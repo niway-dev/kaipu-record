@@ -595,9 +595,10 @@ async function applyRecordTarget(target: RecordTarget): Promise<void> {
     // the countdown is cancelled, the hidden app comes back instead of staying out of sight.
     hub.prepareRegionCountdown(target.displayId, target.rect, showMainWindow);
     // The renderer is not told the target: `selectArea` broadcast it as settings, and the
-    // recorder reads source and area when its countdown ends, not when the request lands
-    // (recorder-store test "resolves the take's input when the countdown ends"). A start
-    // path without a countdown must carry the target in the request instead.
+    // recorder reads source and area when its countdown ends, not when the request lands; an
+    // acquisition it made during the countdown with an older target is released (recorder-store
+    // test "resolves the take's input again when the countdown ends"). A start path without a
+    // countdown must carry the target in the request instead.
     triggerStartRecording({ reveal: false });
     return;
   }
@@ -1025,10 +1026,11 @@ app.whenReady().then(() => {
   // The capture overlay's windows too, a little later: "Start recording" opens them, and
   // loading one renderer per display was most of its wait. Held off while a take runs.
   mainWindow?.once("ready-to-show", () => {
-    setTimeout(
-      () => prewarmCaptureOverlay(() => (hub?.isActive() || hub?.isPending()) ?? false),
-      OVERLAY_PREWARM_AFTER_LAUNCH_MS,
-    );
+    setTimeout(() => {
+      prewarmCaptureOverlay(() => (hub?.isActive() || hub?.isPending()) ?? false);
+      // The countdown's shade window too: it showed only after loading a renderer.
+      hub?.prewarmShade();
+    }, OVERLAY_PREWARM_AFTER_LAUNCH_MS);
   });
 
   app.on("activate", function () {

@@ -36,7 +36,7 @@ import type {
   RecorderPhaseReport,
   RecordTimingKind,
   RecordingSettings,
-  RecordingShadeState,
+  RecordingShadeView,
   RecordingStartInfo,
   RecordingTick,
 } from "./ipc";
@@ -308,6 +308,11 @@ export interface KaipuElectronAPI {
   subscribeMicLevels(callback: (levels: number[]) => void): () => void;
   /** Tell the hub recording started: hide main window, show the bar. */
   recordingStart(info: RecordingStartInfo): void;
+  /**
+   * Hide the main window, before `recordingStart`; true when it was on screen, so the
+   * recorder waits for it to leave the capture before the take encodes.
+   */
+  recordingHideMainWindow(): Promise<boolean>;
   /** Tell the hub recording ended: hide the bar, restore main window. */
   recordingStop(): void;
   /** Start sampling the pointer for this writer session. `enabled: false` = no track (window source, unknown display). */
@@ -376,7 +381,7 @@ export interface KaipuElectronAPI {
   /** Main renderer → main: a `[record-timing]` mark (see `RecordTimingKind`). */
   reportRecordTiming(label: string, kind: RecordTimingKind): void;
   /** Recording shade window: what to paint (countdown tick or recording). */
-  onRecordingShadeState(callback: (state: RecordingShadeState) => void): () => void;
+  onRecordingShadeState(callback: (state: RecordingShadeView) => void): () => void;
 
   // ── Global shortcuts ──────────────────────────────────────────────────
   /** Per-action registration state of the global shortcuts (false = unavailable). */

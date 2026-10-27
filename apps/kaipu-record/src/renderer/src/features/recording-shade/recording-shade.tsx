@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
-import type { RecordingShadeState } from "@shared/types/ipc";
+import type { RecordingShadeView } from "@shared/types/ipc";
 import type { CaptureRect } from "@shared/types/screenshot-capture";
 import { CountdownOverlay } from "@renderer/features/recording/components/countdown-overlay";
 import styles from "./recording-shade.module.css";
@@ -8,35 +8,14 @@ import styles from "./recording-shade.module.css";
 /** Room the REC tag needs above the area's border before it moves inside. */
 const TAG_ROOM_DIP = 30;
 
-/** `rect=x,y,w,h` (display-relative DIP) from the window's query; null when unusable. */
-export function parseShadeRect(search: string): CaptureRect | null {
-  const value = new URLSearchParams(search).get("rect");
-  if (!value) return null;
-  const parts = value.split(",").map(Number);
-  if (parts.length !== 4 || !parts.every(Number.isFinite)) return null;
-  const [x, y, width, height] = parts as [number, number, number, number];
-  if (width <= 0 || height <= 0) return null;
-  return { x, y, width, height };
-}
-
-/** The phase the window opened in (`phase=countdown&value=3`); recording when absent. */
-export function parseShadeState(search: string): RecordingShadeState {
-  const params = new URLSearchParams(search);
-  if (params.get("phase") !== "countdown") return { phase: "recording" };
-  const value = Number(params.get("value"));
-  return {
-    phase: "countdown",
-    value: params.has("value") && Number.isFinite(value) ? value : null,
-  };
-}
-
 /** The slice of the preload bridge the shade uses; tests pass a fake. */
 export interface RecordingShadeApi {
-  onRecordingShadeState(callback: (state: RecordingShadeState) => void): () => void;
+  onRecordingShadeState(callback: (state: RecordingShadeView) => void): () => void;
 }
 
 /**
- * The marker over the recorded display (`?window=recording-shade`). Main makes the window
+ * The marker over the recorded display (`?window=recording-shade`), loaded once and reused:
+ * the region and phase arrive as state. Main makes the window
  * click-through and content-protected, so this paints and does nothing else.
  *
  * - Countdown: the shared `CountdownOverlay` (the Record page's pink countdown), confined
@@ -47,17 +26,30 @@ export interface RecordingShadeApi {
  * - Recording a whole display (`rect` null): only a 3 px pink border around the display.
  */
 export function RecordingShade({
-  rect,
-  initialState = { phase: "recording" },
+  rect: initialRect = null,
+  initialState = { phase: "idle" },
   api = window.electronAPI,
 }: {
-  rect: CaptureRect | null;
-  initialState?: RecordingShadeState;
+  rect?: CaptureRect | null;
+  initialState?: RecordingShadeView;
   api?: RecordingShadeApi;
 }): React.JSX.Element {
   const t = useTranslations("record");
-  const [state, setState] = useState<RecordingShadeState>(initialState);
-  useEffect(() => api.onRecordingShadeState(setState), [api]);
+  const [state, setState] = useState<RecordingShadeView>(initialState);
+  // The region travels with the state (the window is reused across takes); a view without
+  // one keeps the last.
+  const [rect, setRect] = useState<CaptureRect | null>(initialRect);
+  useEffect(
+    () =>
+      api.onRecordingShadeState((view) => {
+        if (view.rect !== undefined) setRect(view.rect);
+        setState(view);
+      }),
+    [api],
+  );
+
+  // Neutral: the preloaded window waits here, and a hidden one is reset to it.
+  if (state.phase === "idle") return <></>;
 
   if (state.phase === "countdown") {
     // The same pink countdown the Record page shows; click-through here, so no Cancel

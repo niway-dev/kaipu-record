@@ -16,8 +16,9 @@ export interface ScreenRecorderControls {
   status: RecorderStatus;
   /** Current countdown tick (3→1) while a start is pending; null otherwise. */
   countdown: number | null;
-  /** Begin the 3-2-1 countdown then start; `resolveInput` is called right as
-   *  the countdown elapses so it always sees the latest quality/watermark. */
+  /** Begin the 3-2-1 countdown then start; `resolveInput` is called once the countdown
+   *  shows (to acquire the take during it) and again right as it elapses, so the take
+   *  always records the latest source/quality/watermark. */
   requestStart(resolveInput: () => StartInput): void;
   /** Cancel a pending start, or stop an active recording — whichever applies. */
   stopOrCancel(): void;

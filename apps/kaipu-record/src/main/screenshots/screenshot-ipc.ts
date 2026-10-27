@@ -74,19 +74,17 @@ export function prewarmCaptureOverlay(busy: () => boolean): void {
   overlayBusy = busy;
   const windows = overlayWindowsInstance();
   windows.prewarm();
-  // A spare loaded for another mode or language would only be thrown away at the pick.
+  // The mode and intent no longer shape a spare (they reach it as state), so a mode change only
+  // makes sure spares exist (it may have turned a skipped pick into one that opens an overlay).
+  // A language or theme change does need a reload: the loaded renderer painted with the old one.
   let { recordingMode, screenshotMode, locale, theme } = getAppSettings();
   onSettingsChanged((next) => {
-    if (
-      next.recordingMode === recordingMode &&
-      next.screenshotMode === screenshotMode &&
-      next.locale === locale &&
-      next.theme === theme
-    ) {
-      return;
-    }
+    const reload = next.locale !== locale || next.theme !== theme;
+    const modeChanged =
+      next.recordingMode !== recordingMode || next.screenshotMode !== screenshotMode;
     ({ recordingMode, screenshotMode, locale, theme } = next);
-    windows.refreshSpares();
+    if (reload) windows.refreshSpares();
+    else if (modeChanged) windows.prewarm();
   });
 }
 /** Told every overlay answer, so the toast lands on the display the shot came from. */

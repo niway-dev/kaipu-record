@@ -17,7 +17,12 @@ import {
   startElapsed,
   type ElapsedState,
 } from "@renderer/features/recording/elapsed";
-import { startEngine, type EngineHandle } from "@renderer/features/recording/recorder-engine";
+import {
+  prepareEngine,
+  type EngineHandle,
+  type LiveAudioControls,
+  type PreparedEngine,
+} from "@renderer/features/recording/recorder-engine";
 import type { WatermarkConfig } from "@renderer/features/watermark/watermark";
 import { reportError } from "@renderer/features/analytics";
 import { finalizeErrorKey } from "./finalize-error-message";
@@ -69,11 +74,19 @@ let countdownSeconds: number = DEFAULT_RECORDING_COUNTDOWN_SECONDS;
  */
 const COUNTDOWN_VISIBLE_TIMEOUT_MS = 1500;
 /**
- * How long a take may spend acquiring (session file, screen, mic, encoder) before the start
- * is called failed. Each step is a browser or IPC promise that can hang, and the main window
- * is already hidden: past this the start fails the usual way (toast, window restored).
+ * How long a take may still spend acquiring (session file, screen, mic, encoder) once its
+ * countdown is over before the start is called failed. Each step is a browser or IPC promise
+ * that can hang, and the main window is already hidden: past this the start fails the usual
+ * way (toast, window restored).
  */
 const START_TIMEOUT_MS = 10_000;
+/**
+ * How long a take acquired during the countdown waits, after main hid an app window that was
+ * on screen (the Record page's countdown), before it encodes. Its capture is already running,
+ * and the frames in flight when the window is ordered out still show it: about one frame at
+ * 30 fps plus one display refresh. Nothing is waited when the window was already hidden.
+ */
+export const WINDOW_HIDE_SETTLE_MS = 50;
 /** Minimum time the bar shows "Saving…" so it never just flashes on short clips. */
 const MIN_SAVING_MS = 600;
 const roundLevel = (level: number): number => Math.round(level * 100) / 100;
@@ -103,15 +116,27 @@ let countdownTimer: ReturnType<typeof setInterval> | null = null;
 let countdownRequest = 0;
 let stopping = false;
 /**
- * The take being started (from `recordingStart` until it records). A cancel or a timeout
- * drops it without waiting for it — the start may never settle — and whatever it acquires
- * later is released by `discardStart`. `beginEngine` checks it after its await: a start that
- * is no longer this one was cancelled and must not become a take.
+ * The take being acquired: from the start of the countdown (or from `recordingStart` with the
+ * countdown off) until it records. A cancel or a timeout drops it without waiting for it — the
+ * acquisition may never settle — and whatever it acquires later is released by `discardStart`.
+ * `beginTake` checks it after each await: a start that is no longer this one was cancelled and
+ * must not become a take.
  */
 interface PendingStart {
   id: string;
+  /** What it was acquired with: a take whose input changed during the countdown re-acquires. */
+  input: StartInput;
   created: Promise<unknown>;
-  engine: Promise<EngineHandle> | null;
+  engine: Promise<PreparedEngine> | null;
+  /** Session file, devices and cursor track, all acquired; nothing is encoded yet. */
+  acquired: Promise<[CursorTrackSession, PreparedEngine]>;
+  /** Audio settings changed while the engine was still being acquired. */
+  audio: AudioSettingsTracker;
+  /**
+   * The user's live settings, forwarded to the prepared engine from the moment it is acquired
+   * (during the countdown too), then to the take.
+   */
+  live: LiveSettingsForwarder | null;
   /** The engine failed before the take was set up; the start fails with it once acquired. */
   failure?: unknown;
 }
@@ -120,8 +145,6 @@ let sessionCounter = 0;
 let lastResolveInput: (() => StartInput) | null = null;
 /** Unsubscribes the live-settings forwarder of the active take. */
 let stopLiveSettings: (() => void) | null = null;
-/** Stops the audio-settings listener of a start still acquiring (cancelled starts never settle). */
-let stopEarlyAudio: (() => void) | null = null;
 /** Stops following whether any window listens to the mic levels, for the active take. */
 let stopMicLevelListening: (() => void) | null = null;
 /** Whether any window subscribed to the mic levels; only then are they read and sent. */
@@ -199,11 +222,12 @@ function clearCountdownTimer(): void {
 }
 
 /**
- * Begin the countdown (3-2-1 by default; 5 or none per Settings), then start the engine using
- * the input resolved (live) the instant the countdown elapses — mirrors the previous behaviour
- * of reading quality/watermark refs at start time, not at call time. With the countdown off
- * the take starts right away: no "counting" state, no wait for the countdown to be on screen.
- * No-ops unless idle, so callers don't need their own re-entry guard.
+ * Begin the countdown (3-2-1 by default; 5 or none per Settings), acquiring the take while it
+ * runs, then start it with the input resolved (live) the instant the countdown elapses —
+ * mirrors the previous behaviour of reading quality/watermark refs at start time, not at call
+ * time. With the countdown off the take starts right away: no "counting" state, no wait for
+ * the countdown to be on screen. No-ops unless idle, so callers don't need their own re-entry
+ * guard.
  */
 export function requestStartRecording(resolveInput: () => StartInput): void {
   if (snapshot.status !== "idle") return;
@@ -225,7 +249,37 @@ export function requestStartRecording(resolveInput: () => StartInput): void {
     if (request !== countdownRequest || snapshot.status !== "counting") return;
     markRecordTiming("countdown visible, clock started");
     runCountdown(resolveInput, seconds);
+    acquireDuringCountdown(resolveInput);
   });
+}
+
+/**
+ * Open the take's devices while the numbers run, so it can start the moment they end: the
+ * acquisition (session file, screen, mic, encoder, cursor track) took about a second, spent in
+ * "Starting…" after the countdown. Nothing is encoded and the app is not hidden until then.
+ *
+ * The input is resolved here, once the countdown is on screen (after the region's shade has
+ * loaded, by which time main's broadcast of the chosen target has landed), and resolved again
+ * when it ends: that one is the take's. If they differ, this acquisition is released and the
+ * take acquires again then, as without it. One that cannot be resolved yet acquires nothing.
+ */
+function acquireDuringCountdown(resolveInput: () => StartInput): void {
+  let input: StartInput;
+  try {
+    input = resolveInput();
+  } catch {
+    return; // Resolved again when the countdown ends, which reports the failure.
+  }
+  markRecordTiming("acquiring during countdown");
+  const start = acquireStart(input);
+  void start.acquired.then(
+    () => {
+      if (pendingStart === start && snapshot.status === "counting") {
+        markRecordTiming("acquired during countdown");
+      }
+    },
+    () => undefined,
+  );
 }
 
 async function countdownVisible(): Promise<void> {
@@ -248,16 +302,23 @@ function runCountdown(resolveInput: () => StartInput, seconds: number): void {
 }
 
 /**
- * The countdown is over (or was never asked for): resolve the take's input and acquire.
- * Resolved while still pending: a throw (no source selected) then goes back to idle, which
- * main reads as an abandoned countdown — the shade comes down, Esc is released and the
- * hidden app returns. Thrown after "starting", it left all of that stranded.
+ * The countdown is over (or was never asked for): resolve the take's input, hide the app and
+ * start the take — with what the countdown acquired when the input is the same, acquiring now
+ * otherwise. Resolved while still pending: a throw (no source selected) then goes back to
+ * idle, which main reads as an abandoned countdown — the shade comes down, Esc is released
+ * and the hidden app returns. Thrown after "starting", it left all of that stranded.
  */
 function startTake(resolveInput: () => StartInput): void {
+  const countdownEndedAt = snapshot.status === "counting" ? performance.now() : null;
+  let early = pendingStart;
   let input: StartInput;
   try {
     input = resolveInput();
   } catch (error) {
+    if (early) {
+      pendingStart = null;
+      discardStart(early);
+    }
     reportError(runtimeT()("record.errorStart"), error, { context: { phase: "start" } });
     const wasIdle = snapshot.status === "idle";
     update({ status: "idle", countdown: null });
@@ -266,8 +327,65 @@ function startTake(resolveInput: () => StartInput): void {
     if (wasIdle) sendPhaseReport({ phase: "idle" });
     return;
   }
+  if (early && needsNewAcquisition(early.input, input)) {
+    markRecordTiming("input changed during countdown, acquiring again");
+    pendingStart = null;
+    discardStart(early);
+    early = null;
+  }
+  if (countdownEndedAt !== null) markRecordTiming("countdown ended");
   update({ status: "starting", countdown: null });
-  void beginEngine(input);
+  const hidden = hideAppForTake(input);
+  // Acquired after the hide was asked for, as before the countdown acquired: the screen's
+  // first frames never show the app, whatever the margin below.
+  if (!early) markRecordTiming("acquiring");
+  const start = early ?? acquireStart(input);
+  void beginTake(start, input, hidden, countdownEndedAt);
+}
+
+/**
+ * Whether the input resolved at the end of the countdown needs another acquisition than the
+ * one made during it: what a prepared engine cannot change live. Left out on purpose, because
+ * the live-settings forwarder applies them to the prepared engine (`sync` at the end of the
+ * countdown, broadcasts before): system audio on/off (loopback is acquired either way, "off"
+ * is a gain), mic on/off (a mute, or a late open of the device), and the audio settings (mic
+ * level, noise suppression, which reopens the same device, system volume and ducking). Not
+ * left out: switching from one mic to another, which no take does live.
+ */
+function needsNewAcquisition(early: StartInput, input: StartInput): boolean {
+  const fixed = (start: StartInput): string =>
+    JSON.stringify([
+      start.sourceId,
+      start.area ?? null,
+      start.width ?? null,
+      start.height ?? null,
+      start.frameRate ?? null,
+      start.videoBitrate ?? null,
+      start.watermark ?? null,
+    ]);
+  if (fixed(early) !== fixed(input)) return true;
+  return (
+    early.microphoneDeviceId !== null &&
+    input.microphoneDeviceId !== null &&
+    early.microphoneDeviceId !== input.microphoneDeviceId
+  );
+}
+
+/**
+ * Hide the main window and announce the take (`recordingStart`: the bar, the shade, Esc
+ * released). Resolves once the take may encode: at once when the window was already out of
+ * sight, `WINDOW_HIDE_SETTLE_MS` after main hid one that was on screen. The question goes
+ * first, on the same IPC pipe, so main answers it before `recordingStart` hides the window.
+ */
+async function hideAppForTake(input: StartInput): Promise<void> {
+  const wasVisible = window.electronAPI.recordingHideMainWindow();
+  window.electronAPI.recordingStart({
+    sourceId: input.sourceId,
+    sourceName: input.sourceName,
+    area: input.area ?? null,
+  });
+  // No answer: wait as if it was on screen, a margin is cheaper than the app in the take.
+  if (await wasVisible.catch(() => true)) await delay(WINDOW_HIDE_SETTLE_MS);
 }
 
 /**
@@ -280,6 +398,11 @@ function startTake(resolveInput: () => StartInput): void {
 export function stopOrCancelRecording(): void {
   if (snapshot.status === "counting") {
     clearCountdownTimer();
+    // Acquired during the countdown: released, whatever it is still waiting on. The app was
+    // never hidden for it, so there is nothing to restore.
+    const start = pendingStart;
+    pendingStart = null;
+    if (start) discardStart(start);
     update({ status: "idle", countdown: null });
     return;
   }
@@ -287,8 +410,6 @@ export function stopOrCancelRecording(): void {
     const start = pendingStart;
     pendingStart = null;
     if (start) discardStart(start);
-    stopEarlyAudio?.();
-    stopEarlyAudio = null;
     window.electronAPI.recordingStop(); // undo the early hide
     sessionId = null;
     update({ status: "idle", countdown: null });
@@ -297,89 +418,125 @@ export function stopOrCancelRecording(): void {
   void stopRecording();
 }
 
-async function beginEngine(input: StartInput): Promise<void> {
+/**
+ * Acquire a take: its session file, then the engine (screen, mic, encoder) and the cursor
+ * track, without encoding anything. It becomes the pending start.
+ */
+function acquireStart(input: StartInput): PendingStart {
   // Unique across renderer restarts: a recreated renderer must not reuse a dead take's id.
   const id = `session-${Date.now().toString(36)}-${++sessionCounter}`;
-  sessionId = id;
-  markRecordTiming("beginEngine");
-  // Hide the main window BEFORE the engine acquires streams, not after — so the
-  // app's own window is never the first thing on screen when the recording
-  // starts (previously ~0.5-1s of the app itself was captured every time).
-  window.electronAPI.recordingStart({
-    sourceId: input.sourceId,
-    sourceName: input.sourceName,
-    area: input.area ?? null,
-  });
-  const start: PendingStart = {
-    id,
-    created: window.electronAPI.recordingCreate(id),
-    engine: null,
+  const created = window.electronAPI.recordingCreate(id);
+  // Reads `start` only after its first await, once `start` exists.
+  const acquire = async (): Promise<[CursorTrackSession, PreparedEngine]> => {
+    await created;
+    // Cancelled while the take's file was being created: the engine must not open the
+    // screen or the mic for a take that is already gone (`discardStart` aborts the file).
+    if (pendingStart !== start) throw new Error("start cancelled before it was created");
+    start.engine = prepareEngine({
+      sourceId: input.sourceId,
+      area: input.area ?? null,
+      microphoneDeviceId: input.microphoneDeviceId,
+      systemAudio: input.systemAudio,
+      audio: input.audio,
+      width: input.width,
+      height: input.height,
+      frameRate: input.frameRate,
+      videoBitrate: input.videoBitrate,
+      watermark: input.watermark,
+      // Chunks only flow once the take has begun; a discarded take's go nowhere.
+      onChunk: (data, position) => {
+        if (sessionId === id) window.electronAPI.recordingWrite(id, data, position);
+      },
+      // A failure mid-recording (encoder error or the screen capture ending)
+      // runs the same robust stop — finalize-or-abort + always restore the
+      // window/Dock/bar — so the app never gets stuck.
+      onError: (error) => {
+        // Not recording yet (the countdown, or the cursor session still opening): there is
+        // no take to stop, and the start would go on to record a dead capture.
+        if (pendingStart === start) {
+          start.failure ??= error;
+          return;
+        }
+        // A discarded start's engine: the take on screen, if any, is another one.
+        if (sessionId !== id) return;
+        reportError(runtimeT()("record.errorStopped"), error, {
+          context: { sourceId: input.sourceId, phase: "mid-recording" },
+          retry: () => {
+            if (lastResolveInput) requestStartRecording(lastResolveInput);
+          },
+        });
+        void stopRecording();
+      },
+    });
+    // Best-effort, and started CONCURRENTLY with the engine: main resolves the
+    // captured display through desktopCapturer.getSources(), which costs
+    // 100–500 ms, and the recording must never wait for it. The call never
+    // throws — it resolves to a no-op session when main declines (window source,
+    // unknown display), when IPC fails, or after its own 500 ms timeout. Opened during
+    // the countdown, it samples the pointer early: those samples come before the take's
+    // time 0 (its anchor) and are dropped when the track is built.
+    const [track, prepared] = await Promise.all([
+      beginCursorTrackSession(
+        window.electronAPI,
+        id,
+        input.sourceId,
+        input.area ? { area: input.area } : {},
+      ),
+      start.engine,
+    ]);
+    // From here a level, volume, noise or ducking change reaches the prepared engine: during
+    // the countdown it is in effect before the first frame. Changes made while acquiring
+    // were kept by `start.audio`.
+    if (pendingStart === start) start.live = forwardLiveSettings(prepared, input, start.audio);
+    return [track, prepared];
   };
-  pendingStart = start;
   // Audio settings the user changes while the engine is still acquiring (up to seconds)
   // are kept, then applied once it exists; subscribing only after it resolved lost them.
-  const earlyAudio = trackAudioSettings(input.audio);
-  stopEarlyAudio = earlyAudio.stop;
+  const audio = trackAudioSettings(input.audio);
+  const start: PendingStart = {
+    id,
+    input,
+    created,
+    engine: null,
+    acquired: acquire(),
+    audio,
+    live: null,
+  };
+  // Nobody awaits an acquisition cancelled during the countdown: its failure is not an error.
+  start.acquired.catch(() => undefined);
+  pendingStart = start;
+  return start;
+}
+
+/**
+ * The countdown is over: wait for the take's acquisition (done already when the countdown
+ * covered it) and for the app to be out of the shot, then begin encoding and start the clock.
+ * The take's time 0 is its first encoded frame, after this moment, so the duration and the
+ * cursor track's anchor both start at the end of the countdown.
+ */
+async function beginTake(
+  start: PendingStart,
+  input: StartInput,
+  hidden: Promise<void>,
+  countdownEndedAt: number | null,
+): Promise<void> {
+  const { id } = start;
   try {
-    const acquired = (async () => {
-      await start.created;
-      // Cancelled while the take's file was being created: the engine must not open the
-      // screen or the mic for a take that is already gone (`discardStart` aborts the file).
-      if (pendingStart !== start) throw new Error("start cancelled before it was created");
-      start.engine = startEngine({
-        sourceId: input.sourceId,
-        area: input.area ?? null,
-        microphoneDeviceId: input.microphoneDeviceId,
-        systemAudio: input.systemAudio,
-        audio: input.audio,
-        width: input.width,
-        height: input.height,
-        frameRate: input.frameRate,
-        videoBitrate: input.videoBitrate,
-        watermark: input.watermark,
-        // A discarded start still flushes on stop: its chunks go nowhere.
-        onChunk: (data, position) => {
-          if (sessionId === id) window.electronAPI.recordingWrite(id, data, position);
-        },
-        // A failure mid-recording (encoder error or the screen capture ending)
-        // runs the same robust stop — finalize-or-abort + always restore the
-        // window/Dock/bar — so the app never gets stuck.
-        onError: (error) => {
-          // Still acquiring (the cursor session can take a moment after the engine): there is
-          // no take to stop yet, and the start would go on to record a dead capture.
-          if (pendingStart === start) {
-            start.failure ??= error;
-            return;
-          }
-          // A discarded start's engine: the take on screen, if any, is another one.
-          if (sessionId !== id) return;
-          reportError(runtimeT()("record.errorStopped"), error, {
-            context: { sourceId: input.sourceId, phase: "mid-recording" },
-            retry: () => {
-              if (lastResolveInput) requestStartRecording(lastResolveInput);
-            },
-          });
-          void stopRecording();
-        },
-      });
-      // Best-effort, and started CONCURRENTLY with the engine: main resolves the
-      // captured display through desktopCapturer.getSources(), which costs
-      // 100–500 ms, and the recording must never wait for it. The call never
-      // throws — it resolves to a no-op session when main declines (window source,
-      // unknown display), when IPC fails, or after its own 500 ms timeout.
-      return Promise.all([
-        beginCursorTrackSession(
-          window.electronAPI,
-          id,
-          input.sourceId,
-          input.area ? { area: input.area } : {},
-        ),
-        start.engine,
-      ]);
+    const began = (async (): Promise<[CursorTrackSession, EngineHandle]> => {
+      const [track, prepared] = await start.acquired;
+      await hidden;
+      if (pendingStart !== start) throw new Error("start cancelled before it began");
+      if (start.failure !== undefined) throw start.failure;
+      // Settings the forwarder could not have seen (changed before the engine was acquired):
+      // brought in line with the input resolved at the end of the countdown, before encoding.
+      start.live?.sync(input);
+      // Before `begin`: the output's first chunk is written as it starts.
+      sessionId = id;
+      return [track, await prepared.begin()];
     })();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const [track, handle] = await Promise.race([
-      acquired,
+      began,
       new Promise<never>((_, reject) => {
         timer = setTimeout(
           () => reject(new Error(`recording start timed out after ${START_TIMEOUT_MS} ms`)),
@@ -388,11 +545,7 @@ async function beginEngine(input: StartInput): Promise<void> {
       }),
     ]).finally(() => clearTimeout(timer));
     // Cancelled while acquiring: the cancel restored the app and released this start.
-    if (pendingStart !== start) {
-      earlyAudio.stop();
-      return;
-    }
-    // The catch below stops the early audio listener and releases the start.
+    if (pendingStart !== start) return;
     if (start.failure !== undefined) throw start.failure;
     pendingStart = null;
     cursorTrack = track;
@@ -403,8 +556,8 @@ async function beginEngine(input: StartInput): Promise<void> {
       area: input.area ?? null,
       output: handle.outputSize,
     });
-    stopEarlyAudio = null;
-    stopLiveSettings = forwardLiveSettings(handle, input, earlyAudio);
+    // The forwarder attached when the take was acquired keeps running for the take.
+    stopLiveSettings = start.live?.stop ?? null;
     stopMicLevelListening = followMicLevelListeners();
     const activeTrack = cursorTrack;
     void handle.firstMediaTimestamp.then(({ rendererMs, quality }) =>
@@ -412,21 +565,16 @@ async function beginEngine(input: StartInput): Promise<void> {
     );
     clock = startElapsed(Date.now());
     update({ status: "recording", countdown: null });
+    if (countdownEndedAt !== null) {
+      const late = Math.round(performance.now() - countdownEndedAt);
+      markRecordTiming(`clock started at countdown end +${late}ms`);
+    }
     endRecordTiming("status recording");
 
-    tickTimer = setInterval(() => {
-      if (!clock || !engine) return;
-      const paused = clock.pausedAt !== null;
-      window.electronAPI.recordingReportTick({
-        elapsedSeconds: Math.floor(elapsedMs(clock, Date.now()) / 1000),
-        levels: paused ? [0, 0, 0, 0, 0] : engine.readLevels(),
-        status: paused ? "paused" : "recording",
-        systemAudioAvailable: engine.hasSystemAudio,
-      });
-      reportMicLevels(paused);
-    }, 100);
+    // The first tick at once: the bar shows "Starting…" until one arrives.
+    reportTick();
+    tickTimer = setInterval(reportTick, 100);
   } catch (error) {
-    earlyAudio.stop();
     // Cancelled first: the cancel already restored the app, and this is its fallout.
     if (pendingStart !== start) return;
     pendingStart = null;
@@ -448,6 +596,19 @@ async function beginEngine(input: StartInput): Promise<void> {
     // immediately usable again; the toast above carries the retry action.
     update({ status: "idle", countdown: null });
   }
+}
+
+/** Timer, levels and status to the bar. */
+function reportTick(): void {
+  if (!clock || !engine) return;
+  const paused = clock.pausedAt !== null;
+  window.electronAPI.recordingReportTick({
+    elapsedSeconds: Math.floor(elapsedMs(clock, Date.now()) / 1000),
+    levels: paused ? [0, 0, 0, 0, 0] : engine.readLevels(),
+    status: paused ? "paused" : "recording",
+    systemAudioAvailable: engine.hasSystemAudio,
+  });
+  reportMicLevels(paused);
 }
 
 /**
@@ -489,11 +650,15 @@ function reportMicLevels(paused: boolean): void {
 }
 
 /**
- * Release a start that will not become a take, without waiting on it: the engine is stopped
- * whenever it resolves, and the session's temp file is aborted once main has created it.
+ * Release a start that will not become a take, without waiting on it: its settings listeners
+ * stop at once, the engine's devices are released whenever it resolves (or the take stopped,
+ * if it had begun), and the session's temp file is aborted once main has created it, which
+ * also discards its cursor track.
  */
 function discardStart(start: PendingStart): void {
-  void start.engine?.then((handle) => handle.stop()).catch(() => undefined);
+  start.audio.stop();
+  start.live?.stop();
+  void start.engine?.then((prepared) => prepared.release()).catch(() => undefined);
   void start.created
     .catch(() => undefined)
     .then(() => window.electronAPI.recordingAbort(start.id))
@@ -509,15 +674,33 @@ interface AudioSettingsTracker {
 /** Remembers the newest `AppSettings.audio` broadcast from now on. */
 function trackAudioSettings(initial: AudioSettings): AudioSettingsTracker {
   let latest = initial;
-  const unsubscribe = window.electronAPI.onSettingsChanged((appSettings) => {
+  let unsubscribe: (() => void) | null = window.electronAPI.onSettingsChanged((appSettings) => {
     latest = sanitizeAudioSettings(appSettings.audio);
   });
-  return { latest: () => latest, stop: unsubscribe };
+  return {
+    latest: () => latest,
+    stop: () => {
+      unsubscribe?.();
+      unsubscribe = null;
+    },
+  };
+}
+
+interface LiveSettingsForwarder {
+  /**
+   * Apply the mic and system-audio toggles of `input` where they differ from what the engine
+   * last got: a toggle changed before the forwarder existed reached no broadcast listener.
+   * The audio settings are not taken from `input`: the tracker and the broadcasts that feed
+   * the forwarder are at least as new as it.
+   */
+  sync(input: StartInput): void;
+  stop(): void;
 }
 
 /**
- * While a take runs, forward the user's live toggles (any window, any shortcut —
- * they all just write `RecordingSettings`) to the engine. When the engine answers
+ * From the moment a take is acquired (during the countdown too) until it ends, forward the
+ * user's live toggles (any window, any shortcut — they all just write `RecordingSettings`)
+ * to the engine. When the engine answers
  * "unavailable", write the setting back to `false` so every surface shows the
  * truth. Calls are serialized so a quick off/on never lands out of order.
  *
@@ -527,10 +710,10 @@ function trackAudioSettings(initial: AudioSettings): AudioSettingsTracker {
  * Returns the unsubscribe.
  */
 function forwardLiveSettings(
-  handle: EngineHandle,
+  handle: LiveAudioControls,
   input: StartInput,
   early: AudioSettingsTracker,
-): () => void {
+): LiveSettingsForwarder {
   let micOn = input.microphoneDeviceId !== null;
   let sysOn = input.systemAudio;
   let queue: Promise<void> = Promise.resolve();
@@ -585,11 +768,14 @@ function forwardLiveSettings(
   const unsubscribeAudio = window.electronAPI.onSettingsChanged((appSettings) => {
     applyAudio(sanitizeAudioSettings(appSettings.audio));
   });
-  const unsubscribe = window.electronAPI.onRecordingSettingsChanged((settings) => {
-    if (settings.isMicrophoneEnabled !== micOn) {
-      micOn = settings.isMicrophoneEnabled;
+  const applyToggles = (
+    micEnabled: boolean,
+    deviceId: string | null,
+    sysEnabled: boolean,
+  ): void => {
+    if (micEnabled !== micOn) {
+      micOn = micEnabled;
       const on = micOn;
-      const deviceId = settings.selectedMicrophone?.deviceId ?? null;
       queue = queue.then(async () => {
         const result = await handle.setMicrophoneEnabled(on, deviceId);
         if (result === "unavailable" && on) {
@@ -598,18 +784,31 @@ function forwardLiveSettings(
         }
       });
     }
-    if (settings.isSystemAudioEnabled !== sysOn) {
-      sysOn = settings.isSystemAudioEnabled;
+    if (sysEnabled !== sysOn) {
+      sysOn = sysEnabled;
       if (handle.setSystemAudioEnabled(sysOn) === "unavailable" && sysOn) {
         sysOn = false;
         writeBack({ isSystemAudioEnabled: false });
       }
     }
-  });
-  return () => {
-    active = false;
-    unsubscribe();
-    unsubscribeAudio();
+  };
+  const unsubscribe = window.electronAPI.onRecordingSettingsChanged((settings) =>
+    applyToggles(
+      settings.isMicrophoneEnabled,
+      settings.selectedMicrophone?.deviceId ?? null,
+      settings.isSystemAudioEnabled,
+    ),
+  );
+  return {
+    sync(next) {
+      if (!active) return;
+      applyToggles(next.microphoneDeviceId !== null, next.microphoneDeviceId, next.systemAudio);
+    },
+    stop() {
+      active = false;
+      unsubscribe();
+      unsubscribeAudio();
+    },
   };
 }
 

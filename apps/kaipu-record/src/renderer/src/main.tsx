@@ -9,11 +9,7 @@ import { CameraBubble } from "./features/camera-bubble/camera-bubble";
 import { CaptureOverlay } from "./features/screenshots/overlay/capture-overlay";
 import { parseOverlayQuery } from "./features/screenshots/overlay/overlay-query";
 import { CaptureToast } from "./features/screenshots/toast/capture-toast";
-import {
-  parseShadeRect,
-  parseShadeState,
-  RecordingShade,
-} from "./features/recording-shade/recording-shade";
+import { RecordingShade } from "./features/recording-shade/recording-shade";
 import { installCrashForwarder } from "./features/analytics/crash-forwarder";
 import { I18nRoot } from "./app/i18n-root";
 import { StylexProbe } from "./dev/stylex-probe";
@@ -58,12 +54,7 @@ async function bootstrap(): Promise<void> {
     document.body.style.background = "transparent";
     document.body.dataset.window = "recording-shade";
     installCrashForwarder("recording-shade");
-    node = (
-      <RecordingShade
-        rect={parseShadeRect(window.location.search)}
-        initialState={parseShadeState(window.location.search)}
-      />
-    );
+    node = <RecordingShade />;
   } else if (windowKind === "capture-toast") {
     // Transparent, fixed-size window: only the card paints (see main.css).
     document.body.style.background = "transparent";

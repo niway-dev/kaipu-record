@@ -7,7 +7,7 @@ import {
 } from "mediabunny";
 import { Mp4OutputFormat } from "mediabunny";
 import { DEFAULT_AUDIO_SETTINGS } from "@shared/audio-settings";
-import { startEngine, type EngineOptions } from "./recorder-engine";
+import { prepareEngine, startEngine, type EngineOptions } from "./recorder-engine";
 import { startRecordingCompositor } from "./recording-compositor";
 
 // The compositor touches a real <canvas>/captureStream (no-op in jsdom), so mock
@@ -952,5 +952,133 @@ describe("a start that fails after the audio is wired", () => {
     screenVideoTrack.getSettings = vi.fn(() => ({ width: 3024, height: 1964 }));
     await expect(startEngine(baseOptions())).rejects.toThrow("encoder refused");
     expect(stop).toHaveBeenCalled();
+  });
+});
+
+/**
+ * A take acquired during the countdown: its devices are open while the numbers run, and
+ * nothing is encoded until it begins at the end of the countdown.
+ */
+describe("prepareEngine", () => {
+  it("acquires the screen and the mic without starting the output", async () => {
+    const onChunk = vi.fn();
+    await prepareEngine(baseOptions({ microphoneDeviceId: "mic-1", onChunk }));
+
+    expect(getUserMedia).toHaveBeenCalledTimes(2); // screen + mic, both open
+    expect(lastOutput().addVideoTrack).toHaveBeenCalled();
+    // No output started: no frame of the countdown can reach the file.
+    expect(lastOutput().start).not.toHaveBeenCalled();
+    expect(onChunk).not.toHaveBeenCalled();
+    expect(screenVideoTrack.stop).not.toHaveBeenCalled();
+  });
+
+  it("starts the output only when the take begins", async () => {
+    const prepared = await prepareEngine(baseOptions());
+    expect(lastOutput().start).not.toHaveBeenCalled();
+
+    const handle = await prepared.begin();
+    expect(lastOutput().start).toHaveBeenCalledOnce();
+    expect(handle.outputSize).toEqual({ width: 1920, height: 1080 });
+  });
+
+  it("release before the take begins frees every device and never starts the output", async () => {
+    const prepared = await prepareEngine(
+      baseOptions({ microphoneDeviceId: "mic-1", systemAudio: true }),
+    );
+
+    prepared.release();
+
+    await vi.waitFor(() => expect(audioContextClose).toHaveBeenCalled());
+    expect(screenVideoTrack.stop).toHaveBeenCalled();
+    expect(screenSystemAudioTrack.stop).toHaveBeenCalled();
+    expect(micTrack.stop).toHaveBeenCalled();
+    expect(destinationTrack.stop).toHaveBeenCalled();
+    expect(lastOutput().start).not.toHaveBeenCalled();
+    await expect(prepared.begin()).rejects.toThrow();
+  });
+
+  it("release after the take began stops it, so a cancel at any moment frees the devices", async () => {
+    const prepared = await prepareEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+    await prepared.begin();
+
+    prepared.release();
+
+    await vi.waitFor(() => expect(lastOutput().finalize).toHaveBeenCalled());
+    await vi.waitFor(() => expect(micTrack.stop).toHaveBeenCalled());
+    expect(screenVideoTrack.stop).toHaveBeenCalled();
+  });
+
+  it("reports a screen capture that ends before the take begins", async () => {
+    const onError = vi.fn();
+    await prepareEngine(baseOptions({ onError }));
+    const ended = screenVideoTrack.addEventListener.mock.calls.find(([type]) => type === "ended");
+
+    ended![1]();
+
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "screen capture ended" }),
+    );
+  });
+
+  it("releases what it acquired when the output cannot start", async () => {
+    const prepared = await prepareEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+    lastOutput().start.mockRejectedValueOnce(new Error("encoder unavailable"));
+
+    await expect(prepared.begin()).rejects.toThrow("encoder unavailable");
+    expect(screenVideoTrack.stop).toHaveBeenCalled();
+    expect(micTrack.stop).toHaveBeenCalled();
+  });
+});
+
+describe("prepareEngine — the audio of a take waiting for its countdown", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const withDucking = (): EngineOptions =>
+    baseOptions({
+      microphoneDeviceId: "mic-1",
+      systemAudio: true,
+      audio: { ...DEFAULT_AUDIO_SETTINGS, duckSystemAudioWhileTalking: true },
+    });
+
+  it("runs no ducking loop before the take begins, and starts it when it does", async () => {
+    const prepared = await prepareEngine(withDucking());
+    expect(vi.getTimerCount()).toBe(0);
+
+    await prepared.begin();
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+  });
+
+  it("ducking turned on during the countdown starts with the take", async () => {
+    const prepared = await prepareEngine(
+      baseOptions({ microphoneDeviceId: "mic-1", systemAudio: true }),
+    );
+    expect(prepared.setDucking(true)).toBe("ok");
+    expect(vi.getTimerCount()).toBe(0);
+
+    await prepared.begin();
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+  });
+
+  it("a level changed during the countdown is already in effect when the take begins", async () => {
+    const prepared = await prepareEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+    prepared.setMicLevel(60);
+    expect(rampTargets(gains[0])).toEqual([0.6]); // the mic level gain
+  });
+
+  it("release before the take begins tears down the whole audio graph", async () => {
+    const prepared = await prepareEngine(withDucking());
+    prepared.setDucking(true);
+
+    prepared.release();
+
+    expect(vi.getTimerCount()).toBe(0);
+    expect(audioContextClose).toHaveBeenCalled();
+    expect(micTrack.stop).toHaveBeenCalled();
+    expect(screenSystemAudioTrack.stop).toHaveBeenCalled();
+    expect(destinationTrack.stop).toHaveBeenCalled();
+    // A released take takes no more settings.
+    expect(prepared.setSystemAudioVolume(50)).toBe("unavailable");
+    expect(await prepared.setMicrophoneEnabled(true, "mic-1")).toBe("unavailable");
   });
 });

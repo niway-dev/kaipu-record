@@ -145,7 +145,7 @@ Ventana principal (oculta)                  Barra flotante (ventana aparte)
 - `main/recording/control-bar-window.ts` — `BrowserWindow` frameless/transparent/always-on-top, abajo-centro de la pantalla.
 - `main/recording/recording-hub.ts` — relay de estado/comandos + oculta/muestra la ventana principal.
 
-**IPC nuevo:** `recording:create|write|finalize|abort` (writer) · `recording:report-tick` → `control:tick` (estado → barra) · `control:command` → `recording:command` (botones → grabador) · `recording:start|stop` (mostrar/ocultar ventanas).
+**IPC nuevo:** `recording:create|write|finalize|abort` (writer) · `recording:report-tick` → `control:tick` (estado → barra) · `control:command` → `recording:command` (botones → grabador) · `recording:start|stop` (mostrar/ocultar ventanas) · `recording:hide-main-window` (invoke at the end of the countdown: hides the main window and answers whether it was on screen).
 
 **Vault:** ahora es agnóstico de extensión (`.mp4`/`.webm`), con sidecar de duración + thumbnail; `kaipu-media://thumb/<id>` sirve el póster.
 
@@ -174,9 +174,11 @@ system stream → sysVolumeGain (volume / 100) → sysDuckGain → sysMuteGain (
   (only for the latest request). The device itself is never switched mid-take.
 - `sysDuckGain` follows `ducking.ts`: every 50 ms the engine reads the mic analyser's RMS; above
   about -40 dBFS the gain ramps to 0.3 over 80 ms, and after 400 ms below it ramps back to 1 over
-  300 ms. A muted mic never ducks. The loop starts only after `output.start()` resolves; a start
-  that fails after the `AudioContext` exists clears the loop, stops the compositor and every
-  acquired track, and closes the context before rethrowing.
+  300 ms. A muted mic never ducks. The loop starts only when the take begins (after
+  `output.start()` resolves): a take prepared during the countdown remembers a ducking toggle and
+  starts the loop with the take. A start that fails after the `AudioContext` exists, and a
+  prepared take that is released, clear the loop, stop the compositor and every acquired track,
+  and close the context.
 - `readMicLevels()` returns 5 bars from the mic analyser only (not the mix). They do **not** ride
   `RecordingActivity` (that broadcast re-rendered every window ~10 times a second). A window calls
   `subscribeMicLevels(callback)` (preload; counted per webContents in main, dropped when the
@@ -184,10 +186,12 @@ system stream → sysVolumeGain (volume / 100) → sysDuckGain → sysMuteGain (
   subscribed; only then the recorder reads the bars and sends them (`mic-levels:report`, rounded,
   identical bars skipped), and main relays them to the subscribed windows alone
   (`mic-levels:data`, `main/recording/mic-level-relay.ts`).
-- Changes to `AppSettings.audio` reach a running take through `recorder-store.ts`
-  (`forwardLiveSettings`), serialized on the same queue as the other live settings. Changes made
-  while the engine is still acquiring are tracked from the start of the take and applied once the
-  engine exists.
+- Changes to `AppSettings.audio` reach the take through `recorder-store.ts`
+  (`forwardLiveSettings`), serialized on the same queue as the other live settings. The forwarder
+  attaches as soon as the engine is acquired — during the countdown, on the `PreparedEngine`,
+  which has the same live controls as the running take — so a change made during the countdown is
+  in effect before the first frame. Changes made while the engine is still being acquired are
+  tracked from the start of the acquisition and applied once it exists.
 
 ### El engine ya no vive en la página
 
@@ -219,9 +223,10 @@ navegación. Con esto:
   **bloquea con un toast** si el store no está `idle` — cubre tanto una
   grabación activa como el propio countdown/`starting`, donde antes el
   selector nativo de región corría contra el arranque del engine.
-- La ventana principal se oculta (`recordingStart` IPC) **antes** de que el
-  engine adquiera streams, no después — antes se veía la propia app en los
-  primeros ~0.5-1s de cada grabación.
+- The main window is hidden (`recording:hide-main-window` + `recordingStart`)
+  **before the take encodes its first frame**, not after — the app itself used to
+  show in the first ~0.5-1 s of every recording. See
+  [Start sequence](#start-sequence-acquiring-during-the-countdown).
 - `fastStart: false` (antes `"in-memory"`) — mediabunny escribe a disco
   progresivamente en vez de bufferear la grabación completa en RAM del
   renderer hasta el stop (eso hacía OOM-crashear grabaciones largas y perder
@@ -303,7 +308,7 @@ imports de electron/node/react), compartido por main (validación) y renderer (U
   `settings:get/update`), validado por `sanitizeQuality` en `mergeSettings`.
 - **Wiring al encoder:** `qualityToEngine(quality)` → `{ width, height, frameRate,
 videoBitrate }`. `use-recording-setup` lo lee en mount (ref) y lo pasa por `StartInput` →
-  `useScreenRecorder` → `startEngine`. El engine usa esos valores en las constraints
+  `useScreenRecorder` → `prepareEngine`. El engine usa esos valores en las constraints
   `maxWidth/maxHeight/maxFrameRate` y en el bitrate del track. **El `maxWidth/Height` es un
   techo: no upscalea** sobre la resolución nativa de la pantalla.
 - **Una sola fuente para los números de encode:** el engine **no reescribe** ningún valor —
@@ -340,7 +345,7 @@ incluido) no sabe de planes ni flags.
   encoder. **Costo cero cuando está apagado:** si `enabled === false` se encodea el screen
   track directo (sin canvas). La detección de fallas sigue mirando el `screenTrack` original.
 - **Wiring:** `useWatermark()` → `use-recording-setup` (ref) → `StartInput.watermark` →
-  `startEngine`. `EngineOptions.watermark` decide compositar o no; `stop()` corta el draw loop.
+  `prepareEngine`. `EngineOptions.watermark` decide compositar o no; `stop()` corta el draw loop.
 - **Config** (`watermark.ts`, sets `as const`): variant (wordmark/mark), position, tint
   (white/original), opacity, height/margin ratios. Default: wordmark · centro-derecha · white.
 
@@ -351,13 +356,14 @@ entitlement). El seam ya está, así que enchufarlo no toca nada más.
 
 Las rutas de error restauran **siempre** el estado de la app:
 
-- **Falla al arrancar** (permiso denegado, `getDisplayMedia` falla): la ventana se oculta
-  optimistamente **antes** de que el engine adquiera streams (ver
-  [El engine ya no vive en la página](#el-engine-ya-no-vive-en-la-página)), así que el
-  `catch` de `beginEngine` debe deshacer ese hide explícitamente — llama a
-  `recordingStop()` (mostrar ventana + restaurar Dock + esconder barra) y aborta la
-  sesión — y vuelve a `idle` (no queda en un estado `error` separado), así el botón Start
-  es usable de inmediato.
+- **Start failure** (permission denied, `getUserMedia` fails, the screen capture ends):
+  the window is hidden optimistically when the countdown ends, before the take is set up
+  (see [Start sequence](#start-sequence-acquiring-during-the-countdown)), so `beginTake`'s
+  `catch` undoes that hide explicitly — it calls `recordingStop()` (show window + restore
+  Dock + hide bar), releases the engine and aborts the session — and goes back to `idle`
+  (no separate `error` state), so Start is usable at once. A failure during the countdown
+  is held (`PendingStart.failure`, or the rejected acquisition) and fails the start when
+  the countdown ends, the same way.
 - **Falla al finalizar:** `recordingStop()` se llama **siempre**, fuera del try/catch.
 - **Falla a mitad de grabación** (encoder error, o el track de pantalla termina porque el
   usuario corta el screen-share): el engine la expone vía `onError` (el `errorPromise` de
@@ -391,13 +397,68 @@ La visibilidad en el Dock/switcher es ahora un **setting persistido** (`showInDo
 `infrastructure/settings-store.ts` (la primera infra de settings persistidos de la app) y
 se togglea desde Settings.
 
+### Start sequence: acquiring during the countdown
+
+A take's acquisition — session file (`recording:create`), screen `getUserMedia`, frame-size
+measurement, compositor, mic, audio mix, encoder, cursor track — costs about a second. It
+used to start when the countdown reached 0, so every take spent that second in
+"Starting…". It now runs **during** the countdown, and the take starts within tens of
+milliseconds of the countdown's end.
+
+1. **Countdown on screen** (`countdownVisible`): the clock of the numbers starts, and
+   `acquireDuringCountdown` resolves the input and calls `acquireStart`: it creates the
+   session file, then `prepareEngine` and `beginCursorTrackSession` concurrently. Nothing
+   is encoded and the app is not hidden. The mark `acquired during countdown` says it
+   finished before 0.
+2. **Countdown ends** (`startTake`): the input is resolved again — that one is the take's.
+   If something a prepared engine cannot change live differs (`needsNewAcquisition`: source,
+   area, quality, watermark, or a switch from one mic to another), the early acquisition is
+   released and the take acquires again, as it did before. Mic and system audio on/off and the
+   audio settings are not in that list: the live-settings forwarder, attached once the engine
+   was acquired, applies them to the prepared engine (`sync` brings the toggles in line with
+   the input before the take begins). The status goes to `"starting"`.
+3. **Hide the app**: `recording:hide-main-window` (invoke) is sent, then `recordingStart`
+   (bar, shade, Esc released). Main answers the invoke before handling `recordingStart`
+   (same IPC pipe, in order) with whether the window was on screen. On the Record page's
+   countdown it was: the take waits `WINDOW_HIDE_SETTLE_MS` (50 ms) so the frames in flight
+   when the window is ordered out are not its first. For a region countdown the window was
+   already hidden and nothing is waited.
+4. **Begin** (`beginTake`): once acquired and hidden, `PreparedEngine.begin()` calls
+   `output.start()` (a few ms), the clock starts and the first tick goes to the bar at once,
+   so it leaves "Starting…" immediately. Marks: `clock started at countdown end +Nms`, then
+   `status recording`.
+
+**How the countdown stays out of the file.** `prepareEngine` builds the `Output` and its
+`MediaStreamVideo/AudioTrackSource`s but does not start the output; no frame is read from
+the tracks until `begin()`. The sources are not started-and-paused instead, because
+mediabunny cannot pause a source before its first frame: the frame-rate sampler's `tick`
+asserts on a time base that only the first unpaused frame sets, and the take fails when it
+resumes. With `timestampBase: "synced-zero"`, the first frame after `begin()` sets
+`_firstMediaStreamTimestamp`, so the take's duration (`startElapsed` right after `begin`),
+its video time 0 and the cursor track's anchor (`firstMediaTimestamp`) all start at the end
+of the countdown. The poster thumbnail is also taken in `begin()`: during a Record-page
+countdown the screen still shows the app. Pointer samples and clicks taken during the
+countdown are before the anchor and are dropped by `buildCursorTrack`.
+
+**Cancel and failure.** A cancel during the countdown (Esc, Stop, the cancel button) calls
+`discardStart`: the settings listeners stop, `PreparedEngine.release()` stops the screen and
+mic tracks, the compositor, the ducking loop and the audio context, and `recording:abort` deletes the session file and discards main's
+cursor track. An acquisition still in flight is released when it settles. `release()` after
+`begin()` stops the take instead, so a cancel at any moment leaves no device open. An engine
+`onError` during the countdown (the screen capture ends) is held in `PendingStart.failure`
+and fails the start the usual way when the countdown ends. macOS shows its recording
+indicator from acquisition on, so during the countdown too.
+
+With the countdown off nothing changes: the take acquires at once, after the hide is asked
+for, and starts when acquired.
+
 ### El hueco "starting" después del countdown
 
-Tras el countdown (`3·2·1` por defecto, `5·4·3·2·1` o ninguno según Settings), el
-grabador entra en estado **`"starting"`** mientras
-adquiere los streams y arma el encoder — ahí `isRecording` todavía es `false` y la
-ventana **aún no se ocultó**, así que el botón Start quedaba visible y clickeable
-~0.5–1s (se podía disparar una segunda grabación). Se cierra por tres lados:
+After the countdown (`3·2·1` by default, `5·4·3·2·1` or none per Settings), the recorder is
+in **`"starting"`** until the take encodes: tens of milliseconds when the countdown covered
+the acquisition (above), as long as the acquisition still needs otherwise. There
+`isRecording` is still `false`, so the Start button used to be visible and clickable for
+~0.5–1 s (a second recording could be triggered). It is closed from three sides:
 
 - El **overlay del countdown sigue arriba durante `"starting"`** mostrando un
   spinner (su `value` pasa de número a `null`). Como el overlay es un backdrop que
@@ -412,12 +473,12 @@ ventana **aún no se ocultó**, así que el botón Start quedaba visible y click
 `useRecordingSetup` expone `recordingStatus` (el `RecorderStatus` completo) para que
 el Record page distinga "starting". El número del countdown usa el color de acento.
 
-**Cancelable en todo momento.** `CountdownOverlay` tiene un botón "Cancel" visible y un
-handler de Escape, ambos wireados a `stopOrCancelRecording()` — la misma función que
-maneja el stop de la barra/atajo global. Es una sola rama de código para las tres fases:
-durante `"counting"` cancela el intervalo al instante; durante `"starting"` (el hueco de
-arriba, sin engine todavía) marca un flag que se consume apenas el engine resuelve, en
-vez de dejar que la grabación arranque igual; con un engine vivo, finaliza normalmente.
+**Cancelable at any moment.** `CountdownOverlay` has a visible "Cancel" button and an
+Escape handler, both wired to `stopOrCancelRecording()` — the same function the bar and the
+global stop shortcut use. One code path for the three phases: during `"counting"` it clears
+the interval and releases whatever the countdown acquired; during `"starting"` it restores
+the app at once and releases the start whenever its acquisition settles, instead of letting
+the recording start anyway; with a live engine, it finalizes normally.
 
 ### Después de grabar: navegación + estado "Saving"
 
@@ -434,7 +495,8 @@ The bar window is hidden on stop, not destroyed, so it would otherwise keep that
 "Saving…" into the next take. Its other state is **"Starting…"** (muted dot, Stop
 only, no timer): `ControlBarWindow.hide()` and the hub's `recordingStart` reset it
 to `CONTROL_BAR_STARTING_TICK`, and a new bar window opens on it. It lasts until the
-recorder's first tick, after the streams are acquired. Stop there cancels the
+recorder's first tick, sent the moment the take encodes — right at the end of the countdown
+when the countdown acquired the take. Stop there cancels the
 pending start. A bar hidden before its first window painted stays hidden.
 
 ### Ventanas flotantes transparentes (barra y burbuja)

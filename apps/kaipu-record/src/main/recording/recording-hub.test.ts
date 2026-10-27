@@ -24,7 +24,7 @@ const mockState = vi.hoisted(() => ({
     preview: vi.fn((size: number) => size),
   },
   bar: { show: vi.fn(), hide: vi.fn(), sendTick: vi.fn(), reset: vi.fn(), raise: vi.fn() },
-  shade: { show: vi.fn(), hide: vi.fn(), update: vi.fn() },
+  shade: { show: vi.fn(), hide: vi.fn(), update: vi.fn(), prewarm: vi.fn() },
   shortcutRegister: vi.fn((_accelerator: string, _handler: () => void) => true),
   shortcutUnregister: vi.fn(),
   displays: [] as Array<{
@@ -88,6 +88,7 @@ vi.mock("./recording-shade-window", () => ({
     show = mockState.shade.show;
     hide = mockState.shade.hide;
     update = mockState.shade.update;
+    prewarm = mockState.shade.prewarm;
   },
 }));
 
@@ -218,6 +219,27 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
   afterEach(async () => {
     Object.defineProperty(process, "platform", { value: realPlatform, configurable: true });
     await rm(mockState.userDataDir, { recursive: true, force: true });
+  });
+
+  it("hides the main window at the end of a countdown and says whether it was on screen", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    let visible = true;
+    const mainWindow = {
+      ...fakeMainWindow(),
+      isVisible: () => visible,
+      hide: vi.fn(() => (visible = false)),
+    };
+    registerRecordingHub(() => mainWindow as never);
+    const hideMain = mockState.ipcHandle.get(IPC_CHANNELS.recordingHideMainWindow)!;
+
+    // The Record page's countdown: the app was on screen, and the take must wait for it.
+    expect(hideMain({})).toBe(true);
+    expect(mainWindow.hide).toHaveBeenCalledOnce();
+    // A region countdown: the app was already out of sight, nothing to wait for.
+    expect(hideMain({})).toBe(false);
+    expect(mainWindow.hide).toHaveBeenCalledOnce();
   });
 
   it("stopping a recording restores the Dock the control bar dropped", async () => {
@@ -1155,6 +1177,13 @@ describe("recording hub — choosing an area or a display on the overlay", () =>
     expect(await handle.selectArea(1, null)).toBe(true);
     expect(mockState.getSources).toHaveBeenCalledTimes(1);
     expect(settings().selectedSource).toMatchObject({ id: "screen:1:0" });
+  });
+
+  it("loads the shade window ahead of the first countdown", async () => {
+    const { handle } = await hub();
+    handle.prewarmShade();
+    expect(mockState.shade.prewarm).toHaveBeenCalledTimes(1);
+    expect(mockState.shade.show).not.toHaveBeenCalled();
   });
 
   it("lists the screen sources again after a display change", async () => {

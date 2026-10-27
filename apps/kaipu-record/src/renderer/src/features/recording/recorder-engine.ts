@@ -29,33 +29,12 @@ import {
 import { waitForFirstMediaTimestamp, type FirstMediaTimestamp } from "./first-media-timestamp";
 import { markRecordTiming } from "./record-timing";
 
-export interface EngineHandle {
-  pause(): void;
-  resume(): void;
-  /** Stop capture, finalize the MP4, resolve when flushed. */
-  stop(): Promise<void>;
-  /** Current 5-bar level (0..1) of the mix: mic and system audio, as they are recorded. */
-  readLevels(): number[];
-  /**
-   * Current 5-bar level (0..1) of the microphone alone, before its mute gain; zeros while
-   * no mic is open. The settings meter shows the mic, not the mix.
-   */
-  readMicLevels(): number[];
-  /**
-   * A still JPEG frame of the screen captured at start. Taken in the background (it is only
-   * needed at finalize), so the take never waits for it; null when it could not be taken.
-   */
-  thumbnail: Promise<ArrayBuffer | null>;
-  /**
-   * The size the video is encoded at: the compositor's target (area crop or `fitToCap`
-   * downscale), which equals the native track size when frames are encoded raw.
-   */
-  outputSize: { width: number; height: number };
-  /**
-   * Renderer-clock time of video time 0 (the MP4's first media sample). Resolves
-   * within ~1 frame of start; "estimated" if mediabunny's private field is missing.
-   */
-  firstMediaTimestamp: Promise<FirstMediaTimestamp>;
+/**
+ * The take's live audio controls. A prepared take (`PreparedEngine`, during the countdown)
+ * has them too, so a setting changed while the numbers run is in effect when the take
+ * begins; a running take (`EngineHandle`) keeps them.
+ */
+export interface LiveAudioControls {
   /** True when a loopback (system audio) track was acquired with the screen. */
   hasSystemAudio: boolean;
   /**
@@ -85,9 +64,58 @@ export interface EngineHandle {
   setSystemAudioVolume(percent: number): LiveToggleResult;
   /**
    * Lower the system audio while the mic hears a voice. "unavailable" without loopback;
-   * turning it off restores the full volume.
+   * turning it off restores the full volume. On a prepared take it is remembered, and the
+   * ducking loop starts with the take.
    */
   setDucking(on: boolean): LiveToggleResult;
+}
+
+export interface EngineHandle extends LiveAudioControls {
+  pause(): void;
+  resume(): void;
+  /** Stop capture, finalize the MP4, resolve when flushed. */
+  stop(): Promise<void>;
+  /** Current 5-bar level (0..1) of the mix: mic and system audio, as they are recorded. */
+  readLevels(): number[];
+  /**
+   * Current 5-bar level (0..1) of the microphone alone, before its mute gain; zeros while
+   * no mic is open. The settings meter shows the mic, not the mix.
+   */
+  readMicLevels(): number[];
+  /**
+   * A still JPEG frame of the screen captured at start. Taken in the background (it is only
+   * needed at finalize), so the take never waits for it; null when it could not be taken.
+   */
+  thumbnail: Promise<ArrayBuffer | null>;
+  /**
+   * The size the video is encoded at: the compositor's target (area crop or `fitToCap`
+   * downscale), which equals the native track size when frames are encoded raw.
+   */
+  outputSize: { width: number; height: number };
+  /**
+   * Renderer-clock time of video time 0 (the MP4's first media sample). Resolves
+   * within ~1 frame of start; "estimated" if mediabunny's private field is missing.
+   */
+  firstMediaTimestamp: Promise<FirstMediaTimestamp>;
+}
+
+/**
+ * A take whose devices are open (screen, mic, audio graph, compositor) and whose encoder is
+ * built, but which encodes nothing yet. The recorder acquires one during the countdown, so the
+ * take can start the instant the countdown ends.
+ */
+export interface PreparedEngine extends LiveAudioControls {
+  /**
+   * Start encoding. The take's time 0 (`firstMediaTimestamp`) is the first frame after this
+   * call: nothing captured before it reaches the file. Called once.
+   */
+  begin(): Promise<EngineHandle>;
+  /**
+   * Release a take that will not record: every device, the compositor, the audio graph and
+   * the ducking loop. After `begin` it stops the take instead, once `begin` settles, so a
+   * cancel landing at any moment leaves no device open.
+   */
+  release(): void;
 }
 
 export type LiveToggleResult = "ok" | "unavailable";
@@ -136,9 +164,10 @@ export interface EngineOptions {
   /** Receives each StreamTarget chunk to forward to the main-process writer. */
   onChunk(data: ArrayBuffer, position: number): void;
   /**
-   * Fires if the engine fails *during* a recording — the encoder errors or the
-   * screen capture ends (the user stops sharing / closes the source). The caller
-   * should tear the recording down cleanly so the app never gets stuck.
+   * Fires if the engine fails once acquired — the encoder errors or the screen
+   * capture ends (the user stops sharing / closes the source), during the recording
+   * or while a prepared take waits for its countdown. The caller should tear the
+   * recording down cleanly so the app never gets stuck.
    */
   onError?(error: unknown): void;
 }
@@ -164,6 +193,16 @@ const THUMBNAIL_STOP_WAIT_MS = 1000;
  * pause/resume/stop and live levels.
  */
 export async function startEngine(options: EngineOptions): Promise<EngineHandle> {
+  return (await prepareEngine(options)).begin();
+}
+
+/**
+ * Acquire screen + mic, build the audio graph and the MP4 encoder, without starting it:
+ * `begin` starts it. The output is not started, rather than started paused, because
+ * mediabunny's sources cannot be paused before their first frame: a paused first frame leaves
+ * the frame-rate sampler without its time base, and the take fails when it resumes.
+ */
+export async function prepareEngine(options: EngineOptions): Promise<PreparedEngine> {
   // The resolution preset is a HEIGHT CAP, not a fixed 16:9 box. Width is only a
   // fallback for the source aspect ratio when the track can't report its size.
   const capHeight = options.height ?? ENGINE_DEFAULTS.height;
@@ -275,7 +314,10 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     if (duckTimer) clearInterval(duckTimer);
     duckTimer = null;
   };
-  /** Frees everything a failed start acquired; each step is independent and best-effort. */
+  /**
+   * Frees everything acquired, for a start that failed or a prepared take released; each step
+   * is independent and best-effort.
+   */
   const releaseAll = (): void => {
     stopDucking();
     try {
@@ -481,20 +523,12 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
       });
       output.addAudioTrack(audioSource);
     }
-    await output.start();
-    markRecordTiming("output.start resolved");
-    // Only now: a start that failed above must not leave the loop running.
-    if (options.audio.duckSystemAudioWhileTalking) startDucking();
-    // Fallback anchor if mediabunny's private first-media timestamp is unavailable:
-    // the first frame is accepted within one frame period of start() resolving.
-    const startedAt = performance.now();
-    const firstMediaTimestamp = waitForFirstMediaTimestamp(output, startedAt);
-
-    // Surface mid-recording failures so the caller tears down cleanly (otherwise the
-    // app gets stuck: window hidden, bar showing, no real recording). Fires at most
-    // once, and not for our own teardown (stop() sets the flag first).
+    // Surface failures so the caller tears down cleanly (otherwise the app gets stuck: window
+    // hidden, bar showing, no real recording). Wired before the take begins: a screen capture
+    // that ends during the countdown fails the start. Fires at most once, and not for our own
+    // teardown (stop() and release() set the flag first).
     let teardownStarted = false;
-    /** Set by stop(); a live toggle arriving after it is answered "unavailable". */
+    /** Set by stop() and release(); a live toggle arriving after it is answered "unavailable". */
     let stopped = false;
     /** Guards against a second late mic acquisition while one is in flight. */
     let acquiringMic = false;
@@ -507,34 +541,12 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     audioSource?.errorPromise.catch(notifyError);
     screenTrack.addEventListener("ended", () => notifyError(new Error("screen capture ended")));
 
-    // 5. Poster thumbnail from the first screen frame, at the real output size. In the
-    // background: the take starts without it, and stop waits for it before the tracks end.
-    const thumbnail = captureThumbnail(screenStream, target).then((image) => {
-      markRecordTiming("captureThumbnail resolved");
-      return image;
-    });
+    /** Whether the take has begun: the ducking loop only runs then. */
+    let begun = false;
+    /** Ducking as last asked for; a prepared take starts the loop when it begins. */
+    let duckingOn = options.audio.duckSystemAudioWhileTalking;
 
-    return {
-      pause: () => {
-        videoSource.pause();
-        audioSource?.pause();
-      },
-      resume: () => {
-        videoSource.resume();
-        audioSource?.resume();
-      },
-      readLevels: () => {
-        analyser.getByteTimeDomainData(levelBuffer);
-        return levelsFromTimeDomain(levelBuffer, 5);
-      },
-      readMicLevels: () => {
-        if (!micLevelGain) return [0, 0, 0, 0, 0];
-        micAnalyser.getByteTimeDomainData(micBuffer);
-        return levelsFromTimeDomain(micBuffer, 5);
-      },
-      thumbnail,
-      outputSize: { width: target.width, height: target.height },
-      firstMediaTimestamp,
+    const controls: LiveAudioControls = {
       hasSystemAudio: sysMuteGain !== null,
       async setMicrophoneEnabled(on, deviceId) {
         if (stopped) return "unavailable";
@@ -585,8 +597,9 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
       },
       setDucking(on) {
         if (!sysDuckGain || stopped) return "unavailable";
+        duckingOn = on;
         if (on) {
-          startDucking();
+          if (begun) startDucking();
         } else {
           stopDucking();
           duckState = INITIAL_DUCK_STATE;
@@ -594,6 +607,34 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
         }
         return "ok";
       },
+    };
+
+    /** The running take's handle, built by `begin` once the output has started. */
+    const handle = (
+      thumbnail: Promise<ArrayBuffer | null>,
+      firstMediaTimestamp: Promise<FirstMediaTimestamp>,
+    ): EngineHandle => ({
+      ...controls,
+      pause: () => {
+        videoSource.pause();
+        audioSource?.pause();
+      },
+      resume: () => {
+        videoSource.resume();
+        audioSource?.resume();
+      },
+      readLevels: () => {
+        analyser.getByteTimeDomainData(levelBuffer);
+        return levelsFromTimeDomain(levelBuffer, 5);
+      },
+      readMicLevels: () => {
+        if (!micLevelGain) return [0, 0, 0, 0, 0];
+        micAnalyser.getByteTimeDomainData(micBuffer);
+        return levelsFromTimeDomain(micBuffer, 5);
+      },
+      thumbnail,
+      outputSize: { width: target.width, height: target.height },
+      firstMediaTimestamp,
       async stop() {
         stopped = true;
         stopDucking();
@@ -610,6 +651,57 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
         for (const stream of inputStreams) stream.getTracks().forEach((t) => t.stop());
         destination.stream.getTracks().forEach((t) => t.stop());
         await audioContext.close();
+      },
+    });
+
+    const begin = async (): Promise<EngineHandle> => {
+      try {
+        await output.start();
+      } catch (error) {
+        stopped = true;
+        teardownStarted = true;
+        releaseAll();
+        throw error;
+      }
+      markRecordTiming("output.start resolved");
+      begun = true;
+      // Only now: a take that never begins must not leave the loop running.
+      if (duckingOn) startDucking();
+      // Fallback anchor if mediabunny's private first-media timestamp is unavailable:
+      // the first frame is accepted within one frame period of start() resolving.
+      const startedAt = performance.now();
+      const firstMediaTimestamp = waitForFirstMediaTimestamp(output, startedAt);
+
+      // 5. Poster thumbnail from the first screen frame of the take, at the real output size.
+      // Taken here, not while preparing: during a countdown the screen still shows the app.
+      // In the background: the take starts without it, and stop waits for it before the
+      // tracks end.
+      const thumbnail = captureThumbnail(screenStream, target).then((image) => {
+        markRecordTiming("captureThumbnail resolved");
+        return image;
+      });
+      return handle(thumbnail, firstMediaTimestamp);
+    };
+
+    let beginning: Promise<EngineHandle> | null = null;
+    let released = false;
+    return {
+      ...controls,
+      begin() {
+        if (released) return Promise.reject(new Error("engine released before it began"));
+        beginning ??= begin();
+        return beginning;
+      },
+      release() {
+        if (released) return;
+        released = true;
+        if (beginning) {
+          void beginning.then((started) => started.stop()).catch(() => undefined);
+          return;
+        }
+        stopped = true;
+        teardownStarted = true; // stopping the tracks below would otherwise fire onError
+        releaseAll();
       },
     };
   } catch (error) {

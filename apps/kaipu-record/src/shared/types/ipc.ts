@@ -530,6 +530,10 @@ export const IPC_CHANNELS = {
   micLevelsListening: "mic-levels:listening",
   micLevelsGetListening: "mic-levels:get-listening",
   recordingStart: "recording:start",
+  // Main renderer → main (invoke), when a countdown ends, right before `recordingStart`: hide
+  // the main window and answer whether it was on screen. A take acquired during the countdown
+  // already captures the screen, and must not encode until the window has left it.
+  recordingHideMainWindow: "recording:hide-main-window",
   recordingStop: "recording:stop",
   // Cursor track (recorder renderer → main). Keyed by the writer session id. See
   // plans/video-editor-v2/02: main samples the pointer; the renderer sends the clock
@@ -750,7 +754,18 @@ export type RecordTimingKind = "begin" | "mark" | "end";
 /** What the recording shade paints (main → shade window). */
 export type RecordingShadeState =
   | { phase: "countdown"; value: number | null }
-  | { phase: "recording" };
+  | { phase: "recording" }
+  // Neutral: nothing painted. The preloaded window waits in it, and a hidden one is reset to it.
+  | { phase: "idle" };
+
+/**
+ * What main sends the shade window: the state plus the region it is drawn on (display-relative
+ * DIP, `null` for the whole display). The window is reused across takes, so the region travels
+ * as state, not in its URL. Absent `rect` keeps the last one.
+ */
+export type RecordingShadeView = RecordingShadeState & {
+  rect?: CaptureRect | null;
+};
 
 /** Source identity for placing the bar on the recorded screen. */
 export interface RecordingStartInfo {

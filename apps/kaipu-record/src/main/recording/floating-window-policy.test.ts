@@ -135,48 +135,4 @@ describe("the recording shade", () => {
     expect(window.setIgnoreMouseEvents).toHaveBeenCalledWith(true);
     expect(window.setContentProtection).toHaveBeenCalledWith(true);
   });
-
-  it("tells the renderer where the clear area is", () => {
-    new RecordingShadeWindow().show(SHADE_DISPLAY, SHADE_AREA);
-
-    const [{ window }] = created;
-    const loaded = JSON.stringify([window.loadURL.mock.calls, window.loadFile.mock.calls]);
-    expect(loaded).toContain("window=recording-shade");
-    expect(loaded).toContain("rect=100,50,640,360");
-  });
-
-  it("a countdown shade becomes the recording shade in place when the region is the same", () => {
-    const shade = new RecordingShadeWindow();
-    shade.show(SHADE_DISPLAY, SHADE_AREA, undefined, { phase: "countdown", value: 3 });
-    const loaded = JSON.stringify([
-      created[0].window.loadURL.mock.calls,
-      created[0].window.loadFile.mock.calls,
-    ]);
-    expect(loaded).toContain("phase=countdown&value=3");
-    shade.show(SHADE_DISPLAY, SHADE_AREA);
-    expect(created).toHaveLength(1);
-    expect(created[0].window.webContents.send).toHaveBeenCalledWith("recording-shade:state", {
-      phase: "recording",
-    });
-  });
-
-  it("marks a whole display with no rect in the query", () => {
-    new RecordingShadeWindow().show(SHADE_DISPLAY, null);
-    const loaded = JSON.stringify([
-      created[0].window.loadURL.mock.calls,
-      created[0].window.loadFile.mock.calls,
-    ]);
-    expect(loaded).toContain("window=recording-shade&phase=recording");
-    expect(loaded).not.toContain("rect=");
-    expect(created[0].window.setContentProtection).toHaveBeenCalledWith(true);
-  });
-
-  it("is torn down on hide, and a second show replaces the first", () => {
-    const shade = new RecordingShadeWindow();
-    shade.show(SHADE_DISPLAY, SHADE_AREA);
-    shade.show(SHADE_DISPLAY, { x: 0, y: 0, width: 800, height: 600 });
-    expect(created[0].window.destroy).toHaveBeenCalled();
-    shade.hide();
-    expect(created[1].window.destroy).toHaveBeenCalled();
-  });
 });

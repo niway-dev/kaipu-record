@@ -168,6 +168,7 @@ window.electronAPI = {
   onMicLevelsListening: () => () => {},
   subscribeMicLevels: () => () => {},
   recordingStart: () => {},
+  recordingHideMainWindow: async () => false,
   recordingStop: () => {},
   cursorTrackStart: async () => ({ enabled: false }),
   cursorClockNow: async () => 0,
