@@ -10,7 +10,11 @@ export interface Scenario {
   vaultDir: string;
   /** Save `<outDir>/NN-<name>.png`; numbering keeps the steps in order. */
   shot: (name: string) => Promise<void>;
-  /** Close the app (finalizes the video), then list what was written. */
+  /**
+   * Close the app (finalizes the video), then list what was written. A failed close is
+   * logged, not thrown: it runs in the scenario's `finally`, where a throw would replace the
+   * scenario's own failure, and the clips are still kept.
+   */
   finish: () => Promise<void>;
 }
 
@@ -34,7 +38,11 @@ export async function startScenario(name: string): Promise<Scenario> {
       });
     },
     finish: async () => {
-      await teardown();
+      try {
+        await teardown();
+      } catch (error) {
+        console.error(`[verify] ${name}: closing the app failed`, error);
+      }
       // The app owns several windows and Playwright writes one .webm per page. The biggest
       // is the main window; keep it as video.webm and drop the small overlay recordings.
       const clips = await Promise.all(
