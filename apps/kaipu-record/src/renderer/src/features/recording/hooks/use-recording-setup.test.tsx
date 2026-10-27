@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import type { RecordingSettings } from "@shared/types";
+import type { AppSettings, RecordingSettings } from "@shared/types";
+import { DEFAULT_AUDIO_SETTINGS } from "@shared/audio-settings";
 
 // Device enumeration mocked (no navigator.mediaDevices in jsdom).
 const { MICS } = vi.hoisted(() => ({ MICS: [{ deviceId: "m1", label: "Mic One" }] }));
@@ -118,6 +119,39 @@ describe("useRecordingSetup", () => {
     expect(resolveInput()).toEqual(
       expect.objectContaining({ sourceId: "s1", microphoneDeviceId: "m1" }),
     );
+  });
+
+  it("a slow initial settings read never overwrites a newer audio change", async () => {
+    const original = { ...window.electronAPI };
+    const listeners: Array<(settings: AppSettings) => void> = [];
+    const onChange = (settings: AppSettings): void => listeners.forEach((l) => l(settings));
+    const reads: Array<(settings: AppSettings) => void> = [];
+    window.electronAPI.getSettings = () =>
+      new Promise<AppSettings>((resolve) => reads.push(resolve));
+    window.electronAPI.onSettingsChanged = (callback) => {
+      listeners.push(callback);
+      return () => {};
+    };
+    try {
+      mockSettings = SETTINGS({ selectedSource: SCREEN });
+      const { result } = renderHook(() => useRecordingSetup());
+
+      // The user changes the level; the broadcast arrives before the first read resolves.
+      act(() => onChange({ audio: { ...DEFAULT_AUDIO_SETTINGS, micLevel: 150 } } as AppSettings));
+      await act(async () => {
+        for (const read of reads) {
+          read({ audio: { ...DEFAULT_AUDIO_SETTINGS, micLevel: 90 } } as AppSettings);
+        }
+      });
+
+      act(() => result.current.startRecording());
+      const resolveInput = recorderRequestStart.mock.calls[0][0] as () => {
+        audio: { micLevel: number };
+      };
+      expect(resolveInput().audio.micLevel).toBe(150);
+    } finally {
+      Object.assign(window.electronAPI, original);
+    }
   });
 
   it("startRecording carries the shared recording area into the start input", () => {

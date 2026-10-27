@@ -101,10 +101,14 @@ export function useRecordingSetup(): RecordingSetup {
   // level changed in the popover before pressing Record is the one the take starts with.
   const audioRef = useRef<AudioSettings>(DEFAULT_AUDIO_SETTINGS);
   useEffect(() => {
+    // A broadcast is newer than the initial read, which may resolve after it: once one has
+    // arrived, the read must not overwrite it.
+    let heardChange = false;
     void window.electronAPI.getSettings().then((appSettings) => {
-      audioRef.current = sanitizeAudioSettings(appSettings.audio);
+      if (!heardChange) audioRef.current = sanitizeAudioSettings(appSettings.audio);
     });
     return window.electronAPI.onSettingsChanged((appSettings) => {
+      heardChange = true;
       audioRef.current = sanitizeAudioSettings(appSettings.audio);
     });
   }, []);
