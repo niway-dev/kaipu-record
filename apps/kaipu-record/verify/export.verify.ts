@@ -24,7 +24,10 @@ test("export: editor to the Ready to share card", async () => {
     const ready = s.page.getByRole("region", { name: /^Ready to share/ });
     await expect(ready).toBeVisible({ timeout: 90_000 });
     await expect(ready.getByRole("button", { name: "View file" })).toBeVisible();
-    await s.page.waitForTimeout(800); // let the card finish sliding in
+    // The card slides in: wait for its animations to finish, not for a guessed delay.
+    await ready.evaluate((card) =>
+      Promise.all(card.getAnimations({ subtree: true }).map((animation) => animation.finished)),
+    );
     await s.shot("ready-to-share");
   } finally {
     await s.finish();
