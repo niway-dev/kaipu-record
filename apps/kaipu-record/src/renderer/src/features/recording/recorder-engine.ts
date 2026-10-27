@@ -17,7 +17,15 @@ import type { RecordingArea } from "@shared/types/ipc";
 import { areaEncodePlan } from "./area-crop";
 import { measureFrameSize, playWithin } from "./frame-size";
 import { startRecordingCompositor, type RecordingCompositor } from "./recording-compositor";
+import { clampMicLevel, clampSystemAudioVolume, type AudioSettings } from "@shared/audio-settings";
 import { levelsFromTimeDomain } from "./audio-levels";
+import {
+  DUCK_RELEASE_MS,
+  INITIAL_DUCK_STATE,
+  dbfsFromTimeDomain,
+  decideDuck,
+  type DuckState,
+} from "./ducking";
 import { waitForFirstMediaTimestamp, type FirstMediaTimestamp } from "./first-media-timestamp";
 import { markRecordTiming } from "./record-timing";
 
@@ -26,8 +34,13 @@ export interface EngineHandle {
   resume(): void;
   /** Stop capture, finalize the MP4, resolve when flushed. */
   stop(): Promise<void>;
-  /** Current 5-bar mic level (0..1). */
+  /** Current 5-bar level (0..1) of the mix: mic and system audio, as they are recorded. */
   readLevels(): number[];
+  /**
+   * Current 5-bar level (0..1) of the microphone alone, before its mute gain; zeros while
+   * no mic is open. The settings meter shows the mic, not the mix.
+   */
+  readMicLevels(): number[];
   /**
    * A still JPEG frame of the screen captured at start. Taken in the background (it is only
    * needed at finalize), so the take never waits for it; null when it could not be taken.
@@ -54,12 +67,32 @@ export interface EngineHandle {
   setMicrophoneEnabled(on: boolean, deviceId: string | null): Promise<LiveToggleResult>;
   /** Ramp the system-audio gain. "unavailable" when no loopback track exists. */
   setSystemAudioEnabled(on: boolean): LiveToggleResult;
+  /**
+   * Mic level in percent (0..200, 100 = unchanged), on its own gain so muting never
+   * overwrites it. Remembered for a mic acquired later.
+   */
+  setMicLevel(percent: number): void;
+  /**
+   * Turn the mic's noise suppression on or off on the live track. "unavailable" when no
+   * mic is open (the value still applies to one acquired later) or the device refuses it.
+   */
+  setNoiseSuppression(on: boolean): Promise<LiveToggleResult>;
+  /** System-audio volume in percent (0..100), on its own gain. "unavailable" without loopback. */
+  setSystemAudioVolume(percent: number): LiveToggleResult;
+  /**
+   * Lower the system audio while the mic hears a voice. "unavailable" without loopback;
+   * turning it off restores the full volume.
+   */
+  setDucking(on: boolean): LiveToggleResult;
 }
 
 export type LiveToggleResult = "ok" | "unavailable";
 
 /** Mute/unmute ramp length — long enough to avoid a click, short enough to feel instant. */
 export const GAIN_RAMP_SECONDS = 0.02;
+
+/** How often the ducking loop samples the mic. */
+const DUCK_POLL_MS = 50;
 
 export interface EngineOptions {
   sourceId: string;
@@ -76,6 +109,11 @@ export interface EngineOptions {
    * turned on mid-take (loopback can only be acquired with the screen, at start).
    */
   systemAudio: boolean;
+  /**
+   * Mic level, noise suppression, system-audio volume and ducking at start. The defaults
+   * (`DEFAULT_AUDIO_SETTINGS`) leave the take exactly as it was before these existed.
+   */
+  audio: AudioSettings;
   /**
    * Encoder targets resolved from the user's quality preset. All optional — the
    * defaults below preserve the original 1080p · 30fps · 8 Mbps behaviour, so
@@ -166,7 +204,7 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   // The mic opens alongside the screen instead of after it and the compositor: both are OS
   // device opens, and the take waited for one, then the other.
   const micRequest = options.microphoneDeviceId
-    ? openMicrophone(options.microphoneDeviceId)
+    ? openMicrophone(options.microphoneDeviceId, options.audio.noiseSuppression)
     : Promise.resolve(null);
   // A start that fails before the mic is wired in must still release it (the mic light).
   const releaseMicOnFailure = (error: unknown): never => {
@@ -217,53 +255,111 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     encodeTrack = compositor.track;
   }
 
-  // 2. Mic (best-effort) + system-audio (best-effort) → each through its own
-  // GainNode → one mixed track. Mute = gain 0, so the file keeps one continuous
-  // audio track with no gaps. Every acquired stream is tracked so stop() releases
-  // the OS devices (closing the AudioContext alone does NOT stop the underlying
-  // tracks — the mic light would stay on).
+  // 2. Mic (best-effort) + system-audio (best-effort) → one mixed track. Each input runs
+  // through separate gain nodes so a mute, a level and a duck never overwrite each other:
+  //   mic:    source → level → [mic analyser] → mute → destination
+  //   system: source → volume → duck → mute → destination
+  // Mute = gain 0, so the file keeps one continuous audio track with no gaps. Every
+  // acquired stream is tracked so stop() releases the OS devices (closing the AudioContext
+  // alone does NOT stop the underlying tracks — the mic light would stay on).
   const inputStreams: MediaStream[] = [screenStream];
   const audioContext = new AudioContext();
   const destination = audioContext.createMediaStreamDestination();
 
-  /** Connect a stream through a fresh GainNode starting at `audible ? 1 : 0`. */
-  const connectThroughGain = (stream: MediaStream, audible: boolean): GainNode => {
-    const gain = audioContext.createGain();
-    gain.gain.value = audible ? 1 : 0;
-    audioContext.createMediaStreamSource(stream).connect(gain);
-    gain.connect(destination);
-    return gain;
-  };
-  const rampTo = (gain: GainNode, on: boolean): void => {
+  const rampGain = (gain: GainNode, value: number, seconds: number = GAIN_RAMP_SECONDS): void => {
     const now = audioContext.currentTime;
     gain.gain.cancelScheduledValues(now);
     gain.gain.setValueAtTime(gain.gain.value, now);
-    gain.gain.linearRampToValueAtTime(on ? 1 : 0, now + GAIN_RAMP_SECONDS);
+    gain.gain.linearRampToValueAtTime(value, now + seconds);
+  };
+  const createGain = (value: number): GainNode => {
+    const gain = audioContext.createGain();
+    gain.gain.value = value;
+    return gain;
+  };
+
+  // Live audio settings: the current values, so an input acquired later starts from them.
+  let micLevel = clampMicLevel(options.audio.micLevel);
+  let noiseSuppression = options.audio.noiseSuppression;
+  let micTrack: MediaStreamTrack | null = null;
+  let micLevelGain: GainNode | null = null;
+  let micMuteGain: GainNode | null = null;
+  /** The mic as the user set it (on = audible); a muted mic never ducks the system audio. */
+  let micAudible = true;
+  // One analyser for the mic alone, tapped before the mute gain: it drives both the
+  // settings meter and the ducking, and still hears the voice when the mic is muted.
+  const micAnalyser = audioContext.createAnalyser();
+  micAnalyser.fftSize = 1024;
+  micAnalyser.smoothingTimeConstant = 0.3;
+  const micBuffer = new Uint8Array(micAnalyser.fftSize);
+
+  const connectMic = (stream: MediaStream): void => {
+    micTrack = stream.getAudioTracks()[0] ?? null;
+    micLevelGain = createGain(micLevel / 100);
+    micMuteGain = createGain(1);
+    micAudible = true;
+    audioContext.createMediaStreamSource(stream).connect(micLevelGain);
+    micLevelGain.connect(micAnalyser);
+    micLevelGain.connect(micMuteGain);
+    micMuteGain.connect(destination);
   };
   const acquireMicrophone = async (deviceId: string): Promise<MediaStream | null> => {
-    const mic = await openMicrophone(deviceId);
+    const mic = await openMicrophone(deviceId, noiseSuppression);
     if (mic) inputStreams.push(mic);
     return mic;
   };
 
-  let micGain: GainNode | null = null;
   const startMic = await micRequest;
   markRecordTiming(`microphone ${startMic ? "opened" : "off or unavailable"}`);
   if (startMic) {
     inputStreams.push(startMic);
-    micGain = connectThroughGain(startMic, true);
+    connectMic(startMic);
   }
   const systemAudioTrack = screenStream.getAudioTracks()[0];
-  let sysGain: GainNode | null = null;
+  let sysVolumeGain: GainNode | null = null;
+  let sysDuckGain: GainNode | null = null;
+  let sysMuteGain: GainNode | null = null;
   if (systemAudioTrack) {
-    sysGain = connectThroughGain(new MediaStream([systemAudioTrack]), options.systemAudio);
+    sysVolumeGain = createGain(clampSystemAudioVolume(options.audio.systemAudioVolume) / 100);
+    sysDuckGain = createGain(1);
+    sysMuteGain = createGain(options.systemAudio ? 1 : 0);
+    audioContext
+      .createMediaStreamSource(new MediaStream([systemAudioTrack]))
+      .connect(sysVolumeGain);
+    sysVolumeGain.connect(sysDuckGain);
+    sysDuckGain.connect(sysMuteGain);
+    sysMuteGain.connect(destination);
   }
   // Always present, even with no input connected: the destination then produces
   // silence. mediabunny cannot add a track after start(), and a mid-take unmute
   // needs somewhere to go.
   const mixedAudioTrack = destination.stream.getAudioTracks()[0];
 
-  // 3. Mic-level analyser tapped off the mix.
+  // Ducking loop: measure the mic, let the pure rules decide, apply the ramp they ask for.
+  let duckTimer: ReturnType<typeof setInterval> | null = null;
+  let duckState: DuckState = INITIAL_DUCK_STATE;
+  const duckTick = (): void => {
+    if (!sysDuckGain) return;
+    micAnalyser.getByteTimeDomainData(micBuffer);
+    const decision = decideDuck(
+      { dbfs: dbfsFromTimeDomain(micBuffer), now: performance.now(), muted: !micAudible },
+      duckState,
+    );
+    duckState = decision.state;
+    if (decision.ramp) rampGain(sysDuckGain, decision.ramp.target, decision.ramp.ms / 1000);
+  };
+  const stopDucking = (): void => {
+    if (duckTimer) clearInterval(duckTimer);
+    duckTimer = null;
+  };
+  const startDucking = (): void => {
+    if (duckTimer || !sysDuckGain) return;
+    duckState = INITIAL_DUCK_STATE;
+    duckTimer = setInterval(duckTick, DUCK_POLL_MS);
+  };
+  if (options.audio.duckSystemAudioWhileTalking) startDucking();
+
+  // 3. Level analyser tapped off the mix.
   const analyser = audioContext.createAnalyser();
   analyser.fftSize = 256;
   analyser.smoothingTimeConstant = 0.3;
@@ -363,14 +459,20 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
       analyser.getByteTimeDomainData(levelBuffer);
       return levelsFromTimeDomain(levelBuffer, 5);
     },
+    readMicLevels: () => {
+      if (!micLevelGain) return [0, 0, 0, 0, 0];
+      micAnalyser.getByteTimeDomainData(micBuffer);
+      return levelsFromTimeDomain(micBuffer, 5);
+    },
     thumbnail,
     outputSize: { width: target.width, height: target.height },
     firstMediaTimestamp,
-    hasSystemAudio: sysGain !== null,
+    hasSystemAudio: sysMuteGain !== null,
     async setMicrophoneEnabled(on, deviceId) {
       if (stopped) return "unavailable";
-      if (micGain) {
-        rampTo(micGain, on);
+      if (micMuteGain) {
+        micAudible = on;
+        rampGain(micMuteGain, on ? 1 : 0);
         return "ok";
       }
       if (!on) return "ok"; // never acquired, nothing to mute
@@ -384,19 +486,50 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
           mic.getTracks().forEach((t) => t.stop());
           return "unavailable";
         }
-        micGain = connectThroughGain(mic, true);
+        connectMic(mic);
         return "ok";
       } finally {
         acquiringMic = false;
       }
     },
     setSystemAudioEnabled(on) {
-      if (!sysGain || stopped) return "unavailable";
-      rampTo(sysGain, on);
+      if (!sysMuteGain || stopped) return "unavailable";
+      rampGain(sysMuteGain, on ? 1 : 0);
+      return "ok";
+    },
+    setMicLevel(percent) {
+      micLevel = clampMicLevel(percent);
+      if (micLevelGain && !stopped) rampGain(micLevelGain, micLevel / 100);
+    },
+    async setNoiseSuppression(on) {
+      noiseSuppression = on;
+      if (!micTrack || stopped) return "unavailable";
+      try {
+        await micTrack.applyConstraints({ noiseSuppression: on });
+        return "ok";
+      } catch {
+        return "unavailable"; // the device does not allow changing it live
+      }
+    },
+    setSystemAudioVolume(percent) {
+      if (!sysVolumeGain || stopped) return "unavailable";
+      rampGain(sysVolumeGain, clampSystemAudioVolume(percent) / 100);
+      return "ok";
+    },
+    setDucking(on) {
+      if (!sysDuckGain || stopped) return "unavailable";
+      if (on) {
+        startDucking();
+      } else {
+        stopDucking();
+        duckState = INITIAL_DUCK_STATE;
+        rampGain(sysDuckGain, 1, DUCK_RELEASE_MS / 1000);
+      }
       return "ok";
     },
     async stop() {
       stopped = true;
+      stopDucking();
       teardownStarted = true; // stopping the tracks below would otherwise fire onError
       // The poster frame comes from the screen track: take it before the tracks stop, but
       // never let it hold the save up.
@@ -411,9 +544,14 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
 }
 
 /** Mic (best-effort): the stream, or null when it cannot be opened. */
-async function openMicrophone(deviceId: string): Promise<MediaStream | null> {
+async function openMicrophone(
+  deviceId: string,
+  noiseSuppression: boolean,
+): Promise<MediaStream | null> {
   try {
-    return await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { ideal: deviceId } } });
+    return await navigator.mediaDevices.getUserMedia({
+      audio: { deviceId: { ideal: deviceId }, noiseSuppression },
+    });
   } catch {
     return null; // mic unavailable — continue without it
   }

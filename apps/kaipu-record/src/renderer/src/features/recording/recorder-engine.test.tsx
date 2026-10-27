@@ -6,6 +6,7 @@ import {
   StreamTarget,
 } from "mediabunny";
 import { Mp4OutputFormat } from "mediabunny";
+import { DEFAULT_AUDIO_SETTINGS } from "@shared/audio-settings";
 import { startEngine, type EngineOptions } from "./recorder-engine";
 import { startRecordingCompositor } from "./recording-compositor";
 
@@ -43,8 +44,14 @@ function fakeTrack(settings: { width: number; height: number } = { width: 1920, 
   stop: ReturnType<typeof vi.fn>;
   addEventListener: ReturnType<typeof vi.fn>;
   getSettings: ReturnType<typeof vi.fn>;
+  applyConstraints: ReturnType<typeof vi.fn>;
 } {
-  return { stop: vi.fn(), addEventListener: vi.fn(), getSettings: vi.fn(() => settings) };
+  return {
+    stop: vi.fn(),
+    addEventListener: vi.fn(),
+    getSettings: vi.fn(() => settings),
+    applyConstraints: vi.fn(async () => {}),
+  };
 }
 
 function fakeStream(video: unknown[], audio: unknown[]): MediaStream {
@@ -73,6 +80,15 @@ interface FakeGain {
   connect: ReturnType<typeof vi.fn>;
 }
 let gains: FakeGain[];
+/** An AnalyserNode stand-in whose time-domain bytes are all `level` (128 = silence). */
+interface FakeAnalyser {
+  level: number;
+  connect: ReturnType<typeof vi.fn>;
+}
+/** In creation order: the engine makes the mic-only analyser first, the mix one second. */
+let analysers: FakeAnalyser[];
+/** Time-domain byte for a steady square wave of the given dBFS (alternates 128 ± amplitude). */
+const bytesForDbfs = (dbfs: number): number => 128 + Math.round(128 * 10 ** (dbfs / 20));
 /** Ramp targets of a gain, in order. */
 const rampTargets = (gain: FakeGain): number[] =>
   gain.gain.linearRampToValueAtTime.mock.calls.map((c) => c[0] as number);
@@ -85,6 +101,7 @@ beforeEach(() => {
   destinationTrack = fakeTrack();
   audioContextClose = vi.fn(async () => {});
   gains = [];
+  analysers = [];
 
   getUserMedia = vi.fn(async (constraints: MediaStreamConstraints) => {
     // The screen request carries video constraints; everything else is the mic.
@@ -118,11 +135,17 @@ beforeEach(() => {
       gains.push(node);
       return node;
     });
-    createAnalyser = vi.fn(() => ({
-      fftSize: 0,
-      smoothingTimeConstant: 0,
-      getByteTimeDomainData: vi.fn(),
-    }));
+    createAnalyser = vi.fn(() => {
+      const node = {
+        fftSize: 0,
+        smoothingTimeConstant: 0,
+        level: 128,
+        connect: vi.fn(),
+        getByteTimeDomainData: vi.fn((out: Uint8Array) => out.fill(node.level)),
+      };
+      analysers.push(node);
+      return node;
+    });
     close = audioContextClose;
   }
   // captureThumbnail plays a hidden <video>; jsdom's media element never resolves
@@ -153,6 +176,7 @@ const baseOptions = (over: Partial<EngineOptions> = {}): EngineOptions => ({
   sourceId: "screen:1",
   microphoneDeviceId: null,
   systemAudio: false,
+  audio: DEFAULT_AUDIO_SETTINGS,
   onChunk: vi.fn(),
   ...over,
 });
@@ -425,10 +449,8 @@ describe("live controls", () => {
     const handle = await startEngine(
       baseOptions({ microphoneDeviceId: "mic-1", systemAudio: false }),
     );
-    // mic first (on), then loopback (acquired, but off → gain 0).
-    expect(gains).toHaveLength(2);
-    expect(gains[0].gain.value).toBe(1);
-    expect(gains[1].gain.value).toBe(0);
+    // mic: level, mute (both unity); loopback: volume, duck (unity), mute (acquired, but off → 0).
+    expect(gains.map((g) => g.gain.value)).toEqual([1, 1, 1, 1, 0]);
     expect(handle.hasSystemAudio).toBe(true);
   });
 
@@ -451,12 +473,13 @@ describe("live controls", () => {
 
   it("mutes and unmutes the mic with a short ramp, keeping the device open", async () => {
     const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
-    const mic = gains[0];
+    const [micLevelGain, mic] = gains;
 
     expect(await handle.setMicrophoneEnabled(false, "mic-1")).toBe("ok");
     expect(await handle.setMicrophoneEnabled(true, "mic-1")).toBe("ok");
 
     expect(rampTargets(mic)).toEqual([0, 1]);
+    expect(rampTargets(micLevelGain)).toEqual([]); // muting never touches the level
     // ~20 ms ramp from the context's current time (10 s in the fake).
     expect(mic.gain.linearRampToValueAtTime.mock.calls[0][1]).toBeCloseTo(10.02);
     expect(micTrack.stop).not.toHaveBeenCalled();
@@ -474,7 +497,7 @@ describe("live controls", () => {
       audio: { deviceId: { ideal: string } };
     };
     expect(micConstraints.audio.deviceId.ideal).toBe("mic-2");
-    expect(gains).toHaveLength(before + 1);
+    expect(gains).toHaveLength(before + 2); // level + mute
     expect(gains.at(-1)!.gain.value).toBe(1);
 
     await handle.stop();
@@ -498,12 +521,14 @@ describe("live controls", () => {
 
   it("ramps the system-audio gain", async () => {
     const handle = await startEngine(baseOptions({ systemAudio: true }));
-    const sys = gains[0];
+    const [volume, duck, sys] = gains;
     expect(sys.gain.value).toBe(1);
 
     expect(handle.setSystemAudioEnabled(false)).toBe("ok");
     expect(handle.setSystemAudioEnabled(true)).toBe("ok");
     expect(rampTargets(sys)).toEqual([0, 1]);
+    expect(rampTargets(volume)).toEqual([]);
+    expect(rampTargets(duck)).toEqual([]);
   });
 
   it("answers unavailable for system audio when there is no loopback track", async () => {
@@ -521,5 +546,183 @@ describe("live controls", () => {
     await handle.stop();
     expect(handle.setSystemAudioEnabled(false)).toBe("unavailable");
     expect(await handle.setMicrophoneEnabled(true, "mic-1")).toBe("unavailable");
+  });
+});
+
+describe("audio settings", () => {
+  const audio = (
+    over: Partial<typeof DEFAULT_AUDIO_SETTINGS> = {},
+  ): typeof DEFAULT_AUDIO_SETTINGS => ({
+    ...DEFAULT_AUDIO_SETTINGS,
+    ...over,
+  });
+
+  it("asks for noise suppression in the mic constraints, at start and for a late mic", async () => {
+    await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+    expect(getUserMedia.mock.calls[1][0]).toEqual({
+      audio: { deviceId: { ideal: "mic-1" }, noiseSuppression: true },
+    });
+
+    const handle = await startEngine(
+      baseOptions({ microphoneDeviceId: null, audio: audio({ noiseSuppression: false }) }),
+    );
+    getUserMedia.mockClear();
+    await handle.setMicrophoneEnabled(true, "mic-2");
+    expect(getUserMedia.mock.calls[0][0]).toEqual({
+      audio: { deviceId: { ideal: "mic-2" }, noiseSuppression: false },
+    });
+  });
+
+  it("starts the mic and system gains from the settings", async () => {
+    await startEngine(
+      baseOptions({
+        microphoneDeviceId: "mic-1",
+        systemAudio: true,
+        audio: audio({ micLevel: 150, systemAudioVolume: 40 }),
+      }),
+    );
+    // mic level, mic mute, system volume, duck, system mute.
+    expect(gains.map((g) => g.gain.value)).toEqual([1.5, 1, 0.4, 1, 1]);
+  });
+
+  it("setMicLevel ramps only the level gain, and a late mic starts from it", async () => {
+    const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+    handle.setMicLevel(70);
+    handle.setMicLevel(900); // clamped to 200
+    expect(rampTargets(gains[0])).toEqual([0.7, 2]);
+    expect(rampTargets(gains[1])).toEqual([]);
+
+    const late = await startEngine(baseOptions({ microphoneDeviceId: null }));
+    late.setMicLevel(50);
+    const before = gains.length;
+    await late.setMicrophoneEnabled(true, "mic-1");
+    expect(gains[before].gain.value).toBe(0.5);
+  });
+
+  it("setNoiseSuppression applies the constraint on the live mic track", async () => {
+    const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+    expect(await handle.setNoiseSuppression(false)).toBe("ok");
+    expect(micTrack.applyConstraints).toHaveBeenCalledWith({ noiseSuppression: false });
+  });
+
+  it("setNoiseSuppression is unavailable without a mic or when the device refuses it", async () => {
+    const none = await startEngine(baseOptions({ microphoneDeviceId: null }));
+    expect(await none.setNoiseSuppression(false)).toBe("unavailable");
+
+    const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+    micTrack.applyConstraints.mockRejectedValueOnce(new Error("OverconstrainedError"));
+    expect(await handle.setNoiseSuppression(false)).toBe("unavailable");
+  });
+
+  it("setSystemAudioVolume ramps only the volume gain; unavailable without loopback", async () => {
+    const handle = await startEngine(baseOptions({ systemAudio: true }));
+    expect(handle.setSystemAudioVolume(25)).toBe("ok");
+    const [volume, duck, mute] = gains;
+    expect(rampTargets(volume)).toEqual([0.25]);
+    expect(rampTargets(duck)).toEqual([]);
+    expect(rampTargets(mute)).toEqual([]);
+
+    getUserMedia.mockImplementation(async () => fakeStream([screenVideoTrack], []));
+    const bare = await startEngine(baseOptions());
+    expect(bare.setSystemAudioVolume(10)).toBe("unavailable");
+    expect(bare.setDucking(true)).toBe("unavailable");
+  });
+
+  describe("ducking", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    const ducking = async (over: Partial<EngineOptions> = {}) => {
+      const handle = await startEngine(
+        baseOptions({
+          microphoneDeviceId: "mic-1",
+          systemAudio: true,
+          audio: audio({ duckSystemAudioWhileTalking: true }),
+          ...over,
+        }),
+      );
+      const duck = gains[3];
+      return { handle, duck };
+    };
+
+    it("ducks the system audio to 0.3 when the mic hears a voice, then restores it", async () => {
+      const { duck } = await ducking();
+      analysers[0].level = bytesForDbfs(-20);
+      await vi.advanceTimersByTimeAsync(50);
+      expect(rampTargets(duck)).toEqual([0.3]);
+      expect(duck.gain.linearRampToValueAtTime.mock.calls[0][1]).toBeCloseTo(10.08);
+
+      analysers[0].level = 128;
+      await vi.advanceTimersByTimeAsync(500);
+      expect(rampTargets(duck)).toEqual([0.3, 1]);
+    });
+
+    it("does nothing while the mic stays quiet", async () => {
+      const { duck } = await ducking();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(rampTargets(duck)).toEqual([]);
+    });
+
+    it("never ducks for a muted mic", async () => {
+      const { handle, duck } = await ducking();
+      await handle.setMicrophoneEnabled(false, "mic-1");
+      analysers[0].level = bytesForDbfs(-20);
+      await vi.advanceTimersByTimeAsync(500);
+      expect(rampTargets(duck)).toEqual([]);
+    });
+
+    it("does not run unless enabled, and setDucking(true) starts it", async () => {
+      const { handle, duck } = await ducking({ audio: audio() });
+      analysers[0].level = bytesForDbfs(-20);
+      await vi.advanceTimersByTimeAsync(200);
+      expect(rampTargets(duck)).toEqual([]);
+
+      expect(handle.setDucking(true)).toBe("ok");
+      await vi.advanceTimersByTimeAsync(50);
+      expect(rampTargets(duck)).toEqual([0.3]);
+    });
+
+    it("setDucking(false) stops the loop and restores full volume", async () => {
+      const { handle, duck } = await ducking();
+      analysers[0].level = bytesForDbfs(-20);
+      await vi.advanceTimersByTimeAsync(50);
+      handle.setDucking(false);
+      expect(rampTargets(duck)).toEqual([0.3, 1]);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(rampTargets(duck)).toEqual([0.3, 1]); // no further changes
+    });
+
+    it("clears the loop on stop", async () => {
+      const { handle } = await ducking();
+      const stopping = handle.stop();
+      await vi.advanceTimersByTimeAsync(1500);
+      await stopping;
+      expect(vi.getTimerCount()).toBe(0);
+    });
+  });
+
+  describe("readMicLevels", () => {
+    it("is five zeros while no mic is open", async () => {
+      const handle = await startEngine(baseOptions({ microphoneDeviceId: null }));
+      expect(handle.readMicLevels()).toEqual([0, 0, 0, 0, 0]);
+    });
+
+    it("reads five bars from the mic-only analyser, not the mix", async () => {
+      const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+      const [mic, mix] = analysers;
+      mic.level = bytesForDbfs(-12);
+      mix.level = 128;
+      const bars = handle.readMicLevels();
+      expect(bars).toHaveLength(5);
+      expect(bars.every((bar) => bar > 0)).toBe(true);
+      expect(handle.readLevels().every((bar) => bar === 0)).toBe(true);
+    });
+
+    it("keeps reading while the mic is muted (the meter shows what the device hears)", async () => {
+      const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+      await handle.setMicrophoneEnabled(false, "mic-1");
+      analysers[0].level = bytesForDbfs(-12);
+      expect(handle.readMicLevels().some((bar) => bar > 0)).toBe(true);
+    });
   });
 });

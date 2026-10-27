@@ -17,6 +17,7 @@ vi.mock("mediabunny", () => ({
   MediaStreamAudioTrackSource: vi.fn(),
 }));
 
+import { DEFAULT_AUDIO_SETTINGS } from "@shared/audio-settings";
 import { startEngine } from "./recorder-engine";
 
 afterEach(() => {
@@ -55,6 +56,7 @@ describe("startEngine — a capture that never delivers a frame", () => {
       sourceId: "screen:1:0",
       microphoneDeviceId: null,
       systemAudio: false,
+      audio: DEFAULT_AUDIO_SETTINGS,
       height: 1080,
       onChunk: vi.fn(),
     }).then(
