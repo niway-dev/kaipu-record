@@ -20,6 +20,7 @@ import {
 } from "@shared/types";
 import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 import { sanitizeQuality } from "@shared/recording-quality";
+import { sanitizeAudioSettings } from "@shared/audio-settings";
 import { sanitizeCameraBubble } from "@shared/camera-bubble";
 import { DEFAULT_LOCALE, isLocale } from "@kaipu/i18n";
 
@@ -156,5 +157,6 @@ export function mergeSettings(
         ? safe.diagnosticsEnabled
         : DEFAULT_SETTINGS.diagnosticsEnabled,
     cameraBubble: sanitizeCameraBubble(safe.cameraBubble),
+    audio: sanitizeAudioSettings(safe.audio),
   };
 }

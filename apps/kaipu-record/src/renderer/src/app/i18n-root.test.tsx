@@ -25,6 +25,12 @@ const SETTINGS: AppSettings = {
   trayHintShown: false,
   diagnosticsEnabled: true,
   cameraBubble: { shape: "circle", size: 240, deviceId: null },
+  audio: {
+    micLevel: 100,
+    noiseSuppression: true,
+    systemAudioVolume: 100,
+    duckSystemAudioWhileTalking: false,
+  },
 };
 
 describe("I18nRoot theme application", () => {

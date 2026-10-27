@@ -103,6 +103,12 @@ describe("mergeSettings", () => {
       trayHintShown: true,
       diagnosticsEnabled: false,
       cameraBubble: { shape: "circle", size: 240, deviceId: null },
+      audio: {
+        micLevel: 100,
+        noiseSuppression: true,
+        systemAudioVolume: 100,
+        duckSystemAudioWhileTalking: false,
+      },
     });
   });
 
@@ -417,5 +423,38 @@ describe("mergeSettings — cameraBubble", () => {
       deviceId: null,
     });
     expect(mergeSettings({ cameraBubble: "big" } as never).cameraBubble.size).toBe(240);
+  });
+});
+
+describe("mergeSettings — audio", () => {
+  it("defaults to today's recording", () => {
+    expect(mergeSettings(null).audio).toEqual({
+      micLevel: 100,
+      noiseSuppression: true,
+      systemAudioVolume: 100,
+      duckSystemAudioWhileTalking: false,
+    });
+  });
+
+  it("keeps a valid stored value", () => {
+    const audio = {
+      micLevel: 70,
+      noiseSuppression: false,
+      systemAudioVolume: 40,
+      duckSystemAudioWhileTalking: true,
+    };
+    expect(mergeSettings({ audio }).audio).toEqual(audio);
+  });
+
+  it("falls back field by field and clamps numbers", () => {
+    expect(
+      mergeSettings({ audio: { micLevel: 900, noiseSuppression: "no" } } as never).audio,
+    ).toEqual({
+      micLevel: 200,
+      noiseSuppression: true,
+      systemAudioVolume: 100,
+      duckSystemAudioWhileTalking: false,
+    });
+    expect(mergeSettings({ audio: 3 } as never).audio.micLevel).toBe(100);
   });
 });

@@ -19,6 +19,7 @@ import {
   type RecordingRatio,
   type RememberedArea,
 } from "./screenshot-capture";
+import { DEFAULT_AUDIO_SETTINGS, type AudioSettings } from "../audio-settings";
 import { DEFAULT_CAMERA_BUBBLE, type CameraBubbleSettings } from "../camera-bubble";
 
 /**
@@ -312,6 +313,12 @@ export interface AppSettings {
    * bubble's resize grip, and applied to a showing bubble live, mid-take included.
    */
   cameraBubble: CameraBubbleSettings;
+  /**
+   * The mic's level and noise reduction, the system audio's volume and its ducking (see
+   * `shared/audio-settings.ts`). Changed from the Mic and System audio settings and applied
+   * to a running take live. The mic device itself stays in `RecordingSettings`.
+   */
+  audio: AudioSettings;
 }
 
 /**
@@ -343,6 +350,7 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   trayHintShown: false,
   diagnosticsEnabled: true,
   cameraBubble: DEFAULT_CAMERA_BUBBLE,
+  audio: DEFAULT_AUDIO_SETTINGS,
 };
 
 /** Prefixes on the `recording:finalize` rejection message; the renderer picks the toast from them. */

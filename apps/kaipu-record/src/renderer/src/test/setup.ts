@@ -77,6 +77,12 @@ const STUB_SETTINGS = {
   trayHintShown: false,
   diagnosticsEnabled: true,
   cameraBubble: { shape: "circle", size: 240, deviceId: null },
+  audio: {
+    micLevel: 100,
+    noiseSuppression: true,
+    systemAudioVolume: 100,
+    duckSystemAudioWhileTalking: false,
+  },
 } as const;
 
 // Vitest does not expose `afterEach` as a global (globals: false), so
