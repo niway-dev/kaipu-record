@@ -9,17 +9,14 @@
  * No TS enums (house rule): `as const` arrays + derived types.
  */
 import type { RecordingArea } from "./types/ipc";
-import { RECORDING_RATIOS, type RecordingRatio } from "./types/screenshot-capture";
+import {
+  RECORDING_RATIO_VALUES,
+  isRecordingRatio,
+  type RecordingRatio,
+} from "./types/screenshot-capture";
 
 export const RECORDING_CAPTURE_MODES = ["screen", "area", "window"] as const;
 export type RecordingCaptureMode = (typeof RECORDING_CAPTURE_MODES)[number];
-
-/**
- * The aspect ratios a remembered area can be locked to; "free" = no lock. The same list the
- * overlay's ratio bar offers (`RECORDING_RATIOS`), so a stored ratio always names a chip.
- */
-export const RECORDING_CAPTURE_RATIOS = RECORDING_RATIOS;
-export type RecordingCaptureRatio = RecordingRatio;
 
 export interface RecordingCapture {
   mode: RecordingCaptureMode;
@@ -27,7 +24,7 @@ export interface RecordingCapture {
   width: number;
   height: number;
   /** Area recordings only: the locked ratio, or one inferred from the size. null otherwise. */
-  ratio: RecordingCaptureRatio | null;
+  ratio: RecordingRatio | null;
   /** Area recordings only: the display the area was on. */
   displayId?: number;
 }
@@ -44,27 +41,16 @@ export function recordingCaptureMode(sourceId: string, hasArea: boolean): Record
 /** Relative tolerance when inferring a fixed ratio from an encoded size (even rounding shifts it). */
 export const RATIO_TOLERANCE = 0.01;
 
-const FIXED_RATIOS: ReadonlyArray<{
-  ratio: Exclude<RecordingCaptureRatio, "free">;
-  value: number;
-}> = [
-  { ratio: "16:9", value: 16 / 9 },
-  { ratio: "9:16", value: 9 / 16 },
-  { ratio: "1:1", value: 1 },
-];
-
 /** 16:9, 9:16 or 1:1 when `width / height` is within 1% of one; "free" otherwise or when unknown. */
-export function inferRecordingRatio(width: number, height: number): RecordingCaptureRatio {
+export function inferRecordingRatio(width: number, height: number): RecordingRatio {
   if (!(width > 0) || !(height > 0)) return "free";
   const actual = width / height;
-  for (const { ratio, value } of FIXED_RATIOS) {
+  for (const [ratio, value] of Object.entries(RECORDING_RATIO_VALUES) as Array<
+    [Exclude<RecordingRatio, "free">, number]
+  >) {
     if (Math.abs(actual - value) / value <= RATIO_TOLERANCE) return ratio;
   }
   return "free";
-}
-
-function isRatio(value: unknown): value is RecordingCaptureRatio {
-  return (RECORDING_CAPTURE_RATIOS as readonly unknown[]).includes(value);
 }
 
 function positiveInt(value: unknown): number {
@@ -99,7 +85,7 @@ export function buildRecordingCapture(input: BuildRecordingCaptureInput): Record
     height = 0;
   }
   if (mode !== "area" || !area) return { mode, width, height, ratio: null };
-  const ratio = isRatio(area.ratio) ? area.ratio : inferRecordingRatio(width, height);
+  const ratio = isRecordingRatio(area.ratio) ? area.ratio : inferRecordingRatio(width, height);
   return { mode, width, height, ratio, displayId: area.displayId };
 }
 
@@ -119,7 +105,7 @@ export function sanitizeRecordingCapture(value: unknown): RecordingCapture | nul
     mode,
     width: sized ? width : 0,
     height: sized ? height : 0,
-    ratio: mode === "area" && isRatio(raw.ratio) ? raw.ratio : null,
+    ratio: mode === "area" && isRecordingRatio(raw.ratio) ? raw.ratio : null,
   };
   if (mode === "area" && typeof raw.displayId === "number" && Number.isFinite(raw.displayId)) {
     capture.displayId = raw.displayId;

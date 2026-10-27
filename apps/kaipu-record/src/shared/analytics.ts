@@ -6,11 +6,8 @@
  * No TS enums (house rule): `as const` arrays + derived types, one source for
  * the value and its type — same idiom as IPC_CHANNELS.
  */
-import {
-  inferRecordingRatio,
-  recordingCaptureMode,
-  type RecordingCaptureRatio,
-} from "./recording-capture";
+import { inferRecordingRatio, recordingCaptureMode } from "./recording-capture";
+import type { RecordingRatio } from "./types/screenshot-capture";
 
 /** Feature flags the app reads. Names must match the PostHog dashboard exactly. */
 export const FLAG_NAMES = ["bypass-login"] as const;
@@ -116,7 +113,7 @@ export interface RecordingStartedProperties {
   /** Area only. */
   size?: RecordingSizeBucket;
   /** Area only: the chip the box was locked to, or the one its size matches ("free" otherwise). */
-  ratio?: RecordingCaptureRatio;
+  ratio?: RecordingRatio;
 }
 
 /**
@@ -131,7 +128,7 @@ export function buildRecordingStartedProperties(input: {
   /** The area's size in physical pixels (DIP × scale factor). */
   areaSize?: { width: number; height: number } | null;
   /** The ratio the area was locked to, when the overlay reported one. */
-  ratio?: RecordingCaptureRatio;
+  ratio?: RecordingRatio;
 }): RecordingStartedProperties {
   const mode = recordingCaptureMode(input.sourceId, input.area);
   const base = { mode, platform: input.platform, displays: input.displays };

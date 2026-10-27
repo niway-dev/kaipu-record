@@ -6,10 +6,10 @@ import { MIN_AREA_SIZE } from "@shared/capture-geometry";
 import type { RecordingArea } from "@shared/types/ipc";
 import { isRecordingRatio } from "@shared/types/screenshot-capture";
 import {
-  CAMERA_BUBBLE_MIN_SIZE,
+  CAMERA_BUBBLE_AREA_MARGIN,
   CAMERA_BUBBLE_WINDOW_PAD,
   DEFAULT_CAMERA_BUBBLE,
-  clampCameraBubbleSize,
+  cameraBubbleWindowInArea,
 } from "@shared/camera-bubble";
 
 export interface Rect {
@@ -22,7 +22,7 @@ export interface Rect {
 /** Room the bubble's window keeps around the bubble (see `shared/camera-bubble.ts`). */
 export const BUBBLE_PAD = CAMERA_BUBBLE_WINDOW_PAD;
 /** The window's distance from the area's (or display's) left and bottom edges, in DIP. */
-export const BUBBLE_MARGIN = 32;
+export const BUBBLE_MARGIN = CAMERA_BUBBLE_AREA_MARGIN;
 
 /** A display-relative area in global DIP, given its display's bounds. */
 export function areaToGlobal(area: RecordingArea, displayBounds: Rect): Rect {
@@ -46,11 +46,8 @@ export function bubbleBoundsInArea(
   size: number = DEFAULT_CAMERA_BUBBLE.size,
   margin = BUBBLE_MARGIN,
 ): Rect | null {
-  const room = Math.min(area.width, area.height) - 2 * margin - 2 * BUBBLE_PAD;
-  const fitted = Math.min(clampCameraBubbleSize(size), Math.floor(room));
-  if (fitted < CAMERA_BUBBLE_MIN_SIZE) return null;
-  const side = fitted + 2 * BUBBLE_PAD;
-  return { x: area.x + margin, y: area.y + area.height - margin - side, width: side, height: side };
+  // The same rule the overlay's placeholder uses (shared/camera-bubble.ts).
+  return cameraBubbleWindowInArea(area, size, margin);
 }
 
 /** The bubble's own side for window bounds from {@link bubbleBoundsInArea}. */

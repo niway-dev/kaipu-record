@@ -1,5 +1,9 @@
 import { MIN_AREA_SIZE } from "@shared/capture-geometry";
-import type { CaptureRect, RecordingRatio } from "@shared/types/screenshot-capture";
+import {
+  recordingRatioValue,
+  type CaptureRect,
+  type RecordingRatio,
+} from "@shared/types/screenshot-capture";
 import type { HandleId, Pt } from "../annotations/handles";
 
 /**
@@ -9,19 +13,8 @@ import type { HandleId, Pt } from "../annotations/handles";
  * DIP of rounding; the engine rounds the encoded size to even pixels anyway (ADR 0030).
  */
 
-/** Width over height for a locked ratio; `null` for Free. */
-export function ratioValue(ratio: RecordingRatio): number | null {
-  switch (ratio) {
-    case "16:9":
-      return 16 / 9;
-    case "9:16":
-      return 9 / 16;
-    case "1:1":
-      return 1;
-    default:
-      return null;
-  }
-}
+/** Width over height for a locked ratio; `null` for Free (the shared table). */
+export const ratioValue: (ratio: RecordingRatio) => number | null = recordingRatioValue;
 
 /** The smallest width and height a box with `ratio` may have: both sides at least `min`. */
 function minimumSize(ratio: number, min: number): { width: number; height: number } {

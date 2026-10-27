@@ -11,11 +11,12 @@ import type { TagColor } from "@kaipu/domain/constants";
 import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
 import type { ExportPresetId, ExportQuality } from "./export-preset";
-import type { RecordingCapture, RecordingCaptureRatio } from "../recording-capture";
+import type { RecordingCapture } from "../recording-capture";
 import {
   ENABLED_CAPTURE_MODES,
   type CaptureMode,
   type CaptureRect,
+  type RecordingRatio,
   type RememberedArea,
 } from "./screenshot-capture";
 import { DEFAULT_CAMERA_BUBBLE, type CameraBubbleSettings } from "../camera-bubble";
@@ -700,7 +701,7 @@ export interface RecordingArea {
    * The aspect ratio the remembered area is locked to, when the Record page set one.
    * Absent on areas chosen before ratios existed; the capture metadata then infers it.
    */
-  ratio?: RecordingCaptureRatio;
+  ratio?: RecordingRatio;
 }
 
 /**

@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera, Lock, Mic, Volume2, X, type LucideIcon } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
-import type { CameraAccessStatus, KaipuElectronAPI } from "@shared/types/electron-api";
+import type { KaipuElectronAPI } from "@shared/types/electron-api";
 import type { RecordingSettings } from "@shared/types/ipc";
 import {
-  CAMERA_BUBBLE_MIN_SIZE,
   CAMERA_BUBBLE_WINDOW_PAD,
   DEFAULT_CAMERA_BUBBLE,
-  clampCameraBubbleSize,
+  cameraBubbleWindowInArea,
   type CameraBubbleShape,
 } from "@shared/camera-bubble";
+import { useCameraAccess } from "@renderer/features/camera-settings/use-camera-settings";
 import {
   RECORDING_RATIOS,
   type CaptureMode,
@@ -44,12 +44,6 @@ export const RATIO_BAR_GAP_DIP = 8;
 /** The Start pill's height and its gap under the box. */
 export const START_PILL_HEIGHT_DIP = 36;
 export const START_PILL_GAP_DIP = 14;
-/**
- * The camera bubble window's margin inside a recorded area, mirroring `BUBBLE_MARGIN` in
- * `main/recording/area-geometry.ts` (main code cannot be imported here). The window adds
- * `CAMERA_BUBBLE_WINDOW_PAD` around the bubble, so the visible bubble sits margin + pad in.
- */
-export const CAMERA_PREVIEW_WINDOW_MARGIN_DIP = 32;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max));
@@ -110,15 +104,14 @@ export function cameraPreviewPlacement(
   frame: CaptureRect,
   size: number = DEFAULT_CAMERA_BUBBLE.size,
 ): CaptureRect | null {
-  const inset = CAMERA_PREVIEW_WINDOW_MARGIN_DIP + CAMERA_BUBBLE_WINDOW_PAD;
-  const room = Math.min(frame.width, frame.height) - 2 * inset;
-  const fitted = Math.min(clampCameraBubbleSize(size), Math.floor(room));
-  if (fitted < CAMERA_BUBBLE_MIN_SIZE) return null;
+  const window = cameraBubbleWindowInArea(frame, size);
+  if (!window) return null;
+  const pad = CAMERA_BUBBLE_WINDOW_PAD;
   return {
-    x: frame.x + inset,
-    y: frame.y + frame.height - inset - fitted,
-    width: fitted,
-    height: fitted,
+    x: window.x + pad,
+    y: window.y + pad,
+    width: window.width - 2 * pad,
+    height: window.height - 2 * pad,
   };
 }
 
@@ -159,7 +152,8 @@ export function useOverlayToggles(api: RecordingTogglesApi, enabled = true): Ove
     isSystemAudioEnabled: false,
     isCameraEnabled: false,
   });
-  const [access, setAccess] = useState<CameraAccessStatus>("unknown");
+  // The same camera-access read as the Record page and the tray tile.
+  const access = useCameraAccess(api, enabled);
   const [bubble, setBubble] = useState<{ size: number; shape: CameraBubbleShape }>({
     size: DEFAULT_CAMERA_BUBBLE.size,
     shape: DEFAULT_CAMERA_BUBBLE.shape,
@@ -172,12 +166,6 @@ export function useOverlayToggles(api: RecordingTogglesApi, enabled = true): Ove
       .getRecordingSettings()
       .then((current) => {
         if (live) setSettings(current);
-      })
-      .catch(() => {});
-    api
-      .getCameraAccessStatus?.()
-      .then((status) => {
-        if (live) setAccess(status);
       })
       .catch(() => {});
     api

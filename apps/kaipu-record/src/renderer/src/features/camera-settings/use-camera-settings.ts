@@ -54,14 +54,28 @@ export function useCameras(): CameraDevice[] {
   return cameras;
 }
 
-/** Camera access, re-read when the window regains focus (it is granted in System Settings). */
-export function useCameraAccess(): CameraAccessStatus {
+/** Where camera access is read from: the preload bridge, or a test's fake. */
+export interface CameraAccessSource {
+  getCameraAccessStatus?: () => Promise<CameraAccessStatus>;
+}
+
+/**
+ * Camera access, re-read when the window regains focus (it is granted in System Settings).
+ * The Record page, the tray panel and the record overlay all read it here. `enabled` false
+ * reads nothing (a screenshot overlay has no camera toggle); a source without the call
+ * reads "unknown", which never blocks.
+ */
+export function useCameraAccess(
+  source: CameraAccessSource = window.electronAPI,
+  enabled = true,
+): CameraAccessStatus {
   const [access, setAccess] = useState<CameraAccessStatus>("unknown");
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     const check = (): void => {
-      void window.electronAPI
-        .getCameraAccessStatus()
+      source
+        .getCameraAccessStatus?.()
         .then((next) => {
           if (!cancelled) setAccess(next);
         })
@@ -73,7 +87,7 @@ export function useCameraAccess(): CameraAccessStatus {
       cancelled = true;
       window.removeEventListener("focus", check);
     };
-  }, []);
+  }, [source, enabled]);
   return access;
 }
 

@@ -108,6 +108,18 @@ export function isRecordingRatio(value: unknown): value is RecordingRatio {
   return (RECORDING_RATIOS as readonly unknown[]).includes(value);
 }
 
+/** Width over height of each locked ratio: the one table the overlay and the metadata read. */
+export const RECORDING_RATIO_VALUES: Readonly<Record<Exclude<RecordingRatio, "free">, number>> = {
+  "16:9": 16 / 9,
+  "9:16": 9 / 16,
+  "1:1": 1,
+};
+
+/** Width over height for a locked ratio; `null` for Free. */
+export function recordingRatioValue(ratio: RecordingRatio): number | null {
+  return ratio === "free" ? null : RECORDING_RATIO_VALUES[ratio];
+}
+
 /**
  * A remembered recording area for one display: the rectangle (display-relative DIP) and
  * the ratio it was drawn with. `ratio` is optional so areas remembered before ratios

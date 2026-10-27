@@ -29,6 +29,35 @@ export const CAMERA_BUBBLE_MAX_SIZE = 480;
  */
 export const CAMERA_BUBBLE_WINDOW_PAD = 24;
 
+/** The bubble window's distance from the area's (or display's) left and bottom edges, in DIP. */
+export const CAMERA_BUBBLE_AREA_MARGIN = 32;
+
+export interface CameraBubbleRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * The bubble WINDOW's bounds inside `area` for a bubble of `size` (both in the same space,
+ * global DIP for main, window-local DIP for the overlay's placeholder): anchored at the
+ * area's bottom-left corner, growing up and to the right. A size the area cannot hold (with
+ * the margins and the pad on both sides) is clamped down to what fits; `null` when not even
+ * the minimum size fits. The visible bubble is these bounds inset by the pad.
+ */
+export function cameraBubbleWindowInArea(
+  area: CameraBubbleRect,
+  size: number,
+  margin: number = CAMERA_BUBBLE_AREA_MARGIN,
+): CameraBubbleRect | null {
+  const room = Math.min(area.width, area.height) - 2 * margin - 2 * CAMERA_BUBBLE_WINDOW_PAD;
+  const fitted = Math.min(clampCameraBubbleSize(size), Math.floor(room));
+  if (fitted < CAMERA_BUBBLE_MIN_SIZE) return null;
+  const side = fitted + 2 * CAMERA_BUBBLE_WINDOW_PAD;
+  return { x: area.x + margin, y: area.y + area.height - margin - side, width: side, height: side };
+}
+
 /** The three named sizes the S · M · L chips pick. */
 export const CAMERA_BUBBLE_PRESETS = { S: 160, M: 240, L: 360 } as const;
 export type CameraBubblePreset = keyof typeof CAMERA_BUBBLE_PRESETS;
