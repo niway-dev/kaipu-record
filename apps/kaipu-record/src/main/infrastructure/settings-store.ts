@@ -139,9 +139,37 @@ export function onSettingsChanged(listener: (settings: AppSettings) => void): vo
   settingsListeners.add(listener);
 }
 
+/**
+ * Subscribe to changes of some keys only: `listener` runs when one of `keys` differs (by
+ * value) from what it last saw, and not for any other change. A recording start writes the
+ * mode, and that must not re-register every global shortcut or rebuild the tray menu.
+ */
+export function onSettingsKeysChanged<K extends keyof AppSettings>(
+  keys: readonly K[],
+  listener: (settings: AppSettings) => void,
+): void {
+  const snapshot = (from: AppSettings): string => JSON.stringify(keys.map((key) => from[key]));
+  let seen = snapshot(settings);
+  settingsListeners.add((next) => {
+    const now = snapshot(next);
+    if (now === seen) return;
+    seen = now;
+    listener(next);
+  });
+}
+
+/** The launch-at-login value last handed to the OS; `null` before the first. */
+let appliedLaunchAtLogin: boolean | null = null;
+
 function applySideEffects(): void {
   applyDockPolicy();
-  if (process.platform === "darwin" || process.platform === "win32") {
+  // Only on a change: the OS call writes the login item each time, and every settings write
+  // (a mode chip, a remembered frame) used to repeat it.
+  if (
+    (process.platform === "darwin" || process.platform === "win32") &&
+    settings.launchAtLogin !== appliedLaunchAtLogin
+  ) {
+    appliedLaunchAtLogin = settings.launchAtLogin;
     app.setLoginItemSettings({ openAtLogin: settings.launchAtLogin });
   }
 }

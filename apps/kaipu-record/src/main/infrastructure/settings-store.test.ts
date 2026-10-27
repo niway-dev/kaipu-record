@@ -12,6 +12,7 @@ const mockState = vi.hoisted(() => ({
   dockVisible: true,
   setActivationPolicy: vi.fn(),
   dockShow: vi.fn(),
+  setLoginItemSettings: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
@@ -19,7 +20,7 @@ vi.mock("electron", () => ({
     getPath: (name: string) => (name === "userData" ? mockState.userDataDir : "/tmp"),
     setActivationPolicy: mockState.setActivationPolicy,
     dock: { show: mockState.dockShow, isVisible: () => mockState.dockVisible },
-    setLoginItemSettings: vi.fn(),
+    setLoginItemSettings: mockState.setLoginItemSettings,
   },
   ipcMain: {
     handle: (channel: string, fn: (event: unknown, ...args: unknown[]) => unknown) => {
@@ -187,5 +188,50 @@ describe("updateAppSettings (main-side writers)", () => {
     const reloaded = await loadStore();
     reloaded.registerSettings();
     expect(reloaded.getAppSettings().screenshotMode).toBe("screen");
+  });
+});
+
+describe("side effects run only for the settings they follow", () => {
+  beforeEach(async () => {
+    mockState.userDataDir = await mkdtemp(join(tmpdir(), "kaipu-settings-"));
+    mockState.handlers.clear();
+    mockState.setLoginItemSettings.mockReset();
+    setPlatform("darwin");
+  });
+
+  afterEach(async () => {
+    setPlatform(realPlatform);
+    await rm(mockState.userDataDir, { recursive: true, force: true });
+  });
+
+  it("hands launch-at-login to the OS at registration and then only when it changes", async () => {
+    const store = await loadStore();
+    store.registerSettings();
+    expect(mockState.setLoginItemSettings).toHaveBeenCalledTimes(1);
+
+    updateSettings({ recordingMode: "screen" });
+    updateSettings({ recordingMode: "frame" });
+    expect(mockState.setLoginItemSettings).toHaveBeenCalledTimes(1);
+
+    updateSettings({ launchAtLogin: true });
+    expect(mockState.setLoginItemSettings).toHaveBeenLastCalledWith({ openAtLogin: true });
+    expect(mockState.setLoginItemSettings).toHaveBeenCalledTimes(2);
+  });
+
+  it("a keyed listener ignores writes that leave its keys as they were", async () => {
+    const store = await loadStore();
+    store.registerSettings();
+    const listener = vi.fn();
+    store.onSettingsKeysChanged(["locale", "shortcuts"], listener);
+
+    updateSettings({ recordingMode: "screen" });
+    expect(listener).not.toHaveBeenCalled();
+
+    const shortcuts = { ...store.getAppSettings().shortcuts, startRecording: "Command+Shift+9" };
+    updateSettings({ shortcuts });
+    expect(listener).toHaveBeenCalledTimes(1);
+    // The same value written again (a new object) is not a change.
+    updateSettings({ shortcuts: { ...shortcuts } });
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 });

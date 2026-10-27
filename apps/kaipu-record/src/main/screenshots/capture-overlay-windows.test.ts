@@ -1260,3 +1260,151 @@ describe("CaptureOverlayWindows: Window mode disabled (the flag as shipped)", ()
     expect(list).not.toHaveBeenCalled();
   });
 });
+
+describe("CaptureOverlayWindows: the next pick's windows load hidden (warm-up)", () => {
+  function warmed(
+    options: {
+      next?: { ui: "frame" | "screen"; intent: "record" | "capture" } | null;
+      canWarm?: () => boolean;
+    } = {},
+  ) {
+    const next = vi.fn((_lastIntent: unknown) =>
+      options.next === null
+        ? null
+        : {
+            ...(options.next ?? { ui: "frame" as const, intent: "record" as const }),
+            displays: [left, right],
+          },
+    );
+    const port = new CaptureOverlayWindows({
+      platform: "darwin",
+      enabledModes: CAPTURE_MODES,
+      warmup: { next, canWarm: options.canWarm ?? (() => true) },
+      warmDelayMs: 100,
+      warmRetryMs: 500,
+    });
+    return { port, next };
+  }
+
+  it("loads one hidden window per display and never shows it before a pick", () => {
+    vi.useFakeTimers();
+    const { port } = warmed();
+    port.prewarm();
+    vi.advanceTimersByTime(0);
+
+    expect(created).toHaveLength(2);
+    for (const { window } of created) window.paint();
+    for (const { window } of created) {
+      expect(window.show).not.toHaveBeenCalled();
+      expect(window.showInactive).not.toHaveBeenCalled();
+      // Joining every Space happens only when shown (ADR 0029, the open-only toggle).
+      expect(window.setVisibleOnAllWorkspaces).not.toHaveBeenCalled();
+    }
+  });
+
+  it("a pick that matches shows the painted spares at once instead of loading new windows", () => {
+    vi.useFakeTimers();
+    const { port } = warmed();
+    port.prewarm();
+    vi.advanceTimersByTime(0);
+    const [first, second] = created.map(({ window }) => window);
+    first!.paint();
+
+    void port.pick("frame", [left, right], "record");
+
+    expect(created).toHaveLength(2);
+    // The frame (and the keyboard) is on the display under the pointer, still loading.
+    expect(second!.show).not.toHaveBeenCalled();
+    expect(first!.showInactive).toHaveBeenCalledTimes(1);
+    expect(first!.setVisibleOnAllWorkspaces).toHaveBeenCalledWith(true, {
+      visibleOnFullScreen: true,
+      skipTransformProcessType: true,
+    });
+    // The spare still loading shows when it paints.
+    second!.paint();
+    expect(second!.show).toHaveBeenCalledTimes(1);
+  });
+
+  it("a pick in another mode or intent throws the spares away and loads its own", () => {
+    vi.useFakeTimers();
+    const { port } = warmed();
+    port.prewarm();
+    vi.advanceTimersByTime(0);
+    const spares = created.map(({ window }) => window);
+
+    void port.pick("frame", [left, right]);
+
+    for (const spare of spares) expect(spare.destroy).toHaveBeenCalled();
+    expect(created).toHaveLength(4);
+  });
+
+  it("loads the next spares once a pick ends, guessed from that pick's intent", () => {
+    vi.useFakeTimers();
+    const { port, next } = warmed();
+    void port.pick("frame", [left, right]);
+    expect(created).toHaveLength(2);
+
+    port.destroyAll();
+    vi.advanceTimersByTime(99);
+    expect(created).toHaveLength(2);
+    vi.advanceTimersByTime(1);
+    expect(next).toHaveBeenLastCalledWith("capture");
+    expect(created).toHaveLength(4);
+  });
+
+  it("waits while the app is busy (a take), then loads", () => {
+    vi.useFakeTimers();
+    let busy = true;
+    const { port } = warmed({ canWarm: () => !busy });
+    port.prewarm();
+    vi.advanceTimersByTime(0);
+    expect(created).toHaveLength(0);
+
+    busy = false;
+    vi.advanceTimersByTime(500);
+    expect(created).toHaveLength(2);
+  });
+
+  it("loads nothing when the next pick shows no overlay", () => {
+    vi.useFakeTimers();
+    const { port } = warmed({ next: null });
+    port.prewarm();
+    vi.advanceTimersByTime(1000);
+    expect(created).toHaveLength(0);
+  });
+
+  it("a display change reloads the spares for the new layout", () => {
+    vi.useFakeTimers();
+    const { port } = warmed();
+    port.prewarm();
+    vi.advanceTimersByTime(0);
+    const spares = created.map(({ window }) => window);
+
+    screenListeners.get("display-metrics-changed")!({}, left);
+    for (const spare of spares) expect(spare.destroy).toHaveBeenCalled();
+    vi.advanceTimersByTime(100);
+    expect(created).toHaveLength(4);
+  });
+
+  it("a spare whose renderer crashed is never used", () => {
+    vi.useFakeTimers();
+    const { port } = warmed();
+    port.prewarm();
+    vi.advanceTimersByTime(0);
+    created[0]!.window.crashRenderer();
+    expect(created[1]!.window.destroy).toHaveBeenCalled();
+
+    void port.pick("frame", [left, right], "record");
+    expect(created).toHaveLength(4);
+  });
+
+  it("loads nothing without a warm-up (the default)", () => {
+    vi.useFakeTimers();
+    const port = overlays();
+    port.prewarm();
+    void port.pick("frame", [left]);
+    port.destroyAll();
+    vi.advanceTimersByTime(60_000);
+    expect(created).toHaveLength(1);
+  });
+});

@@ -19,6 +19,7 @@ import { measureFrameSize, playWithin } from "./frame-size";
 import { startRecordingCompositor, type RecordingCompositor } from "./recording-compositor";
 import { levelsFromTimeDomain } from "./audio-levels";
 import { waitForFirstMediaTimestamp, type FirstMediaTimestamp } from "./first-media-timestamp";
+import { markRecordTiming } from "./record-timing";
 
 export interface EngineHandle {
   pause(): void;
@@ -27,8 +28,11 @@ export interface EngineHandle {
   stop(): Promise<void>;
   /** Current 5-bar mic level (0..1). */
   readLevels(): number[];
-  /** A still JPEG frame of the screen captured at start. */
-  thumbnail: ArrayBuffer | null;
+  /**
+   * A still JPEG frame of the screen captured at start. Taken in the background (it is only
+   * needed at finalize), so the take never waits for it; null when it could not be taken.
+   */
+  thumbnail: Promise<ArrayBuffer | null>;
   /**
    * The size the video is encoded at: the compositor's target (area crop or `fitToCap`
    * downscale), which equals the native track size when frames are encoded raw.
@@ -109,6 +113,9 @@ const ENGINE_DEFAULTS = qualityToEngine(DEFAULT_QUALITY);
 // (`fitToCap`) and applied, undistorted, by the compositor.
 const CAPTURE_CEILING = { width: 7680, height: 4320 } as const;
 
+/** How long stop waits for a poster frame still being taken before it saves without one. */
+const THUMBNAIL_STOP_WAIT_MS = 1000;
+
 /**
  * Acquire screen + mic, mix audio, and start encoding to MP4 (H.264/AAC) via
  * mediabunny, streaming chunks out through `onChunk`. Returns a handle for
@@ -144,22 +151,31 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   // says, because "off" is a gain of 0 and the user may turn it on mid-take — and
   // FALL BACK to video-only if it rejects: the recording always starts (just
   // without system audio) instead of failing outright.
-  let screenStream: MediaStream | null = null;
-  try {
-    screenStream = await navigator.mediaDevices.getUserMedia({
-      audio: { mandatory: { chromeMediaSource: "desktop" } } as MediaTrackConstraints,
-      video: videoConstraints,
-    });
-  } catch (error) {
-    console.warn("system audio capture unavailable — recording without it", error);
-  }
-  if (!screenStream) {
-    screenStream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: videoConstraints,
-    });
-  }
+  const acquireScreen = async (): Promise<MediaStream> => {
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        audio: { mandatory: { chromeMediaSource: "desktop" } } as MediaTrackConstraints,
+        video: videoConstraints,
+      });
+    } catch (error) {
+      console.warn("system audio capture unavailable — recording without it", error);
+    }
+    return navigator.mediaDevices.getUserMedia({ audio: false, video: videoConstraints });
+  };
+  const screenRequest = acquireScreen();
+  // The mic opens alongside the screen instead of after it and the compositor: both are OS
+  // device opens, and the take waited for one, then the other.
+  const micRequest = options.microphoneDeviceId
+    ? openMicrophone(options.microphoneDeviceId)
+    : Promise.resolve(null);
+  // A start that fails before the mic is wired in must still release it (the mic light).
+  const releaseMicOnFailure = (error: unknown): never => {
+    void micRequest.then((mic) => mic?.getTracks().forEach((track) => track.stop()));
+    throw error;
+  };
+  const screenStream = await screenRequest.catch(releaseMicOnFailure);
   const screenTrack = screenStream.getVideoTracks()[0];
+  markRecordTiming("screen getUserMedia resolved");
 
   // 1b. Derive the real output size from the MEASURED native dimensions, keeping
   // the screen's true aspect ratio (so a 3024×1964 MacBook records as 1662×1080,
@@ -168,7 +184,8 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   const { width: sourceW, height: sourceH } = await measureFrameSize(screenTrack, {
     width: fallbackWidth,
     height: capHeight,
-  });
+  }).catch(releaseMicOnFailure);
+  markRecordTiming(`measureFrameSize resolved (${sourceW}x${sourceH})`);
   const areaPlan = options.area
     ? areaEncodePlan({ width: sourceW, height: sourceH }, options.area, capHeight)
     : null;
@@ -195,7 +212,7 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     } catch (error) {
       // No take will own the capture: release it, or the screen stays "being recorded".
       screenStream.getTracks().forEach((t) => t.stop());
-      throw error;
+      return releaseMicOnFailure(error);
     }
     encodeTrack = compositor.track;
   }
@@ -224,21 +241,17 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     gain.gain.linearRampToValueAtTime(on ? 1 : 0, now + GAIN_RAMP_SECONDS);
   };
   const acquireMicrophone = async (deviceId: string): Promise<MediaStream | null> => {
-    try {
-      const mic = await navigator.mediaDevices.getUserMedia({
-        audio: { deviceId: { ideal: deviceId } },
-      });
-      inputStreams.push(mic);
-      return mic;
-    } catch {
-      return null; // mic unavailable — continue without it
-    }
+    const mic = await openMicrophone(deviceId);
+    if (mic) inputStreams.push(mic);
+    return mic;
   };
 
   let micGain: GainNode | null = null;
-  if (options.microphoneDeviceId) {
-    const mic = await acquireMicrophone(options.microphoneDeviceId);
-    if (mic) micGain = connectThroughGain(mic, true);
+  const startMic = await micRequest;
+  markRecordTiming(`microphone ${startMic ? "opened" : "off or unavailable"}`);
+  if (startMic) {
+    inputStreams.push(startMic);
+    micGain = connectThroughGain(startMic, true);
   }
   const systemAudioTrack = screenStream.getAudioTracks()[0];
   let sysGain: GainNode | null = null;
@@ -307,6 +320,7 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     output.addAudioTrack(audioSource);
   }
   await output.start();
+  markRecordTiming("output.start resolved");
   // Fallback anchor if mediabunny's private first-media timestamp is unavailable:
   // the first frame is accepted within one frame period of start() resolving.
   const startedAt = performance.now();
@@ -329,8 +343,12 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   audioSource?.errorPromise.catch(notifyError);
   screenTrack.addEventListener("ended", () => notifyError(new Error("screen capture ended")));
 
-  // 5. Poster thumbnail from the first screen frame, at the real output size.
-  const thumbnail = await captureThumbnail(screenStream, target);
+  // 5. Poster thumbnail from the first screen frame, at the real output size. In the
+  // background: the take starts without it, and stop waits for it before the tracks end.
+  const thumbnail = captureThumbnail(screenStream, target).then((image) => {
+    markRecordTiming("captureThumbnail resolved");
+    return image;
+  });
 
   return {
     pause: () => {
@@ -380,6 +398,9 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     async stop() {
       stopped = true;
       teardownStarted = true; // stopping the tracks below would otherwise fire onError
+      // The poster frame comes from the screen track: take it before the tracks stop, but
+      // never let it hold the save up.
+      await Promise.race([thumbnail, delay(THUMBNAIL_STOP_WAIT_MS)]);
       await output.finalize();
       compositor?.stop(); // cancel the draw loop + release the canvas track
       for (const stream of inputStreams) stream.getTracks().forEach((t) => t.stop());
@@ -388,6 +409,17 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     },
   };
 }
+
+/** Mic (best-effort): the stream, or null when it cannot be opened. */
+async function openMicrophone(deviceId: string): Promise<MediaStream | null> {
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { ideal: deviceId } } });
+  } catch {
+    return null; // mic unavailable — continue without it
+  }
+}
+
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function captureThumbnail(
   stream: MediaStream,
