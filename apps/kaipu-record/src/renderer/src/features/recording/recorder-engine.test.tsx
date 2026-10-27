@@ -282,6 +282,54 @@ describe("startEngine", () => {
     expect(lastOutput().addAudioTrack).toHaveBeenCalled();
   });
 
+  it("opens the microphone alongside the screen, not after it", async () => {
+    let releaseScreen: () => void = () => {};
+    getUserMedia.mockImplementation(async (constraints: MediaStreamConstraints) => {
+      if (!constraints.video) return fakeStream([], [micTrack]);
+      await new Promise<void>((resolve) => (releaseScreen = resolve));
+      return fakeStream([screenVideoTrack], [screenSystemAudioTrack]);
+    });
+
+    const starting = startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+    // The screen request is still open, and the mic was already asked for.
+    expect(getUserMedia).toHaveBeenCalledTimes(2);
+    expect((getUserMedia.mock.calls[0][0] as MediaStreamConstraints).video).toBeTruthy();
+    releaseScreen();
+    await starting;
+    expect(gains[0]?.gain.value).toBe(1);
+  });
+
+  it("releases the microphone when the screen cannot be captured", async () => {
+    getUserMedia.mockImplementation(async (constraints: MediaStreamConstraints) => {
+      if (constraints.video) throw new Error("NotAllowedError");
+      return fakeStream([], [micTrack]);
+    });
+
+    await expect(startEngine(baseOptions({ microphoneDeviceId: "mic-1" }))).rejects.toThrow(
+      "NotAllowedError",
+    );
+    await vi.waitFor(() => expect(micTrack.stop).toHaveBeenCalled());
+  });
+
+  it("starts without waiting for the poster frame, and stop collects it", async () => {
+    let played: () => void = () => {};
+    vi.mocked(HTMLMediaElement.prototype.play).mockImplementation(
+      () => new Promise<void>((resolve) => (played = resolve)),
+    );
+
+    const handle = await startEngine(baseOptions());
+    expect(lastOutput().start).toHaveBeenCalled();
+    let settled = false;
+    void handle.thumbnail.then(() => (settled = true));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    played();
+    await handle.stop();
+    expect(settled).toBe(true);
+    expect(screenVideoTrack.stop).toHaveBeenCalled();
+  });
+
   it("keeps recording when the microphone cannot be opened", async () => {
     getUserMedia.mockImplementation(async (constraints: MediaStreamConstraints) => {
       if (constraints.video) return fakeStream([screenVideoTrack], []);

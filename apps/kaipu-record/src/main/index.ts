@@ -22,6 +22,7 @@ import { registerCloudStorageHandlers } from "./cloud";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
 import { registerRecordingHub, type RecordingHubHandle } from "./recording/recording-hub";
 import { recoverStrandedRecordings } from "./recording/stranded-recordings";
+import { beginRecordTiming, markRecordTiming } from "./recording/record-timing";
 import { vaultDirectory } from "./library/vault-location";
 import {
   initAutoUpdater,
@@ -35,6 +36,7 @@ import {
   getAppSettings,
   applyDockPolicy,
   onSettingsChanged,
+  onSettingsKeysChanged,
   updateAppSettings,
 } from "./infrastructure/settings-store";
 import { registerAuth } from "./infrastructure/auth-store";
@@ -60,7 +62,11 @@ import {
   type CaptureRequestPayload,
 } from "@shared/types/screenshot-capture";
 import type { RecordTarget } from "./screenshots/capture-handler";
-import { registerScreenshotHandlers, type ScreenshotHandlers } from "./screenshots/screenshot-ipc";
+import {
+  prewarmCaptureOverlay,
+  registerScreenshotHandlers,
+  type ScreenshotHandlers,
+} from "./screenshots/screenshot-ipc";
 import { resolveShortcutCapture, type CaptureShortcut } from "./screenshots/shortcut-capture";
 import { routeCaptureRequest } from "./screenshots/capture-request";
 import {
@@ -189,6 +195,8 @@ registerMediaScheme();
 
 /** Normal window minimums; floored so the main UI / onboarding never break. */
 const BASE_MIN_WIDTH = 720;
+/** How long after the main window shows the capture overlay's windows start loading hidden. */
+const OVERLAY_PREWARM_AFTER_LAUNCH_MS = 3000;
 const BASE_MIN_HEIGHT = 560;
 /** The screenshot editor (toolbar + canvas + beautify panel) needs more room. */
 /**
@@ -441,6 +449,10 @@ function triggerStartRecording(options: { reveal?: boolean } = {}): void {
     showAlreadyRecordingNotice();
     return;
   }
+  // A direct start (Capture Panel, no overlay) begins its timeline here; an overlay start
+  // began it at the selector.
+  if (options.reveal === false) markRecordTiming("start request sent to the recorder");
+  else beginRecordTiming("start requested (no overlay)");
   capturePanel?.hide();
   if (options.reveal === false) {
     // The countdown runs on the region the overlay chose (the recording shade); the
@@ -467,6 +479,7 @@ function triggerRecordSelector(requested?: CaptureMode): void {
     showAlreadyRecordingNotice();
     return;
   }
+  beginRecordTiming(`start clicked (${requested ?? "last"} mode)`);
   const settings = getAppSettings();
   if (requested && requested !== settings.recordingMode) {
     updateAppSettings({ recordingMode: requested });
@@ -478,6 +491,8 @@ function triggerRecordSelector(requested?: CaptureMode): void {
     sendToRenderer(IPC_CHANNELS.recordingRequestSourcePicker, { startOnPick: true });
     return;
   }
+  // The Record answer needs the display's screen source: list them while the overlay opens.
+  hub?.prefetchScreenSources();
   triggerCaptureScreenshot({ mode, intent: "record" });
 }
 
@@ -561,6 +576,7 @@ async function applyRecordTarget(target: RecordTarget): Promise<void> {
     showAlreadyRecordingNotice();
     return;
   }
+  markRecordTiming(`overlay answered (${target.start ? "record" : "use selection"})`);
   const applied = await hub.selectArea(target.displayId, target.rect, target.ratio);
   if (!applied) {
     // The overlay kept the main window hidden for a countdown that will not come: bring the
@@ -588,6 +604,8 @@ async function applyRecordTarget(target: RecordTarget): Promise<void> {
 
 /** The `recordArea` shortcut: the overlay in Frame, opened to choose what to record. */
 function triggerRecordArea(): void {
+  beginRecordTiming("record area shortcut");
+  hub?.prefetchScreenSources();
   triggerCaptureScreenshot({ mode: "frame", intent: "record" });
 }
 
@@ -814,9 +832,9 @@ app.whenReady().then(() => {
       toggleCamera: () => hub?.toggleRecordingSetting("isCameraEnabled"),
     },
   });
-  onSettingsChanged(() => applyGlobalShortcuts());
-  // Rebuild the native tray menu when the language changes.
-  onSettingsChanged((settings) => rebuildTrayMenu(settings.locale));
+  onSettingsKeysChanged(["shortcuts"], () => applyGlobalShortcuts());
+  // Rebuild the native tray menu when the language (or a shortcut it labels) changes.
+  onSettingsKeysChanged(["locale", "shortcuts"], (settings) => rebuildTrayMenu(settings.locale));
 
   // Library: local recordings vault + cloud catalog.
   registerLibraryVaultHandlers({ auth, serverUrl: authServerUrl });
@@ -1001,6 +1019,14 @@ app.whenReady().then(() => {
   // the main window is ready, not alongside it: the main window's start-up comes
   // first, and the end-to-end suite takes the first window to open as the app.
   mainWindow?.once("ready-to-show", () => capturePanel?.prewarm());
+  // The capture overlay's windows too, a little later: "Start recording" opens them, and
+  // loading one renderer per display was most of its wait. Held off while a take runs.
+  mainWindow?.once("ready-to-show", () => {
+    setTimeout(
+      () => prewarmCaptureOverlay(() => (hub?.isActive() || hub?.isPending()) ?? false),
+      OVERLAY_PREWARM_AFTER_LAUNCH_MS,
+    );
+  });
 
   app.on("activate", function () {
     // Dock-icon click: bring the main window back (recreating it if it was

@@ -348,6 +348,55 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     expect(visible({})).toBeUndefined();
   });
 
+  it("opens the region's shade on 3 as soon as the region is prepared, before the first tick", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const hub = registerRecordingHub(() => fakeMainWindow() as never);
+    const display = { id: 2, bounds: { x: 0, y: 0, width: 1512, height: 982 } };
+    mockState.displays = [display];
+    const rect = { x: 100, y: 50, width: 640, height: 360 };
+    const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+    const visible = mockState.ipcHandle.get(IPC_CHANNELS.recordingCountdownVisible)!;
+
+    hub.prepareRegionCountdown(2, rect);
+    expect(mockState.shade.show).toHaveBeenCalledTimes(1);
+    expect(mockState.shade.show).toHaveBeenCalledWith(display, rect, expect.any(Function), {
+      phase: "countdown",
+      value: 3,
+    });
+
+    // The shade showed while the start request travelled: the recorder's wait is answered
+    // at once, and its ticks only repaint the window already up.
+    const onShown = mockState.shade.show.mock.lastCall![2] as () => void;
+    onShown();
+    expect(visible({})).toBeUndefined();
+    phase({}, { phase: "counting", value: 3 });
+    phase({}, { phase: "counting", value: 2 });
+    expect(mockState.shade.show).toHaveBeenCalledTimes(1);
+    expect(mockState.shade.update).toHaveBeenLastCalledWith({ phase: "countdown", value: 2 });
+  });
+
+  it("a tick reported while the shade still loads does not count as visible", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const hub = registerRecordingHub(() => fakeMainWindow() as never);
+    mockState.displays = [{ id: 2, bounds: { x: 0, y: 0, width: 1512, height: 982 } }];
+    const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+    const visible = mockState.ipcHandle.get(IPC_CHANNELS.recordingCountdownVisible)!;
+
+    hub.prepareRegionCountdown(2, null);
+    let shown = false;
+    const waiting = (visible({}) as Promise<void>).then(() => (shown = true));
+    phase({}, { phase: "counting", value: 3 });
+    await Promise.resolve();
+    expect(shown).toBe(false);
+    (mockState.shade.show.mock.lastCall![2] as () => void)();
+    await waiting;
+    expect(shown).toBe(true);
+  });
+
   it("releases a recorder waiting on the countdown when the region is abandoned", async () => {
     const { registerSettings } = await import("../infrastructure/settings-store");
     const { registerRecordingHub } = await import("./recording-hub");
@@ -877,6 +926,26 @@ describe("recording hub — choosing an area or a display on the overlay", () =>
     mockState.displays = [mockState.displays[0]];
     mockState.screenOn.get("display-removed")!();
     expect(settings().area).toBeNull();
+  });
+
+  it("lists the screen sources once: a prefetch at overlay open serves the pick", async () => {
+    const { handle, settings } = await hub();
+    handle.prefetchScreenSources();
+    handle.prefetchScreenSources();
+    expect(await handle.selectArea(2, null)).toBe(true);
+    expect(await handle.selectArea(1, null)).toBe(true);
+    expect(mockState.getSources).toHaveBeenCalledTimes(1);
+    expect(settings().selectedSource).toMatchObject({ id: "screen:1:0" });
+  });
+
+  it("lists the screen sources again after a display change", async () => {
+    const { handle } = await hub();
+    await handle.selectArea(2, null);
+    mockState.screenOn.get("display-added")!();
+    await handle.selectArea(2, null);
+    mockState.screenOn.get("display-metrics-changed")!();
+    await handle.selectArea(2, null);
+    expect(mockState.getSources).toHaveBeenCalledTimes(3);
   });
 
   it("a display change during a take waits for stop before dropping the area", async () => {

@@ -69,7 +69,7 @@ function fakeEngine(over: Partial<EngineHandle> = {}): EngineHandle {
     resume: vi.fn(),
     stop: vi.fn(async () => {}),
     readLevels: vi.fn(() => [0, 0, 0, 0, 0]),
-    thumbnail: null,
+    thumbnail: Promise.resolve(null),
     outputSize: { width: 1662, height: 1080 },
     firstMediaTimestamp: Promise.resolve({ rendererMs: 0, quality: "estimated" as const }),
     hasSystemAudio: true,
