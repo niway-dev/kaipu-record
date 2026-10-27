@@ -113,6 +113,14 @@ export class RecordingWriter {
 
   async create(sessionId: string): Promise<{ tempPath: string }> {
     const tempPath = join(await this.stagingDir(), `kaipu-rec-${sessionId}.mp4.part`);
+    // A session already under this id (a renderer restarted its counter) is released first:
+    // its handle must not outlive the map entry that replaces it.
+    const previous = this.sessions.get(sessionId);
+    if (previous) {
+      this.sessions.delete(sessionId);
+      await previous.queue;
+      await this.closeHandle(previous).catch(() => {});
+    }
     const handle = await open(tempPath, "w+");
     this.sessions.set(sessionId, { handle, tempPath, queue: Promise.resolve() });
     return { tempPath };
@@ -193,26 +201,61 @@ export class RecordingWriter {
       session.stranded = true;
       throw new FinalizeMoveError(session.tempPath, cause);
     }
+
+    // From the move on, the take is in the vault: if its metadata cannot be written, it is
+    // taken back out, so no `.mp4` is left in the vault without its sidecar, and the take
+    // stays salvageable from the staging file.
+    let recording: LocalRecording;
+    try {
+      // Renderer-supplied, so validated before it lands on disk; exports send none.
+      const capture = sanitizeRecordingCapture(meta.capture);
+      await vault.writeMeta(id, {
+        title: meta.title,
+        durationSeconds: meta.durationSeconds,
+        ...(capture ? { capture } : {}),
+        createdAt: this.now(),
+        derivedFromAssetId: meta.derivedFromAssetId ?? null,
+        ...(meta.exportPreset ? { exportPreset: meta.exportPreset } : {}),
+        ...(isFingerprint(meta.exportFingerprint)
+          ? { exportFingerprint: meta.exportFingerprint }
+          : {}),
+      });
+      if (meta.thumbnail) await vault.writeThumbnail(id, Buffer.from(meta.thumbnail));
+      const described = await vault.describe(id);
+      if (!described) throw new Error(`Finalized recording "${id}" not found in vault`);
+      recording = described;
+    } catch (cause) {
+      if (!(await this.takeBack(vault, id, dest, session))) {
+        // The media stays in the vault (listed without its sidecar) and staging has nothing
+        // left: a salvage would fail, so the error must not offer one.
+        this.sessions.delete(sessionId);
+        throw cause;
+      }
+      session.stranded = true;
+      throw new FinalizeMoveError(session.tempPath, cause);
+    }
     this.sessions.delete(sessionId);
-
-    // Renderer-supplied, so validated before it lands on disk; exports send none.
-    const capture = sanitizeRecordingCapture(meta.capture);
-    await vault.writeMeta(id, {
-      title: meta.title,
-      durationSeconds: meta.durationSeconds,
-      ...(capture ? { capture } : {}),
-      createdAt: this.now(),
-      derivedFromAssetId: meta.derivedFromAssetId ?? null,
-      ...(meta.exportPreset ? { exportPreset: meta.exportPreset } : {}),
-      ...(isFingerprint(meta.exportFingerprint)
-        ? { exportFingerprint: meta.exportFingerprint }
-        : {}),
-    });
-    if (meta.thumbnail) await vault.writeThumbnail(id, Buffer.from(meta.thumbnail));
-
-    const recording = await vault.describe(id);
-    if (!recording) throw new Error(`Finalized recording "${id}" not found in vault`);
     return recording;
+  }
+
+  /**
+   * Move a finalized take back from the vault to its staging path and remove what was written
+   * for it. If the media cannot be moved back, the vault keeps it: removing it would lose it.
+   * Resolves whether the take is back in staging.
+   */
+  private async takeBack(
+    vault: LibraryVault,
+    id: string,
+    dest: string,
+    session: Session,
+  ): Promise<boolean> {
+    try {
+      await moveFile(dest, session.tempPath, { overwrite: true });
+    } catch {
+      return false;
+    }
+    await vault.remove(id).catch(() => {});
+    return true;
   }
 
   private async closeHandle(session: Session): Promise<void> {
@@ -227,6 +270,22 @@ export class RecordingWriter {
     if (!session?.stranded) throw new Error(`No stranded recording session "${sessionId}"`);
     await moveFile(session.tempPath, destPath, { overwrite: true }); // the save dialog confirmed it
     this.sessions.delete(sessionId);
+  }
+
+  /**
+   * Close every open session without deleting its file, for a take whose renderer is gone
+   * (crash, window closed mid-take): the partial `.part` stays on disk, but no handle is
+   * leaked. A stranded take is kept, so the save dialog can still salvage it.
+   */
+  async releaseAll(): Promise<void> {
+    const released = [...this.sessions.entries()].filter(([, session]) => !session.stranded);
+    for (const [id] of released) this.sessions.delete(id);
+    await Promise.all(
+      released.map(async ([, session]) => {
+        await session.queue;
+        await this.closeHandle(session).catch(() => {});
+      }),
+    );
   }
 
   async abort(sessionId: string): Promise<void> {

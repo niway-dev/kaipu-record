@@ -285,7 +285,8 @@ export function stopOrCancelRecording(): void {
 }
 
 async function beginEngine(input: StartInput): Promise<void> {
-  const id = `session-${++sessionCounter}`;
+  // Unique across renderer restarts: a recreated renderer must not reuse a dead take's id.
+  const id = `session-${Date.now().toString(36)}-${++sessionCounter}`;
   sessionId = id;
   markRecordTiming("beginEngine");
   // Hide the main window BEFORE the engine acquires streams, not after — so the
@@ -305,6 +306,9 @@ async function beginEngine(input: StartInput): Promise<void> {
   try {
     const acquired = (async () => {
       await start.created;
+      // Cancelled while the take's file was being created: the engine must not open the
+      // screen or the mic for a take that is already gone (`discardStart` aborts the file).
+      if (pendingStart !== start) throw new Error("start cancelled before it was created");
       start.engine = startEngine({
         sourceId: input.sourceId,
         area: input.area ?? null,
@@ -483,7 +487,8 @@ function forwardLiveSettings(handle: EngineHandle, input: StartInput): () => voi
 }
 
 export function pauseRecording(): void {
-  // Only a running take: during "finalizing" the engine is still set but flushing.
+  // Only a recording pauses: while finalizing the engine is already stopping, and a pause
+  // here would move the store out of "finalizing" under a take that is saving.
   if (snapshot.status !== "recording" || !engine || !clock) return;
   const pausedAt = performance.now();
   engine.pause();
