@@ -246,7 +246,7 @@ describe("ScreenCard", () => {
     expect(screen.getByText("1600 × 1000 · Built-in")).toBeInTheDocument();
   });
 
-  it("offers Capture · n, Copy, Record and the mode row", () => {
+  it("offers Capture · n, Copy and the mode row, without Record", () => {
     renderScreen();
     const capture = screen.getByRole("button", { name: "Capture this display · 2" });
     expect(capture).toHaveTextContent("Capture · 2");
@@ -255,7 +255,7 @@ describe("ScreenCard", () => {
       "aria-pressed",
       "true",
     );
-    expect(screen.getByRole("button", { name: "Record" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Record" })).not.toBeInTheDocument();
   });
 
   it("answers capture from Capture · n and copy from Copy", () => {
@@ -278,14 +278,6 @@ describe("ScreenCard", () => {
       action: "capture",
       displayId: 42,
     });
-  });
-
-  it("Record answers record for this display, without capturing it", () => {
-    const { answer } = renderScreen();
-    fireEvent.click(screen.getByRole("button", { name: "Record" }));
-    expect(answer).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ kind: "display", action: "record", displayId: 42 }),
-    );
   });
 
   it("Enter captures the hovered display, from whichever overlay has the keyboard", () => {
@@ -379,7 +371,7 @@ describe("ScreenCard", () => {
 });
 
 describe("FrameBox", () => {
-  it("attaches one toolbar under the frame, centred: switch, modes, Capture, Copy, Record, Cancel", async () => {
+  it("attaches one toolbar under the frame, centred: switch, modes, Capture, Copy, Cancel", async () => {
     const { api } = fakeApi({ "42": { x: 400, y: 120, width: 400, height: 300 } });
     render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
@@ -393,7 +385,6 @@ describe("FrameBox", () => {
       "Screen (3)",
       "Capture",
       "Copy",
-      "Record",
       "Cancel",
     ]);
     expect(within(bar).getByRole("button", { name: "Frame (1)" })).toHaveAttribute(
@@ -404,7 +395,7 @@ describe("FrameBox", () => {
       "aria-pressed",
       "false",
     );
-    expect(within(bar).getByRole("button", { name: "Record" })).toBeEnabled();
+    expect(within(bar).queryByRole("button", { name: "Record" })).not.toBeInTheDocument();
     expect(within(bar).getByRole("button", { name: "Cancel" })).toHaveAttribute(
       "title",
       "Cancel · Esc",
@@ -543,19 +534,6 @@ describe("FrameBox (chrome and keys)", () => {
     await waitFor(() =>
       expect(answer).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({ kind: "rect", action: "copy" }),
-      ),
-    );
-  });
-
-  it("Record on the frame answers record with the frame", async () => {
-    const remembered = { x: 100, y: 120, width: 400, height: 300 };
-    const { api, answer } = fakeApi({ "42": remembered });
-    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
-    await screen.findByTestId("capture-frame");
-    fireEvent.click(screen.getByRole("button", { name: "Record" }));
-    await waitFor(() =>
-      expect(answer).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({ kind: "rect", action: "record", rect: remembered }),
       ),
     );
   });
@@ -1345,17 +1323,34 @@ describe("WindowPicker", () => {
     );
   });
 
-  it("Copy in the action bar answers copy; a window cannot be recorded from here", () => {
+  it("Copy in the action bar answers copy; a screenshot picker has no Record", () => {
     const { sheet, answer } = renderPicker();
     fireEvent.pointerMove(sheet, { clientX: 300, clientY: 300 });
 
-    expect(screen.getByRole("button", { name: "Record" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "Record" }));
-    expect(answer).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Record" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     expect(answer).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ kind: "window", action: "copy", windowId: "11" }),
     );
+  });
+
+  it("opened to record, the picker's bar still draws Record first (disabled: a window cannot be recorded)", () => {
+    const fake = fakeApi({}, WINDOWS);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("window", { intent: "record" })}
+        api={fake.api}
+      />,
+    );
+    fireEvent.pointerMove(screen.getByTestId("window-picker"), { clientX: 300, clientY: 300 });
+    const bar = screen.getByTestId("selection-toolbar");
+    const labels = within(bar)
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label"));
+    expect(labels.indexOf("Record")).toBeGreaterThan(-1);
+    expect(labels.indexOf("Record")).toBeLessThan(labels.indexOf("Capture"));
+    expect(within(bar).getByRole("button", { name: "Record" })).toBeDisabled();
   });
 
   it("tells main the pointer is on this display, so this overlay gets the keyboard", () => {
@@ -1427,7 +1422,6 @@ describe("Window mode disabled (the flag as shipped)", () => {
       "Screen (2)",
       "Capture",
       "Copy",
-      "Record",
       "Cancel",
     ]);
   });
@@ -1556,25 +1550,15 @@ describe("CaptureOverlay — opened to record (ADR 0030)", () => {
     expect(answer).not.toHaveBeenCalled();
   });
 
-  it("a screenshot overlay offers an enabled Record next to Capture and Copy", async () => {
+  it("a screenshot overlay has no Record button and R does nothing; P / V is the way to record", async () => {
     const { api, answer } = fakeApi({ "42": frame });
     render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
-    const record = within(screen.getByTestId("selection-toolbar")).getByRole("button", {
-      name: /^Record/,
-    });
-    expect(record).toBeEnabled();
-
-    fireEvent.click(record);
-    await waitFor(() =>
-      expect(answer).toHaveBeenCalledExactlyOnceWith(
-        expect.objectContaining({ kind: "rect", action: "record", rect: frame }),
-      ),
-    );
-    // Recording from a screenshot overlay remembers nothing in the screenshot frame memory.
-    expect(api.updateSettings).not.toHaveBeenCalledWith(
-      expect.objectContaining({ screenshotFrame: expect.anything() }),
-    );
+    const bar = screen.getByTestId("selection-toolbar");
+    expect(within(bar).queryByRole("button", { name: /^Record/ })).not.toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: "Video (V)" })).toBeInTheDocument();
+    press("r");
+    expect(answer).not.toHaveBeenCalled();
   });
 
   it("the Screen card records the display, and in the record intent a click selects it", async () => {

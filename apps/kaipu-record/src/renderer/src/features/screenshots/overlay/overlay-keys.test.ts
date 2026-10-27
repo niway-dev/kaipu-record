@@ -57,16 +57,17 @@ describe("actionForKey", () => {
     expect(actionForKey(key({ key: "Enter", metaKey: true }), "mac", "capture")).toBeNull();
   });
 
-  it("R alone records, in either intent, on every platform", () => {
-    expect(actionForKey(key({ key: "r" }), "mac", "capture")).toBe("record");
+  it("R alone records only in the record intent; a screenshot overlay ignores it", () => {
+    expect(actionForKey(key({ key: "r" }), "mac", "capture")).toBeNull();
     expect(actionForKey(key({ key: "R" }), "other", "record")).toBe("record");
+    expect(actionForKey(key({ key: "r" }), "mac", "record")).toBe("record");
   });
 
   it("⌘R and Ctrl+R are not Record: packaged builds swallow them before the page", () => {
     // @electron-toolkit's watchWindowShortcuts preventDefaults Ctrl/Cmd+R outside dev.
-    expect(actionForKey(key({ key: "r", metaKey: true }), "mac", "capture")).toBeNull();
-    expect(actionForKey(key({ key: "r", ctrlKey: true }), "other", "capture")).toBeNull();
-    expect(actionForKey(key({ key: "r", altKey: true }), "mac", "capture")).toBeNull();
+    expect(actionForKey(key({ key: "r", metaKey: true }), "mac", "record")).toBeNull();
+    expect(actionForKey(key({ key: "r", ctrlKey: true }), "other", "record")).toBeNull();
+    expect(actionForKey(key({ key: "r", altKey: true }), "mac", "record")).toBeNull();
   });
 
   it("⌘C copies only when the overlay opened to capture", () => {

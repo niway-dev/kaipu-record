@@ -91,9 +91,9 @@ export function primaryAction(intent: CaptureIntent): "capture" | "record" {
 }
 
 /**
- * The action a key fires on a selection: Enter the primary one, R Record in either intent
- * (an alias of Enter when the overlay opened to record), ⌘C / Ctrl+C Copy only when the
- * overlay opened to take a screenshot.
+ * The action a key fires on a selection: Enter the primary one, R Record only when the
+ * overlay opened to record (an alias of Enter; a screenshot overlay has no Record, P / V
+ * switches intent instead), ⌘C / Ctrl+C Copy only when it opened to take a screenshot.
  */
 export function actionForKey(
   event: KeyboardEvent,
@@ -101,7 +101,7 @@ export function actionForKey(
   intent: CaptureIntent,
 ): CaptureAction | null {
   if (isCaptureKey(event)) return primaryAction(intent);
-  if (isRecordKey(event)) return "record";
+  if (intent === "record" && isRecordKey(event)) return "record";
   if (intent === "capture" && isCopyKey(event, platform)) return "copy";
   return null;
 }
