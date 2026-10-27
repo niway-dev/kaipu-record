@@ -522,6 +522,10 @@ export const IPC_CHANNELS = {
   // Main renderer → main: the recorder's phase while a start is pending, so main can draw
   // the countdown on the chosen region (recording shade window).
   recordingRecorderPhase: "recording:recorder-phase",
+  // Main renderer → main (invoke): resolves once the countdown is on screen. A region
+  // countdown is drawn by the shade window, which loads after the first tick is reported;
+  // the recorder waits for it so "3" is not spent while that window is still loading.
+  recordingCountdownVisible: "recording:countdown-visible",
   // Main → recording shade window: countdown tick or recording.
   recordingShadeState: "recording-shade:state",
   // Capture Panel asks main to run the interactive screenshot capture (panel → main →

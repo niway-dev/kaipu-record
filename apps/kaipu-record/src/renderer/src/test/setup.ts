@@ -181,6 +181,7 @@ window.electronAPI = {
   requestCaptureScreenshot: () => {},
   requestRecordSelector: () => {},
   reportRecorderPhase: () => {},
+  waitForCountdownVisible: async () => {},
   onRecordingShadeState: () => () => {},
   getShortcutStatus: async () => ({
     startRecording: true,

@@ -449,12 +449,25 @@ export function registerRecordingHub(
   };
   // Who to tell when the prepared start never becomes a take (the app was kept hidden).
   let countdownAbandoned: (() => void) | null = null;
+  // The region countdown is on screen (its shade showed the first tick), and the recorder's
+  // waits for that moment (`recordingCountdownVisible`).
+  let countdownShown = false;
+  let countdownShownWaiters: Array<() => void> = [];
+  const markCountdownShown = (): void => {
+    countdownShown = true;
+    const waiters = countdownShownWaiters;
+    countdownShownWaiters = [];
+    for (const resolve of waiters) resolve();
+  };
   const clearCountdownRegion = (): void => {
     if (countdownRegionTimer) clearTimeout(countdownRegionTimer);
     countdownRegionTimer = null;
     countdownRegion = null;
     countdownAbandoned = null;
     releaseEscape();
+    // Nothing is left to wait for: a waiting recorder goes on (or finds itself cancelled).
+    markCountdownShown();
+    countdownShown = false;
   };
   /** The prepared start will not become a take: forget it and let the caller reveal the app. */
   const abandonCountdownRegion = (): void => {
@@ -463,6 +476,12 @@ export function registerRecordingHub(
     shade.hide();
     notify?.();
   };
+  // Without a region the countdown is the Record page's own and is already visible. With one,
+  // the shade loads a renderer before it can show "3": the recorder starts its clock after.
+  ipcMain.handle(IPC_CHANNELS.recordingCountdownVisible, (): Promise<void> | undefined => {
+    if (!countdownRegion || activity.active || countdownShown) return undefined;
+    return new Promise((resolve) => countdownShownWaiters.push(resolve));
+  });
   ipcMain.on(IPC_CHANNELS.recordingRecorderPhase, (_e, raw: unknown) => {
     const report = parsePhaseReport(raw);
     // Every countdown (overlay region or Record page) is a pending take for the tray.
@@ -476,7 +495,15 @@ export function registerRecordingHub(
       countdownRegionTimer = null;
     }
     if (report.phase === "counting") {
-      shade.show(display, rect, raiseFloating, { phase: "countdown", value: report.value });
+      shade.show(
+        display,
+        rect,
+        () => {
+          raiseFloating();
+          markCountdownShown();
+        },
+        { phase: "countdown", value: report.value },
+      );
       holdEscape();
     } else if (report.phase === "starting") {
       shade.update({ phase: "countdown", value: null });
