@@ -872,7 +872,11 @@ describe("mic analyser tap point", () => {
     expect(micSource.connect).toHaveBeenCalledWith(levelGain);
     expect(levelGain!.connect).not.toHaveBeenCalledWith(analysers[0]);
     expect(levelGain!.connect).toHaveBeenCalledWith(muteGain);
+    // Raising the level changes the gain node, not what the analyser reads.
+    analysers[0].level = bytesForDbfs(-30);
+    const before = handle.readMicLevels();
     handle.setMicLevel(200);
+    expect(handle.readMicLevels()).toEqual(before);
   });
 });
 
