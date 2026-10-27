@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mkdir, mkdtemp, readFile, readdir, access, stat, writeFile } from "node:fs/promises";
+import { chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FinalizeMoveError, RecordingWriter } from "./recording-writer";
@@ -148,6 +149,36 @@ describe("RecordingWriter", () => {
     const dest = join(tempDir, "rescued.mp4");
     await writer.salvage("s1", dest);
     expect(await readFile(dest, "utf-8")).toBe("take");
+  });
+
+  it("a metadata failure whose take-back also fails keeps the media in the vault and offers no salvage", async () => {
+    const vaultDir = await mkdtemp(join(tmpdir(), "rw-vault-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "rw-temp-"));
+    const writer = new RecordingWriter({
+      vaultDir: () => vaultDir,
+      newId: () => "rec-fixed",
+      // Read once the media is in the vault: from then on staging refuses the move back.
+      now: () => {
+        chmodSync(tempDir, 0o500);
+        return 5000;
+      },
+      tempDir,
+    });
+    try {
+      await writer.create("s1");
+      await writer.write("s1", new TextEncoder().encode("take").buffer, 0);
+      await mkdir(join(vaultDir, ".kaipu", "rec-fixed.json"), { recursive: true });
+
+      const finalized = writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 });
+
+      // The staging file is gone, so a salvage offer would fail: the error must not make one.
+      await expect(finalized).rejects.toThrow();
+      await expect(finalized).rejects.not.toBeInstanceOf(FinalizeMoveError);
+      // The only copy stays where it is, and the library lists it without its sidecar.
+      expect(await readFile(join(vaultDir, "rec-fixed.mp4"), "utf-8")).toBe("take");
+    } finally {
+      chmodSync(tempDir, 0o700);
+    }
   });
 
   it("a second create with the same id starts a clean session without the first one's bytes", async () => {

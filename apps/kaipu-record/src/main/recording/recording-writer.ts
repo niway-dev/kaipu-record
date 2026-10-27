@@ -225,8 +225,13 @@ export class RecordingWriter {
       if (!described) throw new Error(`Finalized recording "${id}" not found in vault`);
       recording = described;
     } catch (cause) {
+      if (!(await this.takeBack(vault, id, dest, session))) {
+        // The media stays in the vault (listed without its sidecar) and staging has nothing
+        // left: a salvage would fail, so the error must not offer one.
+        this.sessions.delete(sessionId);
+        throw cause;
+      }
       session.stranded = true;
-      await this.takeBack(vault, id, dest, session);
       throw new FinalizeMoveError(session.tempPath, cause);
     }
     this.sessions.delete(sessionId);
@@ -236,19 +241,21 @@ export class RecordingWriter {
   /**
    * Move a finalized take back from the vault to its staging path and remove what was written
    * for it. If the media cannot be moved back, the vault keeps it: removing it would lose it.
+   * Resolves whether the take is back in staging.
    */
   private async takeBack(
     vault: LibraryVault,
     id: string,
     dest: string,
     session: Session,
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       await moveFile(dest, session.tempPath, { overwrite: true });
     } catch {
-      return;
+      return false;
     }
     await vault.remove(id).catch(() => {});
+    return true;
   }
 
   private async closeHandle(session: Session): Promise<void> {
