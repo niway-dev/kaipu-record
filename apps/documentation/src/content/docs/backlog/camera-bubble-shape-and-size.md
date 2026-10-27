@@ -30,10 +30,34 @@ every toggle; 1c (a camera card) because it doubled the camera's visual weight.
 | `size`     | 120–480 DIP                 | 240 (M)  | Presets S = 160, M = 240, L = 360. Clamped, not dropped. |
 | `deviceId` | a `videoinput` id or `null` | `null`   | `null` opens the OS default camera.                      |
 
-Only these persist. The bubble's **position does not**: it is fixed at the bottom-left corner of
-the recorded area (or of the display's work area when the whole screen records) and grows up and
-to the right. The bubble is **not draggable** any more: the old drag region is gone and the
-window is created with `movable: false` and `resizable: false`.
+Only these persist. The bubble's **position does not**: it starts at the bottom-left corner of
+the recorded area (or of the display's work area when the whole screen records), the user can
+drag it elsewhere (see [Moving the bubble](#moving-the-bubble)), and it grows up and to the right
+from wherever it sits.
+
+### Moving the bubble
+
+The first version of this feature made the bubble fixed (`movable: false` and no drag region,
+commit `96447be3`), which the owner reported as a regression: before it, the bubble could be
+dragged anywhere. Pressing anywhere on the bubble and dragging moves it again:
+
+- The drag is driven by pointer events in the renderer, not by `-webkit-app-region: drag`. An OS
+  drag region would swallow the pointer events the resize grip and the hover controls need, and
+  could not keep the bubble inside a recorded area. The renderer sends the pointer's offset since
+  the press (`beginCameraBubbleMove`, `moveCameraBubble`); `CameraBubbleWindow.moveBy` moves the
+  window and clamps it inside the recorded area, or inside the work area of the display it is
+  dragged onto. The window stays `movable: false` for the OS.
+- It works during a recording too: nothing is drawn for it, so the video only shows the bubble
+  moving.
+- The window's bottom-left corner is the bubble's anchor, so a resize (grip or settings) grows it
+  up and to the right from where it was dropped, pushed back inside the container if needed.
+- The position lives in main's memory: on the display, for the app session (across camera
+  toggles); inside an area, for the take. Each area recording starts at the area's bottom-left
+  corner, which is where the overlay's placeholder shows it, and the bubble returns to its
+  dropped spot on the display when the take ends.
+- The overlay's placeholder is not draggable: the bubble window is hidden while the overlay is up,
+  and moving the placeholder would need a per-area remembered offset. Drag the real bubble once
+  the take starts instead.
 
 Every change applies live, mid-take included. Main listens to settings changes and resizes the
 bubble window from its anchored corner (`CameraBubbleWindow.applySize`). The renderer reads the
@@ -98,10 +122,13 @@ asked; treating "not asked yet" as blocked would have made the camera impossible
 2. Capture panel: the drawer grows the panel, the panel does not hide while using it (including
    the native device `<select>`), Esc closes it.
 3. Bubble hover chrome and grip outside a recording; nothing of it during a recording or in the
-   recorded file; a drag never moves the bubble's bottom-left corner.
-4. A small area (under 232 px) hides the bubble; a medium one shrinks it.
-5. Camera access denied in System Settings: BLOCKED tile, blocked card, the button opens the pane.
-6. Windows: same checks (the bubble's hover events on an inactive always-on-top window).
+   recorded file; a grip drag never moves the bubble's bottom-left corner.
+4. Drag-to-move: pressing on the bubble and dragging moves it, before and during a take, on macOS
+   and Windows; it stops at the edges of a recorded area; the grip still resizes from the dropped
+   spot.
+5. A small area (under 232 px) hides the bubble; a medium one shrinks it.
+6. Camera access denied in System Settings: BLOCKED tile, blocked card, the button opens the pane.
+7. Windows: same checks (the bubble's hover events on an inactive always-on-top window).
 
 ## Deferred
 

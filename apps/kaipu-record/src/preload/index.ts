@@ -67,6 +67,8 @@ const kaipuApi: KaipuElectronAPI = {
   openSystemSettings: (kind) => ipcRenderer.invoke(IPC_CHANNELS.openSystemSettings, kind),
   getCameraAccessStatus: () => ipcRenderer.invoke(IPC_CHANNELS.cameraAccessStatus),
   previewCameraBubbleSize: (size) => ipcRenderer.invoke(IPC_CHANNELS.cameraBubblePreviewSize, size),
+  beginCameraBubbleMove: () => ipcRenderer.send(IPC_CHANNELS.cameraBubbleMoveStart),
+  moveCameraBubble: (dx, dy) => ipcRenderer.send(IPC_CHANNELS.cameraBubbleMove, dx, dy),
   listLocalRecordings: () => ipcRenderer.invoke(IPC_CHANNELS.listLocalRecordings),
   renameLocalRecording: (id, title) =>
     ipcRenderer.invoke(IPC_CHANNELS.renameLocalRecording, id, title),

@@ -50,6 +50,29 @@ export function bubbleBoundsInArea(
   return cameraBubbleWindowInArea(area, size, margin);
 }
 
+/** Where the user dragged the bubble: its window's bottom-left corner, in global DIP. */
+export interface BubbleCorner {
+  x: number;
+  bottom: number;
+}
+
+/**
+ * The bubble window's bounds for a window of `side` whose bottom-left corner the user put at
+ * `corner`, moved back inside `container` (the recorded area, or the display's work area)
+ * when the drag or a later resize would push it out. Keeping the bottom-left corner is what
+ * makes the resize grip grow the bubble up and to the right wherever it was dropped.
+ */
+export function bubbleBoundsAt(container: Rect, side: number, corner: BubbleCorner): Rect {
+  const clamp = (value: number, min: number, max: number): number =>
+    Math.round(Math.min(Math.max(value, min), Math.max(min, max)));
+  return {
+    x: clamp(corner.x, container.x, container.x + container.width - side),
+    y: clamp(corner.bottom - side, container.y, container.y + container.height - side),
+    width: side,
+    height: side,
+  };
+}
+
 /** The bubble's own side for window bounds from {@link bubbleBoundsInArea}. */
 export function bubbleSizeOf(bounds: Rect): number {
   return bounds.width - 2 * BUBBLE_PAD;

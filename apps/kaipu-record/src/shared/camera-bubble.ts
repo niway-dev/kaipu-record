@@ -3,9 +3,9 @@
  * import-free on purpose: main (settings merge, window bounds), the preload bundle
  * (through `types/ipc.ts`) and the renderer (the settings UI, the bubble) all read it.
  *
- * Only these persist. The bubble's position does not: it lives at the bottom-left
- * corner of the recorded area and grows up and to the right from there (spec
- * record-capture-modes, decision 6).
+ * Only these persist. The bubble's position does not: it starts at the bottom-left
+ * corner of the recorded area (spec record-capture-modes, decision 6), the user can drag
+ * it elsewhere for the session, and it grows up and to the right from wherever it sits.
  */
 
 export const CAMERA_BUBBLE_SHAPES = ["circle", "rounded"] as const;

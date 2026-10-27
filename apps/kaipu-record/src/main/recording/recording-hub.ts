@@ -150,6 +150,11 @@ export function registerRecordingHub(
   ipcMain.handle(IPC_CHANNELS.cameraBubblePreviewSize, (_e, size: unknown): number =>
     cameraBubble.preview(typeof size === "number" ? size : appliedBubbleSize),
   );
+  // Drag-to-move: the bubble renderer reports the pointer's offset; main clamps and moves.
+  ipcMain.on(IPC_CHANNELS.cameraBubbleMoveStart, () => cameraBubble.beginMove());
+  ipcMain.on(IPC_CHANNELS.cameraBubbleMove, (_e, dx: unknown, dy: unknown) => {
+    if (typeof dx === "number" && typeof dy === "number") cameraBubble.moveBy(dx, dy);
+  });
   const shade = new RecordingShadeWindow();
   const writer = new RecordingWriter({
     vaultDir: () => vaultDirectory().path,

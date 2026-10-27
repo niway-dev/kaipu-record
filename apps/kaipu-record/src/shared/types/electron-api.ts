@@ -205,6 +205,13 @@ export interface KaipuElectronAPI {
    * the recorded area clamp it.
    */
   previewCameraBubbleSize(size: number): Promise<number>;
+  /** Camera bubble → main: the pointer went down on the bubble; a move may follow. */
+  beginCameraBubbleMove(): void;
+  /**
+   * Camera bubble → main: move the bubble by the pointer's offset (DIP) since
+   * {@link beginCameraBubbleMove}. Main keeps it inside the recorded area or the display.
+   */
+  moveCameraBubble(dx: number, dy: number): void;
 
   /** List recordings stored in the local vault. */
   listLocalRecordings(): Promise<LocalRecording[]>;
