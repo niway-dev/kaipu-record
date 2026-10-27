@@ -125,7 +125,7 @@ Ventana principal (oculta)                  Barra flotante (ventana aparte)
  useScreenRecorder                           ControlBar  timer · 5 barras · ⏸/▶ · ■
   getUserMedia(chromeMediaSourceId) ─┐
   getUserMedia(mic) + sys audio ─────┤─► MediaStreamVideo/AudioTrackSource
-  AudioContext mix + AnalyserNode    └─► Output(Mp4OutputFormat, StreamTarget)
+  AudioContext graph (gains) + mic AnalyserNode └─► Output(Mp4OutputFormat, StreamTarget)
                                           → chunks { data, position } ─┐
         ┌──────────────────────── main process ───────────────────────┘
         │ recording-writer  fd.write(buf, 0, len, position)  (posicional, no append)
@@ -148,6 +148,29 @@ Ventana principal (oculta)                  Barra flotante (ventana aparte)
 **IPC nuevo:** `recording:create|write|finalize|abort` (writer) · `recording:report-tick` → `control:tick` (estado → barra) · `control:command` → `recording:command` (botones → grabador) · `recording:start|stop` (mostrar/ocultar ventanas).
 
 **Vault:** ahora es agnóstico de extensión (`.mp4`/`.webm`), con sidecar de duración + thumbnail; `kaipu-media://thumb/<id>` sirve el póster.
+
+### Audio graph
+
+The engine mixes the microphone and the system audio in one `AudioContext` into a single
+destination track. Each stage has its own `GainNode`, so mute, level and ducking never overwrite
+each other (settings and decisions: [Mic and System audio settings](/backlog/mic-and-system-audio-settings/)).
+
+```
+mic stream    → micLevelGain (micLevel / 100) → micMuteGain (on/off ramp) → destination
+                      └→ mic AnalyserNode (meter + ducking; hears the voice while muted)
+system stream → sysVolumeGain (volume / 100) → sysDuckGain → sysMuteGain (on/off ramp) → destination
+```
+
+- `micLevelGain` is `AppSettings.audio.micLevel / 100` (0–2, 1 = unchanged). Noise suppression is
+  the `noiseSuppression` constraint of the mic's `getUserMedia`; changing it mid-take calls
+  `applyConstraints` on the live track. The device itself is never switched mid-take.
+- `sysDuckGain` follows `ducking.ts`: every 50 ms the engine reads the mic analyser's RMS; above
+  about -40 dBFS the gain ramps to 0.3 over 80 ms, and after 400 ms below it ramps back to 1 over
+  300 ms. A muted mic never ducks.
+- `readMicLevels()` returns 5 bars from the mic analyser only (not the mix), carried to the
+  settings UI as `RecordingActivity.micLevels`.
+- Changes to `AppSettings.audio` reach a running take through `recorder-store.ts`
+  (`forwardLiveSettings`), serialized on the same queue as the other live settings.
 
 ### El engine ya no vive en la página
 
