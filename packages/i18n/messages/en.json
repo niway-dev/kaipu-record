@@ -287,8 +287,6 @@
     "cameraLabel": "Camera",
     "statusOn": "ON",
     "statusOff": "OFF",
-    "micTitle": "MICROPHONE",
-    "selectMic": "Select microphone",
     "micBuiltIn": "BUILT-IN",
     "micBluetooth": "BLUETOOTH",
     "micUsb": "USB",

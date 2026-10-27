@@ -46,8 +46,6 @@ export interface RecordingSetup {
   // Microphone device
   microphones: Microphone[];
   selectedMicrophone: Microphone | null;
-  isMicrophoneMenuOpen: boolean;
-  toggleMicrophoneMenu(): void;
   selectMicrophone(microphone: Microphone): void;
 
   // Recording lifecycle
@@ -83,7 +81,6 @@ export function useRecordingSetup(): RecordingSetup {
 
   // Per-window UI state (NOT shared).
   const [isSourcePickerOpen, setSourcePickerOpen] = useState(false);
-  const [isMicrophoneMenuOpen, setMicrophoneMenuOpen] = useState(false);
 
   const microphones = useMicrophones();
   const recorder = useScreenRecorder();
@@ -187,12 +184,7 @@ export function useRecordingSetup(): RecordingSetup {
 
     microphones,
     selectedMicrophone,
-    isMicrophoneMenuOpen,
-    toggleMicrophoneMenu: () => setMicrophoneMenuOpen((open) => !open),
-    selectMicrophone: (microphone) => {
-      update({ selectedMicrophone: microphone });
-      setMicrophoneMenuOpen(false);
-    },
+    selectMicrophone: (microphone) => update({ selectedMicrophone: microphone }),
 
     isRecording,
     recordingStatus: recorder.status,

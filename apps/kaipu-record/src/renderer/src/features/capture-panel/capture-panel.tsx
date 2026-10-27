@@ -6,7 +6,6 @@ import { useSourceSelection } from "@renderer/features/recording/hooks/use-sourc
 import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
 import { SourceCard } from "@renderer/features/recording/components/source-card";
 import { RecordingToggles } from "@renderer/features/recording/components/recording-toggles";
-import { MicPicker } from "@renderer/features/recording/components/mic-picker";
 import { RecordButton } from "@renderer/features/recording/components/record-button";
 import { RecordModeButtons } from "@renderer/features/recording/components/record-mode-buttons";
 import { useRecordingSettings } from "@renderer/features/recording/hooks/use-recording-settings";
@@ -17,6 +16,14 @@ import {
   CameraPanelTile,
   useCameraControl,
 } from "@renderer/features/camera-settings";
+import {
+  MicPanelDrawer,
+  MicToggleSplit,
+  SystemAudioPanelDrawer,
+  SystemAudioToggleSplit,
+  useAudioControl,
+} from "@renderer/features/audio-settings";
+import { exclusive } from "@renderer/features/settings-controls/use-settings-disclosure";
 import { PanelHeader } from "./components/panel-header";
 import { PanelTabs, type PanelTab } from "./components/panel-tabs";
 import type { CaptureMode } from "@shared/types/screenshot-capture";
@@ -39,8 +46,13 @@ export function CapturePanel(): React.JSX.Element {
   const activity = useRecordingActivity();
   // A pending take (countdown) is busy too: no second selector while it counts.
   const isBusy = activity.active || activity.pending === true;
-  // The split Camera tile and its inline drawer share this.
-  const camera = useCameraControl();
+  // The split Mic, Audio and Camera tiles each share their state with an inline drawer;
+  // only one drawer is open at a time (opening one closes the others).
+  const [mic, systemAudio, camera] = exclusive([
+    useAudioControl(),
+    useAudioControl(),
+    useCameraControl(),
+  ]);
   const stopRecording = (): void => window.electronAPI?.controlCommand("stop");
 
   // Two modes: recording controls and the screenshot action. A recording locks the
@@ -70,6 +82,42 @@ export function CapturePanel(): React.JSX.Element {
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  const micSlot = (
+    <MicToggleSplit
+      compact
+      control={mic}
+      on={setup.isMicrophoneEnabled}
+      onToggle={setup.toggleMicrophone}
+    />
+  );
+  const audioSlot = (
+    <SystemAudioToggleSplit
+      compact
+      control={systemAudio}
+      on={setup.isSystemAudioEnabled}
+      onToggle={setup.toggleSystemAudio}
+      unavailable={isBusy && activity.systemAudioAvailable === false}
+    />
+  );
+  const cameraSlot = (
+    <CameraPanelTile control={camera} on={setup.isCameraEnabled} onToggle={setup.toggleCamera} />
+  );
+  // The drawers grow the panel downward; the ResizeObserver above follows them.
+  const drawers = (
+    <>
+      <MicPanelDrawer
+        control={mic}
+        on={setup.isMicrophoneEnabled}
+        isRecording={isBusy}
+        microphones={setup.microphones}
+        selectedMicrophone={setup.selectedMicrophone}
+        onSelectMicrophone={setup.selectMicrophone}
+      />
+      <SystemAudioPanelDrawer control={systemAudio} micOn={setup.isMicrophoneEnabled} />
+      <CameraPanelDrawer control={camera} on={setup.isCameraEnabled} isRecording={isBusy} />
+    </>
+  );
 
   const openMain = (): void => window.electronAPI?.openMainWindow();
   // "Change" from the tray: the picker + source enumeration live in the main renderer,
@@ -110,26 +158,11 @@ export function CapturePanel(): React.JSX.Element {
               onToggleMicrophone={setup.toggleMicrophone}
               onToggleSystemAudio={setup.toggleSystemAudio}
               onToggleCamera={setup.toggleCamera}
-              cameraSlot={
-                <CameraPanelTile
-                  control={camera}
-                  on={setup.isCameraEnabled}
-                  onToggle={setup.toggleCamera}
-                />
-              }
+              micSlot={micSlot}
+              audioSlot={audioSlot}
+              cameraSlot={cameraSlot}
             />
-            {/* The drawer grows the panel downward; the ResizeObserver above follows it. */}
-            <CameraPanelDrawer control={camera} on={setup.isCameraEnabled} isRecording={false} />
-            {setup.isMicrophoneEnabled && setup.microphones.length > 0 && (
-              <MicPicker
-                variant="compact"
-                microphones={setup.microphones}
-                selected={setup.selectedMicrophone}
-                isOpen={setup.isMicrophoneMenuOpen}
-                onToggle={setup.toggleMicrophoneMenu}
-                onSelect={setup.selectMicrophone}
-              />
-            )}
+            {drawers}
           </div>
         </RecordModeButtons>
       ) : activeTab === "record" ? (
@@ -142,10 +175,10 @@ export function CapturePanel(): React.JSX.Element {
             />
           )}
 
-          {/* Mid-take only the source and mic device stay locked (changing them would
-              restart the encoder or move levels); the three toggles stay live —
-              muting writes silence into the same track, the camera is captured as
-              part of the screen. */}
+          {/* Mid-take only the source stays locked (changing it would restart the encoder);
+              the three toggles stay live — muting writes silence into the same track, the
+              camera is captured as part of the screen — and the mic drawer locks its own
+              device list. */}
           <div className={styles.lockable}>
             <div
               className={styles.locked}
@@ -164,33 +197,12 @@ export function CapturePanel(): React.JSX.Element {
               onToggleMicrophone={setup.toggleMicrophone}
               onToggleSystemAudio={setup.toggleSystemAudio}
               onToggleCamera={setup.toggleCamera}
-              cameraSlot={
-                <CameraPanelTile
-                  control={camera}
-                  on={setup.isCameraEnabled}
-                  onToggle={setup.toggleCamera}
-                />
-              }
+              micSlot={micSlot}
+              audioSlot={audioSlot}
+              cameraSlot={cameraSlot}
             />
 
-            <CameraPanelDrawer control={camera} on={setup.isCameraEnabled} isRecording={isBusy} />
-
-            {setup.isMicrophoneEnabled && setup.microphones.length > 0 && (
-              <div
-                className={styles.locked}
-                data-locked={isBusy || undefined}
-                inert={isBusy || undefined}
-              >
-                <MicPicker
-                  variant="compact"
-                  microphones={setup.microphones}
-                  selected={setup.selectedMicrophone}
-                  isOpen={setup.isMicrophoneMenuOpen}
-                  onToggle={setup.toggleMicrophoneMenu}
-                  onSelect={setup.selectMicrophone}
-                />
-              </div>
-            )}
+            {drawers}
           </div>
 
           {/* Recording runs in the main window renderer (getDisplayMedia/WebCodecs

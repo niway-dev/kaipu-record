@@ -16,6 +16,8 @@ export interface ToggleSplitProps {
   blocked?: boolean;
   /** The body does nothing when pressed (blocked off, or unavailable). */
   bodyDisabled?: boolean;
+  /** Natively disabled body, dimmed and not focusable (the plain tile's `disabled`). */
+  bodyUnavailable?: boolean;
   /** Accessible name of the body when its text alone is not enough (e.g. blocked). */
   bodyLabel?: string;
   /** Native tooltip for the body, e.g. why it is disabled. */
@@ -46,6 +48,7 @@ export function ToggleSplit({
   onToggle,
   blocked = false,
   bodyDisabled = false,
+  bodyUnavailable = false,
   bodyLabel,
   bodyTitle,
   chevronLabel,
@@ -69,6 +72,7 @@ export function ToggleSplit({
         type="button"
         className={styles.body}
         aria-pressed={on}
+        disabled={bodyUnavailable}
         aria-disabled={bodyDisabled || undefined}
         aria-label={bodyLabel}
         title={bodyTitle}
