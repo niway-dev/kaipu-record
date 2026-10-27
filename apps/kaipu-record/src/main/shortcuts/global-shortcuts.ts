@@ -50,10 +50,34 @@ function tryRegister(accelerator: string, handler: () => void): boolean {
   }
 }
 
+/**
+ * Temporary registrations owned by another module (the countdown's Esc in the recording
+ * hub). `applyGlobalShortcuts` starts with `unregisterAll`, which runs on every settings
+ * write; these are registered again after it, so a write mid-countdown never drops them.
+ */
+const temporary = new Map<string, () => void>();
+
+/** Hold `accelerator` until {@link releaseTemporaryShortcut}. False when it did not take. */
+export function holdTemporaryShortcut(accelerator: string, handler: () => void): boolean {
+  if (!tryRegister(accelerator, handler)) return false;
+  temporary.set(accelerator, handler);
+  return true;
+}
+
+export function releaseTemporaryShortcut(accelerator: string): void {
+  if (!temporary.delete(accelerator)) return;
+  try {
+    globalShortcut.unregister(accelerator);
+  } catch (error) {
+    console.error(`failed to release global shortcut "${accelerator}"`, error);
+  }
+}
+
 /** (Re)register every global shortcut from the current settings. Idempotent. */
 export function applyGlobalShortcuts(): void {
-  if (!deps) return;
   globalShortcut.unregisterAll();
+  for (const [accelerator, handler] of temporary) tryRegister(accelerator, handler);
+  if (!deps) return;
   const shortcuts = deps.getShortcuts();
   for (const action of SHORTCUT_ACTIONS) {
     // A switched-off action (Window mode) is never registered, so its combo stays free.

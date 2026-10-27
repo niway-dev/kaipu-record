@@ -3,7 +3,6 @@ import {
   BrowserWindow,
   desktopCapturer,
   dialog,
-  globalShortcut,
   ipcMain,
   screen,
   systemPreferences,
@@ -35,6 +34,7 @@ import { ControlBarWindow } from "./control-bar-window";
 import { CameraBubbleWindow } from "./camera-bubble-window";
 import { RecordingShadeWindow } from "./recording-shade-window";
 import { areaToGlobal, fullDisplayBorderAllowed, sanitizeArea } from "./area-geometry";
+import { holdTemporaryShortcut, releaseTemporaryShortcut } from "../shortcuts/global-shortcuts";
 import { FinalizeMoveError, RecordingWriter, timestampId } from "./recording-writer";
 import { IDLE_ACTIVITY, applyTick, startedActivity, stoppedActivity } from "./recording-activity";
 import { vaultDirectory } from "../library/vault-location";
@@ -428,11 +428,11 @@ export function registerRecordingHub(
   const releaseEscape = (): void => {
     if (!escapeHeld) return;
     escapeHeld = false;
-    globalShortcut.unregister("Escape");
+    releaseTemporaryShortcut("Escape");
   };
   const holdEscape = (): void => {
     if (escapeHeld) return;
-    escapeHeld = globalShortcut.register("Escape", () => {
+    escapeHeld = holdTemporaryShortcut("Escape", () => {
       getMainWindow()?.webContents.send(IPC_CHANNELS.recordingCommand, "stop");
     });
   };
