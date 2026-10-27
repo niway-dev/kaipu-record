@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, type PointerEvent } from "react";
-import { Camera } from "lucide-react";
+import { Camera, X } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { useCameraPreview } from "@renderer/features/recording/hooks/use-camera-preview";
 import { useRecordingActivity } from "@renderer/features/recording/hooks/use-recording-activity";
@@ -92,13 +92,15 @@ async function settleGrip(
 /**
  * Root mounted in the floating camera-bubble window (`?window=camera-bubble`). Shows the
  * live webcam in a circle or a rounded square; the screen recording captures it because
- * the window sits on screen. It does not move (it lives at the bottom-left corner of the
- * recorded area) and has no drag region.
+ * the window sits on screen. Pressing on the bubble and dragging moves it, during a
+ * recording too: the pointer's offset goes to main, which moves the window and keeps it
+ * inside the recorded area. There is no OS drag region, so the grip still gets its events.
  *
- * Outside a recording, hovering shows a pink outline, the size ("240 px · M") and a resize
- * grip; dragging the grip resizes the bubble from its anchored corner. Once a recording
- * starts none of that chrome renders, so the bubble on screen is exactly the one in the
- * video.
+ * Outside a recording, hovering shows a pink outline, the size ("240 px · M"), a resize
+ * grip and a close button that turns the camera off; dragging the grip resizes the bubble
+ * from its bottom-left corner. Once a recording starts none of that chrome renders, so the
+ * bubble on screen is exactly the one in the video (the control bar, which the video
+ * leaves out, offers the same "turn camera off" during a take).
  */
 export function CameraBubble(): React.JSX.Element {
   const t = useTranslations("cameraSettings");
@@ -111,6 +113,8 @@ export function CameraBubble(): React.JSX.Element {
   // The pointer drag in progress. Its session outlives it: a preview reply that lands after
   // the release still updates the session, and the release waits for it before saving.
   const drag = useRef<GripSession | null>(null);
+  // The move in progress: the pointer's screen position when it went down on the bubble.
+  const move = useRef<{ x: number; y: number } | null>(null);
   const latestBubble = useRef(bubble);
   latestBubble.current = bubble;
 
@@ -165,6 +169,25 @@ export function CameraBubble(): React.JSX.Element {
     void settleGrip(start, latestBubble);
   };
 
+  const onBubbleDown = (event: PointerEvent<HTMLDivElement>): void => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    move.current = { x: event.screenX, y: event.screenY };
+    window.electronAPI.beginCameraBubbleMove();
+  };
+
+  const onBubbleMove = (event: PointerEvent<HTMLDivElement>): void => {
+    const start = move.current;
+    if (!start) return;
+    window.electronAPI.moveCameraBubble(event.screenX - start.x, event.screenY - start.y);
+  };
+
+  const onBubbleUp = (event: PointerEvent<HTMLDivElement>): void => {
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    move.current = null;
+  };
+
   const preset = cameraBubblePresetFor(size);
   const radius = bubble.shape === "circle" ? "50%" : `${Math.round(size * ROUNDED_RADIUS)}px`;
 
@@ -181,7 +204,15 @@ export function CameraBubble(): React.JSX.Element {
           {preset ? t("bubbleLabel", { size, preset }) : t("bubbleLabelCustom", { size })}
         </span>
       )}
-      <div className={styles.bubble} style={{ borderRadius: radius }}>
+      <div
+        className={styles.bubble}
+        style={{ borderRadius: radius }}
+        data-testid="camera-bubble"
+        onPointerDown={onBubbleDown}
+        onPointerMove={onBubbleMove}
+        onPointerUp={onBubbleUp}
+        onPointerCancel={onBubbleUp}
+      >
         <video
           ref={videoRef}
           autoPlay
@@ -192,6 +223,19 @@ export function CameraBubble(): React.JSX.Element {
         />
         {!hasStream && <Camera size={30} className={styles.placeholder} />}
       </div>
+      {showChrome && (
+        <button
+          type="button"
+          className={bubble.shape === "circle" ? styles.closeCircle : styles.closeRounded}
+          data-testid="bubble-camera-off"
+          aria-label={t("turnCameraOff")}
+          title={t("turnCameraOff")}
+          // The camera toggle is global: main destroys this window and releases the device.
+          onClick={() => window.electronAPI.updateRecordingSettings({ isCameraEnabled: false })}
+        >
+          <X size={12} strokeWidth={3} aria-hidden />
+        </button>
+      )}
       {showChrome && (
         <div
           className={bubble.shape === "circle" ? styles.gripCircle : styles.gripRounded}
