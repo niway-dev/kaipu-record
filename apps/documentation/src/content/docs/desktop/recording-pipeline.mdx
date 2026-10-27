@@ -156,21 +156,38 @@ destination track. Each stage has its own `GainNode`, so mute, level and ducking
 each other (settings and decisions: [Mic and System audio settings](/backlog/mic-and-system-audio-settings/)).
 
 ```
+mic stream    → mic AnalyserNode (meter + ducking; raw device signal, hears the voice while muted)
 mic stream    → micLevelGain (micLevel / 100) → micMuteGain (on/off ramp) → destination
-                      └→ mic AnalyserNode (meter + ducking; hears the voice while muted)
 system stream → sysVolumeGain (volume / 100) → sysDuckGain → sysMuteGain (on/off ramp) → destination
 ```
 
-- `micLevelGain` is `AppSettings.audio.micLevel / 100` (0–2, 1 = unchanged). Noise suppression is
-  the `noiseSuppression` constraint of the mic's `getUserMedia`; changing it mid-take calls
-  `applyConstraints` on the live track. The device itself is never switched mid-take.
+- `micLevelGain` is `AppSettings.audio.micLevel / 100` (0–2, 1 = unchanged). The mic analyser is
+  tapped straight off the source, **before** the level gain: it hears the signal after the
+  device's and Chromium's noise processing but not the level slider, so the ducking threshold does
+  not move with the slider and the meter means the same before and during a take.
+- Noise suppression is the `noiseSuppression` constraint of the mic's `getUserMedia`. Chromium
+  cannot reconfigure the processing of a live track, so changing it mid-take **reopens the same
+  device** (the live track's `deviceId`, exact) with the new value, connects the new source to
+  the same level gain and analyser, and only then disconnects the old source and stops its tracks.
+  Calls are serialized. If the reopen fails, the old source keeps recording, the engine answers
+  `"unavailable"` and the store writes the value actually in effect back to `AppSettings.audio`
+  (only for the latest request). The device itself is never switched mid-take.
 - `sysDuckGain` follows `ducking.ts`: every 50 ms the engine reads the mic analyser's RMS; above
   about -40 dBFS the gain ramps to 0.3 over 80 ms, and after 400 ms below it ramps back to 1 over
-  300 ms. A muted mic never ducks.
-- `readMicLevels()` returns 5 bars from the mic analyser only (not the mix), carried to the
-  settings UI as `RecordingActivity.micLevels`.
+  300 ms. A muted mic never ducks. The loop starts only after `output.start()` resolves; a start
+  that fails after the `AudioContext` exists clears the loop, stops the compositor and every
+  acquired track, and closes the context before rethrowing.
+- `readMicLevels()` returns 5 bars from the mic analyser only (not the mix). They do **not** ride
+  `RecordingActivity` (that broadcast re-rendered every window ~10 times a second). A window calls
+  `subscribeMicLevels(callback)` (preload; counted per webContents in main, dropped when the
+  webContents is destroyed); main tells the recorder over `mic-levels:listening` whether anyone
+  subscribed; only then the recorder reads the bars and sends them (`mic-levels:report`, rounded,
+  identical bars skipped), and main relays them to the subscribed windows alone
+  (`mic-levels:data`, `main/recording/mic-level-relay.ts`).
 - Changes to `AppSettings.audio` reach a running take through `recorder-store.ts`
-  (`forwardLiveSettings`), serialized on the same queue as the other live settings.
+  (`forwardLiveSettings`), serialized on the same queue as the other live settings. Changes made
+  while the engine is still acquiring are tracked from the start of the take and applied once the
+  engine exists.
 
 ### El engine ya no vive en la página
 

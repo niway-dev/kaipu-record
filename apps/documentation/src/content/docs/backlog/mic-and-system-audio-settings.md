@@ -56,10 +56,20 @@ The audio graph, the ducking rules and the live forwarding are described in
 [Recording pipeline → Audio graph](/desktop/recording-pipeline/#audio-graph). Level, noise
 reduction, volume and ducking apply to a running take; the device never changes mid-take.
 
-The meter before a take (`useMicLevelMeter`) opens `getUserMedia` for the selected device only
-while the settings are open, the mic toggle is on and nothing is recording, and releases the
-tracks and the `AudioContext` on close, device change or unmount. During a take it reads
-`RecordingActivity.micLevels` (5 bars, mic only), spread over the 14 bars.
+The meter before a take (`useMicLevelMeter`) opens `getUserMedia` for the selected device (with
+the `noiseSuppression` the take will use) only while the settings are open, the mic toggle is on,
+nothing is busy and **the window has focus**, and releases the tracks and the `AudioContext` on
+close, device change, blur or unmount. Every settings disclosure (Mic, Audio, Camera) also closes
+when its window loses focus: the capture panel hides on blur and the main window can sit in the
+tray, and neither reliably reports visibility. During a take the meter subscribes to the engine's
+mic levels (`useTakeMicLevels` → `subscribeMicLevels`, a channel of its own, see the pipeline
+page) only while mounted and focused; the levels are never part of the activity broadcast. The
+analyser taps the raw mic before the level gain, so before and during a take the bars mean the
+same.
+
+The Record page treats any recorder state other than idle (countdown, starting, recording, saving)
+as busy for the Mic and Camera settings, like the capture panel. The Mic and Audio tiles of a
+window share one `useAudioSettings` store, because every write sends the whole `audio` object.
 
 ## Decisions
 
@@ -69,6 +79,9 @@ tracks and the `AudioContext` on close, device change or unmount. During a take 
 | **Leave out Kaipu sounds** is not rendered.                                                                                        | Kaipu plays no start/stop sounds today, so the switch would do nothing.                                                                               |
 | Extract a shared split tile and settings shell from the camera controls (`features/settings-controls`) instead of copying the CSS. | One look and one focus contract for the three tiles; the camera's tests stayed green.                                                                 |
 | Ducking is disabled in the UI while the mic is off.                                                                                | With no mic there is no voice to duck under.                                                                                                          |
+| Mic levels travel on their own IPC channel, sent only while a window subscribes.                                                   | On the activity broadcast they re-rendered every window ~10 times a second for the whole take.                                                        |
+| The mic analyser taps the source before the level gain.                                                                            | The ducking threshold and the meter must not move with the level slider.                                                                              |
+| Noise suppression mid-take reopens the same device and swaps the source; a refusal is written back to the setting.                 | Chromium cannot change processing on a live track; the UI must show the value in effect.                                                              |
 | The audio-unavailable tile (no loopback mid-take) keeps its disabled body and tooltip; its chevron still opens the settings.       | The settings stay reachable; only the toggle could not work.                                                                                          |
 
 ## Manual checks
@@ -79,10 +92,17 @@ tracks and the `AudioContext` on close, device change or unmount. During a take 
    the OS mic indicator turns off when you close the popover.
 3. Switch device from the list; Mic off: the meter is flat and the device is not opened.
 4. Record with the level at 0% (silent mic), 100% and 200% (loud); the exported audio matches.
-5. During a take: drag the level and toggle noise reduction; both apply live. The device list is
-   locked, "LIVE" and the note show. Unplug the selected mic: DISCONNECTED appears.
+5. During a take: drag the level and toggle noise reduction; both apply live (noise reopens the
+   mic: no gap in the recording, the meter keeps moving). The device list is locked, "LIVE" and the
+   note show. Unplug the selected mic: DISCONNECTED appears. The meter moves the same at 50% and
+   200% level, and ducking triggers at the same voice volume.
+   Hardware: confirm the OS mic indicator turns off when the capture panel hides on blur with the
+   Mic drawer open, and when the main window goes to the tray with the Mic popover open.
 6. System audio at 30%, then 100%, with something playing: the volume in the recording follows.
 7. "Lower it while I talk": system audio dips while you speak and returns about half a second
    after; disabled with the mic toggle off; a muted mic does not duck.
 8. Microphone permission denied: the "Microphone access is off" notice still shows on the Record page.
-9. Spanish: all new strings are in neutral Spanish.
+9. Countdown: press Record and open Mic settings during the 3-2-1: the device list is locked and
+   the meter does not hold the mic. With no microphones, opening Mic settings focuses the panel and
+   Esc closes it.
+10. Spanish: all new strings are in neutral Spanish.
