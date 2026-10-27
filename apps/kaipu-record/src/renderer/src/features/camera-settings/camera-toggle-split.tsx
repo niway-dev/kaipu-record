@@ -1,7 +1,7 @@
 import React, { type Ref } from "react";
-import { Camera, ChevronDown, Lock } from "lucide-react";
+import { Camera, Lock } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
-import styles from "./camera-toggle-split.module.css";
+import { ToggleSplit } from "../settings-controls/toggle-split";
 
 export interface CameraToggleSplitProps {
   on: boolean;
@@ -22,61 +22,30 @@ export interface CameraToggleSplitProps {
 /**
  * The Camera tile of the Mic · Audio · Camera row, split in two: the body toggles the
  * camera exactly as the plain tile did, and a chevron segment on its right opens the
- * camera settings. Someone who never touches the chevron sees the same row as before.
+ * camera settings.
  */
 export function CameraToggleSplit({
   on,
   onToggle,
   blocked = false,
-  compact = false,
-  open,
-  onOpenChange,
-  controlsId,
-  chevronRef,
+  ...rest
 }: CameraToggleSplitProps): React.JSX.Element {
   const t = useTranslations("cameraSettings");
   const tStatus = useTranslations("record");
-  const iconSize = compact ? 15 : 20;
-  // A blocked camera cannot be turned on; one that is somehow on can still be turned off.
-  const cannotToggle = blocked && !on;
-
   return (
-    <div
-      className={styles.split}
-      data-compact={compact || undefined}
-      data-active={on || undefined}
-      data-blocked={blocked || undefined}
-    >
-      <button
-        type="button"
-        className={styles.body}
-        aria-pressed={on}
-        aria-disabled={cannotToggle || undefined}
-        aria-label={blocked ? t("blockedTile") : undefined}
-        onClick={cannotToggle ? undefined : onToggle}
-      >
-        <span className={styles.icon}>
-          {blocked ? <Lock size={iconSize} /> : <Camera size={iconSize} />}
-        </span>
-        {!compact && <span className={styles.label}>{t("camera")}</span>}
-        <span className={styles.status}>
-          {blocked ? t("blocked") : on ? tStatus("statusOn") : tStatus("statusOff")}
-        </span>
-      </button>
-      <button
-        ref={chevronRef}
-        type="button"
-        className={styles.chevron}
-        aria-label={t("title")}
-        // The popover is a dialog; the panel's drawer is an inline region.
-        aria-haspopup={compact ? undefined : "dialog"}
-        aria-expanded={open}
-        aria-controls={open ? controlsId : undefined}
-        data-open={open || undefined}
-        onClick={() => onOpenChange(!open)}
-      >
-        <ChevronDown size={compact ? 12 : 14} aria-hidden />
-      </button>
-    </div>
+    <ToggleSplit
+      {...rest}
+      icon={Camera}
+      blockedIcon={Lock}
+      label={t("camera")}
+      status={blocked ? t("blocked") : on ? tStatus("statusOn") : tStatus("statusOff")}
+      on={on}
+      onToggle={onToggle}
+      blocked={blocked}
+      // A blocked camera cannot be turned on; one that is somehow on can still be turned off.
+      bodyDisabled={blocked && !on}
+      bodyLabel={blocked ? t("blockedTile") : undefined}
+      chevronLabel={t("title")}
+    />
   );
 }
