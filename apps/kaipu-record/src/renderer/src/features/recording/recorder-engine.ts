@@ -94,9 +94,10 @@ export interface EngineOptions {
   /** Receives each StreamTarget chunk to forward to the main-process writer. */
   onChunk(data: ArrayBuffer, position: number): void;
   /**
-   * Fires if the engine fails *during* a recording — the encoder errors or the
-   * screen capture ends (the user stops sharing / closes the source). The caller
-   * should tear the recording down cleanly so the app never gets stuck.
+   * Fires if the engine fails once acquired — the encoder errors or the screen
+   * capture ends (the user stops sharing / closes the source), during the recording
+   * or while a prepared take waits for its countdown. The caller should tear the
+   * recording down cleanly so the app never gets stuck.
    */
   onError?(error: unknown): void;
 }
@@ -117,11 +118,40 @@ const CAPTURE_CEILING = { width: 7680, height: 4320 } as const;
 const THUMBNAIL_STOP_WAIT_MS = 1000;
 
 /**
+ * A take whose devices are open (screen, mic, audio mix, compositor) and whose encoder is
+ * built, but which encodes nothing yet. The recorder acquires one during the countdown, so the
+ * take can start the instant the countdown ends.
+ */
+export interface PreparedEngine {
+  /**
+   * Start encoding. The take's time 0 (`firstMediaTimestamp`) is the first frame after this
+   * call: nothing captured before it reaches the file. Called once.
+   */
+  begin(): Promise<EngineHandle>;
+  /**
+   * Release a take that will not record: every device, the compositor and the audio graph.
+   * After `begin` it stops the take instead, once `begin` settles, so a cancel landing at any
+   * moment leaves no device open.
+   */
+  release(): void;
+}
+
+/**
  * Acquire screen + mic, mix audio, and start encoding to MP4 (H.264/AAC) via
  * mediabunny, streaming chunks out through `onChunk`. Returns a handle for
  * pause/resume/stop and live levels.
  */
 export async function startEngine(options: EngineOptions): Promise<EngineHandle> {
+  return (await prepareEngine(options)).begin();
+}
+
+/**
+ * Acquire screen + mic, mix audio and build the MP4 encoder, without starting it: `begin`
+ * starts it. The output is not started, rather than started paused, because mediabunny's
+ * sources cannot be paused before their first frame: a paused first frame leaves the frame-rate
+ * sampler without its time base, and the take fails when it resumes.
+ */
+export async function prepareEngine(options: EngineOptions): Promise<PreparedEngine> {
   // The resolution preset is a HEIGHT CAP, not a fixed 16:9 box. Width is only a
   // fallback for the source aspect ratio when the track can't report its size.
   const capHeight = options.height ?? ENGINE_DEFAULTS.height;
@@ -319,16 +349,11 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     });
     output.addAudioTrack(audioSource);
   }
-  await output.start();
-  markRecordTiming("output.start resolved");
-  // Fallback anchor if mediabunny's private first-media timestamp is unavailable:
-  // the first frame is accepted within one frame period of start() resolving.
-  const startedAt = performance.now();
-  const firstMediaTimestamp = waitForFirstMediaTimestamp(output, startedAt);
 
-  // Surface mid-recording failures so the caller tears down cleanly (otherwise the
-  // app gets stuck: window hidden, bar showing, no real recording). Fires at most
-  // once, and not for our own teardown (stop() sets the flag first).
+  // Surface failures so the caller tears down cleanly (otherwise the app gets stuck: window
+  // hidden, bar showing, no real recording). Wired before the take begins: a screen capture
+  // that ends during the countdown fails the start. Fires at most once, and not for our own
+  // teardown (stop() and release() set the flag first).
   let teardownStarted = false;
   /** Set by stop(); a live toggle arriving after it is answered "unavailable". */
   let stopped = false;
@@ -343,73 +368,122 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   audioSource?.errorPromise.catch(notifyError);
   screenTrack.addEventListener("ended", () => notifyError(new Error("screen capture ended")));
 
-  // 5. Poster thumbnail from the first screen frame, at the real output size. In the
-  // background: the take starts without it, and stop waits for it before the tracks end.
-  const thumbnail = captureThumbnail(screenStream, target).then((image) => {
-    markRecordTiming("captureThumbnail resolved");
-    return image;
-  });
+  /** Every device, the compositor and the audio graph: what stop() and release() free. */
+  const releaseDevices = async (): Promise<void> => {
+    compositor?.stop(); // cancel the draw loop + release the canvas track
+    for (const stream of inputStreams) stream.getTracks().forEach((t) => t.stop());
+    destination.stream.getTracks().forEach((t) => t.stop());
+    await audioContext.close();
+  };
 
-  return {
-    pause: () => {
-      videoSource.pause();
-      audioSource?.pause();
-    },
-    resume: () => {
-      videoSource.resume();
-      audioSource?.resume();
-    },
-    readLevels: () => {
-      analyser.getByteTimeDomainData(levelBuffer);
-      return levelsFromTimeDomain(levelBuffer, 5);
-    },
-    thumbnail,
-    outputSize: { width: target.width, height: target.height },
-    firstMediaTimestamp,
-    hasSystemAudio: sysGain !== null,
-    async setMicrophoneEnabled(on, deviceId) {
-      if (stopped) return "unavailable";
-      if (micGain) {
-        rampTo(micGain, on);
-        return "ok";
-      }
-      if (!on) return "ok"; // never acquired, nothing to mute
-      if (!deviceId || acquiringMic) return "unavailable";
-      acquiringMic = true;
-      try {
-        const mic = await acquireMicrophone(deviceId);
-        if (!mic) return "unavailable";
-        if (stopped) {
-          // The take ended while the device was opening — release it at once.
-          mic.getTracks().forEach((t) => t.stop());
-          return "unavailable";
+  /** The running take's handle, built by `begin` once the output has started. */
+  const handle = (
+    thumbnail: Promise<ArrayBuffer | null>,
+    firstMediaTimestamp: Promise<FirstMediaTimestamp>,
+  ): EngineHandle => {
+    return {
+      pause: () => {
+        videoSource.pause();
+        audioSource?.pause();
+      },
+      resume: () => {
+        videoSource.resume();
+        audioSource?.resume();
+      },
+      readLevels: () => {
+        analyser.getByteTimeDomainData(levelBuffer);
+        return levelsFromTimeDomain(levelBuffer, 5);
+      },
+      thumbnail,
+      outputSize: { width: target.width, height: target.height },
+      firstMediaTimestamp,
+      hasSystemAudio: sysGain !== null,
+      async setMicrophoneEnabled(on, deviceId) {
+        if (stopped) return "unavailable";
+        if (micGain) {
+          rampTo(micGain, on);
+          return "ok";
         }
-        micGain = connectThroughGain(mic, true);
+        if (!on) return "ok"; // never acquired, nothing to mute
+        if (!deviceId || acquiringMic) return "unavailable";
+        acquiringMic = true;
+        try {
+          const mic = await acquireMicrophone(deviceId);
+          if (!mic) return "unavailable";
+          if (stopped) {
+            // The take ended while the device was opening — release it at once.
+            mic.getTracks().forEach((t) => t.stop());
+            return "unavailable";
+          }
+          micGain = connectThroughGain(mic, true);
+          return "ok";
+        } finally {
+          acquiringMic = false;
+        }
+      },
+      setSystemAudioEnabled(on) {
+        if (!sysGain || stopped) return "unavailable";
+        rampTo(sysGain, on);
         return "ok";
-      } finally {
-        acquiringMic = false;
+      },
+      async stop() {
+        stopped = true;
+        teardownStarted = true; // stopping the tracks below would otherwise fire onError
+        // Stop encoding now: the frames and samples after the stop request do not belong to the
+        // take (the store cut its duration at this moment), and the wait below must not add any.
+        videoSource.pause();
+        audioSource?.pause();
+        // The poster frame comes from the screen track: take it before the tracks stop, but
+        // never let it hold the save up.
+        await Promise.race([thumbnail, delay(THUMBNAIL_STOP_WAIT_MS)]);
+        await output.finalize();
+        await releaseDevices();
+      },
+    };
+  };
+
+  const begin = async (): Promise<EngineHandle> => {
+    try {
+      await output.start();
+    } catch (error) {
+      teardownStarted = true;
+      void releaseDevices().catch(() => undefined);
+      throw error;
+    }
+    markRecordTiming("output.start resolved");
+    // Fallback anchor if mediabunny's private first-media timestamp is unavailable:
+    // the first frame is accepted within one frame period of start() resolving.
+    const startedAt = performance.now();
+    const firstMediaTimestamp = waitForFirstMediaTimestamp(output, startedAt);
+
+    // 5. Poster thumbnail from the first screen frame of the take, at the real output size.
+    // Taken here, not while preparing: during a countdown the screen still shows the app.
+    // In the background: the take starts without it, and stop waits for it before the
+    // tracks end.
+    const thumbnail = captureThumbnail(screenStream, target).then((image) => {
+      markRecordTiming("captureThumbnail resolved");
+      return image;
+    });
+    return handle(thumbnail, firstMediaTimestamp);
+  };
+
+  let beginning: Promise<EngineHandle> | null = null;
+  let released = false;
+  return {
+    begin() {
+      if (released) return Promise.reject(new Error("engine released before it began"));
+      beginning ??= begin();
+      return beginning;
+    },
+    release() {
+      if (released) return;
+      released = true;
+      if (beginning) {
+        void beginning.then((started) => started.stop()).catch(() => undefined);
+        return;
       }
-    },
-    setSystemAudioEnabled(on) {
-      if (!sysGain || stopped) return "unavailable";
-      rampTo(sysGain, on);
-      return "ok";
-    },
-    async stop() {
-      stopped = true;
       teardownStarted = true; // stopping the tracks below would otherwise fire onError
-      // Stop encoding now: the frames and samples after the stop request do not belong to the
-      // take (the store cut its duration at this moment), and the wait below must not add any.
-      videoSource.pause();
-      audioSource?.pause();
-      // The poster frame comes from the screen track: take it before the tracks stop, but
-      // never let it hold the save up.
-      await Promise.race([thumbnail, delay(THUMBNAIL_STOP_WAIT_MS)]);
-      await output.finalize();
-      compositor?.stop(); // cancel the draw loop + release the canvas track
-      for (const stream of inputStreams) stream.getTracks().forEach((t) => t.stop());
-      destination.stream.getTracks().forEach((t) => t.stop());
-      await audioContext.close();
+      void releaseDevices().catch(() => undefined);
     },
   };
 }
