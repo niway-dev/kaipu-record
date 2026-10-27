@@ -143,10 +143,12 @@ describe("MacProvider", () => {
       expect(runCli).not.toHaveBeenCalled();
     });
 
-    it("screen with one display in the record intent selects it without an overlay", async () => {
+    it("screen with one display in the record intent records it without an overlay", async () => {
+      // "Start recording" in Screen on a lone display: the take starts, it does not only
+      // set the target (which left the user with no recording at all).
       const out = await macProvider().capture({ mode: "screen", overlay: fake, intent: "record" });
       expect(fake.pick).not.toHaveBeenCalled();
-      expect(out).toEqual({ kind: "record", start: false, displayId: 1, rect: null });
+      expect(out).toEqual({ kind: "record", start: true, displayId: 1, rect: null });
       expect(runCli).not.toHaveBeenCalled();
     });
 
@@ -443,6 +445,13 @@ describe("WindowsProvider", () => {
 
   it("serves Frame, Window and Screen when Window is enabled", () => {
     expect(MODES.map((m) => provider().supports(m))).toEqual([true, true, true]);
+  });
+
+  it("screen with one display in the record intent records it without an overlay", async () => {
+    const out = await provider().capture({ mode: "screen", overlay: fake, intent: "record" });
+    expect(fake.pick).not.toHaveBeenCalled();
+    expect(out).toEqual({ kind: "record", start: true, displayId: 1, rect: null });
+    expect(log).not.toContain("getSources");
   });
 
   it("frame: pick, hide, capture, destroy, in that order, cropped in physical pixels", async () => {
