@@ -311,7 +311,10 @@ no watermark are needed.
 - `CaptureAction` becomes `"capture" | "copy" | "record" | "select"`. `OverlayAnswer` carries it
   as today; the overlay never captures or records (ADR 0022 decision 3).
 - Action bar by intent:
-  - `capture`: **Capture** (Enter, primary) · Copy (⌘C / Ctrl+C) · Record (R) · Cancel (Esc).
+  - `capture`: **Capture** (Enter, primary) · Copy (⌘C / Ctrl+C) · Cancel (Esc). No Record button
+    and no R key: the P / V intent switch at the left of the bar already turns the same
+    selection into a recording, so a Record button would duplicate it and compete with Capture.
+    (Owner decision after the first build; it supersedes the Record seat ADR 0024 reserved.)
   - `record`: **Use selection** (Enter, primary) · Record (R) · Capture (click only) · Cancel (Esc).
 - The Screen card gets the same bar in place of its "Record this display · soon" label.
 - The pill lists `ENABLED_CAPTURE_MODES` as today; in `record` intent the Frame box starts from
@@ -413,7 +416,7 @@ Surfaces to design, each with its states:
    right edge as in v2. The ACTION BAR under the box changes: primary "Use selection" (Enter),
    then "Record" (R), then "Capture" (click only), then Cancel (Esc). Also the Screen card variant
    with the same bar. Show the CAPTURE intent bar beside it for contrast: primary Capture
-   (Enter), Copy (⌘C), Record (R), Cancel — the Record button is enabled now, not "soon".
+   (Enter), Copy (⌘C), Cancel — no Record button, because the P / V switch covers it.
 
 4. Recording shade: the recorded display while an area is being recorded. The area is fully
    clear with a 1.5 px border; everything outside is covered by a dark translucent shade (pick

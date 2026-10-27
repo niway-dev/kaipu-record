@@ -26,7 +26,7 @@ export const CHROME_GAP_DIP = 10;
 export const TOOLBAR_HEIGHT_DIP = 44;
 /**
  * What the toolbar occupies besides its mode buttons (about: the Capture | Record switch,
- * Capture, Copy, Record, Cancel, dividers).
+ * Capture, Copy, Cancel, dividers; Record only in the record intent).
  */
 export const TOOLBAR_BASE_WIDTH_DIP = 540;
 /** One mode button with only its icon and key badge. */
@@ -47,7 +47,7 @@ export interface OverlayChrome {
   modes: readonly CaptureMode[];
   platform: KeyPlatform;
   /**
-   * Why the overlay opened. `capture`: Capture is primary, with Copy and Record beside it.
+   * Why the overlay opened. `capture`: Capture is primary, with Copy beside it and no Record (the P / V switch covers it).
    * `record`: Frame and Screen draw their own record chrome (Start recording, Enter).
    */
   intent: CaptureIntent;
@@ -123,7 +123,7 @@ function useModeLabels(): Record<CaptureMode, string> {
  * The one horizontal toolbar attached to the selection: the segmented mode group (icon, name
  * on wide selections, key badge), the actions of the overlay's intent (see `ActionButtons`),
  * and Cancel (Esc). `canRecord` false (a selection under the recording minimum) disables
- * Record and Use selection; Capture and Copy stay.
+ * Record (record intent); Capture and Copy stay.
  */
 export function SelectionToolbar({
   chrome,
@@ -243,7 +243,8 @@ export function IntentSwitch({
 
 /**
  * The action buttons for the overlay's intent, shared by the selection toolbar and the
- * Screen card. Opened to capture: Capture (Enter) · Copy (⌘C) | Record (R). Opened to
+ * Screen card. Opened to capture: Capture (Enter) · Copy (⌘C), with no Record: the P / V
+ * switch beside the modes already turns the same selection into a recording. Opened to
  * record (the Window picker only): Record (R) | Capture (click only, so ⌘C keeps meaning
  * copy everywhere else in the app).
  */
@@ -276,7 +277,7 @@ export function ActionButtons({
       )}
     </button>
   );
-  const record = (
+  const record = () => (
     <button
       type="button"
       className={styles.recordButton}
@@ -296,7 +297,7 @@ export function ActionButtons({
     // their own record chrome): Record first, Capture beside it, no "Use selection".
     return (
       <>
-        {record}
+        {record()}
         <span className={styles.barDivider} aria-hidden />
         {capture(false)}
       </>
@@ -317,8 +318,6 @@ export function ActionButtons({
           {copyKeyLabel(chrome.platform)}
         </kbd>
       </button>
-      <span className={styles.barDivider} aria-hidden />
-      {record}
     </>
   );
 }
