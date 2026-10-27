@@ -113,11 +113,13 @@ export interface RecordingHubHandle {
   ): void;
   /**
    * Best-effort recovery when the recorder renderer is gone (crash, or the
-   * main window destroyed) mid-recording: resets activity, hides the bar, and
-   * restores the Dock policy without waiting on IPC that will never arrive
-   * from a dead renderer. No-ops while idle.
+   * main window destroyed) mid-recording or mid-countdown: resets activity, hides the bar and
+   * the shades, releases a pending take (Esc, the tray), and restores the Dock policy without
+   * waiting on IPC that will never arrive from a dead renderer. No-ops while idle.
+   * `revealAbandoned` also brings back the app a prepared countdown had kept hidden: set it
+   * when the main window is still there (a crash), not when the user closed it.
    */
-  forceReset(): void;
+  forceReset(options?: { revealAbandoned?: boolean }): void;
 }
 
 /** How long a region waits for its countdown before it is forgotten. */
@@ -741,14 +743,16 @@ export function registerRecordingHub(
       });
       return true;
     },
-    forceReset: () => {
+    forceReset: (options) => {
       cursorTracks.discardAll();
       clickSessions.clear();
       clickHook.stop();
       // A shade must never outlive the renderer that would have stopped it.
+      const notify = countdownAbandoned;
       clearCountdownRegion();
       setPending(false);
       shade.hide();
+      if (options?.revealAbandoned) revealAbandoned(notify);
       if (!activity.active) return;
       applyStopWindowState();
     },

@@ -991,6 +991,45 @@ describe("recording hub — choosing an area or a display on the overlay", () =>
     expect(mockState.shade.hide).toHaveBeenCalled();
   });
 
+  it("a window closed during a countdown ends the pending take: not busy, Esc freed, shade gone", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    mockState.shortcutUnregister.mockClear();
+    const hub = registerRecordingHub(() => fakeMainWindow() as never);
+    mockState.displays = [{ id: 2, bounds: { x: 0, y: 0, width: 1512, height: 982 } }];
+    const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+    const reveal = vi.fn();
+
+    hub.prepareRegionCountdown(2, { x: 10, y: 10, width: 300, height: 200 }, reveal);
+    phase({}, { phase: "counting", value: 2 });
+    expect(hub.isPending()).toBe(true);
+
+    // The window is closed: no reveal (the user closed it), but the take must be released.
+    hub.forceReset();
+    expect(hub.isPending()).toBe(false);
+    expect(mockState.shortcutUnregister).toHaveBeenCalledWith("Escape");
+    expect(mockState.shade.hide).toHaveBeenCalled();
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it("a forced reset that reveals brings the app back from a countdown it abandons", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const hub = registerRecordingHub(() => fakeMainWindow() as never);
+    mockState.displays = [{ id: 2, bounds: { x: 0, y: 0, width: 1512, height: 982 } }];
+    const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+    const reveal = vi.fn();
+
+    hub.prepareRegionCountdown(2, null, reveal);
+    phase({}, { phase: "counting", value: 2 });
+    // The renderer died: the app was hidden for this countdown and must come back.
+    hub.forceReset({ revealAbandoned: true });
+    expect(reveal).toHaveBeenCalledTimes(1);
+    expect(hub.isPending()).toBe(false);
+  });
+
   it("an area smaller than the minimum is refused", async () => {
     const { handle } = await hub();
     expect(await handle.selectArea(2, { x: 0, y: 0, width: 63, height: 400 })).toBe(false);
