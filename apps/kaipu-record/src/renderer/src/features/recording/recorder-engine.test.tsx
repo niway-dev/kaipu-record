@@ -80,6 +80,13 @@ interface FakeGain {
   connect: ReturnType<typeof vi.fn>;
 }
 let gains: FakeGain[];
+/** A MediaStreamAudioSourceNode stand-in, in creation order, with the stream it wraps. */
+interface FakeSource {
+  stream: unknown;
+  connect: ReturnType<typeof vi.fn>;
+  disconnect: ReturnType<typeof vi.fn>;
+}
+let sources: FakeSource[];
 /** An AnalyserNode stand-in whose time-domain bytes are all `level` (128 = silence). */
 interface FakeAnalyser {
   level: number;
@@ -102,6 +109,7 @@ beforeEach(() => {
   audioContextClose = vi.fn(async () => {});
   gains = [];
   analysers = [];
+  sources = [];
 
   getUserMedia = vi.fn(async (constraints: MediaStreamConstraints) => {
     // The screen request carries video constraints; everything else is the mic.
@@ -120,7 +128,11 @@ beforeEach(() => {
     createMediaStreamDestination = vi.fn(() => ({
       stream: fakeStream([], [destinationTrack]),
     }));
-    createMediaStreamSource = vi.fn(() => ({ connect: vi.fn() }));
+    createMediaStreamSource = vi.fn((stream: unknown) => {
+      const node: FakeSource = { stream, connect: vi.fn(), disconnect: vi.fn() };
+      sources.push(node);
+      return node;
+    });
     currentTime = 10;
     createGain = vi.fn(() => {
       const node: FakeGain = {
@@ -599,19 +611,126 @@ describe("audio settings", () => {
     expect(gains[before].gain.value).toBe(0.5);
   });
 
-  it("setNoiseSuppression applies the constraint on the live mic track", async () => {
-    const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
-    expect(await handle.setNoiseSuppression(false)).toBe("ok");
-    expect(micTrack.applyConstraints).toHaveBeenCalledWith({ noiseSuppression: false });
-  });
+  describe("setNoiseSuppression", () => {
+    /** Audio-only getUserMedia calls hand out these tracks in order, then fail if told to. */
+    function micFactory(): {
+      tracks: ReturnType<typeof fakeTrack>[];
+      fail: { next: boolean };
+    } {
+      const tracks: ReturnType<typeof fakeTrack>[] = [];
+      const fail = { next: false };
+      getUserMedia.mockImplementation(async (constraints: MediaStreamConstraints) => {
+        if (constraints.video) {
+          return fakeStream([screenVideoTrack], constraints.audio ? [screenSystemAudioTrack] : []);
+        }
+        if (fail.next) {
+          fail.next = false;
+          throw new Error("NotReadableError");
+        }
+        const track = fakeTrack();
+        track.getSettings = vi.fn(() => ({ deviceId: "real-mic" }) as never);
+        tracks.push(track);
+        return fakeStream([], [track]);
+      });
+      return { tracks, fail };
+    }
+    const micCalls = (): MediaStreamConstraints[] =>
+      getUserMedia.mock.calls.map((c) => c[0] as MediaStreamConstraints).filter((c) => !c.video);
 
-  it("setNoiseSuppression is unavailable without a mic or when the device refuses it", async () => {
-    const none = await startEngine(baseOptions({ microphoneDeviceId: null }));
-    expect(await none.setNoiseSuppression(false)).toBe("unavailable");
+    it("reopens the same device with the new setting instead of reconfiguring the live track", async () => {
+      const { tracks } = micFactory();
+      const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+      expect(await handle.setNoiseSuppression(false)).toBe("ok");
 
-    const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
-    micTrack.applyConstraints.mockRejectedValueOnce(new Error("OverconstrainedError"));
-    expect(await handle.setNoiseSuppression(false)).toBe("unavailable");
+      expect(micCalls().at(-1)).toEqual({
+        audio: { deviceId: { exact: "real-mic" }, noiseSuppression: false },
+      });
+      expect(tracks[0]!.applyConstraints).not.toHaveBeenCalled();
+      // The new source feeds the same level gain and the same analyser as the old one.
+      const oldSource = sources[0];
+      const newSource = sources.at(-1);
+      expect(newSource!.connect).toHaveBeenCalledWith(gains[0]);
+      expect(newSource!.connect).toHaveBeenCalledWith(analysers[0]);
+      // The old one is gone only after the new one was connected.
+      expect(oldSource!.disconnect).toHaveBeenCalled();
+      expect(tracks[0]!.stop).toHaveBeenCalled();
+      expect(tracks[1]!.stop).not.toHaveBeenCalled();
+    });
+
+    it("releases the reopened mic on stop, and not the replaced one twice", async () => {
+      const { tracks } = micFactory();
+      const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+      await handle.setNoiseSuppression(false);
+      await handle.stop();
+      expect(tracks[0]!.stop).toHaveBeenCalledTimes(1);
+      expect(tracks[1]!.stop).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the old source and answers unavailable when the device cannot be reopened", async () => {
+      const { tracks, fail } = micFactory();
+      const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+      fail.next = true;
+      expect(await handle.setNoiseSuppression(false)).toBe("unavailable");
+      expect(tracks[0]!.stop).not.toHaveBeenCalled();
+      expect(sources.every((s) => s.disconnect.mock.calls.length === 0)).toBe(true);
+      // The old mic is still the live one: a later reopen works from it.
+      expect(await handle.setNoiseSuppression(false)).toBe("ok");
+    });
+
+    it("serializes concurrent calls: the second waits for the first, and the last request wins", async () => {
+      const { tracks } = micFactory();
+      const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+      const open = getUserMedia.getMockImplementation()!;
+      let release: () => void = () => {};
+      getUserMedia.mockImplementationOnce(async (constraints: MediaStreamConstraints) => {
+        await new Promise<void>((resolve) => (release = resolve));
+        return (open as (c: MediaStreamConstraints) => Promise<MediaStream>)(constraints);
+      });
+      const first = handle.setNoiseSuppression(false);
+      await Promise.resolve();
+      await Promise.resolve();
+      const second = handle.setNoiseSuppression(true);
+      await Promise.resolve();
+      // The second has not opened anything while the first is still opening.
+      expect(micCalls()).toHaveLength(2);
+      release();
+      expect(await Promise.all([first, second])).toEqual(["ok", "ok"]);
+      expect(
+        micCalls()
+          .slice(1)
+          .map((c) => (c.audio as { noiseSuppression: boolean }).noiseSuppression),
+      ).toEqual([false, true]);
+      // Two reopens: the first replacement is released, the last one stays live.
+      expect(tracks).toHaveLength(3);
+      expect(tracks[0]!.stop).toHaveBeenCalled();
+      expect(tracks[1]!.stop).toHaveBeenCalled();
+      expect(tracks[2]!.stop).not.toHaveBeenCalled();
+    });
+
+    it("does not reopen when the setting already is the one in effect", async () => {
+      micFactory();
+      const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+      const before = getUserMedia.mock.calls.length;
+      expect(await handle.setNoiseSuppression(true)).toBe("ok");
+      expect(getUserMedia.mock.calls.length).toBe(before);
+    });
+
+    it("applies to a mic acquired later when none is open now", async () => {
+      micFactory();
+      const handle = await startEngine(baseOptions({ microphoneDeviceId: null }));
+      expect(await handle.setNoiseSuppression(false)).toBe("ok");
+      await handle.setMicrophoneEnabled(true, "mic-2");
+      expect(micCalls().at(-1)).toEqual({
+        audio: { deviceId: { ideal: "mic-2" }, noiseSuppression: false },
+      });
+    });
+
+    it("answers unavailable after stop", async () => {
+      micFactory();
+      const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+      await handle.stop();
+      expect(await handle.setNoiseSuppression(false)).toBe("unavailable");
+    });
   });
 
   it("setSystemAudioVolume ramps only the volume gain; unavailable without loopback", async () => {
@@ -724,5 +843,93 @@ describe("audio settings", () => {
       analysers[0].level = bytesForDbfs(-12);
       expect(handle.readMicLevels().some((bar) => bar > 0)).toBe(true);
     });
+  });
+});
+
+describe("mic analyser tap point", () => {
+  it("taps the raw device signal before the level gain, so the level never moves the meter or the ducking", async () => {
+    const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+    const micSource = sources[0]!;
+    const [levelGain, muteGain] = gains;
+    expect(micSource.connect).toHaveBeenCalledWith(analysers[0]);
+    expect(micSource.connect).toHaveBeenCalledWith(levelGain);
+    expect(levelGain!.connect).not.toHaveBeenCalledWith(analysers[0]);
+    expect(levelGain!.connect).toHaveBeenCalledWith(muteGain);
+    handle.setMicLevel(200);
+  });
+});
+
+describe("a start that fails after the audio is wired", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const failingStart = (): void => {
+    vi.mocked(Output).mockImplementationOnce(function () {
+      return {
+        addVideoTrack: vi.fn(),
+        addAudioTrack: vi.fn(),
+        start: vi.fn(async () => {
+          throw new Error("encoder refused");
+        }),
+        finalize: vi.fn(async () => {}),
+      } as never;
+    });
+  };
+
+  it("clears the ducking loop, closes the context and stops every track before rethrowing", async () => {
+    failingStart();
+    await expect(
+      startEngine(
+        baseOptions({
+          microphoneDeviceId: "mic-1",
+          systemAudio: true,
+          audio: { ...DEFAULT_AUDIO_SETTINGS, duckSystemAudioWhileTalking: true },
+        }),
+      ),
+    ).rejects.toThrow("encoder refused");
+
+    expect(vi.getTimerCount()).toBe(0);
+    expect(audioContextClose).toHaveBeenCalled();
+    expect(micTrack.stop).toHaveBeenCalled();
+    expect(screenVideoTrack.stop).toHaveBeenCalled();
+    expect(screenSystemAudioTrack.stop).toHaveBeenCalled();
+    expect(destinationTrack.stop).toHaveBeenCalled();
+  });
+
+  it("does not start ducking before the output has started", async () => {
+    let release: () => void = () => {};
+    vi.mocked(Output).mockImplementationOnce(function () {
+      return {
+        addVideoTrack: vi.fn(),
+        addAudioTrack: vi.fn(),
+        start: vi.fn(() => new Promise<void>((resolve) => (release = resolve))),
+        finalize: vi.fn(async () => {}),
+      } as never;
+    });
+    const starting = startEngine(
+      baseOptions({
+        microphoneDeviceId: "mic-1",
+        systemAudio: true,
+        audio: { ...DEFAULT_AUDIO_SETTINGS, duckSystemAudioWhileTalking: true },
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(0);
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    await starting;
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+  });
+
+  it("releases the compositor too", async () => {
+    failingStart();
+    const stop = vi.fn();
+    vi.mocked(startRecordingCompositor).mockResolvedValueOnce({
+      track: { stop: vi.fn() },
+      stop,
+    } as never);
+    screenVideoTrack.getSettings = vi.fn(() => ({ width: 3024, height: 1964 }));
+    await expect(startEngine(baseOptions())).rejects.toThrow("encoder refused");
+    expect(stop).toHaveBeenCalled();
   });
 });
