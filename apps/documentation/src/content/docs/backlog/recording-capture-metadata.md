@@ -65,5 +65,4 @@ description: "Every new recording stores its capture mode (screen, area, window)
 
 ## Not included
 
-- The Record page's "Recent" grid does not show the tag yet (another change owns that page).
 - No cloud sync of the value; the server catalog is unchanged.

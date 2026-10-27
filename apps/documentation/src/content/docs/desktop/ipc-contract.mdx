@@ -56,11 +56,18 @@ same path as `settings:update`; no UI control writes it directly.
 
 ### Permisos
 
-| Canal                       | Dir | En `electronAPI`           | Registrador      |
-| --------------------------- | --- | -------------------------- | ---------------- |
-| `permissions:check`         | r→m | `checkPermissions()`       | `permissions.ts` |
-| `permissions:request`       | r→m | `requestPermission(kind)`  | `permissions.ts` |
-| `permissions:open-settings` | r→m | `openSystemSettings(kind)` | `permissions.ts` |
+| Canal                              | Dir | En `electronAPI`                | Registrador        |
+| ---------------------------------- | --- | ------------------------------- | ------------------ |
+| `permissions:check`                | r→m | `checkPermissions()`            | `permissions.ts`   |
+| `permissions:request`              | r→m | `requestPermission(kind)`       | `permissions.ts`   |
+| `permissions:open-settings`        | r→m | `openSystemSettings(kind)`      | `permissions.ts`   |
+| `permissions:camera-access-status` | r→m | `getCameraAccessStatus()`       | `permissions.ts`   |
+| `camera-bubble:preview-size`       | r→m | `previewCameraBubbleSize(size)` | `recording-hub.ts` |
+
+`permissions:camera-access-status` answers `"granted" | "blocked" | "unknown"`: only a denied
+camera blocks the Camera toggle (`checkPermissions().camera` is also false before the first
+prompt). `camera-bubble:preview-size` resizes the bubble window live during a grip drag,
+clamped to the recorded area, and answers the size actually applied; the grip saves that one.
 
 ### Library / vault
 
@@ -96,6 +103,7 @@ same path as `settings:update`; no UI control writes it directly.
 | `screenshot:overlay-state`         | m→o      | `captureOverlay.onState(cb)`                                          | `screenshots/` |
 | `screenshot:overlay-frame-display` | o→m      | `captureOverlay.chooseFrameDisplay(id)`                               | `screenshots/` |
 | `screenshot:overlay-mode`          | o→m      | `captureOverlay.setMode(mode)`                                        | `screenshots/` |
+| `screenshot:overlay-intent`        | o→m      | `captureOverlay.setIntent(intent)`                                    | `screenshots/` |
 | `screenshot:overlay-hidden-ack`    | m→o, o→m | `captureOverlay.onHiddenAckRequest(cb)`, `captureOverlay.hiddenAck()` | `screenshots/` |
 | `screenshot:toast-show`            | m→t      | `captureToast.onShow(cb)`                                             | `screenshots/` |
 | `screenshot:toast-ready`           | t→m      | `captureToast.ready()`                                                | `screenshots/` |
@@ -234,7 +242,8 @@ An area recording (ADR 0030) adds one optional field to two payloads and nothing
 `recording:start` carries `area: RecordingArea | null` (main shows the recording shade and
 anchors the camera bubble inside it), and `cursor-track:start` takes it as a third argument
 (main normalizes the track to the area). `recording:start` also emits `recording_started`
-with `{ mode: "screen" | "area" | "window", platform, displays }`.
+with `{ mode: "screen" | "area" | "window", platform, displays }`, plus, for an area,
+`size` (`<720p` · `720p` · `1080p` · `1440p+`) and `ratio`.
 
 ### Cross-window triggers (panel/atajo → Record page)
 

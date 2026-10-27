@@ -6,7 +6,9 @@ description: "The tray icon's right-click menu gains a Record submenu (screen, a
 # Tray menu: Record submenu
 
 > **Status: 🟢 Ready to validate (prod review pending)** — PR #381, integrated with the rest of
-> task 5 on `feat/record-modes-integration` (2026-10-26). Part of
+> task 5 on `feat/record-modes-integration` (2026-10-26). Unit tests and type checks pass;
+> nothing has been run in Electron yet (native menu rendering, accelerators and the hash
+> navigation are unverified at runtime), and owner QA is pending. Part of
 > [Record capture modes](./record-capture-modes).
 
 ## What changed

@@ -35,6 +35,7 @@ description: "Proposal: choose what a recording covers — a display, an area dr
   on Windows at 125 % and 150 %.
 - Measure the compositor's frame rate for a 1280×720 area in the hidden main window (spec,
   open question 1).
-- Owner QA of task 5 (`feat/record-modes-ui`): ratio chips and the locked resize, Enter / R /
+- Owner QA of task 5 (the integration PR from `feat/record-modes-integration`, which supersedes
+  #380–#383): ratio chips and the locked resize, Enter / R /
   P / V on the overlay, the countdown drawn on the region with Esc, the border and REC tag over
   the dark shade, the control bar beside the area. See the spec's task 5 notes.

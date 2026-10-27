@@ -87,8 +87,17 @@ must be ours and must work on macOS and Windows alike.
 
 ## Non-goals
 
-- Changing the area while recording; exact dimensions or aspect locks in the picker; Window mode
-  inside the overlay for recording; compositing the camera into the canvas; Linux.
+- Changing the area while recording; exact dimensions in the picker; Window mode inside the
+  overlay for recording; compositing the camera into the canvas; Linux.
+
+## Amendments
+
+- **2026-10-26 — aspect locks are in.** "Aspect locks in the picker" is no longer a non-goal: the
+  owner approved the "Kaipu Record Modes" design, whose Frame box offers Free, 16:9, 9:16 and 1:1
+  when the overlay opens to record. Exact dimensions stay a non-goal. The crop decision is
+  unchanged: a locked ratio only shapes the rectangle the compositor crops. See the spec's
+  [task 5 notes](/specs/2026-10-26-record-capture-modes-design/#task-5-implementation-notes-design-kaipu-record-modes),
+  "New: aspect ratios".
 
 ## Reopen when
 

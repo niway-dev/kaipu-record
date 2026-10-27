@@ -96,8 +96,11 @@ rounded square) and size (120–480 px, presets S 160 · M 240 · L 360) are now
 (`AppSettings.cameraBubble`), changed live from the split Camera tile or the bubble's hover grip
 ([backlog](/backlog/camera-bubble-shape-and-size/)). The bubble stays at this decision's fixed
 bottom-left corner and grows up and to the right; it is **not draggable** and its position is
-not persisted. "Cannot hold the bubble" now means "cannot hold even the 120 px minimum": a
-larger size the area cannot hold is shrunk to what fits instead of hiding the bubble.
+not persisted. This also changes full-screen recordings, which decision 6 did not cover: there
+the bubble used to be draggable anywhere on the display, and now it is fixed at the display's
+bottom-left corner too. "Cannot hold the bubble" now means "cannot hold even the 120 px
+minimum": a larger size the area cannot hold is shrunk to what fits instead of hiding the
+bubble.
 
 ### Open questions
 
@@ -145,8 +148,9 @@ What changed against the decisions above:
   (recorded → `recordingArea`, shot → `screenshotFrame`), as before. Each intent keeps its own
   last mode: `screenshotMode` (written by a capture) and `recordingMode` (written by a take or a
   mode chip), so "Start recording" opens in Record and the screenshot shortcuts open in Capture.
-  The switch is per overlay window: on several displays, switching on one does not switch the
-  others (main does not broadcast the intent).
+  The switch is shared: an overlay sends it to main (`screenshot:overlay-intent`), which
+  broadcasts it in the overlay state, so on several displays every overlay confirms with the
+  same intent. After P the Frame box is free; the ratio it had stays and comes back with V.
 - _Decision 4 (recording shade)._ Kept as decided: dark outside, clear inside, click-through,
   content-protected. The design's additions are drawn on top: a 2 px pink border 3 px outside
   the area with a soft glow, and a "REC · border not recorded" tag. New: a **whole-display**
@@ -157,8 +161,13 @@ What changed against the decisions above:
   starts… press Esc to cancel"; no border for a whole display) instead of the main window. The
   main window stays hidden (`CaptureEnding` "recording"); the recorder reports its phase to main
   (`recording:recorder-phase`) and **Esc is a global shortcut held only during the countdown**,
-  because nothing of ours has focus. Starting from the thumbnail picker (Window) keeps the old
-  countdown in the main window.
+  because nothing of ours has focus. It is a temporary registration that survives the settings
+  writes that re-apply the global shortcuts. Starting from the thumbnail picker (Window) keeps
+  the old countdown in the main window. While a take is pending (countdown or acquiring), the
+  selector, the screenshot shortcuts and the tray's Record items are refused like during a take.
+  If the start never reaches the recorder (a dialog in the hidden window, no source) or ends
+  before a take, main shows the app again instead of leaving it hidden. A whole-display
+  countdown turns into the recording border at once, without waiting for the source lookup.
 - _Decision 7 (control bar)._ Amended: the bar now **sits outside the recorded area**: centred
   16 DIP below it when that fits the work area, else 16 DIP to its right (top-aligned), else to
   its left, else bottom centre as before (`controlBarBounds`). A whole display keeps bottom
@@ -177,12 +186,21 @@ What changed against the decisions above:
   layouts is #380's split tile: a popover on the page, an inline drawer in the tray panel.
 - _Decision 9 (shortcuts)._ `startRecording` now opens the selector in the last used mode, as the
   button does, instead of starting the current target at once.
-- _New: aspect ratios._ The Frame box opened to record offers Free, 16:9, 9:16 and 1:1. A locked
+- _New: aspect ratios._ This amends ADR 0030, which listed "aspect locks in the picker" as a
+  non-goal ([amendment of 2026-10-26](/architecture/decisions/0030-recording-target-and-area-crop-in-the-compositor/#amendments);
+  exact dimensions stay out of scope). The Frame box opened to record offers Free, 16:9, 9:16 and 1:1. A locked
   ratio constrains drawing a new box, dragging a corner (the opposite corner stays) and dragging
   an edge (the box grows around its centre line); picking a chip reshapes the box around its
   centre. The ratio is remembered with the area per display (`RememberedArea.ratio` in
   `AppSettings.recordingArea`; an area remembered before ratios loads as Free). Geometry:
   `ratio-geometry.ts`, unit-tested.
+- _Owner QA: the full-screen border is not in the file._ Full-screen recordings now open a
+  display-sized, always-on-top shade window that draws only a pink border; before task 5 they had
+  no shade window at all. It stays out of the video only if content protection is honoured. Check
+  that the border is absent from the recorded file on macOS 15+ (ScreenCaptureKit) and on
+  Windows. On Windows builds before 10 2004 (no `WDA_EXCLUDEFROMCAPTURE`, where a protected
+  window shows black in captures) the whole-display border is skipped (`fullDisplayBorderAllowed`);
+  an area's shade is outside the recorded crop and is kept.
 - _Tray submenu._ The tray icon's right-click menu has Record → Record screen, Record area,
   Record window… ([backlog](/backlog/tray-record-submenu/)). Each opens the selector in its own
   mode, like the Record page's chips (Window: the thumbnail picker while NIW2-469 keeps it off).

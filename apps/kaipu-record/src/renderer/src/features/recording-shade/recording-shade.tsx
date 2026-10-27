@@ -41,7 +41,7 @@ export interface RecordingShadeApi {
  * - Countdown: everything outside the region is dimmed (40 %), the region keeps a 2 px pink
  *   border (none for a whole display), and the number sits in the middle.
  * - Recording an area: the area is clear and everything around it dark, as the screenshot
- *   overlay does (ADR 0030 decision 4), with a 2 px pink border 3 px outside the area and
+ *   overlay does (spec "Record capture modes" decision 4), with a 2 px pink border 3 px outside the area and
  *   a "REC · border not recorded" tag on top (design "Kaipu Record Modes").
  * - Recording a whole display (`rect` null): only a 3 px pink border around the display.
  */
