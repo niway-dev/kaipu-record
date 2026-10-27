@@ -7,13 +7,13 @@ description: Claude Sonnet 5.5 reviews each pull request once when it is ready, 
 
 ## Status
 
-| Field         | Value                                                                                                                                                 |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | Accepted — now consumed through the reusable workflow `niway-dev/agent-review` (`.github/workflows/agent-review.yml`); not yet run in this repository |
-| Date          | 2026-10-20                                                                                                                                            |
-| Supersedes    | —                                                                                                                                                     |
-| Amends        | —                                                                                                                                                     |
-| Superseded by | —                                                                                                                                                     |
+| Field         | Value                                                                                                                                                                                                                                                                                                           |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Accepted — now consumed through the reusable workflow `niway-dev/agent-review` (`.github/workflows/agent-review.yml`); first ran here on PR #394 (2026-10-27). Amended 2026-10-27: the script and its tests left this repository ([amendment](#amendment-the-review-script-and-its-tests-left-this-repository)) |
+| Date          | 2026-10-20                                                                                                                                                                                                                                                                                                      |
+| Supersedes    | —                                                                                                                                                                                                                                                                                                               |
+| Amends        | —                                                                                                                                                                                                                                                                                                               |
+| Superseded by | —                                                                                                                                                                                                                                                                                                               |
 
 ## Context
 
@@ -79,3 +79,13 @@ keeps ordinary pull requests fast: they get an immediate pass, not a verificatio
 - `CONTRIBUTING.md` opens pull requests to outside contributors, or a second collaborator joins.
 - The kit moves past its first option (niway-dev/pr-review-engine's v1 design ladder).
 - `claude-code-action` works with this key.
+
+## Amendment: the review script and its tests left this repository
+
+**2026-10-27.** The Consequences above say the review script is a copy of the kit's and that
+`bun test ./scripts/` (in `check-workflows`) runs its tests. Both stopped being true when the
+review moved to the reusable workflow `niway-dev/agent-review` (534d6c98): the copy and
+`scripts/claude-review.test.ts` were deleted, and this repository now calls that workflow
+instead of running a script of its own. With no test left under `scripts/`,
+`bun test ./scripts/` exited 1 and failed `check-workflows` and `bun run verify`; PR #394
+removed the step.
