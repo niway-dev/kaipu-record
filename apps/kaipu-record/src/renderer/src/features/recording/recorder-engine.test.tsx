@@ -380,6 +380,23 @@ describe("startEngine", () => {
     expect(position).toBe(42);
   });
 
+  it("stops encoding as soon as stop is requested, not after the poster frame wait", async () => {
+    // A poster frame that never comes must not keep the encoder running past the stop.
+    vi.mocked(HTMLMediaElement.prototype.play).mockImplementation(
+      () => new Promise<void>(() => {}),
+    );
+    const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1" }));
+    const videoSource = vi.mocked(MediaStreamVideoTrackSource).mock.results.at(-1)!.value;
+    const audioSource = vi.mocked(MediaStreamAudioTrackSource).mock.results.at(-1)!.value;
+
+    const stopping = handle.stop();
+    expect(videoSource.pause).toHaveBeenCalled();
+    expect(audioSource.pause).toHaveBeenCalled();
+    expect(lastOutput().finalize).not.toHaveBeenCalled(); // still waiting for the poster (1 s)
+    await stopping;
+    expect(lastOutput().finalize).toHaveBeenCalled();
+  });
+
   it("releases every device and closes the audio context on stop", async () => {
     const handle = await startEngine(
       baseOptions({ microphoneDeviceId: "mic-1", systemAudio: true }),
