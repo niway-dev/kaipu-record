@@ -150,6 +150,10 @@
     "recording": "Grabación",
     "showControlBar": "Mostrar la barra de control en la grabación",
     "showControlBarDescription": "Incluye la barra flotante en el video capturado. Desactivado la mantiene oculta (por defecto).",
+    "countdown": "Cuenta regresiva antes de grabar",
+    "countdownDescription": "Segundos de cuenta regresiva antes de empezar a grabar. Desactivada empieza al instante.",
+    "countdownOff": "Sin cuenta",
+    "countdownSeconds": "{seconds} s",
     "clickZoomLabel": "Zoom en clics (Accesibilidad)",
     "files": "Archivos",
     "recordingsFolder": "Carpeta de grabaciones",
@@ -1116,6 +1120,7 @@
   },
   "panel": {
     "saving": "Guardando…",
+    "starting": "Iniciando…",
     "paused": "Pausado",
     "resume": "Reanudar",
     "pause": "Pausar",

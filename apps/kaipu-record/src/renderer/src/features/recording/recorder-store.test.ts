@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalRecording, RecordingSettings } from "@shared/types";
-import type { ControlCommand } from "@shared/types/ipc";
+import type { AppSettings, ControlCommand } from "@shared/types/ipc";
 import { startEngine, type EngineHandle } from "@renderer/features/recording/recorder-engine";
 // Type-only (erased at runtime), so it does not run the store's import-time side effect early.
 import type { StartInput } from "./recorder-store";
@@ -21,6 +21,7 @@ const startEngineMock = vi.mocked(startEngine);
 const reportErrorMock = vi.mocked(reportError);
 
 const callOrder: string[] = [];
+const appSettingsListeners: Array<(settings: AppSettings) => void> = [];
 const commands: Array<(command: ControlCommand) => void> = [];
 const recordingCreateMock = vi.fn(async () => {
   callOrder.push("recordingCreate");
@@ -33,6 +34,12 @@ window.electronAPI.recordingStart = recordingStartMock;
 window.electronAPI.recordingStop = recordingStopMock;
 window.electronAPI.onRecordingCommand = vi.fn((callback) => {
   commands.push(callback);
+  return () => {};
+});
+// The countdown length is read live: the store primes it with getSettings and follows the
+// settings broadcast, both at import time.
+window.electronAPI.onSettingsChanged = vi.fn((callback) => {
+  appSettingsListeners.push(callback);
   return () => {};
 });
 
@@ -479,6 +486,52 @@ describe("recorder-store", () => {
     );
   });
 
+  it("an engine that fails while the take is still being acquired fails the start instead of recording", async () => {
+    const engine = fakeEngine();
+    startEngineMock.mockImplementation(async (opts) => {
+      // The screen capture ends before the take is set up (the cursor session still opens):
+      // there is no take to stop yet, so this error used to be dropped.
+      opts.onError?.(new Error("screen capture ended"));
+      return engine;
+    });
+    store.requestStartRecording(() => input);
+    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
+    expect(engine.stop).toHaveBeenCalledOnce();
+    expect(window.electronAPI.recordingAbort).toHaveBeenCalledOnce();
+    expect(window.electronAPI.recordingStop).toHaveBeenCalledOnce(); // undoes the hide
+    expect(reportErrorMock).toHaveBeenCalledOnce();
+    expect(reportErrorMock).toHaveBeenCalledWith(
+      messages.record.errorStart,
+      expect.any(Error),
+      expect.objectContaining({ retry: expect.any(Function) }),
+    );
+  });
+
+  it("a pause or resume that lands while the take is saving is ignored", async () => {
+    let finishStop!: () => void;
+    const engine = fakeEngine({ stop: vi.fn(() => new Promise<void>((r) => (finishStop = r))) });
+    startEngineMock.mockResolvedValue(engine);
+    store.requestStartRecording(() => input);
+    await vi.advanceTimersByTimeAsync(3000);
+    store.pauseRecording();
+    store.stopOrCancelRecording();
+    expect(store.getRecorderSnapshot().status).toBe("finalizing");
+
+    // The bar's Resume/Pause clicked just as the Stop shortcut fired: the engine is flushing.
+    store.resumeRecording();
+    store.pauseRecording();
+    expect(engine.resume).not.toHaveBeenCalled();
+    expect(engine.pause).toHaveBeenCalledOnce(); // the pause before the stop
+    expect(store.getRecorderSnapshot().status).toBe("finalizing");
+
+    finishStop();
+    await vi.advanceTimersByTimeAsync(700);
+    expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
+  });
+
   it("aborts the session, undoes the early window-hide, and returns to idle when the engine fails to start", async () => {
     startEngineMock.mockRejectedValue(new Error("getDisplayMedia denied"));
 
@@ -505,6 +558,95 @@ describe("recorder-store", () => {
     expect(reports).not.toHaveBeenCalledWith({ phase: "starting" });
     expect(window.electronAPI.recordingStart).not.toHaveBeenCalled();
     expect(reportErrorMock).toHaveBeenCalledOnce();
+  });
+
+  describe("countdown length setting", () => {
+    // The settings broadcast the store follows (Settings → Recording → Countdown).
+    const setCountdown = (seconds: unknown): void => {
+      for (const listener of appSettingsListeners) {
+        listener({ recordingCountdownSeconds: seconds } as AppSettings);
+      }
+    };
+    afterEach(() => setCountdown(3));
+
+    it("with 0 skips the counting state and the visible-wait and starts the engine at once", async () => {
+      setCountdown(0);
+      const reports = vi.fn();
+      window.electronAPI.reportRecorderPhase = reports;
+      window.electronAPI.waitForCountdownVisible = vi.fn(() => new Promise<void>(() => {}));
+      startEngineMock.mockImplementation(async () => {
+        callOrder.push("startEngine");
+        return fakeEngine();
+      });
+
+      store.requestStartRecording(() => input);
+
+      // No "counting" at any point, and nothing was waited for: already acquiring.
+      expect(store.getRecorderSnapshot()).toEqual({ status: "starting", countdown: null });
+      expect(window.electronAPI.waitForCountdownVisible).not.toHaveBeenCalled();
+      expect(window.electronAPI.recordingStart).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceId: "screen:1" }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getRecorderSnapshot().status).toBe("recording");
+      expect(callOrder).toEqual(["recordingStart", "recordingCreate", "startEngine"]);
+      expect(reports.mock.calls.map(([report]) => report)).toEqual([{ phase: "starting" }]);
+
+      await stopAndSettle();
+    });
+
+    it("with 0 resolves the input at once, and a throw goes back to idle without starting", () => {
+      setCountdown(0);
+      const reports = vi.fn();
+      window.electronAPI.reportRecorderPhase = reports;
+      store.requestStartRecording(() => {
+        throw new Error("no source selected");
+      });
+
+      expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
+      // Main is told the start is dead, so a hidden app is not left waiting for it.
+      expect(reports.mock.calls.map(([report]) => report)).toEqual([{ phase: "idle" }]);
+      expect(reportErrorMock).toHaveBeenCalledOnce();
+      expect(window.electronAPI.recordingStart).not.toHaveBeenCalled();
+      expect(startEngineMock).not.toHaveBeenCalled();
+    });
+
+    it("with 5 counts 5 → 1 and starts after five seconds", async () => {
+      setCountdown(5);
+      store.requestStartRecording(() => input);
+      expect(store.getRecorderSnapshot()).toEqual({ status: "counting", countdown: 5 });
+
+      for (const expected of [4, 3, 2, 1]) {
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(store.getRecorderSnapshot()).toEqual({ status: "counting", countdown: expected });
+      }
+      expect(window.electronAPI.recordingStart).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(store.getRecorderSnapshot().status).toBe("recording");
+
+      await stopAndSettle();
+    });
+
+    it("reads the length when the start is requested, so a change applies to the next take", async () => {
+      setCountdown(5);
+      setCountdown(0);
+      store.requestStartRecording(() => input);
+      expect(store.getRecorderSnapshot().status).toBe("starting");
+      await vi.advanceTimersByTimeAsync(0);
+      await stopAndSettle();
+
+      setCountdown(3);
+      store.requestStartRecording(() => input);
+      expect(store.getRecorderSnapshot()).toEqual({ status: "counting", countdown: 3 });
+      store.stopOrCancelRecording();
+    });
+
+    it("falls back to 3 for a value that is not an offered length", () => {
+      setCountdown(7);
+      store.requestStartRecording(() => input);
+      expect(store.getRecorderSnapshot()).toEqual({ status: "counting", countdown: 3 });
+      store.stopOrCancelRecording();
+    });
   });
 
   it("ignores a second start request while one is already in progress", async () => {

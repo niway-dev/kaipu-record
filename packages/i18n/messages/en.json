@@ -150,6 +150,10 @@
     "recording": "Recording",
     "showControlBar": "Show control bar in recording",
     "showControlBarDescription": "Include the floating control bar in the captured video. Off keeps it hidden (default).",
+    "countdown": "Countdown before recording",
+    "countdownDescription": "Seconds to count down before a recording starts. Off starts it right away.",
+    "countdownOff": "Off",
+    "countdownSeconds": "{seconds} s",
     "clickZoomLabel": "Zoom on clicks (Accessibility)",
     "files": "Files",
     "recordingsFolder": "Recordings folder",
@@ -1116,6 +1120,7 @@
   },
   "panel": {
     "saving": "Saving…",
+    "starting": "Starting…",
     "paused": "Paused",
     "resume": "Resume",
     "pause": "Pause",
