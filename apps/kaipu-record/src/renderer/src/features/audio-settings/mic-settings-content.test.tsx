@@ -71,6 +71,24 @@ describe("MicSettingsContent", () => {
     expect(onSelect).toHaveBeenLastCalledWith(AIRPODS);
   });
 
+  it("from an unplugged saved device, ArrowUp picks the last device", async () => {
+    const GONE: Microphone = { deviceId: "gone", label: "Shure MV7" };
+    const onSelect = vi.fn();
+    render(<Harness initial={GONE} onSelect={onSelect} />);
+    screen.getByRole("radio", { name: /Shure/ }).focus();
+    await userEvent.keyboard("{ArrowUp}");
+    expect(onSelect).toHaveBeenLastCalledWith(AIRPODS);
+  });
+
+  it("from an unplugged saved device, ArrowDown picks the first device", async () => {
+    const GONE: Microphone = { deviceId: "gone", label: "Shure MV7" };
+    const onSelect = vi.fn();
+    render(<Harness initial={GONE} onSelect={onSelect} />);
+    screen.getByRole("radio", { name: /Shure/ }).focus();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(onSelect).toHaveBeenLastCalledWith(BUILT_IN);
+  });
+
   it("selects a device by clicking it", async () => {
     const onSelect = vi.fn();
     render(<Harness onSelect={onSelect} />);

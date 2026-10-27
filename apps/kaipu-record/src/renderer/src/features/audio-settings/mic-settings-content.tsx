@@ -57,7 +57,9 @@ export function MicSettingsContent({
     if (delta === 0 || isRecording || microphones.length === 0) return;
     event.preventDefault();
     const current = microphones.findIndex((m) => m.deviceId === selected?.deviceId);
-    const next = microphones[(current + delta + microphones.length) % microphones.length]!;
+    // No listed device is selected (it was unplugged): Down starts at the first, Up at the last.
+    const from = current === -1 ? (delta > 0 ? -1 : microphones.length) : current;
+    const next = microphones[(from + delta + microphones.length) % microphones.length]!;
     onSelect(next);
     rows.current[devices.indexOf(next)]?.focus();
   };
