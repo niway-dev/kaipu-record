@@ -5,25 +5,90 @@ import { createMainTranslator } from "@kaipu/i18n/main";
 import { buildScreenshotCapturedProperties, SCREENSHOT_CAPTURED_EVENT } from "@shared/analytics";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import type { LocalRecording } from "@shared/types/library-storage";
-import type { CaptureMode, OverlayAnswer } from "@shared/types/screenshot-capture";
+import {
+  isEnabledCaptureMode,
+  type CaptureMode,
+  type OverlayAnswer,
+} from "@shared/types/screenshot-capture";
 import { assertExportPayload, exportFileName } from "./export-file-name";
 import {
   createCaptureHandler,
   type CaptureWindowHooks,
   type RecordTarget,
 } from "./capture-handler";
-import { CaptureOverlayWindows } from "./capture-overlay-windows";
+import { CaptureOverlayWindows, type OverlayWarmup } from "./capture-overlay-windows";
 import type { OverlayPort } from "./overlay-port";
 import { createScreenshotProvider } from "./screenshot-capture";
 import { createWindowLister } from "./window-lister";
 import { captureMainEvent } from "../services/analytics.service";
-import { getAppSettings, updateAppSettings } from "../infrastructure/settings-store";
+import {
+  getAppSettings,
+  onSettingsChanged,
+  updateAppSettings,
+} from "../infrastructure/settings-store";
 import { screenshotFilePath } from "../library";
 import { saveScreenshotToVault } from "./screenshot-save";
 import type { CaptureToastShowRequest } from "./capture-toast-window";
 import { deferToastUntilAfterCapture } from "./toast-after-capture";
 
 let overlayWindows: CaptureOverlayWindows | null = null;
+/** Whether something (a take) would rather the overlay windows did not load now. */
+let overlayBusy: () => boolean = () => false;
+
+/**
+ * The next pick's guess: the intent of the last one (record before any), opened in that
+ * intent's remembered mode. Nothing when that pick shows no overlay: a mode switched off
+ * (Window, NIW2-469), or Screen on a lone display.
+ */
+const overlayWarmup: OverlayWarmup = {
+  next: (lastIntent) => {
+    const intent = lastIntent ?? "record";
+    const settings = getAppSettings();
+    const ui = intent === "record" ? settings.recordingMode : settings.screenshotMode;
+    const displays = screen.getAllDisplays();
+    if (!isEnabledCaptureMode(ui)) return null;
+    if (ui === "screen" && displays.length === 1) return null;
+    return { ui, intent, displays };
+  },
+  canWarm: () => !overlayBusy(),
+};
+
+function overlayWindowsInstance(): CaptureOverlayWindows {
+  // macOS lists through osascript JXA, Windows through PowerShell; other platforms find
+  // nothing. Our own windows are dropped by pid (plus HWND on Windows).
+  overlayWindows ??= new CaptureOverlayWindows({
+    windowLister: createWindowLister(process.platform),
+    warmup: overlayWarmup,
+  });
+  return overlayWindows;
+}
+
+/**
+ * Load the overlay windows of the next pick hidden, so "Start recording" shows them at once
+ * instead of loading a renderer per display first. Call once the app has started (after the
+ * main window); every pick that ends loads the next ones by itself. `busy` holds the loading
+ * off while it would compete with a take.
+ */
+export function prewarmCaptureOverlay(busy: () => boolean): void {
+  if (!app.isReady()) return;
+  overlayBusy = busy;
+  const windows = overlayWindowsInstance();
+  windows.prewarm();
+  // A spare loaded for another mode or language would only be thrown away at the pick.
+  let { recordingMode, screenshotMode, locale, theme } = getAppSettings();
+  onSettingsChanged((next) => {
+    if (
+      next.recordingMode === recordingMode &&
+      next.screenshotMode === screenshotMode &&
+      next.locale === locale &&
+      next.theme === theme
+    ) {
+      return;
+    }
+    ({ recordingMode, screenshotMode, locale, theme } = next);
+    windows.refreshSpares();
+  });
+}
 /** Told every overlay answer, so the toast lands on the display the shot came from. */
 let observePick: (answer: OverlayAnswer) => void = () => {};
 
@@ -34,12 +99,7 @@ let observePick: (answer: OverlayAnswer) => void = () => {};
 const overlay: OverlayPort = {
   pick: async (ui, displays, intent) => {
     if (!app.isReady()) return { kind: "cancelled" };
-    // macOS lists through osascript JXA, Windows through PowerShell; other platforms find
-    // nothing. Our own windows are dropped by pid (plus HWND on Windows).
-    overlayWindows ??= new CaptureOverlayWindows({
-      windowLister: createWindowLister(process.platform),
-    });
-    const answer = await overlayWindows.pick(ui, displays, intent);
+    const answer = await overlayWindowsInstance().pick(ui, displays, intent);
     observePick(answer);
     return answer;
   },

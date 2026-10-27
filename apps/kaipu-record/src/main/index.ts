@@ -61,7 +61,11 @@ import {
   type CaptureRequestPayload,
 } from "@shared/types/screenshot-capture";
 import type { RecordTarget } from "./screenshots/capture-handler";
-import { registerScreenshotHandlers, type ScreenshotHandlers } from "./screenshots/screenshot-ipc";
+import {
+  prewarmCaptureOverlay,
+  registerScreenshotHandlers,
+  type ScreenshotHandlers,
+} from "./screenshots/screenshot-ipc";
 import { resolveShortcutCapture, type CaptureShortcut } from "./screenshots/shortcut-capture";
 import { routeCaptureRequest } from "./screenshots/capture-request";
 import {
@@ -190,6 +194,8 @@ registerMediaScheme();
 
 /** Normal window minimums; floored so the main UI / onboarding never break. */
 const BASE_MIN_WIDTH = 720;
+/** How long after the main window shows the capture overlay's windows start loading hidden. */
+const OVERLAY_PREWARM_AFTER_LAUNCH_MS = 3000;
 const BASE_MIN_HEIGHT = 560;
 /** The screenshot editor (toolbar + canvas + beautify panel) needs more room. */
 /**
@@ -1012,6 +1018,14 @@ app.whenReady().then(() => {
   // the main window is ready, not alongside it: the main window's start-up comes
   // first, and the end-to-end suite takes the first window to open as the app.
   mainWindow?.once("ready-to-show", () => capturePanel?.prewarm());
+  // The capture overlay's windows too, a little later: "Start recording" opens them, and
+  // loading one renderer per display was most of its wait. Held off while a take runs.
+  mainWindow?.once("ready-to-show", () => {
+    setTimeout(
+      () => prewarmCaptureOverlay(() => (hub?.isActive() || hub?.isPending()) ?? false),
+      OVERLAY_PREWARM_AFTER_LAUNCH_MS,
+    );
+  });
 
   app.on("activate", function () {
     // Dock-icon click: bring the main window back (recreating it if it was

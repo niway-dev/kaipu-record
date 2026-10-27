@@ -31,6 +31,12 @@ export const HIDDEN_ACK_CAP_MS = 250;
 /** How long every overlay has to reach `ready-to-show` before the pick is abandoned. */
 export const OVERLAY_READY_TIMEOUT_MS = 10_000;
 
+/** How long after a pick ends the next pick's windows start loading (the shot or take goes first). */
+export const OVERLAY_WARM_DELAY_MS = 2000;
+
+/** How often a warm-up that found the app busy (a take) tries again. */
+export const OVERLAY_WARM_RETRY_MS = 5000;
+
 /** Chromium's `ERR_ABORTED`: a navigation superseded or cancelled, not a failed load. */
 const ERR_ABORTED = -3;
 
@@ -73,6 +79,24 @@ export interface OverlayWindow {
   on(event: "closed", listener: () => void): void;
 }
 
+/**
+ * Pre-loading the next pick's windows (spares). Each overlay window is a full renderer, and
+ * loading one per display at every pick is most of the wait before the overlay shows. With a
+ * warm-up, the windows of the most likely next pick load hidden once a pick ends, and that
+ * pick shows them at once.
+ */
+export interface OverlayWarmup {
+  /**
+   * What the next pick most likely opens, given the intent of the last one (`null` before the
+   * first): `null` when no overlay is worth pre-loading.
+   */
+  next(
+    lastIntent: CaptureIntent | null,
+  ): { ui: OverlayUi; intent: CaptureIntent; displays: Display[] } | null;
+  /** False while loading windows would compete with something (a take): tried again later. */
+  canWarm(): boolean;
+}
+
 type SenderEvent = { sender: { id: number } };
 type IpcListener = (event: SenderEvent, payload?: unknown) => void;
 
@@ -85,7 +109,10 @@ export interface CaptureOverlayDeps {
     on(channel: string, listener: IpcListener): void;
   };
   screen: {
-    on(event: "display-removed", listener: (event: unknown, display: Display) => void): void;
+    on(
+      event: "display-removed" | "display-added" | "display-metrics-changed",
+      listener: (event: unknown, display: Display) => void,
+    ): void;
   };
   /** Where the pointer is, so the overlay under it takes keyboard focus (Esc, Enter, 1/2/3). */
   cursorPoint(): { x: number; y: number };
@@ -103,6 +130,11 @@ export interface CaptureOverlayDeps {
    * never starts while `window` is missing. Defaults to `ENABLED_CAPTURE_MODES`.
    */
   enabledModes: readonly CaptureMode[];
+  /** Keep the next pick's windows loaded hidden (see `OverlayWarmup`); none when absent. */
+  warmup: OverlayWarmup | null;
+  /** The warm-up's delays; tests shorten them. */
+  warmDelayMs: number;
+  warmRetryMs: number;
 }
 
 const electronDeps = (): CaptureOverlayDeps => ({
@@ -123,9 +155,20 @@ const electronDeps = (): CaptureOverlayDeps => ({
   readyTimeoutMs: OVERLAY_READY_TIMEOUT_MS,
   windowLister: NO_WINDOWS_LISTER,
   enabledModes: ENABLED_CAPTURE_MODES,
+  warmup: null,
+  warmDelayMs: OVERLAY_WARM_DELAY_MS,
+  warmRetryMs: OVERLAY_WARM_RETRY_MS,
 });
 
-type OverlayEntry = { window: OverlayWindow; displayId: number };
+type OverlayEntry = {
+  window: OverlayWindow;
+  displayId: number;
+  /** Its renderer painted (`ready-to-show`): a spare that did is shown at once by its pick. */
+  ready: boolean;
+};
+
+/** Windows loaded hidden for a pick that has not opened yet; `key` is their joined queries. */
+type Spares = { key: string; entries: OverlayEntry[] };
 
 type PickSession = {
   displays: Display[];
@@ -292,6 +335,11 @@ export class CaptureOverlayWindows implements OverlayPort {
   private focusDisplayId: number | null = null;
   /** Window mode's list: `null` until the lister answers, `[]` when it found none. */
   private windows: ListedWindow[] | null = null;
+  /** The next pick's windows, loaded hidden (see `OverlayWarmup`). */
+  private spares: Spares | null = null;
+  private warmTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Why the last pick opened (after any P / V switch): the warm-up guesses the next from it. */
+  private lastIntent: CaptureIntent | null = null;
 
   constructor(deps: Partial<CaptureOverlayDeps> = {}) {
     this.deps = { ...electronDeps(), ...deps };
@@ -320,27 +368,24 @@ export class CaptureOverlayWindows implements OverlayPort {
       this.intent = intent;
       this.hoverDisplayId = null;
       this.windows = null;
-      const cursor = this.deps.cursorPoint();
-      const underCursor = displays.findIndex((display) => contains(display.bounds, cursor));
-      // One frame at a time: it starts where the pointer is, else on the primary display
-      // (else the first picked one), and the user moves it by clicking another display.
-      if (ui === "frame") {
-        const primary = this.deps.primaryDisplayId();
-        this.frameDisplayId = (
-          displays[underCursor] ??
-          displays.find((display) => display.id === primary) ??
-          displays[0]
-        ).id;
-      } else {
-        this.frameDisplayId = null;
-      }
+      const { frameDisplayId, underCursor } = this.initialFrame(ui, displays);
+      this.frameDisplayId = frameDisplayId;
       // Keyboard focus (Esc, Enter, 1/2/3): the Frame's Enter only works in the window
       // that holds the frame, so there focus follows the frame, not the pointer.
       this.focusDisplayId = this.frameDisplayId ?? displays[Math.max(0, underCursor)].id;
-      const displayIds = displays.map((display) => display.id);
-      displays.forEach((display, index) => {
-        this.entries.push(this.createOverlay(ui, display, index + 1, displayIds));
-      });
+      const queries = this.queriesFor(ui, displays, frameDisplayId, intent);
+      // Spares loaded for exactly this pick (same displays, mode, intent and frame) are used
+      // as they are; any others are thrown away, and this pick loads its own as it always did.
+      const spares = this.spares;
+      this.spares = null;
+      if (spares && spares.key === queries.join("|")) {
+        this.entries.push(...spares.entries);
+      } else {
+        this.destroySpares(spares);
+        displays.forEach((display, index) => {
+          this.entries.push(this.createOverlay(display, queries[index]!));
+        });
+      }
       // Window from the start: list in parallel with the overlays painting. On Windows the
       // PowerShell lister is slow to start (Add-Type compiles C#), so it starts with every
       // pick: by the time the user presses 2, the list has usually landed.
@@ -352,7 +397,95 @@ export class CaptureOverlayWindows implements OverlayPort {
         session.watchdog = null;
         if (this.session === session) this.destroyAll();
       }, this.deps.readyTimeoutMs);
+      // Spares that already painted are shown now; the others when they do.
+      for (const entry of this.entries) if (entry.ready) this.reveal(entry);
     });
+  }
+
+  /**
+   * Load the next pick's windows now, hidden (see `OverlayWarmup`). Main calls it once the
+   * app has started; every pick that ends schedules it again by itself. No-op without a
+   * warm-up, while a pick is open, or when spares are already loaded.
+   */
+  prewarm(): void {
+    this.scheduleWarm(0);
+  }
+
+  /** Throw the spares away and load them again (the next pick changed: mode, language). */
+  refreshSpares(): void {
+    if (!this.spares) return;
+    this.destroySpares(this.spares);
+    this.spares = null;
+    this.scheduleWarm(this.deps.warmDelayMs);
+  }
+
+  /**
+   * One frame at a time: it starts where the pointer is, else on the primary display (else
+   * the first picked one), and the user moves it by clicking another display.
+   */
+  private initialFrame(
+    ui: OverlayUi,
+    displays: Display[],
+  ): { frameDisplayId: number | null; underCursor: number } {
+    const cursor = this.deps.cursorPoint();
+    const underCursor = displays.findIndex((display) => contains(display.bounds, cursor));
+    if (ui !== "frame") return { frameDisplayId: null, underCursor };
+    const primary = this.deps.primaryDisplayId();
+    const frame =
+      displays[underCursor] ?? displays.find((display) => display.id === primary) ?? displays[0];
+    return { frameDisplayId: frame!.id, underCursor };
+  }
+
+  private queriesFor(
+    ui: OverlayUi,
+    displays: Display[],
+    frameDisplayId: number | null,
+    intent: CaptureIntent,
+  ): string[] {
+    const displayIds = displays.map((display) => display.id);
+    return displays.map((display, index) =>
+      overlayQuery(ui, display, index + 1, displayIds, frameDisplayId, intent),
+    );
+  }
+
+  private scheduleWarm(delayMs: number): void {
+    if (!this.deps.warmup || this.warmTimer) return;
+    this.warmTimer = setTimeout(() => {
+      this.warmTimer = null;
+      this.warm();
+    }, delayMs);
+  }
+
+  private warm(): void {
+    const warmup = this.deps.warmup;
+    if (!warmup || this.session || this.spares) return;
+    if (!warmup.canWarm()) {
+      this.scheduleWarm(this.deps.warmRetryMs);
+      return;
+    }
+    const next = warmup.next(this.lastIntent);
+    if (!next || next.displays.length === 0) return;
+    const ui: OverlayUi = this.deps.enabledModes.includes(next.ui) ? next.ui : "frame";
+    const { frameDisplayId } = this.initialFrame(ui, next.displays);
+    const queries = this.queriesFor(ui, next.displays, frameDisplayId, next.intent);
+    this.spares = {
+      key: queries.join("|"),
+      entries: next.displays.map((display, index) => this.createOverlay(display, queries[index]!)),
+    };
+  }
+
+  private destroySpares(spares: Spares | null): void {
+    for (const { window } of spares?.entries ?? []) {
+      if (!window.isDestroyed()) window.destroy();
+    }
+  }
+
+  /** A spare that broke (crash, failed load, closed): drop them all, a pick loads its own. */
+  private dropSpareFor(entry: OverlayEntry): void {
+    const spares = this.spares;
+    if (!spares?.entries.includes(entry)) return;
+    this.spares = null;
+    this.destroySpares(spares);
   }
 
   hideAll(): Promise<void> {
@@ -433,6 +566,7 @@ export class CaptureOverlayWindows implements OverlayPort {
     this.entries = [];
     const session = this.session;
     this.session = null;
+    if (session) this.lastIntent = this.intent;
     this.hoverDisplayId = null;
     this.frameDisplayId = null;
     this.focusDisplayId = null;
@@ -443,14 +577,12 @@ export class CaptureOverlayWindows implements OverlayPort {
     }
     this.hiddenWait?.finish();
     session?.settle?.({ kind: "cancelled" });
+    // The next pick's windows load once this one's shot or take is under way.
+    this.scheduleWarm(this.deps.warmDelayMs);
   }
 
-  private createOverlay(
-    ui: OverlayUi,
-    display: Display,
-    index: number,
-    displayIds: readonly number[],
-  ): OverlayEntry {
+  /** One overlay window for `display`, loading `query`; shown once it paints and a pick is open. */
+  private createOverlay(display: Display, query: string): OverlayEntry {
     const darwin = this.deps.platform === "darwin";
     const window = this.deps.createWindow({
       ...display.bounds,
@@ -481,42 +613,30 @@ export class CaptureOverlayWindows implements OverlayPort {
     // Above full-screen apps on macOS and above the taskbar on Windows.
     window.setAlwaysOnTop(true, "screen-saver");
 
-    const entry: OverlayEntry = { window, displayId: display.id };
+    const entry: OverlayEntry = { window, displayId: display.id, ready: false };
     window.once("ready-to-show", () => {
-      // Answered or destroyed before it painted: never show a stale overlay.
-      if (window.isDestroyed() || !this.session?.settle) return;
-      this.setSpaceBehavior(window, true);
-      // `show()` also makes the window key, so with several displays whichever overlay
-      // painted LAST took the keyboard and Enter / ⌘C on the frame went nowhere. Only the
-      // focus target is shown active; the others never take focus on their own.
-      if (display.id === this.focusDisplayId) {
-        window.show();
-        window.focus();
-      } else {
-        window.showInactive();
-      }
-      // A renderer that loaded after the last broadcast still learns where the frame is.
-      this.sendState(window);
-      if (this.intent === "record") markRecordTiming(`overlay shown on display ${display.id}`);
-      const session = this.session;
-      session.shown += 1;
-      if (session.shown >= this.entries.length && session.watchdog) {
-        clearTimeout(session.watchdog);
-        session.watchdog = null;
-      }
+      entry.ready = true;
+      // A spare waits hidden for its pick; one whose pick ended was destroyed with it.
+      if (this.entries.includes(entry)) this.reveal(entry);
     });
-    window.on("closed", () => this.forget(entry));
+    window.on("closed", () => {
+      this.dropSpareFor(entry);
+      this.forget(entry);
+    });
     // A crashed renderer leaves its window open: invisible, screen-covering and eating
     // clicks, with no overlay left to press Esc in. Cancel and tear the session down.
     window.webContents.on("render-process-gone", () => {
+      this.dropSpareFor(entry);
       if (this.entries.includes(entry)) this.destroyAll();
     });
     // A load that fails or a renderer that hangs leaves a window nobody can answer.
     window.webContents.on("did-fail-load", (_event, errorCode, _description, _url, isMainFrame) => {
       if (errorCode === ERR_ABORTED || isMainFrame === false) return;
+      this.dropSpareFor(entry);
       if (this.entries.includes(entry)) this.destroyAll();
     });
     window.webContents.on("unresponsive", () => {
+      this.dropSpareFor(entry);
       if (this.entries.includes(entry)) this.destroyAll();
     });
     // Esc from main, so cancelling does not depend on which renderer holds keyboard focus.
@@ -527,11 +647,34 @@ export class CaptureOverlayWindows implements OverlayPort {
       this.answer({ kind: "cancelled" });
     });
 
-    this.deps.loadRenderer(
-      window,
-      overlayQuery(ui, display, index, displayIds, this.frameDisplayId, this.intent),
-    );
+    this.deps.loadRenderer(window, query);
     return entry;
+  }
+
+  /** Show a painted window of the open pick. */
+  private reveal(entry: OverlayEntry): void {
+    const { window, displayId } = entry;
+    // Answered or destroyed before it painted: never show a stale overlay.
+    if (window.isDestroyed() || !this.session?.settle) return;
+    this.setSpaceBehavior(window, true);
+    // `show()` also makes the window key, so with several displays whichever overlay
+    // painted LAST took the keyboard and Enter / ⌘C on the frame went nowhere. Only the
+    // focus target is shown active; the others never take focus on their own.
+    if (displayId === this.focusDisplayId) {
+      window.show();
+      window.focus();
+    } else {
+      window.showInactive();
+    }
+    // A renderer that loaded after the last broadcast still learns where the frame is.
+    this.sendState(window);
+    if (this.intent === "record") markRecordTiming(`overlay shown on display ${displayId}`);
+    const session = this.session;
+    session.shown += 1;
+    if (session.shown >= this.entries.length && session.watchdog) {
+      clearTimeout(session.watchdog);
+      session.watchdog = null;
+    }
   }
 
   /** Join every Space, full-screen ones included, while shown; leave them when hidden. */
@@ -682,8 +825,12 @@ export class CaptureOverlayWindows implements OverlayPort {
     // Failure 6: a display going away while the overlay is up cancels the whole pick,
     // and its window (now orphaned off-screen) goes with the rest.
     this.deps.screen.on("display-removed", (_event, display) => {
+      // Spares were laid out for the old displays.
+      this.refreshSpares();
       if (!this.session?.settle || !this.session.displayIds.has(display.id)) return;
       this.destroyAll(); // settles the pick with `cancelled`
     });
+    this.deps.screen.on("display-added", () => this.refreshSpares());
+    this.deps.screen.on("display-metrics-changed", () => this.refreshSpares());
   }
 }
