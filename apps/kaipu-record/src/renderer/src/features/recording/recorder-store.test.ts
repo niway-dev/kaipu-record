@@ -426,6 +426,52 @@ describe("recorder-store", () => {
     );
   });
 
+  it("an engine that fails while the take is still being acquired fails the start instead of recording", async () => {
+    const engine = fakeEngine();
+    startEngineMock.mockImplementation(async (opts) => {
+      // The screen capture ends before the take is set up (the cursor session still opens):
+      // there is no take to stop yet, so this error used to be dropped.
+      opts.onError?.(new Error("screen capture ended"));
+      return engine;
+    });
+    store.requestStartRecording(() => input);
+    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
+    expect(engine.stop).toHaveBeenCalledOnce();
+    expect(window.electronAPI.recordingAbort).toHaveBeenCalledOnce();
+    expect(window.electronAPI.recordingStop).toHaveBeenCalledOnce(); // undoes the hide
+    expect(reportErrorMock).toHaveBeenCalledOnce();
+    expect(reportErrorMock).toHaveBeenCalledWith(
+      messages.record.errorStart,
+      expect.any(Error),
+      expect.objectContaining({ retry: expect.any(Function) }),
+    );
+  });
+
+  it("a pause or resume that lands while the take is saving is ignored", async () => {
+    let finishStop!: () => void;
+    const engine = fakeEngine({ stop: vi.fn(() => new Promise<void>((r) => (finishStop = r))) });
+    startEngineMock.mockResolvedValue(engine);
+    store.requestStartRecording(() => input);
+    await vi.advanceTimersByTimeAsync(3000);
+    store.pauseRecording();
+    store.stopOrCancelRecording();
+    expect(store.getRecorderSnapshot().status).toBe("finalizing");
+
+    // The bar's Resume/Pause clicked just as the Stop shortcut fired: the engine is flushing.
+    store.resumeRecording();
+    store.pauseRecording();
+    expect(engine.resume).not.toHaveBeenCalled();
+    expect(engine.pause).toHaveBeenCalledOnce(); // the pause before the stop
+    expect(store.getRecorderSnapshot().status).toBe("finalizing");
+
+    finishStop();
+    await vi.advanceTimersByTimeAsync(700);
+    expect(store.getRecorderSnapshot()).toEqual({ status: "idle", countdown: null });
+  });
+
   it("aborts the session, undoes the early window-hide, and returns to idle when the engine fails to start", async () => {
     startEngineMock.mockRejectedValue(new Error("getDisplayMedia denied"));
 

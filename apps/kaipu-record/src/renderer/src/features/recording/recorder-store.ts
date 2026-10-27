@@ -102,6 +102,8 @@ interface PendingStart {
   id: string;
   created: Promise<unknown>;
   engine: Promise<EngineHandle> | null;
+  /** The engine failed before the take was set up; the start fails with it once acquired. */
+  failure?: unknown;
 }
 let pendingStart: PendingStart | null = null;
 let sessionCounter = 0;
@@ -294,6 +296,14 @@ async function beginEngine(input: StartInput): Promise<void> {
         // runs the same robust stop — finalize-or-abort + always restore the
         // window/Dock/bar — so the app never gets stuck.
         onError: (error) => {
+          // Still acquiring (the cursor session can take a moment after the engine): there is
+          // no take to stop yet, and the start would go on to record a dead capture.
+          if (pendingStart === start) {
+            start.failure ??= error;
+            return;
+          }
+          // A discarded start's engine: the take on screen, if any, is another one.
+          if (sessionId !== id) return;
           reportError(runtimeT()("record.errorStopped"), error, {
             context: { sourceId: input.sourceId, phase: "mid-recording" },
             retry: () => {
@@ -330,6 +340,7 @@ async function beginEngine(input: StartInput): Promise<void> {
     ]).finally(() => clearTimeout(timer));
     // Cancelled while acquiring: the cancel restored the app and released this start.
     if (pendingStart !== start) return;
+    if (start.failure !== undefined) throw start.failure;
     pendingStart = null;
     cursorTrack = track;
 
@@ -445,7 +456,8 @@ function forwardLiveSettings(handle: EngineHandle, input: StartInput): () => voi
 }
 
 export function pauseRecording(): void {
-  if (!engine || !clock) return;
+  // Only a running take: during "finalizing" the engine is still set but flushing.
+  if (snapshot.status !== "recording" || !engine || !clock) return;
   const pausedAt = performance.now();
   engine.pause();
   cursorTrack?.pause(pausedAt);
@@ -454,7 +466,7 @@ export function pauseRecording(): void {
 }
 
 export function resumeRecording(): void {
-  if (!engine || !clock) return;
+  if (snapshot.status !== "paused" || !engine || !clock) return;
   const resumedAt = performance.now();
   engine.resume();
   cursorTrack?.resume(resumedAt);
