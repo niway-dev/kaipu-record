@@ -333,8 +333,14 @@ export function registerRecordingHub(
   // "stop" is sent once per recording (writes are fire-and-forget and keep
   // arriving after the first failure). Reset on each new session.
   let stoppedForWriteFailure = false;
+  // Sessions aborted before their cursor track began: `cursorTrackStart` waits on the display
+  // lookup, and an abort landing meanwhile (a start that failed or was cancelled fast) found
+  // nothing to discard, so the tracker then started with nobody left to stop it. Renderer ids
+  // repeat after a reload, so creating a session clears its id.
+  const abortedSessions = new Set<string>();
   ipcMain.handle(IPC_CHANNELS.recordingCreate, (_e, sessionId: string) => {
     stoppedForWriteFailure = false;
+    abortedSessions.delete(sessionId);
     return writer.create(sessionId);
   });
   ipcMain.on(
@@ -398,6 +404,7 @@ export function registerRecordingHub(
     return writer.stat(sessionId);
   });
   ipcMain.handle(IPC_CHANNELS.recordingAbort, (_e, sessionId: string) => {
+    abortedSessions.add(sessionId);
     cursorTracks.discard(sessionId);
     clickSessions.delete(sessionId);
     stopHookIfIdle();
@@ -416,7 +423,7 @@ export function registerRecordingHub(
         await displayIdForSource(screenSources, sourceId),
         screen.getAllDisplays(),
       );
-      if (!display) return { enabled: false };
+      if (!display || abortedSessions.has(sessionId)) return { enabled: false };
       // An area on this display: normalize to the area, so the editor's zoom lands on the
       // recorded frame (ADR 0030). An area naming another display is ignored, not trusted.
       const safe = sanitizeArea(area, { id: Number(display.id), bounds: display.bounds });
@@ -545,8 +552,12 @@ export function registerRecordingHub(
     }
   });
 
+  // Bumped by every start: a display lookup still running for a take that was cancelled must
+  // not show the bar or change the shade of the take that started after it.
+  let takeCount = 0;
   ipcMain.on(IPC_CHANNELS.recordingStart, (_e, info: RecordingStartInfo) => {
     activity = startedActivity();
+    const take = ++takeCount;
     // Before any tick of this take (same IPC order) and before the bar can show: the hidden
     // bar may still hold the previous take's "Saving…".
     bar.reset();
@@ -605,8 +616,8 @@ export function registerRecordingHub(
     const wholeDisplayCountdown = !area && region !== null && region.rect === null;
     void displayIdForSource(screenSources, info.sourceId).then((displayId) => {
       // Stopped (or cancelled) while the lookup ran: the always-on-top bar must not come up
-      // over a take that is already gone.
-      if (!activity.active) return;
+      // over a take that is already gone, nor act for it on a take started since.
+      if (!activity.active || take !== takeCount) return;
       bar.show(displayId, { includeInRecording, anchor: areaGlobal });
       if (area || wholeDisplayCountdown) return;
       const display =

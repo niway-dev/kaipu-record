@@ -600,6 +600,71 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     expect(mockState.bar.sendTick).toHaveBeenCalledWith(tick);
   });
 
+  it("a source lookup left over from a cancelled take never acts on the next take", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const hub = registerRecordingHub(() => fakeMainWindow() as never);
+    const display1 = { id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } };
+    const display2 = { id: 2, bounds: { x: 1512, y: 0, width: 1512, height: 982 } };
+    mockState.displays = [display1, display2];
+    const sources = [
+      { id: "screen:1:0", name: "Screen 1", display_id: "1" },
+      { id: "screen:2:0", name: "Screen 2", display_id: "2" },
+    ];
+    // Take B's area is chosen first (that lists the sources), then the list goes stale.
+    mockState.getSources.mockResolvedValue(sources);
+    const rect = { x: 100, y: 50, width: 640, height: 360 };
+    await hub.selectArea(2, rect);
+    mockState.screenOn.get("display-added")!();
+    let resolve!: (list: typeof sources) => void;
+    mockState.getSources.mockImplementationOnce(() => new Promise((r) => (resolve = r)));
+    const start = mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!;
+    const stop = mockState.ipcOn.get(IPC_CHANNELS.recordingStop)!;
+
+    // Take A (the whole display 1) is cancelled while its display lookup still runs...
+    start({}, { sourceId: "screen:1:0", sourceName: "Screen 1" });
+    stop({});
+    // ...and take B (an area of display 2) starts before that lookup comes back.
+    start({}, { sourceId: "screen:2:0", sourceName: "Area" });
+    expect(mockState.shade.show).toHaveBeenLastCalledWith(display2, rect, expect.any(Function));
+    resolve(sources);
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Only B's bar, and B's area shade is not replaced by A's full-display border.
+    expect(mockState.bar.show).toHaveBeenCalledTimes(1);
+    expect(mockState.bar.show).toHaveBeenCalledWith("2", expect.anything());
+    expect(mockState.shade.show).toHaveBeenLastCalledWith(display2, rect, expect.any(Function));
+  });
+
+  it("a cursor track whose take was aborted while its display resolved never starts sampling", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+    mockState.displays = [{ id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } }];
+    let resolve!: (list: Array<{ id: string; name: string; display_id: string }>) => void;
+    mockState.getSources.mockImplementationOnce(() => new Promise((r) => (resolve = r)));
+    const create = mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!;
+    const trackStart = mockState.ipcHandle.get(IPC_CHANNELS.cursorTrackStart)!;
+    const abort = mockState.ipcHandle.get(IPC_CHANNELS.recordingAbort)!;
+    await create({}, "session-1");
+
+    // The start failed (or was cancelled) fast: its abort lands before the lookup returns.
+    const started = trackStart({}, "session-1", "screen:1:0") as Promise<{ enabled: boolean }>;
+    await abort({}, "session-1");
+    resolve([{ id: "screen:1:0", name: "S", display_id: "1" }]);
+
+    // Nothing would ever finish or discard that tracker: it would sample, with the global
+    // mouse hook on, until the app quits.
+    await expect(started).resolves.toEqual({ enabled: false });
+    // The same id from a reloaded recorder is a new session, tracked as usual.
+    await create({}, "session-1");
+    mockState.getSources.mockResolvedValue([{ id: "screen:1:0", name: "S", display_id: "1" }]);
+    await expect(trackStart({}, "session-1", "screen:1:0")).resolves.toEqual({ enabled: true });
+    await abort({}, "session-1");
+  });
+
   it("starts the region's TTL only once a recreated main window has loaded", async () => {
     vi.useFakeTimers();
     try {
