@@ -1,6 +1,6 @@
 ---
 title: "Camera bubble — shape and size"
-description: "The camera toggle becomes configurable without weighing more: a split Camera tile opens shape, size and device settings (a popover on the Record page, an inline drawer in the capture panel), and the bubble resizes from its fixed corner with a hover grip."
+description: "The camera toggle becomes configurable without weighing more: a split Camera tile opens shape, size and device settings (an inline drawer on both the Record page and the capture panel), and the bubble resizes from its fixed corner with a hover grip."
 ---
 
 # Camera bubble — shape and size
@@ -72,8 +72,8 @@ stays 56 px in, as before. A size the area cannot hold is shrunk to what fits; w
 ## The UI
 
 - **Record page.** The Camera tile splits: the body toggles the camera as before; a 28 px chevron
-  segment on its right opens a 272 px popover (`role="dialog"`) anchored right under the row.
-- **Capture panel.** The panel hides when it loses focus, so there is no popover: the 22 px
+  segment on its right opens an inline drawer (`role="region"`) right under the row, in the page's flow. It replaced a floating popover, which was clipped at the bottom of the window; the content area scrolls, so the drawer pushes the page instead. Full-size tiles and chips here.
+- **Capture panel.** The panel hides when it loses focus, so there is no popover either: the 22 px
   chevron expands an inline **drawer** inside the panel, the panel grows downward and focus never
   leaves the window. Esc or the chevron closes it. Same content, compact (26 px chips, short
   labels).
@@ -127,7 +127,7 @@ asked; treating "not asked yet" as blocked would have made the camera impossible
 ## Accessibility contract
 
 - Focus order: Mic → Audio → Camera (toggle) → Camera settings (chevron) → Start Recording. The
-  popover and the drawer sit right after the chevron in the DOM, so Tab continues into them.
+  drawer sits right after the chevron in the DOM, so Tab continues into them.
 - Opening moves focus to the Shape group (its checked radio), or to "Open System Settings" when
   blocked. Inside: Shape → Size chips → slider → device selector (the device chip is drawn in the
   header but comes last in the DOM). Esc closes and returns focus to the chevron.
@@ -145,7 +145,7 @@ asked; treating "not asked yet" as blocked would have made the camera impossible
 
 ## What to validate
 
-1. Record page: chevron opens the popover under the row; Esc returns focus; shape, chips, slider
+1. Record page: chevron opens the drawer under the row; Esc returns focus; shape, chips, slider
    and device change a showing bubble at once.
 2. Capture panel: the drawer grows the panel, the panel does not hide while using it (including
    the native device `<select>`), Esc closes it.
