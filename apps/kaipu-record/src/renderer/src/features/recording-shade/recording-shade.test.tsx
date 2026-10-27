@@ -1,5 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { CountdownOverlay } from "@renderer/features/recording/components/countdown-overlay";
 import type { RecordingShadeState } from "@shared/types/ipc";
 import { parseShadeRect, parseShadeState, RecordingShade } from "./recording-shade";
 
@@ -76,7 +77,12 @@ describe("RecordingShade", () => {
     render(
       <RecordingShade rect={RECT} initialState={{ phase: "countdown", value: 3 }} api={api} />,
     );
-    expect(screen.getByTestId("recording-shade-countdown")).toBeInTheDocument();
+    // The shared CountdownOverlay (the Record page's pink one), confined to the region,
+    // with no Cancel button: the shade is click-through and Esc is global.
+    const overlay = screen.getByRole("status");
+    expect(overlay.style.left).toBe("100px");
+    expect(overlay.style.width).toBe("640px");
+    expect(screen.queryByRole("button", { name: /cancel/i })).toBeNull();
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByText("Recording starts… press Esc to cancel")).toBeInTheDocument();
 
@@ -84,9 +90,21 @@ describe("RecordingShade", () => {
     expect(screen.getByText("2")).toBeInTheDocument();
     push({ phase: "countdown", value: null });
     expect(screen.queryByText("2")).toBeNull();
+    expect(screen.getByRole("status")).toBeInTheDocument();
 
     push({ phase: "recording" });
-    expect(screen.queryByTestId("recording-shade-countdown")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
     expect(screen.getByTestId("recording-shade-border")).toBeInTheDocument();
+  });
+
+  it("renders the number with the shared component's class, not a copy", () => {
+    const { api } = fakeApi();
+    const shade = render(
+      <RecordingShade rect={RECT} initialState={{ phase: "countdown", value: 3 }} api={api} />,
+    );
+    const shadeClass = screen.getByText("3").className;
+    shade.unmount();
+    render(<CountdownOverlay value={3} onCancel={() => {}} />);
+    expect(screen.getByText("3").className).toBe(shadeClass);
   });
 });

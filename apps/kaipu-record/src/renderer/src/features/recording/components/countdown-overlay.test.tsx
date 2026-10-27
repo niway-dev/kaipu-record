@@ -30,4 +30,10 @@ describe("CountdownOverlay", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onCancel).toHaveBeenCalledOnce();
   });
+
+  it("without onCancel (click-through shade) has no Cancel button and shows the hint", () => {
+    render(<CountdownOverlay value={2} hint="Press Esc" />);
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.getByText("Press Esc")).toBeInTheDocument();
+  });
 });
