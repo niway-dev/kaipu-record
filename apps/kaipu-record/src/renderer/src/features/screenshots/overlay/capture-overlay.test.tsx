@@ -1727,7 +1727,9 @@ describe("CaptureOverlay — record chrome (design Kaipu Record Modes)", () => {
 
     press("v");
     expect(screen.getByRole("button", { name: "16:9" })).toHaveAttribute("aria-pressed", "true");
+    // The free box is refit to the restored ratio at once, before any further drag.
     const box = frameGeometry();
+    expect(Math.abs(box.width / box.height - 16 / 9)).toBeLessThan(0.01);
     fireEvent.pointerDown(sheet, {
       button: 0,
       clientX: box.x + box.width,

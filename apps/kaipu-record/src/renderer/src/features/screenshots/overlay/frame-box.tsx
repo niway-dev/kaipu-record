@@ -161,6 +161,15 @@ export function FrameBox({
   // A screenshot frame (after P) is free; the chosen ratio stays in state, so V brings it back.
   const locked = recording ? ratioValue(ratio) : null;
   const drag = useRef<Drag | null>(null);
+  // V after a free resize: the box is refit to the restored ratio, so what Start sends (a
+  // rect plus a ratio) agrees with itself and the remembered area does not jump next time.
+  useEffect(() => {
+    if (!recording) return;
+    setRatio((current) => {
+      setFrame((frame) => fitRatio(frame, current, area));
+      return current;
+    });
+  }, [recording, area]);
 
   // Latest frame for the window-level Enter listener without re-subscribing per move.
   const latest = useRef(frame);
