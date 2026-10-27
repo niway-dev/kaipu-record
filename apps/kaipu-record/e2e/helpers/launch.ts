@@ -81,7 +81,7 @@ async function seedVault(vaultDir: string): Promise<void> {
  * put `app.getPath("userData")` in our temp dir, so vault-location.ts reads OUR
  * preferences and never the developer's real profile or ~/Videos/Kaipu Record.
  */
-export async function launchApp(): Promise<{
+export async function launchApp(options: { recordVideoDir?: string } = {}): Promise<{
   app: ElectronApplication;
   page: Page;
   vaultDir: string;
@@ -112,6 +112,8 @@ export async function launchApp(): Promise<{
   const app = await electron.launch({
     args,
     env: { ...process.env, KAIPU_DISABLE_SCREEN_CAPTURE: "1" },
+    // Used only by `verify/` (PR proof). Playwright finalizes the .webm when the app closes.
+    ...(options.recordVideoDir ? { recordVideo: { dir: options.recordVideoDir } } : {}),
   });
 
   // Why this instrumentation exists.
