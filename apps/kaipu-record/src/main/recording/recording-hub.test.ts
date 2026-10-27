@@ -110,7 +110,7 @@ function fakeMainWindow() {
     show: vi.fn(),
     focus: vi.fn(),
     isDestroyed: () => false,
-    webContents: { send: vi.fn() },
+    webContents: { id: 1, send: vi.fn(), isDestroyed: () => false },
   };
 }
 
@@ -1339,5 +1339,99 @@ describe("recording hub — camera bubble size", () => {
     const preview = mockState.ipcHandle.get(IPC_CHANNELS.cameraBubblePreviewSize)!;
     expect(preview({}, 300)).toBe(200);
     expect(mockState.bubble.preview).toHaveBeenCalledWith(300);
+  });
+
+  it("relays mic levels only to subscribed windows and tells the recorder who listens", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const mainWindow = fakeMainWindow();
+    registerRecordingHub(() => mainWindow as never);
+    const panel = { id: 7, send: vi.fn(), once: vi.fn(), on: vi.fn(), isDestroyed: () => false };
+    const other = { id: 8, send: vi.fn(), once: vi.fn(), on: vi.fn(), isDestroyed: () => false };
+    const fromRecorder = { sender: mainWindow.webContents };
+    const subscribe = mockState.ipcOn.get(IPC_CHANNELS.micLevelsSubscribe)!;
+    const unsubscribe = mockState.ipcOn.get(IPC_CHANNELS.micLevelsUnsubscribe)!;
+    const report = mockState.ipcOn.get(IPC_CHANNELS.micLevelsReport)!;
+    const listening = mockState.ipcHandle.get(IPC_CHANNELS.micLevelsGetListening)!;
+
+    expect(listening({})).toBe(false);
+    subscribe({ sender: panel });
+    expect(listening({})).toBe(true);
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith(IPC_CHANNELS.micLevelsListening, true);
+
+    report(fromRecorder, [0.1, 0.2, 0.3, 0.4, 0.5]);
+    expect(panel.send).toHaveBeenCalledWith(IPC_CHANNELS.micLevelsData, [0.1, 0.2, 0.3, 0.4, 0.5]);
+    expect(other.send).not.toHaveBeenCalled();
+    // Rubbish from a renderer is dropped.
+    report(fromRecorder, "loud");
+    expect(panel.send).toHaveBeenCalledTimes(1);
+    // Only the recorder reports levels: another window cannot drive the meter.
+    report({ sender: other }, [1, 1, 1, 1, 1]);
+    expect(panel.send).toHaveBeenCalledTimes(1);
+    // Out-of-range values are clamped to the 0..1 a bar can show.
+    report(fromRecorder, [-1, 2, 0.5, 0, 1]);
+    expect(panel.send).toHaveBeenLastCalledWith(IPC_CHANNELS.micLevelsData, [0, 1, 0.5, 0, 1]);
+
+    unsubscribe({ sender: panel });
+    expect(mainWindow.webContents.send).toHaveBeenLastCalledWith(
+      IPC_CHANNELS.micLevelsListening,
+      false,
+    );
+    report(fromRecorder, [0, 0, 0, 0, 0]);
+    expect(panel.send).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears a window's mic-level subscription when it is destroyed", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+    let destroyed: () => void = () => {};
+    const panel = {
+      id: 9,
+      send: vi.fn(),
+      once: (_event: string, fn: () => void) => {
+        destroyed = fn;
+      },
+      on: vi.fn(),
+      isDestroyed: () => false,
+    };
+    mockState.ipcOn.get(IPC_CHANNELS.micLevelsSubscribe)!({ sender: panel });
+    const listening = mockState.ipcHandle.get(IPC_CHANNELS.micLevelsGetListening)!;
+    expect(listening({})).toBe(true);
+    destroyed();
+    expect(listening({})).toBe(false);
+  });
+
+  it("clears a window's mic-level subscriptions when it reloads or its renderer dies", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+    const handlers = new Map<string, (details?: unknown) => void>();
+    const panel = {
+      id: 10,
+      send: vi.fn(),
+      once: vi.fn(),
+      on: (event: string, fn: (details?: unknown) => void) => handlers.set(event, fn),
+      isDestroyed: () => false,
+    };
+    const subscribe = mockState.ipcOn.get(IPC_CHANNELS.micLevelsSubscribe)!;
+    const listening = mockState.ipcHandle.get(IPC_CHANNELS.micLevelsGetListening)!;
+
+    subscribe({ sender: panel });
+    // An in-page navigation or a subframe keeps the page, and its subscription.
+    handlers.get("did-start-navigation")!({ isMainFrame: true, isSameDocument: true });
+    handlers.get("did-start-navigation")!({ isMainFrame: false, isSameDocument: false });
+    expect(listening({})).toBe(true);
+    // A reload drops the page without running its cleanup.
+    handlers.get("did-start-navigation")!({ isMainFrame: true, isSameDocument: false });
+    expect(listening({})).toBe(false);
+
+    subscribe({ sender: panel });
+    subscribe({ sender: panel });
+    handlers.get("render-process-gone")!();
+    expect(listening({})).toBe(false);
   });
 });

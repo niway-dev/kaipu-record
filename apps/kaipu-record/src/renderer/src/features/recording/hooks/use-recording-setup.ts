@@ -5,6 +5,11 @@ import {
   sanitizeQuality,
   type RecordingQuality,
 } from "@shared/recording-quality";
+import {
+  DEFAULT_AUDIO_SETTINGS,
+  sanitizeAudioSettings,
+  type AudioSettings,
+} from "@shared/audio-settings";
 import { useWatermark } from "@renderer/features/watermark/use-watermark";
 import { useMicrophones } from "@renderer/features/recording/hooks/use-microphones";
 import { useRecordingSettings } from "@renderer/features/recording/hooks/use-recording-settings";
@@ -41,8 +46,6 @@ export interface RecordingSetup {
   // Microphone device
   microphones: Microphone[];
   selectedMicrophone: Microphone | null;
-  isMicrophoneMenuOpen: boolean;
-  toggleMicrophoneMenu(): void;
   selectMicrophone(microphone: Microphone): void;
 
   // Recording lifecycle
@@ -78,7 +81,6 @@ export function useRecordingSetup(): RecordingSetup {
 
   // Per-window UI state (NOT shared).
   const [isSourcePickerOpen, setSourcePickerOpen] = useState(false);
-  const [isMicrophoneMenuOpen, setMicrophoneMenuOpen] = useState(false);
 
   const microphones = useMicrophones();
   const recorder = useScreenRecorder();
@@ -91,6 +93,23 @@ export function useRecordingSetup(): RecordingSetup {
   useEffect(() => {
     void window.electronAPI.getSettings().then((appSettings) => {
       qualityRef.current = sanitizeQuality(appSettings.recordingQuality);
+    });
+  }, []);
+
+  // The audio settings (mic level, noise reduction, system volume, ducking) are persisted
+  // app settings too. Read on mount, then kept current through `onSettingsChanged`, so a
+  // level changed in the popover before pressing Record is the one the take starts with.
+  const audioRef = useRef<AudioSettings>(DEFAULT_AUDIO_SETTINGS);
+  useEffect(() => {
+    // A broadcast is newer than the initial read, which may resolve after it: once one has
+    // arrived, the read must not overwrite it.
+    let heardChange = false;
+    void window.electronAPI.getSettings().then((appSettings) => {
+      if (!heardChange) audioRef.current = sanitizeAudioSettings(appSettings.audio);
+    });
+    return window.electronAPI.onSettingsChanged((appSettings) => {
+      heardChange = true;
+      audioRef.current = sanitizeAudioSettings(appSettings.audio);
     });
   }, []);
 
@@ -135,6 +154,7 @@ export function useRecordingSetup(): RecordingSetup {
         area: areaRef.current,
         microphoneDeviceId: micEnabledRef.current ? (micRef.current?.deviceId ?? null) : null,
         systemAudio: systemAudioRef.current,
+        audio: audioRef.current,
         width: engineQuality.width,
         height: engineQuality.height,
         frameRate: engineQuality.frameRate,
@@ -168,12 +188,7 @@ export function useRecordingSetup(): RecordingSetup {
 
     microphones,
     selectedMicrophone,
-    isMicrophoneMenuOpen,
-    toggleMicrophoneMenu: () => setMicrophoneMenuOpen((open) => !open),
-    selectMicrophone: (microphone) => {
-      update({ selectedMicrophone: microphone });
-      setMicrophoneMenuOpen(false);
-    },
+    selectMicrophone: (microphone) => update({ selectedMicrophone: microphone }),
 
     isRecording,
     recordingStatus: recorder.status,

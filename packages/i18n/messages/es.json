@@ -239,6 +239,33 @@
     "resizeGrip": "Cambiar el tamaño de la burbuja de cámara",
     "turnCameraOff": "Apagar la cámara"
   },
+  "micSettings": {
+    "title": "Ajustes del micrófono",
+    "microphone": "Micrófono",
+    "live": "En vivo",
+    "input": "Entrada",
+    "noDevices": "No se encontraron micrófonos",
+    "disconnected": "Desconectado",
+    "meter": "Medidor del nivel de entrada",
+    "inputLevel": "Nivel de entrada",
+    "levelValue": "{percent}%",
+    "noiseTitle": "Reducir el ruido de fondo",
+    "noiseHint": "Ventiladores, teclado y ruido de la calle",
+    "liveNote": "El nivel y el ruido se aplican en vivo. El dispositivo queda bloqueado hasta que detengas."
+  },
+  "systemAudioSettings": {
+    "title": "Ajustes del audio del sistema",
+    "systemAudio": "Audio del sistema",
+    "whatToCapture": "Qué capturar",
+    "allSound": "Todo el sonido",
+    "oneApp": "Una app",
+    "notAvailableYet": "Todavía no disponible",
+    "volume": "Volumen en la grabación",
+    "volumeValue": "{percent}%",
+    "duckTitle": "Bajarlo mientras hablo",
+    "duckHint": "Mantiene tu voz por encima",
+    "duckNeedsMic": "Activa el micrófono para usarlo"
+  },
   "record": {
     "readyToRecord": "Todo listo para grabar",
     "micAccessOff": "El acceso al micrófono está desactivado",
@@ -264,8 +291,6 @@
     "cameraLabel": "Cámara",
     "statusOn": "SÍ",
     "statusOff": "NO",
-    "micTitle": "MICRÓFONO",
-    "selectMic": "Seleccionar micrófono",
     "micBuiltIn": "INCORPORADO",
     "micBluetooth": "BLUETOOTH",
     "micUsb": "USB",

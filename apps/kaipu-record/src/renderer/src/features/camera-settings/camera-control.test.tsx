@@ -199,3 +199,15 @@ describe("useCameraSettings throttling", () => {
     }
   });
 });
+
+describe("window blur", () => {
+  it("closes an open camera popover when the window loses focus", async () => {
+    render(<CameraControlWithPopover on onToggle={() => {}} isRecording={false} />);
+    await userEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+    expect(screen.getByRole("dialog", { name: "Camera settings" })).toBeInTheDocument();
+    act(() => {
+      fireEvent.blur(window);
+    });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});

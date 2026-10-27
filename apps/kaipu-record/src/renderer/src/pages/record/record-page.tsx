@@ -10,13 +10,17 @@ import { useRecordingMode } from "@renderer/features/recording/hooks/use-recordi
 import { usePermissions } from "@renderer/features/permissions";
 import { SourceCard } from "@renderer/features/recording/components/source-card";
 import { RecordingToggles } from "@renderer/features/recording/components/recording-toggles";
-import { MicPicker } from "@renderer/features/recording/components/mic-picker";
 import { RecordModeButtons } from "@renderer/features/recording/components/record-mode-buttons";
 import { RecordingIndicator } from "@renderer/features/recording/components/recording-indicator";
 import { CountdownOverlay } from "@renderer/features/recording/components/countdown-overlay";
 import { ScreenSourceSelector } from "@renderer/features/recording/components/screen-source-selector";
 import { PermissionNotice } from "@renderer/features/recording/components/permission-notice";
 import { CameraControlWithPopover } from "@renderer/features/camera-settings";
+import {
+  MicControlWithPopover,
+  SystemAudioControlWithPopover,
+  useAudioSettings,
+} from "@renderer/features/audio-settings";
 import { useTranslations } from "@kaipu/i18n";
 import type { CaptureMode } from "@shared/types/screenshot-capture";
 import styles from "./record-page.module.css";
@@ -39,6 +43,8 @@ export function RecordPage(): React.JSX.Element {
   // level (see AppShell), not here — the engine (and its completion) now
   // outlives this page's mount, so this page never needs to own that callback.
   const setup = useRecordingSetup();
+  // One audio store for the Mic and Audio tiles: each write sends the whole `audio` object.
+  const audioStore = useAudioSettings();
   const { area } = useRecordingSettings();
   const recordingMode = useRecordingMode(area);
   const { sources, isLoading: isLoadingSources, error: sourcesError } = useSourceSelection(setup);
@@ -110,20 +116,47 @@ export function RecordPage(): React.JSX.Element {
 
   const openSelector = (mode?: CaptureMode): void => window.electronAPI.requestRecordSelector(mode);
 
+  // Anything but idle is busy (countdown, acquiring, recording, saving): the Mic and Camera
+  // settings lock their device lists and the pre-take meter lets go of the device. Same
+  // meaning as the capture panel's `isBusy`.
+  const isBusy = setup.recordingStatus !== "idle";
+
+  const isSystemAudioUnavailable = isRecording && activity.systemAudioAvailable === false;
+
   const toggles = (
     <RecordingToggles
       isMicrophoneEnabled={setup.isMicrophoneEnabled}
       isSystemAudioEnabled={setup.isSystemAudioEnabled}
       isCameraEnabled={setup.isCameraEnabled}
-      isSystemAudioUnavailable={isRecording && activity.systemAudioAvailable === false}
+      isSystemAudioUnavailable={isSystemAudioUnavailable}
       onToggleMicrophone={setup.toggleMicrophone}
       onToggleSystemAudio={setup.toggleSystemAudio}
       onToggleCamera={setup.toggleCamera}
+      micSlot={
+        <MicControlWithPopover
+          store={audioStore}
+          on={setup.isMicrophoneEnabled}
+          onToggle={setup.toggleMicrophone}
+          isRecording={isBusy}
+          microphones={setup.microphones}
+          selectedMicrophone={setup.selectedMicrophone}
+          onSelectMicrophone={setup.selectMicrophone}
+        />
+      }
+      audioSlot={
+        <SystemAudioControlWithPopover
+          store={audioStore}
+          on={setup.isSystemAudioEnabled}
+          onToggle={setup.toggleSystemAudio}
+          micOn={setup.isMicrophoneEnabled}
+          unavailable={isSystemAudioUnavailable}
+        />
+      }
       cameraSlot={
         <CameraControlWithPopover
           on={setup.isCameraEnabled}
           onToggle={setup.toggleCamera}
-          isRecording={isRecording}
+          isRecording={isBusy}
         />
       }
     />
@@ -131,29 +164,12 @@ export function RecordPage(): React.JSX.Element {
 
   const inputNotices = (
     <>
-      {setup.isMicrophoneEnabled &&
-        (isMicrophoneDenied ? (
-          <PermissionNotice
-            label={t("micAccessOff")}
-            onOpenSettings={() => void openPermissionSettings("microphone")}
-          />
-        ) : (
-          setup.microphones.length > 0 && (
-            <div
-              className={styles.locked}
-              data-locked={isRecording || undefined}
-              inert={isRecording || undefined}
-            >
-              <MicPicker
-                microphones={setup.microphones}
-                selected={setup.selectedMicrophone}
-                isOpen={setup.isMicrophoneMenuOpen}
-                onToggle={setup.toggleMicrophoneMenu}
-                onSelect={setup.selectMicrophone}
-              />
-            </div>
-          )
-        ))}
+      {setup.isMicrophoneEnabled && isMicrophoneDenied && (
+        <PermissionNotice
+          label={t("micAccessOff")}
+          onOpenSettings={() => void openPermissionSettings("microphone")}
+        />
+      )}
 
       {setup.isCameraEnabled && isCameraDenied && (
         <PermissionNotice

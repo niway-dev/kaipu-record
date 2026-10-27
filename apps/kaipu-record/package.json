@@ -15,6 +15,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "bash ../../scripts/require-env.sh .env && bun run build && node node_modules/@playwright/test/cli.js test",
+    "proof": "bun run build && node node_modules/@playwright/test/cli.js test -c verify/playwright.config.ts",
+    "proof:run": "node node_modules/@playwright/test/cli.js test -c verify/playwright.config.ts",
     "cursor-track:check": "bun run scripts/cursor-track-check.ts",
     "icons": "bash scripts/generate-app-icons.sh",
     "start": "electron-vite preview",

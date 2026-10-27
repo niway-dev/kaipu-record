@@ -1,7 +1,8 @@
-import React, { useCallback, useId, useRef, useState, type RefObject } from "react";
+import React, { type RefObject } from "react";
 import { CameraToggleSplit } from "./camera-toggle-split";
 import { CameraSettingsPopover } from "./camera-settings-popover";
 import { CameraSettingsDrawer } from "./camera-settings-drawer";
+import { useSettingsDisclosure } from "../settings-controls/use-settings-disclosure";
 import { useCameraSettings, type CameraSettingsStore } from "./use-camera-settings";
 
 export interface CameraControl {
@@ -17,19 +18,8 @@ export interface CameraControl {
 /** State the split tile and its settings (popover or drawer) share. */
 export function useCameraControl(): CameraControl {
   const store = useCameraSettings();
-  const [open, setOpen] = useState(false);
-  const close = useCallback(() => setOpen(false), []);
-  const chevronRef = useRef<HTMLButtonElement>(null);
-  const settingsId = useId();
-  return {
-    store,
-    open,
-    setOpen,
-    close,
-    chevronRef,
-    settingsId,
-    blocked: store.access === "blocked",
-  };
+  const disclosure = useSettingsDisclosure();
+  return { store, ...disclosure, blocked: store.access === "blocked" };
 }
 
 interface CameraControlProps {

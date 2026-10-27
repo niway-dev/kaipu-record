@@ -7,13 +7,13 @@ description: Claude Sonnet 5.5 reviews each pull request once when it is ready, 
 
 ## Status
 
-| Field         | Value                                                                                                                                                                                                                                                                                                           |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | Accepted — now consumed through the reusable workflow `niway-dev/agent-review` (`.github/workflows/agent-review.yml`); first ran here on PR #394 (2026-10-27). Amended 2026-10-27: the script and its tests left this repository ([amendment](#amendment-the-review-script-and-its-tests-left-this-repository)) |
-| Date          | 2026-10-20                                                                                                                                                                                                                                                                                                      |
-| Supersedes    | —                                                                                                                                                                                                                                                                                                               |
-| Amends        | —                                                                                                                                                                                                                                                                                                               |
-| Superseded by | —                                                                                                                                                                                                                                                                                                               |
+| Field         | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Accepted — now consumed through the reusable workflow `niway-dev/wachi-reviewer` (`.github/workflows/agent-review.yml`); first ran here on PR #394 (2026-10-27). Amended 2026-10-27: the script and its tests left this repository ([amendment](#amendment-the-review-script-and-its-tests-left-this-repository)); the engine was renamed and is pinned to an exact release ([amendment](#amendment-the-engine-is-now-niway-devwachi-reviewer-pinned-to-v120)) |
+| Date          | 2026-10-20                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Supersedes    | —                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Amends        | —                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Superseded by | —                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 ## Context
 
@@ -89,3 +89,13 @@ review moved to the reusable workflow `niway-dev/agent-review` (534d6c98): the c
 instead of running a script of its own. With no test left under `scripts/`,
 `bun test ./scripts/` exited 1 and failed `check-workflows` and `bun run verify`; PR #394
 removed the step.
+
+## Amendment: the engine is now niway-dev/wachi-reviewer, pinned to v1.2.0
+
+**2026-10-27.** The reusable workflow's repository was renamed from `niway-dev/agent-review` to
+`niway-dev/wachi-reviewer` (its ADR 0005). GitHub does not redirect `uses:` to a renamed
+repository, so `.github/workflows/agent-review.yml` now names the new one. It is also pinned to
+the exact tag `v1.2.0` instead of the floating `v1`, following the engine's ADR 0001 amendment of
+2026-10-26: a moved floating tag would run a new release with this repository's key before
+anyone read it. A new release now runs here only after the tag is edited. The on-demand command
+is `/wachi review`; `@agent-review` and `@claude` still work.

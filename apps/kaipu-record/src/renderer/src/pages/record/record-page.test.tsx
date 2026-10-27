@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useNavigate } from "react-router-dom";
+import type { RecorderStatus } from "@renderer/features/recording/recorder-store";
 import type { RecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
 import { RecordPage } from "./record-page";
 
@@ -21,6 +23,11 @@ let setupState: {
   isRecording: boolean;
   isSourcePickerOpen?: boolean;
   sources?: (typeof SCREEN | typeof WINDOW)[];
+  microphoneEnabled?: boolean;
+  microphoneGranted?: boolean;
+  microphones?: { deviceId: string; label: string }[];
+  recordingStatus?: RecorderStatus;
+  cameraEnabled?: boolean;
 };
 
 function makeSetup(): RecordingSetup {
@@ -30,19 +37,17 @@ function makeSetup(): RecordingSetup {
     isSourcePickerOpen: setupState.isSourcePickerOpen ?? false,
     openSourcePicker,
     closeSourcePicker: vi.fn(),
-    isMicrophoneEnabled: false,
+    isMicrophoneEnabled: setupState.microphoneEnabled ?? false,
     isSystemAudioEnabled: false,
-    isCameraEnabled: false,
+    isCameraEnabled: setupState.cameraEnabled ?? false,
     toggleMicrophone: vi.fn(),
     toggleSystemAudio: vi.fn(),
     toggleCamera: vi.fn(),
-    microphones: [],
+    microphones: setupState.microphones ?? [],
     selectedMicrophone: null,
-    isMicrophoneMenuOpen: false,
-    toggleMicrophoneMenu: vi.fn(),
     selectMicrophone: vi.fn(),
     isRecording: setupState.isRecording,
-    recordingStatus: setupState.isRecording ? "recording" : "idle",
+    recordingStatus: setupState.recordingStatus ?? (setupState.isRecording ? "recording" : "idle"),
     countdown: null,
     canStartRecording: setupState.selectedSource !== null && !setupState.isRecording,
     startRecording,
@@ -71,7 +76,7 @@ vi.mock("@renderer/features/recording/hooks/use-source-selection", () => ({
 }));
 vi.mock("@renderer/features/permissions", () => ({
   usePermissions: () => ({
-    status: { screen: true, microphone: true, camera: true },
+    status: { screen: true, microphone: setupState.microphoneGranted ?? true, camera: true },
     check: vi.fn(async () => {}),
     openSettings: vi.fn(),
   }),
@@ -201,6 +206,59 @@ describe("RecordPage idle layout (design Kaipu Record Modes)", () => {
     renderAt(undefined);
     fireEvent.click(screen.getByRole("button", { name: "Camera settings" }));
     expect(screen.getByRole("dialog", { name: "Camera settings" })).toBeInTheDocument();
+  });
+
+  it("opens the Mic and Audio settings popovers from their split tiles", async () => {
+    renderAt(undefined);
+    await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+    expect(screen.getByRole("dialog", { name: "Microphone settings" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "System audio settings" }));
+    expect(screen.getByRole("dialog", { name: "System audio settings" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Microphone settings" })).toBeNull();
+  });
+
+  it("locks the Mic and Camera settings during the countdown and while starting", async () => {
+    setupState.microphoneEnabled = true;
+    setupState.cameraEnabled = true;
+    setupState.microphones = [{ deviceId: "a", label: "MacBook Pro Microphone" }];
+    for (const status of ["counting", "starting", "finalizing"] as const) {
+      setupState.recordingStatus = status;
+      const { unmount } = render(
+        <MemoryRouter>
+          <RecordPage />
+        </MemoryRouter>,
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+      expect(screen.getByText("Live")).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+      expect(
+        screen.getByText("Changes apply live and will show in the recording."),
+      ).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it("keeps the Mic and Camera settings editable while idle", async () => {
+    setupState.microphoneEnabled = true;
+    setupState.cameraEnabled = true;
+    renderAt(undefined);
+    await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+    expect(screen.queryByText("Live")).toBeNull();
+  });
+
+  it("no longer renders the old microphone picker row under the toggles", () => {
+    setupState.microphoneEnabled = true;
+    setupState.microphones = [{ deviceId: "a", label: "MacBook Pro Microphone" }];
+    renderAt(undefined);
+    expect(screen.queryByText("MICROPHONE")).toBeNull();
+    expect(screen.queryByText("MacBook Pro Microphone")).toBeNull();
+  });
+
+  it("still shows the permission notice when the microphone is on but access is off", async () => {
+    setupState.microphoneEnabled = true;
+    setupState.microphoneGranted = false;
+    renderAt(undefined);
+    expect(await screen.findByText("Microphone access is off")).toBeInTheDocument();
   });
 
   it("keeps the recording layout while a take runs", () => {

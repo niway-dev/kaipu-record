@@ -291,6 +291,21 @@ export interface KaipuElectronAPI {
   recordingStat(sessionId: string): Promise<number>;
   /** Push a live tick (elapsed/levels/status) to the hub for the bar. */
   recordingReportTick(tick: RecordingTick): void;
+  /**
+   * Recorder only: report the mic's 5 bars (0..1) for the settings meter. Sent only while
+   * {@link onMicLevelsListening} / {@link getMicLevelsListening} say a window listens.
+   */
+  recordingReportMicLevels(levels: number[]): void;
+  /** Recorder only: whether any window currently subscribes to the mic levels. */
+  getMicLevelsListening(): Promise<boolean>;
+  /** Recorder only: a window started (true) or stopped (false) listening to the mic levels. */
+  onMicLevelsListening(callback: (listening: boolean) => void): () => void;
+  /**
+   * Any window: receive the mic's 5 bars (0..1) during a take. Registers interest with main
+   * (the recorder sends levels only while someone listens) and drops it on unsubscribe or
+   * when the window is destroyed.
+   */
+  subscribeMicLevels(callback: (levels: number[]) => void): () => void;
   /** Tell the hub recording started: hide main window, show the bar. */
   recordingStart(info: RecordingStartInfo): void;
   /**

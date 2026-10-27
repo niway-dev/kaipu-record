@@ -112,6 +112,25 @@ const kaipuApi: KaipuElectronAPI = {
   recordingAbort: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.recordingAbort, sessionId),
   recordingStat: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.recordingStat, sessionId),
   recordingReportTick: (tick) => ipcRenderer.send(IPC_CHANNELS.recordingReportTick, tick),
+  recordingReportMicLevels: (levels) => ipcRenderer.send(IPC_CHANNELS.micLevelsReport, levels),
+  getMicLevelsListening: () => ipcRenderer.invoke(IPC_CHANNELS.micLevelsGetListening),
+  onMicLevelsListening: (callback) => {
+    const listener = (_e: IpcRendererEvent, listening: boolean): void => callback(listening);
+    ipcRenderer.on(IPC_CHANNELS.micLevelsListening, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.micLevelsListening, listener);
+  },
+  subscribeMicLevels: (callback) => {
+    const listener = (_e: IpcRendererEvent, levels: number[]): void => callback(levels);
+    ipcRenderer.on(IPC_CHANNELS.micLevelsData, listener);
+    ipcRenderer.send(IPC_CHANNELS.micLevelsSubscribe);
+    let active = true;
+    return () => {
+      if (!active) return;
+      active = false;
+      ipcRenderer.removeListener(IPC_CHANNELS.micLevelsData, listener);
+      ipcRenderer.send(IPC_CHANNELS.micLevelsUnsubscribe);
+    };
+  },
   recordingStart: (info) => ipcRenderer.send(IPC_CHANNELS.recordingStart, info),
   recordingHideMainWindow: () => ipcRenderer.invoke(IPC_CHANNELS.recordingHideMainWindow),
   recordingStop: () => ipcRenderer.send(IPC_CHANNELS.recordingStop),
