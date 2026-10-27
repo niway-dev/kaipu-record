@@ -160,18 +160,22 @@ describe("MicControlWithPopover (Record page)", () => {
     });
 
     it("reads the engine's bars during a take instead of opening the device again", async () => {
-      window.electronAPI.getRecordingState = async () => ({
-        active: true,
-        status: "recording",
-        elapsedSeconds: 3,
-        micLevels: [1, 1, 1, 1, 1],
-      });
+      const unsubscribe = vi.fn();
+      let push: (levels: number[]) => void = () => {};
+      window.electronAPI.subscribeMicLevels = (callback) => {
+        push = callback;
+        return unsubscribe;
+      };
       render(<MicControlWithPopover on onToggle={() => {}} isRecording {...devices} />);
       await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+      act(() => push([1, 1, 1, 1, 1]));
       const meter = screen.getByRole("img", { name: "Input level meter" });
       await waitFor(() => expect(meter.querySelector("span")).toHaveStyle({ height: "100%" }));
       expect(getUserMedia).not.toHaveBeenCalled();
       expect(screen.getByText("Live")).toBeInTheDocument();
+      // Closed, the meter is gone and so is the subscription.
+      await userEvent.keyboard("{Escape}");
+      expect(unsubscribe).toHaveBeenCalled();
     });
   });
 });

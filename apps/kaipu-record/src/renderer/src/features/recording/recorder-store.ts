@@ -112,6 +112,11 @@ let sessionCounter = 0;
 let lastResolveInput: (() => StartInput) | null = null;
 /** Unsubscribes the live-settings forwarder of the active take. */
 let stopLiveSettings: (() => void) | null = null;
+/** Stops following whether any window listens to the mic levels, for the active take. */
+let stopMicLevelListening: (() => void) | null = null;
+/** Whether any window subscribed to the mic levels; only then are they read and sent. */
+let micLevelsListening = false;
+let lastMicLevels: number[] | null = null;
 
 const listeners = new Set<() => void>();
 const completeListeners = new Set<(recording: LocalRecording) => void>();
@@ -345,6 +350,7 @@ async function beginEngine(input: StartInput): Promise<void> {
       output: handle.outputSize,
     });
     stopLiveSettings = forwardLiveSettings(handle, input);
+    stopMicLevelListening = followMicLevelListeners();
     const activeTrack = cursorTrack;
     void handle.firstMediaTimestamp.then(({ rendererMs, quality }) =>
       activeTrack?.anchor(rendererMs, quality),
@@ -359,11 +365,10 @@ async function beginEngine(input: StartInput): Promise<void> {
       window.electronAPI.recordingReportTick({
         elapsedSeconds: Math.floor(elapsedMs(clock, Date.now()) / 1000),
         levels: paused ? [0, 0, 0, 0, 0] : engine.readLevels(),
-        // Rounded so a steady room produces identical ticks and main does not re-broadcast.
-        micLevels: paused ? [0, 0, 0, 0, 0] : engine.readMicLevels().map(roundLevel),
         status: paused ? "paused" : "recording",
         systemAudioAvailable: engine.hasSystemAudio,
       });
+      reportMicLevels(paused);
     }, 100);
   } catch (error) {
     // Cancelled first: the cancel already restored the app, and this is its fallout.
@@ -387,6 +392,44 @@ async function beginEngine(input: StartInput): Promise<void> {
     // immediately usable again; the toast above carries the retry action.
     update({ status: "idle", countdown: null });
   }
+}
+
+/**
+ * Follow whether any window subscribed to the mic levels. They go on their own channel, not
+ * the activity tick: broadcast to every window ~10 times a second they would re-render
+ * pages that never show them. Returns the unsubscribe.
+ */
+function followMicLevelListeners(): () => void {
+  micLevelsListening = false;
+  lastMicLevels = null;
+  let heard = false;
+  const unsubscribe = window.electronAPI.onMicLevelsListening((listening) => {
+    heard = true;
+    micLevelsListening = listening;
+    lastMicLevels = null;
+  });
+  // A window may already be listening when the take starts; an event that arrived first wins.
+  void window.electronAPI
+    .getMicLevelsListening()
+    .then((listening) => {
+      if (!heard) micLevelsListening = listening;
+    })
+    .catch(() => undefined);
+  return () => {
+    unsubscribe();
+    micLevelsListening = false;
+    lastMicLevels = null;
+  };
+}
+
+/** Sends the mic's bars to main while someone listens; identical bars are not re-sent. */
+function reportMicLevels(paused: boolean): void {
+  if (!micLevelsListening || !engine) return;
+  // Rounded so a steady room produces identical bars and nothing is re-sent.
+  const levels = paused ? [0, 0, 0, 0, 0] : engine.readMicLevels().map(roundLevel);
+  if (lastMicLevels && levels.every((level, i) => level === lastMicLevels![i])) return;
+  lastMicLevels = levels;
+  window.electronAPI.recordingReportMicLevels(levels);
 }
 
 /**
@@ -504,6 +547,8 @@ async function stopRecording(): Promise<void> {
   beginRecordTiming("stop requested", true);
   stopLiveSettings?.();
   stopLiveSettings = null;
+  stopMicLevelListening?.();
+  stopMicLevelListening = null;
   update({ status: "finalizing", countdown: null });
   const durationMs = clock ? elapsedMs(clock, Date.now()) : 0;
   const durationSeconds = Math.floor(durationMs / 1000);
@@ -512,7 +557,6 @@ async function stopRecording(): Promise<void> {
   window.electronAPI.recordingReportTick({
     elapsedSeconds: durationSeconds,
     levels: [0, 0, 0, 0, 0],
-    micLevels: [0, 0, 0, 0, 0],
     status: "saving",
   });
   stopTicks();

@@ -62,28 +62,6 @@ describe("recording-activity", () => {
       expect(again.changed).toBe(false);
     });
 
-    it("re-broadcasts when the mic bars move, and stays quiet while they hold", () => {
-      const bars = [0.1, 0.2, 0.3, 0.2, 0.1];
-      const first = applyTick(running, { ...tick("recording", 5), micLevels: bars });
-      expect(first.changed).toBe(true);
-      expect(first.activity.micLevels).toEqual(bars);
-
-      const same = applyTick(first.activity, { ...tick("recording", 5), micLevels: [...bars] });
-      expect(same.changed).toBe(false);
-      expect(same.activity).toBe(first.activity);
-
-      const moved = applyTick(first.activity, {
-        ...tick("recording", 5),
-        micLevels: [0.1, 0.2, 0.4, 0.2, 0.1],
-      });
-      expect(moved.changed).toBe(true);
-    });
-
-    it("keeps the known mic bars when a tick omits them", () => {
-      const known = { ...running, micLevels: [0.5, 0.5, 0.5, 0.5, 0.5] };
-      expect(applyTick(known, tick("recording", 6)).activity.micLevels).toEqual(known.micLevels);
-    });
-
     it("keeps the known availability when a tick omits it", () => {
       const known = { ...running, systemAudioAvailable: true };
       const result = applyTick(known, tick("recording", 6));

@@ -495,6 +495,16 @@ export const IPC_CHANNELS = {
   /** NIW2-218: byte size of an open writer session's temp file (Small-file size check). */
   recordingStat: "recording:stat",
   recordingReportTick: "recording:report-tick",
+  // Mic levels for the settings meter, kept off the activity broadcast (10/s would re-render
+  // every window). A window subscribes (renderer → main, counted); the recorder reports
+  // levels (renderer → main) only while main says someone listens (main → recorder), and
+  // main relays them to the subscribed windows alone (main → renderer).
+  micLevelsSubscribe: "mic-levels:subscribe",
+  micLevelsUnsubscribe: "mic-levels:unsubscribe",
+  micLevelsReport: "mic-levels:report",
+  micLevelsData: "mic-levels:data",
+  micLevelsListening: "mic-levels:listening",
+  micLevelsGetListening: "mic-levels:get-listening",
   recordingStart: "recording:start",
   recordingStop: "recording:stop",
   // Cursor track (recorder renderer → main). Keyed by the writer session id. See
@@ -598,11 +608,6 @@ export type UpdateStatus =
 export interface RecordingTick {
   elapsedSeconds: number;
   levels: number[];
-  /**
-   * The microphone alone, 5 bars (0..1), before its mute gain; zeros while paused or
-   * when no mic is open. Omitted by ticks that predate it. `levels` is the mix.
-   */
-  micLevels?: number[];
   status: RecordingStatus;
   /**
    * Whether this take has a loopback (system audio) track. Omitted = unknown,
@@ -628,12 +633,6 @@ export interface RecordingActivity {
   active: boolean;
   status: RecordingStatus;
   elapsedSeconds: number;
-  /**
-   * Latest {@link RecordingTick.micLevels}, for the mic meter in the settings popover and
-   * drawer. Only meaningful while active; re-broadcast whenever it changes (the store
-   * rounds it to 2 decimals so a steady room stays quiet on the wire).
-   */
-  micLevels?: number[];
   /** See {@link RecordingTick.systemAudioAvailable}. Only meaningful while active. */
   systemAudioAvailable?: boolean;
   /**

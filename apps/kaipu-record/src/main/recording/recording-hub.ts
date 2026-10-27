@@ -41,6 +41,7 @@ import { ScreenSourceCache, type ScreenSource } from "./screen-source-cache";
 import { areaToGlobal, fullDisplayBorderAllowed, sanitizeArea } from "./area-geometry";
 import { holdTemporaryShortcut, releaseTemporaryShortcut } from "../shortcuts/global-shortcuts";
 import { FinalizeMoveError, RecordingWriter, timestampId } from "./recording-writer";
+import { createMicLevelRelay } from "./mic-level-relay";
 import { IDLE_ACTIVITY, applyTick, startedActivity, stoppedActivity } from "./recording-activity";
 import { vaultDirectory } from "../library/vault-location";
 import { endRecordTiming, markRecordTiming, receiveRecordTiming } from "./record-timing";
@@ -212,6 +213,9 @@ export function registerRecordingHub(
   const stopHookIfIdle = (): void => {
     if (!cursorTracks.active) clickHook.stop();
   };
+
+  /** Windows whose destruction already clears their mic-level subscriptions. */
+  const micLevelWatched = new Set<number>();
 
   // Single source of truth for "is a recording happening", broadcast to every
   // window so non-recorder windows (reopened Record page, Capture Panel) can
@@ -652,6 +656,28 @@ export function registerRecordingHub(
   ipcMain.on(IPC_CHANNELS.recordingStop, applyStopWindowState);
 
   // ── Relay ────────────────────────────────────────────────────────────
+  // Mic levels for the settings meter: only the windows that subscribed get them, and the
+  // recorder is told whether anyone does so it does not even send otherwise.
+  const micLevels = createMicLevelRelay(() => getMainWindow()?.webContents ?? null);
+  ipcMain.on(IPC_CHANNELS.micLevelsSubscribe, (e) => {
+    const sender = e.sender;
+    micLevels.subscribe(sender);
+    if (!micLevelWatched.has(sender.id)) {
+      micLevelWatched.add(sender.id);
+      sender.once("destroyed", () => {
+        micLevelWatched.delete(sender.id);
+        micLevels.remove(sender.id);
+      });
+    }
+  });
+  ipcMain.on(IPC_CHANNELS.micLevelsUnsubscribe, (e) => micLevels.unsubscribe(e.sender.id));
+  ipcMain.on(IPC_CHANNELS.micLevelsReport, (_e, levels: unknown) => {
+    // From a renderer: pass on only a short list of plain numbers.
+    if (!Array.isArray(levels) || levels.length > 16) return;
+    if (!levels.every((level) => typeof level === "number" && Number.isFinite(level))) return;
+    micLevels.publish(levels);
+  });
+  ipcMain.handle(IPC_CHANNELS.micLevelsGetListening, () => micLevels.listening());
   ipcMain.on(IPC_CHANNELS.recordingReportTick, (_e, tick: RecordingTick) => {
     bar.send(IPC_CHANNELS.controlTick, tick);
     const next = applyTick(activity, tick);

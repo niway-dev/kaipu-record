@@ -649,20 +649,69 @@ describe("recorder-store live settings", () => {
     await stopAndSettle();
   });
 
-  it("reports the mic bars next to the mix levels, and zeros while paused", async () => {
-    const engine = fakeEngine({ readMicLevels: vi.fn(() => [0.123, 0.4, 0.5, 0.6, 0.789]) });
-    await startWith(engine);
-    await vi.advanceTimersByTimeAsync(100);
-    expect(window.electronAPI.recordingReportTick).toHaveBeenLastCalledWith(
-      expect.objectContaining({ micLevels: [0.12, 0.4, 0.5, 0.6, 0.79] }),
-    );
+  describe("mic levels for the settings meter", () => {
+    let listeningCallbacks: Array<(listening: boolean) => void>;
+    let report: ReturnType<typeof vi.fn<(levels: number[]) => void>>;
+    let queried: boolean;
+    beforeEach(() => {
+      listeningCallbacks = [];
+      queried = false;
+      report = vi.fn<(levels: number[]) => void>();
+      window.electronAPI.recordingReportMicLevels = report;
+      window.electronAPI.getMicLevelsListening = vi.fn(async () => queried);
+      window.electronAPI.onMicLevelsListening = vi.fn((callback) => {
+        listeningCallbacks.push(callback);
+        return () => {
+          listeningCallbacks = listeningCallbacks.filter((c) => c !== callback);
+        };
+      });
+    });
 
-    store.pauseRecording();
-    await vi.advanceTimersByTimeAsync(100);
-    expect(window.electronAPI.recordingReportTick).toHaveBeenLastCalledWith(
-      expect.objectContaining({ status: "paused", micLevels: [0, 0, 0, 0, 0] }),
-    );
-    await stopAndSettle();
+    it("keeps the bars out of the activity tick and sends nothing while nobody listens", async () => {
+      const engine = fakeEngine({ readMicLevels: vi.fn(() => [0.123, 0.4, 0.5, 0.6, 0.789]) });
+      await startWith(engine);
+      await vi.advanceTimersByTimeAsync(300);
+      expect(report).not.toHaveBeenCalled();
+      expect(engine.readMicLevels).not.toHaveBeenCalled();
+      for (const [tick] of vi.mocked(window.electronAPI.recordingReportTick).mock.calls) {
+        expect(tick).not.toHaveProperty("micLevels");
+      }
+      await stopAndSettle();
+    });
+
+    it("sends rounded bars while a window listens, zeros while paused, and stops when it leaves", async () => {
+      const engine = fakeEngine({ readMicLevels: vi.fn(() => [0.123, 0.4, 0.5, 0.6, 0.789]) });
+      await startWith(engine);
+      for (const callback of listeningCallbacks) callback(true);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(report).toHaveBeenLastCalledWith([0.12, 0.4, 0.5, 0.6, 0.79]);
+
+      store.pauseRecording();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(report).toHaveBeenLastCalledWith([0, 0, 0, 0, 0]);
+      store.resumeRecording();
+
+      for (const callback of listeningCallbacks) callback(false);
+      report.mockClear();
+      await vi.advanceTimersByTimeAsync(300);
+      expect(report).not.toHaveBeenCalled();
+      await stopAndSettle();
+    });
+
+    it("learns about a window that was already listening when the take started", async () => {
+      queried = true;
+      await startWith(fakeEngine({ readMicLevels: vi.fn(() => [0.5, 0.5, 0.5, 0.5, 0.5]) }));
+      await vi.advanceTimersByTimeAsync(100);
+      expect(report).toHaveBeenCalled();
+      await stopAndSettle();
+    });
+
+    it("stops listening for listeners when the take ends", async () => {
+      await startWith(fakeEngine());
+      expect(listeningCallbacks).toHaveLength(1);
+      await stopAndSettle();
+      expect(listeningCallbacks).toHaveLength(0);
+    });
   });
 
   it("stops forwarding once the take ends", async () => {

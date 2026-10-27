@@ -1,7 +1,6 @@
 import React, { type Ref, type RefObject } from "react";
 import { Mic, Volume2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
-import { useRecordingActivity } from "@renderer/features/recording/hooks/use-recording-activity";
 import type { Microphone } from "@renderer/features/recording/types";
 import { SettingsDrawer } from "../settings-controls/settings-drawer";
 import { SettingsPopover } from "../settings-controls/settings-popover";
@@ -14,6 +13,7 @@ import { useSettingsFocus } from "../settings-controls/use-settings-focus";
 import { MicSettingsContent } from "./mic-settings-content";
 import { SystemAudioSettingsContent } from "./system-audio-settings-content";
 import { spreadLevels, useMicLevelMeter } from "./use-mic-level-meter";
+import { useTakeMicLevels } from "./use-take-mic-levels";
 import { useAudioSettings, type AudioSettingsStore } from "./use-audio-settings";
 
 /** State the Mic (or Audio) split tile and its settings (popover or drawer) share. */
@@ -49,7 +49,7 @@ interface MicBodyProps extends MicDevices {
 /**
  * The mic settings plus where their meter reads from. Mounted only while the popover or
  * drawer is open, so the pre-take meter (it opens the device) runs exactly that long: open,
- * mic on, not recording. During a take the engine's activity broadcast feeds it instead.
+ * mic on, not recording. During a take the engine's mic levels feed it instead (their own channel, only while mounted).
  */
 function MicSettingsBody({
   control,
@@ -61,13 +61,13 @@ function MicSettingsBody({
   selectedMicrophone,
   onSelectMicrophone,
 }: MicBodyProps): React.JSX.Element {
-  const activity = useRecordingActivity();
+  const takeLevels = useTakeMicLevels(isRecording && micOn);
   const preTake = useMicLevelMeter(
     selectedMicrophone?.deviceId ?? null,
     micOn && !isRecording && microphones.length > 0,
     control.store.audio.noiseSuppression,
   );
-  const levels = isRecording ? spreadLevels(activity.micLevels) : preTake;
+  const levels = isRecording ? spreadLevels(takeLevels) : preTake;
   return (
     <MicSettingsContent
       microphones={microphones}

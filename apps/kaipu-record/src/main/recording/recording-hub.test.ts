@@ -108,7 +108,7 @@ function fakeMainWindow() {
     show: vi.fn(),
     focus: vi.fn(),
     isDestroyed: () => false,
-    webContents: { send: vi.fn() },
+    webContents: { id: 1, send: vi.fn(), isDestroyed: () => false },
   };
 }
 
@@ -1034,5 +1034,60 @@ describe("recording hub — camera bubble size", () => {
     const preview = mockState.ipcHandle.get(IPC_CHANNELS.cameraBubblePreviewSize)!;
     expect(preview({}, 300)).toBe(200);
     expect(mockState.bubble.preview).toHaveBeenCalledWith(300);
+  });
+
+  it("relays mic levels only to subscribed windows and tells the recorder who listens", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const mainWindow = fakeMainWindow();
+    registerRecordingHub(() => mainWindow as never);
+    const panel = { id: 7, send: vi.fn(), once: vi.fn(), isDestroyed: () => false };
+    const other = { id: 8, send: vi.fn(), once: vi.fn(), isDestroyed: () => false };
+    const subscribe = mockState.ipcOn.get(IPC_CHANNELS.micLevelsSubscribe)!;
+    const unsubscribe = mockState.ipcOn.get(IPC_CHANNELS.micLevelsUnsubscribe)!;
+    const report = mockState.ipcOn.get(IPC_CHANNELS.micLevelsReport)!;
+    const listening = mockState.ipcHandle.get(IPC_CHANNELS.micLevelsGetListening)!;
+
+    expect(listening({})).toBe(false);
+    subscribe({ sender: panel });
+    expect(listening({})).toBe(true);
+    expect(mainWindow.webContents.send).toHaveBeenCalledWith(IPC_CHANNELS.micLevelsListening, true);
+
+    report({}, [0.1, 0.2, 0.3, 0.4, 0.5]);
+    expect(panel.send).toHaveBeenCalledWith(IPC_CHANNELS.micLevelsData, [0.1, 0.2, 0.3, 0.4, 0.5]);
+    expect(other.send).not.toHaveBeenCalled();
+    // Rubbish from a renderer is dropped.
+    report({}, "loud");
+    expect(panel.send).toHaveBeenCalledTimes(1);
+
+    unsubscribe({ sender: panel });
+    expect(mainWindow.webContents.send).toHaveBeenLastCalledWith(
+      IPC_CHANNELS.micLevelsListening,
+      false,
+    );
+    report({}, [0, 0, 0, 0, 0]);
+    expect(panel.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears a window's mic-level subscription when it is destroyed", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+    let destroyed: () => void = () => {};
+    const panel = {
+      id: 9,
+      send: vi.fn(),
+      once: (_event: string, fn: () => void) => {
+        destroyed = fn;
+      },
+      isDestroyed: () => false,
+    };
+    mockState.ipcOn.get(IPC_CHANNELS.micLevelsSubscribe)!({ sender: panel });
+    const listening = mockState.ipcHandle.get(IPC_CHANNELS.micLevelsGetListening)!;
+    expect(listening({})).toBe(true);
+    destroyed();
+    expect(listening({})).toBe(false);
   });
 });

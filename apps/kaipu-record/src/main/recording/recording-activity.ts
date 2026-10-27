@@ -25,7 +25,7 @@ export function stoppedActivity(activity: RecordingActivity): RecordingActivity 
 /**
  * Apply a recorder tick. Returns the next activity and whether it changed enough
  * to warrant a re-broadcast — i.e. the status flipped (pause/resume/saving), the
- * whole-second timer advanced or the mic's meter bars moved. A tick that changes none
+ * whole-second timer advanced or the system-audio availability became known. A tick that changes none
  * of them (the engine reports ~10/s) is a no-op so we never spam every window. While inactive, ticks are ignored.
  */
 export function applyTick(
@@ -34,12 +34,10 @@ export function applyTick(
 ): { activity: RecordingActivity; changed: boolean } {
   if (!activity.active) return { activity, changed: false };
   const systemAudioAvailable = tick.systemAudioAvailable ?? activity.systemAudioAvailable;
-  const micLevels = tick.micLevels ?? activity.micLevels;
   const changed =
     tick.status !== activity.status ||
     tick.elapsedSeconds !== activity.elapsedSeconds ||
-    systemAudioAvailable !== activity.systemAudioAvailable ||
-    !sameLevels(micLevels, activity.micLevels);
+    systemAudioAvailable !== activity.systemAudioAvailable;
   if (!changed) return { activity, changed: false };
   const next: RecordingActivity = {
     ...activity,
@@ -47,12 +45,5 @@ export function applyTick(
     elapsedSeconds: tick.elapsedSeconds,
   };
   if (systemAudioAvailable !== undefined) next.systemAudioAvailable = systemAudioAvailable;
-  if (micLevels !== undefined) next.micLevels = micLevels;
   return { activity: next, changed: true };
-}
-
-function sameLevels(a: number[] | undefined, b: number[] | undefined): boolean {
-  if (a === b) return true;
-  if (!a || !b || a.length !== b.length) return false;
-  return a.every((value, i) => value === b[i]);
 }
