@@ -181,7 +181,9 @@ What changed against the decisions above:
   "16:9 · 1280 × 720" caption for a remembered Frame area (DIP, as stored; the overlay readout is
   in device pixels), and the existing Mic / Audio / Camera toggles (`RecordingToggles`, the one
   component that renders the camera toggle). No selection card. **Window** opens the thumbnail
-  picker on the Record page and a pick starts the countdown. `AppSettings.recordingMode`
+  picker on the Record page and a pick starts the countdown. **Screen** on a single display has
+  nothing to pick, so the overlay is skipped and the countdown starts on that display at once;
+  with several displays the chooser's "Record this display" starts it. `AppSettings.recordingMode`
   (`frame` | `window` | `screen`, default `screen`) is now stored. The page lists the four newest
   recordings under "Recent", each with its capture tag ("FRAME · 16:9", "SCREEN", "WINDOW") from
   the decision 12 metadata; recordings made before it have none. The Camera toggle in both
