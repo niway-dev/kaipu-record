@@ -67,7 +67,7 @@ The device stays where it is (`RecordingSettings.selectedMicrophone`, shared acr
 - New handle methods: `setMicLevel(percent)`, `setNoiseSuppression(on)` (`applyConstraints` on
   the live mic track; "unavailable" if no mic), `setSystemAudioVolume(percent)`,
   `setDucking(on)`.
-- Ducking: an analyser on the mic *before* the mute gain. A 50 ms interval reads RMS; above a
+- Ducking: an analyser on the mic _before_ the mute gain. A 50 ms interval reads RMS; above a
   threshold (about -40 dBFS) ramp `sysDuckGain` to 0.3 over 80 ms; after 400 ms below it, ramp
   back to 1 over 300 ms. A muted mic never ducks. Pure decision logic in its own module
   (`ducking.ts`) so it is unit-tested without Web Audio.
@@ -107,25 +107,25 @@ New feature folder `renderer/src/features/audio-settings/`, mirroring `camera-se
 - i18n: new `micSettings` and `systemAudioSettings` namespaces in `packages/i18n/messages/en.json`
   and `es.json` (neutral Spanish). Copy from the design:
 
-| EN | ES |
-| --- | --- |
-| Microphone | Micrófono |
-| Input | Entrada |
-| Input level | Nivel de entrada |
-| Reduce background noise | Reducir el ruido de fondo |
-| Fans, keyboard and street noise | Ventiladores, teclado y ruido de la calle |
-| Disconnected | Desconectado |
-| Live | En vivo |
+| EN                                                                         | ES                                                                                         |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Microphone                                                                 | Micrófono                                                                                  |
+| Input                                                                      | Entrada                                                                                    |
+| Input level                                                                | Nivel de entrada                                                                           |
+| Reduce background noise                                                    | Reducir el ruido de fondo                                                                  |
+| Fans, keyboard and street noise                                            | Ventiladores, teclado y ruido de la calle                                                  |
+| Disconnected                                                               | Desconectado                                                                               |
+| Live                                                                       | En vivo                                                                                    |
 | Level and noise apply live. Switching the device is locked until you stop. | El nivel y el ruido se aplican en vivo. El dispositivo queda bloqueado hasta que detengas. |
-| System audio | Audio del sistema |
-| What to capture | Qué capturar |
-| All sound | Todo el sonido |
-| One app | Una app |
-| Not available yet | Todavía no disponible |
-| Volume in the recording | Volumen en la grabación |
-| Lower it while I talk | Bajarlo mientras hablo |
-| Keeps your voice on top | Mantiene tu voz por encima |
-| Turn on the microphone to use this | Activa el micrófono para usarlo |
+| System audio                                                               | Audio del sistema                                                                          |
+| What to capture                                                            | Qué capturar                                                                               |
+| All sound                                                                  | Todo el sonido                                                                             |
+| One app                                                                    | Una app                                                                                    |
+| Not available yet                                                          | Todavía no disponible                                                                      |
+| Volume in the recording                                                    | Volumen en la grabación                                                                    |
+| Lower it while I talk                                                      | Bajarlo mientras hablo                                                                     |
+| Keeps your voice on top                                                    | Mantiene tu voz por encima                                                                 |
+| Turn on the microphone to use this                                         | Activa el micrófono para usarlo                                                            |
 
 ## Tasks (TDD each)
 
