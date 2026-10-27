@@ -1,0 +1,93 @@
+/* The frame both audio settings share: header, section labels, the live note. */
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.content[data-compact] {
+  gap: 6px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+}
+
+.content[data-compact] .header {
+  height: 22px;
+}
+
+.headerIcon {
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.headerTitle {
+  flex: 1 1 auto;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--accent-primary);
+}
+
+.live::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.note {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--accent-primary);
+  background: rgba(246, 5, 92, 0.08);
+  border: 1px solid rgba(246, 5, 92, 0.24);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+}
+
+.note:empty {
+  display: none;
+}
+
+.noteIcon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}

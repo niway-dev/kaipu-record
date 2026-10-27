@@ -1,0 +1,130 @@
+/* Shared by the mic and system-audio settings (popover and drawer). Dark tokens and the
+   accent tint match the Camera settings fields. */
+
+.sliderRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sliderIcon {
+  display: flex;
+  color: var(--text-muted);
+}
+
+.track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  /* A drag must not scroll or select. */
+  touch-action: none;
+  user-select: none;
+}
+
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: var(--accent-primary);
+}
+
+.thumb {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  transform: translate(-50%, -50%);
+}
+
+.track:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 6px;
+}
+
+.sliderValue {
+  min-width: 36px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.switchRow[data-disabled] {
+  opacity: 0.6;
+}
+
+.switchText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.switchTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.switchHint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 20px;
+  padding: 0;
+  border-radius: 999px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  appearance: none;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.switch[aria-checked="true"] {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.switch[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+.switchKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 120ms ease;
+}
+
+.switch[aria-checked="true"] .switchKnob {
+  transform: translateX(14px);
+}
+
+.switch:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}

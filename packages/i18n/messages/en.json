@@ -235,6 +235,33 @@
     "resizeGrip": "Resize camera bubble",
     "turnCameraOff": "Turn camera off"
   },
+  "micSettings": {
+    "title": "Microphone settings",
+    "microphone": "Microphone",
+    "live": "Live",
+    "input": "Input",
+    "noDevices": "No microphones found",
+    "disconnected": "Disconnected",
+    "meter": "Input level meter",
+    "inputLevel": "Input level",
+    "levelValue": "{percent}%",
+    "noiseTitle": "Reduce background noise",
+    "noiseHint": "Fans, keyboard and street noise",
+    "liveNote": "Level and noise apply live. Switching the device is locked until you stop."
+  },
+  "systemAudioSettings": {
+    "title": "System audio settings",
+    "systemAudio": "System audio",
+    "whatToCapture": "What to capture",
+    "allSound": "All sound",
+    "oneApp": "One app",
+    "notAvailableYet": "Not available yet",
+    "volume": "Volume in the recording",
+    "volumeValue": "{percent}%",
+    "duckTitle": "Lower it while I talk",
+    "duckHint": "Keeps your voice on top",
+    "duckNeedsMic": "Turn on the microphone to use this"
+  },
   "record": {
     "readyToRecord": "Ready to record",
     "micAccessOff": "Microphone access is off",
