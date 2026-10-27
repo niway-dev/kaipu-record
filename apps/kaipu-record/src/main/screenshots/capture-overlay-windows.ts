@@ -21,6 +21,7 @@ import {
   type OverlayPort,
   type WindowLister,
 } from "./overlay-port";
+import { markRecordTiming } from "../recording/record-timing";
 
 export type OverlayUi = CaptureMode;
 
@@ -496,6 +497,7 @@ export class CaptureOverlayWindows implements OverlayPort {
       }
       // A renderer that loaded after the last broadcast still learns where the frame is.
       this.sendState(window);
+      if (this.intent === "record") markRecordTiming(`overlay shown on display ${display.id}`);
       const session = this.session;
       session.shown += 1;
       if (session.shown >= this.entries.length && session.watchdog) {

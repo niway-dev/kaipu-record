@@ -19,6 +19,7 @@ import { measureFrameSize } from "./frame-size";
 import { startRecordingCompositor, type RecordingCompositor } from "./recording-compositor";
 import { levelsFromTimeDomain } from "./audio-levels";
 import { waitForFirstMediaTimestamp, type FirstMediaTimestamp } from "./first-media-timestamp";
+import { markRecordTiming } from "./record-timing";
 
 export interface EngineHandle {
   pause(): void;
@@ -160,6 +161,7 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     });
   }
   const screenTrack = screenStream.getVideoTracks()[0];
+  markRecordTiming("screen getUserMedia resolved");
 
   // 1b. Derive the real output size from the MEASURED native dimensions, keeping
   // the screen's true aspect ratio (so a 3024×1964 MacBook records as 1662×1080,
@@ -169,6 +171,7 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     width: fallbackWidth,
     height: capHeight,
   });
+  markRecordTiming(`measureFrameSize resolved (${sourceW}x${sourceH})`);
   const areaPlan = options.area
     ? areaEncodePlan({ width: sourceW, height: sourceH }, options.area, capHeight)
     : null;
@@ -301,6 +304,7 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     output.addAudioTrack(audioSource);
   }
   await output.start();
+  markRecordTiming("output.start resolved");
   // Fallback anchor if mediabunny's private first-media timestamp is unavailable:
   // the first frame is accepted within one frame period of start() resolving.
   const startedAt = performance.now();
@@ -325,6 +329,7 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
 
   // 5. Poster thumbnail from the first screen frame, at the real output size.
   const thumbnail = await captureThumbnail(screenStream, target);
+  markRecordTiming("captureThumbnail resolved");
 
   return {
     pause: () => {

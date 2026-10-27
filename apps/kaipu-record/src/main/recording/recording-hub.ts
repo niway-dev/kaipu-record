@@ -38,6 +38,7 @@ import { holdTemporaryShortcut, releaseTemporaryShortcut } from "../shortcuts/gl
 import { FinalizeMoveError, RecordingWriter, timestampId } from "./recording-writer";
 import { IDLE_ACTIVITY, applyTick, startedActivity, stoppedActivity } from "./recording-activity";
 import { vaultDirectory } from "../library/vault-location";
+import { endRecordTiming, markRecordTiming, receiveRecordTiming } from "./record-timing";
 import {
   applyDockPolicy,
   forceRegularPolicy,
@@ -216,6 +217,9 @@ export function registerRecordingHub(
     }
   };
   ipcMain.handle(IPC_CHANNELS.recordingGetState, (): RecordingActivity => publicActivity());
+  ipcMain.on(IPC_CHANNELS.recordingTiming, (_e, label: unknown, kind: unknown) =>
+    receiveRecordTiming(label, kind),
+  );
 
   // Shared recording settings — single source of truth, mirrored to every window.
   const settings: RecordingSettings = {
@@ -499,6 +503,7 @@ export function registerRecordingHub(
         display,
         rect,
         () => {
+          markRecordTiming("countdown shade shown");
           raiseFloating();
           markCountdownShown();
         },
@@ -607,6 +612,7 @@ export function registerRecordingHub(
     const main = getMainWindow();
     main?.show();
     main?.focus();
+    endRecordTiming("main window shown");
     // Hiding the main window for the recording can drop the app from the Dock /
     // Cmd+Tab on macOS; re-assert the policy and bring the app forward so it's
     // back in the switcher (respects the "show in Dock" setting).
@@ -670,7 +676,9 @@ export function registerRecordingHub(
       if (!display) return false;
       const area = rect ? sanitizeArea({ displayId, rect, ratio }, display) : null;
       if (rect && !area) return false;
+      markRecordTiming("selectArea: resolving the screen source");
       const source = await screenSourceForDisplay(displayId, screen.getAllDisplays().length);
+      markRecordTiming(`selectArea: screen source ${source ? "resolved" : "missing"}`);
       if (!source) return false;
       const t = createMainTranslator(getAppSettings().locale);
       applySettingsPatch({

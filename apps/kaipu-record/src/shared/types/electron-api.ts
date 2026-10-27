@@ -34,6 +34,7 @@ import type {
   RecordingArea,
   RecordingFinalizeMeta,
   RecorderPhaseReport,
+  RecordTimingKind,
   RecordingSettings,
   RecordingShadeState,
   RecordingStartInfo,
@@ -357,6 +358,8 @@ export interface KaipuElectronAPI {
    * when the shade window has shown the first tick with one.
    */
   waitForCountdownVisible(): Promise<void>;
+  /** Main renderer → main: a `[record-timing]` mark (see `RecordTimingKind`). */
+  reportRecordTiming(label: string, kind: RecordTimingKind): void;
   /** Recording shade window: what to paint (countdown tick or recording). */
   onRecordingShadeState(callback: (state: RecordingShadeState) => void): () => void;
 

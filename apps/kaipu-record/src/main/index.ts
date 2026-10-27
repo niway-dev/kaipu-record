@@ -22,6 +22,7 @@ import { registerCloudStorageHandlers } from "./cloud";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
 import { registerRecordingHub, type RecordingHubHandle } from "./recording/recording-hub";
 import { recoverStrandedRecordings } from "./recording/stranded-recordings";
+import { beginRecordTiming, markRecordTiming } from "./recording/record-timing";
 import { vaultDirectory } from "./library/vault-location";
 import {
   initAutoUpdater,
@@ -441,6 +442,10 @@ function triggerStartRecording(options: { reveal?: boolean } = {}): void {
     showAlreadyRecordingNotice();
     return;
   }
+  // A direct start (Capture Panel, no overlay) begins its timeline here; an overlay start
+  // began it at the selector.
+  if (options.reveal === false) markRecordTiming("start request sent to the recorder");
+  else beginRecordTiming("start requested (no overlay)");
   capturePanel?.hide();
   if (options.reveal === false) {
     // The countdown runs on the region the overlay chose (the recording shade); the
@@ -467,6 +472,7 @@ function triggerRecordSelector(requested?: CaptureMode): void {
     showAlreadyRecordingNotice();
     return;
   }
+  beginRecordTiming(`start clicked (${requested ?? "last"} mode)`);
   const settings = getAppSettings();
   if (requested && requested !== settings.recordingMode) {
     updateAppSettings({ recordingMode: requested });
@@ -561,6 +567,7 @@ async function applyRecordTarget(target: RecordTarget): Promise<void> {
     showAlreadyRecordingNotice();
     return;
   }
+  markRecordTiming(`overlay answered (${target.start ? "record" : "use selection"})`);
   const applied = await hub.selectArea(target.displayId, target.rect, target.ratio);
   if (!applied) {
     // The overlay kept the main window hidden for a countdown that will not come: bring the
@@ -588,6 +595,7 @@ async function applyRecordTarget(target: RecordTarget): Promise<void> {
 
 /** The `recordArea` shortcut: the overlay in Frame, opened to choose what to record. */
 function triggerRecordArea(): void {
+  beginRecordTiming("record area shortcut");
   triggerCaptureScreenshot({ mode: "frame", intent: "record" });
 }
 

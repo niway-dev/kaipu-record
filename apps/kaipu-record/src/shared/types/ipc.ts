@@ -526,6 +526,9 @@ export const IPC_CHANNELS = {
   // countdown is drawn by the shade window, which loads after the first tick is reported;
   // the recorder waits for it so "3" is not spent while that window is still loading.
   recordingCountdownVisible: "recording:countdown-visible",
+  // Main renderer → main: a `[record-timing]` mark, logged on main's clock so a start or a
+  // stop reads as one timeline in the terminal (see `main/recording/record-timing.ts`).
+  recordingTiming: "recording:timing",
   // Main → recording shade window: countdown tick or recording.
   recordingShadeState: "recording-shade:state",
   // Capture Panel asks main to run the interactive screenshot capture (panel → main →
@@ -679,6 +682,12 @@ export type RecorderPhaseReport =
   | { phase: "counting"; value: number }
   | { phase: "starting" }
   | { phase: "idle" };
+
+/**
+ * A `[record-timing]` mark from the main renderer: `begin` restarts main's clock (a stop),
+ * `end` closes the timeline (the take is recording), `mark` is any step in between.
+ */
+export type RecordTimingKind = "begin" | "mark" | "end";
 
 /** What the recording shade paints (main → shade window). */
 export type RecordingShadeState =

@@ -17,6 +17,7 @@ import { reportError } from "@renderer/features/analytics";
 import { finalizeErrorKey } from "./finalize-error-message";
 import { buildRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
 import { runtimeT } from "@renderer/lib/runtime-i18n";
+import { beginRecordTiming, endRecordTiming, markRecordTiming } from "./record-timing";
 
 export type RecorderStatus =
   | "idle"
@@ -166,6 +167,7 @@ function clearCountdownTimer(): void {
 export function requestStartRecording(resolveInput: () => StartInput): void {
   if (snapshot.status !== "idle") return;
   lastResolveInput = resolveInput;
+  beginRecordTiming("requestStartRecording");
   const request = ++countdownRequest;
   update({ status: "counting", countdown: COUNTDOWN_SECONDS });
   // "3" gets its whole second only once it is visible: a region countdown is drawn by a
@@ -174,6 +176,7 @@ export function requestStartRecording(resolveInput: () => StartInput): void {
   void countdownVisible().then(() => {
     // Cancelled (or cancelled and started again) while waiting.
     if (request !== countdownRequest || snapshot.status !== "counting") return;
+    markRecordTiming("countdown visible, clock started");
     runCountdown(resolveInput);
   });
 }
@@ -221,6 +224,7 @@ export function stopOrCancelRecording(): void {
 async function beginEngine(input: StartInput): Promise<void> {
   const id = `session-${++sessionCounter}`;
   sessionId = id;
+  markRecordTiming("beginEngine");
   // Hide the main window BEFORE the engine acquires streams, not after — so the
   // app's own window is never the first thing on screen when the recording
   // starts (previously ~0.5-1s of the app itself was captured every time).
@@ -294,6 +298,7 @@ async function beginEngine(input: StartInput): Promise<void> {
     );
     clock = startElapsed(Date.now());
     update({ status: "recording", countdown: null });
+    endRecordTiming("status recording");
 
     tickTimer = setInterval(() => {
       if (!clock || !engine) return;
@@ -401,6 +406,7 @@ async function stopRecording(): Promise<void> {
   // Guard re-entry: the user clicking Stop and an engine-failure can both fire.
   if (stopping || !activeEngine || !activeSessionId) return;
   stopping = true;
+  beginRecordTiming("stop requested", true);
   stopLiveSettings?.();
   stopLiveSettings = null;
   update({ status: "finalizing", countdown: null });
@@ -423,13 +429,16 @@ async function stopRecording(): Promise<void> {
     [recording] = await Promise.all([
       (async (): Promise<LocalRecording> => {
         await activeEngine.stop();
-        return window.electronAPI.recordingFinalize(activeSessionId, {
+        markRecordTiming("engine.stop resolved");
+        const finalized = await window.electronAPI.recordingFinalize(activeSessionId, {
           title,
           durationSeconds,
           durationMs,
           thumbnail: activeEngine.thumbnail,
           capture: activeCapture,
         });
+        markRecordTiming("finalize resolved");
+        return finalized;
       })(),
       delay(MIN_SAVING_MS),
     ]);
