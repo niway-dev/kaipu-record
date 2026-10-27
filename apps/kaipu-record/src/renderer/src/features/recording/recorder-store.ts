@@ -256,7 +256,8 @@ export function stopOrCancelRecording(): void {
 }
 
 async function beginEngine(input: StartInput): Promise<void> {
-  const id = `session-${++sessionCounter}`;
+  // Unique across renderer restarts: a recreated renderer must not reuse a dead take's id.
+  const id = `session-${Date.now().toString(36)}-${++sessionCounter}`;
   sessionId = id;
   markRecordTiming("beginEngine");
   // Hide the main window BEFORE the engine acquires streams, not after — so the

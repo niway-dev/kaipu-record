@@ -100,6 +100,48 @@ describe("RecordingWriter", () => {
     expect(vaultFiles).toHaveLength(0);
   });
 
+  it("releaseAll closes the open sessions but keeps their partial files, and forgets them", async () => {
+    const { writer, tempDir } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("partial").buffer, 0);
+    await writer.releaseAll();
+    // The take's renderer died: the partial .part stays on disk, the session is gone.
+    expect(await readdir(tempDir)).toHaveLength(1);
+    await expect(writer.stat("s1")).rejects.toThrow(/session/i);
+    await expect(
+      writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
+    ).rejects.toThrow(/session/i);
+  });
+
+  it("releaseAll keeps a stranded take so it can still be salvaged", async () => {
+    const vaultPath = await unreachableVault();
+    const fallbackTempDir = await mkdtemp(join(tmpdir(), "rw-fallback-"));
+    const writer = new RecordingWriter({
+      vaultDir: () => vaultPath,
+      newId: () => "rec-fixed",
+      fallbackTempDir,
+    });
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("hello").buffer, 0);
+    await expect(
+      writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
+    ).rejects.toBeInstanceOf(FinalizeMoveError);
+    await writer.releaseAll();
+    const dest = join(await mkdtemp(join(tmpdir(), "rw-else-")), "x.mp4");
+    await writer.salvage("s1", dest);
+    expect(await readFile(dest, "utf-8")).toBe("hello");
+  });
+
+  it("a second create with the same id starts a clean session without the first one's bytes", async () => {
+    const { writer } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("OLD-OLD").buffer, 0);
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("NEW").buffer, 0);
+    const rec = await writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 });
+    expect(await readFile(rec.filePath, "utf-8")).toBe("NEW");
+  });
+
   it("throws when writing to an unknown session", async () => {
     const { writer } = await setup();
     await expect(writer.write("ghost", new ArrayBuffer(1), 0)).rejects.toThrow(/session/i);

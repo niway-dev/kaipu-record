@@ -113,6 +113,14 @@ export class RecordingWriter {
 
   async create(sessionId: string): Promise<{ tempPath: string }> {
     const tempPath = join(await this.stagingDir(), `kaipu-rec-${sessionId}.mp4.part`);
+    // A session already under this id (a renderer restarted its counter) is released first:
+    // its handle must not outlive the map entry that replaces it.
+    const previous = this.sessions.get(sessionId);
+    if (previous) {
+      this.sessions.delete(sessionId);
+      await previous.queue;
+      await this.closeHandle(previous).catch(() => {});
+    }
     const handle = await open(tempPath, "w+");
     this.sessions.set(sessionId, { handle, tempPath, queue: Promise.resolve() });
     return { tempPath };
@@ -227,6 +235,22 @@ export class RecordingWriter {
     if (!session?.stranded) throw new Error(`No stranded recording session "${sessionId}"`);
     await moveFile(session.tempPath, destPath, { overwrite: true }); // the save dialog confirmed it
     this.sessions.delete(sessionId);
+  }
+
+  /**
+   * Close every open session without deleting its file, for a take whose renderer is gone
+   * (crash, window closed mid-take): the partial `.part` stays on disk, but no handle is
+   * leaked. A stranded take is kept, so the save dialog can still salvage it.
+   */
+  async releaseAll(): Promise<void> {
+    const released = [...this.sessions.entries()].filter(([, session]) => !session.stranded);
+    for (const [id] of released) this.sessions.delete(id);
+    await Promise.all(
+      released.map(async ([, session]) => {
+        await session.queue;
+        await this.closeHandle(session).catch(() => {});
+      }),
+    );
   }
 
   async abort(sessionId: string): Promise<void> {
