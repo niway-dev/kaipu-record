@@ -84,18 +84,20 @@ export function RecordPage(): React.JSX.Element {
   openPickerRef.current = setup.openSourcePicker;
   const pickerForRef = useRef<number | null>(null);
   const startOnPickRef = useRef(false);
+  // A pick made to record starts once the chosen source is the selected one (the settings
+  // write round-trips through main), so the take never starts on the previous source.
+  const [pendingStartId, setPendingStartId] = useState<string | null>(null);
   useEffect(() => {
     const openPicker = navState?.openPicker;
     if (openPicker && pickerForRef.current !== openPicker) {
       pickerForRef.current = openPicker;
       startOnPickRef.current = navState?.startOnPick === true;
+      // A pick whose selection never landed (a failed settings write) must not fire later.
+      setPendingStartId(null);
       openPickerRef.current();
     }
   }, [navState?.openPicker, navState?.startOnPick]);
 
-  // A pick made to record starts once the chosen source is the selected one (the settings
-  // write round-trips through main), so the take never starts on the previous source.
-  const [pendingStartId, setPendingStartId] = useState<string | null>(null);
   useEffect(() => {
     if (!pendingStartId || selectedSource?.id !== pendingStartId || isRecording) return;
     setPendingStartId(null);

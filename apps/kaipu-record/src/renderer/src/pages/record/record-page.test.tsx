@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter, useNavigate } from "react-router-dom";
 import type { RecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
 import { RecordPage } from "./record-page";
 
@@ -13,15 +13,21 @@ const { startRecording, openSourcePicker } = vi.hoisted(() => ({
 }));
 
 const SCREEN = { id: "s1", name: "Display 1", type: "screen" as const };
+const WINDOW = { id: "w1", name: "Safari", type: "window" as const };
 
 /** Mutable setup state each test tweaks before rendering. */
-let setupState: { selectedSource: typeof SCREEN | null; isRecording: boolean };
+let setupState: {
+  selectedSource: typeof SCREEN | typeof WINDOW | null;
+  isRecording: boolean;
+  isSourcePickerOpen?: boolean;
+  sources?: (typeof SCREEN | typeof WINDOW)[];
+};
 
 function makeSetup(): RecordingSetup {
   return {
     selectedSource: setupState.selectedSource,
     selectSource: vi.fn(),
-    isSourcePickerOpen: false,
+    isSourcePickerOpen: setupState.isSourcePickerOpen ?? false,
     openSourcePicker,
     closeSourcePicker: vi.fn(),
     isMicrophoneEnabled: false,
@@ -57,7 +63,11 @@ vi.mock("@renderer/features/recording/hooks/use-recording-activity", () => ({
   useRecordingActivity: () => ({ active: false, status: "recording", elapsedSeconds: 0 }),
 }));
 vi.mock("@renderer/features/recording/hooks/use-source-selection", () => ({
-  useSourceSelection: () => ({ sources: [], isLoading: false, error: null }),
+  useSourceSelection: () => ({
+    sources: (setupState.sources ?? []).map((source) => ({ ...source, thumbnail: "" })),
+    isLoading: false,
+    error: null,
+  }),
 }));
 vi.mock("@renderer/features/permissions", () => ({
   usePermissions: () => ({
@@ -67,14 +77,25 @@ vi.mock("@renderer/features/permissions", () => ({
   }),
 }));
 
+let navigateTo: ((state: Record<string, unknown>) => void) | null = null;
+
+/** Exposes the router's navigate so a test can arrive with a new nav state, as AppRoot does. */
+function NavProbe(): null {
+  const navigate = useNavigate();
+  navigateTo = (state) => navigate("/", { state });
+  return null;
+}
+
 function renderAt(state: Record<string, unknown> | undefined): { rerender: () => void } {
-  const ui = (
+  // A fresh element on every render: React skips a rerender of the identical element.
+  const ui = (): React.JSX.Element => (
     <MemoryRouter initialEntries={[{ pathname: "/", state }]}>
+      <NavProbe />
       <RecordPage />
     </MemoryRouter>
   );
-  const view = render(ui);
-  return { rerender: () => view.rerender(ui) };
+  const view = render(ui());
+  return { rerender: () => view.rerender(ui()) };
 }
 
 describe("RecordPage auto-start", () => {
@@ -116,6 +137,26 @@ describe("RecordPage auto-start", () => {
     expect(openSourcePicker).toHaveBeenCalledTimes(1);
     rerender();
     expect(openSourcePicker).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops a start-on-pick whose selection never landed when the picker opens again", () => {
+    setupState = {
+      selectedSource: SCREEN,
+      isRecording: false,
+      isSourcePickerOpen: true,
+      sources: [WINDOW],
+    };
+    const { rerender } = renderAt({ openPicker: 300, startOnPick: true });
+    fireEvent.click(screen.getByRole("button", { name: /^Windows/ }));
+    fireEvent.click(screen.getByText("Safari"));
+    // The selection has not round-tripped through main: nothing starts yet.
+    expect(startRecording).not.toHaveBeenCalled();
+
+    // The picker is opened again (a plain "Change"), then the window becomes the selection.
+    act(() => navigateTo!({ openPicker: 301 }));
+    setupState.selectedSource = WINDOW;
+    rerender();
+    expect(startRecording).not.toHaveBeenCalled();
   });
 });
 
