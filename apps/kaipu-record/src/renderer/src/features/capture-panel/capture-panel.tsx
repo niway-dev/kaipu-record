@@ -22,6 +22,7 @@ import {
   SystemAudioPanelDrawer,
   SystemAudioToggleSplit,
   useAudioControl,
+  useAudioSettings,
 } from "@renderer/features/audio-settings";
 import { exclusive } from "@renderer/features/settings-controls/use-settings-disclosure";
 import { PanelHeader } from "./components/panel-header";
@@ -48,9 +49,11 @@ export function CapturePanel(): React.JSX.Element {
   const isBusy = activity.active || activity.pending === true;
   // The split Mic, Audio and Camera tiles each share their state with an inline drawer;
   // only one drawer is open at a time (opening one closes the others).
+  // One audio store for both audio tiles, so neither can write over the other's field.
+  const audioStore = useAudioSettings();
   const [mic, systemAudio, camera] = exclusive([
-    useAudioControl(),
-    useAudioControl(),
+    useAudioControl(audioStore),
+    useAudioControl(audioStore),
     useCameraControl(),
   ]);
   const stopRecording = (): void => window.electronAPI?.controlCommand("stop");

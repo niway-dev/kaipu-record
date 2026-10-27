@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -12,6 +13,7 @@ import {
   SystemAudioToggleSplit,
   useAudioControl,
 } from "./audio-controls";
+import { useAudioSettings } from "./use-audio-settings";
 
 const BUILT_IN: Microphone = { deviceId: "a", label: "MacBook Pro Microphone" };
 const USB: Microphone = { deviceId: "b", label: "Blue Yeti USB Microphone" };
@@ -45,6 +47,33 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+type MicProps = Omit<ComponentProps<typeof MicControlWithPopover>, "store">;
+type SystemProps = Omit<ComponentProps<typeof SystemAudioControlWithPopover>, "store">;
+
+/** A tile with its own store; the shared-store case is `RecordRow` below. */
+function MicWithStore(props: MicProps): React.JSX.Element {
+  return <MicControlWithPopover store={useAudioSettings()} {...props} />;
+}
+function SystemWithStore(props: SystemProps): React.JSX.Element {
+  return <SystemAudioControlWithPopover store={useAudioSettings()} {...props} />;
+}
+/** The Record page's shape: both tiles over one store. */
+function RecordRow(): React.JSX.Element {
+  const store = useAudioSettings();
+  return (
+    <div>
+      <MicControlWithPopover
+        store={store}
+        on
+        onToggle={() => {}}
+        isRecording={false}
+        {...devices}
+      />
+      <SystemAudioControlWithPopover store={store} on onToggle={() => {}} micOn />
+    </div>
+  );
+}
+
 const devices = {
   microphones: [BUILT_IN, USB],
   selectedMicrophone: BUILT_IN,
@@ -53,7 +82,7 @@ const devices = {
 
 describe("MicControlWithPopover (Record page)", () => {
   it("opens a dialog with focus on the selected device, and Esc returns focus to the chevron", async () => {
-    render(<MicControlWithPopover on onToggle={() => {}} isRecording={false} {...devices} />);
+    render(<MicWithStore on onToggle={() => {}} isRecording={false} {...devices} />);
     const chevron = screen.getByRole("button", { name: "Microphone settings" });
     await userEvent.click(chevron);
 
@@ -68,9 +97,7 @@ describe("MicControlWithPopover (Record page)", () => {
 
   it("toggles the mic from the body, not from the chevron", async () => {
     const onToggle = vi.fn();
-    render(
-      <MicControlWithPopover on={false} onToggle={onToggle} isRecording={false} {...devices} />,
-    );
+    render(<MicWithStore on={false} onToggle={onToggle} isRecording={false} {...devices} />);
     await userEvent.click(screen.getByRole("button", { name: /Mic/, pressed: false }));
     expect(onToggle).toHaveBeenCalledOnce();
   });
@@ -78,7 +105,7 @@ describe("MicControlWithPopover (Record page)", () => {
   it("chooses a device through the setup's selection", async () => {
     const onSelectMicrophone = vi.fn();
     render(
-      <MicControlWithPopover
+      <MicWithStore
         on
         onToggle={() => {}}
         isRecording={false}
@@ -104,7 +131,7 @@ describe("MicControlWithPopover (Record page)", () => {
     });
     const updateSettings = vi.fn(async () => ({}) as never);
     window.electronAPI.updateSettings = updateSettings;
-    render(<MicControlWithPopover on onToggle={() => {}} isRecording={false} {...devices} />);
+    render(<MicWithStore on onToggle={() => {}} isRecording={false} {...devices} />);
     await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
     await waitFor(() =>
       expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "false"),
@@ -125,7 +152,7 @@ describe("MicControlWithPopover (Record page)", () => {
 
   describe("the pre-take meter", () => {
     it("opens the selected device only while the popover is open, and releases it on close", async () => {
-      render(<MicControlWithPopover on onToggle={() => {}} isRecording={false} {...devices} />);
+      render(<MicWithStore on onToggle={() => {}} isRecording={false} {...devices} />);
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(getUserMedia).not.toHaveBeenCalled();
 
@@ -140,7 +167,7 @@ describe("MicControlWithPopover (Record page)", () => {
     });
 
     it("closes the popover and releases the device when the window loses focus", async () => {
-      render(<MicControlWithPopover on onToggle={() => {}} isRecording={false} {...devices} />);
+      render(<MicWithStore on onToggle={() => {}} isRecording={false} {...devices} />);
       await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
       await waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
       act(() => {
@@ -151,9 +178,7 @@ describe("MicControlWithPopover (Record page)", () => {
     });
 
     it("does not open the device while the mic is off", async () => {
-      render(
-        <MicControlWithPopover on={false} onToggle={() => {}} isRecording={false} {...devices} />,
-      );
+      render(<MicWithStore on={false} onToggle={() => {}} isRecording={false} {...devices} />);
       await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(getUserMedia).not.toHaveBeenCalled();
@@ -166,7 +191,7 @@ describe("MicControlWithPopover (Record page)", () => {
         push = callback;
         return unsubscribe;
       };
-      render(<MicControlWithPopover on onToggle={() => {}} isRecording {...devices} />);
+      render(<MicWithStore on onToggle={() => {}} isRecording {...devices} />);
       await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
       act(() => push([1, 1, 1, 1, 1]));
       const meter = screen.getByRole("img", { name: "Input level meter" });
@@ -180,11 +205,35 @@ describe("MicControlWithPopover (Record page)", () => {
   });
 });
 
+describe("one audio store per window", () => {
+  it("a Mic change and an Audio change in the same window both reach the saved object", async () => {
+    const updateSettings = vi.fn(async (_patch: unknown) => ({}) as never);
+    window.electronAPI.updateSettings = updateSettings;
+    render(<RecordRow />);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+    const micSlider = screen.getByRole("slider");
+    micSlider.focus();
+    fireEvent.keyDown(micSlider, { key: "ArrowRight" });
+    await userEvent.click(screen.getByRole("button", { name: "System audio settings" }));
+    const volume = screen.getByRole("slider");
+    volume.focus();
+    fireEvent.keyDown(volume, { key: "ArrowLeft" });
+
+    await waitFor(() =>
+      expect(updateSettings).toHaveBeenLastCalledWith({
+        audio: expect.objectContaining({ micLevel: 105, systemAudioVolume: 95 }),
+      }),
+    );
+  });
+});
+
 describe("SystemAudioControlWithPopover (Record page)", () => {
   it("opens under the Audio tile and persists the volume", async () => {
     const updateSettings = vi.fn(async () => ({}) as never);
     window.electronAPI.updateSettings = updateSettings;
-    render(<SystemAudioControlWithPopover on onToggle={() => {}} micOn />);
+    render(<SystemWithStore on onToggle={() => {}} micOn />);
     await userEvent.click(screen.getByRole("button", { name: "System audio settings" }));
     expect(screen.getByRole("dialog", { name: "System audio settings" })).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "All sound" })).toHaveFocus();
@@ -200,21 +249,22 @@ describe("SystemAudioControlWithPopover (Record page)", () => {
   });
 
   it("keeps the unavailable tile disabled but its settings reachable", async () => {
-    render(<SystemAudioControlWithPopover on onToggle={() => {}} micOn unavailable />);
+    render(<SystemWithStore on onToggle={() => {}} micOn unavailable />);
     expect(screen.getByTitle("System audio isn't available for this recording")).toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "System audio settings" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
   it("disables ducking while the mic is off", async () => {
-    render(<SystemAudioControlWithPopover on onToggle={() => {}} micOn={false} />);
+    render(<SystemWithStore on onToggle={() => {}} micOn={false} />);
     await userEvent.click(screen.getByRole("button", { name: "System audio settings" }));
     expect(screen.getByRole("switch")).toHaveAttribute("aria-disabled", "true");
   });
 });
 
 function PanelHarness(): React.JSX.Element {
-  const [mic, audio] = exclusive([useAudioControl(), useAudioControl()]);
+  const store = useAudioSettings();
+  const [mic, audio] = exclusive([useAudioControl(store), useAudioControl(store)]);
   return (
     <div>
       <MicToggleSplit compact control={mic} on onToggle={() => {}} />

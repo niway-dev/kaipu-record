@@ -14,17 +14,20 @@ import { MicSettingsContent } from "./mic-settings-content";
 import { SystemAudioSettingsContent } from "./system-audio-settings-content";
 import { spreadLevels, useMicLevelMeter } from "./use-mic-level-meter";
 import { useTakeMicLevels } from "./use-take-mic-levels";
-import { useAudioSettings, type AudioSettingsStore } from "./use-audio-settings";
+import type { AudioSettingsStore } from "./use-audio-settings";
 
 /** State the Mic (or Audio) split tile and its settings (popover or drawer) share. */
 export interface AudioControl extends SettingsDisclosure {
   store: AudioSettingsStore;
 }
 
-/** One per tile: each keeps its own throttled writer over the same persisted `audio`. */
-export function useAudioControl(): AudioControl {
+/**
+ * One per tile, over the window's single `AudioSettingsStore` (see `useAudioSettings`):
+ * every write sends the whole `audio` object, so two stores in one window would let a
+ * throttled write from one restore a stale field of the other.
+ */
+export function useAudioControl(store: AudioSettingsStore): AudioControl {
   const disclosure = useSettingsDisclosure();
-  const store = useAudioSettings();
   return { ...disclosure, store };
 }
 
@@ -143,12 +146,19 @@ function MicSettingsPopover(props: MicSettingsProps): React.JSX.Element | null {
 
 /** The Record page's Mic tile: the split toggle and its popover (`RecordingToggles`' `micSlot`). */
 export function MicControlWithPopover({
+  store,
   on,
   onToggle,
   isRecording,
   ...devices
-}: MicDevices & { on: boolean; onToggle: () => void; isRecording: boolean }): React.JSX.Element {
-  const control = useAudioControl();
+}: MicDevices & {
+  /** The window's one audio-settings store, shared with the Audio tile. */
+  store: AudioSettingsStore;
+  on: boolean;
+  onToggle: () => void;
+  isRecording: boolean;
+}): React.JSX.Element {
+  const control = useAudioControl(store);
   return (
     <>
       <MicToggleSplit control={control} on={on} onToggle={onToggle} />
@@ -260,17 +270,20 @@ function SystemAudioSettingsPopover({
 
 /** The Record page's Audio tile: the split toggle and its popover (`RecordingToggles`' `audioSlot`). */
 export function SystemAudioControlWithPopover({
+  store,
   on,
   onToggle,
   micOn,
   unavailable,
 }: {
+  /** The window's one audio-settings store, shared with the Mic tile. */
+  store: AudioSettingsStore;
   on: boolean;
   onToggle: () => void;
   micOn: boolean;
   unavailable?: boolean;
 }): React.JSX.Element {
-  const control = useAudioControl();
+  const control = useAudioControl(store);
   return (
     <>
       <SystemAudioToggleSplit

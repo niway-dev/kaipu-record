@@ -19,6 +19,7 @@ import { CameraControlWithPopover } from "@renderer/features/camera-settings";
 import {
   MicControlWithPopover,
   SystemAudioControlWithPopover,
+  useAudioSettings,
 } from "@renderer/features/audio-settings";
 import { useTranslations } from "@kaipu/i18n";
 import type { CaptureMode } from "@shared/types/screenshot-capture";
@@ -42,6 +43,8 @@ export function RecordPage(): React.JSX.Element {
   // level (see AppShell), not here — the engine (and its completion) now
   // outlives this page's mount, so this page never needs to own that callback.
   const setup = useRecordingSetup();
+  // One audio store for the Mic and Audio tiles: each write sends the whole `audio` object.
+  const audioStore = useAudioSettings();
   const { area } = useRecordingSettings();
   const recordingMode = useRecordingMode(area);
   const { sources, isLoading: isLoadingSources, error: sourcesError } = useSourceSelection(setup);
@@ -131,6 +134,7 @@ export function RecordPage(): React.JSX.Element {
       onToggleCamera={setup.toggleCamera}
       micSlot={
         <MicControlWithPopover
+          store={audioStore}
           on={setup.isMicrophoneEnabled}
           onToggle={setup.toggleMicrophone}
           isRecording={isBusy}
@@ -141,6 +145,7 @@ export function RecordPage(): React.JSX.Element {
       }
       audioSlot={
         <SystemAudioControlWithPopover
+          store={audioStore}
           on={setup.isSystemAudioEnabled}
           onToggle={setup.toggleSystemAudio}
           micOn={setup.isMicrophoneEnabled}
