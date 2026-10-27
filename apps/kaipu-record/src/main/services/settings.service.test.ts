@@ -68,6 +68,7 @@ describe("mergeSettings", () => {
         showInDock: false,
         recordingQuality: QUALITY_PRESETS.max,
         showBarInRecording: true,
+        recordingCountdownSeconds: 5,
         showBrandBadge: true,
         screenshotCopy: "manual",
         shortcuts,
@@ -89,6 +90,7 @@ describe("mergeSettings", () => {
       showInDock: false,
       recordingQuality: QUALITY_PRESETS.max,
       showBarInRecording: true,
+      recordingCountdownSeconds: 5,
       showBrandBadge: true,
       screenshotCopy: "manual",
       shortcuts,
@@ -229,6 +231,23 @@ describe("mergeSettings", () => {
   it("defaults showBarInRecording to false when absent or invalid", () => {
     expect(mergeSettings({}).showBarInRecording).toBe(false);
     expect(mergeSettings({ showBarInRecording: "yes" as never }).showBarInRecording).toBe(false);
+  });
+
+  it("keeps each offered countdown length (0, 3, 5)", () => {
+    for (const seconds of [0, 3, 5] as const) {
+      expect(mergeSettings({ recordingCountdownSeconds: seconds }).recordingCountdownSeconds).toBe(
+        seconds,
+      );
+    }
+  });
+
+  it("defaults recordingCountdownSeconds to 3 when absent or not an offered length", () => {
+    expect(mergeSettings({}).recordingCountdownSeconds).toBe(3);
+    for (const invalid of [1, 2, 4, 10, -3, 3.5, NaN, "5", null, true]) {
+      expect(
+        mergeSettings({ recordingCountdownSeconds: invalid as never }).recordingCountdownSeconds,
+      ).toBe(3);
+    }
   });
 
   it("fills in default shortcuts when absent", () => {

@@ -33,6 +33,7 @@ import { RecordingQualitySettings } from "./recording-quality-settings";
 import { ExportQualitySettings } from "./export-quality-settings";
 import { ScreenshotCopySettings } from "./screenshot-copy-settings";
 import { BrandBadgeSettings } from "./brand-badge-settings";
+import { CountdownSettings } from "./countdown-settings";
 import { DiagnosticsSettings } from "./diagnostics-settings";
 import { Section, SettingsPanel } from "./settings-panel";
 import styles from "./settings-page.module.css";
@@ -43,7 +44,7 @@ import styles from "./settings-page.module.css";
  *   • Permissions       → window.electronAPI permission bridge (+ macOS Accessibility)
  *   • Recording quality → AppSettings.recordingQuality → encoder
  *                         + AppSettings.exportQuality → export sheet's preselected row
- *   • Recording         → AppSettings.showBarInRecording / showBrandBadge
+ *   • Recording         → AppSettings.showBarInRecording / recordingCountdownSeconds / showBrandBadge
  *   • Files             → the real on-disk recordings vault
  *   • App               → Dock policy, replay the first-run flow, diagnostics opt-out
  *   • Developer         → dev-only overrides (stripped from production)
@@ -199,6 +200,7 @@ export function RecordingSettingsPage(): React.JSX.Element {
             />
           }
         />
+        <CountdownSettings />
         <BrandBadgeSettings />
       </Section>
     </SettingsPanel>

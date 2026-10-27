@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, readFile, readdir, access, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, access, stat, writeFile } from "node:fs/promises";
+import { chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FinalizeMoveError, RecordingWriter } from "./recording-writer";
@@ -98,6 +99,96 @@ describe("RecordingWriter", () => {
     expect(await readdir(tempDir)).toHaveLength(0);
     const vaultFiles = (await readdir(vaultDir)).filter((f) => f.endsWith(".mp4"));
     expect(vaultFiles).toHaveLength(0);
+  });
+
+  it("releaseAll closes the open sessions but keeps their partial files, and forgets them", async () => {
+    const { writer, tempDir } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("partial").buffer, 0);
+    await writer.releaseAll();
+    // The take's renderer died: the partial .part stays on disk, the session is gone.
+    expect(await readdir(tempDir)).toHaveLength(1);
+    await expect(writer.stat("s1")).rejects.toThrow(/session/i);
+    await expect(
+      writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
+    ).rejects.toThrow(/session/i);
+  });
+
+  it("releaseAll keeps a stranded take so it can still be salvaged", async () => {
+    const vaultPath = await unreachableVault();
+    const fallbackTempDir = await mkdtemp(join(tmpdir(), "rw-fallback-"));
+    const writer = new RecordingWriter({
+      vaultDir: () => vaultPath,
+      newId: () => "rec-fixed",
+      fallbackTempDir,
+    });
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("hello").buffer, 0);
+    await expect(
+      writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
+    ).rejects.toBeInstanceOf(FinalizeMoveError);
+    await writer.releaseAll();
+    const dest = join(await mkdtemp(join(tmpdir(), "rw-else-")), "x.mp4");
+    await writer.salvage("s1", dest);
+    expect(await readFile(dest, "utf-8")).toBe("hello");
+  });
+
+  it("a metadata failure after the move takes the media back out of the vault, still salvageable", async () => {
+    const { writer, vaultDir, tempDir } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("take").buffer, 0);
+    // The sidecar cannot be written (a folder sits where it goes): the move already happened.
+    await mkdir(join(vaultDir, ".kaipu", "rec-fixed.json"), { recursive: true });
+
+    await expect(
+      writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
+    ).rejects.toBeInstanceOf(FinalizeMoveError);
+    // No orphan .mp4 in the vault, and the take is back in staging, not lost.
+    expect((await readdir(vaultDir)).filter((f) => f.endsWith(".mp4"))).toHaveLength(0);
+    expect(await readdir(tempDir)).toContain("kaipu-rec-s1.mp4.part");
+    const dest = join(tempDir, "rescued.mp4");
+    await writer.salvage("s1", dest);
+    expect(await readFile(dest, "utf-8")).toBe("take");
+  });
+
+  it("a metadata failure whose take-back also fails keeps the media in the vault and offers no salvage", async () => {
+    const vaultDir = await mkdtemp(join(tmpdir(), "rw-vault-"));
+    const tempDir = await mkdtemp(join(tmpdir(), "rw-temp-"));
+    const writer = new RecordingWriter({
+      vaultDir: () => vaultDir,
+      newId: () => "rec-fixed",
+      // Read once the media is in the vault: from then on staging refuses the move back.
+      now: () => {
+        chmodSync(tempDir, 0o500);
+        return 5000;
+      },
+      tempDir,
+    });
+    try {
+      await writer.create("s1");
+      await writer.write("s1", new TextEncoder().encode("take").buffer, 0);
+      await mkdir(join(vaultDir, ".kaipu", "rec-fixed.json"), { recursive: true });
+
+      const finalized = writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 });
+
+      // The staging file is gone, so a salvage offer would fail: the error must not make one.
+      await expect(finalized).rejects.toThrow();
+      await expect(finalized).rejects.not.toBeInstanceOf(FinalizeMoveError);
+      // The only copy stays where it is, and the library lists it without its sidecar.
+      expect(await readFile(join(vaultDir, "rec-fixed.mp4"), "utf-8")).toBe("take");
+    } finally {
+      chmodSync(tempDir, 0o700);
+    }
+  });
+
+  it("a second create with the same id starts a clean session without the first one's bytes", async () => {
+    const { writer } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("OLD-OLD").buffer, 0);
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("NEW").buffer, 0);
+    const rec = await writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 });
+    expect(await readFile(rec.filePath, "utf-8")).toBe("NEW");
   });
 
   it("throws when writing to an unknown session", async () => {

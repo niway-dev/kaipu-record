@@ -267,6 +267,9 @@ function createWindow(showOnReady = true): void {
     closingWithRecording = false;
     closingWithExport = false;
     exportActive = false;
+    // A window closed mid-countdown takes its renderer, and the take with it. Release the
+    // pending take (tray, Esc, shade) here; the user closed the window, so do not reopen it.
+    hub?.forceReset();
   });
 
   // Closing the window mid-recording (the red button, or Cmd+W where the app
@@ -365,7 +368,7 @@ function createWindow(showOnReady = true): void {
   // stuck, Dock policy never restored, Capture Panel permanently locked).
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     console.error("main renderer process gone", details.reason);
-    hub?.forceReset();
+    hub?.forceReset({ revealAbandoned: true });
     // The renderer that owned the export is gone; nothing is left to cancel.
     exportActive = false;
   });

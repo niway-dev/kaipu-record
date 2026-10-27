@@ -24,15 +24,16 @@ export function stoppedActivity(activity: RecordingActivity): RecordingActivity 
 
 /**
  * Apply a recorder tick. Returns the next activity and whether it changed enough
- * to warrant a re-broadcast — i.e. the status flipped (pause/resume/saving), the
- * whole-second timer advanced or the system-audio availability became known. A tick that changes none
- * of them (the engine reports ~10/s) is a no-op so we never spam every window. While inactive, ticks are ignored.
+ * to warrant a re-broadcast — i.e. the status flipped (pause/resume/saving) or the
+ * whole-second timer advanced. A same-second tick (the engine reports ~10/s) is a
+ * no-op so we never spam every window. While inactive, ticks are ignored, and so is a
+ * `starting` tick: that is the bar's own reset, not a recorder status other windows show.
  */
 export function applyTick(
   activity: RecordingActivity,
   tick: RecordingTick,
 ): { activity: RecordingActivity; changed: boolean } {
-  if (!activity.active) return { activity, changed: false };
+  if (!activity.active || tick.status === "starting") return { activity, changed: false };
   const systemAudioAvailable = tick.systemAudioAvailable ?? activity.systemAudioAvailable;
   const changed =
     tick.status !== activity.status ||

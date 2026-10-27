@@ -598,6 +598,10 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
         stopped = true;
         stopDucking();
         teardownStarted = true; // stopping the tracks below would otherwise fire onError
+        // Stop encoding now: the frames and samples after the stop request do not belong to the
+        // take (the store cut its duration at this moment), and the wait below must not add any.
+        videoSource.pause();
+        audioSource?.pause();
         // The poster frame comes from the screen track: take it before the tracks stop, but
         // never let it hold the save up.
         await Promise.race([thumbnail, delay(THUMBNAIL_STOP_WAIT_MS)]);
