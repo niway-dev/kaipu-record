@@ -44,9 +44,7 @@ export function SettingsPopover({
   children,
 }: SettingsPopoverProps): React.JSX.Element | null {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const [anchor, setAnchor] = useState<{ top: number; left?: number; right?: number } | null>(
-    null,
-  );
+  const [anchor, setAnchor] = useState<{ top: number; left?: number; right?: number } | null>(null);
 
   useLayoutEffect(() => {
     if (!open) return;
