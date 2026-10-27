@@ -1,7 +1,6 @@
 .popover {
   position: fixed;
   z-index: 1000;
-  width: 272px;
   box-sizing: border-box;
   padding: 12px;
   background: var(--bg-card);

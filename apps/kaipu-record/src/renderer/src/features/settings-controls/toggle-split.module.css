@@ -1,6 +1,6 @@
-/* Mirrors @kaipu/ui StatusToggle (the Mic and Audio tiles) so the row reads as one:
+/* Mirrors @kaipu/ui StatusToggle so the row reads as one:
    same paddings, radius, colors and ON/OFF readout. The tile is split into a body
-   (the toggle) and a chevron segment (the camera settings). */
+   (the toggle) and a chevron segment (the tile's settings). */
 
 .split {
   flex: 1 1 0%;
@@ -58,9 +58,14 @@
   filter: brightness(1.1);
 }
 
-.body[aria-disabled="true"] {
+.body[aria-disabled="true"],
+.body:disabled {
   cursor: not-allowed;
   filter: none;
+}
+
+.body:disabled {
+  opacity: 0.45;
 }
 
 .icon {

@@ -1,8 +1,9 @@
 import React, { type RefObject } from "react";
 import { useTranslations } from "@kaipu/i18n";
-import { CameraSettingsContent, useSettingsFocus } from "./camera-settings-content";
+import { SettingsDrawer } from "../settings-controls/settings-drawer";
+import { useSettingsFocus } from "../settings-controls/use-settings-focus";
+import { CameraSettingsContent } from "./camera-settings-content";
 import type { CameraSettingsStore } from "./use-camera-settings";
-import styles from "./camera-settings-drawer.module.css";
 
 export interface CameraSettingsDrawerProps {
   id: string;
@@ -14,12 +15,7 @@ export interface CameraSettingsDrawerProps {
   isRecording: boolean;
 }
 
-/**
- * The capture panel's camera settings. The panel hides when it loses focus, so a popover
- * (a second layer, or a second window) is out: the chevron expands this drawer inline,
- * the panel grows downward (its ResizeObserver resizes the window) and focus never leaves
- * the window. Esc or the chevron closes it.
- */
+/** The capture panel's camera settings, as an inline drawer under the row. */
 export function CameraSettingsDrawer({
   id,
   open,
@@ -31,15 +27,8 @@ export function CameraSettingsDrawer({
 }: CameraSettingsDrawerProps): React.JSX.Element | null {
   const t = useTranslations("cameraSettings");
   const { firstRef, onKeyDown } = useSettingsFocus(open, chevronRef, onClose);
-  if (!open) return null;
   return (
-    <div
-      id={id}
-      role="region"
-      aria-label={t("title")}
-      className={styles.drawer}
-      onKeyDown={onKeyDown}
-    >
+    <SettingsDrawer id={id} label={t("title")} open={open} onKeyDown={onKeyDown}>
       <CameraSettingsContent
         store={store}
         cameraOn={cameraOn}
@@ -47,6 +36,6 @@ export function CameraSettingsDrawer({
         compact
         firstRef={firstRef}
       />
-    </div>
+    </SettingsDrawer>
   );
 }

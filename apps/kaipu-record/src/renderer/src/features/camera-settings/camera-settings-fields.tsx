@@ -21,6 +21,8 @@ interface RadioOption<T extends string> {
   ariaLabel?: string;
   icon?: ReactNode;
   disabled?: boolean;
+  /** Native tooltip, e.g. why the option is disabled. */
+  title?: string;
 }
 
 interface RadioChipsProps<T extends string> {
@@ -84,6 +86,7 @@ export function RadioChips<T extends string>({
             aria-checked={checked}
             aria-label={option.ariaLabel}
             aria-disabled={option.disabled || undefined}
+            title={option.title}
             tabIndex={checked ? 0 : -1}
             className={styles.chip}
             onClick={option.disabled ? undefined : () => onChange(option.value)}

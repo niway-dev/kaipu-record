@@ -17,7 +17,15 @@ import type { RecordingArea } from "@shared/types/ipc";
 import { areaEncodePlan } from "./area-crop";
 import { measureFrameSize, playWithin } from "./frame-size";
 import { startRecordingCompositor, type RecordingCompositor } from "./recording-compositor";
+import { clampMicLevel, clampSystemAudioVolume, type AudioSettings } from "@shared/audio-settings";
 import { levelsFromTimeDomain } from "./audio-levels";
+import {
+  DUCK_RELEASE_MS,
+  INITIAL_DUCK_STATE,
+  dbfsFromTimeDomain,
+  decideDuck,
+  type DuckState,
+} from "./ducking";
 import { waitForFirstMediaTimestamp, type FirstMediaTimestamp } from "./first-media-timestamp";
 import { markRecordTiming } from "./record-timing";
 
@@ -26,8 +34,13 @@ export interface EngineHandle {
   resume(): void;
   /** Stop capture, finalize the MP4, resolve when flushed. */
   stop(): Promise<void>;
-  /** Current 5-bar mic level (0..1). */
+  /** Current 5-bar level (0..1) of the mix: mic and system audio, as they are recorded. */
   readLevels(): number[];
+  /**
+   * Current 5-bar level (0..1) of the microphone alone, before its mute gain; zeros while
+   * no mic is open. The settings meter shows the mic, not the mix.
+   */
+  readMicLevels(): number[];
   /**
    * A still JPEG frame of the screen captured at start. Taken in the background (it is only
    * needed at finalize), so the take never waits for it; null when it could not be taken.
@@ -54,12 +67,36 @@ export interface EngineHandle {
   setMicrophoneEnabled(on: boolean, deviceId: string | null): Promise<LiveToggleResult>;
   /** Ramp the system-audio gain. "unavailable" when no loopback track exists. */
   setSystemAudioEnabled(on: boolean): LiveToggleResult;
+  /**
+   * Mic level in percent (0..200, 100 = unchanged), on its own gain so muting never
+   * overwrites it. Remembered for a mic acquired later.
+   */
+  setMicLevel(percent: number): void;
+  /**
+   * Turn the mic's noise suppression on or off. Chromium cannot reconfigure the processing
+   * of a live track, so this reopens the same device with the new setting, wires the new
+   * source into the same level node and only then releases the old one (calls are
+   * serialized). "ok" with no mic open (the value applies to one acquired later);
+   * "unavailable" when the device cannot be reopened, in which case the old source keeps
+   * recording and the caller must show the value actually in effect.
+   */
+  setNoiseSuppression(on: boolean): Promise<LiveToggleResult>;
+  /** System-audio volume in percent (0..100), on its own gain. "unavailable" without loopback. */
+  setSystemAudioVolume(percent: number): LiveToggleResult;
+  /**
+   * Lower the system audio while the mic hears a voice. "unavailable" without loopback;
+   * turning it off restores the full volume.
+   */
+  setDucking(on: boolean): LiveToggleResult;
 }
 
 export type LiveToggleResult = "ok" | "unavailable";
 
 /** Mute/unmute ramp length — long enough to avoid a click, short enough to feel instant. */
 export const GAIN_RAMP_SECONDS = 0.02;
+
+/** How often the ducking loop samples the mic. */
+const DUCK_POLL_MS = 50;
 
 export interface EngineOptions {
   sourceId: string;
@@ -76,6 +113,11 @@ export interface EngineOptions {
    * turned on mid-take (loopback can only be acquired with the screen, at start).
    */
   systemAudio: boolean;
+  /**
+   * Mic level, noise suppression, system-audio volume and ducking at start. The defaults
+   * (`DEFAULT_AUDIO_SETTINGS`) leave the take exactly as it was before these existed.
+   */
+  audio: AudioSettings;
   /**
    * Encoder targets resolved from the user's quality preset. All optional — the
    * defaults below preserve the original 1080p · 30fps · 8 Mbps behaviour, so
@@ -166,7 +208,7 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
   // The mic opens alongside the screen instead of after it and the compositor: both are OS
   // device opens, and the take waited for one, then the other.
   const micRequest = options.microphoneDeviceId
-    ? openMicrophone(options.microphoneDeviceId)
+    ? openMicrophone(options.microphoneDeviceId, options.audio.noiseSuppression)
     : Promise.resolve(null);
   // A start that fails before the mic is wired in must still release it (the mic light).
   const releaseMicOnFailure = (error: unknown): never => {
@@ -217,207 +259,376 @@ export async function startEngine(options: EngineOptions): Promise<EngineHandle>
     encodeTrack = compositor.track;
   }
 
-  // 2. Mic (best-effort) + system-audio (best-effort) → each through its own
-  // GainNode → one mixed track. Mute = gain 0, so the file keeps one continuous
-  // audio track with no gaps. Every acquired stream is tracked so stop() releases
-  // the OS devices (closing the AudioContext alone does NOT stop the underlying
-  // tracks — the mic light would stay on).
+  // 2. Mic (best-effort) + system-audio (best-effort) → one mixed track. Each input runs
+  // through separate gain nodes so a mute, a level and a duck never overwrite each other:
+  //   mic:    source → [mic analyser]            (the raw device signal, after the OS/browser
+  //           source → level → mute → destination  noise processing and before the level)
+  //   system: source → volume → duck → mute → destination
+  // Mute = gain 0, so the file keeps one continuous audio track with no gaps. Every
+  // acquired stream is tracked so stop() releases the OS devices (closing the AudioContext
+  // alone does NOT stop the underlying tracks — the mic light would stay on).
   const inputStreams: MediaStream[] = [screenStream];
   const audioContext = new AudioContext();
   const destination = audioContext.createMediaStreamDestination();
-
-  /** Connect a stream through a fresh GainNode starting at `audible ? 1 : 0`. */
-  const connectThroughGain = (stream: MediaStream, audible: boolean): GainNode => {
-    const gain = audioContext.createGain();
-    gain.gain.value = audible ? 1 : 0;
-    audioContext.createMediaStreamSource(stream).connect(gain);
-    gain.connect(destination);
-    return gain;
+  let duckTimer: ReturnType<typeof setInterval> | null = null;
+  const stopDucking = (): void => {
+    if (duckTimer) clearInterval(duckTimer);
+    duckTimer = null;
   };
-  const rampTo = (gain: GainNode, on: boolean): void => {
-    const now = audioContext.currentTime;
-    gain.gain.cancelScheduledValues(now);
-    gain.gain.setValueAtTime(gain.gain.value, now);
-    gain.gain.linearRampToValueAtTime(on ? 1 : 0, now + GAIN_RAMP_SECONDS);
+  /** Frees everything a failed start acquired; each step is independent and best-effort. */
+  const releaseAll = (): void => {
+    stopDucking();
+    try {
+      compositor?.stop();
+    } catch {
+      // already stopped
+    }
+    for (const stream of inputStreams) stream.getTracks().forEach((t) => t.stop());
+    destination.stream.getTracks().forEach((t) => t.stop());
+    void audioContext.close().catch(() => undefined);
   };
-  const acquireMicrophone = async (deviceId: string): Promise<MediaStream | null> => {
-    const mic = await openMicrophone(deviceId);
-    if (mic) inputStreams.push(mic);
-    return mic;
-  };
+  try {
+    const rampGain = (gain: GainNode, value: number, seconds: number = GAIN_RAMP_SECONDS): void => {
+      const now = audioContext.currentTime;
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setValueAtTime(gain.gain.value, now);
+      gain.gain.linearRampToValueAtTime(value, now + seconds);
+    };
+    const createGain = (value: number): GainNode => {
+      const gain = audioContext.createGain();
+      gain.gain.value = value;
+      return gain;
+    };
 
-  let micGain: GainNode | null = null;
-  const startMic = await micRequest;
-  markRecordTiming(`microphone ${startMic ? "opened" : "off or unavailable"}`);
-  if (startMic) {
-    inputStreams.push(startMic);
-    micGain = connectThroughGain(startMic, true);
-  }
-  const systemAudioTrack = screenStream.getAudioTracks()[0];
-  let sysGain: GainNode | null = null;
-  if (systemAudioTrack) {
-    sysGain = connectThroughGain(new MediaStream([systemAudioTrack]), options.systemAudio);
-  }
-  // Always present, even with no input connected: the destination then produces
-  // silence. mediabunny cannot add a track after start(), and a mid-take unmute
-  // needs somewhere to go.
-  const mixedAudioTrack = destination.stream.getAudioTracks()[0];
+    // Live audio settings: the current values, so an input acquired later starts from them.
+    let micLevel = clampMicLevel(options.audio.micLevel);
+    let noiseSuppression = options.audio.noiseSuppression;
+    let micTrack: MediaStreamTrack | null = null;
+    let micStream: MediaStream | null = null;
+    let micSource: MediaStreamAudioSourceNode | null = null;
+    /** The noise-suppression value the open mic was requested with (what is in effect). */
+    let micNoise = noiseSuppression;
+    let micLevelGain: GainNode | null = null;
+    let micMuteGain: GainNode | null = null;
+    /** The mic as the user set it (on = audible); a muted mic never ducks the system audio. */
+    let micAudible = true;
+    // One analyser for the mic alone, tapped straight off the source: before the level gain
+    // and the mute gain. It drives both the settings meter and the ducking, so neither moves
+    // with the level slider, the meter means the same before and during a take, and it still
+    // hears the voice when the mic is muted.
+    const micAnalyser = audioContext.createAnalyser();
+    micAnalyser.fftSize = 1024;
+    micAnalyser.smoothingTimeConstant = 0.3;
+    const micBuffer = new Uint8Array(micAnalyser.fftSize);
 
-  // 3. Mic-level analyser tapped off the mix.
-  const analyser = audioContext.createAnalyser();
-  analyser.fftSize = 256;
-  analyser.smoothingTimeConstant = 0.3;
-  audioContext.createMediaStreamSource(destination.stream).connect(analyser);
-  const levelBuffer = new Uint8Array(analyser.fftSize);
-
-  // 4. mediabunny output → StreamTarget → onChunk.
-  const writable = new WritableStream<StreamTargetChunk>({
-    write(chunk) {
-      const copy = chunk.data.slice().buffer; // copy out of pooled buffer
-      options.onChunk(copy, chunk.position);
-    },
-  });
-  // `fastStart: false` (moov box at the END of the file, written on finalize)
-  // keeps mediabunny writing chunks progressively to disk as they encode — the
-  // RecordingWriter below is a positional writer built exactly for this. The
-  // "in-memory" mode this replaces buffers the ENTIRE recording in renderer RAM
-  // until stop() (nothing hits disk meanwhile), so a long recording would OOM
-  // the renderer and a crash before stop would lose the whole session.
-  const output = new Output({
-    format: new Mp4OutputFormat({ fastStart: false }),
-    target: new StreamTarget(writable),
-  });
-  const videoSource = new MediaStreamVideoTrackSource(encodeTrack, {
-    codec: "avc",
-    bitrate: videoBitrate,
-    // Nudge Chromium toward the platform encoder (VideoToolbox on macOS) instead
-    // of its bundled software H.264 (OpenH264). It's a hint — if hardware H.264
-    // encode isn't available via WebCodecs, it falls back to software (the prior
-    // behaviour). `realtime` suits live capture: drop frames under load rather
-    // than build a backlog.
-    hardwareAcceleration: "prefer-hardware",
-    latencyMode: "realtime",
-    onEncoderConfig: (config) => {
-      // Verify what Chromium actually configured. If hardware engaged, the
-      // "[OpenH264]" warnings in the console disappear.
-      console.info("[recorder] video encoder config:", {
-        codec: config.codec,
-        hardwareAcceleration: config.hardwareAcceleration,
-        latencyMode: config.latencyMode,
-        width: config.width,
-        height: config.height,
-        bitrate: config.bitrate,
-      });
-    },
-  });
-  output.addVideoTrack(videoSource, { frameRate });
-  let audioSource: MediaStreamAudioTrackSource | null = null;
-  if (mixedAudioTrack) {
-    audioSource = new MediaStreamAudioTrackSource(mixedAudioTrack, {
-      codec: "aac",
-      bitrate: AUDIO_BITRATE_BPS,
-    });
-    output.addAudioTrack(audioSource);
-  }
-  await output.start();
-  markRecordTiming("output.start resolved");
-  // Fallback anchor if mediabunny's private first-media timestamp is unavailable:
-  // the first frame is accepted within one frame period of start() resolving.
-  const startedAt = performance.now();
-  const firstMediaTimestamp = waitForFirstMediaTimestamp(output, startedAt);
-
-  // Surface mid-recording failures so the caller tears down cleanly (otherwise the
-  // app gets stuck: window hidden, bar showing, no real recording). Fires at most
-  // once, and not for our own teardown (stop() sets the flag first).
-  let teardownStarted = false;
-  /** Set by stop(); a live toggle arriving after it is answered "unavailable". */
-  let stopped = false;
-  /** Guards against a second late mic acquisition while one is in flight. */
-  let acquiringMic = false;
-  const notifyError = (error: unknown): void => {
-    if (teardownStarted) return;
-    teardownStarted = true;
-    options.onError?.(error);
-  };
-  videoSource.errorPromise.catch(notifyError);
-  audioSource?.errorPromise.catch(notifyError);
-  screenTrack.addEventListener("ended", () => notifyError(new Error("screen capture ended")));
-
-  // 5. Poster thumbnail from the first screen frame, at the real output size. In the
-  // background: the take starts without it, and stop waits for it before the tracks end.
-  const thumbnail = captureThumbnail(screenStream, target).then((image) => {
-    markRecordTiming("captureThumbnail resolved");
-    return image;
-  });
-
-  return {
-    pause: () => {
-      videoSource.pause();
-      audioSource?.pause();
-    },
-    resume: () => {
-      videoSource.resume();
-      audioSource?.resume();
-    },
-    readLevels: () => {
-      analyser.getByteTimeDomainData(levelBuffer);
-      return levelsFromTimeDomain(levelBuffer, 5);
-    },
-    thumbnail,
-    outputSize: { width: target.width, height: target.height },
-    firstMediaTimestamp,
-    hasSystemAudio: sysGain !== null,
-    async setMicrophoneEnabled(on, deviceId) {
+    /** Wires a mic stream's source into the analyser and the level gain (which must exist). */
+    const attachMicSource = (stream: MediaStream, level: GainNode): MediaStreamAudioSourceNode => {
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(micAnalyser);
+      source.connect(level);
+      return source;
+    };
+    const connectMic = (stream: MediaStream): void => {
+      micTrack = stream.getAudioTracks()[0] ?? null;
+      micStream = stream;
+      micLevelGain = createGain(micLevel / 100);
+      micMuteGain = createGain(1);
+      micAudible = true;
+      micSource = attachMicSource(stream, micLevelGain);
+      micLevelGain.connect(micMuteGain);
+      micMuteGain.connect(destination);
+    };
+    const acquireMicrophone = async (deviceId: string): Promise<MediaStream | null> => {
+      micNoise = noiseSuppression;
+      const mic = await openMicrophone(deviceId, noiseSuppression);
+      if (mic) inputStreams.push(mic);
+      return mic;
+    };
+    /** Live noise-suppression changes run one at a time, in the order they were asked. */
+    let noiseQueue: Promise<unknown> = Promise.resolve();
+    const reopenMic = async (): Promise<LiveToggleResult> => {
       if (stopped) return "unavailable";
-      if (micGain) {
-        rampTo(micGain, on);
-        return "ok";
-      }
-      if (!on) return "ok"; // never acquired, nothing to mute
-      if (!deviceId || acquiringMic) return "unavailable";
-      acquiringMic = true;
+      const level = micLevelGain;
+      const previousStream = micStream;
+      const previousSource = micSource;
+      if (!micTrack || !level || !previousStream || !previousSource) return "ok"; // none open yet
+      const wanted = noiseSuppression;
+      if (wanted === micNoise) return "ok";
+      const deviceId = micTrack.getSettings().deviceId;
+      if (!deviceId) return "unavailable";
+      let next: MediaStream | null = null;
       try {
-        const mic = await acquireMicrophone(deviceId);
-        if (!mic) return "unavailable";
-        if (stopped) {
-          // The take ended while the device was opening — release it at once.
-          mic.getTracks().forEach((t) => t.stop());
-          return "unavailable";
-        }
-        micGain = connectThroughGain(mic, true);
-        return "ok";
-      } finally {
-        acquiringMic = false;
+        next = await navigator.mediaDevices.getUserMedia({
+          audio: { deviceId: { exact: deviceId }, noiseSuppression: wanted },
+        });
+      } catch {
+        return "unavailable"; // the old source keeps recording
       }
-    },
-    setSystemAudioEnabled(on) {
-      if (!sysGain || stopped) return "unavailable";
-      rampTo(sysGain, on);
+      if (stopped) {
+        next.getTracks().forEach((t) => t.stop());
+        return "unavailable";
+      }
+      // Connect the new source before letting the old one go, so the take hears no gap.
+      micSource = attachMicSource(next, level);
+      micStream = next;
+      micTrack = next.getAudioTracks()[0] ?? null;
+      micNoise = wanted;
+      inputStreams.push(next);
+      previousSource.disconnect();
+      previousStream.getTracks().forEach((t) => t.stop());
+      const index = inputStreams.indexOf(previousStream);
+      if (index >= 0) inputStreams.splice(index, 1);
       return "ok";
-    },
-    async stop() {
-      stopped = true;
-      teardownStarted = true; // stopping the tracks below would otherwise fire onError
-      // Stop encoding now: the frames and samples after the stop request do not belong to the
-      // take (the store cut its duration at this moment), and the wait below must not add any.
-      videoSource.pause();
-      audioSource?.pause();
-      // The poster frame comes from the screen track: take it before the tracks stop, but
-      // never let it hold the save up.
-      await Promise.race([thumbnail, delay(THUMBNAIL_STOP_WAIT_MS)]);
-      await output.finalize();
-      compositor?.stop(); // cancel the draw loop + release the canvas track
-      for (const stream of inputStreams) stream.getTracks().forEach((t) => t.stop());
-      destination.stream.getTracks().forEach((t) => t.stop());
-      await audioContext.close();
-    },
-  };
+    };
+
+    const startMic = await micRequest;
+    markRecordTiming(`microphone ${startMic ? "opened" : "off or unavailable"}`);
+    if (startMic) {
+      inputStreams.push(startMic);
+      connectMic(startMic);
+    }
+    const systemAudioTrack = screenStream.getAudioTracks()[0];
+    let sysVolumeGain: GainNode | null = null;
+    let sysDuckGain: GainNode | null = null;
+    let sysMuteGain: GainNode | null = null;
+    if (systemAudioTrack) {
+      sysVolumeGain = createGain(clampSystemAudioVolume(options.audio.systemAudioVolume) / 100);
+      sysDuckGain = createGain(1);
+      sysMuteGain = createGain(options.systemAudio ? 1 : 0);
+      audioContext
+        .createMediaStreamSource(new MediaStream([systemAudioTrack]))
+        .connect(sysVolumeGain);
+      sysVolumeGain.connect(sysDuckGain);
+      sysDuckGain.connect(sysMuteGain);
+      sysMuteGain.connect(destination);
+    }
+    // Always present, even with no input connected: the destination then produces
+    // silence. mediabunny cannot add a track after start(), and a mid-take unmute
+    // needs somewhere to go.
+    const mixedAudioTrack = destination.stream.getAudioTracks()[0];
+
+    // Ducking loop: measure the mic, let the pure rules decide, apply the ramp they ask for.
+    let duckState: DuckState = INITIAL_DUCK_STATE;
+    const duckTick = (): void => {
+      if (!sysDuckGain) return;
+      micAnalyser.getByteTimeDomainData(micBuffer);
+      const decision = decideDuck(
+        { dbfs: dbfsFromTimeDomain(micBuffer), now: performance.now(), muted: !micAudible },
+        duckState,
+      );
+      duckState = decision.state;
+      if (decision.ramp) rampGain(sysDuckGain, decision.ramp.target, decision.ramp.ms / 1000);
+    };
+    const startDucking = (): void => {
+      if (duckTimer || !sysDuckGain) return;
+      duckState = INITIAL_DUCK_STATE;
+      duckTimer = setInterval(duckTick, DUCK_POLL_MS);
+    };
+
+    // 3. Level analyser tapped off the mix.
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.3;
+    audioContext.createMediaStreamSource(destination.stream).connect(analyser);
+    const levelBuffer = new Uint8Array(analyser.fftSize);
+
+    // 4. mediabunny output → StreamTarget → onChunk.
+    const writable = new WritableStream<StreamTargetChunk>({
+      write(chunk) {
+        const copy = chunk.data.slice().buffer; // copy out of pooled buffer
+        options.onChunk(copy, chunk.position);
+      },
+    });
+    // `fastStart: false` (moov box at the END of the file, written on finalize)
+    // keeps mediabunny writing chunks progressively to disk as they encode — the
+    // RecordingWriter below is a positional writer built exactly for this. The
+    // "in-memory" mode this replaces buffers the ENTIRE recording in renderer RAM
+    // until stop() (nothing hits disk meanwhile), so a long recording would OOM
+    // the renderer and a crash before stop would lose the whole session.
+    const output = new Output({
+      format: new Mp4OutputFormat({ fastStart: false }),
+      target: new StreamTarget(writable),
+    });
+    const videoSource = new MediaStreamVideoTrackSource(encodeTrack, {
+      codec: "avc",
+      bitrate: videoBitrate,
+      // Nudge Chromium toward the platform encoder (VideoToolbox on macOS) instead
+      // of its bundled software H.264 (OpenH264). It's a hint — if hardware H.264
+      // encode isn't available via WebCodecs, it falls back to software (the prior
+      // behaviour). `realtime` suits live capture: drop frames under load rather
+      // than build a backlog.
+      hardwareAcceleration: "prefer-hardware",
+      latencyMode: "realtime",
+      onEncoderConfig: (config) => {
+        // Verify what Chromium actually configured. If hardware engaged, the
+        // "[OpenH264]" warnings in the console disappear.
+        console.info("[recorder] video encoder config:", {
+          codec: config.codec,
+          hardwareAcceleration: config.hardwareAcceleration,
+          latencyMode: config.latencyMode,
+          width: config.width,
+          height: config.height,
+          bitrate: config.bitrate,
+        });
+      },
+    });
+    output.addVideoTrack(videoSource, { frameRate });
+    let audioSource: MediaStreamAudioTrackSource | null = null;
+    if (mixedAudioTrack) {
+      audioSource = new MediaStreamAudioTrackSource(mixedAudioTrack, {
+        codec: "aac",
+        bitrate: AUDIO_BITRATE_BPS,
+      });
+      output.addAudioTrack(audioSource);
+    }
+    await output.start();
+    markRecordTiming("output.start resolved");
+    // Only now: a start that failed above must not leave the loop running.
+    if (options.audio.duckSystemAudioWhileTalking) startDucking();
+    // Fallback anchor if mediabunny's private first-media timestamp is unavailable:
+    // the first frame is accepted within one frame period of start() resolving.
+    const startedAt = performance.now();
+    const firstMediaTimestamp = waitForFirstMediaTimestamp(output, startedAt);
+
+    // Surface mid-recording failures so the caller tears down cleanly (otherwise the
+    // app gets stuck: window hidden, bar showing, no real recording). Fires at most
+    // once, and not for our own teardown (stop() sets the flag first).
+    let teardownStarted = false;
+    /** Set by stop(); a live toggle arriving after it is answered "unavailable". */
+    let stopped = false;
+    /** Guards against a second late mic acquisition while one is in flight. */
+    let acquiringMic = false;
+    const notifyError = (error: unknown): void => {
+      if (teardownStarted) return;
+      teardownStarted = true;
+      options.onError?.(error);
+    };
+    videoSource.errorPromise.catch(notifyError);
+    audioSource?.errorPromise.catch(notifyError);
+    screenTrack.addEventListener("ended", () => notifyError(new Error("screen capture ended")));
+
+    // 5. Poster thumbnail from the first screen frame, at the real output size. In the
+    // background: the take starts without it, and stop waits for it before the tracks end.
+    const thumbnail = captureThumbnail(screenStream, target).then((image) => {
+      markRecordTiming("captureThumbnail resolved");
+      return image;
+    });
+
+    return {
+      pause: () => {
+        videoSource.pause();
+        audioSource?.pause();
+      },
+      resume: () => {
+        videoSource.resume();
+        audioSource?.resume();
+      },
+      readLevels: () => {
+        analyser.getByteTimeDomainData(levelBuffer);
+        return levelsFromTimeDomain(levelBuffer, 5);
+      },
+      readMicLevels: () => {
+        if (!micLevelGain) return [0, 0, 0, 0, 0];
+        micAnalyser.getByteTimeDomainData(micBuffer);
+        return levelsFromTimeDomain(micBuffer, 5);
+      },
+      thumbnail,
+      outputSize: { width: target.width, height: target.height },
+      firstMediaTimestamp,
+      hasSystemAudio: sysMuteGain !== null,
+      async setMicrophoneEnabled(on, deviceId) {
+        if (stopped) return "unavailable";
+        if (micMuteGain) {
+          micAudible = on;
+          rampGain(micMuteGain, on ? 1 : 0);
+          return "ok";
+        }
+        if (!on) return "ok"; // never acquired, nothing to mute
+        if (!deviceId || acquiringMic) return "unavailable";
+        acquiringMic = true;
+        try {
+          const mic = await acquireMicrophone(deviceId);
+          if (!mic) return "unavailable";
+          if (stopped) {
+            // The take ended while the device was opening — release it at once.
+            mic.getTracks().forEach((t) => t.stop());
+            return "unavailable";
+          }
+          connectMic(mic);
+          // The setting changed while the device was opening: bring it in line.
+          if (micNoise !== noiseSuppression)
+            void (noiseQueue = noiseQueue.then(reopenMic, reopenMic));
+          return "ok";
+        } finally {
+          acquiringMic = false;
+        }
+      },
+      setSystemAudioEnabled(on) {
+        if (!sysMuteGain || stopped) return "unavailable";
+        rampGain(sysMuteGain, on ? 1 : 0);
+        return "ok";
+      },
+      setMicLevel(percent) {
+        micLevel = clampMicLevel(percent);
+        if (micLevelGain && !stopped) rampGain(micLevelGain, micLevel / 100);
+      },
+      setNoiseSuppression(on) {
+        noiseSuppression = on;
+        const result = noiseQueue.then(reopenMic, reopenMic);
+        noiseQueue = result;
+        return result;
+      },
+      setSystemAudioVolume(percent) {
+        if (!sysVolumeGain || stopped) return "unavailable";
+        rampGain(sysVolumeGain, clampSystemAudioVolume(percent) / 100);
+        return "ok";
+      },
+      setDucking(on) {
+        if (!sysDuckGain || stopped) return "unavailable";
+        if (on) {
+          startDucking();
+        } else {
+          stopDucking();
+          duckState = INITIAL_DUCK_STATE;
+          rampGain(sysDuckGain, 1, DUCK_RELEASE_MS / 1000);
+        }
+        return "ok";
+      },
+      async stop() {
+        stopped = true;
+        stopDucking();
+        teardownStarted = true; // stopping the tracks below would otherwise fire onError
+        // Stop encoding now: the frames and samples after the stop request do not belong to the
+        // take (the store cut its duration at this moment), and the wait below must not add any.
+        videoSource.pause();
+        audioSource?.pause();
+        // The poster frame comes from the screen track: take it before the tracks stop, but
+        // never let it hold the save up.
+        await Promise.race([thumbnail, delay(THUMBNAIL_STOP_WAIT_MS)]);
+        await output.finalize();
+        compositor?.stop(); // cancel the draw loop + release the canvas track
+        for (const stream of inputStreams) stream.getTracks().forEach((t) => t.stop());
+        destination.stream.getTracks().forEach((t) => t.stop());
+        await audioContext.close();
+      },
+    };
+  } catch (error) {
+    // A start that fails here must not leave anything running or held: the ducking loop,
+    // the audio context, the compositor and every device acquired so far (the mic light).
+    releaseAll();
+    throw error;
+  }
 }
 
 /** Mic (best-effort): the stream, or null when it cannot be opened. */
-async function openMicrophone(deviceId: string): Promise<MediaStream | null> {
+async function openMicrophone(
+  deviceId: string,
+  noiseSuppression: boolean,
+): Promise<MediaStream | null> {
   try {
-    return await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { ideal: deviceId } } });
+    return await navigator.mediaDevices.getUserMedia({
+      audio: { deviceId: { ideal: deviceId }, noiseSuppression },
+    });
   } catch {
     return null; // mic unavailable — continue without it
   }

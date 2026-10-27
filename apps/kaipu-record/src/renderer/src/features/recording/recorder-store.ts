@@ -1,4 +1,5 @@
 import type { LocalRecording, RecordingSettings } from "@shared/types";
+import { sanitizeAudioSettings, type AudioSettings } from "@shared/audio-settings";
 import {
   DEFAULT_RECORDING_COUNTDOWN_SECONDS,
   sanitizeCountdownSeconds,
@@ -39,6 +40,8 @@ export interface StartInput {
   area?: RecordingArea | null;
   microphoneDeviceId: string | null;
   systemAudio: boolean;
+  /** Mic level, noise reduction, system-audio volume and ducking the take starts with. */
+  audio: AudioSettings;
   /** Encoder targets resolved from the user's quality preset (optional → engine defaults). */
   width?: number;
   height?: number;
@@ -73,6 +76,7 @@ const COUNTDOWN_VISIBLE_TIMEOUT_MS = 1500;
 const START_TIMEOUT_MS = 10_000;
 /** Minimum time the bar shows "Saving…" so it never just flashes on short clips. */
 const MIN_SAVING_MS = 600;
+const roundLevel = (level: number): number => Math.round(level * 100) / 100;
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
@@ -116,6 +120,13 @@ let sessionCounter = 0;
 let lastResolveInput: (() => StartInput) | null = null;
 /** Unsubscribes the live-settings forwarder of the active take. */
 let stopLiveSettings: (() => void) | null = null;
+/** Stops the audio-settings listener of a start still acquiring (cancelled starts never settle). */
+let stopEarlyAudio: (() => void) | null = null;
+/** Stops following whether any window listens to the mic levels, for the active take. */
+let stopMicLevelListening: (() => void) | null = null;
+/** Whether any window subscribed to the mic levels; only then are they read and sent. */
+let micLevelsListening = false;
+let lastMicLevels: number[] | null = null;
 
 const listeners = new Set<() => void>();
 const completeListeners = new Set<(recording: LocalRecording) => void>();
@@ -276,6 +287,8 @@ export function stopOrCancelRecording(): void {
     const start = pendingStart;
     pendingStart = null;
     if (start) discardStart(start);
+    stopEarlyAudio?.();
+    stopEarlyAudio = null;
     window.electronAPI.recordingStop(); // undo the early hide
     sessionId = null;
     update({ status: "idle", countdown: null });
@@ -303,6 +316,10 @@ async function beginEngine(input: StartInput): Promise<void> {
     engine: null,
   };
   pendingStart = start;
+  // Audio settings the user changes while the engine is still acquiring (up to seconds)
+  // are kept, then applied once it exists; subscribing only after it resolved lost them.
+  const earlyAudio = trackAudioSettings(input.audio);
+  stopEarlyAudio = earlyAudio.stop;
   try {
     const acquired = (async () => {
       await start.created;
@@ -314,6 +331,7 @@ async function beginEngine(input: StartInput): Promise<void> {
         area: input.area ?? null,
         microphoneDeviceId: input.microphoneDeviceId,
         systemAudio: input.systemAudio,
+        audio: input.audio,
         width: input.width,
         height: input.height,
         frameRate: input.frameRate,
@@ -370,7 +388,11 @@ async function beginEngine(input: StartInput): Promise<void> {
       }),
     ]).finally(() => clearTimeout(timer));
     // Cancelled while acquiring: the cancel restored the app and released this start.
-    if (pendingStart !== start) return;
+    if (pendingStart !== start) {
+      earlyAudio.stop();
+      return;
+    }
+    // The catch below stops the early audio listener and releases the start.
     if (start.failure !== undefined) throw start.failure;
     pendingStart = null;
     cursorTrack = track;
@@ -381,7 +403,9 @@ async function beginEngine(input: StartInput): Promise<void> {
       area: input.area ?? null,
       output: handle.outputSize,
     });
-    stopLiveSettings = forwardLiveSettings(handle, input);
+    stopEarlyAudio = null;
+    stopLiveSettings = forwardLiveSettings(handle, input, earlyAudio);
+    stopMicLevelListening = followMicLevelListeners();
     const activeTrack = cursorTrack;
     void handle.firstMediaTimestamp.then(({ rendererMs, quality }) =>
       activeTrack?.anchor(rendererMs, quality),
@@ -399,8 +423,10 @@ async function beginEngine(input: StartInput): Promise<void> {
         status: paused ? "paused" : "recording",
         systemAudioAvailable: engine.hasSystemAudio,
       });
+      reportMicLevels(paused);
     }, 100);
   } catch (error) {
+    earlyAudio.stop();
     // Cancelled first: the cancel already restored the app, and this is its fallout.
     if (pendingStart !== start) return;
     pendingStart = null;
@@ -425,6 +451,44 @@ async function beginEngine(input: StartInput): Promise<void> {
 }
 
 /**
+ * Follow whether any window subscribed to the mic levels. They go on their own channel, not
+ * the activity tick: broadcast to every window ~10 times a second they would re-render
+ * pages that never show them. Returns the unsubscribe.
+ */
+function followMicLevelListeners(): () => void {
+  micLevelsListening = false;
+  lastMicLevels = null;
+  let heard = false;
+  const unsubscribe = window.electronAPI.onMicLevelsListening((listening) => {
+    heard = true;
+    micLevelsListening = listening;
+    lastMicLevels = null;
+  });
+  // A window may already be listening when the take starts; an event that arrived first wins.
+  void window.electronAPI
+    .getMicLevelsListening()
+    .then((listening) => {
+      if (!heard) micLevelsListening = listening;
+    })
+    .catch(() => undefined);
+  return () => {
+    unsubscribe();
+    micLevelsListening = false;
+    lastMicLevels = null;
+  };
+}
+
+/** Sends the mic's bars to main while someone listens; identical bars are not re-sent. */
+function reportMicLevels(paused: boolean): void {
+  if (!micLevelsListening || !engine) return;
+  // Rounded so a steady room produces identical bars and nothing is re-sent.
+  const levels = paused ? [0, 0, 0, 0, 0] : engine.readMicLevels().map(roundLevel);
+  if (lastMicLevels && levels.every((level, i) => level === lastMicLevels![i])) return;
+  lastMicLevels = levels;
+  window.electronAPI.recordingReportMicLevels(levels);
+}
+
+/**
  * Release a start that will not become a take, without waiting on it: the engine is stopped
  * whenever it resolves, and the session's temp file is aborted once main has created it.
  */
@@ -436,14 +500,37 @@ function discardStart(start: PendingStart): void {
     .catch(() => undefined);
 }
 
+interface AudioSettingsTracker {
+  /** The newest audio settings seen so far (the start's own until one changes). */
+  latest(): AudioSettings;
+  stop(): void;
+}
+
+/** Remembers the newest `AppSettings.audio` broadcast from now on. */
+function trackAudioSettings(initial: AudioSettings): AudioSettingsTracker {
+  let latest = initial;
+  const unsubscribe = window.electronAPI.onSettingsChanged((appSettings) => {
+    latest = sanitizeAudioSettings(appSettings.audio);
+  });
+  return { latest: () => latest, stop: unsubscribe };
+}
+
 /**
  * While a take runs, forward the user's live toggles (any window, any shortcut —
  * they all just write `RecordingSettings`) to the engine. When the engine answers
  * "unavailable", write the setting back to `false` so every surface shows the
  * truth. Calls are serialized so a quick off/on never lands out of order.
+ *
+ * Also forwards the persisted `AppSettings.audio` (level, noise, volume, ducking) the same
+ * way: only the fields that differ from what the engine last got, on the same queue. The
+ * mic device is never switched mid-take.
  * Returns the unsubscribe.
  */
-function forwardLiveSettings(handle: EngineHandle, input: StartInput): () => void {
+function forwardLiveSettings(
+  handle: EngineHandle,
+  input: StartInput,
+  early: AudioSettingsTracker,
+): () => void {
   let micOn = input.microphoneDeviceId !== null;
   let sysOn = input.systemAudio;
   let queue: Promise<void> = Promise.resolve();
@@ -459,6 +546,45 @@ function forwardLiveSettings(handle: EngineHandle, input: StartInput): () => voi
     writeBack({ isSystemAudioEnabled: false });
   }
 
+  // What the engine was started with; every change is a diff against what it last got.
+  let audio = input.audio;
+  /** The noise suppression actually in effect: what the engine last confirmed. */
+  let noiseInEffect = input.audio.noiseSuppression;
+  let noiseRequest = 0;
+  const applyAudio = (next: AudioSettings): void => {
+    const previous = audio;
+    audio = next;
+    if (next.micLevel !== previous.micLevel) {
+      queue = queue.then(() => handle.setMicLevel(next.micLevel));
+    }
+    if (next.noiseSuppression !== previous.noiseSuppression) {
+      const request = ++noiseRequest;
+      queue = queue.then(async () => {
+        if (!active) return;
+        const result = await handle.setNoiseSuppression(next.noiseSuppression);
+        if (result === "ok") {
+          noiseInEffect = next.noiseSuppression;
+        } else if (request === noiseRequest && active && audio.noiseSuppression !== noiseInEffect) {
+          // The device would not switch: show the truth, unless a newer choice is waiting.
+          audio = { ...audio, noiseSuppression: noiseInEffect };
+          void window.electronAPI.updateSettings({ audio });
+        }
+      });
+    }
+    if (next.systemAudioVolume !== previous.systemAudioVolume) {
+      queue = queue.then(() => void handle.setSystemAudioVolume(next.systemAudioVolume));
+    }
+    if (next.duckSystemAudioWhileTalking !== previous.duckSystemAudioWhileTalking) {
+      queue = queue.then(() => void handle.setDucking(next.duckSystemAudioWhileTalking));
+    }
+  };
+  // Changes made before the engine existed, then the live ones.
+  const missed = early.latest();
+  early.stop();
+  applyAudio(missed);
+  const unsubscribeAudio = window.electronAPI.onSettingsChanged((appSettings) => {
+    applyAudio(sanitizeAudioSettings(appSettings.audio));
+  });
   const unsubscribe = window.electronAPI.onRecordingSettingsChanged((settings) => {
     if (settings.isMicrophoneEnabled !== micOn) {
       micOn = settings.isMicrophoneEnabled;
@@ -483,6 +609,7 @@ function forwardLiveSettings(handle: EngineHandle, input: StartInput): () => voi
   return () => {
     active = false;
     unsubscribe();
+    unsubscribeAudio();
   };
 }
 
@@ -516,6 +643,8 @@ async function stopRecording(): Promise<void> {
   beginRecordTiming("stop requested", true);
   stopLiveSettings?.();
   stopLiveSettings = null;
+  stopMicLevelListening?.();
+  stopMicLevelListening = null;
   update({ status: "finalizing", countdown: null });
   const durationMs = clock ? elapsedMs(clock, Date.now()) : 0;
   const durationSeconds = Math.floor(durationMs / 1000);

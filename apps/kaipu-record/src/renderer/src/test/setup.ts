@@ -78,6 +78,12 @@ const STUB_SETTINGS = {
   trayHintShown: false,
   diagnosticsEnabled: true,
   cameraBubble: { shape: "circle", size: 240, deviceId: null },
+  audio: {
+    micLevel: 100,
+    noiseSuppression: true,
+    systemAudioVolume: 100,
+    duckSystemAudioWhileTalking: false,
+  },
 } as const;
 
 // Vitest does not expose `afterEach` as a global (globals: false), so
@@ -86,6 +92,10 @@ const STUB_SETTINGS = {
 afterEach(() => {
   cleanup();
 });
+
+// jsdom's `document.hasFocus()` is false until something is focused; a real window has focus.
+// Tests of the unfocused case spy on it.
+document.hasFocus = () => true;
 
 // Minimal `window.electronAPI` stub so renderer code that talks to the preload
 // bridge (e.g. usePermissions) works under jsdom. Individual tests can override.
@@ -153,6 +163,10 @@ window.electronAPI = {
   recordingAbort: async () => {},
   recordingStat: async () => 0,
   recordingReportTick: () => {},
+  recordingReportMicLevels: () => {},
+  getMicLevelsListening: async () => false,
+  onMicLevelsListening: () => () => {},
+  subscribeMicLevels: () => () => {},
   recordingStart: () => {},
   recordingStop: () => {},
   cursorTrackStart: async () => ({ enabled: false }),

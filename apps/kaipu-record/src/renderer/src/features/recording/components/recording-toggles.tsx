@@ -14,6 +14,12 @@ interface RecordingTogglesProps {
   isSystemAudioUnavailable?: boolean;
   variant?: "full" | "compact";
   /**
+   * Rendered in the Mic and Audio tiles' place: the split toggle + settings chevron
+   * (features/audio-settings). Without them those tiles are plain toggles.
+   */
+  micSlot?: ReactNode;
+  audioSlot?: ReactNode;
+  /**
    * Rendered in the Camera tile's place: the split toggle + settings chevron
    * (features/camera-settings). Without it the Camera tile is a plain toggle.
    */
@@ -31,6 +37,8 @@ export function RecordingToggles({
   isCameraEnabled,
   isSystemAudioUnavailable = false,
   variant = "full",
+  micSlot,
+  audioSlot,
   cameraSlot,
   onToggleMicrophone,
   onToggleSystemAudio,
@@ -51,6 +59,7 @@ export function RecordingToggles({
           label: t("micLabel"),
           isActive: isMicrophoneEnabled,
           onToggle: onToggleMicrophone,
+          element: micSlot,
         },
         {
           id: "audio",
@@ -60,6 +69,7 @@ export function RecordingToggles({
           onToggle: onToggleSystemAudio,
           disabled: isSystemAudioUnavailable,
           title: isSystemAudioUnavailable ? t("audioUnavailable") : undefined,
+          element: audioSlot,
         },
         {
           id: "camera",

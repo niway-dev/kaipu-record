@@ -16,8 +16,6 @@ vi.mock("@renderer/features/recording/hooks/use-recording-setup", () => ({
     toggleCamera: vi.fn(),
     microphones: [],
     selectedMicrophone: null,
-    isMicrophoneMenuOpen: false,
-    toggleMicrophoneMenu: vi.fn(),
     selectMicrophone: vi.fn(),
   }),
 }));
@@ -94,6 +92,18 @@ describe("CapturePanel — tabs", () => {
     const drawer = screen.getByRole("region", { name: "Camera settings" });
     // The drawer sits inside the root the ResizeObserver measures, so the window follows it.
     expect(container.firstElementChild?.contains(drawer)).toBe(true);
+  });
+
+  it("opens one drawer at a time: Mic, Audio and Camera close each other", () => {
+    render(<CapturePanel />);
+    fireEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+    expect(screen.getByRole("region", { name: "Microphone settings" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "System audio settings" }));
+    expect(screen.queryByRole("region", { name: "Microphone settings" })).toBeNull();
+    expect(screen.getByRole("region", { name: "System audio settings" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+    expect(screen.queryByRole("region", { name: "System audio settings" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Camera settings" })).toBeInTheDocument();
   });
 
   it("captures in the chosen mode when a chip is clicked, without touching the stored mode", async () => {

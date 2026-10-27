@@ -19,6 +19,7 @@ import {
   type RecordingRatio,
   type RememberedArea,
 } from "./screenshot-capture";
+import { DEFAULT_AUDIO_SETTINGS, type AudioSettings } from "../audio-settings";
 import { DEFAULT_CAMERA_BUBBLE, type CameraBubbleSettings } from "../camera-bubble";
 
 /**
@@ -335,6 +336,12 @@ export interface AppSettings {
    * bubble's resize grip, and applied to a showing bubble live, mid-take included.
    */
   cameraBubble: CameraBubbleSettings;
+  /**
+   * The mic's level and noise reduction, the system audio's volume and its ducking (see
+   * `shared/audio-settings.ts`). Changed from the Mic and System audio settings and applied
+   * to a running take live. The mic device itself stays in `RecordingSettings`.
+   */
+  audio: AudioSettings;
 }
 
 /**
@@ -367,6 +374,7 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   trayHintShown: false,
   diagnosticsEnabled: true,
   cameraBubble: DEFAULT_CAMERA_BUBBLE,
+  audio: DEFAULT_AUDIO_SETTINGS,
 };
 
 /** Prefixes on the `recording:finalize` rejection message; the renderer picks the toast from them. */
@@ -511,6 +519,16 @@ export const IPC_CHANNELS = {
   /** NIW2-218: byte size of an open writer session's temp file (Small-file size check). */
   recordingStat: "recording:stat",
   recordingReportTick: "recording:report-tick",
+  // Mic levels for the settings meter, kept off the activity broadcast (10/s would re-render
+  // every window). A window subscribes (renderer → main, counted); the recorder reports
+  // levels (renderer → main) only while main says someone listens (main → recorder), and
+  // main relays them to the subscribed windows alone (main → renderer).
+  micLevelsSubscribe: "mic-levels:subscribe",
+  micLevelsUnsubscribe: "mic-levels:unsubscribe",
+  micLevelsReport: "mic-levels:report",
+  micLevelsData: "mic-levels:data",
+  micLevelsListening: "mic-levels:listening",
+  micLevelsGetListening: "mic-levels:get-listening",
   recordingStart: "recording:start",
   recordingStop: "recording:stop",
   // Cursor track (recorder renderer → main). Keyed by the writer session id. See
