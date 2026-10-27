@@ -583,8 +583,11 @@ export function registerRecordingHub(
     // now, without waiting for the source lookup below, which can fail.
     const wholeDisplayCountdown = !area && region !== null && region.rect === null;
     void displayIdForSource(info.sourceId).then((displayId) => {
+      // Stopped (or cancelled) while the lookup ran: the always-on-top bar must not come up
+      // over a take that is already gone.
+      if (!activity.active) return;
       bar.show(displayId, { includeInRecording, anchor: areaGlobal });
-      if (area || wholeDisplayCountdown || !activity.active) return;
+      if (area || wholeDisplayCountdown) return;
       const display =
         displayId === undefined
           ? undefined

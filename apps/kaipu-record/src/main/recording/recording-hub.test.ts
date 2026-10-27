@@ -499,6 +499,25 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     expect(mockState.dockVisible).toBe(true);
   });
 
+  it("a stop that lands before the source lookup resolves never brings the bar up", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+    mockState.displays = [{ id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } }];
+    let resolve!: (sources: Array<{ id: string; name: string; display_id: string }>) => void;
+    mockState.getSources.mockImplementationOnce(() => new Promise((r) => (resolve = r)));
+    const start = mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!;
+    const stop = mockState.ipcOn.get(IPC_CHANNELS.recordingStop)!;
+
+    start({}, { sourceId: "screen:1:0", sourceName: "S" });
+    stop({});
+    resolve([{ id: "screen:1:0", name: "S", display_id: "1" }]);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(mockState.bar.show).not.toHaveBeenCalled();
+  });
+
   it("starts the region's TTL only once a recreated main window has loaded", async () => {
     vi.useFakeTimers();
     try {
