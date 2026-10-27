@@ -16,6 +16,7 @@ import {
   type Theme,
   UPLOAD_MODES,
   type UploadMode,
+  sanitizeCountdownSeconds,
   sanitizeExportQuality,
 } from "@shared/types";
 import { defaultShortcutsFor } from "@shared/shortcut-defaults";
@@ -124,6 +125,7 @@ export function mergeSettings(
       typeof safe.showBarInRecording === "boolean"
         ? safe.showBarInRecording
         : DEFAULT_SETTINGS.showBarInRecording,
+    recordingCountdownSeconds: sanitizeCountdownSeconds(safe.recordingCountdownSeconds),
     showBrandBadge:
       typeof safe.showBrandBadge === "boolean"
         ? safe.showBrandBadge

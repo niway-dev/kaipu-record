@@ -68,6 +68,11 @@ describe("recording-activity", () => {
       expect(result.activity.systemAudioAvailable).toBe(true);
     });
 
+    it("ignores the bar's own 'starting' reset: the activity has no such status", () => {
+      const result = applyTick(running, tick("starting", 0));
+      expect(result).toEqual({ activity: running, changed: false });
+    });
+
     it("a new take starts with availability unknown", () => {
       expect(startedActivity().systemAudioAvailable).toBeUndefined();
     });

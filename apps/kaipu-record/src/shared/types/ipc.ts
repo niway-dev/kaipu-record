@@ -216,6 +216,23 @@ export type UploadMode = (typeof UPLOAD_MODES)[number];
 export const SCREENSHOT_COPY_MODES = ["auto", "manual"] as const;
 export type ScreenshotCopyMode = (typeof SCREENSHOT_COPY_MODES)[number];
 
+/**
+ * The countdown lengths Settings offers, in seconds. 0 starts the take right away.
+ * Literals on purpose: this module is shared with the preload bundle.
+ */
+export const RECORDING_COUNTDOWN_OPTIONS = [0, 3, 5] as const;
+export type RecordingCountdownSeconds = (typeof RECORDING_COUNTDOWN_OPTIONS)[number];
+/** The countdown before a take when the setting was never changed: 3, 2, 1. */
+export const DEFAULT_RECORDING_COUNTDOWN_SECONDS: RecordingCountdownSeconds = 3;
+
+/** A stored or received value as one of the offered lengths; anything else is the default. */
+export function sanitizeCountdownSeconds(value: unknown): RecordingCountdownSeconds {
+  return (
+    RECORDING_COUNTDOWN_OPTIONS.find((option) => option === value) ??
+    DEFAULT_RECORDING_COUNTDOWN_SECONDS
+  );
+}
+
 export interface AppSettings {
   theme: Theme;
   /** UI language for every renderer window + the native tray. */
@@ -233,6 +250,12 @@ export interface AppSettings {
    * it out via content protection (`NSWindowSharingNone`).
    */
   showBarInRecording: boolean;
+  /**
+   * Seconds counted down before a take starts (Settings → Recording): 0 (off), 3 or 5. With 0
+   * no number is shown and nothing waits: the take begins as soon as it is requested. Read at
+   * the moment a start is requested, so a change applies to the next take.
+   */
+  recordingCountdownSeconds: RecordingCountdownSeconds;
   /**
    * Burn a small "Made with Kaipu" mark into recordings. Off by default: the free
    * app carries no watermark (backlog/free-tier-no-watermark), this is an opt-in
@@ -329,6 +352,7 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   showInDock: true,
   recordingQuality: DEFAULT_QUALITY,
   showBarInRecording: false,
+  recordingCountdownSeconds: DEFAULT_RECORDING_COUNTDOWN_SECONDS,
   showBrandBadge: false,
   screenshotCopy: "auto",
   deviceId: "",
@@ -587,10 +611,18 @@ export type UpdateStatus =
   | { state: "ready"; version: string }
   | { state: "error"; message: string; checkedAt: number };
 
+/**
+ * What the control bar shows. `starting` is the bar's own: main resets the bar to it when a
+ * take starts and when the bar is hidden, and a new bar window opens on it, so the bar never
+ * shows a previous take's state while the next one acquires its streams. The recorder never
+ * reports it, and the shared activity has no such status.
+ */
+export type ControlBarStatus = RecordingStatus | "starting";
+
 export interface RecordingTick {
   elapsedSeconds: number;
   levels: number[];
-  status: RecordingStatus;
+  status: ControlBarStatus;
   /**
    * Whether this take has a loopback (system audio) track. Omitted = unknown,
    * treated as available. Lets every window disable the system-audio toggle
@@ -598,6 +630,13 @@ export interface RecordingTick {
    */
   systemAudioAvailable?: boolean;
 }
+
+/** The bar between a take's start and its first tick: no timer, no level, Stop only. */
+export const CONTROL_BAR_STARTING_TICK: RecordingTick = Object.freeze({
+  elapsedSeconds: 0,
+  levels: Object.freeze([0, 0, 0, 0, 0]) as number[],
+  status: "starting",
+});
 
 export type ControlCommand = "pause" | "resume" | "stop";
 
@@ -675,16 +714,14 @@ export interface RecordingBackfillMeta {
 
 /**
  * The recorder's phase as main needs it to draw the countdown over the chosen region
- * (main renderer → main). `counting` carries the tick (3, 2, 1); `starting` is the gap
- * while streams are acquired; `idle` after a cancel or a failed start.
+ * (main renderer → main). `counting` carries the tick (3, 2, 1, or from 5 down); `starting`
+ * is the gap while streams are acquired (the first report when the countdown is off); `idle`
+ * after a cancel or a failed start.
  */
 export type RecorderPhaseReport =
   | { phase: "counting"; value: number }
   | { phase: "starting" }
   | { phase: "idle" };
-
-/** The countdown before a take: 3, 2, 1. Main paints the first tick before the recorder reports it. */
-export const RECORDING_COUNTDOWN_SECONDS = 3;
 
 /**
  * A `[record-timing]` mark from the main renderer: `begin` restarts main's clock (a stop),

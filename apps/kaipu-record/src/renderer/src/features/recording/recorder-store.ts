@@ -1,6 +1,7 @@
 import type { LocalRecording, RecordingSettings } from "@shared/types";
 import {
-  RECORDING_COUNTDOWN_SECONDS,
+  DEFAULT_RECORDING_COUNTDOWN_SECONDS,
+  sanitizeCountdownSeconds,
   type RecorderPhaseReport,
   type RecordingArea,
 } from "@shared/types/ipc";
@@ -49,11 +50,16 @@ export interface StartInput {
 
 export interface RecorderSnapshot {
   status: RecorderStatus;
-  /** Current countdown tick (3→1) while a start is pending; null otherwise. */
+  /** Current countdown tick (3→1, or 5→1) while a start is pending; null otherwise. */
   countdown: number | null;
 }
 
-const COUNTDOWN_SECONDS = RECORDING_COUNTDOWN_SECONDS;
+/**
+ * The countdown length from Settings (0, 3 or 5), read when a start is requested. Kept here
+ * because a start is synchronous: it is primed from the settings file and follows the
+ * broadcast, so a change applies to the very next take with no restart.
+ */
+let countdownSeconds: number = DEFAULT_RECORDING_COUNTDOWN_SECONDS;
 /**
  * How long the first tick waits for main to say the countdown is on screen (the shade window
  * loading on the chosen region). Past it the countdown runs anyway: a take never depends on it.
@@ -102,6 +108,8 @@ interface PendingStart {
   id: string;
   created: Promise<unknown>;
   engine: Promise<EngineHandle> | null;
+  /** The engine failed before the take was set up; the start fails with it once acquired. */
+  failure?: unknown;
 }
 let pendingStart: PendingStart | null = null;
 let sessionCounter = 0;
@@ -139,7 +147,10 @@ function reportPhase(previous: RecorderSnapshot, next: RecorderSnapshot): void {
         : next.status === "idle" && pending
           ? { phase: "idle" }
           : null;
-  if (!report) return;
+  if (report) sendPhaseReport(report);
+}
+
+function sendPhaseReport(report: RecorderPhaseReport): void {
   try {
     window.electronAPI.reportRecorderPhase(report);
   } catch (error) {
@@ -177,17 +188,24 @@ function clearCountdownTimer(): void {
 }
 
 /**
- * Begin the 3-2-1 countdown, then start the engine using the input resolved
- * (live) the instant the countdown elapses — mirrors the previous behaviour of
- * reading quality/watermark refs at start time, not at call time. No-ops
- * unless idle, so callers don't need their own re-entry guard.
+ * Begin the countdown (3-2-1 by default; 5 or none per Settings), then start the engine using
+ * the input resolved (live) the instant the countdown elapses — mirrors the previous behaviour
+ * of reading quality/watermark refs at start time, not at call time. With the countdown off
+ * the take starts right away: no "counting" state, no wait for the countdown to be on screen.
+ * No-ops unless idle, so callers don't need their own re-entry guard.
  */
 export function requestStartRecording(resolveInput: () => StartInput): void {
   if (snapshot.status !== "idle") return;
   lastResolveInput = resolveInput;
   beginRecordTiming("requestStartRecording");
   const request = ++countdownRequest;
-  update({ status: "counting", countdown: COUNTDOWN_SECONDS });
+  const seconds = countdownSeconds;
+  if (seconds === 0) {
+    markRecordTiming("countdown off");
+    startTake(resolveInput);
+    return;
+  }
+  update({ status: "counting", countdown: seconds });
   // "3" gets its whole second only once it is visible: a region countdown is drawn by a
   // window main opens on this first report, and the clock used to run while it loaded,
   // which read as "3.2...1".
@@ -195,7 +213,7 @@ export function requestStartRecording(resolveInput: () => StartInput): void {
     // Cancelled (or cancelled and started again) while waiting.
     if (request !== countdownRequest || snapshot.status !== "counting") return;
     markRecordTiming("countdown visible, clock started");
-    runCountdown(resolveInput);
+    runCountdown(resolveInput, seconds);
   });
 }
 
@@ -205,29 +223,40 @@ async function countdownVisible(): Promise<void> {
   await Promise.race([wait.catch(() => undefined), delay(COUNTDOWN_VISIBLE_TIMEOUT_MS)]);
 }
 
-function runCountdown(resolveInput: () => StartInput): void {
-  let remaining = COUNTDOWN_SECONDS;
+function runCountdown(resolveInput: () => StartInput, seconds: number): void {
+  let remaining = seconds;
   countdownTimer = setInterval(() => {
     remaining -= 1;
     if (remaining <= 0) {
       clearCountdownTimer();
-      // Resolved while still "counting": a throw (no source selected) then goes back to idle,
-      // which main reads as an abandoned countdown — the shade comes down, Esc is released
-      // and the hidden app returns. Thrown after "starting", it left all of that stranded.
-      let input: StartInput;
-      try {
-        input = resolveInput();
-      } catch (error) {
-        reportError(runtimeT()("record.errorStart"), error, { context: { phase: "start" } });
-        update({ status: "idle", countdown: null });
-        return;
-      }
-      update({ status: "starting", countdown: null });
-      void beginEngine(input);
+      startTake(resolveInput);
     } else {
       update({ countdown: remaining });
     }
   }, 1000);
+}
+
+/**
+ * The countdown is over (or was never asked for): resolve the take's input and acquire.
+ * Resolved while still pending: a throw (no source selected) then goes back to idle, which
+ * main reads as an abandoned countdown — the shade comes down, Esc is released and the
+ * hidden app returns. Thrown after "starting", it left all of that stranded.
+ */
+function startTake(resolveInput: () => StartInput): void {
+  let input: StartInput;
+  try {
+    input = resolveInput();
+  } catch (error) {
+    reportError(runtimeT()("record.errorStart"), error, { context: { phase: "start" } });
+    const wasIdle = snapshot.status === "idle";
+    update({ status: "idle", countdown: null });
+    // Without a countdown the recorder never left idle, so `update` reports nothing: tell main
+    // the prepared start is dead, or the hidden app waits out the region's expiry.
+    if (wasIdle) sendPhaseReport({ phase: "idle" });
+    return;
+  }
+  update({ status: "starting", countdown: null });
+  void beginEngine(input);
 }
 
 /**
@@ -294,6 +323,14 @@ async function beginEngine(input: StartInput): Promise<void> {
         // runs the same robust stop — finalize-or-abort + always restore the
         // window/Dock/bar — so the app never gets stuck.
         onError: (error) => {
+          // Still acquiring (the cursor session can take a moment after the engine): there is
+          // no take to stop yet, and the start would go on to record a dead capture.
+          if (pendingStart === start) {
+            start.failure ??= error;
+            return;
+          }
+          // A discarded start's engine: the take on screen, if any, is another one.
+          if (sessionId !== id) return;
           reportError(runtimeT()("record.errorStopped"), error, {
             context: { sourceId: input.sourceId, phase: "mid-recording" },
             retry: () => {
@@ -330,6 +367,7 @@ async function beginEngine(input: StartInput): Promise<void> {
     ]).finally(() => clearTimeout(timer));
     // Cancelled while acquiring: the cancel restored the app and released this start.
     if (pendingStart !== start) return;
+    if (start.failure !== undefined) throw start.failure;
     pendingStart = null;
     cursorTrack = track;
 
@@ -445,7 +483,8 @@ function forwardLiveSettings(handle: EngineHandle, input: StartInput): () => voi
 }
 
 export function pauseRecording(): void {
-  if (!engine || !clock) return;
+  // Only a running take: during "finalizing" the engine is still set but flushing.
+  if (snapshot.status !== "recording" || !engine || !clock) return;
   const pausedAt = performance.now();
   engine.pause();
   cursorTrack?.pause(pausedAt);
@@ -454,7 +493,7 @@ export function pauseRecording(): void {
 }
 
 export function resumeRecording(): void {
-  if (!engine || !clock) return;
+  if (snapshot.status !== "paused" || !engine || !clock) return;
   const resumedAt = performance.now();
   engine.resume();
   cursorTrack?.resume(resumedAt);
@@ -529,6 +568,25 @@ async function stopRecording(): Promise<void> {
   stopping = false;
   update({ status: "idle", countdown: null });
 }
+
+// The countdown length (Settings → Recording). Registered at import like the command listener
+// below, so every window that records follows the same persisted value. A broadcast that lands
+// before the first read finishes wins: it is newer than the file the read saw.
+let countdownBroadcastSeen = false;
+window.electronAPI.onSettingsChanged?.((settings) => {
+  countdownBroadcastSeen = true;
+  countdownSeconds = sanitizeCountdownSeconds(settings.recordingCountdownSeconds);
+});
+void window.electronAPI
+  .getSettings?.()
+  .then((settings) => {
+    if (!countdownBroadcastSeen) {
+      countdownSeconds = sanitizeCountdownSeconds(settings.recordingCountdownSeconds);
+    }
+  })
+  .catch(() => {
+    // Unreadable settings leave the default: a take never depends on this read.
+  });
 
 // The bar's buttons and the global stop shortcut arrive as relayed commands.
 // Registered ONCE here at module scope — not inside a React effect tied to a
