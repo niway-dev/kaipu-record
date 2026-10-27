@@ -201,26 +201,54 @@ export class RecordingWriter {
       session.stranded = true;
       throw new FinalizeMoveError(session.tempPath, cause);
     }
+
+    // From the move on, the take is in the vault: if its metadata cannot be written, it is
+    // taken back out, so no `.mp4` is left in the vault without its sidecar, and the take
+    // stays salvageable from the staging file.
+    let recording: LocalRecording;
+    try {
+      // Renderer-supplied, so validated before it lands on disk; exports send none.
+      const capture = sanitizeRecordingCapture(meta.capture);
+      await vault.writeMeta(id, {
+        title: meta.title,
+        durationSeconds: meta.durationSeconds,
+        ...(capture ? { capture } : {}),
+        createdAt: this.now(),
+        derivedFromAssetId: meta.derivedFromAssetId ?? null,
+        ...(meta.exportPreset ? { exportPreset: meta.exportPreset } : {}),
+        ...(isFingerprint(meta.exportFingerprint)
+          ? { exportFingerprint: meta.exportFingerprint }
+          : {}),
+      });
+      if (meta.thumbnail) await vault.writeThumbnail(id, Buffer.from(meta.thumbnail));
+      const described = await vault.describe(id);
+      if (!described) throw new Error(`Finalized recording "${id}" not found in vault`);
+      recording = described;
+    } catch (cause) {
+      session.stranded = true;
+      await this.takeBack(vault, id, dest, session);
+      throw new FinalizeMoveError(session.tempPath, cause);
+    }
     this.sessions.delete(sessionId);
-
-    // Renderer-supplied, so validated before it lands on disk; exports send none.
-    const capture = sanitizeRecordingCapture(meta.capture);
-    await vault.writeMeta(id, {
-      title: meta.title,
-      durationSeconds: meta.durationSeconds,
-      ...(capture ? { capture } : {}),
-      createdAt: this.now(),
-      derivedFromAssetId: meta.derivedFromAssetId ?? null,
-      ...(meta.exportPreset ? { exportPreset: meta.exportPreset } : {}),
-      ...(isFingerprint(meta.exportFingerprint)
-        ? { exportFingerprint: meta.exportFingerprint }
-        : {}),
-    });
-    if (meta.thumbnail) await vault.writeThumbnail(id, Buffer.from(meta.thumbnail));
-
-    const recording = await vault.describe(id);
-    if (!recording) throw new Error(`Finalized recording "${id}" not found in vault`);
     return recording;
+  }
+
+  /**
+   * Move a finalized take back from the vault to its staging path and remove what was written
+   * for it. If the media cannot be moved back, the vault keeps it: removing it would lose it.
+   */
+  private async takeBack(
+    vault: LibraryVault,
+    id: string,
+    dest: string,
+    session: Session,
+  ): Promise<void> {
+    try {
+      await moveFile(dest, session.tempPath, { overwrite: true });
+    } catch {
+      return;
+    }
+    await vault.remove(id).catch(() => {});
   }
 
   private async closeHandle(session: Session): Promise<void> {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, readFile, readdir, access, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, access, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FinalizeMoveError, RecordingWriter } from "./recording-writer";
@@ -130,6 +130,24 @@ describe("RecordingWriter", () => {
     const dest = join(await mkdtemp(join(tmpdir(), "rw-else-")), "x.mp4");
     await writer.salvage("s1", dest);
     expect(await readFile(dest, "utf-8")).toBe("hello");
+  });
+
+  it("a metadata failure after the move takes the media back out of the vault, still salvageable", async () => {
+    const { writer, vaultDir, tempDir } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("take").buffer, 0);
+    // The sidecar cannot be written (a folder sits where it goes): the move already happened.
+    await mkdir(join(vaultDir, ".kaipu", "rec-fixed.json"), { recursive: true });
+
+    await expect(
+      writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
+    ).rejects.toBeInstanceOf(FinalizeMoveError);
+    // No orphan .mp4 in the vault, and the take is back in staging, not lost.
+    expect((await readdir(vaultDir)).filter((f) => f.endsWith(".mp4"))).toHaveLength(0);
+    expect(await readdir(tempDir)).toContain("kaipu-rec-s1.mp4.part");
+    const dest = join(tempDir, "rescued.mp4");
+    await writer.salvage("s1", dest);
+    expect(await readFile(dest, "utf-8")).toBe("take");
   });
 
   it("a second create with the same id starts a clean session without the first one's bytes", async () => {
