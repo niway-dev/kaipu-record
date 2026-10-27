@@ -23,7 +23,7 @@ const mockState = vi.hoisted(() => ({
     applySize: vi.fn(),
     preview: vi.fn((size: number) => size),
   },
-  bar: { show: vi.fn(), hide: vi.fn(), send: vi.fn(), raise: vi.fn() },
+  bar: { show: vi.fn(), hide: vi.fn(), sendTick: vi.fn(), reset: vi.fn(), raise: vi.fn() },
   shade: { show: vi.fn(), hide: vi.fn(), update: vi.fn() },
   shortcutRegister: vi.fn((_accelerator: string, _handler: () => void) => true),
   shortcutUnregister: vi.fn(),
@@ -95,7 +95,8 @@ vi.mock("./control-bar-window", () => ({
   ControlBarWindow: class {
     show = mockState.bar.show;
     hide = mockState.bar.hide;
-    send = mockState.bar.send;
+    sendTick = mockState.bar.sendTick;
+    reset = mockState.bar.reset;
     raise = mockState.bar.raise;
   },
 }));
@@ -565,6 +566,38 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     await new Promise((r) => setTimeout(r, 0));
 
     expect(mockState.bar.show).not.toHaveBeenCalled();
+  });
+
+  it("a take starting resets the bar to its neutral state before the bar can show", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+    mockState.displays = [{ id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } }];
+    mockState.getSources.mockResolvedValue([{ id: "screen:1:0", name: "S", display_id: "1" }]);
+
+    // The previous take left the hidden bar on "Saving…"; the next one must not show it.
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+      {},
+      { sourceId: "screen:1:0", sourceName: "S" },
+    );
+    expect(mockState.bar.reset).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(mockState.bar.show).toHaveBeenCalledTimes(1));
+    expect(mockState.bar.reset.mock.invocationCallOrder[0]).toBeLessThan(
+      mockState.bar.show.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("relays the recorder's ticks to the bar", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+    const tick = { elapsedSeconds: 3, levels: [0, 0, 0, 0, 0], status: "recording" };
+
+    mockState.ipcOn.get(IPC_CHANNELS.recordingReportTick)!({}, tick);
+
+    expect(mockState.bar.sendTick).toHaveBeenCalledWith(tick);
   });
 
   it("starts the region's TTL only once a recreated main window has loaded", async () => {

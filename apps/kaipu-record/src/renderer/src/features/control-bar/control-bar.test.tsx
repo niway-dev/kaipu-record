@@ -74,6 +74,26 @@ describe("ControlBar", () => {
     expect(screen.queryByRole("button", { name: /stop/i })).not.toBeInTheDocument();
   });
 
+  it("shows a neutral Starting state while the take acquires: no timer, no pause, Stop usable", () => {
+    const onStop = vi.fn();
+    render(
+      <ControlBar
+        tick={{ ...baseTick, status: "starting" }}
+        onPause={vi.fn()}
+        onResume={vi.fn()}
+        onStop={onStop}
+        modeChip={{ mode: "screen", ratio: null }}
+      />,
+    );
+    expect(screen.getByText(/starting/i)).toBeInTheDocument();
+    expect(screen.queryByText(/saving/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("00:04:17")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /pause/i })).not.toBeInTheDocument();
+    // Stop cancels the pending start (the recorder's "starting" branch).
+    fireEvent.click(screen.getByRole("button", { name: /stop/i }));
+    expect(onStop).toHaveBeenCalledOnce();
+  });
+
   it("offers Turn camera off only while the camera is on", () => {
     const onCameraOff = vi.fn();
     const { rerender } = render(

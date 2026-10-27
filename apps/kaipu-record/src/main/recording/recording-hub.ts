@@ -547,6 +547,9 @@ export function registerRecordingHub(
 
   ipcMain.on(IPC_CHANNELS.recordingStart, (_e, info: RecordingStartInfo) => {
     activity = startedActivity();
+    // Before any tick of this take (same IPC order) and before the bar can show: the hidden
+    // bar may still hold the previous take's "Saving…".
+    bar.reset();
     // The countdown is over: Esc belongs to the apps again. The region it was drawn on is
     // kept for the shade below.
     const region = countdownRegion;
@@ -653,7 +656,7 @@ export function registerRecordingHub(
 
   // ── Relay ────────────────────────────────────────────────────────────
   ipcMain.on(IPC_CHANNELS.recordingReportTick, (_e, tick: RecordingTick) => {
-    bar.send(IPC_CHANNELS.controlTick, tick);
+    bar.sendTick(tick);
     const next = applyTick(activity, tick);
     activity = next.activity;
     if (next.changed) broadcastActivity();

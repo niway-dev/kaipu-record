@@ -1116,6 +1116,7 @@
   },
   "panel": {
     "saving": "Saving…",
+    "starting": "Starting…",
     "paused": "Paused",
     "resume": "Resume",
     "pause": "Pause",

@@ -50,6 +50,21 @@ export function ControlBar({
     );
   }
 
+  if (tick.status === "starting") {
+    // The streams are still being acquired: nothing is recorded yet, so no timer, no level
+    // and no pause. Stop stays, and cancels the pending start.
+    return (
+      <div className={styles.bar}>
+        <span className={styles.dot} data-starting />
+        <span className={styles.savingLabel}>{t("starting")}</span>
+        {modeChip && <ModeChip chip={modeChip} label={modeName(modeChip.mode, tModes)} />}
+        <button className={styles.stop} type="button" aria-label={t("stop")} onClick={onStop}>
+          <Square size={14} fill="currentColor" />
+        </button>
+      </div>
+    );
+  }
+
   const paused = tick.status === "paused";
   return (
     <div className={styles.bar} data-paused={paused || undefined}>

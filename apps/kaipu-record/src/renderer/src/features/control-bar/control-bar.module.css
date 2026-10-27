@@ -42,6 +42,12 @@
   animation: none;
 }
 
+/* Not recording yet: a muted (still pulsing) dot, so the bar never claims a take that may
+   not start. */
+.dot[data-starting] {
+  background: var(--text-muted);
+}
+
 .time {
   font-family: var(--font-mono);
   font-size: 16px;

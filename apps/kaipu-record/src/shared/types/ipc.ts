@@ -587,10 +587,18 @@ export type UpdateStatus =
   | { state: "ready"; version: string }
   | { state: "error"; message: string; checkedAt: number };
 
+/**
+ * What the control bar shows. `starting` is the bar's own: main resets the bar to it when a
+ * take starts and when the bar is hidden, and a new bar window opens on it, so the bar never
+ * shows a previous take's state while the next one acquires its streams. The recorder never
+ * reports it, and the shared activity has no such status.
+ */
+export type ControlBarStatus = RecordingStatus | "starting";
+
 export interface RecordingTick {
   elapsedSeconds: number;
   levels: number[];
-  status: RecordingStatus;
+  status: ControlBarStatus;
   /**
    * Whether this take has a loopback (system audio) track. Omitted = unknown,
    * treated as available. Lets every window disable the system-audio toggle
@@ -598,6 +606,13 @@ export interface RecordingTick {
    */
   systemAudioAvailable?: boolean;
 }
+
+/** The bar between a take's start and its first tick: no timer, no level, Stop only. */
+export const CONTROL_BAR_STARTING_TICK: RecordingTick = Object.freeze({
+  elapsedSeconds: 0,
+  levels: Object.freeze([0, 0, 0, 0, 0]) as number[],
+  status: "starting",
+});
 
 export type ControlCommand = "pause" | "resume" | "stop";
 

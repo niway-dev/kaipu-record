@@ -389,6 +389,13 @@ en clips cortos). Luego dispara `onComplete(recording)` que navega a
 directo en el detalle del video (sin flash del Record page). El detalle tiene su
 propio "Loading…" mientras `useLocalLibrary` re-lista el vault.
 
+The bar window is hidden on stop, not destroyed, so it would otherwise keep that
+"Saving…" into the next take. Its other state is **"Starting…"** (muted dot, Stop
+only, no timer): `ControlBarWindow.hide()` and the hub's `recordingStart` reset it
+to `CONTROL_BAR_STARTING_TICK`, and a new bar window opens on it. It lasts until the
+recorder's first tick, after the streams are acquired. Stop there cancels the
+pending start. A bar hidden before its first window painted stays hidden.
+
 ### Ventanas flotantes transparentes (barra y burbuja)
 
 La barra y la burbuja son `BrowserWindow` frameless/transparent/always-on-top.

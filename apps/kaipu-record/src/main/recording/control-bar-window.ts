@@ -1,6 +1,8 @@
 import { BrowserWindow, screen } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
+import { IPC_CHANNELS } from "@shared/types";
+import { CONTROL_BAR_STARTING_TICK, type RecordingTick } from "@shared/types/ipc";
 import type { Rect } from "./area-geometry";
 import { controlBarBounds } from "./control-bar-placement";
 
@@ -40,6 +42,16 @@ export class ControlBarWindow {
   private includeInRecording = false;
   /** The recorded area to keep clear of, when only part of the display is recorded. */
   private anchor: Rect | null = null;
+  /**
+   * Whether the bar should be on screen. A new window shows itself only once it has painted
+   * (`ready-to-show`), which can come after a fast failed start or an early Stop hid it: it
+   * must then stay hidden, or it floats over an idle app with a Stop that does nothing.
+   */
+  private wanted = false;
+  /** The current window has painted once; before that, showing it would show nothing. */
+  private ready = false;
+  /** What the bar shows now, replayed to a window whose page was still loading. */
+  private lastTick: RecordingTick = CONTROL_BAR_STARTING_TICK;
 
   show(displayId?: string, options?: ControlBarOptions): void {
     this.displayId = displayId;
@@ -47,13 +59,16 @@ export class ControlBarWindow {
     if (options?.includeInRecording !== undefined) {
       this.includeInRecording = options.includeInRecording;
     }
+    this.wanted = true;
     if (this.window && !this.window.isDestroyed()) {
       this.applyContentProtection();
       this.position();
-      this.window.showInactive();
+      // Still loading: its `ready-to-show` shows it.
+      if (this.ready) this.window.showInactive();
       return;
     }
-    this.window = new BrowserWindow({
+    this.ready = false;
+    const window = new BrowserWindow({
       width: BAR_WIDTH,
       height: BAR_HEIGHT,
       ...(process.platform === "darwin" ? { type: "panel" } : {}),
@@ -77,6 +92,7 @@ export class ControlBarWindow {
         backgroundThrottling: false,
       },
     });
+    this.window = window;
     this.window.setAlwaysOnTop(true, "screen-saver");
     this.window.setVisibleOnAllWorkspaces(true, {
       visibleOnFullScreen: true,
@@ -93,11 +109,18 @@ export class ControlBarWindow {
     }
 
     this.window.once("ready-to-show", () => {
+      if (this.window !== window || window.isDestroyed()) return;
+      this.ready = true;
+      // A tick sent while the page loaded found no listener: apply the latest one now.
+      window.webContents.send(IPC_CHANNELS.controlTick, this.lastTick);
+      if (!this.wanted) return;
       this.position();
-      this.window?.showInactive();
+      window.showInactive();
     });
     this.window.on("closed", () => {
+      if (this.window !== window) return;
       this.window = null;
+      this.ready = false;
     });
   }
 
@@ -115,20 +138,34 @@ export class ControlBarWindow {
     this.window?.setContentProtection(!this.includeInRecording);
   }
 
-  /** Push a message to the bar renderer. */
-  send(channel: string, payload: unknown): void {
+  /** Show the recorder's tick (timer, level, status) on the bar. */
+  sendTick(tick: RecordingTick): void {
+    this.lastTick = tick;
     if (this.window && !this.window.isDestroyed()) {
-      this.window.webContents.send(channel, payload);
+      this.window.webContents.send(IPC_CHANNELS.controlTick, tick);
     }
   }
 
+  /** Put the bar in its neutral "starting" state: a new take, nothing ticked yet. */
+  reset(): void {
+    this.sendTick(CONTROL_BAR_STARTING_TICK);
+  }
+
+  /**
+   * Hide the bar, kept for the next take, and reset it while it is off screen: a window
+   * shown again repaints on its next frame, so the last take's "Saving…" must already be gone.
+   */
   hide(): void {
+    this.wanted = false;
     this.window?.hide();
+    this.reset();
   }
 
   destroy(): void {
+    this.wanted = false;
     this.window?.destroy();
     this.window = null;
+    this.ready = false;
   }
 
   private position(): void {
