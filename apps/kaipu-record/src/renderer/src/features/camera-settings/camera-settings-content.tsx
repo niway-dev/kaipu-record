@@ -13,9 +13,9 @@ export interface CameraSettingsContentProps {
 }
 
 /**
- * Header + settings (or the blocked card), and the focus contract both containers share:
- * opening moves focus into the content (the Shape group, or the blocked card's button),
- * Esc closes and gives focus back to the chevron.
+ * The focus contract both containers (popover and drawer) share: opening moves focus into
+ * the content (the Shape group, or the blocked card's button), Esc closes and gives focus
+ * back to the chevron.
  */
 export function useSettingsFocus(
   open: boolean,
@@ -47,6 +47,7 @@ export function useSettingsFocus(
   return { firstRef, onKeyDown };
 }
 
+/** Header + settings, or the blocked card while camera access is denied. */
 export function CameraSettingsContent({
   store,
   cameraOn,
