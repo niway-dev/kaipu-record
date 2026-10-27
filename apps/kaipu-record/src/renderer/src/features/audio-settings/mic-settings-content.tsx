@@ -78,6 +78,9 @@ export function MicSettingsContent({
         role="radiogroup"
         aria-label={t("input")}
         className={micStyles.devices}
+        // With no device there is no radio to take focus: the group itself does, so focus
+        // still enters the settings and Esc reaches their key handler.
+        tabIndex={devices.length === 0 ? -1 : undefined}
         onKeyDown={onKeyDown}
       >
         {devices.length === 0 && <p className={styles.hint}>{t("noDevices")}</p>}

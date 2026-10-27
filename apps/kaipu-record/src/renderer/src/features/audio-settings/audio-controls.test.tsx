@@ -150,6 +150,25 @@ describe("MicControlWithPopover (Record page)", () => {
     );
   });
 
+  it("with no microphones, focus still moves into the popover and Esc closes it", async () => {
+    render(
+      <MicWithStore
+        on
+        onToggle={() => {}}
+        isRecording={false}
+        microphones={[]}
+        selectedMicrophone={null}
+        onSelectMicrophone={() => {}}
+      />,
+    );
+    const chevron = screen.getByRole("button", { name: "Microphone settings" });
+    await userEvent.click(chevron);
+    expect(screen.getByRole("radiogroup", { name: "Input" })).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(chevron).toHaveFocus();
+  });
+
   describe("the pre-take meter", () => {
     it("opens the selected device only while the popover is open, and releases it on close", async () => {
       render(<MicWithStore on onToggle={() => {}} isRecording={false} {...devices} />);
