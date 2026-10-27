@@ -527,6 +527,31 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
       expect(mockState.shortcutRegister).not.toHaveBeenCalled();
     });
 
+    it("draws the countdown the recorder runs when its length disagrees with the region's", async () => {
+      // Main read 0 when the region was prepared, but the recorder (its own copy of the
+      // setting, not yet updated) counts 3: the countdown it runs must still be on screen.
+      mockState.shortcutRegister.mockClear();
+      const { hub, display } = await setup(0);
+      const rect = { x: 100, y: 50, width: 640, height: 360 };
+      const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+      const visible = mockState.ipcHandle.get(IPC_CHANNELS.recordingCountdownVisible)!;
+
+      hub.prepareRegionCountdown(2, rect);
+      phase({}, { phase: "counting", value: 3 });
+
+      expect(mockState.shade.show).toHaveBeenCalledWith(display, rect, expect.any(Function), {
+        phase: "countdown",
+        value: 3,
+      });
+      // The recorder starts its clock only once that shade is on screen.
+      const wait = visible({}) as Promise<void> | undefined;
+      expect(wait).toBeInstanceOf(Promise);
+      const onShown = mockState.shade.show.mock.calls[0]![2] as () => void;
+      onShown();
+      await expect(wait).resolves.toBeUndefined();
+      expect(mockState.shortcutRegister).toHaveBeenCalledWith("Escape", expect.any(Function));
+    });
+
     it("with 0 a Frame area still gets its shade and border when the take starts", async () => {
       const { hub, display } = await setup(0);
       const rect = { x: 100, y: 50, width: 640, height: 360 };

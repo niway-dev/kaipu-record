@@ -524,6 +524,26 @@ export function registerRecordingHub(
     shade.hide();
     revealAbandoned(notify);
   };
+  /**
+   * Open the region's shade on the countdown's first tick. It loads while the start request
+   * reaches the recorder; the recorder starts its clock only once it is on screen
+   * (`recordingCountdownVisible`).
+   */
+  const drawCountdown = (region: NonNullable<typeof countdownRegion>, seconds: number): void => {
+    region.drawn = true;
+    countdownShown = false;
+    shade.show(
+      region.display,
+      region.rect,
+      () => {
+        if (countdownRegion !== region) return;
+        markRecordTiming("countdown shade shown");
+        raiseFloating();
+        markCountdownShown();
+      },
+      { phase: "countdown", value: seconds },
+    );
+  };
   // Without a region the countdown is the Record page's own and is already visible. With one,
   // the shade (opened when the region was prepared) loads a renderer before it can show "3":
   // the recorder starts its clock after.
@@ -543,9 +563,15 @@ export function registerRecordingHub(
       countdownRegionTimer = null;
     }
     if (report.phase === "counting") {
-      // The shade opened with the region (`prepareRegionCountdown`); a tick only repaints it.
-      // Showing it again here would answer `recordingCountdownVisible` before it loaded.
-      shade.update({ phase: "countdown", value: report.value });
+      if (!countdownRegion.drawn) {
+        // Prepared with the countdown off, yet the recorder counts: its copy of the setting
+        // had not caught up. What it runs is what the user must see, so draw it now.
+        drawCountdown(countdownRegion, report.value);
+      } else {
+        // The shade opened with the region (`prepareRegionCountdown`); a tick only repaints
+        // it. Showing it again here would answer `recordingCountdownVisible` before it loaded.
+        shade.update({ phase: "countdown", value: report.value });
+      }
       holdEscape();
     } else if (report.phase === "starting") {
       // The gap after the countdown: its dim stays up, number cleared. Nothing to clear when
@@ -707,25 +733,13 @@ export function registerRecordingHub(
         return;
       }
       const seconds = getAppSettings().recordingCountdownSeconds;
-      const prepared = { display, rect: area ? area.rect : null, drawn: seconds > 0 };
+      const prepared = { display, rect: area ? area.rect : null, drawn: false };
       countdownRegion = prepared;
       countdownAbandoned = onAbandoned ?? null;
-      if (prepared.drawn) {
-        // Open the shade now, on the first tick (the configured length): it loads while the
-        // start request reaches the recorder, instead of after its first tick report. The
-        // recorder still starts its clock only once this window is on screen
-        // (`recordingCountdownVisible`).
-        shade.show(
-          display,
-          prepared.rect,
-          () => {
-            if (countdownRegion !== prepared) return;
-            markRecordTiming("countdown shade shown");
-            raiseFloating();
-            markCountdownShown();
-          },
-          { phase: "countdown", value: seconds },
-        );
+      if (seconds > 0) {
+        // Open the shade now, on the first tick (the configured length), instead of after the
+        // recorder's first tick report.
+        drawCountdown(prepared, seconds);
       } else {
         // No countdown, so no dim and no number: the recorder does not wait for either.
         markCountdownShown();
