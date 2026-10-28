@@ -6,18 +6,20 @@
 # before you have read it, and this one invokes a C compiler. Nothing that
 # compiles code on your machine should be a side effect of `bun install`.
 #
-# Why it has to exist at all: `uiohook-napi` ships prebuilds for Node, not for
-# Electron, and Electron embeds its own V8/Node — so a module built for the
-# system Node will not load inside the app. `electron-builder.yml` sets
-# `npmRebuild: false`, so packaging does not rebuild either. This script is the
-# only place the rebuild happens.
+# Why it has to exist at all: `uiohook-napi` is patched (see `patches/` and the
+# root `package.json` `patchedDependencies`) and `bun install` patches the C
+# sources, not the prebuilt binary it ships. That prebuild is a N-API module, so
+# Electron loads it fine — unpatched, with the start() deadlock the patch fixes.
+# `electron-builder.yml` sets `npmRebuild: false`, so packaging does not rebuild
+# either. This script is the only place the patched sources get compiled.
 #
-# Run it when `bun run setup` tells you to. It is also called explicitly by the
-# macOS packaging paths (`build:mac`, `release-desktop.yml`), which must never
-# depend on someone having remembered.
+# Run it when `bun run setup` tells you to. It is also called explicitly by every
+# packaging path (`build:mac`, `build:win`, `build:linux`, `build:unpack`,
+# `release-desktop.yml`), which must never depend on someone having remembered.
 set -euo pipefail
 
-APP_DIR="$(cd "$(dirname "$0")/../apps/kaipu-record" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+APP_DIR="$(cd "$SCRIPT_DIR/../apps/kaipu-record" && pwd)"
 cd "$APP_DIR"
 
 ELECTRON_PKG="node_modules/electron/package.json"
@@ -29,10 +31,13 @@ ELECTRON_VERSION="$(node -p "require('./$ELECTRON_PKG').version")"
 
 bunx electron-builder install-app-deps
 
-# Stamp what we just built against. `setup-dev.sh` compares this to the installed
-# Electron version to tell you whether a rebuild is pending. It lives inside
-# node_modules on purpose: a fresh install wipes it, which is exactly when the
-# rebuild is needed again.
-printf '%s\n' "$ELECTRON_VERSION" > node_modules/.native-deps-electron-version
+# Stamp what we just built against: Electron version + hash of the dependency
+# patches (scripts/native-deps-stamp.sh). `setup-dev.sh` and the release workflow
+# compare the file to a fresh stamp to tell you whether a rebuild is pending —
+# an Electron bump or a changed patch both show up. It lives inside node_modules
+# on purpose: a fresh install wipes it, which is exactly when the rebuild is
+# needed again.
+STAMP="$(bash "$SCRIPT_DIR/native-deps-stamp.sh")"
+printf '%s\n' "$STAMP" > node_modules/.native-deps-electron-version
 
-echo "rebuild-native: built against Electron $ELECTRON_VERSION"
+echo "rebuild-native: built against Electron $ELECTRON_VERSION (stamp $STAMP)"
