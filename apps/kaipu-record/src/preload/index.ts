@@ -224,6 +224,7 @@ const kaipuApi: KaipuElectronAPI = {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.screenshotOverlayHiddenAck, listener);
     },
     hiddenAck: () => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayHiddenAck),
+    requestState: () => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayStateRequest),
   },
   captureToast: {
     onShow: (callback) => {

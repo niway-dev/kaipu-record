@@ -67,6 +67,8 @@ export interface CaptureOverlayBridge {
   setIntent(intent: CaptureIntent): void;
   /** Main's state broadcast (mode, hover, frame display, window list). Returns an unsubscribe fn. */
   onState(callback: (state: OverlayState) => void): () => void;
+  /** Ask main for the current state again, once `onState` is listening (see `screenshotOverlayStateRequest`). */
+  requestState(): void;
   /** Main hid the overlays and asks for an ack after the next frame. Returns an unsubscribe fn. */
   onHiddenAckRequest(callback: () => void): () => void;
   /** Answer `onHiddenAckRequest`: this overlay has painted its last frame. */
