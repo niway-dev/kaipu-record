@@ -24,7 +24,7 @@ interface TagPanelProps {
   /** Every live tag, most used first. */
   tags: readonly TagSummary[];
   initialTab: TagPanelTab;
-  onAssign(tagIds: readonly string[]): void;
+  onAssign(tagIds: readonly string[]): void | Promise<void>;
   onCreate(name: string, color?: TagColor): Promise<TagSummary | null>;
   onRename(id: string, name: string): Promise<void>;
   onRecolor(id: string, color: TagColor): Promise<void>;
@@ -144,7 +144,7 @@ function ItemTags({
 }: {
   video: LibraryVideo;
   tags: readonly TagSummary[];
-  onAssign(tagIds: readonly string[]): void;
+  onAssign(tagIds: readonly string[]): void | Promise<void>;
   onCreate(name: string): Promise<TagSummary | null>;
   onOpenDetails(): void;
 }): React.JSX.Element {

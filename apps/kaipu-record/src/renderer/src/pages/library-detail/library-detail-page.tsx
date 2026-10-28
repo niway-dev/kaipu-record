@@ -264,7 +264,7 @@ export function LibraryDetailPage(): React.JSX.Element {
             <TagEditor
               assigned={resolveTags(video.tagIds, tagApi.byId)}
               all={tagApi.tags}
-              onAssign={(next) => void setTags(localId, next)}
+              onAssign={(next) => setTags(localId, next)}
               onCreate={tagApi.create}
             />
           )}
