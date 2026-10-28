@@ -15,12 +15,27 @@ function preferencesFile(): string {
   return join(app.getPath("userData"), "preferences.json");
 }
 
-function read(): StoredPreferences {
+/**
+ * Parsed preferences, remembered per file path. Main is the only writer, so the
+ * set/reset paths keep it exact and `vaultDirectory()` never touches disk after the
+ * first call. Keyed by path so a different userData dir (tests) never sees another
+ * dir's value. A hand edit of preferences.json while the app runs is picked up on
+ * restart or merged into the next set/reset write.
+ */
+let cached: { file: string; preferences: StoredPreferences } | null = null;
+
+function readFromDisk(): StoredPreferences {
   try {
     return JSON.parse(readFileSync(preferencesFile(), "utf-8")) as StoredPreferences;
   } catch {
     return {};
   }
+}
+
+function read(): StoredPreferences {
+  const file = preferencesFile();
+  if (cached?.file !== file) cached = { file, preferences: readFromDisk() };
+  return cached.preferences;
 }
 
 function write(preferences: StoredPreferences): void {
@@ -32,6 +47,8 @@ function write(preferences: StoredPreferences): void {
   const tmp = `${path}.tmp`;
   writeFileSync(tmp, JSON.stringify(preferences, null, 2));
   renameSync(tmp, path);
+  // Only after the rename succeeded: a failed write leaves the cache on the old value.
+  cached = { file: path, preferences };
 }
 
 /** Platform default: Videos folder + "Kaipu Record". */
@@ -52,11 +69,13 @@ export function vaultDirectory(): VaultDirectory {
 }
 
 export function setVaultDirectory(directory: string): void {
-  write({ ...read(), vaultDirectory: directory });
+  // Re-read from disk so a hand-edited preferences.json (any key) is merged
+  // into this write instead of being clobbered by a stale cache.
+  write({ ...readFromDisk(), vaultDirectory: directory });
 }
 
 export function resetVaultDirectory(): void {
-  const preferences = read();
+  const preferences = readFromDisk();
   delete preferences.vaultDirectory;
   write(preferences);
 }
