@@ -292,6 +292,8 @@ function runCountdown(resolveInput: () => StartInput, seconds: number): void {
   let remaining = seconds;
   countdownTimer = setInterval(() => {
     remaining -= 1;
+    // Each second is a heartbeat: a timeline that stops here had its renderer stall.
+    markRecordTiming(`countdown tick (${remaining} left)`);
     if (remaining <= 0) {
       clearCountdownTimer();
       startTake(resolveInput);
@@ -397,6 +399,7 @@ async function hideAppForTake(input: StartInput): Promise<void> {
  */
 export function stopOrCancelRecording(): void {
   if (snapshot.status === "counting") {
+    markRecordTiming("cancelled during the countdown");
     clearCountdownTimer();
     // Acquired during the countdown: released, whatever it is still waiting on. The app was
     // never hidden for it, so there is nothing to restore.
@@ -407,6 +410,7 @@ export function stopOrCancelRecording(): void {
     return;
   }
   if (snapshot.status === "starting") {
+    markRecordTiming("cancelled while starting");
     const start = pendingStart;
     pendingStart = null;
     if (start) discardStart(start);
@@ -927,6 +931,7 @@ void window.electronAPI
 // remount, and correctly cancels a pending countdown instead of only ever
 // acting on a live engine.
 window.electronAPI.onRecordingCommand((command) => {
+  markRecordTiming(`command from main: ${command}`);
   if (command === "pause") pauseRecording();
   else if (command === "resume") resumeRecording();
   else if (command === "stop") stopOrCancelRecording();

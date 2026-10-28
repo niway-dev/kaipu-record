@@ -257,6 +257,9 @@ function createWindow(showOnReady = true): void {
   });
 
   mainWindow.webContents.setBackgroundThrottling(false);
+  // The recorder lives in this renderer: a stall shows in the terminal, take or not.
+  mainWindow.on("unresponsive", () => console.warn("[record-timing] main window unresponsive"));
+  mainWindow.on("responsive", () => console.warn("[record-timing] main window responsive again"));
 
   mainWindow.on("ready-to-show", () => {
     if (showOnReady) mainWindow?.show();
@@ -821,7 +824,10 @@ app.whenReady().then(() => {
     handlers: {
       // "Start recording" opens the selector in the last used mode, as the button does.
       startRecording: () => triggerRecordSelector(),
-      stopRecording: () => mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop"),
+      stopRecording: () => {
+        markRecordTiming("stop shortcut: stop sent to the recorder");
+        mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop");
+      },
       bringToFront: bringAppToFront,
       captureScreenshot: () => triggerShortcutCapture("captureScreenshot"),
       captureScreen: () => triggerShortcutCapture("captureScreen"),
@@ -1013,7 +1019,10 @@ app.whenReady().then(() => {
       recordScreen: () => triggerRecordSelector("screen"),
       recordArea: () => triggerRecordSelector("frame"),
       recordWindow: () => triggerRecordSelector("window"),
-      stopRecording: () => mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop"),
+      stopRecording: () => {
+        markRecordTiming("tray menu: stop sent to the recorder");
+        mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop");
+      },
       takeScreenshot: () => triggerShortcutCapture("captureScreenshot"),
       openLibrary: () => showMainWindowAt(ROUTES.library),
       openSettings: () => showMainWindowAt(ROUTES.settings),
