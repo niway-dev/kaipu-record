@@ -189,7 +189,7 @@ bubble and the exported video read correctly; turn it on and check the selfie fl
 
 ## Framing
 
-Status: 🟡 In progress (implemented; pending owner validation on the real app).
+Status: 🟢 Ready to validate (prod review pending) — implemented; pending owner validation on the real app.
 
 "I need to be able to frame myself when I need it." The bubble used to show whatever the
 camera sees, centered. The Camera settings now have a "Framing" switch after "Mirror image":
@@ -219,6 +219,11 @@ is asked for `size × 2 (Retina) × zoom` lines, rounded up to 480, 720 or 1080 
 count changes and then stays put for 400 ms, so dragging the slider does not restart the
 camera on every tick. Reopening shows the placeholder for a moment; that is the one visible
 cost of crossing a step.
+
+**Frozen during a take.** That blink would be recorded, so while a take runs the bubble keeps
+the line count it had when the take started (`takeLines` in `camera-bubble.tsx`) and catches
+up when the take ends. Zoom and position still apply at once, mid-take; the trade-off is that
+zooming in during a take shows a softer image in the video until it ends.
 
 Persistence follows the size slider: changes show at once and reach disk at most every 60 ms.
 
