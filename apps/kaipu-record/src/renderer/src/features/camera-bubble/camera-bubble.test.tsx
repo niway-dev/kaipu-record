@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RecordingActivity } from "@shared/types";
 
@@ -136,17 +136,17 @@ describe("CameraBubble", () => {
   });
 
   it("asks the camera for more lines when framing zooms in, and follows live changes", async () => {
-    const video = await renderWithFraming({ enabled: true, zoom: 2, x: 0, y: 0 });
-    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 1080));
     let push: ((settings: never) => void) | null = null;
-    const base = await original.getSettings();
     window.electronAPI.onSettingsChanged = ((callback: (settings: never) => void) => {
       push = callback;
       return () => {};
     }) as never;
-    cleanup();
-    const second = render(<CameraBubble />);
-    await waitFor(() => expect(push).not.toBeNull());
+    const base = await original.getSettings();
+    const video = await renderWithFraming({ enabled: true, zoom: 2, x: 0, y: 0 });
+    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 1080));
+    expect(video.style.transform).toContain("scale(2)");
+    // The same bubble follows a pushed change: framing off clears the transform and the
+    // camera goes back to its usual lines.
     act(() =>
       push?.({
         ...base,
@@ -159,8 +159,8 @@ describe("CameraBubble", () => {
         },
       } as never),
     );
-    expect(second.container.querySelector("video")!.style.transform).toBe("");
-    expect(video).toBeDefined();
+    expect(video.style.transform).toBe("");
+    expect(mockPreview).toHaveBeenLastCalledWith(true, null, 480);
   });
 
   it("keeps the camera resolution while recording, so a zoom change never reopens the camera mid-take", async () => {
