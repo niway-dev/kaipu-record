@@ -27,8 +27,9 @@ export interface MicSettingsContentProps {
 /**
  * The microphone settings, shared by the Record page's drawer and the capture panel's
  * drawer: the input device (locked during a take), the input level, noise reduction. The
- * compact (panel) variant keeps the panel short: one-line device rows in a list that
- * scrolls past five, the type only where a device is disconnected, the noise hint on hover.
+ * compact (panel) variant keeps the panel short: no section labels, one-line device rows
+ * in a list that scrolls past four, the type only where a device is disconnected, and the
+ * noise hint on hover.
  */
 export function MicSettingsContent({
   microphones,
@@ -82,9 +83,12 @@ export function MicSettingsContent({
       </div>
 
       <div className={styles.column}>
-        <span className={styles.label} aria-hidden>
-          {t("input")}
-        </span>
+        {/* The panel drops the section labels: the radios and the slider name themselves. */}
+        {!compact && (
+          <span className={styles.label} aria-hidden>
+            {t("input")}
+          </span>
+        )}
         <div
           ref={firstRef as RefObject<HTMLDivElement | null>}
           role="radiogroup"
@@ -145,9 +149,11 @@ export function MicSettingsContent({
       </div>
 
       <div className={styles.column}>
-        <span className={styles.label} aria-hidden>
-          {t("inputLevel")}
-        </span>
+        {!compact && (
+          <span className={styles.label} aria-hidden>
+            {t("inputLevel")}
+          </span>
+        )}
         <LevelSlider
           label={t("inputLevel")}
           value={audio.micLevel}

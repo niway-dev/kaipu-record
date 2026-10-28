@@ -10,10 +10,10 @@
   padding-bottom: 4px;
 }
 
-/* The capture panel: one-line rows, and at most five of them before the list scrolls. */
+/* The capture panel: one-line rows, and at most four of them before the list scrolls. */
 .devices[data-compact] {
   gap: 3px;
-  max-height: calc(5 * 28px + 4 * 3px);
+  max-height: calc(4 * 28px + 3 * 3px);
   overflow-y: auto;
 }
 
