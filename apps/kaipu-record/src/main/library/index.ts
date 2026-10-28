@@ -154,7 +154,8 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
   // resolved inside the vault — the renderer never names a path.
   // NIW2-218: when the renderer sends the item's title, the dragged file carries it instead of
   // the vault id. The vault keeps its id name; the friendly file is a hard link (no extra
-  // space) in a temp folder, cleaned on the next drag and on quit.
+  // space) in `<vault>/.kaipu/drag/` (same volume), pruned when older than an hour and wiped
+  // on quit.
   ipcMain.on(IPC_CHANNELS.startFileDrag, (event, id: string, name?: unknown) => {
     void (async () => {
       if (typeof id !== "string" || /[\\/]|\.\./.test(id)) return;
@@ -165,7 +166,7 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
       if (icon.isEmpty()) return;
       const dragFile =
         typeof name === "string" && name.length > 0
-          ? await createDragCopy(file, friendlyDragName(name, extname(file)))
+          ? await createDragCopy(vault.directory, file, friendlyDragName(name, extname(file)))
           : file;
       event.sender.startDrag({ file: dragFile, icon: icon.resize({ width: 96 }) });
     })().catch((error) => console.error("file drag failed", error));

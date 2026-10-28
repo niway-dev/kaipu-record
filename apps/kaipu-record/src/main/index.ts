@@ -17,7 +17,7 @@ import { ROUTES } from "@shared/routes";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
 import { currentVault, registerLibraryVaultHandlers } from "./library";
-import { cleanupDragCopies } from "./library/drag-copies";
+import { cleanupDragCopies, cleanupLegacyDragCopies } from "./library/drag-copies";
 import { registerCloudStorageHandlers } from "./cloud";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
 import { registerRecordingHub, type RecordingHubHandle } from "./recording/recording-hub";
@@ -703,7 +703,8 @@ app.whenReady().then(() => {
   });
 
   // Drag copies left by a previous run (crash, force quit) are stale; best-effort.
-  cleanupDragCopies().catch(() => {});
+  cleanupDragCopies(vaultDirectory().path).catch(() => {});
+  cleanupLegacyDragCopies(app.getPath("temp")).catch(() => {});
 
   // The renderer reports when a video export starts and stops (NIW2-218); the close and quit
   // guards read it. Registered once, not per window.
@@ -1113,7 +1114,7 @@ app.on("before-quit", (event) => {
   unregisterGlobalShortcuts();
   tray?.destroy();
   tray = null;
-  cleanupDragCopies().catch(() => {});
+  cleanupDragCopies(vaultDirectory().path).catch(() => {});
   void shutdownMainAnalytics();
 });
 
