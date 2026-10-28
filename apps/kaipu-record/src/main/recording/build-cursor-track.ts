@@ -21,8 +21,8 @@ export interface BuildCursorTrackInput {
   clicksAvailable: boolean;
   display: CursorTrack["display"];
   /**
-   * Video time of the last frame in the file (`meta.durationSeconds * 1000`), when the
-   * caller knows it. The tracker keeps sampling until `recordingFinalize`, which only
+   * Video time of the last frame in the file, when the caller knows it: finalize passes
+   * `meta.durationMs + 250` (video time at the stop request, plus the frames flushed after it). The tracker keeps sampling until `recordingFinalize`, which only
    * runs after `output.finalize()` and the recorder's MIN_SAVING_MS dwell — without
    * this cut the track carries 0.6–2 s of samples and clicks past the end of the media
    * (the user moving the pointer to the "Saving…" bar, or clicking Stop again).
