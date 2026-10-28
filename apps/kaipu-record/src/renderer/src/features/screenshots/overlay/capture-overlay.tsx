@@ -142,32 +142,35 @@ export function CaptureOverlay({
    */
   const requestedMode = useRef<CaptureMode | null>(null);
 
-  useEffect(
-    () =>
-      bridge.onState((incoming) => {
-        setReceived(true);
-        setOpenedIntent((opened) => opened ?? incoming.intent ?? "capture");
-        if (incoming.intent !== undefined) {
-          const asked = requestedIntent.current;
-          if (asked === null || incoming.intent === asked) {
-            requestedIntent.current = null;
-            setLocalIntent(incoming.intent);
-          }
+  useEffect(() => {
+    const unsubscribe = bridge.onState((incoming) => {
+      setReceived(true);
+      setOpenedIntent((opened) => opened ?? incoming.intent ?? "capture");
+      if (incoming.intent !== undefined) {
+        const asked = requestedIntent.current;
+        if (asked === null || incoming.intent === asked) {
+          requestedIntent.current = null;
+          setLocalIntent(incoming.intent);
         }
-        const requested = requestedMode.current;
-        if (requested === null || incoming.mode === requested) {
-          requestedMode.current = null;
-          setState(incoming);
-          return;
-        }
-        setState((current) => ({
-          ...incoming,
-          mode: current.mode,
-          frameDisplayId: current.frameDisplayId,
-        }));
-      }),
-    [bridge],
-  );
+      }
+      const requested = requestedMode.current;
+      if (requested === null || incoming.mode === requested) {
+        requestedMode.current = null;
+        setState(incoming);
+        return;
+      }
+      setState((current) => ({
+        ...incoming,
+        mode: current.mode,
+        frameDisplayId: current.frameDisplayId,
+      }));
+    });
+    // Main may have sent the first state before this listener existed (a spare that was still
+    // loading when its pick opened); without it a spare paints nothing and the screen-sized
+    // window swallows every click. Ask again now that it is heard.
+    bridge.requestState();
+    return unsubscribe;
+  }, [bridge]);
 
   const send = useCallback<SendAnswer>(
     (answer, beforeSend) => {

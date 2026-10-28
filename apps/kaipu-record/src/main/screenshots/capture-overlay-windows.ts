@@ -784,6 +784,15 @@ export class CaptureOverlayWindows implements OverlayPort {
   }
 
   private registerListeners(): void {
+    // The renderer's listener is attached now: whatever state went out before it is resent.
+    this.deps.ipc.on(IPC_CHANNELS.screenshotOverlayStateRequest, (event) => {
+      if (!this.session) return;
+      const entry = this.liveEntries().find(
+        ({ window }) => window.webContents.id === event.sender.id,
+      );
+      if (entry) this.sendState(entry.window);
+    });
+
     this.deps.ipc.on(IPC_CHANNELS.screenshotOverlayAnswer, (event, payload) => {
       if (!this.session?.settle || !this.ownsSender(event)) return;
       const answer = parseAnswer(payload, this.session.displayIds, this.windows);
