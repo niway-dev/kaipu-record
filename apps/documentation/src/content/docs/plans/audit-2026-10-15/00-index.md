@@ -79,6 +79,7 @@ Deleted from this folder once their PR merged; git keeps the plan text.
 | 05 Screenshot editor save races   | SHOT-B1, SHOT-B4, SHOT-B8, SHOT-B9 (SHOT-B2 dropped: premise no longer holds) | [#360](https://github.com/niway-dev/kaipu-record/pull/360) |
 | 07 Tags registry integrity        | LIB-A4, LIB-B7, LIB-B6                                                        | [#358](https://github.com/niway-dev/kaipu-record/pull/358) |
 | 19 Trim drag                      | VID-B1, VID-B2, VID-B7, VID-B8                                                | [#368](https://github.com/niway-dev/kaipu-record/pull/368) |
+| 26 Cursor track tail              | REC-B8                                                                        | [#416](https://github.com/niway-dev/kaipu-record/pull/416) |
 | 28 Video thumbnails by range      | VID-A3                                                                        | [#369](https://github.com/niway-dev/kaipu-record/pull/369) |
 | 29 Export canvas pool             | VID-A5                                                                        | [#371](https://github.com/niway-dev/kaipu-record/pull/371) |
 | 31 Screenshot composite once      | SHOT-A1                                                                       | [#372](https://github.com/niway-dev/kaipu-record/pull/372) |
