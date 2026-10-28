@@ -6,11 +6,12 @@
 # before you have read it, and this one invokes a C compiler. Nothing that
 # compiles code on your machine should be a side effect of `bun install`.
 #
-# Why it has to exist at all: `uiohook-napi` ships prebuilds for Node, not for
-# Electron, and Electron embeds its own V8/Node — so a module built for the
-# system Node will not load inside the app. `electron-builder.yml` sets
-# `npmRebuild: false`, so packaging does not rebuild either. This script is the
-# only place the rebuild happens.
+# Why it has to exist at all: `uiohook-napi` is patched (see `patches/` and the
+# root `package.json` `patchedDependencies`) and `bun install` patches the C
+# sources, not the prebuilt binary it ships. That prebuild is a N-API module, so
+# Electron loads it fine — unpatched, with the start() deadlock the patch fixes.
+# `electron-builder.yml` sets `npmRebuild: false`, so packaging does not rebuild
+# either. This script is the only place the patched sources get compiled.
 #
 # Run it when `bun run setup` tells you to. It is also called explicitly by the
 # macOS packaging paths (`build:mac`, `release-desktop.yml`), which must never

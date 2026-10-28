@@ -49,8 +49,16 @@ describe("uiohook-napi native patch", () => {
     expect(patch).toContain("src/lib/uiohook_worker.c");
     // The fix's explicit start state, waited on in a predicate loop.
     expect(patch).toContain("hook_start_state");
-    // The old flag mutex is gone: nothing may trylock it as a "started" signal.
-    expect(patch).not.toMatch(/^\+.*uv_mutex_trylock\(&hook_running_mutex\)/m);
+    // The old flag mutex is gone: no added *code* line may trylock it as a "started"
+    // signal (the fix's comments are allowed to mention it by name).
+    const addedCode = patch
+      .split("\n")
+      .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
+      .map((line) => line.slice(1).trim())
+      .filter((line) => !line.startsWith("//") && !line.startsWith("*"));
+    expect(addedCode.some((line) => line.includes("uv_mutex_trylock(&hook_running_mutex)"))).toBe(
+      false,
+    );
   });
 
   it("reached the installed native sources", () => {

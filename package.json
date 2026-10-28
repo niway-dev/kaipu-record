@@ -72,5 +72,8 @@
     "turbo": "^2.6.3",
     "typescript": "catalog:"
   },
-  "packageManager": "bun@1.3.4"
+  "packageManager": "bun@1.3.4",
+  "patchedDependencies": {
+    "uiohook-napi@1.5.5": "patches/uiohook-napi@1.5.5.patch"
+  }
 }
