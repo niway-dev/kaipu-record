@@ -9,7 +9,9 @@ function Harness({
   micOn = true,
   audio = DEFAULT_AUDIO_SETTINGS,
   onChange = vi.fn(),
+  compact = false,
 }: {
+  compact?: boolean;
   micOn?: boolean;
   audio?: AudioSettings;
   onChange?: (patch: Partial<AudioSettings>) => void;
@@ -20,6 +22,7 @@ function Harness({
       audio={audio}
       onChange={onChange}
       micOn={micOn}
+      compact={compact}
       firstRef={firstRef}
     />
   );
@@ -68,5 +71,14 @@ describe("SystemAudioSettingsContent", () => {
     expect(screen.getByText("Turn on the microphone to use this")).toBeInTheDocument();
     await userEvent.click(toggle);
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("compact (capture panel): no One app line; the disabled chip's tooltip says it", () => {
+    render(<Harness compact />);
+    expect(screen.queryByText(/Not available yet/, { selector: "p" })).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "One app, Not available yet" })).toHaveAttribute(
+      "title",
+      "Not available yet",
+    );
   });
 });

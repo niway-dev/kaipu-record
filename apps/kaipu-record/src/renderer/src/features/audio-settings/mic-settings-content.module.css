@@ -10,6 +10,34 @@
   padding-bottom: 4px;
 }
 
+/* The capture panel: one-line rows, and at most five of them before the list scrolls. */
+.devices[data-compact] {
+  gap: 3px;
+  max-height: calc(5 * 28px + 4 * 3px);
+  overflow-y: auto;
+}
+
+.devices[data-compact] .device {
+  min-height: 28px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+.devices[data-compact] .deviceText {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+}
+
+/* The type is in the row's tooltip; only "Disconnected" stays on screen. */
+.devices[data-compact] .deviceType:not([data-missing]) {
+  display: none;
+}
+
+.devices[data-compact] .deviceType {
+  flex: 0 0 auto;
+}
+
 .device {
   display: flex;
   align-items: center;

@@ -70,9 +70,12 @@ export function SystemAudioSettingsContent({
           compact={compact}
           groupRef={firstRef as RefObject<HTMLDivElement | null>}
         />
-        <p className={styles.hint} aria-hidden>
-          {t("oneApp")} · {reason}
-        </p>
+        {/* The disabled chip already says it in its tooltip; the panel has no room twice. */}
+        {!compact && (
+          <p className={styles.hint} aria-hidden>
+            {t("oneApp")} · {reason}
+          </p>
+        )}
       </div>
 
       <div className={styles.column}>
@@ -92,6 +95,7 @@ export function SystemAudioSettingsContent({
         <SwitchRow
           title={t("duckTitle")}
           hint={t("duckHint")}
+          hintHidden={compact}
           checked={audio.duckSystemAudioWhileTalking}
           onChange={(duckSystemAudioWhileTalking) => onChange({ duckSystemAudioWhileTalking })}
           disabled={!micOn}
