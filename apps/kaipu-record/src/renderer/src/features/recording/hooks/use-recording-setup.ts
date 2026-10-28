@@ -119,13 +119,16 @@ export function useRecordingSetup(): RecordingSetup {
   const watermarkRef = useRef(watermark);
   watermarkRef.current = watermark;
 
-  // Default the mic to the first device once enumerated, into the shared settings
-  // (idempotent — only when nothing is selected yet).
+  // Default the mic once enumerated, into the shared settings: only when nothing is
+  // selected, and only once main's settings have arrived. Before that `selectedMicrophone`
+  // is the placeholder null, and defaulting then overwrote the microphone remembered from
+  // the last launch. The list puts the system's default input first.
+  const settingsLoaded = settings.loaded;
   useEffect(() => {
-    if (!selectedMicrophone && microphones.length > 0) {
+    if (settingsLoaded && !selectedMicrophone && microphones.length > 0) {
       update({ selectedMicrophone: microphones[0] });
     }
-  }, [microphones, selectedMicrophone, update]);
+  }, [settingsLoaded, microphones, selectedMicrophone, update]);
 
   // "Recording" and "paused" both count as an active session for the UI.
   const isRecording = recorder.status === "recording" || recorder.status === "paused";

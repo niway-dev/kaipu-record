@@ -34,8 +34,9 @@ vi.mock("@renderer/features/recording/hooks/use-screen-recorder", () => ({
 // assert writes through `mockUpdate`. Read at call time (no TDZ).
 const mockUpdate = vi.fn();
 let mockSettings: RecordingSettings;
+let mockLoaded = true;
 vi.mock("@renderer/features/recording/hooks/use-recording-settings", () => ({
-  useRecordingSettings: () => ({ ...mockSettings, update: mockUpdate }),
+  useRecordingSettings: () => ({ ...mockSettings, loaded: mockLoaded, update: mockUpdate }),
 }));
 
 import { useRecordingSetup } from "./use-recording-setup";
@@ -56,6 +57,7 @@ describe("useRecordingSetup", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     mockSettings = SETTINGS();
+    mockLoaded = true;
     mockRecorderStatus = "idle";
     mockCountdown = null;
     for (const spy of [
@@ -97,6 +99,15 @@ describe("useRecordingSetup", () => {
     expect(mockUpdate).toHaveBeenCalledWith({
       selectedMicrophone: { deviceId: "m1", label: "Mic One" },
     });
+  });
+
+  it("does not default the mic before main's settings arrive (they hold the remembered one)", () => {
+    mockSettings = SETTINGS({ selectedMicrophone: null });
+    mockLoaded = false;
+    renderHook(() => useRecordingSetup());
+    expect(mockUpdate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ selectedMicrophone: expect.anything() }),
+    );
   });
 
   it("exposes the recorder status/countdown and delegates pause/resume", () => {

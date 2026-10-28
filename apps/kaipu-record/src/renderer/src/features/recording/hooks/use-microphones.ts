@@ -20,9 +20,7 @@ export function useMicrophones(): Microphone[] {
 
     const audioInputs = async (): Promise<MediaDeviceInfo[]> => {
       const devices = await navigator.mediaDevices.enumerateDevices();
-      return devices.filter(
-        (device) => device.kind === "audioinput" && device.deviceId !== "default",
-      );
+      return systemDefaultFirst(devices.filter((device) => device.kind === "audioinput"));
     };
 
     const load = async (): Promise<void> => {
@@ -58,4 +56,24 @@ export function useMicrophones(): Microphone[] {
   }, []);
 
   return microphones;
+}
+
+/**
+ * The audio inputs without the "default" alias, the system's default input first. The
+ * alias is the same device under a second id (Chromium gives it the real one's `groupId`);
+ * listing it would show that device twice. First, because a first launch picks the head of
+ * the list: the input macOS uses by default, not whichever one it happens to list first.
+ */
+export function systemDefaultFirst(inputs: MediaDeviceInfo[]): MediaDeviceInfo[] {
+  const alias = inputs.find((device) => device.deviceId === "default");
+  const devices = inputs.filter((device) => device.deviceId !== "default");
+  if (!alias) return devices;
+  // By group when Chromium gives one; by name otherwise ("Default - Yeti Nano" → "Yeti Nano").
+  const index = devices.findIndex((device) =>
+    alias.groupId !== ""
+      ? device.groupId === alias.groupId
+      : device.label !== "" && alias.label.endsWith(device.label),
+  );
+  if (index <= 0) return devices;
+  return [devices[index]!, ...devices.slice(0, index), ...devices.slice(index + 1)];
 }

@@ -11,6 +11,8 @@ const DEFAULT: RecordingSettings = {
 };
 
 export interface RecordingSettingsStore extends RecordingSettings {
+  /** False until main's settings have arrived: until then the values are the defaults. */
+  loaded: boolean;
   update(patch: Partial<RecordingSettings>): void;
 }
 
@@ -22,10 +24,15 @@ export interface RecordingSettingsStore extends RecordingSettings {
  */
 export function useRecordingSettings(): RecordingSettingsStore {
   const [settings, setSettings] = useState<RecordingSettings>(DEFAULT);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    void window.electronAPI.getRecordingSettings().then(setSettings);
-    return window.electronAPI.onRecordingSettingsChanged(setSettings);
+    const receive = (next: RecordingSettings): void => {
+      setSettings(next);
+      setLoaded(true);
+    };
+    void window.electronAPI.getRecordingSettings().then(receive);
+    return window.electronAPI.onRecordingSettingsChanged(receive);
   }, []);
 
   const update = useCallback((patch: Partial<RecordingSettings>) => {
@@ -33,5 +40,5 @@ export function useRecordingSettings(): RecordingSettingsStore {
     window.electronAPI.updateRecordingSettings(patch);
   }, []);
 
-  return { ...settings, update };
+  return { ...settings, loaded, update };
 }
