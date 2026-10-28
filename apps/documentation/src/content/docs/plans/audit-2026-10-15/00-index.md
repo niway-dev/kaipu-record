@@ -5,7 +5,7 @@ description: One implementation plan per root cause for every finding of the 202
 
 # Audit 2026-10-15 — fix plans
 
-**Status: 🟡 In progress — 11 of 36 plans shipped, 25 open.** Source: the
+**Status: 🟡 In progress — 12 of 36 plans shipped, 24 open.** Source: the
 [audit report](/audits/2026-10-15/report/) (78 findings, 68 distinct). Each plan below closes one
 root cause and lists the findings it retires. Batches follow the report's fix order: measure first,
 then data loss, then the Library fan-out, the trim handle, recording failure paths, and render cost.
@@ -35,7 +35,6 @@ analyses are not in the repo.
 | Plan                                                                                  | Closes                                           |
 | ------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | [10 Library broadcast fan-out](/plans/audit-2026-10-15/10-library-broadcast-fanout/)  | LIB-A1, LIB-A2, LIB-A8, SHOT-A7, SHOT-A9, VID-B9 |
-| [11 Vault directory cache](/plans/audit-2026-10-15/11-vault-directory-cache/)         | LIB-A3                                           |
 | [12 Library list fs work](/plans/audit-2026-10-15/12-library-list-fs-work/)           | LIB-A5                                           |
 | [13 Catalog refresh integrity](/plans/audit-2026-10-15/13-catalog-refresh-integrity/) | LIB-B4, LIB-B5                                   |
 | [14 Library thumbnails](/plans/audit-2026-10-15/14-library-thumbnails/)               | LIB-A6                                           |
