@@ -242,10 +242,12 @@ export function registerRecordingHub(
     receiveRecordTiming(label, kind),
   );
 
-  // Shared recording settings — single source of truth, mirrored to every window.
+  // Shared recording settings — single source of truth, mirrored to every window. The
+  // microphone starts as the one the user last picked (the renderer remembers a pick in
+  // AppSettings, never an automatic default); the rest starts fresh.
   const settings: RecordingSettings = {
     selectedSource: null,
-    selectedMicrophone: null,
+    selectedMicrophone: getAppSettings().microphone,
     isMicrophoneEnabled: true,
     isSystemAudioEnabled: false,
     isCameraEnabled: false,

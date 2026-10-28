@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
-import { useMicrophones } from "./use-microphones";
+import { systemDefaultFirst, useMicrophones } from "./use-microphones";
 
 type Listener = () => void;
 
@@ -159,5 +159,45 @@ describe("useMicrophones and the microphone indicator", () => {
 
     await waitFor(() => expect(result.current).toHaveLength(1));
     expect(stop).toHaveBeenCalled();
+  });
+});
+
+describe("systemDefaultFirst", () => {
+  const iphone = device({ deviceId: "iphone", label: "iPhone Microphone", groupId: "g-iphone" });
+  const yeti = device({ deviceId: "yeti", label: "Yeti Nano (046d:0ab1)", groupId: "g-yeti" });
+  const builtIn = device({ deviceId: "mac", label: "MacBook Pro Microphone", groupId: "g-mac" });
+
+  it("moves the system's default input to the head and drops the alias", () => {
+    const alias = device({
+      deviceId: "default",
+      label: "Default - Yeti Nano (046d:0ab1)",
+      groupId: "g-yeti",
+    });
+    expect(systemDefaultFirst([alias, iphone, builtIn, yeti]).map((d) => d.deviceId)).toEqual([
+      "yeti",
+      "iphone",
+      "mac",
+    ]);
+  });
+
+  it("matches by name when the alias has no group", () => {
+    const alias = device({
+      deviceId: "default",
+      label: "Default - Yeti Nano (046d:0ab1)",
+      groupId: "",
+    });
+    expect(systemDefaultFirst([iphone, yeti, alias]).map((d) => d.deviceId)).toEqual([
+      "yeti",
+      "iphone",
+    ]);
+  });
+
+  it("keeps the order without an alias, or when nothing matches it", () => {
+    expect(systemDefaultFirst([iphone, yeti]).map((d) => d.deviceId)).toEqual(["iphone", "yeti"]);
+    const stray = device({ deviceId: "default", label: "Default - Gone", groupId: "g-gone" });
+    expect(systemDefaultFirst([stray, iphone, yeti]).map((d) => d.deviceId)).toEqual([
+      "iphone",
+      "yeti",
+    ]);
   });
 });

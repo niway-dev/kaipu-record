@@ -34,8 +34,9 @@ vi.mock("@renderer/features/recording/hooks/use-screen-recorder", () => ({
 // assert writes through `mockUpdate`. Read at call time (no TDZ).
 const mockUpdate = vi.fn();
 let mockSettings: RecordingSettings;
+let mockLoaded = true;
 vi.mock("@renderer/features/recording/hooks/use-recording-settings", () => ({
-  useRecordingSettings: () => ({ ...mockSettings, update: mockUpdate }),
+  useRecordingSettings: () => ({ ...mockSettings, loaded: mockLoaded, update: mockUpdate }),
 }));
 
 import { useRecordingSetup } from "./use-recording-setup";
@@ -52,10 +53,16 @@ const SETTINGS = (over: Partial<RecordingSettings> = {}): RecordingSettings => (
 
 const SCREEN = { id: "s1", name: "Display 1", type: "screen" as const };
 
+/** Lets the hook's `getSettings()` read resolve (the mic choice waits for it). */
+async function flushSettings(): Promise<void> {
+  await act(async () => {});
+}
+
 describe("useRecordingSetup", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     mockSettings = SETTINGS();
+    mockLoaded = true;
     mockRecorderStatus = "idle";
     mockCountdown = null;
     for (const spy of [
@@ -68,7 +75,11 @@ describe("useRecordingSetup", () => {
       spy.mockClear();
     }
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    MICS.splice(0, MICS.length, { deviceId: "m1", label: "Mic One" });
+  });
 
   it("can-start reflects the shared selected source and the recorder being idle", () => {
     const idle = renderHook(() => useRecordingSetup());
@@ -91,12 +102,77 @@ describe("useRecordingSetup", () => {
     expect(mockUpdate).toHaveBeenCalledWith({ isCameraEnabled: true });
   });
 
-  it("defaults the mic into shared settings when none is selected", () => {
+  it("defaults the mic into shared settings when none is selected, without remembering it", async () => {
+    const updateSettings = vi.spyOn(window.electronAPI, "updateSettings").mockClear();
     mockSettings = SETTINGS({ selectedMicrophone: null });
     renderHook(() => useRecordingSetup());
+    await flushSettings();
     expect(mockUpdate).toHaveBeenCalledWith({
       selectedMicrophone: { deviceId: "m1", label: "Mic One" },
     });
+    // An automatic default must keep following the system's input on the next launch.
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
+  describe("the mic a take uses: the picked one while connected, else the system default", () => {
+    const YETI = { deviceId: "yeti", label: "Yeti Nano" };
+    const IPHONE = { deviceId: "iphone", label: "iPhone Microphone" };
+
+    async function remember(microphone: AppSettings["microphone"]): Promise<void> {
+      const stored = await window.electronAPI.getSettings();
+      vi.spyOn(window.electronAPI, "getSettings").mockResolvedValue({ ...stored, microphone });
+    }
+
+    it("selects the remembered mic when it is connected", async () => {
+      await remember(YETI);
+      MICS.splice(0, MICS.length, IPHONE, YETI); // the system default (iPhone) heads the list
+      mockSettings = SETTINGS({ selectedMicrophone: null });
+      renderHook(() => useRecordingSetup());
+      await flushSettings();
+      expect(mockUpdate).toHaveBeenLastCalledWith({ selectedMicrophone: YETI });
+    });
+
+    it("falls back to the system default while it is unplugged, and returns when it is back", async () => {
+      await remember(YETI);
+      MICS.splice(0, MICS.length, IPHONE);
+      mockSettings = SETTINGS({ selectedMicrophone: YETI });
+      const view = renderHook(() => useRecordingSetup());
+      await flushSettings();
+      expect(mockUpdate).toHaveBeenLastCalledWith({ selectedMicrophone: IPHONE });
+
+      mockSettings = SETTINGS({ selectedMicrophone: IPHONE });
+      MICS.splice(0, MICS.length, IPHONE, YETI);
+      view.rerender();
+      expect(mockUpdate).toHaveBeenLastCalledWith({ selectedMicrophone: YETI });
+    });
+
+    it("never switches while a take is pending or running", async () => {
+      await remember(YETI);
+      MICS.splice(0, MICS.length, IPHONE);
+      mockSettings = SETTINGS({ selectedMicrophone: YETI });
+      mockRecorderStatus = "recording";
+      renderHook(() => useRecordingSetup());
+      await flushSettings();
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  it("remembers a picked mic for the next launch", () => {
+    const updateSettings = vi.spyOn(window.electronAPI, "updateSettings").mockClear();
+    const { result } = renderHook(() => useRecordingSetup());
+    const yeti = { deviceId: "yeti", label: "Yeti Nano" };
+    act(() => result.current.selectMicrophone(yeti));
+    expect(mockUpdate).toHaveBeenCalledWith({ selectedMicrophone: yeti });
+    expect(updateSettings).toHaveBeenCalledWith({ microphone: yeti });
+  });
+
+  it("does not default the mic before main's settings arrive (they hold the remembered one)", () => {
+    mockSettings = SETTINGS({ selectedMicrophone: null });
+    mockLoaded = false;
+    renderHook(() => useRecordingSetup());
+    expect(mockUpdate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ selectedMicrophone: expect.anything() }),
+    );
   });
 
   it("exposes the recorder status/countdown and delegates pause/resume", () => {

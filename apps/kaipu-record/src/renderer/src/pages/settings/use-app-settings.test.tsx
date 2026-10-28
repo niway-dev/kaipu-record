@@ -39,6 +39,7 @@ const SETTINGS: AppSettings = {
     systemAudioVolume: 100,
     duckSystemAudioWhileTalking: false,
   },
+  microphone: null,
 };
 
 describe("useAppSettings", () => {

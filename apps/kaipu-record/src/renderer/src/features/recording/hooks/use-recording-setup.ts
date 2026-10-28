@@ -18,6 +18,7 @@ import {
   type RecorderStatus,
   type StartInput,
 } from "@renderer/features/recording/hooks/use-screen-recorder";
+import type { AppSettings } from "@shared/types";
 import type { Microphone, SelectedSource } from "@renderer/features/recording/types";
 
 /**
@@ -100,16 +101,23 @@ export function useRecordingSetup(): RecordingSetup {
   // app settings too. Read on mount, then kept current through `onSettingsChanged`, so a
   // level changed in the popover before pressing Record is the one the take starts with.
   const audioRef = useRef<AudioSettings>(DEFAULT_AUDIO_SETTINGS);
+  // The microphone the user picked last (AppSettings.microphone); `undefined` until read.
+  const [preferredMicrophone, setPreferredMicrophone] = useState<
+    AppSettings["microphone"] | undefined
+  >(undefined);
   useEffect(() => {
     // A broadcast is newer than the initial read, which may resolve after it: once one has
     // arrived, the read must not overwrite it.
     let heardChange = false;
     void window.electronAPI.getSettings().then((appSettings) => {
-      if (!heardChange) audioRef.current = sanitizeAudioSettings(appSettings.audio);
+      if (heardChange) return;
+      audioRef.current = sanitizeAudioSettings(appSettings.audio);
+      setPreferredMicrophone(appSettings.microphone ?? null);
     });
     return window.electronAPI.onSettingsChanged((appSettings) => {
       heardChange = true;
       audioRef.current = sanitizeAudioSettings(appSettings.audio);
+      setPreferredMicrophone(appSettings.microphone ?? null);
     });
   }, []);
 
@@ -119,13 +127,21 @@ export function useRecordingSetup(): RecordingSetup {
   const watermarkRef = useRef(watermark);
   watermarkRef.current = watermark;
 
-  // Default the mic to the first device once enumerated, into the shared settings
-  // (idempotent — only when nothing is selected yet).
+  // The mic a take uses: the one the user picked, while it is connected; otherwise the
+  // system's default input, which heads the list. Recomputed when devices come and go, so
+  // unplugging the picked mic falls back and plugging it back in returns to it. Waits for
+  // main's settings (before them `selectedMicrophone` is a placeholder) and never switches
+  // while a take is pending or running.
+  const settingsLoaded = settings.loaded;
+  const recorderIdle = recorder.status === "idle";
   useEffect(() => {
-    if (!selectedMicrophone && microphones.length > 0) {
-      update({ selectedMicrophone: microphones[0] });
+    if (!settingsLoaded || preferredMicrophone === undefined || !recorderIdle) return;
+    const effective =
+      microphones.find((mic) => mic.deviceId === preferredMicrophone?.deviceId) ?? microphones[0];
+    if (effective && effective.deviceId !== selectedMicrophone?.deviceId) {
+      update({ selectedMicrophone: effective });
     }
-  }, [microphones, selectedMicrophone, update]);
+  }, [settingsLoaded, preferredMicrophone, recorderIdle, microphones, selectedMicrophone, update]);
 
   // "Recording" and "paused" both count as an active session for the UI.
   const isRecording = recorder.status === "recording" || recorder.status === "paused";
@@ -188,7 +204,14 @@ export function useRecordingSetup(): RecordingSetup {
 
     microphones,
     selectedMicrophone,
-    selectMicrophone: (microphone) => update({ selectedMicrophone: microphone }),
+    selectMicrophone: (microphone) => {
+      // Only a pick is remembered. The fallback above is not: stored, it would replace the
+      // pick, and the system's default would stop being followed. Written before the shared
+      // selection, so no window sees the new selection with the old preference and undoes it.
+      setPreferredMicrophone(microphone);
+      void window.electronAPI.updateSettings({ microphone });
+      update({ selectedMicrophone: microphone });
+    },
 
     isRecording,
     recordingStatus: recorder.status,
