@@ -121,6 +121,19 @@ jobs:
       - name: Rebuild native dependencies for Electron
         run: bash scripts/rebuild-native.sh
 
+      # Same check as the Windows job: if the rebuild above is ever dropped or silently
+      # skipped, the .dmg still builds, with the unpatched prebuild inside. The stamp is
+      # Electron version + patch hash (scripts/native-deps-stamp.sh); a mismatch fails here.
+      - name: Check native dependencies were rebuilt for this Electron and patch set
+        run: |
+          EXPECTED="$(bash scripts/native-deps-stamp.sh)"
+          BUILT_FOR="$(cat apps/kaipu-record/node_modules/.native-deps-electron-version 2>/dev/null || echo "")"
+          if [ "$BUILT_FOR" != "$EXPECTED" ]; then
+            echo "::error::native dependencies stamp is '${BUILT_FOR}', expected '${EXPECTED}' — the rebuild step did not run or did not finish"
+            exit 1
+          fi
+          echo "uiohook-napi built for ${EXPECTED}"
+
       - name: Prepare Apple API key file
         # @electron/notarize wants the .p8 as a file path, so materialize it to the
         # runner's temp dir and expose the path to later steps. Accept either the
