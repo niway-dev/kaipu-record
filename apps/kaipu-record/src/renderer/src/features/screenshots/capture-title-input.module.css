@@ -1,13 +1,19 @@
 /*
  * The capture's name, in the toolbar's middle stretch. Reads as a label until
  * focused, then as a field — the toolbar stays calm while the name is editable.
+ *
+ * The min-width keeps a readable stretch of the name: once the row cannot give
+ * it that, the row overflows and useCompactRow drops the action labels, instead
+ * of the name shrinking to "Scree…" first. The side spacing is padding, not
+ * margin, because useCompactRow sums offsetWidth, which leaves margins out — a
+ * margin would let the row overflow by that much before it compacts.
  */
 
 .field {
   flex: 1;
-  min-width: 0;
+  min-width: calc(160px + 2 * var(--space-md));
   max-width: 520px;
-  margin: 0 var(--space-md);
+  padding: 0 var(--space-md);
 }
 
 .input {
