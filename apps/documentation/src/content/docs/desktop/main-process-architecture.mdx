@@ -54,7 +54,7 @@ El contrato IPC entre main y renderer está en [IPC Contract](/desktop/ipc-contr
 La app no tiene dos bundles de renderer: tiene **uno solo cargado con un query distinto**. `src/renderer/src/main.tsx` lee `?mode=capture` y monta `<CapturePanel/>` en vez de `<App/>` (`main.tsx:10`).
 
 - **Main window** — la app completa (Record / Library / Settings). Se crea al arrancar y se re-crea on-demand (`showMainWindow` la recrea si fue cerrada).
-- **Capture Panel** — `capture-panel-window.ts`: frameless, `alwaysOnTop`, transparente, 340px de ancho, altura 180–640 (inicial 380). Se ancla bajo el ícono del tray (`position()` clampea al work area), se auto-oculta en `blur` (comportamiento natural de popover), y ajusta su alto cuando el renderer reporta el contenido vía `capture-panel:resize`.
+- **Capture Panel** — `capture-panel-window.ts`: frameless, `alwaysOnTop`, transparente, 340px de ancho, altura 180–600 (inicial 380). Se ancla bajo el ícono del tray (`position()` clampea al work area), se auto-oculta en `blur` (comportamiento natural de popover), y ajusta su alto cuando el renderer reporta el contenido vía `capture-panel:resize`.
 
 ## Constraints
 

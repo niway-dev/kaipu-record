@@ -5,7 +5,7 @@ import { is } from "@electron-toolkit/utils";
 
 const PANEL_WIDTH = 340;
 const PANEL_MIN_HEIGHT = 180;
-const PANEL_MAX_HEIGHT = 640;
+const PANEL_MAX_HEIGHT = 600;
 const PANEL_INITIAL_HEIGHT = 380;
 
 /**
