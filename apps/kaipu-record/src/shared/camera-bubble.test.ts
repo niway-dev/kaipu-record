@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_CAMERA_FRAMING,
+  cameraCaptureLines,
+  framingTransform,
   cameraBubbleWindowInArea,
   cameraBubblePresetFor,
   clampCameraBubbleSize,
@@ -81,5 +84,83 @@ describe("cameraBubbleWindowInArea (main's bubble window and the overlay placeho
     expect(cameraBubbleWindowInArea({ x: 0, y: 0, width: 232, height: 232 }, 240)?.width).toBe(
       120 + 48,
     );
+  });
+});
+
+describe("sanitizeCameraBubble — framing", () => {
+  it("defaults to off, centered, no zoom", () => {
+    expect(sanitizeCameraBubble({}).framing).toEqual({ enabled: false, zoom: 1, x: 0, y: 0 });
+    expect(sanitizeCameraBubble({ framing: "wide" }).framing).toEqual(DEFAULT_CAMERA_FRAMING);
+  });
+
+  it("keeps a valid value", () => {
+    const framing = { enabled: true, zoom: 1.5, x: 0.4, y: -0.2 };
+    expect(sanitizeCameraBubble({ framing }).framing).toEqual(framing);
+  });
+
+  it("clamps zoom to 1–3 and the position to -1–1", () => {
+    expect(
+      sanitizeCameraBubble({ framing: { enabled: true, zoom: 9, x: -5, y: 5 } }).framing,
+    ).toEqual({ enabled: true, zoom: 3, x: -1, y: 1 });
+    expect(sanitizeCameraBubble({ framing: { zoom: 0.2 } }).framing.zoom).toBe(1);
+  });
+
+  it("snaps zoom to the 0.05 step", () => {
+    expect(sanitizeCameraBubble({ framing: { zoom: 1.52 } }).framing.zoom).toBe(1.5);
+    expect(sanitizeCameraBubble({ framing: { zoom: 1.53 } }).framing.zoom).toBe(1.55);
+  });
+
+  it("falls back field by field for non-numbers and non-booleans", () => {
+    expect(
+      sanitizeCameraBubble({ framing: { enabled: "yes", zoom: "2", x: Number.NaN, y: 0.5 } })
+        .framing,
+    ).toEqual({ enabled: false, zoom: 1, x: 0, y: 0.5 });
+    expect(sanitizeCameraBubble({ framing: { zoom: Infinity, x: null } }).framing).toEqual(
+      DEFAULT_CAMERA_FRAMING,
+    );
+  });
+});
+
+describe("framingTransform", () => {
+  it("is the identity at zoom 1, whatever the position", () => {
+    expect(framingTransform({ zoom: 1, x: 1, y: -1 }, false)).toBe("scale(1) translate(0%, 0%)");
+  });
+
+  it("pans at most (z-1)/(2z) of the size, so the image still covers the bubble", () => {
+    // zoom 2: the image is twice the bubble, 25 % of the (unscaled) side is the whole slack.
+    expect(framingTransform({ zoom: 2, x: 1, y: 1 }, false)).toBe("scale(2) translate(-25%, -25%)");
+    expect(framingTransform({ zoom: 2, x: -1, y: -1 }, false)).toBe("scale(2) translate(25%, 25%)");
+    expect(framingTransform({ zoom: 3, x: 0.5, y: 0 }, false)).toBe(
+      "scale(3) translate(-16.667%, 0%)",
+    );
+  });
+
+  it("clamps a position outside -1..1 instead of leaving an empty edge", () => {
+    expect(framingTransform({ zoom: 2, x: 7, y: -7 }, false)).toBe("scale(2) translate(-25%, 25%)");
+  });
+
+  it("moves the view the same way on screen mirrored or not: the flip is applied first", () => {
+    const plain = framingTransform({ zoom: 2, x: 1, y: 0 }, false);
+    const flipped = framingTransform({ zoom: 2, x: 1, y: 0 }, true);
+    expect(flipped).toBe(`${plain} scaleX(-1)`);
+    expect(flipped.indexOf("translate")).toBeLessThan(flipped.indexOf("scaleX"));
+  });
+});
+
+describe("cameraCaptureLines", () => {
+  it("keeps today's 480 lines when framing is off, whatever the zoom", () => {
+    expect(cameraCaptureLines(480, { enabled: false, zoom: 3, x: 0, y: 0 })).toBe(480);
+  });
+
+  it("asks for size × 2 (Retina) × zoom lines, rounded up to 480, 720 or 1080", () => {
+    const on = (zoom: number) => ({ enabled: true, zoom, x: 0, y: 0 });
+    expect(cameraCaptureLines(240, on(1))).toBe(480);
+    expect(cameraCaptureLines(240, on(1.5))).toBe(720);
+    expect(cameraCaptureLines(240, on(1.55))).toBe(1080);
+    expect(cameraCaptureLines(120, on(1))).toBe(480);
+  });
+
+  it("never asks for more than 1080 lines", () => {
+    expect(cameraCaptureLines(480, { enabled: true, zoom: 3, x: 0, y: 0 })).toBe(1080);
   });
 });

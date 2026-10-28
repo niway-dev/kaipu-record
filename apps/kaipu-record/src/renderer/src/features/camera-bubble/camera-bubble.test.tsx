@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RecordingActivity } from "@shared/types";
 
@@ -40,13 +40,19 @@ describe("CameraBubble", () => {
     window.electronAPI.getSettings = async () =>
       ({
         ...(await original.getSettings()),
-        cameraBubble: { shape: "rounded", size: 240, deviceId: "cam-9", mirrored: true },
+        cameraBubble: {
+          shape: "rounded",
+          size: 240,
+          deviceId: "cam-9",
+          mirrored: true,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
       }) as never;
     const { container } = render(<CameraBubble />);
     await waitFor(() =>
       expect(container.firstElementChild).toHaveAttribute("data-shape", "rounded"),
     );
-    expect(mockPreview).toHaveBeenLastCalledWith(true, "cam-9");
+    expect(mockPreview).toHaveBeenLastCalledWith(true, "cam-9", 480);
   });
 
   it("mirrors the preview by default and when the setting is on", async () => {
@@ -64,7 +70,13 @@ describe("CameraBubble", () => {
     window.electronAPI.getSettings = async () =>
       ({
         ...base,
-        cameraBubble: { shape: "circle", size: 240, deviceId: null, mirrored: false },
+        cameraBubble: {
+          shape: "circle",
+          size: 240,
+          deviceId: null,
+          mirrored: false,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
       }) as never;
     window.electronAPI.onSettingsChanged = ((callback: (settings: never) => void) => {
       push = callback;
@@ -77,10 +89,78 @@ describe("CameraBubble", () => {
     act(() =>
       push?.({
         ...base,
-        cameraBubble: { shape: "circle", size: 240, deviceId: null, mirrored: true },
+        cameraBubble: {
+          shape: "circle",
+          size: 240,
+          deviceId: null,
+          mirrored: true,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
       } as never),
     );
     expect(container.firstElementChild).toHaveAttribute("data-mirrored", "true");
+  });
+
+  async function renderWithFraming(
+    framing: { enabled: boolean; zoom: number; x: number; y: number },
+    mirrored = true,
+  ): Promise<HTMLElement> {
+    withStream();
+    const base = await original.getSettings();
+    window.electronAPI.getSettings = async () =>
+      ({
+        ...base,
+        cameraBubble: { shape: "circle", size: 240, deviceId: null, mirrored, framing },
+      }) as never;
+    const { container } = render(<CameraBubble />);
+    await waitFor(() => expect(mockPreview).toHaveBeenCalled());
+    return container.querySelector("video")!;
+  }
+
+  it("leaves the video untouched while framing is off", async () => {
+    const video = await renderWithFraming({ enabled: false, zoom: 2, x: 1, y: 1 });
+    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 480));
+    expect(video.style.transform).toBe("");
+  });
+
+  it("applies the zoom and pan, with the mirror last, while framing is on", async () => {
+    const video = await renderWithFraming({ enabled: true, zoom: 2, x: 1, y: 0 });
+    await waitFor(() =>
+      expect(video.style.transform).toBe("scale(2) translate(-25%, 0%) scaleX(-1)"),
+    );
+  });
+
+  it("applies framing without the flip when mirroring is off", async () => {
+    const video = await renderWithFraming({ enabled: true, zoom: 2, x: -1, y: 1 }, false);
+    await waitFor(() => expect(video.style.transform).toBe("scale(2) translate(25%, -25%)"));
+  });
+
+  it("asks the camera for more lines when framing zooms in, and follows live changes", async () => {
+    const video = await renderWithFraming({ enabled: true, zoom: 2, x: 0, y: 0 });
+    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 1080));
+    let push: ((settings: never) => void) | null = null;
+    const base = await original.getSettings();
+    window.electronAPI.onSettingsChanged = ((callback: (settings: never) => void) => {
+      push = callback;
+      return () => {};
+    }) as never;
+    cleanup();
+    const second = render(<CameraBubble />);
+    await waitFor(() => expect(push).not.toBeNull());
+    act(() =>
+      push?.({
+        ...base,
+        cameraBubble: {
+          shape: "circle",
+          size: 240,
+          deviceId: null,
+          mirrored: true,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
+      } as never),
+    );
+    expect(second.container.querySelector("video")!.style.transform).toBe("");
+    expect(video).toBeDefined();
   });
 
   it("shows the outline, size label and grip on hover", () => {
@@ -133,7 +213,13 @@ describe("CameraBubble", () => {
     fireEvent.pointerUp(grip, { pointerId: 1 });
     await waitFor(() =>
       expect(updateSettings).toHaveBeenCalledWith({
-        cameraBubble: { shape: "circle", size: 300, deviceId: null, mirrored: true },
+        cameraBubble: {
+          shape: "circle",
+          size: 300,
+          deviceId: null,
+          mirrored: true,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
       }),
     );
   });
@@ -250,7 +336,13 @@ describe("CameraBubble — grip release races", () => {
     // …and its applied size is what gets saved.
     await waitFor(() =>
       expect(updateSettings).toHaveBeenCalledWith({
-        cameraBubble: { shape: "circle", size: 300, deviceId: null, mirrored: true },
+        cameraBubble: {
+          shape: "circle",
+          size: 300,
+          deviceId: null,
+          mirrored: true,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
       }),
     );
     expect(updateSettings).toHaveBeenCalledTimes(1);
@@ -275,7 +367,13 @@ describe("CameraBubble — grip release races", () => {
     act(() => push?.({ active: true, status: "recording", elapsedSeconds: 0 }));
     await waitFor(() =>
       expect(updateSettings).toHaveBeenCalledWith({
-        cameraBubble: { shape: "circle", size: 280, deviceId: null, mirrored: true },
+        cameraBubble: {
+          shape: "circle",
+          size: 280,
+          deviceId: null,
+          mirrored: true,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
       }),
     );
   });

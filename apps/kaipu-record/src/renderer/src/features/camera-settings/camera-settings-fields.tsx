@@ -1,18 +1,30 @@
-import React, { useRef, type KeyboardEvent, type ReactNode, type Ref } from "react";
-import { Circle, Lock, Square } from "lucide-react";
+import React, {
+  useRef,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+  type Ref,
+} from "react";
+import { Circle, Lock, Square, ZoomIn } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import {
   CAMERA_BUBBLE_MAX_SIZE,
   CAMERA_BUBBLE_MIN_SIZE,
   CAMERA_BUBBLE_PRESETS,
   CAMERA_BUBBLE_PRESET_IDS,
+  CAMERA_FRAMING_MAX_ZOOM,
+  CAMERA_FRAMING_MIN_ZOOM,
+  DEFAULT_CAMERA_FRAMING,
   cameraBubblePresetFor,
+  clampCameraPan,
+  clampCameraZoom,
   stepCameraBubbleSize,
+  type CameraFraming,
   type CameraBubblePreset,
   type CameraBubbleSettings,
   type CameraBubbleShape,
 } from "@shared/camera-bubble";
-import { SwitchRow } from "@renderer/features/audio-settings/audio-settings-fields";
+import { LevelSlider, SwitchRow } from "@renderer/features/audio-settings/audio-settings-fields";
 import type { CameraDevice } from "./use-camera-settings";
 import styles from "./camera-settings-fields.module.css";
 
@@ -97,6 +109,128 @@ export function RadioChips<T extends string>({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/** Keyboard step of the position pad: 0.1 of the way to an edge, 0.25 with Shift. */
+const PAD_STEP = 0.1;
+const PAD_BIG_STEP = 0.25;
+
+interface FramingControlsProps {
+  framing: CameraFraming;
+  onChange: (framing: CameraFraming) => void;
+}
+
+/** Zoom slider, position pad and Reset, shown while framing is on. */
+function FramingControls({ framing, onChange }: FramingControlsProps): React.JSX.Element {
+  const t = useTranslations("cameraSettings");
+  const dragging = useRef(false);
+  // Nothing to pan at 100 %: the image is exactly the bubble.
+  const canPan = framing.zoom > CAMERA_FRAMING_MIN_ZOOM;
+
+  const parts: string[] = [];
+  const xPercent = Math.round(Math.abs(framing.x) * 100);
+  const yPercent = Math.round(Math.abs(framing.y) * 100);
+  if (xPercent > 0) {
+    parts.push(
+      framing.x < 0
+        ? t("positionLeft", { percent: xPercent })
+        : t("positionRight", { percent: xPercent }),
+    );
+  }
+  if (yPercent > 0) {
+    parts.push(
+      framing.y < 0
+        ? t("positionUp", { percent: yPercent })
+        : t("positionDown", { percent: yPercent }),
+    );
+  }
+  const valueText = parts.length
+    ? parts
+        .map((part, index) => (index === 0 ? part : part.charAt(0).toLowerCase() + part.slice(1)))
+        .join(", ")
+    : t("positionCentered");
+
+  const move = (x: number, y: number): void =>
+    onChange({ ...framing, x: clampCameraPan(x), y: clampCameraPan(y) });
+
+  const onPadKey = (event: KeyboardEvent<HTMLDivElement>): void => {
+    const step = event.shiftKey ? PAD_BIG_STEP : PAD_STEP;
+    // Same directions as what you see: Right moves the view right, Up moves it up.
+    if (event.key === "ArrowRight") move(framing.x + step, framing.y);
+    else if (event.key === "ArrowLeft") move(framing.x - step, framing.y);
+    else if (event.key === "ArrowDown") move(framing.x, framing.y + step);
+    else if (event.key === "ArrowUp") move(framing.x, framing.y - step);
+    else return;
+    event.preventDefault();
+  };
+
+  const fromPointer = (event: PointerEvent<HTMLDivElement>): void => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    move(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      ((event.clientY - rect.top) / rect.height) * 2 - 1,
+    );
+  };
+
+  return (
+    <div className={styles.framing}>
+      <LevelSlider
+        label={t("zoom")}
+        icon={<ZoomIn size={14} aria-hidden />}
+        value={Math.round(framing.zoom * 100)}
+        min={CAMERA_FRAMING_MIN_ZOOM * 100}
+        max={CAMERA_FRAMING_MAX_ZOOM * 100}
+        valueText={t("zoomValue", { percent: Math.round(framing.zoom * 100) })}
+        onChange={(percent) => onChange({ ...framing, zoom: clampCameraZoom(percent / 100) })}
+      />
+      <div className={styles.padRow}>
+        <div
+          className={styles.pad}
+          role="slider"
+          aria-label={t("position")}
+          aria-valuemin={-100}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(framing.x * 100)}
+          aria-valuetext={valueText}
+          aria-disabled={!canPan || undefined}
+          data-disabled={!canPan || undefined}
+          tabIndex={canPan ? 0 : -1}
+          onKeyDown={canPan ? onPadKey : undefined}
+          onPointerDown={(event) => {
+            if (!canPan) return;
+            dragging.current = true;
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+            fromPointer(event);
+          }}
+          onPointerMove={(event) => {
+            if (dragging.current) fromPointer(event);
+          }}
+          onPointerUp={() => {
+            dragging.current = false;
+          }}
+          onPointerCancel={() => {
+            dragging.current = false;
+          }}
+        >
+          <span
+            className={styles.padDot}
+            style={{
+              left: `${(framing.x + 1) * 50}%`,
+              top: `${(framing.y + 1) * 50}%`,
+            }}
+          />
+        </div>
+        <button
+          type="button"
+          className={styles.reset}
+          onClick={() => onChange({ ...DEFAULT_CAMERA_FRAMING, enabled: framing.enabled })}
+        >
+          {t("reset")}
+        </button>
+      </div>
     </div>
   );
 }
@@ -245,6 +379,18 @@ export function CameraSettingsFields({
           onChange={(mirrored) => onChange({ mirrored })}
         />
       </div>
+
+      <div className={styles.mirror}>
+        <SwitchRow
+          title={t("framingTitle")}
+          hint={t("framingHint")}
+          checked={bubble.framing.enabled}
+          onChange={(enabled) => onChange({ framing: { ...bubble.framing, enabled } })}
+        />
+      </div>
+      {bubble.framing.enabled && (
+        <FramingControls framing={bubble.framing} onChange={(framing) => onChange({ framing })} />
+      )}
 
       {/* Present from the start and filled later, so it is announced once when it changes. */}
       <p

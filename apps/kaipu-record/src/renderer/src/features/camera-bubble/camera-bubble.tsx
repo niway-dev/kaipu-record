@@ -7,6 +7,8 @@ import {
   CAMERA_BUBBLE_WINDOW_PAD,
   DEFAULT_CAMERA_BUBBLE,
   cameraBubblePresetFor,
+  cameraCaptureLines,
+  framingTransform,
   clampCameraBubbleSize,
   type CameraBubbleSettings,
 } from "@shared/camera-bubble";
@@ -106,7 +108,11 @@ export function CameraBubble(): React.JSX.Element {
   const t = useTranslations("cameraSettings");
   const bubble = useBubbleSettings();
   const activity = useRecordingActivity();
-  const { videoRef, hasStream } = useCameraPreview(true, bubble.deviceId);
+  const { videoRef, hasStream } = useCameraPreview(
+    true,
+    bubble.deviceId,
+    cameraCaptureLines(bubble.size, bubble.framing),
+  );
   const [size, setSize] = useState(sizeFromWindow);
   const [hovered, setHovered] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -220,7 +226,13 @@ export function CameraBubble(): React.JSX.Element {
           playsInline
           muted
           className={styles.video}
-          style={{ display: hasStream ? "block" : "none" }}
+          style={{
+            display: hasStream ? "block" : "none",
+            // Framing on: zoom + pan + the mirror in one transform (it overrides the CSS flip).
+            ...(bubble.framing.enabled
+              ? { transform: framingTransform(bubble.framing, bubble.mirrored) }
+              : null),
+          }}
         />
         {!hasStream && <Camera size={30} className={styles.placeholder} />}
       </div>

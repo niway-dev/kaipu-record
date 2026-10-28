@@ -2,16 +2,24 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 
 /**
  * The bubble is at most 480 DIP (960 px on a Retina screen) and is recorded as part of
- * the screen, so 640×480 is the ceiling worth asking for; more would only cost CPU.
+ * the screen, so 640×480 is the ceiling worth asking for without framing; more would only
+ * cost CPU. Framing asks for more lines (see `cameraCaptureLines`), 4:3 like the default.
  */
-const PREVIEW_SIZE = { width: { ideal: 640 }, height: { ideal: 480 } };
+export const DEFAULT_PREVIEW_LINES = 480;
+
+/** How long the wanted lines must stay put before the stream is reopened for them. */
+const LINES_SETTLE_MS = 400;
+
+function previewSize(lines: number): { width: { ideal: number }; height: { ideal: number } } {
+  return { width: { ideal: Math.round((lines * 4) / 3) }, height: { ideal: lines } };
+}
 
 /** The chosen camera when there is one; otherwise the user-facing default. */
-function previewConstraints(deviceId: string | null): MediaStreamConstraints {
+function previewConstraints(deviceId: string | null, lines: number): MediaStreamConstraints {
   return {
     video: deviceId
-      ? { deviceId: { exact: deviceId }, ...PREVIEW_SIZE }
-      : { facingMode: "user", ...PREVIEW_SIZE },
+      ? { deviceId: { exact: deviceId }, ...previewSize(lines) }
+      : { facingMode: "user", ...previewSize(lines) },
     audio: false,
   };
 }
@@ -26,11 +34,24 @@ export interface CameraPreview {
  * Stops all tracks when disabled or on unmount so the camera light turns off.
  * A `deviceId` change reopens the stream on that camera; a device that is gone
  * (unplugged since it was picked) falls back to the default camera.
+ * `lines` is the image height asked for: a change reopens the stream only once it has
+ * stayed the same for a moment, so dragging a zoom slider does not restart the camera.
  */
-export function useCameraPreview(enabled: boolean, deviceId: string | null = null): CameraPreview {
+export function useCameraPreview(
+  enabled: boolean,
+  deviceId: string | null = null,
+  lines: number = DEFAULT_PREVIEW_LINES,
+): CameraPreview {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [hasStream, setHasStream] = useState(false);
+  const [settledLines, setSettledLines] = useState(lines);
+
+  useEffect(() => {
+    if (lines === settledLines) return;
+    const timer = setTimeout(() => setSettledLines(lines), LINES_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [lines, settledLines]);
 
   useEffect(() => {
     // Tear down whatever is currently open and detach it from the element.
@@ -55,10 +76,14 @@ export function useCameraPreview(enabled: boolean, deviceId: string | null = nul
       try {
         let stream: MediaStream;
         try {
-          stream = await navigator.mediaDevices.getUserMedia(previewConstraints(deviceId));
+          stream = await navigator.mediaDevices.getUserMedia(
+            previewConstraints(deviceId, settledLines),
+          );
         } catch (error) {
           if (!deviceId || controller.signal.aborted) throw error;
-          stream = await navigator.mediaDevices.getUserMedia(previewConstraints(null));
+          stream = await navigator.mediaDevices.getUserMedia(
+            previewConstraints(null, settledLines),
+          );
         }
         if (controller.signal.aborted) {
           for (const track of stream.getTracks()) track.stop();
@@ -78,7 +103,7 @@ export function useCameraPreview(enabled: boolean, deviceId: string | null = nul
       controller.abort();
       releaseStream();
     };
-  }, [enabled, deviceId]);
+  }, [enabled, deviceId, settledLines]);
 
   return { videoRef, hasStream };
 }
