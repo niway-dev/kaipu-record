@@ -338,7 +338,7 @@ export function CameraSettingsFields({
             onChange={(choice) => {
               if (choice !== "custom") onChange({ size: CAMERA_BUBBLE_PRESETS[choice] });
             }}
-            compact={compact}
+            compact={false}
           />
 
           <div className={styles.slider}>
