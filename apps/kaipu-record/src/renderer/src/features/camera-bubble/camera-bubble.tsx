@@ -108,11 +108,13 @@ export function CameraBubble(): React.JSX.Element {
   const t = useTranslations("cameraSettings");
   const bubble = useBubbleSettings();
   const activity = useRecordingActivity();
-  const { videoRef, hasStream } = useCameraPreview(
-    true,
-    bubble.deviceId,
-    cameraCaptureLines(bubble.size, bubble.framing),
-  );
+  // A new resolution reopens the camera, and the bubble blinks while it does: during a take
+  // that blink would be in the video. So the lines stay as they were when the take started
+  // (the zoom itself still applies at once) and catch up when it ends.
+  const wantedLines = cameraCaptureLines(bubble.size, bubble.framing);
+  const takeLines = useRef(wantedLines);
+  if (!activity.active) takeLines.current = wantedLines;
+  const { videoRef, hasStream } = useCameraPreview(true, bubble.deviceId, takeLines.current);
   const [size, setSize] = useState(sizeFromWindow);
   const [hovered, setHovered] = useState(false);
   const [dragging, setDragging] = useState(false);

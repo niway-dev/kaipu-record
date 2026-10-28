@@ -163,6 +163,40 @@ describe("CameraBubble", () => {
     expect(video).toBeDefined();
   });
 
+  it("keeps the camera resolution while recording, so a zoom change never reopens the camera mid-take", async () => {
+    let pushActivity: ((activity: RecordingActivity) => void) | null = null;
+    window.electronAPI.onRecordingState = (callback) => {
+      pushActivity = callback;
+      return () => {};
+    };
+    let pushSettings: ((settings: never) => void) | null = null;
+    window.electronAPI.onSettingsChanged = ((callback: (settings: never) => void) => {
+      pushSettings = callback;
+      return () => {};
+    }) as never;
+    const base = await original.getSettings();
+    const withZoom = (zoom: number): never =>
+      ({
+        ...base,
+        cameraBubble: {
+          shape: "circle",
+          size: 240,
+          deviceId: null,
+          mirrored: true,
+          framing: { enabled: true, zoom, x: 0, y: 0 },
+        },
+      }) as never;
+    const video = await renderWithFraming({ enabled: true, zoom: 1, x: 0, y: 0 });
+    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 480));
+    act(() => pushActivity?.({ active: true, status: "recording", elapsedSeconds: 0 }));
+    act(() => pushSettings?.(withZoom(2)));
+    // The zoom applies at once; the stream keeps its lines until the take ends.
+    expect(video.style.transform).toContain("scale(2)");
+    expect(mockPreview).toHaveBeenLastCalledWith(true, null, 480);
+    act(() => pushActivity?.({ active: false, status: "recording", elapsedSeconds: 3 }));
+    expect(mockPreview).toHaveBeenLastCalledWith(true, null, 1080);
+  });
+
   it("shows the outline, size label and grip on hover", () => {
     withStream();
     const { container } = render(<CameraBubble />);
