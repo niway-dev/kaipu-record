@@ -34,6 +34,19 @@ track (zero added cost).
 On **Apple Silicon** this is a modest bump (the GPU resamples a 3K frame in well under a
 millisecond). On **Intel Macs** (still a shipped target) it's heavier — no equivalent acceleration.
 
+## Cadence
+
+Cadence: draws follow source frames, capped at frameRate, none while paused. The draw loop
+follows `video.requestVideoFrameCallback` (one call per new source frame), falls back to
+`requestAnimationFrame` when that API is missing or has not fired 500 ms after start, and skips
+any draw sooner than `1000 / frameRate − 2` ms after the previous one. A 1 s heartbeat redraws a
+static screen, and the engine's pause/resume pause and resume the compositor (audit REC-A7,
+NIW2-401). Before this, the loop redrew on every display refresh (up to 120 Hz on ProMotion),
+paused or not. The output stays constant-rate either way: mediabunny's
+`MediaStreamVideoTrackSource` with a `frameRate` repeats the last frame on its own 250 Hz timer.
+Each take logs one `[recording-compositor] … draws/s … via …` line at stop; the before/after
+CPU and draws/s numbers on a ProMotion MacBook are still to be measured (see the NIW2-401 PR).
+
 ## The indicator to watch
 
 Revisit this when any of these show up — **especially on Intel**:

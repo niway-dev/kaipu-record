@@ -19,8 +19,22 @@ const FALLBACK_ASPECT = 1974 / 352;
 export interface RecordingCompositor {
   /** The composited video track to encode instead of the raw screen track. */
   track: MediaStreamVideoTrack;
+  /** Stop redrawing (the take is paused). Idempotent. */
+  pause(): void;
+  /** Redraw once and follow the source again. No-op after `stop()`. */
+  resume(): void;
   stop(): void;
 }
+
+// A static screen produces no source frames, and captureStream only emits when the canvas
+// changes, so redraw at least this often to keep the encoder fed.
+const HEARTBEAT_MS = 1000;
+// Tick faster than the bound: a 1 s tick that skips because a frame drew 500 ms earlier
+// would leave a ~2 s gap. A 250 ms tick keeps every gap under HEARTBEAT_MS + 250 ms.
+const HEARTBEAT_TICK_MS = 250;
+// rVFC is not proven to fire on a detached <video> in a hidden window: with no source
+// frame by then, follow the display (rAF) instead, throttled the same way.
+const FRAME_CALLBACK_GRACE_MS = 500;
 
 /**
  * Re-frame the screen capture onto a `<canvas>` sized to `target` and re-capture
@@ -84,8 +98,28 @@ export async function startRecordingCompositor(
     opacity = watermark.opacity;
   }
 
-  let frame = 0;
-  const draw = (): void => {
+  // Cadence: one draw per NEW source frame, never faster than the capture rate.
+  // `requestVideoFrameCallback` fires only when the <video> presents a new frame; without
+  // it, fall back to rAF, throttled by the same interval. The 2 ms slack keeps a 30 fps
+  // source on a 60 Hz clock from skipping every other frame.
+  const minIntervalMs = 1000 / Math.max(1, frameRate) - 2;
+  let hasVideoFrameCallback = typeof video.requestVideoFrameCallback === "function";
+  let handle = 0;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  let grace: ReturnType<typeof setTimeout> | undefined;
+  let paused = false;
+  let stopped = false;
+  let lastDrawAt = Number.NEGATIVE_INFINITY;
+  let sourceFrames = 0;
+  let draws = 0;
+  const startedAt = performance.now();
+
+  /**
+   * `at` is the time the draw is charged to: the callback's frame time when a frame drives
+   * it. Stamping the clock after the draw instead would carry the draw's own cost into the
+   * interval, and on a 60 Hz clock a 5 ms draw would then skip to every third frame (20 fps).
+   */
+  const draw = (at = performance.now()): void => {
     // Screen sources have a fixed AR, but WINDOW sources change dimensions
     // whenever the user resizes the window — re-reading videoWidth/videoHeight
     // and uniformly fitting (letterboxed, never stretched) every frame keeps the
@@ -111,20 +145,75 @@ export async function startRecordingCompositor(
       ctx.drawImage(stamp, rect.x, rect.y, rect.width, rect.height);
       ctx.restore();
     }
-    frame = requestAnimationFrame(draw);
+    lastDrawAt = at;
+    draws += 1;
   };
-  draw();
+  const onFrame = (now: number): void => {
+    sourceFrames += 1;
+    if (stopped || paused) return;
+    if (now - lastDrawAt >= minIntervalMs) draw(now);
+    schedule();
+  };
+  const schedule = (): void => {
+    handle = hasVideoFrameCallback
+      ? video.requestVideoFrameCallback(onFrame)
+      : requestAnimationFrame(onFrame);
+  };
+  const halt = (): void => {
+    if (hasVideoFrameCallback) video.cancelVideoFrameCallback(handle);
+    else cancelAnimationFrame(handle);
+    clearInterval(heartbeat);
+    clearTimeout(grace);
+  };
+  const start = (): void => {
+    schedule();
+    heartbeat = setInterval(() => {
+      if (performance.now() - lastDrawAt >= HEARTBEAT_MS) draw();
+    }, HEARTBEAT_TICK_MS);
+    if (hasVideoFrameCallback && sourceFrames === 0) {
+      grace = setTimeout(() => {
+        if (sourceFrames > 0) return;
+        video.cancelVideoFrameCallback(handle);
+        hasVideoFrameCallback = false;
+        schedule();
+      }, FRAME_CALLBACK_GRACE_MS);
+    }
+  };
+
+  draw(); // the first frame must exist before captureStream is created
+  start();
 
   const stream = canvas.captureStream(frameRate);
   const track = stream.getVideoTracks()[0];
 
   return {
     track,
+    pause: () => {
+      if (paused || stopped) return;
+      paused = true;
+      halt();
+    },
+    resume: () => {
+      if (!paused || stopped) return;
+      paused = false;
+      draw();
+      start();
+    },
     stop: () => {
-      cancelAnimationFrame(frame);
+      if (stopped) return;
+      stopped = true;
+      halt();
       track.stop();
       video.pause();
       video.srcObject = null;
+      // One line per take to check the cadence (draws/s should stay at or under frameRate).
+      const seconds = (performance.now() - startedAt) / 1000;
+      if (seconds > 0) {
+        console.info(
+          `[recording-compositor] ${draws} draws, ${sourceFrames} source frames in ${seconds.toFixed(1)}s ` +
+            `(${(draws / seconds).toFixed(1)} draws/s, cap ${frameRate}) via ${hasVideoFrameCallback ? "requestVideoFrameCallback" : "requestAnimationFrame"}`,
+        );
+      }
     },
   };
 }

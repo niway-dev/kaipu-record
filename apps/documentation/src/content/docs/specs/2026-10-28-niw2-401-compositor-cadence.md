@@ -1,9 +1,14 @@
 ---
-title: "25 · Compositor cadence"
-description: "Closes REC-A7: the recording compositor redraws on every requestAnimationFrame (up to 120 Hz on ProMotion) instead of at the encode frame rate, and keeps drawing while paused."
+title: "NIW2-401: 25 Compositor cadence — approved spec"
+description: "The compositor draws at most once per source frame, never faster than the capture frame rate, and not at all while the take is paused."
 ---
 
-# Compositor cadence — implementation plan
+# NIW2-401: 25 Compositor cadence
+
+> Approved spec, committed **before** implementation (ADR-0010). Source: audit plan `apps/documentation/src/content/docs/plans/audit-2026-10-15/25-compositor-cadence.md` on `main` @ `f10e39a4`, copied below unchanged except the heading level. Linear: https://linear.app/niway/issue/NIW2-401. Where they disagree, **this file wins**.
+> Path: `apps/documentation/src/content/docs/specs/2026-10-28-niw2-401-compositor-cadence.md` · Approved: 2026-10-28 (Cristian, all proposed defaults) · Batch 5 — recording failure paths (parent NIW2-385) · Closes: REC-A7
+
+## Compositor cadence — implementation plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -274,3 +279,25 @@ git commit -m "perf(desktop): pausing a take pauses the compositor"
 - [ ] Add the cadence paragraph to `apps/documentation/src/content/docs/backlog/recording-compositor-perf.md` with the measured numbers.
 - [ ] Open a PR titled `perf(desktop): compositor draws at the capture rate and pauses (audit REC-A7)` linking this plan, the finding and the backlog note; include the measurements and the R1/R2 outcome. End with **How to test it yourself** = the measurement steps 1–4 in short form.
 - [ ] The PR deletes this plan file and removes its row from `plans/audit-2026-10-15/00-index.md`.
+
+## Dependencies
+
+- No open `blocked by` relation. Independent of the other audit plans.
+- Linear lists this ticket as blocking NIW2-387 (plan 01). Plan 01's telemetry helps measure the draw rate but is not required first.
+
+## Approved decisions
+
+1. **Approval.** Cristian approved this ticket on 2026-10-28 with every proposed default; this file is the contract. Where the Linear description disagrees, this file wins.
+2. **Failing test first.** Each task starts with a failing test, run before the fix. Selector names, helper names and line numbers were written by reading the code, not by running it: adapt them to today's code.
+3. **Stop, don't improvise.** If a Review Focus line or a flagged assumption does not hold on today's `main`, stop and report it in a comment on the Linear ticket instead of improvising.
+4. **One PR.** One PR for this ticket. It links NIW2-401, ends with a "How to test it yourself" section, and deletes the plan file `apps/documentation/src/content/docs/plans/audit-2026-10-15/25-compositor-cadence.md` plus its row in `00-index.md`.
+5. **Tooling.** Never run the Playwright desktop E2E suite locally (CI runs it). Use the pinned tools (`apps/kaipu-record/node_modules/.bin/vitest`, `bun run check-types`), never `bunx`.
+6. **Human merge.** The ticket carries `needs-human-merge`: the PR is not auto-landed; Cristian reviews and merges it.
+7. **Repo rule: no remote side effects.** No remote `db:push`/migrations against any real or dev database, no deploys, no releases or tags, no changes to remote storage or secrets. Local tests and fixtures only.
+8. **Suggested model:** Sonnet.
+9. **Verify in the app before changing the cadence:** measure the current draw rate vs the capture rate first. The plan assumes `requestVideoFrameCallback` keeps firing on a hidden/offscreen `<video>` in the recorder window; if rVFC stalls when hidden, stop and report on the ticket before changing the cadence.
+10. **Re-check the finding against mediabunny 1.61.4** (the auditor used a stale 1.49.0 install). If the finding no longer applies, report instead of changing code.
+
+## Change log
+
+- 2026-10-28: Spec approved by Cristian with all proposed defaults; committed as the first commit of `feature/niw2-401-…` from audit plan `25-compositor-cadence` (`main` @ `f10e39a4`).
