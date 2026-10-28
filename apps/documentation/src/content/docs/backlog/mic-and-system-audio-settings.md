@@ -37,13 +37,16 @@ The device stays in `RecordingSettings.selectedMicrophone`, shared across window
 reproduce the recording from before these settings existed.
 
 The picked device is also remembered across launches in `AppSettings.microphone`
-(`{ deviceId, label } | null`): the recording hub starts with it, and the renderer writes it
-only when the user picks a device. The automatic default is never stored, so until something is
-picked Kaipu keeps following the system's default input: the list puts it first and it is the
-one selected. Chromium's `default` alias is matched to its device by
-`groupId`, or by name without one. A remembered device that is unplugged shows as DISCONNECTED;
-the take asks for it as `ideal`, so it falls back to the system default. The renderer defaults
-nothing before main's settings arrive, or it would overwrite the remembered device.
+(`{ deviceId, label } | null`), written by the renderer only when the user picks one; the
+recording hub starts with it. The device a take uses is a coalesce: the picked one while it is
+connected, otherwise the system's default input, which heads the list (Chromium's `default`
+alias is matched to its device by `groupId`, or by name without one). It is recomputed when
+devices come and go: unplugging the picked mic falls back to the default, plugging it back in
+returns to it, and the fallback is never stored as a pick. Nothing switches while a take is
+pending or running, and nothing is chosen before main's settings arrive. The on/off toggles are
+not remembered: every launch starts with the mic on and the camera and system audio off. The
+camera works the same way: `cameraBubble.deviceId` is the picked camera, and the bubble opens
+the default one while it is unplugged.
 
 ## What each surface shows
 
