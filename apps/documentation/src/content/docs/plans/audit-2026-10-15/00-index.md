@@ -50,15 +50,14 @@ All shipped.
 
 ## Batch 5 — recording failure paths
 
-| Plan                                                                                     | Closes                         |
-| ---------------------------------------------------------------------------------------- | ------------------------------ |
-| [20 Recording engine cleanup](/plans/audit-2026-10-15/20-recording-engine-cleanup/)      | REC-A1, REC-B2, REC-B1         |
-| [21 Recording main-side resources](/plans/audit-2026-10-15/21-recording-main-resources/) | REC-A2, REC-B4, REC-B3, REC-B5 |
-| [22 Recording crash writer](/plans/audit-2026-10-15/22-recording-crash-writer/)          | REC-A4, REC-B7                 |
-| [23 Mic failure feedback](/plans/audit-2026-10-15/23-mic-failure-feedback/)              | REC-A5                         |
-| [24 Recording start latency](/plans/audit-2026-10-15/24-recording-start-latency/)        | REC-A6, REC-A9                 |
-| [25 Compositor cadence](/plans/audit-2026-10-15/25-compositor-cadence/)                  | REC-A7                         |
-| [26 Cursor track tail](/plans/audit-2026-10-15/26-cursor-track-tail/)                    | REC-B8                         |
+| Plan                                                                                | Closes                 |
+| ----------------------------------------------------------------------------------- | ---------------------- |
+| [20 Recording engine cleanup](/plans/audit-2026-10-15/20-recording-engine-cleanup/) | REC-A1, REC-B2, REC-B1 |
+| [22 Recording crash writer](/plans/audit-2026-10-15/22-recording-crash-writer/)     | REC-A4, REC-B7         |
+| [23 Mic failure feedback](/plans/audit-2026-10-15/23-mic-failure-feedback/)         | REC-A5                 |
+| [24 Recording start latency](/plans/audit-2026-10-15/24-recording-start-latency/)   | REC-A6, REC-A9         |
+| [25 Compositor cadence](/plans/audit-2026-10-15/25-compositor-cadence/)             | REC-A7                 |
+| [26 Cursor track tail](/plans/audit-2026-10-15/26-cursor-track-tail/)               | REC-B8                 |
 
 ## Batch 6 — render and copy cost
 
@@ -80,6 +79,7 @@ Deleted from this folder once their PR merged; git keeps the plan text.
 | 05 Screenshot editor save races   | SHOT-B1, SHOT-B4, SHOT-B8, SHOT-B9 (SHOT-B2 dropped: premise no longer holds) | [#360](https://github.com/niway-dev/kaipu-record/pull/360) |
 | 07 Tags registry integrity        | LIB-A4, LIB-B7, LIB-B6                                                        | [#358](https://github.com/niway-dev/kaipu-record/pull/358) |
 | 19 Trim drag                      | VID-B1, VID-B2, VID-B7, VID-B8                                                | [#368](https://github.com/niway-dev/kaipu-record/pull/368) |
+| 21 Recording main-side resources  | REC-A2, REC-B4, REC-B3, REC-B5                                                | [#413](https://github.com/niway-dev/kaipu-record/pull/413) |
 | 28 Video thumbnails by range      | VID-A3                                                                        | [#369](https://github.com/niway-dev/kaipu-record/pull/369) |
 | 29 Export canvas pool             | VID-A5                                                                        | [#371](https://github.com/niway-dev/kaipu-record/pull/371) |
 | 31 Screenshot composite once      | SHOT-A1                                                                       | [#372](https://github.com/niway-dev/kaipu-record/pull/372) |
