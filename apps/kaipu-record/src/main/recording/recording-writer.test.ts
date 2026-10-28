@@ -114,6 +114,17 @@ describe("RecordingWriter", () => {
     ).rejects.toThrow(/session/i);
   });
 
+  it("ids lists the open sessions until they end", async () => {
+    const { writer } = await setup();
+    await writer.create("s1");
+    await writer.create("s2");
+    expect(writer.ids()).toEqual(["s1", "s2"]);
+    await writer.abort("s1");
+    expect(writer.ids()).toEqual(["s2"]);
+    await writer.releaseAll();
+    expect(writer.ids()).toEqual([]);
+  });
+
   it("releaseAll keeps a stranded take so it can still be salvaged", async () => {
     const vaultPath = await unreachableVault();
     const fallbackTempDir = await mkdtemp(join(tmpdir(), "rw-fallback-"));
