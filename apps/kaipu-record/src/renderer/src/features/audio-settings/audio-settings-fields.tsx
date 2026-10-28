@@ -107,6 +107,8 @@ export interface SwitchRowProps {
   onChange: (checked: boolean) => void;
   disabled?: boolean;
   disabledReason?: string;
+  /** Where space is tight: the hint stays the switch's description, and shows on hover. */
+  hintHidden?: boolean;
 }
 
 /** A labelled on/off switch row. A disabled one says why, in place of its hint. */
@@ -117,17 +119,25 @@ export function SwitchRow({
   onChange,
   disabled = false,
   disabledReason,
+  hintHidden = false,
 }: SwitchRowProps): React.JSX.Element {
   const titleId = useId();
   const hintId = useId();
+  const reason = disabled && disabledReason ? disabledReason : null;
+  // A disabled reason always shows: it is the only place that says why.
+  const hideHint = hintHidden && reason === null;
   return (
-    <div className={styles.switchRow} data-disabled={disabled || undefined}>
+    <div
+      className={styles.switchRow}
+      data-disabled={disabled || undefined}
+      title={hideHint ? hint : undefined}
+    >
       <div className={styles.switchText}>
         <span id={titleId} className={styles.switchTitle}>
           {title}
         </span>
-        <span id={hintId} className={styles.switchHint}>
-          {disabled && disabledReason ? disabledReason : hint}
+        <span id={hintId} className={hideHint ? styles.visuallyHidden : styles.switchHint}>
+          {reason ?? hint}
         </span>
       </div>
       <button

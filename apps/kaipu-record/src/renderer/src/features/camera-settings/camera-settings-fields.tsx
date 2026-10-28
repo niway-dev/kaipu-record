@@ -250,9 +250,11 @@ export interface CameraSettingsFieldsProps {
 }
 
 /**
- * The camera settings themselves, shared by the Record page's popover and the capture
- * panel's drawer. DOM order is the Tab order the design asks for: Shape → Size chips →
- * slider → device selector (the device chip is drawn in the header, but comes last).
+ * The camera settings themselves, shared by the Record page's drawer and the capture
+ * panel's compact one. DOM order is the Tab order the design asks for: Shape → Size chips →
+ * slider → device selector (the device chip is drawn in the header, but comes last). The
+ * compact variant drops Size and keeps the switch hints for screen readers only, so the
+ * panel stays short.
  */
 export function CameraSettingsFields({
   bubble,
@@ -281,11 +283,7 @@ export function CameraSettingsFields({
       value: "custom",
       // Not a preset: the chip shows the value. A preset: it reads "Custom" and is
       // not clickable (the slider is how a custom size is made).
-      text: preset
-        ? t("sizeCustom")
-        : compact
-          ? t("sizePx", { size: bubble.size })
-          : t("sizeCustomValue", { size: bubble.size }),
+      text: preset ? t("sizeCustom") : t("sizeCustomValue", { size: bubble.size }),
       ariaLabel: preset
         ? t("sizeCustom")
         : t("sizeChip", { name: t("sizeCustom"), size: bubble.size }),
@@ -326,55 +324,60 @@ export function CameraSettingsFields({
         groupRef={shapeRef}
       />
 
-      <span className={styles.label} aria-hidden>
-        {t("size")}
-      </span>
-      <RadioChips
-        label={t("size")}
-        options={sizes}
-        value={preset ?? "custom"}
-        onChange={(choice) => {
-          if (choice !== "custom") onChange({ size: CAMERA_BUBBLE_PRESETS[choice] });
-        }}
-        compact={compact}
-      />
+      {/* The panel has no room for Size: there the bubble's own resize grip sizes it. The
+          Record page keeps it, and it is the keyboard's way to size the bubble. */}
+      {!compact && (
+        <>
+          <span className={styles.label} aria-hidden>
+            {t("size")}
+          </span>
+          <RadioChips
+            label={t("size")}
+            options={sizes}
+            value={preset ?? "custom"}
+            onChange={(choice) => {
+              if (choice !== "custom") onChange({ size: CAMERA_BUBBLE_PRESETS[choice] });
+            }}
+            compact={compact}
+          />
 
-      <div className={styles.slider}>
-        <input
-          type="range"
-          min={CAMERA_BUBBLE_MIN_SIZE}
-          max={CAMERA_BUBBLE_MAX_SIZE}
-          step={10}
-          value={bubble.size}
-          aria-label={t("slider")}
-          aria-valuetext={valueText}
-          onKeyDown={onSliderKey}
-          onChange={(event) => onChange({ size: Number(event.currentTarget.value) })}
-        />
-        <div className={styles.ticks} aria-hidden>
-          {CAMERA_BUBBLE_PRESET_IDS.map((id) => (
-            <span
-              key={id}
-              className={styles.tick}
-              data-current={preset === id || undefined}
-              style={{
-                left: `${((CAMERA_BUBBLE_PRESETS[id] - CAMERA_BUBBLE_MIN_SIZE) / span) * 100}%`,
-              }}
+          <div className={styles.slider}>
+            <input
+              type="range"
+              min={CAMERA_BUBBLE_MIN_SIZE}
+              max={CAMERA_BUBBLE_MAX_SIZE}
+              step={10}
+              value={bubble.size}
+              aria-label={t("slider")}
+              aria-valuetext={valueText}
+              onKeyDown={onSliderKey}
+              onChange={(event) => onChange({ size: Number(event.currentTarget.value) })}
             />
-          ))}
-        </div>
-        {!compact && (
-          <div className={styles.range} aria-hidden>
-            <span>{t("sizePx", { size: CAMERA_BUBBLE_MIN_SIZE })}</span>
-            <span>{t("sizePx", { size: CAMERA_BUBBLE_MAX_SIZE })}</span>
+            <div className={styles.ticks} aria-hidden>
+              {CAMERA_BUBBLE_PRESET_IDS.map((id) => (
+                <span
+                  key={id}
+                  className={styles.tick}
+                  data-current={preset === id || undefined}
+                  style={{
+                    left: `${((CAMERA_BUBBLE_PRESETS[id] - CAMERA_BUBBLE_MIN_SIZE) / span) * 100}%`,
+                  }}
+                />
+              ))}
+            </div>
+            <div className={styles.range} aria-hidden>
+              <span>{t("sizePx", { size: CAMERA_BUBBLE_MIN_SIZE })}</span>
+              <span>{t("sizePx", { size: CAMERA_BUBBLE_MAX_SIZE })}</span>
+            </div>
           </div>
-        )}
-      </div>
+        </>
+      )}
 
       <div className={styles.mirror}>
         <SwitchRow
           title={t("mirrorTitle")}
           hint={t("mirrorHint")}
+          hintHidden={compact}
           checked={bubble.mirrored}
           onChange={(mirrored) => onChange({ mirrored })}
         />
@@ -384,6 +387,7 @@ export function CameraSettingsFields({
         <SwitchRow
           title={t("framingTitle")}
           hint={t("framingHint")}
+          hintHidden={compact}
           checked={bubble.framing.enabled}
           onChange={(enabled) => onChange({ framing: { ...bubble.framing, enabled } })}
         />

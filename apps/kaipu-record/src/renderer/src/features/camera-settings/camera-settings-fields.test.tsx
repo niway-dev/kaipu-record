@@ -231,6 +231,25 @@ describe("CameraSettingsFields — mirror", () => {
   });
 });
 
+describe("CameraSettingsFields — compact (capture panel)", () => {
+  it("drops the Size chips and slider; the full variant keeps them", () => {
+    renderFields({ compact: true });
+    expect(screen.queryByRole("radiogroup", { name: "Size" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("slider", { name: /size/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Shape" })).toBeInTheDocument();
+  });
+
+  it("keeps the switch hints as descriptions and tooltips, not visible lines", () => {
+    renderFields({ compact: true });
+    const framing = screen.getByRole("switch", { name: "Framing" });
+    expect(framing).toHaveAccessibleDescription("Zoom in and move the image inside the bubble");
+    expect(framing.closest("[title]")).toHaveAttribute(
+      "title",
+      "Zoom in and move the image inside the bubble",
+    );
+  });
+});
+
 describe("CameraSettingsFields — framing", () => {
   const on = { enabled: true, zoom: 1.5, x: 0, y: 0 };
 
