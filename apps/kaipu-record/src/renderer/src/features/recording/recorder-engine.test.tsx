@@ -13,7 +13,12 @@ import { startRecordingCompositor } from "./recording-compositor";
 // The compositor touches a real <canvas>/captureStream (no-op in jsdom), so mock
 // it; we assert the engine hands it the right re-frame target instead.
 vi.mock("./recording-compositor", () => ({
-  startRecordingCompositor: vi.fn(async () => ({ track: { stop: vi.fn() }, stop: vi.fn() })),
+  startRecordingCompositor: vi.fn(async () => ({
+    track: { stop: vi.fn() },
+    pause: vi.fn(),
+    resume: vi.fn(),
+    stop: vi.fn(),
+  })),
 }));
 
 // mediabunny is mocked so the engine's wiring is observable without a real encoder.
@@ -460,6 +465,29 @@ describe("startEngine", () => {
     handle.resume();
     expect(videoSource.resume).toHaveBeenCalled();
     expect(audioSource.resume).toHaveBeenCalled();
+  });
+
+  it("pauses and resumes the compositor with the take", async () => {
+    // A non-16:9 panel: the compositor runs.
+    screenVideoTrack.getSettings = vi.fn(() => ({ width: 3024, height: 1964 }));
+    const handle = await startEngine(baseOptions());
+    const compositor = await vi.mocked(startRecordingCompositor).mock.results.at(-1)!.value;
+
+    handle.pause();
+    expect(compositor.pause).toHaveBeenCalled();
+    expect(compositor.resume).not.toHaveBeenCalled();
+
+    handle.resume();
+    expect(compositor.resume).toHaveBeenCalled();
+  });
+
+  it("pauses and resumes without a compositor", async () => {
+    const handle = await startEngine(baseOptions());
+    expect(startRecordingCompositor).not.toHaveBeenCalled();
+    expect(() => {
+      handle.pause();
+      handle.resume();
+    }).not.toThrow();
   });
 
   it("reports five microphone level bars", async () => {

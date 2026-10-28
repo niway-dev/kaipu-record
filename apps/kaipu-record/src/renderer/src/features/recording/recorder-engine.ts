@@ -618,8 +618,10 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
       pause: () => {
         videoSource.pause();
         audioSource?.pause();
+        compositor?.pause(); // no redraws while nothing is encoded
       },
       resume: () => {
+        compositor?.resume(); // a fresh frame is on the canvas before the source samples again
         videoSource.resume();
         audioSource?.resume();
       },
