@@ -216,8 +216,9 @@ bun run rebuild:native   # compiles the patched sources against the installed El
 ```
 
 `bun run setup` reports when that rebuild is pending and prints this command —
-it compares a stamp in `node_modules` against the installed Electron version, so
-a fresh install or an Electron bump both show up. Every packaging path
+it compares a stamp in `node_modules` against the installed Electron version plus
+a hash of `patches/*.patch` (`scripts/native-deps-stamp.sh`), so a fresh install,
+an Electron bump or a changed patch all show up. Every packaging path
 (`build:mac`, `build:unpack`, `build:win`, `build:linux`, `release-desktop.yml`)
 calls it explicitly, because a release must not depend on someone remembering.
 

@@ -18,7 +18,8 @@
 # depend on someone having remembered.
 set -euo pipefail
 
-APP_DIR="$(cd "$(dirname "$0")/../apps/kaipu-record" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+APP_DIR="$(cd "$SCRIPT_DIR/../apps/kaipu-record" && pwd)"
 cd "$APP_DIR"
 
 ELECTRON_PKG="node_modules/electron/package.json"
@@ -30,10 +31,13 @@ ELECTRON_VERSION="$(node -p "require('./$ELECTRON_PKG').version")"
 
 bunx electron-builder install-app-deps
 
-# Stamp what we just built against. `setup-dev.sh` compares this to the installed
-# Electron version to tell you whether a rebuild is pending. It lives inside
-# node_modules on purpose: a fresh install wipes it, which is exactly when the
-# rebuild is needed again.
-printf '%s\n' "$ELECTRON_VERSION" > node_modules/.native-deps-electron-version
+# Stamp what we just built against: Electron version + hash of the dependency
+# patches (scripts/native-deps-stamp.sh). `setup-dev.sh` and the release workflow
+# compare the file to a fresh stamp to tell you whether a rebuild is pending —
+# an Electron bump or a changed patch both show up. It lives inside node_modules
+# on purpose: a fresh install wipes it, which is exactly when the rebuild is
+# needed again.
+STAMP="$(bash "$SCRIPT_DIR/native-deps-stamp.sh")"
+printf '%s\n' "$STAMP" > node_modules/.native-deps-electron-version
 
-echo "rebuild-native: built against Electron $ELECTRON_VERSION"
+echo "rebuild-native: built against Electron $ELECTRON_VERSION (stamp $STAMP)"

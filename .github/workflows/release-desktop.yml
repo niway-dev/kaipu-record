@@ -112,11 +112,12 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # Rebuilds uiohook-napi against Electron's ABI. This was a postinstall until it
-      # was made explicit (scripts/rebuild-native.sh). It MUST stay here: this is a
-      # macOS runner and `electron-builder.yml` sets `npmRebuild: false`, so without
-      # it the signed artifact ships a module built for the wrong ABI — a failure
-      # that surfaces on a user's machine, not in this job.
+      # Compiles the PATCHED uiohook-napi sources against Electron. This was a
+      # postinstall until it was made explicit (scripts/rebuild-native.sh). It MUST
+      # stay here: `electron-builder.yml` sets `npmRebuild: false`, so without it the
+      # signed artifact ships the unpatched N-API prebuild — Electron loads it fine,
+      # start() deadlock included — a failure that surfaces on a user's machine, not
+      # in this job.
       - name: Rebuild native dependencies for Electron
         run: bash scripts/rebuild-native.sh
 
@@ -244,17 +245,17 @@ jobs:
       # silently skipped, the installer still builds and ships the UNPATCHED N-API
       # prebuild — Electron loads it fine, with the start() deadlock the bun patch fixes —
       # on every user's machine. The stamp is what scripts/rebuild-native.sh writes
-      # and scripts/setup-dev.sh reads; a mismatch with the installed Electron fails here.
-      - name: Check native dependencies were rebuilt for this Electron
-        working-directory: apps/kaipu-record
+      # and scripts/setup-dev.sh reads: Electron version + patch hash
+      # (scripts/native-deps-stamp.sh); a mismatch fails here.
+      - name: Check native dependencies were rebuilt for this Electron and patch set
         run: |
-          ELECTRON_VERSION="$(node -p "require('./node_modules/electron/package.json').version")"
-          BUILT_FOR="$(cat node_modules/.native-deps-electron-version 2>/dev/null || echo "")"
-          if [ "$BUILT_FOR" != "$ELECTRON_VERSION" ]; then
-            echo "::error::native dependencies were built for '${BUILT_FOR}', installed Electron is '${ELECTRON_VERSION}' — the rebuild step did not run or did not finish"
+          EXPECTED="$(bash scripts/native-deps-stamp.sh)"
+          BUILT_FOR="$(cat apps/kaipu-record/node_modules/.native-deps-electron-version 2>/dev/null || echo "")"
+          if [ "$BUILT_FOR" != "$EXPECTED" ]; then
+            echo "::error::native dependencies stamp is '${BUILT_FOR}', expected '${EXPECTED}' — the rebuild step did not run or did not finish"
             exit 1
           fi
-          echo "uiohook-napi built for Electron ${ELECTRON_VERSION}"
+          echo "uiohook-napi built for ${EXPECTED}"
 
       - name: Build
         working-directory: apps/kaipu-record

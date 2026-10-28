@@ -42,30 +42,26 @@ describe("uiohook-napi native patch", () => {
     );
   });
 
-  it("replaces the mutex-as-flag handshake in uiohook_worker.c", () => {
+  it("is a patch of uiohook_worker.c", () => {
     const patchPath = resolve(repoRoot, `patches/uiohook-napi@${version}.patch`);
     expect(existsSync(patchPath)).toBe(true);
-    const patch = readFileSync(patchPath, "utf8");
-    expect(patch).toContain("src/lib/uiohook_worker.c");
-    // The fix's explicit start state, waited on in a predicate loop.
-    expect(patch).toContain("hook_start_state");
-    // The old flag mutex is gone: no added *code* line may trylock it as a "started"
-    // signal (the fix's comments are allowed to mention it by name).
-    const addedCode = patch
-      .split("\n")
-      .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
-      .map((line) => line.slice(1).trim())
-      .filter((line) => !line.startsWith("//") && !line.startsWith("*"));
-    expect(addedCode.some((line) => line.includes("uv_mutex_trylock(&hook_running_mutex)"))).toBe(
-      false,
-    );
+    expect(readFileSync(patchPath, "utf8")).toContain("src/lib/uiohook_worker.c");
   });
 
-  it("reached the installed native sources", () => {
+  it("replaces the mutex-as-flag handshake in the installed native sources", () => {
     const worker = readFileSync(
       resolve(appDir, "node_modules/uiohook-napi/src/lib/uiohook_worker.c"),
       "utf8",
     );
-    expect(worker).toContain("hook_start_state");
+    const code = worker
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => !line.startsWith("//") && !line.startsWith("*"));
+    // The fix: an explicit start state, waited on in a predicate loop, so a spurious
+    // wake-up goes back to waiting instead of being read as a startup failure.
+    expect(code).toContain("while (hook_state == HOOK_START_PENDING) {");
+    // The old flag mutex is gone from the code (comments may still name it): nothing
+    // may trylock it as a "started" signal, nothing may join while holding it.
+    expect(code.some((line) => line.includes("hook_running_mutex"))).toBe(false);
   });
 });
