@@ -4,7 +4,13 @@ import userEvent from "@testing-library/user-event";
 import type { CameraBubbleSettings } from "@shared/camera-bubble";
 import { CameraBlockedCard, CameraSettingsFields } from "./camera-settings-fields";
 
-const bubble: CameraBubbleSettings = { shape: "circle", size: 240, deviceId: null };
+const bubble: CameraBubbleSettings = {
+  shape: "circle",
+  size: 240,
+  deviceId: null,
+  mirrored: true,
+  framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+};
 
 function renderFields(overrides: Partial<React.ComponentProps<typeof CameraSettingsFields>> = {}): {
   onChange: ReturnType<typeof vi.fn>;
@@ -153,6 +159,10 @@ describe("CameraSettingsFields — device and notes", () => {
     await userEvent.tab();
     expect(screen.getByRole("slider")).toHaveFocus();
     await userEvent.tab();
+    expect(screen.getByRole("switch", { name: "Mirror image" })).toHaveFocus();
+    await userEvent.tab();
+    expect(screen.getByRole("switch", { name: "Framing" })).toHaveFocus();
+    await userEvent.tab();
     expect(screen.getByRole("combobox")).toHaveFocus();
   });
 
@@ -186,5 +196,131 @@ describe("CameraBlockedCard", () => {
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Open System Settings" }));
     expect(onOpenSystemSettings).toHaveBeenCalledOnce();
+  });
+});
+
+describe("CameraSettingsFields — mirror", () => {
+  it("shows a Mirror image switch with its hint, on by default", () => {
+    renderFields();
+    const mirror = screen.getByRole("switch", { name: "Mirror image" });
+    expect(mirror).toHaveAttribute("aria-checked", "true");
+    expect(mirror).toHaveAccessibleDescription(
+      "Turn off when the camera faces away from you, so text reads correctly",
+    );
+  });
+
+  it("writes mirrored: false when switched off, and true when switched on", async () => {
+    const { onChange } = renderFields();
+    await userEvent.click(screen.getByRole("switch", { name: "Mirror image" }));
+    expect(onChange).toHaveBeenLastCalledWith({ mirrored: false });
+  });
+
+  it("reflects an off setting and turns it back on", async () => {
+    const { onChange } = renderFields({ bubble: { ...bubble, mirrored: false } });
+    const mirror = screen.getByRole("switch", { name: "Mirror image" });
+    expect(mirror).toHaveAttribute("aria-checked", "false");
+    await userEvent.click(mirror);
+    expect(onChange).toHaveBeenLastCalledWith({ mirrored: true });
+  });
+
+  it("is also there in the compact variant, and mid-take", () => {
+    renderFields({ compact: true, isRecording: true });
+    expect(screen.getByRole("switch", { name: "Mirror image" })).not.toHaveAttribute(
+      "aria-disabled",
+    );
+  });
+});
+
+describe("CameraSettingsFields — framing", () => {
+  const on = { enabled: true, zoom: 1.5, x: 0, y: 0 };
+
+  it("shows a Framing switch with its hint, off by default and without controls", () => {
+    renderFields();
+    const framing = screen.getByRole("switch", { name: "Framing" });
+    expect(framing).toHaveAttribute("aria-checked", "false");
+    expect(framing).toHaveAccessibleDescription("Zoom in and move the image inside the bubble");
+    expect(screen.queryByRole("slider", { name: "Zoom" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Image position")).not.toBeInTheDocument();
+  });
+
+  it("writes the whole framing object when switched on", async () => {
+    const { onChange } = renderFields();
+    await userEvent.click(screen.getByRole("switch", { name: "Framing" }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      framing: { enabled: true, zoom: 1, x: 0, y: 0 },
+    });
+  });
+
+  it("shows the zoom slider and the position pad when on, in both variants, mid-take", () => {
+    renderFields({ bubble: { ...bubble, framing: on }, compact: true, isRecording: true });
+    expect(screen.getByRole("slider", { name: "Zoom" })).toHaveAttribute("aria-valuetext", "150%");
+    expect(screen.getByLabelText("Image position")).toHaveAttribute("aria-valuetext", "Centered");
+  });
+
+  it("zoom: arrows move 5 %, Shift 25 %", async () => {
+    const { onChange } = renderFields({ bubble: { ...bubble, framing: on } });
+    const zoom = screen.getByRole("slider", { name: "Zoom" });
+    zoom.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(onChange).toHaveBeenLastCalledWith({ framing: { ...on, zoom: 1.55 } });
+    await userEvent.keyboard("{Shift>}{ArrowLeft}{/Shift}");
+    expect(onChange).toHaveBeenLastCalledWith({ framing: { ...on, zoom: 1.25 } });
+  });
+
+  it("the pad is disabled and not focusable at 100 % zoom", () => {
+    renderFields({ bubble: { ...bubble, framing: { ...on, zoom: 1 } } });
+    const pad = screen.getByLabelText("Image position");
+    expect(pad).toHaveAttribute("aria-disabled", "true");
+    expect(pad).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("the pad: arrows move 0.1, Shift 0.25, and the value text says where", async () => {
+    const { onChange } = renderFields({ bubble: { ...bubble, framing: on } });
+    const pad = screen.getByLabelText("Image position");
+    pad.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(onChange).toHaveBeenLastCalledWith({ framing: { ...on, x: 0.1 } });
+    await userEvent.keyboard("{ArrowUp}");
+    expect(onChange).toHaveBeenLastCalledWith({ framing: { ...on, y: -0.1 } });
+    await userEvent.keyboard("{Shift>}{ArrowDown}{/Shift}");
+    expect(onChange).toHaveBeenLastCalledWith({ framing: { ...on, y: 0.25 } });
+  });
+
+  it("the pad stops at the edges", async () => {
+    const { onChange } = renderFields({
+      bubble: { ...bubble, framing: { ...on, x: 0.95 } },
+    });
+    screen.getByLabelText("Image position").focus();
+    await userEvent.keyboard("{ArrowRight}");
+    expect(onChange).toHaveBeenLastCalledWith({ framing: { ...on, x: 1 } });
+  });
+
+  it("the pad's value text reads left/right and up/down in percent", () => {
+    renderFields({ bubble: { ...bubble, framing: { ...on, x: -0.4, y: -0.2 } } });
+    expect(screen.getByLabelText("Image position")).toHaveAttribute(
+      "aria-valuetext",
+      "Left 40%, up 20%",
+    );
+  });
+
+  it("dragging the dot writes the position under the pointer (right = positive x)", () => {
+    const { onChange } = renderFields({ bubble: { ...bubble, framing: on } });
+    const pad = screen.getByLabelText("Image position");
+    pad.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 200, height: 100, right: 200, bottom: 100 }) as DOMRect;
+    fireEvent.pointerDown(pad, { clientX: 150, clientY: 25, pointerId: 1 });
+    expect(onChange).toHaveBeenLastCalledWith({ framing: { ...on, x: 0.5, y: -0.5 } });
+    fireEvent.pointerMove(pad, { clientX: 400, clientY: 100, pointerId: 1 });
+    expect(onChange).toHaveBeenLastCalledWith({ framing: { ...on, x: 1, y: 1 } });
+  });
+
+  it("Reset recenters and sets zoom back to 100 %, keeping it on", async () => {
+    const { onChange } = renderFields({
+      bubble: { ...bubble, framing: { enabled: true, zoom: 2, x: 0.5, y: -0.5 } },
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(onChange).toHaveBeenLastCalledWith({
+      framing: { enabled: true, zoom: 1, x: 0, y: 0 },
+    });
   });
 });

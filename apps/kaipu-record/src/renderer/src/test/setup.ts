@@ -77,7 +77,13 @@ const STUB_SETTINGS = {
   screenshotMode: "frame",
   trayHintShown: false,
   diagnosticsEnabled: true,
-  cameraBubble: { shape: "circle", size: 240, deviceId: null },
+  cameraBubble: {
+    shape: "circle",
+    size: 240,
+    deviceId: null,
+    mirrored: true,
+    framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+  },
   audio: {
     micLevel: 100,
     noiseSuppression: true,

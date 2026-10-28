@@ -168,3 +168,65 @@ asked; treating "not asked yet" as blocked would have made the camera impossible
 - The fox-nocam illustration for the blocked card: the app has no such asset, the lock icon is
   used.
 - Analytics: the app does not track camera toggles, so no shape or size event was added.
+
+## Mirror image
+
+Status: 🟡 In progress (implemented; pending owner validation on the real app).
+
+The bubble used to be always flipped horizontally, like a selfie cam. The bubble is
+captured into the recording as part of the screen, so with a rear-facing camera (for
+example an iPhone through Continuity Camera) or any text in view, the text came out
+reversed in the video.
+
+`CameraBubbleSettings.mirrored` (default `true`, today's behaviour) turns the flip on or
+off. The Camera settings have a "Mirror image" switch after the size controls, in both the
+panel and the full variant, and it is allowed during a take like the other camera fields.
+The bubble applies the flip through a `data-mirrored` attribute, so it follows the setting
+live, including mid-recording. A stored non-boolean falls back to `true`.
+
+To validate: turn the switch off with text in front of the camera and check that the
+bubble and the exported video read correctly; turn it on and check the selfie flip returns.
+
+## Framing
+
+Status: 🟢 Ready to validate (prod review pending) — implemented; pending owner validation on the real app.
+
+"I need to be able to frame myself when I need it." The bubble used to show whatever the
+camera sees, centered. The Camera settings now have a "Framing" switch after "Mirror image":
+when on, a zoom slider (100–300 %, arrows ±5, Shift ±25), a small position pad (a draggable
+dot; arrows move 0.1, Shift 0.25) and a "Reset" button (recenters, zoom back to 100 %) appear.
+The pad is dimmed and not focusable at 100 % zoom, where there is nothing to pan. It works in
+both variants and mid-take: the bubble is captured into the recording, so the framing shows
+in the video as it changes.
+
+`CameraBubbleSettings.framing` is `{ enabled, zoom, x, y }`, default
+`{ enabled: false, zoom: 1, x: 0, y: 0 }`. `zoom` is 1–3 in steps of 0.05; `x` and `y` are
+-1..1, how far the visible window is panned toward each edge (0 centered, ±1 touching that
+edge of the camera image). Each field is sanitized on its own: clamped, and a non-number
+falls back to its default. With `enabled` false the bubble renders exactly as before.
+
+**Transform.** `framingTransform` returns `scale(z) translate(tx%, ty%)` plus `scaleX(-1)`
+when mirrored. With `object-fit: cover` the largest pan that keeps the image covering the
+bubble is `(z-1)/(2z)` of its side, so `x = ±1` reaches an edge and never shows an empty
+one. The flip is the innermost function, so the translate is always in screen space:
+positive `x` moves the view toward the right of what the bubble shows, mirrored or not
+(the image slides left), and dragging the dot or pressing Right does the same thing you see.
+
+**Capture-resolution rule.** The stream used to be a fixed 640×480. Zooming in only crops
+that image, so a small stream would be upscaled and look soft. With framing on, the camera
+is asked for `size × 2 (Retina) × zoom` lines, rounded up to 480, 720 or 1080 and capped at
+1080 (width 4:3). With framing off it stays 480. The stream is reopened only when the line
+count changes and then stays put for 400 ms, so dragging the slider does not restart the
+camera on every tick. Reopening shows the placeholder for a moment; that is the one visible
+cost of crossing a step.
+
+**Frozen during a take.** That blink would be recorded, so while a take runs the bubble keeps
+the line count it had when the take started (`takeLines` in `camera-bubble.tsx`) and catches
+up when the take ends. Zoom and position still apply at once, mid-take; the trade-off is that
+zooming in during a take shows a softer image in the video until it ends.
+
+Persistence follows the size slider: changes show at once and reach disk at most every 60 ms.
+
+To validate: turn Framing on, zoom to 200 % and drag the dot; check the bubble pans without
+empty edges and the picture stays sharp after a second; check both Mirror on and off move the
+same way you drag; change the framing during a take and check the exported video.

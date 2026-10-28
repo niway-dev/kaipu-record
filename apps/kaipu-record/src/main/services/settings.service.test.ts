@@ -104,7 +104,13 @@ describe("mergeSettings", () => {
       screenshotMode: "frame",
       trayHintShown: true,
       diagnosticsEnabled: false,
-      cameraBubble: { shape: "circle", size: 240, deviceId: null },
+      cameraBubble: {
+        shape: "circle",
+        size: 240,
+        deviceId: null,
+        mirrored: true,
+        framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+      },
       audio: {
         micLevel: 100,
         noiseSuppression: true,
@@ -423,23 +429,40 @@ describe("mergeSettings — cameraBubble", () => {
       shape: "circle",
       size: 240,
       deviceId: null,
+      mirrored: true,
+      framing: { enabled: false, zoom: 1, x: 0, y: 0 },
     });
   });
 
   it("keeps a valid stored value", () => {
-    const cameraBubble = { shape: "rounded", size: 300, deviceId: "cam-1" } as const;
+    const cameraBubble = {
+      shape: "rounded",
+      size: 300,
+      deviceId: "cam-1",
+      mirrored: false,
+      framing: { enabled: true, zoom: 2, x: 0.5, y: -0.25 },
+    } as const;
     expect(mergeSettings({ cameraBubble }).cameraBubble).toEqual(cameraBubble);
   });
 
   it("falls back field by field and clamps the size", () => {
     expect(
-      mergeSettings({ cameraBubble: { shape: "hexagon", size: 9000, deviceId: 4 } } as never)
-        .cameraBubble,
-    ).toEqual({ shape: "circle", size: 480, deviceId: null });
+      mergeSettings({
+        cameraBubble: { shape: "hexagon", size: 9000, deviceId: 4, mirrored: "yes" },
+      } as never).cameraBubble,
+    ).toEqual({
+      shape: "circle",
+      size: 480,
+      deviceId: null,
+      mirrored: true,
+      framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+    });
     expect(mergeSettings({ cameraBubble: { size: 50.4 } } as never).cameraBubble).toEqual({
       shape: "circle",
       size: 120,
       deviceId: null,
+      mirrored: true,
+      framing: { enabled: false, zoom: 1, x: 0, y: 0 },
     });
     expect(mergeSettings({ cameraBubble: "big" } as never).cameraBubble.size).toBe(240);
   });

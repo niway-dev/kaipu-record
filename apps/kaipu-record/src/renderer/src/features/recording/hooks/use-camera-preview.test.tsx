@@ -114,4 +114,34 @@ describe("useCameraPreview", () => {
     await waitFor(() => expect(getUserMedia).toHaveBeenCalled());
     expect(result.current.hasStream).toBe(false);
   });
+
+  it("asks for the lines given (4:3 width), 480 by default", async () => {
+    const { stream } = fakeStream();
+    getUserMedia.mockResolvedValue(stream);
+    const { result } = renderHook(() => useCameraPreview(true, null, 1080));
+    await waitFor(() => expect(result.current.hasStream).toBe(true));
+    expect(getUserMedia).toHaveBeenCalledWith({
+      video: { facingMode: "user", width: { ideal: 1440 }, height: { ideal: 1080 } },
+      audio: false,
+    });
+  });
+
+  it("reopens once, after the lines settle, not on every change", async () => {
+    const { stream, stop } = fakeStream();
+    getUserMedia.mockResolvedValue(stream);
+    const { result, rerender } = renderHook(({ lines }) => useCameraPreview(true, null, lines), {
+      initialProps: { lines: 480 },
+    });
+    await waitFor(() => expect(result.current.hasStream).toBe(true));
+    rerender({ lines: 720 });
+    rerender({ lines: 1080 });
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(stop).not.toHaveBeenCalled();
+    await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(2));
+    expect(getUserMedia).toHaveBeenLastCalledWith({
+      video: { facingMode: "user", width: { ideal: 1440 }, height: { ideal: 1080 } },
+      audio: false,
+    });
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
 });

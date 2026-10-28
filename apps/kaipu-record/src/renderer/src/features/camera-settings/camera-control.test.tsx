@@ -60,7 +60,13 @@ describe("Camera drawer (Record page, page variant)", () => {
     await userEvent.click(screen.getByRole("radio", { name: "Rounded" }));
     await waitFor(() =>
       expect(updateSettings).toHaveBeenCalledWith({
-        cameraBubble: { shape: "rounded", size: 240, deviceId: null },
+        cameraBubble: {
+          shape: "rounded",
+          size: 240,
+          deviceId: null,
+          mirrored: true,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
       }),
     );
   });
@@ -125,7 +131,13 @@ describe("useCameraSettings before the saved value loads", () => {
         release = () =>
           resolve({
             ...saved,
-            cameraBubble: { shape: "rounded", size: 240, deviceId: "cam-9" },
+            cameraBubble: {
+              shape: "rounded",
+              size: 240,
+              deviceId: "cam-9",
+              mirrored: true,
+              framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+            },
           });
       });
     const updateSettings = vi.fn(async () => ({}) as never);
@@ -139,7 +151,13 @@ describe("useCameraSettings before the saved value loads", () => {
     await act(async () => release!());
     await waitFor(() =>
       expect(updateSettings).toHaveBeenCalledWith({
-        cameraBubble: { shape: "rounded", size: 300, deviceId: "cam-9" },
+        cameraBubble: {
+          shape: "rounded",
+          size: 300,
+          deviceId: "cam-9",
+          mirrored: true,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
       }),
     );
   });
@@ -162,7 +180,13 @@ describe("useCameraSettings throttling", () => {
       });
       expect(updateSettings.mock.calls.length).toBeLessThanOrEqual(2);
       expect(updateSettings).toHaveBeenLastCalledWith({
-        cameraBubble: { shape: "circle", size: 280, deviceId: null },
+        cameraBubble: {
+          shape: "circle",
+          size: 280,
+          deviceId: null,
+          mirrored: true,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
       });
     } finally {
       vi.useRealTimers();
@@ -185,7 +209,13 @@ describe("useCameraSettings throttling", () => {
       fireEvent.change(slider, { target: { value: "300" } });
       unmount();
       expect(updateSettings).toHaveBeenLastCalledWith({
-        cameraBubble: { shape: "circle", size: 300, deviceId: null },
+        cameraBubble: {
+          shape: "circle",
+          size: 300,
+          deviceId: null,
+          mirrored: true,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
       });
     } finally {
       vi.useRealTimers();

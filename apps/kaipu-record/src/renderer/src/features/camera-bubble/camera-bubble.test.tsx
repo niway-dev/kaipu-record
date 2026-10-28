@@ -40,13 +40,161 @@ describe("CameraBubble", () => {
     window.electronAPI.getSettings = async () =>
       ({
         ...(await original.getSettings()),
-        cameraBubble: { shape: "rounded", size: 240, deviceId: "cam-9" },
+        cameraBubble: {
+          shape: "rounded",
+          size: 240,
+          deviceId: "cam-9",
+          mirrored: true,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
       }) as never;
     const { container } = render(<CameraBubble />);
     await waitFor(() =>
       expect(container.firstElementChild).toHaveAttribute("data-shape", "rounded"),
     );
-    expect(mockPreview).toHaveBeenLastCalledWith(true, "cam-9");
+    expect(mockPreview).toHaveBeenLastCalledWith(true, "cam-9", 480);
+  });
+
+  it("mirrors the preview by default and when the setting is on", async () => {
+    withStream();
+    const { container } = render(<CameraBubble />);
+    await waitFor(() =>
+      expect(container.firstElementChild).toHaveAttribute("data-mirrored", "true"),
+    );
+  });
+
+  it("does not mirror when the setting is off, and follows a live change", async () => {
+    withStream();
+    let push: ((settings: never) => void) | null = null;
+    const base = await original.getSettings();
+    window.electronAPI.getSettings = async () =>
+      ({
+        ...base,
+        cameraBubble: {
+          shape: "circle",
+          size: 240,
+          deviceId: null,
+          mirrored: false,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
+      }) as never;
+    window.electronAPI.onSettingsChanged = ((callback: (settings: never) => void) => {
+      push = callback;
+      return () => {};
+    }) as never;
+    const { container } = render(<CameraBubble />);
+    await waitFor(() => expect(push).not.toBeNull());
+    await waitFor(() => expect(container.firstElementChild).not.toHaveAttribute("data-mirrored"));
+
+    act(() =>
+      push?.({
+        ...base,
+        cameraBubble: {
+          shape: "circle",
+          size: 240,
+          deviceId: null,
+          mirrored: true,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
+      } as never),
+    );
+    expect(container.firstElementChild).toHaveAttribute("data-mirrored", "true");
+  });
+
+  async function renderWithFraming(
+    framing: { enabled: boolean; zoom: number; x: number; y: number },
+    mirrored = true,
+  ): Promise<HTMLElement> {
+    withStream();
+    const base = await original.getSettings();
+    window.electronAPI.getSettings = async () =>
+      ({
+        ...base,
+        cameraBubble: { shape: "circle", size: 240, deviceId: null, mirrored, framing },
+      }) as never;
+    const { container } = render(<CameraBubble />);
+    await waitFor(() => expect(mockPreview).toHaveBeenCalled());
+    return container.querySelector("video")!;
+  }
+
+  it("leaves the video untouched while framing is off", async () => {
+    const video = await renderWithFraming({ enabled: false, zoom: 2, x: 1, y: 1 });
+    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 480));
+    expect(video.style.transform).toBe("");
+  });
+
+  it("applies the zoom and pan, with the mirror last, while framing is on", async () => {
+    const video = await renderWithFraming({ enabled: true, zoom: 2, x: 1, y: 0 });
+    await waitFor(() =>
+      expect(video.style.transform).toBe("scale(2) translate(-25%, 0%) scaleX(-1)"),
+    );
+  });
+
+  it("applies framing without the flip when mirroring is off", async () => {
+    const video = await renderWithFraming({ enabled: true, zoom: 2, x: -1, y: 1 }, false);
+    await waitFor(() => expect(video.style.transform).toBe("scale(2) translate(25%, -25%)"));
+  });
+
+  it("asks the camera for more lines when framing zooms in, and follows live changes", async () => {
+    let push: ((settings: never) => void) | null = null;
+    window.electronAPI.onSettingsChanged = ((callback: (settings: never) => void) => {
+      push = callback;
+      return () => {};
+    }) as never;
+    const base = await original.getSettings();
+    const video = await renderWithFraming({ enabled: true, zoom: 2, x: 0, y: 0 });
+    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 1080));
+    expect(video.style.transform).toContain("scale(2)");
+    // The same bubble follows a pushed change: framing off clears the transform and the
+    // camera goes back to its usual lines.
+    act(() =>
+      push?.({
+        ...base,
+        cameraBubble: {
+          shape: "circle",
+          size: 240,
+          deviceId: null,
+          mirrored: true,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
+      } as never),
+    );
+    expect(video.style.transform).toBe("");
+    expect(mockPreview).toHaveBeenLastCalledWith(true, null, 480);
+  });
+
+  it("keeps the camera resolution while recording, so a zoom change never reopens the camera mid-take", async () => {
+    let pushActivity: ((activity: RecordingActivity) => void) | null = null;
+    window.electronAPI.onRecordingState = (callback) => {
+      pushActivity = callback;
+      return () => {};
+    };
+    let pushSettings: ((settings: never) => void) | null = null;
+    window.electronAPI.onSettingsChanged = ((callback: (settings: never) => void) => {
+      pushSettings = callback;
+      return () => {};
+    }) as never;
+    const base = await original.getSettings();
+    const withZoom = (zoom: number): never =>
+      ({
+        ...base,
+        cameraBubble: {
+          shape: "circle",
+          size: 240,
+          deviceId: null,
+          mirrored: true,
+          framing: { enabled: true, zoom, x: 0, y: 0 },
+        },
+      }) as never;
+    const video = await renderWithFraming({ enabled: true, zoom: 1, x: 0, y: 0 });
+    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 480));
+    act(() => pushActivity?.({ active: true, status: "recording", elapsedSeconds: 0 }));
+    act(() => pushSettings?.(withZoom(2)));
+    // The zoom applies at once; the stream keeps its lines until the take ends.
+    expect(video.style.transform).toContain("scale(2)");
+    expect(mockPreview).toHaveBeenLastCalledWith(true, null, 480);
+    act(() => pushActivity?.({ active: false, status: "recording", elapsedSeconds: 3 }));
+    expect(mockPreview).toHaveBeenLastCalledWith(true, null, 1080);
   });
 
   it("shows the outline, size label and grip on hover", () => {
@@ -99,7 +247,13 @@ describe("CameraBubble", () => {
     fireEvent.pointerUp(grip, { pointerId: 1 });
     await waitFor(() =>
       expect(updateSettings).toHaveBeenCalledWith({
-        cameraBubble: { shape: "circle", size: 300, deviceId: null },
+        cameraBubble: {
+          shape: "circle",
+          size: 300,
+          deviceId: null,
+          mirrored: true,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
       }),
     );
   });
@@ -216,7 +370,13 @@ describe("CameraBubble — grip release races", () => {
     // …and its applied size is what gets saved.
     await waitFor(() =>
       expect(updateSettings).toHaveBeenCalledWith({
-        cameraBubble: { shape: "circle", size: 300, deviceId: null },
+        cameraBubble: {
+          shape: "circle",
+          size: 300,
+          deviceId: null,
+          mirrored: true,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
       }),
     );
     expect(updateSettings).toHaveBeenCalledTimes(1);
@@ -241,7 +401,13 @@ describe("CameraBubble — grip release races", () => {
     act(() => push?.({ active: true, status: "recording", elapsedSeconds: 0 }));
     await waitFor(() =>
       expect(updateSettings).toHaveBeenCalledWith({
-        cameraBubble: { shape: "circle", size: 280, deviceId: null },
+        cameraBubble: {
+          shape: "circle",
+          size: 280,
+          deviceId: null,
+          mirrored: true,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
       }),
     );
   });

@@ -223,3 +223,78 @@
   height: 26px;
   font-size: 11px;
 }
+
+.mirror {
+  margin-top: 4px;
+}
+
+.framing {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.padRow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* A 4:3 box: the dot is where the visible window sits inside the camera image. */
+.pad {
+  position: relative;
+  width: 96px;
+  aspect-ratio: 4 / 3;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.fields[data-compact] .pad {
+  width: 80px;
+}
+
+.pad:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.pad[data-disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.padDot {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  pointer-events: none;
+}
+
+.reset {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  padding: 2px 4px;
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.reset:hover {
+  color: var(--text-primary);
+}
+
+.reset:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

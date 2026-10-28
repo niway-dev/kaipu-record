@@ -17,7 +17,38 @@ export interface CameraBubbleSettings {
   size: number;
   /** The `videoinput` device to open; `null` lets the OS pick its default camera. */
   deviceId: string | null;
+  /**
+   * Whether the preview is flipped like a selfie cam. The bubble is captured into the
+   * recording, so a flipped rear camera (or any text in view) reads reversed in the video.
+   */
+  mirrored: boolean;
+  /** Manual framing: zoom and pan the camera image inside the bubble. */
+  framing: CameraFraming;
 }
+
+/**
+ * Where the camera image sits inside the bubble. Applies only while `enabled`; with it off
+ * the bubble renders exactly as it did before framing existed (zoom/x/y are kept for later).
+ */
+export interface CameraFraming {
+  enabled: boolean;
+  /** Magnification of the image, {@link CAMERA_FRAMING_MIN_ZOOM}–{@link CAMERA_FRAMING_MAX_ZOOM}. */
+  zoom: number;
+  /**
+   * How far the visible window is panned toward the right edge of what the bubble SHOWS,
+   * -1 (touching the left edge) to 1 (touching the right edge); 0 is centered. Mirroring
+   * does not change this: positive x always moves the view toward the right of the bubble.
+   */
+  x: number;
+  /** Same, vertically: -1 is the top edge, 1 the bottom edge. */
+  y: number;
+}
+
+export const CAMERA_FRAMING_MIN_ZOOM = 1;
+export const CAMERA_FRAMING_MAX_ZOOM = 3;
+export const CAMERA_FRAMING_ZOOM_STEP = 0.05;
+
+export const DEFAULT_CAMERA_FRAMING: CameraFraming = { enabled: false, zoom: 1, x: 0, y: 0 };
 
 export const CAMERA_BUBBLE_MIN_SIZE = 120;
 export const CAMERA_BUBBLE_MAX_SIZE = 480;
@@ -71,6 +102,8 @@ export const DEFAULT_CAMERA_BUBBLE: CameraBubbleSettings = {
   shape: "circle",
   size: CAMERA_BUBBLE_PRESETS.M,
   deviceId: null,
+  mirrored: true,
+  framing: DEFAULT_CAMERA_FRAMING,
 };
 
 /** A finite size, rounded to whole DIP and held inside the allowed range. */
@@ -90,7 +123,7 @@ export function cameraBubblePresetFor(size: number): CameraBubblePreset | null {
 /**
  * Stored (possibly partial or hand-edited) bubble settings merged over the defaults,
  * field by field: an invalid shape falls back alone, a size out of range is clamped
- * rather than dropped.
+ * rather than dropped, a non-boolean `mirrored` falls back to on.
  */
 export function sanitizeCameraBubble(value: unknown): CameraBubbleSettings {
   const safe = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
@@ -103,7 +136,80 @@ export function sanitizeCameraBubble(value: unknown): CameraBubbleSettings {
       : DEFAULT_CAMERA_BUBBLE.size;
   const deviceId =
     typeof safe.deviceId === "string" && safe.deviceId.length > 0 ? safe.deviceId : null;
-  return { shape, size, deviceId };
+  const mirrored =
+    typeof safe.mirrored === "boolean" ? safe.mirrored : DEFAULT_CAMERA_BUBBLE.mirrored;
+  return { shape, size, deviceId, mirrored, framing: sanitizeCameraFraming(safe.framing) };
+}
+
+function finiteOr(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+/** A zoom held in range and snapped to the 0.05 step. */
+export function clampCameraZoom(zoom: number): number {
+  const clamped = Math.min(CAMERA_FRAMING_MAX_ZOOM, Math.max(CAMERA_FRAMING_MIN_ZOOM, zoom));
+  return (
+    Math.round(Math.round(clamped / CAMERA_FRAMING_ZOOM_STEP) * CAMERA_FRAMING_ZOOM_STEP * 100) /
+    100
+  );
+}
+
+/** A pan held in -1..1, to two decimals (and never -0). */
+export function clampCameraPan(pan: number): number {
+  return Math.round(Math.min(1, Math.max(-1, pan)) * 100) / 100 + 0;
+}
+
+/** Stored framing, field by field: non-numbers fall back, numbers are clamped. */
+export function sanitizeCameraFraming(value: unknown): CameraFraming {
+  const safe = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  return {
+    enabled: typeof safe.enabled === "boolean" ? safe.enabled : DEFAULT_CAMERA_FRAMING.enabled,
+    zoom: clampCameraZoom(finiteOr(safe.zoom, DEFAULT_CAMERA_FRAMING.zoom)),
+    x: clampCameraPan(finiteOr(safe.x, DEFAULT_CAMERA_FRAMING.x)),
+    y: clampCameraPan(finiteOr(safe.y, DEFAULT_CAMERA_FRAMING.y)),
+  };
+}
+
+function percent(value: number): string {
+  return `${Math.round(value * 100000) / 1000 + 0}%`;
+}
+
+/**
+ * The video element's CSS transform for a framed bubble. With `object-fit: cover` the
+ * image already fills the bubble, so scaling by z leaves (z-1)/2 of the side spare on each
+ * edge; in the pre-scale units a translate lives in, that is (z-1)/(2z). Panning by x·that
+ * keeps the image covering the bubble: no empty edges at any zoom.
+ *
+ * Convention: positive x/y move the VIEW right/down, so the image slides left/up (the
+ * translate is negative). The mirror flip is the LAST (innermost) function, applied to
+ * the image before it is scaled and translated, so the translate is always in screen
+ * space: x = 1 shows the right edge of what the bubble displays, mirrored or not.
+ */
+export function framingTransform(
+  framing: Pick<CameraFraming, "zoom" | "x" | "y">,
+  mirrored: boolean,
+): string {
+  const zoom = clampCameraZoom(finiteOr(framing.zoom, 1));
+  const reach = (zoom - 1) / (2 * zoom);
+  const tx = -clampCameraPan(finiteOr(framing.x, 0)) * reach;
+  const ty = -clampCameraPan(finiteOr(framing.y, 0)) * reach;
+  return `scale(${zoom}) translate(${percent(tx)}, ${percent(ty)})${mirrored ? " scaleX(-1)" : ""}`;
+}
+
+/** The lines of camera image worth requesting: today's 480, or 720 / 1080 when zoomed in. */
+const CAPTURE_LINE_STEPS = [480, 720, 1080] as const;
+
+/**
+ * How many lines the camera stream should have. Without framing it stays 480 (what the
+ * preview always asked for). With it, the bubble shows `zoom` times less of the image, so
+ * the stream needs `size × 2 (Retina) × zoom` lines to stay sharp; rounded UP to a step
+ * and capped at 1080, so a slider drag crosses a step rarely and the stream is not
+ * reopened on every tick.
+ */
+export function cameraCaptureLines(size: number, framing: CameraFraming): number {
+  if (!framing.enabled) return CAPTURE_LINE_STEPS[0];
+  const needed = clampCameraBubbleSize(size) * 2 * clampCameraZoom(finiteOr(framing.zoom, 1));
+  return CAPTURE_LINE_STEPS.find((lines) => lines >= needed) ?? CAPTURE_LINE_STEPS[2];
 }
 
 /**
