@@ -13,9 +13,9 @@
 # `electron-builder.yml` sets `npmRebuild: false`, so packaging does not rebuild
 # either. This script is the only place the patched sources get compiled.
 #
-# Run it when `bun run setup` tells you to. It is also called explicitly by the
-# macOS packaging paths (`build:mac`, `release-desktop.yml`), which must never
-# depend on someone having remembered.
+# Run it when `bun run setup` tells you to. It is also called explicitly by every
+# packaging path (`build:mac`, `build:win`, `build:linux`, `build:unpack`,
+# `release-desktop.yml`), which must never depend on someone having remembered.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
