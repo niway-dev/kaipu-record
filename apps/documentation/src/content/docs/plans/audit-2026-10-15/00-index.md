@@ -57,7 +57,6 @@ All shipped.
 | [22 Recording crash writer](/plans/audit-2026-10-15/22-recording-crash-writer/)          | REC-A4, REC-B7                 |
 | [23 Mic failure feedback](/plans/audit-2026-10-15/23-mic-failure-feedback/)              | REC-A5                         |
 | [24 Recording start latency](/plans/audit-2026-10-15/24-recording-start-latency/)        | REC-A6, REC-A9                 |
-| [25 Compositor cadence](/plans/audit-2026-10-15/25-compositor-cadence/)                  | REC-A7                         |
 | [26 Cursor track tail](/plans/audit-2026-10-15/26-cursor-track-tail/)                    | REC-B8                         |
 
 ## Batch 6 — render and copy cost
