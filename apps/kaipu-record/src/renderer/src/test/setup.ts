@@ -90,6 +90,7 @@ const STUB_SETTINGS = {
     systemAudioVolume: 100,
     duckSystemAudioWhileTalking: false,
   },
+  microphone: null,
 } as const;
 
 // Vitest does not expose `afterEach` as a global (globals: false), so

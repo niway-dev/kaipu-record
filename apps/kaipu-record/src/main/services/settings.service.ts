@@ -160,5 +160,14 @@ export function mergeSettings(
         : DEFAULT_SETTINGS.diagnosticsEnabled,
     cameraBubble: sanitizeCameraBubble(safe.cameraBubble),
     audio: sanitizeAudioSettings(safe.audio),
+    microphone: sanitizeMicrophone(safe.microphone),
   };
+}
+
+/** A remembered microphone needs a device id to be found again; anything else is dropped. */
+export function sanitizeMicrophone(stored: unknown): AppSettings["microphone"] {
+  if (typeof stored !== "object" || stored === null) return null;
+  const { deviceId, label } = stored as { deviceId?: unknown; label?: unknown };
+  if (typeof deviceId !== "string" || deviceId === "") return null;
+  return { deviceId, label: typeof label === "string" ? label : "" };
 }

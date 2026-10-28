@@ -342,6 +342,12 @@ export interface AppSettings {
    * to a running take live. The mic device itself stays in `RecordingSettings`.
    */
   audio: AudioSettings;
+  /**
+   * The microphone picked last in the Mic settings, restored at launch into
+   * `RecordingSettings.selectedMicrophone`, so a restart does not fall back to whichever
+   * input the system lists first. `null` until one is picked.
+   */
+  microphone: { deviceId: string; label: string } | null;
 }
 
 /**
@@ -375,6 +381,7 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   diagnosticsEnabled: true,
   cameraBubble: DEFAULT_CAMERA_BUBBLE,
   audio: DEFAULT_AUDIO_SETTINGS,
+  microphone: null,
 };
 
 /** Prefixes on the `recording:finalize` rejection message; the renderer picks the toast from them. */

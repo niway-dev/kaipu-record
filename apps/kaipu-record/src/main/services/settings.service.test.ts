@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_EXPORT_QUALITY, DEFAULT_SETTINGS } from "@shared/types";
+import { DEFAULT_EXPORT_QUALITY, DEFAULT_SETTINGS, type AppSettings } from "@shared/types";
 import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 import { DEFAULT_QUALITY, QUALITY_PRESETS } from "@shared/recording-quality";
 import { DEFAULT_LOCALE } from "@kaipu/i18n";
@@ -82,6 +82,7 @@ describe("mergeSettings", () => {
         screenshotMode: "frame",
         trayHintShown: true,
         diagnosticsEnabled: false,
+        microphone: { deviceId: "yeti", label: "Yeti Nano" },
       }),
     ).toEqual({
       theme: "dark",
@@ -117,7 +118,21 @@ describe("mergeSettings", () => {
         systemAudioVolume: 100,
         duckSystemAudioWhileTalking: false,
       },
+      microphone: { deviceId: "yeti", label: "Yeti Nano" },
     });
+  });
+
+  it("drops a remembered microphone without a device id", () => {
+    expect(mergeSettings({}).microphone).toBeNull();
+    expect(mergeSettings({ microphone: { deviceId: "", label: "x" } }).microphone).toBeNull();
+    expect(
+      mergeSettings({ microphone: "yeti" as unknown as AppSettings["microphone"] }).microphone,
+    ).toBeNull();
+    expect(
+      mergeSettings({
+        microphone: { deviceId: "yeti", label: 3 } as unknown as AppSettings["microphone"],
+      }).microphone,
+    ).toEqual({ deviceId: "yeti", label: "" });
   });
 
   it("keeps a known ratio on a remembered recording area and drops an unknown one", () => {

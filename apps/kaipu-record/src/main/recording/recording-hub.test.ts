@@ -184,6 +184,27 @@ describe("recording hub — camera on keeps the main window visible", () => {
     expect(mockState.setActivationPolicy).not.toHaveBeenCalled();
     expect(mockState.dockShow).not.toHaveBeenCalled();
   });
+
+  it("remembers a picked microphone in app settings and starts the next launch with it", async () => {
+    const { registerSettings, getAppSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+    const yeti = { deviceId: "yeti", label: "Yeti Nano" };
+
+    const update = mockState.ipcOn.get(IPC_CHANNELS.recordingSettingsUpdate);
+    if (!update) throw new Error("recordingSettingsUpdate listener not registered");
+    update({}, { selectedMicrophone: yeti });
+    expect(getAppSettings().microphone).toEqual(yeti);
+
+    // A second hub stands in for the next launch: it reads the remembered one.
+    mockState.ipcHandle.clear();
+    mockState.ipcOn.clear();
+    registerRecordingHub(() => fakeMainWindow() as never);
+    const get = mockState.ipcHandle.get(IPC_CHANNELS.recordingSettingsGet);
+    if (!get) throw new Error("recordingSettingsGet handler not registered");
+    expect((get({}) as { selectedMicrophone: unknown }).selectedMicrophone).toEqual(yeti);
+  });
 });
 
 /**
