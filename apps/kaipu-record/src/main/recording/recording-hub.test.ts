@@ -822,6 +822,66 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     await abort({}, "session-1");
   });
 
+  it("a cursor track for a take that already ended is refused without a display lookup", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+    mockState.displays = [{ id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } }];
+    mockState.getSources.mockClear();
+    const create = mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!;
+    const trackStart = mockState.ipcHandle.get(IPC_CHANNELS.cursorTrackStart)!;
+    const abort = mockState.ipcHandle.get(IPC_CHANNELS.recordingAbort)!;
+    await create({}, "session-1");
+    await abort({}, "session-1");
+
+    await expect(trackStart({}, "session-1", "screen:1:0")).resolves.toEqual({ enabled: false });
+    expect(mockState.getSources).not.toHaveBeenCalled();
+  });
+
+  it("a cursor track whose take finalized while its display resolved never starts sampling", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+    mockState.displays = [{ id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } }];
+    let resolve!: (list: Array<{ id: string; name: string; display_id: string }>) => void;
+    mockState.getSources.mockImplementationOnce(() => new Promise((r) => (resolve = r)));
+    const create = mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!;
+    const write = mockState.ipcOn.get(IPC_CHANNELS.recordingWrite)!;
+    const finalize = mockState.ipcHandle.get(IPC_CHANNELS.recordingFinalize)!;
+    const trackStart = mockState.ipcHandle.get(IPC_CHANNELS.cursorTrackStart)!;
+    await create({}, "session-1");
+    write({}, "session-1", new TextEncoder().encode("take").buffer, 0);
+
+    // The renderer stopped waiting on the handshake (its 500 ms race) and the whole take ran.
+    const started = trackStart({}, "session-1", "screen:1:0") as Promise<{ enabled: boolean }>;
+    await finalize({}, "session-1", { title: "T", durationSeconds: 1, durationMs: 1000 });
+    resolve([{ id: "screen:1:0", name: "S", display_id: "1" }]);
+
+    await expect(started).resolves.toEqual({ enabled: false });
+  });
+
+  it("a forced reset ends its open takes: a cursor track still resolving never starts", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const hub = registerRecordingHub(() => fakeMainWindow() as never);
+    mockState.displays = [{ id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } }];
+    let resolve!: (list: Array<{ id: string; name: string; display_id: string }>) => void;
+    mockState.getSources.mockImplementationOnce(() => new Promise((r) => (resolve = r)));
+    const create = mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!;
+    const trackStart = mockState.ipcHandle.get(IPC_CHANNELS.cursorTrackStart)!;
+    await create({}, "session-1");
+
+    // The renderer is gone (crash, hung at close): it will never abort or finalize this take.
+    const started = trackStart({}, "session-1", "screen:1:0") as Promise<{ enabled: boolean }>;
+    hub.forceReset();
+    resolve([{ id: "screen:1:0", name: "S", display_id: "1" }]);
+
+    await expect(started).resolves.toEqual({ enabled: false });
+  });
+
   it("starts the region's TTL only once a recreated main window has loaded", async () => {
     vi.useFakeTimers();
     try {
