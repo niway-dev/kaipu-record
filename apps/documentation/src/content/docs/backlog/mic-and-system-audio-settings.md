@@ -37,9 +37,10 @@ The device stays in `RecordingSettings.selectedMicrophone`, shared across window
 reproduce the recording from before these settings existed.
 
 The picked device is also remembered across launches in `AppSettings.microphone`
-(`{ deviceId, label } | null`): the recording hub starts with it, and writes it back when a
-different device is picked. Until something is picked, the list puts the system's default input
-first and that one is selected. Chromium's `default` alias is matched to its device by
+(`{ deviceId, label } | null`): the recording hub starts with it, and the renderer writes it
+only when the user picks a device. The automatic default is never stored, so until something is
+picked Kaipu keeps following the system's default input: the list puts it first and it is the
+one selected. Chromium's `default` alias is matched to its device by
 `groupId`, or by name without one. A remembered device that is unplugged shows as DISCONNECTED;
 the take asks for it as `ideal`, so it falls back to the system default. The renderer defaults
 nothing before main's settings arrive, or it would overwrite the remembered device.

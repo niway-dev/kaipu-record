@@ -46,7 +46,6 @@ import {
   forceRegularPolicy,
   getAppSettings,
   onSettingsChanged,
-  updateAppSettings,
 } from "../infrastructure/settings-store";
 
 /** The three input toggles a global shortcut can flip. */
@@ -244,7 +243,8 @@ export function registerRecordingHub(
   );
 
   // Shared recording settings — single source of truth, mirrored to every window. The
-  // microphone is the one remembered across launches; the rest starts fresh.
+  // microphone starts as the one the user last picked (the renderer remembers a pick in
+  // AppSettings, never an automatic default); the rest starts fresh.
   const settings: RecordingSettings = {
     selectedSource: null,
     selectedMicrophone: getAppSettings().microphone,
@@ -265,13 +265,6 @@ export function registerRecordingHub(
     const cameraWasOn = settings.isCameraEnabled;
     Object.assign(settings, patch);
     broadcastSettings();
-    // Remember a picked microphone for the next launch (only on a change: it writes the file).
-    if (
-      patch.selectedMicrophone !== undefined &&
-      patch.selectedMicrophone?.deviceId !== getAppSettings().microphone?.deviceId
-    ) {
-      updateAppSettings({ microphone: patch.selectedMicrophone });
-    }
     // The camera bubble follows the (now global) Camera toggle, so it works no
     // matter which window flipped it.
     if (settings.isCameraEnabled !== cameraWasOn) {

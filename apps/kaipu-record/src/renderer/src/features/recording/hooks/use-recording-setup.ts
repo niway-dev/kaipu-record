@@ -191,7 +191,12 @@ export function useRecordingSetup(): RecordingSetup {
 
     microphones,
     selectedMicrophone,
-    selectMicrophone: (microphone) => update({ selectedMicrophone: microphone }),
+    selectMicrophone: (microphone) => {
+      update({ selectedMicrophone: microphone });
+      // Only a pick is remembered for the next launch. The automatic default above is not:
+      // stored, it would stop following the system's default input.
+      void window.electronAPI.updateSettings({ microphone });
+    },
 
     isRecording,
     recordingStatus: recorder.status,

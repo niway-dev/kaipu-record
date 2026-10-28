@@ -93,12 +93,24 @@ describe("useRecordingSetup", () => {
     expect(mockUpdate).toHaveBeenCalledWith({ isCameraEnabled: true });
   });
 
-  it("defaults the mic into shared settings when none is selected", () => {
+  it("defaults the mic into shared settings when none is selected, without remembering it", () => {
+    const updateSettings = vi.spyOn(window.electronAPI, "updateSettings").mockClear();
     mockSettings = SETTINGS({ selectedMicrophone: null });
     renderHook(() => useRecordingSetup());
     expect(mockUpdate).toHaveBeenCalledWith({
       selectedMicrophone: { deviceId: "m1", label: "Mic One" },
     });
+    // An automatic default must keep following the system's input on the next launch.
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
+  it("remembers a picked mic for the next launch", () => {
+    const updateSettings = vi.spyOn(window.electronAPI, "updateSettings").mockClear();
+    const { result } = renderHook(() => useRecordingSetup());
+    const yeti = { deviceId: "yeti", label: "Yeti Nano" };
+    act(() => result.current.selectMicrophone(yeti));
+    expect(mockUpdate).toHaveBeenCalledWith({ selectedMicrophone: yeti });
+    expect(updateSettings).toHaveBeenCalledWith({ microphone: yeti });
   });
 
   it("does not default the mic before main's settings arrive (they hold the remembered one)", () => {
