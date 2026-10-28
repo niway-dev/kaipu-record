@@ -546,6 +546,31 @@ describe("recorder-store", () => {
     );
   });
 
+  it("a pause before the first media sample resolves is not taken off the video time (known gap)", async () => {
+    // The spec keeps this out of scope: `videoClock` only exists once t0 resolves, so a pause
+    // issued before that (less than one frame; the UI cannot hit it) is unknown to it. Pinned so
+    // a change here is a decision, not an accident.
+    let resolveT0!: (value: { rendererMs: number; quality: "exact" }) => void;
+    const engine = fakeEngine({
+      firstMediaTimestamp: new Promise((resolve) => (resolveT0 = resolve)),
+    });
+    prepareEngineMock.mockResolvedValue(fakePrepared(engine));
+    store.requestStartRecording(() => input);
+    await vi.advanceTimersByTimeAsync(3000); // recording at performance.now() = 3000
+    store.pauseRecording();
+    await vi.advanceTimersByTimeAsync(1000);
+    store.resumeRecording();
+    resolveT0({ rendererMs: 3000, quality: "exact" });
+    await vi.advanceTimersByTimeAsync(1400);
+    await stopAndSettle();
+    // The wall clock saw the pause (1400 ms); the video clock started at t0 after it and counts
+    // the full 2400 ms. The wall clock still drives the bar and durationSeconds.
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ durationSeconds: 1, durationMs: 2400 }),
+    );
+  });
+
   it("falls back to the wall clock when the first media timestamp never resolves", async () => {
     const engine = fakeEngine({ firstMediaTimestamp: new Promise(() => {}) });
     prepareEngineMock.mockResolvedValue(fakePrepared(engine));
