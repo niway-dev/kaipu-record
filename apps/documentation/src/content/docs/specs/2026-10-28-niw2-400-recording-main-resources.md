@@ -8,6 +8,14 @@ description: "Nothing main starts for a take outlives it: a late `cursor-track:s
 > Approved spec, committed **before** implementation (ADR-0010). Source: audit plan `apps/documentation/src/content/docs/plans/audit-2026-10-15/21-recording-main-resources.md` on `main` @ `f10e39a4`, copied below unchanged except the heading level. Linear: https://linear.app/niway/issue/NIW2-400. Where they disagree, **this file wins**.
 > Path: `apps/documentation/src/content/docs/specs/2026-10-28-niw2-400-recording-main-resources.md` · Approved: 2026-10-28 (Cristian, all proposed defaults) · Batch 5 — recording failure paths (parent NIW2-385) · Closes: REC-A2, REC-B4, REC-B3, REC-B5
 
+> **Shipped deviations (2026-10-28, PR #413).** The plan below was written from older code; by the time it ran, part of it was already on `main`, and one choice was superseded. What ships differs from the text below in three places:
+>
+> 1. **`forceReset` releases writer sessions, it does not abort them.** The plan's `RecordingWriter.abortAll()` was not added; `forceReset` keeps `writer.releaseAll()` (closes the handles, keeps the `.part` files for recovery), as the Global Constraints below already say plan 22's handling supersedes the plain `abortAll()`. Every open session is still marked ended first (`ids()` is the only writer addition).
+> 2. **No `barGeneration` counter.** `main` already guards the delayed `bar.show` with the hub's `takeCount` and `!activity.active` (REC-B3, shipped before this PR), so Task 2's counter would duplicate it.
+> 3. **`ControlBarWindow`'s `wanted` flag (Task 3) already existed** on `main` (2d00eb79) with its tests; this PR adds nothing there.
+>
+> "Closes REC-B3" therefore rests on `main` as a whole (the guards above plus this PR's tests), not on this diff alone. Review Focus items 1–5 hold as written against the shipped code.
+
 ## Recording main-side resources — implementation plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
