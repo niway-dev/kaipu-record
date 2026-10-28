@@ -124,7 +124,7 @@
 }
 
 .subtitle {
-  margin: 0 0 var(--space-md);
+  margin: 0 0 var(--space-sm);
   max-width: 560px;
   font-size: var(--font-size-md);
   line-height: 1.55;
@@ -133,12 +133,12 @@
 
 .cardDivider {
   height: 1px;
-  margin: 20px 0 16px;
+  margin: 14px 0 12px;
   background: var(--border);
 }
 
 .sectionLabel {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.14em;

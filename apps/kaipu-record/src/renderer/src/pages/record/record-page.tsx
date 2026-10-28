@@ -15,12 +15,20 @@ import { RecordingIndicator } from "@renderer/features/recording/components/reco
 import { CountdownOverlay } from "@renderer/features/recording/components/countdown-overlay";
 import { ScreenSourceSelector } from "@renderer/features/recording/components/screen-source-selector";
 import { PermissionNotice } from "@renderer/features/recording/components/permission-notice";
-import { CameraControlWithPopover } from "@renderer/features/camera-settings";
 import {
-  MicControlWithPopover,
-  SystemAudioControlWithPopover,
+  CameraPanelDrawer,
+  CameraPanelTile,
+  useCameraControl,
+} from "@renderer/features/camera-settings";
+import {
+  MicPanelDrawer,
+  MicToggleSplit,
+  SystemAudioPanelDrawer,
+  SystemAudioToggleSplit,
+  useAudioControl,
   useAudioSettings,
 } from "@renderer/features/audio-settings";
+import { exclusive } from "@renderer/features/settings-controls/use-settings-disclosure";
 import { useTranslations } from "@kaipu/i18n";
 import type { CaptureMode } from "@shared/types/screenshot-capture";
 import styles from "./record-page.module.css";
@@ -123,43 +131,70 @@ export function RecordPage(): React.JSX.Element {
 
   const isSystemAudioUnavailable = isRecording && activity.systemAudioAvailable === false;
 
+  // Mic, Audio and Camera: split tiles in the row, one inline drawer open at a time, right
+  // under the row in the page's flow (the content area scrolls, so a tall drawer pushes
+  // instead of being clipped). Same pattern as the capture panel, with the wide variant.
+  const [mic, systemAudio, camera] = exclusive([
+    useAudioControl(audioStore),
+    useAudioControl(audioStore),
+    useCameraControl(),
+  ]);
+
   const toggles = (
-    <RecordingToggles
-      isMicrophoneEnabled={setup.isMicrophoneEnabled}
-      isSystemAudioEnabled={setup.isSystemAudioEnabled}
-      isCameraEnabled={setup.isCameraEnabled}
-      isSystemAudioUnavailable={isSystemAudioUnavailable}
-      onToggleMicrophone={setup.toggleMicrophone}
-      onToggleSystemAudio={setup.toggleSystemAudio}
-      onToggleCamera={setup.toggleCamera}
-      micSlot={
-        <MicControlWithPopover
-          store={audioStore}
-          on={setup.isMicrophoneEnabled}
-          onToggle={setup.toggleMicrophone}
-          isRecording={isBusy}
-          microphones={setup.microphones}
-          selectedMicrophone={setup.selectedMicrophone}
-          onSelectMicrophone={setup.selectMicrophone}
-        />
-      }
-      audioSlot={
-        <SystemAudioControlWithPopover
-          store={audioStore}
-          on={setup.isSystemAudioEnabled}
-          onToggle={setup.toggleSystemAudio}
-          micOn={setup.isMicrophoneEnabled}
-          unavailable={isSystemAudioUnavailable}
-        />
-      }
-      cameraSlot={
-        <CameraControlWithPopover
-          on={setup.isCameraEnabled}
-          onToggle={setup.toggleCamera}
-          isRecording={isBusy}
-        />
-      }
-    />
+    <>
+      <RecordingToggles
+        isMicrophoneEnabled={setup.isMicrophoneEnabled}
+        isSystemAudioEnabled={setup.isSystemAudioEnabled}
+        isCameraEnabled={setup.isCameraEnabled}
+        isSystemAudioUnavailable={isSystemAudioUnavailable}
+        onToggleMicrophone={setup.toggleMicrophone}
+        onToggleSystemAudio={setup.toggleSystemAudio}
+        onToggleCamera={setup.toggleCamera}
+        micSlot={
+          <MicToggleSplit
+            control={mic}
+            on={setup.isMicrophoneEnabled}
+            onToggle={setup.toggleMicrophone}
+          />
+        }
+        audioSlot={
+          <SystemAudioToggleSplit
+            control={systemAudio}
+            on={setup.isSystemAudioEnabled}
+            onToggle={setup.toggleSystemAudio}
+            unavailable={isSystemAudioUnavailable}
+          />
+        }
+        cameraSlot={
+          <CameraPanelTile
+            compact={false}
+            control={camera}
+            on={setup.isCameraEnabled}
+            onToggle={setup.toggleCamera}
+          />
+        }
+      />
+      <MicPanelDrawer
+        variant="page"
+        control={mic}
+        on={setup.isMicrophoneEnabled}
+        isRecording={isBusy}
+        microphones={setup.microphones}
+        selectedMicrophone={setup.selectedMicrophone}
+        onSelectMicrophone={setup.selectMicrophone}
+      />
+      <SystemAudioPanelDrawer
+        variant="page"
+        control={systemAudio}
+        micOn={setup.isMicrophoneEnabled}
+      />
+      <CameraPanelDrawer
+        variant="page"
+        control={camera}
+        on={setup.isCameraEnabled}
+        isRecording={isBusy}
+      />
+    </>
   );
 
   const inputNotices = (

@@ -6,3 +6,9 @@
   border-radius: var(--radius-sm);
   text-align: left;
 }
+
+/* The Record page's drawer is wide: it is the container the two-column settings query. */
+.drawer[data-variant="page"] {
+  container-type: inline-size;
+  padding: 12px 14px;
+}

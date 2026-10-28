@@ -202,19 +202,32 @@ describe("RecordPage idle layout (design Kaipu Record Modes)", () => {
     expect(startRecording).not.toHaveBeenCalled();
   });
 
-  it("opens the camera settings popover from the split Camera tile in the idle layout", () => {
+  it("opens the camera settings drawer from the split Camera tile in the idle layout", () => {
     renderAt(undefined);
     fireEvent.click(screen.getByRole("button", { name: "Camera settings" }));
-    expect(screen.getByRole("dialog", { name: "Camera settings" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Camera settings" })).toBeInTheDocument();
   });
 
-  it("opens the Mic and Audio settings popovers from their split tiles", async () => {
+  it("opens the Mic and Audio drawers in the page's flow, one at a time", async () => {
     renderAt(undefined);
     await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
-    expect(screen.getByRole("dialog", { name: "Microphone settings" })).toBeInTheDocument();
+    const mic = screen.getByRole("region", { name: "Microphone settings" });
+    expect(mic).toBeInTheDocument();
+    // In flow, not a floating dialog: it lives in the same block as the tile row.
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(mic.parentElement).toContainElement(
+      screen.getByRole("button", { name: "Microphone settings" }),
+    );
     await userEvent.click(screen.getByRole("button", { name: "System audio settings" }));
-    expect(screen.getByRole("dialog", { name: "System audio settings" })).toBeInTheDocument();
-    expect(screen.queryByRole("dialog", { name: "Microphone settings" })).toBeNull();
+    expect(screen.getByRole("region", { name: "System audio settings" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Microphone settings" })).toBeNull();
+  });
+
+  it("opens the drawers in the recording layout too", async () => {
+    setupState.isRecording = true;
+    renderAt(undefined);
+    await userEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+    expect(screen.getByRole("region", { name: "Camera settings" })).toBeInTheDocument();
   });
 
   it("locks the Mic and Camera settings during the countdown and while starting", async () => {

@@ -1,6 +1,6 @@
 ---
 title: "Mic and System audio settings"
-description: "The Mic and Audio tiles split like the Camera tile: a popover on the Record page and an inline drawer in the capture panel for the input device, input level, noise reduction, system-audio volume and lowering it while you talk."
+description: "The Mic and Audio tiles split like the Camera tile: an inline drawer on the Record page (wide, two columns) and in the capture panel (compact) for the input device, input level, noise reduction, system-audio volume and lowering it while you talk."
 ---
 
 # Mic and System audio settings
@@ -46,9 +46,10 @@ reproduce the recording from before these settings existed.
 - **System audio**: WHAT TO CAPTURE (All sound; One app disabled with "Not available yet");
   VOLUME IN THE RECORDING; the "Lower it while I talk" switch, disabled with "Turn on the
   microphone to use this" while the mic toggle is off.
-- **Record page**: ~300 px popover under the row, left-aligned with its tile and kept inside the
-  window. **Capture panel**: inline drawer under the row; only one drawer (Mic, Audio, Camera) is
-  open at a time. Microphone permission denied keeps the existing notice on the Record page.
+- **Record page**: wide inline drawer under the row, in the page's flow (a floating popover was
+  clipped at the bottom of the window; the content area scrolls, so a tall drawer pushes and
+  scrolls instead). Two columns above ~520 px, one below. **Capture panel**: compact inline
+  drawer under the row. On both, only one drawer (Mic, Audio, Camera) is open at a time. Microphone permission denied keeps the existing notice on the Record page.
 
 ## Engine and live changes
 
@@ -87,9 +88,9 @@ window share one `useAudioSettings` store, because every write sends the whole `
 ## Manual checks
 
 1. Record page and capture panel: Mic and Audio tiles look like the Camera tile; chevrons open the
-   popover (left-aligned, inside the window) and the drawer; only one drawer at a time in the panel.
+   inline drawer under the row (pushing the page, never clipped); only one drawer at a time.
 2. Open Microphone settings with the mic on: the meter on the selected row moves when you talk, and
-   the OS mic indicator turns off when you close the popover.
+   the OS mic indicator turns off when you close the drawer.
 3. Switch device from the list; Mic off: the meter is flat and the device is not opened.
 4. Record with the level at 0% (silent mic), 100% and 200% (loud); the exported audio matches.
 5. During a take: drag the level and toggle noise reduction; both apply live (noise reopens the
@@ -97,7 +98,7 @@ window share one `useAudioSettings` store, because every write sends the whole `
    note show. Unplug the selected mic: DISCONNECTED appears. The meter moves the same at 50% and
    200% level, and ducking triggers at the same voice volume.
    Hardware: confirm the OS mic indicator turns off when the capture panel hides on blur with the
-   Mic drawer open, and when the main window goes to the tray with the Mic popover open.
+   Mic drawer open, and when the main window goes to the tray with the Mic drawer open.
 6. System audio at 30%, then 100%, with something playing: the volume in the recording follows.
 7. "Lower it while I talk": system audio dips while you speak and returns about half a second
    after; disabled with the mic toggle off; a muted mic does not duck.
