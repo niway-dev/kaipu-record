@@ -12,6 +12,7 @@ import {
   type CameraBubbleSettings,
   type CameraBubbleShape,
 } from "@shared/camera-bubble";
+import { SwitchRow } from "@renderer/features/audio-settings/audio-settings-fields";
 import type { CameraDevice } from "./use-camera-settings";
 import styles from "./camera-settings-fields.module.css";
 
@@ -234,6 +235,15 @@ export function CameraSettingsFields({
             <span>{t("sizePx", { size: CAMERA_BUBBLE_MAX_SIZE })}</span>
           </div>
         )}
+      </div>
+
+      <div className={styles.mirror}>
+        <SwitchRow
+          title={t("mirrorTitle")}
+          hint={t("mirrorHint")}
+          checked={bubble.mirrored}
+          onChange={(mirrored) => onChange({ mirrored })}
+        />
       </div>
 
       {/* Present from the start and filled later, so it is announced once when it changes. */}

@@ -40,13 +40,47 @@ describe("CameraBubble", () => {
     window.electronAPI.getSettings = async () =>
       ({
         ...(await original.getSettings()),
-        cameraBubble: { shape: "rounded", size: 240, deviceId: "cam-9" },
+        cameraBubble: { shape: "rounded", size: 240, deviceId: "cam-9", mirrored: true },
       }) as never;
     const { container } = render(<CameraBubble />);
     await waitFor(() =>
       expect(container.firstElementChild).toHaveAttribute("data-shape", "rounded"),
     );
     expect(mockPreview).toHaveBeenLastCalledWith(true, "cam-9");
+  });
+
+  it("mirrors the preview by default and when the setting is on", async () => {
+    withStream();
+    const { container } = render(<CameraBubble />);
+    await waitFor(() =>
+      expect(container.firstElementChild).toHaveAttribute("data-mirrored", "true"),
+    );
+  });
+
+  it("does not mirror when the setting is off, and follows a live change", async () => {
+    withStream();
+    let push: ((settings: never) => void) | null = null;
+    const base = await original.getSettings();
+    window.electronAPI.getSettings = async () =>
+      ({
+        ...base,
+        cameraBubble: { shape: "circle", size: 240, deviceId: null, mirrored: false },
+      }) as never;
+    window.electronAPI.onSettingsChanged = ((callback: (settings: never) => void) => {
+      push = callback;
+      return () => {};
+    }) as never;
+    const { container } = render(<CameraBubble />);
+    await waitFor(() => expect(push).not.toBeNull());
+    await waitFor(() => expect(container.firstElementChild).not.toHaveAttribute("data-mirrored"));
+
+    act(() =>
+      push?.({
+        ...base,
+        cameraBubble: { shape: "circle", size: 240, deviceId: null, mirrored: true },
+      } as never),
+    );
+    expect(container.firstElementChild).toHaveAttribute("data-mirrored", "true");
   });
 
   it("shows the outline, size label and grip on hover", () => {
@@ -99,7 +133,7 @@ describe("CameraBubble", () => {
     fireEvent.pointerUp(grip, { pointerId: 1 });
     await waitFor(() =>
       expect(updateSettings).toHaveBeenCalledWith({
-        cameraBubble: { shape: "circle", size: 300, deviceId: null },
+        cameraBubble: { shape: "circle", size: 300, deviceId: null, mirrored: true },
       }),
     );
   });
@@ -216,7 +250,7 @@ describe("CameraBubble — grip release races", () => {
     // …and its applied size is what gets saved.
     await waitFor(() =>
       expect(updateSettings).toHaveBeenCalledWith({
-        cameraBubble: { shape: "circle", size: 300, deviceId: null },
+        cameraBubble: { shape: "circle", size: 300, deviceId: null, mirrored: true },
       }),
     );
     expect(updateSettings).toHaveBeenCalledTimes(1);
@@ -241,7 +275,7 @@ describe("CameraBubble — grip release races", () => {
     act(() => push?.({ active: true, status: "recording", elapsedSeconds: 0 }));
     await waitFor(() =>
       expect(updateSettings).toHaveBeenCalledWith({
-        cameraBubble: { shape: "circle", size: 280, deviceId: null },
+        cameraBubble: { shape: "circle", size: 280, deviceId: null, mirrored: true },
       }),
     );
   });

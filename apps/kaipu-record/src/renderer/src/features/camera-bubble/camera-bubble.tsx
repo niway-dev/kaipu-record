@@ -195,6 +195,7 @@ export function CameraBubble(): React.JSX.Element {
     <div
       className={styles.root}
       data-shape={bubble.shape}
+      data-mirrored={bubble.mirrored || undefined}
       data-chrome={showChrome || undefined}
       onPointerEnter={() => setHovered(true)}
       onPointerLeave={() => setHovered(false)}

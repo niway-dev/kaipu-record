@@ -44,6 +44,18 @@ describe("stepCameraBubbleSize", () => {
 });
 
 describe("sanitizeCameraBubble", () => {
+  it("mirrors by default, and keeps a stored boolean", () => {
+    expect(sanitizeCameraBubble({}).mirrored).toBe(true);
+    expect(sanitizeCameraBubble({ mirrored: false }).mirrored).toBe(false);
+    expect(sanitizeCameraBubble({ mirrored: true }).mirrored).toBe(true);
+  });
+
+  it("falls back to mirrored for a stored non-boolean, leaving the other fields alone", () => {
+    const result = sanitizeCameraBubble({ shape: "rounded", mirrored: "no" });
+    expect(result.mirrored).toBe(true);
+    expect(result.shape).toBe("rounded");
+  });
+
   it("drops an empty device id", () => {
     expect(sanitizeCameraBubble({ deviceId: "" }).deviceId).toBeNull();
   });

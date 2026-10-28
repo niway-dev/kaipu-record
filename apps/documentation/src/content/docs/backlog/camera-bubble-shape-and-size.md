@@ -168,3 +168,21 @@ asked; treating "not asked yet" as blocked would have made the camera impossible
 - The fox-nocam illustration for the blocked card: the app has no such asset, the lock icon is
   used.
 - Analytics: the app does not track camera toggles, so no shape or size event was added.
+
+## Mirror image
+
+Status: 🟡 In progress (implemented; pending owner validation on the real app).
+
+The bubble used to be always flipped horizontally, like a selfie cam. The bubble is
+captured into the recording as part of the screen, so with a rear-facing camera (for
+example an iPhone through Continuity Camera) or any text in view, the text came out
+reversed in the video.
+
+`CameraBubbleSettings.mirrored` (default `true`, today's behaviour) turns the flip on or
+off. The Camera settings have a "Mirror image" switch after the size controls, in both the
+panel and the full variant, and it is allowed during a take like the other camera fields.
+The bubble applies the flip through a `data-mirrored` attribute, so it follows the setting
+live, including mid-recording. A stored non-boolean falls back to `true`.
+
+To validate: turn the switch off with text in front of the camera and check that the
+bubble and the exported video read correctly; turn it on and check the selfie flip returns.

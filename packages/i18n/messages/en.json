@@ -231,6 +231,8 @@
     "deviceUnnamed": "Camera {index}",
     "offNote": "Camera is off. These apply when you turn it on.",
     "liveNote": "Changes apply live and will show in the recording.",
+    "mirrorTitle": "Mirror image",
+    "mirrorHint": "Turn off when the camera faces away from you, so text reads correctly",
     "blockedTitle": "Camera access is blocked",
     "blockedBody": "Allow Kaipu in System Settings → Privacy → Camera.",
     "openSystemSettings": "Open System Settings",

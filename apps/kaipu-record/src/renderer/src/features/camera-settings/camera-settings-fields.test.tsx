@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import type { CameraBubbleSettings } from "@shared/camera-bubble";
 import { CameraBlockedCard, CameraSettingsFields } from "./camera-settings-fields";
 
-const bubble: CameraBubbleSettings = { shape: "circle", size: 240, deviceId: null };
+const bubble: CameraBubbleSettings = { shape: "circle", size: 240, deviceId: null, mirrored: true };
 
 function renderFields(overrides: Partial<React.ComponentProps<typeof CameraSettingsFields>> = {}): {
   onChange: ReturnType<typeof vi.fn>;
@@ -153,6 +153,8 @@ describe("CameraSettingsFields — device and notes", () => {
     await userEvent.tab();
     expect(screen.getByRole("slider")).toHaveFocus();
     await userEvent.tab();
+    expect(screen.getByRole("switch", { name: "Mirror image" })).toHaveFocus();
+    await userEvent.tab();
     expect(screen.getByRole("combobox")).toHaveFocus();
   });
 
@@ -186,5 +188,37 @@ describe("CameraBlockedCard", () => {
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Open System Settings" }));
     expect(onOpenSystemSettings).toHaveBeenCalledOnce();
+  });
+});
+
+describe("CameraSettingsFields — mirror", () => {
+  it("shows a Mirror image switch with its hint, on by default", () => {
+    renderFields();
+    const mirror = screen.getByRole("switch", { name: "Mirror image" });
+    expect(mirror).toHaveAttribute("aria-checked", "true");
+    expect(mirror).toHaveAccessibleDescription(
+      "Turn off when the camera faces away from you, so text reads correctly",
+    );
+  });
+
+  it("writes mirrored: false when switched off, and true when switched on", async () => {
+    const { onChange } = renderFields();
+    await userEvent.click(screen.getByRole("switch", { name: "Mirror image" }));
+    expect(onChange).toHaveBeenLastCalledWith({ mirrored: false });
+  });
+
+  it("reflects an off setting and turns it back on", async () => {
+    const { onChange } = renderFields({ bubble: { ...bubble, mirrored: false } });
+    const mirror = screen.getByRole("switch", { name: "Mirror image" });
+    expect(mirror).toHaveAttribute("aria-checked", "false");
+    await userEvent.click(mirror);
+    expect(onChange).toHaveBeenLastCalledWith({ mirrored: true });
+  });
+
+  it("is also there in the compact variant, and mid-take", () => {
+    renderFields({ compact: true, isRecording: true });
+    expect(screen.getByRole("switch", { name: "Mirror image" })).not.toHaveAttribute(
+      "aria-disabled",
+    );
   });
 });

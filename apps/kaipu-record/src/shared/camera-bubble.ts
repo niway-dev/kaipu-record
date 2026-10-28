@@ -17,6 +17,11 @@ export interface CameraBubbleSettings {
   size: number;
   /** The `videoinput` device to open; `null` lets the OS pick its default camera. */
   deviceId: string | null;
+  /**
+   * Whether the preview is flipped like a selfie cam. The bubble is captured into the
+   * recording, so a flipped rear camera (or any text in view) reads reversed in the video.
+   */
+  mirrored: boolean;
 }
 
 export const CAMERA_BUBBLE_MIN_SIZE = 120;
@@ -71,6 +76,7 @@ export const DEFAULT_CAMERA_BUBBLE: CameraBubbleSettings = {
   shape: "circle",
   size: CAMERA_BUBBLE_PRESETS.M,
   deviceId: null,
+  mirrored: true,
 };
 
 /** A finite size, rounded to whole DIP and held inside the allowed range. */
@@ -90,7 +96,7 @@ export function cameraBubblePresetFor(size: number): CameraBubblePreset | null {
 /**
  * Stored (possibly partial or hand-edited) bubble settings merged over the defaults,
  * field by field: an invalid shape falls back alone, a size out of range is clamped
- * rather than dropped.
+ * rather than dropped, a non-boolean `mirrored` falls back to on.
  */
 export function sanitizeCameraBubble(value: unknown): CameraBubbleSettings {
   const safe = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
@@ -103,7 +109,9 @@ export function sanitizeCameraBubble(value: unknown): CameraBubbleSettings {
       : DEFAULT_CAMERA_BUBBLE.size;
   const deviceId =
     typeof safe.deviceId === "string" && safe.deviceId.length > 0 ? safe.deviceId : null;
-  return { shape, size, deviceId };
+  const mirrored =
+    typeof safe.mirrored === "boolean" ? safe.mirrored : DEFAULT_CAMERA_BUBBLE.mirrored;
+  return { shape, size, deviceId, mirrored };
 }
 
 /**
