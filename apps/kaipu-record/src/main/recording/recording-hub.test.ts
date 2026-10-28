@@ -355,6 +355,9 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     expect(mainWindow.webContents.send).toHaveBeenCalledWith(IPC_CHANNELS.recordingCommand, "stop");
     phase({}, { phase: "idle" });
     expect(mockState.shade.hide).toHaveBeenCalled();
+    // The bar kept hidden from the last take was raised with the countdown: never leave it
+    // reading "Starting…" over an idle app.
+    expect(mockState.bar.hide).toHaveBeenCalled();
     expect(mockState.shortcutUnregister).toHaveBeenCalledWith("Escape");
   });
 

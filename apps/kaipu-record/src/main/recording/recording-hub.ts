@@ -534,6 +534,8 @@ export function registerRecordingHub(
     const notify = countdownAbandoned;
     clearCountdownRegion();
     shade.hide();
+    // Nothing of a take is on screen: the bar never belongs over an idle app.
+    bar.hide();
     revealAbandoned(notify);
   };
   /**

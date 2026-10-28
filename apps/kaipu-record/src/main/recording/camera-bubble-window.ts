@@ -162,9 +162,12 @@ export class CameraBubbleWindow {
     this.window.setBounds(bounds);
   }
 
-  /** Bring the bubble above other always-on-top windows (Windows orders them by show time). */
+  /**
+   * Bring the bubble above other always-on-top windows (Windows orders them by show time).
+   * Only a visible one: on macOS `moveTop()` orders a hidden window back on screen.
+   */
   raise(): void {
-    if (this.window && !this.window.isDestroyed()) this.window.moveTop();
+    if (this.isVisible()) this.window?.moveTop();
   }
 
   /** True while the bubble has an active (non-destroyed) window and is visible. */

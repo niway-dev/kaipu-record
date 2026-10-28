@@ -124,8 +124,14 @@ export class ControlBarWindow {
     });
   }
 
-  /** Bring the bar above other always-on-top windows (Windows orders them by show time). */
+  /**
+   * Bring the bar above other always-on-top windows (Windows orders them by show time). Only
+   * while it is wanted: on macOS `moveTop()` orders a hidden window back on screen, and the
+   * countdown raises the floating windows before the take, so the bar kept hidden from the
+   * last take came back as "Starting…" and outlived a cancelled countdown.
+   */
   raise(): void {
+    if (!this.wanted) return;
     if (this.window && !this.window.isDestroyed()) this.window.moveTop();
   }
 
