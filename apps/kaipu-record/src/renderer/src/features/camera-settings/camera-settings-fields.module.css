@@ -254,7 +254,7 @@
 }
 
 .fields[data-compact] .pad {
-  width: 80px;
+  width: 64px;
 }
 
 .pad:focus-visible {

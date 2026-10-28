@@ -86,6 +86,19 @@
   color: var(--text-muted);
 }
 
+/* Off screen, still read as the switch's description. */
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .switch {
   position: relative;
   flex: 0 0 auto;

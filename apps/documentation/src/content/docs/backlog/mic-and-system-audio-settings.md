@@ -61,7 +61,12 @@ the default one while it is unplugged.
 - **Record page**: wide inline drawer under the row, in the page's flow (a floating popover was
   clipped at the bottom of the window; the content area scrolls, so a tall drawer pushes and
   scrolls instead). Two columns above ~520 px, one below. **Capture panel**: compact inline
-  drawer under the row. On both, only one drawer (Mic, Audio, Camera) is open at a time. Microphone permission denied keeps the existing notice on the Record page.
+  drawer under the row, kept under the panel's 600 px ceiling: no Input / Input level labels,
+  one-line device rows (the type is in the row's tooltip; "Disconnected" stays visible), a
+  device list that scrolls past four,
+  the noise and ducking hints as tooltips and screen-reader descriptions, and no "One app" line
+  under the capture chips (the disabled chip's tooltip says it). `e2e/capture-panel-height.e2e.ts`
+  measures every drawer at its tallest against that ceiling. On both, only one drawer (Mic, Audio, Camera) is open at a time. Microphone permission denied keeps the existing notice on the Record page.
 
 ## Engine and live changes
 

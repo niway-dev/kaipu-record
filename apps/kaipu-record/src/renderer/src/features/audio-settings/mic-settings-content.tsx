@@ -26,7 +26,10 @@ export interface MicSettingsContentProps {
 
 /**
  * The microphone settings, shared by the Record page's drawer and the capture panel's
- * drawer: the input device (locked during a take), the input level, noise reduction.
+ * drawer: the input device (locked during a take), the input level, noise reduction. The
+ * compact (panel) variant keeps the panel short: no section labels, one-line device rows
+ * in a list that scrolls past four, the type only where a device is disconnected, and the
+ * noise hint on hover.
  */
 export function MicSettingsContent({
   microphones,
@@ -80,15 +83,19 @@ export function MicSettingsContent({
       </div>
 
       <div className={styles.column}>
-        <span className={styles.label} aria-hidden>
-          {t("input")}
-        </span>
+        {/* The panel drops the section labels: the radios and the slider name themselves. */}
+        {!compact && (
+          <span className={styles.label} aria-hidden>
+            {t("input")}
+          </span>
+        )}
         <div
           ref={firstRef as RefObject<HTMLDivElement | null>}
           role="radiogroup"
           aria-label={t("input")}
           className={micStyles.devices}
           data-dense={columns || undefined}
+          data-compact={compact || undefined}
           // With no device there is no radio to take focus: the group itself does, so focus
           // still enters the settings and Esc reaches their key handler.
           tabIndex={devices.length === 0 ? -1 : undefined}
@@ -99,6 +106,7 @@ export function MicSettingsContent({
             const checked = mic.deviceId === selected?.deviceId;
             const isMissing = missing && mic.deviceId === selected?.deviceId;
             const canPick = selectable(mic);
+            const type = isMissing ? t("disconnected") : tRecord(getMicrophoneType(mic.label));
             return (
               <button
                 key={mic.deviceId}
@@ -112,13 +120,15 @@ export function MicSettingsContent({
                 tabIndex={checked ? 0 : -1}
                 className={micStyles.device}
                 data-missing={isMissing || undefined}
+                // Compact rows are one line: the full name and type show on hover.
+                title={compact ? `${mic.label} · ${type}` : undefined}
                 onClick={canPick ? () => onSelect(mic) : undefined}
               >
                 <span className={micStyles.dot} aria-hidden />
                 <span className={micStyles.deviceText}>
                   <span className={micStyles.deviceName}>{mic.label}</span>
                   <span className={micStyles.deviceType} data-missing={isMissing || undefined}>
-                    {isMissing ? t("disconnected") : tRecord(getMicrophoneType(mic.label))}
+                    {type}
                   </span>
                 </span>
                 {checked && !isMissing && (
@@ -139,9 +149,11 @@ export function MicSettingsContent({
       </div>
 
       <div className={styles.column}>
-        <span className={styles.label} aria-hidden>
-          {t("inputLevel")}
-        </span>
+        {!compact && (
+          <span className={styles.label} aria-hidden>
+            {t("inputLevel")}
+          </span>
+        )}
         <LevelSlider
           label={t("inputLevel")}
           value={audio.micLevel}
@@ -155,6 +167,7 @@ export function MicSettingsContent({
         <SwitchRow
           title={t("noiseTitle")}
           hint={t("noiseHint")}
+          hintHidden={compact}
           checked={audio.noiseSuppression}
           onChange={(noiseSuppression) => onChange({ noiseSuppression })}
         />

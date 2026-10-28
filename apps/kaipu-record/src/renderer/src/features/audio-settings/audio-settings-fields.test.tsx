@@ -92,4 +92,23 @@ describe("SwitchRow", () => {
     await userEvent.click(screen.getByRole("switch"));
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it("still shows a disabled reason when the hint is hidden", () => {
+    render(
+      <SwitchRow
+        title="Duck"
+        hint="Keeps your voice on top"
+        checked={false}
+        onChange={() => {}}
+        hintHidden
+        disabled
+        disabledReason="Turn on the microphone to use this"
+      />,
+    );
+    const reason = screen.getByText("Turn on the microphone to use this");
+    expect(reason.closest("[title]")).toBeNull();
+    expect(screen.getByRole("switch")).toHaveAccessibleDescription(
+      "Turn on the microphone to use this",
+    );
+  });
 });

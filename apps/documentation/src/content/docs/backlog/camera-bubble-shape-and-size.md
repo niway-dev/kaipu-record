@@ -75,8 +75,12 @@ stays 56 px in, as before. A size the area cannot hold is shrunk to what fits; w
   segment on its right opens an inline drawer (`role="region"`) right under the row, in the page's flow. It replaced a floating popover, which was clipped at the bottom of the window; the content area scrolls, so the drawer pushes the page instead. Full-size tiles and chips here.
 - **Capture panel.** The panel hides when it loses focus, so there is no popover either: the 22 px
   chevron expands an inline **drawer** inside the panel, the panel grows downward and focus never
-  leaves the window. Esc or the chevron closes it. Same content, compact (26 px chips, short
-  labels).
+  leaves the window. Esc or the chevron closes it. Compact content (26 px chips), without the
+  Size section: the bubble's hover grip sizes it there, and the panel stays under its 600 px
+  ceiling with framing open. The Mirror and Framing hints are screen-reader descriptions and
+  hover tooltips there, not visible lines. The Record page keeps Size, which is also the
+  keyboard's way to size the bubble (the grip is pointer-only); `e2e/capture-panel-height.e2e.ts` checks the
+  panel height with framing open.
 - **Content.** Header with the camera icon, "Camera" and the device selector chip; Shape (Circle |
   Rounded); Size (S · M · L · Custom, where Custom shows the value when it is not a preset and is
   not clickable otherwise); a 120–480 px slider with ticks at the three presets.
