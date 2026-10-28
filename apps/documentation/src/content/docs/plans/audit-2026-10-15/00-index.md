@@ -42,7 +42,6 @@ analyses are not in the repo.
 | [15 Orphan heal](/plans/audit-2026-10-15/15-orphan-heal/)                             | LIB-A7, LIB-B9                                   |
 | [16 Library IPC validation](/plans/audit-2026-10-15/16-library-ipc-validation/)       | LIB-B11                                          |
 | [17 Tag chip editing](/plans/audit-2026-10-15/17-tag-chip-editing/)                   | LIB-B2                                           |
-| [18 Drag-out across volumes](/plans/audit-2026-10-15/18-drag-out-volumes/)            | LIB-B12                                          |
 
 ## Batch 4 — trim handle
 
