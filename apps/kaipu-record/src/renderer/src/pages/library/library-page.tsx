@@ -375,9 +375,7 @@ export function LibraryPage(): React.JSX.Element {
           video={tagging}
           tags={tagApi.tags}
           initialTab={tagDrawer.tab}
-          onAssign={(next) => {
-            if (tagging?.id) void setTags(tagging.id, next);
-          }}
+          onAssign={(next) => (tagging?.id ? setTags(tagging.id, next) : undefined)}
           onCreate={tagApi.create}
           onRename={tagApi.rename}
           onRecolor={tagApi.recolor}
