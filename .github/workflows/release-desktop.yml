@@ -241,8 +241,9 @@ jobs:
         run: bash scripts/rebuild-native.sh
 
       # Failure 8 of the Windows release design: if the rebuild above is ever dropped or
-      # silently skipped, the installer still builds and click-hook.ts degrades to "no
-      # clicks" on every user's machine. The stamp is what scripts/rebuild-native.sh writes
+      # silently skipped, the installer still builds and ships the UNPATCHED N-API
+      # prebuild — Electron loads it fine, with the start() deadlock the bun patch fixes —
+      # on every user's machine. The stamp is what scripts/rebuild-native.sh writes
       # and scripts/setup-dev.sh reads; a mismatch with the installed Electron fails here.
       - name: Check native dependencies were rebuilt for this Electron
         working-directory: apps/kaipu-record
