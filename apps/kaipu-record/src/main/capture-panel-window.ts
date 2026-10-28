@@ -2,10 +2,10 @@ import { BrowserWindow, ipcMain, screen } from "electron";
 import type { Rectangle } from "electron";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
+import { CAPTURE_PANEL_MAX_HEIGHT } from "@shared/capture-panel";
 
 const PANEL_WIDTH = 340;
 const PANEL_MIN_HEIGHT = 180;
-const PANEL_MAX_HEIGHT = 600;
 const PANEL_INITIAL_HEIGHT = 380;
 
 /**
@@ -152,7 +152,10 @@ export class CapturePanelWindow {
   private registerIpc(): void {
     ipcMain.on("capture-panel:resize", (_event, height: number) => {
       if (this.window && !this.window.isDestroyed()) {
-        const clamped = Math.max(PANEL_MIN_HEIGHT, Math.min(Math.round(height), PANEL_MAX_HEIGHT));
+        const clamped = Math.max(
+          PANEL_MIN_HEIGHT,
+          Math.min(Math.round(height), CAPTURE_PANEL_MAX_HEIGHT),
+        );
         this.window.setContentSize(PANEL_WIDTH, clamped);
       }
     });

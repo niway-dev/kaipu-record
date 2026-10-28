@@ -136,7 +136,7 @@ export function CapturePanel(): React.JSX.Element {
     window.electronAPI?.requestCaptureScreenshot(mode);
 
   return (
-    <div ref={rootRef} className={styles.panel}>
+    <div ref={rootRef} className={styles.panel} data-testid="capture-panel">
       <PanelHeader onOpenMainWindow={openMain} />
 
       {/* Two modes: recording controls and the screenshot action. Locked to Record
