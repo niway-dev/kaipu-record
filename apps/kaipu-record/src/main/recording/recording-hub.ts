@@ -484,6 +484,7 @@ export function registerRecordingHub(
   const holdEscape = (): void => {
     if (escapeHeld) return;
     escapeHeld = holdTemporaryShortcut("Escape", () => {
+      markRecordTiming("Esc pressed: stop sent to the recorder");
       getMainWindow()?.webContents.send(IPC_CHANNELS.recordingCommand, "stop");
     });
   };
@@ -528,7 +529,8 @@ export function registerRecordingHub(
     app.focus({ steal: true });
   };
   /** The prepared start will not become a take: forget it and let the caller reveal the app. */
-  const abandonCountdownRegion = (): void => {
+  const abandonCountdownRegion = (reason: string): void => {
+    markRecordTiming(`countdown region abandoned (${reason})`);
     const notify = countdownAbandoned;
     clearCountdownRegion();
     shade.hide();
@@ -590,7 +592,7 @@ export function registerRecordingHub(
     } else {
       // Cancelled (Esc, Stop) or failed before the take: nothing is marked any more, and the
       // app that was kept hidden for the countdown comes back.
-      abandonCountdownRegion();
+      abandonCountdownRegion("the recorder went back to idle");
     }
   });
 
@@ -756,6 +758,7 @@ export function registerRecordingHub(
     if (next.changed) broadcastActivity();
   });
   ipcMain.on(IPC_CHANNELS.controlCommand, (_e, command: ControlCommand) => {
+    markRecordTiming(`control bar: ${command}`);
     getMainWindow()?.webContents.send(IPC_CHANNELS.recordingCommand, command);
   });
 
@@ -798,7 +801,10 @@ export function registerRecordingHub(
       // The TTL counts from when the recorder can answer: a recreated main window loads first.
       const startTtl = (): void => {
         if (countdownRegion !== prepared || countdownRegionTimer) return;
-        countdownRegionTimer = setTimeout(abandonCountdownRegion, COUNTDOWN_REGION_TTL_MS);
+        countdownRegionTimer = setTimeout(
+          () => abandonCountdownRegion("no start arrived in time"),
+          COUNTDOWN_REGION_TTL_MS,
+        );
       };
       const contents = getMainWindow()?.webContents;
       if (contents?.isLoading?.()) contents.once("did-finish-load", startTtl);
