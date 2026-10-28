@@ -388,10 +388,13 @@ export function registerRecordingHub(
       }
       // Best effort: a recording is never failed by its cursor track. The tracker
       // is still sampling here (finalize runs after the encoder stopped), so the
-      // tail past the last frame is cut with the recording's duration. `+ 250`
-      // (not `meta.durationMs` exactly) covers the last frame's own duration and
-      // clock jitter: the whole point of this cut is to drop the 0.6–2 s of
-      // "saving" samples, not to be frame-exact.
+      // tail past the last frame is cut with the recording's VIDEO duration at the
+      // stop request (measured from the first media sample, see recorder-store
+      // `videoClock`) — the same time base as the samples. `+ 250` (not
+      // `meta.durationMs` exactly) covers the frames `output.finalize()` flushes
+      // after the request, the last frame's own duration and clock jitter: the
+      // whole point of this cut is to drop the 0.6–2 s of "saving" samples, not
+      // to be frame-exact.
       const track = cursorTracks.finish(
         sessionId,
         clickSessions.delete(sessionId),
