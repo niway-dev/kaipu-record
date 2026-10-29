@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.15.1](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.15.0...desktop-v0.15.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **desktop:** the capture overlay hears keys from the commit that paints it ([bc92f82](https://github.com/niway-dev/kaipu-record/commit/bc92f82c114ad497ba1ff86940fe1ef640c01e61))
+* **desktop:** the capture overlay hears keys from the commit that paints it ([41f0e4b](https://github.com/niway-dev/kaipu-record/commit/41f0e4b9ba32dc9bb8497f2583e6c01b87ecd68a))
+
 ## [0.15.0](https://github.com/niway-dev/kaipu-record/compare/desktop-v0.14.1...desktop-v0.15.0) (2026-10-29)
 
 
