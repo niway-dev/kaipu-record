@@ -1,4 +1,5 @@
 import { defineConfig } from "@playwright/test";
+import { TEST_TIMEOUT_MS } from "./e2e/helpers/test-budget";
 
 /*
  * Run this suite through `node`, never through the `playwright` shim on PATH.
@@ -42,7 +43,7 @@ export default defineConfig({
    * Remove this the moment the cause is found. A retry that becomes permanent is how a
    * real defect gets to live in the suite forever. */
   retries: process.env.CI ? 1 : 0,
-  timeout: 120_000,
+  timeout: TEST_TIMEOUT_MS,
   reporter: [["list"]],
   use: {
     trace: "retain-on-failure",

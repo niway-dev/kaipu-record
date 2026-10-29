@@ -18,6 +18,9 @@ const execFileAsync = promisify(execFile);
  */
 export const QUIT_DEADLINE_MS = 15_000;
 
+/** The most `sample` may take; it records for 2 s and then writes the call graphs. */
+export const SAMPLE_TIMEOUT_MS = 20_000;
+
 export interface QuitWatchdogDeps {
   /** Ask the app to quit and resolve once its process is gone (`ElectronApplication.close`). */
   close: () => Promise<void>;
@@ -82,7 +85,9 @@ export async function sampleProcess(pid: number): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "kaipu-e2e-sample-"));
   const file = path.join(dir, `electron-${pid}.sample.txt`);
   try {
-    await execFileAsync("sample", [String(pid), "2", "-file", file], { timeout: 20_000 });
+    await execFileAsync("sample", [String(pid), "2", "-file", file], {
+      timeout: SAMPLE_TIMEOUT_MS,
+    });
     return await readFile(file, "utf-8");
   } finally {
     await rm(dir, { recursive: true, force: true });

@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
-import { closeOrReport, QUIT_DEADLINE_MS, type QuitWatchdogDeps } from "./quit-watchdog";
+import {
+  closeOrReport,
+  QUIT_DEADLINE_MS,
+  SAMPLE_TIMEOUT_MS,
+  type QuitWatchdogDeps,
+} from "./quit-watchdog";
+import { TEST_TIMEOUT_MS } from "./test-budget";
 
 function deps(overrides: Partial<QuitWatchdogDeps> = {}): QuitWatchdogDeps & {
   attachments: Array<{ name: string; body: string }>;
@@ -62,9 +68,11 @@ describe("closeOrReport", () => {
     expect(d.kill).not.toHaveBeenCalled();
   });
 
-  it("keeps the deadline well inside Playwright's 120 s test timeout", () => {
-    // Deadline + a stack sample (~3 s) + the retry's own launch must fit in one test's budget.
-    expect(QUIT_DEADLINE_MS).toBeGreaterThanOrEqual(10_000);
-    expect(QUIT_DEADLINE_MS).toBeLessThanOrEqual(30_000);
+  it("a hung quit plus its stack sample leaves most of the test's budget to the test itself", () => {
+    // The watchdog runs in teardown, after the test body has spent its own time (launch,
+    // actions, assertions: 3–15 s in this suite, up to ~30 s with the slowest polls). Even a
+    // sample that takes its whole timeout must not push a hung test past Playwright's
+    // timeout, or the report degrades back to the bare "Test timeout exceeded" with no stack.
+    expect(QUIT_DEADLINE_MS + SAMPLE_TIMEOUT_MS).toBeLessThanOrEqual(TEST_TIMEOUT_MS / 2);
   });
 });
