@@ -24,7 +24,6 @@ describe("RecordingWriter.salvage — overwrite confirmed in the save dialog", (
     const writer = new RecordingWriter({
       // A vault path under a regular file cannot be created, so finalize strands the take.
       vaultDir: () => join(picked, "not-a-dir"),
-      newId: () => "rec-fixed",
       tempDir,
     });
     const { tempPath } = await writer.create("s1");

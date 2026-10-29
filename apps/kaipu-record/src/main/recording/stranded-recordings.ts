@@ -1,7 +1,8 @@
 import { readdir, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { LibraryVault } from "../library/library-vault";
-import { STAGING_DIR, moveFile, timestampId } from "./recording-writer";
+import { defaultCaptureName } from "@shared/default-capture-name";
+import { STAGING_DIR, moveFile } from "./recording-writer";
 
 const PART_RE = /^kaipu-rec-.+\.mp4\.part$/;
 const MIN_AGE_MS = 2 * 60_000; // another instance may still be writing a fresh file
@@ -50,15 +51,19 @@ export async function recoverStrandedRecordings(deps: SweepDeps): Promise<SweepR
           result.discarded += 1;
           continue;
         }
-        const base = `${timestampId(info.mtimeMs)}-recovered`;
-        let id = base;
-        for (let n = 2; await vault.hasMedia(id); n += 1) id = `${base}-${n}`;
-        await moveFile(path, await vault.filePath(id));
-        await vault.writeMeta(id, {
+        const id = await vault.allocateId({
+          kind: "recording",
           title: deps.title,
           createdAt: info.mtimeMs,
-          derivedFromAssetId: null,
+          stem: `${defaultCaptureName("recording", new Date(info.mtimeMs))} (recovered)`,
         });
+        try {
+          await moveFile(path, await vault.filePath(id));
+        } catch (error) {
+          await vault.remove(id).catch(() => {}); // release the reserved stem
+          throw error;
+        }
+        await vault.writeMeta(id, { derivedFromAssetId: null });
         result.recovered.push(id);
       } catch {
         result.failed.push(path);

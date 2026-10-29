@@ -1,12 +1,6 @@
-import { rm } from "node:fs/promises";
-import { join } from "node:path";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { broadcastLibraryChanged, currentVault } from "../library";
-
-/** Stable, sortable id; mirrors the recording writer's timestamp scheme. */
-function screenshotId(): string {
-  return `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}`;
-}
+import { ItemGoneError } from "../library/library-vault";
 
 export interface SaveScreenshotMeta {
   title: string;
@@ -23,12 +17,22 @@ export async function saveScreenshotToVault(
   png: Buffer,
   meta: SaveScreenshotMeta,
 ): Promise<LocalRecording> {
-  const id = meta.overwriteId ?? screenshotId();
-  const isNew = meta.overwriteId === undefined;
   const vault = currentVault();
-  await vault.writeImage(id, png);
   const now = Date.now();
+  const isNew = meta.overwriteId === undefined;
+  let id: string;
+  if (meta.overwriteId === undefined) {
+    // The file name follows the title (ADR 0032); the stub sidecar reserves it, so two
+    // shots in the same second get ` (2)` instead of overwriting each other.
+    id = await vault.allocateId({ kind: "screenshot", title: meta.title, createdAt: now });
+  } else {
+    id = meta.overwriteId;
+    // A rename moved (or a delete removed) the item: writing would resurrect a PNG
+    // under the old name, a second copy of the shot.
+    if (!(await vault.hasMedia(id))) throw new ItemGoneError(id);
+  }
   try {
+    await vault.writeImage(id, png);
     // Preserve the original createdAt when overwriting; stamp it for a new item.
     await vault.writeMeta(id, {
       title: meta.title,
@@ -37,8 +41,9 @@ export async function saveScreenshotToVault(
     });
   } catch (error) {
     // A new item without a sidecar would be saved again under a second id when the
-    // caller retries, leaving this PNG orphaned. Remove it so the retry starts clean.
-    if (isNew) await rm(join(vault.directory, `${id}.png`), { force: true }).catch(() => {});
+    // caller retries, leaving this PNG orphaned. Remove it (and its reserved stem) so
+    // the retry starts clean.
+    if (isNew) await vault.remove(id).catch(() => {});
     throw error;
   }
   const saved = await vault.describe(id);

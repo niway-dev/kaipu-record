@@ -13,8 +13,6 @@ export const STAGING_DIR = join(".kaipu", "tmp");
 export interface RecordingWriterDeps {
   /** Current vault directory (can change at runtime). */
   vaultDir: () => string;
-  /** Generates a filesystem-safe, sortable recording id. */
-  newId: () => string;
   /** Wall clock (ms) — injectable for tests. */
   now?: () => number;
   /** Forces every in-progress file into this directory (tests). Unset: stage inside the vault. */
@@ -181,12 +179,16 @@ export class RecordingWriter {
 
     // Resolve the destination BEFORE touching the session: a vault that vanished
     // (unplugged drive, revoked folder) must leave the take recoverable.
+    // The id is allocated from the title (ADR 0032): its stub sidecar reserves the stem, so a
+    // capture in the same second or a rename racing this one gets another name.
     const vaultDir = this.deps.vaultDir();
     const vault = new LibraryVault(vaultDir);
-    const id = this.deps.newId();
+    const createdAt = this.now();
+    let id: string;
     let dest: string;
     try {
       await mkdir(vaultDir, { recursive: true });
+      id = await vault.allocateId({ kind: "recording", title: meta.title, createdAt });
       dest = await vault.filePath(id); // <id>.mp4 (does not exist yet)
     } catch (cause) {
       session.stranded = true;
@@ -198,6 +200,8 @@ export class RecordingWriter {
     try {
       await moveFile(session.tempPath, dest);
     } catch (cause) {
+      // Release the reserved stem: only its stub sidecar exists.
+      await vault.remove(id).catch(() => {});
       session.stranded = true;
       throw new FinalizeMoveError(session.tempPath, cause);
     }
@@ -213,7 +217,7 @@ export class RecordingWriter {
         title: meta.title,
         durationSeconds: meta.durationSeconds,
         ...(capture ? { capture } : {}),
-        createdAt: this.now(),
+        createdAt,
         derivedFromAssetId: meta.derivedFromAssetId ?? null,
         ...(meta.exportPreset ? { exportPreset: meta.exportPreset } : {}),
         ...(isFingerprint(meta.exportFingerprint)
@@ -311,10 +315,4 @@ export class RecordingWriter {
 /** A renderer-supplied export fingerprint: a short token ("whole" or "edit:<hash>"). */
 function isFingerprint(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 64;
-}
-
-/** Default id: sortable, filesystem-safe, second-resolution timestamp. */
-export function timestampId(now: number): string {
-  const iso = new Date(now).toISOString().replace(/[:.]/g, "-").replace("T", "-").slice(0, 19);
-  return `recording-${iso}`;
 }

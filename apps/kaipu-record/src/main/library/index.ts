@@ -15,7 +15,6 @@ import { isTagColor } from "@kaipu/domain/constants";
 import { saveGif } from "./gif-save";
 import { createDragCopy } from "./drag-copies";
 import { friendlyDragName } from "./drag-name";
-import { timestampId } from "../recording/recording-writer";
 import { resetVaultDirectory, setVaultDirectory, vaultDirectory } from "./vault-location";
 import { deleteVideoEditSession, registerVideoEditSessionHandlers } from "./video-edit-session";
 
@@ -142,11 +141,7 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
   );
   // NIW2-217: GIF export. Bytes are validated (GIF89a, ≤ 64 MB) and the path is chosen here.
   ipcMain.handle(IPC_CHANNELS.gifSave, async (_event, bytes: ArrayBuffer, meta: GifSaveMeta) => {
-    const recording = await saveGif(
-      { vaultDir: () => vaultDirectory().path, newId: () => timestampId(Date.now()) },
-      bytes,
-      meta,
-    );
+    const recording = await saveGif({ vaultDir: () => vaultDirectory().path }, bytes, meta);
     broadcastLibraryChanged();
     return recording;
   });

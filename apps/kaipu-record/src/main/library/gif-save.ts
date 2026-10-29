@@ -31,7 +31,6 @@ export function validateGifBytes(bytes: Uint8Array): void {
 
 export interface GifSaveDeps {
   vaultDir: () => string;
-  newId: () => string;
   now?: () => number;
 }
 
@@ -43,13 +42,15 @@ export async function saveGif(
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
   validateGifBytes(bytes);
   const vault = new LibraryVault(deps.vaultDir());
-  const id = deps.newId();
-  await vault.writeGif(id, bytes);
+  const createdAt = (deps.now ?? Date.now)();
+  // The file name follows the title (ADR 0032); the stub sidecar reserves it.
+  const id = await vault.allocateId({ kind: "gif", title: meta.title, createdAt });
   try {
+    await vault.writeGif(id, bytes);
     await vault.writeMeta(id, {
       title: meta.title,
       durationSeconds: meta.durationSeconds,
-      createdAt: (deps.now ?? Date.now)(),
+      createdAt,
       derivedFromAssetId: meta.derivedFromAssetId ?? null,
       gifWidth: meta.width,
       gifHeight: meta.height,
@@ -57,7 +58,7 @@ export async function saveGif(
     });
     if (meta.thumbnail) await vault.writeThumbnail(id, Buffer.from(meta.thumbnail));
   } catch (error) {
-    // No half-saved item: the GIF without its sidecar would list with a wrong title.
+    // No half-saved item: neither a GIF without its sidecar nor a stub without its GIF.
     await vault.remove(id).catch(() => {});
     throw error;
   }

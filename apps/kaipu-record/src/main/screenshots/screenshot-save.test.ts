@@ -2,7 +2,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { LibraryVault } from "../library/library-vault";
+import { ItemGoneError, LibraryVault } from "../library/library-vault";
 
 let vault: LibraryVault;
 
@@ -32,6 +32,37 @@ describe("saveScreenshotToVault", () => {
       "disk full",
     );
     expect((await readdir(directory)).filter((n) => n.endsWith(".png"))).toEqual([]);
+    // The reserved stem is released too: no stub sidecar is left behind.
+    expect(await readdir(join(directory, ".kaipu"))).toEqual([]);
+  });
+
+  it("names a new shot after its title", async () => {
+    const saved = await saveScreenshotToVault(Buffer.from("png"), {
+      title: "Kaipu Screenshot 2026-10-29 at 13.51.00",
+    });
+    expect(saved).toMatchObject({
+      id: "Kaipu Screenshot 2026-10-29 at 13.51.00",
+      title: "Kaipu Screenshot 2026-10-29 at 13.51.00",
+      kind: "screenshot",
+    });
+    expect(await readdir(directory)).toContain("Kaipu Screenshot 2026-10-29 at 13.51.00.png");
+  });
+
+  it("gives a second shot with the same title ' (2)' instead of overwriting the first", async () => {
+    const first = await saveScreenshotToVault(Buffer.from("one"), { title: "Shot" });
+    const second = await saveScreenshotToVault(Buffer.from("two"), { title: "Shot" });
+    expect([first.id, second.id]).toEqual(["Shot", "Shot (2)"]);
+    expect((await readFile(join(directory, "Shot.png"))).toString()).toBe("one");
+    expect((await readFile(join(directory, "Shot (2).png"))).toString()).toBe("two");
+  });
+
+  it("refuses to overwrite an id that no longer has media (renamed meanwhile)", async () => {
+    const saved = await saveScreenshotToVault(Buffer.from("png"), { title: "Shot" });
+    await vault.renameItem(saved.id, "Renamed");
+    await expect(
+      saveScreenshotToVault(Buffer.from("edit"), { title: "Shot", overwriteId: saved.id }),
+    ).rejects.toBeInstanceOf(ItemGoneError);
+    expect((await readdir(directory)).filter((n) => n.endsWith(".png"))).toEqual(["Renamed.png"]);
   });
 
   it("keeps the PNG when an overwrite's sidecar write fails", async () => {

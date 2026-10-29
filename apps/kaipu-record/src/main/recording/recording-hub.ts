@@ -36,7 +36,8 @@ import { RecordingShadeWindow } from "./recording-shade-window";
 import { ScreenSourceCache, type ScreenSource } from "./screen-source-cache";
 import { areaToGlobal, fullDisplayBorderAllowed, sanitizeArea } from "./area-geometry";
 import { holdTemporaryShortcut, releaseTemporaryShortcut } from "../shortcuts/global-shortcuts";
-import { FinalizeMoveError, RecordingWriter, timestampId } from "./recording-writer";
+import { defaultCaptureName } from "@shared/default-capture-name";
+import { FinalizeMoveError, RecordingWriter } from "./recording-writer";
 import { createMicLevelRelay } from "./mic-level-relay";
 import { IDLE_ACTIVITY, applyTick, startedActivity, stoppedActivity } from "./recording-activity";
 import { vaultDirectory } from "../library/vault-location";
@@ -184,10 +185,7 @@ export function registerRecordingHub(
   });
   const shade = new RecordingShadeWindow();
   const screenSources = new ScreenSourceCache(listScreenSources);
-  const writer = new RecordingWriter({
-    vaultDir: () => vaultDirectory().path,
-    newId: () => timestampId(Date.now()),
-  });
+  const writer = new RecordingWriter({ vaultDir: () => vaultDirectory().path });
 
   // Cursor tracks, keyed by writer session id (see plans/video-editor-v2/02).
   const cursorTracks = new CursorTrackRegistry({
@@ -333,7 +331,7 @@ export function registerRecordingHub(
     // Deliberately parentless: the main window is hidden while the control bar is up.
     const result = await dialog.showSaveDialog({
       title: t("dialogs.saveRecordingElsewhere"),
-      defaultPath: join(videosDir(), `${timestampId(Date.now())}.mp4`),
+      defaultPath: join(videosDir(), `${defaultCaptureName("recording")}.mp4`),
       filters: [{ name: "MP4", extensions: ["mp4"] }],
     });
     if (result.canceled || !result.filePath) return null;

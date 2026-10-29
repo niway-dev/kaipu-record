@@ -36,7 +36,6 @@ describe("RecordingWriter — write failure", () => {
     unlinkMock.mockClear();
     writer = new RecordingWriter({
       vaultDir: () => "/vault",
-      newId: () => "rec-fixed",
       now: () => 5000,
       tempDir: "/tmp",
     });

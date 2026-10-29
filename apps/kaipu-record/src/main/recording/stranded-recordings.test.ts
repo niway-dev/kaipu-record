@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { defaultCaptureName } from "@shared/default-capture-name";
 import { STAGING_DIR } from "./recording-writer";
 import { recoverStrandedRecordings } from "./stranded-recordings";
 
@@ -39,8 +40,10 @@ describe("recoverStrandedRecordings", () => {
     expect(result.recovered).toHaveLength(1);
     const id = result.recovered[0];
     expect((await readFile(join(vaultDir, `${id}.mp4`))).toString()).toBe("bytes");
+    expect(id).toBe(`${defaultCaptureName("recording", old)} (recovered)`);
     const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", `${id}.json`), "utf-8"));
     expect(sidecar.title).toBe("Recovered recording");
+    expect(sidecar.assetId).toEqual(expect.any(String));
     expect(await readdir(join(vaultDir, STAGING_DIR))).toHaveLength(0);
   });
 
@@ -95,6 +98,8 @@ describe("recoverStrandedRecordings", () => {
       now: () => now,
     });
     expect(new Set(result.recovered).size).toBe(2);
+    const base = `${defaultCaptureName("recording", old)} (recovered)`;
+    expect([...result.recovered].sort()).toEqual([base, `${base} (2)`]);
   });
 
   it("returns an empty result when the staging folder is missing", async () => {

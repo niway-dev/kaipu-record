@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,7 +20,7 @@ const meta = {
 
 describe("saveGif", () => {
   let directory: string;
-  const deps = () => ({ vaultDir: () => directory, newId: () => "gif-1", now: () => 1234 });
+  const deps = () => ({ vaultDir: () => directory, now: () => 1234 });
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), "kaipu-gif-"));
@@ -32,20 +32,20 @@ describe("saveGif", () => {
   it("writes <id>.gif, the sidecar and the thumbnail, and lists it as kind gif", async () => {
     const recording = await saveGif(deps(), gifBytes(), meta);
     expect(recording).toMatchObject({
-      id: "gif-1",
+      id: "Demo (GIF)",
       kind: "gif",
       title: "Demo (GIF)",
       durationSeconds: 4,
       createdAt: 1234,
       derivedFromAssetId: meta.derivedFromAssetId,
       gif: { width: 640, height: 360, fps: 15 },
-      thumbnailUrl: "kaipu-media://thumb/gif-1",
+      thumbnailUrl: "kaipu-media://thumb/Demo (GIF)",
     });
-    expect(recording.filePath).toBe(join(directory, "gif-1.gif"));
-    expect(await readdir(directory)).toEqual(expect.arrayContaining(["gif-1.gif"]));
-    expect(await readFile(join(directory, ".kaipu", "gif-1.jpg"))).toHaveLength(3);
+    expect(recording.filePath).toBe(join(directory, "Demo (GIF).gif"));
+    expect(await readdir(directory)).toEqual(expect.arrayContaining(["Demo (GIF).gif"]));
+    expect(await readFile(join(directory, ".kaipu", "Demo (GIF).jpg"))).toHaveLength(3);
     const listed = await new LibraryVault(directory).list();
-    expect(listed.map((r) => [r.id, r.kind])).toEqual([["gif-1", "gif"]]);
+    expect(listed.map((r) => [r.id, r.kind])).toEqual([["Demo (GIF)", "gif"]]);
   });
 
   it.each([
@@ -73,9 +73,28 @@ describe("saveGif", () => {
     expect((await readdir(directory)).filter((f) => f.endsWith(".part"))).toEqual([]);
   });
 
+  it("gives a second GIF with the same title ' (2)'", async () => {
+    const first = await saveGif(deps(), gifBytes(), meta);
+    const second = await saveGif(deps(), gifBytes(), meta);
+    expect([first.id, second.id]).toEqual(["Demo (GIF)", "Demo (GIF) (2)"]);
+  });
+
+  it("releases the reserved name when the sidecar write fails", async () => {
+    const spy = vi
+      .spyOn(LibraryVault.prototype, "writeMeta")
+      .mockRejectedValueOnce(new Error("disk full"));
+    try {
+      await expect(saveGif(deps(), gifBytes(), meta)).rejects.toThrow("disk full");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await readdir(directory)).toEqual([".kaipu"]);
+    expect(await readdir(join(directory, ".kaipu"))).toEqual([]);
+  });
+
   it("delete removes the GIF, its sidecar and its thumbnail", async () => {
     await saveGif(deps(), gifBytes(), meta);
-    await new LibraryVault(directory).remove("gif-1");
+    await new LibraryVault(directory).remove("Demo (GIF)");
     expect(await readdir(directory)).toEqual([".kaipu"]);
     expect(await readdir(join(directory, ".kaipu"))).toEqual([]);
   });
