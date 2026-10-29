@@ -40,7 +40,6 @@ analyses are not in the repo.
 | [14 Library thumbnails](/plans/audit-2026-10-15/14-library-thumbnails/)               | LIB-A6                                           |
 | [15 Orphan heal](/plans/audit-2026-10-15/15-orphan-heal/)                             | LIB-A7, LIB-B9                                   |
 | [16 Library IPC validation](/plans/audit-2026-10-15/16-library-ipc-validation/)       | LIB-B11                                          |
-| [18 Drag-out across volumes](/plans/audit-2026-10-15/18-drag-out-volumes/)            | LIB-B12                                          |
 
 ## Batch 4 — trim handle
 
@@ -76,6 +75,8 @@ Deleted from this folder once their PR merged; git keeps the plan text.
 | 04 Sidecar write serialization    | LIB-B1, LIB-B8, LIB-B10, SHOT-B3                                              | [#367](https://github.com/niway-dev/kaipu-record/pull/367) |
 | 05 Screenshot editor save races   | SHOT-B1, SHOT-B4, SHOT-B8, SHOT-B9 (SHOT-B2 dropped: premise no longer holds) | [#360](https://github.com/niway-dev/kaipu-record/pull/360) |
 | 07 Tags registry integrity        | LIB-A4, LIB-B7, LIB-B6                                                        | [#358](https://github.com/niway-dev/kaipu-record/pull/358) |
+| 17 Tag chip editing               | LIB-B2                                                                        | [#411](https://github.com/niway-dev/kaipu-record/pull/411) |
+| 18 Drag-out across volumes        | LIB-B12                                                                       | [#412](https://github.com/niway-dev/kaipu-record/pull/412) |
 | 19 Trim drag                      | VID-B1, VID-B2, VID-B7, VID-B8                                                | [#368](https://github.com/niway-dev/kaipu-record/pull/368) |
 | 21 Recording main-side resources  | REC-A2, REC-B4, REC-B3, REC-B5                                                | [#413](https://github.com/niway-dev/kaipu-record/pull/413) |
 | 28 Video thumbnails by range      | VID-A3                                                                        | [#369](https://github.com/niway-dev/kaipu-record/pull/369) |
