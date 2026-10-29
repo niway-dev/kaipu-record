@@ -234,4 +234,34 @@ describe("ScreenshotEditorPage — rename moves the file (NIW2-560)", () => {
     await waitFor(() => expect(rename).toHaveBeenCalledTimes(2));
     expect(rename).toHaveBeenLastCalledWith("s1", "Locked");
   });
+
+  it("a reopened vault screenshot renamed before any read still saves its edits", async () => {
+    // The vault: bytes live under the current id only; the rename moves them.
+    let currentId = "shot";
+    window.electronAPI.readScreenshotBytes = vi.fn(async (id: string) => {
+      if (id !== currentId) throw new Error(`ENOENT: ${id}.png`);
+      return new Uint8Array([9, 9]).buffer;
+    });
+    window.electronAPI.renameLocalRecording = vi.fn(async (_id: string, title: string) => {
+      currentId = "Renamed";
+      return renameResult("Renamed", title);
+    }) as never;
+    window.electronAPI.saveScreenshot = vi.fn(async () => saved("Renamed", "Renamed")) as never;
+    const LOCAL: ImageSource = { kind: "local", id: "shot", assetId: "a-shot", title: "shot" };
+    const { router } = mount(LOCAL);
+    await loadImage();
+
+    // Rename first: nothing has read the bytes yet.
+    const field = screen.getByRole("textbox", { name: /title/i });
+    fireEvent.change(field, { target: { value: "Renamed" } });
+    fireEvent.blur(field);
+    await waitFor(() => expect(window.electronAPI.renameLocalRecording).toHaveBeenCalled());
+
+    editPadding();
+    act(() => void router.navigate("/library"));
+    expect(await screen.findByText("library")).toBeInTheDocument();
+    expect(saveCalls()).toHaveLength(1);
+    expect(saveCalls()[0][1]).toMatchObject({ overwriteId: "Renamed" });
+    expect(exportScene.mock.calls[0]![1]).toMatchObject({ bytes: new Uint8Array([9, 9]).buffer });
+  });
 });

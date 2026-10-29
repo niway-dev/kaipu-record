@@ -166,6 +166,11 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
       const id = savedIdRef.current;
       if (!id || !alive.current) return;
       try {
+        // A reopened vault shot reads its original bytes lazily, by the id it opened
+        // with. Read (and cache) them now, while the file is still there: after the move
+        // that id names nothing, and the next save would fail.
+        // Best effort: an unreadable file must not block the title.
+        if (image) await image.getBytes().catch(() => {});
         const result = await window.electronAPI.renameLocalRecording(id, next);
         const newId = result.recording.id;
         savedIdRef.current = newId;
