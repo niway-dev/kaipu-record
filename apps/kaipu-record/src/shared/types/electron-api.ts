@@ -472,8 +472,9 @@ export interface KaipuElectronAPI {
   peekClipboardImage(): Promise<{ width: number; height: number } | null>;
   /**
    * Write a PNG into the vault and return the stored item. With `overwriteId` it
-   * replaces that existing screenshot (keeping its createdAt); without, it creates
-   * a new timestamped item.
+   * replaces that existing screenshot (keeping its createdAt), and `overwriteAssetId` is
+   * required with it: main follows the item if a rename moved it and refuses an overwrite
+   * without it (NIW2-560). Without `overwriteId`, it creates a new item named after the title.
    */
   saveScreenshot(
     png: ArrayBuffer,

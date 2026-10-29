@@ -813,29 +813,28 @@ export class LibraryVault {
   /**
    * Overwrite a saved screenshot's PNG and merge `meta` into its sidecar, serialized
    * against renames (NAMES_LOCK) so a rename can never land between the check and the
-   * write and leave the PNG resurrected under the old name. With `expectedAssetId`, the
-   * item is followed: if `id` no longer holds that identity (renamed meanwhile), the
-   * write goes to the id that does. Resolves the id written; throws `ItemGoneError`
-   * when the item is nowhere.
+   * write and leave the PNG resurrected under the old name. `expectedAssetId` is
+   * required: if `id` no longer holds that identity (renamed meanwhile, and maybe taken
+   * by another shot), the write follows the item to the id that does — never onto
+   * whoever holds the name now. Resolves the id written; throws `ItemGoneError` when the
+   * item is nowhere.
    */
   async overwriteImage(
     id: string,
     png: Buffer,
     meta: Sidecar,
-    expectedAssetId?: string,
+    expectedAssetId: string,
   ): Promise<string> {
+    if (!expectedAssetId) throw new Error("overwriteImage: the expected assetId is required");
     return withLock(NAMES_LOCK, async () => {
       let target: string | null = id;
       const holds =
-        (await this.hasMedia(id)) &&
-        (expectedAssetId === undefined || (await this.sidecar(id)).assetId === expectedAssetId);
+        (await this.hasMedia(id)) && (await this.sidecar(id)).assetId === expectedAssetId;
       if (!holds) {
         target =
-          expectedAssetId === undefined
-            ? null
-            : ((await this.list()).find(
-                (item) => item.assetId === expectedAssetId && item.kind === "screenshot",
-              )?.id ?? null);
+          (await this.list()).find(
+            (item) => item.assetId === expectedAssetId && item.kind === "screenshot",
+          )?.id ?? null;
       }
       if (target === null) throw new ItemGoneError(id);
       const resolved = target;

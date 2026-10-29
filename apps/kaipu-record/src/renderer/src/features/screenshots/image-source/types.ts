@@ -38,8 +38,11 @@ export type ImageSource =
       kind: "local";
       id: string;
       version?: number;
-      /** The item's identity: a save follows it if a rename moved the file (NIW2-560). */
-      assetId?: string;
+      /**
+       * The item's identity, required: an overwrite names it, so a save follows the item
+       * if a rename moved the file and never writes over another shot (NIW2-560).
+       */
+      assetId: string;
     })
   | (ImageSourceBase & { kind: "cloud"; url: string });
 

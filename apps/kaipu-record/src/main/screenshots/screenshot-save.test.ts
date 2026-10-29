@@ -56,24 +56,33 @@ describe("saveScreenshotToVault", () => {
     expect((await readFile(join(directory, "Shot (2).png"))).toString()).toBe("two");
   });
 
-  it("refuses to overwrite an id that no longer has media (renamed meanwhile)", async () => {
+  it("refuses to overwrite an item that is gone (deleted meanwhile)", async () => {
     const saved = await saveScreenshotToVault(Buffer.from("png"), { title: "Shot" });
-    await vault.renameItem(saved.id, "Renamed");
+    await vault.remove(saved.id);
     await expect(
-      saveScreenshotToVault(Buffer.from("edit"), { title: "Shot", overwriteId: saved.id }),
+      saveScreenshotToVault(Buffer.from("edit"), {
+        title: "Shot",
+        overwriteId: saved.id,
+        overwriteAssetId: saved.assetId,
+      }),
     ).rejects.toBeInstanceOf(ItemGoneError);
-    expect((await readdir(directory)).filter((n) => n.endsWith(".png"))).toEqual(["Renamed.png"]);
+    expect((await readdir(directory)).filter((n) => n.endsWith(".png"))).toEqual([]);
   });
 
   it("keeps the PNG when an overwrite's sidecar write fails", async () => {
     await vault.writeImage("existing", Buffer.from("old"));
+    const { assetId } = (await vault.describe("existing"))!;
     // The overwrite merges its sidecar under the names lock, through the locked writer.
     vi.spyOn(
       vault as never as { writeMetaLocked: () => Promise<void> },
       "writeMetaLocked",
     ).mockRejectedValue(new Error("disk full"));
     await expect(
-      saveScreenshotToVault(Buffer.from("new"), { title: "Shot", overwriteId: "existing" }),
+      saveScreenshotToVault(Buffer.from("new"), {
+        title: "Shot",
+        overwriteId: "existing",
+        overwriteAssetId: assetId,
+      }),
     ).rejects.toThrow("disk full");
     expect((await readdir(directory)).filter((n) => n.endsWith(".png"))).toEqual(["existing.png"]);
     // The new bytes were already written; only a brand-new item is rolled back.
@@ -93,6 +102,7 @@ describe("saveScreenshotToVault", () => {
     const overwrite = saveScreenshotToVault(Buffer.from("edit"), {
       title: "shot",
       overwriteId: saved.id,
+      overwriteAssetId: saved.assetId,
     }).catch((error: unknown) => error);
     await overwrite;
     await renamed;
@@ -126,5 +136,19 @@ describe("saveScreenshotToVault", () => {
     });
     expect(result).toMatchObject({ id: "Moved", assetId: first.assetId });
     expect((await readFile(join(directory, "shot.png"))).toString()).toBe("other");
+  });
+
+  it("refuses an overwrite that does not name the identity it expects", async () => {
+    // Rename A Shot → Moved, then B takes "Shot": an identity-less overwrite of "Shot"
+    // would write A's edits over B.
+    const a = await saveScreenshotToVault(Buffer.from("A"), { title: "Shot" });
+    await vault.renameItem(a.id, "Moved");
+    const b = await saveScreenshotToVault(Buffer.from("B"), { title: "Shot" });
+    expect(b.id).toBe("Shot");
+    await expect(
+      saveScreenshotToVault(Buffer.from("edited A"), { title: "Shot", overwriteId: "Shot" }),
+    ).rejects.toThrow(/overwriteAssetId/);
+    expect((await readFile(join(directory, "Shot.png"))).toString()).toBe("B");
+    expect((await readFile(join(directory, "Moved.png"))).toString()).toBe("A");
   });
 });

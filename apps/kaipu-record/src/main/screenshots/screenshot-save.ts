@@ -5,8 +5,9 @@ export interface SaveScreenshotMeta {
   title: string;
   overwriteId?: string;
   /**
-   * The identity the editor expects at `overwriteId`. When a rename moved the item, the
-   * overwrite follows it to its current id instead of writing a second copy.
+   * The identity the editor expects at `overwriteId` — required with it. When a rename
+   * moved the item, the overwrite follows it to its current id; it never writes over
+   * another shot that took the old name. An overwrite without it is refused.
    */
   overwriteAssetId?: string;
   /** A save the user asked for (not the capture's auto-save): puts the shot on the Continue list. */
@@ -46,6 +47,9 @@ export async function saveScreenshotToVault(
     // Checked and written under the vault's names lock, so a rename cannot slip in
     // between and leave the PNG resurrected under the old name. The original createdAt
     // is preserved.
+    if (!meta.overwriteAssetId) {
+      throw new Error("screenshot save: an overwrite needs overwriteAssetId");
+    }
     id = await vault.overwriteImage(
       meta.overwriteId,
       png,
