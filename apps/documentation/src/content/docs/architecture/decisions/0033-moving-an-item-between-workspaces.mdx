@@ -1,0 +1,141 @@
+---
+title: "ADR 0033: Moving an item between workspaces keeps its identity and never leaves zero copies"
+description: A finished recording or screenshot moves to another workspace with all its Kaipu files. Same volume renames the media, another volume copies it, verifies sha256 and only then deletes the source. The assetId is kept, tags are remapped by name, a name collision gets a suffix, and a journal in userData heals a move the app died in.
+---
+
+# ADR 0033: Moving an item between workspaces keeps its identity and never leaves zero copies
+
+## Status
+
+| Field         | Value                                                                                                     |
+| ------------- | --------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — [several workspaces design](/specs/2026-10-29-several-workspaces-design/); nothing implemented |
+| Date          | 2026-10-29                                                                                                |
+| Supersedes    | —                                                                                                         |
+| Superseded by | —                                                                                                         |
+| Amends        | ADR 0003's wording "the editor never … moves … the original" (see Consequences)                           |
+
+## Context
+
+ADR 0032 introduces several workspaces, one active at a time. A capture lands in the active
+workspace, and sometimes that is the wrong one. On the first launch every existing item is in
+the single migrated workspace, and the user will want to move the work ones out. The owner asked
+for a move from the Library and from the editor.
+
+An item is more than its media file. In a vault today (`library-vault.ts`, `video-edit-session.ts`):
+
+| File                                           | What it holds                                                           |
+| ---------------------------------------------- | ----------------------------------------------------------------------- |
+| `<id>.mp4` / `.webm` / `.png` / `.gif`         | the media; its stem is the local id, and listing keys on these files    |
+| `.kaipu/<id>.json`                             | the sidecar: `assetId`, title, tags, capture labels, hash cache, stamps |
+| `.kaipu/<id>.jpg`                              | the thumbnail (videos and GIFs; a screenshot is its own thumbnail)      |
+| `.kaipu/<id>.cursor.json`                      | the cursor track behind auto-zoom                                       |
+| `.kaipu/<id>.edit.json`, `<id>.edit.meta.json` | the video edit project and its freshness stamp                          |
+| `.kaipu/<id>.assets/`                          | slide images the edit project references                                |
+
+Two traps come from the code. First, `describe()` mints a new `assetId` for a media file whose
+sidecar has none (`library-vault.ts:185-214`). A media file that lands before its sidecar
+therefore becomes a different item, and its cloud link is lost. Second, the existing
+`moveFile` (`recording/recording-writer.ts:66-91`) falls back to an unverified copy and then
+deletes the source. That is fine for a staging file that was just written, but it can destroy
+the only good copy of a recording when the target is a flaky USB drive.
+
+## Decision
+
+1. **What moves.** The media file, the sidecar, the thumbnail, the cursor track and the edit
+   project (`.edit.json`, `.edit.meta.json`, `.assets/`). Drag copies (`.kaipu/drag/`) and
+   staging files (`.kaipu/tmp/`) never move.
+2. **Identity is kept.** The `assetId`, `derivedFromAssetId`, title and every other sidecar
+   field move unchanged. The local id stays the same unless it collides.
+3. **Collisions get a suffix and never overwrite.** If the target has a media file or any
+   Kaipu file under the same id, the item takes `<id>-2`, `<id>-3`… (still a plain item id).
+   Every file of the item is renamed to match; the edit project does not embed the id. If the
+   target already holds an item with the same `assetId` (a copied folder), the move is refused.
+4. **Per file: rename on the same volume, otherwise copy, verify, delete.** Small Kaipu files
+   are always copied into the target and removed from the source only at the end. The media is
+   renamed when both folders are on the same device (`stat.dev`). Otherwise it is copied into
+   the target's `.kaipu/tmp/move-<moveId>/`, fsynced, its sha256 compared with the source's,
+   and then renamed into place. A mismatch aborts the move and the source stays untouched.
+   The media step never replaces an existing file.
+5. **Order, with the media as the commit point.**
+   1. Write a journal entry: `userData/workspace-moves/<moveId>.json` (source and target ids,
+      old and new local id, `assetId`, file list, phase `copying`).
+   2. Copy the small files into the target, then write the target sidecar: remapped tags, the
+      same `assetId`, and a hash cache refreshed from the verified copy.
+   3. Rename the media into the target. **This is the commit**: the journal phase becomes
+      `committed`.
+   4. Delete the source media, then the source's small files.
+   5. Set the cloud asset's `workspaceId` (ADR 0032), or queue it when offline.
+   6. Delete the journal entry.
+6. **Healing.** At startup, and before any new move, each journal entry is finished. Before the
+   commit, the files this move created in the target and its staging folder are deleted, and
+   the source was never touched. After the commit, the source deletions and the cloud update
+   are completed. An entry whose workspace is unavailable waits until it is reachable. At every
+   instant there is at least one complete, listed copy of the item. The worst visible state,
+   until healed, is the item in both workspaces under the same `assetId`, never zero copies.
+7. **Tags remap by name.** For each tag on the item, the target's registry is searched for a
+   live tag with the same slug, and that tag is used. If none exists, it is created with the
+   same name and color. Missing tags are created before the sidecar is written, the same
+   registry-first order as `importLegacy` (`tag-repository.ts:153-157`). A target registry that
+   cannot be trusted (`TagRegistryError`) refuses the move before anything is copied.
+8. **Freshness survives the move.** The edit project's `.edit.meta.json` records the source's
+   size and mtime. When it matched the source before the move, it is rewritten with the new
+   file's size and mtime; a stale project stays stale.
+9. **Preconditions**, checked before step 1: both workspaces are available and the target is
+   writable; nothing is recording or exporting; the item is not open in an export; the editor
+   has flushed its autosave; for a copy, the target volume has room for the media plus a
+   margin. While the move runs, it holds the item's sidecar lock and the switch lock
+   (ADR 0032, decision 5).
+10. **A cloud-only item** (its local copy was removed, so only its sidecar, thumbnail and edit
+    project remain) moves its small files and its `workspaceId`. The commit point is then the
+    cloud update.
+
+## Alternatives rejected
+
+- **Always copy, even on the same volume.** This doubles the disk space and the time for
+  multi-GB recordings, for no safety gain: a same-device rename is atomic.
+- **Reuse `moveFile` as it is** (rename, else unverified copy, then a best-effort unlink). A
+  truncated copy on a failing drive would replace the only good file.
+- **Treat the moved item as new** (new `assetId` in the target). This breaks the cloud link,
+  lineage (`derivedFromAssetId`) and the "same as cloud" comparison, and duplicates the cloud
+  bytes on the next upload.
+- **Copy tag ids across registries.** Ids are per workspace (ADR 0020). The same id could
+  collide with a different tag of the same name and fail `TagNameTakenError`. People mean the
+  tag by its name.
+- **Overwrite, or ask, on a collision.** An overwrite loses an item. A dialog for a rare case
+  is friction. A numeric suffix is what Finder does.
+- **The journal inside the source or the target folder.** Either folder may be the unplugged
+  one when healing runs. userData is always present.
+
+## Consequences
+
+- One new main-process module, the workspace mover. It reuses `atomicWriteFile` and `withLock`
+  (`library/atomic-write.ts`), `sha256FileBase64` (`library/content-hash.ts`), the
+  EXDEV-aware pattern of `createDragCopy` (`library/drag-copies.ts:70-94`) and the staging
+  folder convention of the recording writer (`STAGING_DIR`).
+- `saveSession` must refuse to write for an item that has no media in its workspace. Otherwise
+  an editor autosave that lands after a move recreates an orphan `.edit.json` in the source.
+- Moving an original does not move its exports. Exports left behind show their source as
+  missing (`needs-source`), as when the original is deleted (ADR 0003).
+- Tags created in the target by a move that is then rolled back remain as unused tags. This is
+  accepted: a visible, empty tag, never a dangling id.
+- **ADR 0003** says the editor never "moves" the original. Its intent is the export path: an
+  export must never replace the original. A Move to workspace issued by the user from the
+  editor is a user action on the item, like Delete in the Library. The bytes arrive verified
+  and unchanged. This ADR amends that word; 0003's reopen conditions (storage pressure,
+  publish in place) are not met and its decision stands.
+
+## Non-goals
+
+Moving between machines; moving several items as one transaction (a multi-select runs single
+moves one after another); moving an export together with its source; moving a workspace's
+whole folder (that is a Finder move, and the folder keeps its id).
+
+## Reopen when
+
+- Workspaces sit on cloud-synced folders (iCloud Drive, Dropbox) whose files can be evicted.
+  Hashing or renaming a placeholder would download it or fail, and the volume test (`stat.dev`)
+  stops meaning "rename is safe".
+- Moves must be undone as one action, or batched as one transaction.
+- The item gains a file outside `.kaipu/<id>*` (for example a screenshot scene document) that
+  this list does not name.
