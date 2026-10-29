@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { Camera, Lock, Mic, Volume2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import type { CaptureOverlayBridge } from "@shared/types/electron-api";
@@ -106,7 +106,8 @@ export function ScreenCard({
   const platform = chrome.platform;
   const intent = chrome.intent;
 
-  useEffect(() => {
+  // Layout effect: the card hears Enter from the commit that paints it (see FrameBox).
+  useLayoutEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       const action = actionForKey(event, platform, intent);
       if (!action) return;

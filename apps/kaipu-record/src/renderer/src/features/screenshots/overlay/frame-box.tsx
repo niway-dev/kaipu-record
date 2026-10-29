@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { clampFrameToDisplay } from "@shared/capture-geometry";
 import type {
@@ -181,7 +181,11 @@ export function FrameBox({
   const platform = chrome.platform;
   const intent = chrome.intent;
 
-  useEffect(() => {
+  // A layout effect, not a passive one: the listener is attached in the commit that paints
+  // the box, so a box that says "Enter to capture" always hears Enter. A passive effect
+  // runs a task later, and a key that lands in that gap is dropped — the desktop-v0.15.0
+  // release verify failed exactly there (a test pressed Enter the moment the box appeared).
+  useLayoutEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (MODIFIER_KEYS.has(event.key)) return;
       // Whatever the key does next (confirm, switch mode, cancel), the drag ends first.
