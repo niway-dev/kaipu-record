@@ -5,11 +5,13 @@ description: Proposal to evaluate shared typed token references and a gradual mi
 
 # Typed styles with StyleX across desktop and web
 
-> **Status: 🟡 In progress — stages 0–1 shipped, stage 2 started** (updated
-> 2026-10-02). ADR 0008 settled the direction and the four stages; stages 0 and 1
-> are on `main` (PR #212). Stage 2 is migrating the desktop's primitives into
-> `@kaipu/ui` under `atoms/`. The original proposal below still describes the end
-> state.
+> **Status: 🟡 In progress — stages 0–2b shipped, stages 3–4 open** (updated
+> 2026-10-28). ADR 0008 settled the direction and the four stages. Stages 0–2a
+> are on `main` since PRs #212–#222, stage 2b (sidebar and recording controls)
+> since PRs #226–#227 (2026-10-04). The web's roadmap, sign-in/sign-up and
+> dashboard pages were rewritten in StyleX (2026-10-18/19, `web-v0.11.0`). See
+> "Where it stands (2026-10-28)" below for what is still on the old systems. The
+> original proposal at the end still describes the end state.
 
 ## What the first experiment proved (2026-10-01, `be6eed7`)
 
@@ -238,6 +240,59 @@ proved the page acted on it and disarmed the previous tool.
 
 Stability check: `bun run verify` green three consecutive times, 10/10 test
 tasks, 26 tests in that file.
+
+## Where it stands (2026-10-28)
+
+Measured on `main` at `cf478229`, four weeks after the experiment started.
+
+| Surface     | On StyleX                                                                                                                                   | Still on the old system                                                                                                                         |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@kaipu/ui` | Badge, Button, Card, Input, Row, SearchInput, Toggle, Modal, Popover, ToastList, Rail (the sidebar), RecordButton, SourceCard, StatusToggle | —                                                                                                                                               |
+| Desktop     | consumes the shared pieces; shipped in `desktop-v0.14.0` and `0.14.1` (2026-10-19/21, both Pre-release)                                     | 97 `.module.css` (91 on 2026-10-01: new features kept adding modules, which decision 4 of the spec allows); `Select` on Radix + CSS Modules     |
+| Web         | roadmap, sign-in/sign-up, dashboard (`web-v0.11.0`, 2026-10-19)                                                                             | Tailwind v4 active in `vite.config.ts`; 10 files with utility classes (22 on 2026-10-01); 3 components import `@kaipu/web-ui`; 16 `.module.css` |
+| Stages      | 0, 1, 2a, 2b                                                                                                                                | 3 (landing modules, `--kl-*`) partly; 4 (shadcn-cssinjs, Tailwind removal) not started                                                          |
+
+Files with `stylex.create`: 45 across the desktop, the web and `packages/ui`.
+
+### Bundles over the four weeks, and why they are not a migration measurement
+
+Baseline `78f6deac` (2026-10-01, the commit before the experiment) against
+`cf478229`, same machine, one run each, dependencies installed:
+
+|                               | 2026-10-01                             | 2026-10-28                            |
+| ----------------------------- | -------------------------------------- | ------------------------------------- |
+| Web client CSS                | 4 files, 157.1 KB raw, 30.0 KB gzip    | 8 files, 178.2 KB raw, 37.6 KB gzip   |
+| Web client JS                 | 18 files, 1185.1 KB raw, 361.2 KB gzip | 68 files, 992.0 KB raw, 328.8 KB gzip |
+| Web `vite build`              | 4.5 s                                  | 7.6 s                                 |
+| Desktop renderer CSS          | 166.2 KB raw, 31.7 KB gzip             | 262.0 KB raw, 52.1 KB gzip            |
+| Desktop renderer JS           | 3920.8 KB raw, 787.2 KB gzip           | 7047.2 KB raw, 1515.6 KB gzip         |
+| Desktop `electron-vite build` | 3.0 s                                  | 5.2 s                                 |
+
+Four weeks of product work sit between those commits (the dashboard, auth and
+roadmap redesigns; cursor track, drag-out and editor fixes), so the deltas
+describe the products, not StyleX. The migration's own measurement is still
+the controlled one in the stage 2a section: −1.5 KB CSS, −8.4 KB JS. The
+desktop renderer JS nearly doubling is not explained here and deserves its own
+look before any performance claim in either direction.
+
+### The production web ships one StyleX sheet for every route
+
+`kaipu.app` home on 2026-10-28 loads five render-blocking stylesheets, 163.5 KB
+raw and 32.8 KB gzip in total. The StyleX sheet (`stylex-*.css`) is 56.3 KB raw
+and 10.9 KB gzip, 973 rules: the PostCSS scanner writes every atomic from every
+included source into one sheet, so the home downloads the dashboard's styles
+and the dashboard downloads the landing's. The home does render most of
+`@kaipu/ui` in its product shot, so the waste is the per-route part. Recorded
+in the technical-debt ledger; not measured whether splitting it moves first
+paint.
+
+### Two claims the migration does not support
+
+- "The first paint no longer flashes the wrong theme" is true, but it was fixed
+  in `78f6deac` (2026-10-01), one day before the experiment and with no StyleX
+  in it: the inline critical style now follows the theme cookie.
+- "Performance went up" has no controlled measurement behind it. What the
+  migration can claim is that it did not cost bytes.
 
 ## Motivation
 

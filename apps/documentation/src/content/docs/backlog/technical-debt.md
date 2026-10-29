@@ -45,6 +45,22 @@ _Closes when:_ stage 4 settles which headless library both surfaces share — th
 desktop uses Radix only here, the web runs `@base-ui/react` — and that rebuild
 lifts the open/highlight state into React.
 
+### The web ships one StyleX sheet for every route
+
+Found 2026-10-28 while measuring `kaipu.app`. `@stylexjs/postcss-plugin` writes
+every atomic from every included source into the one `stylex-*.css` the root
+stylesheet pulls in: 973 rules, 56.3 KB raw, 10.9 KB gzip on the home, which
+renders none of the dashboard, auth or roadmap styles inside it. The home is one
+of five render-blocking stylesheets (163.5 KB raw, 32.8 KB gzip together).
+
+_Cost today:_ about 11 KB gzip on first paint that the home does not use, out of
+33 KB of CSS. Not measured against first paint.
+
+_Closes when:_ the sheet is split per route (one `@stylex;` entry per route
+group, or the scanner's `include` narrowed per entry) and first paint is
+measured before and after. If the measurement shows no change, close it as
+"measured, not worth it" instead.
+
 ### The two surfaces hold different majors of the same libraries
 
 `lucide-react` is `^1.18.0` on the desktop and `^0.525.0` on the web.
