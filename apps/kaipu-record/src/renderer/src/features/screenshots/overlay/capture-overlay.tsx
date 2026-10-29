@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
 import {
   ENABLED_CAPTURE_MODES,
@@ -215,7 +215,8 @@ export function CaptureOverlay({
     [bridge, query.displayId],
   );
 
-  useEffect(() => {
+  // Layout effect: Esc and the mode keys work from the first paint (see FrameBox).
+  useLayoutEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === "Escape") {
         event.preventDefault();

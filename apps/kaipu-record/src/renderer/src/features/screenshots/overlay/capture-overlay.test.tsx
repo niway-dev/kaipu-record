@@ -2032,3 +2032,33 @@ describe("CaptureOverlay — the Capture | Record switch", () => {
     });
   });
 });
+
+describe("CaptureOverlay — the keyboard works from the first paint", () => {
+  // The frame appears in a later commit (the remembered geometry loads first). The release
+  // verify of desktop-v0.15.0 pressed Enter the moment the box was in the DOM and nothing
+  // answered: the box's keydown listener was a passive effect, one task behind the paint.
+  // This observes the DOM like that test did (a MutationObserver, a microtask after the
+  // commit) and expects the listener to be there already: it attaches in the commit itself.
+  it("the frame box hears Enter as soon as it is in the DOM", async () => {
+    let keydownListeners = 0;
+    const original = window.addEventListener.bind(window);
+    vi.spyOn(window, "addEventListener").mockImplementation((type, ...rest) => {
+      if (type === "keydown") keydownListeners += 1;
+      return original(type, ...(rest as [EventListenerOrEventListenerObject, boolean?]));
+    });
+    const listenersWhenPainted = new Promise<number>((resolve) => {
+      const observer = new MutationObserver(() => {
+        if (!document.querySelector('[data-testid="capture-frame"]')) return;
+        observer.disconnect();
+        resolve(keydownListeners);
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
+
+    const { api } = fakeApi({ "42": { x: 300, y: 300, width: 500, height: 400 } });
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
+
+    // The overlay's own Esc listener, plus the frame box's Enter listener.
+    expect(await listenersWhenPainted).toBe(2);
+  });
+});

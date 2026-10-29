@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import type { CaptureOverlayBridge } from "@shared/types/electron-api";
 import type { CaptureAction, CaptureRect, ListedWindow } from "@shared/types/screenshot-capture";
@@ -125,7 +125,8 @@ export function WindowPicker({
   const platform = chrome.platform;
   const intent = chrome.intent;
 
-  useEffect(() => {
+  // Layout effect: the picker hears Enter from the commit that paints it (see FrameBox).
+  useLayoutEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       // A window is captured, never recorded from here (Window keeps the thumbnail picker).
       // Opened to record, Enter means "use selection", which a window cannot be: nothing.
