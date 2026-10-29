@@ -50,7 +50,9 @@ same second already share a stem today.
    new `LocalRecording`. Callers must treat `id` as valid only until the next rename and never
    persist it; `assetId` is the identity for anything that outlives a render.
 2. **The title is the source; the file name is a projection.** The title stays in the sidecar
-   exactly as typed. `fileStemFromTitle()` derives the stem: NFC, forbidden characters and
+   exactly as typed. `fileStemFromTitle()` derives the stem: NFKC (so a file name never holds a
+   compatibility character such as `ſ` or fullwidth letters, which case-insensitive filesystems
+   alias to ASCII), forbidden characters and
    control characters to spaces, dot runs collapsed (so `isUnsafeId`'s `..` guard holds),
    leading dots and trailing dots/spaces trimmed, Windows reserved names prefixed with `Kaipu `,
    capped at 100 code points and 180 UTF-8 bytes (room for the longest companion suffix and
@@ -79,17 +81,23 @@ same second already share a stem today.
 6. **A file the OS will not release keeps its name, and the user is told.** Windows `EPERM`/
    `EBUSY`/`EACCES` is retried three times (≈1.5 s), then the rename resolves with
    `file: "kept-old-name"`; a running export (`exportActive`, reason `busy`) or the item being
-   open in the video editor (reason `editing`, from a registry the editor joins on mount and
-   leaves on unmount or when its window goes away) short-circuits to the same outcome. The
+   open in the video editor (reason `editing`) short-circuits to the same outcome. The editor
+   acquires its item through main under the same names lock as renames and is answered the
+   item's current id, which it loads and writes under; it releases on unmount or when its
+   window goes away. The
    title is saved either way; a non-blocking toast offers Retry. A rename never fails because
    of the file.
 7. **`writeMeta` never creates a sidecar for an id with neither sidecar nor media.** A hash,
    tag or backfill write that was queued behind a rename cannot resurrect the old stem. A
    screenshot overwrite is checked and written under the names lock and names the identity it
-   expects, so it follows a renamed item instead of recreating the old file.
+   expects (required), so it follows a renamed item instead of recreating the old file, and
+   never writes over another shot that took the old name.
 8. **A media URL carries the id percent-encoded.** Ids are titles now (`#`, `?`, `%` are
    legal), so every `kaipu-media://` URL is built by one shared helper that encodes the id,
    and the protocol handler decodes it once, answering 400 to a malformed escape.
+9. **Name comparisons use a filesystem fold.** Reservation and overlap checks compare names
+   through `fsFold` (NFKC, then upper- and lower-case), stricter than APFS or NTFS on purpose:
+   a false "same name" costs a ` (2)`, a missed one merges two items.
 
 ## Alternatives rejected
 
