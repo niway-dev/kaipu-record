@@ -1,60 +1,82 @@
 ---
 title: Several workspaces — separate libraries for work and personal captures
-description: Design for letting the desktop app keep several workspaces (folders with Kaipu files), one active at a time, with captures landing in the active one, cloud entries tagged by workspace, per-workspace tags, and a crash-safe move of an item between workspaces.
+description: Design for letting the desktop app keep several workspaces (folders with Kaipu files), one active at a time and switched from tiles in the navigation rail, with captures landing in the active one, per-workspace setting overrides, synced folders, cloud entries tagged by workspace, per-workspace tags, a crash-safe move of an item between workspaces, and an additive, downgrade-safe migration.
 ---
 
 # Several workspaces — design
 
 **Status: 🔵 Proposed · 2026-10-29.** Decisions approved by the owner on 2026-10-29
-([NIW2-370](https://linear.app/niway/issue/NIW2-370)). Nothing implemented. Creates
-[ADR 0032](/architecture/decisions/0032-workspaces-identity-in-the-folder-one-active/) and
-[ADR 0033](/architecture/decisions/0033-moving-an-item-between-workspaces/); reuses
-[ADR 0020](/architecture/decisions/0020-tags-are-entities-with-stable-ids/).
-Backlog: [Several workspaces](/backlog/several-workspaces/).
+([NIW2-370](https://linear.app/niway/issue/NIW2-370)), in two rounds: round 1 (decisions 1–10)
+and round 2 (decisions 11–18, owner decisions A–I). Nothing implemented. Creates
+[ADR 0032](/architecture/decisions/0032-workspaces-identity-in-the-folder-one-active/),
+[ADR 0033](/architecture/decisions/0033-moving-an-item-between-workspaces/) and
+[ADR 0034](/architecture/decisions/0034-per-workspace-setting-overrides/); reuses
+[ADR 0020](/architecture/decisions/0020-tags-are-entities-with-stable-ids/). Round 2 amended
+0032 and 0033 in place (both Proposed). Backlog: [Several workspaces](/backlog/several-workspaces/).
 
 ## Summary (one minute)
 
 Kaipu gets **workspaces**: separate libraries, for example "Work" and "Personal", so that a
 leak of one never includes the other. A workspace is a **folder the user already has**. Kaipu
-writes `.kaipu/workspace.json` into it (an id and a name), and adopts a folder that already
-has Kaipu files. The list of workspaces and the active one live in the app's preferences.
-**One workspace is active at a time**, switched from a selector at the top of the sidebar.
-The Library, the editors, tags and **every new capture** use the active workspace. There is no
-combined view and no destination picker. Switching is locked while anything is being written,
-so a recording ends in the workspace it started in, and a switch is a transaction: editors
-flush and close, pending toasts are dropped, and main refuses any call stamped with the old
-workspace. A workspace on a disconnected drive shows
-as unavailable, and Kaipu never falls back to another one. **Tags stay per workspace.** The
-**cloud catalog stays per account**, and each cloud asset records its `workspaceId` on the
-server, so a workspace's Library hides the others' cloud items. A finished recording or
-screenshot can be **moved** to another workspace from the Library or the editor. The move
-renames on the same drive, and copies, verifies the sha256 and then deletes across drives.
-It keeps the item's `assetId`, remaps tags by name, adds a suffix on a name collision, removes
-the item's drag copies from the source, serializes against the editor's saves, and heals itself
-after a crash by inspecting both media files and rolling forward, never by deleting a target
-because a journal says `copying`. Removing a workspace never touches the user's media.
+writes `.kaipu/workspace.json` into it (an id, a name, a color and optional initials), and
+adopts a folder that already has Kaipu files. The folder may sit inside Google Drive, OneDrive
+or iCloud Drive: the provider then syncs that workspace with no integration code. The list of
+workspaces and the active one live in the app's preferences.
 
-| #   | Decision                                                                                                                                                                                                                                                                                                                                                                | Why                                                                                                                                                                                                                | ADR         |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- |
-| 1   | One **active** workspace, switched from a selector. No combined view. New captures always save to the active workspace.                                                                                                                                                                                                                                                 | Separation is the goal. A combined view turns it into a filter that one bug or a shared screen defeats. A per-capture picker makes a wrong click the leak.                                                         | 0032 (new)  |
-| 2   | A workspace is an existing folder. Kaipu writes `.kaipu/workspace.json` (UUID + name). A folder with `.kaipu/` is adopted: reuse `workspace.json`, mint it if absent. The list + `activeId` live in userData preferences.                                                                                                                                               | Identity must travel with the folder (copy, rename, another Mac). The app must know which folders exist without scanning disks.                                                                                    | 0032        |
-| 3   | First launch: the current vault becomes the first workspace. Cloud entries without a `workspaceId` belong to it.                                                                                                                                                                                                                                                        | Nobody loses anything and nothing has to be chosen on upgrade.                                                                                                                                                     | 0032        |
-| 4   | Cloud catalog stays per account. Every cloud asset stores `workspaceId` **on the server**. A Library hides cloud entries of other workspaces.                                                                                                                                                                                                                           | The local catalog is a cache rebuilt from the server on every refresh, so a client-only field would be lost (see [Things the code contradicted](#things-the-code-contradicted)).                                   | 0032        |
-| 5   | Tags stay per workspace. ADR 0020's reopen condition ("several vaults must share one tag vocabulary") is **not met**.                                                                                                                                                                                                                                                   | Shared tags would leak a work vocabulary ("Client X") into the personal workspace — the opposite of the goal.                                                                                                      | reuses 0020 |
-| 6   | Move a finished item: media, sidecar, thumbnail, cursor track, edit project. Same volume = rename; other volume = copy, verify sha256, delete. `assetId` kept; tags remapped by name; collision → suffix. Source drag copies removed; one per-item lock shared with saves; crash recovery verifies both media files and rolls forward. From the Library and the editor. | The first launch puts everything in one workspace; moving is how the user separates it. Keeping `assetId` keeps the cloud link and lineage.                                                                        | 0033 (new)  |
-| 7   | Switching is locked while recording (and while exporting, saving or moving). A recording finishes in the workspace it started in. The switch itself is a transaction: flush and close editors, drop pending toasts and caches, bump a generation; main rejects stale calls. Captures bind their workspace at start.                                                     | The writer resolves the folder three times today (start, finalize, cursor track). An open editor, a retained quiet capture or a paused tag write would otherwise still reach the other workspace after the switch. | 0032        |
-| 8   | An unreachable workspace is unavailable: cannot be switched to or moved into. An unreachable **active** workspace refuses captures; it never falls back.                                                                                                                                                                                                                | Falling back to "whatever is reachable" sends work captures into the personal folder.                                                                                                                              | 0032        |
-| 9   | Two actions: **Remove from list** (unregister, nothing on disk changes) and **Delete workspace** (`.kaipu/` to the OS Trash via `shell.trashItem`). Media is never touched. _Default pending owner confirmation — see Open questions._                                                                                                                                  | Owner: deleting a workspace removes Kaipu's files only. Two verbs keep the reversible action reversible.                                                                                                           | —           |
-| 10  | Implementation waits for NIW2-394 and NIW2-398. **Both are already merged** (#410, #412), so the dependency is met.                                                                                                                                                                                                                                                     | They touch `vault-location.ts` and `drag-copies.ts`, which this design rewrites.                                                                                                                                   | —           |
+**One workspace is active at a time.** It is switched with one click on its tile in the
+navigation rail, and named in the status bar, the window title and the tray. The Library, the
+editors, tags and **every new capture** use the active workspace, and every surface where a
+capture lands says where ("Saving to Work"). There is no combined view and no destination
+picker. Switching is locked while anything is being written, and a switch is a transaction:
+editors flush and close, pending toasts are dropped, and main refuses any call stamped with the
+old workspace. A workspace on a disconnected drive shows as unavailable, and Kaipu never falls
+back to another one.
+
+**Settings inherit.** "All workspaces" is today's settings file, unchanged. A workspace can
+override five keys (badge, upload mode, recording quality, export quality, screenshot copy),
+and shortcuts are always global. **Tags stay per workspace.** The **cloud catalog stays per
+account**, and each cloud asset records its `workspaceId` on the server.
+
+A finished recording or screenshot can be **moved** with "Move to" from the Library, the item
+page or an editor. The move keeps the item's `assetId`, verifies every copy, and heals itself
+after a crash without ever leaving zero copies. With a synced side it always copies, verifies
+and deletes. Removing a workspace never touches the user's media.
+
+**Kaipu has paying customers, so the migration is small and additive.** It writes
+`workspace.json` and a registry key and touches nothing else. It is idempotent and
+crash-safe, and it keeps an older app version working after a downgrade. Nothing changes on
+screen until the user adds a second workspace.
+
+| #   | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Why                                                                                                                                                                                                                | ADR                            |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ |
+| 1   | One **active** workspace, switched from the rail (decision 11). No combined view. New captures always save to the active workspace.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Separation is the goal. A combined view turns it into a filter that one bug or a shared screen defeats. A per-capture picker makes a wrong click the leak.                                                         | 0032 (new)                     |
+| 2   | A workspace is an existing folder. Kaipu writes `.kaipu/workspace.json` (UUID, name, color, initials). A folder with `.kaipu/` is adopted: reuse `workspace.json`, mint it if absent. The list + `activeId` live in userData preferences.                                                                                                                                                                                                                                                                                                                                                                                   | Identity must travel with the folder (copy, rename, another Mac). The app must know which folders exist without scanning disks.                                                                                    | 0032                           |
+| 3   | First launch: the current vault becomes the first workspace. Cloud entries without a `workspaceId` belong to it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Nobody loses anything and nothing has to be chosen on upgrade.                                                                                                                                                     | 0032                           |
+| 4   | Cloud catalog stays per account. Every cloud asset stores `workspaceId` **on the server** (nullable column). A Library hides cloud entries of other workspaces.                                                                                                                                                                                                                                                                                                                                                                                                                                                             | The local catalog is a cache rebuilt from the server on every refresh, so a client-only field would be lost (see [Things the code contradicted](#things-the-code-contradicted)).                                   | 0032                           |
+| 5   | Tags stay per workspace. ADR 0020's reopen condition ("several vaults must share one tag vocabulary") is **not met**.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Shared tags would leak a work vocabulary ("Client X") into the personal workspace — the opposite of the goal.                                                                                                      | reuses 0020                    |
+| 6   | Move a finished item: media, sidecar, thumbnail, cursor track, edit project. Same volume = rename; other volume, or any synced side = copy, verify sha256, delete. `assetId` kept; tags remapped by name; collision → suffix. Source drag copies removed; one per-item lock shared with saves; crash recovery verifies both media files and rolls forward.                                                                                                                                                                                                                                                                  | The first launch puts everything in one workspace; moving is how the user separates it. Keeping `assetId` keeps the cloud link and lineage.                                                                        | 0033 (new)                     |
+| 7   | Switching is locked while recording (and while exporting, saving or moving). A recording finishes in the workspace it started in. The switch itself is a transaction: flush and close editors, drop pending toasts and caches, bump a generation; main rejects stale calls. Captures bind their workspace, and their settings, at start.                                                                                                                                                                                                                                                                                    | The writer resolves the folder three times today (start, finalize, cursor track). An open editor, a retained quiet capture or a paused tag write would otherwise still reach the other workspace after the switch. | 0032                           |
+| 8   | An unreachable workspace is unavailable: cannot be switched to or moved into. An unreachable **active** workspace refuses captures; it never falls back.                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Falling back to "whatever is reachable" sends work captures into the personal folder.                                                                                                                              | 0032                           |
+| 9   | Two actions: **Remove from list** (unregister, nothing on disk changes) and **Delete workspace** (`.kaipu/` to the OS Trash via `shell.trashItem`). Media is never touched. _Default pending owner confirmation — see Open questions._                                                                                                                                                                                                                                                                                                                                                                                      | Owner: deleting a workspace removes Kaipu's files only. Two verbs keep the reversible action reversible.                                                                                                           | —                              |
+| 10  | Implementation waits for NIW2-394 and NIW2-398. **Both are already merged** (#410, #412), so the dependency is met.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | They touch `vault-location.ts` and `drag-copies.ts`, which this design rewrites.                                                                                                                                   | —                              |
+| 11  | **Switcher = workspace tiles in the 72 px rail**, under the logo: a 36 px tile with initials on the workspace color and a 9 px mono name. One click switches. Right-click: Rename, Show in Finder, Manage. A "+" tile adds. More than 4 → the last tile is "+N" and opens a list. Also: a "● Work" chip in the status bar, the window title "Work — Kaipu Record", and a "Workspace: Work ▸" submenu in the tray. ⌘1…⌘n switch only while the window is focused, never globally. Only Settings → Workspaces besides that. **With one workspace: no tiles, no chip, no "Move to".**                                          | A switch must cost one click and be visible everywhere a capture can start, including the tray when the main window is hidden. A tile that only opens a dropdown doubles the cost of the common action.            | 0032 (amended)                 |
+| 12  | Workspace **color** (a tag-palette key) and optional **initials** live in `.kaipu/workspace.json`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | The tile and the chip need them on every Mac that opens the folder.                                                                                                                                                | 0032 (amended)                 |
+| 13  | **"Move to" surfaces and "Saving to" labels** (the verb is "Move to", never "Send to": the item leaves the source). Library header: name + count. Card and row: a new "⋯" menu with "Move to ▸". Item page: "Workspace: Work" + "Move to…". Editors: a "Work ▾" chip. Export sheet: "Saves to Work". Record page: "Recording to Work · Switch". Control bar: "● Work". Capture panel and overlay: "Saving to Work". Capture toast: "Saved to Work", no move control in v1. Disabled states are defined (target not connected, write in progress, cloud-only, dragged under 10 s, synced file not downloaded).               | The cheapest guard against a capture in the wrong workspace is naming the workspace where the capture lands. "Send" suggests a copy.                                                                               | —                              |
+| 14  | **Per-workspace setting overrides**, inherited from an "All workspaces" level (VS Code's user vs workspace model). Five overridable keys: `showBrandBadge`, `uploadMode`, `recordingQuality`, `exportQuality`, `screenshotCopy`. Everything else, and **every shortcut**, is app-wide. All level = `userData/settings.json`, unchanged. Overrides = `<workspace>/.kaipu/settings.json`, validated, unknown keys ignored. `uploadMode` override stays in userData, keyed by workspace. Read at capture start. This **reverses** round 1's "Out of scope: different settings per workspace" and ADR 0032's settings non-goal. | The owner wants different capture defaults for work and personal. Inheritance avoids the drift of a one-time copy. Upload consent must not arrive inside someone else's folder.                                    | 0034 (new)                     |
+| 15  | **Synced folders are allowed in v1** (Google Drive, OneDrive, iCloud Drive through macOS File Provider). Detected by path, labelled "Synced by <provider>". Scratch files (staging, drag copies) move to userData for synced workspaces only. A move with a synced side always copies, verifies and deletes. Evicted files show "In the cloud — download to open" and never hang a probe or mark the workspace unreadable. Conflict copies are detected and warned about; no cross-machine locking.                                                                                                                         | Per-workspace provider sync with zero integration code. Staying in the folder would upload partial takes and duplicate dragged items.                                                                              | 0033 (amended), 0032 (amended) |
+| 16  | **Not in v1**: a Kaipu Cloud account per workspace, and any direct Google Drive or OneDrive API integration.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | See Out of scope.                                                                                                                                                                                                  | —                              |
+| 17  | **Migration is additive, idempotent, crash-safe and downgrade-safe.** It adds the registry to `preferences.json` and writes `.kaipu/workspace.json`, and nothing else. `vaultDirectory` keeps mirroring the active path on every switch. Server column nullable. No flag: invisible until a second workspace exists.                                                                                                                                                                                                                                                                                                        | Kaipu has paying customers. An upgrade must not change anything they see or risk anything they have, and a downgrade must still open a library.                                                                    | 0032 (amended)                 |
+| 18  | The Library keeps **every existing filter** per workspace: search, sort (Newest, Oldest, Largest), grid/list, kind chips with counts, storage chips with counts, tag chips with counts, the tag drawer and the "filtered by" summary line.                                                                                                                                                                                                                                                                                                                                                                                  | A workspace is a smaller Library, not a different one.                                                                                                                                                             | —                              |
 
 ## Open questions
 
 1. **Delete vs Remove (decision 9).** The recommended default is two actions:
    - **Remove from list**: unregisters the workspace. Nothing on disk changes, and adding the
-     folder again restores it exactly, with the same id, tags, titles and cloud link.
+     folder again restores it exactly, with the same id, tags, titles, setting overrides and
+     cloud link.
    - **Delete workspace**: moves the folder's `.kaipu/` to the OS Trash (never `rm`). The
-     confirmation states that titles, tags, edit projects, cursor tracks (auto-zoom) and the
-     cloud link are lost and that the media stays.
+     confirmation states that titles, tags, edit projects, cursor tracks (auto-zoom), setting
+     overrides and the cloud link are lost and that the media stays.
 
    Trade-off: two verbs are one more thing to understand. One verb would have to be either
    always destructive, which is surprising for "I just don't want it in my list", or never
@@ -69,28 +91,52 @@ because a journal says `copying`. Removing a workspace never touches the user's 
 3. **Moving several items at once.** The move is defined per item (ADR 0033). The first launch
    leaves everything mixed in one workspace, so a multi-select **Move to…** in v1 (running
    single moves one after another) would matter. Does the Library's selection model allow it
-   in v1, or is it a follow-up?
-4. **Exports follow their source?** Moving an original leaves its exports where they are. Today
-   nothing then warns about it: an export's editing state is `exported-only` whether or not its
-   source exists (`main/library/edit-project-probe.ts:35-37` never resolves
-   `derivedFromAssetId`), so there is no "source is missing" badge to rely on. Two follow-ups
-   are possible: the move dialog offers "Also move N exports", or a workspace-local lineage
-   check flags exports whose source is not in the workspace. The proposed default is neither
-   in v1: one item, one move, and the dialog only states how many exports stay behind.
+   in v1, or is it a follow-up? Round 2 does not settle it: the new "⋯" menu (decision 13) is
+   per item.
+4. **Exports follow their source?** Moving an original leaves its exports where they are.
+   Round 2 found that the item page then says the wrong thing: an export whose source is not in
+   the loaded list shows "Source recording was deleted"
+   (`renderer/src/pages/library-detail/library-detail-page.tsx:163-166`, `:331-340`). Decision
+   13 changes that line to "Source recording is not in this workspace", which is true whether it
+   was deleted or moved. The moved original, in its new workspace, shows "never exported"
+   (`renderer/src/features/library/lineage.ts:50-58`), which is true inside that workspace.
+   Two follow-ups are still possible: the move dialog offers "Also move N exports", or a
+   workspace-local lineage check. The proposed default is neither in v1: one item, one move,
+   and the dialog states how many exports stay behind.
 5. **Default name of a new workspace.** The proposal is the folder's name ("Kaipu Record" for
    the migrated one), renamable at once in the add dialog. Should the migrated one be called
-   "Personal" instead? That presumes what it holds.
+   "Personal" instead? That presumes what it holds. Round 2 adds a color and initials but does
+   not settle the name; the migrated workspace gets the first palette color and initials from
+   its name.
+6. **"All workspaces" as a Library view, sorted by time?** The owner suggested an "All
+   workspaces" option like the Settings scope. **Recommendation: no.** As a combined Library
+   view it contradicts ADR 0032 decision 1: on a shared screen, or through one bug in a filter,
+   personal items would show next to work items, which is the leak workspaces exist to stop.
+   In Settings, "All workspaces" is only the scope of the defaults (ADR 0034). It holds
+   values, not content. Proposed: no combined Library view; "All workspaces" exists only as the
+   Settings scope. **Owner: confirm on the PR.**
 
 ## Out of scope
 
 - Renaming code identifiers from vault to workspace (only user-facing copy and docs change).
-- Search, tags or any view across workspaces.
+- Search, tags or any view across workspaces, including an "All workspaces" Library (Open
+  question 6).
 - Tags shared between workspaces.
 - A destination per capture, or automatic routing by app/window.
 - Syncing the workspace list between machines; workspaces on the web dashboard.
-- A different cloud account, or different settings, per workspace.
+- **A Kaipu Cloud account per workspace.** One sign-in per app; the server already separates
+  by `workspaceId`, and two accounts would need two sessions, two quotas and a switch of
+  identity on every workspace switch.
+- **A direct Google Drive or OneDrive API integration.** The provider's own File Provider
+  client already syncs a folder; an API client would add OAuth, quotas and conflict handling to
+  get what a folder path gives for free.
+- Per-workspace shortcuts, devices (mic, camera) or any key outside ADR 0034's five.
+- Locking a synced workspace against another Mac that has the same folder open.
+- A move control in the capture toast (v1 shows "Saved to Work" only).
+- A separate workspace screen besides Settings → Workspaces.
 - A lineage check that flags an export whose source moved to another workspace (Open question
-  4). Moving an original leaves its exports as they are, with no warning.
+  4). Moving an original leaves its exports as they are, with no warning beyond the corrected
+  item-page line.
 - Two app flavors (dev and prod, PR #428) registering the same folder at once. The existing
   concurrent-sweep risk is unchanged and tracked with the userData isolation follow-ups.
 
@@ -131,13 +177,42 @@ because a journal says `copying`. Removing a workspace never touches the user's 
 - Tag sync (ADR 0021, future) merging both workspaces' tags into one account vocabulary.
 - "Delete workspace" removing media, removing anything with `rm`, or failing silently on a
   drive with no Trash.
+- **Switcher (decision 11):** a click on a tile that only opens a menu, so switching takes two
+  clicks; a ⌘digit registered as a global shortcut that switches workspace from another app;
+  the tray capturing into a workspace the user cannot see because the main window is hidden.
+- **Labels (decision 13):** the control bar shown in the recording (`showBarInRecording` on)
+  burning the workspace name ("● Client X") into the video; "Move to" offered with a single
+  workspace; the capture toast still saying "Saved to Library" while two workspaces exist.
+- **Settings (decision 14):** a folder received from someone else injecting behaviour through
+  `.kaipu/settings.json` (unknown keys, invalid values, an `uploadMode`); a received folder
+  starting automatic uploads on this Mac; a setting edited mid-take changing that take; an older
+  app version erasing the overrides on its first settings write; a shortcut that does something
+  else after a switch; an override silently applying everywhere because the UI does not show
+  its source.
+- **Synced folders (decision 15):** a recording's `.part` being uploaded while it is written;
+  a drag copy syncing a duplicate of the item under its title; a same-device rename into or out
+  of a File Provider folder that loses or trashes the cloud copy; hashing, probing or
+  thumbnailing an evicted file hanging the Library or marking the workspace unreadable; an
+  evicted `workspace.json` making the workspace "unreadable"; an evicted sidecar read as `{}`
+  and rewritten with a new `assetId`, which loses the title, tags and cloud link; a conflict
+  copy (`tags (1).json`) silently winning or being ignored with no warning.
+- **Migration (decision 17):** an upgrade that renames, moves or rewrites a customer's media,
+  sidecars, tags or settings; a crash mid-migration leaving no usable library; a second run
+  minting a second id; an unparseable `preferences.json` being overwritten and losing the
+  custom folder; a downgrade opening an empty default folder instead of the active workspace; a
+  re-upgrade ignoring a folder change the user made in the older version; a new server breaking
+  an older desktop.
+- **Reserved names:** a media file named `workspace.*`, `settings.*` or `tags.*` in the folder
+  root, whose sidecar path is `.kaipu/workspace.json`, `.kaipu/settings.json` or
+  `.kaipu/tags.json`, so an identity write or a Delete of that item overwrites or removes the
+  workspace's own files.
 
 ## Acceptance criteria
 
 - [ ] With two workspaces registered, the Library, the Editor home, tag lists and counts show
       only the active workspace's items and tags; no IPC returns another workspace's items.
 - [ ] A recording, export, GIF and screenshot made while workspace A is active land in A's
-      folder, including the cursor track; the selector is disabled for the whole write.
+      folder, including the cursor track; the switcher is disabled for the whole write.
 - [ ] Switching from the editor, after the session is saved, leaves the session in the item's
       own workspace; a save that names an item with no media is refused.
 - [ ] Switching with a screenshot editor open, and again with a video editor open, flushes and
@@ -152,14 +227,11 @@ because a journal says `copying`. Removing a workspace never touches the user's 
       Library; the pending toast is dismissed by the switch.
 - [ ] A tag registry read started in A, a switch to B, then the write: the write is rejected or
       lands in A's registry, and B's `tags.json` is unchanged. Tag IPC carries `workspaceId`.
-- [ ] Adding a folder without `.kaipu/` writes `.kaipu/workspace.json` with a UUID and a name;
-      adding a pre-workspaces vault keeps its sidecars, tags and edit projects and only adds
-      `workspace.json`.
+- [ ] Adding a folder without `.kaipu/` writes `.kaipu/workspace.json` with a UUID, a name, a
+      palette color and initials; adding a pre-workspaces vault keeps its sidecars, tags and
+      edit projects and only adds `workspace.json`.
 - [ ] Adding a folder whose `workspace.json` id is already registered to an **unavailable**
       path updates that entry's path (relocate); to an **available** path, gives the copy a new id.
-- [ ] First launch after the upgrade registers the current vault (custom or default path) as
-      the only workspace, active, with nothing moved or rewritten except `workspace.json` and
-      `preferences.json`.
 - [ ] An unmounted workspace is listed as unavailable, cannot be switched to or chosen as a
       move target, and its folder is not recreated.
 - [ ] With the active workspace unmounted, starting a recording or screenshot shows an error
@@ -191,28 +263,139 @@ because a journal says `copying`. Removing a workspace never touches the user's 
       or assets and the target holding a complete project; a save queued behind the move is
       refused with `item-moved`. `flush()` awaits a write already in flight.
 - [ ] Moving an original leaves its exports listed as they were, in their workspace, without
-      an error; the move dialog states how many exports stay behind. (No "source missing"
-      badge is promised: Open question 4.)
+      an error; the move dialog states how many exports stay behind; the left-behind export's
+      item page says "Source recording is not in this workspace", never "was deleted".
 - [ ] A target with an item already named `<id>` receives the moved item as `<id>-2`; nothing
       is overwritten.
 - [ ] Tags on a moved item map to target tags with the same slug; missing ones are created with
       the same name and color.
 - [ ] A moved item's fresh edit project stays fresh (no "missing dependencies" badge).
 - [ ] "Remove from list" changes no file on disk; re-adding restores the workspace with the same
-      id and cloud entries.
+      id, cloud entries and setting overrides.
 - [ ] "Delete workspace" moves `.kaipu/` to the Trash, leaves every media file in place, and
       refuses with a message on a volume where `shell.trashItem` fails.
 
+**Switcher and labels (decisions 11–13)**
+
+- [ ] With one workspace: the rail shows no tiles, the status bar no chip, the window title is
+      "Kaipu Record", the tray has no Workspace submenu, no surface offers "Move to", Settings
+      has no scope selector, every capture surface keeps today's copy ("Saved to Library"), and
+      Settings → Workspaces offers "Add workspace".
+- [ ] With two workspaces: one click on the inactive tile switches (no menu opens); right-click
+      offers Rename, Show in Finder and Manage; the "+" tile opens the add flow.
+- [ ] With five or more workspaces, the rail shows four tiles and a "+N" tile whose list holds
+      the rest, and the active workspace is always one of the visible tiles or marked in the list.
+- [ ] The status bar chip, the window title ("Work — Kaipu Record") and the tray submenu name
+      the active workspace and update on every switch; choosing a workspace in the tray
+      switches it while the main window is hidden.
+- [ ] ⌘1…⌘n switch only while a Kaipu window is focused; with another app in front they do
+      nothing; a user global shortcut bound to ⌘<digit> wins and that digit does not switch.
+- [ ] A workspace tile, the chip and the tray show the color and initials read from
+      `.kaipu/workspace.json`; a missing or unknown color falls back to a palette color, and
+      missing initials are derived from the name.
+- [ ] The Library header shows the workspace name and the item count; cards carry no
+      workspace chip.
+- [ ] Every Library card and list row has a "⋯" menu with "Move to ▸" listing the other
+      workspaces; a not-connected target is disabled with "Not connected"; during a write the
+      entry is disabled with the reason; within 10 s of a drag the move is refused with a
+      message; an evicted synced item shows "Download it first".
+- [ ] The item page shows "Workspace: Work" and a "Move to…" action; both editors show a
+      "Work ▾" chip with the move targets; the export sheet says "Saves to Work"; the Record
+      page says "Recording to Work · Switch" and Switch changes the active workspace.
+- [ ] The control bar shows "● Work" while recording, and hides it whenever the bar is part of
+      the recording (`showBarInRecording` on).
+- [ ] The capture panel and overlay say "Saving to Work"; the capture toast says "Saved to
+      Work" (and "Save to Work") and has no move control.
+- [ ] Moving a cloud-only item calls `PUT /assets/{assetId}/workspace` and moves its small
+      files; offline, it is refused with a message and nothing changes.
+- [ ] The Library of each workspace keeps search, sort (Newest, Oldest, Largest), grid/list,
+      kind, storage and tag chips with counts, the tag drawer and the "filtered by" summary,
+      all computed over that workspace's items only.
+
+**Settings (decision 14, ADR 0034)**
+
+- [ ] With no override, every effective setting equals the All workspaces value; changing an
+      All workspaces value changes it in every workspace that does not override it.
+- [ ] An override of each of the five keys applies only in its workspace; Reset returns the
+      row to "Inherited from All workspaces"; non-overridable rows show "App-wide" and edit the
+      All level from any scope.
+- [ ] In the All workspaces scope, a key that a workspace overrides says "Overridden in <name>".
+- [ ] A `.kaipu/settings.json` with an unknown key, an invalid value, or an `uploadMode` is
+      read as if those entries were absent, and the file is not rewritten by reading it.
+- [ ] Adding a received folder whose `.kaipu/settings.json` says `uploadMode: "automatic"`
+      starts no upload, and that workspace's upload mode reads "Inherited from All workspaces".
+- [ ] Changing `recordingQuality` or `showBrandBadge` during a take, or switching in another
+      window during it, does not change that take; the next take uses the new value.
+- [ ] Shortcuts are identical in every workspace, and no shortcut row has a workspace scope.
+- [ ] An unavailable workspace's scope is listed, disabled, as "Not connected".
+- [ ] After the upgrade, `userData/settings.json` is byte-identical to before until the user
+      changes a setting.
+
+**Synced folders (decision 15)**
+
+- [ ] A workspace under `~/Library/CloudStorage/GoogleDrive-…`, `~/Library/CloudStorage/OneDrive-…`
+      or `~/Library/Mobile Documents/com~apple~CloudDocs` (after resolving symlinks) shows
+      "Synced by Google Drive / OneDrive / iCloud Drive" on its Settings row, and adding it shows
+      a one-time note.
+- [ ] Recording into a synced workspace writes no `.part` file inside the workspace folder, and
+      dragging an item out writes no file inside it.
+- [ ] A move whose source or target is synced copies, verifies sha256 at the final path and
+      then deletes, even when both paths report the same `stat.dev`.
+- [ ] An evicted media file lists as "In the cloud — download to open", with no thumbnail
+      generation, probe or hash started for it, and the Library finishes loading while offline.
+- [ ] An evicted `workspace.json` leaves the workspace available under its registered id;
+      moves into it wait until the file is read and its id matches.
+- [ ] A sidecar that exists but cannot be read (evicted and offline, or any error other than
+      "not found") lists the item read-only and never writes a new sidecar or `assetId`.
+- [ ] A conflict copy of `tags.json`, `workspace.json`, `settings.json` or a sidecar inside
+      `.kaipu/` raises a warning on the workspace's Settings row naming the files; Kaipu
+      neither merges nor deletes them.
+
+**Migration (decision 17)**
+
+- [ ] First launch after the upgrade registers the current vault (custom or default path) as
+      the only workspace, active, and writes only `.kaipu/workspace.json` and the `workspaces`
+      key of `preferences.json`; every other file in the folder and in userData is unchanged
+      (compared by hash before and after).
+- [ ] Running the migration twice, and killing the app after `workspace.json` is written but
+      before `preferences.json` is, both end with one workspace with one id; after the kill,
+      the app still opens the library before and after the relaunch.
+- [ ] An unparseable `preferences.json` is not overwritten; the app opens the library as today
+      and retries the migration on the next launch.
+- [ ] A folder that is not writable is registered with `pendingInit: true`, still opens as
+      today, and gets `workspace.json` once it is writable.
+- [ ] After every switch, `vaultDirectory` in `preferences.json` equals the active workspace's
+      path (the key is absent when that path is the default folder); an older app version
+      launched on that file opens the active workspace's items.
+- [ ] An older app version that changes the folder keeps the `workspaces` key; the next launch
+      of this version registers that folder (or matches it by its `workspace.json` id) and makes
+      it active.
+- [ ] A fixture test loads the `preferences.json` and `settings.json` shapes of the current
+      release: a custom folder, the default folder, no file, and an unreachable custom folder.
+      Each ends with the expected registry, and effective settings equal to `mergeSettings` of
+      the stored file for every key.
+- [ ] The server migration adds `cloud_asset.workspace_id` as a nullable column with no
+      default rewrite of existing rows; `GET /assets` from the current desktop release still
+      parses; an upload intent without `workspaceId` is accepted.
+- [ ] A media file named `workspace.png`, `settings.mp4` or `tags.png` in a workspace root is
+      listed, its identity write and its Delete never touch `.kaipu/workspace.json`,
+      `.kaipu/settings.json` or `.kaipu/tags.json`.
+
 ---
 
-## Current state (verified on `main` at `be178352`, 2026-10-29)
+## Current state (verified on `main` at `16cd8d80`, 2026-10-29)
 
-All paths are relative to `apps/kaipu-record/src/`.
+All paths are relative to `apps/kaipu-record/src/` unless they start with `packages/`. Round 1
+was verified at `be178352`. The only `src` change since is #428, which shifted `main/index.ts`
+by 14 lines; the line numbers below are the current ones.
 
 **One folder.** `main/library/vault-location.ts:9-11` stores one optional `vaultDirectory`
 string in `userData/preferences.json` (`:14-16`). `vaultDirectory()` returns it, or the default
 `Videos/Kaipu Record` (`:54-69`). The parsed preferences are cached in memory (`:25`); this is
-NIW2-394, merged in #410. Settings → Files (`renderer/src/pages/settings/settings-pages.tsx:210`)
+NIW2-394, merged in #410. `readFromDisk` returns `{}` when the file does not parse (`:27-33`),
+so a corrupt file today silently means "default folder". `setVaultDirectory` and
+`resetVaultDirectory` re-read the file and spread it (`:70-80`), so **an older version keeps
+any key it does not know**. Settings → Files (`renderer/src/pages/settings/settings-pages.tsx:210`)
 changes the folder through `chooseVaultDirectory`, `resetVaultDirectory`, `getVaultDirectory`
 and `openVaultDirectory` (`shared/types/ipc.ts:455-459`, handlers at `main/library/index.ts:175-239`).
 
@@ -235,7 +418,9 @@ None of these bind a folder for the duration of a task.
 - Drag with a title makes a hard link, or a copy where links fail, of the media in
   `<vault>/.kaipu/drag/<uuid>/<title>.<ext>` (`main/library/drag-copies.ts:70-92`, called at
   `main/library/index.ts:159-171`). It is removed by `pruneDragCopies` after an hour
-  (`:32-60`), and at startup and quit (`main/index.ts:713`, `:1144`).
+  (`:32-60`), and at startup and quit (`main/index.ts:727`, `:1158`). Startup also deletes
+  `<os temp>/kaipu-drag`, the folder of older builds (`main/index.ts:728`,
+  `drag-copies.ts:23-26`), so that name cannot be reused for new drag copies.
 - A quiet capture keeps `{ png, width, height, mode }` in module state
   (`main/screenshots/last-quiet-capture.ts:4-9`) with no workspace. The toast's Save later calls
   `saveToVault` (`main/screenshots/capture-toast-window.ts:241-248`), which reaches
@@ -260,7 +445,10 @@ None of these bind a folder for the duration of a task.
 and the hub resolves it a third time to write the cursor track
 (`main/recording/recording-hub.ts:424-427`). Editor exports go through the same writer
 (ADR 0003: `recordingCreate` → `recordingFinalize`). A switch in between would stage in A and
-finish in B, which may also be a copy across volumes.
+finish in B, which may also be a copy across volumes. Staging is `<vault>/.kaipu/tmp/`
+(`STAGING_DIR`, `recording-writer.ts:10-11`) so that the finalize is a same-volume rename, and
+stranded-take recovery scans that folder and the OS temp fallback
+(`main/recording/stranded-recordings.ts:35-39`).
 
 **Item files.** All of them are in the vault root or in `.kaipu/`:
 
@@ -278,14 +466,58 @@ so a renamed id needs no rewrite. Screenshots have no edit project: they are sav
 `.kaipu/tags.json` (`main/library/tag-repository.ts:67-69`). Drag copies live in `.kaipu/drag/`
 (`main/library/drag-copies.ts:14-16`), and recording staging in `.kaipu/tmp/` (`STAGING_DIR`).
 
+**Nothing lists `.kaipu/`.** `LibraryVault.list()` reads only the folder root and keeps files
+with a media extension (`library-vault.ts:105-115`). Every `.kaipu/` path is derived from an
+item id, a fixed name (`tags.json`) or a known subfolder (`drag/`, `tmp/`, `<id>.assets/`). So
+an older version ignores new files in `.kaipu/`, with one exception: a root media file whose
+stem equals a fixed name. Its sidecar path is that file, see Things the code contradicted.
+
+**Settings.** `AppSettings` has 23 keys (`shared/types/ipc.ts:237-351`), stored whole in
+`userData/settings.json` (`main/infrastructure/settings-store.ts:17-19`, atomic write at
+`:41-49`). `mergeSettings` rebuilds the object field by field and drops unknown keys
+(`main/services/settings.service.ts:112-160`). Renderers read it through `settings:get` /
+`settings:changed` (`shared/types/ipc.ts:412-418`). The five keys of ADR 0034 are read by:
+`useWatermark` live (`renderer/src/features/watermark/use-watermark.ts:22`); the Record page's
+hook on mount, not at start (`renderer/src/features/recording/hooks/use-recording-setup.ts:89-98`);
+the export sheet when it opens (`renderer/src/features/library/components/share-recording.tsx:171`,
+`renderer/src/pages/video-editor/video-editor-page.tsx:1535`); the screenshot editor and main's
+capture path (`renderer/src/pages/screenshot-editor/screenshot-editor-page.tsx:143`,
+`main/screenshots/screenshot-ipc.ts:163`); and the Cloud page for `uploadMode`
+(`renderer/src/pages/cloud/cloud-page.tsx:12-13`), whose comment says "per device, never per
+account" (`shared/types/ipc.ts:203-209`).
+
+**Shell and surfaces.** The rail is the shared `Rail` (`packages/ui/src/molecules/rail.tsx`):
+72 px wide (`:25`), a brand slot (`:189-191`), then the nav sections (`:193`), mono 9 px labels
+(`:86-88`), and no slot between the brand and the sections. `Sidebar` feeds it
+(`renderer/src/shell/sidebar.tsx:36-68`). The status bar holds the env badge, the shortcut hints
+and the version (`renderer/src/shell/app-shell.tsx:54-66`). The main window title is fixed at
+"Kaipu Record" (`main/index.ts:264`, `renderer/index.html:5`). The tray menu is a plain template
+(`main/tray-menu.ts:60-114`). The capture toast's copy is in
+`packages/i18n/messages/en.json:755-764` (`screenshots.toast.savedTitle` = "Saved to Library",
+`saveToLibrary`, `footerAlsoSaved`). Library cards and rows have **inline icon buttons** for
+Tags, Edit and Delete and **no action menu** (`renderer/src/features/library/components/video-card.tsx:95-115`,
+`video-row.tsx:98-115`). The item page has a metadata line (`library-detail-page.tsx:271`) and an
+action row (`:345-400`). The Library page has a title and subtitle (`renderer/src/pages/library/library-page.tsx:120-124`),
+the search, `SortMenu` and grid/list toggle (`:141-170`), kind and storage chips with counts
+(`:178-218`), the tag row and drawer (`:101-110`, `:232`), and the "filtered by" summary
+(`:73-86`, `:275`). The filters themselves are in `renderer/src/features/library/library-filters.ts:6-22`, `:43-55`.
+
+**Keyboard.** Every default global shortcut is `Command+Control+<letter>` on macOS
+(`shared/types/ipc.ts:92-176`). Main sets no application menu (no `setApplicationMenu` call),
+so the window has Electron's default menu, which binds no ⌘<digit>. No in-window key handler
+uses digits: the editors use letters, Space, Escape and Delete
+(`renderer/src/pages/video-editor/video-editor-page.tsx:1076-1120`). **⌘1–⌘9 are free.**
+
 **Cloud catalog.** `main/cloud/catalog-cache.ts:11-31` keeps `userData/cloud/<userId>/catalog.json`
 per account. It is a **cache of server data**: `LibraryService.doRefresh`
 (`main/library/library-service.ts:78-93`) rebuilds every entry from `GET /api/v1/assets`
-(`main/cloud/catalog-client.ts:36-92`) and carries forward only `lastSeenLocalId`.
-`composeLibrary` joins local and cloud by `assetId` alone (`main/library/compose-library.ts:32-58`).
-The server row is `cloud_asset` (`packages/infra-db/src/schema/cloud.ts:21-45`), keyed by
-`(user_id, asset_id)`. The desktop does **not upload yet**: no client calls
-`/assets/upload-intents` (only `apps/server-hono/src/contract/cloud.contract.ts:29` defines it).
+(`main/cloud/catalog-client.ts:36-92`) and carries forward only `lastSeenLocalId`. The client
+casts the response and maps named fields (`:56-75`), so an extra server field is ignored by the
+current release. `composeLibrary` joins local and cloud by `assetId` alone
+(`main/library/compose-library.ts:32-58`). The server row is `cloud_asset`
+(`packages/infra-db/src/schema/cloud.ts:21-45`), keyed by `(user_id, asset_id)`. The desktop
+does **not upload yet**: no client calls `/assets/upload-intents` (only
+`apps/server-hono/src/contract/cloud.contract.ts:29` defines it).
 
 **Moves to reuse.** `atomicWriteFile` and `withLock` (`main/library/atomic-write.ts:11-50`);
 `sha256FileBase64` (`main/library/content-hash.ts`); the EXDEV handling in `createDragCopy`
@@ -293,8 +525,8 @@ The server row is `cloud_asset` (`packages/infra-db/src/schema/cloud.ts:21-45`),
 (`main/recording/recording-writer.ts:66-91`) renames, or else copies and unlinks **without
 verifying**, so it is not safe for a user's only copy (ADR 0033).
 
-**Startup and quit.** Stranded-take recovery (`main/index.ts:1006`) and drag-copy cleanup
-(`main/index.ts:713`, `:1144`) run for the active vault only.
+**Startup and quit.** Stranded-take recovery (`main/index.ts:1020`) and drag-copy cleanup
+(`main/index.ts:727`, `:1158`) run for the active vault only.
 
 **In flight.** [Plan 08 · vault id collisions](/plans/audit-2026-10-15/08-vault-id-collisions/)
 is not implemented (`main/library/vault-id.ts` does not exist). It replaces `timestampId` /
@@ -313,11 +545,10 @@ must check collisions in the **target** workspace, the same check `mintVaultId` 
    then show a second Mac's every cloud item in its first workspace, which is the leak. So
    `workspaceId` is a **server column**. The owner's "this makes cloud simpler" still holds:
    the catalog stays per account, and it is one field and one endpoint. Because desktop upload
-   has not shipped, the field can be required from the first upload, and rows without it will
-   not exist in practice.
+   has not shipped, rows without it will not exist in practice.
 3. **"Switching is locked while recording" is not enough.** Exports, GIF saves, screenshot
    saves and the editor's autosave all resolve the folder at write time (see
-   [Current state](#current-state-verified-on-main-at-be178352-2026-10-29)). The design widens
+   [Current state](#current-state-verified-on-main-at-16cd8d80-2026-10-29)). The design widens
    the lock to every writer and makes every item address carry `workspaceId`.
 4. **ADR 0003 says the editor never "moves" the original.** Decision 6 puts Move in the editor.
    ADR 0033 amends the word: the intent is the export path, and a user-issued move is a user
@@ -339,6 +570,36 @@ must check collisions in the **target** workspace, the same check `mintVaultId` 
    `composeLibrary` would have rewritten the account cache without the other workspaces'
    entries. Exports of a moved original never showed `needs-source`. ADR 0033 and the Cloud
    section below close each.
+9. **There is no item menu in the Library** (round 2). Round 1 said "the item menu gets Move to
+   workspace". Cards and rows only have inline Tags, Edit and Delete buttons
+   (`video-card.tsx:95-115`, `video-row.tsx:98-115`). Decision 13 adds a "⋯" menu.
+10. **A left-behind export says its source "was deleted"** (round 2). The item page resolves
+    `derivedFromAssetId` against the loaded list only (`library-detail-page.tsx:163-166`) and
+    shows "Source recording was deleted" (`:331-340`, `en.json:720`) when it is absent. After a
+    move that is false. Decision 13 changes the copy.
+11. **A sidecar read error is read as "no sidecar"** (round 2). `LibraryVault.sidecar()` returns
+    `{}` for any error (`library-vault.ts:169-175`), and `ensureIdentity` then writes a sidecar
+    with a new `assetId` (`:185-214`). On a synced folder, an evicted sidecar that cannot be
+    downloaded at that moment would lose its title, tags and cloud link. Only `ENOENT` may mean
+    "no sidecar"; any other error lists the item read-only (the `readOnlyIdentityMemo` path)
+    and writes nothing. This also protects flaky network drives today.
+12. **Fixed names in `.kaipu/` collide with media stems** (round 2). A sidecar path is
+    `.kaipu/<stem>.json`, so a root file `tags.png` already addresses `.kaipu/tags.json` as its
+    sidecar, and `remove()` deletes it by that path (`library-vault.ts:378-389`). Adding
+    `workspace.json` and `settings.json` adds two more such names. An adopted folder can hold
+    any file name. Guard: `workspace`, `settings` and `tags` are reserved stems. Such a media
+    file lists with an in-memory identity (the read-only path), and its writes and Delete never
+    touch the reserved file. An older version has no guard. That risk is pre-existing (for
+    `tags.json`) and needs a file named exactly that.
+13. **`recordingQuality` is read when the Record page mounts**, not when a take starts
+    (`use-recording-setup.ts:89-98`), and `showBrandBadge` is read live (`use-watermark.ts:22`).
+    Decision 14's "bound at capture start" needs both changed (ADR 0034, Consequences).
+14. **Overrides cannot live in `settings.json`.** `mergeSettings` drops unknown keys
+    (`settings.service.ts:112-160`), so an older version would erase them on its first write.
+    That is why ADR 0034 keeps the All level unchanged and puts overrides in separate files.
+15. **The control bar can be in the video.** With `showBarInRecording` on, the bar is
+    captured (`shared/types/ipc.ts:249-253`). A "● Work" chip on it would put the workspace's
+    name into the recording, so the chip hides in that case (decision 13).
 
 ---
 
@@ -353,12 +614,33 @@ must check collisions in the **target** workspace, the same check `mintVaultId` 
   "version": 1,
   "id": "0192f0c4-7a1e-7c3b-9f2a-4d5e6f708192",
   "name": "Work",
+  "color": "amber",
+  "initials": "W",
   "createdAt": 1761734400000
 }
 ```
 
 `id` is a UUID v7 (`uuidv7()` from `tag-repository.ts`, as tags). `name` is authoritative here,
-so a folder carried to another Mac keeps its name. Renaming a workspace writes this file.
+so a folder carried to another Mac keeps its name. `color` is a key of the tag palette
+(`TAG_COLORS`, `packages/domain/src/constants/tags.ts:17`), so the tile and the chip reuse the
+tag tokens. A new workspace takes the next color not yet used, like `nextTagColor`. `initials`
+is optional (1–2 characters). When absent, it is the first letter of the first two words of
+`name`. An unknown `color` or invalid `initials` falls back to these defaults on read, and the
+file is not rewritten. Renaming or recoloring a workspace writes this file. An older version
+never reads it.
+
+`<workspace>/.kaipu/settings.json`, the folder-bound overrides (ADR 0034), absent until the
+first override:
+
+```json
+{ "version": 1, "overrides": { "recordingQuality": "1080p60", "showBrandBadge": false } }
+```
+
+`userData/workspace-settings.json`, the machine-bound override (ADR 0034):
+
+```json
+{ "version": 1, "workspaces": { "0192f0c4-7a1e-7c3b-9f2a-4d5e6f708192": { "uploadMode": "manual" } } }
+```
 
 `userData/preferences.json`, the new `workspaces` key next to the existing keys:
 
@@ -370,19 +652,27 @@ so a folder carried to another Mac keeps its name. Renaming a workspace writes t
     "activeId": "0192f0c4-7a1e-7c3b-9f2a-4d5e6f708192",
     "legacyCloudOwnerId": "0192f0c3-0000-7000-8000-000000000001",
     "entries": [
-      { "id": "0192f0c3-0000-7000-8000-000000000001", "path": "/Users/me/Movies/Kaipu Record", "name": "Kaipu Record", "addedAt": 1761734300000 },
-      { "id": "0192f0c4-7a1e-7c3b-9f2a-4d5e6f708192", "path": "/Volumes/Work/Kaipu", "name": "Work", "addedAt": 1761734400000 }
+      { "id": "0192f0c3-0000-7000-8000-000000000001", "path": "/Users/me/Movies/Kaipu Record", "name": "Kaipu Record", "color": "rose", "initials": "KR", "addedAt": 1761734300000 },
+      { "id": "0192f0c4-7a1e-7c3b-9f2a-4d5e6f708192", "path": "/Volumes/Work/Kaipu", "name": "Work", "color": "amber", "initials": "W", "addedAt": 1761734400000 }
     ]
   }
 }
 ```
 
-- `name` in an entry is a cache, so an unavailable workspace can still be named in the UI.
+- `name`, `color` and `initials` in an entry are a cache, so an unavailable workspace can
+  still be drawn in the rail and named in the UI. The folder's file wins when it is readable.
 - `legacyCloudOwnerId` names the workspace that owns cloud entries without a `workspaceId`
   (decision 3). It is explicit, not "the first entry", so removing or reordering entries never
   moves those entries elsewhere silently.
-- `vaultDirectory` keeps being written, mirrored to the active path, for one release, so a
-  downgrade opens the active workspace.
+- `vaultDirectory` mirrors the active path **on every switch, with no end date** (decision
+  17). It is removed when the active path is the default folder, so an older version shows
+  "default" rather than a custom folder.
+
+**The "master settings"** the owner asked about are two files in userData, both outside any
+workspace: `userData/preferences.json` holds the workspace registry (the list and `activeId`),
+and `userData/settings.json` holds the All workspaces level of every setting. Each workspace
+adds at most its own `.kaipu/settings.json`, and this Mac adds at most one `uploadMode` per
+workspace in `userData/workspace-settings.json`.
 
 `CloudCatalogEntry` (`shared/types/library-item.ts:50-68`) gains `workspaceId: string | null`.
 The local `userData/workspace-moves/<moveId>.json` journal is specified in ADR 0033.
@@ -396,25 +686,89 @@ workspace's file is there). The check runs when the list is read and before a sw
 It never creates the root. `LibraryVault.list()`'s `mkdir` (`library-vault.ts:106`) must only
 create `.kaipu/` inside an existing root.
 
+One exception: in a synced workspace, a `workspace.json` that exists but is evicted is **not**
+`unreadable` (see Synced folders). Reading it may download it. Until that read succeeds, the
+workspace is available with `identity: "unverified"`. It can be listed, switched to and
+captured into under the registered id, and it cannot receive a move.
+
 ### Migration (first launch after the upgrade)
 
-1. No `workspaces` key: take `vaultDirectory().path` (custom or default).
-2. If the path is reachable: create it if it is the default and missing (today's behaviour),
-   then adopt it (reuse or mint `workspace.json`) and register it as the only entry, active,
-   and `legacyCloudOwnerId`.
-3. If the path is not reachable (a custom folder on an unplugged drive): register it with a
-   minted id and `pendingInit: true`, active and unavailable. On the first reach, write
-   `workspace.json`. If a `workspace.json` is already there, adopt that id, and update
-   `activeId` and `legacyCloudOwnerId` to match.
-4. Nothing else is rewritten: no sidecar, tag registry or media changes.
+Kaipu has paying customers. The migration is therefore **additive only**: it adds two things,
+and no customer file is moved, renamed or rewritten.
+
+1. **Trigger.** `preferences.json` has no `workspaces` key. If the file exists but does not
+   parse, stop: write nothing, open the library exactly as today, log it, and try again on the
+   next launch. Today's `readFromDisk` would treat it as empty (`vault-location.ts:27-33`), and a
+   migration that then wrote the file would erase a custom folder for good.
+2. **Pick the folder.** `vaultDirectory().path`, custom or default.
+3. **Adopt it.** If it is reachable: create it if it is the default and missing (today's
+   behaviour), then read `.kaipu/workspace.json`. If it is valid, reuse its id. Otherwise mint
+   one and write the file atomically (`atomicWriteFile`: temp, fsync, rename). If the folder is
+   unreachable (a custom folder on an unplugged drive) or not writable, mint the id anyway and
+   mark the entry `pendingInit: true`. On the first reach, write `workspace.json`. If a
+   `workspace.json` is already there by then, adopt that id, and update `activeId` and
+   `legacyCloudOwnerId` to match.
+4. **Register it.** Write `preferences.json` atomically with the `workspaces` key: one entry,
+   active, `legacyCloudOwnerId`. Keep `vaultDirectory` exactly as it was (present or absent).
+5. **Touch nothing else.** No sidecar, tag registry, thumbnail, edit project or media changes.
+   `settings.json` is neither read for the migration nor written: it becomes the All workspaces
+   level as it is. No override exists, so every effective setting equals today's value. That
+   means zero behaviour change.
+
+**Idempotent.** With the key present, the migration does nothing. A rerun after step 3
+finds the `workspace.json` it wrote and reuses its id, so there is never a second id.
+
+**Crash-safe.** Each step leaves a usable state. A crash before step 4 leaves no `workspaces`
+key, so both this version and an older one open the folder through `vaultDirectory` as today.
+The file written in step 3 is ignored by an older version and reused by this one. Step 4 is
+one atomic rename.
+
+**Downgrade-safe.** An older version reads only `vaultDirectory` (`vault-location.ts:9-11`).
+Because every switch keeps it equal to the active path, an older version opens the workspace
+that was active. What an older version does with the new pieces:
+
+- `.kaipu/workspace.json` and `.kaipu/settings.json`: ignored, since nothing lists `.kaipu/`
+  (Current state). The exception is the reserved-stem collision (Things the code contradicted,
+  12), which needs a media file named `workspace.*` or `settings.*`.
+- The `workspaces` key: kept, because its writes spread the file they read
+  (`vault-location.ts:70-80`).
+- `userData/workspace-settings.json` and the scratch folders in userData: never opened. A take
+  stranded in a synced workspace's scratch folder is recovered when this version runs again,
+  not by the older one.
+- Other workspaces are invisible, and the cloud filter is gone: an older version shows every
+  cloud entry of the account. No cloud entry carries a `workspaceId` until desktop upload
+  ships, so today this shows nothing new.
+
+**Round trip.** On every launch, if the folder `vaultDirectory()` resolves to is not the active
+entry's path, an older version changed it. This version then adopts that folder, matching an
+existing entry by its `workspace.json` id or path or registering a new one, and makes it
+active. A folder change made while downgraded is therefore not ignored after the re-upgrade.
+
+**Server.** `cloud_asset.workspace_id` is added as a nullable column in an additive migration,
+with no rewrite of existing rows. `GET /assets` adds the field, which the current desktop
+ignores (`catalog-client.ts:56-75`). `POST /assets/upload-intents` accepts `workspaceId` as
+optional, and this desktop always sends it. A row without one belongs to `legacyCloudOwnerId`
+on each Mac.
+
+**Fixture test.** `main/library/__fixtures__/workspaces-migration/` holds the shapes the current
+release writes: `preferences.json` with a custom `vaultDirectory`, no `vaultDirectory` (the
+default folder), no file at all, a custom folder that is unreachable, and an unparseable file.
+Next to them sits a `settings.json` with all 23 keys as `settings-store.ts` writes it. Each case
+asserts the resulting registry, the files written (only the two named in steps 3–4), and that
+effective settings equal `mergeSettings(stored)` for every key.
+
+**Rollout.** No flag. The release ships the registry, the migration and the new code paths, but
+with one workspace nothing on screen changes except Settings → Files becoming Settings →
+Workspaces with an "Add workspace" action (decision 11). Everything else appears when a second
+workspace is added.
 
 ### Cloud: server and client
 
 The server changes; it does not exist on any client yet:
 
 - `cloud_asset.workspace_id text NULL`, an opaque client UUID with no foreign key; the server
-  does not know workspace names.
-- `POST /assets/upload-intents` takes `workspaceId`, required for new assets.
+  does not know workspace names. Additive migration (see Migration).
+- `POST /assets/upload-intents` takes an optional `workspaceId`; this desktop always sends it.
 - `GET /assets` returns `workspaceId`.
 - A new `PUT /assets/{assetId}/workspace` with body `{ workspaceId }`: idempotent, used by
   moves and by "Assign to workspace…".
@@ -434,6 +788,7 @@ On the client:
   workspace's entries.
 - Entries whose effective workspace is not registered on this Mac are counted for Settings
   (Open question 2) from the **full** catalog and shown nowhere else.
+- An upload reads `uploadMode` for the item's workspace (ADR 0034, decision 4).
 
 ### Tags
 
@@ -449,21 +804,122 @@ switch waits for it. `setItemTags` and the other item calls carry `workspaceId` 
 else. Tag sync (ADR 0021) must scope its rows,
 cursor and slug merge per `workspaceId`; this is an amendment to make before NIW2-368.
 
+### Settings per workspace
+
+Specified in [ADR 0034](/architecture/decisions/0034-per-workspace-setting-overrides/), which
+also holds the inventory of every `AppSettings` key with its class and reason. In short:
+
+- Effective value = workspace override ?? All workspaces value. Main resolves it, and
+  `settings:get` / `settings:changed` keep their shape and now return the effective settings of
+  the active workspace. A switch broadcasts `settings:changed`.
+- New channels: `settings:get-scoped(scope)` → `{ all, overrides, effective }`, and
+  `settings:set-override(workspaceId, key, value | null)` (null = Reset). `settings:update`
+  keeps writing the All level.
+- Overridable: `showBrandBadge`, `recordingQuality`, `exportQuality`, `screenshotCopy` (folder
+  file) and `uploadMode` (userData file). Shortcuts never.
+- Bound at capture start with the capture's `workspaceId`, together with its folder.
+- Unknown or invalid entries in a folder file are ignored and never written back. An
+  unreachable workspace's scope cannot be edited.
+
+### Synced folders
+
+**What the sources say.** On macOS, Google Drive, OneDrive and other providers use Apple's
+File Provider. Their folders live in `~/Library/CloudStorage` and cannot be moved
+([Google](https://support.google.com/drive/answer/12178485)), always on the internal drive
+([TidBITS](https://tidbits.com/2023/03/10/apples-file-provider-forces-mac-cloud-storage-changes/)).
+iCloud Drive lives in `~/Library/Mobile Documents/com~apple~CloudDocs`. A file can be
+**evicted**: it stays as a placeholder with its attributes and no data, and the provider
+downloads it when it is needed
+([Eclectic Light](https://eclecticlight.co/2026/05/09/explainer-file-provider-and-cloud-services/)).
+Opening an online-only file downloads it, and some apps fail on files not yet downloaded
+(TidBITS). Moving an item out of the Drive folder sends its cloud copy to the trash (Google).
+
+**Detection.** After resolving symlinks (`realpath`), a workspace path under
+`~/Library/CloudStorage/GoogleDrive-…` is "Synced by Google Drive", under
+`~/Library/CloudStorage/OneDrive-…` "Synced by OneDrive", under
+`~/Library/Mobile Documents/com~apple~CloudDocs` "Synced by iCloud Drive", and anything else
+under `~/Library/CloudStorage/` "Synced by a cloud provider". The Settings → Workspaces row
+shows the label. Adding such a folder shows a one-time note: Kaipu keeps its working files
+outside the folder, items the provider has offloaded show as "In the cloud", and opening the
+same folder on two Macs at once can create conflict copies. The kind is stored on the entry
+and re-detected on every launch.
+
+**Scratch outside the folder, for synced workspaces only.** Recording staging and move staging
+go to `userData/workspace-scratch/<workspaceId>/tmp/`, and drag copies to
+`userData/workspace-scratch/<workspaceId>/drag/` (not `<os temp>/kaipu-drag`, which startup
+deletes, `drag-copies.ts:23-26`). Local and external-drive workspaces keep `.kaipu/tmp/` and
+`.kaipu/drag/`.
+
+Why not for every workspace, which would be one rule: for an external drive, staging in
+userData would turn every finalize into a multi-GB copy across volumes and put the take on the
+internal disk, which is often the one without room. A synced folder is always on the internal
+drive, so its scratch in userData is on the same device and the finalize stays cheap. Startup
+and quit sweeps (stranded takes, drag copies) also scan each synced workspace's scratch folder.
+
+**Moves.** Any move with a synced side copies, verifies sha256 **at the final path** and then
+deletes (ADR 0033, decisions 4 and 13). This holds even when `stat.dev` matches, which it always
+does on the internal drive.
+
+**Evicted files.** Main checks before reading. A media file is treated as evicted when
+`stat.blocks === 0 && stat.size > 0`. That is a heuristic, because Node's `fs.Stats` does not
+expose the `SF_DATALESS` flag (unverified: whether every provider's placeholder reports zero
+blocks). An evicted media file:
+
+- lists from its sidecar (title, duration and size come from the sidecar and `stat`);
+- shows "In the cloud — download to open" in the Library and on the item page;
+- gets no thumbnail generation, no probe and no hash;
+- cannot be dragged, edited, shared or moved until it is downloaded. **Download** reads the
+  file once in main with a progress row, which makes the provider download it, and can be
+  cancelled.
+
+Small `.kaipu/` files (`workspace.json`, sidecars, `tags.json`) may be read even when
+evicted, which downloads a few KB, but every read has a timeout. A sidecar read that fails or
+times out lists the item read-only and writes nothing (Things the code contradicted, 11). A
+`tags.json` read that fails shows the tags as unavailable, and nothing writes the registry.
+None of this marks the workspace unreadable.
+
+**Two Macs.** The same synced folder registered on two Macs is one workspace (same id), and the
+cloud entries agree. Both may write `tags.json`, a sidecar or `settings.json` at the same time,
+and the provider then keeps both versions as a conflict copy (for example `tags (1).json`;
+the exact naming differs by provider and is unverified). The v1 guard is detect and warn: the
+availability check lists `.kaipu/` for names matching a reserved file or a sidecar plus a
+conflict suffix, and the Settings → Workspaces row warns "Conflicting copies of Kaipu files:
+tags (1).json". Kaipu neither merges nor deletes them. Media conflict copies in the root
+(`<id> (1).mp4`) list as separate items with their own identity. There is no cross-machine
+locking in v1.
+
+**Unverified, to check in a spike before implementation:**
+
+- whether `link()` from userData into, or inside, a File Provider folder fails, and with what
+  error (the copy fallback covers both cases, but an evicted file's copy downloads it);
+- whether a `rename()` from userData into a File Provider folder is atomic and keeps the
+  provider's sync state (the design does not rely on it: it verifies at the final path);
+- how reading an evicted file behaves offline: an error, a hang, or a wait (the timeout covers
+  all three);
+- whether the zero-blocks heuristic holds for Google Drive, OneDrive and iCloud Drive
+  placeholders;
+- whether iCloud's "Desktop & Documents" sync puts `~/Documents` under the iCloud path after
+  `realpath`. If it does not, a workspace in `~/Documents` is synced but not detected;
+- each provider's conflict-copy naming.
+
 ### IPC changes
 
 New channels (main ↔ renderer):
 
-| Channel                      | Payload → result                                                                                                   |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `workspaces:list`            | → `{ activeId, workspaces: { id, name, path, state: "available" \| "unavailable", reason? }[], orphanCloudCount }` |
-| `workspaces:add`             | opens the folder picker; adopts or initializes → the entry, or null when cancelled                                 |
-| `workspaces:switch`          | `id` → ok, or `{ reason: "busy" \| "unavailable" }`                                                                |
-| `workspaces:rename`          | `id, name` → entry                                                                                                 |
-| `workspaces:remove`          | `id` → ok (refused for the active one and for the last one)                                                        |
-| `workspaces:delete`          | `id` → ok or `{ reason: "active" \| "no-trash" \| "busy" }` after main shows the confirmation                      |
-| `workspaces:open-folder`     | `id` → reveals the folder                                                                                          |
-| `workspaces:move-item`       | `{ workspaceId, id }, targetId` → `{ ok, newId }` or a reason                                                      |
-| `workspaces:changed` (event) | broadcast after any registry change or switch; windows re-list                                                     |
+| Channel                      | Payload → result                                                                                                                                                 |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workspaces:list`            | → `{ activeId, generation, workspaces: { id, name, color, initials, path, sync, state: "available" \| "unavailable", reason?, warnings? }[], orphanCloudCount }` |
+| `workspaces:add`             | opens the folder picker; adopts or initializes → the entry, or null when cancelled                                                                               |
+| `workspaces:switch`          | `id` → ok, or `{ reason: "busy" \| "unavailable" \| "cancelled" }`                                                                                               |
+| `workspaces:rename`          | `id, { name?, color?, initials? }` → entry                                                                                                                       |
+| `workspaces:remove`          | `id` → ok (refused for the active one and for the last one)                                                                                                      |
+| `workspaces:delete`          | `id` → ok or `{ reason: "active" \| "no-trash" \| "busy" }` after main shows the confirmation                                                                    |
+| `workspaces:open-folder`     | `id` → reveals the folder                                                                                                                                        |
+| `workspaces:move-item`       | `{ workspaceId, id }, targetId` → `{ ok, newId }` or a reason                                                                                                    |
+| `workspaces:download-item`   | `{ workspaceId, id }` → progress events, then ok or a reason (synced, evicted media)                                                                             |
+| `workspaces:changed` (event) | broadcast after any registry change or switch, with the generation; windows re-list                                                                              |
+| `settings:get-scoped`        | `scope` (`"all"` or a workspace id) → `{ all, overrides, effective }`                                                                                            |
+| `settings:set-override`      | `workspaceId, key, value \| null` → effective settings; refused for a non-overridable key or an unavailable workspace                                            |
 
 Changed: every item-scoped channel (`listLocalRecordings`, `loadCursorTrack`,
 `renameLocalRecording`, `markOpenedInEditor`, `setItemTags`, `backfillLocalRecordingMeta`,
@@ -474,6 +930,7 @@ unavailable id, and **any id or generation that is not the active one** with `st
 The renderer also discards responses whose generation is no longer current. Main holds a
 counter, `workspaces:changed` carries it, and it is bumped in the last step of a switch. `kaipu-media://thumb/<id>` becomes
 `kaipu-media://thumb/<workspaceId>/<id>`, and the same for `recording/` and `screenshot/`.
+`settings:get` and `settings:changed` keep their payload and return effective settings.
 
 Retired: `getVaultDirectory`, `chooseVaultDirectory`, `resetVaultDirectory` and
 `openVaultDirectory` are replaced by the `workspaces:*` channels. "Reset to default folder"
@@ -483,11 +940,12 @@ becomes "Add workspace" pointed at the default folder.
 
 **The lock.** Main refuses `workspaces:switch` while any of these is true: the `RecordingWriter`
 has an open session (this covers recordings and editor exports), a GIF or screenshot save is
-running (this includes a toast's Save), or a move is running. In addition,
-`RecordingWriter.create()` stores the resolved folder in its `Session`, and `finalize()` and the
-cursor-track write use that folder instead of calling `vaultDirectory()` again. Even a bug in
-the lock cannot then split a take. Startup sweeps (stranded takes, drag copies) iterate over
-every available workspace.
+running (this includes a toast's Save), a move is running, or a download is running. In
+addition, `RecordingWriter.create()` stores the resolved folder (or scratch folder) in its
+`Session`, and `finalize()` and the cursor-track write use that folder instead of calling
+`vaultDirectory()` again. Even a bug in the lock cannot then split a take. Startup sweeps
+(stranded takes, drag copies) iterate over every available workspace and every synced
+workspace's scratch folder.
 
 **The transaction** (ADR 0032, decisions 6, 7 and 9). A lock only stops writers that already
 exist; it does not stop an editor that is merely open. When the lock allows the switch:
@@ -500,56 +958,129 @@ exist; it does not stop an editor that is merely open. When the lock allows the 
    Save, Discard or Cancel. The screenshot editor, the video editor and the item detail page
    close. The media/thumbnail URL caches and the list queries are cleared.
 3. Pending quiet-capture toasts are dismissed and `last-quiet-capture` is cleared.
-4. Main bumps the generation, writes `activeId`, and broadcasts `workspaces:changed`.
+4. Main bumps the generation, writes `activeId` and the mirrored `vaultDirectory`, sets the
+   window title, rebuilds the tray menu, and broadcasts `workspaces:changed` and
+   `settings:changed`.
 
-A failure before step 4 leaves the old workspace active and unchanged.
+A failure before step 4 leaves the old workspace active and unchanged. Every switch entry point
+uses this transaction: a tile, ⌘<digit>, the tray submenu, the Record page's Switch, the
+"Moved to Personal · Switch" toast and Settings.
 
 **Captures bind at start.** The capture request reads the active workspace once and carries
 `workspaceId` in `QuietCapture`, the toast payload, the toast's Save and Annotate, and the
-editor source. `saveScreenshotToVault` takes the workspace from its metadata instead of
-`currentVault()`. A toast action whose `workspaceId` is not the active one writes nothing.
-Switching drops the retained bytes. For a copy-only capture the pixels are already on the
-clipboard, so nothing the user can still paste is lost.
+editor source, together with the effective settings it needs (ADR 0034). `saveScreenshotToVault`
+takes the workspace from its metadata instead of `currentVault()`. A toast action whose
+`workspaceId` is not the active one writes nothing. Switching drops the retained bytes. For a
+copy-only capture the pixels are already on the clipboard, so nothing the user can still paste
+is lost.
 
 **One lock per item** (ADR 0033, decision 12) makes session saves, screenshot overwrites,
 deletes and moves mutually exclusive per item. The sidecar lock stays inside it.
 
 ### UI
 
-- **Selector**: at the top of the sidebar (`renderer/src/shell/sidebar.tsx:36`), the active
-  workspace's name, then a menu: the workspaces (an unavailable one is disabled and labelled
-  "Not connected"), **Add workspace…** and **Manage workspaces…**. While locked, it is disabled
-  with "Finish the recording to switch".
-- **Where captures go**: the capture toast and the Record page name the active workspace
-  ("Saved to Work"). This is the cheapest guard against capturing into the wrong workspace.
-- **Settings → Files becomes Settings → Workspaces** (`settings-pages.tsx:210`): one row per
-  workspace with its name, path and state, and the actions Rename, Show in Finder, Remove from
-  list and Delete workspace…; plus **Add workspace** and, when non-zero, the orphan cloud count
-  with **Assign to workspace…**.
-- **Library**: the item menu gets **Move to workspace ▸** (the other available workspaces). A
-  progress row shows during a move across volumes.
-- **Editor**: the item's info area shows **Workspace: Work** with **Move to…**. The editor
-  flushes its autosave, the move runs, the editor returns to the Library, and a toast reads
-  "Moved to Personal · Switch".
-- **Move dialog** (only across volumes or when exports stay behind): the size to copy, and
-  "N exports of this recording stay in Work" (counted from the already loaded local list by
-  `derivedFromAssetId`; no new lookup). If the item was dragged in the last 10 seconds, the
-  move is refused with "Finish dropping the file, then try again". During a move the editor is
-  read-only.
-- **Delete confirmation** names what is lost: titles, tags, edit projects, cursor tracks
-  (auto-zoom) and the cloud link. It also says what stays: every recording and screenshot file.
+**One rule first: with one workspace, nothing here is shown.** No tiles, no chip, no title
+prefix, no tray submenu, no "Move to", no "Saving to" labels (today's copy stays), and no
+Settings scope selector. Settings → Workspaces shows the one folder and "Add workspace".
+
+**The switcher (decision 11).**
+
+- **Rail tiles.** A stack under the logo (`Sidebar`, `renderer/src/shell/sidebar.tsx:60-67`).
+  The shared `Rail` has no slot between the brand and the sections (`rail.tsx:189-193`), so it
+  gains one (a `header` prop). Following ADR 0009, the rail receives the tiles as elements and
+  labels as props. Each tile is 36 px, with the initials on the workspace color and the name
+  under it in 9 px mono, like the nav labels. The active tile carries the rail's active pill.
+  - One click switches. No tile only opens a dropdown.
+  - Right-click opens Rename, Show in Finder and Manage (Settings → Workspaces).
+  - An unavailable workspace's tile is dimmed, "Not connected", and does not switch.
+  - The "+" tile opens the add flow.
+  - With more than four workspaces, the fourth position is "+N" and opens a list of the rest.
+    The active one is always visible, swapped into the stack if needed.
+  - While the lock holds, the tiles are disabled with "Finish the recording to switch" (or the
+    matching reason).
+  - This follows the left-hand workspace rail of Slack and the server list of Discord.
+- **Status bar chip** "● Work" in the workspace color, in `app-shell.tsx`'s status bar (`:54-66`).
+  Clicking it opens the same list as "+N".
+- **Window title** "Work — Kaipu Record", set by main on every switch.
+- **Tray** (`main/tray-menu.ts`): a "Workspace: Work ▸" submenu listing the workspaces as radio
+  items (disabled while busy or not connected). Captures often start from the tray or a
+  shortcut with the main window hidden, so this is the only place the user can see and change
+  the target there. `TrayMenuInput` gains the workspace list and a `switchWorkspace(id)`
+  action.
+- **⌘1…⌘n** (Ctrl on Windows) switch to the n-th workspace, only while a Kaipu window has focus.
+  They are handled in the renderer, never registered with `globalShortcut`. ⌘1–⌘9 are free
+  today (Current state). If the user binds a global shortcut to ⌘<digit>, the global one wins,
+  and Settings → Shortcuts says that digit no longer switches.
+- No other workspace screen exists besides **Settings → Workspaces**.
+
+**Settings → Files becomes Settings → Workspaces** (`settings-pages.tsx:210`). There is one row
+per workspace, with:
+
+- its tile, name, path, state and sync label ("Synced by Google Drive"), and any conflict
+  warning;
+- the actions Rename (name, color, initials), Show in Finder, Remove from list and Delete
+  workspace…;
+- below the rows, **Add workspace** and, when non-zero, the orphan cloud count with **Assign to
+  workspace…**.
+
+**Where things land and "Move to" (decision 13).** The verb is always "Move to", never
+"Send to", because the item leaves the source.
+
+| Surface                         | With two or more workspaces                                                                                                                                                                                                   | File                                                                                                                     |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Library header                  | The workspace name as the page title, with the item count; no chip per card.                                                                                                                                                  | `renderer/src/pages/library/library-page.tsx:120-124`                                                                    |
+| Library card and list row       | A new "⋯" button next to Tags, Edit and Delete, opening a menu with "Move to ▸" and the other workspaces.                                                                                                                     | `video-card.tsx:95-115`, `video-row.tsx:98-115`                                                                          |
+| Item page                       | "Workspace: Work" in the metadata line; "Move to…" in the action row.                                                                                                                                                         | `library-detail-page.tsx:271`, `:345-400`                                                                                |
+| Video editor, screenshot editor | A "Work ▾" chip whose menu lists the move targets. After a move: the editor flushes, the move runs, the editor returns to the Library, and a toast reads "Moved to Personal · Switch". During a move the editor is read-only. | `pages/video-editor/`, `pages/screenshot-editor/`                                                                        |
+| Export sheet                    | "Saves to Work".                                                                                                                                                                                                              | `renderer/src/features/video-editor/components/export-sheet.tsx`                                                         |
+| Record page                     | "Recording to Work · Switch". Switch opens the workspace list and **changes the active workspace**; it is not a destination for this take.                                                                                    | `renderer/src/pages/record/record-page.tsx`                                                                              |
+| Recording control bar           | "● Work", hidden while `showBarInRecording` is on, so the name never appears in the video.                                                                                                                                    | `renderer/src/features/control-bar/control-bar.tsx`                                                                      |
+| Capture panel, capture overlay  | "Saving to Work".                                                                                                                                                                                                             | `renderer/src/features/capture-panel/capture-panel.tsx`, `renderer/src/features/screenshots/overlay/capture-overlay.tsx` |
+| Capture toast                   | "Saved to Work", "Save to Work", "Also saved to Work" instead of "…Library". **No move control in v1.**                                                                                                                       | `main/screenshots/capture-toast-window.ts`, `packages/i18n/messages/en.json:755-764`                                     |
+| Item page lineage line          | "Source recording is not in this workspace" instead of "Source recording was deleted" (Open question 4).                                                                                                                      | `library-detail-page.tsx:331-340`, `en.json:720`                                                                         |
+
+**States of "Move to".**
+
+- **Target not connected**: the entry is disabled with "Not connected".
+- **Blocked during a write** (recording, export, save, move, download): every entry is disabled
+  with the reason ("Finish the recording to move").
+- **Cloud-only item**: the move only reassigns the workspace on the server
+  (`PUT /assets/{assetId}/workspace`) and moves the small files (ADR 0033, decision 10).
+  Offline it is disabled with "Connect to move a cloud-only item".
+- **Dragged less than 10 s ago**: refused with "Finish dropping the file, then try again".
+- **Exports staying behind**: the move dialog states "N exports of this recording stay in Work".
+  The count comes from the already loaded local list by `derivedFromAssetId`; no new lookup.
+- **Synced and evicted**: disabled with "Download it first".
+
+The **move dialog** appears only when copying across volumes or with a synced side (it shows
+the size to copy), or when exports stay behind. A progress row shows during a copy.
+
+The **delete confirmation** names what is lost: titles, tags, edit projects, cursor tracks
+(auto-zoom), setting overrides and the cloud link. It also says what stays: every recording
+and screenshot file.
+
+**Library filters (decision 18).** Every existing filter stays, computed over the active
+workspace's items only, with nothing added or removed: search (title and tags), sort (Newest,
+Oldest, Largest), grid/list, kind chips with counts, storage chips with counts, tag chips
+with counts, the tag drawer, and the "filtered by" summary line (`library-filters.ts`,
+`library-page.tsx`). The switch clears the list queries (transaction step 2). The filter state
+itself (selected tags, search) resets on switch, because tag ids are per workspace.
 
 ### Delete and remove, in detail
 
 - **Remove from list**: refused for the active and the last workspace. It drops the entry and
   touches no file. The workspace's cloud entries become orphan (hidden) until the folder is
-  added again, which restores them under the same id.
+  added again, which restores them under the same id. The machine-bound `uploadMode` entry is
+  kept for that case.
 - **Delete workspace**: refused for the active workspace and while busy. It first runs the
   stranded-take recovery for that folder, so a half-saved take becomes a media file and stays.
   Then it calls `shell.trashItem(<root>/.kaipu)`. If that rejects (a network volume with no
-  Trash), nothing is removed and the message says so. On success, it removes the entry. Its
-  cloud entries are orphaned for good (Open question 2). Adding the folder again later creates
-  a new workspace whose items get new `assetId`s.
+  Trash), nothing is removed and the message says so. On success, it removes the entry, its
+  machine-bound settings and its scratch folder. Its cloud entries are orphaned for good (Open
+  question 2). Adding the folder again later creates a new workspace whose items get new
+  `assetId`s. In a synced workspace the provider decides what happens to the trashed
+  `.kaipu/` in the cloud (TidBITS: Dropbox deletes online-only files without the Mac Trash,
+  Google Drive uses it), so the confirmation says the provider's trash applies.
 
 ## State of the art
 
@@ -560,7 +1091,14 @@ deletes and moves mutually exclusive per item. The sidecar lock stays inside it.
   ([forum](https://forum.obsidian.md/t/how-can-i-move-folders-between-vaults/41151)).
   Moving a vault across drives fails with `EXDEV` when the app only tries `rename`
   ([forum](https://forum.obsidian.md/t/fail-to-move-vault-across-devices-drives-fix-exdev-error/115346)),
-  which is why ADR 0033 copies, verifies and then deletes.
+  which is why ADR 0033 copies, verifies and then deletes. Its settings are fully per vault, and
+  sharing them across vaults is a long-running request
+  ([forum](https://forum.obsidian.md/t/option-to-sync-settings-themes-and-plugins-across-multiple-vaults/41789)),
+  which is why ADR 0034 inherits instead.
+- **VS Code** User and Workspace settings: a workspace value overrides the user value, and the
+  editor shows where each value comes from
+  ([VS Code](https://code.visualstudio.com/docs/configure/settings)). ADR 0034 takes this
+  model.
 - **Eagle libraries**: several libraries, one open at a time, switched from a menu. Each
   library is a self-contained folder, and the recommended practice is separate libraries for
   unrelated work rather than one huge one
@@ -572,6 +1110,8 @@ deletes and moves mutually exclusive per item. The sidecar lock stays inside it.
   ([Lightroom Queen](https://www.lightroomqueen.com/one-or-multiple-catalogs/)). Kaipu's goal
   is the separation case, so it takes the multiple-catalog side. ADR 0032 rejects the
   one-catalog-with-filter model.
+- **macOS File Provider** (Google Drive, OneDrive, iCloud Drive): see
+  [Synced folders](#synced-folders) for the sources and what they do not say.
 - Hub: [library vault](https://github.com/csdev19/general-knowledge/blob/main/desktop/library-vault.md)
   describes the single-vault layout. It needs a short note about workspaces once they are
   implemented, not before.

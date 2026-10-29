@@ -7,12 +7,13 @@ description: A workspace is an existing folder with Kaipu files in it; its id an
 
 ## Status
 
-| Field         | Value                                                                                                     |
-| ------------- | --------------------------------------------------------------------------------------------------------- |
-| Status        | Proposed — [several workspaces design](/specs/2026-10-29-several-workspaces-design/); nothing implemented |
-| Date          | 2026-10-29                                                                                                |
-| Supersedes    | —                                                                                                         |
-| Superseded by | —                                                                                                         |
+| Field         | Value                                                                                                           |
+| ------------- | --------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — [several workspaces design](/specs/2026-10-29-several-workspaces-design/); nothing implemented       |
+| Date          | 2026-10-29                                                                                                      |
+| Supersedes    | —                                                                                                               |
+| Superseded by | —                                                                                                               |
+| Amended       | 2026-10-29, round 2, in place while Proposed: switcher, color and initials, synced folders, downgrade, settings |
 
 ## Context
 
@@ -31,7 +32,8 @@ The user-facing word is **workspace**. "Vault" survives only in existing code id
 ## Decision
 
 1. **A workspace is an existing folder** the user picks. Kaipu initializes it by writing
-   `.kaipu/workspace.json` (`version`, a UUID `id`, a display `name`, `createdAt`). The folder is
+   `.kaipu/workspace.json` (`version`, a UUID `id`, a display `name`, `createdAt`, a `color`
+   from the tag palette and optional `initials`). The folder is
    never created by Kaipu, and Kaipu never creates the folder root again once it is registered:
    a missing root means "unavailable", not "empty".
 2. **A folder that already has `.kaipu/` is adopted**: its `workspace.json` is reused, or
@@ -41,7 +43,11 @@ The user-facing word is **workspace**. "Vault" survives only in existing code id
    registered entries (id, path, cached name) and `activeId`. The folder holds the identity;
    userData holds which folders this machine knows and which one is active.
 4. **One active workspace.** The Library, the editors, tags and every new capture work on the
-   active workspace only. There is no combined view and no per-capture destination.
+   active workspace only. There is no combined view and no per-capture destination. "All
+   workspaces" exists only as the Settings scope for defaults (ADR 0034), never as a Library
+   view. The switcher is a stack of tiles in the navigation rail, and one click switches. The
+   active workspace is named wherever a capture or a write is about to land (spec, UI). With a
+   single workspace none of this is shown.
 5. **Switching is refused while anything writes into the active workspace**: a recording, an
    export, a GIF save, a screenshot save, or a move. Each writer also binds its folder when it
    starts, so a write always ends in the workspace it started in.
@@ -70,7 +76,9 @@ The user-facing word is **workspace**. "Vault" survives only in existing code id
 8. **A workspace whose folder cannot be reached is unavailable**: it is listed, cannot be
    switched to, cannot receive a move, and is never silently replaced by another one. If the
    active workspace becomes unavailable, captures are refused with a message. They do not fall
-   back to another workspace.
+   back to another workspace. A `workspace.json` that exists but is evicted by a sync provider
+   (dataless) does **not** make the workspace unavailable: the registry's id is used until the
+   file can be read, and moves into it wait for that read (spec, Synced folders).
 9. **A capture is bound to a workspace when it starts.** The capture request resolves the
    active `workspaceId` once. That id travels with the retained bytes, the toast payload, the
    toast's Save and Annotate actions and the editor source, and the save resolves the folder
@@ -78,7 +86,12 @@ The user-facing word is **workspace**. "Vault" survives only in existing code id
    writes nothing. The switch (decision 7) drops the retained bytes, so a delayed click can
    never land in the new workspace. A quiet capture is copy-only, so its pixels are already on
    the clipboard when the bytes are dropped.
-10. **Tags stay per workspace** (ADR 0020 unchanged). **The cloud catalog stays per account**,
+10. **A workspace may live in a folder a sync provider manages** (Google Drive, OneDrive,
+    iCloud Drive through macOS File Provider). Kaipu detects it by path, says so, keeps its
+    scratch files (recording staging, drag copies) outside the folder, and treats an evicted
+    file as "in the cloud", never as missing. It adds no provider integration (spec, Synced
+    folders).
+11. **Tags stay per workspace** (ADR 0020 unchanged). **The cloud catalog stays per account**,
     and every cloud asset records the `workspaceId` it belongs to. A workspace's Library hides
     cloud entries of other workspaces. Hiding is a view: it never removes other workspaces'
     entries from the account cache.
@@ -89,7 +102,8 @@ The user-facing word is **workspace**. "Vault" survives only in existing code id
   "All" view). Separation becomes a filter: a cleared filter, a search that ignores it, or a
   bug in one query shows everything on a shared screen. Every surface (search, tags, the
   Editor home, counts) would have to remember the filter. The goal is that the other workspace
-  is not loaded at all.
+  is not loaded at all. This also covers an "All workspaces" Library sorted by time, which the
+  owner raised on 2026-10-29 (spec, Open question 6; the recommendation is no).
 - **A destination picker on every capture.** It adds a decision to every capture, and a wrong
   click is the exact leak this exists to prevent. Quiet capture (ADR 0024) has no place to
   ask.
@@ -125,14 +139,29 @@ The user-facing word is **workspace**. "Vault" survives only in existing code id
 - A copied workspace folder adopted on the same machine arrives with an id that is already
   registered. The copy gets a new id, and its items keep their `assetId`s, so their cloud
   entries stay with the original.
-- `preferences.json` keeps writing `vaultDirectory` (set to the active path) for one release,
-  so a downgrade opens the workspace that was active.
+- `preferences.json` keeps writing `vaultDirectory`, set to the active path, **on every
+  switch** and with no end date, so any older version opens the workspace that was active.
+  Retiring it needs a later ADR. An older version that changes the folder writes only
+  `vaultDirectory` and keeps the `workspaces` key (`vault-location.ts:70-80` spreads the file it
+  read), so the next launch of this version adopts that folder and makes it active (spec,
+  Migration).
+- Settings stay one app-wide level that a workspace can override for five keys (ADR 0034). This
+  replaces the non-goal "settings … per workspace" that this ADR listed before the 2026-10-29
+  amendment.
+- `.kaipu/workspace.json` and `.kaipu/settings.json` are reserved names, like `tags.json`. A
+  media file whose stem is `workspace`, `settings` or `tags` must never address them as its
+  sidecar (spec, Things the code contradicted).
 
 ## Non-goals
 
-Renaming code from vault to workspace; search across workspaces; tags shared between
-workspaces; a destination per capture; syncing the workspace list between machines;
-workspaces on the web dashboard; settings, shortcuts or a cloud account per workspace.
+Renaming code from vault to workspace; search across workspaces or a combined Library view;
+tags shared between workspaces; a destination per capture; syncing the workspace list between
+machines; workspaces on the web dashboard; shortcuts or a Kaipu Cloud account per workspace;
+an integration with a provider's API (Drive, OneDrive); locking a synced workspace that is open
+on two Macs at once.
+
+Until the 2026-10-29 amendment this list also excluded settings per workspace. That non-goal
+is withdrawn: [ADR 0034](/architecture/decisions/0034-per-workspace-setting-overrides/) adds overrides for five keys.
 
 ## Reopen when
 
@@ -140,4 +169,5 @@ workspaces on the web dashboard; settings, shortcuts or a cloud account per work
 - Captures must be routed automatically (by app, window or schedule) instead of by the active
   workspace.
 - The workspace list must follow the user to another machine, or a workspace must be shared
-  with another person.
+  with another person. A synced folder open on two Macs is supported only as "same folder, no
+  locking"; real sharing reopens this.

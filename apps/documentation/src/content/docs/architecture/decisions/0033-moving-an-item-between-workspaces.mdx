@@ -14,6 +14,7 @@ description: A finished recording or screenshot moves to another workspace with 
 | Supersedes    | —                                                                                                         |
 | Superseded by | —                                                                                                         |
 | Amends        | ADR 0003's wording "the editor never … moves … the original" (see Consequences)                           |
+| Amended       | 2026-10-29, in place while Proposed: synced folders met the first reopen condition (decisions 4, 9, 13)   |
 
 ## Context
 
@@ -57,9 +58,10 @@ Three more traps are about things that run **beside** the move:
 ## Decision
 
 1. **What moves.** The media file, the sidecar, the thumbnail, the cursor track and the edit
-   project (`.edit.json`, `.edit.meta.json`, `.assets/`). Drag copies (`.kaipu/drag/`) and
-   staging files (`.kaipu/tmp/`) never move, and the item's drag artifacts are **deleted from
-   the source** before the move completes (decision 11).
+   project (`.edit.json`, `.edit.meta.json`, `.assets/`). Drag copies and staging files never
+   move, wherever they live (`.kaipu/drag/` and `.kaipu/tmp/`, or the userData scratch folder of
+   a synced workspace, decision 13). The item's drag artifacts are **deleted from the source**
+   before the move completes (decision 11).
 2. **Identity is kept.** The `assetId`, `derivedFromAssetId`, title and every other sidecar
    field move unchanged. The local id stays the same unless it collides.
 3. **Collisions get a suffix and never overwrite.** If the target has a media file or any
@@ -72,6 +74,17 @@ Three more traps are about things that run **beside** the move:
    the target's `.kaipu/tmp/move-<moveId>/`, fsynced, its sha256 compared with the source's,
    and then renamed into place. A mismatch aborts the move and the source stays untouched.
    The media step never replaces an existing file.
+
+   **When either side is a synced workspace, the media is always copied, verified and then
+   deleted, even when `stat.dev` matches.** Every File Provider folder sits on the internal
+   drive under `~/Library/CloudStorage` (or `~/Library/Mobile Documents` for iCloud Drive), so
+   `stat.dev` is the same as for a local folder. A rename across File Provider domains is not
+   known to be atomic or to keep the provider's state (unverified), and Google Drive documents
+   that moving an item out of its folder sends the cloud copy to the trash. The copy's staging
+   folder is the target's scratch folder (decision 13). The sha256 is checked **at the final
+   path, after the copy is in place**, because the provider may take over the file once it
+   appears there.
+
 5. **Order, with the media as the commit point.**
    1. Take the item lock (decision 12). Inside it, re-check that the media exists and still
       matches the identity the Library showed. Remove the item's drag artifacts (decision 11).
@@ -104,7 +117,7 @@ Three more traps are about things that run **beside** the move:
    | present      | present and identity matches         | Committed (a copy finished). Roll forward: delete the source media, then its small files.                                     |
    | present      | present, identity does **not** match | A partial or foreign target file. If the source matches, delete only the target's files of this move. Otherwise quarantine.   |
    | absent       | present, identity does not match     | Do not delete anything. Quarantine the entry and surface it: this is the only copy.                                           |
-   | absent       | absent                               | Do not delete anything. Look for the verified copy in the target's staging folder; if it is not there, surface the entry.     |
+   | absent       | absent                               | Do not delete anything. Look for the verified copy in the move's staging folder; if it is not there, surface the entry.       |
 
    One rule covers every row: **a side is deleted only when the other side is verified
    complete**, and a journal phase of `copying` never justifies deleting a target. A missing
@@ -125,8 +138,10 @@ Three more traps are about things that run **beside** the move:
 9. **Preconditions**, checked before step 1: both workspaces are available and the target is
    writable; nothing is recording or exporting; the item is not open in an export; the editor
    has flushed its autosave; for a copy, the target volume has room for the media plus a
-   margin; no drag of this item started within the last 10 seconds (decision 11). While the
-   move runs, it holds the item lock (decision 12) and the switch lock (ADR 0032, decision 5).
+   margin; no drag of this item started within the last 10 seconds (decision 11); the source
+   media is not evicted (dataless) by a sync provider, and the target's `workspace.json` has
+   been read and its id matches (decision 13). While the move runs, it holds the item lock
+   (decision 12) and the switch lock (ADR 0032, decision 5).
 10. **A cloud-only item** (its local copy was removed, so only its sidecar, thumbnail and edit
     project remain) moves its small files and its `workspaceId`. The commit point is then the
     cloud update.
@@ -159,6 +174,22 @@ Three more traps are about things that run **beside** the move:
     - A save that was queued behind the move gets the lock afterwards, finds no media in the
       source workspace, and is refused with `item-moved`. It writes nothing, so it cannot
       recreate source assets or leave a partial project.
+
+13. **Synced workspaces** (added 2026-10-29). A workspace inside a File Provider folder is
+    handled like this:
+    - Its scratch files live **outside** it, in `userData/workspace-scratch/<workspaceId>/`:
+      `tmp/` for recording staging and move staging, `drag/` for drag copies. They would
+      otherwise be uploaded while they are written, and a drag copy would sync a duplicate of
+      the item under its title. The scratch folder is on the internal drive, like every File
+      Provider folder, so finalizing a take is still a same-device operation.
+    - An evicted (dataless) source media is not moved: the item says "In the cloud — download to
+      open", and the move is disabled with "Download it first". Hashing it would download it, or
+      hang while offline.
+    - A move into a synced workspace waits until the target's `workspace.json` has been read
+      and its id matches. An evicted `workspace.json` only delays the move; it never makes the
+      workspace unavailable (ADR 0032, decision 8).
+    - The journal stays in userData, so a move between two Macs that share a synced folder is
+      still a move on one Mac. There is no cross-machine lock (non-goal).
 
 ## Alternatives rejected
 
@@ -208,14 +239,19 @@ Three more traps are about things that run **beside** the move:
 ## Non-goals
 
 Moving between machines; moving several items as one transaction (a multi-select runs single
-moves one after another); moving an export together with its source or flagging that its source moved; moving a workspace's
-whole folder (that is a Finder move, and the folder keeps its id).
+moves one after another); moving an export together with its source or flagging that its
+source moved; moving a workspace's whole folder (that is a Finder move, and the folder keeps
+its id); downloading an evicted file as part of a move; locking an item against another Mac
+that opens the same synced folder.
 
 ## Reopen when
 
-- Workspaces sit on cloud-synced folders (iCloud Drive, Dropbox) whose files can be evicted.
-  Hashing or renaming a placeholder would download it or fail, and the volume test (`stat.dev`)
-  stops meaning "rename is safe".
+- ~~Workspaces sit on cloud-synced folders (iCloud Drive, Dropbox) whose files can be evicted.~~
+  **Met on 2026-10-29**, when the owner allowed synced folders in v1. Addressed in place by
+  decisions 4 (always copy, verify and delete when a synced side is involved), 9 (no evicted
+  source, a verified target) and 13 (scratch outside the folder).
+- A sync provider is found to replace, rename or conflict-copy a file **after** Kaipu verified
+  it at its final path, so "verified in place" no longer means "safe to delete the source".
 - Moves must be undone as one action, or batched as one transaction.
 - Exports left behind must show that their source moved (a workspace-local lineage check), or
   follow it.
