@@ -139,7 +139,10 @@ export function LibraryDetailPage(): React.JSX.Element {
     navigate("/library");
   };
 
-  if (isLoading || recovering) {
+  // Only the first load shows the loading state. A background re-list (the
+  // `library:changed` a rename broadcasts) keeps the page — and the player, with its
+  // playback position — mounted (NIW2-560).
+  if ((isLoading && !video) || recovering) {
     return <div className={styles.centered}>{t("loading")}</div>;
   }
 
