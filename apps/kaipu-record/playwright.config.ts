@@ -34,6 +34,11 @@ export default defineConfig({
    * single bad launch must not block a release: a real failure still fails every attempt,
    * and only the failing test re-runs, so the macOS minutes this costs are small.
    *
+   * A second flake has since been pinned down further: the app's quit never finishing when
+   * it lands 3.5–4.5 s after launch (NIW2-548). `launchApp`'s teardown bounds that one to
+   * ~20 s, attaches the main process's stack and fails the test, so this retry absorbs it
+   * without the 4 minutes of timeouts it used to cost.
+   *
    * Remove this the moment the cause is found. A retry that becomes permanent is how a
    * real defect gets to live in the suite forever. */
   retries: process.env.CI ? 1 : 0,

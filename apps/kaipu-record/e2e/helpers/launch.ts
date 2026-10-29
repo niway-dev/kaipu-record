@@ -1,7 +1,23 @@
-import { _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
+import { _electron as electron, test, type ElectronApplication, type Page } from "@playwright/test";
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { closeOrReport, QUIT_DEADLINE_MS, sampleProcess } from "./quit-watchdog";
+
+/** Electron's stderr is kept for the quit-hang report; only the most recent part matters. */
+const STDERR_TAIL_BYTES = 64 * 1024;
+
+/**
+ * Keep `body` with the running test's report, or print it when no test is running (the
+ * `verify/` proof scripts launch the app outside Playwright's runner).
+ */
+async function attachEvidence(name: string, body: string): Promise<void> {
+  try {
+    await test.info().attach(name, { body, contentType: "text/plain" });
+  } catch {
+    console.error(`[e2e] ${name}:\n${body}`);
+  }
+}
 
 const APP_ROOT = path.resolve(__dirname, "..", "..");
 const MAIN_ENTRY = path.join(APP_ROOT, "out", "main", "index.js");
@@ -129,6 +145,10 @@ export async function launchApp(options: { recordVideoDir?: string } = {}): Prom
   // occurrence self-describing in the CI log instead of sending someone back here.
   let closedDeliberately = false;
   const pid = app.process().pid ?? -1;
+  let stderrTail = "";
+  app.process().stderr?.on("data", (chunk: Buffer | string) => {
+    stderrTail = (stderrTail + String(chunk)).slice(-STDERR_TAIL_BYTES);
+  });
   app.process().once("exit", (code, signal) => {
     if (closedDeliberately) return;
     console.error(
@@ -149,11 +169,30 @@ export async function launchApp(options: { recordVideoDir?: string } = {}): Prom
     app,
     page,
     vaultDir,
+    // The quit itself is bounded. `app.close()` asks the main process for `app.quit()` and
+    // waits for the process to exit; when the quit lands 3.5–4.5 s after launch, in the
+    // window where the app pre-loads its overlay and shade windows, the process sometimes
+    // never exits (NIW2-548, five release-candidate runs). Left alone that costs the test's
+    // 120 s plus the worker teardown's 120 s and fails the run with an error outside any
+    // test. `closeOrReport` samples the hung main process, attaches the stack and stderr,
+    // kills it and fails the test, so a hang costs ~20 s, retries, and leaves evidence.
     teardown: async () => {
       closedDeliberately = true;
-      await app.close();
-      await rm(userDataDir, { recursive: true, force: true });
-      await rm(vaultDir, { recursive: true, force: true });
+      try {
+        await closeOrReport({
+          close: () => app.close(),
+          deadlineMs: QUIT_DEADLINE_MS,
+          sample: () => sampleProcess(pid),
+          kill: () => {
+            app.process().kill("SIGKILL");
+          },
+          stderr: () => stderrTail,
+          attach: attachEvidence,
+        });
+      } finally {
+        await rm(userDataDir, { recursive: true, force: true });
+        await rm(vaultDir, { recursive: true, force: true });
+      }
     },
   };
 }
