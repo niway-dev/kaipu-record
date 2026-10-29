@@ -39,4 +39,15 @@ describe("EditorSessions", () => {
     sessions.releaseOwner(9);
     expect(sessions.isOpen("ghost", "x")).toBe(false);
   });
+
+  it("refuses a hold whose owner went away (closed, reloaded) after the request arrived", () => {
+    const sessions = new EditorSessions();
+    const generation = sessions.generation(1);
+    sessions.releaseOwner(1); // the window navigated or was destroyed while the request waited
+    expect(sessions.openIfCurrent(1, generation, "clip", "asset-1")).toBe(false);
+    expect(sessions.isOpen("clip", "asset-1")).toBe(false);
+    // A request issued after the release is current again.
+    expect(sessions.openIfCurrent(1, sessions.generation(1), "clip", "asset-1")).toBe(true);
+    expect(sessions.isOpen("clip", "asset-1")).toBe(true);
+  });
 });

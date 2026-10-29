@@ -122,10 +122,15 @@ export function registerLibraryVaultHandlers(deps: {
   // the file waits, and loads under the id the rename produced.
   ipcMain.handle(IPC_CHANNELS.editorSessionAcquire, async (event, assetId: unknown) => {
     if (typeof assetId !== "string") return null;
-    const owner = event.sender.id;
-    watchOwner(event.sender);
-    return currentVault().acquireForEditor(assetId, (id) =>
-      editorSessions.open(owner, id, assetId),
+    const sender = event.sender;
+    const owner = sender.id;
+    watchOwner(sender);
+    // Captured on arrival: if the window reloads or closes while the request waits for
+    // the names lock, the hold is refused instead of outliving the page that asked.
+    const generation = editorSessions.generation(owner);
+    return currentVault().acquireForEditor(
+      assetId,
+      (id) => !sender.isDestroyed() && editorSessions.openIfCurrent(owner, generation, id, assetId),
     );
   });
   ipcMain.on(IPC_CHANNELS.editorSessionClose, (event, id: unknown) => {

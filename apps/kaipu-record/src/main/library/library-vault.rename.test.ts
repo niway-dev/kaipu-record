@@ -327,7 +327,7 @@ describe("LibraryVault.renameItem", () => {
       isEditing: (id, assetId) => {
         // The editor opens while the rename is about to copy companions.
         acquired ??= new LibraryVault(directory).acquireForEditor("asset-1", (heldId) =>
-          sessions.open(1, heldId, "asset-1"),
+          sessions.openIfCurrent(1, 0, heldId, "asset-1"),
         );
         return sessions.isOpen(id, assetId);
       },
@@ -343,13 +343,40 @@ describe("LibraryVault.renameItem", () => {
     await seedFullItem("clip");
     const sessions = new EditorSessions();
     const id = await vault.acquireForEditor("asset-1", (heldId) =>
-      sessions.open(1, heldId, "asset-1"),
+      sessions.openIfCurrent(1, 0, heldId, "asset-1"),
     );
     expect(id).toBe("clip");
     const result = await vault.renameItem("clip", "New", {
       isEditing: (itemId, assetId) => sessions.isOpen(itemId, assetId),
     });
     expect(result).toMatchObject({ file: "kept-old-name", reason: "editing" });
+  });
+
+  it("an acquisition queued behind a rename is refused if its window went away meanwhile", async () => {
+    await seedFullItem("clip");
+    const sessions = new EditorSessions();
+    // The rename holds the names lock while it retries a locked file.
+    let release!: () => void;
+    renameFailure.codes = ["EBUSY"];
+    const renaming = vault.renameItem("clip", "New", {
+      retry: { delaysMs: [150], sleep: () => new Promise<void>((r) => (release = r)) },
+      isEditing: (id, assetId) => sessions.isOpen(id, assetId),
+    });
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    // The editor's request arrives (generation captured), then its window reloads.
+    const generation = sessions.generation(7);
+    const acquiring = new LibraryVault(directory).acquireForEditor("asset-1", (id) =>
+      sessions.openIfCurrent(7, generation, id, "asset-1"),
+    );
+    sessions.releaseOwner(7);
+    release();
+    await expect(renaming).resolves.toMatchObject({ file: "renamed" });
+    await expect(acquiring).resolves.toBeNull();
+    expect(sessions.isOpen("New", "asset-1")).toBe(false);
+    // Nothing is left holding the item: the next rename moves the file.
+    await expect(
+      vault.renameItem("New", "Newer", { isEditing: (id, a) => sessions.isOpen(id, a) }),
+    ).resolves.toMatchObject({ file: "renamed" });
   });
 
   it("acquiring an item that is gone resolves null and holds nothing", async () => {

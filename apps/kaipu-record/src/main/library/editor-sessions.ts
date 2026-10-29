@@ -17,6 +17,24 @@ interface Held {
 export class EditorSessions {
   /** Owner (webContents id) → the sessions it holds; a list, so two opens count twice. */
   private readonly byOwner = new Map<number, Held[]>();
+  /**
+   * Owner → how many times it was released (navigated, reloaded, destroyed). A request
+   * captures it on arrival; a hold whose owner was released meanwhile is refused, so no
+   * hold outlives the page that asked for it. Never deleted: a reset would let a stale
+   * request match again.
+   */
+  private readonly generations = new Map<number, number>();
+
+  generation(owner: number): number {
+    return this.generations.get(owner) ?? 0;
+  }
+
+  /** `open`, unless the owner was released since `generation` was read. Resolves whether it held. */
+  openIfCurrent(owner: number, generation: number, id: string, assetId: string): boolean {
+    if (generation !== this.generation(owner)) return false;
+    this.open(owner, id, assetId);
+    return true;
+  }
 
   open(owner: number, id: string, assetId: string): void {
     const held = this.byOwner.get(owner) ?? [];
@@ -35,6 +53,7 @@ export class EditorSessions {
   /** Everything a window held: it was closed, reloaded or crashed without unmounting. */
   releaseOwner(owner: number): void {
     this.byOwner.delete(owner);
+    this.generations.set(owner, this.generation(owner) + 1);
   }
 
   isOpen(id: string, assetId: string): boolean {
