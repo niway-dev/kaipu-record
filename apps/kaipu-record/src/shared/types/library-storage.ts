@@ -73,8 +73,11 @@ export interface VaultDirectory {
 
 /** What a rename did to the file (NIW2-560). "kept-old-name" is not an error: the title was saved. */
 export type RenameFileOutcome = "renamed" | "unchanged" | "kept-old-name";
-/** Why the file kept its old name: another app holds it, an export is reading it, or another I/O error. */
-export type RenameKeptReason = "locked" | "busy" | "io";
+/**
+ * Why the file kept its old name: another app holds it, an export is reading it, the item
+ * is open in the video editor (which holds its id for its lifetime), or another I/O error.
+ */
+export type RenameKeptReason = "locked" | "busy" | "editing" | "io";
 
 export interface RenameResult {
   /** The item after the rename; `recording.id` is the id to use from now on. */

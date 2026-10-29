@@ -147,6 +147,8 @@ window.electronAPI = {
     },
   }),
   markOpenedInEditor: async () => {},
+  openEditorSession: () => {},
+  closeEditorSession: () => {},
   listTags: async () => [],
   createTag: async (name) => ({
     id: `tag-${name}`,

@@ -434,6 +434,9 @@ export const IPC_CHANNELS = {
   renameLocalRecording: "library:rename-local",
   // Editor home: stamp an item as opened in an editor (sidecar `editorOpenedAt`).
   markOpenedInEditor: "library:mark-opened-in-editor",
+  // NIW2-560: the video editor holds an item while mounted; main refuses to move its file.
+  editorSessionOpen: "library:editor-session-open",
+  editorSessionClose: "library:editor-session-close",
   /** Tags as entities (ADR 0020): the registry, and which tags an item carries. */
   listTags: "tags:list",
   createTag: "tags:create",

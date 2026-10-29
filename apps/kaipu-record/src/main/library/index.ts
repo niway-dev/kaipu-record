@@ -14,6 +14,7 @@ import type { AuthHandle } from "../infrastructure/auth-store";
 import { getAppSettings } from "../infrastructure/settings-store";
 import { CatalogCache } from "../cloud/catalog-cache";
 import { fetchCloudCatalog } from "../cloud/catalog-client";
+import { EditorSessions } from "./editor-sessions";
 import { LibraryService } from "./library-service";
 import { LibraryVault, isPlainItemId } from "./library-vault";
 import { loadDeviceId, VaultTagRepository, type TagRepository } from "./tag-repository";
@@ -99,6 +100,32 @@ export function registerLibraryVaultHandlers(deps: {
   ipcMain.handle(IPC_CHANNELS.loadCursorTrack, (_event, id: string) =>
     currentVault().readCursorTrack(id),
   );
+  // NIW2-560: the video editor holds its source id for its lifetime. Whatever asks for a
+  // rename (a toast's Retry survives navigation), the file keeps its name while the item
+  // is open there. A window that goes away releases what it held.
+  const editorSessions = new EditorSessions();
+  const watched = new Set<number>();
+  ipcMain.on(IPC_CHANNELS.editorSessionOpen, (event, id: unknown, assetId: unknown) => {
+    if (typeof id !== "string" || typeof assetId !== "string") return;
+    const owner = event.sender.id;
+    editorSessions.open(owner, id, assetId);
+    if (!watched.has(owner)) {
+      watched.add(owner);
+      const release = (): void => {
+        editorSessions.releaseOwner(owner);
+        watched.delete(owner);
+      };
+      event.sender.once("destroyed", release);
+      // A reload unmounts nothing: the new page starts with no editor open.
+      event.sender.on("did-start-navigation", (details) => {
+        if (details.isMainFrame && !details.isSameDocument) editorSessions.releaseOwner(owner);
+      });
+    }
+  });
+  ipcMain.on(IPC_CHANNELS.editorSessionClose, (event, id: unknown) => {
+    if (typeof id === "string") editorSessions.close(event.sender.id, id);
+  });
+
   // NIW2-560: the file follows the title. An export streams its source over the media
   // protocol for minutes, so while one runs the file keeps its name (the title is saved).
   ipcMain.handle(
@@ -108,6 +135,7 @@ export function registerLibraryVaultHandlers(deps: {
       if (typeof title !== "string") throw new Error("rename: invalid title");
       const result = await currentVault().renameItem(id, title.trim(), {
         isBusy: deps.isExportActive,
+        isEditing: (itemId, assetId) => editorSessions.isOpen(itemId, assetId),
       });
       if (result.file === "renamed") broadcastLibraryChanged();
       return result;

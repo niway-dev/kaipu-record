@@ -228,6 +228,12 @@ export interface KaipuElectronAPI {
   renameLocalRecording(id: string, title: string): Promise<RenameResult>;
   /** Stamp a vault item as opened in an editor now (orders the Editor home). */
   markOpenedInEditor(id: string): Promise<void>;
+  /**
+   * The video editor holds this item while mounted (NIW2-560, ADR 0032): a rename keeps
+   * the file's name ("editing") until `closeEditorSession`, or until the window goes away.
+   */
+  openEditorSession(id: string, assetId: string): void;
+  closeEditorSession(id: string): void;
   /** Every live tag with its item count, most used first. */
   listTags(): Promise<TagSummary[]>;
   /** Create a tag; rejects when the name (case-insensitively) is taken. */

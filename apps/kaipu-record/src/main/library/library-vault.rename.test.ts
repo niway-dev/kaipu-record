@@ -279,6 +279,23 @@ describe("LibraryVault.renameItem", () => {
     expect(await readdir(meta)).not.toContain("New.json");
   });
 
+  it("keeps the old name, but saves the title, while the item is open in the video editor", async () => {
+    await seedFullItem("clip");
+    const isEditing = vi.fn(
+      (id: string, assetId: string) => id === "clip" && assetId === "asset-1",
+    );
+    const result = await vault.renameItem("clip", "New", { isEditing });
+    expect(result).toMatchObject({
+      file: "kept-old-name",
+      reason: "editing",
+      recording: { id: "clip", title: "New" },
+    });
+    expect(isEditing).toHaveBeenCalledWith("clip", "asset-1");
+    expect(renameFailure.calls).toBe(0);
+    expect(await readdir(directory)).toContain("clip.mp4");
+    expect(await readFile(join(meta, "clip.edit.json"), "utf-8")).toBe('{"scene":1}');
+  });
+
   it("retries a locked file and renames once it is released", async () => {
     await seedFullItem("clip");
     renameFailure.codes = ["EBUSY", "EPERM"];

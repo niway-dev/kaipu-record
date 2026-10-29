@@ -251,6 +251,12 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
   useEffect(() => {
     return () => assetStoreRef.current.dispose();
   }, []);
+  // NIW2-560: this editor holds `source.id` for its lifetime (session autosave, cursor
+  // track, source URL). While it is mounted, main keeps the file's name on any rename.
+  useEffect(() => {
+    window.electronAPI.openEditorSession(source.id, source.assetId);
+    return () => window.electronAPI.closeEditorSession(source.id);
+  }, [source.id, source.assetId]);
 
   // The room this screen needs; released when it unmounts. See use-window-floor.
 

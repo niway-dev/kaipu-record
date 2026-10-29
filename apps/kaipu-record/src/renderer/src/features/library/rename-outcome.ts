@@ -5,6 +5,7 @@ import { ITEM_NOT_FOUND_MARKER, type RenameResult } from "@shared/types/library-
 const KEPT_MESSAGE = {
   locked: "renameKeptLocked",
   busy: "renameKeptBusy",
+  editing: "renameKeptEditing",
   io: "renameKeptError",
 } as const;
 

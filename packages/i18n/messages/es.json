@@ -706,6 +706,7 @@
     "errorRename": "No pudimos renombrar la grabación.",
     "renameKeptLocked": "Nombre guardado. El archivo conserva su nombre anterior porque otra aplicación lo está usando.",
     "renameKeptBusy": "Nombre guardado. El archivo conserva su nombre anterior mientras se ejecuta una exportación.",
+    "renameKeptEditing": "Nombre guardado. El archivo conserva su nombre anterior mientras está abierto en el editor.",
     "renameKeptError": "Nombre guardado, pero no se pudo renombrar el archivo.",
     "errorDelete": "No pudimos eliminar el archivo.",
     "availabilityLocal": "Local",

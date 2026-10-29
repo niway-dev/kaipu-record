@@ -119,6 +119,11 @@ export interface AllocateInput {
 export interface RenameOptions {
   /** True while an export may be streaming the file: the file then keeps its name ("busy"). */
   isBusy?: () => boolean;
+  /**
+   * True while the item is open in the video editor, which holds its id for its lifetime
+   * (ADR 0032): the file then keeps its name ("editing").
+   */
+  isEditing?: (id: string, assetId: string) => boolean;
   retry?: RetryPolicy;
 }
 
@@ -389,7 +394,12 @@ export class LibraryVault {
         const target = await this.resolveRenameTarget(stem, id, oldMedia, meta.assetId!);
         if (target.mode === "same") return { recording: await describeOld(), file: "unchanged" };
 
-        // 3. An export may be streaming the file: moving it would fail the export.
+        // 3. The video editor holds this id (session saves, cursor track, source URL):
+        // moving the file under it would send its next save to the old paths.
+        if (options.isEditing?.(id, meta.assetId!)) {
+          return { recording: await describeOld(), file: "kept-old-name", reason: "editing" };
+        }
+        // An export may be streaming the file: moving it would fail the export.
         if (options.isBusy?.()) {
           return { recording: await describeOld(), file: "kept-old-name", reason: "busy" };
         }
