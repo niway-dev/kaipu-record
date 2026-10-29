@@ -6,8 +6,9 @@ import { describe, expect, it } from "vitest";
 /**
  * The OS-facing icons (build/icon.icns, build/icon.png, build/icon.ico,
  * resources/icon.png and the Windows tray .ico files) are derived from the brand
- * package by scripts/generate-app-icons.sh, which records the hash of its inputs. If the logo or the script changes without re-running
- * it, the Dock and ⌘-Tab silently keep the old icon (NIW2-181) — this catches it.
+ * package by scripts/generate-app-icons.sh, which records the hash of its inputs.
+ * If a logo or the script changes without re-running it, the Dock, ⌘-Tab and the
+ * Windows installer silently keep the old icon (NIW2-181) — this catches it.
  * Rendering needs macOS `sips`, so CI compares the stamp instead of re-rendering.
  */
 const APP_DIR = resolve(__dirname, "../..");
