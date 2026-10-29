@@ -31,6 +31,10 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  # The one-click installer's progress banner shows no icon unless given one. Same file
+  # as the .exe, installer and uninstaller icon: scripts/generate-app-icons.sh derives it
+  # from packages/brand, so it cannot fall behind the logo the app shows.
+  installerHeaderIcon: build/icon.ico
   # Shown as the installer's first page: SignPath's signing terms require software that
   # sends data off the device to show its privacy notice during installation. Kept as
   # UTF-8 with BOM, or electron-builder rewrites it in place on every build.
