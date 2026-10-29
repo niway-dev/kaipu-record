@@ -782,6 +782,43 @@ export class LibraryVault {
     return target;
   }
 
+  /**
+   * Overwrite a saved screenshot's PNG and merge `meta` into its sidecar, serialized
+   * against renames (NAMES_LOCK) so a rename can never land between the check and the
+   * write and leave the PNG resurrected under the old name. With `expectedAssetId`, the
+   * item is followed: if `id` no longer holds that identity (renamed meanwhile), the
+   * write goes to the id that does. Resolves the id written; throws `ItemGoneError`
+   * when the item is nowhere.
+   */
+  async overwriteImage(
+    id: string,
+    png: Buffer,
+    meta: Sidecar,
+    expectedAssetId?: string,
+  ): Promise<string> {
+    return withLock(NAMES_LOCK, async () => {
+      let target: string | null = id;
+      const holds =
+        (await this.hasMedia(id)) &&
+        (expectedAssetId === undefined || (await this.sidecar(id)).assetId === expectedAssetId);
+      if (!holds) {
+        target =
+          expectedAssetId === undefined
+            ? null
+            : ((await this.list()).find(
+                (item) => item.assetId === expectedAssetId && item.kind === "screenshot",
+              )?.id ?? null);
+      }
+      if (target === null) throw new ItemGoneError(id);
+      const resolved = target;
+      await withLock(this.sidecarPath(resolved), async () => {
+        await this.writeImage(resolved, png);
+        await this.writeMetaLocked(resolved, meta);
+      });
+      return resolved;
+    });
+  }
+
   /** Writes a screenshot PNG as `<id>.png` in the vault root. */
   async writeImage(id: string, png: Buffer): Promise<void> {
     await mkdir(this.directory, { recursive: true });

@@ -67,12 +67,64 @@ describe("saveScreenshotToVault", () => {
 
   it("keeps the PNG when an overwrite's sidecar write fails", async () => {
     await vault.writeImage("existing", Buffer.from("old"));
-    vi.spyOn(vault, "writeMeta").mockRejectedValue(new Error("disk full"));
+    // The overwrite merges its sidecar under the names lock, through the locked writer.
+    vi.spyOn(
+      vault as never as { writeMetaLocked: () => Promise<void> },
+      "writeMetaLocked",
+    ).mockRejectedValue(new Error("disk full"));
     await expect(
       saveScreenshotToVault(Buffer.from("new"), { title: "Shot", overwriteId: "existing" }),
     ).rejects.toThrow("disk full");
     expect((await readdir(directory)).filter((n) => n.endsWith(".png"))).toEqual(["existing.png"]);
     // The new bytes were already written; only a brand-new item is rolled back.
     expect((await readFile(join(directory, "existing.png"))).toString()).toBe("new");
+  });
+
+  it("an overwrite racing a rename never resurrects the old name", async () => {
+    const saved = await saveScreenshotToVault(Buffer.from("one"), { title: "shot" });
+    const writeImage = vault.writeImage.bind(vault);
+    let renamed: Promise<unknown> | null = null;
+    vi.spyOn(vault, "writeImage").mockImplementation(async (id, png) => {
+      // The user renames the shot just as the overwrite is about to write.
+      renamed ??= new LibraryVault(directory).renameItem(saved.id, "New shot");
+      await Promise.race([renamed, new Promise((r) => setTimeout(r, 100))]);
+      return writeImage(id, png);
+    });
+    const overwrite = saveScreenshotToVault(Buffer.from("edit"), {
+      title: "shot",
+      overwriteId: saved.id,
+    }).catch((error: unknown) => error);
+    await overwrite;
+    await renamed;
+    const listed = await vault.list();
+    expect(listed.map((r) => r.assetId)).toEqual([saved.assetId]);
+    expect((await readdir(directory)).filter((n) => n.endsWith(".png"))).toHaveLength(1);
+  });
+
+  it("follows the item to its new id when it was renamed before the overwrite", async () => {
+    const saved = await saveScreenshotToVault(Buffer.from("one"), { title: "shot" });
+    await vault.renameItem(saved.id, "New shot");
+    const result = await saveScreenshotToVault(Buffer.from("edit"), {
+      title: "New shot",
+      overwriteId: saved.id,
+      overwriteAssetId: saved.assetId,
+    });
+    expect(result).toMatchObject({ id: "New shot", assetId: saved.assetId });
+    expect((await readFile(join(directory, "New shot.png"))).toString()).toBe("edit");
+    expect((await readdir(directory)).filter((n) => n.endsWith(".png"))).toEqual(["New shot.png"]);
+  });
+
+  it("does not overwrite another item that took the old name", async () => {
+    const first = await saveScreenshotToVault(Buffer.from("one"), { title: "shot" });
+    await vault.renameItem(first.id, "Moved");
+    const other = await saveScreenshotToVault(Buffer.from("other"), { title: "shot" });
+    expect(other.id).toBe(first.id); // the stem was free again
+    const result = await saveScreenshotToVault(Buffer.from("edit"), {
+      title: "Moved",
+      overwriteId: first.id,
+      overwriteAssetId: first.assetId,
+    });
+    expect(result).toMatchObject({ id: "Moved", assetId: first.assetId });
+    expect((await readFile(join(directory, "shot.png"))).toString()).toBe("other");
   });
 });

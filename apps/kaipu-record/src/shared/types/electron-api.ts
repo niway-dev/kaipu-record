@@ -470,7 +470,7 @@ export interface KaipuElectronAPI {
   saveScreenshot(
     png: ArrayBuffer,
     /** `manual`: the user pressed Save (stamps the Editor home's "Saved"), not the auto-save. */
-    meta: { title: string; overwriteId?: string; manual?: boolean },
+    meta: { title: string; overwriteId?: string; overwriteAssetId?: string; manual?: boolean },
   ): Promise<LocalRecording>;
   /**
    * Ask where to put an exported capture (a native save dialog seeded with

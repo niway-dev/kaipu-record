@@ -217,7 +217,7 @@ export function registerScreenshotHandlers(
     async (
       _e,
       png: ArrayBuffer,
-      meta: { title: string; overwriteId?: string; manual?: boolean },
+      meta: { title: string; overwriteId?: string; overwriteAssetId?: string; manual?: boolean },
     ): Promise<LocalRecording> => {
       return saveScreenshotToVault(Buffer.from(png), meta);
     },

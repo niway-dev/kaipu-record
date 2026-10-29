@@ -34,7 +34,13 @@ export type ImageSource =
        */
       origin?: "capture" | "paste" | "quiet";
     })
-  | (ImageSourceBase & { kind: "local"; id: string; version?: number })
+  | (ImageSourceBase & {
+      kind: "local";
+      id: string;
+      version?: number;
+      /** The item's identity: a save follows it if a rename moved the file (NIW2-560). */
+      assetId?: string;
+    })
   | (ImageSourceBase & { kind: "cloud"; url: string });
 
 /** What every reader resolves a source into, for the generic editor to consume. */

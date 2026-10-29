@@ -137,6 +137,10 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
   const [savedId, setSavedId] = useState<string | null>(source.kind === "local" ? source.id : null);
   // Queued jobs read these when they RUN, not from the render that queued them.
   const savedIdRef = useRef(savedId);
+  // The saved item's identity: an overwrite names it so main can follow a rename.
+  const savedAssetIdRef = useRef<string | undefined>(
+    source.kind === "local" ? source.assetId : undefined,
+  );
   // The item the auto-save on open created: the ONLY thing Discard may delete.
   const autoSavedId = useRef<string | null>(null);
   // The auto copy mode is read ONCE when the editor opens; a Settings change while
@@ -165,6 +169,7 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
         const result = await window.electronAPI.renameLocalRecording(id, next);
         const newId = result.recording.id;
         savedIdRef.current = newId;
+        savedAssetIdRef.current = result.recording.assetId;
         setSavedId(newId);
         if (autoSavedId.current === id) autoSavedId.current = newId;
         notifyRenameOutcome(result, { library: tLibrary, common: tCommon }, () => {
@@ -320,10 +325,14 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
           // user sees even if the field has not blurred yet (e.g. a shortcut).
           title: opts.title ?? resolveCaptureTitle(draftAtStart, captureTitle.autoTitle),
           overwriteId,
+          ...(overwriteId !== undefined && savedAssetIdRef.current
+            ? { overwriteAssetId: savedAssetIdRef.current }
+            : {}),
           // The auto-save on open is not the user's work; every other save is.
           manual: opts.manual ?? !opts.silent,
         });
         savedIdRef.current = saved.id;
+        savedAssetIdRef.current = saved.assetId;
         setSavedId(saved.id);
         // Don't clobber a title typed while the save was running.
         if (latest.current.draft === draftAtStart) captureTitle.adopt(saved.title);

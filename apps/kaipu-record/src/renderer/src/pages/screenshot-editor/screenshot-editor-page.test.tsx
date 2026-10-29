@@ -212,7 +212,11 @@ describe("ScreenshotEditorPage — rename moves the file (NIW2-560)", () => {
     d.resolve(renameResult("Sprint demo", "Sprint demo"));
     expect(await screen.findByText("library")).toBeInTheDocument();
     expect(saveCalls()).toHaveLength(2);
-    expect(saveCalls()[1][1]).toMatchObject({ overwriteId: "Sprint demo" });
+    // The identity rides along, so main can follow a rename it has not seen yet.
+    expect(saveCalls()[1][1]).toMatchObject({
+      overwriteId: "Sprint demo",
+      overwriteAssetId: "a-Sprint demo",
+    });
   });
 
   it("shows a Retry toast when the file kept its old name, and retries on the same id", async () => {
