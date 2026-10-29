@@ -45,16 +45,43 @@ The user-facing word is **workspace**. "Vault" survives only in existing code id
 5. **Switching is refused while anything writes into the active workspace**: a recording, an
    export, a GIF save, a screenshot save, or a move. Each writer also binds its folder when it
    starts, so a write always ends in the workspace it started in.
-6. **Item addresses carry the workspace.** Every IPC call that names an item sends
-   `workspaceId`. Main resolves it to a registered, available path, so an editor left open
-   across a switch never writes into the wrong folder.
-7. **A workspace whose folder cannot be reached is unavailable**: it is listed, cannot be
+6. **Item addresses carry the workspace, and main serves only the active one.** Every IPC call
+   that names an item, and every tag-registry call, sends `workspaceId` and the **workspace
+   generation** it was made under. Main runs the call only when both match the active
+   workspace, and binds the resolved folder once for the whole operation (a repository
+   operation never resolves the folder twice). A stale call is rejected with `stale-workspace`
+   and writes nothing. The mover and the startup sweeps are the only code that touches a
+   non-active workspace, and they are main-internal.
+7. **A switch is a transaction, not a flag.** `workspaces:switch` runs these steps in order, and
+   stops at the first that fails, leaving the old workspace active:
+   1. Refuse if a writer is busy (decision 5).
+   2. Main enters `switching`: new item-scoped calls are rejected, and calls already running
+      are drained (every call runs inside a per-workspace gate, so the switch awaits them).
+   3. Every renderer window is asked to prepare. Editors **flush and await their pending
+      saves**. An editor with unsaved changes asks Save, Discard or Cancel; Cancel aborts the
+      switch. The screenshot editor, the video editor and the item detail page are closed and
+      unmounted. Media and thumbnail caches and the list queries are cleared.
+   4. Pending quiet-capture toasts are dismissed and their retained bytes dropped (decision 9).
+   5. Main bumps the generation, sets `activeId` and persists it, then broadcasts
+      `workspaces:changed` with the new generation. Renderers reload their lists.
+      A response that arrives after the switch carries the old generation and is discarded by the
+      renderer. Nothing from the old workspace stays mounted, so there is no editor left to copy
+      pixels to the clipboard or to save.
+8. **A workspace whose folder cannot be reached is unavailable**: it is listed, cannot be
    switched to, cannot receive a move, and is never silently replaced by another one. If the
    active workspace becomes unavailable, captures are refused with a message. They do not fall
    back to another workspace.
-8. **Tags stay per workspace** (ADR 0020 unchanged). **The cloud catalog stays per account**,
-   and every cloud asset records the `workspaceId` it belongs to. A workspace's Library hides
-   cloud entries of other workspaces.
+9. **A capture is bound to a workspace when it starts.** The capture request resolves the
+   active `workspaceId` once. That id travels with the retained bytes, the toast payload, the
+   toast's Save and Annotate actions and the editor source, and the save resolves the folder
+   from it. If it is not the active workspace any more when an action arrives, the action
+   writes nothing. The switch (decision 7) drops the retained bytes, so a delayed click can
+   never land in the new workspace. A quiet capture is copy-only, so its pixels are already on
+   the clipboard when the bytes are dropped.
+10. **Tags stay per workspace** (ADR 0020 unchanged). **The cloud catalog stays per account**,
+    and every cloud asset records the `workspaceId` it belongs to. A workspace's Library hides
+    cloud entries of other workspaces. Hiding is a view: it never removes other workspaces'
+    entries from the account cache.
 
 ## Alternatives rejected
 
@@ -81,6 +108,9 @@ The user-facing word is **workspace**. "Vault" survives only in existing code id
 
 - `vault-location.ts` becomes a workspace registry: list, add/adopt, switch, rename, remove.
   `currentVault()` callers that act on a named item resolve by `workspaceId` instead.
+- Main gains a per-workspace operation gate and a generation counter. The renderer stamps
+  calls with both, and the switch drains the gate. This is what makes "one active workspace"
+  true for an editor that was already open, not just for the next call.
 - `kaipu-media://` URLs carry the workspace id, so a URL the renderer cached before a switch
   cannot resolve an item with the same id in another folder.
 - The startup sweeps run for every available workspace: stranded-take recovery
