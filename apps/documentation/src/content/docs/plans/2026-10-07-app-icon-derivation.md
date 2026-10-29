@@ -35,6 +35,15 @@ The window content shows the new fox (`@kaipu/brand`), but the OS shows the old 
    `logo-app.svg` + the script, so editing the source without regenerating fails CI.
 4. Note in the rollout plan which step this closes.
 
+## Update 2026-10-29 — Windows
+
+The script now also writes `build/icon.ico` (Windows `.exe`, installer, uninstaller,
+shortcuts and the one-click installer's progress banner): `logo-app.svg` edge to edge at
+48–256 px, `logo-plain.svg` at 16–32 px. The stamp hashes every input (both logos, the
+two mono cuts, the script and `png-to-ico.mjs`), and `build/icon.outputs.sha256` lists
+every generated file; `app-icon.test.ts` fails when a shipped icon is missing from it or
+was changed by hand. Until then the `.ico` was a June hand export with the old play-mark.
+
 ## Not verified at night
 
 Visual check in the Dock, ⌘-Tab and Finder for `bun run dev` and a fresh DMG install
