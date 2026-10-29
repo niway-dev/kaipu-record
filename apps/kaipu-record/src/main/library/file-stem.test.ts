@@ -121,6 +121,28 @@ describe("reserved stems (NIW2-560 review)", () => {
   });
 });
 
+describe("filesystem aliases (NIW2-560 second review)", () => {
+  it.each([
+    ["Demo.curſor", "Demo cursor"], // U+017F long s folds to "s" on APFS
+    ["Demo.\uFF45\uFF44\uFF49\uFF54", "Demo edit"], // fullwidth ".edit" letters
+    ["tagſ", "Kaipu tags"],
+    ["\uFF54\uFF41\uFF47\uFF53", "Kaipu tags"], // fullwidth "tags"
+    ["\u212Aaipu demo", "Kaipu demo"], // Kelvin sign
+    ["\uFF24\uFF45\uFF4D\uFF4F", "Demo"], // fullwidth letters
+    ["a\uFF0Fb\uFF1Ac", "a b c"], // fullwidth solidus and colon become forbidden ASCII
+    ["one\u2025two", "one.two"], // two-dot leader expands to "..", then collapses
+  ])("projects %j to a plain, unreserved stem (%j)", (title, stem) => {
+    expect(fileStemFromTitle(title)).toBe(stem);
+  });
+
+  it("flags reserved names under any case fold a filesystem may apply", () => {
+    expect(isReservedStem("tagſ")).toBe(true);
+    expect(isReservedStem("x.curſor")).toBe(true);
+    expect(isReservedStem("x.\uFF45\uFF44\uFF49\uFF54")).toBe(true);
+    expect(isReservedStem("TAGS")).toBe(true);
+  });
+});
+
 describe("isReservedWindowsName", () => {
   it("checks the segment before the first dot, case-insensitively", () => {
     expect(isReservedWindowsName("con")).toBe(true);

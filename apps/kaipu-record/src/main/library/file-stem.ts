@@ -25,20 +25,33 @@ const COMPANION_TAILS = [".edit.meta", ".edit", ".cursor"];
 const VAULT_OWNED = new Set(["tags"]);
 
 /**
+ * The comparison key a case-insensitive filesystem may use for a name: compatibility
+ * characters folded (`ſ` → `s`, fullwidth → ASCII), then case folded both ways (`ı` and
+ * `I` both reach `i`). Stricter than APFS or NTFS on purpose: a false "same name" only
+ * costs a ` (2)`, a missed one merges two items.
+ */
+export function fsFold(value: string): string {
+  return value.normalize("NFKC").toUpperCase().toLowerCase().normalize("NFKC");
+}
+
+/** The companion tail `stem` ends with, under `fsFold`, if any. */
+function companionTail(stem: string): string | undefined {
+  return COMPANION_TAILS.find((tail) => fsFold(stem.slice(-tail.length)) === tail);
+}
+
+/**
  * True when `stem` must never name an item: its companion paths would overlap another
- * stem's (`*.edit`, `*.cursor`, `*.edit.meta`) or a file the vault owns (`tags`).
- * Case-insensitive, like APFS and NTFS.
+ * stem's (`*.edit`, `*.cursor`, `*.edit.meta`) or a file the vault owns (`tags`), under
+ * any case or compatibility fold a filesystem may apply (`tagſ` aliases `tags`).
  */
 export function isReservedStem(stem: string): boolean {
-  const lower = stem.toLowerCase();
-  return VAULT_OWNED.has(lower) || COMPANION_TAILS.some((tail) => lower.endsWith(tail));
+  return VAULT_OWNED.has(fsFold(stem)) || companionTail(stem) !== undefined;
 }
 
 /** `Demo.edit` → `Demo edit`, `tags` → `Kaipu tags`: the nearest stem that is not reserved. */
 function unreserve(stem: string): string {
-  if (VAULT_OWNED.has(stem.toLowerCase())) return `Kaipu ${stem}`;
-  const lower = stem.toLowerCase();
-  const tail = COMPANION_TAILS.find((t) => lower.endsWith(t));
+  if (VAULT_OWNED.has(fsFold(stem))) return `Kaipu ${stem}`;
+  const tail = companionTail(stem);
   if (!tail) return stem;
   const dot = stem.length - tail.length + tail.lastIndexOf(".");
   return `${stem.slice(0, dot)} ${stem.slice(dot + 1)}`;
@@ -71,7 +84,10 @@ function capLength(value: string): string {
  * stem (`isReservedStem`).
  */
 export function fileStemFromTitle(title: string): string | null {
-  let stem = title.normalize("NFC").replace(FORBIDDEN, " ").replace(/\s+/g, " ");
+  // NFKC, not just NFC: a compatibility character (`ſ`, fullwidth letters, `‥`) is an
+  // alias of plain ASCII on case-insensitive filesystems, so the file name never holds
+  // one — and fullwidth `／` or `：` become the forbidden ASCII they stand for.
+  let stem = title.normalize("NFKC").replace(FORBIDDEN, " ").replace(/\s+/g, " ");
   stem = trimEdges(stem.replace(/\.{2,}/g, "."));
   if (isReservedWindowsName(stem)) stem = `Kaipu ${stem}`;
   stem = trimEdges(capLength(stem));

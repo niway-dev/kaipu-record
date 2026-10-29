@@ -230,6 +230,28 @@ describe("LibraryVault.renameItem", () => {
     },
   );
 
+  it.each(["Demo.curſor", "Demo.\uFF45\uFF44\uFF49\uFF54", "Demo.EDİT"])(
+    "a Unicode alias of a companion tail (%j) neither renames onto Demo's paths nor loses its identity",
+    async (title) => {
+      await writeFile(join(directory, "Demo.mp4"), "v");
+      await mkdir(meta, { recursive: true });
+      await writeFile(
+        join(meta, "Demo.json"),
+        JSON.stringify({ assetId: "asset-1", tagIds: ["t"] }),
+      );
+      const result = await vault.renameItem("Demo", title);
+      expect(result.recording.id).not.toMatch(/\.(curs|edit)/i);
+      expect(result.recording).toMatchObject({ assetId: "asset-1", tagIds: ["t"], title });
+      expect((await vault.list()).map((r) => r.assetId)).toEqual(["asset-1"]);
+    },
+  );
+
+  it("never allocates a stem that aliases the tag registry (tagſ)", async () => {
+    const id = await vault.allocateId({ kind: "screenshot", title: "tagſ", createdAt: 1 });
+    expect(id).toBe("Kaipu tags");
+    expect(await readdir(meta)).not.toContain("tags.json");
+  });
+
   it("never names an item after a file the vault owns (.kaipu/tags.json)", async () => {
     // No tag registry yet: its path is free on disk, but it is not the item's to take.
     await writeFile(join(directory, "clip.mp4"), "v");

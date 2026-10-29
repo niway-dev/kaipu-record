@@ -23,7 +23,7 @@ import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/type
 import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-name";
 import { atomicWriteFile, withLock } from "./atomic-write";
 import { sha256FileBase64 } from "./content-hash";
-import { fileStemFromTitle, isReservedStem } from "./file-stem";
+import { fileStemFromTitle, fsFold, isReservedStem } from "./file-stem";
 import { mediaUrl } from "@shared/media-url";
 
 const META_DIR = ".kaipu";
@@ -151,7 +151,8 @@ type StemResolution =
 
 const sleepFor = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-const foldName = (value: string): string => value.normalize("NFC").toLowerCase();
+/** Names a case-insensitive filesystem may treat as one (see `fsFold`). */
+const foldName = fsFold;
 
 function kindFromExt(ext: string): CaptureKind {
   if ((IMAGE_EXTS as readonly string[]).includes(ext)) return "screenshot";
