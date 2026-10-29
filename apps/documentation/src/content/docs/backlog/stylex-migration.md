@@ -289,8 +289,8 @@ paint.
 ### Two claims the migration does not support
 
 - "The first paint no longer flashes the wrong theme" is true, but it was fixed
-  in `78f6deac` (2026-10-01), one day before the experiment and with no StyleX
-  in it: the inline critical style now follows the theme cookie.
+  in `78f6deac` (2026-10-01), the same day as the experiment's first commit
+  (`be6eed7`) and one commit earlier, with no StyleX in it: the inline critical style now follows the theme cookie.
 - "Performance went up" has no controlled measurement behind it. What the
   migration can claim is that it did not cost bytes.
 
