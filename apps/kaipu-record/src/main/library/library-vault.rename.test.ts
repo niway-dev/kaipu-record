@@ -212,6 +212,42 @@ describe("LibraryVault.renameItem", () => {
     expect(await readdir(meta)).toEqual(["Named.json"]);
   });
 
+  it.each(["Demo.edit", "Demo.cursor", "Demo.edit.meta", "Demo.EDIT"])(
+    "renaming Demo to %j never lands on Demo's own companion paths",
+    async (title) => {
+      // No edit project, no cursor track: the overlapping paths are free on disk.
+      await writeFile(join(directory, "Demo.mp4"), "v");
+      await mkdir(meta, { recursive: true });
+      await writeFile(
+        join(meta, "Demo.json"),
+        JSON.stringify({ assetId: "asset-1", title: "Demo", tagIds: ["tag-a"] }),
+      );
+      const result = await vault.renameItem("Demo", title);
+      expect(result.recording).toMatchObject({ assetId: "asset-1", tagIds: ["tag-a"], title });
+      const [listed] = await vault.list();
+      expect(listed).toMatchObject({ id: result.recording.id, assetId: "asset-1" });
+      expect((await vault.list()).map((r) => r.assetId)).toEqual(["asset-1"]);
+    },
+  );
+
+  it("never names an item after a file the vault owns (.kaipu/tags.json)", async () => {
+    // No tag registry yet: its path is free on disk, but it is not the item's to take.
+    await writeFile(join(directory, "clip.mp4"), "v");
+    const result = await vault.renameItem("clip", "tags");
+    expect(result.recording.id).not.toMatch(/^tags$/i);
+    expect(await readdir(meta)).not.toContain("tags.json");
+  });
+
+  it("does not move onto a stem whose companions overlap the source's", async () => {
+    // A legacy item whose id already ends in ".edit" (renamed in Finder).
+    await writeFile(join(directory, "Demo.edit.mp4"), "v");
+    await mkdir(meta, { recursive: true });
+    await writeFile(join(meta, "Demo.edit.json"), JSON.stringify({ assetId: "asset-1" }));
+    const result = await vault.renameItem("Demo.edit", "Demo");
+    expect(result.recording.assetId).toBe("asset-1");
+    expect((await vault.list()).map((r) => r.assetId)).toEqual(["asset-1"]);
+  });
+
   it("throws ItemNotFoundError (with the IPC marker) for an id without media", async () => {
     await expect(vault.renameItem("ghost", "X")).rejects.toBeInstanceOf(ItemNotFoundError);
     await expect(vault.renameItem("ghost", "X")).rejects.toThrow(ITEM_NOT_FOUND_MARKER);
@@ -360,6 +396,15 @@ describe("LibraryVault.allocateId", () => {
       "Base (recovered) (2)",
     );
     expect(await vault.allocateId({ ...input, stem: "a/b" })).toBe("a b");
+  });
+
+  it("never allocates a reserved or companion-shaped stem", async () => {
+    const input = { kind: "screenshot" as const, createdAt: at };
+    expect(await vault.allocateId({ ...input, title: "tags" })).not.toMatch(/^tags$/i);
+    expect(await vault.allocateId({ ...input, title: "Shot.edit" })).not.toMatch(/\.edit$/i);
+    expect(await vault.allocateId({ ...input, title: "x", stem: "y.cursor" })).not.toMatch(
+      /\.cursor$/i,
+    );
   });
 
   it("falls back to the default name for an empty title", async () => {

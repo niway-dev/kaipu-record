@@ -3,6 +3,7 @@ import {
   STEM_MAX_CODE_POINTS,
   STEM_MAX_UTF8_BYTES,
   fileStemFromTitle,
+  isReservedStem,
   isReservedWindowsName,
 } from "./file-stem";
 import { isPlainItemId } from "./library-vault";
@@ -94,6 +95,29 @@ describe("fileStemFromTitle", () => {
       expect(stem).not.toContain("..");
       expect(stem).not.toMatch(/[\s.]$/);
     }
+  });
+});
+
+describe("reserved stems (NIW2-560 review)", () => {
+  it.each([
+    ["Demo.edit", "Demo edit"],
+    ["Demo.EDIT", "Demo EDIT"],
+    ["Demo.cursor", "Demo cursor"],
+    ["Demo.edit.meta", "Demo.edit meta"],
+    ["tags", "Kaipu tags"],
+    ["TAGS", "Kaipu TAGS"],
+  ])("projects %j to a stem that owns no other stem's companion (%j)", (title, stem) => {
+    expect(fileStemFromTitle(title)).toBe(stem);
+    expect(isReservedStem(stem)).toBe(false);
+  });
+
+  it("flags companion-shaped and vault-owned names", () => {
+    expect(isReservedStem("a.edit")).toBe(true);
+    expect(isReservedStem("a.Cursor")).toBe(true);
+    expect(isReservedStem("a.edit.meta")).toBe(true);
+    expect(isReservedStem("Tags")).toBe(true);
+    expect(isReservedStem("tags list")).toBe(false);
+    expect(isReservedStem("edit")).toBe(false);
   });
 });
 

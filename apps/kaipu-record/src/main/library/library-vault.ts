@@ -23,7 +23,7 @@ import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/type
 import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-name";
 import { atomicWriteFile, withLock } from "./atomic-write";
 import { sha256FileBase64 } from "./content-hash";
-import { fileStemFromTitle } from "./file-stem";
+import { fileStemFromTitle, isReservedStem } from "./file-stem";
 
 const META_DIR = ".kaipu";
 /** Known video containers, in preference order — `.mp4` is what we now write. */
@@ -238,6 +238,8 @@ export class LibraryVault {
    * would merge two identities.
    */
   async isStemFree(stem: string): Promise<boolean> {
+    // A reserved stem's companions are another stem's (or the vault's own) files.
+    if (isReservedStem(stem)) return false;
     const { cursorTrackTemp: _temp, ...companions } = this.companionPaths(stem);
     const paths = [
       ...ALL_EXTS.map((ext) => join(this.directory, `${stem}${ext}`)),
@@ -297,6 +299,8 @@ export class LibraryVault {
   ): Promise<StemResolution> {
     return this.firstCandidate(stem, async (candidate) => {
       if (candidate === self) return { id: candidate, mode: "same" };
+      // Copy-then-delete would delete the copy if any path is shared with the source.
+      if (this.pathsOverlap(candidate, self)) return null;
       if (await this.isStemFree(candidate)) return { id: candidate, mode: "free" };
       if (foldName(candidate) === foldName(self) && (await this.isSameFile(candidate, selfMedia))) {
         return { id: candidate, mode: "case" };
@@ -309,6 +313,21 @@ export class LibraryVault {
       }
       return null;
     });
+  }
+
+  /**
+   * Whether two different stems share a path (case-folded, as on APFS/NTFS): e.g. a legacy
+   * `Demo.edit` item, whose sidecar `Demo.edit.json` is `Demo`'s edit session. A case-only
+   * variant of the same stem is not an overlap; `moveInPlace` handles it.
+   */
+  private pathsOverlap(a: string, b: string): boolean {
+    if (foldName(a) === foldName(b)) return false;
+    const owned = (id: string): string[] => [
+      ...ALL_EXTS.map((ext) => join(this.directory, `${id}${ext}`)),
+      ...Object.values(this.companionPaths(id)),
+    ];
+    const theirs = new Set(owned(b).map(foldName));
+    return owned(a).some((path) => theirs.has(foldName(path)));
   }
 
   /** Whether `candidate` with `media`'s extension is the very same file (case-insensitive FS). */
