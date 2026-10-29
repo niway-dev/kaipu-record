@@ -64,6 +64,27 @@ interface ToolbarLayout {
   rowSpread: number;
 }
 
+/**
+ * The toolbar settles a frame after the window does: useCompactRow re-measures from a
+ * ResizeObserver, so a reading taken the instant `innerWidth` matches can still carry the
+ * previous width's `data-compact` (seen on CI: "false" with the actions pushed outside at
+ * 680px, then "true" and clean a moment later). Poll the reading instead of taking one.
+ */
+async function expectToolbar(page: Page, expected: ToolbarLayout): Promise<void> {
+  await expect.poll(() => measureToolbar(page)).toEqual(expected);
+}
+
+/** The capture title field's width: what the compact row exists to protect (NIW2-351). */
+async function titleFieldWidth(page: Page): Promise<number> {
+  return page
+    .getByRole("toolbar")
+    .getByRole("textbox", { name: "Title" })
+    .evaluate((el) => el.getBoundingClientRect().width);
+}
+
+/** Below this the title reads as "Scree…": the minimum capture-title-input.module.css keeps. */
+const READABLE_TITLE_WIDTH = 160;
+
 async function measureToolbar(page: Page): Promise<ToolbarLayout> {
   return page.evaluate(() => {
     const bar = document.querySelector<HTMLElement>('[role="toolbar"]');
@@ -132,11 +153,9 @@ for (const width of [1440, 1180]) {
     try {
       await openScreenshotEditor(page);
       await resizeWindow(app, page, width);
-      expect(await measureToolbar(page)).toEqual<ToolbarLayout>({
-        ...ONE_CLEAN_ROW,
-        compact: "false",
-      });
+      await expectToolbar(page, { ...ONE_CLEAN_ROW, compact: "false" });
       await expect(page.getByRole("toolbar").getByText("Save", { exact: true })).toBeVisible();
+      expect(await titleFieldWidth(page)).toBeGreaterThanOrEqual(READABLE_TITLE_WIDTH);
     } finally {
       await teardown();
     }
@@ -144,37 +163,39 @@ for (const width of [1440, 1180]) {
 }
 
 // A display too small for the editor floor: `fitPresetToDisplay` clamps the floor to the
-// work area, so the image editor still runs at 900px on a small laptop with the labels on.
-// The guard the `main`-preset era had at 900 stays, reached by clearing the floor.
-test("the editor toolbar keeps one row, labels on, at 900px below the editor floor", async () => {
+// work area, so the image editor still runs at 900px on a small laptop. The row cannot
+// hold the tools, the labelled actions and a readable title there, and the title wins
+// (NIW2-351): the action labels go, the controls stay in one clean row, and the name
+// keeps its readable minimum instead of shrinking to "Scree…".
+test("at 900px below the editor floor the toolbar drops the labels and keeps the title readable", async () => {
   const { app, page, teardown } = await launchApp();
   try {
     await openScreenshotEditor(page);
     await resizeWindow(app, page, 900, { belowFloor: true });
-    expect(await measureToolbar(page)).toEqual<ToolbarLayout>({
-      ...ONE_CLEAN_ROW,
-      compact: "false",
-    });
-    await expect(page.getByRole("toolbar").getByText("Save", { exact: true })).toBeVisible();
+    await expectToolbar(page, { ...ONE_CLEAN_ROW, compact: "true" });
+    const save = page.getByRole("button", { name: "Save", exact: true });
+    await expect(save).toBeVisible();
+    await expect(save.getByText("Save")).toBeHidden();
+    expect(await titleFieldWidth(page)).toBeGreaterThanOrEqual(READABLE_TITLE_WIDTH);
   } finally {
     await teardown();
   }
 });
 
 // Narrower than the app allows — a display too small for the floor, or a control added
-// later — the row gives up the action labels rather than overlapping.
+// later — the row gives up the action labels rather than overlapping. With the labels gone
+// the title is the only thing left that may give: its readable minimum is released, so the
+// icon-only actions never run past the toolbar's edge.
 test("below the window floor the editor toolbar drops the action labels instead of overlapping", async () => {
   const { app, page, teardown } = await launchApp();
   try {
     await openScreenshotEditor(page);
     await resizeWindow(app, page, 680, { belowFloor: true });
-    expect(await measureToolbar(page)).toEqual<ToolbarLayout>({
-      ...ONE_CLEAN_ROW,
-      compact: "true",
-    });
+    await expectToolbar(page, { ...ONE_CLEAN_ROW, compact: "true" });
     const save = page.getByRole("button", { name: "Save", exact: true });
     await expect(save).toBeVisible();
     await expect(save.getByText("Save")).toBeHidden();
+    expect(await titleFieldWidth(page)).toBeGreaterThan(0);
   } finally {
     await teardown();
   }

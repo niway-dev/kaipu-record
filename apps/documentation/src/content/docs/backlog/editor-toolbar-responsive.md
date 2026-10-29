@@ -26,10 +26,14 @@ Two of the options below shipped, in two steps:
    per button added, and at the app's 900px floor it would either never fire or strip the
    labels from a row that still has ~190px to spare.
 
-Checked by `apps/kaipu-record/e2e/screenshot-editor.e2e.ts`: at 1040px (the preset's
-starting width) and 900px (the floor, and the width the window actually opens at) the row
-holds every control on one line with nothing overlapping and the labels on; forced below
-the floor (680px) it collapses to icons rather than overlapping.
+Checked by `apps/kaipu-record/e2e/screenshot-editor.e2e.ts`: at 1440px (the editor
+preset's starting width) and 1180px (its floor) the row holds every control on one line
+with nothing overlapping, the labels on and the capture title readable. At 900px (a
+display too small for the floor) the tools, the labelled actions and a readable title no
+longer fit together and the title wins (NIW2-351): the labels drop, the row stays clean
+and the title keeps its 160px minimum. Forced further down (680px) the title's minimum
+is released too — with the labels gone it is the only thing left that can give — so the
+icon-only actions never run past the toolbar's edge.
 
 Not done, and not needed for now: a second row (option 4) or an overflow menu (option 3).
 Reopen if a control is added that does not fit even icon-only at 900px.

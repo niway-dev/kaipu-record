@@ -7,6 +7,13 @@
  * of the name shrinking to "Scree…" first. The side spacing is padding, not
  * margin, because useCompactRow sums offsetWidth, which leaves margins out — a
  * margin would let the row overflow by that much before it compacts.
+ *
+ * Once the row is compact the minimum is released: the labels are already gone,
+ * so the name is the only thing left that can give. Without this a window
+ * narrower than the tools, the icon-only actions and the minimum together (below
+ * the editor's floor) pushed the actions past the toolbar's edge. `data-compact`
+ * is set on the toolbar by useCompactRow (screenshot-editor-page.tsx); the
+ * attribute selector reaches across CSS modules, a class could not.
  */
 
 .field {
@@ -14,6 +21,10 @@
   min-width: calc(160px + 2 * var(--space-md));
   max-width: 520px;
   padding: 0 var(--space-md);
+}
+
+[data-compact="true"] .field {
+  min-width: 0;
 }
 
 .input {
