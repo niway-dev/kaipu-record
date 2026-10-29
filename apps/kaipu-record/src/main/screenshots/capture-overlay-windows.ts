@@ -362,6 +362,8 @@ export class CaptureOverlayWindows implements OverlayPort {
   private warmTimer: ReturnType<typeof setTimeout> | null = null;
   /** Why the last pick opened (after any P / V switch): the warm-up guesses the next from it. */
   private lastIntent: CaptureIntent | null = null;
+  /** `dispose()` ran: the app is quitting, so no window is loaded again. */
+  private disposed = false;
 
   constructor(deps: Partial<CaptureOverlayDeps> = {}) {
     this.deps = { ...electronDeps(), ...deps };
@@ -479,8 +481,25 @@ export class CaptureOverlayWindows implements OverlayPort {
     return displays.map((display, index) => overlaySpareQuery(display, index + 1, displayIds));
   }
 
+  /**
+   * Quit: cancel the warm-up, drop the spares and any open pick's windows for good (no
+   * `beforeunload` round trip), and never load another. The windows this class creates after
+   * the quit began are exactly what keeps Electron's quit waiting forever (NIW2-548).
+   */
+  dispose(): void {
+    this.disposed = true;
+    if (this.warmTimer) {
+      clearTimeout(this.warmTimer);
+      this.warmTimer = null;
+    }
+    const spares = this.spares;
+    this.spares = null;
+    this.destroySpares(spares);
+    this.destroyAll();
+  }
+
   private scheduleWarm(delayMs: number): void {
-    if (!this.deps.warmup || this.warmTimer) return;
+    if (this.disposed || !this.deps.warmup || this.warmTimer) return;
     this.warmTimer = setTimeout(() => {
       this.warmTimer = null;
       this.warm();

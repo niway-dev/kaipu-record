@@ -224,3 +224,28 @@ describe("the recording shade: preloaded and reused", () => {
     });
   });
 });
+
+describe("the recording shade on quit", () => {
+  it("destroy() drops the window outright and prewarm() creates no other", () => {
+    const shade = new RecordingShadeWindow();
+    shade.prewarm();
+    const [window] = created;
+
+    shade.destroy();
+
+    expect(window!.destroy).toHaveBeenCalledTimes(1);
+    shade.prewarm();
+    expect(created).toHaveLength(1);
+  });
+
+  it("a show() after destroy() creates nothing and still answers its onShown callback", () => {
+    const shade = new RecordingShadeWindow();
+    shade.destroy();
+    const onShown = vi.fn();
+
+    shade.show(DISPLAY, AREA, onShown, COUNTDOWN);
+
+    expect(created).toHaveLength(0);
+    expect(onShown).toHaveBeenCalledTimes(1);
+  });
+});

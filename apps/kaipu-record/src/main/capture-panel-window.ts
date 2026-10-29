@@ -33,6 +33,8 @@ export class CapturePanelWindow {
   private painted = false;
   /** A click that arrived before the first paint — honoured when it lands. */
   private pendingTrayBounds: Rectangle | null = null;
+  /** `destroy()` ran: the app is quitting, so no window is created again. */
+  private disposed = false;
 
   constructor() {
     this.registerIpc();
@@ -75,6 +77,14 @@ export class CapturePanelWindow {
     }
   }
 
+  /** Quit: drop the window for good (no `beforeunload` round trip) and never create another. */
+  destroy(): void {
+    this.disposed = true;
+    this.pendingTrayBounds = null;
+    if (this.window && !this.window.isDestroyed()) this.window.destroy();
+    this.window = null;
+  }
+
   /** Join every Space, full-screen ones included, while open; leave them when hidden. */
   private setSpaceBehavior(open: boolean): void {
     if (process.platform !== "darwin" || !this.window || this.window.isDestroyed()) return;
@@ -102,6 +112,7 @@ export class CapturePanelWindow {
   }
 
   private create(): void {
+    if (this.disposed) return;
     this.window = new BrowserWindow({
       width: PANEL_WIDTH,
       height: PANEL_INITIAL_HEIGHT,

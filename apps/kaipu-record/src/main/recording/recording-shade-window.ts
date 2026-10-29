@@ -49,13 +49,24 @@ export class RecordingShadeWindow {
   private visible = false;
   /** The callback of the `show` that is waiting for the page to load. */
   private pendingShown: (() => void) | undefined;
+  /** `destroy()` ran: the app is quitting, so no window is created again. */
+  private disposed = false;
 
   /**
    * Load the window hidden and neutral, so the first `show` of a take only sends it a state
    * (the way the control bar's window is kept). Call once the app is up; no-op when one exists.
    */
   prewarm(): void {
+    if (this.disposed) return;
     this.ensureWindow(screen.getPrimaryDisplay().bounds);
+  }
+
+  /** Quit: drop the window for good (no `beforeunload` round trip) and never create another. */
+  destroy(): void {
+    this.disposed = true;
+    this.hide();
+    if (this.window && !this.window.isDestroyed()) this.window.destroy();
+    this.window = null;
   }
 
   /**
@@ -69,6 +80,11 @@ export class RecordingShadeWindow {
     onShown?: () => void,
     state: RecordingShadeState = { phase: "recording" },
   ): void {
+    // Quitting: nothing to cover, and a caller waiting on `onShown` must not wait forever.
+    if (this.disposed) {
+      onShown?.();
+      return;
+    }
     const key = JSON.stringify([display.id, display.bounds, rect]);
     if (this.window && !this.window.isDestroyed() && this.visible && this.key === key) {
       this.update(state);

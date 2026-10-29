@@ -105,6 +105,11 @@ const overlay: OverlayPort = {
   destroyAll: () => overlayWindows?.destroyAll(),
 };
 
+/** Quit: the overlay windows, spares included, are destroyed and never loaded again. */
+export function disposeCaptureOverlay(): void {
+  overlayWindows?.dispose();
+}
+
 /** What the rest of main needs from the screenshot backend once it is registered. */
 export interface ScreenshotHandlers {
   /** The modes this platform's provider can serve (the capture shortcuts fall back on it). */

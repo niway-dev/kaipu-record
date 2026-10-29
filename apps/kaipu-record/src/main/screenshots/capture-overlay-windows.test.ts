@@ -1572,3 +1572,49 @@ describe("CaptureOverlayWindows: the next pick's windows load hidden (warm-up)",
     expect(created).toHaveLength(1);
   });
 });
+
+describe("the capture overlays on quit", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function warmedPort() {
+    return new CaptureOverlayWindows({
+      platform: "darwin",
+      enabledModes: CAPTURE_MODES,
+      warmup: {
+        next: () => ({ ui: "frame", intent: "record", displays: [left, right] }),
+        canWarm: () => true,
+      },
+      warmDelayMs: 100,
+      warmRetryMs: 500,
+    });
+  }
+
+  it("dispose() destroys the loaded spares and a later prewarm() loads nothing", () => {
+    vi.useFakeTimers();
+    const port = warmedPort();
+    port.prewarm();
+    vi.advanceTimersByTime(0);
+    expect(created).toHaveLength(2);
+
+    port.dispose();
+
+    for (const { window } of created) expect(window.destroy).toHaveBeenCalledTimes(1);
+    port.prewarm();
+    vi.advanceTimersByTime(1000);
+    expect(created).toHaveLength(2);
+  });
+
+  it("dispose() cancels a warm-up still pending, so the quit never sees a late window", () => {
+    vi.useFakeTimers();
+    const port = warmedPort();
+    port.refreshSpares(); // no spares yet: a no-op
+    port.prewarm();
+
+    port.dispose();
+    vi.advanceTimersByTime(1000);
+
+    expect(created).toHaveLength(0);
+  });
+});

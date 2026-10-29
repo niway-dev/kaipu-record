@@ -94,6 +94,12 @@ export interface RecordingHubHandle {
   /** Load the countdown/recording shade window hidden, so the first countdown does not wait. */
   prewarmShade(): void;
   /**
+   * Quit: stop the click hook and the cursor sampling, release the writer's file handles and
+   * destroy the shade, control bar and camera bubble windows. The quit guards have already
+   * stopped or reset any take, so nothing here waits on a renderer.
+   */
+  dispose(): void;
+  /**
    * The next start's countdown is drawn on this region of this display (design "Kaipu Record
    * Modes"): the overlay just chose it, and the main window stays hidden. `rect` is display-
    * relative DIP, `null` for the whole display. Forgotten after `COUNTDOWN_REGION_TTL_MS`
@@ -833,6 +839,16 @@ export function registerRecordingHub(
     },
     prefetchScreenSources: () => screenSources.prefetch(),
     prewarmShade: () => shade.prewarm(),
+    dispose: () => {
+      clickHook.stop();
+      cursorTracks.discardAll();
+      clickSessions.clear();
+      clearCountdownRegion();
+      void writer.releaseAll().catch((error) => console.error("releasing takes failed", error));
+      shade.destroy();
+      bar.destroy();
+      cameraBubble.destroy();
+    },
     selectArea: async (displayId, rect, ratio) => {
       // The source is locked for the length of a take.
       if (activity.active) return false;

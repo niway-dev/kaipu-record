@@ -3,6 +3,7 @@ import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { closeOrReport, QUIT_DEADLINE_MS, sampleProcess } from "./quit-watchdog";
+import { SHUTDOWN_DEADLINE_MARKER } from "../../src/main/shutdown";
 
 /** Electron's stderr is kept for the quit-hang report; only the most recent part matters. */
 const STDERR_TAIL_BYTES = 64 * 1024;
@@ -189,6 +190,17 @@ export async function launchApp(options: { recordVideoDir?: string } = {}): Prom
           stderr: () => stderrTail,
           attach: attachEvidence,
         });
+        // The app has its own net: past `QUIT_DEADLINE_MS` in `src/main/shutdown.ts` it logs
+        // what is still open and exits by itself. That reads as a clean close here, so the
+        // log line is the only trace. A quit that needed the net is still a defect: fail,
+        // with the line that names what kept the quit waiting.
+        if (stderrTail.includes(SHUTDOWN_DEADLINE_MARKER)) {
+          await attachEvidence("quit-deadline-stderr", stderrTail);
+          throw new Error(
+            "[e2e] the app only quit because its shutdown deadline forced it (NIW2-548). " +
+              "The windows it still had open are in the quit-deadline-stderr attachment.",
+          );
+        }
       } finally {
         await rm(userDataDir, { recursive: true, force: true });
         await rm(vaultDir, { recursive: true, force: true });
