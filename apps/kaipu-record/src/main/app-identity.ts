@@ -5,8 +5,8 @@ import { join } from "path";
  * package.json, which the installed app and a dev run share — so without this both used one
  * userData directory: one single-instance lock (whichever started second quit at once), one
  * `auth.enc` (a dev-server session in the production app, and the reverse), one onboarding
- * state, one device id. A different name also gives the dev run its own macOS keychain entry
- * for `safeStorage` ("<name> Safe Storage").
+ * state, one device id. The name is set on every launch before `ready`, so whichever keychain
+ * entry `safeStorage` derives from it is the same each time and a dev sign-in survives restarts.
  */
 export const DEV_APP_NAME = "kaipu-record-dev";
 

@@ -4,14 +4,17 @@ import packageJson from "../../package.json";
 import { DEV_APP_NAME, devAppIdentity } from "./app-identity";
 
 const APP_DATA = "/Users/someone/Library/Application Support";
-// Electron names the installed app's data directory after package.json: `productName` when it
-// has one, `name` otherwise. That directory also holds the single-instance lock.
-const PACKAGED_USER_DATA = join(
-  APP_DATA,
-  (packageJson as { productName?: string }).productName ?? packageJson.name,
-);
+// The installed app's data — session, settings, the single-instance lock — lives in
+// `<appData>/kaipu-record`: Electron names the directory after package.json's `productName`,
+// else its `name`. Hard-coded, not derived, so a rename here cannot move users' data silently.
+const PACKAGED_USER_DATA = join(APP_DATA, "kaipu-record");
 
 describe("devAppIdentity", () => {
+  it("the installed app's data directory name is pinned by package.json", () => {
+    expect(packageJson.name).toBe("kaipu-record");
+    expect((packageJson as { productName?: string }).productName).toBeUndefined();
+  });
+
   it("leaves a packaged build alone", () => {
     expect(
       devAppIdentity({ isPackaged: true, hasUserDataDirSwitch: false, appDataDir: APP_DATA }),
