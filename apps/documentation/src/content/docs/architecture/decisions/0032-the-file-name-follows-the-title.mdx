@@ -83,8 +83,11 @@ same second already share a stem today.
    `file: "kept-old-name"`; a running export (`exportActive`, reason `busy`) or the item being
    open in the video editor (reason `editing`) short-circuits to the same outcome. The editor
    acquires its item through main under the same names lock as renames and is answered the
-   item's current id, which it loads and writes under; it releases on unmount or when its
-   window goes away. The
+   item's current id, which it loads and writes under; with no answer (the item is gone, or
+   main failed) it loads nothing and says the item is no longer available — never the route's
+   id, which another item may have taken. It releases on unmount or when its window goes away,
+   and a request that waited for the lock is refused if its window closed or reloaded
+   meanwhile (per-window generation), so no hold outlives its page. The
    title is saved either way; a non-blocking toast offers Retry. A rename never fails because
    of the file.
 7. **`writeMeta` never creates a sidecar for an id with neither sidecar nor media.** A hash,
@@ -96,7 +99,7 @@ same second already share a stem today.
    legal), so every `kaipu-media://` URL is built by one shared helper that encodes the id,
    and the protocol handler decodes it once, answering 400 to a malformed escape.
 9. **Name comparisons use a filesystem fold.** Reservation and overlap checks compare names
-   through `fsFold` (NFKC, then upper- and lower-case), stricter than APFS or NTFS on purpose:
+   through `fsFold` (NFKC, then lower → upper → lower case, so `ß` and `ẞ` meet), stricter than APFS or NTFS on purpose:
    a false "same name" costs a ` (2)`, a missed one merges two items.
 
 ## Alternatives rejected
