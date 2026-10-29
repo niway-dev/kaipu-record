@@ -90,7 +90,7 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
     currentVault().readCursorTrack(id),
   );
   ipcMain.handle(IPC_CHANNELS.renameLocalRecording, (_event, id: string, title: string) =>
-    currentVault().rename(id, title),
+    currentVault().renameItem(id, title),
   );
   // No broadcast: the stamp only reorders the Editor home, which re-lists on mount.
   ipcMain.handle(IPC_CHANNELS.markOpenedInEditor, (_event, id: string) =>

@@ -6,7 +6,11 @@ import type { RecordingCapture } from "../recording-capture";
  * Pure type — safe to import from both main and renderer.
  */
 export interface LocalRecording {
-  /** The filename without extension. Local-only handle; stable while the file is not renamed. */
+  /**
+   * The filename without extension. Local-only handle that changes when the item is
+   * renamed (ADR 0032): use it for the current render and IPC call, never persist it —
+   * `assetId` is the identity for anything that outlives that.
+   */
   id: string;
   /**
    * Stable identity minted on first read and persisted in the sidecar. This is
@@ -66,3 +70,24 @@ export interface VaultDirectory {
   path: string;
   isCustom: boolean;
 }
+
+/** What a rename did to the file (NIW2-560). "kept-old-name" is not an error: the title was saved. */
+export type RenameFileOutcome = "renamed" | "unchanged" | "kept-old-name";
+/** Why the file kept its old name: another app holds it, an export is reading it, or another I/O error. */
+export type RenameKeptReason = "locked" | "busy" | "io";
+
+export interface RenameResult {
+  /** The item after the rename; `recording.id` is the id to use from now on. */
+  recording: LocalRecording;
+  file: RenameFileOutcome;
+  /** Set only when `file` is "kept-old-name". */
+  reason?: RenameKeptReason;
+}
+
+/**
+ * Marker in the message of the error a rename rejects with when the id no longer names a
+ * media file (deleted, or already renamed by a double commit). Electron passes only the
+ * message across IPC, so the renderer matches on this to refresh quietly instead of
+ * reporting an error.
+ */
+export const ITEM_NOT_FOUND_MARKER = "vault-item-not-found";

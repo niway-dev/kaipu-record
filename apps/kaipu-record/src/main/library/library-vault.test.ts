@@ -92,16 +92,6 @@ describe("LibraryVault", () => {
     expect((await vault.describe("bad"))?.capture).toBeNull();
   });
 
-  it("renames via the sidecar without touching the video file", async () => {
-    await writeRecording("clip");
-    await vault.rename("clip", "Renamed");
-
-    const sidecar = JSON.parse(await readFile(join(directory, ".kaipu", "clip.json"), "utf-8"));
-    expect(sidecar.title).toBe("Renamed");
-    expect((await vault.list())[0].title).toBe("Renamed");
-    expect(await readdir(directory)).toContain("clip.webm");
-  });
-
   it("stamps an item as opened in an editor, keeping its other fields", async () => {
     await writeRecording("clip");
     await writeSidecar("clip", { title: "My Demo", createdAt: 1000 });
@@ -154,7 +144,7 @@ describe("LibraryVault", () => {
 
   it("removes the video and its sidecar", async () => {
     await writeRecording("clip");
-    await vault.rename("clip", "X");
+    await vault.writeMeta("clip", { title: "X" });
     await vault.remove("clip");
 
     expect(await vault.list()).toHaveLength(0);
@@ -329,10 +319,16 @@ describe("LibraryVault", () => {
 
   it("does not lose the title when a rename races the identity mint", async () => {
     await writeRecording("race");
-    await Promise.all([vault.describe("race"), new LibraryVault(directory).rename("race", "Mine")]);
-    const sidecar = JSON.parse(await readFile(join(directory, ".kaipu", "race.json"), "utf-8"));
+    const [described, renamed] = await Promise.all([
+      vault.describe("race"),
+      new LibraryVault(directory).renameItem("race", "Mine"),
+    ]);
+    const sidecar = JSON.parse(await readFile(join(directory, ".kaipu", "Mine.json"), "utf-8"));
     expect(sidecar.title).toBe("Mine");
-    expect(typeof sidecar.assetId).toBe("string");
+    expect(renamed.recording.assetId).toBe(sidecar.assetId);
+    // A describe that loses the race to the move sees no item, never a second identity.
+    if (described) expect(described.assetId).toBe(sidecar.assetId);
+    expect(await readdir(join(directory, ".kaipu"))).toEqual(["Mine.json"]);
   });
 });
 

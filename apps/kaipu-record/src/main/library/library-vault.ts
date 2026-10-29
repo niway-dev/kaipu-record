@@ -1,12 +1,29 @@
-import { basename, join } from "node:path";
-import { access, mkdir, open, readFile, readdir, rename, rm, stat } from "node:fs/promises";
+import { basename, extname, join } from "node:path";
+import { constants } from "node:fs";
+import {
+  access,
+  copyFile,
+  cp,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+} from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import type { LocalRecording } from "@shared/types/library-storage";
+import {
+  ITEM_NOT_FOUND_MARKER,
+  type LocalRecording,
+  type RenameResult,
+} from "@shared/types/library-storage";
 import { sanitizeRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
 import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/types/export-preset";
-import { defaultCaptureName } from "@shared/default-capture-name";
+import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-name";
 import { atomicWriteFile, withLock } from "./atomic-write";
 import { sha256FileBase64 } from "./content-hash";
+import { fileStemFromTitle } from "./file-stem";
 
 const META_DIR = ".kaipu";
 /** Known video containers, in preference order — `.mp4` is what we now write. */
@@ -54,6 +71,92 @@ export interface Sidecar {
   capture?: RecordingCapture;
 }
 
+/**
+ * Module-level `withLock` key that serializes every operation choosing or changing an
+ * item's stem (ADR 0032): `allocateId` and `renameItem`, across every `LibraryVault`
+ * instance. Always taken before a sidecar lock, never inside one, so there is no
+ * lock-order cycle.
+ */
+export const NAMES_LOCK = "vault:names";
+
+/** Error codes a locked file raises on rename (Windows sharing violations, mostly). */
+const LOCKED_CODES = new Set(["EPERM", "EBUSY", "EACCES", "ETXTBSY"]);
+
+/** How a rename retries a media file another app holds: one try, then one per delay. */
+export interface RetryPolicy {
+  delaysMs: number[];
+  sleep?: (ms: number) => Promise<void>;
+}
+/** ≈1.5 s worst case: the user pressed Enter and is waiting. */
+export const DEFAULT_RENAME_RETRY: RetryPolicy = { delaysMs: [150, 400, 900] };
+
+/** The id names no media file (deleted, or already renamed). Its message carries the IPC marker. */
+export class ItemNotFoundError extends Error {
+  constructor(readonly id: string) {
+    super(`${ITEM_NOT_FOUND_MARKER}: no media file for "${id}"`);
+    this.name = "ItemNotFoundError";
+  }
+}
+
+/** A sidecar write for an id with neither a sidecar nor a media file (it was renamed or removed). */
+export class ItemGoneError extends Error {
+  constructor(readonly id: string) {
+    super(`Library item "${id}" is gone (renamed or removed)`);
+    this.name = "ItemGoneError";
+  }
+}
+
+export interface AllocateInput {
+  kind: CaptureKind;
+  /** The title the item will carry; the stem is derived from it. */
+  title: string;
+  createdAt: number;
+  /** Explicit stem (stranded recovery: "<default> (recovered)"); still sanitized and collision-resolved. */
+  stem?: string;
+}
+
+export interface RenameOptions {
+  /** True while an export may be streaming the file: the file then keeps its name ("busy"). */
+  isBusy?: () => boolean;
+  retry?: RetryPolicy;
+}
+
+/** Every companion an id owns under `.kaipu/`. */
+export interface CompanionPaths {
+  sidecar: string;
+  thumbnail: string;
+  cursorTrack: string;
+  /** Left by an interrupted cursor-track write; deleted, never moved. */
+  cursorTrackTemp: string;
+  editSession: string;
+  editMeta: string;
+  assetsDir: string;
+}
+
+/** How a rename reaches its target stem. */
+type StemResolution =
+  | { id: string; mode: "same" }
+  /** No file of any item uses the stem. */
+  | { id: string; mode: "free" }
+  /** The same item under a different case or normalization: a real move, done in place. */
+  | { id: string; mode: "case" }
+  /** Companions an earlier interrupted rename of this item left behind; overwritten. */
+  | { id: string; mode: "leftover" };
+
+const sleepFor = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+const foldName = (value: string): string => value.normalize("NFC").toLowerCase();
+
+function kindFromExt(ext: string): CaptureKind {
+  if ((IMAGE_EXTS as readonly string[]).includes(ext)) return "screenshot";
+  if ((GIF_EXTS as readonly string[]).includes(ext)) return "gif";
+  return "recording";
+}
+
+function errorCode(error: unknown): string | undefined {
+  return (error as NodeJS.ErrnoException | null)?.code;
+}
+
 // Keyed by the sidecar's absolute path (not per-instance), so a re-minted id on a
 // read-only vault survives across separate `LibraryVault` instances for the same
 // directory (e.g. a fresh instance per IPC call) instead of re-minting on every read.
@@ -69,10 +172,11 @@ async function exists(path: string): Promise<boolean> {
 }
 
 /**
- * Local recordings vault. A recording lives as `<id><ext>` (ext ∈ VIDEO_EXTS)
- * with optional sidecar metadata (`.kaipu/<id>.json`) and thumbnail
- * (`.kaipu/<id>.jpg`). The filename *is* the id. Pure: no Electron — the
- * directory is injected so it's testable against a temp folder.
+ * Local recordings vault. An item lives as `<id><ext>` (ext ∈ ALL_EXTS) with
+ * optional companions under `.kaipu/` (`<id>.json` sidecar, `<id>.jpg` thumbnail,
+ * cursor track, edit session, assets). The filename *is* the id, and a rename moves
+ * it (ADR 0032): the id is valid until the next rename, `assetId` is the identity.
+ * Pure: no Electron — the directory is injected so it's testable against a temp folder.
  */
 export class LibraryVault {
   constructor(readonly directory: string) {}
@@ -103,6 +207,297 @@ export class LibraryVault {
     return join(this.metaDirectory(), `${id}.cursor.json`);
   }
 
+  /** Every companion path `id` owns. `remove()` and `renameItem()` go through this, so they cannot drift. */
+  companionPaths(id: string): CompanionPaths {
+    const meta = this.metaDirectory();
+    return {
+      sidecar: this.sidecarPath(id),
+      thumbnail: this.thumbnailPath(id),
+      cursorTrack: this.cursorTrackPath(id),
+      cursorTrackTemp: `${this.cursorTrackPath(id)}.tmp`,
+      editSession: join(meta, `${id}.edit.json`),
+      editMeta: join(meta, `${id}.edit.meta.json`),
+      assetsDir: join(meta, `${id}.assets`),
+    };
+  }
+
+  /** The media file `id` names right now, or null. */
+  private async mediaPath(id: string): Promise<string | null> {
+    if (!isPlainItemId(id)) return null;
+    for (const ext of ALL_EXTS) {
+      const candidate = join(this.directory, `${id}${ext}`);
+      if (await exists(candidate)) return candidate;
+    }
+    return null;
+  }
+
+  /**
+   * True when no media file and no companion exists for `stem`. Asked of the file
+   * system, so on APFS/NTFS a differently-cased name counts as taken too. An orphan
+   * sidecar (a cloud-only item after `removeLocalCopy`) takes its stem: renaming onto it
+   * would merge two identities.
+   */
+  async isStemFree(stem: string): Promise<boolean> {
+    const { cursorTrackTemp: _temp, ...companions } = this.companionPaths(stem);
+    const paths = [
+      ...ALL_EXTS.map((ext) => join(this.directory, `${stem}${ext}`)),
+      ...Object.values(companions),
+    ];
+    const found = await Promise.all(paths.map(exists));
+    return !found.includes(true);
+  }
+
+  /** `stem`, `stem (2)` … `stem (99)`, then random tails until one is accepted. */
+  private async firstCandidate(
+    stem: string,
+    accept: (candidate: string) => Promise<StemResolution | null>,
+  ): Promise<StemResolution> {
+    for (let n = 1; n <= 99; n++) {
+      const resolved = await accept(n === 1 ? stem : `${stem} (${n})`);
+      if (resolved) return resolved;
+    }
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const resolved = await accept(`${stem} (${randomUUID().slice(0, 4)})`);
+      if (resolved) return resolved;
+    }
+    throw new Error(`No free file name for "${stem}"`);
+  }
+
+  /**
+   * Reserve a stem for a new item: derive it from `title` (or sanitize `stem`), resolve
+   * collisions with ` (2)`, ` (3)` …, and write a stub sidecar — all under NAMES_LOCK.
+   * From this moment the stem is taken; the caller writes the media next and calls
+   * `remove(id)` if that fails.
+   */
+  async allocateId(input: AllocateInput): Promise<string> {
+    const fallback = defaultCaptureName(input.kind, new Date(input.createdAt));
+    const stem = fileStemFromTitle(input.stem ?? input.title) ?? fallback;
+    return withLock(NAMES_LOCK, async () => {
+      const { id } = await this.firstCandidate(stem, async (candidate) =>
+        (await this.isStemFree(candidate)) ? { id: candidate, mode: "free" } : null,
+      );
+      await mkdir(this.metaDirectory(), { recursive: true });
+      const stub: Sidecar = {
+        sidecarVersion: 2,
+        assetId: randomUUID(),
+        createdAt: input.createdAt,
+        title: input.title,
+      };
+      await atomicWriteFile(this.sidecarPath(id), JSON.stringify(stub, null, 2));
+      return id;
+    });
+  }
+
+  /** Where a rename of `self` (owner of `assetId`, media at `selfMedia`) lands for `stem`. */
+  private resolveRenameTarget(
+    stem: string,
+    self: string,
+    selfMedia: string,
+    assetId: string,
+  ): Promise<StemResolution> {
+    return this.firstCandidate(stem, async (candidate) => {
+      if (candidate === self) return { id: candidate, mode: "same" };
+      if (await this.isStemFree(candidate)) return { id: candidate, mode: "free" };
+      if (foldName(candidate) === foldName(self) && (await this.isSameFile(candidate, selfMedia))) {
+        return { id: candidate, mode: "case" };
+      }
+      if (
+        !(await this.hasMedia(candidate)) &&
+        (await this.sidecar(candidate)).assetId === assetId
+      ) {
+        return { id: candidate, mode: "leftover" };
+      }
+      return null;
+    });
+  }
+
+  /** Whether `candidate` with `media`'s extension is the very same file (case-insensitive FS). */
+  private async isSameFile(candidate: string, media: string): Promise<boolean> {
+    try {
+      const [a, b] = await Promise.all([
+        stat(join(this.directory, `${candidate}${extname(media)}`)),
+        stat(media),
+      ]);
+      return a.ino === b.ino && a.dev === b.dev;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Save the title and move the item — media and every companion — to the stem the
+   * title derives (ADR 0032). Holds NAMES_LOCK and the old sidecar's lock throughout.
+   *
+   * Order: title into the old sidecar → companions copied to the new stem → media
+   * `rename` (the commit point) → old companions deleted. Every crash point leaves the
+   * old item or the new item whole, and the title is never lost.
+   *
+   * Throws `ItemNotFoundError` for an id without media, or when even the title cannot
+   * be written. Every other failure resolves with `file: "kept-old-name"`.
+   */
+  async renameItem(id: string, title: string, options: RenameOptions = {}): Promise<RenameResult> {
+    if (!isPlainItemId(id)) throw new ItemNotFoundError(id);
+    const oldSidecar = this.sidecarPath(id);
+    return withLock(NAMES_LOCK, () =>
+      withLock(oldSidecar, async () => {
+        const oldMedia = await this.mediaPath(id);
+        if (!oldMedia) throw new ItemNotFoundError(id);
+
+        // 1. The title first: whatever happens to the file, the user's name is saved.
+        // The identity is settled here too, so `describe()` below never needs this lock.
+        const current = await this.sidecar(id);
+        const meta: Sidecar = {
+          ...current,
+          sidecarVersion: 2,
+          title,
+          assetId: current.assetId ?? readOnlyIdentityMemo.get(oldSidecar) ?? randomUUID(),
+        };
+        delete meta.localRemovedAt;
+        await mkdir(this.metaDirectory(), { recursive: true });
+        await atomicWriteFile(oldSidecar, JSON.stringify(meta, null, 2));
+        const describeOld = async (): Promise<LocalRecording> => {
+          const recording = await this.describe(id);
+          if (!recording) throw new ItemNotFoundError(id);
+          return recording;
+        };
+
+        // 2. The target stem.
+        const ext = extname(oldMedia);
+        const createdAt = meta.createdAt ?? (await stat(oldMedia)).birthtimeMs;
+        const stem =
+          fileStemFromTitle(title) ?? defaultCaptureName(kindFromExt(ext), new Date(createdAt));
+        const target = await this.resolveRenameTarget(stem, id, oldMedia, meta.assetId!);
+        if (target.mode === "same") return { recording: await describeOld(), file: "unchanged" };
+
+        // 3. An export may be streaming the file: moving it would fail the export.
+        if (options.isBusy?.()) {
+          return { recording: await describeOld(), file: "kept-old-name", reason: "busy" };
+        }
+
+        const newId = target.id;
+        const newMedia = join(this.directory, `${newId}${ext}`);
+        const from = this.companionPaths(id);
+        const to = this.companionPaths(newId);
+        const retry = options.retry ?? DEFAULT_RENAME_RETRY;
+
+        if (target.mode === "case") {
+          const reason = await this.moveInPlace(from, to, oldMedia, newMedia, retry, id);
+          if (reason) return { recording: await describeOld(), file: "kept-old-name", reason };
+        } else {
+          // 4. Companions to the new stem. A leftover of this item is cleared first.
+          if (target.mode === "leftover") await this.removeCompanions(to);
+          const created: string[] = [];
+          try {
+            await atomicWriteFile(to.sidecar, JSON.stringify(meta, null, 2));
+            created.push(to.sidecar);
+            for (const key of ["thumbnail", "cursorTrack", "editSession", "editMeta"] as const) {
+              if (!(await exists(from[key]))) continue;
+              await copyFile(from[key], to[key], constants.COPYFILE_EXCL);
+              created.push(to[key]);
+            }
+            if (await exists(from.assetsDir)) {
+              created.push(to.assetsDir);
+              await cp(from.assetsDir, to.assetsDir, {
+                recursive: true,
+                force: false,
+                errorOnExist: true,
+              });
+            }
+          } catch {
+            await this.removePaths(created);
+            return { recording: await describeOld(), file: "kept-old-name", reason: "io" };
+          }
+
+          // 5. The commit point.
+          const failure = await this.renameWithRetry(oldMedia, newMedia, retry);
+          if (failure) {
+            await this.removePaths(created);
+            if (failure === "gone") throw new ItemNotFoundError(id);
+            return { recording: await describeOld(), file: "kept-old-name", reason: failure };
+          }
+
+          // 6. Old companions last, best effort: a leftover is invisible to `list()`.
+          await this.removeCompanions(from);
+        }
+
+        readOnlyIdentityMemo.delete(oldSidecar);
+        const recording = await this.describe(newId);
+        if (!recording) throw new ItemNotFoundError(newId);
+        return { recording, file: "renamed" };
+      }),
+    );
+  }
+
+  /**
+   * `fs.rename` of the media, retried while the file is locked. Resolves null on success,
+   * else why it failed: "locked" (still held after every retry), "gone" (ENOENT), "io".
+   */
+  private async renameWithRetry(
+    from: string,
+    to: string,
+    retry: RetryPolicy,
+  ): Promise<"locked" | "gone" | "io" | null> {
+    const sleep = retry.sleep ?? sleepFor;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await rename(from, to);
+        return null;
+      } catch (error) {
+        const code = errorCode(error);
+        if (code === "ENOENT") return "gone";
+        if (!code || !LOCKED_CODES.has(code)) return "io";
+        if (attempt >= retry.delaysMs.length) return "locked";
+        await sleep(retry.delaysMs[attempt]!);
+      }
+    }
+  }
+
+  /**
+   * A case- or normalization-only rename of the same item. On APFS/NTFS the old and new
+   * names are the same files, so copy-then-delete would delete the copy: each companion
+   * is renamed in place, then the media. A failed media move puts the companions back.
+   */
+  private async moveInPlace(
+    from: CompanionPaths,
+    to: CompanionPaths,
+    oldMedia: string,
+    newMedia: string,
+    retry: RetryPolicy,
+    id: string,
+  ): Promise<"locked" | "io" | null> {
+    const moved: (keyof CompanionPaths)[] = [];
+    const undo = async (): Promise<void> => {
+      for (const key of moved.reverse()) await rename(to[key], from[key]).catch(() => {});
+    };
+    const keys = ["sidecar", "thumbnail", "cursorTrack", "editSession", "editMeta", "assetsDir"];
+    try {
+      for (const key of keys as (keyof CompanionPaths)[]) {
+        if (!(await exists(from[key]))) continue;
+        await rename(from[key], to[key]);
+        moved.push(key);
+      }
+    } catch {
+      await undo();
+      return "io";
+    }
+    const failure = await this.renameWithRetry(oldMedia, newMedia, retry);
+    if (failure) {
+      await undo();
+      if (failure === "gone") throw new ItemNotFoundError(id);
+      return failure;
+    }
+    await rm(from.cursorTrackTemp, { force: true }).catch(() => {});
+    return null;
+  }
+
+  private async removePaths(paths: string[]): Promise<void> {
+    await Promise.allSettled(paths.map((path) => rm(path, { recursive: true, force: true })));
+  }
+
+  private async removeCompanions(paths: CompanionPaths): Promise<void> {
+    await this.removePaths(Object.values(paths));
+  }
+
   async list(): Promise<LocalRecording[]> {
     await mkdir(this.directory, { recursive: true });
     // Let a readdir failure propagate (unreadable folder, unreachable network
@@ -129,7 +524,14 @@ export class LibraryVault {
     }
     const isImage = IMAGE_EXTS.some((ext) => filePath.endsWith(ext));
     const isGif = GIF_EXTS.some((ext) => filePath.endsWith(ext));
-    const meta = await this.ensureIdentity(id);
+    let meta: Sidecar & { assetId: string };
+    try {
+      meta = await this.ensureIdentity(id);
+    } catch (error) {
+      // The file moved (a rename) between the stat above and the sidecar read.
+      if (error instanceof ItemGoneError) return null;
+      throw error;
+    }
     const hashIsFresh =
       meta.contentSha256 !== undefined &&
       meta.hashedSizeBytes === info.size &&
@@ -206,7 +608,9 @@ export class LibraryVault {
       try {
         await this.writeMetaLocked(id, next);
         readOnlyIdentityMemo.delete(sidecarPath);
-      } catch {
+      } catch (error) {
+        // Renamed or removed while we read it: there is no item to give an identity to.
+        if (error instanceof ItemGoneError) throw error;
         // Read-only vault: keep the in-memory identity; nothing else could persist either.
         readOnlyIdentityMemo.set(sidecarPath, next.assetId!);
       }
@@ -224,8 +628,15 @@ export class LibraryVault {
     await withLock(this.sidecarPath(id), () => this.writeMetaLocked(id, meta));
   }
 
-  /** Read-merge-write; the caller must hold the sidecar lock. */
+  /**
+   * Read-merge-write; the caller must hold the sidecar lock. Never creates a sidecar for
+   * an id with neither a sidecar nor media: a hash, tag or heal write queued behind a
+   * rename would otherwise resurrect the old stem as an orphan (`ItemGoneError`).
+   */
   private async writeMetaLocked(id: string, meta: Sidecar): Promise<void> {
+    if (!(await exists(this.sidecarPath(id))) && !(await this.hasMedia(id))) {
+      throw new ItemGoneError(id);
+    }
     const current = await this.sidecar(id);
     await mkdir(this.metaDirectory(), { recursive: true });
     await atomicWriteFile(
@@ -360,33 +771,19 @@ export class LibraryVault {
     await atomicWriteFile(join(this.directory, `${id}.png`), png, "part");
   }
 
-  /** Updates the user-facing title without touching the video file. */
-  async rename(id: string, title: string): Promise<void> {
-    await this.writeMeta(id, { title });
-  }
-
   /** Stamp "opened in an editor now" — what the Editor home's Continue list orders by. */
   async markOpenedInEditor(id: string, at = Date.now()): Promise<void> {
     await this.writeMeta(id, { editorOpenedAt: at });
   }
 
   /**
-   * Removes the video plus its sidecar and thumbnail. The sidecar/thumbnail are
-   * best-effort (they may not exist), but a failure to delete the actual
-   * recording propagates so the UI can report it — `Promise.allSettled` over all
-   * three previously swallowed even a permission/locked-file error on the video.
+   * Removes the media file plus every companion (`companionPaths`). The companions are
+   * best-effort (they may not exist), but a failure to delete the media itself
+   * propagates so the UI can report it.
    */
   async remove(id: string): Promise<void> {
     // Under the sidecar lock so a racing writeMeta cannot recreate the sidecar just after it is deleted.
-    await withLock(this.sidecarPath(id), () =>
-      Promise.allSettled([
-        rm(this.sidecarPath(id), { force: true }),
-        rm(this.thumbnailPath(id), { force: true }),
-        rm(this.cursorTrackPath(id), { force: true }),
-        // An interrupted writeCursorTrack can leave the temp file behind.
-        rm(`${this.cursorTrackPath(id)}.tmp`, { force: true }),
-      ]),
-    );
+    await withLock(this.sidecarPath(id), () => this.removeCompanions(this.companionPaths(id)));
     await rm(await this.filePath(id), { force: true });
   }
 
@@ -399,6 +796,8 @@ export class LibraryVault {
   async removeLocalCopy(id: string): Promise<void> {
     const target = await this.filePath(id);
     if (!(await exists(target))) throw new Error(`No local media file for "${id}"`);
+    // A legacy item may have no sidecar yet; once the media is gone, writeMeta could not create one.
+    await this.ensureIdentity(id);
     await rm(target);
     await this.writeMeta(id, { localRemovedAt: Date.now() });
   }

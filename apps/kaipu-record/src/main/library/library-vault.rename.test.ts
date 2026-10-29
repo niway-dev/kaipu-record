@@ -1,0 +1,436 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as fsp from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { defaultCaptureName } from "@shared/default-capture-name";
+import { ITEM_NOT_FOUND_MARKER } from "@shared/types/library-storage";
+import {
+  DEFAULT_RENAME_RETRY,
+  ItemGoneError,
+  ItemNotFoundError,
+  LibraryVault,
+  type RetryPolicy,
+} from "./library-vault";
+
+/**
+ * `rename` of a vault media file can be made to fail on demand; every other call (and
+ * every atomic sidecar write, which also renames) passes through to the real one.
+ */
+const renameFailure = vi.hoisted(() => ({
+  codes: [] as string[],
+  calls: 0,
+}));
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...actual,
+    rename: vi.fn(async (from: string, to: string) => {
+      const isMediaMove = /\.(mp4|webm|png|gif)$/.test(String(from)) && !from.endsWith(".part");
+      if (isMediaMove) {
+        renameFailure.calls += 1;
+        const code = renameFailure.codes.shift();
+        if (code) throw Object.assign(new Error(`${code}: mocked`), { code });
+      }
+      return actual.rename(from, to);
+    }),
+  };
+});
+
+const noWait: RetryPolicy = { delaysMs: [150, 400, 900], sleep: async () => {} };
+const canChmod = process.platform !== "win32" && process.getuid?.() !== 0;
+
+describe("LibraryVault.renameItem", () => {
+  let directory: string;
+  let meta: string;
+  let vault: LibraryVault;
+
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), "kaipu-rename-"));
+    meta = join(directory, ".kaipu");
+    vault = new LibraryVault(directory);
+    renameFailure.codes = [];
+    renameFailure.calls = 0;
+  });
+
+  afterEach(async () => {
+    await chmod(meta, 0o700).catch(() => {});
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  const readJson = async (path: string): Promise<Record<string, unknown>> =>
+    JSON.parse(await readFile(path, "utf-8"));
+
+  /** A recording with every companion the vault knows about. */
+  async function seedFullItem(id: string, ext = ".mp4"): Promise<void> {
+    await mkdir(join(meta, `${id}.assets`), { recursive: true });
+    await writeFile(join(directory, `${id}${ext}`), "media-bytes");
+    await writeFile(
+      join(meta, `${id}.json`),
+      JSON.stringify({
+        sidecarVersion: 2,
+        assetId: "asset-1",
+        title: "Old",
+        createdAt: 1000,
+        tagIds: ["tag-a"],
+        contentSha256: "hash",
+        hashedSizeBytes: 11,
+        hashedMtimeMs: 5,
+      }),
+    );
+    await writeFile(join(meta, `${id}.jpg`), "poster");
+    await writeFile(join(meta, `${id}.cursor.json`), '{"version":1}');
+    await writeFile(join(meta, `${id}.cursor.json.tmp`), "half");
+    await writeFile(join(meta, `${id}.edit.json`), '{"scene":1}');
+    await writeFile(join(meta, `${id}.edit.meta.json`), '{"savedAt":1}');
+    await writeFile(join(meta, `${id}.assets`, "slide-1.png"), "slide");
+  }
+
+  it("moves the media and every companion to the stem the title derives", async () => {
+    await seedFullItem("recording-2026-10-29-13-51-00");
+
+    const result = await vault.renameItem(
+      "recording-2026-10-29-13-51-00",
+      "Sprint demo: part 1/2?",
+    );
+
+    const newId = "Sprint demo part 1 2";
+    expect(result.file).toBe("renamed");
+    expect(result.recording.id).toBe(newId);
+    expect(result.recording.title).toBe("Sprint demo: part 1/2?");
+    expect(result.recording.assetId).toBe("asset-1");
+    expect(result.recording.tagIds).toEqual(["tag-a"]);
+    expect(await readdir(directory)).toEqual([".kaipu", `${newId}.mp4`]);
+    expect((await readdir(meta)).sort()).toEqual(
+      [
+        `${newId}.assets`,
+        `${newId}.cursor.json`,
+        `${newId}.edit.json`,
+        `${newId}.edit.meta.json`,
+        `${newId}.jpg`,
+        `${newId}.json`,
+      ].sort(),
+    );
+    expect(await readFile(join(meta, `${newId}.jpg`), "utf-8")).toBe("poster");
+    expect(await readFile(join(meta, `${newId}.edit.json`), "utf-8")).toBe('{"scene":1}');
+    expect(await readFile(join(meta, `${newId}.assets`, "slide-1.png"), "utf-8")).toBe("slide");
+    const sidecar = await readJson(join(meta, `${newId}.json`));
+    expect(sidecar).toMatchObject({
+      title: "Sprint demo: part 1/2?",
+      assetId: "asset-1",
+      tagIds: ["tag-a"],
+      contentSha256: "hash",
+      createdAt: 1000,
+    });
+    // The list shows one item, under the new id.
+    expect((await vault.list()).map((r) => r.id)).toEqual([newId]);
+  });
+
+  it("is 'unchanged' and leaves the file alone when the stem does not change", async () => {
+    await seedFullItem("Demo");
+    const result = await vault.renameItem("Demo", "Demo?");
+    expect(result).toMatchObject({ file: "unchanged", recording: { id: "Demo", title: "Demo?" } });
+    expect(await readdir(directory)).toContain("Demo.mp4");
+    expect((await readJson(join(meta, "Demo.json"))).title).toBe("Demo?");
+  });
+
+  it("moves the file on a case-only rename", async () => {
+    await seedFullItem("demo");
+    const result = await vault.renameItem("demo", "Demo");
+    expect(result).toMatchObject({
+      file: "renamed",
+      recording: { id: "Demo", assetId: "asset-1" },
+    });
+    expect(await readdir(directory)).toEqual([".kaipu", "Demo.mp4"]);
+    const companions = await readdir(meta);
+    expect(companions).toContain("Demo.json");
+    expect(companions).toContain("Demo.edit.json");
+    expect(companions).not.toContain("demo.json");
+    expect((await readJson(join(meta, "Demo.json"))).title).toBe("Demo");
+  });
+
+  it("adds ' (2)' when another item already has the name", async () => {
+    await writeFile(join(directory, "Taken.webm"), "other");
+    await seedFullItem("mine");
+    const result = await vault.renameItem("mine", "Taken");
+    expect(result.recording.id).toBe("Taken (2)");
+    expect(result.recording.title).toBe("Taken");
+    expect(await readFile(join(directory, "Taken.webm"), "utf-8")).toBe("other");
+    expect(await readdir(directory)).toContain("Taken (2).mp4");
+  });
+
+  it("treats an orphan sidecar (a cloud-only item) as taken", async () => {
+    await writeFile(join(directory, "cloudy.mp4"), "x");
+    await writeFile(join(directory, "mine.mp4"), "y");
+    await vault.describe("cloudy");
+    await vault.removeLocalCopy("cloudy");
+    const result = await vault.renameItem("mine", "cloudy");
+    expect(result.recording.id).toBe("cloudy (2)");
+    expect((await readJson(join(meta, "cloudy.json"))).localRemovedAt).toEqual(expect.any(Number));
+  });
+
+  it("does not treat a reverse-ordered ' (2)' as a collision with itself", async () => {
+    await writeFile(join(directory, "Demo.mp4"), "other");
+    await seedFullItem("Demo (2)");
+    const result = await vault.renameItem("Demo (2)", "Demo");
+    expect(result).toMatchObject({ file: "unchanged", recording: { id: "Demo (2)" } });
+  });
+
+  it("reuses the leftovers of an earlier interrupted rename of the same item", async () => {
+    await seedFullItem("old");
+    // A crash after step 4 left a sidecar (and a poster) for the target, without media.
+    await writeFile(join(meta, "Target.json"), JSON.stringify({ assetId: "asset-1" }));
+    await writeFile(join(meta, "Target.jpg"), "stale");
+    const result = await vault.renameItem("old", "Target");
+    expect(result).toMatchObject({ file: "renamed", recording: { id: "Target" } });
+    expect(await readFile(join(meta, "Target.jpg"), "utf-8")).toBe("poster");
+    expect((await readJson(join(meta, "Target.json"))).title).toBe("Target");
+  });
+
+  it("does not reuse another item's leftover", async () => {
+    await seedFullItem("old");
+    await writeFile(join(meta, "Target.json"), JSON.stringify({ assetId: "someone-else" }));
+    const result = await vault.renameItem("old", "Target");
+    expect(result.recording.id).toBe("Target (2)");
+  });
+
+  it("falls back to the default name when nothing of the title survives", async () => {
+    await writeFile(join(directory, "x.png"), "png");
+    await mkdir(meta, { recursive: true });
+    await writeFile(join(meta, "x.json"), JSON.stringify({ assetId: "a", createdAt: 0 }));
+    const result = await vault.renameItem("x", "???");
+    expect(result.recording.id).toBe(defaultCaptureName("screenshot", new Date(0)));
+    expect(result.recording.title).toBe("???");
+  });
+
+  it("names a legacy item without a sidecar and gives it an identity", async () => {
+    await writeFile(join(directory, "legacy.webm"), "v");
+    const result = await vault.renameItem("legacy", "Named");
+    expect(result.file).toBe("renamed");
+    expect(result.recording.assetId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(await readdir(meta)).toEqual(["Named.json"]);
+  });
+
+  it("throws ItemNotFoundError (with the IPC marker) for an id without media", async () => {
+    await expect(vault.renameItem("ghost", "X")).rejects.toBeInstanceOf(ItemNotFoundError);
+    await expect(vault.renameItem("ghost", "X")).rejects.toThrow(ITEM_NOT_FOUND_MARKER);
+    await expect(vault.renameItem("../escape", "X")).rejects.toBeInstanceOf(ItemNotFoundError);
+    expect(await readdir(directory)).toEqual([]);
+  });
+
+  it("serializes a double commit: the second rename finds the id gone", async () => {
+    await seedFullItem("clip");
+    const [first, second] = await Promise.allSettled([
+      vault.renameItem("clip", "One"),
+      new LibraryVault(directory).renameItem("clip", "Two"),
+    ]);
+    expect(first).toMatchObject({ status: "fulfilled", value: { recording: { id: "One" } } });
+    expect(second.status).toBe("rejected");
+    expect((second as PromiseRejectedResult).reason).toBeInstanceOf(ItemNotFoundError);
+  });
+
+  it("keeps the old name, but saves the title, while an export is busy", async () => {
+    await seedFullItem("clip");
+    const result = await vault.renameItem("clip", "New", { isBusy: () => true });
+    expect(result).toMatchObject({
+      file: "kept-old-name",
+      reason: "busy",
+      recording: { id: "clip", title: "New" },
+    });
+    expect(renameFailure.calls).toBe(0);
+    expect(await readdir(directory)).toContain("clip.mp4");
+    expect(await readdir(meta)).not.toContain("New.json");
+  });
+
+  it("retries a locked file and renames once it is released", async () => {
+    await seedFullItem("clip");
+    renameFailure.codes = ["EBUSY", "EPERM"];
+    const sleep = vi.fn(async () => {});
+    const result = await vault.renameItem("clip", "New", { retry: { ...noWait, sleep } });
+    expect(result.file).toBe("renamed");
+    expect(renameFailure.calls).toBe(3);
+    expect(sleep.mock.calls).toEqual([[150], [400]]);
+  });
+
+  it("keeps the old name after three retries on a locked file, and cleans the new companions", async () => {
+    await seedFullItem("clip");
+    renameFailure.codes = ["EPERM", "EPERM", "EACCES", "EBUSY"];
+    const sleep = vi.fn(async () => {});
+    const result = await vault.renameItem("clip", "New", { retry: { ...noWait, sleep } });
+    expect(result).toMatchObject({
+      file: "kept-old-name",
+      reason: "locked",
+      recording: { id: "clip", title: "New", assetId: "asset-1" },
+    });
+    expect(renameFailure.calls).toBe(4);
+    expect(sleep.mock.calls).toEqual([[150], [400], [900]]);
+    expect(await readdir(directory)).toEqual([".kaipu", "clip.mp4"]);
+    expect((await readdir(meta)).filter((n) => n.startsWith("New"))).toEqual([]);
+    expect(await readFile(join(meta, "clip.edit.json"), "utf-8")).toBe('{"scene":1}');
+  });
+
+  it("defaults to three retries, ≈1.5 s in total", () => {
+    expect(DEFAULT_RENAME_RETRY.delaysMs).toEqual([150, 400, 900]);
+  });
+
+  it("does not retry an unexpected error: kept-old-name, reason io", async () => {
+    await seedFullItem("clip");
+    renameFailure.codes = ["EXDEV"];
+    const result = await vault.renameItem("clip", "New", { retry: noWait });
+    expect(result).toMatchObject({ file: "kept-old-name", reason: "io" });
+    expect(renameFailure.calls).toBe(1);
+  });
+
+  it.skipIf(!canChmod)("keeps the old item whole when a companion cannot be copied", async () => {
+    await seedFullItem("clip");
+    await chmod(join(meta, "clip.assets", "slide-1.png"), 0o000);
+    try {
+      const result = await vault.renameItem("clip", "New", { retry: noWait });
+      expect(result).toMatchObject({
+        file: "kept-old-name",
+        reason: "io",
+        recording: { id: "clip", title: "New" },
+      });
+      expect(renameFailure.calls).toBe(0);
+      expect((await readdir(meta)).filter((n) => n.startsWith("New"))).toEqual([]);
+      expect(await readdir(directory)).toContain("clip.mp4");
+    } finally {
+      await chmod(join(meta, "clip.assets", "slide-1.png"), 0o600);
+    }
+  });
+
+  it.skipIf(!canChmod)("rejects when even the title cannot be written", async () => {
+    await seedFullItem("clip");
+    await chmod(meta, 0o500);
+    await expect(vault.renameItem("clip", "New")).rejects.toThrow();
+    await chmod(meta, 0o700);
+    expect(await readdir(directory)).toContain("clip.mp4");
+    expect((await readJson(join(meta, "clip.json"))).title).toBe("Old");
+  });
+});
+
+describe("LibraryVault.allocateId", () => {
+  let directory: string;
+  let vault: LibraryVault;
+
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), "kaipu-allocate-"));
+    vault = new LibraryVault(directory);
+  });
+
+  afterEach(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  const at = new Date(2026, 9, 29, 13, 51, 0).getTime();
+
+  it("derives the stem from the title and writes a stub sidecar", async () => {
+    const title = defaultCaptureName("recording", new Date(at));
+    const id = await vault.allocateId({ kind: "recording", title, createdAt: at });
+    expect(id).toBe("Kaipu Recording 2026-10-29 at 13.51.00");
+    const stub = JSON.parse(await readFile(join(directory, ".kaipu", `${id}.json`), "utf-8"));
+    expect(stub).toMatchObject({ sidecarVersion: 2, createdAt: at, title });
+    expect(stub.assetId).toMatch(/^[0-9a-f-]{36}$/);
+    // A stub without media is invisible.
+    expect(await vault.list()).toEqual([]);
+  });
+
+  it("gives two concurrent allocations of the same title distinct ids", async () => {
+    const input = { kind: "screenshot" as const, title: "Shot", createdAt: at };
+    const ids = await Promise.all([
+      vault.allocateId(input),
+      new LibraryVault(directory).allocateId(input),
+      new LibraryVault(directory).allocateId(input),
+    ]);
+    expect(ids.sort()).toEqual(["Shot", "Shot (2)", "Shot (3)"]);
+  });
+
+  it("skips a stem taken by media without a sidecar", async () => {
+    await writeFile(join(directory, "Shot.png"), "png");
+    expect(await vault.allocateId({ kind: "screenshot", title: "Shot", createdAt: at })).toBe(
+      "Shot (2)",
+    );
+  });
+
+  it("sanitizes an explicit stem and still resolves collisions", async () => {
+    const input = { kind: "recording" as const, title: "Recovered", createdAt: at };
+    expect(await vault.allocateId({ ...input, stem: "Base (recovered)" })).toBe("Base (recovered)");
+    expect(await vault.allocateId({ ...input, stem: "Base (recovered)" })).toBe(
+      "Base (recovered) (2)",
+    );
+    expect(await vault.allocateId({ ...input, stem: "a/b" })).toBe("a b");
+  });
+
+  it("falls back to the default name for an empty title", async () => {
+    expect(await vault.allocateId({ kind: "gif", title: "  ", createdAt: at })).toBe(
+      "Kaipu GIF 2026-10-29 at 13.51.00",
+    );
+  });
+
+  it("frees the stem again when the stub is removed", async () => {
+    const id = await vault.allocateId({ kind: "screenshot", title: "Shot", createdAt: at });
+    await vault.remove(id);
+    expect(await vault.isStemFree(id)).toBe(true);
+    expect(await vault.allocateId({ kind: "screenshot", title: "Shot", createdAt: at })).toBe(id);
+  });
+});
+
+describe("LibraryVault — writeMeta guard and companions", () => {
+  let directory: string;
+  let vault: LibraryVault;
+
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), "kaipu-guard-"));
+    vault = new LibraryVault(directory);
+  });
+
+  afterEach(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  it("refuses to create a sidecar for an id with neither sidecar nor media", async () => {
+    await expect(vault.writeMeta("gone", { title: "X" })).rejects.toBeInstanceOf(ItemGoneError);
+    expect(await fsp.readdir(directory).catch(() => [])).not.toContain(".kaipu");
+  });
+
+  it("still writes a sidecar for a legacy item that only has media", async () => {
+    await writeFile(join(directory, "legacy.mp4"), "v");
+    await vault.writeMeta("legacy", { title: "X" });
+    expect((await vault.describe("legacy"))?.title).toBe("X");
+  });
+
+  it("does not resurrect the old stem when a write lands after a rename", async () => {
+    await writeFile(join(directory, "old.mp4"), "v");
+    await vault.renameItem("old", "New");
+    await expect(vault.writeMeta("old", { tagIds: ["t"] })).rejects.toBeInstanceOf(ItemGoneError);
+    await expect(vault.markOpenedInEditor("old")).rejects.toBeInstanceOf(ItemGoneError);
+    expect(await readdir(join(directory, ".kaipu"))).toEqual(["New.json"]);
+  });
+
+  it("remove() deletes every companion, edit session and assets included", async () => {
+    const meta = join(directory, ".kaipu");
+    await mkdir(join(meta, "clip.assets"), { recursive: true });
+    await writeFile(join(directory, "clip.mp4"), "v");
+    for (const suffix of [".json", ".jpg", ".cursor.json", ".edit.json", ".edit.meta.json"]) {
+      await writeFile(join(meta, `clip${suffix}`), "{}");
+    }
+    await writeFile(join(meta, "clip.assets", "a.png"), "png");
+    await vault.remove("clip");
+    expect(await readdir(directory)).toEqual([".kaipu"]);
+    expect(await readdir(meta)).toEqual([]);
+  });
+
+  it("lists every companion path an id owns", () => {
+    const paths = vault.companionPaths("x");
+    expect(Object.values(paths).map((p) => p.slice(directory.length + 1))).toEqual([
+      join(".kaipu", "x.json"),
+      join(".kaipu", "x.jpg"),
+      join(".kaipu", "x.cursor.json"),
+      join(".kaipu", "x.cursor.json.tmp"),
+      join(".kaipu", "x.edit.json"),
+      join(".kaipu", "x.edit.meta.json"),
+      join(".kaipu", "x.assets"),
+    ]);
+  });
+});
