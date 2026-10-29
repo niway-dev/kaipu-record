@@ -34,6 +34,7 @@ export interface ToastWindow {
   setBounds(bounds: Rectangle): void;
   showInactive(): void;
   hide(): void;
+  destroy(): void;
   isDestroyed(): boolean;
   on(event: "closed", listener: () => void): void;
 }
@@ -110,6 +111,8 @@ export class CaptureToastWindow {
   private savingGeneration: number | null = null;
   /** Annotate was pressed while that generation's Save was writing: it runs when the write ends. */
   private annotateAfterSave: number | null = null;
+  /** `destroy()` ran: the app is quitting, so no window is created again. */
+  private disposed = false;
 
   constructor(private readonly deps: CaptureToastDeps) {
     deps.ipc.on(IPC_CHANNELS.screenshotToastReady, (event) => {
@@ -143,6 +146,7 @@ export class CaptureToastWindow {
    * keeps holding it through the re-target.
    */
   show(request: CaptureToastShowRequest): void {
+    if (this.disposed) return;
     const { displayId, ...payload } = request;
     this.generation += 1;
     this.annotateAfterSave = null;
@@ -183,6 +187,14 @@ export class CaptureToastWindow {
     if (!this.window || this.window.isDestroyed()) return;
     this.window.hide();
     this.setSpaceBehavior(false);
+  }
+
+  /** Quit: dismiss, drop the window for good (no `beforeunload` round trip), never show again. */
+  destroy(): void {
+    this.disposed = true;
+    this.dismiss();
+    if (this.window && !this.window.isDestroyed()) this.window.destroy();
+    this.window = null;
   }
 
   private act(action: CaptureToastAction): void {

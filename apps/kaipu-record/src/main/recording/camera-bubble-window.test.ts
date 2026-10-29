@@ -75,3 +75,27 @@ describe("CameraBubbleWindow.raise", () => {
     expect(created[0]!.moveTop).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("CameraBubbleWindow on quit", () => {
+  it("dispose() drops the window outright and a later show() creates no other", () => {
+    const bubble = new CameraBubbleWindow(() => 288);
+    bubble.show();
+    const [window] = created;
+
+    bubble.dispose();
+
+    expect(window!.destroy).toHaveBeenCalledTimes(1);
+    bubble.show();
+    expect(created).toHaveLength(1);
+  });
+
+  it("destroy() between takes still allows the next take's bubble", () => {
+    const bubble = new CameraBubbleWindow(() => 288);
+    bubble.show();
+    bubble.destroy();
+
+    bubble.show();
+
+    expect(created).toHaveLength(2);
+  });
+});

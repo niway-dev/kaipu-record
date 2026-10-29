@@ -53,6 +53,9 @@ const overlayWarmup: OverlayWarmup = {
   canWarm: () => !overlayBusy(),
 };
 
+/** `disposeCaptureOverlay()` ran: an instance created afterwards is disposed on the spot. */
+let overlayDisposed = false;
+
 function overlayWindowsInstance(): CaptureOverlayWindows {
   // macOS lists through osascript JXA, Windows through PowerShell; other platforms find
   // nothing. Our own windows are dropped by pid (plus HWND on Windows).
@@ -60,6 +63,7 @@ function overlayWindowsInstance(): CaptureOverlayWindows {
     windowLister: createWindowLister(process.platform),
     warmup: overlayWarmup,
   });
+  if (overlayDisposed) overlayWindows.dispose();
   return overlayWindows;
 }
 
@@ -70,7 +74,7 @@ function overlayWindowsInstance(): CaptureOverlayWindows {
  * off while it would compete with a take.
  */
 export function prewarmCaptureOverlay(busy: () => boolean): void {
-  if (!app.isReady()) return;
+  if (!app.isReady() || overlayDisposed) return;
   overlayBusy = busy;
   const windows = overlayWindowsInstance();
   windows.prewarm();
@@ -104,6 +108,16 @@ const overlay: OverlayPort = {
   hideAll: async () => overlayWindows?.hideAll(),
   destroyAll: () => overlayWindows?.destroyAll(),
 };
+
+/**
+ * Quit: the overlay windows, spares included, are destroyed and never loaded again. Holds
+ * even when no instance existed yet: the first pick after this gets a disposed instance,
+ * which answers `cancelled` instead of opening windows.
+ */
+export function disposeCaptureOverlay(): void {
+  overlayDisposed = true;
+  overlayWindows?.dispose();
+}
 
 /** What the rest of main needs from the screenshot backend once it is registered. */
 export interface ScreenshotHandlers {

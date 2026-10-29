@@ -36,6 +36,8 @@ export interface ControlBarOptions {
 
 export class ControlBarWindow {
   private window: BrowserWindow | null = null;
+  /** `destroy()` ran: the app is quitting, so no window is created again. */
+  private disposed = false;
   /** The display being recorded, so the bar appears there (multi-monitor). */
   private displayId: string | undefined;
   /** Whether the bar is left capturable (mirrors `AppSettings.showBarInRecording`). */
@@ -54,6 +56,7 @@ export class ControlBarWindow {
   private lastTick: RecordingTick = CONTROL_BAR_STARTING_TICK;
 
   show(displayId?: string, options?: ControlBarOptions): void {
+    if (this.disposed) return;
     this.displayId = displayId;
     this.anchor = options?.anchor ?? null;
     if (options?.includeInRecording !== undefined) {
@@ -167,9 +170,11 @@ export class ControlBarWindow {
     this.reset();
   }
 
+  /** Quit: drop the window for good (no `beforeunload` round trip) and never create another. */
   destroy(): void {
+    this.disposed = true;
     this.wanted = false;
-    this.window?.destroy();
+    if (this.window && !this.window.isDestroyed()) this.window.destroy();
     this.window = null;
     this.ready = false;
   }

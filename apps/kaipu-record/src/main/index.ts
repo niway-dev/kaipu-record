@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { IPC_CHANNELS } from "@shared/types";
 import icon from "../../resources/icon.png?asset";
 import { CapturePanelWindow } from "./capture-panel-window";
+import { appShutdown, installAppShutdown } from "./app-shutdown";
 import { createMainTranslator } from "@kaipu/i18n/main";
 import {
   createTray,
@@ -64,6 +65,7 @@ import {
 } from "@shared/types/screenshot-capture";
 import type { RecordTarget } from "./screenshots/capture-handler";
 import {
+  disposeCaptureOverlay,
   prewarmCaptureOverlay,
   registerScreenshotHandlers,
   type ScreenshotHandlers,
@@ -193,6 +195,8 @@ if (!hasSingleInstanceLock) {
 
 // Must run before `app.whenReady` — privileged scheme registration.
 registerMediaScheme();
+// `will-quit` disarms the quit deadline; a window created after the quit began is destroyed.
+installAppShutdown();
 
 /** Normal window minimums; floored so the main UI / onboarding never break. */
 const BASE_MIN_WIDTH = 720;
@@ -1038,12 +1042,31 @@ app.whenReady().then(() => {
   mainWindow?.once("ready-to-show", () => capturePanel?.prewarm());
   // The capture overlay's windows too, a little later: "Start recording" opens them, and
   // loading one renderer per display was most of its wait. Held off while a take runs.
+  let overlayPrewarm: ReturnType<typeof setTimeout> | null = null;
   mainWindow?.once("ready-to-show", () => {
-    setTimeout(() => {
+    if (appShutdown.isQuitting()) return;
+    overlayPrewarm = setTimeout(() => {
+      overlayPrewarm = null;
+      if (appShutdown.isQuitting()) return;
       prewarmCaptureOverlay(() => (hub?.isActive() || hub?.isPending()) ?? false);
       // The countdown's shade window too: it showed only after loading a renderer.
       hub?.prewarmShade();
     }, OVERLAY_PREWARM_AFTER_LAUNCH_MS);
+  });
+
+  // Everything pre-loaded above is released on quit, newest first (see shutdown.ts). The
+  // pre-loads are what a quit used to trip over: a window loading, or a timer that created
+  // one after the quit had already started closing windows.
+  appShutdown.register({ name: "recording hub", dispose: () => hub?.dispose() });
+  appShutdown.register({ name: "capture overlay", dispose: disposeCaptureOverlay });
+  appShutdown.register({ name: "capture toast", dispose: () => captureToast?.destroy() });
+  appShutdown.register({ name: "capture panel", dispose: () => capturePanel?.destroy() });
+  appShutdown.register({
+    name: "overlay prewarm timer",
+    dispose: () => {
+      if (overlayPrewarm) clearTimeout(overlayPrewarm);
+      overlayPrewarm = null;
+    },
   });
 
   app.on("activate", function () {
@@ -1120,6 +1143,9 @@ app.on("before-quit", (event) => {
   tray = null;
   cleanupDragCopies(vaultDirectory().path).catch(() => {});
   void shutdownMainAnalytics();
+  // Then everything the app pre-loaded or holds open, and the deadline behind it. From here
+  // Electron only has the main window left to close; the rest was destroyed outright.
+  appShutdown.begin();
 });
 
 // Quit when all windows are closed on Linux only. macOS keeps the app in the menu

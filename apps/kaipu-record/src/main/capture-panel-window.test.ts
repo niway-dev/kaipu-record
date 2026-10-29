@@ -18,7 +18,11 @@ class FakeWindow {
     if (event === "ready-to-show") this.readyToShow = callback;
   });
   on = vi.fn();
-  isDestroyed = () => false;
+  private destroyed = false;
+  destroy = vi.fn(() => {
+    this.destroyed = true;
+  });
+  isDestroyed = () => this.destroyed;
   constructor(options: Record<string, unknown>) {
     created.push({ options, window: this });
   }
@@ -85,5 +89,24 @@ describe("CapturePanelWindow over a full-screen app (macOS)", () => {
       visibleOnFullScreen: false,
       skipTransformProcessType: true,
     });
+  });
+});
+
+describe("CapturePanelWindow on quit", () => {
+  beforeEach(() => {
+    created.length = 0;
+  });
+
+  it("destroy() drops the window outright and a later prewarm() or show() creates no other", () => {
+    const panel = new CapturePanelWindow();
+    panel.prewarm();
+    const [{ window }] = created;
+
+    panel.destroy();
+
+    expect(window.destroy).toHaveBeenCalledTimes(1);
+    panel.prewarm();
+    panel.show({ x: 0, y: 0, width: 24, height: 24 });
+    expect(created).toHaveLength(1);
   });
 });

@@ -1,0 +1,113 @@
+---
+title: "ADR 0031: The desktop app shuts down explicitly, newest first, with a deadline"
+description: Everything the main process opens registers a dispose; before-quit runs them all in reverse order, a window created after the quit began is destroyed on sight, and a quit that has not finished within five seconds logs what is still open and exits. The quit never again depends on every renderer answering.
+---
+
+# ADR 0031: The desktop app shuts down explicitly, newest first, with a deadline
+
+## Status
+
+| Field         | Value                                                                                                                                                          |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — implemented in the NIW2-548 pull request, owner QA pending                                                                                          |
+| Date          | 2026-10-29                                                                                                                                                     |
+| Relates to    | [ADR 0029](./0029-floating-windows-never-change-the-activation-policy) (the floating windows this sequence now destroys); NIW2-540 (a native hook that wedged) |
+| Superseded by | —                                                                                                                                                              |
+
+## Context
+
+`app.quit()` in Electron is not a kill. It runs `before-quit`, then closes every window one by
+one — each close asks its renderer `beforeunload` and waits for the answer — and only when no
+window is left fires `will-quit` and ends the process. Three things leave that sequence waiting
+forever, and the result is the same each time: a process with no window and no tray icon, which
+the owner sees as a "ghost" after quitting Kaipu.
+
+1. **A window created after the quit began.** Electron closes the windows that existed when
+   `quit()` ran. Kaipu pre-loads its capture overlay and countdown shade windows on a 3 s timer
+   after the main window shows (`OVERLAY_PREWARM_AFTER_LAUNCH_MS`), and the overlay re-warms
+   itself after every pick. A timer that fires after `before-quit` creates a window nobody will
+   close.
+2. **A renderer that does not answer `beforeunload`.** A hung or still-loading renderer keeps
+   its window open, and the quit with it.
+3. **A native hook or child that is wedged.** NIW2-540 was the global mouse hook deadlocking
+   in `start()`; nothing in the quit path stopped it.
+
+Until now `before-quit` released four things (global shortcuts, the tray, stale drag copies,
+analytics) and trusted Electron's generic close for the other seven window types the app owns
+(capture panel, overlays, shade, control bar, camera bubble, toast, main). The macOS E2E suite
+hit this on five release-candidate runs: every assertion green, then `app.close()` never
+returning, 4 minutes of timeouts per occurrence (NIW2-548). All five quit 3.5–4.5 s after
+launch — inside the prewarm window.
+
+This is also not how the surrounding software behaves. Chromium runs a shutdown watchdog that
+ends the browser process when its shutdown overruns. VS Code's lifecycle service runs its
+`onWillShutdown` participants with a timeout each and proceeds without the stragglers. Both
+treat the deadline as a net behind an explicit sequence, not as the mechanism.
+
+## Decision
+
+1. **One shutdown sequence, in `src/main/shutdown.ts`.** Everything the main process opens or
+   schedules — windows, timers that create windows, the native hook, the recording writer's
+   file handles — registers a named `dispose` with `appShutdown`. `before-quit`, once the
+   recording and export guards have passed, calls `appShutdown.begin()`: it sets `quitting`,
+   runs every `dispose` **newest first**, logs any that throws by name and continues, and arms
+   the deadline. `begin()` is idempotent; a participant registered after it ran is disposed on
+   the spot.
+2. **Auxiliary windows are destroyed, not closed.** Their `dispose` calls `BrowserWindow.destroy()`:
+   no `beforeunload` round trip, so no renderer can hold the quit. Only the main window still
+   goes through Electron's close, where the recording and export guards live. Each window class
+   gains a `destroy()` and a `disposed` flag; after it, `prewarm()` / `show()` create nothing.
+3. **A window created after the quit began is destroyed on sight.** `browser-window-created`
+   checks `appShutdown.isQuitting()` and destroys the newcomer on the next tick, logging who
+   made it. This is the guard for any creator the registry does not know about.
+4. **A deadline of 5 s, then `app.exit()`.** `will-quit` disarms it. If it fires, the log line
+   starts with `[shutdown] deadline` and lists every window still open (id, title, URL,
+   visible, loading, crashed). The E2E harness fails a test whose Electron stderr carries that
+   marker, with the line attached: a quit that needed the net is a defect, not a pass.
+5. **The sequence is pure and unit-tested.** `shutdown.ts` imports nothing from Electron;
+   `app-shutdown.ts` wires it to `app` and `BrowserWindow`. The window classes' `destroy()` and
+   the overlay's `dispose()` have their own tests with fake windows.
+
+## Alternatives rejected
+
+- **Only the deadline.** It stops the ghost but leaves the cause: every quit would run to 5 s
+  whenever a pre-load is in flight, and the log would have to be read every time. The deadline
+  is the net; the explicit sequence is the fix.
+- **Cancel the pre-load timers and nothing else.** Covers today's trigger and not the next one
+  (a renderer that stops answering, a hook that wedges). The registry makes "what do we hold
+  open" a list that grows with the app, instead of a hunt per incident.
+- **`close()` on the auxiliary windows.** Keeps the `beforeunload` round trip, which is the
+  exact thing a hung renderer never completes. Those windows own no unsaved state; `destroy()`
+  loses nothing.
+- **Kill-after-15-s in the E2E harness only.** Reverted once already in PR #420 as hiding the
+  defect; kept now only as the evidence capture (`sample` of the main process) for a hang the
+  app's own sequence did not prevent.
+
+## Consequences
+
+- A quit releases the hub (hook, cursor sampling, writer handles, shade, control bar, camera
+  bubble), the overlay windows and spares, the toast, the capture panel and the prewarm timer,
+  in that order reversed, before Electron closes the main window.
+- Anything new the main process pre-loads or holds open must register a `dispose`; the
+  `browser-window-created` guard catches a window that forgot, and logs it.
+- The worst-case quit is 5 s plus one log line, never a ghost. The E2E suite treats that
+  log line as a failure, so the net cannot become the norm unnoticed.
+- `onSettingsChanged` / `onSettingsKeysChanged` still have no unsubscribe. Every subscriber
+  today is a process-lifetime singleton, so nothing leaks; the first per-instance subscriber
+  must add one (tracked in NIW2-550 with the renderer-side lifecycle audit).
+
+## Non-goals
+
+- The renderer's own lifecycle (effects, listeners, media streams): NIW2-550.
+- Identifying which of the three causes hit the five E2E runs. The sequence removes all three
+  by construction; the E2E watchdog from NIW2-548 still samples the main process if a quit
+  hangs anyway.
+- Windows or Linux shutdown paths beyond what Electron shares across platforms.
+
+## Reopen when
+
+- A quit reaches the deadline on a release candidate (the E2E fails on the marker) or in a
+  user's log: the listed windows name a participant that is missing or a `destroy()` that does
+  not take.
+- Electron changes `app.quit()` to destroy windows outright or adds its own shutdown deadline,
+  at which point parts of this sequence duplicate the runtime.

@@ -41,7 +41,12 @@ class FakeWindow {
   });
   visible = false;
   isVisible = () => this.visible;
-  isDestroyed = () => false;
+  private destroyed = false;
+  destroy = vi.fn(() => {
+    this.destroyed = true;
+    this.closed?.();
+  });
+  isDestroyed = () => this.destroyed;
   private closed: (() => void) | null = null;
   on = vi.fn((event: string, callback: () => void) => {
     if (event === "closed") this.closed = callback;
@@ -651,4 +656,18 @@ describe("CaptureToastWindow", () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+describe("CaptureToastWindow on quit", () => {
+  it("destroy() drops the window outright and a later show() creates no other", () => {
+    const { toast, deps, windows } = setup();
+    toast.show({ ...COPIED, displayId: 1 });
+    expect(windows).toHaveLength(1);
+
+    toast.destroy();
+
+    expect(windows[0]!.destroy).toHaveBeenCalledTimes(1);
+    toast.show({ ...COPIED, displayId: 1 });
+    expect(deps.createWindow).toHaveBeenCalledTimes(1);
+  });
 });
