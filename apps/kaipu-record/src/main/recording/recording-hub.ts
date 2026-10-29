@@ -126,6 +126,9 @@ export interface RecordingHubHandle {
 /** How long a region waits for its countdown before it is forgotten. */
 export const COUNTDOWN_REGION_TTL_MS = 5000;
 
+/** Ended session ids remembered to refuse a late cursor track; a late one is seconds late at most. */
+const ENDED_SESSIONS_CAP = 64;
+
 /** A renderer report, made safe: anything malformed is ignored. */
 function parsePhaseReport(value: unknown): RecorderPhaseReport | null {
   if (!value || typeof value !== "object") return null;
@@ -341,14 +344,23 @@ export function registerRecordingHub(
   // "stop" is sent once per recording (writes are fire-and-forget and keep
   // arriving after the first failure). Reset on each new session.
   let stoppedForWriteFailure = false;
-  // Sessions aborted before their cursor track began: `cursorTrackStart` waits on the display
-  // lookup, and an abort landing meanwhile (a start that failed or was cancelled fast) found
-  // nothing to discard, so the tracker then started with nobody left to stop it. Renderer ids
-  // repeat after a reload, so creating a session clears its id.
-  const abortedSessions = new Set<string>();
+  // Sessions whose take already ended (aborted, finalized or dropped by a forced reset):
+  // `cursorTrackStart` waits on the display lookup, and an end landing meanwhile (a start that
+  // failed or was cancelled fast, a renderer that gave up on the handshake) found nothing to
+  // discard, so the tracker then started with nobody left to stop it. Renderer ids repeat
+  // after a reload, so creating a session clears its id; the oldest ids fall off past a cap.
+  const endedSessions = new Set<string>();
+  const markEnded = (sessionId: string): void => {
+    endedSessions.delete(sessionId);
+    endedSessions.add(sessionId);
+    if (endedSessions.size > ENDED_SESSIONS_CAP) {
+      const oldest = endedSessions.values().next().value;
+      if (oldest !== undefined) endedSessions.delete(oldest);
+    }
+  };
   ipcMain.handle(IPC_CHANNELS.recordingCreate, (_e, sessionId: string) => {
     stoppedForWriteFailure = false;
-    abortedSessions.delete(sessionId);
+    endedSessions.delete(sessionId);
     return writer.create(sessionId);
   });
   ipcMain.on(
@@ -371,6 +383,8 @@ export function registerRecordingHub(
   ipcMain.handle(
     IPC_CHANNELS.recordingFinalize,
     async (_e, sessionId: string, meta: RecordingFinalizeMeta) => {
+      // The renderer never retries a finalize (it aborts), so the take ends here either way.
+      markEnded(sessionId);
       let recording;
       try {
         recording = await writer.finalize(sessionId, meta);
@@ -415,7 +429,7 @@ export function registerRecordingHub(
     return writer.stat(sessionId);
   });
   ipcMain.handle(IPC_CHANNELS.recordingAbort, (_e, sessionId: string) => {
-    abortedSessions.add(sessionId);
+    markEnded(sessionId);
     cursorTracks.discard(sessionId);
     clickSessions.delete(sessionId);
     stopHookIfIdle();
@@ -429,12 +443,14 @@ export function registerRecordingHub(
       sourceId: string,
       area?: RecordingArea | null,
     ): Promise<{ enabled: boolean }> => {
+      if (endedSessions.has(sessionId)) return { enabled: false };
       const display = pickCapturedDisplay(
         sourceId,
         await displayIdForSource(screenSources, sourceId),
         screen.getAllDisplays(),
       );
-      if (!display || abortedSessions.has(sessionId)) return { enabled: false };
+      // Checked again: the take may have ended while the lookup ran.
+      if (!display || endedSessions.has(sessionId)) return { enabled: false };
       // An area on this display: normalize to the area, so the editor's zoom lands on the
       // recorded frame (ADR 0030). An area naming another display is ignored, not trusted.
       const safe = sanitizeArea(area, { id: Number(display.id), bounds: display.bounds });
@@ -537,6 +553,8 @@ export function registerRecordingHub(
     const notify = countdownAbandoned;
     clearCountdownRegion();
     shade.hide();
+    // Nothing of a take is on screen: the bar never belongs over an idle app.
+    bar.hide();
     revealAbandoned(notify);
   };
   /**
@@ -845,7 +863,8 @@ export function registerRecordingHub(
     },
     forceReset: (options) => {
       // Its takes will never be finalized or aborted: release their file handles. The partial
-      // files stay on disk.
+      // files stay on disk, and a cursor track still resolving for one of them must not start.
+      for (const id of writer.ids()) markEnded(id);
       void writer.releaseAll().catch((error) => console.error("releasing takes failed", error));
       cursorTracks.discardAll();
       clickSessions.clear();

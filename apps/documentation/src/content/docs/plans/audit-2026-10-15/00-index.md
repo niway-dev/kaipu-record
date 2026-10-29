@@ -5,7 +5,7 @@ description: One implementation plan per root cause for every finding of the 202
 
 # Audit 2026-10-15 — fix plans
 
-**Status: 🟡 In progress — 11 of 36 plans shipped, 25 open.** Source: the
+**Status: 🟡 In progress — 12 of 36 plans shipped, 24 open.** Source: the
 [audit report](/audits/2026-10-15/report/) (78 findings, 68 distinct). Each plan below closes one
 root cause and lists the findings it retires. Batches follow the report's fix order: measure first,
 then data loss, then the Library fan-out, the trim handle, recording failure paths, and render cost.
@@ -35,13 +35,11 @@ analyses are not in the repo.
 | Plan                                                                                  | Closes                                           |
 | ------------------------------------------------------------------------------------- | ------------------------------------------------ |
 | [10 Library broadcast fan-out](/plans/audit-2026-10-15/10-library-broadcast-fanout/)  | LIB-A1, LIB-A2, LIB-A8, SHOT-A7, SHOT-A9, VID-B9 |
-| [11 Vault directory cache](/plans/audit-2026-10-15/11-vault-directory-cache/)         | LIB-A3                                           |
 | [12 Library list fs work](/plans/audit-2026-10-15/12-library-list-fs-work/)           | LIB-A5                                           |
 | [13 Catalog refresh integrity](/plans/audit-2026-10-15/13-catalog-refresh-integrity/) | LIB-B4, LIB-B5                                   |
 | [14 Library thumbnails](/plans/audit-2026-10-15/14-library-thumbnails/)               | LIB-A6                                           |
 | [15 Orphan heal](/plans/audit-2026-10-15/15-orphan-heal/)                             | LIB-A7, LIB-B9                                   |
 | [16 Library IPC validation](/plans/audit-2026-10-15/16-library-ipc-validation/)       | LIB-B11                                          |
-| [17 Tag chip editing](/plans/audit-2026-10-15/17-tag-chip-editing/)                   | LIB-B2                                           |
 | [18 Drag-out across volumes](/plans/audit-2026-10-15/18-drag-out-volumes/)            | LIB-B12                                          |
 
 ## Batch 4 — trim handle
@@ -50,14 +48,13 @@ All shipped.
 
 ## Batch 5 — recording failure paths
 
-| Plan                                                                                     | Closes                         |
-| ---------------------------------------------------------------------------------------- | ------------------------------ |
-| [20 Recording engine cleanup](/plans/audit-2026-10-15/20-recording-engine-cleanup/)      | REC-A1, REC-B2, REC-B1         |
-| [21 Recording main-side resources](/plans/audit-2026-10-15/21-recording-main-resources/) | REC-A2, REC-B4, REC-B3, REC-B5 |
-| [22 Recording crash writer](/plans/audit-2026-10-15/22-recording-crash-writer/)          | REC-A4, REC-B7                 |
-| [23 Mic failure feedback](/plans/audit-2026-10-15/23-mic-failure-feedback/)              | REC-A5                         |
-| [24 Recording start latency](/plans/audit-2026-10-15/24-recording-start-latency/)        | REC-A6, REC-A9                 |
-| [25 Compositor cadence](/plans/audit-2026-10-15/25-compositor-cadence/)                  | REC-A7                         |
+| Plan                                                                                | Closes                 |
+| ----------------------------------------------------------------------------------- | ---------------------- |
+| [20 Recording engine cleanup](/plans/audit-2026-10-15/20-recording-engine-cleanup/) | REC-A1, REC-B2, REC-B1 |
+| [22 Recording crash writer](/plans/audit-2026-10-15/22-recording-crash-writer/)     | REC-A4, REC-B7         |
+| [23 Mic failure feedback](/plans/audit-2026-10-15/23-mic-failure-feedback/)         | REC-A5                 |
+| [24 Recording start latency](/plans/audit-2026-10-15/24-recording-start-latency/)   | REC-A6, REC-A9         |
+| [25 Compositor cadence](/plans/audit-2026-10-15/25-compositor-cadence/)             | REC-A7                 |
 
 ## Batch 6 — render and copy cost
 
@@ -79,6 +76,7 @@ Deleted from this folder once their PR merged; git keeps the plan text.
 | 05 Screenshot editor save races   | SHOT-B1, SHOT-B4, SHOT-B8, SHOT-B9 (SHOT-B2 dropped: premise no longer holds) | [#360](https://github.com/niway-dev/kaipu-record/pull/360) |
 | 07 Tags registry integrity        | LIB-A4, LIB-B7, LIB-B6                                                        | [#358](https://github.com/niway-dev/kaipu-record/pull/358) |
 | 19 Trim drag                      | VID-B1, VID-B2, VID-B7, VID-B8                                                | [#368](https://github.com/niway-dev/kaipu-record/pull/368) |
+| 21 Recording main-side resources  | REC-A2, REC-B4, REC-B3, REC-B5                                                | [#413](https://github.com/niway-dev/kaipu-record/pull/413) |
 | 26 Cursor track tail              | REC-B8                                                                        | [#416](https://github.com/niway-dev/kaipu-record/pull/416) |
 | 28 Video thumbnails by range      | VID-A3                                                                        | [#369](https://github.com/niway-dev/kaipu-record/pull/369) |
 | 29 Export canvas pool             | VID-A5                                                                        | [#371](https://github.com/niway-dev/kaipu-record/pull/371) |

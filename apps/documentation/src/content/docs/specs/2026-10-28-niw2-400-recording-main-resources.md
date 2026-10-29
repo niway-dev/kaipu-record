@@ -1,9 +1,22 @@
 ---
-title: "21 · Recording main-side resources"
-description: "Closes REC-A2, REC-B4, REC-B3, REC-B5: a start that fails before cursor-track:start resolves leaves the 125 Hz sampler and the global mouse hook running for the app's life; the control bar can appear after the take ended; the close/quit guard's timeout leaves the hub 'recording' and a stale once-listener closes the next window."
+title: "NIW2-400: 21 Recording main-side resources — approved spec"
+description: "Nothing main starts for a take outlives it: a late `cursor-track:start` for an ended session is refused, the control bar never shows for a take that already stopped, and a hung renderer at close/quit time resets the hub instead of leaving it \"recording\" with a stale listener."
 ---
 
-# Recording main-side resources — implementation plan
+# NIW2-400: 21 Recording main-side resources
+
+> Approved spec, committed **before** implementation (ADR-0010). Source: audit plan `apps/documentation/src/content/docs/plans/audit-2026-10-15/21-recording-main-resources.md` on `main` @ `f10e39a4`, copied below unchanged except the heading level. Linear: https://linear.app/niway/issue/NIW2-400. Where they disagree, **this file wins**.
+> Path: `apps/documentation/src/content/docs/specs/2026-10-28-niw2-400-recording-main-resources.md` · Approved: 2026-10-28 (Cristian, all proposed defaults) · Batch 5 — recording failure paths (parent NIW2-385) · Closes: REC-A2, REC-B4, REC-B3, REC-B5
+
+> **Shipped deviations (2026-10-28, PR #413).** The plan below was written from older code; by the time it ran, part of it was already on `main`, and one choice was superseded. What ships differs from the text below in three places:
+>
+> 1. **`forceReset` releases writer sessions, it does not abort them.** The plan's `RecordingWriter.abortAll()` was not added; `forceReset` keeps `writer.releaseAll()` (closes the handles, keeps the `.part` files for recovery), as the Global Constraints below already say plan 22's handling supersedes the plain `abortAll()`. Every open session is still marked ended first (`ids()` is the only writer addition).
+> 2. **No `barGeneration` counter.** `main` already guards the delayed `bar.show` with the hub's `takeCount` and `!activity.active` (REC-B3, shipped before this PR), so Task 2's counter would duplicate it.
+> 3. **`ControlBarWindow`'s `wanted` flag (Task 3) already existed** on `main` (2d00eb79) with its tests; this PR adds nothing there.
+>
+> "Closes REC-B3" therefore rests on `main` as a whole (the guards above plus this PR's tests), not on this diff alone. Review Focus items 1–5 hold as written against the shipped code.
+
+## Recording main-side resources — implementation plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -388,3 +401,23 @@ git commit -m "fix(desktop): close/quit guards reset the hub on timeout and neve
   2. Vault on a slow USB volume: start a take, ⌘W → "Stop and close"; after 5 s the window closes and the bar is gone. Relaunch, record again and stop → the window does **not** close by itself.
   3. Record and stop normally → bar hidden, main window back (regression).
 - [ ] The PR deletes this plan file and removes its row from `plans/audit-2026-10-15/00-index.md`.
+
+## Dependencies
+
+- No open `blocked by` relation. Independent of the `recorder-engine.ts` chain (it is main-side).
+- Linear lists this ticket as blocking NIW2-405 (plan 30).
+
+## Approved decisions
+
+1. **Approval.** Cristian approved this ticket on 2026-10-28 with every proposed default; this file is the contract. Where the Linear description disagrees, this file wins.
+2. **Failing test first.** Each task starts with a failing test, run before the fix. Selector names, helper names and line numbers were written by reading the code, not by running it: adapt them to today's code.
+3. **Stop, don't improvise.** If a Review Focus line or a flagged assumption does not hold on today's `main`, stop and report it in a comment on the Linear ticket instead of improvising.
+4. **One PR.** One PR for this ticket. It links NIW2-400, ends with a "How to test it yourself" section, and deletes the plan file `apps/documentation/src/content/docs/plans/audit-2026-10-15/21-recording-main-resources.md` plus its row in `00-index.md`.
+5. **Tooling.** Never run the Playwright desktop E2E suite locally (CI runs it). Use the pinned tools (`apps/kaipu-record/node_modules/.bin/vitest`, `bun run check-types`), never `bunx`.
+6. **Human merge.** The ticket carries `needs-human-merge`: the PR is not auto-landed; Cristian reviews and merges it.
+7. **Repo rule: no remote side effects.** No remote `db:push`/migrations against any real or dev database, no deploys, no releases or tags, no changes to remote storage or secrets. Local tests and fixtures only.
+8. **Suggested model:** Opus 5.5 — session lifecycle across the recording hub, cursor tracking and window close/quit paths.
+
+## Change log
+
+- 2026-10-28: Spec approved by Cristian with all proposed defaults; committed as the first commit of `feature/niw2-400-…` from audit plan `21-recording-main-resources` (`main` @ `f10e39a4`).

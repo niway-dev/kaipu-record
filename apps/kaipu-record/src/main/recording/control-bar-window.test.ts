@@ -106,6 +106,22 @@ describe("control bar window", () => {
     expect(created[0].showInactive).toHaveBeenCalledTimes(2);
   });
 
+  it("raise() leaves a hidden bar off screen: moveTop would order it back on macOS", () => {
+    const bar = new ControlBarWindow();
+    bar.show();
+    created[0].readyToShow();
+    bar.hide();
+
+    // The countdown raises the floating windows before the take: the bar kept from the last
+    // take must stay hidden, or it comes back as "Starting…" over the countdown.
+    bar.raise();
+    expect(created[0].moveTop).not.toHaveBeenCalled();
+
+    bar.show();
+    bar.raise();
+    expect(created[0].moveTop).toHaveBeenCalledTimes(1);
+  });
+
   it("reset repaints the bar as starting", () => {
     const bar = new ControlBarWindow();
     bar.show();

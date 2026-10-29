@@ -31,8 +31,9 @@ security find-identity -v -p codesigning | grep "Developer ID Application" || tr
 # and nothing else.
 # Native deps are no longer rebuilt by a postinstall (see scripts/rebuild-native.sh).
 # `electron-builder.yml` sets `npmRebuild: false`, so packaging will not do it either:
-# without this line the .dmg ships a uiohook-napi built for the wrong ABI, which fails
-# silently on the user's machine rather than here.
+# without this line the .dmg ships the unpatched uiohook-napi N-API prebuild — Electron
+# loads it fine, start() deadlock included — which fails on the user's machine rather
+# than here.
 bash "$ROOT/scripts/rebuild-native.sh"
 
 exec bash "$ROOT/scripts/with-env.sh" --env prod --path /kaipu-record -- bash -c '

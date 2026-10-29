@@ -272,6 +272,11 @@ export class RecordingWriter {
     this.sessions.delete(sessionId);
   }
 
+  /** Ids of the sessions still open (a stranded take included), e.g. to end them all on a reset. */
+  ids(): string[] {
+    return [...this.sessions.keys()];
+  }
+
   /**
    * Close every open session without deleting its file, for a take whose renderer is gone
    * (crash, window closed mid-take): the partial `.part` stays on disk, but no handle is

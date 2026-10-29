@@ -27,6 +27,14 @@ describe("CaptureTitleInput", () => {
     expect(field()).toHaveAttribute("placeholder", AUTO);
   });
 
+  it("shows the full name in its tooltip, so a truncated name stays readable", async () => {
+    render(<Harness onRename={null} />);
+    expect(field().title.split("\n")[0]).toBe(AUTO);
+    await userEvent.clear(field());
+    await userEvent.type(field(), "Login bug");
+    expect(field().title.split("\n")[0]).toBe("Login bug");
+  });
+
   it("commits the typed name on Enter", async () => {
     render(<Harness onRename={null} />);
     await userEvent.clear(field());

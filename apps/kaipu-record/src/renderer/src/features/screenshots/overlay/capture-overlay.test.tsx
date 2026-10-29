@@ -102,6 +102,7 @@ function fakeApi(
         };
       }),
       hiddenAck: vi.fn(),
+      requestState: vi.fn(),
     },
     getSettings: vi.fn(async () => settings),
     updateSettings: vi.fn(async (patch: Partial<AppSettings>) => {
@@ -226,6 +227,21 @@ describe("a spare (loaded ahead of its pick)", () => {
     pushState({ mode: "screen", frameDisplayId: null });
     expect(container).not.toBeEmptyDOMElement();
     expect(screen.getByTestId("hint-pill")).toBeInTheDocument();
+  });
+
+  it("asks main for the state once it listens, so a state sent before that is not lost", () => {
+    const { api } = fakeApi({}, null);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("frame", { spare: true })}
+        api={api}
+      />,
+    );
+    expect(api.captureOverlay.requestState).toHaveBeenCalledOnce();
+    expect(api.captureOverlay.onState.mock.invocationCallOrder[0]).toBeLessThan(
+      api.captureOverlay.requestState.mock.invocationCallOrder[0]!,
+    );
   });
 
   it("takes the mode and the frame display from the state, not from the loaded query", () => {

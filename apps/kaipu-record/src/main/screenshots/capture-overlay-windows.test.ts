@@ -1326,6 +1326,40 @@ describe("CaptureOverlayWindows: the next pick's windows load hidden (warm-up)",
     expect(second!.show).toHaveBeenCalledTimes(1);
   });
 
+  it("resends the pick's state to a spare whose listener attached after its first state", () => {
+    vi.useFakeTimers();
+    const { port } = warmed();
+    port.prewarm();
+    vi.advanceTimersByTime(0);
+    const [first] = created.map(({ window }) => window);
+
+    void port.pick("frame", [left, right], "record");
+    // It paints and is shown with its state before React has subscribed: that state is lost.
+    first!.paint();
+    first!.webContents.send.mockClear();
+
+    first!.send(IPC_CHANNELS.screenshotOverlayStateRequest);
+    expect(first!.webContents.send).toHaveBeenCalledWith(
+      IPC_CHANNELS.screenshotOverlayState,
+      expect.objectContaining({ mode: "frame", intent: "record" }),
+    );
+  });
+
+  it("answers no state request outside a pick", () => {
+    vi.useFakeTimers();
+    const { port } = warmed();
+    port.prewarm();
+    vi.advanceTimersByTime(0);
+    const [first] = created.map(({ window }) => window);
+    first!.paint();
+
+    first!.send(IPC_CHANNELS.screenshotOverlayStateRequest);
+    expect(first!.webContents.send).not.toHaveBeenCalledWith(
+      IPC_CHANNELS.screenshotOverlayState,
+      expect.anything(),
+    );
+  });
+
   it("loads the spares with a neutral query: no frame, mode choice or intent in it", () => {
     vi.useFakeTimers();
     const { port } = warmed();

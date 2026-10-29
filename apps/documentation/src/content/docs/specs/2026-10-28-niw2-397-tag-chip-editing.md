@@ -1,9 +1,14 @@
 ---
-title: "17 · Tag chip editing"
-description: "Closes LIB-B2: pasting several tags at once assigns only the last one, and chip edits build on a stale id list."
+title: "NIW2-397: 17 Tag chip editing — approved spec"
+description: "A pasted `a, b, c` ends in exactly one `setItemTags` call carrying every tag; two quick chip removals both apply."
 ---
 
-# Tag chip editing — implementation plan
+# NIW2-397: 17 Tag chip editing
+
+> Approved spec, committed **before** implementation (ADR-0010). Source: audit plan `apps/documentation/src/content/docs/plans/audit-2026-10-15/17-tag-chip-editing.md` on `main` @ `f10e39a4`, copied below unchanged except the heading level. Linear: https://linear.app/niway/issue/NIW2-397. Where they disagree, **this file wins**.
+> Path: `apps/documentation/src/content/docs/specs/2026-10-28-niw2-397-tag-chip-editing.md` · Approved: 2026-10-28 (Cristian, all proposed defaults) · Batch 3 — Library fan-out (parent NIW2-383) · Closes: LIB-B2
+
+## Tag chip editing — implementation plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-step. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -243,3 +248,23 @@ git commit -m "fix(desktop): tag editors learn when a tag save settles"
   2. With three tags, click the × of two chips quickly → both disappear and stay gone after reload.
   3. Type a tag name and press Enter twice quickly → one chip, no duplicate.
 - [ ] The PR deletes this plan file and removes its row from `plans/audit-2026-10-15/00-index.md`.
+
+## Dependencies
+
+- No open `blocked by` relation. Independent of the other audit plans.
+- Linear lists this ticket as blocking NIW2-395 (plan 14) and NIW2-393 (plan 10).
+
+## Approved decisions
+
+1. **Approval.** Cristian approved this ticket on 2026-10-28 with every proposed default; this file is the contract. Where the Linear description disagrees, this file wins.
+2. **Failing test first.** Each task starts with a failing test, run before the fix. Selector names, helper names and line numbers were written by reading the code, not by running it: adapt them to today's code.
+3. **Stop, don't improvise.** If a Review Focus line or a flagged assumption does not hold on today's `main`, stop and report it in a comment on the Linear ticket instead of improvising.
+4. **One PR.** One PR for this ticket. It links NIW2-397, ends with a "How to test it yourself" section, and deletes the plan file `apps/documentation/src/content/docs/plans/audit-2026-10-15/17-tag-chip-editing.md` plus its row in `00-index.md`.
+5. **Tooling.** Never run the Playwright desktop E2E suite locally (CI runs it). Use the pinned tools (`apps/kaipu-record/node_modules/.bin/vitest`, `bun run check-types`), never `bunx`.
+6. **Human merge.** The ticket carries `needs-human-merge`: the PR is not auto-landed; Cristian reviews and merges it.
+7. **Repo rule: no remote side effects.** No remote `db:push`/migrations against any real or dev database, no deploys, no releases or tags, no changes to remote storage or secrets. Local tests and fixtures only.
+8. **Suggested model:** Sonnet.
+
+## Change log
+
+- 2026-10-28: Spec approved by Cristian with all proposed defaults; committed as the first commit of `feature/niw2-397-…` from audit plan `17-tag-chip-editing` (`main` @ `f10e39a4`).

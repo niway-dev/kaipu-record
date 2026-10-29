@@ -203,22 +203,33 @@ The reusable form of this, including why it breaks unrelated CI jobs, is the
 [native dependencies pattern](https://github.com/csdev19/general-knowledge/blob/main/desktop/native-dependencies.md).
 
 The desktop app has one native dependency, `uiohook-napi` (the global mouse hook
-behind auto-zoom on clicks). It ships prebuilds for Node, not for Electron, and
-`electron-builder.yml` sets `npmRebuild: false`, so it has to be rebuilt
-explicitly:
+behind auto-zoom on clicks). It is **patched**: `patches/uiohook-napi@<version>.patch`
+(declared in the root `package.json` under `patchedDependencies`) carries the
+upstream fix for a startup deadlock in `uIOhook.start()` that froze the whole app
+at "start recording" ([SnosMe/uiohook-napi#66](https://github.com/SnosMe/uiohook-napi/pull/66),
+unmerged as of 2026-10-28). `bun install` applies the patch to the C **sources**
+only; the shipped prebuilt binary stays unpatched, and `electron-builder.yml` sets
+`npmRebuild: false`, so the fix exists at runtime only after an explicit rebuild:
 
 ```bash
-bun run rebuild:native   # rebuilds against the installed Electron's ABI
+bun run rebuild:native   # compiles the patched sources against the installed Electron
 ```
 
 `bun run setup` reports when that rebuild is pending and prints this command —
-it compares a stamp in `node_modules` against the installed Electron version, so
-a fresh install or an Electron bump both show up. Every packaging path
+it compares a stamp in `node_modules` against the installed Electron version plus
+a hash of `patches/*.patch` (`scripts/native-deps-stamp.sh`), so a fresh install,
+an Electron bump or a changed patch all show up. Every packaging path
 (`build:mac`, `build:unpack`, `build:win`, `build:linux`, `release-desktop.yml`)
 calls it explicitly, because a release must not depend on someone remembering.
 
-If you skip it the app still runs: `click-hook.ts` degrades to "no clicks"
-rather than crashing. That silence is why the check exists.
+If you skip it the app still runs, and that is the trap: the Node prebuild is a
+N-API module, so Electron loads it without complaint — you get the **unpatched**
+hook with the deadlock, and nothing in the UI tells you. (The earlier belief that
+a skipped rebuild degrades to "no clicks" was wrong; a hung main process on
+2026-10-28 was running the prebuild.) `click-hook.ts` still degrades to "no clicks"
+when the module is missing or fails to load. Bumping `uiohook-napi` means
+re-checking whether the fix landed upstream and re-creating the patch
+(`bun patch uiohook-napi`); `click-hook-native-patch.test.ts` fails until you do.
 
 ## Common Commands
 

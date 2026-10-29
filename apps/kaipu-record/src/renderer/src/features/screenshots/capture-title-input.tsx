@@ -15,7 +15,9 @@ export function CaptureTitleInput({ title }: { title: CaptureTitle }): React.JSX
         type="text"
         className={styles.input}
         aria-label={t("titleLabel")}
-        title={t("titleHint")}
+        // The full name leads the tooltip: a long name the field truncates
+        // stays readable on hover.
+        title={`${title.draft || title.autoTitle}\n${t("titleHint")}`}
         placeholder={title.autoTitle}
         value={title.draft}
         spellCheck={false}
