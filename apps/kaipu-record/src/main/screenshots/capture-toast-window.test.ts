@@ -142,7 +142,7 @@ function setup(options: { kept?: QuietCapture | null; save?: () => Promise<{ id:
       if (of === sequence) kept = null;
     }),
     saveToVault: vi.fn(options.save ?? (async () => ({ id: "screenshot-new" }))),
-    title: () => "Screenshot — now",
+    title: () => "Kaipu Screenshot now",
     openSaved: vi.fn(),
     openQuietCapture: vi.fn(),
   };
@@ -185,10 +185,10 @@ describe("saveFromToast", () => {
       id: "screenshot-9",
       title: "ignored",
     }));
-    await expect(saveFromToast(save)(SHOT.png, "Screenshot — now")).resolves.toEqual({
+    await expect(saveFromToast(save)(SHOT.png, "Kaipu Screenshot now")).resolves.toEqual({
       id: "screenshot-9",
     });
-    expect(save).toHaveBeenCalledWith(SHOT.png, { title: "Screenshot — now", manual: false });
+    expect(save).toHaveBeenCalledWith(SHOT.png, { title: "Kaipu Screenshot now", manual: false });
   });
 });
 
@@ -501,7 +501,7 @@ describe("CaptureToastWindow", () => {
       await vi.waitFor(() => expect(shown()).toHaveLength(2));
 
       expect(deps.saveToVault).toHaveBeenCalledTimes(1);
-      expect(deps.saveToVault).toHaveBeenCalledWith(SHOT.png, "Screenshot — now");
+      expect(deps.saveToVault).toHaveBeenCalledWith(SHOT.png, "Kaipu Screenshot now");
       expect(shown()[1]).toEqual({ ...COPIED, saved: { id: "screenshot-new" } });
       // The vault has the shot now: Annotate opens that item, the bytes are not needed.
       expect(keptNow()).toBeNull();
@@ -552,7 +552,7 @@ describe("CaptureToastWindow", () => {
       act("save");
 
       expect(deps.saveToVault).toHaveBeenCalledTimes(2);
-      expect(deps.saveToVault).toHaveBeenLastCalledWith(NEXT_SHOT.png, "Screenshot — now");
+      expect(deps.saveToVault).toHaveBeenLastCalledWith(NEXT_SHOT.png, "Kaipu Screenshot now");
       finishes.forEach((finish) => finish({ id: "screenshot-x" }));
     });
 

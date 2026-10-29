@@ -20,6 +20,7 @@ import {
 } from "@renderer/features/screenshots/auto-capture-policy";
 import { DiscardChangesDialog } from "@renderer/features/screenshots/discard-changes-dialog";
 import { reportError } from "@renderer/features/analytics";
+import { screenshotTitle } from "@shared/screenshot-title";
 import { notifyRenameOutcome } from "@renderer/features/library/rename-outcome";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import {
@@ -152,9 +153,7 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
   // The auto title is computed once; the toolbar field starts from it and is
   // what Save writes. On a saved shot, committing the field renames the vault item
   // in place — the same IPC the Library's inline rename uses.
-  const [autoTitle] = useState(
-    () => source.title ?? `${t("screenshotPrefix")} — ${new Date().toLocaleString()}`,
-  );
+  const [autoTitle] = useState(() => source.title ?? screenshotTitle());
   // NIW2-560: a rename moves the file, so the vault id changes. It runs through the
   // same queue as saves, so a save never overwrites the old (vanished) name while the
   // file is moving, and the new id is adopted everywhere this editor holds it.
