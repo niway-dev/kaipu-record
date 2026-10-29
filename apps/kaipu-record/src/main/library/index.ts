@@ -105,22 +105,28 @@ export function registerLibraryVaultHandlers(deps: {
   // is open there. A window that goes away releases what it held.
   const editorSessions = new EditorSessions();
   const watched = new Set<number>();
-  ipcMain.on(IPC_CHANNELS.editorSessionOpen, (event, id: unknown, assetId: unknown) => {
-    if (typeof id !== "string" || typeof assetId !== "string") return;
+  const watchOwner = (sender: Electron.WebContents): void => {
+    const owner = sender.id;
+    if (watched.has(owner)) return;
+    watched.add(owner);
+    sender.once("destroyed", () => {
+      editorSessions.releaseOwner(owner);
+      watched.delete(owner);
+    });
+    // A reload unmounts nothing: the new page starts with no editor open.
+    sender.on("did-start-navigation", (details) => {
+      if (details.isMainFrame && !details.isSameDocument) editorSessions.releaseOwner(owner);
+    });
+  };
+  // Serialized with renames (names lock): an editor that opens while a rename is moving
+  // the file waits, and loads under the id the rename produced.
+  ipcMain.handle(IPC_CHANNELS.editorSessionAcquire, async (event, assetId: unknown) => {
+    if (typeof assetId !== "string") return null;
     const owner = event.sender.id;
-    editorSessions.open(owner, id, assetId);
-    if (!watched.has(owner)) {
-      watched.add(owner);
-      const release = (): void => {
-        editorSessions.releaseOwner(owner);
-        watched.delete(owner);
-      };
-      event.sender.once("destroyed", release);
-      // A reload unmounts nothing: the new page starts with no editor open.
-      event.sender.on("did-start-navigation", (details) => {
-        if (details.isMainFrame && !details.isSameDocument) editorSessions.releaseOwner(owner);
-      });
-    }
+    watchOwner(event.sender);
+    return currentVault().acquireForEditor(assetId, (id) =>
+      editorSessions.open(owner, id, assetId),
+    );
   });
   ipcMain.on(IPC_CHANNELS.editorSessionClose, (event, id: unknown) => {
     if (typeof id === "string") editorSessions.close(event.sender.id, id);

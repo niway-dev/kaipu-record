@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultCaptureName } from "@shared/default-capture-name";
 import { ITEM_NOT_FOUND_MARKER } from "@shared/types/library-storage";
+import { EditorSessions } from "./editor-sessions";
 import {
   DEFAULT_RENAME_RETRY,
   ItemGoneError,
@@ -316,6 +317,45 @@ describe("LibraryVault.renameItem", () => {
     expect(renameFailure.calls).toBe(0);
     expect(await readdir(directory)).toContain("clip.mp4");
     expect(await readFile(join(meta, "clip.edit.json"), "utf-8")).toBe('{"scene":1}');
+  });
+
+  it("an editor acquiring the item mid-rename waits for the move and gets the new id", async () => {
+    await seedFullItem("clip");
+    const sessions = new EditorSessions();
+    let acquired: Promise<string | null> | null = null;
+    const result = await vault.renameItem("clip", "New", {
+      isEditing: (id, assetId) => {
+        // The editor opens while the rename is about to copy companions.
+        acquired ??= new LibraryVault(directory).acquireForEditor("asset-1", (heldId) =>
+          sessions.open(1, heldId, "asset-1"),
+        );
+        return sessions.isOpen(id, assetId);
+      },
+    });
+    expect(result.file).toBe("renamed");
+    // Serialized behind the rename: the editor loads and writes under the new id.
+    await expect(acquired).resolves.toBe("New");
+    expect(sessions.isOpen("New", "")).toBe(true);
+    expect(sessions.isOpen("clip", "")).toBe(false);
+  });
+
+  it("a rename after the editor acquired the item keeps the file's name", async () => {
+    await seedFullItem("clip");
+    const sessions = new EditorSessions();
+    const id = await vault.acquireForEditor("asset-1", (heldId) =>
+      sessions.open(1, heldId, "asset-1"),
+    );
+    expect(id).toBe("clip");
+    const result = await vault.renameItem("clip", "New", {
+      isEditing: (itemId, assetId) => sessions.isOpen(itemId, assetId),
+    });
+    expect(result).toMatchObject({ file: "kept-old-name", reason: "editing" });
+  });
+
+  it("acquiring an item that is gone resolves null and holds nothing", async () => {
+    const hold = vi.fn();
+    await expect(vault.acquireForEditor("nobody", hold)).resolves.toBeNull();
+    expect(hold).not.toHaveBeenCalled();
   });
 
   it("retries a locked file and renames once it is released", async () => {

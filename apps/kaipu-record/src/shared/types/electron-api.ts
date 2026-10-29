@@ -231,8 +231,10 @@ export interface KaipuElectronAPI {
   /**
    * The video editor holds this item while mounted (NIW2-560, ADR 0032): a rename keeps
    * the file's name ("editing") until `closeEditorSession`, or until the window goes away.
+   * Serialized with renames in main; resolves the item's current id, which the editor
+   * must load and write under, or null when no local item has `assetId`.
    */
-  openEditorSession(id: string, assetId: string): void;
+  acquireEditorSession(assetId: string): Promise<string | null>;
   closeEditorSession(id: string): void;
   /** Every live tag with its item count, most used first. */
   listTags(): Promise<TagSummary[]>;

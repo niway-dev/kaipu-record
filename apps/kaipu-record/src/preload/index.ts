@@ -73,7 +73,7 @@ const kaipuApi: KaipuElectronAPI = {
   renameLocalRecording: (id, title) =>
     ipcRenderer.invoke(IPC_CHANNELS.renameLocalRecording, id, title),
   markOpenedInEditor: (id) => ipcRenderer.invoke(IPC_CHANNELS.markOpenedInEditor, id),
-  openEditorSession: (id, assetId) => ipcRenderer.send(IPC_CHANNELS.editorSessionOpen, id, assetId),
+  acquireEditorSession: (assetId) => ipcRenderer.invoke(IPC_CHANNELS.editorSessionAcquire, assetId),
   closeEditorSession: (id) => ipcRenderer.send(IPC_CHANNELS.editorSessionClose, id),
   listTags: () => ipcRenderer.invoke(IPC_CHANNELS.listTags),
   createTag: (name, color) => ipcRenderer.invoke(IPC_CHANNELS.createTag, name, color),

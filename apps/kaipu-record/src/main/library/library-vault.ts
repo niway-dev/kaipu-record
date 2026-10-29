@@ -460,6 +460,22 @@ export class LibraryVault {
   }
 
   /**
+   * Hold an item for the video editor, serialized with renames through NAMES_LOCK: an
+   * acquisition issued while a rename is moving the file waits for it, and a rename that
+   * starts after it sees the hold (`isEditing`) and keeps the file's name. Resolves the
+   * item's **current** id — the one the editor must load and write under — after calling
+   * `hold(id)` inside the lock, or null (nothing held) when no local item has `assetId`.
+   */
+  async acquireForEditor(assetId: string, hold: (id: string) => void): Promise<string | null> {
+    return withLock(NAMES_LOCK, async () => {
+      const item = (await this.list()).find((candidate) => candidate.assetId === assetId);
+      if (!item) return null;
+      hold(item.id);
+      return item.id;
+    });
+  }
+
+  /**
    * `fs.rename` of the media, retried while the file is locked. Resolves null on success,
    * else why it failed: "locked" (still held after every retry), "gone" (ENOENT), "io".
    */

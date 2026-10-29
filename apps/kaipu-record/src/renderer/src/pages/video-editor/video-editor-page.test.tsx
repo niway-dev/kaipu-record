@@ -182,6 +182,44 @@ describe("VideoEditorPage — legacy /video-editor redirect", () => {
   });
 });
 
+describe("VideoEditorLoader — editor hold (NIW2-560)", () => {
+  afterEach(() => {
+    window.electronAPI.acquireEditorSession = async () => null;
+    window.electronAPI.closeEditorSession = () => {};
+  });
+
+  it("loads nothing before main acknowledges the hold, then loads under the current id", async () => {
+    let acknowledge!: (id: string) => void;
+    window.electronAPI.acquireEditorSession = vi.fn(
+      () => new Promise<string | null>((resolve) => (acknowledge = resolve)),
+    );
+    const loadSession = vi.fn(async () => null);
+    const loadTrack = vi.fn(async () => null);
+    window.electronAPI.loadVideoEditSession = loadSession;
+    window.electronAPI.loadCursorTrack = loadTrack;
+    const close = vi.fn();
+    window.electronAPI.closeEditorSession = close;
+
+    const { unmount } = render(
+      <RouterProvider
+        router={createMemoryRouter([{ path: "/", element: <VideoEditorLoader source={SOURCE} /> }])}
+      />,
+    );
+    await waitFor(() =>
+      expect(window.electronAPI.acquireEditorSession).toHaveBeenCalledWith("asset-1"),
+    );
+    expect(loadSession).not.toHaveBeenCalled();
+    expect(loadTrack).not.toHaveBeenCalled();
+
+    // A rename moved the file while the editor was opening.
+    await act(async () => acknowledge("Renamed clip"));
+    await waitFor(() => expect(loadSession).toHaveBeenCalledWith("Renamed clip"));
+    expect(loadTrack).toHaveBeenCalledWith("Renamed clip");
+    unmount();
+    expect(close).toHaveBeenCalledWith("Renamed clip");
+  });
+});
+
 describe("VideoEditorPage — transport bar", () => {
   it("renders the play/pause button with aria-label Play by default", async () => {
     renderEditor();

@@ -251,12 +251,6 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
   useEffect(() => {
     return () => assetStoreRef.current.dispose();
   }, []);
-  // NIW2-560: this editor holds `source.id` for its lifetime (session autosave, cursor
-  // track, source URL). While it is mounted, main keeps the file's name on any rename.
-  useEffect(() => {
-    window.electronAPI.openEditorSession(source.id, source.assetId);
-    return () => window.electronAPI.closeEditorSession(source.id);
-  }, [source.id, source.assetId]);
 
   // The room this screen needs; released when it unmounts. See use-window-floor.
 
@@ -274,6 +268,8 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
   }, [source.title]);
 
   const [resolved, setResolved] = useState<{
+    /** The source under the id main acknowledged holding (see below). */
+    source: VideoEditorSource;
     scene: VideoScene;
     cursorTrack: CursorTrack | null;
   } | null>(null);
@@ -283,12 +279,28 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
     // without this, a mid-load unmount would run dispose() (other effect) and
     // then restoreAsset would recreate object URLs that are never revoked.
     let cancelled = false;
+    // NIW2-560: this editor holds its source id for its lifetime (session autosave, cursor
+    // track, source URL). Main serializes the hold with renames and answers the item's
+    // CURRENT id; nothing is loaded or written before that answer, so a rename that was
+    // moving the file as the editor opened can never leave it on the old name.
+    let heldId: string | null = null;
     void (async () => {
+      let editorSource = source;
+      try {
+        heldId = await window.electronAPI.acquireEditorSession(source.assetId);
+        if (heldId !== null) editorSource = { ...source, id: heldId };
+      } catch {
+        // Main unavailable: open under the id the route gave; no hold to release.
+      }
+      if (cancelled) {
+        if (heldId !== null) window.electronAPI.closeEditorSession(heldId);
+        return;
+      }
       // The cursor track is best-effort and independent of the session: a missing or
       // malformed track just means no auto zooms (the editor behaves as before v2).
       let cursorTrack: CursorTrack | null = null;
       try {
-        const trackJson = await window.electronAPI.loadCursorTrack(source.id);
+        const trackJson = await window.electronAPI.loadCursorTrack(editorSource.id);
         cursorTrack = trackJson ? parseCursorTrack(trackJson) : null;
       } catch {
         cursorTrack = null;
@@ -299,12 +311,13 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
       const open = (scene: VideoScene, hasZoomData: boolean): void => {
         if (cancelled) return;
         setResolved({
+          source: editorSource,
           scene: withInitialZooms(scene, hasZoomData, cursorTrack, source.durationSeconds),
           cursorTrack,
         });
       };
       try {
-        const saved = await window.electronAPI.loadVideoEditSession(source.id);
+        const saved = await window.electronAPI.loadVideoEditSession(editorSource.id);
         if (cancelled) return;
         if (saved !== null) {
           const session = parseSession(saved.sessionJson);
@@ -345,6 +358,7 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
     })();
     return () => {
       cancelled = true;
+      if (heldId !== null) window.electronAPI.closeEditorSession(heldId);
     };
   }, []); // [] correct: source is stable per VideoEditorLoader's key (the asset id)
 
@@ -356,7 +370,7 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
 
   return (
     <VideoEditor
-      source={source}
+      source={resolved.source}
       resolvedScene={resolved.scene}
       cursorTrack={resolved.cursorTrack}
       assetStoreRef={assetStoreRef}
