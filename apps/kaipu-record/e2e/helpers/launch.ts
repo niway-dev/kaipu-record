@@ -16,6 +16,51 @@ export const RECORDING_DURATION = 3;
 export const SCREENSHOT_ID = "e2e-shot";
 
 /**
+ * How long `app.close()` may take before the Electron process is killed instead. A clean
+ * quit takes well under a second; Playwright itself waits forever.
+ */
+const CLOSE_TIMEOUT_MS = 15_000;
+
+/**
+ * Quit the app, and kill it if the quit never completes.
+ *
+ * Why this exists. Three release-candidate runs (2026-10-28, runs 40638221144, 40645332501
+ * and 40805912132) failed a test whose every assertion had passed: the trace ends in
+ * "Close context" (this `app.close()`), unfinished after 120 s, and the worker's own
+ * teardown then timed out as well. `ElectronApplication.close()` asks the app to `quit()`
+ * and waits for the process to exit, with no timeout of its own, so a quit that never
+ * finishes turns a green test red and costs two minutes on top. A different test each
+ * time (library delete, the editor toolbar, the capture panel), all of them ending about
+ * 3.5–4.5 s after launch — the moment the overlay windows pre-load (OVERLAY_PREWARM_AFTER_LAUNCH_MS
+ * in src/main/index.ts) — and each passed on its retry.
+ *
+ * The hang is the app's to fix; this only stops it from failing a test whose assertions
+ * passed, and it logs loudly so the CI log still names the occurrence (grep "[e2e] quit").
+ */
+async function closeOrKill(app: ElectronApplication, pid: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const closed = app.close().then(() => "closed" as const);
+  const timedOut = new Promise<"timed out">((resolve) => {
+    timer = setTimeout(() => resolve("timed out"), CLOSE_TIMEOUT_MS);
+  });
+  try {
+    if ((await Promise.race([closed, timedOut])) === "closed") return;
+  } finally {
+    clearTimeout(timer);
+  }
+  console.error(
+    `[e2e] quit did not finish within ${CLOSE_TIMEOUT_MS}ms of app.close(): ` +
+      `killing Electron pid=${pid}. The test's assertions had already passed.`,
+  );
+  app.process().kill("SIGKILL");
+  // The pending close settles (or rejects) once the process is gone; never wait on it twice.
+  await Promise.race([
+    closed.catch(() => undefined),
+    new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+  ]);
+}
+
+/**
  * Stable asset ids for the seeded fixtures. The library's detail route is keyed by `assetId`
  * (`/library/:assetId`), not by the filename-derived local id, so the sidecars are seeded with
  * these rather than letting the vault mint random ones — a minted id is unknowable to a test
@@ -151,7 +196,7 @@ export async function launchApp(options: { recordVideoDir?: string } = {}): Prom
     vaultDir,
     teardown: async () => {
       closedDeliberately = true;
-      await app.close();
+      await closeOrKill(app, pid);
       await rm(userDataDir, { recursive: true, force: true });
       await rm(vaultDir, { recursive: true, force: true });
     },
