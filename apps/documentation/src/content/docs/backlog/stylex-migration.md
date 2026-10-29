@@ -251,7 +251,7 @@ Measured on `main` at `cf478229`, four weeks after the experiment started.
 | `@kaipu/ui` | Badge, Button, Card, Input, Row, SearchInput, Toggle, Modal, Popover, ToastList, Rail (the sidebar), RecordButton, SourceCard, StatusToggle            | —                                                                                                                                               |
 | Desktop     | consumes the shared pieces; released in `desktop-v0.14.0` and `0.14.1` (both 2026-10-20 per the changelog, both marked Pre-release on GitHub Releases) | 97 `.module.css` (91 on 2026-10-01: new features kept adding modules, which decision 4 of the spec allows); `Select` on Radix + CSS Modules     |
 | Web         | roadmap, sign-in/sign-up, dashboard (merged 2026-10-18/19, released in `web-v0.11.0` on 2026-10-20)                                                    | Tailwind v4 active in `vite.config.ts`; 10 files with utility classes (22 on 2026-10-01); 3 components import `@kaipu/web-ui`; 16 `.module.css` |
-| Stages      | 0, 1, 2a, 2b                                                                                                                                           | 3 (landing modules, `--kl-*`) partly; 4 (shadcn-cssinjs, Tailwind removal) not started                                                          |
+| Stages      | 0, 1, 2a, 2b                                                                                                                                           | 3 (landing modules, `--kl-*`) started; 4 (shadcn-cssinjs, Tailwind removal) not started                                                         |
 
 Files with `stylex.create`: 45 across the desktop, the web and `packages/ui`.
 
