@@ -64,6 +64,20 @@ describe("LibraryService", () => {
     await rm(userData, { recursive: true, force: true });
   });
 
+  it("lists a renamed item once, under its new id and the same assetId", async () => {
+    account = null;
+    await writeFile(join(vaultDir, "old.mp4"), "");
+    const [before] = (await service.list()).items;
+    await new LibraryVault(vaultDir).renameItem("old", "Sprint demo");
+    const { items } = await service.list();
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      assetId: before!.assetId,
+      title: "Sprint demo",
+      local: { id: "Sprint demo" },
+    });
+  });
+
   it("lists local items only when signed out, with catalogVerifiedAt null", async () => {
     account = null;
     await writeFile(join(vaultDir, "a.mp4"), "");
