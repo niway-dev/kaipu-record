@@ -3,6 +3,8 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { useLocalLibrary } from "./use-local-library";
 import { reportError } from "@renderer/features/analytics";
 import type { LibraryItem } from "@shared/types/library-item";
+import { ITEM_NOT_FOUND_MARKER } from "@shared/types/library-storage";
+import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 
 vi.mock("@renderer/features/analytics", () => ({ reportError: vi.fn() }));
 
@@ -200,6 +202,76 @@ describe("useLocalLibrary", () => {
       expect.any(Error),
       expect.anything(),
     );
+  });
+
+  it("patches the renamed item by assetId with its new id, title and thumbnail", async () => {
+    window.electronAPI.renameLocalRecording = vi.fn(async (_id: string, title: string) => ({
+      file: "renamed" as const,
+      recording: {
+        ...items[0]!.local!,
+        id: "Sprint demo",
+        title,
+        thumbnailUrl: "kaipu-media://thumb/Sprint demo",
+      },
+    }));
+    const { result } = renderHook(() => useLocalLibrary());
+    await waitFor(() => expect(result.current.videos).toHaveLength(2));
+
+    await act(async () => {
+      await result.current.rename("a", "Sprint demo");
+    });
+
+    expect(result.current.videos[0]).toMatchObject({
+      assetId: "00000000-0000-0000-0000-000000000001",
+      id: "Sprint demo",
+      title: "Sprint demo",
+      thumbnailUrl: "kaipu-media://thumb/Sprint demo",
+    });
+    expect(result.current.videos[1]).toMatchObject({ id: "b", title: "B" });
+    expect(getToasts()).toEqual([]);
+  });
+
+  it("shows a toast with Retry when the file kept its old name, and retries with the same title", async () => {
+    const rename = vi.fn(async (id: string, title: string) => ({
+      file: "kept-old-name" as const,
+      reason: "locked" as const,
+      recording: { ...items[0]!.local!, id, title },
+    }));
+    window.electronAPI.renameLocalRecording = rename;
+    const { result } = renderHook(() => useLocalLibrary());
+    await waitFor(() => expect(result.current.videos).toHaveLength(2));
+
+    await act(async () => {
+      await result.current.rename("a", "Locked name");
+    });
+
+    // The title is saved either way; the file kept its name.
+    expect(result.current.videos[0]).toMatchObject({ id: "a", title: "Locked name" });
+    const [toast] = getToasts();
+    expect(toast?.message).toMatch(/another app is using it/i);
+    expect(toast?.action?.label).toBe("Retry");
+    expect(reportError).not.toHaveBeenCalled();
+
+    rename.mockClear();
+    await act(async () => toast!.action!.onClick());
+    expect(rename).toHaveBeenCalledWith("a", "Locked name");
+    for (const t of getToasts()) dismissToast(t.id);
+  });
+
+  it("refreshes quietly when the item is no longer there (double commit)", async () => {
+    window.electronAPI.renameLocalRecording = vi.fn(async () => {
+      throw new Error(`Error invoking remote method: ${ITEM_NOT_FOUND_MARKER}: no media file`);
+    });
+    const { result } = renderHook(() => useLocalLibrary());
+    await waitFor(() => expect(result.current.videos).toHaveLength(2));
+    expect(window.electronAPI.listLibraryItems).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await result.current.rename("a", "Again");
+    });
+
+    expect(reportError).not.toHaveBeenCalled();
+    await waitFor(() => expect(window.electronAPI.listLibraryItems).toHaveBeenCalledTimes(2));
   });
 
   it("re-lists when the vault folder changes", async () => {

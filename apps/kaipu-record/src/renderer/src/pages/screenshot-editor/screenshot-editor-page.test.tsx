@@ -176,3 +176,58 @@ describe("ScreenshotEditorPage — save races", () => {
     expect(saveCalls()[1][1]).toMatchObject({ overwriteId: "s1" });
   });
 });
+
+describe("ScreenshotEditorPage — rename moves the file (NIW2-560)", () => {
+  const renameResult = (id: string, title: string, file = "renamed", reason?: string) => ({
+    file,
+    reason,
+    recording: { ...saved(id, title), filePath: `/vault/${id}.png` },
+  });
+
+  /** Save a pasted shot (bound to "s1"), then commit a new title in the field. */
+  async function saveThenRename(title: string): Promise<void> {
+    await loadImage();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saveCalls()).toHaveLength(1));
+    await act(async () => {});
+    const field = screen.getByRole("textbox", { name: /title/i });
+    fireEvent.change(field, { target: { value: title } });
+    fireEvent.blur(field);
+  }
+
+  it("a save that follows a rename in flight overwrites the new id, not the vanished one", async () => {
+    const d = deferred<ReturnType<typeof renameResult>>();
+    window.electronAPI.renameLocalRecording = vi.fn(() => d.promise) as never;
+    const { router } = mount(PASTE);
+    await saveThenRename("Sprint demo");
+    await waitFor(() =>
+      expect(window.electronAPI.renameLocalRecording).toHaveBeenCalledWith("s1", "Sprint demo"),
+    );
+    // An edit and a leave while the file is still moving: the autosave must wait for it.
+    editPadding();
+    act(() => void router.navigate("/library"));
+    await act(async () => {});
+    expect(saveCalls()).toHaveLength(1);
+
+    d.resolve(renameResult("Sprint demo", "Sprint demo"));
+    expect(await screen.findByText("library")).toBeInTheDocument();
+    expect(saveCalls()).toHaveLength(2);
+    expect(saveCalls()[1][1]).toMatchObject({ overwriteId: "Sprint demo" });
+  });
+
+  it("shows a Retry toast when the file kept its old name, and retries on the same id", async () => {
+    const rename = vi.fn(async (id: string, title: string) =>
+      renameResult(id, title, "kept-old-name", "locked"),
+    );
+    window.electronAPI.renameLocalRecording = rename as never;
+    mount(PASTE);
+    await saveThenRename("Locked");
+    await waitFor(() => expect(getToasts()).toHaveLength(1));
+    const [toast] = getToasts();
+    expect(toast!.message).toMatch(/another app is using it/i);
+
+    await act(async () => toast!.action!.onClick());
+    await waitFor(() => expect(rename).toHaveBeenCalledTimes(2));
+    expect(rename).toHaveBeenLastCalledWith("s1", "Locked");
+  });
+});

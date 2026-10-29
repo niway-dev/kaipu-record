@@ -4,6 +4,10 @@ import type { LibraryVideo } from "@renderer/features/library/types";
 import { reportError } from "@renderer/features/analytics";
 import { toLibraryVideo } from "@renderer/features/library/map-item";
 import type { CatalogRefreshResult, RemoveLocalCopyResult } from "@shared/types/library-item";
+import {
+  isItemNotFoundError,
+  notifyRenameOutcome,
+} from "@renderer/features/library/rename-outcome";
 import { useOrphanHeal } from "./use-orphan-heal";
 
 export interface LocalLibrary {
@@ -33,6 +37,7 @@ export interface LocalLibrary {
 /** Loads + manages the combined local/cloud library via the main process. */
 export function useLocalLibrary(): LocalLibrary {
   const t = useTranslations("library");
+  const tCommon = useTranslations("common");
   const [videos, setVideos] = useState<LibraryVideo[]>([]);
   const [isLoading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -65,14 +70,41 @@ export function useLocalLibrary(): LocalLibrary {
     }
   }, []);
 
-  const rename = useCallback(async (id: string, title: string) => {
-    try {
-      await window.electronAPI.renameLocalRecording(id, title);
-      setVideos((prev) => prev.map((video) => (video.id === id ? { ...video, title } : video)));
-    } catch (error) {
-      reportError(t("errorRename"), error, { context: { id } });
-    }
-  }, []);
+  // NIW2-560: the file follows the title, so the item's id can change. Patched by
+  // assetId (the identity), not by the old id; main also broadcasts `library:changed`.
+  const rename = useCallback(
+    async (id: string, title: string): Promise<void> => {
+      try {
+        const result = await window.electronAPI.renameLocalRecording(id, title);
+        const { recording } = result;
+        setVideos((prev) =>
+          prev.map((video) =>
+            video.assetId === recording.assetId
+              ? {
+                  ...video,
+                  id: recording.id,
+                  title: recording.title,
+                  thumbnailUrl: recording.thumbnailUrl ?? null,
+                }
+              : video,
+          ),
+        );
+        // Retry goes straight to main with the same title: it is already saved, so the
+        // "title changed" check of the rename field would skip it.
+        notifyRenameOutcome(result, { library: t, common: tCommon }, () => {
+          void rename(recording.id, recording.title);
+        });
+      } catch (error) {
+        // A double commit, or the item vanished: the list is stale, not the user's action.
+        if (isItemNotFoundError(error)) {
+          void refresh();
+          return;
+        }
+        reportError(t("errorRename"), error, { context: { id } });
+      }
+    },
+    [refresh, t, tCommon],
+  );
 
   const setTags = useCallback(async (id: string, tagIds: readonly string[]) => {
     try {

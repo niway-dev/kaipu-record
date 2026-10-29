@@ -20,6 +20,7 @@ import {
 } from "@renderer/features/screenshots/auto-capture-policy";
 import { DiscardChangesDialog } from "@renderer/features/screenshots/discard-changes-dialog";
 import { reportError } from "@renderer/features/analytics";
+import { notifyRenameOutcome } from "@renderer/features/library/rename-outcome";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import {
   BeautifiedFrame,
@@ -90,6 +91,8 @@ export function ScreenshotEditorPage(): React.JSX.Element {
 /** The image editor itself. The Editor workspace routes render it, keyed per item. */
 export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Element {
   const t = useTranslations("screenshots");
+  const tLibrary = useTranslations("library");
+  const tCommon = useTranslations("common");
   const image = useImageSource(source);
   // A re-opened saved shot is already framed/flattened — start it unframed so the
   // editor doesn't beautify it twice; a fresh capture gets the default frame.
@@ -152,19 +155,32 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
   const [autoTitle] = useState(
     () => source.title ?? `${t("screenshotPrefix")} — ${new Date().toLocaleString()}`,
   );
-  const renameSaved = async (id: string, next: string): Promise<void> => {
-    try {
-      await window.electronAPI.renameLocalRecording(id, next);
-    } catch (error) {
-      reportError(t("renameError"), error, {
-        context: { phase: "rename", id },
-        retry: () => void renameSaved(id, next),
-      });
-    }
-  };
+  // NIW2-560: a rename moves the file, so the vault id changes. It runs through the
+  // same queue as saves, so a save never overwrites the old (vanished) name while the
+  // file is moving, and the new id is adopted everywhere this editor holds it.
+  const renameSaved = (next: string): Promise<void> =>
+    enqueue(async () => {
+      const id = savedIdRef.current;
+      if (!id || !alive.current) return;
+      try {
+        const result = await window.electronAPI.renameLocalRecording(id, next);
+        const newId = result.recording.id;
+        savedIdRef.current = newId;
+        setSavedId(newId);
+        if (autoSavedId.current === id) autoSavedId.current = newId;
+        notifyRenameOutcome(result, { library: tLibrary, common: tCommon }, () => {
+          if (alive.current) void renameSaved(next);
+        });
+      } catch (error) {
+        reportError(t("renameError"), error, {
+          context: { phase: "rename", id },
+          retry: () => void renameSaved(next),
+        });
+      }
+    });
   const captureTitle = useCaptureTitle(
     autoTitle,
-    savedId ? (next) => void renameSaved(savedId, next) : null,
+    savedId ? (next) => void renameSaved(next) : null,
   );
 
   // Unsaved-changes guard. A fresh capture (blob) lives ONLY in memory, so it's
@@ -292,8 +308,13 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
       const revision = sceneRevision.current;
       const snap = latest.current.scene;
       const draftAtStart = latest.current.draft;
+      // Callers pass the saved id they saw; a rename queued before this save moved it.
       const overwriteId =
-        opts.overwriteId ?? (opts.bindToSaved ? (savedIdRef.current ?? undefined) : undefined);
+        opts.overwriteId !== undefined
+          ? (savedIdRef.current ?? opts.overwriteId)
+          : opts.bindToSaved
+            ? (savedIdRef.current ?? undefined)
+            : undefined;
       try {
         const saved = await window.electronAPI.saveScreenshot(await exportAs("png", snap), {
           // The live field, not only its committed value: Save must write what the
