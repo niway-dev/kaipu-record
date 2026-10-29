@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LibraryVault } from "./library-vault";
+import { defaultCaptureName } from "@shared/default-capture-name";
+import { LibraryVault, humanizeId } from "./library-vault";
 
 describe("LibraryVault", () => {
   let directory: string;
@@ -33,7 +34,7 @@ describe("LibraryVault", () => {
     await writeRecording("alpha-clip", 4096);
     const [recording] = await vault.list();
     expect(recording.id).toBe("alpha-clip");
-    expect(recording.title).toBe("Alpha Clip");
+    expect(recording.title).toBe("alpha-clip");
     expect(recording.sizeBytes).toBe(4096);
     expect(recording.durationSeconds).toBe(0);
   });
@@ -452,5 +453,32 @@ describe("LibraryVault — mp4 + thumbnails", () => {
     const updated = await vault.backfill("orphan-2", { durationSeconds: 10, thumbnail: null });
 
     expect(updated).toMatchObject({ durationSeconds: 10, thumbnailUrl: null });
+  });
+});
+
+describe("humanizeId", () => {
+  it("renders a legacy recording stem as the default name for its (UTC) timestamp", () => {
+    expect(humanizeId("recording-2026-10-29-13-51-00")).toBe(
+      defaultCaptureName("recording", new Date(Date.UTC(2026, 9, 29, 13, 51, 0))),
+    );
+  });
+
+  it("renders a legacy screenshot stem, milliseconds and all", () => {
+    expect(humanizeId("screenshot-2026-10-29T13-51-00-800Z")).toBe(
+      defaultCaptureName("screenshot", new Date(Date.UTC(2026, 9, 29, 13, 51, 0))),
+    );
+  });
+
+  it("keeps a recovered legacy stem readable", () => {
+    expect(humanizeId("recording-2026-10-29-13-51-00-recovered")).toMatch(/^Kaipu Recording /);
+  });
+
+  it("returns any other stem as is", () => {
+    expect(humanizeId("Kaipu Recording 2026-10-29 at 13.51.00")).toBe(
+      "Kaipu Recording 2026-10-29 at 13.51.00",
+    );
+    expect(humanizeId("my_clip-final")).toBe("my_clip-final");
+    expect(humanizeId("  padded ")).toBe("padded");
+    expect(humanizeId("")).toBe("Recording");
   });
 });

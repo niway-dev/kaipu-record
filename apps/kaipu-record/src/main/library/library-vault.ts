@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { sanitizeRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
 import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/types/export-preset";
+import { defaultCaptureName } from "@shared/default-capture-name";
 import { atomicWriteFile, withLock } from "./atomic-write";
 import { sha256FileBase64 } from "./content-hash";
 
@@ -413,9 +414,22 @@ function describeExport(meta: Sidecar): LocalRecording["export"] {
   };
 }
 
-function humanizeId(id: string): string {
-  const cleaned = id.replace(/[-_]+/g, " ").trim();
-  return cleaned ? cleaned.replace(/\b\w/g, (c) => c.toUpperCase()) : "Recording";
+const LEGACY_STEM = /^(recording|screenshot)-(\d{4})-(\d{2})-(\d{2})[-T](\d{2})-(\d{2})-(\d{2})/;
+
+/**
+ * The title an item without a sidecar title shows. New stems are already readable
+ * (ADR 0032); a legacy writer stem (`recording-2026-10-29-13-51-00`,
+ * `screenshot-2026-10-29T13-51-00-800Z`) reads as the new default name, so untitled
+ * legacy items look like new ones. Legacy stems were UTC; the default name is local time.
+ */
+export function humanizeId(id: string): string {
+  const legacy = LEGACY_STEM.exec(id);
+  if (legacy) {
+    const [, kind, y, mo, d, h, mi, s] = legacy;
+    const utc = new Date(Date.UTC(+y!, +mo! - 1, +d!, +h!, +mi!, +s!));
+    return defaultCaptureName(kind === "screenshot" ? "screenshot" : "recording", utc);
+  }
+  return id.trim() || "Recording";
 }
 
 /**
