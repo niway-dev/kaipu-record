@@ -505,6 +505,10 @@ export const IPC_CHANNELS = {
   // Main → overlay (no payload): "reply after your next animation frame"; overlay → main
   // on the same channel (no payload). Capture waits for every reply or a 250 ms cap.
   screenshotOverlayHiddenAck: "screenshot:overlay-hidden-ack",
+  // Overlay → main: its state listener is attached; main answers with the current state.
+  // A spare learns its mode and intent only from state, and one sent before its listener
+  // was attached (a spare still loading when its pick opened) is lost.
+  screenshotOverlayStateRequest: "screenshot:overlay-state-request",
   // Capture toast (main/screenshots/capture-toast-window.ts), shown after a quiet capture.
   // Main → toast: `CaptureToastPayload` to render; sent again with `saved` after Save.
   screenshotToastShow: "screenshot:toast-show",

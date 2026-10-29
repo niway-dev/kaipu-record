@@ -77,17 +77,20 @@ if [ "$missing" -gt 0 ]; then
 fi
 
 # --- native dependencies ----------------------------------------------------
-# `uiohook-napi` ships prebuilds for Node, not for Electron, so it has to be
-# rebuilt against Electron's ABI before the desktop app can load it. That rebuild
-# used to be a `postinstall`; it is explicit now (scripts/rebuild-native.sh), so
-# this is the thing that has to notice it is pending.
+# `uiohook-napi` is patched (root `package.json` `patchedDependencies`): `bun
+# install` patches its C sources, and only an explicit rebuild compiles them
+# (scripts/rebuild-native.sh; it used to be a `postinstall`). This is the thing
+# that has to notice the rebuild is pending.
 #
 # Reported, never run: the rebuild invokes a C compiler, and the decision to do
 # that stays with you — the same rule the tool checks above follow.
 #
-# Not fatal. Without it the app still runs; `click-hook.ts` degrades to "no
-# clicks" rather than crashing, so the only casualty is auto-zoom on clicks. That
-# silence is exactly why this check is here: nothing else would tell you.
+# Not fatal, and that is the trap. Without it the app still runs: the shipped
+# prebuild is a N-API module, Electron loads it fine, and you get the UNPATCHED
+# hook — the `uIOhook.start()` deadlock that freezes the whole app at "start
+# recording". Nothing in the UI tells you. The stamp carries the Electron version
+# and a hash of the patches (scripts/native-deps-stamp.sh), so a bump of either
+# shows up here.
 printf '\n%sDesktop native dependencies%s\n' "$bold" "$off"
 native_app_dir="apps/kaipu-record"
 native_stamp="$native_app_dir/node_modules/.native-deps-electron-version"
@@ -97,19 +100,19 @@ if [ ! -f "$native_electron_pkg" ]; then
   printf '  %s·%s %-12s %snot installed yet — run bun install first%s\n' \
     "$yellow" "$off" "electron" "$dim" "$off"
 else
-  native_electron_version="$(node -p "require('./$native_electron_pkg').version" 2>/dev/null || echo "")"
+  native_expected="$(bash scripts/native-deps-stamp.sh 2>/dev/null || echo "")"
   native_built_for="$(cat "$native_stamp" 2>/dev/null || echo "")"
-  if [ -n "$native_electron_version" ] && [ "$native_built_for" = "$native_electron_version" ]; then
-    printf '  %s✓%s %-12s built for Electron %s\n' "$green" "$off" "uiohook-napi" "$native_electron_version"
+  if [ -n "$native_expected" ] && [ "$native_built_for" = "$native_expected" ]; then
+    printf '  %s✓%s %-12s built for %s\n' "$green" "$off" "uiohook-napi" "$native_expected"
   else
     if [ -z "$native_built_for" ]; then
       printf '  %s·%s %-12s %snot built for Electron yet%s\n' \
         "$yellow" "$off" "uiohook-napi" "$dim" "$off"
     else
-      printf '  %s·%s %-12s %sbuilt for Electron %s, installed is %s%s\n' \
-        "$yellow" "$off" "uiohook-napi" "$dim" "$native_built_for" "$native_electron_version" "$off"
+      printf '  %s·%s %-12s %sbuilt for %s, expected %s%s\n' \
+        "$yellow" "$off" "uiohook-napi" "$dim" "$native_built_for" "$native_expected" "$off"
     fi
-    printf '       %sneeded for:%s auto-zoom on clicks in the video editor\n' "$dim" "$off"
+    printf '       %swithout it:%s the unpatched hook runs — start() can deadlock the app\n' "$dim" "$off"
     printf '       %srun:%s        bun run rebuild:native\n' "$dim" "$off"
   fi
 fi

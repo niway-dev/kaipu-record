@@ -430,6 +430,9 @@
       },
     },
   },
+  "patchedDependencies": {
+    "uiohook-napi@1.5.5": "patches/uiohook-napi@1.5.5.patch",
+  },
   "catalog": {
     "@better-auth/electron": "1.7.11",
     "@orpc/client": "1.13.5",

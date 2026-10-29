@@ -97,8 +97,9 @@ real hardware until there is a reason to pay for a Windows E2E lane.
 7. **Update from beta N to N+1 fails on Windows.** QA step 10 installs beta N, publishes
    N+1 to a staging prefix, and watches the status banner reach `ready`.
 8. **`rebuild:native` skipped on the Windows runner.** The job fails if
-   `node_modules/.native-deps-electron-version` does not match the installed Electron after the
-   rebuild step (same stamp the setup doctor reads).
+   `node_modules/.native-deps-electron-version` does not match the installed Electron version
+   plus the hash of `patches/*.patch` (`scripts/native-deps-stamp.sh`, the same stamp the setup
+   doctor reads) after the rebuild step.
 9. **Tray icon invisible.** QA step 10 checks the icon on a dark and a light taskbar.
 
 ## 1. What exists today (checked 2026-10-15)

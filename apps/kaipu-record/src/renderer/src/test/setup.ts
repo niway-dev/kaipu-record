@@ -235,6 +235,7 @@ window.electronAPI = {
     onState: () => () => {},
     onHiddenAckRequest: () => () => {},
     hiddenAck: () => {},
+    requestState: () => {},
   },
   captureToast: {
     onShow: () => () => {},

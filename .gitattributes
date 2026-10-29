@@ -1,0 +1,4 @@
+# Dependency patches are applied byte-for-byte by `bun install` and their hash is
+# pinned in bun.lock; a CRLF checkout (Windows runners, core.autocrlf) would
+# change the bytes and fail the install.
+patches/*.patch -text

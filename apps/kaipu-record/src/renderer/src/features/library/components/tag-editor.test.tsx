@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { TAGS_PER_ITEM_MAX } from "@kaipu/domain/constants";
 import type { TagSummary } from "@shared/types";
 import { TagEditor } from "./tag-editor";
 
@@ -41,6 +42,12 @@ function Harness({
     />
   );
 }
+
+const deferred = (): { promise: Promise<void>; resolve: () => void } => {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => (resolve = r));
+  return { promise, resolve };
+};
 
 const input = (): HTMLInputElement => screen.getByRole("textbox", { name: "Tags" });
 const chips = (): string[] =>
@@ -114,5 +121,105 @@ describe("TagEditor", () => {
     fireEvent.mouseDown(screen.getByRole("button", { name: "Archivos varios" }));
     expect(chips()).toEqual(["video", "Archivos varios"]);
     expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  // These render TagEditor with a static `assigned`, like a parent whose save has not
+  // landed yet: the Harness above updates state synchronously and cannot show it.
+  it("assigns a pasted list of new tags in one onAssign call", async () => {
+    const onCreate = vi.fn(async (name: string) => tag(name));
+    const onAssign = vi.fn();
+    render(<TagEditor assigned={[]} all={[]} onAssign={onAssign} onCreate={onCreate} />);
+
+    fireEvent.change(input(), { target: { value: "design, demo, " } });
+
+    await waitFor(() => expect(onAssign).toHaveBeenCalledTimes(1));
+    expect(onAssign).toHaveBeenCalledWith(["t-design", "t-demo"]);
+    expect(input().value).toBe("");
+  });
+
+  it("keeps existing tags and mixes existing and new in a paste", async () => {
+    const onCreate = vi.fn(async (name: string) => tag(name));
+    const onAssign = vi.fn();
+    render(
+      <TagEditor
+        assigned={[tag("a")]}
+        all={[tag("Demo")]}
+        onAssign={onAssign}
+        onCreate={onCreate}
+      />,
+    );
+
+    fireEvent.change(input(), { target: { value: "demo, fresh, " } });
+
+    await waitFor(() => expect(onAssign).toHaveBeenCalledTimes(1));
+    expect(onAssign).toHaveBeenCalledWith(["t-a", "t-Demo", "t-fresh"]);
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(onCreate).toHaveBeenCalledWith("fresh");
+  });
+
+  it("ignores duplicates and invalid pieces in a paste", async () => {
+    const onCreate = vi.fn(async (name: string) => tag(name));
+    const onAssign = vi.fn();
+    render(<TagEditor assigned={[]} all={[]} onAssign={onAssign} onCreate={onCreate} />);
+
+    fireEvent.change(input(), { target: { value: "a, A, ../x, b, " } });
+
+    await waitFor(() => expect(onAssign).toHaveBeenCalledTimes(1));
+    expect(onCreate.mock.calls.map(([name]) => name)).toEqual(["a", "b"]);
+    expect(onAssign).toHaveBeenCalledWith(["t-a", "t-b"]);
+  });
+
+  it("caps a paste at the per-item limit", async () => {
+    const assigned = Array.from({ length: TAGS_PER_ITEM_MAX - 1 }, (_, i) => tag(`t${i}`));
+    const onCreate = vi.fn(async (name: string) => tag(name));
+    const onAssign = vi.fn();
+    render(<TagEditor assigned={assigned} all={[]} onAssign={onAssign} onCreate={onCreate} />);
+
+    fireEvent.change(input(), { target: { value: "x, y, z, " } });
+
+    await waitFor(() => expect(onAssign).toHaveBeenCalledTimes(1));
+    expect(onAssign.mock.calls[0]![0]).toHaveLength(TAGS_PER_ITEM_MAX);
+    // Only the tag that fits is created; the rest would be orphans in the registry.
+    expect(onCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("two quick chip removals before the first save settles both apply", async () => {
+    const save = deferred();
+    const onAssign = vi.fn((_ids: readonly string[]) => save.promise);
+    render(
+      <TagEditor
+        assigned={[tag("a"), tag("b"), tag("c")]}
+        all={[]}
+        onAssign={onAssign}
+        onCreate={async (name) => tag(name)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove tag a" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove tag b" }));
+
+    expect(onAssign.mock.calls).toEqual([[["t-b", "t-c"]], [["t-c"]]]);
+    await act(async () => save.resolve());
+  });
+
+  it("re-syncs with the props after a save settles", async () => {
+    const save = deferred();
+    const onAssign = vi.fn((_ids: readonly string[]) => save.promise);
+    const onCreate = async (name: string): Promise<TagSummary> => tag(name);
+    const { rerender } = render(
+      <TagEditor
+        assigned={[tag("a"), tag("b")]}
+        all={[]}
+        onAssign={onAssign}
+        onCreate={onCreate}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove tag a" }));
+    await act(async () => save.resolve());
+    rerender(<TagEditor assigned={[tag("b")]} all={[]} onAssign={onAssign} onCreate={onCreate} />);
+    fireEvent.click(screen.getByRole("button", { name: "Remove tag b" }));
+
+    expect(onAssign).toHaveBeenLastCalledWith([]);
   });
 });

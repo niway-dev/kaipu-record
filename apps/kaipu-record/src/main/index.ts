@@ -22,6 +22,7 @@ import { registerCloudStorageHandlers } from "./cloud";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
 import { registerRecordingHub, type RecordingHubHandle } from "./recording/recording-hub";
 import { recoverStrandedRecordings } from "./recording/stranded-recordings";
+import { proceedWhenRecordingStops } from "./recording/stop-guard";
 import { beginRecordTiming, markRecordTiming } from "./recording/record-timing";
 import { vaultDirectory } from "./library/vault-location";
 import {
@@ -305,11 +306,13 @@ function createWindow(showOnReady = true): void {
     }
     closingWithRecording = true;
     mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop");
-    const finishClose = (): void => mainWindow?.close();
-    const timeout = setTimeout(finishClose, 5000);
-    ipcMain.once(IPC_CHANNELS.recordingStop, () => {
-      clearTimeout(timeout);
-      finishClose();
+    proceedWhenRecordingStops({
+      ipc: ipcMain,
+      channel: IPC_CHANNELS.recordingStop,
+      timeoutMs: 5000,
+      // The renderer hung: no `recordingStop` will come, so the hub would stay "recording".
+      onTimeout: () => hub?.forceReset(),
+      proceed: () => mainWindow?.close(),
     });
     return true;
   };
@@ -1076,11 +1079,12 @@ app.on("before-quit", (event) => {
     if (choice !== 1) return;
     quittingWithRecording = true;
     mainWindow?.webContents.send(IPC_CHANNELS.recordingCommand, "stop");
-    const finishQuit = (): void => app.quit();
-    const timeout = setTimeout(finishQuit, 5000);
-    ipcMain.once(IPC_CHANNELS.recordingStop, () => {
-      clearTimeout(timeout);
-      finishQuit();
+    proceedWhenRecordingStops({
+      ipc: ipcMain,
+      channel: IPC_CHANNELS.recordingStop,
+      timeoutMs: 5000,
+      onTimeout: () => hub?.forceReset(),
+      proceed: () => app.quit(),
     });
     return;
   }
