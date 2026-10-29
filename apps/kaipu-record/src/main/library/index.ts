@@ -2,21 +2,27 @@ import { extname, join } from "node:path";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
-import type { GifSaveMeta, RecordingBackfillMeta, TagSummary, VaultDirectory } from "@shared/types";
+import type {
+  GifSaveMeta,
+  RecordingBackfillMeta,
+  RenameResult,
+  TagSummary,
+  VaultDirectory,
+} from "@shared/types";
 import { createMainTranslator } from "@kaipu/i18n/main";
 import type { AuthHandle } from "../infrastructure/auth-store";
 import { getAppSettings } from "../infrastructure/settings-store";
 import { CatalogCache } from "../cloud/catalog-cache";
 import { fetchCloudCatalog } from "../cloud/catalog-client";
 import { LibraryService } from "./library-service";
-import { LibraryVault } from "./library-vault";
+import { LibraryVault, isPlainItemId } from "./library-vault";
 import { loadDeviceId, VaultTagRepository, type TagRepository } from "./tag-repository";
 import { isTagColor } from "@kaipu/domain/constants";
 import { saveGif } from "./gif-save";
 import { createDragCopy } from "./drag-copies";
 import { friendlyDragName } from "./drag-name";
 import { resetVaultDirectory, setVaultDirectory, vaultDirectory } from "./vault-location";
-import { deleteVideoEditSession, registerVideoEditSessionHandlers } from "./video-edit-session";
+import { registerVideoEditSessionHandlers } from "./video-edit-session";
 
 /** Tell every window the library changed (a new item, a new vault folder) so open pages re-list. */
 export function broadcastLibraryChanged(): void {
@@ -57,7 +63,12 @@ export function thumbnailFilePath(id: string): string {
   return join(vaultDirectory().path, ".kaipu", `${id}.jpg`);
 }
 
-export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl: string }): void {
+export function registerLibraryVaultHandlers(deps: {
+  auth: AuthHandle;
+  serverUrl: string;
+  /** True while a video export is encoding: a rename then keeps the file's name ("busy"). */
+  isExportActive: () => boolean;
+}): void {
   const service = new LibraryService({
     vault: currentVault,
     vaultDir: () => vaultDirectory().path,
@@ -88,8 +99,19 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
   ipcMain.handle(IPC_CHANNELS.loadCursorTrack, (_event, id: string) =>
     currentVault().readCursorTrack(id),
   );
-  ipcMain.handle(IPC_CHANNELS.renameLocalRecording, (_event, id: string, title: string) =>
-    currentVault().renameItem(id, title),
+  // NIW2-560: the file follows the title. An export streams its source over the media
+  // protocol for minutes, so while one runs the file keeps its name (the title is saved).
+  ipcMain.handle(
+    IPC_CHANNELS.renameLocalRecording,
+    async (_event, id: unknown, title: unknown): Promise<RenameResult> => {
+      if (typeof id !== "string" || !isPlainItemId(id)) throw new Error("rename: invalid id");
+      if (typeof title !== "string") throw new Error("rename: invalid title");
+      const result = await currentVault().renameItem(id, title.trim(), {
+        isBusy: deps.isExportActive,
+      });
+      if (result.file === "renamed") broadcastLibraryChanged();
+      return result;
+    },
   );
   // No broadcast: the stamp only reorders the Editor home, which re-lists on mount.
   ipcMain.handle(IPC_CHANNELS.markOpenedInEditor, (_event, id: string) =>
@@ -131,11 +153,10 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
     IPC_CHANNELS.backfillLocalRecordingMeta,
     (_event, id: string, meta: RecordingBackfillMeta) => currentVault().backfill(id, meta),
   );
-  ipcMain.handle(IPC_CHANNELS.deleteLocalRecording, async (_event, id: string) => {
-    await currentVault().remove(id);
-    // Best-effort: a missing session must never block the delete.
-    await deleteVideoEditSession(id).catch(() => {});
-  });
+  // remove() deletes every companion, the edit session and its assets included.
+  ipcMain.handle(IPC_CHANNELS.deleteLocalRecording, (_event, id: string) =>
+    currentVault().remove(id),
+  );
   ipcMain.handle(IPC_CHANNELS.revealLocalRecording, async (_event, id: string) =>
     shell.showItemInFolder(await currentVault().filePath(id)),
   );

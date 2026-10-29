@@ -19,7 +19,7 @@ import type {
 import type { SerializedError } from "../analytics";
 import type { AppSettings, ShortcutAction, TagSummary, UpdateStatus } from "./ipc";
 import type { TagColor } from "@kaipu/domain/constants";
-import type { LocalRecording, VaultDirectory } from "./library-storage";
+import type { LocalRecording, RenameResult, VaultDirectory } from "./library-storage";
 import type { StorageUsageResult } from "./cloud-storage";
 import type {
   CatalogRefreshResult,
@@ -218,8 +218,14 @@ export interface KaipuElectronAPI {
 
   /** List recordings stored in the local vault. */
   listLocalRecordings(): Promise<LocalRecording[]>;
-  /** Rename a local recording (updates sidecar metadata; the file is untouched). */
-  renameLocalRecording(id: string, title: string): Promise<void>;
+  /**
+   * Rename a local item (NIW2-560, ADR 0032): saves the title and moves the file (and its
+   * sidecars) to a name derived from it. `recording.id` is the id to use from now on.
+   * `file` says what happened to the file; "kept-old-name" is not an error — the title
+   * was saved. Rejects for an unknown id (message carries `ITEM_NOT_FOUND_MARKER`) or
+   * when the title itself cannot be written.
+   */
+  renameLocalRecording(id: string, title: string): Promise<RenameResult>;
   /** Stamp a vault item as opened in an editor now (orders the Editor home). */
   markOpenedInEditor(id: string): Promise<void>;
   /** Every live tag with its item count, most used first. */

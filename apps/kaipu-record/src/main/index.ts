@@ -869,7 +869,11 @@ app.whenReady().then(() => {
   onSettingsKeysChanged(["locale", "shortcuts"], (settings) => rebuildTrayMenu(settings.locale));
 
   // Library: local recordings vault + cloud catalog.
-  registerLibraryVaultHandlers({ auth, serverUrl: authServerUrl });
+  registerLibraryVaultHandlers({
+    auth,
+    serverUrl: authServerUrl,
+    isExportActive: () => exportActive,
+  });
   registerCloudStorageHandlers({ auth, serverUrl: authServerUrl });
 
   // Screenshots: capture/copy/save IPC handlers.

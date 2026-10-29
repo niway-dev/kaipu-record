@@ -106,7 +106,10 @@ describe("useLocalLibrary", () => {
       catalogVerifiedAt: null,
     }));
     window.electronAPI.deleteLocalRecording = vi.fn(async () => {});
-    window.electronAPI.renameLocalRecording = vi.fn(async () => {});
+    window.electronAPI.renameLocalRecording = vi.fn(async (id: string, title: string) => ({
+      file: "unchanged" as const,
+      recording: { ...items[0]!.local!, id, title },
+    }));
     window.electronAPI.removeLocalCopy = vi.fn(async () => ({ ok: true as const }));
     window.electronAPI.onLibraryChanged = () => () => {};
   });
