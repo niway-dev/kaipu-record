@@ -109,6 +109,25 @@ App behaviours on `feat/windows-release` (landed, unvalidated on Windows hardwar
 - [ ] Tray icon visible on a dark and a light taskbar (light-glyph `.ico` files). 🟡 Landed,
       unvalidated.
 
+## Owner install notes (2026-10-29)
+
+The owner installed the Windows build on real hardware and reported three things:
+
+- [x] **The old play-mark icon** on the installer, the `.exe`, the uninstaller and the
+      shortcuts. `build/icon.ico` was a hand export the icon script never produced. It is now
+      generated from `packages/brand` with the other OS icons, and the progress banner of the
+      one-click installer shows it too (`nsis.installerHeaderIcon`). 🟢 Fixed, ready to validate
+      on the next Windows build.
+- [ ] **The install is very slow.** 🔵 Not measured yet. Unverified hypotheses: the one-click
+      installer unpacks a 7z of the whole app (a 115 MB `setup.exe` for 0.15.1) file by file,
+      and Defender scans each file of an unsigned installer as it lands. Next step: time each
+      phase on the same machine (SmartScreen prompt, extraction, first launch) before changing
+      anything.
+- [ ] **The installer looks plain.** 🔵 Proposed. Today it is electron-builder's one-click
+      NSIS installer: the privacy notice page, then a progress banner. A designed installer
+      (assisted installer with sidebar and header art, or a custom UI) is design work and needs
+      a spec first.
+
 ## Non-goals
 
 - Feature parity before shipping. The beta label is the parity plan.

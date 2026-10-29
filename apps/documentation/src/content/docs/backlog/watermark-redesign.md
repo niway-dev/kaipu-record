@@ -77,3 +77,8 @@ next reader does not re-derive them.
 - **No position picker for paid users.** Separate idea, separate page if it ever lands.
 - **No new asset.** If the mark is ever redesigned, only `kaipu-wordmark.svg` changes;
   the defaults above already place whatever it holds.
+
+**2026-10-29.** That is what happened: `kaipu-wordmark.svg` (now 1900×352) and
+`kaipu-mark-mono.svg` swapped the retired play-mark for the fox of the brand's mono cuts,
+copied path for path; `watermark-assets.test.ts` fails if either drifts from it. The
+"Kaipu Recorder" lettering and every default above are unchanged.
