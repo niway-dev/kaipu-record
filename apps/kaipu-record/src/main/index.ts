@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { IPC_CHANNELS } from "@shared/types";
 import icon from "../../resources/icon.png?asset";
 import { CapturePanelWindow } from "./capture-panel-window";
+import { devAppIdentity } from "./app-identity";
 import { appShutdown, installAppShutdown } from "./app-shutdown";
 import { createMainTranslator } from "@kaipu/i18n/main";
 import {
@@ -142,6 +143,19 @@ function sendToRenderer(channel: string, payload?: unknown): void {
   if (!contents) return;
   if (rendererReady) contents.send(channel, payload);
   else pendingRendererSends.push({ channel, payload });
+}
+
+// A dev run is a different app from the installed one: its own name and userData directory,
+// so it gets its own lock, session, settings and device id (see app-identity.ts). Must run
+// before the lock below and before anything reads userData.
+const devIdentity = devAppIdentity({
+  isPackaged: app.isPackaged,
+  hasUserDataDirSwitch: app.commandLine.hasSwitch("user-data-dir"),
+  appDataDir: app.getPath("appData"),
+});
+if (devIdentity) {
+  app.setName(devIdentity.name);
+  if (devIdentity.userDataDir) app.setPath("userData", devIdentity.userDataDir);
 }
 
 // One running copy per user. Mandatory on Windows: closing the window hides the app
