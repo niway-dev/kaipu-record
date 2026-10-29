@@ -47,7 +47,7 @@ describe("DEFAULT_WATERMARK_CONFIG", () => {
   });
 
   it("sits in the frame's bottom-right corner at 1080p", () => {
-    const aspect = 1974 / 352; // the shipped wordmark asset
+    const aspect = 1900 / 352; // the shipped wordmark asset
     const r = watermarkRect(1920, 1080, aspect, DEFAULT_WATERMARK_CONFIG);
     const margin = Math.round(1080 * DEFAULT_WATERMARK_CONFIG.marginRatio);
     expect(r.x).toBe(1920 - r.width - margin);
@@ -58,7 +58,7 @@ describe("DEFAULT_WATERMARK_CONFIG", () => {
   // to the bottom edge, overlapping the recorded content's own bottom bar. The
   // gap below the mark must stay comparable to the mark's own height.
   it("keeps the mark clear of the bottom edge, not glued to it", () => {
-    const r = watermarkRect(1920, 1080, 1974 / 352, DEFAULT_WATERMARK_CONFIG);
+    const r = watermarkRect(1920, 1080, 1900 / 352, DEFAULT_WATERMARK_CONFIG);
     const gapBelow = 1080 - (r.y + r.height);
     expect(gapBelow).toBeGreaterThanOrEqual(r.height * 0.75);
   });

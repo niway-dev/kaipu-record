@@ -149,9 +149,10 @@ container is `calc(var(--kl-max-w) + 2 * var(--kl-gutter))`. With a plain
 - **Nothing has been reviewed in a browser by the owner.** The page now renders
   and has been measured at five viewports, but every layout decision was reasoned
   from the design images. The owner reviews by screenshot each round.
-- **The desktop bundle icon** (`build/icon.icns`, `.ico`, `.png`) is still the
-  old artwork. Needs a 1024×1024 export from Figma; the source is 778px and
-  upscaling looks soft in the Dock.
+- ~~**The desktop bundle icon** (`build/icon.icns`, `.ico`, `.png`) is still the
+  old artwork.~~ Done: `apps/kaipu-record/scripts/generate-app-icons.sh` renders
+  every OS icon from `packages/brand` vectors (macOS since NIW2-181, the Windows
+  `.ico` since 2026-10-29), so no raster export is needed.
 - **Missing brand assets:** the pink lockup as SVG, a cropped fox head for a true
   favicon, and a monochrome plain fox for the menu-bar idle state.
 - **Caveat is 75 kB** — half the font budget, for two handwritten words in one
