@@ -5,7 +5,7 @@ description: "The vault file follows the title: rename moves the media and every
 
 # NIW2-560: Renaming a library item renames its file on disk
 
-> Design spec, written **before** implementation. Linear: https://linear.app/niway/issue/NIW2-560. Creates [ADR 0032](/architecture/decisions/0032-the-file-name-follows-the-title/). Status: proposed, nothing implemented yet — `apps/documentation/src/content/docs/desktop/library-vault.mdx` still describes today's behaviour and is updated by the implementation PR, not by this spec.
+> Design spec, written **before** implementation. Linear: https://linear.app/niway/issue/NIW2-560. Creates [ADR 0032](/architecture/decisions/0032-the-file-name-follows-the-title/). Status: implemented on branch `feature/niw2-560-renaming-a-library-item-renames-its-file-on-disk-with`, owner QA pending; `desktop/library-vault.mdx` and `desktop/ipc-contract.mdx` describe the implemented behaviour.
 > Path: `apps/documentation/src/content/docs/specs/2026-10-29-niw2-560-rename-renames-the-file.md` · Written: 2026-10-29 · Owner decisions 1–3 below were taken before this spec and are not reopened here.
 
 ## In one minute
@@ -393,3 +393,4 @@ Create `shared/default-capture-name.ts` and `main/library/file-stem.ts` per §2.
 ## Change log
 
 - 2026-10-29: Spec written from the ticket and a code audit on `main` @ `16cd8d80`. No code changed yet.
+- 2026-10-29: Implemented (Units 1–7). Deviations: legacy stems in `humanizeId` are read as UTC and rendered in local time (the default-name rule), so the §8 example holds only in UTC; `friendlyDragName` now uses the vault's projection, so its tests expect spaces instead of `-` and the 100-code-point cap; screenshot-editor renames run through the editor's save queue instead of a separate in-flight ref; the capture toast still carries only the vault id (§3.2 "improve cheaply" not done); open question 3 answered: the GIF export reads its source once, inside the mounted video editor, so `exportActive` does not need to cover it.
