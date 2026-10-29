@@ -9,7 +9,8 @@ description: Proposal to evaluate shared typed token references and a gradual mi
 > 2026-10-28). ADR 0008 settled the direction and the four stages. Stages 0–2a
 > are on `main` since PRs #212–#222, stage 2b (sidebar and recording controls)
 > since PRs #226–#227 (2026-10-04). The web's roadmap, sign-in/sign-up and
-> dashboard pages were rewritten in StyleX (2026-10-18/19, `web-v0.11.0`). See
+> dashboard pages were rewritten in StyleX (merged 2026-10-18/19, released in
+> `web-v0.11.0` on 2026-10-20). See
 > "Where it stands (2026-10-28)" below for what is still on the old systems. The
 > original proposal at the end still describes the end state.
 
@@ -245,12 +246,12 @@ tasks, 26 tests in that file.
 
 Measured on `main` at `cf478229`, four weeks after the experiment started.
 
-| Surface     | On StyleX                                                                                                                                   | Still on the old system                                                                                                                         |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@kaipu/ui` | Badge, Button, Card, Input, Row, SearchInput, Toggle, Modal, Popover, ToastList, Rail (the sidebar), RecordButton, SourceCard, StatusToggle | —                                                                                                                                               |
-| Desktop     | consumes the shared pieces; shipped in `desktop-v0.14.0` and `0.14.1` (2026-10-19/21, both Pre-release)                                     | 97 `.module.css` (91 on 2026-10-01: new features kept adding modules, which decision 4 of the spec allows); `Select` on Radix + CSS Modules     |
-| Web         | roadmap, sign-in/sign-up, dashboard (`web-v0.11.0`, 2026-10-19)                                                                             | Tailwind v4 active in `vite.config.ts`; 10 files with utility classes (22 on 2026-10-01); 3 components import `@kaipu/web-ui`; 16 `.module.css` |
-| Stages      | 0, 1, 2a, 2b                                                                                                                                | 3 (landing modules, `--kl-*`) partly; 4 (shadcn-cssinjs, Tailwind removal) not started                                                          |
+| Surface     | On StyleX                                                                                                                                              | Still on the old system                                                                                                                         |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@kaipu/ui` | Badge, Button, Card, Input, Row, SearchInput, Toggle, Modal, Popover, ToastList, Rail (the sidebar), RecordButton, SourceCard, StatusToggle            | —                                                                                                                                               |
+| Desktop     | consumes the shared pieces; released in `desktop-v0.14.0` and `0.14.1` (both 2026-10-20 per the changelog, both marked Pre-release on GitHub Releases) | 97 `.module.css` (91 on 2026-10-01: new features kept adding modules, which decision 4 of the spec allows); `Select` on Radix + CSS Modules     |
+| Web         | roadmap, sign-in/sign-up, dashboard (merged 2026-10-18/19, released in `web-v0.11.0` on 2026-10-20)                                                    | Tailwind v4 active in `vite.config.ts`; 10 files with utility classes (22 on 2026-10-01); 3 components import `@kaipu/web-ui`; 16 `.module.css` |
+| Stages      | 0, 1, 2a, 2b                                                                                                                                           | 3 (landing modules, `--kl-*`) partly; 4 (shadcn-cssinjs, Tailwind removal) not started                                                          |
 
 Files with `stylex.create`: 45 across the desktop, the web and `packages/ui`.
 
