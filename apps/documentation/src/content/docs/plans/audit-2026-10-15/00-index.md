@@ -54,7 +54,6 @@ All shipped.
 | [23 Mic failure feedback](/plans/audit-2026-10-15/23-mic-failure-feedback/)         | REC-A5                 |
 | [24 Recording start latency](/plans/audit-2026-10-15/24-recording-start-latency/)   | REC-A6, REC-A9         |
 | [25 Compositor cadence](/plans/audit-2026-10-15/25-compositor-cadence/)             | REC-A7                 |
-| [26 Cursor track tail](/plans/audit-2026-10-15/26-cursor-track-tail/)               | REC-B8                 |
 
 ## Batch 6 — render and copy cost
 
@@ -79,6 +78,7 @@ Deleted from this folder once their PR merged; git keeps the plan text.
 | 18 Drag-out across volumes        | LIB-B12                                                                       | [#412](https://github.com/niway-dev/kaipu-record/pull/412) |
 | 19 Trim drag                      | VID-B1, VID-B2, VID-B7, VID-B8                                                | [#368](https://github.com/niway-dev/kaipu-record/pull/368) |
 | 21 Recording main-side resources  | REC-A2, REC-B4, REC-B3, REC-B5                                                | [#413](https://github.com/niway-dev/kaipu-record/pull/413) |
+| 26 Cursor track tail              | REC-B8                                                                        | [#416](https://github.com/niway-dev/kaipu-record/pull/416) |
 | 28 Video thumbnails by range      | VID-A3                                                                        | [#369](https://github.com/niway-dev/kaipu-record/pull/369) |
 | 29 Export canvas pool             | VID-A5                                                                        | [#371](https://github.com/niway-dev/kaipu-record/pull/371) |
 | 31 Screenshot composite once      | SHOT-A1                                                                       | [#372](https://github.com/niway-dev/kaipu-record/pull/372) |

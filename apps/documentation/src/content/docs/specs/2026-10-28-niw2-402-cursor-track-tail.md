@@ -1,9 +1,14 @@
 ---
-title: "26 · Cursor track tail"
-description: "Closes REC-B8: the cursor track's tail cut compares video time with a wall-clock duration that starts ≥150 ms after video time 0 (the thumbnail capture sits in between), so the last ~100 ms of samples and clicks are dropped."
+title: "NIW2-402: 26 Cursor track tail — approved spec"
+description: "The cursor follows the pointer to the last frame of every recording: the tail cut is computed in video time."
 ---
 
-# Cursor track tail — implementation plan
+# NIW2-402: 26 Cursor track tail
+
+> Approved spec, committed **before** implementation (ADR-0010). Source: audit plan `apps/documentation/src/content/docs/plans/audit-2026-10-15/26-cursor-track-tail.md` on `main` @ `f10e39a4`, copied below unchanged except the heading level. Linear: https://linear.app/niway/issue/NIW2-402. Where they disagree, **this file wins**.
+> Path: `apps/documentation/src/content/docs/specs/2026-10-28-niw2-402-cursor-track-tail.md` · Approved: 2026-10-28 (Cristian, all proposed defaults) · Batch 5 — recording failure paths (parent NIW2-385) · Closes: REC-B8
+
+## Cursor track tail — implementation plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -222,3 +227,26 @@ git commit -m "test(desktop): pin the cursor-track tail cut against the real fix
   2. Compare the last `t` in `<vault>/.kaipu/<id>.cursor.json` with the video duration → within ~50 ms (before: 100–350 ms short).
   3. Record with a pause in the middle → the cursor track still lines up after the pause.
 - [ ] The PR deletes this plan file and removes its row from `plans/audit-2026-10-15/00-index.md`.
+
+## Dependencies
+
+- No open `blocked by` relation. Independent of the other audit plans.
+- Plan 24 (NIW2-421) later shrinks the wall-clock/video-time gap but does not remove it; this plan is still needed.
+- Linear lists this ticket as blocking NIW2-387 (plan 01).
+
+## Approved decisions
+
+1. **Approval.** Cristian approved this ticket on 2026-10-28 with every proposed default; this file is the contract. Where the Linear description disagrees, this file wins.
+2. **Failing test first.** Each task starts with a failing test, run before the fix. Selector names, helper names and line numbers were written by reading the code, not by running it: adapt them to today's code.
+3. **Stop, don't improvise.** If a Review Focus line or a flagged assumption does not hold on today's `main`, stop and report it in a comment on the Linear ticket instead of improvising.
+4. **One PR.** One PR for this ticket. It links NIW2-402, ends with a "How to test it yourself" section, and deletes the plan file `apps/documentation/src/content/docs/plans/audit-2026-10-15/26-cursor-track-tail.md` plus its row in `00-index.md`.
+5. **Tooling.** Never run the Playwright desktop E2E suite locally (CI runs it). Use the pinned tools (`apps/kaipu-record/node_modules/.bin/vitest`, `bun run check-types`), never `bunx`.
+6. **Human merge.** The ticket carries `needs-human-merge`: the PR is not auto-landed; Cristian reviews and merges it.
+7. **Repo rule: no remote side effects.** No remote `db:push`/migrations against any real or dev database, no deploys, no releases or tags, no changes to remote storage or secrets. Local tests and fixtures only.
+8. **Suggested model:** Sonnet.
+9. **Approach (plan default):** a second `videoClock` anchored at `firstMediaTimestamp.rendererMs`, read at Stop for `durationMs`, falling back to the wall clock when `t0` never resolved. Enlarging the margin and "no cut" stay rejected.
+10. **Out of scope (plan default):** `durationSeconds` stays the wall-clock floor; state the known pre-`t0` pause gap in the PR.
+
+## Change log
+
+- 2026-10-28: Spec approved by Cristian with all proposed defaults; committed as the first commit of `feature/niw2-402-…` from audit plan `26-cursor-track-tail` (`main` @ `f10e39a4`).

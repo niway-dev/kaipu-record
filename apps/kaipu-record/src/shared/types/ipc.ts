@@ -712,9 +712,10 @@ export interface RecordingFinalizeMeta {
   title: string;
   durationSeconds: number;
   /**
-   * Unfloored `durationSeconds` in ms — the cursor tracker's `maxMs` cut needs the
-   * real elapsed time, not the metadata's floored seconds (flooring can drop up to
-   * ~1 s of real samples/clicks at the end of every recording).
+   * Video time (ms since the MP4's first media sample, pauses removed) when Stop was
+   * requested — not the bar's wall-clock timer, which starts later. The cursor
+   * tracker's `maxMs` cut needs it unfloored and in the samples' time base
+   * (flooring, or the wall clock's late start, drops real samples/clicks at the end).
    */
   durationMs: number;
   thumbnail?: ArrayBuffer | null;

@@ -490,7 +490,10 @@ describe("recorder-store", () => {
   });
 
   it("finalizes with the unfloored elapsed time in durationMs, not durationSeconds * 1000", async () => {
-    const engine = fakeEngine();
+    // t0 (first media sample) = the moment recording starts (fake performance.now() = 3000).
+    const engine = fakeEngine({
+      firstMediaTimestamp: Promise.resolve({ rendererMs: 3000, quality: "exact" as const }),
+    });
     prepareEngineMock.mockResolvedValue(fakePrepared(engine));
 
     store.requestStartRecording(() => input);
@@ -505,6 +508,79 @@ describe("recorder-store", () => {
     expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({ durationSeconds: 2, durationMs: 2400 }),
+    );
+  });
+
+  it("reports durationMs in video time: measured from the first media sample, not from when the bar started", async () => {
+    // t0 (first frame) is 350 ms BEFORE the bar's clock starts (thumbnail capture ran in between).
+    const engine = fakeEngine({
+      firstMediaTimestamp: Promise.resolve({ rendererMs: 3000 - 350, quality: "exact" as const }),
+    });
+    prepareEngineMock.mockResolvedValue(fakePrepared(engine));
+    store.requestStartRecording(() => input);
+    await vi.advanceTimersByTimeAsync(3000); // countdown → recording starts (performance.now() = 3000)
+    await vi.advanceTimersByTimeAsync(2400);
+    await stopAndSettle();
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ durationSeconds: 2, durationMs: 2400 + 350 }),
+    );
+  });
+
+  it("excludes a pause from the video-time duration", async () => {
+    const engine = fakeEngine({
+      firstMediaTimestamp: Promise.resolve({ rendererMs: 3000, quality: "exact" as const }),
+    });
+    prepareEngineMock.mockResolvedValue(fakePrepared(engine));
+    store.requestStartRecording(() => input);
+    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(1000);
+    store.pauseRecording();
+    await vi.advanceTimersByTimeAsync(1000);
+    store.resumeRecording();
+    await vi.advanceTimersByTimeAsync(1400);
+    await stopAndSettle();
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ durationMs: 2400 }),
+    );
+  });
+
+  it("a pause before the first media sample resolves is not taken off the video time (known gap)", async () => {
+    // The spec keeps this out of scope: `videoClock` only exists once t0 resolves, so a pause
+    // issued before that (less than one frame; the UI cannot hit it) is unknown to it. Pinned so
+    // a change here is a decision, not an accident.
+    let resolveT0!: (value: { rendererMs: number; quality: "exact" }) => void;
+    const engine = fakeEngine({
+      firstMediaTimestamp: new Promise((resolve) => (resolveT0 = resolve)),
+    });
+    prepareEngineMock.mockResolvedValue(fakePrepared(engine));
+    store.requestStartRecording(() => input);
+    await vi.advanceTimersByTimeAsync(3000); // recording at performance.now() = 3000
+    store.pauseRecording();
+    await vi.advanceTimersByTimeAsync(1000);
+    store.resumeRecording();
+    resolveT0({ rendererMs: 3000, quality: "exact" });
+    await vi.advanceTimersByTimeAsync(1400);
+    await stopAndSettle();
+    // The wall clock saw the pause (1400 ms); the video clock started at t0 after it and counts
+    // the full 2400 ms. The wall clock still drives the bar and durationSeconds.
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ durationSeconds: 1, durationMs: 2400 }),
+    );
+  });
+
+  it("falls back to the wall clock when the first media timestamp never resolves", async () => {
+    const engine = fakeEngine({ firstMediaTimestamp: new Promise(() => {}) });
+    prepareEngineMock.mockResolvedValue(fakePrepared(engine));
+    store.requestStartRecording(() => input);
+    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(2400);
+    await stopAndSettle();
+    expect(window.electronAPI.recordingFinalize).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ durationMs: 2400 }),
     );
   });
 

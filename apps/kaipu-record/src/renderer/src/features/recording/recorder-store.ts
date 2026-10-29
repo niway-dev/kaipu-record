@@ -110,6 +110,8 @@ let sessionId: string | null = null;
 /** How the active take is captured; sent with finalize so the library can label it. */
 let capture: RecordingCapture | null = null;
 let clock: ElapsedState | null = null;
+/** Video-time clock: zero = the MP4's first media sample, renderer `performance.now()`, pauses removed. */
+let videoClock: ElapsedState | null = null;
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
 /** Bumped by every start request, so a countdown cancelled while waiting to be visible stays cancelled. */
@@ -564,9 +566,11 @@ async function beginTake(
     stopLiveSettings = start.live?.stop ?? null;
     stopMicLevelListening = followMicLevelListeners();
     const activeTrack = cursorTrack;
-    void handle.firstMediaTimestamp.then(({ rendererMs, quality }) =>
-      activeTrack?.anchor(rendererMs, quality),
-    );
+    void handle.firstMediaTimestamp.then(({ rendererMs, quality }) => {
+      activeTrack?.anchor(rendererMs, quality);
+      // Same t0 the cursor track is anchored to. Skip if the take already ended.
+      if (engine === handle) videoClock = startElapsed(rendererMs);
+    });
     clock = startElapsed(Date.now());
     update({ status: "recording", countdown: null });
     if (countdownEndedAt !== null) {
@@ -596,6 +600,7 @@ async function beginTake(
     engine = null;
     cursorTrack = null;
     sessionId = null;
+    videoClock = null;
     // Back to idle (not a separate "error" state) so the Start button is
     // immediately usable again; the toast above carries the retry action.
     update({ status: "idle", countdown: null });
@@ -823,6 +828,7 @@ export function pauseRecording(): void {
   const pausedAt = performance.now();
   engine.pause();
   cursorTrack?.pause(pausedAt);
+  if (videoClock) videoClock = pauseElapsed(videoClock, pausedAt);
   clock = pauseElapsed(clock, Date.now());
   update({ status: "paused" });
 }
@@ -832,6 +838,7 @@ export function resumeRecording(): void {
   const resumedAt = performance.now();
   engine.resume();
   cursorTrack?.resume(resumedAt);
+  if (videoClock) videoClock = resumeElapsed(videoClock, resumedAt);
   clock = resumeElapsed(clock, Date.now());
   update({ status: "recording" });
 }
@@ -849,8 +856,13 @@ async function stopRecording(): Promise<void> {
   stopMicLevelListening?.();
   stopMicLevelListening = null;
   update({ status: "finalizing", countdown: null });
-  const durationMs = clock ? elapsedMs(clock, Date.now()) : 0;
-  const durationSeconds = Math.floor(durationMs / 1000);
+  const wallMs = clock ? elapsedMs(clock, Date.now()) : 0;
+  const durationSeconds = Math.floor(wallMs / 1000);
+  // Video length at the stop request, measured from the MP4's first media sample (t0), not
+  // from when the bar started: the thumbnail capture delays the bar's clock by >= 150 ms,
+  // which the cursor tracker's tail cut cannot absorb. Falls back to the wall clock when
+  // t0 never resolved (cursor track off, or the first-media wait timed out).
+  const durationMs = videoClock ? elapsedMs(videoClock, performance.now()) : wallMs;
   // Flip the bar to "Saving…" before the timer stops, so the finalize wait reads
   // as progress instead of a frozen widget.
   window.electronAPI.recordingReportTick({
@@ -902,6 +914,7 @@ async function stopRecording(): Promise<void> {
   sessionId = null;
   capture = null;
   clock = null;
+  videoClock = null;
   stopping = false;
   update({ status: "idle", countdown: null });
 }
