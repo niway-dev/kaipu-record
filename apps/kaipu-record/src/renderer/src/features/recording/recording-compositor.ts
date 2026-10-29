@@ -13,8 +13,8 @@ const ASSET_URL: Record<WatermarkVariant, string> = {
   mark: markUrl,
 };
 
-// Fallback aspect (wordmark is 1974×352) if an SVG reports no intrinsic size.
-const FALLBACK_ASPECT = 1974 / 352;
+// Fallback aspect (wordmark is 1900×352) if an SVG reports no intrinsic size.
+const FALLBACK_ASPECT = 1900 / 352;
 
 export interface RecordingCompositor {
   /** The composited video track to encode instead of the raw screen track. */
@@ -141,7 +141,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 /** Re-colour the asset to a solid white silhouette, preserving its alpha. */
 function whiteSilhouette(image: HTMLImageElement): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
-  canvas.width = image.width || 1974;
+  canvas.width = image.width || 1900;
   canvas.height = image.height || 352;
   const ctx = canvas.getContext("2d");
   if (!ctx) return canvas;
