@@ -7,10 +7,16 @@ set -euo pipefail
 #   source:  packages/brand/assets/logo-app.svg   (the `app` purpose, see brand/src/index.ts)
 #   outputs: build/icon.icns       packaged macOS app (electron-builder buildResources)
 #            build/icon.png        1024 px, electron-builder's fallback / Linux
+#            build/icon.ico        Windows: the .exe, the installer, the uninstaller,
+#                                  the shortcuts and the installer's progress banner
 #            resources/icon.png    512 px, the dev-run Dock icon and the Linux window icon
-#            build/icon.source.sha256   hash of the source + this script; a vitest test
-#                                       fails when it no longer matches, i.e. when the
-#                                       logo changed and nobody re-ran this script
+#            build/icon.source.sha256   hash of every brand source + this script and its
+#                                       .ico packer; a vitest test fails when it no longer
+#                                       matches, i.e. when the logo changed and nobody
+#                                       re-ran this script
+#            build/icon.outputs.sha256  hash of every file written here; the same test
+#                                       fails when a shipped icon is not one of them, or
+#                                       was replaced by hand after generation
 #
 # macOS only: it uses the system `sips` (renders SVG) and `iconutil` (builds the
 # .icns). Headless — no app opens, no window, no permission prompt.
@@ -22,27 +28,38 @@ set -euo pipefail
 # other icon in the Dock. Each size is rendered straight from the vector, so the
 # small sizes are not downscaled blur and the large ones are not upscaled.
 #
-# Not covered: build/icon.ico (Windows). `sips` cannot write a multi-size .ico.
-
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ROOT="$(cd "$APP_DIR/../.." && pwd)"
 SOURCE="$ROOT/packages/brand/assets/logo-app.svg"
+PLAIN="$ROOT/packages/brand/assets/logo-plain.svg"
 SCRIPT="$APP_DIR/scripts/generate-app-icons.sh"
+PACKER="$APP_DIR/scripts/png-to-ico.mjs"
+# Every input, in the order the stamp hashes them (src/main/app-icon.test.ts reads the same list).
+INPUTS=(
+  "$SOURCE"
+  "$PLAIN"
+  "$ROOT/packages/brand/assets/mono-record.svg"
+  "$ROOT/packages/brand/assets/mono-screenshot.svg"
+  "$SCRIPT"
+  "$PACKER"
+)
 
 CANVAS=1024
 BODY=824
 MARGIN=$(((CANVAS - BODY) / 2))
 
-for tool in sips iconutil shasum; do
+for tool in sips iconutil shasum node; do
   command -v "$tool" >/dev/null || {
-    echo "✗ $tool not found — this script runs on macOS only." >&2
+    echo "✗ $tool not found — this script runs on macOS, with node for the .ico packer." >&2
     exit 1
   }
 done
-[ -f "$SOURCE" ] || {
-  echo "✗ source not found: $SOURCE" >&2
-  exit 1
-}
+for input in "${INPUTS[@]}"; do
+  [ -f "$input" ] || {
+    echo "✗ source not found: $input" >&2
+    exit 1
+  }
+done
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/kaipu-icons.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
@@ -79,10 +96,35 @@ iconutil -c icns "$ICONSET" -o "$APP_DIR/build/icon.icns"
 cp "$ICONSET/icon_512x512@2x.png" "$APP_DIR/build/icon.png"
 cp "$ICONSET/icon_256x256@2x.png" "$APP_DIR/resources/icon.png"
 
-cat "$SOURCE" "$SCRIPT" | shasum -a 256 | awk '{print $1}' >"$APP_DIR/build/icon.source.sha256"
-
 echo "✓ app icons regenerated from packages/brand/assets/logo-app.svg"
-echo "  build/icon.icns, build/icon.png, resources/icon.png, build/icon.source.sha256"
+echo "  build/icon.icns, build/icon.png, resources/icon.png"
+
+# Windows app icon. Windows draws no grid around an app icon, so the artwork fills
+# the canvas instead of sitting in Apple's margin. Below 48 px it is the plain fox:
+# the frame corners turn into a grey fringe that small (the `micro` rule in
+# packages/brand/src/index.ts). Sizes are the ones the shell asks for, from the
+# 16 px title bar to the 256 px large-icon view.
+#
+# render_full <brand svg> <px> <out.png>: rasterise the artwork edge to edge.
+render_full() {
+  local source="$1" px="$2" out="$3" svg="$WORK/full-$(basename "$1" .svg)-$2.svg"
+  tr '\n' ' ' <"$source" |
+    sed -E 's/<\?xml[^>]*\?>//' |
+    sed -E "1s/<svg([^>]*) width=\"[^\"]*\"/<svg\1 width=\"$px\"/; 1s/<svg([^>]*) height=\"[^\"]*\"/<svg\1 height=\"$px\"/" >"$svg"
+  sips -s format png "$svg" --out "$out" >/dev/null
+}
+
+win_pngs=()
+for px in 16 24 32 48 64 128 256; do
+  art="$SOURCE"
+  [ "$px" -lt 48 ] && art="$PLAIN"
+  render_full "$art" "$px" "$WORK/win-$px.png"
+  win_pngs+=("$WORK/win-$px.png")
+done
+node "$PACKER" "$APP_DIR/build/icon.ico" "${win_pngs[@]}"
+
+echo "✓ Windows app icon regenerated from logo-app.svg (48–256 px) and logo-plain.svg (16–32 px)"
+echo "  build/icon.ico"
 
 # Windows tray icons. The macOS menu bar uses black template PNGs that the OS
 # recolours; the Windows taskbar does not, and it is dark by default, so the
@@ -92,10 +134,6 @@ echo "  build/icon.icns, build/icon.png, resources/icon.png, build/icon.source.s
 #
 #   outputs: resources/tray-windows-recording.ico    (Record mode, mono-record.svg)
 #            resources/tray-windows-screenshot.ico   (Screenshot mode, mono-screenshot.svg)
-command -v node >/dev/null || {
-  echo "✗ node not found — needed to pack the Windows tray .ico files." >&2
-  exit 1
-}
 
 # tray_ico <brand svg> <out.ico>
 tray_ico() {
@@ -125,3 +163,12 @@ tray_ico "$ROOT/packages/brand/assets/mono-screenshot.svg" "$APP_DIR/resources/t
 
 echo "✓ Windows tray icons regenerated from packages/brand/assets/mono-*.svg"
 echo "  resources/tray-windows-recording.ico, resources/tray-windows-screenshot.ico"
+
+cat "${INPUTS[@]}" | shasum -a 256 | awk '{print $1}' >"$APP_DIR/build/icon.source.sha256"
+(
+  cd "$APP_DIR"
+  shasum -a 256 build/icon.icns build/icon.png build/icon.ico resources/icon.png \
+    resources/tray-windows-recording.ico resources/tray-windows-screenshot.ico
+) >"$APP_DIR/build/icon.outputs.sha256"
+
+echo "✓ build/icon.source.sha256, build/icon.outputs.sha256"

@@ -4,15 +4,23 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * The OS-facing icons (build/icon.icns, build/icon.png, resources/icon.png) are
- * derived from the brand package by scripts/generate-app-icons.sh, which records
- * the hash of its inputs. If the logo or the script changes without re-running
+ * The OS-facing icons (build/icon.icns, build/icon.png, build/icon.ico,
+ * resources/icon.png and the Windows tray .ico files) are derived from the brand
+ * package by scripts/generate-app-icons.sh, which records the hash of its inputs. If the logo or the script changes without re-running
  * it, the Dock and ⌘-Tab silently keep the old icon (NIW2-181) — this catches it.
  * Rendering needs macOS `sips`, so CI compares the stamp instead of re-rendering.
  */
 const APP_DIR = resolve(__dirname, "../..");
-const SOURCE = resolve(APP_DIR, "../../packages/brand/assets/logo-app.svg");
-const SCRIPT = resolve(APP_DIR, "scripts/generate-app-icons.sh");
+const BRAND = resolve(APP_DIR, "../../packages/brand/assets");
+/** The script's inputs, in the order its stamp hashes them (INPUTS in the script). */
+const INPUTS = [
+  resolve(BRAND, "logo-app.svg"),
+  resolve(BRAND, "logo-plain.svg"),
+  resolve(BRAND, "mono-record.svg"),
+  resolve(BRAND, "mono-screenshot.svg"),
+  resolve(APP_DIR, "scripts/generate-app-icons.sh"),
+  resolve(APP_DIR, "scripts/png-to-ico.mjs"),
+];
 const STAMP = resolve(APP_DIR, "build/icon.source.sha256");
 const OUTPUTS = resolve(APP_DIR, "build/icon.outputs.sha256");
 
@@ -37,7 +45,7 @@ const sha256 = (data: Buffer): string => createHash("sha256").update(data).diges
 describe("app icon", () => {
   it("is regenerated from the current brand source", () => {
     const expected = createHash("sha256")
-      .update(Buffer.concat([readFileSync(SOURCE), readFileSync(SCRIPT)]))
+      .update(Buffer.concat(INPUTS.map((input) => readFileSync(input))))
       .digest("hex");
     const stamp = readFileSync(STAMP, "utf8").trim();
     expect(stamp, "run `bun run icons` in apps/kaipu-record and commit the outputs").toBe(expected);
