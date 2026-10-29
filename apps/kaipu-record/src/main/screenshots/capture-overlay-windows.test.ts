@@ -1617,4 +1617,13 @@ describe("the capture overlays on quit", () => {
 
     expect(created).toHaveLength(0);
   });
+  it("a pick() after dispose() answers cancelled and opens no window", async () => {
+    const port = warmedPort();
+    port.dispose();
+
+    const answer = await port.pick("frame", [left, right], "record");
+
+    expect(answer).toEqual({ kind: "cancelled" });
+    expect(created).toHaveLength(0);
+  });
 });

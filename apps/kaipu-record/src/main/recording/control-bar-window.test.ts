@@ -134,3 +134,31 @@ describe("control bar window", () => {
     );
   });
 });
+
+describe("control bar window on quit", () => {
+  beforeEach(() => {
+    created.length = 0;
+  });
+
+  it("destroy() drops the window outright and a later show() creates no other", () => {
+    const bar = new ControlBarWindow();
+    bar.show();
+    const [window] = created;
+
+    bar.destroy();
+
+    expect(window!.destroy).toHaveBeenCalledTimes(1);
+    bar.show();
+    expect(created).toHaveLength(1);
+  });
+
+  it("destroy() on a window Electron already destroyed does not throw", () => {
+    const bar = new ControlBarWindow();
+    bar.show();
+    const [window] = created;
+    window!.isDestroyed = () => true;
+
+    expect(() => bar.destroy()).not.toThrow();
+    expect(window!.destroy).not.toHaveBeenCalled();
+  });
+});

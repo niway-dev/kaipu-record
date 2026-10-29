@@ -840,14 +840,30 @@ export function registerRecordingHub(
     prefetchScreenSources: () => screenSources.prefetch(),
     prewarmShade: () => shade.prewarm(),
     dispose: () => {
-      clickHook.stop();
-      cursorTracks.discardAll();
-      clickSessions.clear();
-      clearCountdownRegion();
-      void writer.releaseAll().catch((error) => console.error("releasing takes failed", error));
-      shade.destroy();
-      bar.destroy();
-      cameraBubble.destroy();
+      // Every step on its own: one that throws must not leave a window for the quit to wait on.
+      const steps: Array<[string, () => void]> = [
+        ["click hook", () => clickHook.stop()],
+        ["cursor tracks", () => cursorTracks.discardAll()],
+        ["click sessions", () => clickSessions.clear()],
+        ["countdown region", () => clearCountdownRegion()],
+        [
+          "writer",
+          () =>
+            void writer
+              .releaseAll()
+              .catch((error) => console.error("releasing takes failed", error)),
+        ],
+        ["shade", () => shade.destroy()],
+        ["control bar", () => bar.destroy()],
+        ["camera bubble", () => cameraBubble.dispose()],
+      ];
+      for (const [name, step] of steps) {
+        try {
+          step();
+        } catch (error) {
+          console.error(`[shutdown] recording hub: ${name} failed to dispose`, error);
+        }
+      }
     },
     selectArea: async (displayId, rect, ratio) => {
       // The source is locked for the length of a take.

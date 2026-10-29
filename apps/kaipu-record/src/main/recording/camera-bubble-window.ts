@@ -36,6 +36,8 @@ import {
  */
 export class CameraBubbleWindow {
   private window: BrowserWindow | null = null;
+  /** `dispose()` ran: the app is quitting, so no window is created again. */
+  private disposed = false;
   /** The recorded area (global DIP) while an area records; null otherwise. */
   private anchor: Rect | null = null;
   /** The size the grip is dragging to, until the release persists it. */
@@ -51,6 +53,7 @@ export class CameraBubbleWindow {
   constructor(private readonly size: () => number = () => DEFAULT_CAMERA_BUBBLE.size) {}
 
   show(): void {
+    if (this.disposed) return;
     if (this.window && !this.window.isDestroyed()) {
       if (this.fits()) this.window.showInactive();
       return;
@@ -191,8 +194,14 @@ export class CameraBubbleWindow {
    * down to release the device (and turn the macOS green in-use light off).
    */
   destroy(): void {
-    this.window?.destroy();
+    if (this.window && !this.window.isDestroyed()) this.window.destroy();
     this.window = null;
+  }
+
+  /** Quit: `destroy()`, and no window is created again. */
+  dispose(): void {
+    this.disposed = true;
+    this.destroy();
   }
 
   private fits(): boolean {

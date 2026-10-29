@@ -375,7 +375,11 @@ export class CaptureOverlayWindows implements OverlayPort {
     displays: Display[],
     intent: CaptureIntent = "capture",
   ): Promise<OverlayAnswer> {
-    if (this.session || displays.length === 0) return Promise.resolve({ kind: "cancelled" });
+    // Quitting: a pick that arrives now (an IPC from the main window as it closes) must not
+    // open the windows the quit would then wait on.
+    if (this.disposed || this.session || displays.length === 0) {
+      return Promise.resolve({ kind: "cancelled" });
+    }
     // A disabled mode opens in Frame, the same fallback the page and the tray show.
     const ui: OverlayUi = this.deps.enabledModes.includes(requested) ? requested : "frame";
 
