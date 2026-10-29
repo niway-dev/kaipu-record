@@ -55,6 +55,10 @@ same second already share a stem today.
    leading dots and trailing dots/spaces trimmed, Windows reserved names prefixed with `Kaipu `,
    capped at 100 code points and 180 UTF-8 bytes (room for the longest companion suffix and
    for a ` (99)` tail under the 255-byte component and the Windows 260-character path limits).
+   A stem never owns another stem's files: one ending in `.edit`, `.cursor` or `.edit.meta`
+   (whose `.json` is another stem's edit session, cursor track or session metadata) has that
+   dot turned into a space, and the vault-owned name `tags` (`.kaipu/tags.json`) becomes
+   `Kaipu tags`; the vault also refuses any candidate whose paths overlap the source's.
    An empty projection falls back to the default name.
 3. **Default names are for people.** New items are named `Kaipu Recording 2026-10-29 at 13.51.00`,
    `Kaipu Screenshot …`, `Kaipu GIF …` (local time, dots in the time because colons are not
@@ -74,11 +78,18 @@ same second already share a stem today.
    whose `assetId` a sidecar with media also holds", which NIW2-561 sweeps.
 6. **A file the OS will not release keeps its name, and the user is told.** Windows `EPERM`/
    `EBUSY`/`EACCES` is retried three times (≈1.5 s), then the rename resolves with
-   `file: "kept-old-name"`; a running export (`exportActive`) short-circuits to the same
-   outcome. The title is saved either way; a non-blocking toast offers Retry. A rename never
-   fails because of the file.
+   `file: "kept-old-name"`; a running export (`exportActive`, reason `busy`) or the item being
+   open in the video editor (reason `editing`, from a registry the editor joins on mount and
+   leaves on unmount or when its window goes away) short-circuits to the same outcome. The
+   title is saved either way; a non-blocking toast offers Retry. A rename never fails because
+   of the file.
 7. **`writeMeta` never creates a sidecar for an id with neither sidecar nor media.** A hash,
-   tag or backfill write that was queued behind a rename cannot resurrect the old stem.
+   tag or backfill write that was queued behind a rename cannot resurrect the old stem. A
+   screenshot overwrite is checked and written under the names lock and names the identity it
+   expects, so it follows a renamed item instead of recreating the old file.
+8. **A media URL carries the id percent-encoded.** Ids are titles now (`#`, `?`, `%` are
+   legal), so every `kaipu-media://` URL is built by one shared helper that encodes the id,
+   and the protocol handler decodes it once, answering 400 to a malformed escape.
 
 ## Alternatives rejected
 
@@ -109,9 +120,11 @@ same second already share a stem today.
 
 - `LocalRecording.id` changes on rename. Renderer state keyed by it is patched from the
   rename result by `assetId`; the detail page's player remounts under the new id (position
-  preserved); the screenshot editor adopts the new id for its next overwrite. The video
-  editor keeps its source id for its lifetime, which is safe only because no rename surface
-  is reachable while it is mounted — a future one must re-key the editor on `id`.
+  preserved, and a background re-list keeps it mounted); the screenshot editor caches its
+  original bytes before the move and adopts the new id for its next overwrite. The video
+  editor keeps its source id for its lifetime; main enforces that no file moves while it is
+  mounted (reason `editing`), whatever surface asks — a future editor that wants renames must
+  re-key on `id` and drop that guard.
 - `kaipu-media://` URLs are valid for the current id only. Anything that streams a file for
   minutes (an export) is protected by the `busy` outcome, not by the URL surviving.
 - Every writer allocates its id through the vault; `timestampId()` and `screenshotId()` go

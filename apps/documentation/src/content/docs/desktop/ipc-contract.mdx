@@ -76,6 +76,8 @@ clamped to the recorded area, and answers the size actually applied; the grip sa
 | `library:list-local`            | r→m | `listLocalRecordings()`                        | `library/index.ts` |
 | `library:rename-local`          | r→m | `renameLocalRecording(id, t)` → `RenameResult` | `library/index.ts` |
 | `library:mark-opened-in-editor` | r→m | `markOpenedInEditor(id)`                       | `library/index.ts` |
+| `library:editor-session-open`   | r→m | `openEditorSession(id, assetId)`               | `library/index.ts` |
+| `library:editor-session-close`  | r→m | `closeEditorSession(id)`                       | `library/index.ts` |
 | `library:delete-local`          | r→m | `deleteLocalRecording(id)`                     | `library/index.ts` |
 | `library:reveal-local`          | r→m | `revealLocalRecording(id)`                     | `library/index.ts` |
 | `library:get-vault-dir`         | r→m | `getVaultDirectory()`                          | `library/index.ts` |
@@ -83,7 +85,7 @@ clamped to the recorded area, and answers the size actually applied; the grip sa
 | `library:reset-vault-dir`       | r→m | `resetVaultDirectory()`                        | `library/index.ts` |
 | `library:changed`               | m→r | `onLibraryChanged(cb)`                         | `library/index.ts` |
 
-`library:rename-local` saves the title **and moves the file** (media + every `.kaipu/` companion) to a name derived from it ([ADR 0032](/architecture/decisions/0032-the-file-name-follows-the-title/)). It resolves `RenameResult = { recording, file, reason? }`: `recording.id` is the id to use from then on; `file` is `"renamed"` (main also broadcasts `library:changed`), `"unchanged"` (same derived name), or `"kept-old-name"` with `reason` `"locked"` (another app holds the file after three retries), `"busy"` (an export is running) or `"io"`. `"kept-old-name"` is not an error — the title was saved. It rejects only for an invalid or unknown id (the message carries `ITEM_NOT_FOUND_MARKER`) or when the title itself cannot be written.
+`library:rename-local` saves the title **and moves the file** (media + every `.kaipu/` companion) to a name derived from it ([ADR 0032](/architecture/decisions/0032-the-file-name-follows-the-title/)). It resolves `RenameResult = { recording, file, reason? }`: `recording.id` is the id to use from then on; `file` is `"renamed"` (main also broadcasts `library:changed`), `"unchanged"` (same derived name), or `"kept-old-name"` with `reason` `"locked"` (another app holds the file after three retries), `"busy"` (an export is running), `"editing"` (the item is open in the video editor, which registers it through `library:editor-session-open`/`-close`) or `"io"`. `"kept-old-name"` is not an error — the title was saved. It rejects only for an invalid or unknown id (the message carries `ITEM_NOT_FOUND_MARKER`) or when the title itself cannot be written.
 
 ### Screenshots
 
