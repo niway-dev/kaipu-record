@@ -1,4 +1,5 @@
 import { openRecordingInput } from "@renderer/lib/open-recording-input";
+import { mediaUrl } from "@shared/media-url";
 
 /**
  * Source facts the export presets need (NIW2-218): what the `<video>` element doesn't expose
@@ -26,7 +27,7 @@ const SAMPLE_PACKETS = 120;
  * Never throws: the sheet falls back to conservative defaults (30 fps, audio on).
  */
 export async function probeSource(sourceId: string): Promise<SourceProbe | null> {
-  const input = openRecordingInput(`kaipu-media://recording/${sourceId}`);
+  const input = openRecordingInput(mediaUrl("recording", sourceId));
   try {
     const video = await input.getPrimaryVideoTrack();
     const audio = await input.getPrimaryAudioTrack();

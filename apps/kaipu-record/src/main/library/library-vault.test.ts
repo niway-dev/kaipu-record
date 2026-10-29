@@ -3,6 +3,7 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultCaptureName } from "@shared/default-capture-name";
+import { parseMediaUrl } from "@shared/media-url";
 import { LibraryVault, humanizeId } from "./library-vault";
 
 describe("LibraryVault", () => {
@@ -477,4 +478,30 @@ describe("humanizeId", () => {
     expect(humanizeId("  padded ")).toBe("padded");
     expect(humanizeId("")).toBe("Recording");
   });
+});
+
+describe("LibraryVault — media URLs (NIW2-560 review)", () => {
+  let directory: string;
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), "kaipu-urls-"));
+  });
+  afterEach(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  it.each(["Demo #1", "50% done", "What? Why", "a%2Fb"])(
+    "thumbnail URLs address the item %j exactly",
+    async (id) => {
+      const vault = new LibraryVault(directory);
+      await writeFile(join(directory, `${id}.png`), "png");
+      await writeFile(join(directory, `${id}.mp4`.replace(".mp4", " clip.mp4")), "v");
+      await mkdir(join(directory, ".kaipu"), { recursive: true });
+      await writeFile(join(directory, ".kaipu", `${id} clip.jpg`), "jpg");
+      const shot = await vault.describe(id);
+      expect(parseMediaUrl(shot!.thumbnailUrl!)).toEqual({ kind: "screenshot", id });
+      expect(new URL(shot!.thumbnailUrl!).searchParams.get("v")).toMatch(/^\d+$/);
+      const clip = await vault.describe(`${id} clip`);
+      expect(parseMediaUrl(clip!.thumbnailUrl!)).toEqual({ kind: "thumb", id: `${id} clip` });
+    },
+  );
 });

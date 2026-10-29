@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import styles from "./screenshot-viewer.module.css";
+import { mediaUrl } from "@shared/media-url";
 
 /**
  * GIF viewer for the library detail page (NIW2-217). An `<img>` plays and loops the file
@@ -17,7 +18,7 @@ export function GifViewer({ id }: { id: string }): React.JSX.Element {
     <div className={styles.viewer}>
       {!failed ? (
         <img
-          src={`kaipu-media://recording/${encodeURIComponent(id)}`}
+          src={mediaUrl("recording", id)}
           alt=""
           className={styles.image}
           draggable

@@ -24,6 +24,7 @@ import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-na
 import { atomicWriteFile, withLock } from "./atomic-write";
 import { sha256FileBase64 } from "./content-hash";
 import { fileStemFromTitle, isReservedStem } from "./file-stem";
+import { mediaUrl } from "@shared/media-url";
 
 const META_DIR = ".kaipu";
 /** Known video containers, in preference order — `.mp4` is what we now write. */
@@ -581,9 +582,9 @@ export class LibraryVault {
         ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
           // overwritten in place (same id/URL) — only the changed item, so the
           // rest stay cacheable.
-          `kaipu-media://screenshot/${id}?v=${Math.round(info.mtimeMs)}`
+          mediaUrl("screenshot", id, Math.round(info.mtimeMs))
         : (await exists(this.thumbnailPath(id)))
-          ? `kaipu-media://thumb/${id}`
+          ? mediaUrl("thumb", id)
           : null,
     };
   }

@@ -2,9 +2,7 @@ import React, { useLayoutEffect, useRef, useState } from "react";
 import { VideoOff } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import styles from "./recording-player.module.css";
-
-/** Playable URL for a vault recording, served by the main-process media protocol. */
-const mediaUrl = (id: string): string => `kaipu-media://recording/${encodeURIComponent(id)}`;
+import { mediaUrl } from "@shared/media-url";
 
 interface RecordingPlayerProps {
   id: string;
@@ -47,7 +45,7 @@ export function RecordingPlayer({ id, poster }: RecordingPlayerProps): React.JSX
       {playable ? (
         <video
           className={styles.video}
-          src={mediaUrl(id)}
+          src={mediaUrl("recording", id)}
           poster={poster ?? undefined}
           controls
           autoPlay

@@ -39,7 +39,7 @@ describe("saveGif", () => {
       createdAt: 1234,
       derivedFromAssetId: meta.derivedFromAssetId,
       gif: { width: 640, height: 360, fps: 15 },
-      thumbnailUrl: "kaipu-media://thumb/Demo (GIF)",
+      thumbnailUrl: "kaipu-media://thumb/Demo%20(GIF)",
     });
     expect(recording.filePath).toBe(join(directory, "Demo (GIF).gif"));
     expect(await readdir(directory)).toEqual(expect.arrayContaining(["Demo (GIF).gif"]));

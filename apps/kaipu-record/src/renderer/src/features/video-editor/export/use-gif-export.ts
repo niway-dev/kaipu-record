@@ -8,6 +8,7 @@ import type { CameraPath } from "../zoom/camera-path";
 import { buildExportPlan, gifOutputSize, sliceExportPlan, type ExportPlan } from "./export-plan";
 import type { GifFps, GifStartMessage, GifWorkerMessage } from "./gif-messages";
 import { rasterizeOverlays } from "./overlay-raster";
+import { mediaUrl } from "@shared/media-url";
 
 export interface GifJobArgs {
   scene: VideoScene;
@@ -146,7 +147,7 @@ export function useGifExport(): GifExportController {
 
   const sourceBlob = useCallback((id: string): Promise<Blob> => {
     if (sourceRef.current?.id !== id) {
-      const blob = fetch(`kaipu-media://recording/${id}`).then((r) => r.blob());
+      const blob = fetch(mediaUrl("recording", id)).then((r) => r.blob());
       // A failed fetch must not be cached for the next attempt.
       blob.catch(() => {
         if (sourceRef.current?.blob === blob) sourceRef.current = null;

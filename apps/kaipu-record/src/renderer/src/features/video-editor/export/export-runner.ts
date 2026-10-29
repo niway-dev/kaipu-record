@@ -19,6 +19,7 @@ import {
 } from "./export-presets";
 import { WHOLE_RECORDING_FINGERPRINT } from "./export-reuse";
 import type { VideoEncodingChoice } from "./video-encoding";
+import { mediaUrl } from "@shared/media-url";
 
 export interface VideoExportState {
   status: "idle" | "exporting" | "error";
@@ -315,7 +316,7 @@ export async function startVideoExport(
 
   let sourceBlob: Blob;
   try {
-    const sourceResponse = await fetch(`kaipu-media://recording/${args.sourceId}`);
+    const sourceResponse = await fetch(mediaUrl("recording", args.sourceId));
     sourceBlob = await sourceResponse.blob();
   } catch (error) {
     fail(GENERIC_ERROR, error);
