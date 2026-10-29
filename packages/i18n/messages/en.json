@@ -922,6 +922,7 @@
     "saveStateSaved": "Saved",
     "saveStateFailed": "Couldn't save. Click to retry.",
     "restoreError": "Couldn't restore the previous edit",
+    "sourceUnavailable": "This recording is no longer in your library, so it cannot be edited.",
     "mute": "Mute",
     "unmute": "Unmute",
     "pause": "Pause",

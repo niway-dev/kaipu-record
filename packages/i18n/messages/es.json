@@ -922,6 +922,7 @@
     "saveStateSaved": "Guardado",
     "saveStateFailed": "No se pudo guardar. Haz clic para reintentar.",
     "restoreError": "No se pudo restaurar la edición anterior",
+    "sourceUnavailable": "Esta grabación ya no está en tu biblioteca, así que no se puede editar.",
     "mute": "Silenciar",
     "unmute": "Activar sonido",
     "pause": "Pausar",

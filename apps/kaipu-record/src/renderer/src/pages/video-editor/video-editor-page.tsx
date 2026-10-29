@@ -31,7 +31,7 @@ import {
   ModalTitle,
 } from "@kaipu/ui";
 import * as stylex from "@stylexjs/stylex";
-import { Badge } from "@kaipu/ui";
+import { Badge, Button } from "@kaipu/ui";
 import {
   boundaryIndexAt,
   clampOverlays,
@@ -273,6 +273,9 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
     scene: VideoScene;
     cursorTrack: CursorTrack | null;
   } | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
+  const navigate = useNavigate();
+  const tLibrary = useTranslations("library");
 
   useEffect(() => {
     // Guards against calling restoreAsset or setting state after unmount —
@@ -285,17 +288,23 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
     // moving the file as the editor opened can never leave it on the old name.
     let heldId: string | null = null;
     void (async () => {
-      let editorSource = source;
       try {
         heldId = await window.electronAPI.acquireEditorSession(source.assetId);
-        if (heldId !== null) editorSource = { ...source, id: heldId };
       } catch {
-        // Main unavailable: open under the id the route gave; no hold to release.
+        heldId = null;
       }
       if (cancelled) {
         if (heldId !== null) window.electronAPI.closeEditorSession(heldId);
         return;
       }
+      // No hold: the item is gone (or main could not say). Never fall back to the route's
+      // id — another item may have taken that name since, and this editor would read its
+      // media and overwrite its session.
+      if (heldId === null) {
+        setUnavailable(true);
+        return;
+      }
+      const editorSource: VideoEditorSource = { ...source, id: heldId };
       // The cursor track is best-effort and independent of the session: a missing or
       // malformed track just means no auto zooms (the editor behaves as before v2).
       let cursorTrack: CursorTrack | null = null;
@@ -361,6 +370,17 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
       if (heldId !== null) window.electronAPI.closeEditorSession(heldId);
     };
   }, []); // [] correct: source is stable per VideoEditorLoader's key (the asset id)
+
+  if (unavailable) {
+    return (
+      <div className={styles.unavailable} role="alert">
+        <p>{t("sourceUnavailable")}</p>
+        <Button variant="ghost" onClick={() => navigate(ROUTES.library)}>
+          {tLibrary("backToLibrary")}
+        </Button>
+      </div>
+    );
+  }
 
   if (resolved === null) {
     // Brief loading state while the session IPC resolves. The editor grows the window

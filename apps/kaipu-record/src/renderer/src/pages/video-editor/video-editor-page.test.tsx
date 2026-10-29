@@ -92,6 +92,11 @@ const SOURCE: VideoEditorSource = {
   durationSeconds: 30,
 };
 
+// Main holds the item under its current id before the editor loads anything (NIW2-560).
+beforeEach(() => {
+  window.electronAPI.acquireEditorSession = async () => SOURCE.id;
+});
+
 function renderEditor() {
   const router = createMemoryRouter(
     [
@@ -184,7 +189,6 @@ describe("VideoEditorPage — legacy /video-editor redirect", () => {
 
 describe("VideoEditorLoader — editor hold (NIW2-560)", () => {
   afterEach(() => {
-    window.electronAPI.acquireEditorSession = async () => null;
     window.electronAPI.closeEditorSession = () => {};
   });
 
@@ -217,6 +221,39 @@ describe("VideoEditorLoader — editor hold (NIW2-560)", () => {
     expect(loadTrack).toHaveBeenCalledWith("Renamed clip");
     unmount();
     expect(close).toHaveBeenCalledWith("Renamed clip");
+  });
+});
+
+describe("VideoEditorLoader — item no longer available (NIW2-560)", () => {
+  it.each([
+    ["main answers null (deleted; another item took its name)", async () => null],
+    [
+      "the acquisition rejects",
+      async () => {
+        throw new Error("ipc down");
+      },
+    ],
+  ])("never loads under the route's id when %s", async (_label, acquire) => {
+    window.electronAPI.acquireEditorSession = vi.fn(acquire) as never;
+    const loadSession = vi.fn(async () => null);
+    const loadTrack = vi.fn(async () => null);
+    window.electronAPI.loadVideoEditSession = loadSession;
+    window.electronAPI.loadCursorTrack = loadTrack;
+    const router = createMemoryRouter(
+      [
+        { path: "/", element: <VideoEditorLoader source={SOURCE} /> },
+        { path: "/library", element: <div>library-page</div> },
+      ],
+      { initialEntries: ["/"] },
+    );
+    render(<RouterProvider router={router} />);
+
+    expect(await screen.findByText(/no longer in your library/i)).toBeInTheDocument();
+    expect(loadSession).not.toHaveBeenCalled();
+    expect(loadTrack).not.toHaveBeenCalled();
+    expect(document.querySelector("footer")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /back to library/i }));
+    expect(await screen.findByText("library-page")).toBeInTheDocument();
   });
 });
 
