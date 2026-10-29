@@ -26,12 +26,14 @@ const VAULT_OWNED = new Set(["tags"]);
 
 /**
  * The comparison key a case-insensitive filesystem may use for a name: compatibility
- * characters folded (`ſ` → `s`, fullwidth → ASCII), then case folded both ways (`ı` and
- * `I` both reach `i`). Stricter than APFS or NTFS on purpose: a false "same name" only
+ * characters folded (`ſ` → `s`, fullwidth → ASCII), then case folded lower → upper → lower
+ * (`ı` and `I` both reach `i`; `ß` and `ẞ` both reach `ss`). Stricter than APFS or NTFS on purpose: a false "same name" only
  * costs a ` (2)`, a missed one merges two items.
  */
 export function fsFold(value: string): string {
-  return value.normalize("NFKC").toUpperCase().toLowerCase().normalize("NFKC");
+  // lower → upper → lower: `ẞ` lowers to `ß`, which uppers to `SS`, so both reach `ss`
+  // (upper first would leave `ẞ` as `ß`). Idempotent: fsFold(fsFold(x)) === fsFold(x).
+  return value.normalize("NFKC").toLowerCase().toUpperCase().toLowerCase().normalize("NFKC");
 }
 
 /** The companion tail `stem` ends with, under `fsFold`, if any. */

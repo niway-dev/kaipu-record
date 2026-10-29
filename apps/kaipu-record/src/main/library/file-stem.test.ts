@@ -3,6 +3,7 @@ import {
   STEM_MAX_CODE_POINTS,
   STEM_MAX_UTF8_BYTES,
   fileStemFromTitle,
+  fsFold,
   isReservedStem,
   isReservedWindowsName,
 } from "./file-stem";
@@ -133,6 +134,18 @@ describe("filesystem aliases (NIW2-560 second review)", () => {
     ["one\u2025two", "one.two"], // two-dot leader expands to "..", then collapses
   ])("projects %j to a plain, unreserved stem (%j)", (title, stem) => {
     expect(fileStemFromTitle(title)).toBe(stem);
+  });
+
+  it.each([
+    ["ß", "ẞ"],
+    ["Straße", "STRAẞE"],
+    ["ſ", "S"],
+    ["\u212A", "k"],
+    ["\uFF24emo", "DEMO"],
+    ["ı", "I"],
+  ])("folds %j and %j to the same key, idempotently", (a, b) => {
+    expect(fsFold(a)).toBe(fsFold(b));
+    expect(fsFold(fsFold(a))).toBe(fsFold(a));
   });
 
   it("flags reserved names under any case fold a filesystem may apply", () => {
