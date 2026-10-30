@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { Translator } from "@kaipu/i18n";
 import type { LocalRecording } from "@shared/types/library-storage";
+import type { DestinationId } from "@renderer/features/prepare/destinations";
 import { captureException } from "@renderer/features/analytics";
 import { showToast } from "@renderer/ui/toast-store";
 import type { SlideAssetStore } from "../slide-assets";
@@ -18,6 +19,7 @@ import {
   slideFrameCount,
 } from "./export-presets";
 import { WHOLE_RECORDING_FINGERPRINT } from "./export-reuse";
+import { noteFinishedCopy } from "./ready-copies";
 import type { VideoEncodingChoice } from "./video-encoding";
 
 export interface VideoExportState {
@@ -53,6 +55,8 @@ export interface StartExportArgs {
    * `editFingerprint(scene)` from the editor, `WHOLE_RECORDING_FINGERPRINT` from Share.
    */
   fingerprint?: string;
+  /** Where the copy is going, when Prepare started it (NIW2-586): the cards name it. */
+  destination?: DestinationId;
   /**
    * The file landed in the vault. Runs even when the page that started the export is gone
    * (exports run in the background), so it must not assume its component is mounted.
@@ -72,9 +76,14 @@ export interface ExportJobInfo {
   /** Output size. */
   width: number;
   height: number;
+  /**
+   * Where the copy is going, when Prepare started it: "Preparing your YouTube copy…".
+   * Absent for an editor export, which the cards call "your export" (NIW2-586).
+   */
+  destination?: DestinationId;
 }
 
-/** A finished export, until the user dismisses its "Ready to share" card. */
+/** A finished export, until the user dismisses its ready card. */
 export interface ReadyExport {
   job: ExportJobInfo;
   recording: LocalRecording;
@@ -86,6 +95,11 @@ export interface ExportRunnerSnapshot extends VideoExportState {
   /** When the current encode attempt started (Date.now()), for "about N s left". */
   attemptStartedAt: number | null;
   ready: ReadyExport | null;
+  /**
+   * The user hid the progress card (its ✕): the export keeps running, and the ready card
+   * still shows when it finishes. An error shows again whatever this says (NIW2-586).
+   */
+  progressHidden: boolean;
 }
 
 /**
@@ -127,6 +141,7 @@ const IDLE: ExportRunnerSnapshot = {
   job: null,
   attemptStartedAt: null,
   ready: null,
+  progressHidden: false,
 };
 
 /*
@@ -231,9 +246,14 @@ export function retryVideoExport(): void {
   void startVideoExport(args, t);
 }
 
-/** The Ready card's Done (or ✕). */
+/** The Ready card's ✕. The copy stays unseen until it is opened (`ready-copies.ts`). */
 export function dismissReadyExport(): void {
   if (snapshot.ready) set({ ready: null });
+}
+
+/** The progress card's ✕: hides the card, never the export (Cancel stops it). */
+export function hideExportProgress(): void {
+  if (snapshot.status === "exporting" && !snapshot.progressHidden) set({ progressHidden: true });
 }
 
 /**
@@ -286,6 +306,7 @@ export async function startVideoExport(
     estimateBytes: presetId === "maximum" ? null : target.estimateBytes,
     width: target.width,
     height: target.height,
+    ...(args.destination ? { destination: args.destination } : {}),
   };
 
   active = true;
@@ -297,6 +318,7 @@ export async function startVideoExport(
     job,
     attemptStartedAt: Date.now(),
     ready: null,
+    progressHidden: false,
   });
 
   const fail = (message: string, error?: unknown): void => {
@@ -305,7 +327,13 @@ export async function startVideoExport(
     sessionId = null;
     active = false;
     teardown(id);
-    set({ status: "error", fraction: 0, error: message, attemptStartedAt: null });
+    set({
+      status: "error",
+      fraction: 0,
+      error: message,
+      attemptStartedAt: null,
+      progressHidden: false,
+    });
   };
 
   // The editor's slide store is disposed when the editor unmounts, and the export may
@@ -426,6 +454,7 @@ export async function startVideoExport(
             sessionId = null;
             active = false;
             set({ ...IDLE, ready: { job, recording } });
+            noteFinishedCopy(recording.assetId);
             try {
               await args.onSaved(recording);
             } catch (error) {

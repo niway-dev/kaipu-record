@@ -6,6 +6,11 @@ export interface StatusCardProps {
   label: string;
   /** A small tile on the left of the title. */
   icon?: React.ReactNode;
+  /**
+   * The icon brings its own tile (a destination logo, the fox): drawn as is, without the
+   * accent frame around it.
+   */
+  bareIcon?: boolean;
   title: React.ReactNode;
   /** One mono line under the title (sizes, dimensions). */
   subtitle?: React.ReactNode;
@@ -28,6 +33,7 @@ export interface StatusCardProps {
 export function StatusCard({
   label,
   icon,
+  bareIcon = false,
   title,
   subtitle,
   onDismiss,
@@ -46,7 +52,7 @@ export function StatusCard({
     >
       <header className={styles.header}>
         {icon && (
-          <span className={styles.icon} aria-hidden>
+          <span className={styles.icon} data-bare={bareIcon} aria-hidden>
             {icon}
           </span>
         )}
@@ -91,17 +97,38 @@ export function StatusCardActions({ children }: { children: React.ReactNode }): 
   return <div className={styles.actions}>{children}</div>;
 }
 
+/**
+ * A card button. `text` is a quiet word-only action (the progress card's Cancel); `grow`
+ * shares the row with the primary instead of hugging its label. A button with
+ * `onDragStart` is something to pick up (the ready card's "Drag to upload").
+ */
 export function StatusCardButton({
   variant = "secondary",
+  grow = false,
   onClick,
+  onDragStart,
+  label,
   children,
 }: {
-  variant?: "primary" | "secondary";
-  onClick(): void;
+  variant?: "primary" | "secondary" | "text";
+  grow?: boolean;
+  onClick?(): void;
+  onDragStart?(event: React.DragEvent<HTMLButtonElement>): void;
+  /** Accessible name, when the visible words are not enough. */
+  label?: string;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <button type="button" className={styles.button} data-variant={variant} onClick={onClick}>
+    <button
+      type="button"
+      className={styles.button}
+      data-variant={variant}
+      data-grow={grow}
+      aria-label={label}
+      onClick={onClick}
+      draggable={onDragStart ? true : undefined}
+      onDragStart={onDragStart}
+    >
       {children}
     </button>
   );

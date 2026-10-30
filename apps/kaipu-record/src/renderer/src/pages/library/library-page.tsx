@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  Check,
   Library,
   LayoutGrid,
   LayoutList,
@@ -28,6 +29,7 @@ import { buildLineage, editBadge } from "@renderer/features/library/lineage";
 import { canOpenInEditor, useOpenInEditor } from "@renderer/features/editor/open-in-editor";
 import { preparePath } from "@renderer/features/prepare/prepare-path";
 import { asPreparable } from "@renderer/features/prepare/use-prepare-copy";
+import { unseenCopyIds, useReadyCopies } from "@renderer/features/video-editor/export/ready-copies";
 import styles from "./library-page.module.css";
 
 /** The search field's share of the toolbar, moved out of the module: the shared
@@ -43,6 +45,7 @@ const sxLibrary = stylex.create({
 
 export function LibraryPage(): React.JSX.Element {
   const t = useTranslations("library");
+  const tCopy = useTranslations("backgroundCopy");
   const navigate = useNavigate();
   const { openItem } = useOpenInEditor();
   const { videos, isLoading, hasError, refresh, remove, setTags } = useLocalLibrary();
@@ -52,6 +55,11 @@ export function LibraryPage(): React.JSX.Element {
   // the current view must still count toward its source's badge.
   const lineage = useMemo(() => buildLineage(videos), [videos]);
   const showFullPageError = hasError && videos.length === 0;
+  // NIW2-586: finished copies not opened yet — a chip by the title, and their cards outlined.
+  // Only those still in the Library count (a deleted copy has nothing to point at).
+  const readyCopies = useReadyCopies();
+  const unseenCopies = useMemo(() => unseenCopyIds(readyCopies), [readyCopies]);
+  const unseenCount = videos.filter((v) => unseenCopies.has(v.assetId)).length;
   const {
     kindFilter,
     storageFilter,
@@ -122,7 +130,15 @@ export function LibraryPage(): React.JSX.Element {
     <div className={styles.page}>
       <div className={styles.pageHeader}>
         <div className={styles.pageHeaderText}>
-          <h1 className={styles.pageTitle}>{t("title")}</h1>
+          <div className={styles.pageTitleRow}>
+            <h1 className={styles.pageTitle}>{t("title")}</h1>
+            {unseenCount > 0 && (
+              <span className={styles.copiesReady} role="status">
+                <Check size={12} strokeWidth={2.4} aria-hidden />
+                {tCopy("libraryChip", { count: unseenCount })}
+              </span>
+            )}
+          </div>
           <p className={styles.pageSubtitle}>{t("subtitle")}</p>
         </div>
         <button
@@ -344,6 +360,7 @@ export function LibraryPage(): React.JSX.Element {
               }
               onTags={video.id !== null ? () => openTagPanel(video.assetId) : undefined}
               selected={video.assetId === taggingId}
+              justReady={unseenCopies.has(video.assetId)}
               tags={resolveTags(video.tagIds, tagApi.byId)}
               onDelete={() => {
                 const { id, title } = video;

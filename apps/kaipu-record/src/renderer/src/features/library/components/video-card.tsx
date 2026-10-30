@@ -27,6 +27,8 @@ interface VideoCardProps {
   onTags?(): void;
   /** This item is the one in the tag side panel. */
   selected?: boolean;
+  /** A copy that finished in the background and has not been opened yet (NIW2-586). */
+  justReady?: boolean;
   /** The item's tags, resolved from the registry (name + color). */
   tags?: readonly TagSummary[];
 }
@@ -40,6 +42,7 @@ export function VideoCard({
   onPrepare,
   onTags,
   selected = false,
+  justReady = false,
   tags = [],
 }: VideoCardProps): React.JSX.Element {
   const t = useTranslations("library");
@@ -52,6 +55,7 @@ export function VideoCard({
     <div
       className={styles.card}
       data-selected={selected}
+      data-just-ready={justReady}
       onClick={onNavigate}
       role="button"
       tabIndex={0}

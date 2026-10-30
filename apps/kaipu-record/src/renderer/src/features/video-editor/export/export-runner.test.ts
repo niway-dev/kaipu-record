@@ -11,11 +11,13 @@ import {
   dismissReadyExport,
   exportTitle,
   getExportSnapshot,
+  hideExportProgress,
   isVideoExportBusy,
   retryVideoExport,
   startVideoExport,
   type StartExportArgs,
 } from "./export-runner";
+import { __resetReadyCopiesForTests, getReadyCopies } from "./ready-copies";
 
 // The pipeline itself (plan, session lifecycle, FR8/FR9 retries) is covered through
 // `useVideoExport` in use-video-export.test.ts. Here: what makes the runner app-level —
@@ -100,6 +102,7 @@ beforeEach(() => {
 afterEach(() => {
   captureException.mockClear();
   __resetExportRunnerForTests();
+  __resetReadyCopiesForTests();
   vi.unstubAllGlobals();
 });
 
@@ -239,6 +242,47 @@ describe("export runner (NIW2-218 background export)", () => {
     } as MessageEvent);
     await waitFor(() => expect(workers).toHaveLength(2));
     expect(entries).toHaveBeenCalledOnce();
+  });
+});
+
+describe("export runner in the background (NIW2-586)", () => {
+  it("carries Prepare's destination on the job; an editor export has none", async () => {
+    await startVideoExport(args({ destination: "github" }), t);
+    expect(getExportSnapshot().job?.destination).toBe("github");
+    cancelVideoExport();
+    await startVideoExport(args(), t);
+    expect(getExportSnapshot().job).not.toHaveProperty("destination");
+  });
+
+  it("hiding the progress card leaves the export running, and a new export shows it again", async () => {
+    await startVideoExport(args(), t);
+    hideExportProgress();
+    expect(getExportSnapshot()).toMatchObject({ status: "exporting", progressHidden: true });
+    expect(isVideoExportBusy()).toBe(true);
+    cancelVideoExport();
+    await startVideoExport(args(), t);
+    expect(getExportSnapshot().progressHidden).toBe(false);
+  });
+
+  it("a hidden export that fails shows its error", async () => {
+    await startVideoExport(args(), t);
+    hideExportProgress();
+    workers[0]!.onmessage?.({ data: { type: "error", message: "boom" } } as MessageEvent);
+    expect(getExportSnapshot()).toMatchObject({ status: "error", progressHidden: false });
+  });
+
+  it("notes the finished copy as not seen yet", async () => {
+    await startVideoExport(args(), t);
+    hideExportProgress();
+    finish(workers[0]!);
+    await waitFor(() => expect(getExportSnapshot().ready).not.toBeNull());
+    expect(getReadyCopies().copies).toEqual([{ assetId: "asset-new", announced: false }]);
+  });
+
+  it("a cancelled export notes nothing", async () => {
+    await startVideoExport(args(), t);
+    cancelVideoExport();
+    expect(getReadyCopies().copies).toEqual([]);
   });
 });
 
