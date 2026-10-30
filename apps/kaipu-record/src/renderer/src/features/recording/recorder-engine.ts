@@ -75,8 +75,11 @@ export interface LiveAudioControls {
 export interface WebcamHandle {
   /** Renderer-clock time of the webcam file's time 0, like the screen's. */
   firstMediaTimestamp: Promise<FirstMediaTimestamp>;
-  /** The size the camera delivers, which the file is encoded at (raw: no crop, no mirror). */
-  size: { width: number; height: number };
+  /**
+   * The size the file is encoded at (raw: no crop, no mirror): the first encoded frame's coded
+   * size, or what the track reported when no frame has reached the encoder. Read it after stop.
+   */
+  readonly size: { width: number; height: number };
   /**
    * After `stop`: whether the webcam file finalized cleanly. A webcam unplugged or turned off
    * mid-take is still usable (its file ends there); one whose encoder failed is not.
@@ -572,8 +575,14 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
       output: Output;
       source: MediaStreamVideoTrackSource;
       track: MediaStreamTrack;
-      size: { width: number; height: number };
+      /** What the track reported at prepare time: only a fallback for `encodedSize`. */
+      reportedSize: { width: number; height: number };
     } | null = null;
+    /**
+     * The first frame's coded size, as mediabunny configures the encoder with it. The camera
+     * is shared with the bubble's preview, so `getSettings()` can disagree with the frames.
+     */
+    let webcamEncodedSize: { width: number; height: number } | null = null;
     /** Output started; the camera ended or was turned off; its encoder failed. */
     let webcamStarted = false;
     let webcamClosed = false;
@@ -593,6 +602,9 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
         bitrate: WEBCAM_BITRATE_BPS,
         hardwareAcceleration: "prefer-hardware",
         latencyMode: "realtime",
+        onEncoderConfig: (config) => {
+          webcamEncodedSize ??= { width: config.width, height: config.height };
+        },
       });
       webcamOutput.addVideoTrack(webcamSource, { frameRate: WEBCAM_FPS });
       const { width, height } = webcamTrack.getSettings();
@@ -601,7 +613,10 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
         output: webcamOutput,
         source: webcamSource,
         track: webcamTrack,
-        size: { width: width ?? Math.round((lines * 16) / 9), height: height ?? lines },
+        reportedSize: {
+          width: width ?? Math.round((lines * 16) / 9),
+          height: height ?? lines,
+        },
       };
       // Never an engine error: the take goes on, and finalize drops the unusable file.
       webcamSource.errorPromise.catch((error: unknown) => {
@@ -803,9 +818,12 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
           await webcam.output.start();
           webcamStarted = true;
           markRecordTiming("webcam output.start resolved");
+          const reportedSize = webcam.reportedSize;
           webcamHandle = {
             firstMediaTimestamp: waitForFirstMediaTimestamp(webcam.output, performance.now()),
-            size: webcam.size,
+            get size() {
+              return webcamEncodedSize ?? reportedSize;
+            },
             isUsable: () => !webcamFailed,
           };
         } catch (error) {

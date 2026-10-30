@@ -1201,6 +1201,22 @@ describe("webcam", () => {
     });
   });
 
+  it("records the size of the first encoded webcam frame, not what the track reported", async () => {
+    // The camera is shared with the bubble: what getSettings says at prepare time can differ
+    // from the frames that reach the encoder.
+    webcamTrack.getSettings = vi.fn(() => ({ width: 640, height: 480 }));
+    const handle = await startEngine(baseOptions({ webcam }));
+    expect(handle.webcam?.size).toEqual({ width: 640, height: 480 }); // no frame yet: fallback
+    const { config } = webcamSource();
+    const onEncoderConfig = (config as { onEncoderConfig: (c: VideoEncoderConfig) => void })
+      .onEncoderConfig;
+    // mediabunny configures the encoder from the first frame's coded size.
+    onEncoderConfig({ codec: "avc1.640028", width: 1280, height: 720 });
+    onEncoderConfig({ codec: "avc1.4d0028", width: 1280, height: 720 }); // another candidate
+    await handle.stop();
+    expect(handle.webcam?.size).toEqual({ width: 1280, height: 720 });
+  });
+
   it("pauses and resumes the screen and the webcam in the same call", async () => {
     const handle = await startEngine(baseOptions({ webcam }));
     const screen = vi.mocked(MediaStreamVideoTrackSource).mock.results[0]!.value;
