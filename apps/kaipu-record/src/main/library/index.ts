@@ -53,6 +53,11 @@ export async function screenshotFilePath(id: string): Promise<string> {
   return currentVault().filePath(id); // resolves <id>.png
 }
 
+/** Absolute path to a recording's webcam track (may not exist; ADR 0032). */
+export function webcamFilePath(id: string): string {
+  return currentVault().webcamFilePath(id);
+}
+
 /** Absolute path to a recording's thumbnail jpg (may not exist). */
 export function thumbnailFilePath(id: string): string {
   return join(vaultDirectory().path, ".kaipu", `${id}.jpg`);
