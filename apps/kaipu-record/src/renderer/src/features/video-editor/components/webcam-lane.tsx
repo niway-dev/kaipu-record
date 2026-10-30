@@ -5,20 +5,31 @@
  * visible, and edge drags report SOURCE time (null over a slide) with the start/move/end
  * phase contract. Hidden segments are striped; overrides read "Custom". Deleting goes
  * through the inspector or the Delete key, like every other lane.
+ *
+ * Under the segments runs a filmstrip of the webcam file's own frames, laid out per clip
+ * like the clips lane, so the row reads as "the face" even with no segment on it.
  */
 import { useRef } from "react";
 import { EyeOff } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { sourceRangeToTimelineBlocks, sourceTimeAtTimeline } from "../source-time";
 import { type LayoutEntry, layoutDuration } from "../timeline";
+import type { SourceThumbnail } from "../use-source-thumbnails";
 import type { WebcamSegment } from "../webcam/webcam-model";
-import { fractionToTime, timeToFraction } from "./timeline-geometry";
+import { fractionToTime, thumbnailsForRangeWithin, timeToFraction } from "./timeline-geometry";
 import type { EdgePhase } from "./zoom-lane";
 import styles from "./webcam-lane.module.css";
+
+/** Same density as the clips lane: one tile roughly every 72px of clip width. */
+const THUMBS_PER_BLOCK_PX = 72;
 
 export interface WebcamLaneProps {
   segments: WebcamSegment[];
   layout: LayoutEntry[];
+  /** The webcam file's frames at SOURCE time (`useSourceThumbnails` with the offset). */
+  thumbnails?: SourceThumbnail[];
+  /** Seconds a tile may be from its nearest frame; past it the webcam has no footage. */
+  thumbnailGap?: number;
   selectedId: string | null;
   onSelect(id: string): void;
   /** `sourceTime` is null when the pointer is over a slide — ignore that move. */
@@ -28,6 +39,8 @@ export interface WebcamLaneProps {
 export function WebcamLane({
   segments,
   layout,
+  thumbnails = [],
+  thumbnailGap = 0,
   selectedId,
   onSelect,
   onEdgeDrag,
@@ -83,8 +96,46 @@ export function WebcamLane({
     );
   };
 
+  const laneWidthPx = laneRef.current?.clientWidth ?? 800;
+  const filmstrip =
+    thumbnails.length > 0 ? (
+      // Decoration only: the segments above carry every interaction and accessible name.
+      <div className={styles.filmstrip} data-webcam-filmstrip aria-hidden="true">
+        {layout.map((entry) => {
+          if (entry.kind !== "clip") return null; // a slide has no webcam
+          const width = timeToFraction(entry.timelineEnd - entry.timelineStart, duration);
+          const tiles = thumbnailsForRangeWithin(
+            thumbnails,
+            entry.sourceStart,
+            entry.sourceEnd,
+            Math.max(1, Math.round((width * laneWidthPx) / THUMBS_PER_BLOCK_PX)),
+            thumbnailGap,
+          );
+          return (
+            <div
+              key={entry.itemId}
+              className={styles.strip}
+              style={{
+                left: `${timeToFraction(entry.timelineStart, duration) * 100}%`,
+                width: `${width * 100}%`,
+              }}
+            >
+              {tiles.map((tile, i) =>
+                tile ? (
+                  <img key={i} src={tile.url} alt="" className={styles.tile} draggable={false} />
+                ) : (
+                  <span key={i} className={styles.tile} />
+                ),
+              )}
+            </div>
+          );
+        })}
+      </div>
+    ) : null;
+
   return (
     <div ref={laneRef} className={styles.lane} data-testid="webcam-lane">
+      {filmstrip}
       {segments.flatMap((segment, index) => {
         const blocks = sourceRangeToTimelineBlocks(layout, segment.start, segment.end);
         const selected = segment.id === selectedId;

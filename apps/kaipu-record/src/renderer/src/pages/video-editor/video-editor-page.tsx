@@ -101,7 +101,10 @@ import { CoverInspector } from "@renderer/features/video-editor/components/inspe
 import { formatPrecise } from "@renderer/features/video-editor/components/inspector/format";
 import { useSessionAutosave } from "@renderer/features/video-editor/use-session-autosave";
 import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-playback";
-import { useSourceThumbnails } from "@renderer/features/video-editor/use-source-thumbnails";
+import {
+  sourceThumbnailSpacing,
+  useSourceThumbnails,
+} from "@renderer/features/video-editor/use-source-thumbnails";
 import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
 import { useVideoTools } from "@renderer/features/video-editor/annotations/video-tools";
 import { useVideoExport } from "@renderer/features/video-editor/export/use-video-export";
@@ -453,6 +456,12 @@ function VideoEditor({
   const gifExport = useGifExport();
   const mediaUrl = `kaipu-media://recording/${source.id}`;
   const thumbnails = useSourceThumbnails(mediaUrl, source.durationSeconds);
+  // The webcam lane's filmstrip: the webcam file's frames, reported at SOURCE time.
+  const webcamThumbnails = useSourceThumbnails(
+    hasWebcam ? `kaipu-media://webcam/${source.id}` : "",
+    source.durationSeconds,
+    (webcamTrack?.startOffsetMs ?? 0) / 1000,
+  );
   const selection = useEditorSelection();
   // `select` / `clear` are stable (useCallback, no deps); the `selection` object itself
   // is rebuilt every render, so never put it in a dependency array.
@@ -1592,6 +1601,8 @@ function VideoEditor({
                       <WebcamLane
                         segments={webcamEdits.visibleSegments}
                         layout={layout}
+                        thumbnails={webcamThumbnails}
+                        thumbnailGap={sourceThumbnailSpacing(source.durationSeconds)}
                         selectedId={
                           selectedWebcamId === WEBCAM_LAYER_SELECTION ? null : selectedWebcamId
                         }

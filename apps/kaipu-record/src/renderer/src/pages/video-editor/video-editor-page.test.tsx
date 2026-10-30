@@ -58,6 +58,19 @@ vi.mock("@renderer/features/video-editor/export/use-video-export", () => ({
   }),
 }));
 
+// Thumbnails never decode in jsdom (no WebCodecs); spying on the hook lets the webcam tests
+// pin which file and offset the webcam lane's filmstrip is decoded from.
+const thumbnailCalls = vi.hoisted(() => [] as unknown[][]);
+vi.mock("@renderer/features/video-editor/use-source-thumbnails", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@renderer/features/video-editor/use-source-thumbnails")
+  >()),
+  useSourceThumbnails: (...args: unknown[]) => {
+    thumbnailCalls.push(args);
+    return [];
+  },
+}));
+
 // jsdom's Image never fires onload for blob: URLs (no real image decoding) — the
 // slide asset store's put() would hang forever without a controllable fake. Same
 // approach as slide-assets.test.ts.
@@ -702,6 +715,21 @@ describe("VideoEditorPage — webcam track", () => {
     expect(screen.queryByTestId("webcam-layer")).toBeNull();
     expect(document.querySelectorAll("video")).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Hide webcam here" })).toBeNull();
+    // No webcam file to decode: the webcam filmstrip is asked for nothing.
+    expect(thumbnailCalls.some((args) => String(args[0]).startsWith("kaipu-media://webcam"))).toBe(
+      false,
+    );
+  });
+
+  it("the webcam lane's filmstrip decodes the webcam file at its offset", async () => {
+    thumbnailCalls.length = 0;
+    renderEditor(WITH_WEBCAM);
+    await waitForEditorLoaded();
+    expect(thumbnailCalls).toContainEqual([
+      "kaipu-media://webcam/rec-1",
+      SOURCE.durationSeconds,
+      0.12,
+    ]);
   });
 
   it("a recording with a webcam gets the lane, the layer's own muted video and the hide action", async () => {

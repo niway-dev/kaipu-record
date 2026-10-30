@@ -2,7 +2,11 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { CanvasSink } from "mediabunny";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { openRecordingInput } from "@renderer/lib/open-recording-input";
-import { __resetSourceThumbnailCacheForTests, useSourceThumbnails } from "./use-source-thumbnails";
+import {
+  __resetSourceThumbnailCacheForTests,
+  companionSampleTimes,
+  useSourceThumbnails,
+} from "./use-source-thumbnails";
 
 // mediabunny decodes via WebCodecs, which jsdom lacks — mock it and the Range-reader helper
 // at the boundary so the test exercises OUR orchestration (open → sink → blobs → cache).
@@ -126,5 +130,79 @@ describe("useSourceThumbnails", () => {
     await waitFor(() => expect(again.result.current).toHaveLength(24));
 
     expect(openMock).toHaveBeenCalledTimes(10);
+  });
+});
+
+describe("companionSampleTimes", () => {
+  it("maps evenly spaced source times into the companion file's own time", () => {
+    // Webcam started 2 s after the screen: source 3 s is webcam 1 s.
+    expect(companionSampleTimes(8, 4, 2, Infinity)).toEqual([1, 3, 5]);
+  });
+
+  it("drops the source times before the companion's first frame and after its last", () => {
+    // Source samples 1, 3, 5, 7 → webcam −1, 1, 3, 5; the webcam is 4 s long.
+    expect(companionSampleTimes(8, 4, 2, 4)).toEqual([1, 3]);
+  });
+
+  it("keeps every sample when the companion's duration is unknown", () => {
+    expect(companionSampleTimes(8, 4, 0, Number.NaN)).toEqual([1, 3, 5, 7]);
+  });
+});
+
+describe("useSourceThumbnails over a companion file (the webcam)", () => {
+  const URL_CAM = "kaipu-media://webcam/r1";
+
+  function stubEchoSink() {
+    // Echoes the requested timestamps, like a real sink landing on exact frames.
+    CanvasSinkMock.mockImplementation(function () {
+      return {
+        canvasesAtTimestamps: vi.fn((times: number[]) =>
+          asyncIterableOf(times.map((timestamp) => ({ canvas: fakeCanvas(), timestamp }))),
+        ),
+      };
+    } as never);
+  }
+
+  it("decodes at webcam time and reports each frame at its SOURCE time", async () => {
+    stubInput({ computeDuration: vi.fn(async () => 40) });
+    stubEchoSink();
+    const { result } = renderHook(() => useSourceThumbnails(URL_CAM, 48, 0.5));
+    await waitFor(() => expect(result.current.length).toBeGreaterThan(0));
+
+    const sink = CanvasSinkMock.mock.results[0]!.value as {
+      canvasesAtTimestamps: ReturnType<typeof vi.fn>;
+    };
+    const requested = sink.canvasesAtTimestamps.mock.calls[0]![0] as number[];
+    expect(requested[0]).toBeCloseTo(0.5); // source 1 s − 0.5 s
+    expect(requested.every((t) => t >= 0 && t < 40)).toBe(true);
+    expect(result.current[0]!.sourceTime).toBeCloseTo(1);
+  });
+
+  it("keeps the screen and webcam caches apart", async () => {
+    const screen = renderHook(() => useSourceThumbnails(URL_R1, 48));
+    await waitFor(() => expect(screen.result.current).toHaveLength(24));
+    stubInput({ computeDuration: vi.fn(async () => 48) });
+    const cam = renderHook(() => useSourceThumbnails(URL_CAM, 48, 0));
+    await waitFor(() => expect(cam.result.current.length).toBeGreaterThan(0));
+
+    expect(openMock).toHaveBeenCalledWith(URL_CAM);
+    expect(openMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("decodes nothing for an empty URL (a recording without a webcam)", async () => {
+    const { result } = renderHook(() => useSourceThumbnails("", 48, 0));
+    await Promise.resolve();
+    expect(result.current).toEqual([]);
+    expect(openMock).not.toHaveBeenCalled();
+  });
+
+  it("a different offset is a different cache entry", async () => {
+    stubInput({ computeDuration: vi.fn(async () => 48) });
+    const a = renderHook(() => useSourceThumbnails(URL_CAM, 48, 0));
+    await waitFor(() => expect(a.result.current.length).toBeGreaterThan(0));
+    const b = renderHook(() => useSourceThumbnails(URL_CAM, 48, 1));
+    await waitFor(() => expect(b.result.current.length).toBeGreaterThan(0));
+
+    expect(openMock).toHaveBeenCalledTimes(2);
   });
 });

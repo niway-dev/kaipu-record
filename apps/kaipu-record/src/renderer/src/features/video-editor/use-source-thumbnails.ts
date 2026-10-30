@@ -39,6 +39,29 @@ function cacheSet(key: string, value: CachedThumbnail[]): void {
   }
 }
 
+/** Seconds of SOURCE time between two thumbnails: the gap the filmstrip may bridge. */
+export function sourceThumbnailSpacing(durationSeconds: number): number {
+  return durationSeconds / THUMB_COUNT;
+}
+
+/**
+ * Where to decode a companion file: the same evenly spaced SOURCE times as the screen's
+ * filmstrip, moved into the companion's own time, keeping only those it has a frame for
+ * (`[0, mediaDuration)`; an unknown duration bounds nothing past the start).
+ */
+export function companionSampleTimes(
+  sourceDuration: number,
+  count: number,
+  offsetSeconds: number,
+  mediaDuration: number,
+): number[] {
+  const end = Number.isFinite(mediaDuration) && mediaDuration > 0 ? mediaDuration : Infinity;
+  return Array.from(
+    { length: count },
+    (_, i) => ((i + 0.5) / count) * sourceDuration - offsetSeconds,
+  ).filter((t) => t >= 0 && t < end);
+}
+
 /** Test seam: forget every cached recording. */
 export function __resetSourceThumbnailCacheForTests(): void {
   cache.clear();
@@ -49,15 +72,32 @@ export function __resetSourceThumbnailCacheForTests(): void {
  * Cuts never invalidate this cache — blocks pick the nearest thumbnails by source
  * time — so we never re-decode while editing. Frames are decoded through Range
  * requests (not a full-file read) and kept per recording in a small LRU.
+ *
+ * With `companionOffsetSeconds`, `mediaUrl` is a file played alongside the recording (the
+ * webcam, ADR 0032) whose own time is source time − that offset, and which may start after
+ * or end before the screen: frames are decoded at its own time and reported at SOURCE
+ * time, so the same `thumbnailsForRange` lookups work for both. The cache is keyed by URL
+ * and offset, so the screen and webcam filmstrips of one recording never collide.
+ * An empty `mediaUrl` decodes nothing (a recording without a webcam).
  */
-export function useSourceThumbnails(mediaUrl: string, durationSeconds: number): SourceThumbnail[] {
+export function useSourceThumbnails(
+  mediaUrl: string,
+  durationSeconds: number,
+  companionOffsetSeconds?: number,
+): SourceThumbnail[] {
   const [thumbnails, setThumbnails] = useState<SourceThumbnail[]>([]);
 
   useEffect(() => {
+    if (!mediaUrl) {
+      setThumbnails([]);
+      return;
+    }
     let cancelled = false;
     let input: Input | null = null;
     const urls: string[] = [];
-    const key = `${mediaUrl}|${durationSeconds}`;
+    const companion = companionOffsetSeconds !== undefined;
+    const offsetSeconds = companionOffsetSeconds ?? 0;
+    const key = `${mediaUrl}|${durationSeconds}|${companion ? offsetSeconds : "source"}`;
 
     // Object URLs are created per mount (and revoked on unmount); the cache holds Blobs.
     const publish = (cached: CachedThumbnail[]): void => {
@@ -89,10 +129,18 @@ export function useSourceThumbnails(mediaUrl: string, durationSeconds: number): 
         const track = await input.getPrimaryVideoTrack();
         if (!track || cancelled) return;
         const sink = new CanvasSink(track, { width: THUMB_WIDTH });
-        const timestamps = Array.from(
-          { length: THUMB_COUNT },
-          (_, i) => ((i + 0.5) / THUMB_COUNT) * durationSeconds,
-        );
+        const timestamps = companion
+          ? companionSampleTimes(
+              durationSeconds,
+              THUMB_COUNT,
+              offsetSeconds,
+              await track.computeDuration().catch(() => Number.NaN),
+            )
+          : Array.from(
+              { length: THUMB_COUNT },
+              (_, i) => ((i + 0.5) / THUMB_COUNT) * durationSeconds,
+            );
+        if (cancelled) return;
         const decoded: CachedThumbnail[] = [];
         for await (const wrapped of sink.canvasesAtTimestamps(timestamps)) {
           if (cancelled) return; // cancelled mid-stream: stop decoding further frames
@@ -103,7 +151,7 @@ export function useSourceThumbnails(mediaUrl: string, durationSeconds: number): 
           );
           if (!blob) continue;
           if (cancelled) return;
-          decoded.push({ sourceTime: wrapped.timestamp, blob });
+          decoded.push({ sourceTime: wrapped.timestamp + offsetSeconds, blob });
         }
         if (cancelled) return;
         // An empty result means every frame failed to encode: don't pin that failure in the cache.
@@ -118,7 +166,7 @@ export function useSourceThumbnails(mediaUrl: string, durationSeconds: number): 
     })();
 
     return cleanup;
-  }, [mediaUrl, durationSeconds]);
+  }, [mediaUrl, durationSeconds, companionOffsetSeconds]);
 
   return thumbnails;
 }

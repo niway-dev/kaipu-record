@@ -3,6 +3,7 @@ import {
   fractionToTime,
   rulerTicks,
   thumbnailsForRange,
+  thumbnailsForRangeWithin,
   timeToFraction,
 } from "./timeline-geometry";
 
@@ -50,5 +51,31 @@ describe("thumbnailsForRange", () => {
 
   it("returns [] when there are no thumbnails", () => {
     expect(thumbnailsForRange([], 0, 10, 4)).toEqual([]);
+  });
+});
+
+describe("thumbnailsForRangeWithin", () => {
+  // A webcam that only has frames between source 20 s and 50 s, one thumbnail every 10 s.
+  const thumbs = [25, 35, 45].map((sourceTime, i) => ({ sourceTime, url: `c${i}` }));
+
+  it("leaves a tile empty where the nearest frame is farther than the gap", () => {
+    // Targets 5, 15, 25, ... 95: with a 6 s gap only 25, 35 and 45 have a frame.
+    const picked = thumbnailsForRangeWithin(thumbs, 0, 100, 10, 6);
+    expect(picked.map((t) => t?.url ?? null)).toEqual([
+      null,
+      null,
+      "c0",
+      "c1",
+      "c2",
+      null,
+      null,
+      null,
+      null,
+      null,
+    ]);
+  });
+
+  it("returns [] when there are no thumbnails", () => {
+    expect(thumbnailsForRangeWithin([], 0, 10, 4, 1)).toEqual([]);
   });
 });
