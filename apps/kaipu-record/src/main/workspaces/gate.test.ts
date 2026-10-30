@@ -94,4 +94,36 @@ describe("WorkspaceGate", () => {
     const gate = new WorkspaceGate("ws-pending");
     expect(gate.rebind("ws-real")).toEqual({ workspaceId: "ws-real", generation: 2 });
   });
+
+  describe("adopt (a probe learned the active entry's real id)", () => {
+    it("rebinds when the entry the probe started from is still the one the gate holds", () => {
+      const gate = new WorkspaceGate("pending-a");
+      expect(gate.adopt("pending-a", "real-a", "real-a")).toBe(true);
+      expect(gate.stamp).toEqual({ workspaceId: "real-a", generation: 2 });
+    });
+
+    it("does nothing when a switch committed while the probe ran: the gate holds the target", async () => {
+      const gate = new WorkspaceGate("ws-a");
+      await gate.close();
+      gate.commit("ws-b");
+      // The probe of ws-a answers late, with ws-a's own id: not an adoption.
+      expect(gate.adopt("ws-a", "ws-a", "ws-b")).toBe(false);
+      // A probe whose answer is a different id still must not drag the gate back.
+      expect(gate.adopt("ws-a", "ws-a-real", "ws-b")).toBe(false);
+      expect(gate.stamp).toEqual({ workspaceId: "ws-b", generation: 2 });
+    });
+
+    it("does nothing when the registry's active entry is no longer the adopted one", () => {
+      const gate = new WorkspaceGate("ws-a");
+      // The registry already points at the switch target while the gate has not committed yet.
+      expect(gate.adopt("ws-a", "ws-a-real", "ws-b")).toBe(false);
+      expect(gate.stamp).toEqual({ workspaceId: "ws-a", generation: 1 });
+    });
+
+    it("does nothing when the id did not change", () => {
+      const gate = new WorkspaceGate("ws-a");
+      expect(gate.adopt("ws-a", "ws-a", "ws-a")).toBe(false);
+      expect(gate.stamp.generation).toBe(1);
+    });
+  });
 });

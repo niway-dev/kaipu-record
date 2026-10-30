@@ -96,6 +96,19 @@ export class WorkspaceGate {
     return this.stamp;
   }
 
+  /**
+   * A probe of the active entry found its folder's id and the entry adopted it
+   * (`before` → `after`). Rebinds only when that is still true by the time the probe
+   * answers: the gate still holds `before` and the registry's active entry is `after`.
+   * A switch that committed (or is persisting) meanwhile is not an adoption, and must not
+   * be undone by a late answer about the old workspace.
+   */
+  adopt(before: string, after: string, registryActiveId: string): boolean {
+    if (before === after || this.activeId !== before || registryActiveId !== after) return false;
+    this.rebind(after);
+    return true;
+  }
+
   /** The active entry's id changed outside a switch (a pending entry adopted its folder's id). */
   rebind(activeId: string): WorkspaceStamp {
     this.activeId = activeId;

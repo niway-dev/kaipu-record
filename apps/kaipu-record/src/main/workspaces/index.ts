@@ -107,7 +107,7 @@ export async function requireCaptureWorkspace(): Promise<WorkspaceEntry> {
   if (workspaceGate().switching) throw new StaleWorkspaceError();
   const active = reg.active();
   const { availability, id } = await reg.availability(active.id);
-  if (id !== workspaceGate().stamp.workspaceId) rebindAfterAdoption(id);
+  if (workspaceGate().adopt(active.id, id, reg.active().id)) void broadcastState();
   if (availability.state !== "available") throw new WorkspaceNotConnectedError(active.name);
   return reg.active();
 }
@@ -124,20 +124,13 @@ export async function availableWorkspacePaths(): Promise<string[]> {
   return paths;
 }
 
-/** A pending active entry adopted its folder's id: windows must take the new stamp. */
-function rebindAfterAdoption(id: string): void {
-  workspaceGate().rebind(id);
-  void broadcastState();
-}
-
 async function listState(): Promise<WorkspacesState> {
   const reg = requireRegistry();
   const views: WorkspaceView[] = [];
   for (const entry of reg.entries().slice()) {
     const { availability, id } = await reg.availability(entry.id);
-    if (entry.id === reg.active().id && id !== workspaceGate().stamp.workspaceId) {
-      rebindAfterAdoption(id);
-    }
+    // A pending active entry that adopted its folder's id: windows must take the new stamp.
+    if (workspaceGate().adopt(entry.id, id, reg.active().id)) void broadcastState();
     const count =
       availability.state === "available"
         ? await new LibraryVault(entry.path).countMedia().catch(() => null)
