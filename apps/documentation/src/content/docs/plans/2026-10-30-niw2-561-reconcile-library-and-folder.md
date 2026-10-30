@@ -5,7 +5,7 @@ description: NIW2-561 — one "Check and fix files" action, offered by a banner 
 
 # Reconcile the library with its folder — plan
 
-**Status: 🔵 Proposed, revision 3 · 2026-10-30.** Revision 3 adopts the owner's
+**Status: 🔵 Proposed, revision 4 · 2026-10-30.** Revision 3 adopts the owner's
 simplification after two adversarial review rounds (GPT-6.1 Sol): **follow the
 names, never infer identities, never delete.** Revisions 1 and 2, with their
 findings, are in git history and summarized in the last section. The work is
@@ -32,17 +32,17 @@ the Library and on Home** offers **"Check and fix files"**; the same action is a
 button in Settings → Files. The dialog lists what it will do. **"Fix all"** runs
 one exclusive pass, and pressing it again finds nothing.
 
-| Decision                                                                                                                   | Why                                                                                                                                                                                                           | ADR          |
-| -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| On demand: a banner and a button. No watcher and no automatic migration.                                                   | The app is local-only and cannot push a fix for a broken automatic migration. The user sees the problem before anything moves.                                                                                | **new 0033** |
-| **The file name is the only link between a file and its record.** No pairing by inode, hash or date.                       | Two review rounds broke every pairing rule: inode reuse, file ids that are unstable on exFAT and SMB, swaps made in Finder, restored backups. A false pairing puts one item's tags and edits on another file. | 0033         |
-| **Same item, title ≠ file name → Kaipu wins:** the file takes the title.                                                   | Covers pre-existing items and in-app renames that never reached the disk (a locked file). No marker is needed: the record and the file share the stem.                                                        | reuses 0032  |
-| **A file with no record → a new item under its disk name.**                                                                | A rename in Finder is intentional, so its name wins. The old record does not follow (see the next row).                                                                                                       | 0033         |
-| **Nothing is deleted.** A record or companion with no media moves to `.kaipu/orphans/<run>/` with a manifest.              | The user is in charge; we keep our orphans. The old record of a file renamed in Finder keeps its tags, edits and identity there, for NIW2-589 or the user.                                                    | 0033         |
-| **Fix all is exclusive:** it waits for any capture, export or editor save to finish, and blocks new ones for its duration. | Per-item locks do not cover `remove`, `removeLocalCopy`, thumbnail backfill or companion writers. An exclusive pass removes every concurrency case.                                                           | 0033         |
-| Ambiguous identities (two items with one `assetId`) are listed and left alone.                                             | Choosing would need the identity inference we dropped. The user decides.                                                                                                                                      | 0033         |
-| Old automatic titles are replaced by the new default name from the capture date.                                           | Kept as titles, they would become files like `Recording — 10 29 2026, 7 57 30 PM.mp4`.                                                                                                                        | reuses 0032  |
-| Pasted images are screenshots: `Kaipu Screenshot <date>`.                                                                  | Already on #435 (`00abd0f5`).                                                                                                                                                                                 | none         |
+| Decision                                                                                                                                                                                  | Why                                                                                                                                                                                                                          | ADR          |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| On demand: a banner and a button. No watcher and no automatic migration.                                                                                                                  | The app is local-only and cannot push a fix for a broken automatic migration. The user sees the problem before anything moves.                                                                                               | **new 0033** |
+| **The file name is the only link between a file and its record.** No pairing by inode, hash or date.                                                                                      | Two review rounds broke every pairing rule: inode reuse, file ids that are unstable on exFAT and SMB, swaps made in Finder, restored backups. A false pairing puts one item's tags and edits on another file.                | 0033         |
+| **Same item, title ≠ file name → Kaipu wins:** the file takes the title.                                                                                                                  | Covers pre-existing items and in-app renames that never reached the disk (a locked file). No marker is needed: the record and the file share the stem.                                                                       | reuses 0032  |
+| **A file with no record → a new item under its disk name.**                                                                                                                               | A rename in Finder is intentional, so its name wins. The old record does not follow (see the next row).                                                                                                                      | 0033         |
+| **Nothing is deleted.** A record or companion with no media moves to `.kaipu/orphans/<run>/` with a manifest.                                                                             | The user is in charge; we keep our orphans. The old record of a file renamed in Finder keeps its tags, edits and identity there, for NIW2-589 or the user.                                                                   | 0033         |
+| **Fix all runs in maintenance mode:** it does not start while a recording or export is active, and while it runs, every vault operation entering from outside is **refused**, not queued. | Per-item locks do not cover `remove`, `removeLocalCopy`, backfill or companion writers. A queued operation would wake up holding a name the planner gave to another item. Refusing avoids both, with no nested locking (C1). | 0033         |
+| **Anything ambiguous is listed and left alone:** duplicate identities, two media files on one stem, items whose companion paths overlap another live item's, unreadable records.          | Fixing these needs choices or primitives we deliberately do not build. The user decides.                                                                                                                                     | 0033         |
+| Old automatic titles are replaced by the new default name from the capture date.                                                                                                          | Kept as titles, they would become files like `Recording — 10 29 2026, 7 57 30 PM.mp4`.                                                                                                                                       | reuses 0032  |
+| Pasted images are screenshots: `Kaipu Screenshot <date>`.                                                                                                                                 | Already on #435 (`00abd0f5`).                                                                                                                                                                                                | none         |
 
 **Accepted limitations** (written in the ADR):
 
@@ -76,48 +76,69 @@ Each sidecar read reports one of five outcomes: `ok`, `missing` (ENOENT), `unrea
 (EACCES, EIO), `corrupt-json` or `invalid-schema`. Only `ok` and `missing` take part in
 fixes; the other three are reported and never written (F9).
 
-| Kind                 | Detected when                                                       | Fix                                                               |
-| -------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `stale-auto-title`   | The title matches the old automatic pattern (N1).                   | Title = `defaultCaptureName(kind, captureDate)`, then align.      |
-| `untitled-legacy`    | No title, and the stem matches `LEGACY_STEM`.                       | Title = `humanizeId(stem)`, then align.                           |
-| `name-mismatch`      | The stem is not aligned with the title (N2).                        | `renameItem` with the current title, in planner order (N10).      |
-| `stem-conflict`      | Two media files share a stem (`Demo.mp4` + `Demo.png`).             | The one `filePath` does not pick is adopted under a suffix.       |
-| `missing-sidecar`    | Media with no record.                                               | Adopt: new `assetId`, `title` = stem, `createdAt` = capture date. |
-| `missing-media`      | A record with no media, not cloud-only.                             | M1–M3.                                                            |
-| `orphan-companion`   | A companion-shaped file with no record and no media of its stem.    | Move to orphans, unless protected (M4).                           |
-| `duplicate-identity` | Two media items claim one `assetId`.                                | Listed, not touched (I1).                                         |
-| `unreadable-record`  | A sidecar read is `unreadable`, `corrupt-json` or `invalid-schema`. | Listed, not touched (F9).                                         |
+| Kind                 | Detected when                                                                  | Fix                                                               |
+| -------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| `stale-auto-title`   | The title matches the old automatic pattern (N1).                              | Title = `defaultCaptureName(kind, captureDate)`, then align.      |
+| `untitled-legacy`    | No title, and the stem matches `LEGACY_STEM`.                                  | Title = `humanizeId(stem)`, then align.                           |
+| `name-mismatch`      | The stem is not aligned with the title (N2).                                   | `renameItem` with the current title, in planner order (N10).      |
+| `stem-conflict`      | Two media files share a stem (`Demo.mp4` + `Demo.png`).                        | Listed, not touched; the user renames one in Finder.              |
+| `shared-companion`   | An item's companion paths overlap a live item's (legacy `Demo` + `Demo.edit`). | Listed, not touched (M7).                                         |
+| `missing-sidecar`    | Media with no record.                                                          | Adopt: new `assetId`, `title` = stem, `createdAt` = capture date. |
+| `missing-media`      | A record with no media, not cloud-only.                                        | M1–M3.                                                            |
+| `orphan-companion`   | A companion-shaped file with no record and no media of its stem.               | Move to orphans, unless protected (M4).                           |
+| `duplicate-identity` | Two media items claim one `assetId`.                                           | Listed, not touched (I1).                                         |
+| `unreadable-record`  | A sidecar read is `unreadable`, `corrupt-json` or `invalid-schema`.            | Listed, not touched (F9).                                         |
 
 ## The fix pipeline
 
 `fixVault(vault, options)` runs in main.
 
-1. **Take the vault exclusively** (C1):
-   - wait for in-flight captures, exports and saves to finish;
-   - hold back new ones until the pass ends: a recording start is refused with
-     "Kaipu is fixing your files" (a few seconds), and a screenshot waits;
-   - the dialog shows progress and cannot be dismissed mid-run;
+1. **Enter maintenance mode** (C1):
+   - a recording or export is active → Fix all does not start; the dialog says which
+     one and stays open and dismissible;
+   - other operations in flight (a screenshot save, a backfill, a delete) → wait for
+     them to finish, with a cancellable and dismissible "Waiting for…" state;
+   - once idle, set the maintenance flag. From then on, every operation entering the
+     vault from outside is refused with "Kaipu is fixing your files". That covers
+     IPC handlers, capture starts, hotkey screenshots, backfill and the editor.
+   - only now does the dialog become non-dismissible (progress);
    - one run per vault at a time.
-2. Scan.
-3. Run the actions in this order:
-   1. `missing-media` and `orphan-companion` (to orphans);
-   2. `stem-conflict`, then `missing-sidecar`;
-   3. the title rewrites;
-   4. the renames, through the planner (N10).
-4. Scan again. Anything fixable that is left is a bug: it goes to the report and the
-   error log, and is not retried in a loop.
-5. Release the vault and refresh the library.
+2. Scan, then the first actions:
+   1. `missing-media` and `orphan-companion` (to orphans). Remnants of a committed
+      rename are checked **first**: a record without media whose `assetId` lives at
+      another stem with media goes to orphans. Only then are M2 (cloud-only) and M3
+      classified, so a crash mid-rename never turns its remnant into a cloud-only
+      record that keeps the name taken (review 3, finding 7);
+   2. `missing-sidecar` (adoption);
+   3. the title rewrites.
+3. **Scan again and plan the renames from that inventory**, not from the first scan.
+   An adopted `Ａ.mp4` gets the title `Ａ`, which `fileStemFromTitle` turns into `A`
+   (NFKC); the same happens to overlong or companion-shaped names. Run the planner
+   (N10).
+4. Scan again. Anything fixable left is a bug: it goes to the report and the error
+   log, and is not retried in a loop.
+5. Clear the flag and refresh the library.
+
+**Reconcile renames never reuse a "leftover" destination.** `renameItem` today
+accepts a stem that has a sidecar with the same `assetId` and no recognized media,
+and deletes its companions first (`library-vault.ts:341`, `:455`). That stem may be a
+cloud-only record with its own edits, or sit beside an uppercase-extension media
+file. Reconcile calls it with `allowLeftover: false`: only vacant destinations, and
+any leftover goes through the orphans move.
 
 **No journal is needed.** Each action is safe on its own:
 
-- `renameItem` is crash-safe (it copies, commits, then cleans up);
-- adoption is one atomic sidecar write;
-- a move to orphans that stops halfway leaves companions with no owner, which the
-  next run moves too.
+- `renameItem` is crash-safe: it copies, commits, then cleans up. Its remnants are
+  recognized first (step 2.1).
+- Adoption is one atomic sidecar write.
+- A move to orphans writes its bundle's manifest entry (original paths, title,
+  `assetId`) **before** moving the first file, and marks it complete after the last
+  one. A crash in between leaves a manifest entry that the next run completes into
+  the same run folder.
 
-After a crash, the next "Fix all" sees what is left and finishes it, with the same
-result. Nothing decided before the crash can be lost: the only decisions are "the
-title wins" and "the disk name wins", and both can be read again from the vault.
+After a crash, the next "Fix all" sees what is left and finishes it. The only
+decisions are "the title wins" and "the disk name wins", and both can be read again
+from the vault.
 
 **The report:** `ReconcileReport`, with counts per kind, `fixed`, `moved-to-orphans`,
 `kept` (with a reason: locked by another app) and `failed`. The run log goes to
@@ -126,8 +147,8 @@ title wins" and "the disk name wins", and both can be read again from the vault.
 the reason, the title and the `assetId`.
 
 **Idempotence is the contract:** a scan after a complete fix returns only findings
-that are not fixable now: a locked file, `duplicate-identity` or
-`unreadable-record`. A fixture vault containing every edge case below asserts it,
+that are not fixable now: a locked file, `duplicate-identity`, `stem-conflict`,
+`shared-companion` or `unreadable-record`. A fixture vault containing every edge case below asserts it,
 including 101 items with one title, a 6-item rename chain and a 2-item cycle.
 
 ## Banner
@@ -166,60 +187,66 @@ Each row becomes a test, written red first.
 
 **Records without media, and orphans**
 
-| #   | Case                                                                                                                                                           | Handling                                                                                                                                                                                            |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M1  | A cloud-only item (`localRemovedAt`).                                                                                                                          | Never touched.                                                                                                                                                                                      |
-| M2  | A record without media whose `assetId` is in the cached cloud catalog.                                                                                         | Becomes cloud-only (`localRemovedAt`), so the cloud item keeps its tags.                                                                                                                            |
-| M3  | Any other record without media: a file renamed or deleted in Finder, a crashed capture's stub, a crashed rename's leftover, or the cloud unknown (signed out). | Moved to orphans with all its companions. The library no longer lists it. It is recoverable from the manifest, and NIW2-589 reads it.                                                               |
-| M4  | A companion (`.jpg`, `.cursor.json`, `.edit.json`, `.edit.meta.json`, `<id>.assets/`) with no owner.                                                           | Moved to orphans, except when protected: owned both ways (`Demo.edit.json` is the sidecar of `Demo.edit` or the edit session of `Demo`), or its stem has a present-but-ignored media file (F3, F4). |
-| M5  | Unknown files in `.kaipu/`: `tags.json`, `reconcile/`, `orphans/`, `drag/`, cursor-track temp files.                                                           | Allowlist only; never touched.                                                                                                                                                                      |
-| M6  | A name in orphans already taken by an earlier run.                                                                                                             | Each run has its own folder `<timestamp>`; within a run, paths keep their relative layout.                                                                                                          |
+| #   | Case                                                                                                                                                                                                   | Handling                                                                                                                                                                                                      |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M1  | A cloud-only item (`localRemovedAt`).                                                                                                                                                                  | Never touched.                                                                                                                                                                                                |
+| M2  | A record without media whose `assetId` is in the cached cloud catalog.                                                                                                                                 | Becomes cloud-only (`localRemovedAt`), so the cloud item keeps its tags.                                                                                                                                      |
+| M3  | Any other record without media: a file renamed or deleted in Finder, a crashed capture's stub, the cloud unknown (signed out). Committed-rename remnants are classified before M2 (pipeline step 2.1). | Moved to orphans with all its companions. The library no longer lists it. Recoverable from the manifest; NIW2-589 reads it.                                                                                   |
+| M4  | A companion (`.jpg`, `.cursor.json`, `.edit.json`, `.edit.meta.json`, `<id>.assets/`) with no owner.                                                                                                   | Moved to orphans, except when protected: owned both ways (`Demo.edit.json` is the sidecar of `Demo.edit` or the edit session of `Demo`), or its stem has a present-but-ignored media file (F3, F4).           |
+| M5  | Unknown files in `.kaipu/`: `tags.json`, `reconcile/`, `orphans/`, `drag/`, cursor-track temp files.                                                                                                   | Allowlist only; never touched.                                                                                                                                                                                |
+| M7  | Shared companion paths: legacy `Demo.edit.mp4` beside `Demo.mp4`, where `.kaipu/Demo.edit.json` is both Demo's edit session and the other item's sidecar.                                              | Ownership is computed per physical path. Both items are `shared-companion`: never renamed, never moved to orphans. `renameItem` called by reconcile refuses a source whose companions another live item owns. |
+| M6  | Run folders.                                                                                                                                                                                           | `.kaipu/orphans/<timestamp>-<uuid>/`, created exclusively (`mkdir` without `recursive` on the leaf); paths keep their relative layout inside.                                                                 |
 
 **What the folder may contain**
 
-| #   | Case                                                                   | Handling                                                                                                                                                                                                                                                                 |
-| --- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| F1  | Dotfiles: `.DS_Store`, `._Demo.mp4` (AppleDouble), `.Demo.mp4.icloud`. | Skipped.                                                                                                                                                                                                                                                                 |
-| F2  | `Thumbs.db`, `desktop.ini`, non-media files.                           | Ignored.                                                                                                                                                                                                                                                                 |
-| F3  | Subfolders and symlinks.                                               | Ignored (`lstat`). A symlinked media file protects its companions.                                                                                                                                                                                                       |
-| F4  | An uppercase extension (`Demo.MP4`).                                   | Not adopted; protects its companions; reported as "not recognized".                                                                                                                                                                                                      |
-| F5  | Partial files: `.tmp`, `.part`, `.crdownload`, size 0.                 | Skipped. Writers are idle during a fix (C1); each writer's temp naming is checked during implementation.                                                                                                                                                                 |
-| F6  | A read-only vault, or permission denied.                               | Each action fails cleanly and goes to the report.                                                                                                                                                                                                                        |
-| F7  | An unreachable folder.                                                 | The scan errors, nothing counts as missing, and the banner stays hidden. **An unreadable folder is never read as an empty one.**                                                                                                                                         |
-| F8  | 10k items, or a slow network drive.                                    | Progress in the dialog and concurrency-limited reads. A 10k-item timing test.                                                                                                                                                                                            |
-| F9  | A sidecar that is unreadable, has corrupt JSON or an invalid schema.   | Listed and never written: not by the fix, and not by the library refresh after it. **Today `ensureIdentity` reads it as `{}` and overwrites it with a new identity on any `list()`.** This PR fixes that: a corrupt record is listed read-only and never persisted over. |
+| #   | Case                                                                   | Handling                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| --- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F1  | Dotfiles: `.DS_Store`, `._Demo.mp4` (AppleDouble), `.Demo.mp4.icloud`. | Skipped.                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| F2  | `Thumbs.db`, `desktop.ini`, non-media files.                           | Ignored.                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| F3  | Subfolders and symlinks.                                               | Ignored (`lstat`). A symlinked media file protects its companions.                                                                                                                                                                                                                                                                                                                                                         |
+| F4  | An uppercase extension (`Demo.MP4`).                                   | Not adopted; protects its companions; reported as "not recognized".                                                                                                                                                                                                                                                                                                                                                        |
+| F5  | Partial files: `.tmp`, `.part`, `.crdownload`, size 0.                 | Skipped. Writers are idle during a fix (C1); each writer's temp naming is checked during implementation.                                                                                                                                                                                                                                                                                                                   |
+| F6  | A read-only vault, or permission denied.                               | Each action fails cleanly and goes to the report.                                                                                                                                                                                                                                                                                                                                                                          |
+| F7  | An unreachable folder.                                                 | The scan errors, nothing counts as missing, and the banner stays hidden. **An unreadable folder is never read as an empty one.**                                                                                                                                                                                                                                                                                           |
+| F8  | 10k items, or a slow network drive.                                    | Progress in the dialog and concurrency-limited reads. A 10k-item timing test.                                                                                                                                                                                                                                                                                                                                              |
+| F9  | A sidecar that is unreadable, has corrupt JSON or an invalid schema.   | Listed and never written, by anyone. **Today `sidecar()` turns it into `{}`, and `ensureIdentity`, `writeMetaLocked` (backfill, editor open) and `renameItem` merge over it.** This PR adds the strict read to every sidecar mutation boundary: they throw `UnreadableRecordError`, the item lists read-only, and automatic healing skips it. Test: scan → fix another item → refresh → backfill leaves it byte-identical. |
 
 **Concurrency**
 
-| #   | Case                                                                                       | Handling                                                                                                                                                                                                                                                                                                |
-| --- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| C1  | Captures, exports, editor saves, deletes, local-copy removal, thumbnail backfill, renames. | An exclusive vault gate: every mutating `LibraryVault` method and every writer takes it shared, and Fix all takes it exclusive. It waits for current holders and blocks new ones. Lock order: gate → `NAMES_LOCK` → sidecar lock. The gate is held outside `renameItem`'s own locks, never inside them. |
-| C2  | Editor open on an item (`isEditing`).                                                      | That item's rename is `kept`, and the next press picks it up. The editor's own saves wait on the gate.                                                                                                                                                                                                  |
-| C3  | A file locked by another app (Windows).                                                    | `renameItem` retries, then `kept-old-name`.                                                                                                                                                                                                                                                             |
-| C4  | A crash or quit mid-fix.                                                                   | The next run finishes the job (see "No journal"). The gate is in memory, so a crash releases it.                                                                                                                                                                                                        |
-| C5  | Library views open during a fix.                                                           | Refresh after the fix; routes use `assetId`.                                                                                                                                                                                                                                                            |
-| C6  | A second Kaipu process (dev and prod) on the same vault.                                   | Not protected; the gate is per process. Documented with the dev/prod isolation follow-up.                                                                                                                                                                                                               |
-| C7  | The vault folder changes mid-run.                                                          | Changing the folder waits on the gate.                                                                                                                                                                                                                                                                  |
+| #   | Case                                                                                                                         | Handling                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| --- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1  | Captures, exports, editor saves, deletes, local-copy removal, backfill, renames, folder change.                              | **Maintenance mode, checked only at entry points**: IPC handlers, capture starts, hotkey screenshots, the backfill loop, stranded recovery. While the flag is set they refuse with "Kaipu is fixing your files". Vault methods themselves take no gate, so there is no nesting and no deadlock. An `activity` counter, raised once per top-level operation and released when it ends, tells Fix all when the vault is idle. |
+| C2  | Editor open on an item (`isEditing`).                                                                                        | Fix all can run; that item's rename is `kept`, and the next press picks it up. Editor saves during the run are refused and retried by the editor's autosave.                                                                                                                                                                                                                                                                |
+| C3  | A file locked by another app (Windows).                                                                                      | `renameItem` retries, then `kept-old-name`.                                                                                                                                                                                                                                                                                                                                                                                 |
+| C4  | A crash or quit mid-fix.                                                                                                     | The next run finishes the job (see "No journal"). The flag is in memory, so a crash clears it.                                                                                                                                                                                                                                                                                                                              |
+| C5  | Library views open during a fix.                                                                                             | Refresh after the fix; routes use `assetId`.                                                                                                                                                                                                                                                                                                                                                                                |
+| C6  | A second Kaipu process (dev and prod) on the same vault.                                                                     | Not protected; the gate is per process. Documented with the dev/prod isolation follow-up.                                                                                                                                                                                                                                                                                                                                   |
+| C7  | The vault folder changes mid-run.                                                                                            | Changing the folder is an entry point: refused during maintenance.                                                                                                                                                                                                                                                                                                                                                          |
+| C8  | An operation requested before the fix, executed after it, holding a stale id (`remove("B")` while B was renamed).            | Nothing queues across a run: requests arriving during maintenance are refused, so none wakes up afterwards. Requests already in flight finish **before** maintenance starts (the idle wait).                                                                                                                                                                                                                                |
+| C9  | A recording: `writer.finalize` returns, then the hub writes the cursor track by stem, using the vault folder it reads again. | The recording's activity lease spans the whole hub operation, cursor write and abort cleanup included, and pins the vault folder it started with. Fix all cannot start in that window.                                                                                                                                                                                                                                      |
+| C10 | A long recording, or a slow drive while waiting.                                                                             | Fix all does not start during a recording; the dialog says so and stays dismissible. The idle wait for short operations is cancellable.                                                                                                                                                                                                                                                                                     |
 
 **Identity**
 
-| #   | Case                                                                         | Handling                                                                                |
-| --- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| I1  | Two media items claim one `assetId` (a backup restored beside the original). | Listed and untouched. Renames of those items already refuse (`AmbiguousIdentityError`). |
-| I2  | A v1 sidecar without `assetId`.                                              | Minted during the fix, never during the scan.                                           |
+| #   | Case                                                                         | Handling                                                                                          |
+| --- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| I1  | Two media items claim one `assetId` (a backup restored beside the original). | Listed and untouched. Renames of those items already refuse (`AmbiguousIdentityError`).           |
+| I2  | A v1 sidecar without `assetId`.                                              | Not a finding. `list()` mints it as today; reconcile mints it only on items it is already fixing. |
 
 ## Where it lives
 
 - `src/main/library/vault-reconcile.ts`: the scanner, the planner, the orphans move
   and the handlers. Pure Node, tested on temp vaults.
 - `library-vault.ts`:
-  - the exclusive gate;
+  - `allowLeftover: false` and the shared-companion refusal in `renameItem` (reconcile only);
   - `isAligned` and the capture-date function, shared with `renameItem`;
   - a strict sidecar reader;
-  - `ensureIdentity` no longer writes over a corrupt record.
-- The writers (`recording-writer.ts`, `recording-hub.ts`, `screenshot-save.ts`,
-  `gif-save.ts`, export, stranded recovery, backfill): hold the gate shared for their
-  save.
+  - every sidecar mutation (`ensureIdentity`, `writeMetaLocked`, `renameItem`) refuses an unreadable record.
+- `src/main/library/vault-activity.ts`: the maintenance flag and the activity counter.
+- Entry points (IPC handlers in `library/index.ts`, `recording-hub.ts` through the
+  cursor write, `screenshot-save.ts`, `gif-save.ts`, export, stranded recovery, the
+  backfill loop, the vault-folder change): check the flag and hold one activity lease
+  per top-level operation.
 - `library-service.ts`: `reconcile.scan()` and `reconcile.fix()`. They inject the
   cloud catalog (or "unknown"), `isBusy` and `isEditing`, then refresh.
 - IPC `library:reconcile-scan` and `library:reconcile-fix`, plus progress events,
@@ -252,8 +279,11 @@ Each row becomes a test, written red first.
   - "every original payload survives", at its live destination or in orphans,
     including with injected failures mid-run;
   - "scan → fix another item → refresh leaves a corrupt sidecar byte-identical";
-  - gate tests: a capture that starts during a fix waits, and a fix that starts during
-    a capture waits;
+  - maintenance tests: every entry point refuses during a fix; a fix waits for
+    in-flight short operations and refuses during a recording; the recording lease
+    spans the cursor write;
+  - `renameItem` from reconcile never reuses a leftover and never splits a shared
+    companion;
   - a 10k-item timing.
 - Adversarial review: this revision by GPT-6.1 Sol before coding, then the code before
   the PR.
@@ -272,7 +302,7 @@ Each row becomes a test, written red first.
 1. ADR 0033. Extract `isAligned` and the capture date from `renameItem`, with no
    behaviour change.
 2. The strict reader and the `ensureIdentity` fix for corrupt records.
-3. The exclusive gate in the vault and every writer.
+3. Maintenance mode and activity leases at every entry point.
 4. The scanner, with every edge-case test.
 5. The orphans move, the planner and the fix pipeline, with the idempotence and
    payload-survival tests.
@@ -295,7 +325,21 @@ Each row becomes a test, written red first.
   - inode reuse;
   - two runs sharing one journal.
 
-  The owner chose to drop identity inference entirely. That removes the markers, the
+  The owner chose to drop identity inference entirely (revision 3). That removes the markers, the
   pairing, the journal and the temporary names. It keeps the planner with suffix
   cycle-breaking and moves dead records to orphans (the quarantine, renamed). The
   exclusive gate and the corrupt-record fix answer the rest.
+
+- **Revision 3 → 4** (Sol, 12 findings, 3 blockers):
+  - `renameItem` reusing leftovers → `allowLeftover: false`;
+  - gate deadlocks and queued stale ids → maintenance mode at entry points, refused
+    not queued, with no gate inside vault methods;
+  - the recording cursor write → a lease spanning the hub;
+  - corrupt records still merged by `writeMeta` → strict read at every mutation;
+  - shared companion paths → `shared-companion`, listed only;
+  - crash remnants turning cloud-only → remnants classified first;
+  - `stem-conflict` needing a new primitive → listed only;
+  - plan built from a stale scan → re-scan before planning;
+  - a non-dismissible wait → dismissible until mutation starts;
+  - orphan manifest before moves, and unique run folders;
+  - I2 narrowed.
