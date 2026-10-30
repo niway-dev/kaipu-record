@@ -61,7 +61,7 @@
     },
     "apps/kaipu-record": {
       "name": "kaipu-record",
-      "version": "0.15.1",
+      "version": "0.14.1",
       "dependencies": {
         "@better-auth/electron": "catalog:",
         "@electron-toolkit/preload": "^3.0.2",
