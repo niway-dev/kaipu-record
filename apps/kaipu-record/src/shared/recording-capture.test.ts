@@ -140,6 +140,12 @@ describe("sanitizeRecordingCapture", () => {
       }),
     ).toEqual({ mode: "area", width: 10, height: 10, ratio: null });
   });
+
+  it("keeps an imported video's size and never gives it a ratio (NIW2-579)", () => {
+    expect(
+      sanitizeRecordingCapture({ mode: "import", width: 1080, height: 1920, ratio: "9:16" }),
+    ).toEqual({ mode: "import", width: 1080, height: 1920, ratio: null });
+  });
 });
 
 describe("recordingCaptureLabelKey", () => {
@@ -161,6 +167,14 @@ describe("recordingCaptureLabelKey", () => {
         ratio: null,
       }),
     ).toEqual({ key: "captureWindow" });
+    expect(
+      recordingCaptureLabelKey({
+        mode: "import",
+        width: 1920,
+        height: 1080,
+        ratio: null,
+      }),
+    ).toEqual({ key: "captureImported" });
     expect(
       recordingCaptureLabelKey({
         mode: "area",

@@ -448,6 +448,10 @@ export const IPC_CHANNELS = {
   gifSave: "library:gif-save",
   /** NIW2-217: native drag-out of a vault file (e.g. a GIF into Slack or GitHub). */
   startFileDrag: "library:start-file-drag",
+  /** NIW2-579: pick outside videos in a file dialog and copy them into the vault. */
+  importVideos: "library:import-videos",
+  /** NIW2-579: copy dropped video files (absolute paths, validated in main) into the vault. */
+  importVideoFiles: "library:import-video-files",
   /** NIW2-218: renderer → main, whether a background export is running (close/quit guard). */
   exportActive: "export:active",
   /** NIW2-218: main → renderer, "cancel" the running export (the user confirmed quitting). */

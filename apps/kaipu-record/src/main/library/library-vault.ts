@@ -8,8 +8,11 @@ import { atomicWriteFile, withLock } from "./atomic-write";
 import { sha256FileBase64 } from "./content-hash";
 
 const META_DIR = ".kaipu";
-/** Known video containers, in preference order — `.mp4` is what we now write. */
-const VIDEO_EXTS = [".mp4", ".webm"] as const;
+/**
+ * Known video containers, in preference order — `.mp4` is what we now write. `.mov` and
+ * `.m4v` arrive only through an import (NIW2-579), which keeps the source's container.
+ */
+const VIDEO_EXTS = [".mp4", ".webm", ".mov", ".m4v"] as const;
 const IMAGE_EXTS = [".png"] as const;
 /** Animated GIF exports (NIW2-217). Local-only; thumbnail in `.kaipu/<id>.jpg` like videos. */
 const GIF_EXTS = [".gif"] as const;

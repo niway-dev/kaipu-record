@@ -21,6 +21,7 @@ import type { AppSettings, ShortcutAction, TagSummary, UpdateStatus } from "./ip
 import type { TagColor } from "@kaipu/domain/constants";
 import type { LocalRecording, VaultDirectory } from "./library-storage";
 import type { StorageUsageResult } from "./cloud-storage";
+import type { ImportVideoResult } from "../import-video";
 import type {
   CatalogRefreshResult,
   LibraryListResult,
@@ -256,6 +257,18 @@ export interface KaipuElectronAPI {
    * vault id — main sanitizes it and drags a temporary link to the vault file.
    */
   startFileDrag(id: string, name?: string): void;
+  /**
+   * NIW2-579: open a file dialog for outside videos (mp4, mov, m4v, webm) and copy each one
+   * picked into the vault as a recording. `canceled` when the dialog was closed.
+   */
+  importVideos(): Promise<ImportVideoResult>;
+  /** NIW2-579: import dropped files by path (see `pathForFile`); main validates every path. */
+  importVideoFiles(paths: readonly string[]): Promise<ImportVideoResult>;
+  /**
+   * The absolute path of a `File` from a drop (Electron's `webUtils.getPathForFile`); "" for
+   * a file with no path on disk (e.g. made in the page).
+   */
+  pathForFile(file: File): string;
   /** NIW2-218: tell main whether a background export is running (close/quit confirmation). */
   setExportActive(active: boolean): void;
   /** NIW2-218: main asks to cancel the running export (the user confirmed close/quit). */

@@ -53,6 +53,18 @@ describe("VideoCard", () => {
     expect(screen.queryByRole("button", { name: "Prepare for…" })).toBeNull();
   });
 
+  it("says an imported video was imported in the metadata line, not on the poster", () => {
+    render(
+      <VideoCard
+        video={{ ...video, capture: { mode: "import", width: 1080, height: 1920, ratio: null } }}
+        onNavigate={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/· Imported$/)).toBeInTheDocument();
+    expect(screen.queryByText("IMPORTED")).toBeNull();
+  });
+
   it("shows the title and formatted size", () => {
     render(<VideoCard video={video} onNavigate={vi.fn()} onDelete={vi.fn()} />);
     expect(screen.getByText("My Recording")).toBeInTheDocument();

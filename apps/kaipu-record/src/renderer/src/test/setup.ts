@@ -151,6 +151,9 @@ window.electronAPI = {
     throw new Error("gifSave not stubbed in this test");
   },
   startFileDrag: () => {},
+  importVideos: async () => ({ imported: [], failed: [], canceled: true }),
+  importVideoFiles: async () => ({ imported: [], failed: [], canceled: false }),
+  pathForFile: () => "",
   setExportActive: () => {},
   onExportCommand: () => () => {},
   getVaultDirectory: async () => ({ path: "/tmp/vault", isCustom: false }),

@@ -35,6 +35,20 @@ function renderRow(overrides: Partial<React.ComponentProps<typeof VideoRow>> = {
 }
 
 describe("VideoRow", () => {
+  it("says an imported video was imported in its specs line (NIW2-579)", () => {
+    renderRow({
+      video: makeVideo({ capture: { mode: "import", width: 1920, height: 1080, ratio: null } }),
+    });
+    expect(screen.getByText(/· Imported$/)).toBeInTheDocument();
+  });
+
+  it("says nothing about importing for a recording made in Kaipu", () => {
+    renderRow({
+      video: makeVideo({ capture: { mode: "screen", width: 1920, height: 1080, ratio: null } }),
+    });
+    expect(screen.queryByText(/Imported/)).toBeNull();
+  });
+
   it("navigates when the row is clicked", () => {
     const { container, onNavigate } = renderRow();
     fireEvent.click(container.firstChild as HTMLElement);

@@ -83,6 +83,7 @@ export function VideoRow({
           <span className={styles.specs}>
             {formatSize(video.fileSizeBytes)}
             {video.kind !== "screenshot" && ` · ${formatDuration(video.durationSeconds)}`}
+            {video.capture?.mode === "import" && ` · ${t("importedMeta")}`}
           </span>
           {rowTags.length > 0 && (
             <ul className={styles.tags} aria-label={t("tagsLabel")}>

@@ -190,6 +190,24 @@ describe("LibraryDetailPage", () => {
     expect(screen.getByTestId("capture-meta")).toHaveTextContent("FRAME · 1234 × 567");
   });
 
+  it("says an imported video was imported in the metadata line (NIW2-579)", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [
+        {
+          ...exportedOnlyItem,
+          capture: { mode: "import" as const, width: 1080, height: 1920, ratio: null },
+        },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    expect(screen.getByTestId("capture-meta")).toHaveTextContent("IMPORTED");
+  });
+
   it("Prepare for… opens the Prepare screen with nothing preselected (NIW2-578)", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [exportedOnlyItem],
