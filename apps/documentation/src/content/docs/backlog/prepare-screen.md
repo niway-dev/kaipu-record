@@ -60,12 +60,15 @@ GIFs are not preparable.
 
 ### Ways in
 
-- **Right after recording**: the recording page shows "Your video is ready. Where is it going?"
-  with shortcuts — YouTube, TikTok · Reels, GitHub · Jira, Slack · Discord, More places — plus
-  **Edit first** and **Not now — keep it in the Library**. It shows after every recording (not
-  only a heavy one) and stays until a shortcut or Not now. Settings → Export quality → "Ask where
-  a new recording is going" turns it off (stored as `showRecordingSavedCard`, its NIW2-218 name).
-  It replaces the "Recording saved" card.
+- **Right after recording** (NIW2-584): the "Your video is ready" card, top-right in the app's
+  status-card stack, over the recording page a fresh recording lands on. It shows the file's
+  length, picture size and weight, a "Master · full quality" tag, chips — YouTube, TikTok,
+  GitHub, More places — and **Edit first** / **Open**. It shows after every recording (not only
+  a heavy one), has no timer, and stays until a chip, Open, ✕ or leaving the page. Settings →
+  Export quality → "Ask where a new recording is going" turns it off (stored as
+  `showRecordingSavedCard`, its NIW2-218 name). It replaces the "Recording saved" card and the
+  inline panel NIW2-578 first shipped. It lives in the app, not in a floating window, because
+  main already shows and focuses the app window when a recording stops.
 - **The recording page**: **Prepare for…** replaces Share as the primary button, with quick chips
   (YouTube, TikTok · Reels, GitHub) under the title. The heavy-to-send banner's action is now
   "Prepare a light copy →", which opens Prepare on GitHub.
@@ -107,7 +110,7 @@ recording, a recording-quality floor, and uploading to any platform.
 
 ## How to validate
 
-Record a short clip → the "Where is it going?" panel appears → YouTube → Prepare opens on YouTube,
+Record a short clip → the "Your video is ready" card appears top-right → YouTube → Prepare opens on YouTube,
 1440p selected → try 4K, unfold "What changes in the copy" → Prepare → back on the recording, the
 progress card, then the Ready card → the copy is in the Library and under Already prepared. Then
 GitHub (Light) from the quick chip or the heavy banner, Fit / Fill on Reels, and a screenshot's
