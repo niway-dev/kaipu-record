@@ -316,8 +316,11 @@ export interface KaipuElectronAPI {
   removeLocalCopy(id: string): Promise<RemoveLocalCopyResult>;
 
   // ── Recording engine (used by the main/recorder window) ───────────────
-  /** Open a disk-writer session; returns the temp path. */
-  recordingCreate(sessionId: string): Promise<{ tempPath: string }>;
+  /**
+   * Open a disk-writer session; returns the temp path. `kind` defaults to a recording, whose
+   * partial is kept when its page goes away; an export's partial is discarded then.
+   */
+  recordingCreate(sessionId: string, kind?: "recording" | "export"): Promise<{ tempPath: string }>;
   /** Write a chunk at an exact byte position (positional, not append). */
   recordingWrite(sessionId: string, data: ArrayBuffer, position: number): void;
   /** Close the file, move it into the vault, return the new recording. */

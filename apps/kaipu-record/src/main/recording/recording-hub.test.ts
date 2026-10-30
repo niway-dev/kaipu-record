@@ -1033,7 +1033,7 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
       await aborted;
       await created2;
       expect(vaultActivity.active()).toEqual([]);
-      expect(abort).toHaveBeenCalledWith("export-2");
+      expect(abort).toHaveBeenCalledWith("export-2", expect.stringContaining("export-2"));
     } finally {
       release.mockRestore();
       abort.mockRestore();
@@ -1468,19 +1468,21 @@ describe("recording hub — choosing an area or a display on the overlay", () =>
 
   it("a forced reset releases the writer's open takes, so no file handle outlives the renderer", async () => {
     const { RecordingWriter } = await import("./recording-writer");
-    const releaseAll = vi.spyOn(RecordingWriter.prototype, "releaseAll");
+    const release = vi.spyOn(RecordingWriter.prototype, "release");
     try {
       const { handle } = await hub();
       const create = mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!;
-      await create({}, "session-crashed");
+      const { tempPath } = (await create({}, "session-crashed")) as { tempPath: string };
 
       // The renderer crashed (or its window closed) mid-take: it will never finalize or abort.
       handle.forceReset();
 
-      expect(releaseAll).toHaveBeenCalledOnce();
-      await releaseAll.mock.results[0]!.value;
+      // Released once, bound to its own staging file.
+      await vi.waitFor(() => expect(release).toHaveBeenCalledWith("session-crashed", tempPath));
+      expect(release).toHaveBeenCalledOnce();
+      await release.mock.results[0]!.value;
     } finally {
-      releaseAll.mockRestore();
+      release.mockRestore();
     }
   });
 
@@ -1666,5 +1668,226 @@ describe("recording hub — camera bubble size", () => {
     subscribe({ sender: panel });
     handlers.get("render-process-gone")!();
     expect(listening({})).toBe(false);
+  });
+});
+
+describe("recording hub — one lifecycle per take (NIW2-561)", () => {
+  let vaultDir = "";
+
+  beforeEach(async () => {
+    mockState.userDataDir = await mkdtemp(join(tmpdir(), "kaipu-hub-"));
+    vaultDir = join(mockState.userDataDir, "vault");
+    await writeFile(
+      join(mockState.userDataDir, "preferences.json"),
+      JSON.stringify({ vaultDirectory: vaultDir }),
+    );
+    mockState.ipcOn.clear();
+    mockState.ipcHandle.clear();
+    vi.resetModules();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await rm(mockState.userDataDir, { recursive: true, force: true });
+  });
+
+  async function setup(rendererId: number) {
+    const { EventEmitter } = await import("node:events");
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    const { RecordingWriter } = await import("./recording-writer");
+    const { LibraryVault } = await import("../library/library-vault");
+    const activity = await import("../library/vault-activity");
+    registerSettings();
+    const hub = registerRecordingHub(() => fakeMainWindow() as never);
+    const renderer = Object.assign(new EventEmitter(), { id: rendererId });
+    const event = { sender: renderer };
+    const reload = () =>
+      renderer.emit("did-start-navigation", { isMainFrame: true, isSameDocument: false });
+    return {
+      hub,
+      event,
+      reload,
+      RecordingWriter,
+      LibraryVault,
+      ...activity,
+      create: mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!,
+      write: mockState.ipcOn.get(IPC_CHANNELS.recordingWrite)!,
+      finalize: mockState.ipcHandle.get(IPC_CHANNELS.recordingFinalize)!,
+      abort: mockState.ipcHandle.get(IPC_CHANNELS.recordingAbort)!,
+    };
+  }
+
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 30));
+  const gate = () => {
+    const held: { open?: () => void; reached: boolean } = { reached: false };
+    const wait = () => {
+      held.reached = true;
+      return new Promise<void>((resolve) => (held.open = resolve));
+    };
+    return { held, wait };
+  };
+
+  it.each(["before", "after"] as const)(
+    "a reload %s finalize reserves its destination waits for it: the vault stays busy, nothing is overwritten",
+    async (when) => {
+      const t = await setup(70);
+      const { tempPath } = (await t.create(t.event, "take-1")) as { tempPath: string };
+      t.write(t.event, "take-1", new TextEncoder().encode("only copy").buffer, 0);
+      await vi.waitFor(async () => expect(await readFile(tempPath, "utf-8")).toBe("only copy"));
+      const { held, wait } = gate();
+      const allocate = t.LibraryVault.prototype.allocateId;
+      vi.spyOn(t.LibraryVault.prototype, "allocateId").mockImplementationOnce(
+        async function (this: InstanceType<typeof t.LibraryVault>, input) {
+          if (when === "before") await wait();
+          const id = await allocate.call(this, input);
+          if (when === "after") await wait();
+          return id;
+        },
+      );
+
+      const finalized = Promise.resolve(
+        t.finalize(t.event, "take-1", { title: "Race", durationSeconds: 1, durationMs: 1000 }),
+      );
+      await vi.waitFor(() => expect(held.reached).toBe(true));
+      t.reload();
+      await settle();
+
+      // The page is gone, but its finalize is not: Fix all must not start (it would orphan
+      // the reservation and hand its stem to another recording).
+      expect(t.vaultActivity.active()).toEqual(["recording"]);
+      await expect(t.vaultActivity.enterMaintenance()).rejects.toBeInstanceOf(t.VaultBusyError);
+
+      held.open!();
+      await expect(finalized).resolves.toMatchObject({ id: "Race" });
+      expect(await readFile(join(vaultDir, "Race.mp4"), "utf-8")).toBe("only copy");
+      await vi.waitFor(() => expect(t.vaultActivity.active()).toEqual([]));
+      (await t.vaultActivity.enterMaintenance())();
+    },
+  );
+
+  it("a reload during the cursor-track write keeps the vault busy until the write settles", async () => {
+    mockState.displays = [{ id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } }];
+    mockState.getSources.mockResolvedValue([{ id: "screen:1:0", name: "S", display_id: "1" }]);
+    const t = await setup(71);
+    await t.create(t.event, "take-1");
+    t.write(t.event, "take-1", new TextEncoder().encode("take").buffer, 0);
+    const trackStart = mockState.ipcHandle.get(IPC_CHANNELS.cursorTrackStart)!;
+    await expect(trackStart(t.event, "take-1", "screen:1:0")).resolves.toEqual({ enabled: true });
+    mockState.ipcOn.get(IPC_CHANNELS.cursorTrackAnchor)!(t.event, "take-1", 0, "exact");
+    const { held, wait } = gate();
+    const writeTrack = t.LibraryVault.prototype.writeCursorTrack;
+    const spy = vi
+      .spyOn(t.LibraryVault.prototype, "writeCursorTrack")
+      .mockImplementationOnce(async function (this: InstanceType<typeof t.LibraryVault>, ...args) {
+        await wait();
+        return writeTrack.apply(this, args);
+      });
+
+    const finalized = Promise.resolve(
+      t.finalize(t.event, "take-1", { title: "Track", durationSeconds: 1, durationMs: 1000 }),
+    );
+    await vi.waitFor(() => expect(held.reached).toBe(true));
+    t.reload();
+    await settle();
+    expect(t.vaultActivity.active()).toEqual(["recording"]);
+    await expect(t.vaultActivity.enterMaintenance()).rejects.toBeInstanceOf(t.VaultBusyError);
+
+    held.open!();
+    await finalized;
+    expect(spy).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(t.vaultActivity.active()).toEqual([]));
+  });
+
+  it("refuses a create reusing the id of a take still ending, and keeps that take's partial", async () => {
+    const t = await setup(72);
+    const { tempPath } = (await t.create(t.event, "same-id")) as { tempPath: string };
+    t.write(t.event, "same-id", new TextEncoder().encode("only copy").buffer, 0);
+    await vi.waitFor(async () => expect(await readFile(tempPath, "utf-8")).toBe("only copy"));
+    const { held, wait } = gate();
+    const release = t.RecordingWriter.prototype.release;
+    const releaseSpy = vi
+      .spyOn(t.RecordingWriter.prototype, "release")
+      .mockImplementationOnce(
+        async function (this: InstanceType<typeof t.RecordingWriter>, ...args) {
+          await wait();
+          return release.apply(this, args);
+        },
+      );
+
+    t.reload();
+    await vi.waitFor(() => expect(held.reached).toBe(true));
+    await expect(Promise.resolve().then(() => t.create(t.event, "same-id"))).rejects.toThrow(
+      /still open/,
+    );
+    expect(await readFile(tempPath, "utf-8")).toBe("only copy");
+
+    held.open!();
+    await vi.waitFor(() => expect(t.vaultActivity.active()).toEqual([]));
+    expect(releaseSpy).toHaveBeenCalledWith("same-id", tempPath);
+    expect(await readFile(tempPath, "utf-8")).toBe("only copy");
+    // Once it has ended, the id is free again, with a staging file of its own.
+    const again = (await t.create(t.event, "same-id")) as { tempPath: string };
+    expect(again.tempPath).not.toBe(tempPath);
+    await t.abort(t.event, "same-id");
+    expect(await readFile(tempPath, "utf-8")).toBe("only copy");
+  });
+
+  it("an export abandoned by its page is discarded; a recording's partial is kept", async () => {
+    const t = await setup(73);
+    const recording = (await t.create(t.event, "session-1")) as { tempPath: string };
+    const exported = (await t.create(t.event, "export-1", "export")) as { tempPath: string };
+    t.write(t.event, "session-1", new TextEncoder().encode("recording").buffer, 0);
+    t.write(t.event, "export-1", new TextEncoder().encode("export").buffer, 0);
+    await vi.waitFor(async () => expect(await readFile(exported.tempPath, "utf-8")).toBe("export"));
+    expect(t.vaultActivity.active().sort()).toEqual(["export", "recording"]);
+
+    t.reload();
+    await vi.waitFor(() => expect(t.vaultActivity.active()).toEqual([]));
+    expect(await readFile(recording.tempPath, "utf-8")).toBe("recording");
+    await expect(readFile(exported.tempPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("an export abandoned while its file opens is discarded once the create settles", async () => {
+    const t = await setup(74);
+    const { held, wait } = gate();
+    const create = t.RecordingWriter.prototype.create;
+    let tempPath = "";
+    vi.spyOn(t.RecordingWriter.prototype, "create").mockImplementationOnce(
+      async function (this: InstanceType<typeof t.RecordingWriter>, id) {
+        await wait();
+        const created = await create.call(this, id);
+        tempPath = created.tempPath;
+        return created;
+      },
+    );
+    const created = Promise.resolve(t.create(t.event, "export-1", "export")).catch(
+      (error: unknown) => error,
+    );
+    await vi.waitFor(() => expect(held.reached).toBe(true));
+    t.reload();
+    await settle();
+    expect(t.vaultActivity.active()).toEqual(["export"]);
+
+    held.open!();
+    expect(await created).toBeInstanceOf(Error);
+    await vi.waitFor(() => expect(t.vaultActivity.active()).toEqual([]));
+    await expect(readFile(tempPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("a forced reset discards an export's partial and keeps a recording's", async () => {
+    const t = await setup(75);
+    const recording = (await t.create(t.event, "session-1")) as { tempPath: string };
+    const exported = (await t.create(t.event, "export-1", "export")) as { tempPath: string };
+    t.write(t.event, "session-1", new TextEncoder().encode("recording").buffer, 0);
+    t.write(t.event, "export-1", new TextEncoder().encode("export").buffer, 0);
+    await vi.waitFor(async () =>
+      expect(await readFile(recording.tempPath, "utf-8")).toBe("recording"),
+    );
+
+    t.hub.forceReset();
+    await vi.waitFor(() => expect(t.vaultActivity.active()).toEqual([]));
+    expect(await readFile(recording.tempPath, "utf-8")).toBe("recording");
+    await expect(readFile(exported.tempPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

@@ -368,7 +368,7 @@ export async function startVideoExport(
 
     const id = `export-${crypto.randomUUID()}`;
     sessionId = id;
-    await window.electronAPI.recordingCreate(id);
+    await window.electronAPI.recordingCreate(id, "export");
 
     if (!active) {
       teardown(id);

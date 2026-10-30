@@ -371,44 +371,56 @@ export function registerRecordingHub(
   //
   // A take (a recording, or an export's output) belongs to the page that created it. A page
   // that goes away without ending it (a plain reload, a dead renderer, a destroyed window)
-  // never will: its takes are released (handle closed, `.part` kept for the stranded-take
-  // sweep, as a forced reset does) and their leases freed, or the vault would stay busy until
-  // a restart. A reload is not a discard; only the user's abort deletes the partial.
+  // never will. A recording is released (handle closed, `.part` kept for the stranded-take
+  // sweep, as a forced reset does): a reload is not a discard, and the partial may be the only
+  // copy. An export is discarded: its source is still in the library, so it can be exported
+  // again, and its partial is no recording to recover.
   //
-  // One lifecycle per take: however many events end it (an abort, a navigation, a crash, a
-  // destroy), it ends once, and its lease is freed only after its create has settled and the
-  // writer is done with it. A create still opening its file therefore keeps the vault busy.
+  // One lifecycle per take: however many events end it (a finalize, an abort, a navigation, a
+  // crash, a destroy), it ends once, and its lease is freed only after its create, its
+  // finalize (with the cursor track) and the writer cleanup have all settled. A create still
+  // opening its file, or a finalize still placing it, therefore keeps the vault busy.
+  type TakeKind = "recording" | "export";
   interface Take {
+    kind: TakeKind;
     lease: ActivityLease;
     /** The creating renderer's webContents id, when the create came with a sender. */
     owner: number | null;
     /** Settles (never rejects) once `writer.create()` has. */
     created: Promise<void>;
+    /** This take's staging file, once created: binds the writer cleanup to its own session. */
+    tempPath?: string;
+    /** Settles (never rejects) once its finalize and cursor-track write have. */
+    finalizing?: Promise<void>;
     /** Set by the first end: the writer cleanup, then the lease release. */
     ending?: Promise<void>;
   }
   const recordingLeases = new Map<string, Take>();
-  /** Releases `sessionId`'s lease; with `take`, only while that take still holds the id. */
-  const releaseRecording = (sessionId: string, take?: Take): void => {
-    const current = recordingLeases.get(sessionId);
-    if (take && current !== take) {
-      take.lease.release(); // idempotent
-      return;
-    }
-    current?.lease.release();
-    recordingLeases.delete(sessionId);
+  /** Frees `take`'s lease, and its id while that take still holds it. */
+  const releaseTake = (sessionId: string, take: Take): void => {
+    take.lease.release(); // idempotent
+    if (recordingLeases.get(sessionId) === take) recordingLeases.delete(sessionId);
   };
-  /** Ends `take` once: waits for its create, runs `cleanup`, then frees the vault. */
+  /**
+   * Ends `take` once: waits for its create and any finalize in flight, runs `cleanup` on its
+   * own writer session, then frees the vault.
+   */
   const endTake = (
     sessionId: string,
     take: Take,
-    cleanup: (sessionId: string) => Promise<void>,
+    cleanup: (sessionId: string, tempPath: string | undefined) => Promise<void>,
   ): Promise<void> => {
     take.ending ??= take.created
-      .then(() => cleanup(sessionId))
-      .finally(() => releaseRecording(sessionId, take));
+      .then(() => take.finalizing)
+      .then(() => cleanup(sessionId, take.tempPath))
+      .finally(() => releaseTake(sessionId, take));
     return take.ending;
   };
+  /** What a page gone without ending its take does to it (see above). */
+  const abandonCleanup =
+    (take: Take) =>
+    (id: string, tempPath: string | undefined): Promise<void> =>
+      take.kind === "export" ? writer.abort(id, tempPath) : writer.release(id, tempPath);
   // The renderer whose `recordingStart` made the recording active: if its page goes, nobody
   // will send the stop, so the bar and the hidden main window are restored here.
   let activityOwner: number | null = null;
@@ -416,10 +428,13 @@ export function registerRecordingHub(
   const abandonTake = (sessionId: string, take: Take): void => {
     if (take.ending) return;
     markEnded(sessionId);
-    cursorTracks.discard(sessionId);
-    clickSessions.delete(sessionId);
-    stopHookIfIdle();
-    void endTake(sessionId, take, (id) => writer.release(id)).catch((error) =>
+    // A finalize in flight finishes its own cursor track; anything else is dropped.
+    if (!take.finalizing) {
+      cursorTracks.discard(sessionId);
+      clickSessions.delete(sessionId);
+      stopHookIfIdle();
+    }
+    void endTake(sessionId, take, abandonCleanup(take)).catch((error) =>
       console.error("releasing an abandoned take failed", error),
     );
   };
@@ -434,39 +449,51 @@ export function registerRecordingHub(
       if (activity.active && activityOwner === contents.id) applyStopWindowState();
     });
   };
-  ipcMain.handle(IPC_CHANNELS.recordingCreate, async (e, sessionId: string) => {
-    // A take still ending under this id frees its own lease when its cleanup is done.
-    if (!recordingLeases.get(sessionId)?.ending) releaseRecording(sessionId);
-    const sender = (e as { sender?: RendererContents } | undefined)?.sender;
-    const owner = sender && typeof sender.on === "function" ? sender.id : null;
-    if (sender && owner !== null) watchPage(sender);
-    const lease = vaultActivity.admit("recording");
-    const creating = writer.create(sessionId);
-    const take: Take = {
-      lease,
-      owner,
-      created: creating.then(
-        () => undefined,
-        () => undefined,
-      ),
-    };
-    recordingLeases.set(sessionId, take);
-    stoppedForWriteFailure = false;
-    endedSessions.delete(sessionId);
-    let created: Awaited<ReturnType<RecordingWriter["create"]>>;
-    try {
-      created = await creating;
-    } catch (error) {
-      releaseRecording(sessionId, take);
-      throw error;
-    }
-    if (take.ending) {
-      // Ended while the file was opening (its page left, or an abort): that end owns the file.
-      await take.ending.catch(() => {});
-      throw new Error(`recording:create "${sessionId}": the take ended before its file opened`);
-    }
-    return created;
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.recordingCreate,
+    async (e, sessionId: string, requestedKind?: unknown) => {
+      // An id still held by a take (open, finalizing or ending) is refused: its file may be the
+      // only copy, and its cleanup must never land on a new session.
+      if (recordingLeases.has(sessionId)) {
+        throw new Error(`recording:create "${sessionId}": a take with this id is still open`);
+      }
+      // Anything but an explicit export is a recording: a partial of unknown kind is kept.
+      const kind: TakeKind = requestedKind === "export" ? "export" : "recording";
+      const sender = (e as { sender?: RendererContents } | undefined)?.sender;
+      const owner = sender && typeof sender.on === "function" ? sender.id : null;
+      if (sender && owner !== null) watchPage(sender);
+      const lease = vaultActivity.admit(kind);
+      const creating = writer.create(sessionId);
+      const take: Take = {
+        kind,
+        lease,
+        owner,
+        created: creating.then(
+          ({ tempPath }) => {
+            take.tempPath = tempPath;
+          },
+          () => undefined,
+        ),
+      };
+      recordingLeases.set(sessionId, take);
+      stoppedForWriteFailure = false;
+      endedSessions.delete(sessionId);
+      let created: Awaited<ReturnType<RecordingWriter["create"]>>;
+      try {
+        created = await creating;
+      } catch (error) {
+        releaseTake(sessionId, take);
+        throw error;
+      }
+      await take.created; // `tempPath` is recorded before anything can end the take
+      if (take.ending) {
+        // Ended while the file was opening (its page left, or an abort): that end owns the file.
+        await take.ending.catch(() => {});
+        throw new Error(`recording:create "${sessionId}": the take ended before its file opened`);
+      }
+      return created;
+    },
+  );
   ipcMain.on(
     IPC_CHANNELS.recordingWrite,
     (_e, sessionId: string, data: ArrayBuffer, position: number) => {
@@ -489,10 +516,24 @@ export function registerRecordingHub(
     async (_e, sessionId: string, meta: RecordingFinalizeMeta) => {
       // The renderer never retries a finalize (it aborts), so the take ends here either way.
       markEnded(sessionId);
+      const take = recordingLeases.get(sessionId);
+      if (!take) return finalizeTake(sessionId, meta); // the writer refuses an unknown session
+      if (take.ending || take.finalizing) {
+        throw new Error(`recording:finalize "${sessionId}": the take already ended`);
+      }
+      // Finalize is part of the take: an end arriving meanwhile (a reload) waits for it, and
+      // the lease is freed only once the file is placed and its cursor track written.
+      const finalizing = take.created.then(() => finalizeTake(sessionId, meta));
+      take.finalizing = finalizing.then(
+        () => undefined,
+        () => undefined,
+      );
       try {
-        return await finalizeTake(sessionId, meta);
+        return await finalizing;
       } finally {
-        releaseRecording(sessionId);
+        // Finalize leaves nothing to clean: a placed take is the vault's, a stranded one the
+        // save dialog's (and the renderer's abort after it).
+        await endTake(sessionId, take, async () => {}).catch(() => {});
       }
     },
   );
@@ -548,10 +589,10 @@ export function registerRecordingHub(
     cursorTracks.discard(sessionId);
     clickSessions.delete(sessionId);
     stopHookIfIdle();
-    // The user discarded it: the only end that deletes the partial. A take still being
-    // created is aborted once its file exists, and keeps the vault busy until then.
+    // The user discarded it: the only end that deletes a recording's partial. A take still
+    // being created is aborted once its file exists, and keeps the vault busy until then.
     const take = recordingLeases.get(sessionId);
-    if (take) return endTake(sessionId, take, (id) => writer.abort(id));
+    if (take) return endTake(sessionId, take, (id, tempPath) => writer.abort(id, tempPath));
     return writer.abort(sessionId);
   });
   ipcMain.handle(
@@ -1013,13 +1054,18 @@ export function registerRecordingHub(
       // files stay on disk, and a cursor track still resolving for one of them must not start.
       for (const id of writer.ids()) markEnded(id);
       for (const [sessionId] of recordingLeases) markEnded(sessionId);
-      // A take still being created is released once its file exists, holding the vault until then.
+      // A take still being created (or finalized) ends once that settles, holding the vault
+      // until then; an export's partial is discarded, a recording's kept, as for a reload.
       for (const [sessionId, take] of recordingLeases) {
-        void endTake(sessionId, take, (id) => writer.release(id)).catch((error) =>
+        void endTake(sessionId, take, abandonCleanup(take)).catch((error) =>
           console.error("releasing a take failed", error),
         );
       }
-      void writer.releaseAll().catch((error) => console.error("releasing takes failed", error));
+      // Sessions no take holds any more (a stranded take waiting for its abort).
+      for (const id of writer.ids()) {
+        if (recordingLeases.has(id)) continue;
+        void writer.release(id).catch((error) => console.error("releasing a take failed", error));
+      }
       cursorTracks.discardAll();
       clickSessions.clear();
       clickHook.stop();
