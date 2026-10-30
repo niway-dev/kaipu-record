@@ -190,7 +190,9 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
   // 1. The vault root: media candidates, and stems whose companions are protected.
   const rootEntries = await readdir(directory, { withFileTypes: true });
   const candidates: Media[] = [];
-  /** fsFold(stem) of present-but-ignored media: symlinks, empty files, uppercase extensions. */
+  /** Present media the scan does not treat as an item: symlinks, empty files, uppercase extensions. */
+  const ignored: { stem: string; name: string; unrecognized: boolean }[] = [];
+  /** fsFold(stem) of present-but-ignored media and other protected stems. */
   const protectedFolds = new Set<string>();
   /** Every stem with something media-shaped in the root, live or not: the owners (M7). */
   const present: string[] = [];
@@ -210,13 +212,13 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
     }
     if (MEDIA_EXTS.includes(ext)) {
       if (entry.isSymbolicLink()) {
-        protectedFolds.add(fsFold(stem)); // F3
+        ignored.push({ stem, name, unrecognized: false }); // F3
         return;
       }
       if (!entry.isFile()) return;
       const info = await lstat(join(directory, name));
       if (info.size === 0) {
-        protectedFolds.add(fsFold(stem)); // F5
+        ignored.push({ stem, name, unrecognized: false }); // F5
         return;
       }
       candidates.push({ stem, ext, name, birthtimeMs: info.birthtimeMs, mtimeMs: info.mtimeMs });
@@ -224,26 +226,37 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
       MEDIA_EXTS.includes(ext.toLowerCase()) &&
       (entry.isFile() || entry.isSymbolicLink())
     ) {
-      protectedFolds.add(fsFold(stem)); // F4
-      findings.push({ kind: "not-recognized", fixable: false, path: name, stem });
+      ignored.push({ stem, name, unrecognized: true }); // F4
     }
   });
+  for (const media of ignored) protectedFolds.add(fsFold(media.stem));
 
-  // 2. Two media files on one stem (under any case fold): listed, companions protected.
-  const byFold = new Map<string, Media[]>();
-  for (const media of candidates) {
-    const key = fsFold(media.stem);
-    byFold.set(key, [...(byFold.get(key) ?? []), media]);
+  // 2. Two media files on one stem (under any case fold), counting the ignored ones: every
+  // one of them is listed, and none is adopted, retitled or renamed. `Demo.mp4` next to
+  // `Demo.PNG` must not carry the companions both of them own to a new name.
+  const byFold = new Map<string, { stem: string; name: string; media?: Media }[]>();
+  const inventory = [
+    ...candidates.map((media) => ({ stem: media.stem, name: media.name, media })),
+    ...ignored,
+  ];
+  for (const entry of inventory) {
+    const key = fsFold(entry.stem);
+    byFold.set(key, [...(byFold.get(key) ?? []), entry]);
   }
   const single: Media[] = [];
   for (const [key, group] of byFold) {
     if (group.length === 1) {
-      single.push(group[0]!);
+      if (group[0]!.media) single.push(group[0]!.media);
       continue;
     }
     protectedFolds.add(key);
-    for (const media of group) {
-      findings.push({ kind: "stem-conflict", fixable: false, path: media.name, stem: media.stem });
+    for (const entry of group) {
+      findings.push({ kind: "stem-conflict", fixable: false, path: entry.name, stem: entry.stem });
+    }
+  }
+  for (const media of ignored) {
+    if (media.unrecognized && byFold.get(fsFold(media.stem))!.length === 1) {
+      findings.push({ kind: "not-recognized", fixable: false, path: media.name, stem: media.stem });
     }
   }
 

@@ -289,6 +289,34 @@ describe("scanVault — listed, never fixed", () => {
   });
 });
 
+describe("scanVault — a stem shared with ignored media (F3, F4, F5)", () => {
+  it("is a stem conflict for every media file on it, recognized or not", async () => {
+    const { findings, at } = await scan({
+      "Demo.mp4": "v",
+      ".kaipu/Demo.json": sidecar({ assetId: "d", title: "Renamed" }),
+      "Demo.PNG": "ignored",
+      ".kaipu/Demo.jpg": "j",
+      "Blank.mp4": "v",
+      ".kaipu/Blank.json": sidecar({ assetId: "b", title: "Other" }),
+      "Blank.png": "",
+      "real/Target.png": "p",
+      "Linked.mp4": "v",
+      "Linked.png": { symlink: "real/Target.png" },
+    });
+    for (const path of [
+      "Demo.mp4",
+      "Demo.PNG",
+      "Blank.mp4",
+      "Blank.png",
+      "Linked.mp4",
+      "Linked.png",
+    ]) {
+      expect(at(path)).toMatchObject({ kind: "stem-conflict", fixable: false });
+    }
+    expect(findings).toHaveLength(6);
+  });
+});
+
 describe("scanVault — only reads", () => {
   it("leaves every byte and mtime as it was", async () => {
     directory = await makeVault({

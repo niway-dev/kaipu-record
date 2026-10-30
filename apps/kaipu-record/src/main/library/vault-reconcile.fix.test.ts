@@ -467,3 +467,28 @@ describe("scanVault — 10k items (F8)", () => {
     expect(findings).toEqual([]);
   });
 });
+
+describe("fixVault — a stem shared with an ignored media file", () => {
+  it("adopts, retitles and renames nothing on it: its companions stay with every owner", async () => {
+    directory = await makeVault({
+      "Demo.mp4": "lower",
+      ".kaipu/Demo.json": sidecar({ assetId: "d", title: "Renamed" }),
+      "Demo.PNG": "ignored",
+      ".kaipu/Demo.jpg": "poster",
+    });
+    const payloads = async () =>
+      Object.fromEntries(
+        Object.entries(await snapshot(directory)).filter(
+          ([path]) => path !== ".kaipu" && !path.startsWith(".kaipu/reconcile"),
+        ),
+      );
+    const before = await payloads();
+    const report = await fix();
+    expect(report.failed).toEqual([]);
+    expect(report.remaining.map((f) => [f.kind, f.path])).toEqual([
+      ["stem-conflict", "Demo.mp4"],
+      ["stem-conflict", "Demo.PNG"],
+    ]);
+    expect(await payloads()).toEqual(before);
+  });
+});
