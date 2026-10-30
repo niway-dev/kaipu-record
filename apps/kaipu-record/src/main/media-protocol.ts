@@ -4,6 +4,8 @@ import { stat } from "node:fs/promises";
 import { extname } from "node:path";
 import { Readable } from "node:stream";
 import { recordingFilePath, screenshotFilePath, thumbnailFilePath } from "./library";
+import { activeWorkspace } from "./workspaces";
+import { isForeignWorkspaceUrl } from "./media-workspace";
 import { parseByteRange } from "./media-range";
 
 /**
@@ -92,6 +94,11 @@ export function registerMediaProtocol(): void {
     const url = new URL(request.url);
     const id = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
     if (isUnsafeId(id)) return new Response("Invalid recording id", { status: 400 });
+    // A URL stamped for another workspace (cached before a switch), of any kind, never
+    // resolves an item with the same id in the active one (ADR 0032).
+    if (isForeignWorkspaceUrl(url, activeWorkspace().id)) {
+      return new Response("Not in the active workspace", { status: 404 });
+    }
 
     // Screenshots are overwritten in place; freshness is handled by the `?v=<mtime>`
     // version token on the URL (see LibraryVault.describe), so normal caching is fine.

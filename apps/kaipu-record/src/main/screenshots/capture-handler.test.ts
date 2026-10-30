@@ -31,10 +31,11 @@ function setup(
   const windows = { beforeCapture: vi.fn(), afterCapture: vi.fn(), reveal: vi.fn() };
   const track = vi.fn();
   const rememberMode = vi.fn();
-  const saveToVault = vi.fn(async (_png: Buffer, _title: string) => ({
+  const saveToVault = vi.fn(async (_png: Buffer, _title: string, _workspaceId?: string) => ({
     id: "screenshot-1",
     assetId: "asset-1",
   }));
+  const workspace = vi.fn(() => ({ id: "ws-work", name: "Work" }));
   const copyToClipboard = vi.fn();
   const onQuietCapture = vi.fn();
   const onRecordTarget = vi.fn();
@@ -53,6 +54,7 @@ function setup(
     thumbnail: () => "data:image/png;base64,thumb",
     onQuietCapture,
     onRecordTarget,
+    workspace,
   });
   return {
     handler,
@@ -63,6 +65,7 @@ function setup(
     copyToClipboard,
     onQuietCapture,
     onRecordTarget,
+    workspace,
   };
 }
 
@@ -441,7 +444,21 @@ describe("createCaptureHandler", () => {
         mode: "frame",
         saved: { id: "screenshot-1", assetId: "asset-1" },
         copied: true,
+        workspace: { id: "ws-work", name: "Work" },
       });
+    });
+
+    it("binds the capture to the workspace active when it started (the save, the bytes, the toast)", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const { handler, saveToVault, onQuietCapture, workspace } = setup(shot("copy"));
+      saveToVault.mockRejectedValueOnce(new Error("Work isn't connected"));
+      await handler({ mode: "frame" });
+      expect(workspace).toHaveBeenCalledOnce();
+      expect(saveToVault.mock.calls[0]![2]).toBe("ws-work");
+      expect(onQuietCapture).toHaveBeenCalledWith(
+        expect.objectContaining({ workspace: { id: "ws-work", name: "Work" } }),
+      );
+      expect(takeLastQuietCapture()?.workspaceId).toBe("ws-work");
     });
 
     it("Copy whose save fails still copies and keeps the bytes once for Edit", async () => {
@@ -456,6 +473,7 @@ describe("createCaptureHandler", () => {
         width: 3,
         height: 2,
         mode: "window",
+        workspaceId: "ws-work",
       });
       expect(takeLastQuietCapture()).toBeNull();
     });

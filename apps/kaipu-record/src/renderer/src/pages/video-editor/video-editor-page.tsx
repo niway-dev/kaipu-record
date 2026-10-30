@@ -122,6 +122,7 @@ import { ExportDialog } from "@renderer/features/video-editor/components/export-
 import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import { showToast } from "@renderer/ui/toast-store";
+import { registerSwitchFlush } from "@renderer/features/workspaces/prepare-switch";
 import styles from "./video-editor-page.module.css";
 
 /** The "original" pill's own shape, moved out of video-editor-page.module.css:
@@ -135,6 +136,7 @@ const sxEditor = stylex.create({
 import { useMuteEditing } from "@renderer/features/video-editor/use-mute-editing";
 import { AudioLane } from "@renderer/features/video-editor/components/audio-lane";
 import { MuteInspector } from "@renderer/features/video-editor/components/inspector/mute-inspector";
+import { mediaUrl } from "@renderer/lib/media-url";
 
 export interface VideoEditorSource {
   id: string;
@@ -379,6 +381,10 @@ function VideoEditor({
   // threw away every cut, zoom and redaction, because useBlocker below only ever sees
   // in-app navigation.
   const autosave = useSessionAutosave(source.id, scene, controller.interacting, assetStoreRef);
+  // A workspace switch writes the pending edit first, while this editor is still open and
+  // its workspace still active (ADR 0032, decision 7); the leave guard below then sees it saved.
+  const flushAutosave = autosave.flush;
+  useEffect(() => registerSwitchFlush(flushAutosave), [flushAutosave]);
   // Blocks in-app navigation (e.g. the sidebar) while an edit has NOT reached the
   // session file yet — same useBlocker pattern as the screenshot editor, but now about
   // "not written" rather than "edited": with autosave on, an edit that is already on
@@ -426,8 +432,8 @@ function VideoEditor({
   const videoTools = useVideoTools();
   const videoExport = useVideoExport();
   const gifExport = useGifExport();
-  const mediaUrl = `kaipu-media://recording/${source.id}`;
-  const thumbnails = useSourceThumbnails(mediaUrl, source.durationSeconds);
+  const sourceUrl = mediaUrl("recording", source.id);
+  const thumbnails = useSourceThumbnails(sourceUrl, source.durationSeconds);
   const selection = useEditorSelection();
   // `select` / `clear` are stable (useCallback, no deps); the `selection` object itself
   // is rebuilt every render, so never put it in a dependency array.
@@ -1206,7 +1212,7 @@ function VideoEditor({
           >
             <PreviewStage
               playback={playback}
-              mediaUrl={mediaUrl}
+              mediaUrl={sourceUrl}
               slideUrl={slideUrl}
               expanded={isFullscreen}
               contentRef={contentRef}

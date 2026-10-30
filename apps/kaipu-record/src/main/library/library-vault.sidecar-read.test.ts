@@ -41,7 +41,7 @@ describe("LibraryVault — sidecar read errors never mint an identity", () => {
     "lists the item as unreadable on %s, mints nothing and leaves the sidecar byte-identical",
     async (code) => {
       await seed("clip", original);
-      const vault = new LibraryVault(directory, failingWith(code));
+      const vault = new LibraryVault(directory, null, failingWith(code));
 
       const [item] = await vault.list();
       expect(item).toMatchObject({ id: "clip", metadataIssue: "unreadable", tagIds: [] });
@@ -61,7 +61,7 @@ describe("LibraryVault — sidecar read errors never mint an identity", () => {
 
   it("recovers the original identity, title and tags once a later read succeeds", async () => {
     await seed("clip", original);
-    const [degraded] = await new LibraryVault(directory, failingWith("EIO")).list();
+    const [degraded] = await new LibraryVault(directory, null, failingWith("EIO")).list();
     expect(degraded.metadataIssue).toBe("unreadable");
 
     const [healthy] = await new LibraryVault(directory).list();
@@ -138,7 +138,7 @@ describe("LibraryVault — sidecar read errors never mint an identity", () => {
 
   it("does not delete the media on removeLocalCopy when the sidecar cannot be read", async () => {
     await seed("clip", original);
-    const vault = new LibraryVault(directory, failingWith("EIO"));
+    const vault = new LibraryVault(directory, null, failingWith("EIO"));
     await expect(vault.removeLocalCopy("clip")).rejects.toBeInstanceOf(SidecarUnavailableError);
     expect(await readdir(directory)).toContain("clip.mp4");
   });
