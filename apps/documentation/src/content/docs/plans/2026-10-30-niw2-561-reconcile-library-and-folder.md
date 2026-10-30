@@ -5,7 +5,7 @@ description: NIW2-561 — one "Check and fix files" action, offered by a banner 
 
 # Reconcile the library with its folder — plan
 
-**Status: 🔵 Proposed, revision 4 · 2026-10-30.** Revision 3 adopts the owner's
+**Status: 🔵 Approved for implementation, revision 5 · 2026-10-30.** GPT-6.1 Sol, round 4: "safe to implement after the fixes"; the fixes are applied below. Revision 3 adopted the owner's
 simplification after two adversarial review rounds (GPT-6.1 Sol): **follow the
 names, never infer identities, never delete.** Revisions 1 and 2, with their
 findings, are in git history and summarized in the last section. The work is
@@ -134,7 +134,7 @@ any leftover goes through the orphans move.
 - A move to orphans writes its bundle's manifest entry (original paths, title,
   `assetId`) **before** moving the first file, and marks it complete after the last
   one. A crash in between leaves a manifest entry that the next run completes into
-  the same run folder.
+  the same run folder. Pending manifests are resumed **before** classification. For each file, if the destination already exists, that move happened: it is kept, and a source now present at the old path (a new capture that reused the free stem) is **not** taken. If both exist, or the outcome is uncertain, both are kept and reported. An orphan destination is never overwritten.
 
 After a crash, the next "Fix all" sees what is left and finishes it. The only
 decisions are "the title wins" and "the disk name wins", and both can be read again
@@ -151,6 +151,43 @@ that are not fixable now: a locked file, `duplicate-identity`, `stem-conflict`,
 `shared-companion` or `unreadable-record`. A fixture vault containing every edge case below asserts it,
 including 101 items with one title, a 6-item rename chain and a 2-item cycle.
 
+## Admission contract (maintenance mode)
+
+`vault-activity.ts` owns one flag and one counter per process.
+
+- **`admit(kind)`** checks the flag and increments the counter in one synchronous
+  step. It returns a lease or throws `MaintenanceError`, a typed refusal the renderer
+  recognizes. `lease.release()` is idempotent and always called in `finally`. Nested
+  work runs under the outer lease and never admits again.
+- **`enterMaintenance(signal)`** waits until the counter is 0, sets the flag in the
+  same synchronous step as the final zero check, and is cancellable. It returns an
+  exit function called in `finally`: errors, cancellation and a thrown scan all
+  clear the flag. One run at a time.
+- **Inventory of admission points.** Each is wrapped before any work starts, and
+  holds its lease until every piece of work it spawned is finished:
+  - the library IPC handlers in `library/index.ts`, including `list` (it can mint
+    identities), rename, remove, `removeLocalCopy` (one lease around
+    describe → hash → delete), backfill, `overwriteImage` and tags (`listTags` can
+    import legacy tags into sidecars);
+  - video edit-session saves (`video-edit-session.ts` handlers);
+  - the screenshot-toast `describe` in `main/index.ts`;
+  - capture: the **whole** screenshot operation (hotkey and IPC share one admission
+    point), taken before hiding windows or grabbing pixels; a refusal shows the
+    maintenance message;
+  - the recording session, from start through `finalize`, the cursor write and
+    abort cleanup, pinned to its vault folder (C9);
+  - export: `setExportActive` becomes an acknowledged `export:begin` invoke, made
+    before the source is read, and released on completion, cancellation or the
+    renderer going away;
+  - GIF save, stranded recovery, the vault-folder change.
+  - **Exempt:** drag copies and their cleanup at startup and quit, because
+    `.kaipu/drag/` is outside reconciliation.
+- **Editors:** a save refused with `MaintenanceError` keeps its pending state. A
+  `library:maintenance-ended` event makes the video and screenshot editors retry
+  their latest pending state. Dirty and navigation protection stay on throughout.
+  This is a retry from the renderer, not a queue in main, so no stale vault
+  operation wakes up.
+
 ## Banner
 
 - **When:** on opening the Library or Home, at most once per session; again after the
@@ -165,7 +202,7 @@ including 101 items with one title, a 6-item rename chain and a 2-item cycle.
 
 ## Edge cases
 
-Each row becomes a test, written red first.
+Rows are tested as grouped scenarios plus failure-point tests (a crash or an injected error at every step), written red first. The 10k timing is a smoke measurement, without a threshold.
 
 **Names**
 
@@ -199,17 +236,17 @@ Each row becomes a test, written red first.
 
 **What the folder may contain**
 
-| #   | Case                                                                   | Handling                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| --- | ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| F1  | Dotfiles: `.DS_Store`, `._Demo.mp4` (AppleDouble), `.Demo.mp4.icloud`. | Skipped.                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| F2  | `Thumbs.db`, `desktop.ini`, non-media files.                           | Ignored.                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| F3  | Subfolders and symlinks.                                               | Ignored (`lstat`). A symlinked media file protects its companions.                                                                                                                                                                                                                                                                                                                                                         |
-| F4  | An uppercase extension (`Demo.MP4`).                                   | Not adopted; protects its companions; reported as "not recognized".                                                                                                                                                                                                                                                                                                                                                        |
-| F5  | Partial files: `.tmp`, `.part`, `.crdownload`, size 0.                 | Skipped. Writers are idle during a fix (C1); each writer's temp naming is checked during implementation.                                                                                                                                                                                                                                                                                                                   |
-| F6  | A read-only vault, or permission denied.                               | Each action fails cleanly and goes to the report.                                                                                                                                                                                                                                                                                                                                                                          |
-| F7  | An unreachable folder.                                                 | The scan errors, nothing counts as missing, and the banner stays hidden. **An unreadable folder is never read as an empty one.**                                                                                                                                                                                                                                                                                           |
-| F8  | 10k items, or a slow network drive.                                    | Progress in the dialog and concurrency-limited reads. A 10k-item timing test.                                                                                                                                                                                                                                                                                                                                              |
-| F9  | A sidecar that is unreadable, has corrupt JSON or an invalid schema.   | Listed and never written, by anyone. **Today `sidecar()` turns it into `{}`, and `ensureIdentity`, `writeMetaLocked` (backfill, editor open) and `renameItem` merge over it.** This PR adds the strict read to every sidecar mutation boundary: they throw `UnreadableRecordError`, the item lists read-only, and automatic healing skips it. Test: scan → fix another item → refresh → backfill leaves it byte-identical. |
+| #   | Case                                                                   | Handling                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F1  | Dotfiles: `.DS_Store`, `._Demo.mp4` (AppleDouble), `.Demo.mp4.icloud`. | Skipped.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| F2  | `Thumbs.db`, `desktop.ini`, non-media files.                           | Ignored.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| F3  | Subfolders and symlinks.                                               | Ignored (`lstat`). A symlinked media file protects its companions.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| F4  | An uppercase extension (`Demo.MP4`).                                   | Not adopted; protects its companions; reported as "not recognized".                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| F5  | Partial files: `.tmp`, `.part`, `.crdownload`, size 0.                 | Skipped. Writers are idle during a fix (C1); each writer's temp naming is checked during implementation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| F6  | A read-only vault, or permission denied.                               | Each action fails cleanly and goes to the report.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| F7  | An unreachable folder.                                                 | The scan errors, nothing counts as missing, and the banner stays hidden. **An unreadable folder is never read as an empty one.**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| F8  | 10k items, or a slow network drive.                                    | Progress in the dialog and concurrency-limited reads. A 10k-item timing test.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| F9  | A sidecar that is unreadable, has corrupt JSON or an invalid schema.   | Listed and never written, by anyone. **Today `sidecar()` turns it into `{}`, and `ensureIdentity`, `writeMetaLocked` (backfill, editor open) and `renameItem` merge over it.** This PR adds the strict read to every sidecar mutation boundary, checked **before** touching media or companions (`overwriteImage` writes the PNG first today; edit-session saves must preflight too). `list()` handles it per item: the item appears read-only (`readable: false`), never failing the whole list: they throw `UnreadableRecordError`, the item lists read-only, and automatic healing skips it. Test: scan → fix another item → refresh → backfill leaves it byte-identical. |
 
 **Concurrency**
 
@@ -343,3 +380,8 @@ Each row becomes a test, written red first.
   - a non-dismissible wait → dismissible until mutation starts;
   - orphan manifest before moves, and unique run folders;
   - I2 narrowed.
+- **Revision 4 → 5** (Sol, 6 findings, no blockers; verdict "safe to implement after
+  the fixes"): admission contract and full inventory; atomic admit and enter;
+  acknowledged export start; strict reads before any write, with read-only items per
+  item; editor retry on `maintenance-ended`; captures admitted before pixels;
+  orphan-manifest replay never takes a reused source.
