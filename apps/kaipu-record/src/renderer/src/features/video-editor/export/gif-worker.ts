@@ -158,8 +158,17 @@ function createFrameRenderer(
             : null;
           // A null = no decodable frame at that time (past the stream's end). The canvas
           // then still holds the previous, already-redacted composition, which is repeated.
+          // Over a still screen the decoded frame is an earlier one: its own span keeps its
+          // redactions, the zoom crop follows the camera at the slot's time (E9, as the MP4).
           if (wrapped) {
-            compose.clip(wrapped.canvas, wrapped.timestamp, wrapped.duration, slot.t, webcamFrame);
+            compose.clip(
+              wrapped.canvas,
+              wrapped.timestamp,
+              wrapped.duration,
+              slot.t,
+              webcamFrame,
+              slot.sourceTime,
+            );
           }
           yield { i: slot.i, rgba: grab() };
         }

@@ -8,12 +8,15 @@ import type { GifStartMessage } from "./gif-messages";
 // at the module boundary; what is exercised is the worker's own wiring: the plan's webcam
 // reaches the composer, and each sampled frame gets the webcam frame due at its source time.
 
-const { clip, createOutputComposer, framesAt } = vi.hoisted(() => {
+const { clip, createOutputComposer, framesAt, screen } = vi.hoisted(() => {
   const clip = vi.fn();
   return {
     clip,
     createOutputComposer: vi.fn(() => ({ clip, slide: vi.fn() })),
     framesAt: vi.fn(),
+    // The last source time the screen has a new frame at; past it the sink returns that
+    // frame again, as for a still screen. Infinity: a new frame at every sampled time.
+    screen: { stillFrom: Infinity },
   };
 });
 
@@ -27,7 +30,10 @@ vi.mock("mediabunny", () => ({
   },
   CanvasSink: class {
     async *canvasesAtTimestamps(times: number[]) {
-      for (const t of times) yield { canvas: `screen@${t}`, timestamp: t, duration: 1 / 30 };
+      for (const t of times) {
+        const at = Math.min(t, screen.stillFrom);
+        yield { canvas: `screen@${at}`, timestamp: at, duration: 1 / 30 };
+      }
     }
   },
 }));
@@ -101,6 +107,7 @@ async function runWorker(msg: GifStartMessage): Promise<void> {
 
 beforeEach(() => {
   posted = [];
+  screen.stillFrom = Infinity;
   clip.mockClear();
   createOutputComposer.mockClear();
   framesAt.mockReset();
@@ -127,6 +134,21 @@ describe("gif-worker wiring", () => {
       expect(webcamFrame).toEqual({ image: WEBCAM_IMAGE, sourceTs });
     }
     expect(framesAt.mock.calls[0]![0]).toEqual(clip.mock.calls.map((c) => c[1]));
+  });
+
+  it("over a still screen the crop follows the sampled time; the held frame keeps its own (E9)", async () => {
+    screen.stillFrom = 5.5;
+    await runWorker(message(LAYER));
+    const held = clip.mock.calls.filter((c) => 5 + (c[3] as number) > 5.5 + 1e-6);
+    expect(held.length).toBeGreaterThan(0);
+    for (const [screenCanvas, sourceTs, , outTs, webcamFrame, cameraTs] of held) {
+      // The held frame and its span (so its redactions) stay those of source 5.5 s...
+      expect(screenCanvas).toBe("screen@5.5");
+      expect(sourceTs).toBe(5.5);
+      // ...while the face, its layout and the camera crop all read the sampled time.
+      expect(webcamFrame).toEqual({ image: WEBCAM_IMAGE, sourceTs: cameraTs });
+      expect(cameraTs).toBeCloseTo(5 + outTs);
+    }
   });
 
   it("without a webcam layer, composes with none and opens no webcam decoder", async () => {
