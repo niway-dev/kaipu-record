@@ -8,7 +8,8 @@ import { listFiles, makeVault, sidecar } from "./vault-reconcile.test-helpers";
 /**
  * A fault injector over `node:fs/promises`: every wrapped call is counted, and `fail`
  * decides whether it throws EIO instead. `open` with a write flag stands for a sidecar or
- * manifest write (`atomicWriteFile`).
+ * manifest write (`atomicWriteFile`); the handle it returns is wrapped too, so a write,
+ * a sync or a close of that handle can fail as well.
  */
 const faults = vi.hoisted(() => ({
   fail: null as null | ((op: string, path: string, index: number) => boolean),
@@ -28,9 +29,37 @@ vi.mock("node:fs/promises", async (importOriginal) => {
     }) as F;
   const openForWrite = wrap("write", actual.open);
   const openForRead = wrap("open", actual.open);
-  const open = ((...args: Parameters<typeof actual.open>) =>
+  /** Handle methods that can fail, by the op name they are counted under. */
+  const HANDLE_OPS: Record<string, string> = {
+    write: "handle-write",
+    writeFile: "handle-write",
+    sync: "handle-sync",
+    datasync: "handle-sync",
+    close: "handle-close",
+  };
+  const wrapHandle = (handle: Awaited<ReturnType<typeof actual.open>>, path: string) =>
+    new Proxy(handle, {
+      get(target, prop, receiver) {
+        const value = Reflect.get(target, prop, receiver);
+        const op = typeof prop === "string" ? HANDLE_OPS[prop] : undefined;
+        if (!op || typeof value !== "function") {
+          return typeof value === "function" ? value.bind(target) : value;
+        }
+        return async (...args: unknown[]) => {
+          const index = faults.calls.length;
+          faults.calls.push({ op, path });
+          if (faults.fail?.(op, path, index)) {
+            // A failed close still releases the descriptor: only the caller sees the error.
+            if (op === "handle-close") await target.close();
+            throw Object.assign(new Error(`EIO: injected ${op} ${path}`), { code: "EIO" });
+          }
+          return (value as (...a: unknown[]) => unknown).apply(target, args);
+        };
+      },
+    });
+  const open = (async (...args: Parameters<typeof actual.open>) =>
     args[1] && args[1] !== "r"
-      ? openForWrite(...args)
+      ? wrapHandle(await openForWrite(...args), String(args[0]))
       : openForRead(...args)) as typeof actual.open;
   return {
     ...actual,
@@ -170,32 +199,140 @@ describe("Fix all — every payload survives one failed call at any point", () =
     ".kaipu/recording-2026-10-30-00-57-30.edit.json": "payload:a-session",
     ".kaipu/recording-2026-10-30-00-57-30.assets/s.png": "payload:a-slide",
     "X.mp4": "payload:x",
-    ".kaipu/X.json": sidecar({ assetId: "x", title: "Y", createdAt: T0 }),
+    ".kaipu/X.json": sidecar({ assetId: "x", title: "Y", createdAt: T0, tagIds: ["tag-x"] }),
     "Y.mp4": "payload:y",
     ".kaipu/Y.json": sidecar({ assetId: "y", title: "X", createdAt: T0 + 1 }),
     "Fresh.mp4": "payload:fresh",
-    ".kaipu/Gone.json": sidecar({ assetId: "gone", title: "Gone" }),
+    ".kaipu/Gone.json": sidecar({ assetId: "gone", title: "Gone", tagIds: ["tag-gone"] }),
     ".kaipu/Gone.jpg": "payload:gone-poster",
     ".kaipu/Lost.jpg": "payload:lost",
   };
   const payloads = Object.values(small).filter((v) => v.startsWith("payload:"));
-  const identities = ["a", "x", "y", "gone"];
-  const OPS = ["lstat", "stat", "access", "readFile", "copyFile", "cp", "write", "rename"];
+  /** Each live item: its media payload, its tags and its companions (suffix → payload). */
+  const LIVE = {
+    a: {
+      media: "payload:a",
+      tagIds: ["tag-a"],
+      companions: {
+        ".jpg": "payload:a-poster",
+        ".edit.json": "payload:a-session",
+        ".assets/s.png": "payload:a-slide",
+      },
+    },
+    x: { media: "payload:x", tagIds: ["tag-x"], companions: {} },
+    y: { media: "payload:y", tagIds: undefined, companions: {} },
+  };
+  // Mutation boundaries are injected at every call. `access` is the stem probe: a clean run
+  // makes ~130 of them, the same few checks repeated per candidate path, so it is sampled
+  // (the first, every 8th and the last call) to keep the suite fast. Every other read is
+  // small enough to stay exhaustive.
+  const OPS = [
+    "lstat",
+    "stat",
+    "access",
+    "readFile",
+    "copyFile",
+    "cp",
+    "write",
+    "handle-write",
+    "handle-sync",
+    "handle-close",
+    "rename",
+  ];
+  const SAMPLE_EVERY: Record<string, number> = { access: 8 };
+  const injectionPoints = (op: string, count: number): number[] => {
+    const every = SAMPLE_EVERY[op] ?? 1;
+    const points = new Set<number>();
+    for (let n = 1; n <= count; n++) if (n === 1 || n === count || n % every === 0) points.add(n);
+    return [...points];
+  };
+
+  /** Every file's content, by vault-relative path. */
+  const contentsOf = async (): Promise<Map<string, string>> => {
+    const files = await listFiles(directory);
+    return new Map(await Promise.all(files.map(async (path) => [path, await read(path)] as const)));
+  };
+  const parse = (text: string | undefined): Record<string, unknown> | null => {
+    if (text === undefined) return null;
+    try {
+      return JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  };
+
+  /**
+   * Nothing is lost and no identity is detached: each live item's media is in the root, and
+   * the record at its stem carries its identity, its tags and its companions. The dead
+   * record is a record (at its old path, or in an orphan bundle). After a clean retry its
+   * poster is in the same bundle, and every manifest entry is complete.
+   */
+  const expectSurvival = async (label: string, settled: boolean): Promise<void> => {
+    const contents = await contentsOf();
+    const all = [...contents.values()];
+    for (const payload of payloads) expect(all, `${payload} ${label}`).toContain(payload);
+
+    for (const [assetId, item] of Object.entries(LIVE)) {
+      const media = [...contents].filter(([, c]) => c === item.media).map(([path]) => path);
+      expect(media, `${assetId}'s media ${label}`).toHaveLength(1);
+      const path = media[0]!;
+      expect(path, `${assetId}'s media stays in the root ${label}`).not.toContain("/");
+      const stem = path.slice(0, path.lastIndexOf("."));
+      const record = parse(contents.get(`.kaipu/${stem}.json`));
+      expect(record?.assetId, `${assetId}'s record at "${stem}" ${label}`).toBe(assetId);
+      expect(record?.tagIds, `${assetId}'s tags ${label}`).toEqual(item.tagIds);
+      for (const [suffix, payload] of Object.entries(item.companions)) {
+        expect(contents.get(`.kaipu/${stem}${suffix}`), `${assetId}'s ${suffix} ${label}`).toBe(
+          payload,
+        );
+      }
+    }
+
+    const records = [...contents]
+      .filter(([path]) => path.endsWith("/Gone.json"))
+      .filter(([, c]) => parse(c)?.assetId === "gone")
+      .map(([path]) => path);
+    expect(records, `gone's record ${label}`).toHaveLength(1);
+    const record = records[0]!;
+    expect(parse(contents.get(record))?.tagIds, `gone's tags ${label}`).toEqual(["tag-gone"]);
+    if (!settled) return;
+
+    // The retry finished every bundle where it was started.
+    expect(record, `gone's record ${label}`).toMatch(/^\.kaipu\/orphans\/[^/]+\/Gone\.json$/);
+    const bundle = record.slice(0, -"Gone.json".length);
+    expect(contents.get(`${bundle}Gone.jpg`), `gone's poster in its bundle ${label}`).toBe(
+      "payload:gone-poster",
+    );
+    const manifests = [...contents].filter(([path]) => path.endsWith("/manifest.json"));
+    const entries = manifests.flatMap(
+      ([, c]) => (parse(c)?.entries ?? []) as { stem: string; status: string }[],
+    );
+    expect(
+      entries.filter((e) => e.stem === "Gone"),
+      `gone's manifest entry ${label}`,
+    ).toHaveLength(1);
+    expect(
+      entries.every((e) => e.status === "complete"),
+      `manifests complete ${label}`,
+    ).toBe(true);
+    expect(contents.get(`${bundle}manifest.json`), `gone's bundle manifest ${label}`).toBeDefined();
+  };
 
   it(
-    "injects EIO on the n-th read, copy, sidecar write or move, then a clean run converges",
-    { timeout: 120_000 },
+    "injects EIO at each read, copy, sidecar open, write, sync, close or move, then a clean run converges",
+    { timeout: 180_000 },
     async () => {
       // The calls a clean run makes, per operation.
       directory = await makeVault(small);
       faults.calls = [];
       await fix();
       const clean = faults.calls;
+      await expectSurvival("after a clean run", true);
       await rm(directory, { recursive: true, force: true });
       const counts = Object.fromEntries(
         OPS.map((op) => [op, clean.filter((c) => c.op === op).length]),
       );
-      for (const op of ["lstat", "readFile", "copyFile", "cp", "write", "rename"]) {
+      for (const op of OPS.filter((op) => op !== "stat" && op !== "access")) {
         expect(counts[op], op).toBeGreaterThan(0);
       }
       // The orphan moves are among the renames.
@@ -204,36 +341,24 @@ describe("Fix all — every payload survives one failed call at any point", () =
       );
 
       for (const op of OPS) {
-        for (let n = 1; n <= counts[op]!; n++) {
-          const label = `${op} #${n}`;
+        for (const n of injectionPoints(op, counts[op]!)) {
+          const label = `after ${op} #${n}`;
           directory = await makeVault(small);
           faults.calls = [];
           let seen = 0;
           faults.fail = (called) => called === op && ++seen === n;
           await fix().catch(() => undefined);
           faults.fail = null;
-
-          const contents = await Promise.all(
-            (await listFiles(directory)).map((path) => read(path)),
-          );
-          for (const payload of payloads)
-            expect(contents, `${payload} after ${label}`).toContain(payload);
-          for (const id of identities) {
-            expect(
-              contents.some(
-                (c) => c.includes(`"assetId": "${id}"`) || c.includes(`"assetId":"${id}"`),
-              ),
-              `identity ${id} after ${label}`,
-            ).toBe(true);
-          }
+          await expectSurvival(label, false);
 
           const report = await fix();
-          expect(report.failed, `retry after ${label}`).toEqual([]);
+          expect(report.failed, `retry ${label}`).toEqual([]);
           const left = (await scanVault({ directory, cloud: "unknown" })).findings;
           expect(
             left.filter((f) => f.fixable),
-            `converged after ${label}`,
+            `converged ${label}`,
           ).toEqual([]);
+          await expectSurvival(`after the retry ${label}`, true);
           await rm(directory, { recursive: true, force: true });
         }
       }
