@@ -134,6 +134,7 @@ export default defineConfig({
             { slug: "backlog/web-auth-redesign" },
             { slug: "backlog/legal-documents" },
             { slug: "backlog/desktop-diagnostics-opt-out" },
+            { slug: "backlog/supporter-license" },
             { slug: "backlog/web-analytics" },
             { slug: "backlog/public-roadmap-page" },
             { slug: "backlog/features-page" },
