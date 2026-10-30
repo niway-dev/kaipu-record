@@ -34,6 +34,10 @@ Never in a public issue. See [SECURITY.md](SECURITY.md).
 
 ## For collaborators
 
+- **Sign the [Contributor License Agreement](CLA.md) once, on your first pull request.** You
+  keep the copyright to your work; Niway gets a license broad enough to keep the whole project
+  under one owner, including the right to change its license later. Without it a pull request
+  is not merged.
 - **Issue first.** A pull request links the issue it resolves.
 - **One behaviour per pull request.** Refactors travel separately.
 - **The checks apply to everyone.** The pre-push hook runs lint, format, builds and type
@@ -52,4 +56,6 @@ Setup and commands are in the [README](README.md) and the
 ## Forks
 
 Forks are welcome — that is what the license is for. Under AGPL-3.0, if you run a modified
-version as a network service, you must offer its source to its users.
+version as a network service, you must offer its source to its users. A fork you distribute
+uses its own name and icon: the license covers the code, not the Kaipu name or logo
+([TRADEMARKS.md](TRADEMARKS.md)).
