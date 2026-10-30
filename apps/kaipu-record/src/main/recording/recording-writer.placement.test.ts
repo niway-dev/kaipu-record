@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-// Fifth review of NIW2-561: a short write on a volume without hard links, a confirmed
+// A short write on a volume without hard links, a confirmed
 // overwrite whose copy fails before it starts, and a placed take whose staging file can be
 // neither removed nor renamed. None can be produced portably on a real disk.
 const hooks = vi.hoisted(() => ({

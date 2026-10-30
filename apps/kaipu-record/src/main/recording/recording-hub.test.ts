@@ -1729,7 +1729,7 @@ describe("recording hub — one lifecycle per take (NIW2-561)", () => {
   };
 
   it.each(["before", "after"] as const)(
-    "a reload %s finalize reserves its destination waits for it: the vault stays busy, nothing is overwritten",
+    "a reload %s finalize reserves its destination: the vault stays busy until finalize settles, and nothing is overwritten",
     async (when) => {
       const t = await setup(70);
       const { tempPath } = (await t.create(t.event, "take-1")) as { tempPath: string };

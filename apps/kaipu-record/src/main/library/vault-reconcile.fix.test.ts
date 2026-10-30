@@ -64,7 +64,6 @@ function edgeCaseVault(): Record<string, Parameters<typeof makeVault>[0][string]
     }),
     "screenshot-2026-10-15T21-37-10-853Z.png": "payload:shot",
     ".kaipu/screenshot-2026-10-15T21-37-10-853Z.json": sidecar({ assetId: "shot" }),
-    // A 6-item chain: titles B…F over files A…E, F free.
     // A 2-item cycle.
     "X.mp4": "payload:x",
     ".kaipu/X.json": sidecar({ assetId: "x", title: "Y", createdAt: T0 }),
@@ -94,6 +93,7 @@ function edgeCaseVault(): Record<string, Parameters<typeof makeVault>[0][string]
     ".kaipu/Demo.edit.json": sidecar({ assetId: "s2", title: "Shared two" }),
     "Upper.MP4": "payload:upper",
   };
+  // A 5-item chain: titles B…F over files A…E, F free.
   for (const [i, from] of ["A", "B", "C", "D", "E"].entries()) {
     const to = String.fromCharCode(from.charCodeAt(0) + 1);
     files[`${from}.mp4`] = `payload:chain-${from}`;

@@ -798,7 +798,7 @@
     "reconcileActivity_folder": "a folder change",
     "reconcileFixing": "Fixing files… {done} of {total}",
     "reconcileDone": "Done. {fixed, plural, one {# item fixed} other {# items fixed}}, {moved, plural, one {# file moved to the orphans folder} other {# files moved to the orphans folder}}.",
-    "reconcileKept": "{count, plural, one {# item kept its name for now (open in the editor, locked by another app, or its new name just taken). Fix all again later.} other {# items kept their names for now (open in the editor, locked by another app, or its new name just taken). Fix all again later.}}",
+    "reconcileKept": "{count, plural, one {# item kept its name for now (open in the editor, locked by another app, or its new name just taken). Fix all again later.} other {# items kept their names for now (open in the editor, locked by another app, or their new name just taken). Fix all again later.}}",
     "reconcileFailed": "{count, plural, one {# change failed. Details are in .kaipu/reconcile.} other {# changes failed. Details are in .kaipu/reconcile.}}",
     "reconcileError": "Fix all stopped: {message}"
   },

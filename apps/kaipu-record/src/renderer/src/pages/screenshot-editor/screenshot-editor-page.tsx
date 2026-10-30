@@ -454,12 +454,6 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once when image AND settings are ready
   }, [imageReady, actionsReady]);
 
-  /**
-   * Write the current edits over the vault item, quietly. Every capture is in the vault,
-   * so an edit is never the only copy of anything: it is saved the way a document is,
-   * not guarded behind a dialog. False when there was nothing to write or it failed.
-   * A save or copy already running just delays it: the queue runs it afterwards.
-   */
   // NIW2-561: retry the latest refused save once the files are fixed.
   const persistRef = useRef(persist);
   persistRef.current = persist;
@@ -473,6 +467,12 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
     [],
   );
 
+  /**
+   * Write the current edits over the vault item, quietly. Every capture is in the vault,
+   * so an edit is never the only copy of anything: it is saved the way a document is,
+   * not guarded behind a dialog. False when there was nothing to write or it failed.
+   * A save or copy already running just delays it: the queue runs it afterwards.
+   */
   const autosaveEdits = async (): Promise<boolean> => {
     if (!savedId || !imageReady) return false;
     return (await persist({ overwriteId: savedId, silent: true, manual: true })) !== null;

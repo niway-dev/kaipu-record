@@ -99,4 +99,20 @@ describe("library IPC — maintenance mode refuses every entry point (C1)", () =
       exit();
     }
   });
+
+  it("a second Fix all while one waits answers already-running and keeps the first cancellable", async () => {
+    const fix = state.handle.get(IPC_CHANNELS.libraryReconcileFix)!;
+    const cancel = state.handle.get(IPC_CHANNELS.libraryReconcileCancel)!;
+    // A short operation in flight makes the first run wait for the vault to go idle.
+    const lease = vaultActivity.admit("library");
+    try {
+      const first = Promise.resolve(fix({}));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(await fix({})).toEqual({ status: "already-running" });
+      await cancel({});
+      expect(await first).toEqual({ status: "cancelled" });
+    } finally {
+      lease.release();
+    }
+  });
 });

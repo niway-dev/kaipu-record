@@ -107,7 +107,8 @@ describe("LibraryVault — an unreadable record is never written (F9)", () => {
     const error = await vault
       .overwriteImage("Shot", Buffer.from("new"), { title: "x" }, "s-1")
       .catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(Error);
+    expect(error).toBeInstanceOf(UnreadableRecordError);
+    expect(String(error)).toContain(UNREADABLE_RECORD_MARKER);
     expect(await readFile(join(directory, "Shot.png"), "utf8")).toBe("png");
     expect(await sidecarBytes("Shot")).toBe('{"assetId":"s-1","title":5}');
   });

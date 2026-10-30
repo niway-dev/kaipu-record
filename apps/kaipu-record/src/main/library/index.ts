@@ -4,6 +4,7 @@ import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from "electro
 import { IPC_CHANNELS } from "@shared/types";
 import type {
   GifSaveMeta,
+  ReconcileFixResult,
   RecordingBackfillMeta,
   RenameResult,
   TagSummary,
@@ -158,7 +159,10 @@ export function registerLibraryVaultHandlers(deps: {
   // mode, and while it waits for the vault to be idle the dialog may cancel it.
   ipcMain.handle(IPC_CHANNELS.libraryReconcileScan, () => service.reconcileScan());
   let reconcileWait: AbortController | null = null;
-  ipcMain.handle(IPC_CHANNELS.libraryReconcileFix, async () => {
+  ipcMain.handle(IPC_CHANNELS.libraryReconcileFix, async (): Promise<ReconcileFixResult> => {
+    // A second call (another window, a double trigger) must not take the running run's cancel
+    // handle: it is answered here and leaves the slot alone.
+    if (reconcileWait) return { status: "already-running" };
     const wait = new AbortController();
     reconcileWait = wait;
     try {

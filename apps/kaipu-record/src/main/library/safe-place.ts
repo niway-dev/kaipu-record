@@ -283,6 +283,12 @@ export async function placeNew(
       path: from,
     });
   }
+  if (removal === "unknown") {
+    // Staging mode: a source we could not check keeps a name the stranded sweep matches. Set it
+    // aside (or mark it placed) so a later sweep cannot recover the same take a second time.
+    await setAside(from, sourceId, to, placed.size);
+    return placed;
+  }
   if (removal === "removed") await syncDir(dirname(from)).catch(() => {});
   return placed;
 }

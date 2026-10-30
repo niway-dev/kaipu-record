@@ -381,11 +381,15 @@ describe("an orphan run whose manifest cannot be read stops Fix all (fail closed
       ".kaipu/Demo.json": sidecar({ assetId: "d", title: "Renamed" }),
     });
 
-  it.each([
-    ["unreadable (EACCES)", "eacces"],
-    ["corrupt JSON", "{ not json"],
-    ["a bad schema", JSON.stringify({ version: 1, runId: "run-1", entries: [{ files: 3 }] })],
-  ])("%s: listed by the scan, and nothing is moved, classified or renamed", async (_name, raw) => {
+  // chmod cannot make a file unreadable for root (CI containers) or on Windows.
+  const canChmod = process.platform !== "win32" && process.getuid?.() !== 0;
+  it.each(
+    [
+      ["unreadable (EACCES)", "eacces"],
+      ["corrupt JSON", "{ not json"],
+      ["a bad schema", JSON.stringify({ version: 1, runId: "run-1", entries: [{ files: 3 }] })],
+    ].filter(([, raw]) => raw !== "eacces" || canChmod),
+  )("%s: listed by the scan, and nothing is moved, classified or renamed", async (_name, raw) => {
     directory = await brokenVault(raw === "eacces" ? pendingManifest() : raw);
     const manifestPath = join(directory, MANIFEST);
     const { chmod } = await import("node:fs/promises");

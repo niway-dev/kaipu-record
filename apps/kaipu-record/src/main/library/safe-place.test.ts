@@ -1,6 +1,6 @@
 import { lstat, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Volumes without hard links, short writes, files arriving between two steps and failing
@@ -172,6 +172,20 @@ const read = (path: string) => readFile(path, "utf-8");
 const gone = (path: string) => expect(lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
 
 describe("placeNoReplace", () => {
+  it("staging mode: a source that cannot be checked after placing is set aside, not left sweepable", async () => {
+    const { dir, from, to } = await pair();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    // The check before removing the source fails once, right after the link.
+    hooks.afterLink = { onPath: "Dest.mp4", run: async () => void hooks.failLstat.add(from) };
+    expect(await placeNoReplace(from, to, { stuck: "set-aside" })).toBe("placed");
+    expect(await read(to)).toBe("new recording");
+    const names = await readdir(dir);
+    // The staging name the stranded sweep matches is gone, or a marker says it was placed.
+    const setAside =
+      !names.includes(basename(from)) || names.includes(`${basename(from)}${PLACED_MARKER_SUFFIX}`);
+    expect(setAside).toBe(true);
+  });
+
   it("places with a hard link and removes the source", async () => {
     const { dir, from, to } = await pair();
     expect(await placeNoReplace(from, to)).toBe("placed");

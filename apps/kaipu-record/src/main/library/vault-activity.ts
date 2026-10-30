@@ -65,7 +65,7 @@ export interface ActivityLease {
 
 export interface EnterOptions {
   signal?: AbortSignal;
-  /** The kinds still in flight, each time that set changes while waiting. */
+  /** The kinds still in flight, each time a lease is released while waiting (the set may repeat). */
   onWaiting?: (kinds: ActivityKind[]) => void;
 }
 
