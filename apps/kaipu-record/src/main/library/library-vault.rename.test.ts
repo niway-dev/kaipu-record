@@ -48,12 +48,16 @@ async function renameById(
 }
 
 /**
- * `rename` of a vault media file can be made to fail on demand; every other call (and
- * every atomic sidecar write, which also renames) passes through to the real one.
+ * A move of a vault media file can be made to fail on demand. The move links the new name,
+ * then removes the old one: a lock code (another app holds the file) fails every removal of
+ * the old name during that attempt, any other code fails the link. `arrival` writes a file at the new name right before the link.
+ * Every other call (and every atomic sidecar write, which renames) passes through.
  */
 const renameFailure = vi.hoisted(() => ({
   codes: [] as string[],
   calls: 0,
+  pendingUnlink: null as null | { path: string; code: string },
+  arrival: null as null | { path: string; content: string },
 }));
 
 /** Paths whose existence probe (`access`) fails with EACCES: they can be neither confirmed nor ruled out. */
@@ -69,14 +73,38 @@ vi.mock("node:fs/promises", async (importOriginal) => {
       }
       return actual.access(path, mode);
     }),
-    rename: vi.fn(async (from: string, to: string) => {
-      const isMediaMove = /\.(mp4|webm|png|gif)$/.test(String(from)) && !from.endsWith(".part");
+    link: vi.fn(async (from: string, to: string) => {
+      const isMediaMove = /\.(mp4|webm|png|gif)$/.test(String(from));
       if (isMediaMove) {
         renameFailure.calls += 1;
+        renameFailure.pendingUnlink = null; // a lock lasts for one attempt
+        if (renameFailure.arrival?.path === to) {
+          await actual.writeFile(to, renameFailure.arrival.content);
+          renameFailure.arrival = null;
+        }
         const code = renameFailure.codes.shift();
-        if (code) throw Object.assign(new Error(`${code}: mocked`), { code });
+        if (code && ["EPERM", "EBUSY", "EACCES", "ETXTBSY"].includes(code)) {
+          renameFailure.pendingUnlink = { path: from, code };
+        } else if (code) {
+          throw Object.assign(new Error(`${code}: mocked`), { code });
+        }
+      }
+      return actual.link(from, to);
+    }),
+    // The arrival hits whichever call targets the new name, so a plain rename shows it too.
+    rename: vi.fn(async (from: string, to: string) => {
+      if (renameFailure.arrival?.path === to) {
+        await actual.writeFile(to, renameFailure.arrival.content);
+        renameFailure.arrival = null;
       }
       return actual.rename(from, to);
+    }),
+    unlink: vi.fn(async (path: string) => {
+      const pending = renameFailure.pendingUnlink;
+      if (pending?.path === String(path)) {
+        throw Object.assign(new Error(`${pending.code}: mocked`), { code: pending.code });
+      }
+      return actual.unlink(path);
     }),
   };
 });
@@ -95,6 +123,8 @@ describe("LibraryVault.renameItem", () => {
     vault = new LibraryVault(directory);
     renameFailure.codes = [];
     renameFailure.calls = 0;
+    renameFailure.pendingUnlink = null;
+    renameFailure.arrival = null;
     uncheckable.clear();
   });
 
@@ -538,10 +568,26 @@ describe("LibraryVault.renameItem", () => {
 
   it("does not retry an unexpected error: kept-old-name, reason io", async () => {
     await seedFullItem("clip");
-    renameFailure.codes = ["EXDEV"];
+    renameFailure.codes = ["EIO"];
     const result = await renameById(vault, "clip", "New", { retry: noWait });
     expect(result).toMatchObject({ file: "kept-old-name", reason: "io" });
     expect(renameFailure.calls).toBe(1);
+  });
+
+  it("never replaces a file that arrives at the new name before the commit", async () => {
+    await seedFullItem("clip");
+    renameFailure.arrival = { path: join(directory, "New.mp4"), content: "someone else's" };
+    const result = await renameById(vault, "clip", "New", { retry: noWait });
+    expect(result).toMatchObject({
+      file: "kept-old-name",
+      reason: "taken",
+      recording: { id: "clip", title: "New", assetId: "asset-1" },
+    });
+    expect(await readFile(join(directory, "New.mp4"), "utf-8")).toBe("someone else's");
+    expect((await readdir(directory)).sort()).toEqual([".kaipu", "New.mp4", "clip.mp4"]);
+    // The companions made for the new name are rolled back; the old ones are untouched.
+    expect((await readdir(meta)).filter((n) => n.startsWith("New"))).toEqual([]);
+    expect(await readFile(join(meta, "clip.edit.json"), "utf-8")).toBe('{"scene":1}');
   });
 
   it.skipIf(!canChmod)("keeps the old item whole when a companion cannot be copied", async () => {

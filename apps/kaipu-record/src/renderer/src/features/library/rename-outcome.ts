@@ -10,12 +10,14 @@ const KEPT_MESSAGE = {
   locked: "renameKeptLocked",
   busy: "renameKeptBusy",
   editing: "renameKeptEditing",
+  taken: "renameKeptTaken",
   io: "renameKeptError",
 } as const;
 
 /**
- * NIW2-560: a rename whose file kept its old name (locked, export running, I/O error) still
- * saved the title, so it is not an error: a non-blocking toast says so and offers Retry.
+ * NIW2-560: a rename whose file kept its old name (locked, export running, name taken, I/O
+ * error) still saved the title, so it is not an error: a non-blocking toast says so and offers
+ * Retry.
  * Nothing is shown when the file moved or did not need to.
  */
 export function notifyRenameOutcome(

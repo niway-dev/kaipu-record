@@ -23,7 +23,8 @@ import {
 import { sanitizeRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
 import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/types/export-preset";
 import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-name";
-import { atomicWriteFile, withLock } from "./atomic-write";
+import { atomicWriteFile, uniqueTempPath, withLock } from "./atomic-write";
+import { placeNoReplace, renameCaseOnly, takenError } from "./safe-place";
 import { sha256FileBase64 } from "./content-hash";
 import { fileStemFromTitle, fsFold, isReservedStem, isVaultOwnedStem } from "./file-stem";
 import { mediaUrl } from "@shared/media-url";
@@ -716,19 +717,24 @@ export class LibraryVault {
   }
 
   /**
-   * `fs.rename` of the media, retried while the file is locked. Resolves null on success,
-   * else why it failed: "locked" (still held after every retry), "gone" (ENOENT), "io".
+   * Move the media to `to` through `safe-place`, never replacing a file there, retried while
+   * the file is locked. Resolves null on success, else why it failed: "taken" (a file is at
+   * `to`, however it arrived), "locked" (still held after every retry), "gone" (ENOENT),
+   * "io". `caseOnly`: `to` names the same file in another case or normalization.
    */
   private async renameWithRetry(
     from: string,
     to: string,
     retry: RetryPolicy,
-  ): Promise<"locked" | "gone" | "io" | null> {
+    caseOnly = false,
+  ): Promise<"taken" | "locked" | "gone" | "io" | null> {
     const sleep = retry.sleep ?? sleepFor;
     for (let attempt = 0; ; attempt++) {
       try {
-        await rename(from, to);
-        return null;
+        const placed = caseOnly
+          ? await renameCaseOnly(from, to)
+          : await placeNoReplace(from, to, { stuck: "rollback" });
+        return placed === "taken" ? "taken" : null;
       } catch (error) {
         const code = errorCode(error);
         if (code === "ENOENT") return "gone";
@@ -751,7 +757,7 @@ export class LibraryVault {
     newMedia: string,
     retry: RetryPolicy,
     id: string,
-  ): Promise<"locked" | "io" | null> {
+  ): Promise<"taken" | "locked" | "io" | null> {
     const moved: (keyof CompanionPaths)[] = [];
     const undo = async (): Promise<void> => {
       for (const key of moved.reverse()) await rename(to[key], from[key]).catch(() => {});
@@ -767,7 +773,7 @@ export class LibraryVault {
       await undo();
       return "io";
     }
-    const failure = await this.renameWithRetry(oldMedia, newMedia, retry);
+    const failure = await this.renameWithRetry(oldMedia, newMedia, retry, true);
     if (failure) {
       await undo();
       if (failure === "gone") throw new ItemNotFoundError(id);
@@ -1085,28 +1091,34 @@ export class LibraryVault {
   }
 
   /**
-   * Writes a GIF export as `<id>.gif`, atomically: `<id>.gif.part` → fsync → rename. A
+   * Writes a GIF export as `<id>.gif`: a unique `.part` file, fsync, then placed through
+   * `safe-place`, so a file that arrived at `<id>.gif` meanwhile is never replaced (EEXIST). A
    * failure removes the `.part`, so no partial file is ever listed (`.part` is not a known
    * extension) or left behind.
    */
   async writeGif(id: string, bytes: Uint8Array): Promise<string> {
     await mkdir(this.directory, { recursive: true });
     const target = join(this.directory, `${id}${GIF_EXTS[0]}`);
-    const part = `${target}.part`;
+    await this.placeNewFile(target, bytes);
+    return target;
+  }
+
+  /** Write `bytes` to a new file at `target`, never replacing one there: EEXIST if taken. */
+  private async placeNewFile(target: string, bytes: Uint8Array): Promise<void> {
+    const part = uniqueTempPath(target, "part");
     try {
-      const handle = await open(part, "w");
+      const handle = await open(part, "wx");
       try {
         await handle.writeFile(bytes);
         await handle.sync();
       } finally {
         await handle.close();
       }
-      await rename(part, target);
+      if ((await placeNoReplace(part, target)) === "taken") throw takenError(target);
     } catch (error) {
       await rm(part, { force: true }).catch(() => {});
       throw error;
     }
-    return target;
   }
 
   /**
@@ -1132,19 +1144,24 @@ export class LibraryVault {
       await withLock(this.sidecarPath(resolved), async () => {
         // Before the PNG: a refused record must not leave new pixels under the old record.
         await this.writableSidecar(resolved);
-        await this.writeImage(resolved, png);
+        await this.writeImage(resolved, png, { replace: true });
         await this.writeMetaLocked(resolved, meta);
       });
       return resolved;
     });
   }
 
-  /** Writes a screenshot PNG as `<id>.png` in the vault root. */
-  async writeImage(id: string, png: Buffer): Promise<void> {
+  /**
+   * Writes a screenshot PNG as `<id>.png` in the vault root. `replace` is for the item's own
+   * PNG, its identity verified under NAMES_LOCK (`overwriteImage`); a new shot never replaces
+   * a file at its path (EEXIST). Either way `.part` is not a known extension, so `list()` never
+   * shows a half-written shot, and a failed write leaves the previous PNG untouched.
+   */
+  async writeImage(id: string, png: Buffer, options: { replace?: boolean } = {}): Promise<void> {
     await mkdir(this.directory, { recursive: true });
-    // `.part` is not a known extension, so `list()` never shows a half-written shot,
-    // and a failed write leaves the previous PNG untouched.
-    await atomicWriteFile(join(this.directory, `${id}.png`), png, "part");
+    const target = join(this.directory, `${id}.png`);
+    if (options.replace) await atomicWriteFile(target, png, "part");
+    else await this.placeNewFile(target, png);
   }
 
   /** Stamp "opened in an editor now" — what the Editor home's Continue list orders by. */

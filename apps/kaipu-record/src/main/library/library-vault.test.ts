@@ -372,9 +372,33 @@ describe("LibraryVault — screenshots", () => {
     dirs.push(dir);
     const vault = new LibraryVault(dir);
     await vault.writeImage("shot", Buffer.from("one"));
-    await vault.writeImage("shot", Buffer.from("two"));
+    await vault.writeImage("shot", Buffer.from("two"), { replace: true });
     expect((await readFile(join(dir, "shot.png"))).toString()).toBe("two");
     expect((await readdir(dir)).filter((n) => n.endsWith(".part"))).toEqual([]);
+  });
+
+  it("writeImage of a new shot never replaces a file at its path", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vault-"));
+    dirs.push(dir);
+    const vault = new LibraryVault(dir);
+    await writeFile(join(dir, "shot.png"), "someone else's");
+    await expect(vault.writeImage("shot", Buffer.from("mine"))).rejects.toMatchObject({
+      code: "EEXIST",
+    });
+    expect(await readFile(join(dir, "shot.png"), "utf-8")).toBe("someone else's");
+    expect(await readdir(dir)).toEqual(["shot.png"]);
+  });
+
+  it("writeGif never replaces a file at its path", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vault-"));
+    dirs.push(dir);
+    const vault = new LibraryVault(dir);
+    await writeFile(join(dir, "loop.gif"), "someone else's");
+    await expect(vault.writeGif("loop", new Uint8Array([1, 2]))).rejects.toMatchObject({
+      code: "EEXIST",
+    });
+    expect(await readFile(join(dir, "loop.gif"), "utf-8")).toBe("someone else's");
+    expect(await readdir(dir)).toEqual(["loop.gif"]);
   });
 
   // chmod does not stop root (some CI containers), so the write would succeed there.

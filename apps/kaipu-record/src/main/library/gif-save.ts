@@ -9,6 +9,7 @@
 import type { LocalRecording } from "@shared/types/library-storage";
 import type { GifSaveMeta } from "@shared/types/ipc";
 import { LibraryVault } from "./library-vault";
+import { isFileExists } from "./safe-place";
 
 /** Hard cap on a GIF payload (IPC safety). Mirrors `GIF_HARD_CAP_BYTES` in the renderer. */
 export const GIF_MAX_BYTES = 64 * 1024 * 1024;
@@ -58,8 +59,10 @@ export async function saveGif(
     });
     if (meta.thumbnail) await vault.writeThumbnail(id, Buffer.from(meta.thumbnail));
   } catch (error) {
-    // No half-saved item: neither a GIF without its sidecar nor a stub without its GIF.
-    await vault.remove(id).catch(() => {});
+    // No half-saved item: neither a GIF without its sidecar nor a stub without its GIF. Unless
+    // a file took `<id>.gif` meanwhile (never replaced): the stem is no longer this GIF's, and
+    // removing it would delete that file.
+    if (!isFileExists(error)) await vault.remove(id).catch(() => {});
     throw error;
   }
   const recording = await vault.describe(id);

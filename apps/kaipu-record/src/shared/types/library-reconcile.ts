@@ -55,7 +55,7 @@ export type ReconcileScanResult =
   /** The folder could not be read; nothing counts as missing (F7). */
   | { status: "error"; message: string };
 
-export type ReconcileKeptReason = "locked" | "busy" | "editing" | "io" | "shared";
+export type ReconcileKeptReason = "locked" | "busy" | "editing" | "taken" | "io" | "shared";
 
 export interface ReconcileReport {
   /** Findings per kind in the first scan. */

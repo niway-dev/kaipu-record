@@ -1,5 +1,6 @@
 import type { LocalRecording } from "@shared/types/library-storage";
 import { broadcastLibraryChanged, currentVault } from "../library";
+import { isFileExists } from "../library/safe-place";
 
 export interface SaveScreenshotMeta {
   title: string;
@@ -39,8 +40,9 @@ export async function saveScreenshotToVault(
     } catch (error) {
       // A new item without a sidecar would be saved again under a second id when the
       // caller retries, leaving this PNG orphaned. Remove it (and its reserved stem) so
-      // the retry starts clean.
-      await vault.remove(id).catch(() => {});
+      // the retry starts clean. Unless a file took `<id>.png` meanwhile (never replaced): the
+      // stem is no longer this shot's, and removing it would delete that file.
+      if (!isFileExists(error)) await vault.remove(id).catch(() => {});
       throw error;
     }
   } else {
