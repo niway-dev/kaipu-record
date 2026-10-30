@@ -104,6 +104,14 @@ the overlay's placeholder shows it; see the
 minimum": a larger size the area cannot hold is shrunk to what fits instead of hiding the
 bubble.
 
+_Superseded by [ADR 0032](/architecture/decisions/0032-webcam-is-its-own-track-and-the-bubble-is-excluded-from-capture/)
+(2026-10-30, proposed, not implemented)._ The premise of decision 6 — "the bubble is recorded as
+part of the screen (no content protection)" — is reversed by the
+[webcam track design](/specs/2026-10-30-webcam-track-design/): the webcam becomes its own
+synchronized file and the bubble is excluded from the capture. Anchoring the bubble inside the
+recorded area may stay as UX; it is no longer required for the video. The text above is kept as
+written for the history of this spec.
+
 ### Open questions
 
 1. **Compositor cost for an area in the hidden main window.** The compositor draws on
