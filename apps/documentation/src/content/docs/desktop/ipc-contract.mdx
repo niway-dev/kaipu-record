@@ -249,7 +249,8 @@ A session (and its vault lease) belongs to the page that created it. A page that
 with a session open (a reload, a dead renderer, a destroyed webContents) never finalizes or
 aborts it, so main ends it by its `kind` (`"recording"` by default, `"export"` from the
 export runner): a recording's `.part` is kept for the stranded-take sweep, an export's is
-deleted. A finalize in flight completes first, and the lease is released after it; a
+deleted. An export's partial is also deleted when its finalize failed (the take stranded, the
+save dialog cancelled or the page gone meanwhile), bound to its own staging file. A finalize in flight completes first, and the lease is released after it; a
 `recording:create` still pending then rejects. A `recording:create` whose id is still open
 or ending is refused.
 

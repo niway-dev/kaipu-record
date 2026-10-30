@@ -76,18 +76,19 @@ Each sidecar read reports one of five outcomes: `ok`, `missing` (ENOENT), `unrea
 (EACCES, EIO), `corrupt-json` or `invalid-schema`. Only `ok` and `missing` take part in
 fixes; the other three are reported and never written (F9).
 
-| Kind                 | Detected when                                                                                                                            | Fix                                                               |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `stale-auto-title`   | The title matches the old automatic pattern (N1).                                                                                        | Title = `defaultCaptureName(kind, captureDate)`, then align.      |
-| `untitled-legacy`    | No title, and the stem matches `LEGACY_STEM`.                                                                                            | Title = `humanizeId(stem)`, then align.                           |
-| `name-mismatch`      | The stem is not aligned with the title (N2).                                                                                             | `renameItem` with the current title, in planner order (N10).      |
-| `stem-conflict`      | Two media files share a stem (`Demo.mp4` + `Demo.png`), ignored media included (`Demo.PNG`, empty, symlink).                             | Listed, not touched; the user renames one in Finder.              |
-| `shared-companion`   | An item's companion paths overlap any present stem's (legacy `Demo` + `Demo.edit`), or its record path is the tag registry (`tags.mp4`). | Listed, not touched (M7).                                         |
-| `missing-sidecar`    | Media with no record.                                                                                                                    | Adopt: new `assetId`, `title` = stem, `createdAt` = capture date. |
-| `missing-media`      | A record with no media, not cloud-only.                                                                                                  | M1–M3.                                                            |
-| `orphan-companion`   | A companion-shaped file with no record and no media of its stem.                                                                         | Move to orphans, unless protected (M4).                           |
-| `duplicate-identity` | Two media items claim one `assetId`.                                                                                                     | Listed, not touched (I1).                                         |
-| `unreadable-record`  | A sidecar read is `unreadable`, `corrupt-json` or `invalid-schema`.                                                                      | Listed, not touched (F9).                                         |
+| Kind                    | Detected when                                                                                                                            | Fix                                                               |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `stale-auto-title`      | The title matches the old automatic pattern (N1).                                                                                        | Title = `defaultCaptureName(kind, captureDate)`, then align.      |
+| `untitled-legacy`       | No title, and the stem matches `LEGACY_STEM`.                                                                                            | Title = `humanizeId(stem)`, then align.                           |
+| `name-mismatch`         | The stem is not aligned with the title (N2).                                                                                             | `renameItem` with the current title, in planner order (N10).      |
+| `stem-conflict`         | Two media files share a stem (`Demo.mp4` + `Demo.png`), ignored media included (`Demo.PNG`, empty, symlink).                             | Listed, not touched; the user renames one in Finder.              |
+| `shared-companion`      | An item's companion paths overlap any present stem's (legacy `Demo` + `Demo.edit`), or its record path is the tag registry (`tags.mp4`). | Listed, not touched (M7).                                         |
+| `missing-sidecar`       | Media with no record.                                                                                                                    | Adopt: new `assetId`, `title` = stem, `createdAt` = capture date. |
+| `missing-media`         | A record with no media, not cloud-only.                                                                                                  | M1–M3.                                                            |
+| `orphan-companion`      | A companion-shaped file with no record and no media of its stem.                                                                         | Move to orphans, unless protected (M4).                           |
+| `duplicate-identity`    | Two media items claim one `assetId`.                                                                                                     | Listed, not touched (I1).                                         |
+| `unreadable-record`     | A sidecar read is `unreadable`, `corrupt-json` or `invalid-schema`.                                                                      | Listed, not touched (F9).                                         |
+| `unreadable-orphan-run` | An orphans run's `manifest.json` cannot be read, parsed or validated.                                                                    | Listed; Fix all fails closed and changes nothing.                 |
 
 ## The fix pipeline
 
@@ -134,7 +135,7 @@ any leftover goes through the orphans move.
 - A move to orphans writes its bundle's manifest entry (original paths, title,
   `assetId`) **before** moving the first file, and marks it complete after the last
   one. A crash in between leaves a manifest entry that the next run completes into
-  the same run folder. Pending manifests are resumed **before** classification. For each file, if the destination already exists, that move happened: it is kept, and a source now present at the old path (a new capture that reused the free stem) is **not** taken. If both exist, or the outcome is uncertain, both are kept and reported. An orphan destination is never overwritten. A file an entry still pending after the replay holds is kept out of the fresh classification, so it is retried only through that entry and the bundle never splits.
+  the same run folder. Pending manifests are resumed **before** classification. For each file, if the destination already exists, that move happened: it is kept, and a source now present at the old path (a new capture that reused the free stem) is **not** taken. If both exist, or the outcome is uncertain, both are kept and reported. An orphan destination is never overwritten. A file an entry still pending after the replay holds is kept out of the fresh classification, so it is retried only through that entry and the bundle never splits; an adoption, title rewrite or rename whose stem (or new stem) has a held path waits too. A manifest that cannot be read or validated stops the run before any change.
 
 After a crash, the next "Fix all" sees what is left and finishes it. The only
 decisions are "the title wins" and "the disk name wins", and both can be read again
