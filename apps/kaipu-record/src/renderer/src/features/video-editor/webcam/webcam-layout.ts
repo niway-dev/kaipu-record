@@ -65,7 +65,9 @@ export function clampWebcamCenter(
 
 /**
  * The bubble's square in `frame`, or null for an empty frame. Side = `size` × frame height ×
- * the zoom factor; the centre is the layout's, clamped so the whole square stays inside.
+ * the zoom factor, never more than the frame's shorter side (a 0.6 bubble on a Vertical
+ * 1080×1920 export would be 1152 px wide otherwise); the centre is the layout's, clamped so
+ * the whole square stays inside.
  */
 export function webcamRect(
   layout: Pick<WebcamLayout, "size" | "position" | "scaleDuringZoom">,
@@ -73,7 +75,11 @@ export function webcamRect(
   cameraScale = 1,
 ): WebcamRect | null {
   if (!(frame.width > 0) || !(frame.height > 0)) return null;
-  const side = layout.size * frame.height * webcamZoomFactor(layout.scaleDuringZoom, cameraScale);
+  const side = Math.min(
+    layout.size * frame.height * webcamZoomFactor(layout.scaleDuringZoom, cameraScale),
+    frame.width,
+    frame.height,
+  );
   const center = clampWebcamCenter(layout.position, side, frame);
   return {
     x: center.x * frame.width - side / 2,
@@ -88,6 +94,41 @@ export function webcamClipPath(shape: CameraBubbleShape): string {
     ? "circle(50% at 50% 50%)"
     : `inset(0 round ${Math.round(WEBCAM_ROUNDED_RADIUS * 100)}%)`;
 }
+
+/**
+ * The part of the webcam image the bubble shows, in the image's own pixels: the centred
+ * square `object-fit: cover` puts in a square box, narrowed and panned by the framing. The
+ * export draws exactly this window into the bubble's square; the preview gets the same
+ * window from CSS (`object-fit: cover` plus `framingTransform`), so the two agree.
+ *
+ * Derivation from `framingTransform`: the view is the element scaled by `zoom` about its
+ * centre and translated by `−pan · (zoom − 1) / (2·zoom)` of its side, so it shows a window
+ * of `1/zoom` of the side whose centre sits `pan · (zoom − 1) / (2·zoom)` of the side from
+ * the middle, toward the pan. The mirror flips the image before that, so in the raw
+ * (unmirrored) image a mirrored bubble's window moves the other way on x; the caller then
+ * draws the window flipped.
+ */
+export function webcamSourceRect(
+  image: FrameSize,
+  framing: { zoom: number; x: number; y: number },
+  mirrored: boolean,
+): { sx: number; sy: number; sw: number; sh: number } {
+  const zoom = Number.isFinite(framing.zoom) ? Math.max(1, framing.zoom) : 1;
+  const pan = (value: number): number => (Number.isFinite(value) ? clamp(value, -1, 1) : 0);
+  const side = Math.min(image.width, image.height);
+  const window = side / zoom;
+  const reach = ((zoom - 1) / (2 * zoom)) * side;
+  const cx = image.width / 2 + (mirrored ? -1 : 1) * pan(framing.x) * reach;
+  const cy = image.height / 2 + pan(framing.y) * reach;
+  return { sx: cx - window / 2, sy: cy - window / 2, sw: window, sh: window };
+}
+
+/**
+ * The bubble's drop shadow as a share of its side, matching the preview's
+ * `drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35))` on a bubble of about 90 CSS px (a 0.22 bubble
+ * on a ~400 px tall stage). Relative, so a 4K export does not get a hairline shadow.
+ */
+export const WEBCAM_SHADOW = { blur: 0.09, offsetY: 0.022, color: "rgba(0, 0, 0, 0.35)" } as const;
 
 /** The nine inspector presets, as normalized centres; the clamp pulls them to the edges. */
 export const WEBCAM_POSITION_PRESETS = [

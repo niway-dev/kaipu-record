@@ -7,6 +7,7 @@ import {
   webcamClipPath,
   webcamPresetCenter,
   webcamRect,
+  webcamSourceRect,
   webcamZoomFactor,
 } from "./webcam-layout";
 
@@ -113,5 +114,67 @@ describe("webcamPresetCenter", () => {
       x: 1,
       y: 0,
     });
+  });
+});
+
+describe("webcamSourceRect", () => {
+  const IMAGE = { width: 1280, height: 720 };
+
+  it("shows the centred square cover puts in the bubble without framing", () => {
+    expect(webcamSourceRect(IMAGE, { zoom: 1, x: 0, y: 0 }, false)).toEqual({
+      sx: 280,
+      sy: 0,
+      sw: 720,
+      sh: 720,
+    });
+  });
+
+  it("ignores the pan at zoom 1, where there is nothing to pan", () => {
+    expect(webcamSourceRect(IMAGE, { zoom: 1, x: 1, y: -1 }, true)).toEqual(
+      webcamSourceRect(IMAGE, { zoom: 1, x: 0, y: 0 }, false),
+    );
+  });
+
+  it("narrows to 1/zoom of the square, centred", () => {
+    expect(webcamSourceRect(IMAGE, { zoom: 2, x: 0, y: 0 }, false)).toEqual({
+      sx: 460,
+      sy: 180,
+      sw: 360,
+      sh: 360,
+    });
+  });
+
+  it("pans to the square's edge at x = 1 and y = 1, never past it", () => {
+    // zoom 2: the window is 360 px, its centre moves 180 px: right/bottom edge of the square.
+    const r = webcamSourceRect(IMAGE, { zoom: 2, x: 1, y: 1 }, false);
+    expect(r.sx + r.sw).toBe(1000); // 280 + 720, the cover square's right edge
+    expect(r.sy + r.sh).toBe(720);
+  });
+
+  it("moves the other way in the raw image when mirrored: x = 1 shows the bubble's right", () => {
+    // Mirrored, the right of what the bubble shows is the LEFT of the raw image.
+    const r = webcamSourceRect(IMAGE, { zoom: 2, x: 1, y: 0 }, true);
+    expect(r.sx).toBe(280);
+  });
+
+  it("works for a portrait image (cover picks the width)", () => {
+    expect(webcamSourceRect({ width: 720, height: 1280 }, { zoom: 1, x: 0, y: 0 }, false)).toEqual({
+      sx: 0,
+      sy: 280,
+      sw: 720,
+      sh: 720,
+    });
+  });
+});
+
+describe("webcamRect on a portrait output", () => {
+  it("never makes the bubble wider than the frame (0.6 of a 1920 px height on 1080 px)", () => {
+    const rect = webcamRect(layout({ size: 0.6, position: { x: 1, y: 1 } }), {
+      width: 1080,
+      height: 1920,
+    })!;
+    expect(rect.size).toBe(1080);
+    expect(rect.x).toBe(0);
+    expect(rect.y + rect.size).toBe(1920);
   });
 });
