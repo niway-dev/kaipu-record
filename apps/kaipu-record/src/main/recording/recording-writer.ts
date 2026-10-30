@@ -287,14 +287,19 @@ export class RecordingWriter {
    * leaked. A stranded take is kept, so the save dialog can still salvage it.
    */
   async releaseAll(): Promise<void> {
-    const released = [...this.sessions.entries()].filter(([, session]) => !session.stranded);
-    for (const [id] of released) this.sessions.delete(id);
-    await Promise.all(
-      released.map(async ([, session]) => {
-        await session.queue;
-        await this.closeHandle(session).catch(() => {});
-      }),
-    );
+    await Promise.all(this.ids().map((id) => this.release(id)));
+  }
+
+  /**
+   * `releaseAll` for one session: a take whose page is gone (a reload) is not a discard, so
+   * its `.part` stays for the stranded-take sweep. Only `abort` (the user cancelled) deletes.
+   */
+  async release(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.stranded) return;
+    this.sessions.delete(sessionId);
+    await session.queue;
+    await this.closeHandle(session).catch(() => {});
   }
 
   async abort(sessionId: string): Promise<void> {

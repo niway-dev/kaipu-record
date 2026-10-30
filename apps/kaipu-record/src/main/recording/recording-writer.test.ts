@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LibraryVault } from "../library/library-vault";
 import { FinalizeMoveError, RecordingWriter } from "./recording-writer";
+import { recoverStrandedRecordings } from "./stranded-recordings";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -114,6 +115,30 @@ describe("RecordingWriter", () => {
     await expect(
       writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
     ).rejects.toThrow(/session/i);
+  });
+
+  it("release closes one session but keeps its partial for the stranded-take sweep", async () => {
+    const vaultDir = await mkdtemp(join(tmpdir(), "rw-vault-"));
+    const writer = new RecordingWriter({ vaultDir: () => vaultDir });
+    const { tempPath } = await writer.create("s1");
+    await writer.create("s2");
+    await writer.write("s1", new TextEncoder().encode("partial").buffer, 0);
+
+    // Its page reloaded mid-take: that is not a discard, the bytes are the only copy.
+    await writer.release("s1");
+    expect(await readFile(tempPath, "utf-8")).toBe("partial");
+    expect(writer.ids()).toEqual(["s2"]);
+
+    const swept = await recoverStrandedRecordings({
+      vaultDir,
+      fallbackTempDir: await mkdtemp(join(tmpdir(), "rw-fallback-")),
+      title: "Recovered",
+      now: () => Date.now() + 10 * 60_000,
+    });
+    expect(swept.recovered).toHaveLength(1);
+    expect(
+      await readFile(await new LibraryVault(vaultDir).filePath(swept.recovered[0]!), "utf-8"),
+    ).toBe("partial");
   });
 
   it("ids lists the open sessions until they end", async () => {
