@@ -26,6 +26,11 @@
  * that segment's source range, `webcam-lockstep.ts`), and the composer draws the layer
  * last, onto the final canvas. Without one, no second Input is opened.
  *
+ * Screen capture is change-driven: over a still screen one screen frame can stay up for
+ * seconds. With a visible webcam layer, the gap is filled with extra output frames at the
+ * webcam's rate (or the preset's cap), each the held screen frame re-composed with the next
+ * webcam frame, so the face keeps moving (`fillWebcamGap`). Fills stay inside their clip.
+ *
  * Encoding (NIW2-218): AVC with a keyframe every 10 s (2 s for YouTube). The quality tiers
  * use quantizer mode (constant quality) on the hardware encoder, at most 24 fps; everything
  * else, and a platform without quantizer support, targets a bitrate. `pickVideoEncoding` probes
@@ -79,7 +84,7 @@ import {
   Quality,
   StreamTarget,
 } from "mediabunny";
-import type { StreamTargetChunk } from "mediabunny";
+import type { StreamTargetChunk, WrappedCanvas } from "mediabunny";
 import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
 import { silencedSpansFor } from "../audio-edits";
 import { rebaseVideoTimestamp } from "./rebase-timestamp";
@@ -94,7 +99,9 @@ import {
 } from "./export-presets";
 import { cappedSlideFps, createFrameRateCap } from "./frame-rate-cap";
 import { chooseVideoEncoding, type VideoEncodingChoice } from "./video-encoding";
-import { webcamLookupTime } from "./webcam-lockstep";
+import { WEBCAM_FPS } from "@shared/webcam-track";
+import { webcamAt } from "../webcam/webcam-model";
+import { fillWebcamGap, webcamLookupTime, type WebcamFillState } from "./webcam-lockstep";
 import { openWebcamSourceOrNone, webcamImageOf, type WebcamSource } from "./webcam-source";
 
 // ---------------------------------------------------------------------------
@@ -235,9 +242,12 @@ async function runExportWithInput(
   // real source rate/sample rate when the worker sees more (too small → the muxer throws
   // and the hook retries once without fast start).
   const stats = await videoTrack.computePacketStats(240).catch(() => null);
+  // Webcam fills (see the header) add frames up to the webcam's rate over a still screen.
+  const fillFps = Math.min(WEBCAM_FPS, preset.maxFps ?? WEBCAM_FPS);
+  const sourceFps = stats?.averagePacketRate ?? 30;
   const workerCounts = packetCountsFor({
     durationSec: plan.totalDuration,
-    fps: stats?.averagePacketRate ?? 30,
+    fps: webcam ? Math.max(sourceFps, fillFps) : sourceFps,
     maxFps: preset.maxFps,
     slideFrames: slideFrameCount(plan.segments, plan.slideFps),
     hasAudio: audioSource !== null,
@@ -322,8 +332,51 @@ async function runExportWithInput(
 
         // The webcam frames of this clip, decoded beside the screen's (null: no webcam).
         const webcamCursor = webcam?.cursorFor(segment.sourceStart, segment.sourceEnd) ?? null;
+        const layer = plan.webcam;
+        // The latest screen frame decoded (kept or not): what the source shows until the next
+        // one, so the fills re-compose it. Its canvas stays intact while the next is decoded
+        // (the sink's pool has two slots, see canvas-sink-options.ts).
+        let held: WrappedCanvas | null = null;
+        let fills: WebcamFillState<WrappedCanvas> = { from: segment.sourceStart, face: null };
+        const fillUntil = async (nextFrame: number): Promise<void> => {
+          if (!held || !webcamCursor || !layer) return;
+          const frame = held;
+          fills = await fillWebcamGap({
+            state: fills,
+            nextFrame,
+            segmentEnd: segment.sourceEnd,
+            fps: fillFps,
+            visible: (t) => webcamAt({ webcam: layer }, t) !== null,
+            frameAt: (t) => webcamCursor.frameAt(t),
+            emit: async (t, face) => {
+              const outTs = segment.timelineStart + (t - segment.sourceStart);
+              if (prevOutTs !== null && outTs <= prevOutTs) return false;
+              if (!cap.keep(outTs)) return false;
+              const image = webcamImageOf(face);
+              // The held frame's own source span: its redactions and crop, unchanged.
+              compose.clip(
+                frame.canvas,
+                frame.timestamp,
+                frame.duration,
+                outTs,
+                image ? { image, sourceTs: t } : null,
+              );
+              await sendPosterOnce();
+              await videoSource.add(outTs, 1 / fillFps);
+              reportProgress(outTs);
+              prevOutTs = outTs;
+              return true;
+            },
+          });
+        };
         try {
           for await (const wrapped of sink.canvases(segment.sourceStart, segment.sourceEnd)) {
+            // One time for the webcam frame, its layout and the camera scale (E1).
+            const webcamTime = webcamLookupTime(wrapped.timestamp, segment.sourceStart);
+            // Keep the face moving over the gap the previous screen frame left (E2).
+            await fillUntil(webcamTime);
+            held = wrapped;
+            fills = { ...fills, from: Math.max(fills.from, webcamTime) };
             // Remap the source timestamp to the output (collapsed) timeline, clamped
             // to never go negative or regress — see the header comment and
             // rebase-timestamp.ts for why the straddling first frame needs this.
@@ -338,18 +391,20 @@ async function runExportWithInput(
             // the next kept one (the muxer derives durations from timestamp deltas), so
             // timestamps stay monotonic and the timeline length is unchanged.
             if (!cap.keep(outTs)) continue;
-            // One time for the webcam frame, its layout and the camera scale (E1).
-            const webcamAt = webcamLookupTime(wrapped.timestamp, segment.sourceStart);
-            const webcamImage = webcamCursor
-              ? webcamImageOf(await webcamCursor.frameAt(webcamAt))
-              : null;
+            const face = webcamCursor ? await webcamCursor.frameAt(webcamTime) : null;
+            const webcamImage = webcamImageOf(face);
             compose.clip(
               wrapped.canvas,
               wrapped.timestamp,
               wrapped.duration,
               outTs,
-              webcamImage ? { image: webcamImage, sourceTs: webcamAt } : null,
+              webcamImage ? { image: webcamImage, sourceTs: webcamTime } : null,
             );
+            // What is on screen now, for the next gap's fills.
+            fills = {
+              ...fills,
+              face: layer && webcamAt({ webcam: layer }, webcamTime) ? face : null,
+            };
             await sendPosterOnce();
             // The frame's own decoded duration (at least one cap slot); the muxer
             // stretches it to the next kept frame anyway.
@@ -357,6 +412,8 @@ async function runExportWithInput(
             reportProgress(outTs);
             prevOutTs = outTs;
           }
+          // The last screen frame of the clip stays up until the clip ends: fill that too.
+          await fillUntil(segment.sourceEnd);
         } finally {
           await webcamCursor?.close();
         }

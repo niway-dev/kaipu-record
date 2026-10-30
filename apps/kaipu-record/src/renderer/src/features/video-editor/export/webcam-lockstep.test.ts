@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createWebcamCursor,
+  fillWebcamGap,
   webcamDecodeWindow,
+  webcamFillTimes,
   webcamLookupTime,
   WEBCAM_DECODE_LEAD,
 } from "./webcam-lockstep";
@@ -167,5 +169,135 @@ describe("webcamLookupTime (E1)", () => {
     const cursor = createWebcamCursor<Frame>(track.frames(window.start, window.end), 0, 10);
     expect(await cursor.frameAt(4.6)).toBeNull(); // what looking up the raw timestamp gave
     expect((await cursor.frameAt(webcamLookupTime(4.6, 5)))?.index).toBe(150);
+  });
+});
+
+describe("webcamFillTimes (E2: a still screen keeps the face moving)", () => {
+  it("fills a 3 s gap between two screen frames at 30 fps (~89 frames)", () => {
+    const times = webcamFillTimes(1, 4, 10, 30);
+    expect(times).toHaveLength(89);
+    expect(times[0]).toBeCloseTo(1 + 1 / 30);
+    expect(times.at(-1)!).toBeLessThan(4 - 1 / 30 + 1e-6);
+  });
+
+  it("adds nothing between screen frames closer than one webcam frame", () => {
+    expect(webcamFillTimes(1, 1 + 1 / 31, 10, 30)).toEqual([]);
+    expect(webcamFillTimes(1, 1 + 1 / 30, 10, 30)).toEqual([]);
+  });
+
+  it("never fills across a cut: it stops one frame before the clip's end", () => {
+    // The next screen frame is in the next clip (source 20 s); this clip ends at 10 s.
+    const times = webcamFillTimes(9, 20, 10, 30);
+    expect(times).toHaveLength(29);
+    expect(times.every((t) => t < 10)).toBe(true);
+    expect(webcamFillTimes(9.95, 20, 10, 30)).toEqual([]);
+  });
+
+  it("follows a lower frame-rate cap (24 fps tiers), so a fill never takes the next frame's slot", () => {
+    expect(webcamFillTimes(0, 1, 10, 24)).toHaveLength(23);
+  });
+});
+
+describe("fillWebcamGap", () => {
+  /** A webcam at `fps`: the same object for the same frame, like the cursor's held frame. */
+  const frames = (fps: number) => {
+    const cache = new Map<number, { index: number }>();
+    return (t: number) => {
+      const index = Math.floor(t * fps + 1e-9);
+      if (!cache.has(index)) cache.set(index, { index });
+      return Promise.resolve(cache.get(index)!);
+    };
+  };
+
+  it("emits one fill per new webcam frame over a still screen", async () => {
+    const emitted: number[] = [];
+    const source = frames(30);
+    const state = await fillWebcamGap({
+      state: { from: 0, face: await source(0) },
+      nextFrame: 1,
+      segmentEnd: 10,
+      fps: 30,
+      visible: () => true,
+      frameAt: source,
+      emit: async (t) => {
+        emitted.push(t);
+        return true;
+      },
+    });
+    expect(emitted).toHaveLength(29);
+    expect(state.face).toEqual({ index: 29 });
+  });
+
+  it("does not re-emit the frame already on screen (a slower webcam)", async () => {
+    const emitted: number[] = [];
+    const source = frames(15);
+    await fillWebcamGap({
+      state: { from: 0, face: await source(0) },
+      nextFrame: 1,
+      segmentEnd: 10,
+      fps: 30,
+      visible: () => true,
+      frameAt: source,
+      emit: async (t) => {
+        emitted.push(t);
+        return true;
+      },
+    });
+    expect(emitted).toHaveLength(14);
+  });
+
+  it("emits nothing while the layer is hidden, except the one frame that removes the face", async () => {
+    const emitted: Array<[number, unknown]> = [];
+    await fillWebcamGap({
+      state: { from: 0, face: { index: 0 } },
+      nextFrame: 1,
+      segmentEnd: 10,
+      fps: 30,
+      visible: (t) => t < 0.5,
+      frameAt: frames(30),
+      emit: async (t, face) => {
+        emitted.push([t, face]);
+        return true;
+      },
+    });
+    const hidden = emitted.filter(([t]) => t >= 0.5);
+    expect(hidden).toHaveLength(1);
+    expect(hidden[0]![1]).toBeNull();
+  });
+
+  it("emits nothing when no face was on screen and none is due (before the webcam starts)", async () => {
+    const emit = vi.fn(async () => true);
+    await fillWebcamGap({
+      state: { from: 0, face: null },
+      nextFrame: 1,
+      segmentEnd: 10,
+      fps: 30,
+      visible: () => true,
+      frameAt: async () => null,
+      emit,
+    });
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it("resumes after the last time it considered, so the cursor never goes back", async () => {
+    const asked: number[] = [];
+    const opts = {
+      segmentEnd: 10,
+      fps: 30,
+      visible: () => true,
+      frameAt: async (t: number) => {
+        asked.push(t);
+        return { index: Math.floor(t * 30 + 1e-9) };
+      },
+      emit: async () => true,
+    };
+    const first = await fillWebcamGap({ ...opts, state: { from: 0, face: null }, nextFrame: 0.5 });
+    // A screen frame was skipped (fps cap): the next gap starts at an older held frame.
+    await fillWebcamGap({
+      ...opts,
+      state: { ...first, from: Math.max(first.from, 0.2) },
+      nextFrame: 1,
+    });
+    expect(asked).toEqual([...asked].sort((a, b) => a - b));
   });
 });

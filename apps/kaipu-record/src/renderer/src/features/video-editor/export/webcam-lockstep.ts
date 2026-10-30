@@ -103,3 +103,56 @@ export function createWebcamCursor<T extends { timestamp: number }>(
     },
   };
 }
+
+/**
+ * Source times at which to add an output frame between two screen frames, so the face keeps
+ * moving over a still screen (screen capture is change-driven: one frame can stay on screen
+ * for seconds). Every `1/fps` after `from` (the held frame's time, or the last fill), and
+ * only while a whole fill period is left before the next screen frame and before the clip's
+ * end, so a fill never shares a frame-rate-cap slot with the next frame and never crosses a
+ * cut. `fps` is the webcam's rate, or the preset's cap when lower.
+ */
+export function webcamFillTimes(
+  from: number,
+  nextFrame: number,
+  segmentEnd: number,
+  fps: number,
+): number[] {
+  if (!(fps > 0)) return [];
+  const last = Math.min(nextFrame, segmentEnd) - 1 / fps + EPS;
+  const times: number[] = [];
+  for (let k = 1; from + k / fps <= last; k++) times.push(from + k / fps);
+  return times;
+}
+
+/** Where the fills of a clip stand: the last time considered and the face last drawn. */
+export interface WebcamFillState<T> {
+  from: number;
+  face: T | null;
+}
+
+/**
+ * Fills one gap (see {@link webcamFillTimes}): for each fill time, the webcam frame due
+ * then (none while the layer is hidden), emitted only when it changes what is on screen —
+ * a new webcam frame, or the face disappearing. `emit` re-composes the held screen frame
+ * with it and returns false when it could not add the frame (the timestamp did not
+ * advance, or the fps cap took the slot). Returns the new state.
+ */
+export async function fillWebcamGap<T>(opts: {
+  state: WebcamFillState<T>;
+  nextFrame: number;
+  segmentEnd: number;
+  fps: number;
+  visible(sourceTime: number): boolean;
+  frameAt(sourceTime: number): Promise<T | null>;
+  emit(sourceTime: number, face: T | null): Promise<boolean>;
+}): Promise<WebcamFillState<T>> {
+  let { from, face } = opts.state;
+  for (const t of webcamFillTimes(from, opts.nextFrame, opts.segmentEnd, opts.fps)) {
+    from = t;
+    const due = opts.visible(t) ? await opts.frameAt(t) : null;
+    if (due === face) continue;
+    if (await opts.emit(t, due)) face = due;
+  }
+  return { from, face };
+}
