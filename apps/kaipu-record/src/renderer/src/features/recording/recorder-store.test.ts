@@ -1560,6 +1560,27 @@ describe("recorder-store live settings", () => {
         await stopAndSettle();
       });
 
+      it("fails the start when main cannot acknowledge the fallback, releasing the take", async () => {
+        // The engine refuses to record a screen whose capture would leave the bubble out.
+        window.electronAPI.recordingWebcamEnded = vi.fn(async () => {
+          throw new Error("ipc down");
+        });
+        prepareEngineMock.mockImplementation(async (options: EngineOptions) => {
+          await options.onWebcamUnavailable!();
+          return fakePrepared();
+        });
+        store.requestStartRecording(() => ({ ...input, webcam }));
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(store.getRecorderSnapshot().status).toBe("idle");
+        expect(reportErrorMock).toHaveBeenCalledWith(
+          messages.record.errorStart,
+          expect.any(Error),
+          expect.anything(),
+        );
+        expect(window.electronAPI.recordingAbort).toHaveBeenCalledWith(createCalls()[0]![0]);
+        expect(window.electronAPI.recordingStop).toHaveBeenCalled();
+      });
+
       it("tells the user when main could not create the webcam session", async () => {
         recordingCreateMock.mockImplementation(async (...args: unknown[]) => {
           if (args[1] === "webcam") throw new Error("Error invoking remote method: EACCES");

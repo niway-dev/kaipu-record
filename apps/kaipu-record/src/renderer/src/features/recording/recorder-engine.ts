@@ -209,7 +209,8 @@ export interface EngineOptions {
    * The take asked for a webcam and it did not open (busy, denied, unplugged, or not within
    * `WEBCAM_OPEN_TIMEOUT_MS`). Awaited BEFORE the screen capture is requested: the bubble is
    * left out only of captures that start while it is protected, so main must put it back in
-   * first (`recordingWebcamEnded`), and the take records the face in the screen instead.
+   * first (`recordingWebcamEnded`), and the take records the face in the screen instead. A
+   * rejection fails the start: the screen is never requested.
    */
   onWebcamUnavailable?(): Promise<void>;
   /**
@@ -323,12 +324,10 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
     throw error;
   };
   if (options.webcam && !(await webcamRequest)) {
-    try {
-      await options.onWebcamUnavailable?.();
-    } catch (error) {
-      // The take still records; only the bubble may stay out of it.
-      console.warn("could not report the unavailable webcam before the screen", error);
-    }
+    // Main must acknowledge it before the screen is captured: otherwise it still believes the
+    // take records a webcam file and keeps the bubble out of the capture, and the face would be
+    // in neither file. Not acknowledged, the start fails like any other (mic released).
+    await Promise.resolve(options.onWebcamUnavailable?.()).catch(releaseMicOnFailure);
   }
   const screenStream = await (screenRequest ?? acquireScreen()).catch(releaseMicOnFailure);
   const screenTrack = screenStream.getVideoTracks()[0];

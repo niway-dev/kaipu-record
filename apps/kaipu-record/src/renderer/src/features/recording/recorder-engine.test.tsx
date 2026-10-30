@@ -1412,23 +1412,26 @@ describe("webcam", () => {
       expect(handle.webcam).toBeNull();
     });
 
-    it("a report that fails does not fail the take", async () => {
+    it("a report main cannot acknowledge fails the start: no screen, the mic released", async () => {
+      // Main still thinks the take records a webcam file and keeps the bubble out of the
+      // capture: recording now would lose the face. The take fails as any start does.
+      const micTrack = fakeTrack();
       getUserMedia.mockImplementation(async (c: MediaStreamConstraints) => {
         if (c.video && !isScreen(c)) throw new Error("NotAllowedError");
+        if (!c.video) return fakeStream([], [micTrack]);
         return fakeStream([screenVideoTrack], []);
       });
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      try {
-        const handle = await startEngine(
+      await expect(
+        prepareEngine(
           baseOptions({
+            microphoneDeviceId: "mic-1",
             webcam,
             onWebcamUnavailable: async () => Promise.reject(new Error("ipc")),
           }),
-        );
-        expect(handle.webcam).toBeNull();
-      } finally {
-        warn.mockRestore();
-      }
+        ),
+      ).rejects.toThrow("ipc");
+      expect(kinds()).not.toContain("screen");
+      await vi.waitFor(() => expect(micTrack.stop).toHaveBeenCalled());
     });
 
     it("a camera that never answers holds the screen until the open timeout", async () => {

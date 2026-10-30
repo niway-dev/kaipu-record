@@ -197,6 +197,8 @@ in `EngineOptions`. When set:
   fail the take: the engine awaits `onWebcamUnavailable` (the store tells main through
   `recordingWebcamEnded`, which puts the bubble back in the capture) before it requests the
   screen, the take records the face in the screen, and the user gets a toast once it is saved.
+  If main cannot acknowledge that report, the start fails like any other start: the screen is
+  never requested.
 - A second `Output({ format: new Mp4OutputFormat({ fastStart: false }), target: new StreamTarget(webcamWritable) })`
   with one `MediaStreamVideoTrackSource(webcamTrack, { codec: "avc", bitrate: WEBCAM_BITRATE_BPS, hardwareAcceleration: "prefer-hardware", latencyMode: "realtime" })`
   and `addVideoTrack(source, { frameRate: 30 })`. No audio track. Chunks go to
