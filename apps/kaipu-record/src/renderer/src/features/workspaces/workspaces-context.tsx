@@ -116,6 +116,28 @@ export function WorkspacesProvider({ children }: { children: React.ReactNode }):
     if (!result.ok && result.reason === "read-only") showToast({ message: t("readOnly") });
   }, [t]);
 
+  const remove = useCallback(
+    async (id: string): Promise<WorkspaceRemoveResult> => {
+      const result = await window.electronAPI.workspaces.remove(id);
+      if (!result.ok) {
+        // A race can refuse it (it became the active one after the dialog opened): the
+        // dialog is gone, so the toast is the only place the reason can show.
+        const name = state?.workspaces.find((w) => w.id === id)?.name ?? "";
+        const message =
+          result.reason === "active"
+            ? t("removeRefusedActive", { name })
+            : result.reason === "last"
+              ? t("removeRefusedLast")
+              : result.reason === "read-only"
+                ? t("readOnly")
+                : t("removeRefusedUnknown");
+        showToast({ message });
+      }
+      return result;
+    },
+    [state, t],
+  );
+
   const value = useMemo<Workspaces>(
     () => ({
       state,
@@ -125,11 +147,11 @@ export function WorkspacesProvider({ children }: { children: React.ReactNode }):
       setMenuOpen,
       switchTo,
       add,
-      remove: (id) => window.electronAPI.workspaces.remove(id),
+      remove,
       openFolder: (id) => void window.electronAPI.workspaces.openFolder(id),
       dismissHint: () => void window.electronAPI.workspaces.dismissHint(),
     }),
-    [state, epoch, active, menuOpen, switchTo, add],
+    [state, epoch, active, menuOpen, switchTo, add, remove],
   );
 
   return <WorkspacesContext.Provider value={value}>{children}</WorkspacesContext.Provider>;
