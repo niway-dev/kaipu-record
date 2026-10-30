@@ -1248,6 +1248,64 @@ describe("webcam", () => {
     expect(handle.webcam?.isUsable()).toBe(true);
   });
 
+  it("re-reads after stop a first-media time the live wait gave up on", async () => {
+    vi.useFakeTimers();
+    const original = vi.mocked(Output).getMockImplementation()!;
+    try {
+      // The fields exist but stay empty past the live 3 s wait: both readings are estimates.
+      vi.mocked(Output).mockImplementation(function () {
+        return {
+          addVideoTrack: vi.fn(),
+          addAudioTrack: vi.fn(),
+          start: vi.fn(async () => {}),
+          finalize: vi.fn(async () => {}),
+          cancel: vi.fn(async () => {}),
+          _firstMediaStreamTimestamp: null,
+        } as never;
+      });
+      const starting = startEngine(baseOptions({ webcam }));
+      await vi.advanceTimersByTimeAsync(0);
+      const handle = await starting;
+      const [screenOutput, webcamOutput] = outputs() as unknown as {
+        _firstMediaStreamTimestamp: number | null;
+      }[];
+      await vi.advanceTimersByTimeAsync(3100);
+      await expect(handle.webcam!.firstMediaTimestamp).resolves.toMatchObject({
+        quality: "estimated",
+      });
+      // Their first samples arrived after all, before the take stopped.
+      screenOutput!._firstMediaStreamTimestamp = 10;
+      webcamOutput!._firstMediaStreamTimestamp = 10.0405;
+      const stopping = handle.stop();
+      await vi.advanceTimersByTimeAsync(2000);
+      await stopping;
+      await expect(handle.webcam!.startTimesAfterStop()).resolves.toEqual({
+        screen: { rendererMs: 10_000, quality: "exact" },
+        webcam: { rendererMs: 10_040.5, quality: "exact" },
+      });
+    } finally {
+      vi.mocked(Output).mockImplementation(original);
+      vi.useRealTimers();
+    }
+  });
+
+  it("a screen that cannot be finalized still releases the camera, the screen and the mic", async () => {
+    const handle = await startEngine(baseOptions({ microphoneDeviceId: "mic-1", webcam }));
+    const [screenOutput, webcamOutput] = outputs();
+    screenOutput!.finalize.mockRejectedValueOnce(new Error("muxer failed"));
+    await expect(handle.stop()).rejects.toThrow("muxer failed");
+    expect(webcamTrack.stop).toHaveBeenCalled();
+    expect(screenVideoTrack.stop).toHaveBeenCalled();
+    expect(micTrack.stop).toHaveBeenCalled();
+    expect(audioContextClose).toHaveBeenCalled();
+    // The take fails with its screen: the webcam file has nothing to belong to.
+    expect(webcamOutput!.finalize).not.toHaveBeenCalled();
+    expect(
+      (webcamOutput as unknown as { cancel: ReturnType<typeof vi.fn> }).cancel,
+    ).toHaveBeenCalled();
+    expect(handle.webcam?.isUsable()).toBe(false);
+  });
+
   it("a webcam that cannot be opened does not fail the take: it records without one", async () => {
     const original = getUserMedia.getMockImplementation() as (
       c: MediaStreamConstraints,
@@ -1345,6 +1403,28 @@ describe("webcam", () => {
     expect(webcamTrack.stop).toHaveBeenCalled();
     await handle.stop();
     expect(handle.webcam?.isUsable()).toBe(true);
+  });
+
+  it("endWebcam leaves a webcam source whose encoder failed alone, and releases the camera", async () => {
+    const mocked = vi.mocked(MediaStreamVideoTrackSource);
+    const original = mocked.getMockImplementation()!;
+    const build = original as unknown as (...args: unknown[]) => Record<string, unknown>;
+    mocked.mockImplementation(function (track: unknown, config: unknown) {
+      const source = build(track, config);
+      if (track === (webcamTrack as unknown)) {
+        source.errorPromise = Promise.reject(new Error("encoder crashed"));
+      }
+      return source as never;
+    });
+    try {
+      const handle = await startEngine(baseOptions({ webcam }));
+      await new Promise((r) => setTimeout(r, 0));
+      handle.endWebcam();
+      expect(webcamSource().source.close).not.toHaveBeenCalled();
+      expect(webcamTrack.stop).toHaveBeenCalled();
+    } finally {
+      mocked.mockImplementation(original);
+    }
   });
 
   it("endWebcam before the take begins drops the webcam from it", async () => {

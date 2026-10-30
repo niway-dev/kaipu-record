@@ -959,6 +959,8 @@ async function stopRecording(): Promise<void> {
   stopTicks();
 
   let recording: LocalRecording | null = null;
+  /** The take recorded a webcam file: the saved recording should carry it. */
+  const recordedWebcam = activeEngine.webcam !== null;
   try {
     const title = `Recording — ${new Date().toLocaleString()}`;
     // Run the real finalize and a minimum dwell together so "Saving…" is visible
@@ -999,6 +1001,11 @@ async function stopRecording(): Promise<void> {
   window.electronAPI.recordingStop();
   if (recording && webcamUnavailable)
     showToast({ message: runtimeT()("record.webcamUnavailable") });
+  // The webcam file failed (its encoder, its finalize at stop, or main could not place it):
+  // the bubble was out of the capture while it recorded, so the face may be in no file.
+  // Nothing signals this during the take; the screen recording is kept, and the user told.
+  else if (recording && recordedWebcam && !recording.webcam)
+    showToast({ message: runtimeT()("record.webcamNotSaved") });
   webcamUnavailable = false;
   engine = null;
   cursorTrack = null;
@@ -1015,7 +1022,8 @@ async function stopRecording(): Promise<void> {
  * The webcam entry finalize sends (ADR 0032): where the webcam file's time 0 sits against the
  * screen's, both read from the same renderer clock. Null without a usable webcam file, which
  * makes main discard its part. Both timestamps resolve within ~1 frame of the start (3 s at
- * most, then "estimated"), so this never holds the save up past that.
+ * most, then "estimated"), so this never holds the save up past that; one the live wait gave
+ * up on is read again after the stop (`startTimesAfterStop`), and is exact if it filled late.
  */
 async function webcamFinalizeMeta(
   handle: EngineHandle,
@@ -1023,12 +1031,9 @@ async function webcamFinalizeMeta(
 ): Promise<WebcamTrackMeta | null> {
   const webcam = handle.webcam;
   if (!webcam || !webcam.isUsable()) return null;
-  const [screenStart, webcamStart] = await Promise.all([
-    handle.firstMediaTimestamp,
-    webcam.firstMediaTimestamp,
-  ]);
+  const starts = await webcam.startTimesAfterStop();
   return {
-    ...webcamStartOffset(screenStart, webcamStart),
+    ...webcamStartOffset(starts.screen, starts.webcam),
     width: webcam.size.width,
     height: webcam.size.height,
     fps: WEBCAM_FPS,

@@ -262,10 +262,16 @@ Both outputs are stamped by mediabunny with the recorder renderer's `performance
 (`timestampBase: "synced-zero"` per output). The two files therefore share a clock and differ
 only by their first accepted sample. The store computes
 `startOffsetMs = webcam.firstMediaTimestamp.rendererMs − screen.firstMediaTimestamp.rendererMs`
-and `offsetQuality = "exact"` only when both are exact. Paused time is dropped by both sources
-identically (`MediaStreamVideoTrackSource` subtracts discarded frames), so the offset is constant
-for the whole take; the residual error is one frame of jitter at each pause edge, inside the
-tolerance the acceptance criteria set.
+and `offsetQuality = "exact"` only when both are exact. A reading the live 3 s wait gave up on
+is read again after the stop (NIW2-581), and is exact if the first sample arrived late. Paused
+time is dropped by both sources (`MediaStreamVideoTrackSource` subtracts the gaps between the
+frames it discards), each in steps of its own frames, so a pause can shift the webcam against
+the screen by up to about one webcam frame (33 ms). The shifts of several pauses add up: the
+bound is ±1 frame per pause, and one pause stays inside the tolerance the acceptance criteria
+set. A pause before the webcam's first frame is not dropped from the webcam at all: its time 0
+becomes the first frame after the resume, the offset then counts paused time the screen
+dropped, and the webcam plays that much late. That window is about one frame after the take
+begins.
 
 Editor time mapping: for screen source time `t`, the webcam frame is the last one with
 `webcamTs ≤ t − startOffsetMs / 1000`; before the webcam's first frame (a late start) the layer

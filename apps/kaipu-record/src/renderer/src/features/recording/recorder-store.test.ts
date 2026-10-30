@@ -1413,6 +1413,10 @@ describe("recorder-store live settings", () => {
     const createCalls = (): unknown[][] => recordingCreateMock.mock.calls as unknown[][];
     const webcamHandle = (over: Partial<NonNullable<EngineHandle["webcam"]>> = {}) => ({
       firstMediaTimestamp: Promise.resolve({ rendererMs: 3020.5, quality: "exact" as const }),
+      startTimesAfterStop: async () => ({
+        screen: { rendererMs: 3000, quality: "exact" as const },
+        webcam: { rendererMs: 3020.5, quality: "exact" as const },
+      }),
       size: { width: 1280, height: 720 },
       isUsable: () => true,
       ...over,
@@ -1420,7 +1424,17 @@ describe("recorder-store live settings", () => {
     const finalizeMeta = () =>
       vi.mocked(window.electronAPI.recordingFinalize).mock.calls.at(-1)![1];
 
-    beforeEach(() => recordingCreateMock.mockClear());
+    afterEach(() => {
+      for (const toast of getToasts()) dismissToast(toast.id);
+    });
+    beforeEach(() => {
+      recordingCreateMock.mockClear();
+      // Main saves the webcam it was sent a usable meta for, as the writer does.
+      window.electronAPI.recordingFinalize = vi.fn(async (_id, meta) => ({
+        ...RECORDING,
+        webcam: meta.webcam ?? null,
+      }));
+    });
 
     it("opens a webcam writer session beside the screen's and hands the engine the camera", async () => {
       await startWith(fakeEngine(), { webcam });
@@ -1451,10 +1465,7 @@ describe("recorder-store live settings", () => {
     });
 
     it("finalizes with the webcam's start offset against the screen, its size and the bubble", async () => {
-      const engine = fakeEngine({
-        firstMediaTimestamp: Promise.resolve({ rendererMs: 3000, quality: "exact" as const }),
-        webcam: webcamHandle(),
-      });
+      const engine = fakeEngine({ webcam: webcamHandle() });
       await startWith(engine, { webcam });
       await stopAndSettle();
       expect(finalizeMeta().webcam).toEqual({
@@ -1467,10 +1478,14 @@ describe("recorder-store live settings", () => {
       });
     });
 
-    it("marks the offset estimated when either first-media timestamp is", async () => {
+    it("marks the offset estimated when either first-media timestamp is, even after stop", async () => {
       const engine = fakeEngine({
-        firstMediaTimestamp: Promise.resolve({ rendererMs: 3000, quality: "estimated" as const }),
-        webcam: webcamHandle(),
+        webcam: webcamHandle({
+          startTimesAfterStop: async () => ({
+            screen: { rendererMs: 3000, quality: "estimated" as const },
+            webcam: { rendererMs: 3020.5, quality: "exact" as const },
+          }),
+        }),
       });
       await startWith(engine, { webcam });
       await stopAndSettle();
@@ -1487,6 +1502,35 @@ describe("recorder-store live settings", () => {
       await startWith(fakeEngine({ webcam: null }), { webcam });
       await stopAndSettle();
       expect(finalizeMeta().webcam).toBeNull();
+    });
+
+    describe("a webcam file that did not make it into the recording (the face may be in no file)", () => {
+      it("tells the user once the take is saved, which keeps the screen", async () => {
+        await startWith(fakeEngine({ webcam: webcamHandle({ isUsable: () => false }) }), {
+          webcam,
+        });
+        expect(getToasts()).toEqual([]); // the app is hidden during the take
+        await stopAndSettle();
+        expect(window.electronAPI.recordingFinalize).toHaveBeenCalledOnce();
+        expect(getToasts().map((t) => t.message)).toEqual([messages.record.webcamNotSaved]);
+        dismissToast(getToasts()[0]!.id);
+      });
+
+      it("also when main could not place a webcam the renderer finalized", async () => {
+        window.electronAPI.recordingFinalize = vi.fn(async () => RECORDING);
+        await startWith(fakeEngine({ webcam: webcamHandle() }), { webcam });
+        await stopAndSettle();
+        expect(getToasts().map((t) => t.message)).toEqual([messages.record.webcamNotSaved]);
+        dismissToast(getToasts()[0]!.id);
+      });
+
+      it("says nothing for a saved webcam, or a take that recorded none", async () => {
+        await startWith(fakeEngine({ webcam: webcamHandle() }), { webcam });
+        await stopAndSettle();
+        await startWith(fakeEngine());
+        await stopAndSettle();
+        expect(getToasts()).toEqual([]);
+      });
     });
 
     it("a webcam session that cannot be created leaves the take without a webcam", async () => {

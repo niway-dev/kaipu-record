@@ -26,7 +26,11 @@ import {
   decideDuck,
   type DuckState,
 } from "./ducking";
-import { waitForFirstMediaTimestamp, type FirstMediaTimestamp } from "./first-media-timestamp";
+import {
+  rereadFirstMediaTimestamp,
+  waitForFirstMediaTimestamp,
+  type FirstMediaTimestamp,
+} from "./first-media-timestamp";
 import { markRecordTiming } from "./record-timing";
 import { WEBCAM_BITRATE_BPS, WEBCAM_FPS } from "@shared/webcam-track";
 
@@ -76,6 +80,12 @@ export interface WebcamHandle {
   /** Renderer-clock time of the webcam file's time 0, like the screen's. */
   firstMediaTimestamp: Promise<FirstMediaTimestamp>;
   /**
+   * After `stop`: the screen's and the webcam's first-media times, for the start offset. Each
+   * is its live reading, or, where the live wait gave up ("estimated"), the exact time read
+   * again from its output, which by then has long accepted its first sample.
+   */
+  startTimesAfterStop(): Promise<{ screen: FirstMediaTimestamp; webcam: FirstMediaTimestamp }>;
+  /**
    * The size the file is encoded at (raw: no crop, no mirror): the first encoded frame's coded
    * size, or what the track reported when no frame has reached the encoder. Read it after stop.
    */
@@ -88,7 +98,16 @@ export interface WebcamHandle {
 }
 
 export interface EngineHandle extends LiveAudioControls {
-  /** Pauses (and `resume` resumes) every source in the same call: screen, audio, webcam. */
+  /**
+   * Pauses (and `resume` resumes) every source in the same call: screen, audio, webcam. Each
+   * source drops the paused time in steps of its own frames (mediabunny subtracts the gaps
+   * between the frames it discards), so a pause can shift the webcam against the screen by
+   * up to about one webcam frame (33 ms); the shifts of several pauses add up, ±1 frame per
+   * pause at worst. A pause before the webcam's first frame is not dropped from the webcam at
+   * all: its time 0 becomes the first frame after the resume, so the stored offset counts the
+   * paused time the screen dropped, and the webcam plays that much late. The window is the
+   * one frame after the take begins, too short for a click.
+   */
   pause(): void;
   resume(): void;
   /** Stop capture, finalize the MP4, resolve when flushed. */
@@ -677,7 +696,8 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
       if (!webcam || webcamClosed) return;
       webcamClosed = true;
       reportWebcamEnded();
-      if (webcamStarted) {
+      // A source whose encoder failed is already torn down by mediabunny: only the camera is left.
+      if (webcamStarted && !webcamFailed) {
         try {
           webcam.source.close();
         } catch {
@@ -817,24 +837,37 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
         // The poster frame comes from the screen track: take it before the tracks stop, but
         // never let it hold the save up.
         await Promise.race([thumbnail, delay(THUMBNAIL_STOP_WAIT_MS)]);
-        await output.finalize();
-        // The webcam after the screen, before the tracks stop. Its failure never fails the
-        // take: the file is reported unusable and finalize drops it.
-        if (webcam && webcamStarted) {
-          if (webcamFailed) await webcam.output.cancel().catch(() => undefined);
-          else {
-            try {
-              await webcam.output.finalize();
-            } catch (error) {
+        try {
+          try {
+            await output.finalize();
+          } catch (error) {
+            // The take fails with its screen: the webcam file has no take to belong to.
+            if (webcam && webcamStarted) {
               webcamFailed = true;
-              console.warn("webcam file could not be finalized — saved without it", error);
+              await webcam.output.cancel().catch(() => undefined);
+            }
+            throw error;
+          }
+          // The webcam after the screen, before the tracks stop. Its failure never fails the
+          // take: the file is reported unusable and finalize drops it.
+          if (webcam && webcamStarted) {
+            if (webcamFailed) await webcam.output.cancel().catch(() => undefined);
+            else {
+              try {
+                await webcam.output.finalize();
+              } catch (error) {
+                webcamFailed = true;
+                console.warn("webcam file could not be finalized — saved without it", error);
+              }
             }
           }
+        } finally {
+          // Whatever the files did, the devices are released: the camera light goes off.
+          compositor?.stop(); // cancel the draw loop + release the canvas track
+          for (const stream of inputStreams) stream.getTracks().forEach((t) => t.stop());
+          destination.stream.getTracks().forEach((t) => t.stop());
+          await audioContext.close();
         }
-        compositor?.stop(); // cancel the draw loop + release the canvas track
-        for (const stream of inputStreams) stream.getTracks().forEach((t) => t.stop());
-        destination.stream.getTracks().forEach((t) => t.stop());
-        await audioContext.close();
       },
     });
 
@@ -864,8 +897,23 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
           webcamStarted = true;
           markRecordTiming("webcam output.start resolved");
           const reportedSize = webcam.reportedSize;
+          const webcamOutput = webcam.output;
+          const webcamFirstMediaTimestamp = waitForFirstMediaTimestamp(
+            webcamOutput,
+            performance.now(),
+          );
           webcamHandle = {
-            firstMediaTimestamp: waitForFirstMediaTimestamp(webcam.output, performance.now()),
+            firstMediaTimestamp: webcamFirstMediaTimestamp,
+            startTimesAfterStop: async () => {
+              const [screenStart, webcamStart] = await Promise.all([
+                firstMediaTimestamp,
+                webcamFirstMediaTimestamp,
+              ]);
+              return {
+                screen: rereadFirstMediaTimestamp(output, screenStart),
+                webcam: rereadFirstMediaTimestamp(webcamOutput, webcamStart),
+              };
+            },
             get size() {
               return webcamEncodedSize ?? reportedSize;
             },

@@ -317,6 +317,7 @@
     "selectScreenOrWindow": "Elige una pantalla o ventana",
     "errorStopped": "La grabación se detuvo por un error. Guardamos lo que se pudo.",
     "webcamUnavailable": "La cámara no estaba disponible, así que tu cara se grabó dentro de la pantalla.",
+    "webcamNotSaved": "No pudimos guardar la grabación de la cámara, así que es posible que tu cara no aparezca en este video. La grabación de pantalla se conservó.",
     "errorStart": "No pudimos iniciar la grabación. Vuelve a intentarlo.",
     "errorSave": "No pudimos guardar la grabación.",
     "errorSaveKept": "No pudimos acceder a tu carpeta de grabaciones. La grabación se conservó y Kaipu la recuperará la próxima vez que se abra.",
