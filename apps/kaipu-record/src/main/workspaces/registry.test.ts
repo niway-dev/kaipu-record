@@ -408,7 +408,7 @@ describe("remove from list", () => {
     expect(again).toMatchObject({ ok: true, entry: { id: added.entry.id } });
   });
 
-  it("refuses the active and the last workspace", async () => {
+  it("refuses the active workspace, even when it is the only one", async () => {
     const registry = await WorkspaceRegistry.open(env());
     const id = registry.active().id;
     expect(await registry.remove(id)).toEqual({ ok: false, reason: "active" });
@@ -418,6 +418,41 @@ describe("remove from list", () => {
     if (!added.ok) throw new Error("add failed");
     await registry.setActive(added.entry.id);
     expect(await registry.remove(added.entry.id)).toEqual({ ok: false, reason: "active" });
+  });
+});
+
+describe("a failed write", () => {
+  it("does not keep an added workspace in the list", async () => {
+    const registry = await WorkspaceRegistry.open(env());
+    const folder = join(root, "Personal");
+    await mkdir(folder);
+    await writeFile(prefsFile(), "{ not json");
+
+    await expect(registry.add(folder)).rejects.toThrow();
+
+    expect(registry.entries()).toHaveLength(1);
+  });
+
+  it("does not drop a removed workspace from the list", async () => {
+    const registry = await WorkspaceRegistry.open(env());
+    const folder = join(root, "Personal");
+    await mkdir(folder);
+    const added = await registry.add(folder);
+    if (!added.ok) throw new Error("add failed");
+    await writeFile(prefsFile(), "{ not json");
+
+    await expect(registry.remove(added.entry.id)).rejects.toThrow();
+
+    expect(registry.get(added.entry.id)).toBeDefined();
+  });
+
+  it("does not keep a dismissed hint", async () => {
+    const registry = await WorkspaceRegistry.open(env());
+    await writeFile(prefsFile(), "{ not json");
+
+    await expect(registry.dismissHint()).rejects.toThrow();
+
+    expect(registry.state.hintDismissedAt).toBeUndefined();
   });
 });
 

@@ -143,6 +143,8 @@ export type RemoveOutcome =
   | { ok: false; reason: "active" | "last" | "unknown" | "read-only" };
 
 const LOCK = "workspaces:registry";
+/** Serializes `update`, so one update's rollback never discards another's change. */
+const UPDATE_LOCK = "workspaces:registry:update";
 
 function samePath(a: string, b: string): boolean {
   return resolve(a) === resolve(b);
@@ -496,6 +498,8 @@ export class WorkspaceRegistry {
     if (this.readOnly) return { ok: false, reason: "read-only" };
     if (!this.get(id)) return { ok: false, reason: "unknown" };
     if (id === this.key.activeId) return { ok: false, reason: "active" };
+    // Defence in depth: the active id always names an entry, so a lone entry is the active
+    // one and was refused above. This guard only matters if that invariant ever breaks.
     if (this.key.entries.length <= 1) return { ok: false, reason: "last" };
     await this.update((key) => {
       key.entries = key.entries.filter((e) => e.id !== id);
@@ -507,14 +511,12 @@ export class WorkspaceRegistry {
   async setActive(id: string): Promise<void> {
     if (this.readOnly) throw new Error("workspaces: preferences are read-only this session");
     if (!this.get(id)) throw new Error(`workspaces: unknown workspace ${id}`);
-    const previous = this.key.activeId;
-    this.key.activeId = id;
-    try {
-      await this.persist({ mirrorVault: true });
-    } catch (error) {
-      this.key.activeId = previous;
-      throw error;
-    }
+    await this.update(
+      (key) => {
+        key.activeId = id;
+      },
+      { mirrorVault: true },
+    );
   }
 
   async dismissHint(): Promise<void> {
@@ -533,9 +535,25 @@ export class WorkspaceRegistry {
     }
   }
 
-  private async update(mutate: (key: WorkspacesKey) => void): Promise<void> {
-    mutate(this.key);
-    if (!this.readOnly) await this.persist({ mirrorVault: false });
+  /**
+   * Apply a change and write it. A failed write puts the registry back as it was, so a
+   * rejected add or remove leaves nothing behind in the list.
+   */
+  private update(
+    mutate: (key: WorkspacesKey) => void,
+    options: { mirrorVault: boolean } = { mirrorVault: false },
+  ): Promise<void> {
+    return withLock(UPDATE_LOCK, async () => {
+      const before = structuredClone(this.key);
+      mutate(this.key);
+      if (this.readOnly) return;
+      try {
+        await this.persist(options);
+      } catch (error) {
+        this.key = before;
+        throw error;
+      }
+    });
   }
 
   /**
