@@ -17,7 +17,9 @@ const hooks = vi.hoisted(() => ({
   failSync: false,
   failUnlink: new Set<string>(),
   failRename: null as null | ((from: string, to: string) => boolean),
-  failWriteFile: false,
+  /** The first `close` / first `stat` of a "wx" handle fails. */
+  failClose: false,
+  failFirstStat: false,
   /** Runs right before the failing write throws (`failWriteAt`). */
   onWriteFail: null as null | (() => Promise<void>),
   /**
@@ -25,6 +27,12 @@ const hooks = vi.hoisted(() => ({
    * also drops `variant`, as both are one directory entry there.
    */
   fold: null as null | { name: string; variant: string },
+  /** Runs once, right after a `link` to a path ending in `onPath` succeeds. */
+  afterLink: null as null | { onPath: string; run: (path: string) => Promise<void> },
+  /** Runs right before a `rename` onto `to` (another process acting in that window). */
+  onRename: null as null | ((from: string, to: string) => Promise<void>),
+  /** Paths whose next `lstat` fails with EIO. */
+  failLstat: new Set<string>(),
 }));
 
 vi.mock("node:fs/promises", async (importActual) => {
@@ -43,7 +51,18 @@ vi.mock("node:fs/promises", async (importActual) => {
       if (hooks.linkError) {
         throw Object.assign(new Error(hooks.linkError), { code: hooks.linkError });
       }
-      return actual.link(from, to);
+      await actual.link(from, to);
+      const after = hooks.afterLink;
+      if (after && to.endsWith(after.onPath)) {
+        hooks.afterLink = null;
+        await after.run(to);
+      }
+    },
+    lstat: async (...args: Parameters<typeof actual.lstat>) => {
+      if (hooks.failLstat.delete(String(args[0]))) {
+        throw Object.assign(new Error("EIO"), { code: "EIO" });
+      }
+      return actual.lstat(...args);
     },
     open: async (path: string, flags?: string, mode?: number) => {
       if (flags === "wx") await arrive(path);
@@ -57,7 +76,24 @@ vi.mock("node:fs/promises", async (importActual) => {
         position: number,
       ) => Promise<{ bytesWritten: number; buffer: Buffer }>;
       const sync = handle.sync.bind(handle);
+      const close = handle.close.bind(handle);
+      const stat = handle.stat.bind(handle) as typeof handle.stat;
+      let stats = 0;
       return Object.assign(handle, {
+        close: async () => {
+          await close();
+          if (hooks.failClose) {
+            hooks.failClose = false;
+            throw Object.assign(new Error("EIO"), { code: "EIO" });
+          }
+        },
+        stat: async (options?: { bigint?: boolean }) => {
+          stats += 1;
+          if (hooks.failFirstStat && stats === 1) {
+            throw Object.assign(new Error("EIO"), { code: "EIO" });
+          }
+          return stat(options as never);
+        },
         write: async (buffer: Buffer, offset: number, length: number, position: number) => {
           writes += 1;
           if (hooks.failWriteAt === writes) {
@@ -81,15 +117,12 @@ vi.mock("node:fs/promises", async (importActual) => {
     },
     rename: async (from: string, to: string) => {
       await arrive(to);
+      await hooks.onRename?.(from, to);
       if (hooks.failRename?.(from, to)) {
         throw Object.assign(new Error("EACCES"), { code: "EACCES" });
       }
       await actual.rename(from, to);
       if (hooks.fold?.name === from) await actual.unlink(hooks.fold.variant).catch(() => {});
-    },
-    writeFile: async (...args: Parameters<typeof actual.writeFile>) => {
-      if (hooks.failWriteFile) throw Object.assign(new Error("EROFS"), { code: "EROFS" });
-      return actual.writeFile(...args);
     },
   };
 });
@@ -111,9 +144,13 @@ afterEach(() => {
   hooks.failSync = false;
   hooks.failUnlink.clear();
   hooks.failRename = null;
-  hooks.failWriteFile = false;
+  hooks.failClose = false;
+  hooks.failFirstStat = false;
   hooks.onWriteFail = null;
   hooks.fold = null;
+  hooks.afterLink = null;
+  hooks.onRename = null;
+  hooks.failLstat.clear();
   vi.restoreAllMocks();
 });
 
@@ -262,6 +299,18 @@ describe("placeNoReplace", () => {
     expect(await read(from)).toBe("new recording");
   });
 
+  it.each([
+    ["the copy's close fails", () => (hooks.failClose = true)],
+    ["the copy's first stat fails", () => (hooks.failFirstStat = true)],
+  ])("%s: its own file is removed and the source kept", async (_name, arm) => {
+    const { dir, from, to } = await pair();
+    hooks.linkError = "EXDEV";
+    arm();
+    await expect(placeNoReplace(from, to)).rejects.toMatchObject({ code: "EIO" });
+    expect(await read(from)).toBe("new recording");
+    expect(await readdir(dir)).toEqual(["source.part"]);
+  });
+
   describe("a source that cannot be removed after placing", () => {
     it("set-aside (default): renamed out of the sweep's pattern", async () => {
       const { dir, from, to } = await pair();
@@ -293,8 +342,9 @@ describe("placeNoReplace", () => {
     it("set-aside: logs when the marker cannot be written either", async () => {
       const { from, to } = await pair();
       hooks.failUnlink.add(from);
-      hooks.failRename = (source) => source === from;
-      hooks.failWriteFile = true;
+      // Neither the set-aside nor the marker's atomic rename can land.
+      hooks.failRename = (source, target) =>
+        source === from || target === `${from}${PLACED_MARKER_SUFFIX}`;
       const error = vi.spyOn(console, "error").mockImplementation(() => {});
       expect(await placeNoReplace(from, to)).toBe("placed");
       expect(error).toHaveBeenCalled();
@@ -355,7 +405,9 @@ describe("renameCaseOnly", () => {
       const identity = await lstat(from);
       hooks.linkError = linkError;
       expect(await renameCaseOnly(from, to)).toBe("placed");
-      expect((await lstat(to)).ino).toBe(identity.ino);
+      // A link keeps the file itself; without hard links it is an exclusive copy (never a
+      // replacing rename onto the new name).
+      if (linkError === null) expect((await lstat(to)).ino).toBe(identity.ino);
       expect(await read(to)).toBe("mine");
       expect(await readdir(dir)).toEqual(["Clip-variant.mp4"]);
     },
@@ -465,5 +517,69 @@ describe("renameCaseOnly when the file cannot return to its old name", () => {
     expect(temp).toBeDefined();
     expect(await read(join(dir, temp!))).toBe("mine");
     expect(await read(to)).toBe("theirs");
+  });
+});
+
+// The threat model (ADR 0033 "Placing a file"): a path's observed stranger identity is never
+// authority to delete, and when ownership is uncertain the bytes are kept.
+describe("a file that replaces one of our names mid-operation", () => {
+  const actualFs = () => vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+
+  it("placeNoReplace keeps a file that replaced the source after placing", async () => {
+    const { dir, from, to } = await pair();
+    const fs = await actualFs();
+    await writeFile(join(dir, "foreign"), "theirs");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    hooks.afterLink = { onPath: "Dest.mp4", run: () => fs.rename(join(dir, "foreign"), from) };
+    expect(await placeNoReplace(from, to)).toBe("placed");
+    expect(await read(to)).toBe("new recording");
+    expect(await read(from)).toBe("theirs");
+  });
+
+  it.each([
+    ["a different file", false],
+    ["an unreadable name", true],
+  ])("case-only: never removes %s at the new name after linking", async (_name, unreadable) => {
+    const dir = await folder();
+    const from = join(dir, "clip.mp4");
+    const to = join(dir, "Clip-variant.mp4");
+    await writeFile(from, "mine");
+    const fs = await actualFs();
+    await fs.link(from, to);
+    hooks.fold = { name: from, variant: to };
+    await writeFile(join(dir, "foreign"), "theirs");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    hooks.afterLink = {
+      onPath: "Clip-variant.mp4",
+      run: async (path) => {
+        await fs.rename(join(dir, "foreign"), path);
+        if (unreadable) hooks.failLstat.add(path);
+      },
+    };
+    await renameCaseOnly(from, to).catch(() => {});
+    expect(await read(to)).toBe("theirs");
+    const names = await readdir(dir);
+    const kept = names.filter((n) => n !== "Clip-variant.mp4");
+    expect(await Promise.all(kept.map((n) => read(join(dir, n))))).toContain("mine");
+  });
+
+  it("case-only without hard links never renames onto the new name", async () => {
+    const dir = await folder();
+    const from = join(dir, "clip.mp4");
+    const to = join(dir, "Clip-variant.mp4");
+    await writeFile(from, "mine");
+    const fs = await actualFs();
+    await fs.link(from, to);
+    hooks.fold = { name: from, variant: to };
+    const foreign = join(dir, "foreign");
+    await writeFile(foreign, "theirs");
+    hooks.linkError = "EPERM";
+    // Another process moves its file onto the new name just before any rename onto it.
+    hooks.onRename = async (_source, target) => {
+      if (target === to) await fs.rename(foreign, to);
+    };
+    expect(await renameCaseOnly(from, to)).toBe("placed");
+    expect(await read(to)).toBe("mine");
+    expect(await read(foreign)).toBe("theirs");
   });
 });

@@ -29,9 +29,10 @@ vi.mock("node:fs/promises", async (importActual) => {
       return actual.link(from, to);
     },
     // Arrival right after a check that found nothing.
-    lstat: async (path: string) => {
+    lstat: async (...args: Parameters<typeof actual.lstat>) => {
+      const path = String(args[0]);
       try {
-        return await actual.lstat(path);
+        return await actual.lstat(...args);
       } finally {
         if (path.endsWith(".mp4")) await arrive(path);
       }

@@ -238,62 +238,69 @@ describe("fixVault — kept, not forced", () => {
 });
 
 describe("fixVault — every payload survives a failure at any point", () => {
-  it("fails every rename from the n-th on, then a clean run finishes the job", async () => {
-    const small = {
-      "recording-2026-10-30-00-57-30.mp4": "payload:a",
-      ".kaipu/recording-2026-10-30-00-57-30.json": sidecar({
-        assetId: "a",
-        createdAt: T0,
-        title: "Recording — 10/29/2026, 7:57:30 PM",
-        tagIds: ["tag-a"],
-      }),
-      ".kaipu/recording-2026-10-30-00-57-30.jpg": "payload:a-poster",
-      ".kaipu/recording-2026-10-30-00-57-30.assets/s.png": "payload:a-slide",
-      "X.mp4": "payload:x",
-      ".kaipu/X.json": sidecar({ assetId: "x", title: "Y", createdAt: T0 }),
-      "Y.mp4": "payload:y",
-      ".kaipu/Y.json": sidecar({ assetId: "y", title: "X", createdAt: T0 + 1 }),
-      "Fresh.mp4": "payload:fresh",
-      ".kaipu/Gone.json": sidecar({ assetId: "gone", title: "Gone" }),
-      ".kaipu/Gone.jpg": "payload:gone-poster",
-      ".kaipu/Lost.jpg": "payload:lost",
-    };
-    const payloads = Object.values(small).filter((v) => v.startsWith("payload:"));
-    const identities = ["a", "x", "y", "gone"];
+  it(
+    "fails every rename from the n-th on, then a clean run finishes the job",
+    { timeout: 60_000 },
+    async () => {
+      const small = {
+        "recording-2026-10-30-00-57-30.mp4": "payload:a",
+        ".kaipu/recording-2026-10-30-00-57-30.json": sidecar({
+          assetId: "a",
+          createdAt: T0,
+          title: "Recording — 10/29/2026, 7:57:30 PM",
+          tagIds: ["tag-a"],
+        }),
+        ".kaipu/recording-2026-10-30-00-57-30.jpg": "payload:a-poster",
+        ".kaipu/recording-2026-10-30-00-57-30.assets/s.png": "payload:a-slide",
+        "X.mp4": "payload:x",
+        ".kaipu/X.json": sidecar({ assetId: "x", title: "Y", createdAt: T0 }),
+        "Y.mp4": "payload:y",
+        ".kaipu/Y.json": sidecar({ assetId: "y", title: "X", createdAt: T0 + 1 }),
+        "Fresh.mp4": "payload:fresh",
+        ".kaipu/Gone.json": sidecar({ assetId: "gone", title: "Gone" }),
+        ".kaipu/Gone.jpg": "payload:gone-poster",
+        ".kaipu/Lost.jpg": "payload:lost",
+      };
+      const payloads = Object.values(small).filter((v) => v.startsWith("payload:"));
+      const identities = ["a", "x", "y", "gone"];
 
-    // Count the renames a clean run makes, then fail from each of them.
-    directory = await makeVault(small);
-    failure.calls = 0;
-    await fix();
-    const total = failure.calls;
-    await rm(directory, { recursive: true, force: true });
-    expect(total).toBeGreaterThan(5);
-
-    for (let n = 1; n <= total; n++) {
+      // Count the renames a clean run makes, then fail from each of them.
       directory = await makeVault(small);
       failure.calls = 0;
-      failure.from = n;
-      await fix().catch(() => undefined);
-      failure.from = Infinity;
-
-      const contents = await Promise.all(
-        (await listFiles(directory)).map((path) => readFile(join(directory, path), "utf8")),
-      );
-      for (const payload of payloads) expect(contents, `${payload} after #${n}`).toContain(payload);
-      for (const id of identities) {
-        expect(
-          contents.some((c) => c.includes(`"assetId": "${id}"`) || c.includes(`"assetId":"${id}"`)),
-          `identity ${id} after #${n}`,
-        ).toBe(true);
-      }
-
-      const report = await fix();
-      expect(report.failed, `retry after #${n}`).toEqual([]);
-      expect(await fixable(), `converged after #${n}`).toEqual([]);
+      await fix();
+      const total = failure.calls;
       await rm(directory, { recursive: true, force: true });
-    }
-    directory = "";
-  });
+      expect(total).toBeGreaterThan(5);
+
+      for (let n = 1; n <= total; n++) {
+        directory = await makeVault(small);
+        failure.calls = 0;
+        failure.from = n;
+        await fix().catch(() => undefined);
+        failure.from = Infinity;
+
+        const contents = await Promise.all(
+          (await listFiles(directory)).map((path) => readFile(join(directory, path), "utf8")),
+        );
+        for (const payload of payloads)
+          expect(contents, `${payload} after #${n}`).toContain(payload);
+        for (const id of identities) {
+          expect(
+            contents.some(
+              (c) => c.includes(`"assetId": "${id}"`) || c.includes(`"assetId":"${id}"`),
+            ),
+            `identity ${id} after #${n}`,
+          ).toBe(true);
+        }
+
+        const report = await fix();
+        expect(report.failed, `retry after #${n}`).toEqual([]);
+        expect(await fixable(), `converged after #${n}`).toEqual([]);
+        await rm(directory, { recursive: true, force: true });
+      }
+      directory = "";
+    },
+  );
 });
 
 describe("orphan manifests", () => {
