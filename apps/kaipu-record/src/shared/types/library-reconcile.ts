@@ -18,7 +18,9 @@ export type ListedFindingKind =
   | "shared-companion"
   | "duplicate-identity"
   | "unreadable-record"
-  | "not-recognized";
+  | "not-recognized"
+  /** An orphans run whose manifest cannot be read or validated: Fix all does nothing until it is resolved. */
+  | "unreadable-orphan-run";
 
 export type ReconcileFindingKind = FixableFindingKind | ListedFindingKind;
 

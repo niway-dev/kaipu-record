@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readFile, rm } from "node:fs/promises";
+import { readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { LibraryVault } from "./library-vault";
 import { fixVault, resumeOrphanManifests, scanVault } from "./vault-reconcile";
@@ -365,4 +365,66 @@ describe("Fix all — every payload survives one failed call at any point", () =
       directory = "";
     },
   );
+});
+
+describe("an orphan run whose manifest cannot be read stops Fix all (fail closed)", () => {
+  const MANIFEST = ".kaipu/orphans/run-1/manifest.json";
+  const brokenVault = (manifest: string) =>
+    makeVault({
+      [MANIFEST]: manifest,
+      ".kaipu/orphans/run-1/Gone.json": sidecar({ assetId: "g", title: "Gone" }),
+      // The bundle's file that had not moved yet, and an unrelated item Fix all would rename.
+      ".kaipu/Gone.jpg": "poster",
+      "Demo.mp4": "video",
+      ".kaipu/Demo.json": sidecar({ assetId: "d", title: "Renamed" }),
+    });
+
+  it.each([
+    ["unreadable (EACCES)", "eacces"],
+    ["corrupt JSON", "{ not json"],
+    ["a bad schema", JSON.stringify({ version: 1, runId: "run-1", entries: [{ files: 3 }] })],
+  ])("%s: listed by the scan, and nothing is moved, classified or renamed", async (_name, raw) => {
+    directory = await brokenVault(raw === "eacces" ? pendingManifest() : raw);
+    const manifestPath = join(directory, MANIFEST);
+    const { chmod } = await import("node:fs/promises");
+    if (raw === "eacces") await chmod(manifestPath, 0o000);
+    try {
+      const scan = await scanVault({ directory, cloud: "unknown" });
+      expect(scan.findings).toContainEqual(
+        expect.objectContaining({ kind: "unreadable-orphan-run", fixable: false, path: MANIFEST }),
+      );
+      // Names only: a manifest without read permission cannot be snapshotted.
+      const names = async () =>
+        (await readdir(directory, { recursive: true }))
+          .filter((path) => !path.startsWith(".kaipu/reconcile"))
+          .sort();
+      const before = await names();
+
+      const report = await fix();
+      expect(report.failed).toContainEqual({
+        path: MANIFEST,
+        error: expect.stringContaining("needs attention"),
+      });
+      expect(report.remaining).toContainEqual(
+        expect.objectContaining({ kind: "unreadable-orphan-run", path: MANIFEST }),
+      );
+      expect(report.movedToOrphans).toBe(0);
+      expect(report.fixed).toBe(0);
+      // Only the run log is new: the poster waits, Demo keeps its name, no second run folder.
+      expect(await names()).toEqual(before);
+      expect(await read(".kaipu/Gone.jpg")).toBe("poster");
+    } finally {
+      if (raw === "eacces") await chmod(manifestPath, 0o600);
+    }
+  });
+
+  it("a run folder without a manifest yet, or a stray file, is not a broken run", async () => {
+    directory = await makeVault({
+      ".kaipu/orphans/run-empty": { dir: true },
+      ".kaipu/orphans/.DS_Store": "x",
+    });
+    const scan = await scanVault({ directory, cloud: "unknown" });
+    expect(scan.findings).toEqual([]);
+    expect((await fix()).failed).toEqual([]);
+  });
 });

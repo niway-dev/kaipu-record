@@ -53,6 +53,8 @@ export function describeFinding(finding: ReconcileFinding, t: LibraryT): string 
       return t("reconcileUnreadable", { path });
     case "not-recognized":
       return t("reconcileNotRecognized", { path });
+    case "unreadable-orphan-run":
+      return t("reconcileUnreadableOrphanRun", { path });
   }
 }
 

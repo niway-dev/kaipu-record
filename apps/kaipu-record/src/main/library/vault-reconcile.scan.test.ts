@@ -212,7 +212,11 @@ describe("scanVault — records without media, and orphans", () => {
         // M5: never touched.
         ".kaipu/tags.json": "{}",
         ".kaipu/reconcile/old.json": "{}",
-        ".kaipu/orphans/run/manifest.json": "{}",
+        ".kaipu/orphans/run/manifest.json": JSON.stringify({
+          version: 1,
+          runId: "run",
+          entries: [],
+        }),
         ".kaipu/drag/Demo.mp4": "v",
         ".kaipu/tmp/kaipu-rec-1.mp4.part": "v",
         ".kaipu/X.cursor.json.tmp": "{}",

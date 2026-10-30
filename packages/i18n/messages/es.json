@@ -782,6 +782,7 @@
     "reconcileSharedCompanion": "{path}: comparte archivos de Kaipu con otro elemento.",
     "reconcileDuplicateIdentity": "{path}: parece una copia de otro elemento. Quita el duplicado.",
     "reconcileUnreadable": "{path}: Kaipu no puede leer este registro.",
+    "reconcileUnreadableOrphanRun": "{path}: Kaipu no puede leer el registro de esta carpeta de huérfanos, así que Arreglar todo no cambia nada hasta que se repare o se elimine.",
     "reconcileNotRecognized": "{path}: no reconocido. Usa una extensión en minúsculas.",
     "reconcileFixAll": "Arreglar todo",
     "reconcileClose": "Cerrar",

@@ -491,6 +491,11 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
   // companions without their record.
   for (const finding of bundles.values()) finding.files!.push(finding.path);
 
+  // 5. Orphan runs whose manifest cannot be read: Fix all refuses to act until they are fixed.
+  for (const path of (await readOrphanRuns(directory)).unreadable) {
+    findings.push({ kind: "unreadable-orphan-run", fixable: false, path, stem: "" });
+  }
+
   findings.sort((a, b) => a.path.localeCompare(b.path));
   return { findings };
 }
@@ -646,37 +651,95 @@ async function moveFiles(
   return { moved, problems };
 }
 
+/** A run folder's manifest that passes the schema the replay relies on. */
+function isManifest(value: unknown): value is Manifest {
+  const manifest = value as Manifest | null;
+  return (
+    typeof manifest === "object" &&
+    manifest !== null &&
+    manifest.version === 1 &&
+    Array.isArray(manifest.entries) &&
+    manifest.entries.every(
+      (entry) =>
+        typeof entry === "object" &&
+        entry !== null &&
+        typeof entry.stem === "string" &&
+        (entry.status === "pending" || entry.status === "complete") &&
+        Array.isArray(entry.files) &&
+        entry.files.every(
+          (file) =>
+            typeof file === "object" &&
+            file !== null &&
+            typeof file.from === "string" &&
+            typeof file.to === "string",
+        ),
+    )
+  );
+}
+
+/**
+ * Every orphan run's manifest, read strictly. A run folder without a manifest (a run that
+ * crashed before its first move) and a stray file are no runs. A manifest that exists but
+ * cannot be read or validated is `unreadable` (vault-relative path): that run's remaining
+ * files are unknown, so nothing may be classified around them.
+ */
+async function readOrphanRuns(
+  directory: string,
+): Promise<{ runs: { folder: string; manifest: Manifest }[]; unreadable: string[] }> {
+  const parent = join(directory, META_DIR, ORPHANS_DIR);
+  let names: string[];
+  try {
+    names = await readdir(parent);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { runs: [], unreadable: [] };
+    throw error;
+  }
+  const runs: { folder: string; manifest: Manifest }[] = [];
+  const unreadable: string[] = [];
+  for (const run of names.sort()) {
+    const folder = join(parent, run);
+    let raw: string;
+    try {
+      raw = await readFile(join(folder, "manifest.json"), "utf8");
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT" || code === "ENOTDIR") continue;
+      unreadable.push(`${META_DIR}/${ORPHANS_DIR}/${run}/manifest.json`);
+      continue;
+    }
+    let manifest: unknown;
+    try {
+      manifest = JSON.parse(raw);
+    } catch {
+      manifest = null;
+    }
+    if (isManifest(manifest)) runs.push({ folder, manifest });
+    else unreadable.push(`${META_DIR}/${ORPHANS_DIR}/${run}/manifest.json`);
+  }
+  return { runs, unreadable };
+}
+
 /**
  * Complete every pending manifest entry a crashed run left, into that run's own folder.
  * Runs before classification, so a half-moved bundle is never classified again. `held`
  * lists the files of entries still pending afterwards: they belong to that entry, and only
- * its replay moves them (the caller keeps them out of a fresh classification).
+ * its replay moves them (the caller keeps them out of a fresh classification). When any
+ * run's manifest is `unreadable`, nothing is replayed and the caller must not act at all.
  */
-export async function resumeOrphanManifests(
-  directory: string,
-): Promise<{ moved: number; conflicts: string[]; failed: string[]; held: string[] }> {
-  const parent = join(directory, META_DIR, ORPHANS_DIR);
-  let runs: string[];
-  try {
-    runs = await readdir(parent);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT")
-      return { moved: 0, conflicts: [], failed: [], held: [] };
-    throw error;
-  }
+export async function resumeOrphanManifests(directory: string): Promise<{
+  moved: number;
+  conflicts: string[];
+  failed: string[];
+  held: string[];
+  unreadable: string[];
+}> {
+  const { runs, unreadable } = await readOrphanRuns(directory);
   let moved = 0;
   const conflicts: string[] = [];
   const failed: string[] = [];
   const held: string[] = [];
-  for (const run of runs) {
-    const folder = join(parent, run);
-    let manifest: Manifest;
-    try {
-      manifest = JSON.parse(await readFile(join(folder, "manifest.json"), "utf8")) as Manifest;
-    } catch {
-      continue; // not a run folder, or a manifest we cannot read: left as it is
-    }
-    if (!Array.isArray(manifest.entries)) continue;
+  if (unreadable.length > 0) return { moved, conflicts, failed, held, unreadable };
+  for (const { folder, manifest } of runs) {
     const pending = manifest.entries.filter((entry) => entry.status === "pending");
     if (pending.length === 0) continue;
     for (const entry of pending) {
@@ -692,7 +755,7 @@ export async function resumeOrphanManifests(
     }
     await writeManifest(folder, manifest);
   }
-  return { moved, conflicts, failed, held };
+  return { moved, conflicts, failed, held, unreadable };
 }
 
 // ── The fix pipeline ──────────────────────────────────────────────────────────
@@ -743,6 +806,20 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
   };
 
   const resumed = await resumeOrphanManifests(directory);
+  if (resumed.unreadable.length > 0) {
+    // Fail closed: that run's files are unknown, so any move, adoption or rename could split
+    // its bundle or take one of its files. Listed until someone repairs or removes it.
+    const scan = (await scanVault({ directory, cloud: options.cloud })).findings;
+    for (const finding of scan) {
+      report.counts[finding.kind] = (report.counts[finding.kind] ?? 0) + 1;
+    }
+    for (const path of resumed.unreadable) {
+      fail(path, "orphan run manifest unreadable: the run needs attention, nothing was fixed");
+    }
+    report.remaining = scan.map(publicFinding);
+    report.logPath = await writeRunLog(directory, now, report);
+    return report;
+  }
   report.movedToOrphans += resumed.moved;
   for (const path of [...resumed.conflicts, ...resumed.failed])
     fail(path, "orphan move left in place");
