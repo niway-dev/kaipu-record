@@ -132,27 +132,15 @@ export function isQualityTier(presetId: ExportPresetId): presetId is QualityTier
 }
 
 /**
- * What the composer draws, for every preset: `wc1` = the webcam layer (NIW2-575, ADR 0033).
- * An export of a webcam recording made before the layer existed has the same edit
- * fingerprint (it hashes the layout) but no face, so it must never be reused.
- */
-const COMPOSE_REVISION = "wc1";
-
-/**
  * What changed in an encode since the sidecars that might match it. "Already exported" only
  * reuses a file encoded the same way: the tiers moved to quantizer encoding at 24 fps on
  * 2026-10-13, so a Balanced or Light file must carry this revision in its fingerprint (the
  * bitrate-tier files, older Balanced files and the old Small-file exports, now read as Light,
- * never match). Every preset also carries {@link COMPOSE_REVISION}. Bump a revision when its
- * numbers change, or when the composer draws something new.
+ * never match). Bump a revision when its numbers change.
  */
 export const ENCODE_REVISION: Partial<Record<ExportPresetId, string>> = {
-  balanced: `q30-24fps-kfi10-${COMPOSE_REVISION}`,
-  light: `q33-24fps-kfi10-${COMPOSE_REVISION}`,
-  youtube: COMPOSE_REVISION,
-  vertical: COMPOSE_REVISION,
-  square: COMPOSE_REVISION,
-  maximum: COMPOSE_REVISION,
+  balanced: "q30-24fps-kfi10",
+  light: "q33-24fps-kfi10",
 };
 
 /** The fingerprint a file of `presetId` records: its content plus the encode revision. */

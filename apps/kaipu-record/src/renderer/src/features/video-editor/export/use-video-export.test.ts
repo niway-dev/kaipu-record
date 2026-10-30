@@ -400,7 +400,7 @@ describe("useVideoExport", () => {
         title: "My recording (for sharing)",
         exportPreset: "balanced",
         // The content plus Balanced's encode revision ("already exported" reuse).
-        exportFingerprint: "whole#q30-24fps-kfi10-wc1",
+        exportFingerprint: "whole#q30-24fps-kfi10",
       }),
     );
   });
@@ -417,7 +417,7 @@ describe("useVideoExport", () => {
       expect.any(String),
       expect.objectContaining({
         title: "My recording (edited)",
-        exportFingerprint: "edit:abc#q30-24fps-kfi10-wc1",
+        exportFingerprint: "edit:abc#q30-24fps-kfi10",
       }),
     );
   });

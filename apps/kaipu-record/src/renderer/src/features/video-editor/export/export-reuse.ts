@@ -43,6 +43,9 @@ function hash53(text: string): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
+/** The composer revision that draws the webcam layer; bump it when that drawing changes. */
+export const WEBCAM_COMPOSE_REVISION = "wc1";
+
 /**
  * The editor's fingerprint: the scene as the export burns it in. Hashed in its saved form
  * (a session round-trip), so reopening the editor on the same edit — the scene rebuilt by
@@ -51,11 +54,13 @@ function hash53(text: string): string {
 export function editFingerprint(scene: VideoScene): string {
   const saved = parseSession(serializeSession(scene))?.scene ?? scene;
   // A recording without a webcam hashes as it did before the layer existed, so the exports
-  // already made from it stay reusable; with one, the layer is hashed so that a layout change
-  // is a new export. Exports made before the composer drew the layer (NIW2-575) match this
-  // fingerprint but have no face; ENCODE_REVISION's composer revision keeps them from reuse.
+  // already made from it stay reusable. With one, the layer is hashed (a layout change is a
+  // new export) and the fingerprint is tagged with the composer revision that first drew it
+  // (NIW2-575): an export made before then fingerprinted as `edit:<hash>` and has no face.
   const { webcam, ...withoutWebcam } = saved;
-  return `edit:${hash53(stableStringify(webcam ? saved : withoutWebcam))}`;
+  return webcam
+    ? `edit:${WEBCAM_COMPOSE_REVISION}:${hash53(stableStringify(saved))}`
+    : `edit:${hash53(stableStringify(withoutWebcam))}`;
 }
 
 /** The newest playable MP4 export of each preset whose content matches `fingerprint`. */

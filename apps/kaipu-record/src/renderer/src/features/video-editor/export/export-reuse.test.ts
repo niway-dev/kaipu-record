@@ -58,6 +58,12 @@ describe("editFingerprint — webcam", () => {
     // Pinned: the hash of the scene as it was serialized before the `webcam` key existed.
     expect(editFingerprint(fixed(null))).toBe("edit:2bdufz02r20");
   });
+
+  it("is tagged only with a webcam, so an export made before the layer was drawn never matches", () => {
+    // Before NIW2-575 a webcam scene fingerprinted as `edit:<hash>` and its file had no face.
+    expect(editFingerprint(fixed(track))).toMatch(/^edit:wc1:[0-9a-z]+$/);
+    expect(editFingerprint(fixed(null))).not.toMatch(/wc1/);
+  });
 });
 
 describe("editFingerprint", () => {
@@ -94,15 +100,9 @@ describe("findReusableExports", () => {
   const whole = WHOLE_RECORDING_FINGERPRINT;
 
   it("finds the newest export per preset with the same content", () => {
-    const old = exported("old", 1, {
-      preset: "balanced",
-      fingerprint: "whole#q30-24fps-kfi10-wc1",
-    });
-    const fresh = exported("new", 2, {
-      preset: "balanced",
-      fingerprint: "whole#q30-24fps-kfi10-wc1",
-    });
-    const yt = exported("yt", 3, { preset: "youtube", fingerprint: "whole#wc1" });
+    const old = exported("old", 1, { preset: "balanced", fingerprint: "whole#q30-24fps-kfi10" });
+    const fresh = exported("new", 2, { preset: "balanced", fingerprint: "whole#q30-24fps-kfi10" });
+    const yt = exported("yt", 3, { preset: "youtube", fingerprint: whole });
     const found = findReusableExports([old, fresh, yt], whole);
     expect(found.balanced?.assetId).toBe("new");
     expect(found.youtube?.assetId).toBe("yt");
@@ -112,7 +112,7 @@ describe("findReusableExports", () => {
   it("never reuses a file with different content (an edit vs the whole recording, an older edit)", () => {
     const edit = exported("edit", 1, {
       preset: "balanced",
-      fingerprint: "edit:abc#q30-24fps-kfi10-wc1",
+      fingerprint: "edit:abc#q30-24fps-kfi10",
     });
     expect(findReusableExports([edit], whole)).toEqual({});
     expect(findReusableExports([edit], "edit:def")).toEqual({});
@@ -123,10 +123,7 @@ describe("findReusableExports", () => {
     // Before the quality tiers: Balanced was 30 fps · 3 Mbps, and small-10 reads as Light.
     const oldBalanced = exported("old-balanced", 1, { preset: "balanced", fingerprint: whole });
     const oldSmall = exported("old-small", 2, { preset: "light", fingerprint: whole });
-    const fresh = exported("light", 3, {
-      preset: "light",
-      fingerprint: "whole#q33-24fps-kfi10-wc1",
-    });
+    const fresh = exported("light", 3, { preset: "light", fingerprint: "whole#q33-24fps-kfi10" });
     expect(findReusableExports([oldBalanced, oldSmall], whole)).toEqual({});
     expect(findReusableExports([oldBalanced, oldSmall, fresh], whole).light?.assetId).toBe("light");
   });
