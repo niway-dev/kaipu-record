@@ -12,6 +12,7 @@ import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
 import type { ExportPresetId, ExportQuality } from "./export-preset";
 import type { RecordingCapture } from "../recording-capture";
+import type { WebcamTrackMeta } from "../webcam-track";
 import {
   ENABLED_CAPTURE_MODES,
   type CaptureMode,
@@ -734,6 +735,12 @@ export interface RecordingFinalizeMeta {
    * library labels. Set by the recorder only; exports leave it unset. Main sanitizes it.
    */
   capture?: RecordingCapture | null;
+  /**
+   * The take's webcam file (ADR 0032): where its time 0 sits against the screen's, its size
+   * and the bubble as recorded. Set only when the webcam session holds a usable file; absent
+   * or null, a webcam part is discarded. Main sanitizes it before the sidecar stores it.
+   */
+  webcam?: WebcamTrackMeta | null;
 }
 
 /**

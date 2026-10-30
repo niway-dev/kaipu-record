@@ -1,10 +1,16 @@
 import { constants } from "node:fs";
 import { copyFile, open, mkdir, rename, unlink, type FileHandle } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import type { LocalRecording } from "@shared/types/library-storage";
 import type { RecordingFinalizeMeta } from "@shared/types/ipc";
 import { sanitizeRecordingCapture } from "@shared/recording-capture";
+import {
+  sanitizeWebcamTrackMeta,
+  webcamSiblingPath,
+  type RecordingWriterKind,
+  type WebcamTrackMeta,
+} from "@shared/webcam-track";
 import { LibraryVault } from "../library/library-vault";
 
 /** Staging folder inside the vault, so the final move is a same-volume rename. Exported for the sweep. */
@@ -24,6 +30,9 @@ export interface RecordingWriterDeps {
 }
 
 interface Session {
+  /** The take's id: a take has a screen session and, with the webcam on, a webcam one. */
+  id: string;
+  kind: RecordingWriterKind;
   handle: FileHandle;
   tempPath: string;
   /**
@@ -91,6 +100,7 @@ export async function moveFile(
  * append stream.
  */
 export class RecordingWriter {
+  /** Every open session, keyed by take id and kind (`sessionKey`); one map for both kinds. */
   private readonly sessions = new Map<string, Session>();
   private readonly fallbackTempDir: string;
   private readonly now: () => number;
@@ -111,23 +121,37 @@ export class RecordingWriter {
     }
   }
 
-  async create(sessionId: string): Promise<{ tempPath: string }> {
-    const tempPath = join(await this.stagingDir(), `kaipu-rec-${sessionId}.mp4.part`);
+  /**
+   * Open a session's staging file: `kaipu-rec-<id>.mp4.part` for the screen,
+   * `kaipu-rec-<id>.webcam.mp4.part` for the take's webcam (ADR 0032).
+   */
+  async create(
+    sessionId: string,
+    kind: RecordingWriterKind = "screen",
+  ): Promise<{ tempPath: string }> {
+    const suffix = kind === "webcam" ? ".webcam.mp4.part" : ".mp4.part";
+    const tempPath = join(await this.stagingDir(), `kaipu-rec-${sessionId}${suffix}`);
     // A session already under this id (a renderer restarted its counter) is released first:
     // its handle must not outlive the map entry that replaces it.
-    const previous = this.sessions.get(sessionId);
+    const key = sessionKey(sessionId, kind);
+    const previous = this.sessions.get(key);
     if (previous) {
-      this.sessions.delete(sessionId);
+      this.sessions.delete(key);
       await previous.queue;
       await this.closeHandle(previous).catch(() => {});
     }
     const handle = await open(tempPath, "w+");
-    this.sessions.set(sessionId, { handle, tempPath, queue: Promise.resolve() });
+    this.sessions.set(key, { id: sessionId, kind, handle, tempPath, queue: Promise.resolve() });
     return { tempPath };
   }
 
-  async write(sessionId: string, data: ArrayBuffer, position: number): Promise<void> {
-    const session = this.sessions.get(sessionId);
+  async write(
+    sessionId: string,
+    data: ArrayBuffer,
+    position: number,
+    kind: RecordingWriterKind = "screen",
+  ): Promise<void> {
+    const session = this.sessions.get(sessionKey(sessionId, kind));
     if (!session) throw new Error(`No recording session "${sessionId}"`);
     const buf = Buffer.from(data);
     const op = session.queue.then(() => session.handle.write(buf, 0, buf.byteLength, position));
@@ -149,24 +173,31 @@ export class RecordingWriter {
   }
 
   /** Whether any write for this session has failed (used to stop early). */
-  hasFailed(sessionId: string): boolean {
-    return this.sessions.get(sessionId)?.failed !== undefined;
+  hasFailed(sessionId: string, kind: RecordingWriterKind = "screen"): boolean {
+    return this.sessions.get(sessionKey(sessionId, kind))?.failed !== undefined;
   }
 
   /**
    * Size in bytes of the session's temp file once every queued positional write has landed
    * (NIW2-218: the Small-file preset checks it against its cap before finalizing).
    */
-  async stat(sessionId: string): Promise<number> {
-    const session = this.sessions.get(sessionId);
+  async stat(sessionId: string, kind: RecordingWriterKind = "screen"): Promise<number> {
+    const session = this.sessions.get(sessionKey(sessionId, kind));
     if (!session) throw new Error(`No recording session "${sessionId}"`);
     await session.queue;
     return (await session.handle.stat()).size;
   }
 
+  /**
+   * Move the finished take into the vault: the screen file as `<id>.mp4`, then the webcam
+   * session's file, when there is one and `meta.webcam` says it is usable, as
+   * `.kaipu/<id>.webcam.mp4`, recorded on the sidecar. The webcam never fails the take: a
+   * webcam that cannot be placed is dropped and the recording is saved without it.
+   */
   async finalize(sessionId: string, meta: RecordingFinalizeMeta): Promise<LocalRecording> {
-    const session = this.sessions.get(sessionId);
+    const session = this.sessions.get(sessionKey(sessionId, "screen"));
     if (!session) throw new Error(`No recording session "${sessionId}"`);
+    const webcamSession = this.sessions.get(sessionKey(sessionId, "webcam")) ?? null;
     await session.queue; // flush in-flight positional writes before closing
 
     // A write failed mid-recording — the .part is truncated/holed. Refuse to move
@@ -175,7 +206,8 @@ export class RecordingWriter {
     if (session.failed) {
       await session.handle.close().catch(() => {});
       await unlink(session.tempPath).catch(() => {});
-      this.sessions.delete(sessionId);
+      this.sessions.delete(sessionKey(sessionId, "screen"));
+      if (webcamSession) await this.discard(webcamSession);
       throw session.failed;
     }
 
@@ -189,8 +221,7 @@ export class RecordingWriter {
       await mkdir(vaultDir, { recursive: true });
       dest = await vault.filePath(id); // <id>.mp4 (does not exist yet)
     } catch (cause) {
-      session.stranded = true;
-      await this.closeHandle(session).catch(() => {});
+      await this.strand(session, webcamSession);
       throw new FinalizeMoveError(session.tempPath, cause);
     }
     await this.closeHandle(session);
@@ -198,9 +229,12 @@ export class RecordingWriter {
     try {
       await moveFile(session.tempPath, dest);
     } catch (cause) {
-      session.stranded = true;
+      await this.strand(session, webcamSession);
       throw new FinalizeMoveError(session.tempPath, cause);
     }
+
+    // Before the sidecar, so it records the webcam only once its file is in place.
+    const webcam = webcamSession ? await this.placeWebcam(vault, id, webcamSession, meta) : null;
 
     // From the move on, the take is in the vault: if its metadata cannot be written, it is
     // taken back out, so no `.mp4` is left in the vault without its sidecar, and the take
@@ -213,6 +247,7 @@ export class RecordingWriter {
         title: meta.title,
         durationSeconds: meta.durationSeconds,
         ...(capture ? { capture } : {}),
+        ...(webcam ? { webcam } : {}),
         createdAt: this.now(),
         derivedFromAssetId: meta.derivedFromAssetId ?? null,
         ...(meta.exportPreset ? { exportPreset: meta.exportPreset } : {}),
@@ -225,17 +260,68 @@ export class RecordingWriter {
       if (!described) throw new Error(`Finalized recording "${id}" not found in vault`);
       recording = described;
     } catch (cause) {
-      if (!(await this.takeBack(vault, id, dest, session))) {
+      if (!(await this.takeBack(vault, id, dest, session, webcam ? webcamSession : null))) {
         // The media stays in the vault (listed without its sidecar) and staging has nothing
         // left: a salvage would fail, so the error must not offer one.
-        this.sessions.delete(sessionId);
+        this.sessions.delete(sessionKey(sessionId, "screen"));
+        this.sessions.delete(sessionKey(sessionId, "webcam"));
         throw cause;
       }
       session.stranded = true;
       throw new FinalizeMoveError(session.tempPath, cause);
     }
-    this.sessions.delete(sessionId);
+    this.sessions.delete(sessionKey(sessionId, "screen"));
+    this.sessions.delete(sessionKey(sessionId, "webcam"));
     return recording;
+  }
+
+  /**
+   * Close the webcam session and move its file to `.kaipu/<id>.webcam.mp4`. Resolves the
+   * sanitized meta for the sidecar, or null (and the part deleted) when the renderer sent no
+   * usable meta, a write failed or the move failed. The session stays in the map until the
+   * take is done, so a take-back can return the file to staging.
+   */
+  private async placeWebcam(
+    vault: LibraryVault,
+    id: string,
+    webcamSession: Session,
+    meta: RecordingFinalizeMeta,
+  ): Promise<WebcamTrackMeta | null> {
+    await webcamSession.queue;
+    const webcam = sanitizeWebcamTrackMeta(meta.webcam);
+    if (!webcam || webcamSession.failed) {
+      await this.discard(webcamSession);
+      return null;
+    }
+    try {
+      await this.closeHandle(webcamSession);
+      const dest = vault.webcamFilePath(id);
+      await mkdir(dirname(dest), { recursive: true });
+      await moveFile(webcamSession.tempPath, dest);
+      return webcam;
+    } catch (error) {
+      console.error("webcam file could not be placed; the recording is saved without it", error);
+      await this.discard(webcamSession);
+      return null;
+    }
+  }
+
+  /** Close a session and delete its part (best-effort), and forget it. */
+  private async discard(session: Session): Promise<void> {
+    this.sessions.delete(sessionKey(session.id, session.kind));
+    await session.queue;
+    await this.closeHandle(session).catch(() => {});
+    await unlink(session.tempPath).catch(() => {});
+  }
+
+  /** Finalize could not place the take: both parts stay in staging for a salvage. */
+  private async strand(session: Session, webcamSession: Session | null): Promise<void> {
+    session.stranded = true;
+    await this.closeHandle(session).catch(() => {});
+    if (!webcamSession) return;
+    webcamSession.stranded = true;
+    await webcamSession.queue;
+    await this.closeHandle(webcamSession).catch(() => {});
   }
 
   /**
@@ -248,11 +334,26 @@ export class RecordingWriter {
     id: string,
     dest: string,
     session: Session,
+    webcamSession: Session | null,
   ): Promise<boolean> {
     try {
       await moveFile(dest, session.tempPath, { overwrite: true });
     } catch {
       return false;
+    }
+    if (webcamSession) {
+      // Best-effort: a webcam that cannot come back is deleted, the screen alone is salvageable.
+      const moved = await moveFile(vault.webcamFilePath(id), webcamSession.tempPath, {
+        overwrite: true,
+      }).then(
+        () => true,
+        () => false,
+      );
+      if (moved) webcamSession.stranded = true;
+      else {
+        this.sessions.delete(sessionKey(webcamSession.id, webcamSession.kind));
+        await unlink(vault.webcamFilePath(id)).catch(() => {});
+      }
     }
     await vault.remove(id).catch(() => {});
     return true;
@@ -265,16 +366,27 @@ export class RecordingWriter {
   }
 
   /** Move a stranded take to a path the user picked, then forget the session. */
+  /**
+   * Move a stranded take to a path the user picked, then forget the session. Its webcam, when
+   * stranded with it, goes beside it as `<name>.webcam.mp4` (best-effort: the screen is the take).
+   */
   async salvage(sessionId: string, destPath: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
+    const session = this.sessions.get(sessionKey(sessionId, "screen"));
     if (!session?.stranded) throw new Error(`No stranded recording session "${sessionId}"`);
     await moveFile(session.tempPath, destPath, { overwrite: true }); // the save dialog confirmed it
-    this.sessions.delete(sessionId);
+    this.sessions.delete(sessionKey(sessionId, "screen"));
+    const webcam = this.sessions.get(sessionKey(sessionId, "webcam"));
+    if (webcam?.stranded) {
+      this.sessions.delete(sessionKey(sessionId, "webcam"));
+      await moveFile(webcam.tempPath, webcamSiblingPath(destPath), { overwrite: true }).catch(
+        (error) => console.error("webcam salvage failed", error),
+      );
+    }
   }
 
-  /** Ids of the sessions still open (a stranded take included), e.g. to end them all on a reset. */
+  /** Ids of the takes still open (a stranded take included), e.g. to end them all on a reset. */
   ids(): string[] {
-    return [...this.sessions.keys()];
+    return [...new Set([...this.sessions.values()].map((session) => session.id))];
   }
 
   /**
@@ -284,7 +396,7 @@ export class RecordingWriter {
    */
   async releaseAll(): Promise<void> {
     const released = [...this.sessions.entries()].filter(([, session]) => !session.stranded);
-    for (const [id] of released) this.sessions.delete(id);
+    for (const [key] of released) this.sessions.delete(key);
     await Promise.all(
       released.map(async ([, session]) => {
         await session.queue;
@@ -293,19 +405,31 @@ export class RecordingWriter {
     );
   }
 
+  /** Discard a take: its screen session and its webcam session, if any. */
   async abort(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
-    // A stranded take is kept on disk for recovery. The renderer aborts after every failed finalize.
-    if (session.stranded) {
-      this.sessions.delete(sessionId);
-      return;
-    }
-    await session.queue; // let in-flight writes settle before closing the handle
-    await session.handle.close().catch(() => {});
-    await unlink(session.tempPath).catch(() => {});
-    this.sessions.delete(sessionId);
+    await Promise.all(
+      (["screen", "webcam"] as const).map(async (kind) => {
+        const key = sessionKey(sessionId, kind);
+        const session = this.sessions.get(key);
+        if (!session) return;
+        // A stranded take is kept on disk for recovery. The renderer aborts after every failed
+        // finalize.
+        if (session.stranded) {
+          this.sessions.delete(key);
+          return;
+        }
+        await session.queue; // let in-flight writes settle before closing the handle
+        await session.handle.close().catch(() => {});
+        await unlink(session.tempPath).catch(() => {});
+        this.sessions.delete(key);
+      }),
+    );
   }
+}
+
+/** The map key of a take's session of one kind; the screen's is the bare id. */
+function sessionKey(sessionId: string, kind: RecordingWriterKind): string {
+  return kind === "screen" ? sessionId : `${sessionId}::${kind}`;
 }
 
 /** A renderer-supplied export fingerprint: a short token ("whole" or "edit:<hash>"). */

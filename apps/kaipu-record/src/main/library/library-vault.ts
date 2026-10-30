@@ -3,6 +3,7 @@ import { access, mkdir, open, readFile, readdir, rename, rm, stat } from "node:f
 import { randomUUID } from "node:crypto";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { sanitizeRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
+import type { WebcamTrackMeta } from "@shared/webcam-track";
 import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/types/export-preset";
 import { atomicWriteFile, withLock } from "./atomic-write";
 import { sha256FileBase64 } from "./content-hash";
@@ -51,6 +52,8 @@ export interface Sidecar {
   editorSavedAt?: number;
   /** New recordings: how the take was captured (library labels). Absent on older items. */
   capture?: RecordingCapture;
+  /** New recordings with the webcam on: the webcam file's offset and size (ADR 0032). */
+  webcam?: WebcamTrackMeta;
 }
 
 // Keyed by the sidecar's absolute path (not per-instance), so a re-minted id on a
@@ -100,6 +103,11 @@ export class LibraryVault {
   /** Cursor event track written at record time (video-editor v2 auto-zoom). */
   cursorTrackPath(id: string): string {
     return join(this.metaDirectory(), `${id}.cursor.json`);
+  }
+
+  /** The take's webcam, recorded as its own file beside the screen (ADR 0032). */
+  webcamFilePath(id: string): string {
+    return join(this.metaDirectory(), `${id}.webcam.mp4`);
   }
 
   async list(): Promise<LocalRecording[]> {
