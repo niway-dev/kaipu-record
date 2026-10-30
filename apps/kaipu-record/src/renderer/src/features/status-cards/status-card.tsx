@@ -9,6 +9,12 @@ export interface StatusCardProps {
   title: React.ReactNode;
   /** One mono line under the title (sizes, dimensions). */
   subtitle?: React.ReactNode;
+  /** A tag under the subtitle (the "Master · full quality" label). */
+  badge?: React.ReactNode;
+  /** The icon is artwork with its own shape (the fox): no tinted tile around it. */
+  plainIcon?: boolean;
+  /** 420 px instead of 380 px, for a card with a row of chips. */
+  wide?: boolean;
   /** ✕ in the corner; omitted for a card that must stay (an export in progress). */
   onDismiss?(): void;
   dismissLabel?: string;
@@ -30,6 +36,9 @@ export function StatusCard({
   icon,
   title,
   subtitle,
+  badge,
+  plainIcon = false,
+  wide = false,
   onDismiss,
   dismissLabel,
   footer,
@@ -40,19 +49,21 @@ export function StatusCard({
   return (
     <section
       className={styles.card}
+      data-wide={wide}
       aria-label={label}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
       <header className={styles.header}>
         {icon && (
-          <span className={styles.icon} aria-hidden>
+          <span className={styles.icon} data-plain={plainIcon} aria-hidden>
             {icon}
           </span>
         )}
         <div className={styles.heading}>
           <div className={styles.title}>{title}</div>
           {subtitle && <div className={styles.subtitle}>{subtitle}</div>}
+          {badge && <div className={styles.badge}>{badge}</div>}
         </div>
         {onDismiss && (
           <button
@@ -86,22 +97,41 @@ export function StatusCardText({
   );
 }
 
-/** The card's action row: a primary button that takes the room, then the others. */
-export function StatusCardActions({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <div className={styles.actions}>{children}</div>;
+/** The card's action row: a primary button that takes the room, then the others; `equal`
+ *  splits the row evenly instead. */
+export function StatusCardActions({
+  equal = false,
+  children,
+}: {
+  equal?: boolean;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className={styles.actions} data-equal={equal}>
+      {children}
+    </div>
+  );
 }
 
 export function StatusCardButton({
   variant = "secondary",
+  title,
   onClick,
   children,
 }: {
   variant?: "primary" | "secondary";
+  title?: string;
   onClick(): void;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <button type="button" className={styles.button} data-variant={variant} onClick={onClick}>
+    <button
+      type="button"
+      className={styles.button}
+      data-variant={variant}
+      title={title}
+      onClick={onClick}
+    >
       {children}
     </button>
   );

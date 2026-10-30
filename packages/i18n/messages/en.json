@@ -839,21 +839,23 @@
     "quickYoutube": "YouTube",
     "quickVertical": "TikTok · Reels",
     "quickGithub": "GitHub",
-    "quickAria": "Prepare for {destination}",
-    "panelLabel": "Where is your video going?",
-    "panelSaved": "Saved to your Library",
-    "panelTitle": "Your video is ready. Where is it going?",
-    "panelMetaNote": "the original stays as it is",
-    "panelYoutubeSub": "Bigger copy, sharper after upload",
-    "panelVerticalName": "TikTok · Reels",
-    "panelVerticalSub": "Vertical 9:16",
-    "panelGithubName": "GitHub · Jira",
-    "panelGithubSub": "Small copy that plays inline",
-    "panelChatName": "Slack · Discord",
-    "panelChatSub": "Light, plays in the chat",
-    "panelMore": "More places",
-    "panelEditFirst": "Edit first",
-    "panelNotNow": "Not now — keep it in the Library"
+    "quickAria": "Prepare for {destination}"
+  },
+  "postRecording": {
+    "title": "Your video is ready",
+    "dimensions": "{width} × {height}",
+    "masterTag": "Master · full quality",
+    "question": "Where do you want to send it? We'll shape a copy for that place.",
+    "chipYoutube": "YouTube",
+    "chipVertical": "TikTok",
+    "chipGithub": "GitHub",
+    "chipAria": "Prepare a copy for {destination}",
+    "more": "More places",
+    "editFirst": "Edit first",
+    "open": "Open",
+    "openHint": "Close this and stay on the recording",
+    "dismiss": "Dismiss",
+    "footer": "Saved at full quality · you can always come back to this"
   },
   "screenshots": {
     "toast": {
