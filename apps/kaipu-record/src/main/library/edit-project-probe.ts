@@ -7,6 +7,7 @@
 import { access, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { EditingState } from "@shared/types/library-item";
+import { sanitizeWebcamTrackMeta } from "@shared/webcam-track";
 import { sessionMetaPath, type SessionMeta } from "./video-edit-session";
 
 async function exists(path: string): Promise<boolean> {
@@ -78,7 +79,7 @@ export async function probeWebcam(vaultDir: string, id: string): Promise<WebcamS
   if (await exists(join(vaultDir, ".kaipu", `${id}.webcam.mp4`))) return "present";
   try {
     const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", `${id}.json`), "utf-8"));
-    return sidecar && typeof sidecar === "object" && sidecar.webcam ? "missing" : "none";
+    return sanitizeWebcamTrackMeta(sidecar?.webcam) ? "missing" : "none";
   } catch {
     return "none";
   }

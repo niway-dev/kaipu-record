@@ -165,7 +165,14 @@ describe("probeWebcam", () => {
   });
 
   it("missing when the sidecar names a webcam but the file is gone", async () => {
-    await sidecar("r", { webcam: { startOffsetMs: 0 } });
+    await sidecar("r", {
+      webcam: { startOffsetMs: 0, offsetQuality: "exact", width: 1280, height: 720, fps: 30 },
+    });
     expect(await probeWebcam(dir, "r")).toBe("missing");
+  });
+
+  it("none when the sidecar's webcam field is malformed, as describe() reads it", async () => {
+    await sidecar("r", { webcam: { startOffsetMs: 0 } });
+    expect(await probeWebcam(dir, "r")).toBe("none");
   });
 });
