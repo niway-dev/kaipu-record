@@ -134,7 +134,7 @@ any leftover goes through the orphans move.
 - A move to orphans writes its bundle's manifest entry (original paths, title,
   `assetId`) **before** moving the first file, and marks it complete after the last
   one. A crash in between leaves a manifest entry that the next run completes into
-  the same run folder. Pending manifests are resumed **before** classification. For each file, if the destination already exists, that move happened: it is kept, and a source now present at the old path (a new capture that reused the free stem) is **not** taken. If both exist, or the outcome is uncertain, both are kept and reported. An orphan destination is never overwritten.
+  the same run folder. Pending manifests are resumed **before** classification. For each file, if the destination already exists, that move happened: it is kept, and a source now present at the old path (a new capture that reused the free stem) is **not** taken. If both exist, or the outcome is uncertain, both are kept and reported. An orphan destination is never overwritten. A file an entry still pending after the replay holds is kept out of the fresh classification, so it is retried only through that entry and the bundle never splits.
 
 After a crash, the next "Fix all" sees what is left and finishes it. The only
 decisions are "the title wins" and "the disk name wins", and both can be read again
@@ -175,7 +175,9 @@ including 101 items with one title, a 6-item rename chain and a 2-item cycle.
     point), taken before hiding windows or grabbing pixels; a refusal shows the
     maintenance message;
   - the recording session, from start through `finalize`, the cursor write and
-    abort cleanup, pinned to its vault folder (C9);
+    abort cleanup, pinned to its vault folder (C9). Finalize is part of the take's one
+    lifecycle: a page that goes away mid-finalize waits for it before the lease is freed.
+    An abandoned export's partial is discarded; a recording's is kept;
   - export: `setExportActive` becomes an acknowledged `export:begin` invoke, made
     before the source is read, and released on completion, cancellation or the
     renderer going away;

@@ -240,15 +240,18 @@ source) and `RecordingSettings.area` (or `null` for a whole display) and broadca
 
 | Canal                | Dir | En `electronAPI`                | Registrador        |
 | -------------------- | --- | ------------------------------- | ------------------ |
-| `recording:create`   | r→m | `recordingCreate(sessionId)`    | `recording-hub.ts` |
+| `recording:create`   | r→m | `recordingCreate(id, kind?)`    | `recording-hub.ts` |
 | `recording:write`    | r→m | `recordingWrite(id, data, pos)` | `recording-hub.ts` |
 | `recording:finalize` | r→m | `recordingFinalize(id, meta)`   | `recording-hub.ts` |
 | `recording:abort`    | r→m | `recordingAbort(id)`            | `recording-hub.ts` |
 
 A session (and its vault lease) belongs to the page that created it. A page that goes away
 with a session open (a reload, a dead renderer, a destroyed webContents) never finalizes or
-aborts it, so main aborts it and releases the lease; a `recording:create` still pending then
-rejects.
+aborts it, so main ends it by its `kind` (`"recording"` by default, `"export"` from the
+export runner): a recording's `.part` is kept for the stranded-take sweep, an export's is
+deleted. A finalize in flight completes first, and the lease is released after it; a
+`recording:create` still pending then rejects. A `recording:create` whose id is still open
+or ending is refused.
 
 ### Recording — barra y estado (cross-window)
 

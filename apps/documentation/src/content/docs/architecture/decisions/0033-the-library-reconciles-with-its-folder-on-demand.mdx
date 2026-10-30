@@ -52,7 +52,9 @@ ADR links file and record by name alone.
    `assetId`) is written before the first file moves and marked complete only once every file
    has moved, so a crash or a failed move is finished by the next run in the same bundle, and
    an orphan destination is never overwritten. Only ENOENT reads as "not there": a path that
-   cannot be checked (EIO, EACCES) keeps both files and leaves the entry pending. The same
+   cannot be checked (EIO, EACCES) keeps both files and leaves the entry pending. A file a
+   pending entry still holds is never classified afresh: only that entry's replay moves it,
+   so a bundle is never split across two run folders. The same
    rule picks names: a stem is free only when every one of its paths is proven absent; one
    proven path makes it taken, and a stem that cannot be checked is skipped for the next
    candidate, never written onto.
@@ -124,10 +126,17 @@ ADR links file and record by name alone.
 - Every vault entry point takes an admission lease for the life of its operation, including
   the recording session through the cursor-track write. New entry points must do the same.
   A lease held for a renderer (a take, an export) is also released when that renderer's page
-  goes away: a reload, a crash or a destroyed window. That ends the take as a forced reset
-  does: its handle is closed and its `.part` kept for the stranded-take sweep; only the
-  user's abort deletes it. A take ends once, however many events end it, and its lease is
-  released only after its create has settled and its cleanup is done.
+  goes away: a reload, a crash or a destroyed window. A take carries its kind. A recording
+  ends as a forced reset does: its handle is closed and its `.part` kept for the
+  stranded-take sweep; only the user's abort deletes it. An export's partial is discarded
+  (its source is still in the library, and the sweep would otherwise list it as a recovered
+  recording); a partial of unknown kind is kept. A take ends once, however many events end
+  it (finalize included), and its lease is released exactly once, after its create, any
+  finalize in flight with its cursor-track write, and its cleanup have all settled: a reload
+  mid-finalize cannot let a fix orphan the stem that finalize reserved. A create reusing the
+  id of a take that is still open or ending is refused, every take stages to its own
+  exclusively created file, and the final move into the vault never replaces an existing
+  file.
 - Sidecar mutations now throw on an unreadable record instead of overwriting it.
 - Idempotence is the contract: a scan after a complete fix returns only findings that are
   not fixable now (a file locked by another app, duplicate identities, stem conflicts,
