@@ -233,6 +233,29 @@ describe("migration (first launch after the upgrade)", () => {
   });
 });
 
+describe("a probe's best-effort cache update", () => {
+  it("still adopts the folder's identity in memory when the write fails: the probe never fails", async () => {
+    const drive = join(root, "Volumes", "T7", "Kaipu");
+    await writePrefs({ vaultDirectory: drive });
+    const registry = await WorkspaceRegistry.open(env());
+    const pending = registry.active().id;
+    await mkdir(drive, { recursive: true });
+    await writeIdentity(drive, {
+      version: 1,
+      id: "0192f0c3-aaaa-7000-8000-000000000009",
+      name: "Work",
+      color: "amber",
+      createdAt: 1,
+    });
+    await writeFile(prefsFile(), "{ not json");
+
+    const result = await registry.availability(pending);
+
+    expect(result.id).toBe("0192f0c3-aaaa-7000-8000-000000000009");
+    expect(registry.active().id).toBe(result.id);
+  });
+});
+
 describe("downgrade", () => {
   it("mirrors the active path into vaultDirectory, and drops the key for the default folder", async () => {
     const registry = await WorkspaceRegistry.open(env());

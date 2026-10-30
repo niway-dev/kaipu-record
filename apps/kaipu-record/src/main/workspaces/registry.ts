@@ -529,7 +529,8 @@ export class WorkspaceRegistry {
   /** An update a probe learned (a cached name, a finished init): never fails the probe. */
   private async refresh(mutate: (key: WorkspacesKey) => void): Promise<void> {
     try {
-      await this.update(mutate);
+      // What a probe learned is true whether or not it could be written: keep it in memory.
+      await this.update(mutate, { mirrorVault: false, rollback: false });
     } catch (error) {
       console.error("workspaces: could not store a registry update", error);
     }
@@ -541,7 +542,7 @@ export class WorkspaceRegistry {
    */
   private update(
     mutate: (key: WorkspacesKey) => void,
-    options: { mirrorVault: boolean } = { mirrorVault: false },
+    options: { mirrorVault: boolean; rollback?: boolean } = { mirrorVault: false },
   ): Promise<void> {
     return withLock(UPDATE_LOCK, async () => {
       const before = structuredClone(this.key);
@@ -550,7 +551,7 @@ export class WorkspaceRegistry {
       try {
         await this.persist(options);
       } catch (error) {
-        this.key = before;
+        if (options.rollback !== false) this.key = before;
         throw error;
       }
     });
