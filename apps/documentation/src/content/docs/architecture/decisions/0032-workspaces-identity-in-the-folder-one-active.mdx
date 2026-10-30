@@ -1,20 +1,21 @@
 ---
 title: "ADR 0032: Workspaces — identity in the folder, the list in userData, one active at a time"
-description: A workspace is an existing folder with Kaipu files in it; its id and name live in .kaipu/workspace.json, the list of registered workspaces and the active id live in userData preferences, and exactly one workspace is active. New captures always land in the active one; there is no combined view.
+description: A workspace is an existing folder with Kaipu files in it; its id and name live in .kaipu/workspace/identity.json, the list of registered workspaces and the active id live in userData preferences, and exactly one workspace is active. New captures always land in the active one; there is no combined view.
 ---
 
 # ADR 0032: Workspaces — identity in the folder, the list in userData, one active at a time
 
 ## Status
 
-| Field         | Value                                                                                                               |
-| ------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Status        | Proposed — [several workspaces design](/specs/2026-10-29-several-workspaces-design/); nothing implemented           |
-| Date          | 2026-10-29                                                                                                          |
-| Supersedes    | —                                                                                                                   |
-| Superseded by | —                                                                                                                   |
-| Amended       | 2026-10-29, round 2, in place while Proposed: switcher, color and initials, synced folders, downgrade, settings     |
-| Amended       | 2026-10-30, round 3, in place while Proposed: visible with one workspace, "Default workspace", orphan cloud entries |
+| Field         | Value                                                                                                                                          |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — [several workspaces design](/specs/2026-10-29-several-workspaces-design/); nothing implemented                                      |
+| Date          | 2026-10-29                                                                                                                                     |
+| Supersedes    | —                                                                                                                                              |
+| Superseded by | —                                                                                                                                              |
+| Amended       | 2026-10-29, round 2, in place while Proposed: switcher, color and initials, synced folders, downgrade, settings                                |
+| Amended       | 2026-10-30, round 3, in place while Proposed: visible with one workspace, "Default workspace", orphan cloud entries                            |
+| Amended       | 2026-10-30, review round, in place while Proposed: identity file moved to `.kaipu/workspace/`, no reads of evicted files, capture-bound policy |
 
 ## Context
 
@@ -33,11 +34,13 @@ The user-facing word is **workspace**. "Vault" survives only in existing code id
 ## Decision
 
 1. **A workspace is an existing folder** the user picks. Kaipu initializes it by writing
-   `.kaipu/workspace.json` (`version`, a UUID `id`, a display `name`, `createdAt`, a `color`
-   from the tag palette and optional `initials`). The folder is
+   `.kaipu/workspace/identity.json` (`version`, a UUID `id`, a display `name`, `createdAt`, a `color`
+   from the tag palette and optional `initials`). The file is in a **subfolder** of `.kaipu/`,
+   not beside the sidecars: a sidecar is `.kaipu/<stem>.json`, so a customer's `workspace.png`
+   already owns `.kaipu/workspace.json`, and no stem can address a folder. The folder is
    never created by Kaipu, and Kaipu never creates the folder root again once it is registered:
    a missing root means "unavailable", not "empty".
-2. **A folder that already has `.kaipu/` is adopted**: its `workspace.json` is reused, or
+2. **A folder that already has `.kaipu/` is adopted**: its `identity.json` is reused, or
    minted when absent (a vault from before this ADR). Its sidecars, tags and edit projects are
    used as they are. The vault that exists at the first launch after the upgrade becomes the
    first workspace and is named **"Default workspace"**, not after its folder, because the
@@ -86,7 +89,7 @@ The user-facing word is **workspace**. "Vault" survives only in existing code id
 8. **A workspace whose folder cannot be reached is unavailable**: it is listed, cannot be
    switched to, cannot receive a move, and is never silently replaced by another one. If the
    active workspace becomes unavailable, captures are refused with a message. They do not fall
-   back to another workspace. A `workspace.json` that exists but is evicted by a sync provider
+   back to another workspace. A `identity.json` that exists but is evicted by a sync provider
    (dataless) does **not** make the workspace unavailable: the registry's id is used until the
    file can be read, and moves into it wait for that read (spec, Synced folders).
 9. **A capture is bound to a workspace when it starts.** The capture request resolves the
@@ -95,11 +98,15 @@ The user-facing word is **workspace**. "Vault" survives only in existing code id
    from it. If it is not the active workspace any more when an action arrives, the action
    writes nothing. The switch (decision 7) drops the retained bytes, so a delayed click can
    never land in the new workspace. A quiet capture is copy-only, so its pixels are already on
-   the clipboard when the bytes are dropped.
+   the clipboard when the bytes are dropped. The capture also carries the settings **policy** it
+   started with (`screenshotCopy`, ADR 0034), including into the in-memory editor opened after a
+   failed save, which never reads the setting again for that capture.
 10. **A workspace may live in a folder a sync provider manages** (Google Drive, OneDrive,
     iCloud Drive through macOS File Provider). Kaipu detects it by path, says so, keeps its
     scratch files (recording staging, drag copies) outside the folder, and treats an evicted
-    file as "in the cloud", never as missing. It adds no provider integration (spec, Synced
+    file as "in the cloud", never as missing. Showing an evicted file must not download it:
+    `describe()` hands out no image URL for an evicted media file or an evicted thumbnail, and the
+    `kaipu-media://` protocol refuses evicted files. It adds no provider integration (spec, Synced
     folders).
 11. **Tags stay per workspace** (ADR 0020 unchanged). **The cloud catalog stays per account**,
     and every cloud asset records the `workspaceId` it belongs to. A workspace's Library hides
@@ -128,10 +135,15 @@ The user-facing word is **workspace**. "Vault" survives only in existing code id
 - **A registry inside each folder only, no list in userData.** The app cannot discover folders
   it does not know. Something on the machine has to list them, and userData is where
   `vaultDirectory` already lives.
-- **The path as the workspace's identity** (no `workspace.json`). Renaming or moving the
+- **The path as the workspace's identity** (no `identity.json`). Renaming or moving the
   folder, a drive mounted under another name, or a second machine would make it a different
   workspace. The cloud `workspaceId` would then point at nothing. A copied folder could not be
   told apart from a moved one.
+- **`.kaipu/workspace.json` and `.kaipu/settings.json` with a reserved-stem guard** (the second
+  draft). The names collide with a customer's `workspace.png` or `settings.png`, which already
+  use them as sidecars: the migration would overwrite the sidecar, and an older app, which has no
+  guard, would delete the identity when the customer deletes `workspace.png`. A guard in this
+  version cannot protect a downgrade, so the files moved into a subfolder.
 - **A separate app profile per workspace** (separate userData, like browser profiles). This
   splits settings, the signed-in account and shortcuts, and needs a relaunch to switch. That
   is too heavy for "keep these files apart".
@@ -169,9 +181,15 @@ The user-facing word is **workspace**. "Vault" survives only in existing code id
 - The one-time hint is remembered in userData (`workspaces.hintDismissedAt` in
   `preferences.json`), not in the folder: it is about this install. An older version keeps the
   key with the rest of the `workspaces` object.
-- `.kaipu/workspace.json` and `.kaipu/settings.json` are reserved names, like `tags.json`. A
-  media file whose stem is `workspace`, `settings` or `tags` must never address them as its
-  sidecar (spec, Things the code contradicted).
+- `.kaipu/workspace/identity.json` and `.kaipu/workspace/settings.json` live in a subfolder no
+  media stem can address, so a customer's `workspace.png` or `settings.png` keeps its own
+  sidecar through the migration and through a downgrade (the older app deleting `workspace.png`
+  deletes `.kaipu/workspace.json`, never the identity). On `main` nothing lists, sweeps, prunes
+  or deletes an unknown subfolder of `.kaipu/` (spec, Current state). `tags.json` keeps its
+  pre-existing collision with a media file named `tags.*` (ADR 0020), which this ADR does not
+  introduce; guarding it is a possible follow-up.
+- `describe()` and the media protocol become the gate against reading evicted files, not only
+  thumbnail generation: a rendered grid must not materialize anything.
 
 ## Non-goals
 

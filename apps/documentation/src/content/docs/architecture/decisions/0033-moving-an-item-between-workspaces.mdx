@@ -16,6 +16,7 @@ description: A finished recording or screenshot moves to another workspace with 
 | Amends        | ADR 0003's wording "the editor never … moves … the original" (see Consequences)                           |
 | Amended       | 2026-10-29, in place while Proposed: synced folders met the first reopen condition (decisions 4, 9, 13)   |
 | Amended       | 2026-10-30, round 3, in place while Proposed: a group move and the exports suggestion (decisions 14, 15)  |
+| Amended       | 2026-10-30, review round, in place while Proposed: the identity file is `.kaipu/workspace/identity.json`  |
 
 ## Context
 
@@ -142,7 +143,7 @@ Three more traps are about things that run **beside** the move:
    writable; nothing is recording or exporting; the item is not open in an export; the editor
    has flushed its autosave; for a copy, the target volume has room for the media plus a
    margin; no drag of this item started within the last 10 seconds (decision 11); the source
-   media is not evicted (dataless) by a sync provider, and the target's `workspace.json` has
+   media is not evicted (dataless) by a sync provider, and the target's `.kaipu/workspace/identity.json` has
    been read and its id matches (decision 13). While the move runs, it holds the item lock
    (decision 12) and the switch lock (ADR 0032, decision 5).
 10. **A cloud-only item** (its local copy was removed, so only its sidecar, thumbnail and edit
@@ -188,8 +189,8 @@ Three more traps are about things that run **beside** the move:
     - An evicted (dataless) source media is not moved: the item says "In the cloud — download to
       open", and the move is disabled with "Download it first". Hashing it would download it, or
       hang while offline.
-    - A move into a synced workspace waits until the target's `workspace.json` has been read
-      and its id matches. An evicted `workspace.json` only delays the move; it never makes the
+    - A move into a synced workspace waits until the target's `.kaipu/workspace/identity.json` has been read
+      and its id matches. An evicted `.kaipu/workspace/identity.json` only delays the move; it never makes the
       workspace unavailable (ADR 0032, decision 8).
     - The journal stays in userData, so a move between two Macs that share a synced folder is
       still a move on one Mac. There is no cross-machine lock (non-goal).

@@ -24,8 +24,10 @@ nothing they have.
 
 ## What it adds
 
-- **Workspaces**: any existing folder becomes one. Kaipu writes `.kaipu/workspace.json` (id,
-  name, color, initials), and a folder that already has Kaipu files is adopted.
+- **Workspaces**: any existing folder becomes one. Kaipu writes `.kaipu/workspace/identity.json` (id,
+  name, color, initials) in a subfolder that no media file's sidecar can address (a customer's
+  `workspace.png` already owns `.kaipu/workspace.json`), and a folder that already has Kaipu
+  files is adopted.
 - **Workspaces are visible from the first launch, even with one.** The existing library becomes
   a workspace named "Default workspace". The rail shows its tile and a "+" tile, the status bar
   shows the chip, and a one-time dismissible hint ("New: workspaces — keep work and personal
@@ -55,10 +57,17 @@ nothing they have.
   group is not a transaction.
 - **Per-workspace settings**, in the first release of workspaces: five keys (badge, upload
   mode, recording quality, export quality, screenshot copy) can be overridden per workspace and
-  inherit from "All workspaces" otherwise. Shortcuts are always global.
+  inherit from "All workspaces" otherwise. Shortcuts are always global. Every settings snapshot
+  is the effective one of the active workspace, a capture keeps the policy it started with
+  (also in the editor that opens after a failed save), and overrides in a folder this Mac did
+  not write stay inactive until the user confirms them once ("Use them / Ignore"). With one
+  workspace the scope selector is hidden, but a row set by an override still shows it and can
+  reset it.
 - **Synced folders**: a workspace may live in Google Drive, OneDrive or iCloud Drive. Kaipu
   labels it, keeps its scratch files outside it, always copies and verifies when a move
-  touches it, and shows offloaded files as "In the cloud".
+  touches it, and shows offloaded files as "In the cloud". Drawing the Library never
+  downloads one: an evicted file or an evicted thumbnail gets no image URL, and the media
+  protocol refuses it.
 - **Cloud**: each cloud asset records its workspace on the server, and a Library hides the
   other workspaces' cloud items.
 - **No combined Library view.** "All workspaces" exists only as the Settings scope for
