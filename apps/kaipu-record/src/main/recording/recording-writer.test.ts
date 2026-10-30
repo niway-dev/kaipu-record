@@ -172,7 +172,7 @@ describe("RecordingWriter", () => {
 
   it("a metadata failure after the move takes the media back out of the vault, still salvageable", async () => {
     const { writer, vaultDir, tempDir } = await setup();
-    await writer.create("s1");
+    const { tempPath } = await writer.create("s1");
     await writer.write("s1", new TextEncoder().encode("take").buffer, 0);
     // The sidecar cannot be written: the move already happened.
     vi.spyOn(LibraryVault.prototype, "writeMeta").mockRejectedValueOnce(new Error("disk full"));
@@ -183,7 +183,7 @@ describe("RecordingWriter", () => {
     // No orphan .mp4 (nor its reserved stub) in the vault, and the take is back in staging.
     expect((await readdir(vaultDir)).filter((f) => f.endsWith(".mp4"))).toHaveLength(0);
     expect(await readdir(join(vaultDir, ".kaipu"))).toEqual([]);
-    expect(await readdir(tempDir)).toContain("kaipu-rec-s1.mp4.part");
+    expect(await readFile(tempPath, "utf-8")).toBe("take");
     const dest = join(tempDir, "rescued.mp4");
     await writer.salvage("s1", dest);
     expect(await readFile(dest, "utf-8")).toBe("take");
@@ -229,14 +229,48 @@ describe("RecordingWriter", () => {
     expect(await readFile(join(vaultDir, `${title} (2).mp4`), "utf-8")).toBe("s2");
   });
 
-  it("a second create with the same id starts a clean session without the first one's bytes", async () => {
+  it("refuses a second create under an open id and keeps the first session's bytes", async () => {
     const { writer } = await setup();
-    await writer.create("s1");
-    await writer.write("s1", new TextEncoder().encode("OLD-OLD").buffer, 0);
-    await writer.create("s1");
-    await writer.write("s1", new TextEncoder().encode("NEW").buffer, 0);
+    const { tempPath } = await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("only copy").buffer, 0);
+    await expect(writer.create("s1")).rejects.toThrow(/already open/);
+    expect(await readFile(tempPath, "utf-8")).toBe("only copy");
     const rec = await writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 });
-    expect(await readFile(rec.filePath, "utf-8")).toBe("NEW");
+    expect(await readFile(rec.filePath, "utf-8")).toBe("only copy");
+  });
+
+  it("gives every session its own staging file, so a released partial is never truncated", async () => {
+    const { writer } = await setup();
+    const first = await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("only copy").buffer, 0);
+    await writer.release("s1");
+    const second = await writer.create("s1");
+    expect(second.tempPath).not.toBe(first.tempPath);
+    expect(await readFile(first.tempPath, "utf-8")).toBe("only copy");
+    // A cleanup bound to the first session never touches the second one.
+    await writer.abort("s1", first.tempPath);
+    await writer.write("s1", new TextEncoder().encode("new").buffer, 0);
+    expect(await readFile(second.tempPath, "utf-8")).toBe("new");
+    expect(await readFile(first.tempPath, "utf-8")).toBe("only copy");
+  });
+
+  it("never replaces a file already at the destination it allocated", async () => {
+    const { writer, vaultDir } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("new take").buffer, 0);
+    // Something lands on the stem between the reservation and the move.
+    const allocate = LibraryVault.prototype.allocateId;
+    vi.spyOn(LibraryVault.prototype, "allocateId").mockImplementationOnce(
+      async function (this: LibraryVault, input) {
+        const id = await allocate.call(this, input);
+        await writeFile(join(vaultDir, `${id}.mp4`), "other recording");
+        return id;
+      },
+    );
+    await expect(
+      writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
+    ).rejects.toBeInstanceOf(FinalizeMoveError);
+    expect(await readFile(join(vaultDir, "T.mp4"), "utf-8")).toBe("other recording");
   });
 
   it("throws when writing to an unknown session", async () => {

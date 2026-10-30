@@ -2,7 +2,7 @@ import { readdir, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { LibraryVault } from "../library/library-vault";
 import { defaultCaptureName } from "@shared/default-capture-name";
-import { STAGING_DIR, moveFile } from "./recording-writer";
+import { STAGING_DIR, isFileExists, moveFile } from "./recording-writer";
 
 const PART_RE = /^kaipu-rec-.+\.mp4\.part$/;
 const MIN_AGE_MS = 2 * 60_000; // another instance may still be writing a fresh file
@@ -60,7 +60,8 @@ export async function recoverStrandedRecordings(deps: SweepDeps): Promise<SweepR
         try {
           await moveFile(path, await vault.filePath(id));
         } catch (error) {
-          await vault.remove(id).catch(() => {}); // release the reserved stem
+          // Release the reserved stem, unless another file took it (removing would delete it).
+          if (!isFileExists(error)) await vault.remove(id).catch(() => {});
           throw error;
         }
         await vault.writeMeta(id, { derivedFromAssetId: null });

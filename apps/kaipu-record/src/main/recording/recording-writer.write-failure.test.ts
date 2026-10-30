@@ -52,7 +52,7 @@ describe("RecordingWriter — write failure", () => {
   });
 
   it("finalize refuses a failed session — rejects, cleans up the temp file, drops the session", async () => {
-    await writer.create("s1");
+    const { tempPath } = await writer.create("s1");
     await expect(writer.write("s1", new TextEncoder().encode("x").buffer, 0)).rejects.toThrow();
 
     await expect(
@@ -60,7 +60,8 @@ describe("RecordingWriter — write failure", () => {
     ).rejects.toThrow(/ENOSPC/);
     // The truncated .part is deleted (never renamed into the vault) and the
     // session is gone, so a second finalize/hasFailed sees nothing.
-    expect(unlinkMock).toHaveBeenCalledWith("/tmp/kaipu-rec-s1.mp4.part");
+    expect(tempPath).toMatch(/^\/tmp\/kaipu-rec-s1-.+\.mp4\.part$/);
+    expect(unlinkMock).toHaveBeenCalledWith(tempPath);
     expect(closeMock).toHaveBeenCalled();
     expect(writer.hasFailed("s1")).toBe(false);
   });

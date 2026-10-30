@@ -6,13 +6,16 @@ import { describe, expect, it, vi } from "vitest";
 // Cross-volume rename failure (EXDEV) followed by a failed copy (ENOSPC) can't be
 // triggered portably against a real disk, so the move primitives are mocked.
 // Only the take's move fails: the vault's atomic sidecar writes rename too.
-const { renameMock, copyFileMock, unlinkMock, realRename } = vi.hoisted(() => {
+const { renameMock, linkMock, copyFileMock, unlinkMock, realRename } = vi.hoisted(() => {
   const realRename = { fn: null as null | ((from: string, to: string) => Promise<void>) };
   return {
     realRename,
     renameMock: vi.fn(async (from: string, to: string) => {
       if (from.endsWith(".mp4.part")) throw Object.assign(new Error("EXDEV"), { code: "EXDEV" });
       return realRename.fn!(from, to);
+    }),
+    linkMock: vi.fn(async () => {
+      throw Object.assign(new Error("EXDEV"), { code: "EXDEV" });
     }),
     copyFileMock: vi.fn(async () => {
       throw Object.assign(new Error("ENOSPC"), { code: "ENOSPC" });
@@ -24,7 +27,13 @@ const { renameMock, copyFileMock, unlinkMock, realRename } = vi.hoisted(() => {
 vi.mock("node:fs/promises", async (importActual) => {
   const actual = await importActual<typeof import("node:fs/promises")>();
   realRename.fn = actual.rename;
-  return { ...actual, rename: renameMock, copyFile: copyFileMock, unlink: unlinkMock };
+  return {
+    ...actual,
+    rename: renameMock,
+    link: linkMock,
+    copyFile: copyFileMock,
+    unlink: unlinkMock,
+  };
 });
 
 import { FinalizeMoveError, RecordingWriter } from "./recording-writer";
