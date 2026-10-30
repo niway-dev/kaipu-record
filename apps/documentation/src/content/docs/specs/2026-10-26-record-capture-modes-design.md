@@ -137,8 +137,10 @@ What changed against the decisions above:
   accepts it. The Frame box, opened to record, carries its own chrome instead of the action bar:
   a ratio bar above it (Free · 16:9 · 9:16 · 1:1 and the size in device pixels, from a new
   `&scale=` query parameter written only for this intent), a vertical widget attached to its
-  right (Capture | Record switch, modes 1–n, Mic, System audio and Camera, Cancel) and a pink
-  "● Start recording ↵" pill under it. The Screen card becomes "● Record this display", the
+  right (Capture | Record switch, modes 1–n, Mic, System audio and Camera, Cancel, and the
+  pink ● Start recording button, Enter). Start first shipped as a pill under the box; it moved
+  into the widget because a box that fills the screen pushed the pill inside its bottom edge,
+  on top of the key hint. The Screen card becomes "● Record this display", the
   mode row and Mic · System · Cam chips. The Window picker keeps the action bar (Record, then
   Capture) and stays behind its flag (NIW2-469).
 - _Decision 2, owner addendum: switching intent inside the selector._ A two-state

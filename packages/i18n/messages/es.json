@@ -772,6 +772,7 @@
       "record": "Grabar",
       "cancel": "Cancelar",
       "cancelTitle": "Cancelar · Esc",
+      "startRecordingTitle": "Empezar a grabar · ↵",
       "modes": "Modo de captura",
       "modeKey": "{mode} ({key})",
       "frame": "Marco de captura",
