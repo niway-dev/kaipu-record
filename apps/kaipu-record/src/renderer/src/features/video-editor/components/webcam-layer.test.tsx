@@ -199,6 +199,37 @@ describe("WebcamLayer", () => {
     expect(cam.currentTime).toBeCloseTo(4.75);
   });
 
+  it("does not stack a new seek on one still in flight; resyncs once it lands", () => {
+    const { ref, el } = mainVideo(1);
+    renderLayer({ videoRef: ref });
+    const cam = loadWebcam(30);
+    // Track every write to the webcam's currentTime, and hold it "seeking".
+    let camTime = 1;
+    let seeking = false;
+    const writes: number[] = [];
+    Object.defineProperty(cam, "currentTime", {
+      configurable: true,
+      get: () => camTime,
+      set: (v: number) => {
+        writes.push(v);
+        camTime = v;
+      },
+    });
+    Object.defineProperty(cam, "seeking", { configurable: true, get: () => seeking });
+    act(() => setTime(el, 3)); // 2 s off: one seek starts
+    expect(writes).toEqual([3]);
+    seeking = true;
+    // The decoder is still busy; the main clock runs on, frame after frame, > 80 ms each.
+    act(() => setTime(el, 3.1));
+    act(() => setTime(el, 3.2));
+    act(() => setTime(el, 3.3));
+    expect(writes).toEqual([3]);
+    // The seek lands at 3 while the main video is at 3.3: one catch-up seek.
+    seeking = false;
+    act(() => void fireEvent(cam, new Event("seeked")));
+    expect(writes).toEqual([3, 3.3]);
+  });
+
   it("mirrors the main element's play and pause", () => {
     const { ref, el } = mainVideo(1);
     renderLayer({ videoRef: ref });

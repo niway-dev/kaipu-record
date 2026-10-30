@@ -127,8 +127,13 @@ export function WebcamLayer({
       },
       side: rect.size,
     };
-    const seekTo = webcamResyncTarget(cam.currentTime, webcamTime, cam.duration);
-    if (seekTo !== null) cam.currentTime = seekTo;
+    // While a seek is in flight, currentTime already reads the pending target and the main
+    // clock keeps moving: re-seeking on every frame would cancel each seek with the next one
+    // and freeze the bubble after a cut or a scrub. Wait for `seeked` (below), then catch up.
+    if (!cam.seeking) {
+      const seekTo = webcamResyncTarget(cam.currentTime, webcamTime, cam.duration);
+      if (seekTo !== null) cam.currentTime = seekTo;
+    }
     const main = videoRef.current;
     if (main && !main.paused && cam.paused) safePlay(cam);
     if (main?.paused && !cam.paused) safePause(cam);
@@ -224,6 +229,7 @@ export function WebcamLayer({
             preload="auto"
             data-testid="webcam-video"
             onLoadedMetadata={() => apply(videoRef.current?.currentTime ?? lastTime.current)}
+            onSeeked={() => apply(videoRef.current?.currentTime ?? lastTime.current)}
           />
         </div>
       </div>
