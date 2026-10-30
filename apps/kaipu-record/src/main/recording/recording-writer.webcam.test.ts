@@ -183,12 +183,62 @@ describe("RecordingWriter — the webcam session", () => {
     // Salvage is offered before the abort in the hub; here, on a fresh stranded pair.
     const second = await setup({ vault: () => join(blocker, "vault") });
     await pair(second.writer);
-    await expect(second.writer.finalize("s1", meta())).rejects.toBeInstanceOf(FinalizeMoveError);
+    await expect(second.writer.finalize("s1", meta({ webcam: webcamMeta }))).rejects.toBeInstanceOf(
+      FinalizeMoveError,
+    );
     const out = await mkdtemp(join(tmpdir(), "rw-out-"));
     await second.writer.salvage("s1", join(out, "take.mp4"));
     expect(await readFile(join(out, "take.mp4"), "utf-8")).toBe("SCREEN");
     expect(await readFile(join(out, "take.webcam.mp4"), "utf-8")).toBe("WEBCAM");
     expect(second.writer.ids()).toEqual([]);
+  });
+
+  describe("a stranded take keeps only a webcam that finalize would have placed", () => {
+    /** A take whose vault cannot be reached: finalize strands it. */
+    async function strandedSetup() {
+      const blocker = join(await mkdtemp(join(tmpdir(), "rw-block-")), "file");
+      await writeFile(blocker, "not a directory");
+      return setup({ vault: () => join(blocker, "vault") });
+    }
+
+    it("discards a webcam the renderer sent no usable meta for (it failed)", async () => {
+      const { writer, tempDir } = await strandedSetup();
+      await pair(writer);
+      await expect(writer.finalize("s1", meta())).rejects.toBeInstanceOf(FinalizeMoveError);
+      expect(await readdir(tempDir)).toEqual(["kaipu-rec-s1.mp4.part"]);
+      const out = await mkdtemp(join(tmpdir(), "rw-out-"));
+      await writer.salvage("s1", join(out, "take.mp4"));
+      expect(await readdir(out)).toEqual(["take.mp4"]);
+      expect(writer.ids()).toEqual([]);
+    });
+
+    it("discards a webcam whose write failed", async () => {
+      const { writer, tempDir } = await strandedSetup();
+      await pair(writer);
+      await writer.write("s1", bytes("FAIL"), 6, "webcam").catch(() => undefined);
+      await expect(writer.finalize("s1", meta({ webcam: webcamMeta }))).rejects.toBeInstanceOf(
+        FinalizeMoveError,
+      );
+      expect(await readdir(tempDir)).toEqual(["kaipu-rec-s1.mp4.part"]);
+    });
+  });
+
+  it("salvage keeps a <name>.webcam.mp4 already beside the destination", async () => {
+    const blocker = join(await mkdtemp(join(tmpdir(), "rw-block-")), "file");
+    await writeFile(blocker, "not a directory");
+    const { writer } = await setup({ vault: () => join(blocker, "vault") });
+    await pair(writer);
+    await expect(writer.finalize("s1", meta({ webcam: webcamMeta }))).rejects.toBeInstanceOf(
+      FinalizeMoveError,
+    );
+    const out = await mkdtemp(join(tmpdir(), "rw-out-"));
+    // The save dialog confirmed replacing take.mp4; nothing confirmed the older webcam file.
+    await writeFile(join(out, "take.webcam.mp4"), "OLDER");
+    await writeFile(join(out, "take.webcam-2.mp4"), "OLDER TOO");
+    await writer.salvage("s1", join(out, "take.mp4"));
+    expect(await readFile(join(out, "take.webcam.mp4"), "utf-8")).toBe("OLDER");
+    expect(await readFile(join(out, "take.webcam-2.mp4"), "utf-8")).toBe("OLDER TOO");
+    expect(await readFile(join(out, "take.webcam-3.mp4"), "utf-8")).toBe("WEBCAM");
   });
 
   it("a metadata failure takes both files back out of the vault, still salvageable", async () => {

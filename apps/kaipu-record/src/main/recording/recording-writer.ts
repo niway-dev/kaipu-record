@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { copyFile, open, mkdir, rename, unlink, type FileHandle } from "node:fs/promises";
+import { access, copyFile, open, mkdir, rename, unlink, type FileHandle } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import type { LocalRecording } from "@shared/types/library-storage";
@@ -221,7 +221,7 @@ export class RecordingWriter {
       await mkdir(vaultDir, { recursive: true });
       dest = await vault.filePath(id); // <id>.mp4 (does not exist yet)
     } catch (cause) {
-      await this.strand(session, webcamSession);
+      await this.strand(session, webcamSession, meta);
       throw new FinalizeMoveError(session.tempPath, cause);
     }
     await this.closeHandle(session);
@@ -229,7 +229,7 @@ export class RecordingWriter {
     try {
       await moveFile(session.tempPath, dest);
     } catch (cause) {
-      await this.strand(session, webcamSession);
+      await this.strand(session, webcamSession, meta);
       throw new FinalizeMoveError(session.tempPath, cause);
     }
 
@@ -314,13 +314,25 @@ export class RecordingWriter {
     await unlink(session.tempPath).catch(() => {});
   }
 
-  /** Finalize could not place the take: both parts stay in staging for a salvage. */
-  private async strand(session: Session, webcamSession: Session | null): Promise<void> {
+  /**
+   * Finalize could not place the take: its parts stay in staging for a salvage. The webcam's
+   * only when finalize would have placed it (`placeWebcam`): one the renderer sent no usable
+   * meta for, or whose write failed, is discarded, so a salvage never hands back a broken file.
+   */
+  private async strand(
+    session: Session,
+    webcamSession: Session | null,
+    meta: RecordingFinalizeMeta,
+  ): Promise<void> {
     session.stranded = true;
     await this.closeHandle(session).catch(() => {});
     if (!webcamSession) return;
-    webcamSession.stranded = true;
     await webcamSession.queue;
+    if (webcamSession.failed || !sanitizeWebcamTrackMeta(meta.webcam)) {
+      await this.discard(webcamSession);
+      return;
+    }
+    webcamSession.stranded = true;
     await this.closeHandle(webcamSession).catch(() => {});
   }
 
@@ -368,6 +380,8 @@ export class RecordingWriter {
   /**
    * Move a stranded take to a path the user picked, then forget the session. Its webcam, when
    * stranded with it, goes beside it as `<name>.webcam.mp4` (best-effort: the screen is the take).
+   * The save dialog only confirmed replacing the screen file: an existing `<name>.webcam.mp4`
+   * is kept, and the webcam takes the first free `<name>.webcam-<n>.mp4`.
    */
   async salvage(sessionId: string, destPath: string): Promise<void> {
     const session = this.sessions.get(sessionKey(sessionId, "screen"));
@@ -377,9 +391,9 @@ export class RecordingWriter {
     const webcam = this.sessions.get(sessionKey(sessionId, "webcam"));
     if (webcam?.stranded) {
       this.sessions.delete(sessionKey(sessionId, "webcam"));
-      await moveFile(webcam.tempPath, webcamSiblingPath(destPath), { overwrite: true }).catch(
-        (error) => console.error("webcam salvage failed", error),
-      );
+      await freeWebcamSiblingPath(destPath)
+        .then((to) => moveFile(webcam.tempPath, to))
+        .catch((error) => console.error("webcam salvage failed", error));
     }
   }
 
@@ -424,6 +438,26 @@ export class RecordingWriter {
       }),
     );
   }
+}
+
+/**
+ * `<name>.webcam.mp4` beside a salvaged screen file, or `<name>.webcam-<n>.mp4` from 2 up when
+ * it is taken: `moveFile` renames, and a rename replaces an existing file without asking.
+ */
+async function freeWebcamSiblingPath(screenPath: string): Promise<string> {
+  const first = webcamSiblingPath(screenPath);
+  for (let n = 1; n < 1000; n++) {
+    const candidate = n === 1 ? first : first.replace(/\.webcam\.mp4$/, `.webcam-${n}.mp4`);
+    if (!(await pathExists(candidate))) return candidate;
+  }
+  throw new Error(`No free webcam file name beside "${screenPath}"`);
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  return access(path).then(
+    () => true,
+    () => false,
+  );
 }
 
 /** The map key of a take's session of one kind; the screen's is the bare id. */
