@@ -133,5 +133,11 @@ export function webcamAt(scene: { webcam: WebcamScene | null }, t: number): Webc
   return segment.layout ? { ...webcam.layout, ...segment.layout } : webcam.layout;
 }
 
+/** The override segment in force at source time `t` (null `t`: over a slide), if any. */
+export function webcamOverrideAt(webcam: WebcamScene, t: number | null): WebcamSegment | null {
+  if (t === null) return null;
+  return webcam.segments.find((s) => s.mode === "override" && t >= s.start && t < s.end) ?? null;
+}
+
 /** The shortest segment the timeline can draw, shared with zoom segments. */
 export const WEBCAM_MIN_SEGMENT_SECONDS = ZOOM_LIMITS.minSeconds;

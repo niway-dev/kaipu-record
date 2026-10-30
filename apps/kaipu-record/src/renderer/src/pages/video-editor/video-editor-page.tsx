@@ -74,7 +74,11 @@ import {
   WebcamSegmentInspector,
 } from "@renderer/features/video-editor/components/inspector/webcam-inspector";
 import { useWebcamEditing } from "@renderer/features/video-editor/webcam/use-webcam-editing";
-import { webcamAt } from "@renderer/features/video-editor/webcam/webcam-model";
+import { webcamAt, webcamOverrideAt } from "@renderer/features/video-editor/webcam/webcam-model";
+import {
+  webcamInspectorTarget,
+  webcamOutlined,
+} from "@renderer/features/video-editor/webcam/webcam-selection";
 import { EditorInspector } from "@renderer/features/video-editor/components/inspector/editor-inspector";
 import { DetectionPanel } from "@renderer/features/video-editor/components/inspector/detection-panel";
 import { ZoomInspector } from "@renderer/features/video-editor/components/inspector/zoom-inspector";
@@ -1046,10 +1050,17 @@ function VideoEditor({
   const selectedOverlay = selectedOverlayId
     ? (scene.overlays.find((o) => o.id === selectedOverlayId) ?? null)
     : null;
-  const selectedWebcamSegment =
-    selectedWebcamId && selectedWebcamId !== WEBCAM_LAYER_SELECTION
-      ? (webcamEdits.visibleSegments.find((s) => s.id === selectedWebcamId) ?? null)
+  // With the layer selected and the playhead inside an override, this is that override.
+  const webcamTarget =
+    hasWebcam && scene.webcam
+      ? webcamInspectorTarget(
+          scene.webcam,
+          webcamEdits.visibleSegments,
+          selectedWebcamId,
+          sourceTimeAtTimeline(layout, playback.timelineTime),
+        )
       : null;
+  const selectedWebcamSegment = webcamTarget?.kind === "segment" ? webcamTarget.segment : null;
 
   // Privacy (doc 10). While a privacy tool is active or a region is selected the preview
   // shows the unzoomed original frame, so drawing/editing maps 1:1 to frame coordinates.
@@ -1308,20 +1319,11 @@ function VideoEditor({
                     // open question 2); a slide has no webcam either.
                     hidden={holdingOriginal || onSlide}
                     interactive={videoTools.tool === "select"}
-                    // Outlined for the layer and for an override (both are the bubble's look), not
-                    // for a hidden range, which has nothing to show.
-                    selected={
-                      selectedWebcamId === WEBCAM_LAYER_SELECTION ||
-                      scene.webcam.segments.some(
-                        (s) => s.id === selectedWebcamId && s.mode === "override",
-                      )
-                    }
+                    selected={webcamOutlined(scene.webcam, selectedWebcamId)}
                     onSelect={(sourceTime) => {
                       // Grabbing the bubble inside an override selects (and edits) that
                       // override, so the inspector shows what the user is looking at.
-                      const override = scene.webcam?.segments.find(
-                        (s) => s.mode === "override" && sourceTime >= s.start && sourceTime < s.end,
-                      );
+                      const override = scene.webcam && webcamOverrideAt(scene.webcam, sourceTime);
                       selectKind("webcam", override?.id ?? WEBCAM_LAYER_SELECTION);
                     }}
                     onBegin={webcamEdits.begin}
@@ -1507,14 +1509,14 @@ function VideoEditor({
               }
               onRemoved={() => selectKind("zoom", null)}
             />
-          ) : hasWebcam && scene.webcam && selectedWebcamId === WEBCAM_LAYER_SELECTION ? (
+          ) : scene.webcam && webcamTarget?.kind === "layer" ? (
             <WebcamInspector
               layout={scene.webcam.layout}
               edits={webcamEdits}
               frame={frameSize}
               onHideHere={handleHideWebcam}
             />
-          ) : hasWebcam && selectedWebcamSegment ? (
+          ) : selectedWebcamSegment ? (
             <WebcamSegmentInspector
               segment={selectedWebcamSegment}
               index={webcamEdits.visibleSegments.indexOf(selectedWebcamSegment) + 1}

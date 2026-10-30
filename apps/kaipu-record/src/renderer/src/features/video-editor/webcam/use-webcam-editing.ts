@@ -22,6 +22,7 @@ import {
 } from "./webcam-edits";
 import {
   WEBCAM_MIN_SEGMENT_SECONDS,
+  webcamOverrideAt,
   type WebcamLayout,
   type WebcamScene,
   type WebcamSegment,
@@ -56,12 +57,6 @@ export interface WebcamEditing {
   end(): void;
 }
 
-/** The override in force at `t`, if any — the segment a layout edit there belongs to. */
-function overrideAt(webcam: WebcamScene, t: number | null): WebcamSegment | null {
-  if (t === null) return null;
-  return webcam.segments.find((s) => s.mode === "override" && t >= s.start && t < s.end) ?? null;
-}
-
 /** Apply a layout patch to the override at `t`, or to the global layout outside one. */
 export function patchWebcamAt(
   scene: VideoScene,
@@ -69,7 +64,8 @@ export function patchWebcamAt(
   t: number | null,
 ): VideoScene {
   if (!scene.webcam) return scene;
-  const override = overrideAt(scene.webcam, t);
+  // The override in force at `t` is the segment a layout edit there belongs to.
+  const override = webcamOverrideAt(scene.webcam, t);
   return override
     ? updateWebcamSegment(scene, override.id, { layout: patch })
     : setWebcamLayout(scene, patch);
