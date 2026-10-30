@@ -124,8 +124,7 @@
     "pasteHint": "Copia una imagen donde sea y luego pulsa {shortcut} aquí.",
     "pasteButton": "Pegar desde el portapapeles",
     "pasteEmpty": "No hay ninguna imagen en el portapapeles. Copia una e inténtalo de nuevo.",
-    "pasteError": "No se pudo abrir esa imagen. Intenta copiarla de nuevo.",
-    "pastedTitle": "Imagen pegada — {date}"
+    "pasteError": "No se pudo abrir esa imagen. Intenta copiarla de nuevo."
   },
   "settings": {
     "title": "Ajustes",

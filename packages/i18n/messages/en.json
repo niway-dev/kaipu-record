@@ -124,8 +124,7 @@
     "pasteHint": "Copy an image anywhere, then press {shortcut} here.",
     "pasteButton": "Paste from clipboard",
     "pasteEmpty": "There is no image on the clipboard. Copy one, then try again.",
-    "pasteError": "Couldn't open that image. Try copying it again.",
-    "pastedTitle": "Pasted image — {date}"
+    "pasteError": "Couldn't open that image. Try copying it again."
   },
   "settings": {
     "title": "Settings",

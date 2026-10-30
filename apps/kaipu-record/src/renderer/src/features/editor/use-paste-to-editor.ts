@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { reportError } from "@renderer/features/analytics";
+import { defaultCaptureName } from "@shared/default-capture-name";
 import { formatAccelerator } from "@renderer/features/shortcuts/keyboard-accelerator";
 import { useOpenInEditor } from "./open-in-editor";
 import {
@@ -49,8 +50,8 @@ export function usePasteToEditor(options: { replace?: boolean } = {}): PasteToEd
           setEmpty(true);
           return;
         }
-        const title = t("pastedTitle", { date: new Date().toLocaleString() });
-        openCapture(pastedImageSource(image, title), { replace });
+        // A pasted image is a screenshot to the library: same default name (ADR 0032).
+        openCapture(pastedImageSource(image, defaultCaptureName("screenshot")), { replace });
       } catch (error) {
         reportError(t("pasteError"), error, { context: { phase: "paste" } });
       } finally {
