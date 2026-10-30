@@ -533,17 +533,27 @@ describe("webcam layer", () => {
     ["a layout with a non-boolean mirror", { layout: { ...LAYOUT, mirrored: 1 }, segments: [] }],
     ["a layout with a bad position", { layout: { ...LAYOUT, position: { x: 0 } }, segments: [] }],
     ["non-array segments", { layout: LAYOUT, segments: {} }],
-    ["a segment with a bad mode", { layout: LAYOUT, segments: [{ ...HIDDEN, mode: "fade" }] }],
-    ["a segment shorter than the minimum", { layout: LAYOUT, segments: [{ ...HIDDEN, end: 2.5 }] }],
-    [
-      "a segment without an id",
-      { layout: LAYOUT, segments: [{ start: 1, end: 3, mode: "hidden" }] },
-    ],
-    [
-      "an override with a bad field",
-      { layout: LAYOUT, segments: [{ ...OVERRIDE, layout: { shadow: "yes" } }] },
-    ],
-  ])("rejects %s", (_label: string, webcam: unknown) => {
-    expect(withWebcam(webcam)).toBeNull();
+  ])("loads the session without the layer for %s", (_label: string, webcam: unknown) => {
+    // The cuts and zooms are worth more than a layer the sidecar can re-seed.
+    const parsed = parseSession(
+      JSON.stringify({
+        version: 1,
+        scene: { items: [CLIP_ITEM], overlays: [], zoomSegments: [ZOOM], webcam },
+      }),
+    );
+    expect(parsed).not.toBeNull();
+    expect(parsed!.scene.zoomSegments).toEqual([ZOOM]);
+    expect(parsed!.scene.webcam).toBeNull();
+  });
+
+  it.each([
+    ["a bad mode", { ...HIDDEN, mode: "fade" }],
+    ["a length under the minimum", { ...HIDDEN, end: 2.5 }],
+    ["no id", { start: 1, end: 3, mode: "hidden" }],
+    ["an override with a bad field", { ...OVERRIDE, layout: { shadow: "yes" } }],
+  ])("drops only the segment with %s and keeps the layer", (_label: string, bad: unknown) => {
+    const layer = segments([bad, { id: "ok", start: 30, end: 33, mode: "hidden" }])!.scene.webcam!;
+    expect(layer.layout).toMatchObject({ size: 0.25 });
+    expect(layer.segments.map((s) => s.id)).toEqual(["ok"]);
   });
 });

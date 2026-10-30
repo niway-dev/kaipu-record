@@ -16,8 +16,8 @@
  * session in an old build is safe (it just shows no zooms).
  *
  * `webcam` (ADR 0033) is additive the same way: absent or null → no layer; a wrong type
- * rejects the session; numbers clamp; overlapping segments are dropped; a segment under the
- * zoom minimum is rejected. Whether the recording HAS a webcam is the sidecar's call, not
+ * drops the layer (the session loads, the sidecar re-seeds it); numbers clamp; overlapping and
+ * invalid segments are dropped individually. Whether the recording HAS a webcam is the sidecar's call, not
  * this file's: see `reconcileWebcam` in scene.ts.
  */
 import { ZOOM_DEFAULTS, ZOOM_LIMITS, type ZoomSegment } from "./zoom/zoom-model";
@@ -155,8 +155,10 @@ export function parseSession(json: string): VideoEditSession | null {
 
   let webcam: WebcamScene | null = null;
   if (sceneRaw["webcam"] !== undefined && sceneRaw["webcam"] !== null) {
+    // An invalid layer is dropped, not the session: the sidecar re-seeds it
+    // (`reconcileWebcam`), whereas rejecting would cost the user's cuts, zooms and redactions,
+    // and a later build adding a shape or mode would make this one reject its sessions.
     webcam = validateWebcam(sceneRaw["webcam"]);
-    if (!webcam) return null;
   }
 
   return {
@@ -434,8 +436,7 @@ function validateWebcam(raw: unknown): WebcamScene | null {
     if (!Array.isArray(w["segments"])) return null;
     for (const segment of w["segments"] as unknown[]) {
       const validated = validateWebcamSegment(segment);
-      if (!validated) return null;
-      parsed.push(validated);
+      if (validated) parsed.push(validated);
     }
   }
   parsed.sort((a, b) => a.start - b.start);
