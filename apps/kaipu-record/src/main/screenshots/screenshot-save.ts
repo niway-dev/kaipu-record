@@ -66,3 +66,21 @@ export function saveCaptureToWorkspace(
     return saveScreenshotToVault(png, meta);
   });
 }
+
+/**
+ * The editor's Save: stamped like every item call, and refused with a message naming the
+ * workspace when its folder is not connected.
+ *
+ * The folder is probed BEFORE the call enters the gate. The probe can make a pending
+ * workspace adopt its folder's id, which bumps the generation; inside the call, the window
+ * would then report a save that did write as stale, and saving again would duplicate the
+ * item. Probed first, the same adoption makes the call refuse before it writes anything.
+ */
+export async function saveEditedScreenshot(
+  stamp: unknown,
+  png: Buffer,
+  meta: SaveScreenshotMeta,
+): Promise<LocalRecording> {
+  await requireCaptureWorkspace();
+  return workspaceGate().run(stamp, () => saveScreenshotToVault(png, meta));
+}

@@ -27,8 +27,8 @@ import {
   updateAppSettings,
 } from "../infrastructure/settings-store";
 import { scoped, screenshotFilePath } from "../library";
-import { activeWorkspace, requireCaptureWorkspace } from "../workspaces";
-import { saveCaptureToWorkspace, saveScreenshotToVault } from "./screenshot-save";
+import { activeWorkspace } from "../workspaces";
+import { saveCaptureToWorkspace, saveEditedScreenshot } from "./screenshot-save";
 import type { CaptureToastShowRequest } from "./capture-toast-window";
 import { deferToastUntilAfterCapture } from "./toast-after-capture";
 
@@ -223,19 +223,15 @@ export function registerScreenshotHandlers(
     }),
   );
 
-  // The editor's Save: stamped like every item call, and refused with a message naming the
-  // workspace when its folder is not connected.
+  // The editor's Save (see `saveEditedScreenshot`: probed before the gate).
   ipcMain.handle(
     IPC_CHANNELS.screenshotSave,
-    scoped(
-      async (
-        png: ArrayBuffer,
-        meta: { title: string; overwriteId?: string; manual?: boolean },
-      ): Promise<LocalRecording> => {
-        await requireCaptureWorkspace();
-        return saveScreenshotToVault(Buffer.from(png), meta);
-      },
-    ),
+    (
+      _event,
+      stamp: unknown,
+      png: ArrayBuffer,
+      meta: { title: string; overwriteId?: string; manual?: boolean },
+    ): Promise<LocalRecording> => saveEditedScreenshot(stamp, Buffer.from(png), meta),
   );
 
   // Exports (PDF) are files to hand to someone, not library items: they go where
