@@ -7,14 +7,17 @@ import { fixVault, resumeOrphanManifests, scanVault } from "./vault-reconcile";
 import { listFiles, makeVault, sidecar, snapshot } from "./vault-reconcile.test-helpers";
 
 /** From the n-th call on, every `rename` fails: a crash (or a dead drive) at that point. */
-const failure = vi.hoisted(() => ({ from: Infinity, calls: 0 }));
+const failure = vi.hoisted(() => ({ from: Infinity, calls: 0, source: "" }));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
   return {
     ...actual,
     rename: vi.fn(async (from: string, to: string) => {
       failure.calls += 1;
-      if (failure.calls >= failure.from) {
+      if (
+        failure.calls >= failure.from ||
+        (failure.source && String(from).endsWith(failure.source))
+      ) {
         throw Object.assign(new Error("EIO: injected"), { code: "EIO" });
       }
       return actual.rename(from, to);
@@ -29,6 +32,7 @@ let directory = "";
 afterEach(async () => {
   failure.from = Infinity;
   failure.calls = 0;
+  failure.source = "";
   if (directory) await rm(directory, { recursive: true, force: true });
   directory = "";
 });
@@ -490,5 +494,34 @@ describe("fixVault — a stem shared with an ignored media file", () => {
       ["stem-conflict", "Demo.PNG"],
     ]);
     expect(await payloads()).toEqual(before);
+  });
+});
+
+describe("fixVault — an orphan bundle with a file that did not move", () => {
+  it("stays pending, and the next run completes the same bundle in its original folder", async () => {
+    directory = await makeVault({
+      ".kaipu/Gone.json": sidecar({ assetId: "g", title: "Gone" }),
+      ".kaipu/Gone.jpg": "poster",
+    });
+    failure.source = "/.kaipu/Gone.jpg";
+    const first = await fix();
+    failure.source = "";
+    expect(first.failed.map((f) => f.path)).toContain(".kaipu/Gone.jpg");
+    const runs = await readdir(join(directory, ".kaipu", "orphans"));
+    expect(runs).toHaveLength(1);
+    const run = `.kaipu/orphans/${runs[0]}`;
+    const manifest = await json(`${run}/manifest.json`);
+    expect(manifest.entries).toHaveLength(1);
+    expect(manifest.entries[0]).toMatchObject({ stem: "Gone", status: "pending" });
+
+    const second = await fix();
+    expect(second.failed).toEqual([]);
+    // The poster joined its record in the first run's bundle; no second bundle was opened.
+    expect(await readdir(join(directory, ".kaipu", "orphans"))).toEqual(runs);
+    expect(await readFile(join(directory, run, "Gone.jpg"), "utf8")).toBe("poster");
+    expect((await json(`${run}/Gone.json`)).assetId).toBe("g");
+    const after = await json(`${run}/manifest.json`);
+    expect(after.entries).toHaveLength(1);
+    expect(after.entries[0]).toMatchObject({ stem: "Gone", status: "complete" });
   });
 });

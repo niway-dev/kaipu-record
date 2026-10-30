@@ -584,10 +584,17 @@ class OrphanRun {
     manifest.entries.push(entry);
     await writeManifest(folder, manifest);
     const { moved, problems } = await moveFiles(this.directory, folder, entry);
-    entry.status = "complete";
+    // A file that did not move keeps the entry pending: the next run finishes this bundle
+    // here, instead of classifying the leftover again into another one.
+    if (isEntryComplete(entry)) entry.status = "complete";
     await writeManifest(folder, manifest);
     return { moved, problems };
   }
+}
+
+/** Every file of the entry is settled (moved, missing or in conflict); none still to retry. */
+function isEntryComplete(entry: ManifestEntry): boolean {
+  return entry.files.every((file) => file.state !== undefined && file.state !== "failed");
 }
 
 async function writeManifest(folder: string, manifest: Manifest): Promise<void> {
@@ -676,7 +683,7 @@ export async function resumeOrphanManifests(
         const state = entry.files.find((f) => f.from === path)?.state;
         (state === "conflict" ? conflicts : failed).push(path);
       }
-      if (entry.files.every((f) => f.state !== "failed")) entry.status = "complete";
+      if (isEntryComplete(entry)) entry.status = "complete";
     }
     await writeManifest(folder, manifest);
   }
