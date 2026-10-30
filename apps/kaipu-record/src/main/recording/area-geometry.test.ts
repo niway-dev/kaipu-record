@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   areaToGlobal,
   bubbleBoundsInArea,
-  bubbleCentreInRect,
+  bubblePlacementInRect,
   bubbleSizeOf,
   fullDisplayBorderAllowed,
   sanitizeArea,
+  withRecordedBubble,
 } from "./area-geometry";
 
 describe("fullDisplayBorderAllowed", () => {
@@ -125,25 +126,62 @@ describe("sanitizeArea — an area that crossed a process boundary", () => {
   });
 });
 
-describe("bubbleCentreInRect", () => {
+describe("bubblePlacementInRect", () => {
   const recorded = { x: 1512, y: 0, width: 1000, height: 500 };
 
-  it("normalizes the bubble window's centre to the recorded rectangle", () => {
-    // Bottom-left corner of the area: window 288 wide, 32 from the left, 32 from the bottom.
+  it("normalizes the bubble's centre and side to the recorded rectangle", () => {
+    // Bottom-left corner of the area: window 288 wide (240 bubble), 32 from the left and bottom.
     const window = { x: 1512 + 32, y: 500 - 32 - 288, width: 288, height: 288 };
-    expect(bubbleCentreInRect(window, recorded)).toEqual({ x: 0.176, y: 0.648 });
+    expect(bubblePlacementInRect(window, recorded)).toEqual({
+      position: { x: 0.176, y: 0.648 },
+      sizeFraction: 0.48,
+    });
   });
 
   it("is null when the bubble's centre is outside the recorded rectangle (another display)", () => {
-    expect(bubbleCentreInRect({ x: 0, y: 0, width: 288, height: 288 }, recorded)).toBeNull();
+    expect(bubblePlacementInRect({ x: 0, y: 0, width: 288, height: 288 }, recorded)).toBeNull();
   });
 
   it("is null for an empty recorded rectangle", () => {
     expect(
-      bubbleCentreInRect(
+      bubblePlacementInRect(
         { x: 0, y: 0, width: 10, height: 10 },
         { x: 0, y: 0, width: 0, height: 0 },
       ),
     ).toBeNull();
+  });
+});
+
+describe("withRecordedBubble", () => {
+  const webcam = {
+    startOffsetMs: 0,
+    offsetQuality: "exact",
+    width: 1280,
+    height: 720,
+    fps: 30,
+    recordedLayout: {
+      shape: "circle",
+      size: 240,
+      mirrored: true,
+      framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+      position: { x: 0.9, y: 0.9 },
+    },
+  } as const;
+  const meta = { title: "T", durationSeconds: 1, durationMs: 1000, webcam };
+  const placement = { position: { x: 0.2, y: 0.8 }, sizeFraction: 0.3 };
+
+  it("replaces the renderer's position with main's", () => {
+    expect(withRecordedBubble(meta, placement).webcam?.recordedLayout).toMatchObject(placement);
+  });
+
+  it("removes the renderer's position when main has none", () => {
+    expect(withRecordedBubble(meta, null).webcam?.recordedLayout).not.toHaveProperty("position");
+  });
+
+  it("returns the meta untouched without a webcam or a recorded layout", () => {
+    const bare = { title: "T", durationSeconds: 1, durationMs: 1000 };
+    expect(withRecordedBubble(bare, placement)).toBe(bare);
+    const noLayout = { ...bare, webcam: { ...webcam, recordedLayout: undefined } };
+    expect(withRecordedBubble(noLayout, placement)).toBe(noLayout);
   });
 });

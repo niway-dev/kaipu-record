@@ -347,6 +347,7 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
         mirrored: true,
         framing: { enabled: false, zoom: 1, x: 0, y: 0 },
         position: { x: 0.99, y: 0.99 },
+        sizeFraction: 0.99,
       },
     };
     const display1 = { id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } };
@@ -400,7 +401,7 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
         withArea: true,
         bubble: { x: 132, y: 90, width: 288, height: 288 },
       });
-      expect(layout?.position).toEqual({ x: 0.275, y: 0.5111 });
+      expect(layout).toMatchObject({ position: { x: 0.275, y: 0.5111 }, sizeFraction: 0.6667 });
     });
 
     it("normalizes the bubble to the display of a whole-display take", async () => {
@@ -408,13 +409,14 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
         sourceId: "screen:1:0",
         bubble: { x: 32, y: 662, width: 288, height: 288 },
       });
-      expect(layout?.position).toEqual({ x: 0.1164, y: 0.8208 });
+      expect(layout).toMatchObject({ position: { x: 0.1164, y: 0.8208 }, sizeFraction: 0.2444 });
     });
 
     it("leaves the position out when the bubble was not on screen, and drops the renderer's", async () => {
       const layout = await recordWithWebcam({ sourceId: "screen:1:0", bubble: null });
       expect(layout).toBeDefined();
       expect(layout).not.toHaveProperty("position");
+      expect(layout).not.toHaveProperty("sizeFraction");
     });
 
     it("leaves the position out for a window take: its bounds are unknown", async () => {

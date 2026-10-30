@@ -73,45 +73,53 @@ export function bubbleBoundsAt(container: Rect, side: number, corner: BubbleCorn
   };
 }
 
+/** The bubble's own side for window bounds from {@link bubbleBoundsInArea}. */
+export function bubbleSizeOf(bounds: Rect): number {
+  return bounds.width - 2 * BUBBLE_PAD;
+}
+
+/** Where the bubble sat in the recorded rectangle, and how big. */
+export interface BubblePlacement {
+  /** The bubble's centre, 0..1 from the rectangle's top-left corner. */
+  position: { x: number; y: number };
+  /** The bubble's side as a fraction of the rectangle's height. */
+  sizeFraction: number;
+}
+
 /**
- * Where the bubble sat in the recorded rectangle: its window's centre (the pad is symmetric,
- * so it is the bubble's centre), as 0..1 fractions of `recorded`, to 4 decimals. `null` when
- * the centre lies outside the rectangle (the bubble was on another display, so it is not in
- * the video) or the rectangle is empty. Both are global DIP.
+ * The bubble's placement in `recorded` (both global DIP), from its window's bounds: the pad
+ * is symmetric, so the window's centre is the bubble's, and its side is the window's minus
+ * the pad. 4 decimals. `null` when the centre lies outside the rectangle (the bubble was on
+ * another display, so it is not in the video) or the rectangle is empty.
  */
-export function bubbleCentreInRect(
-  windowBounds: Rect,
-  recorded: Rect,
-): { x: number; y: number } | null {
+export function bubblePlacementInRect(windowBounds: Rect, recorded: Rect): BubblePlacement | null {
   if (recorded.width <= 0 || recorded.height <= 0) return null;
   const x = (windowBounds.x + windowBounds.width / 2 - recorded.x) / recorded.width;
   const y = (windowBounds.y + windowBounds.height / 2 - recorded.y) / recorded.height;
   if (!(x >= 0 && x <= 1 && y >= 0 && y <= 1)) return null;
   const round = (value: number): number => Math.round(value * 10000) / 10000;
-  return { x: round(x), y: round(y) };
-}
-
-/**
- * The finalize meta with the bubble's position set on its recorded layout, replacing
- * whatever the renderer sent: main is the only one that knows where the bubble sat. Without
- * a position the field is removed; without a recorded layout there is nothing to add it to.
- */
-export function withRecordedBubblePosition(
-  meta: RecordingFinalizeMeta,
-  position: { x: number; y: number } | null,
-): RecordingFinalizeMeta {
-  const layout = meta.webcam?.recordedLayout;
-  if (!meta.webcam || !layout) return meta;
-  const { position: _renderer, ...rest } = layout;
   return {
-    ...meta,
-    webcam: { ...meta.webcam, recordedLayout: position ? { ...rest, position } : rest },
+    position: { x: round(x), y: round(y) },
+    sizeFraction: round(Math.min(1, bubbleSizeOf(windowBounds) / recorded.height)),
   };
 }
 
-/** The bubble's own side for window bounds from {@link bubbleBoundsInArea}. */
-export function bubbleSizeOf(bounds: Rect): number {
-  return bounds.width - 2 * BUBBLE_PAD;
+/**
+ * The finalize meta with the bubble's placement set on its recorded layout, replacing
+ * whatever the renderer sent: main is the only one that knows where the bubble sat. Without
+ * a placement the fields are removed; without a recorded layout there is nothing to add them to.
+ */
+export function withRecordedBubble(
+  meta: RecordingFinalizeMeta,
+  placement: BubblePlacement | null,
+): RecordingFinalizeMeta {
+  const layout = meta.webcam?.recordedLayout;
+  if (!meta.webcam || !layout) return meta;
+  const { position: _position, sizeFraction: _sizeFraction, ...rest } = layout;
+  return {
+    ...meta,
+    webcam: { ...meta.webcam, recordedLayout: placement ? { ...rest, ...placement } : rest },
+  };
 }
 
 /**

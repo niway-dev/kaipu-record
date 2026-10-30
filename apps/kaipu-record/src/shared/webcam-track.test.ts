@@ -133,6 +133,17 @@ describe("sanitizeWebcamTrackMeta", () => {
     ).not.toHaveProperty("position");
   });
 
+  it("keeps the recorded size fraction when positive, capped at 1", () => {
+    const layout = { ...DEFAULT_CAMERA_BUBBLE };
+    const fraction = (sizeFraction: unknown) =>
+      sanitizeWebcamTrackMeta({ ...valid, recordedLayout: { ...layout, sizeFraction } })
+        ?.recordedLayout?.sizeFraction;
+    expect(fraction(0.25)).toBe(0.25);
+    expect(fraction(3)).toBe(1);
+    expect(fraction(-1)).toBeUndefined();
+    expect(fraction("big")).toBeUndefined();
+  });
+
   it("ignores extra fields the renderer sent", () => {
     expect(sanitizeWebcamTrackMeta({ ...valid, path: "/etc/passwd" })).not.toHaveProperty("path");
   });

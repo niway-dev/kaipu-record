@@ -37,10 +37,10 @@ import { RecordingShadeWindow } from "./recording-shade-window";
 import { ScreenSourceCache, type ScreenSource } from "./screen-source-cache";
 import {
   areaToGlobal,
-  bubbleCentreInRect,
+  bubblePlacementInRect,
   fullDisplayBorderAllowed,
   sanitizeArea,
-  withRecordedBubblePosition,
+  withRecordedBubble,
   type Rect,
 } from "./area-geometry";
 import { holdTemporaryShortcut, releaseTemporaryShortcut } from "../shortcuts/global-shortcuts";
@@ -414,9 +414,9 @@ export function registerRecordingHub(
       // Where the bubble sat, as main sees its window: the stop has not released the area yet
       // (the renderer sends it after finalize), so the bubble is still where it was recorded.
       const bubbleBounds = cameraBubble.visibleBounds();
-      const meta = withRecordedBubblePosition(
+      const meta = withRecordedBubble(
         rendererMeta,
-        bubbleBounds && recordedRect ? bubbleCentreInRect(bubbleBounds, recordedRect) : null,
+        bubbleBounds && recordedRect ? bubblePlacementInRect(bubbleBounds, recordedRect) : null,
       );
       let recording;
       try {

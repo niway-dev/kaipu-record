@@ -41,6 +41,8 @@ export type WebcamRecordedLayout = Omit<CameraBubbleSettings, "deviceId"> & {
    * bubble was not on the recorded rectangle. The editor seeds the layer's corner from it.
    */
   position?: { x: number; y: number };
+  /** The bubble's side as a fraction of the recorded rectangle's height, as main saw it. */
+  sizeFraction?: number;
 };
 
 /** The sidecar's `webcam` field, and what the recorder sends with finalize. */
@@ -124,7 +126,16 @@ export function sanitizeWebcamTrackMeta(value: unknown): WebcamTrackMeta | null 
   if (safe.recordedLayout && typeof safe.recordedLayout === "object") {
     const { shape, size, mirrored, framing } = sanitizeCameraBubble(safe.recordedLayout);
     const position = sanitizeUnitPoint((safe.recordedLayout as Record<string, unknown>).position);
-    meta.recordedLayout = { shape, size, mirrored, framing, ...(position ? { position } : {}) };
+    const fraction = (safe.recordedLayout as Record<string, unknown>).sizeFraction;
+    const sizeFraction = isPositive(fraction) ? Math.min(1, fraction) : null;
+    meta.recordedLayout = {
+      shape,
+      size,
+      mirrored,
+      framing,
+      ...(position ? { position } : {}),
+      ...(sizeFraction ? { sizeFraction } : {}),
+    };
   }
   return meta;
 }
