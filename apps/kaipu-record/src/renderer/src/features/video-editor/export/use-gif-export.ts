@@ -168,17 +168,18 @@ export function useGifExport(): GifExportController {
     if (!args.scene.webcam || !args.webcamTrack) return Promise.resolve(null);
     if (webcamRef.current?.id !== args.sourceId) {
       // A fetch that throws exports without the layer (reported), and is not cached: the
-      // next export tries again.
-      const track: Promise<WebcamTrackMessage | null> = fetchWebcamTrack(
-        args.sourceId,
-        args.scene.webcam,
-        args.webcamTrack,
-        (error) => {
-          captureException(error, { context: "gif-export-webcam" });
-          if (webcamRef.current?.track === track) webcamRef.current = null;
-        },
-      );
-      webcamRef.current = { id: args.sourceId, track };
+      // next export tries again. `onError` can run before fetchWebcamTrack returns (fetch()
+      // throwing synchronously): `track` is declared null first, so that read is no TDZ, and
+      // a failure flagged that early is simply never cached (E11).
+      let failed = false;
+      let track: Promise<WebcamTrackMessage | null> | null = null;
+      track = fetchWebcamTrack(args.sourceId, args.scene.webcam, args.webcamTrack, (error) => {
+        captureException(error, { context: "gif-export-webcam" });
+        failed = true;
+        if (track !== null && webcamRef.current?.track === track) webcamRef.current = null;
+      });
+      if (!failed) webcamRef.current = { id: args.sourceId, track };
+      return track;
     }
     return webcamRef.current.track;
   }, []);
