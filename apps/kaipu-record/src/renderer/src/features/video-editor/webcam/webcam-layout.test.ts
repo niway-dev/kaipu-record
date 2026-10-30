@@ -160,6 +160,23 @@ describe("webcamSourceRect", () => {
     expect(r.sx).toBe(280);
   });
 
+  it("clamps the framing exactly like the preview's framingTransform", () => {
+    // Past the 3× cap, and between zoom steps: the preview shows 3× and 1.25×.
+    expect(webcamSourceRect(IMAGE, { zoom: 9, x: 0, y: 0 }, false)).toEqual(
+      webcamSourceRect(IMAGE, { zoom: 3, x: 0, y: 0 }, false),
+    );
+    expect(webcamSourceRect(IMAGE, { zoom: 1.26, x: 0, y: 0 }, false)).toEqual(
+      webcamSourceRect(IMAGE, { zoom: 1.25, x: 0, y: 0 }, false),
+    );
+    // Pans round to two decimals; a non-number falls back like the preview's does.
+    expect(webcamSourceRect(IMAGE, { zoom: 2, x: 0.504, y: 0 }, false)).toEqual(
+      webcamSourceRect(IMAGE, { zoom: 2, x: 0.5, y: 0 }, false),
+    );
+    expect(webcamSourceRect(IMAGE, { zoom: Number.NaN, x: Number.NaN, y: 0 }, false)).toEqual(
+      webcamSourceRect(IMAGE, { zoom: 1, x: 0, y: 0 }, false),
+    );
+  });
+
   it("works for a portrait image (cover picks the width)", () => {
     expect(webcamSourceRect({ width: 720, height: 1280 }, { zoom: 1, x: 0, y: 0 }, false)).toEqual({
       sx: 0,
