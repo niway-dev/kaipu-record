@@ -1746,6 +1746,34 @@ describe("recording hub — the webcam writer session (ADR 0032)", () => {
       expect(protects()).toBe(false);
     });
 
+    it("puts it back in the capture when a webcam write fails mid-take", async () => {
+      const { RecordingWriter } = await import("./recording-writer");
+      const write = vi
+        .spyOn(RecordingWriter.prototype, "write")
+        .mockRejectedValue(new Error("ENOSPC"));
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        await registered();
+        await ipc(IPC_CHANNELS.recordingCreate, "s1");
+        await ipc(IPC_CHANNELS.recordingCreate, "s1", "webcam");
+        mockState.bubble.applyProtection.mockClear();
+        mockState.ipcOn.get(IPC_CHANNELS.recordingWrite)!(
+          {},
+          "s1",
+          new ArrayBuffer(1),
+          0,
+          "webcam",
+        );
+        await new Promise((r) => setTimeout(r, 0));
+        // Finalize drops that webcam file: the face must be in the screen from here on.
+        expect(protects()).toBe(false);
+        expect(mockState.bubble.applyProtection).toHaveBeenCalled();
+      } finally {
+        write.mockRestore();
+        error.mockRestore();
+      }
+    });
+
     it("protects it again when the take is finalized, aborted or reset", async () => {
       const { RecordingWriter } = await import("./recording-writer");
       const finalize = vi

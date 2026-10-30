@@ -430,8 +430,14 @@ export function registerRecordingHub(
       const writerKind = recordingWriterKind(kind);
       void writer.write(sessionId, data, position, writerKind).catch((error) => {
         console.error(`recording ${writerKind} write failed`, error);
-        // The webcam never fails the take: finalize drops a webcam whose write failed.
-        if (writerKind === "webcam") return;
+        // The webcam never fails the take: finalize drops a webcam whose write failed. Its
+        // face then has to be in the screen: the bubble rejoins the capture, best effort while
+        // the stream runs, as for an unplugged camera (`CameraBubbleWindow.applyProtection`).
+        if (writerKind === "webcam") {
+          bubbleProtection.webcamEnded(sessionId);
+          cameraBubble.applyProtection();
+          return;
+        }
         // Writes are fire-and-forget, so without this the engine keeps encoding
         // and the bar keeps ticking while every chunk is dropped. Stop the
         // recorder promptly on the first failure: its stop runs finalize, which
