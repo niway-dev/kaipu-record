@@ -99,11 +99,16 @@ describe("reconcile banner", () => {
     expect(screen.queryByText(/needs your attention/)).toBeNull();
   });
 
-  it("shows nothing when nothing disagrees, or while a recording or export runs", async () => {
+  it("shows nothing while a recording runs, and checks again on the next visit", async () => {
     scanResult = { status: "busy", activity: "recording" };
     mount();
     await waitFor(() => expect(getReconcileState().scan).not.toBeNull());
     expect(screen.queryByRole("status")).toBeNull();
+    scanResult = ok([rename]);
+    await act(() => checkOnce());
+    expect(
+      await screen.findByText("1 file in your folder doesn't match Kaipu."),
+    ).toBeInTheDocument();
   });
 });
 

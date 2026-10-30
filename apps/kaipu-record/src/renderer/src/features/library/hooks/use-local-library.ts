@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { notifyVaultRefusal } from "@renderer/features/library/vault-errors";
 import { useTranslations } from "@kaipu/i18n";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { reportError } from "@renderer/features/analytics";
@@ -107,6 +108,7 @@ export function useLocalLibrary(): LocalLibrary {
           notifyAmbiguousIdentity(t);
           return;
         }
+        if (notifyVaultRefusal(error, t)) return;
         reportError(t("errorRename"), error, { context: { id } });
       }
     },
@@ -120,6 +122,7 @@ export function useLocalLibrary(): LocalLibrary {
         prev.map((video) => (video.id === id ? { ...video, tagIds: stored } : video)),
       );
     } catch (error) {
+      if (notifyVaultRefusal(error, t)) return;
       reportError(t("errorTags"), error, { context: { id } });
     }
   }, []);
@@ -129,6 +132,7 @@ export function useLocalLibrary(): LocalLibrary {
       await window.electronAPI.deleteLocalRecording(id);
       setVideos((prev) => prev.filter((video) => video.id !== id));
     } catch (error) {
+      if (notifyVaultRefusal(error, t)) return;
       reportError(t("errorDelete"), error, { context: { id } });
     }
   }, []);

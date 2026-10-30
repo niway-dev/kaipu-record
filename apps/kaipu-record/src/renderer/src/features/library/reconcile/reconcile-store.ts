@@ -78,6 +78,9 @@ export async function checkOnce(): Promise<void> {
   checkedPath = path;
   set({ bannerHidden: false });
   await rescan();
+  // Not checked after all (a recording, an export, a fix, an unreachable folder): the next
+  // Library or Home visit asks again.
+  if (state.scan?.status !== "ok") checkedPath = null;
 }
 
 export function openReconcileDialog(): void {

@@ -208,6 +208,22 @@ describe("useLocalLibrary", () => {
     );
   });
 
+  it("a rename refused while files are fixed is a plain toast, not an error report", async () => {
+    window.electronAPI.renameLocalRecording = vi.fn(async () => {
+      throw new Error("vault-maintenance: Kaipu is fixing your files");
+    });
+    const { result } = renderHook(() => useLocalLibrary());
+    await waitFor(() => expect(result.current.videos).toHaveLength(2));
+    await act(async () => {
+      await result.current.rename("a", ASSET_A, "New");
+    });
+    expect(reportError).not.toHaveBeenCalled();
+    expect(getToasts().map((toast) => toast.message)).toContain(
+      "Kaipu is fixing your files. Try again in a moment.",
+    );
+    getToasts().forEach((toast) => dismissToast(toast.id));
+  });
+
   it("patches the renamed item by assetId with its new id, title and thumbnail", async () => {
     window.electronAPI.renameLocalRecording = vi.fn(
       async (_id: string, _assetId: string, title: string) => ({
