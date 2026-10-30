@@ -29,6 +29,28 @@ describe("LibraryVault", () => {
     expect(await vault.list()).toEqual([]);
   });
 
+  it("never recreates a missing root: an unplugged workspace fails to list instead of reading as empty", async () => {
+    const gone = join(directory, "unplugged");
+    await expect(new LibraryVault(gone).list()).rejects.toThrow();
+    await expect(stat(gone)).rejects.toThrow();
+  });
+
+  it("stamps the workspace id on the media URLs it hands out", async () => {
+    const scoped = new LibraryVault(directory, "ws-1");
+    await writeFile(join(directory, "shot.png"), Buffer.alloc(16));
+    await writeRecording("take");
+    await mkdir(join(directory, ".kaipu"), { recursive: true });
+    await writeFile(join(directory, ".kaipu", "take.jpg"), Buffer.alloc(8));
+
+    const byId = new Map((await scoped.list()).map((r) => [r.id, r]));
+
+    expect(byId.get("shot")?.thumbnailUrl).toMatch(
+      /^kaipu-media:\/\/screenshot\/shot\?v=\d+&w=ws-1$/,
+    );
+    expect(byId.get("take")?.thumbnailUrl).toBe("kaipu-media://thumb/take?w=ws-1");
+    expect(await scoped.countMedia()).toBe(2);
+  });
+
   it("derives a title and reads the real size from disk", async () => {
     await writeRecording("alpha-clip", 4096);
     const [recording] = await vault.list();

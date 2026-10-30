@@ -26,6 +26,7 @@ import { resolveTags, useTags } from "@renderer/features/library/hooks/use-tags"
 import { TagChip } from "@renderer/features/library/tags/tag-chip";
 import { buildLineage, editBadge } from "@renderer/features/library/lineage";
 import { canOpenInEditor, useOpenInEditor } from "@renderer/features/editor/open-in-editor";
+import { WorkspaceNotConnectedNotice } from "@renderer/features/workspaces/not-connected-notice";
 import styles from "./library-page.module.css";
 
 /** The search field's share of the toolbar, moved out of the module: the shared
@@ -118,6 +119,7 @@ export function LibraryPage(): React.JSX.Element {
 
   return (
     <div className={styles.page}>
+      <WorkspaceNotConnectedNotice />
       <div className={styles.pageHeader}>
         <div className={styles.pageHeaderText}>
           <h1 className={styles.pageTitle}>{t("title")}</h1>

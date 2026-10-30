@@ -122,6 +122,7 @@ import { ExportDialog } from "@renderer/features/video-editor/components/export-
 import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import { showToast } from "@renderer/ui/toast-store";
+import { registerSwitchFlush } from "@renderer/features/workspaces/prepare-switch";
 import styles from "./video-editor-page.module.css";
 
 /** The "original" pill's own shape, moved out of video-editor-page.module.css:
@@ -379,6 +380,10 @@ function VideoEditor({
   // threw away every cut, zoom and redaction, because useBlocker below only ever sees
   // in-app navigation.
   const autosave = useSessionAutosave(source.id, scene, controller.interacting, assetStoreRef);
+  // A workspace switch writes the pending edit first, while this editor is still open and
+  // its workspace still active (ADR 0032, decision 7); the leave guard below then sees it saved.
+  const flushAutosave = autosave.flush;
+  useEffect(() => registerSwitchFlush(flushAutosave), [flushAutosave]);
   // Blocks in-app navigation (e.g. the sidebar) while an edit has NOT reached the
   // session file yet — same useBlocker pattern as the screenshot editor, but now about
   // "not written" rather than "edited": with autosave on, an edit that is already on

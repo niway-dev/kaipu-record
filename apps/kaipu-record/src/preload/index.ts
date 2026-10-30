@@ -11,6 +11,12 @@ import type {
   QuietCaptureHandOff,
 } from "@shared/types/screenshot-capture";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
+import {
+  STALE_WORKSPACE,
+  type WorkspacePrepareRequest,
+  type WorkspacesState,
+  type WorkspaceStamp,
+} from "@shared/types/workspaces";
 import type {
   ControlCommand,
   RecordingActivity,
@@ -19,6 +25,67 @@ import type {
   RecordingTick,
   UpdateStatus,
 } from "@shared/types/ipc";
+
+// ── Workspace stamp (ADR 0032) ────────────────────────────────────────────────
+// Every item-scoped call carries the stamp this window holds: main refuses it once the
+// active workspace or the generation moved on. Read once, synchronously, before the page
+// runs, and replaced by every `workspaces:changed`.
+function readInitialStamp(): WorkspaceStamp | null {
+  try {
+    const value: unknown = ipcRenderer.sendSync(IPC_CHANNELS.workspacesStampSync);
+    if (value && typeof value === "object" && "workspaceId" in value && "generation" in value) {
+      return value as WorkspaceStamp;
+    }
+  } catch {
+    // main not ready: every scoped call refuses until the first `workspaces:changed`
+  }
+  return null;
+}
+let stamp = readInitialStamp();
+/** Between this window's prepare answer and the switch's end: item calls are refused here. */
+let switching = false;
+let prepareHandler: (() => Promise<boolean>) | null = null;
+const sameStamp = (a: WorkspaceStamp | null, b: WorkspaceStamp | null): boolean =>
+  a !== null && b !== null && a.workspaceId === b.workspaceId && a.generation === b.generation;
+
+ipcRenderer.on(IPC_CHANNELS.workspacesChanged, (_e: IpcRendererEvent, state: WorkspacesState) => {
+  stamp = { workspaceId: state.activeId, generation: state.generation };
+  switching = false;
+});
+ipcRenderer.on(IPC_CHANNELS.workspacesPrepareAbort, () => {
+  switching = false;
+});
+ipcRenderer.on(
+  IPC_CHANNELS.workspacesPrepare,
+  (_e: IpcRendererEvent, request: WorkspacePrepareRequest) => {
+    void (async () => {
+      let ok = true;
+      try {
+        ok = prepareHandler ? await prepareHandler() : true;
+      } catch (error) {
+        console.error("workspace switch: preparing this window failed", error);
+        ok = false;
+      }
+      // From here until the switch ends, nothing this window starts can reach main.
+      if (ok) switching = true;
+      ipcRenderer.send(IPC_CHANNELS.workspacesPrepareResult, { requestId: request.requestId, ok });
+    })();
+  },
+);
+
+/** An item-scoped invoke: stamped, and discarded when the answer comes back after a switch. */
+async function scopedInvoke<T>(channel: string, ...args: unknown[]): Promise<T> {
+  if (!stamp && !switching) {
+    // The synchronous read failed: learn the stamp from the registry instead.
+    const state = (await ipcRenderer.invoke(IPC_CHANNELS.workspacesList)) as WorkspacesState;
+    stamp ??= { workspaceId: state.activeId, generation: state.generation };
+  }
+  const sent = stamp;
+  if (switching || !sent) throw new Error(STALE_WORKSPACE);
+  const result = (await ipcRenderer.invoke(channel, sent, ...args)) as T;
+  if (!sameStamp(stamp, sent)) throw new Error(STALE_WORKSPACE);
+  return result;
+}
 
 // Custom Kaipu bridge. Only methods with a live main-process handler are exposed.
 const kaipuApi: KaipuElectronAPI = {
@@ -69,41 +136,58 @@ const kaipuApi: KaipuElectronAPI = {
   previewCameraBubbleSize: (size) => ipcRenderer.invoke(IPC_CHANNELS.cameraBubblePreviewSize, size),
   beginCameraBubbleMove: () => ipcRenderer.send(IPC_CHANNELS.cameraBubbleMoveStart),
   moveCameraBubble: (dx, dy) => ipcRenderer.send(IPC_CHANNELS.cameraBubbleMove, dx, dy),
-  listLocalRecordings: () => ipcRenderer.invoke(IPC_CHANNELS.listLocalRecordings),
-  renameLocalRecording: (id, title) =>
-    ipcRenderer.invoke(IPC_CHANNELS.renameLocalRecording, id, title),
-  markOpenedInEditor: (id) => ipcRenderer.invoke(IPC_CHANNELS.markOpenedInEditor, id),
-  listTags: () => ipcRenderer.invoke(IPC_CHANNELS.listTags),
-  createTag: (name, color) => ipcRenderer.invoke(IPC_CHANNELS.createTag, name, color),
-  renameTag: (id, name) => ipcRenderer.invoke(IPC_CHANNELS.renameTag, id, name),
-  recolorTag: (id, color) => ipcRenderer.invoke(IPC_CHANNELS.recolorTag, id, color),
-  deleteTag: (id) => ipcRenderer.invoke(IPC_CHANNELS.deleteTag, id),
-  setItemTags: (itemId, tagIds) => ipcRenderer.invoke(IPC_CHANNELS.setItemTags, itemId, tagIds),
+  listLocalRecordings: () => scopedInvoke(IPC_CHANNELS.listLocalRecordings),
+  renameLocalRecording: (id, title) => scopedInvoke(IPC_CHANNELS.renameLocalRecording, id, title),
+  markOpenedInEditor: (id) => scopedInvoke(IPC_CHANNELS.markOpenedInEditor, id),
+  listTags: () => scopedInvoke(IPC_CHANNELS.listTags),
+  createTag: (name, color) => scopedInvoke(IPC_CHANNELS.createTag, name, color),
+  renameTag: (id, name) => scopedInvoke(IPC_CHANNELS.renameTag, id, name),
+  recolorTag: (id, color) => scopedInvoke(IPC_CHANNELS.recolorTag, id, color),
+  deleteTag: (id) => scopedInvoke(IPC_CHANNELS.deleteTag, id),
+  setItemTags: (itemId, tagIds) => scopedInvoke(IPC_CHANNELS.setItemTags, itemId, tagIds),
   backfillLocalRecordingMeta: (id, meta) =>
-    ipcRenderer.invoke(IPC_CHANNELS.backfillLocalRecordingMeta, id, meta),
-  deleteLocalRecording: (id) => ipcRenderer.invoke(IPC_CHANNELS.deleteLocalRecording, id),
-  revealLocalRecording: (id) => ipcRenderer.invoke(IPC_CHANNELS.revealLocalRecording, id),
-  gifSave: (bytes, meta) => ipcRenderer.invoke(IPC_CHANNELS.gifSave, bytes, meta),
-  startFileDrag: (id, name) => ipcRenderer.send(IPC_CHANNELS.startFileDrag, id, name),
+    scopedInvoke(IPC_CHANNELS.backfillLocalRecordingMeta, id, meta),
+  deleteLocalRecording: (id) => scopedInvoke(IPC_CHANNELS.deleteLocalRecording, id),
+  revealLocalRecording: (id) => scopedInvoke(IPC_CHANNELS.revealLocalRecording, id),
+  gifSave: (bytes, meta) => scopedInvoke(IPC_CHANNELS.gifSave, bytes, meta),
+  startFileDrag: (id, name) => {
+    if (switching || !stamp) return;
+    ipcRenderer.send(IPC_CHANNELS.startFileDrag, stamp, id, name);
+  },
   setExportActive: (active) => ipcRenderer.send(IPC_CHANNELS.exportActive, active),
   onExportCommand: (callback) => {
     const listener = (_e: IpcRendererEvent, command: "cancel"): void => callback(command);
     ipcRenderer.on(IPC_CHANNELS.exportCommand, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.exportCommand, listener);
   },
-  getVaultDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.getVaultDirectory),
-  chooseVaultDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.chooseVaultDirectory),
-  resetVaultDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.resetVaultDirectory),
-  openVaultDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.openVaultDirectory),
+  workspaces: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.workspacesList),
+    add: () => ipcRenderer.invoke(IPC_CHANNELS.workspacesAdd),
+    switch: (id) => ipcRenderer.invoke(IPC_CHANNELS.workspacesSwitch, id),
+    remove: (id) => ipcRenderer.invoke(IPC_CHANNELS.workspacesRemove, id),
+    openFolder: (id) => ipcRenderer.invoke(IPC_CHANNELS.workspacesOpenFolder, id),
+    dismissHint: () => ipcRenderer.invoke(IPC_CHANNELS.workspacesDismissHint),
+    onChanged: (callback) => {
+      const listener = (_e: IpcRendererEvent, state: WorkspacesState): void => callback(state);
+      ipcRenderer.on(IPC_CHANNELS.workspacesChanged, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.workspacesChanged, listener);
+    },
+    onPrepare: (handler) => {
+      prepareHandler = handler;
+      return () => {
+        if (prepareHandler === handler) prepareHandler = null;
+      };
+    },
+  },
   getStorageUsage: () => ipcRenderer.invoke(IPC_CHANNELS.getStorageUsage),
   onLibraryChanged: (callback) => {
     const listener = (): void => callback();
     ipcRenderer.on(IPC_CHANNELS.libraryChanged, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.libraryChanged, listener);
   },
-  listLibraryItems: () => ipcRenderer.invoke(IPC_CHANNELS.listLibraryItems),
+  listLibraryItems: () => scopedInvoke(IPC_CHANNELS.listLibraryItems),
   refreshCloudCatalog: () => ipcRenderer.invoke(IPC_CHANNELS.refreshCloudCatalog),
-  removeLocalCopy: (id) => ipcRenderer.invoke(IPC_CHANNELS.removeLocalCopy, id),
+  removeLocalCopy: (id) => scopedInvoke(IPC_CHANNELS.removeLocalCopy, id),
   recordingCreate: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.recordingCreate, sessionId),
   recordingWrite: (sessionId, data, position) =>
     ipcRenderer.send(IPC_CHANNELS.recordingWrite, sessionId, data, position),
@@ -199,9 +283,9 @@ const kaipuApi: KaipuElectronAPI = {
   reportException: (payload, origin, context) =>
     ipcRenderer.send(IPC_CHANNELS.analyticsCaptureException, payload, origin, context),
   saveVideoEditSession: (id, sessionJson, assets, exported) =>
-    ipcRenderer.invoke(IPC_CHANNELS.videoEditSaveSession, id, sessionJson, assets, exported),
-  loadVideoEditSession: (id) => ipcRenderer.invoke(IPC_CHANNELS.videoEditLoadSession, id),
-  loadCursorTrack: (id) => ipcRenderer.invoke(IPC_CHANNELS.loadCursorTrack, id),
+    scopedInvoke(IPC_CHANNELS.videoEditSaveSession, id, sessionJson, assets, exported),
+  loadVideoEditSession: (id) => scopedInvoke(IPC_CHANNELS.videoEditLoadSession, id),
+  loadCursorTrack: (id) => scopedInvoke(IPC_CHANNELS.loadCursorTrack, id),
   captureScreenshot: (mode, intent) =>
     ipcRenderer.invoke(IPC_CHANNELS.screenshotCapture, intent ? { mode, intent } : { mode }),
   screenshotSupportedModes: () => ipcRenderer.invoke(IPC_CHANNELS.screenshotSupportedModes),
@@ -254,11 +338,11 @@ const kaipuApi: KaipuElectronAPI = {
   setOnboardingWindowMode: (active) =>
     ipcRenderer.send(IPC_CHANNELS.windowSetOnboardingMode, active),
   copyImageToClipboard: (png) => ipcRenderer.invoke(IPC_CHANNELS.screenshotCopy, png),
-  copyScreenshotById: (id) => ipcRenderer.invoke(IPC_CHANNELS.screenshotCopyById, id),
-  readScreenshotBytes: (id) => ipcRenderer.invoke(IPC_CHANNELS.screenshotReadBytes, id),
+  copyScreenshotById: (id) => scopedInvoke(IPC_CHANNELS.screenshotCopyById, id),
+  readScreenshotBytes: (id) => scopedInvoke(IPC_CHANNELS.screenshotReadBytes, id),
   readClipboardImage: () => ipcRenderer.invoke(IPC_CHANNELS.clipboardReadImage),
   peekClipboardImage: () => ipcRenderer.invoke(IPC_CHANNELS.clipboardPeekImage),
-  saveScreenshot: (png, meta) => ipcRenderer.invoke(IPC_CHANNELS.screenshotSave, png, meta),
+  saveScreenshot: (png, meta) => scopedInvoke(IPC_CHANNELS.screenshotSave, png, meta),
   exportScreenshotFile: (bytes, meta) =>
     ipcRenderer.invoke(IPC_CHANNELS.screenshotExportFile, bytes, meta),
   onCaptureScreenshotHotkey: (callback) => {

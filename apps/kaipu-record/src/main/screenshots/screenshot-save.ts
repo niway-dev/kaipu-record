@@ -2,6 +2,7 @@ import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { broadcastLibraryChanged, currentVault } from "../library";
+import { activeWorkspace, requireCaptureWorkspace, workspaceGate } from "../workspaces";
 
 /** Stable, sortable id; mirrors the recording writer's timestamp scheme. */
 function screenshotId(): string {
@@ -47,4 +48,21 @@ export async function saveScreenshotToVault(
   // never sees the new shot, and opening it there falls back to the Editor home.
   broadcastLibraryChanged();
   return saved;
+}
+
+/**
+ * A capture's save, bound to the workspace the capture started in (ADR 0032, decision 9):
+ * it writes only while that workspace is the active one, and only if its folder is
+ * connected. Otherwise it throws and writes nothing, anywhere. `null` binds it to the
+ * active workspace now.
+ */
+export function saveCaptureToWorkspace(
+  workspaceId: string | null | undefined,
+  png: Buffer,
+  meta: SaveScreenshotMeta,
+): Promise<LocalRecording> {
+  return workspaceGate().runActive(workspaceId ?? activeWorkspace().id, async () => {
+    await requireCaptureWorkspace();
+    return saveScreenshotToVault(png, meta);
+  });
 }

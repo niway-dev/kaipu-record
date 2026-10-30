@@ -18,7 +18,7 @@ import {
 import { ROUTES } from "@shared/routes";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
-import { currentVault, registerLibraryVaultHandlers } from "./library";
+import { broadcastLibraryChanged, currentVault, registerLibraryVaultHandlers } from "./library";
 import { cleanupDragCopies, cleanupLegacyDragCopies } from "./library/drag-copies";
 import { registerCloudStorageHandlers } from "./cloud";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
@@ -26,7 +26,14 @@ import { registerRecordingHub, type RecordingHubHandle } from "./recording/recor
 import { recoverStrandedRecordings } from "./recording/stranded-recordings";
 import { proceedWhenRecordingStops } from "./recording/stop-guard";
 import { beginRecordTiming, markRecordTiming } from "./recording/record-timing";
-import { vaultDirectory } from "./library/vault-location";
+import {
+  activeWorkspace,
+  attachWindowTitle,
+  availableWorkspacePaths,
+  initWorkspaces,
+  notifyWorkspaceBusyChanged,
+  registerWorkspaceHandlers,
+} from "./workspaces";
 import {
   initAutoUpdater,
   getUpdateStatus,
@@ -80,12 +87,13 @@ import {
 } from "./screenshots/capture-toast-window";
 import { createCaptureWindowHooks } from "./screenshots/capture-window-hooks";
 import {
+  clearLastQuietCapture,
   peekLastQuietCapture,
   releaseLastQuietCapture,
   takeLastQuietCapture,
   type QuietCapture,
 } from "./screenshots/last-quiet-capture";
-import { saveScreenshotToVault } from "./screenshots/screenshot-save";
+import { saveCaptureToWorkspace } from "./screenshots/screenshot-save";
 import { screenshotTitle } from "@shared/screenshot-title";
 import {
   boundsAroundCenter,
@@ -276,6 +284,8 @@ function createWindow(showOnReady = true): void {
   });
 
   mainWindow.webContents.setBackgroundThrottling(false);
+  // "Work — Kaipu Record" once a second workspace exists; follows every switch.
+  attachWindowTitle(mainWindow);
   // The recorder lives in this renderer: a stall shows in the terminal, take or not.
   mainWindow.on("unresponsive", () => console.warn("[record-timing] main window unresponsive"));
   mainWindow.on("responsive", () => console.warn("[record-timing] main window responsive again"));
@@ -700,12 +710,42 @@ function openQuietCapture(capture: QuietCapture): void {
   });
 }
 
+/** Drag copies of every connected workspace (startup and quit); best-effort. */
+async function cleanupDragCopiesEverywhere(): Promise<void> {
+  for (const path of await availableWorkspacePaths().catch(() => [])) {
+    await cleanupDragCopies(path).catch(() => {});
+  }
+}
+
+/** Stranded takes of every connected workspace, each into its own folder. */
+async function recoverStrandedEverywhere(): Promise<void> {
+  const title = createMainTranslator(getAppSettings().locale)("library.recoveredRecordingTitle");
+  const active = activeWorkspace().path;
+  for (const vaultDir of await availableWorkspacePaths().catch(() => [])) {
+    try {
+      const r = await recoverStrandedRecordings({
+        vaultDir,
+        ...(vaultDir === active ? { fallbackTempDir: app.getPath("temp") } : {}),
+        title,
+      });
+      if (r.recovered.length) console.info(`recovered ${r.recovered.length} stranded recording(s)`);
+      if (r.failed.length) console.warn("stranded recordings left in place", r.failed);
+    } catch (error) {
+      console.error("stranded recording sweep failed", error);
+    }
+  }
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // A second copy is already quitting (see the single-instance lock above).
   if (!hasSingleInstanceLock) return;
+
+  // The workspace registry first (ADR 0032): the first launch after the upgrade migrates
+  // the library into "Default workspace", and every window's preload reads the stamp.
+  await initWorkspaces();
 
   // Set app user model id for windows
   electronApp.setAppUserModelId("com.niway.kaipu-record");
@@ -723,14 +763,16 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window);
   });
 
-  // Drag copies left by a previous run (crash, force quit) are stale; best-effort.
-  cleanupDragCopies(vaultDirectory().path).catch(() => {});
+  // Drag copies left by a previous run (crash, force quit) are stale; best-effort, in every
+  // workspace that is connected.
+  void cleanupDragCopiesEverywhere();
   cleanupLegacyDragCopies(app.getPath("temp")).catch(() => {});
 
   // The renderer reports when a video export starts and stops (NIW2-218); the close and quit
   // guards read it. Registered once, not per window.
   ipcMain.on(IPC_CHANNELS.exportActive, (_event, active: unknown) => {
     exportActive = active === true;
+    notifyWorkspaceBusyChanged();
   });
 
   // IPC test
@@ -879,12 +921,25 @@ app.whenReady().then(() => {
     peekQuietCapture: peekLastQuietCapture,
     releaseQuietCapture: releaseLastQuietCapture,
     // manual: false — the editor never opened this shot, so it stays off the Continue list.
-    saveToVault: saveFromToast(saveScreenshotToVault),
+    // Bound to the workspace the capture started in: after a switch it writes nothing.
+    saveToVault: saveFromToast(saveCaptureToWorkspace),
     title: () => screenshotTitle(),
     openSaved: openSavedScreenshot,
     openQuietCapture,
   });
   captureToast = toast;
+  registerWorkspaceHandlers({
+    busy: () => {
+      if (hub?.isActive() || hub?.isPending()) return "recording";
+      if (exportActive || hub?.hasOpenWrites()) return "exporting";
+      return null;
+    },
+    dropPendingCaptures: () => {
+      toast.dismiss();
+      clearLastQuietCapture();
+    },
+    broadcastLibraryChanged,
+  });
   screenshotHandlers = registerScreenshotHandlers(
     captureWindowHooks,
     (request) => toast.show(request),
@@ -1016,17 +1071,10 @@ app.whenReady().then(() => {
   // Stream local vault files to the renderer for playback (kaipu-media://).
   registerMediaProtocol();
 
-  // Recover takes a failed finalize or a crash left behind, so the first Library list sees them.
-  void recoverStrandedRecordings({
-    vaultDir: vaultDirectory().path,
-    fallbackTempDir: app.getPath("temp"),
-    title: createMainTranslator(getAppSettings().locale)("library.recoveredRecordingTitle"),
-  })
-    .then((r) => {
-      if (r.recovered.length) console.info(`recovered ${r.recovered.length} stranded recording(s)`);
-      if (r.failed.length) console.warn("stranded recordings left in place", r.failed);
-    })
-    .catch((error) => console.error("stranded recording sweep failed", error));
+  // Recover takes a failed finalize or a crash left behind, so the first Library list sees
+  // them: in every connected workspace, each into its own folder. The OS temp fallback is
+  // swept once, into the active one.
+  void recoverStrandedEverywhere();
 
   createWindow();
 
@@ -1155,7 +1203,7 @@ app.on("before-quit", (event) => {
   unregisterGlobalShortcuts();
   tray?.destroy();
   tray = null;
-  cleanupDragCopies(vaultDirectory().path).catch(() => {});
+  void cleanupDragCopiesEverywhere();
   void shutdownMainAnalytics();
   // Then everything the app pre-loaded or holds open, and the deadline behind it. From here
   // Electron only has the main window left to close; the rest was destroyed outright.

@@ -74,7 +74,20 @@ async function exists(path: string): Promise<boolean> {
  * directory is injected so it's testable against a temp folder.
  */
 export class LibraryVault {
-  constructor(readonly directory: string) {}
+  /**
+   * `workspaceId` goes into the `kaipu-media://` URLs `describe()` hands out, so a URL cached
+   * before a switch never shows another workspace's item with the same id (ADR 0032).
+   */
+  constructor(
+    readonly directory: string,
+    readonly workspaceId: string | null = null,
+  ) {}
+
+  private mediaQuery(params: Record<string, string>): string {
+    const all = this.workspaceId ? { ...params, w: this.workspaceId } : params;
+    const query = new URLSearchParams(all).toString();
+    return query ? `?${query}` : "";
+  }
 
   /** Resolve an id to its real file; if none exists yet, default to `.mp4`. */
   async filePath(id: string): Promise<string> {
@@ -103,7 +116,8 @@ export class LibraryVault {
   }
 
   async list(): Promise<LocalRecording[]> {
-    await mkdir(this.directory, { recursive: true });
+    // The root is never created here: a missing folder is a workspace that is not
+    // connected (an unplugged drive), and recreating it would list it as empty.
     // Let a readdir failure propagate (unreadable folder, unreachable network
     // drive) instead of returning [] — an empty array is indistinguishable from
     // "vault is empty" and gets rendered as the first-run empty state, which
@@ -116,6 +130,12 @@ export class LibraryVault {
     return described
       .filter((r): r is LocalRecording => r !== null)
       .sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  /** How many media files the root holds, without describing them (the switcher's counts). */
+  async countMedia(): Promise<number> {
+    const entries = await readdir(this.directory);
+    return entries.filter((f) => ALL_EXTS.some((ext) => f.endsWith(ext))).length;
   }
 
   async describe(id: string): Promise<LocalRecording | null> {
@@ -159,9 +179,9 @@ export class LibraryVault {
         ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
           // overwritten in place (same id/URL) — only the changed item, so the
           // rest stay cacheable.
-          `kaipu-media://screenshot/${id}?v=${Math.round(info.mtimeMs)}`
+          `kaipu-media://screenshot/${id}${this.mediaQuery({ v: String(Math.round(info.mtimeMs)) })}`
         : (await exists(this.thumbnailPath(id)))
-          ? `kaipu-media://thumb/${id}`
+          ? `kaipu-media://thumb/${id}${this.mediaQuery({})}`
           : null,
     };
   }
