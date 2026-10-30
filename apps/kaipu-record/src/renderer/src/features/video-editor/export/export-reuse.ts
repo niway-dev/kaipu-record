@@ -84,6 +84,17 @@ export function wholeFingerprint(webcam: WebcamScene | null): string {
     : WHOLE_RECORDING_FINGERPRINT;
 }
 
+/**
+ * What an export records when the scene has a webcam layer but the file came out without the
+ * face (the webcam file was missing, unreadable or could not be decoded): its fingerprint
+ * says "with the face", so stamping it would offer a faceless file as the reusable one. Share
+ * records the plain `whole` (the source as it is on disk, which this file is); an editor
+ * export records none, so it is never reused.
+ */
+export function facelessFingerprint(fingerprint: string): string | undefined {
+  return isWholeFingerprint(fingerprint) ? WHOLE_RECORDING_FINGERPRINT : undefined;
+}
+
 /** The newest playable MP4 export of each preset whose content matches `fingerprint`. */
 export type ReusableExports = Partial<Record<ExportPresetId, LibraryVideo>>;
 

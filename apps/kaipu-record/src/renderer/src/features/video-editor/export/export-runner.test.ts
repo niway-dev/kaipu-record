@@ -7,6 +7,7 @@ import { WEBCAM_DEFAULTS } from "../webcam/webcam-model";
 import type { ExportStartMessage } from "./export-messages";
 import { createSlideAssetStore } from "../slide-assets";
 import type { VideoEncodingChoice } from "./video-encoding";
+import { encodeFingerprint } from "./export-presets";
 import {
   __resetExportRunnerForTests,
   cancelVideoExport,
@@ -293,6 +294,76 @@ describe("export runner (NIW2-218 background export)", () => {
       await waitFor(() => expect(workers).toHaveLength(1));
       expect(sent().webcam).toBeNull();
       expect(getExportSnapshot().status).toBe("exporting");
+    });
+
+    describe("an export that lost its face is never offered as the reusable one", () => {
+      const WHOLE_WEBCAM = "whole:abc123";
+      const EDIT_WEBCAM = "edit:wc1:abc123";
+      const stamped = async (): Promise<string | undefined> => {
+        finish(workers[0]!);
+        await waitFor(() => expect(window.electronAPI.recordingFinalize).toHaveBeenCalled());
+        const meta = vi.mocked(window.electronAPI.recordingFinalize).mock.calls[0]![1];
+        return meta.exportFingerprint;
+      };
+
+      it("Share stamps the plain `whole` when the webcam file is missing", async () => {
+        vi.stubGlobal("fetch", fetchMock(404));
+        await startVideoExport(
+          args({
+            scene: WEBCAM_SCENE,
+            webcamTrack: { startOffsetMs: 0 },
+            fingerprint: WHOLE_WEBCAM,
+          }),
+          t,
+        );
+        await waitFor(() => expect(workers).toHaveLength(1));
+        expect(await stamped()).toBe(encodeFingerprint("whole", "light"));
+      });
+
+      it("an editor export stamps no fingerprint when the webcam file is missing", async () => {
+        vi.stubGlobal("fetch", fetchMock(404));
+        await startVideoExport(
+          args({
+            scene: WEBCAM_SCENE,
+            webcamTrack: { startOffsetMs: 0 },
+            fingerprint: EDIT_WEBCAM,
+          }),
+          t,
+        );
+        await waitFor(() => expect(workers).toHaveLength(1));
+        expect(await stamped()).toBeUndefined();
+      });
+
+      it("the same when the worker could not decode the webcam file", async () => {
+        vi.stubGlobal("fetch", fetchMock(200));
+        await startVideoExport(
+          args({
+            scene: WEBCAM_SCENE,
+            webcamTrack: { startOffsetMs: 0 },
+            fingerprint: EDIT_WEBCAM,
+          }),
+          t,
+        );
+        await waitFor(() => expect(workers).toHaveLength(1));
+        workers[0]!.onmessage?.({
+          data: { type: "webcam-error", message: "decode failed" },
+        } as MessageEvent);
+        expect(await stamped()).toBeUndefined();
+      });
+
+      it("keeps the full fingerprint when the face was composed", async () => {
+        vi.stubGlobal("fetch", fetchMock(200));
+        await startVideoExport(
+          args({
+            scene: WEBCAM_SCENE,
+            webcamTrack: { startOffsetMs: 0 },
+            fingerprint: EDIT_WEBCAM,
+          }),
+          t,
+        );
+        await waitFor(() => expect(workers).toHaveLength(1));
+        expect(await stamped()).toBe(encodeFingerprint(EDIT_WEBCAM, "light"));
+      });
     });
 
     it("exports without the layer when the webcam fetch throws, instead of failing", async () => {

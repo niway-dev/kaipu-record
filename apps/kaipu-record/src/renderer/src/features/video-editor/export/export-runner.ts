@@ -17,7 +17,7 @@ import {
   resolveExportTarget,
   slideFrameCount,
 } from "./export-presets";
-import { isWholeFingerprint } from "./export-reuse";
+import { facelessFingerprint, isWholeFingerprint } from "./export-reuse";
 import type { VideoEncodingChoice } from "./video-encoding";
 import { type ExportWebcamTrack, fetchWebcamTrack } from "./webcam-fetch";
 
@@ -331,6 +331,11 @@ export async function startVideoExport(
     fail(GENERIC_ERROR, error);
     return true;
   }
+  /**
+   * The scene has a webcam layer the file will not carry: no webcam file to send, or (set
+   * below) the worker could not decode it. Its fingerprint must not say "with the face".
+   */
+  let faceDropped = plan.webcam !== null && webcam === null;
 
   // One worker run into one fresh writer session. Bitmaps and camera arrays are
   // TRANSFERRED to the worker, so a retry rebuilds them instead of reusing detached ones.
@@ -393,6 +398,7 @@ export async function startVideoExport(
       } else if (msg.type === "webcam-error") {
         // The worker carries on without the layer; the file is still made.
         captureException(new Error(msg.message), { context: "video-export-webcam" });
+        faceDropped = true;
       } else if (msg.type === "error") {
         if (runTarget.fastStart === "reserve" && PACKET_RESERVE_ERROR.test(msg.message)) {
           // FR9 fallback: the moov reservation was too small. Drop this attempt (its
@@ -416,6 +422,10 @@ export async function startVideoExport(
           // onSaved past that point would resurrect a cancelled export.
           await Promise.resolve();
           if (!active) return;
+          const fingerprint =
+            args.fingerprint && faceDropped
+              ? facelessFingerprint(args.fingerprint)
+              : args.fingerprint;
           try {
             const recording = await window.electronAPI.recordingFinalize(id, {
               title: exportTitle(t, presetId, args.title, args.fingerprint),
@@ -426,8 +436,9 @@ export async function startVideoExport(
               exportPreset: presetId,
               // The content plus the preset's encode revision, so "already exported" never
               // reuses a file a different encode produced (see ENCODE_REVISION).
-              ...(args.fingerprint
-                ? { exportFingerprint: encodeFingerprint(args.fingerprint, presetId) }
+              // A file that lost its face records a fingerprint that says so.
+              ...(fingerprint
+                ? { exportFingerprint: encodeFingerprint(fingerprint, presetId) }
                 : {}),
             });
             // Re-check again: cancel() could have run during the finalize await too.
