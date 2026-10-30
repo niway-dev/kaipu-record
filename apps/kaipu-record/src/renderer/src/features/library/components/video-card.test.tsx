@@ -40,17 +40,33 @@ describe("VideoCard", () => {
     expect(screen.queryByText(/FRAME|SCREEN|WINDOW/)).toBeNull();
   });
 
-  it("Prepare for… opens Prepare without opening the card (NIW2-578)", async () => {
+  it("Send to… opens Prepare without opening the card (NIW2-578, NIW2-585)", async () => {
     const onNavigate = vi.fn();
     const onPrepare = vi.fn();
     const { rerender } = render(
       <VideoCard video={video} onNavigate={onNavigate} onDelete={vi.fn()} onPrepare={onPrepare} />,
     );
-    await userEvent.click(screen.getByRole("button", { name: "Prepare for…" }));
+    await userEvent.click(screen.getByRole("button", { name: "Send to…" }));
     expect(onPrepare).toHaveBeenCalledOnce();
     expect(onNavigate).not.toHaveBeenCalled();
     rerender(<VideoCard video={video} onNavigate={onNavigate} onDelete={vi.fn()} />);
-    expect(screen.queryByRole("button", { name: "Prepare for…" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Send to…" })).toBeNull();
+  });
+
+  it("tags an original as the master instead of a plain Recording badge (NIW2-585)", () => {
+    const { rerender } = render(
+      <VideoCard video={video} onNavigate={vi.fn()} onDelete={vi.fn()} />,
+    );
+    expect(screen.getByText("Master · full quality")).toBeInTheDocument();
+    expect(screen.queryByText("Recording")).toBeNull();
+    for (const notMaster of [
+      { ...video, derivedFromAssetId: "src" },
+      { ...video, kind: "screenshot" as const },
+      { ...video, kind: "gif" as const, derivedFromAssetId: "src" },
+    ]) {
+      rerender(<VideoCard video={notMaster} onNavigate={vi.fn()} onDelete={vi.fn()} />);
+      expect(screen.queryByText("Master · full quality")).toBeNull();
+    }
   });
 
   it("says an imported video was imported in the metadata line, not on the poster", () => {

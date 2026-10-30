@@ -26,6 +26,27 @@
   min-width: 0;
 }
 
+.pageTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* NIW2-586: finished copies the user has not opened yet. */
+.copiesReady {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--tone-saving-strong) 40%, transparent);
+  background: color-mix(in srgb, var(--tone-saving-strong) 10%, transparent);
+  color: var(--tone-saving);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
 .pageTitle {
   margin: 0;
   font-size: 20px;

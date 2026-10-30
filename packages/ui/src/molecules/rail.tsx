@@ -106,6 +106,35 @@ const styles = stylex.create({
   barActive: {
     transform: "translateY(-50%) scaleY(1)",
   },
+  // A count on the item's corner: something new is waiting behind it.
+  badge: {
+    position: "absolute",
+    top: "4px",
+    right: "6px",
+    boxSizing: "border-box",
+    minWidth: "16px",
+    height: "16px",
+    paddingInline: "3px",
+    borderRadius: "8px",
+    borderWidth: "2px",
+    borderStyle: "solid",
+    borderColor: tokens.bgSidebar,
+    backgroundColor: tokens.accentPrimary,
+    color: "#fff",
+    fontFamily: tokens.fontMono,
+    fontSize: "8.5px",
+    fontWeight: 700,
+    lineHeight: "12px",
+    textAlign: "center",
+  },
+  srOnly: {
+    position: "absolute",
+    width: "1px",
+    height: "1px",
+    overflow: "hidden",
+    clip: "rect(0 0 0 0)",
+    whiteSpace: "nowrap",
+  },
   footer: {
     flexShrink: 0,
     paddingTop: tokens.spaceSm,
@@ -148,7 +177,14 @@ export interface RailItem {
   icon: ReactNode;
   /** Computed by the caller, since only it knows the current location. */
   active?: boolean;
+  /** A count on the item's corner (new things behind it); nothing when 0 or absent. */
+  badge?: number;
+  /** What the badge means, for screen readers ("1 new copy ready"). */
+  badgeLabel?: string;
 }
+
+/** Above this the badge says "9+": it is a nudge, not a counter. */
+const BADGE_MAX = 9;
 
 /** What `renderLink` must spread onto the element it returns. */
 export interface RailLinkProps {
@@ -211,6 +247,16 @@ export function Rail<T extends RailItem = RailItem>({
                     />
                     {item.icon}
                     <span {...stylex.props(styles.label)}>{item.label}</span>
+                    {item.badge ? (
+                      <>
+                        <span aria-hidden {...stylex.props(styles.badge)}>
+                          {item.badge > BADGE_MAX ? `${BADGE_MAX}+` : item.badge}
+                        </span>
+                        {item.badgeLabel ? (
+                          <span {...stylex.props(styles.srOnly)}>{item.badgeLabel}</span>
+                        ) : null}
+                      </>
+                    ) : null}
                   </>
                 ),
               })}

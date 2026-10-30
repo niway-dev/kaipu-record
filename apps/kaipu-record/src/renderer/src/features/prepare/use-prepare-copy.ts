@@ -13,6 +13,7 @@ import { probeSource, type SourceProbe } from "@renderer/features/video-editor/e
 import { useVideoExport } from "@renderer/features/video-editor/export/use-video-export";
 import { createSlideAssetStore } from "@renderer/features/video-editor/slide-assets";
 import { initialScene } from "@renderer/features/video-editor/scene";
+import { destinationOfPreset } from "./destinations";
 
 /** A local recording: the only kind Prepare makes copies of (no screenshots, no GIFs). */
 export type PreparableVideo = LibraryVideo & { id: string };
@@ -109,6 +110,8 @@ export function usePrepareCopy(): { start(input: PrepareCopyInput): boolean } {
         framing: choice.framing,
         sourceInfo: probe,
         fingerprint: WHOLE_RECORDING_FINGERPRINT,
+        // The progress and ready cards name the place: "Preparing your YouTube copy…".
+        destination: destinationOfPreset(choice.presetId),
         onSaved: (recording) => {
           try {
             onSaved?.(recording);

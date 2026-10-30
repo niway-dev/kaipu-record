@@ -103,6 +103,7 @@ export default defineConfig({
             { slug: "backlog/gif-export" },
             { slug: "backlog/export-presets" },
             { slug: "backlog/prepare-screen" },
+            { slug: "backlog/background-copy-toasts" },
             { slug: "backlog/prepare-drop-zone" },
             { slug: "backlog/editor-space-and-window-presets" },
             { slug: "backlog/capture-panel-latency" },

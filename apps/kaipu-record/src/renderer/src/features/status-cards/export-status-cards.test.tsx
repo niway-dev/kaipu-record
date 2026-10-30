@@ -1,13 +1,22 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Translator } from "@kaipu/i18n";
 import type { LocalRecording } from "@shared/types/library-storage";
 import {
   __resetExportRunnerForTests,
   getExportSnapshot,
   type ExportJobInfo,
+  startVideoExport,
 } from "@renderer/features/video-editor/export/export-runner";
-import { ExportProgressCard, ExportReadyCard } from "./export-status-cards";
+import { initialScene } from "@renderer/features/video-editor/scene";
+import { createSlideAssetStore } from "@renderer/features/video-editor/slide-assets";
+import {
+  __resetReadyCopiesForTests,
+  getReadyCopies,
+  noteFinishedCopy,
+} from "@renderer/features/video-editor/export/ready-copies";
+import { ExportProgressCard, ExportReadyCard, ExportStatusCards } from "./export-status-cards";
 
 const JOB: ExportJobInfo = {
   presetId: "light",
@@ -45,7 +54,10 @@ function inRouter(element: React.ReactNode) {
   return router;
 }
 
-afterEach(() => __resetExportRunnerForTests());
+afterEach(() => {
+  __resetExportRunnerForTests();
+  __resetReadyCopiesForTests();
+});
 
 describe("ExportProgressCard", () => {
   const props = {
@@ -57,18 +69,22 @@ describe("ExportProgressCard", () => {
     now: () => 36_000,
   };
 
-  it("shows what it makes, how far along, about how long is left, and where the size is heading", () => {
-    render(<ExportProgressCard {...props} />);
-    expect(screen.getByText("Making a lighter copy…")).toBeInTheDocument();
-    expect(screen.getByText("Light · 1280×720")).toBeInTheDocument();
+  it("names the destination, how far along, about how long is left, and where the size is heading", () => {
+    render(<ExportProgressCard {...props} job={{ ...JOB, destination: "github" }} />);
+    expect(screen.getByText("Preparing your GitHub copy…")).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "64");
-    expect(screen.getByText("64% · about 25 s left")).toBeInTheDocument();
+    expect(screen.getByText("64% · about 25 s left · you can keep working")).toBeInTheDocument();
     expect(screen.getByText("119 MB → ~9.2 MB")).toBeInTheDocument();
+  });
+
+  it("calls an editor export (no destination) 'your export'", () => {
+    render(<ExportProgressCard {...props} />);
+    expect(screen.getByText("Preparing your export…")).toBeInTheDocument();
   });
 
   it("shows only the percent until the rate is known", () => {
     render(<ExportProgressCard {...props} fraction={0.01} now={() => 500} />);
-    expect(screen.getByText("1%")).toBeInTheDocument();
+    expect(screen.getByText("1% · you can keep working")).toBeInTheDocument();
   });
 
   it("says 'up to' for a fixed canvas and nothing about sizes without the original's", () => {
@@ -92,68 +108,125 @@ describe("ExportProgressCard", () => {
 });
 
 describe("ExportReadyCard", () => {
-  it("reports the real size against the original, and that a tier's copy fits GitHub", () => {
-    inRouter(<ExportReadyCard ready={{ job: JOB, recording: RECORDING }} />);
-    expect(screen.getByText("Ready to share · 8.1 MB")).toBeInTheDocument();
-    expect(screen.getByText("93% lighter than the original.")).toBeInTheDocument();
-    expect(screen.getByText("Original 119 MB")).toBeInTheDocument();
-    // 8.1 MB: fits both plans.
-    expect(screen.getByText("GitHub Free · 10 MB")).toHaveAttribute("data-fits", "true");
-    expect(screen.getByText("GitHub Pro / Team / Enterprise · 100 MB")).toBeInTheDocument();
-  });
-
-  it("says nothing about GitHub for a POST row, and warns when a tier's copy is over 100 MB", () => {
-    const { unmount } = render(
-      <RouterProvider
-        router={createMemoryRouter([
-          {
-            path: "/",
-            element: (
-              <ExportReadyCard
-                ready={{ job: { ...JOB, presetId: "youtube-1440" }, recording: RECORDING }}
-              />
-            ),
-          },
-        ])}
-      />,
-    );
-    expect(screen.queryByText(/GitHub/)).toBeNull();
-    unmount();
+  it("names the destination, the copy's size and that it is in the Library", () => {
     inRouter(
       <ExportReadyCard
         ready={{
-          job: { ...JOB, sourceSizeBytes: 900_000_000 },
-          recording: { ...RECORDING, sizeBytes: 140_000_000 },
+          job: {
+            ...JOB,
+            presetId: "youtube-1440",
+            destination: "youtube",
+            width: 2560,
+            height: 1440,
+          },
+          recording: { ...RECORDING, sizeBytes: 566_000_000 },
         }}
       />,
     );
-    expect(screen.getByText("Too big for GitHub — export a shorter part")).toHaveAttribute(
-      "data-warn",
-      "true",
-    );
+    expect(screen.getByText("Your YouTube copy is ready")).toBeInTheDocument();
+    expect(screen.getByText(/2560 × 1440 · 566 MB/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open Demo (light) in your Library" }),
+    ).toHaveTextContent("in your Library");
+    // A POST copy says nothing about GitHub.
+    expect(screen.queryByText(/GitHub/)).toBeNull();
   });
 
-  it("drags the file out under the item's title, not its vault id", () => {
-    const startFileDrag = vi.spyOn(window.electronAPI, "startFileDrag");
+  it("calls an editor export 'your export', and says where a tier's copy fits on GitHub", () => {
     inRouter(<ExportReadyCard ready={{ job: JOB, recording: RECORDING }} />);
-    const chip = screen.getByRole("button", { name: "Drag Demo (light).mp4 out of Kaipu" });
-    expect(chip).toHaveAttribute("draggable", "true");
-    expect(screen.getByText("Drag it into a GitHub or Jira comment")).toBeInTheDocument();
-    fireEvent.dragStart(chip);
+    expect(screen.getByText("Your export is ready")).toBeInTheDocument();
+    // 8.1 MB: fits both plans.
+    expect(screen.getByText("GitHub Free · 10 MB")).toHaveAttribute("data-fits", "true");
+  });
+
+  it("Drag to upload drags the file out under the item's title, and counts as seen", () => {
+    const startFileDrag = vi.spyOn(window.electronAPI, "startFileDrag");
+    noteFinishedCopy(RECORDING.assetId);
+    inRouter(<ExportReadyCard ready={{ job: JOB, recording: RECORDING }} />);
+    const drag = screen.getByRole("button", { name: "Drag Demo (light).mp4 out of Kaipu" });
+    expect(drag).toHaveAttribute("draggable", "true");
+    expect(drag).toHaveTextContent("Drag to upload");
+    fireEvent.dragStart(drag);
     expect(startFileDrag).toHaveBeenCalledWith("new-rec", "Demo (light)");
+    expect(getReadyCopies().copies).toEqual([]);
     startFileDrag.mockRestore();
   });
 
-  it("View file opens the exported item's page; Show in Finder reveals it; Done closes", async () => {
+  it("Show in Finder reveals the file and counts as seen; 'in your Library' opens it", async () => {
     const reveal = vi.spyOn(window.electronAPI, "revealLocalRecording");
+    noteFinishedCopy(RECORDING.assetId);
     const router = inRouter(<ExportReadyCard ready={{ job: JOB, recording: RECORDING }} />);
     fireEvent.click(screen.getByRole("button", { name: "Show in Finder" }));
     expect(reveal).toHaveBeenCalledWith("new-rec");
+    expect(getReadyCopies().copies).toEqual([]);
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "View file" }));
+      fireEvent.click(screen.getByRole("button", { name: "Open Demo (light) in your Library" }));
     });
     expect(router.state.location.pathname).toBe("/library/asset-new");
     expect(getExportSnapshot().ready).toBeNull();
     reveal.mockRestore();
+  });
+});
+
+describe("ExportStatusCards", () => {
+  const t = ((key: string) => key) as unknown as Translator<"videoEditor">;
+
+  async function startExport(): Promise<void> {
+    vi.stubGlobal(
+      "Worker",
+      class {
+        onmessage = null;
+        onerror = null;
+        postMessage = vi.fn();
+        terminate = vi.fn();
+      },
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ blob: async () => new Blob(["mp4"]) })),
+    );
+    window.electronAPI.recordingCreate = vi.fn(async () => ({ tempPath: "/tmp/x.part" }));
+    window.electronAPI.recordingAbort = vi.fn(async () => {});
+    window.electronAPI.setExportActive = vi.fn();
+    await act(async () => {
+      await startVideoExport(
+        {
+          scene: {
+            ...initialScene(78),
+            items: [{ id: "a", kind: "clip", sourceStart: 0, sourceEnd: 78 }],
+          },
+          sourceId: "rec-1",
+          title: "Demo",
+          derivedFromAssetId: "asset-src",
+          sourceSizeBytes: 119_000_000,
+          videoWidth: 1920,
+          videoHeight: 1080,
+          previewWidth: 1920,
+          slideAssets: createSlideAssetStore(),
+          cameraPath: null,
+          presetId: "youtube-1440",
+          destination: "youtube",
+          onSaved: vi.fn(),
+        },
+        t,
+      );
+    });
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("✕ hides the progress card and the export keeps running; Cancel stops it", async () => {
+    await startExport();
+    inRouter(<ExportStatusCards />);
+    expect(screen.getByText("Preparing your YouTube copy…")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Hide — it keeps going" }));
+    expect(screen.queryByText("Preparing your YouTube copy…")).toBeNull();
+    expect(getExportSnapshot().status).toBe("exporting");
+
+    __resetExportRunnerForTests();
+    await startExport();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(getExportSnapshot().status).toBe("idle");
+    expect(screen.queryByRole("progressbar")).toBeNull();
   });
 });
