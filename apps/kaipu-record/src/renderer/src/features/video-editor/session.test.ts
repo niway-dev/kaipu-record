@@ -556,4 +556,22 @@ describe("webcam layer", () => {
     expect(layer.layout).toMatchObject({ size: 0.25 });
     expect(layer.segments.map((s) => s.id)).toEqual(["ok"]);
   });
+
+  it("accepts a segment a float short of the minimum, as the edge drag produces", () => {
+    const start = 15.190612791990477;
+    const end = 16.190612791990475;
+    expect(end - start).toBeLessThan(1);
+    const layer = segments([{ id: "d", start, end, mode: "hidden" }])!.scene.webcam!;
+    expect(layer.segments).toHaveLength(1);
+  });
+
+  it("accepts a zoom a float short of the minimum, as the edge drag produces", () => {
+    const start = 15.190612791990477;
+    const end = 16.190612791990475;
+    const json = JSON.stringify({
+      version: 1,
+      scene: { items: [CLIP_ITEM], overlays: [], zoomSegments: [{ ...ZOOM, start, end }] },
+    });
+    expect(parseSession(json)?.scene.zoomSegments).toHaveLength(1);
+  });
 });

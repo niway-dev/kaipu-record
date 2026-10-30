@@ -41,6 +41,12 @@ import type {
   VideoScene,
 } from "./scene";
 
+/**
+ * `dragRangeEdge` clamps to `start + minSeconds`, which in floats can come back a hair under
+ * the minimum (16.190612791990475 − 15.190612791990477 < 1); a saved drag must still load.
+ */
+const MIN_LENGTH_TOLERANCE = 1e-6;
+
 export interface VideoEditSession {
   version: 1;
   scene: VideoScene;
@@ -333,7 +339,7 @@ function validateZoomSegment(raw: unknown): ZoomSegment | null {
   const end = z["end"] as number;
   // `end > start` is not enough: a segment under the minimum has no draggable block on
   // the timeline and the camera would flicker through it.
-  if (end - start < ZOOM_LIMITS.minSeconds) return null;
+  if (end - start < ZOOM_LIMITS.minSeconds - MIN_LENGTH_TOLERANCE) return null;
   if (z["mode"] !== "follow" && z["mode"] !== "fixed") return null;
   if (z["origin"] !== "auto" && z["origin"] !== "manual") return null;
   const trigger = z["trigger"] ?? null;
@@ -414,7 +420,7 @@ function validateWebcamSegment(raw: unknown): WebcamSegment | null {
   const start = g["start"] as number;
   const end = g["end"] as number;
   // Same floor as a zoom: a shorter one has no block the user could grab on the timeline.
-  if (end - start < WEBCAM_MIN_SEGMENT_SECONDS) return null;
+  if (end - start < WEBCAM_MIN_SEGMENT_SECONDS - MIN_LENGTH_TOLERANCE) return null;
   if (g["mode"] === "hidden") return { id: g["id"] as string, start, end, mode: "hidden" };
   if (g["mode"] !== "override") return null;
   const segment: WebcamSegment = { id: g["id"] as string, start, end, mode: "override" };
