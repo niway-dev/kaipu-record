@@ -49,10 +49,13 @@ ADR links file and record by name alone.
    intentional, so its name wins.
 5. **Nothing is deleted.** A record or companion with no media moves to
    `.kaipu/orphans/<timestamp>-<uuid>/`. The manifest entry (original paths, title,
-   `assetId`) is written before the first file moves and marked complete after the last, so a
-   crash is finished by the next run, and an orphan destination is never overwritten. Only
-   ENOENT reads as "not there": a path that cannot be checked (EIO, EACCES) keeps both files
-   and leaves the entry pending.
+   `assetId`) is written before the first file moves and marked complete only once every file
+   has moved, so a crash or a failed move is finished by the next run in the same bundle, and
+   an orphan destination is never overwritten. Only ENOENT reads as "not there": a path that
+   cannot be checked (EIO, EACCES) keeps both files and leaves the entry pending. The same
+   rule picks names: a stem is free only when every one of its paths is proven absent; one
+   proven path makes it taken, and a stem that cannot be checked is skipped for the next
+   candidate, never written onto.
    A record whose `assetId` is in the cached cloud catalog becomes cloud-only instead, so the
    cloud item keeps its tags.
 6. **Fix all runs in maintenance mode.** It does not start during a recording or an export,
@@ -63,7 +66,8 @@ ADR links file and record by name alone.
    stranded recovery, folder change), never inside vault methods, so there is no nested
    locking and no deadlock. Editors keep their pending state and retry when maintenance ends.
 7. **Ambiguous cases are listed and left alone:** two media items claiming one `assetId`,
-   two media files on one stem (`Demo.mp4` + `Demo.png`), items whose companion paths overlap
+   two media files on one stem (`Demo.mp4` + `Demo.png`, counting ignored media: `Demo.mp4` +
+   `Demo.PNG`, an empty or a symlinked file), items whose companion paths overlap
    any other present stem's (legacy `Demo` + `Demo.edit`, whether `Demo` is a live item, a
    stem conflict, a symlink, an empty file or an uppercase extension), media whose record path
    is a file the vault owns (`tags.mp4` would take the tag registry `.kaipu/tags.json`), and
@@ -120,7 +124,10 @@ ADR links file and record by name alone.
 - Every vault entry point takes an admission lease for the life of its operation, including
   the recording session through the cursor-track write. New entry points must do the same.
   A lease held for a renderer (a take, an export) is also released when that renderer's page
-  goes away: a reload, a crash or a destroyed window.
+  goes away: a reload, a crash or a destroyed window. That ends the take as a forced reset
+  does: its handle is closed and its `.part` kept for the stranded-take sweep; only the
+  user's abort deletes it. A take ends once, however many events end it, and its lease is
+  released only after its create has settled and its cleanup is done.
 - Sidecar mutations now throw on an unreadable record instead of overwriting it.
 - Idempotence is the contract: a scan after a complete fix returns only findings that are
   not fixable now (a file locked by another app, duplicate identities, stem conflicts,
