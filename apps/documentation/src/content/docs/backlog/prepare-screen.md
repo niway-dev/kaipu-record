@@ -98,7 +98,8 @@ GIFs are not preparable.
 - **"Under the 10 MB limit"** is said only when the estimate fits GitHub's free plan
   (`githubPlans().free`); `githubFit()` is against the paid 100 MB limit, which would make the
   claim false for most recordings.
-- **The Ready card keeps "Ready to share"**: it is shared with the editor's export.
+- **The progress and ready cards** are shared with the editor's export; NIW2-586 names the
+  destination on them ([background copies](./background-copy-toasts)).
 
 ## Out of scope
 
