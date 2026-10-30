@@ -15,6 +15,23 @@ import {
   type RetryPolicy,
 } from "./library-vault";
 
+/** Whether the temp dir folds case (macOS APFS, Windows NTFS) — false on Linux CI. */
+const CASE_INSENSITIVE_TMP = await (async () => {
+  const dir = await mkdtemp(join(tmpdir(), "kaipu-case-"));
+  try {
+    await writeFile(join(dir, "probe"), "");
+    return (
+      (await readdir(dir)).length === 1 &&
+      (await fsp.stat(join(dir, "PROBE")).then(
+        () => true,
+        () => false,
+      ))
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+})();
+
 /** Rename by the id a caller saw, with the identity it holds there (as the IPC does). */
 async function renameById(
   v: LibraryVault,
@@ -152,7 +169,9 @@ describe("LibraryVault.renameItem", () => {
     expect((await readJson(join(meta, "Demo.json"))).title).toBe("Demo?");
   });
 
-  it("moves the file on a case-only rename", async () => {
+  // On Linux (CI) the temp dir is case-sensitive, so "Demo" is simply a free stem; the
+  // in-place branch for APFS/NTFS only runs where the filesystem folds case.
+  it("moves the file on a case-only rename (any filesystem)", async () => {
     await seedFullItem("demo");
     const result = await renameById(vault, "demo", "Demo");
     expect(result).toMatchObject({
@@ -166,6 +185,18 @@ describe("LibraryVault.renameItem", () => {
     expect(companions).not.toContain("demo.json");
     expect((await readJson(join(meta, "Demo.json"))).title).toBe("Demo");
   });
+
+  it.runIf(CASE_INSENSITIVE_TMP)(
+    "takes the in-place branch on a case-folding filesystem (APFS/NTFS)",
+    async () => {
+      await seedFullItem("demo");
+      // The folded name is taken by the item itself: only the in-place move lands it.
+      expect(await vault.isStemFree("Demo")).toBe(false);
+      const result = await renameById(vault, "demo", "Demo");
+      expect(result).toMatchObject({ file: "renamed", recording: { id: "Demo" } });
+      expect(await readdir(directory)).toEqual([".kaipu", "Demo.mp4"]);
+    },
+  );
 
   it("adds ' (2)' when another item already has the name", async () => {
     await writeFile(join(directory, "Taken.webm"), "other");

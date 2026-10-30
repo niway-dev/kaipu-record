@@ -384,8 +384,10 @@ export class LibraryVault {
    * `rename` (the commit point) → old companions deleted. Every crash point leaves the
    * old item or the new item whole, and the title is never lost.
    *
-   * Throws `ItemNotFoundError` for an id without media, or when even the title cannot
-   * be written. Every other failure resolves with `file: "kept-old-name"`.
+   * Throws `ItemNotFoundError` when no item carries `target.assetId`, and
+   * `AmbiguousIdentityError` when two do; a failed title write rethrows the underlying fs
+   * error (EACCES, EPERM …). Every failure after the title is saved resolves with
+   * `file: "kept-old-name"`.
    */
   async renameItem(
     target: RenameTarget,

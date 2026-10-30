@@ -508,7 +508,7 @@ describe("LibraryVault — media URLs (NIW2-560 review)", () => {
     async (id) => {
       const vault = new LibraryVault(directory);
       await writeFile(join(directory, `${id}.png`), "png");
-      await writeFile(join(directory, `${id}.mp4`.replace(".mp4", " clip.mp4")), "v");
+      await writeFile(join(directory, `${id} clip.mp4`), "v");
       await mkdir(join(directory, ".kaipu"), { recursive: true });
       await writeFile(join(directory, ".kaipu", `${id} clip.jpg`), "jpg");
       const shot = await vault.describe(id);

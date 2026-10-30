@@ -6,6 +6,7 @@ description: "The vault file follows the title: rename moves the media and every
 # NIW2-560: Renaming a library item renames its file on disk
 
 > Design spec, written **before** implementation. Linear: https://linear.app/niway/issue/NIW2-560. Creates [ADR 0032](/architecture/decisions/0032-the-file-name-follows-the-title/). Status: implemented on branch `feature/niw2-560-renaming-a-library-item-renames-its-file-on-disk-with`, owner QA pending; `desktop/library-vault.mdx` and `desktop/ipc-contract.mdx` describe the implemented behaviour.
+> The code blocks in §4–§5 show the contract **as first designed**. Review rounds changed it (see the change log at the end): the shipped IPC is `renameLocalRecording(id, assetId, title)`, `renameItem` takes `{ id, assetId }`, `RenameKeptReason` adds `"editing"`, and ambiguous identities reject. Where they differ, `desktop/ipc-contract.mdx` is authoritative.
 > Path: `apps/documentation/src/content/docs/specs/2026-10-29-niw2-560-rename-renames-the-file.md` · Written: 2026-10-29 · Owner decisions 1–3 below were taken before this spec and are not reopened here.
 
 ## In one minute

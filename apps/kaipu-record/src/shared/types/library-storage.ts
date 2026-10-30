@@ -88,8 +88,9 @@ export interface RenameResult {
 }
 
 /**
- * Marker in the message of the error a rename rejects with when the id no longer names a
- * media file (deleted, or already renamed by a double commit). Electron passes only the
+ * Marker in the message of the error a rename rejects with when no item carries the
+ * requested `assetId` any more (deleted). A stale id alone does not reject: the rename
+ * follows the identity to its current id. Electron passes only the
  * message across IPC, so the renderer matches on this to refresh quietly instead of
  * reporting an error.
  */
