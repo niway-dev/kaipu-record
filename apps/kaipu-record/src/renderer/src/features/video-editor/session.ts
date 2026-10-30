@@ -14,9 +14,21 @@
  * a weakened blur or an over-scaled zoom must not be honoured either. Overlapping zooms
  * are dropped, not rejected. Older app builds ignore the new keys, so opening a v2
  * session in an old build is safe (it just shows no zooms).
+ *
+ * `webcam` (ADR 0033) is additive the same way: absent or null → no layer; a wrong type
+ * rejects the session; numbers clamp; overlapping segments are dropped; a segment under the
+ * zoom minimum is rejected. Whether the recording HAS a webcam is the sidecar's call, not
+ * this file's: see `reconcileWebcam` in scene.ts.
  */
 import { ZOOM_DEFAULTS, ZOOM_LIMITS, type ZoomSegment } from "./zoom/zoom-model";
 import { clampIntensity, REDACTION, type NormRect, type Redaction } from "./privacy/redaction";
+import {
+  WEBCAM_MIN_SEGMENT_SECONDS,
+  clampWebcamPatch,
+  type WebcamLayout,
+  type WebcamScene,
+  type WebcamSegment,
+} from "./webcam/webcam-model";
 import type {
   ArrowOverlay,
   BoxOverlay,
@@ -141,9 +153,24 @@ export function parseSession(json: string): VideoEditSession | null {
     zoomSensitivity = Math.min(100, Math.max(0, sceneRaw["zoomSensitivity"] as number));
   }
 
+  let webcam: WebcamScene | null = null;
+  if (sceneRaw["webcam"] !== undefined && sceneRaw["webcam"] !== null) {
+    webcam = validateWebcam(sceneRaw["webcam"]);
+    if (!webcam) return null;
+  }
+
   return {
     version: 1,
-    scene: { items, overlays, zoomSegments, redactions, zoomSensitivity, audioMuted, mutedRanges },
+    scene: {
+      items,
+      overlays,
+      zoomSegments,
+      redactions,
+      zoomSensitivity,
+      audioMuted,
+      mutedRanges,
+      webcam,
+    },
     hasZoomData,
   };
 }
@@ -325,6 +352,102 @@ function validateZoomSegment(raw: unknown): ZoomSegment | null {
     origin: z["origin"],
     trigger,
   };
+}
+
+const WEBCAM_SHAPES = ["circle", "rounded"] as const;
+
+/**
+ * The layout fields present in `raw`, validated by type and clamped; null when one is the
+ * wrong type. With `complete`, every field must be there (the global layout); without, any
+ * subset is fine (an override).
+ */
+function validateWebcamLayout(raw: unknown, complete: boolean): Partial<WebcamLayout> | null {
+  const l = obj(raw);
+  if (!l) return null;
+  const patch: Partial<WebcamLayout> = {};
+  const has = (key: string): boolean => l[key] !== undefined;
+  if (has("shape")) {
+    if (!(WEBCAM_SHAPES as readonly unknown[]).includes(l["shape"])) return null;
+    patch.shape = l["shape"] as WebcamLayout["shape"];
+  }
+  for (const key of ["size", "scaleDuringZoom"] as const) {
+    if (!has(key)) continue;
+    if (!isNum(l[key])) return null;
+    patch[key] = l[key];
+  }
+  for (const key of ["mirrored", "shadow"] as const) {
+    if (!has(key)) continue;
+    if (typeof l[key] !== "boolean") return null;
+    patch[key] = l[key];
+  }
+  if (has("position")) {
+    const position = validatePoint(l["position"]);
+    if (!position) return null;
+    patch.position = position;
+  }
+  if (has("framing")) {
+    const f = obj(l["framing"]);
+    if (!f || !isNum(f["zoom"]) || !isNum(f["x"]) || !isNum(f["y"])) return null;
+    patch.framing = { zoom: f["zoom"], x: f["x"], y: f["y"] };
+  }
+  if (complete) {
+    const keys: Array<keyof WebcamLayout> = [
+      "shape",
+      "size",
+      "position",
+      "mirrored",
+      "framing",
+      "scaleDuringZoom",
+      "shadow",
+    ];
+    if (keys.some((key) => patch[key] === undefined)) return null;
+  }
+  return clampWebcamPatch(patch);
+}
+
+function validateWebcamSegment(raw: unknown): WebcamSegment | null {
+  const g = obj(raw);
+  if (!g) return null;
+  if (!isStr(g["id"]) || !isNum(g["start"]) || !isNum(g["end"])) return null;
+  const start = g["start"] as number;
+  const end = g["end"] as number;
+  // Same floor as a zoom: a shorter one has no block the user could grab on the timeline.
+  if (end - start < WEBCAM_MIN_SEGMENT_SECONDS) return null;
+  if (g["mode"] === "hidden") return { id: g["id"] as string, start, end, mode: "hidden" };
+  if (g["mode"] !== "override") return null;
+  const segment: WebcamSegment = { id: g["id"] as string, start, end, mode: "override" };
+  if (g["layout"] !== undefined) {
+    const layout = validateWebcamLayout(g["layout"], false);
+    if (!layout) return null;
+    segment.layout = layout;
+  }
+  return segment;
+}
+
+function validateWebcam(raw: unknown): WebcamScene | null {
+  const w = obj(raw);
+  if (!w) return null;
+  const layout = validateWebcamLayout(w["layout"], true) as WebcamLayout | null;
+  if (!layout) return null;
+  const parsed: WebcamSegment[] = [];
+  if (w["segments"] !== undefined) {
+    if (!Array.isArray(w["segments"])) return null;
+    for (const segment of w["segments"] as unknown[]) {
+      const validated = validateWebcamSegment(segment);
+      if (!validated) return null;
+      parsed.push(validated);
+    }
+  }
+  parsed.sort((a, b) => a.start - b.start);
+  // Exactly one layout is in force at a time (`webcamAt` takes the first match), so overlaps
+  // are dropped on load rather than rejecting the session, like zoom segments.
+  const segments: WebcamSegment[] = [];
+  for (const segment of parsed) {
+    const previous = segments[segments.length - 1];
+    if (previous && segment.start < previous.end) continue;
+    segments.push(segment);
+  }
+  return { layout, segments };
 }
 
 function validateRect(raw: unknown): NormRect | null {

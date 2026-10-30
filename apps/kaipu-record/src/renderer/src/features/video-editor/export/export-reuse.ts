@@ -50,7 +50,10 @@ function hash53(text: string): string {
  */
 export function editFingerprint(scene: VideoScene): string {
   const saved = parseSession(serializeSession(scene))?.scene ?? scene;
-  return `edit:${hash53(stableStringify(saved))}`;
+  // A recording without a webcam hashes as it did before the layer existed, so the exports
+  // already made from it stay reusable; with one, the layer is part of what the export burns in.
+  const { webcam, ...withoutWebcam } = saved;
+  return `edit:${hash53(stableStringify(webcam ? saved : withoutWebcam))}`;
 }
 
 /** The newest playable MP4 export of each preset whose content matches `fingerprint`. */

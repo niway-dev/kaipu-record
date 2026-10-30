@@ -31,6 +31,35 @@ function exported(
   };
 }
 
+describe("editFingerprint — webcam", () => {
+  const track = {
+    startOffsetMs: 0,
+    offsetQuality: "exact",
+    width: 1280,
+    height: 720,
+    fps: 30,
+  } as const;
+  const fixed = (webcam: typeof track | null): VideoScene => {
+    const scene = initialScene(10, webcam);
+    return { ...scene, items: [{ ...scene.items[0]!, id: "clip" }] };
+  };
+
+  it("changes with the layer, so an export without the face is never reused for one with it", () => {
+    const scene = fixed(track);
+    const moved = {
+      ...scene,
+      webcam: { ...scene.webcam!, layout: { ...scene.webcam!.layout, shape: "rounded" as const } },
+    };
+    expect(editFingerprint(moved)).not.toBe(editFingerprint(scene));
+    expect(editFingerprint(scene)).not.toBe(editFingerprint(fixed(null)));
+  });
+
+  it("is the legacy fingerprint for a recording without a webcam (old exports stay reusable)", () => {
+    // Pinned: the hash of the scene as it was serialized before the `webcam` key existed.
+    expect(editFingerprint(fixed(null))).toBe("edit:2bdufz02r20");
+  });
+});
+
 describe("editFingerprint", () => {
   it("is stable for the same scene and changes with any edit", () => {
     const scene = initialScene(10);
