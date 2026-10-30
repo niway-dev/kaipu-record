@@ -25,7 +25,7 @@ import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/type
 import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-name";
 import { atomicWriteFile, withLock } from "./atomic-write";
 import { sha256FileBase64 } from "./content-hash";
-import { fileStemFromTitle, fsFold, isReservedStem } from "./file-stem";
+import { fileStemFromTitle, fsFold, isReservedStem, isVaultOwnedStem } from "./file-stem";
 import { mediaUrl } from "@shared/media-url";
 
 export const META_DIR = ".kaipu";
@@ -142,7 +142,8 @@ export type SidecarRead =
 export class UnreadableRecordError extends Error {
   constructor(
     readonly id: string,
-    readonly status: SidecarReadStatus,
+    /** `vault-owned`: the record path is a file the vault owns (`tags` → the tag registry). */
+    readonly status: SidecarReadStatus | "vault-owned",
   ) {
     super(`${UNREADABLE_RECORD_MARKER}: the record of "${id}" is ${status}; nothing was written`);
     this.name = "UnreadableRecordError";
@@ -485,6 +486,7 @@ export class LibraryVault {
    * record exists by now, of any readability, or the media is gone.
    */
   async adoptMedia(id: string, fields: { title: string; createdAt: number }): Promise<boolean> {
+    if (isVaultOwnedStem(id)) return false;
     const path = this.sidecarPath(id);
     return withLock(path, async () => {
       if ((await readSidecarStrict(path)).status !== "missing") return false;
@@ -885,6 +887,7 @@ export class LibraryVault {
    * read record. Throws `UnreadableRecordError` for anything else (F9).
    */
   private async writableSidecar(id: string): Promise<Sidecar> {
+    if (isVaultOwnedStem(id)) throw new UnreadableRecordError(id, "vault-owned");
     const read = await readSidecarStrict(this.sidecarPath(id));
     if (read.status === "ok") return read.sidecar;
     if (read.status === "missing") return {};
@@ -964,6 +967,7 @@ export class LibraryVault {
    * rename would otherwise resurrect the old stem as an orphan (`ItemGoneError`).
    */
   private async writeMetaLocked(id: string, meta: Sidecar): Promise<void> {
+    if (isVaultOwnedStem(id)) throw new UnreadableRecordError(id, "vault-owned");
     const read = await readSidecarStrict(this.sidecarPath(id));
     if (read.status === "missing" && !(await this.hasMedia(id))) throw new ItemGoneError(id);
     if (read.status !== "ok" && read.status !== "missing") {

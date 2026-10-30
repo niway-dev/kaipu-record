@@ -47,12 +47,21 @@ function companionTail(stem: string): string | undefined {
  * any case or compatibility fold a filesystem may apply (`tagſ` aliases `tags`).
  */
 export function isReservedStem(stem: string): boolean {
-  return VAULT_OWNED.has(fsFold(stem)) || companionTail(stem) !== undefined;
+  return isVaultOwnedStem(stem) || companionTail(stem) !== undefined;
+}
+
+/**
+ * True when `stem`'s record path is a file the vault itself owns (`.kaipu/tags.json`, the
+ * tag registry), under any fold. Media with such a stem never has a record of its own: it
+ * is listed read-only, and nothing reads, adopts, renames or deletes through that path.
+ */
+export function isVaultOwnedStem(stem: string): boolean {
+  return VAULT_OWNED.has(fsFold(stem));
 }
 
 /** `Demo.edit` → `Demo edit`, `tags` → `Kaipu tags`: the nearest stem that is not reserved. */
 function unreserve(stem: string): string {
-  if (VAULT_OWNED.has(fsFold(stem))) return `Kaipu ${stem}`;
+  if (isVaultOwnedStem(stem)) return `Kaipu ${stem}`;
   const tail = companionTail(stem);
   if (!tail) return stem;
   const dot = stem.length - tail.length + tail.lastIndexOf(".");

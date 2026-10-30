@@ -359,6 +359,42 @@ describe("an unreadable record survives everything (F9)", () => {
   });
 });
 
+describe("the tag registry belongs to the vault, never to media named `tags`", () => {
+  it("tags.mp4 is listed only; Fix all, a refresh and every mutation leave the registry byte-identical", async () => {
+    const registry = JSON.stringify({ version: 1, tags: [{ id: "t1", name: "Work" }] }, null, 2);
+    directory = await makeVault({
+      "tags.mp4": "payload:tags-media",
+      ".kaipu/tags.json": registry,
+      "other.mp4": "payload:other",
+      ".kaipu/other.json": sidecar({ assetId: "o", title: "Other" }),
+    });
+    const registryBytes = () => readFile(join(directory, ".kaipu", "tags.json"), "utf8");
+
+    const scanned = (await scanVault({ directory, cloud: "unknown" })).findings;
+    expect(scanned.find((f) => f.path === "tags.mp4")).toMatchObject({ fixable: false });
+
+    const report = await fix();
+    expect(report.failed).toEqual([]);
+    expect(await registryBytes()).toBe(registry);
+    expect(await readdir(directory)).toEqual(expect.arrayContaining(["tags.mp4", "Other.mp4"]));
+
+    const vault = new LibraryVault(directory);
+    const listed = await vault.list();
+    expect(listed.find((i) => i.id === "tags")!.readable).toBe(false);
+    for (const mutation of [
+      () => vault.renameItem({ id: "tags", assetId: "x" }, "Renamed"),
+      () => vault.writeMeta("tags", { title: "x" }),
+      () => vault.adoptMedia("tags", { title: "x", createdAt: T0 }),
+      () => vault.removeLocalCopy("tags"),
+    ]) {
+      await mutation().catch(() => undefined);
+    }
+    expect(await registryBytes()).toBe(registry);
+    expect(await readFile(join(directory, "tags.mp4"), "utf8")).toBe("payload:tags-media");
+    expect(await fixable()).toEqual([]);
+  });
+});
+
 describe("scanVault — 10k items (F8)", () => {
   it("scans a 10k-item vault (smoke timing, no threshold)", { timeout: 120_000 }, async () => {
     directory = await makeVault({});

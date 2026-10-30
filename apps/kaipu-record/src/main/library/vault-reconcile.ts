@@ -19,7 +19,7 @@ import type {
 } from "@shared/types/library-reconcile";
 import { atomicWriteFile } from "./atomic-write";
 import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-name";
-import { fsFold } from "./file-stem";
+import { fsFold, isVaultOwnedStem } from "./file-stem";
 import {
   LEGACY_STEM,
   LibraryVault,
@@ -198,6 +198,13 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
     const ext = extname(name);
     const stem = name.slice(0, name.length - ext.length);
     if (!isPlainItemId(stem)) return;
+    if (MEDIA_EXTS.includes(ext.toLowerCase()) && isVaultOwnedStem(stem)) {
+      // `tags.mp4`: its record path is the tag registry, which the vault owns. Listed
+      // before any read, so nothing adopts, retitles or renames through it.
+      protectedFolds.add(fsFold(stem));
+      findings.push({ kind: "shared-companion", fixable: false, path: name, stem });
+      return;
+    }
     if (MEDIA_EXTS.includes(ext)) {
       if (entry.isSymbolicLink()) {
         protectedFolds.add(fsFold(stem)); // F3
