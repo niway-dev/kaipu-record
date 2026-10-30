@@ -13,6 +13,7 @@ import {
   ItemNotFoundError,
   LibraryVault,
   type RetryPolicy,
+  SharedCompanionError,
 } from "./library-vault";
 
 /** Whether the temp dir folds case (macOS APFS, Windows NTFS) — false on Linux CI. */
@@ -234,6 +235,34 @@ describe("LibraryVault.renameItem", () => {
     expect(result).toMatchObject({ file: "renamed", recording: { id: "Target" } });
     expect(await readFile(join(meta, "Target.jpg"), "utf-8")).toBe("poster");
     expect((await readJson(join(meta, "Target.json"))).title).toBe("Target");
+  });
+
+  it("from reconcile, never reuses a leftover: it takes the next vacant name", async () => {
+    await seedFullItem("old");
+    await writeFile(join(meta, "Target.json"), JSON.stringify({ assetId: "asset-1" }));
+    await writeFile(join(meta, "Target.jpg"), "a cloud-only poster");
+    const result = await renameById(vault, "old", "Target", { allowLeftover: false });
+    expect(result).toMatchObject({ file: "renamed", recording: { id: "Target (2)" } });
+    expect(await readFile(join(meta, "Target.jpg"), "utf-8")).toBe("a cloud-only poster");
+  });
+
+  it("from reconcile, refuses a source whose companions another live item owns, before any write", async () => {
+    await writeFile(join(directory, "Demo.mp4"), "v");
+    await writeFile(join(directory, "Demo.edit.mp4"), "v2");
+    await mkdir(meta, { recursive: true });
+    const demoEdit = JSON.stringify({ assetId: "asset-2", title: "Other" });
+    await writeFile(join(meta, "Demo.json"), JSON.stringify({ assetId: "asset-1", title: "Demo" }));
+    await writeFile(join(meta, "Demo.edit.json"), demoEdit);
+    for (const [id, assetId] of [
+      ["Demo", "asset-1"],
+      ["Demo.edit", "asset-2"],
+    ] as const) {
+      await expect(
+        vault.renameItem({ id, assetId }, "Renamed", { refuseSharedCompanions: true }),
+      ).rejects.toBeInstanceOf(SharedCompanionError);
+    }
+    expect(await readFile(join(meta, "Demo.edit.json"), "utf-8")).toBe(demoEdit);
+    expect((await readdir(directory)).sort()).toEqual([".kaipu", "Demo.edit.mp4", "Demo.mp4"]);
   });
 
   it("does not reuse another item's leftover", async () => {

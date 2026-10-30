@@ -216,6 +216,27 @@ export interface RenameOptions {
    */
   isEditing?: (id: string, assetId: string) => boolean;
   retry?: RetryPolicy;
+  /**
+   * Reconcile passes false (NIW2-561): a stem with this identity's sidecar and no media may
+   * be a cloud-only record with its own edits, so only vacant stems are taken.
+   */
+  allowLeftover?: boolean;
+  /**
+   * Reconcile passes true: refuse (`SharedCompanionError`) a source whose companion paths
+   * another live item owns (a legacy `Demo` beside `Demo.edit`, M7), before any write.
+   */
+  refuseSharedCompanions?: boolean;
+}
+
+/** The item's companion paths are also another live item's: moving it would split them. */
+export class SharedCompanionError extends Error {
+  constructor(
+    readonly id: string,
+    readonly other: string,
+  ) {
+    super(`"${id}" shares companion files with "${other}"; left as it is`);
+    this.name = "SharedCompanionError";
+  }
 }
 
 /** Every companion an id owns under `.kaipu/`. */
@@ -394,6 +415,7 @@ export class LibraryVault {
     self: string,
     selfMedia: string,
     assetId: string,
+    allowLeftover: boolean,
   ): Promise<StemResolution> {
     return this.firstCandidate(stem, async (candidate) => {
       if (candidate === self) return { id: candidate, mode: "same" };
@@ -404,6 +426,7 @@ export class LibraryVault {
         return { id: candidate, mode: "case" };
       }
       if (
+        allowLeftover &&
         !(await this.hasMedia(candidate)) &&
         (await this.sidecar(candidate)).assetId === assetId
       ) {
@@ -426,6 +449,34 @@ export class LibraryVault {
     ];
     const theirs = new Set(owned(b).map(foldName));
     return owned(a).some((path) => theirs.has(foldName(path)));
+  }
+
+  /** Another stem with media whose companion paths overlap `id`'s, or null. */
+  private async sharesCompanionsWith(id: string): Promise<string | null> {
+    for (const name of await readdir(this.directory)) {
+      const ext = ALL_EXTS.find((e) => name.endsWith(e));
+      if (!ext || name.startsWith(".")) continue;
+      const stem = name.slice(0, -ext.length);
+      if (stem !== id && this.pathsOverlap(id, stem)) return stem;
+    }
+    return null;
+  }
+
+  /**
+   * Give media without a record its first sidecar (reconcile adoption, NIW2-561): a new
+   * identity, `title` and `createdAt`, in one atomic write. Does nothing (false) when a
+   * record exists by now, of any readability, or the media is gone.
+   */
+  async adoptMedia(id: string, fields: { title: string; createdAt: number }): Promise<boolean> {
+    const path = this.sidecarPath(id);
+    return withLock(path, async () => {
+      if ((await readSidecarStrict(path)).status !== "missing") return false;
+      if (!(await this.hasMedia(id))) return false;
+      await mkdir(this.metaDirectory(), { recursive: true });
+      const record: Sidecar = { sidecarVersion: 2, assetId: randomUUID(), ...fields };
+      await atomicWriteFile(path, JSON.stringify(record, null, 2));
+      return true;
+    });
   }
 
   /** Whether `candidate` with `media`'s extension is the very same file (case-insensitive FS). */
@@ -469,6 +520,10 @@ export class LibraryVault {
       return withLock(oldSidecar, async () => {
         const oldMedia = await this.mediaPath(id);
         if (!oldMedia) throw new ItemNotFoundError(id);
+        if (options.refuseSharedCompanions) {
+          const other = await this.sharesCompanionsWith(id);
+          if (other !== null) throw new SharedCompanionError(id, other);
+        }
 
         // 1. The title first: whatever happens to the file, the user's name is saved.
         // The identity is settled here too, so `describe()` below never needs this lock.
@@ -492,7 +547,13 @@ export class LibraryVault {
         const ext = extname(oldMedia);
         const createdAt = captureDate(meta, id, await stat(oldMedia));
         const stem = alignedBase(title, kindFromExt(ext), new Date(createdAt));
-        const target = await this.resolveRenameTarget(stem, id, oldMedia, meta.assetId!);
+        const target = await this.resolveRenameTarget(
+          stem,
+          id,
+          oldMedia,
+          meta.assetId!,
+          options.allowLeftover ?? true,
+        );
         if (target.mode === "same") return { recording: await describeOld(), file: "unchanged" };
 
         // 3. The video editor holds this id (session saves, cursor track, source URL):

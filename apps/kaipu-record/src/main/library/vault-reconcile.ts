@@ -7,14 +7,17 @@
  * reads; it never calls `list()`, `describe()` or `sidecar()`, which mint identities or
  * read failures as `{}`.
  */
+import { randomUUID } from "node:crypto";
 import type { Dirent } from "node:fs";
-import { lstat, readdir } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { lstat, mkdir, readFile, readdir, rename } from "node:fs/promises";
+import { basename, dirname, extname, join } from "node:path";
 import type {
   FixableFindingKind,
   ReconcileFinding,
   ReconcileFindingKind,
+  ReconcileReport,
 } from "@shared/types/library-reconcile";
+import { atomicWriteFile } from "./atomic-write";
 import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-name";
 import { fsFold } from "./file-stem";
 import {
@@ -29,7 +32,9 @@ import {
   isPlainItemId,
   kindFromExt,
   readSidecarStrict,
+  SharedCompanionError,
   type CompanionPaths,
+  type RetryPolicy,
   type Sidecar,
   type SidecarRead,
 } from "./library-vault";
@@ -460,4 +465,408 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
 
   findings.sort((a, b) => a.path.localeCompare(b.path));
   return { findings };
+}
+
+// ── The orphans folder (M3, M4, M6) ───────────────────────────────────────────
+
+const ORPHANS_DIR = "orphans";
+const RECONCILE_DIR = "reconcile";
+
+interface ManifestFile {
+  /** Vault-relative original path (`.kaipu/Gone.json`). */
+  from: string;
+  /** Path inside the run folder (`Gone.json`): the layout under `.kaipu/` is kept. */
+  to: string;
+  state?: "moved" | "conflict" | "missing" | "failed";
+}
+
+interface ManifestEntry {
+  kind: ReconcileFindingKind;
+  stem: string;
+  title?: string;
+  assetId?: string;
+  status: "pending" | "complete";
+  files: ManifestFile[];
+}
+
+interface Manifest {
+  version: 1;
+  runId: string;
+  createdAt?: number;
+  entries: ManifestEntry[];
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * One run's orphans folder, `.kaipu/orphans/<timestamp>-<uuid>/`, created exclusively on
+ * the first move. Each bundle's manifest entry is written before its first file moves and
+ * marked complete after the last; a destination is never overwritten.
+ */
+class OrphanRun {
+  private folder: string | null = null;
+  private manifest: Manifest | null = null;
+
+  constructor(
+    private readonly directory: string,
+    private readonly now: () => number,
+  ) {}
+
+  /** Vault-relative path of the run folder, or null when nothing moved. */
+  get relativeDir(): string | null {
+    return this.folder ? `${META_DIR}/${ORPHANS_DIR}/${basename(this.folder)}` : null;
+  }
+
+  private async open(): Promise<{ folder: string; manifest: Manifest }> {
+    if (this.folder && this.manifest) return { folder: this.folder, manifest: this.manifest };
+    const parent = join(this.directory, META_DIR, ORPHANS_DIR);
+    await mkdir(parent, { recursive: true });
+    const runId = `${new Date(this.now()).toISOString().replace(/[:.]/g, "-")}-${randomUUID()}`;
+    const folder = join(parent, runId);
+    await mkdir(folder); // exclusive on the leaf: two runs never share a folder (M6)
+    this.folder = folder;
+    this.manifest = { version: 1, runId, createdAt: this.now(), entries: [] };
+    return { folder, manifest: this.manifest };
+  }
+
+  /** Move a bundle; resolves how many files moved. Throws only when the manifest cannot be written. */
+  async move(finding: ScanFinding): Promise<{ moved: number; problems: string[] }> {
+    const { folder, manifest } = await this.open();
+    const entry: ManifestEntry = {
+      kind: finding.kind,
+      stem: finding.stem,
+      title: finding.title,
+      assetId: finding.assetId,
+      status: "pending",
+      files: (finding.files ?? []).map((from) => ({ from, to: from.slice(META_DIR.length + 1) })),
+    };
+    manifest.entries.push(entry);
+    await writeManifest(folder, manifest);
+    const { moved, problems } = await moveFiles(this.directory, folder, entry);
+    entry.status = "complete";
+    await writeManifest(folder, manifest);
+    return { moved, problems };
+  }
+}
+
+async function writeManifest(folder: string, manifest: Manifest): Promise<void> {
+  await atomicWriteFile(join(folder, "manifest.json"), JSON.stringify(manifest, null, 2));
+}
+
+/**
+ * Move an entry's files that have not moved yet. A destination that exists means that move
+ * happened: it is kept, and a source present again at the old path (a new capture that
+ * reused the free stem) is not taken (`conflict`).
+ */
+async function moveFiles(
+  directory: string,
+  folder: string,
+  entry: ManifestEntry,
+): Promise<{ moved: number; problems: string[] }> {
+  let moved = 0;
+  const problems: string[] = [];
+  for (const file of entry.files) {
+    if (file.state === "moved" || file.state === "conflict") continue;
+    const from = join(directory, file.from);
+    const to = join(folder, file.to);
+    const [source, destination] = await Promise.all([pathExists(from), pathExists(to)]);
+    if (destination) {
+      file.state = source ? "conflict" : "moved";
+      if (source) problems.push(file.from);
+      continue;
+    }
+    if (!source) {
+      file.state = "missing";
+      continue;
+    }
+    try {
+      await mkdir(dirname(to), { recursive: true });
+      await rename(from, to);
+      file.state = "moved";
+      moved += 1;
+    } catch {
+      file.state = "failed";
+      problems.push(file.from);
+    }
+  }
+  return { moved, problems };
+}
+
+/**
+ * Complete every pending manifest entry a crashed run left, into that run's own folder.
+ * Runs before classification, so a half-moved bundle is never classified again.
+ */
+export async function resumeOrphanManifests(
+  directory: string,
+): Promise<{ moved: number; conflicts: string[]; failed: string[] }> {
+  const parent = join(directory, META_DIR, ORPHANS_DIR);
+  let runs: string[];
+  try {
+    runs = await readdir(parent);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT")
+      return { moved: 0, conflicts: [], failed: [] };
+    throw error;
+  }
+  let moved = 0;
+  const conflicts: string[] = [];
+  const failed: string[] = [];
+  for (const run of runs) {
+    const folder = join(parent, run);
+    let manifest: Manifest;
+    try {
+      manifest = JSON.parse(await readFile(join(folder, "manifest.json"), "utf8")) as Manifest;
+    } catch {
+      continue; // not a run folder, or a manifest we cannot read: left as it is
+    }
+    if (!Array.isArray(manifest.entries)) continue;
+    const pending = manifest.entries.filter((entry) => entry.status === "pending");
+    if (pending.length === 0) continue;
+    for (const entry of pending) {
+      const result = await moveFiles(directory, folder, entry);
+      moved += result.moved;
+      for (const path of result.problems) {
+        const state = entry.files.find((f) => f.from === path)?.state;
+        (state === "conflict" ? conflicts : failed).push(path);
+      }
+      if (entry.files.every((f) => f.state !== "failed")) entry.status = "complete";
+    }
+    await writeManifest(folder, manifest);
+  }
+  return { moved, conflicts, failed };
+}
+
+// ── The fix pipeline ──────────────────────────────────────────────────────────
+
+export interface FixOptions {
+  cloud: ReadonlySet<string> | "unknown";
+  /** The item is open in the video editor: its file keeps its name (C2). */
+  isEditing?: (id: string, assetId: string) => boolean;
+  /** An export may be streaming a file (never true in maintenance mode; kept for safety). */
+  isBusy?: () => boolean;
+  retry?: RetryPolicy;
+  now?: () => number;
+  onProgress?: (done: number, total: number) => void;
+}
+
+interface Planned {
+  finding: ScanFinding;
+  title: string;
+  base: string;
+}
+
+/**
+ * "Fix all" (ADR 0033). The caller holds maintenance mode. Each action is safe on its own,
+ * so there is no journal: a crash leaves something the next run sees and finishes.
+ *
+ * 1. Pending orphan manifests are completed.
+ * 2. Scan: dead records and ownerless companions to orphans (or cloud-only), adoption,
+ *    title rewrites.
+ * 3. Scan again and rename from that inventory, in planner order (N10).
+ * 4. Scan again: anything fixable left is reported, never retried in a loop.
+ */
+export async function fixVault(directory: string, options: FixOptions): Promise<ReconcileReport> {
+  const now = options.now ?? Date.now;
+  const vault = new LibraryVault(directory);
+  const orphans = new OrphanRun(directory, now);
+  const report: ReconcileReport = {
+    counts: {},
+    fixed: 0,
+    movedToOrphans: 0,
+    kept: [],
+    failed: [],
+    remaining: [],
+    orphansDir: null,
+    logPath: null,
+  };
+  const fail = (path: string, error: unknown): void => {
+    report.failed.push({ path, error: error instanceof Error ? error.message : String(error) });
+  };
+
+  const resumed = await resumeOrphanManifests(directory);
+  report.movedToOrphans += resumed.moved;
+  for (const path of [...resumed.conflicts, ...resumed.failed])
+    fail(path, "orphan move left in place");
+
+  // 2. The first actions.
+  const first = (await scanVault({ directory, cloud: options.cloud })).findings;
+  for (const finding of first) report.counts[finding.kind] = (report.counts[finding.kind] ?? 0) + 1;
+  const actions = first.filter((f) => f.fixable && f.kind !== "name-mismatch");
+  let done = 0;
+  let total = first.filter((f) => f.fixable).length;
+  const step = (): void => options.onProgress?.(++done, Math.max(total, done));
+  options.onProgress?.(0, total);
+
+  const order: ReconcileFindingKind[] = [
+    "missing-media",
+    "orphan-companion",
+    "missing-sidecar",
+    "stale-auto-title",
+    "untitled-legacy",
+  ];
+  actions.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
+  for (const finding of actions) {
+    try {
+      if (finding.kind === "missing-media" && finding.action === "cloud-only") {
+        await vault.writeMeta(finding.stem, { localRemovedAt: now() });
+        report.fixed += 1;
+      } else if (finding.kind === "missing-media" || finding.kind === "orphan-companion") {
+        const { moved, problems } = await orphans.move(finding);
+        report.movedToOrphans += moved;
+        for (const path of problems) fail(path, "could not be moved to the orphans folder");
+      } else if (finding.kind === "missing-sidecar") {
+        if (
+          await vault.adoptMedia(finding.stem, {
+            title: finding.newTitle!,
+            createdAt: finding.createdAt!,
+          })
+        ) {
+          report.fixed += 1;
+        }
+      } else {
+        // stale-auto-title, untitled-legacy: the title first; the rename below aligns it.
+        await vault.writeMeta(finding.stem, { title: finding.newTitle! });
+        report.fixed += 1;
+      }
+    } catch (error) {
+      fail(finding.path, error);
+    }
+    step();
+  }
+
+  // 3. Renames, planned from a fresh inventory: an adopted `Ａ.mp4` is titled `Ａ`, whose
+  // stem is `A`; a retitled item now differs from its stem.
+  const second = (await scanVault({ directory, cloud: options.cloud })).findings;
+  // Items already counted in step 2 (retitled or adopted) are not counted again.
+  const retitled = new Set(
+    actions
+      .filter((f) => ["stale-auto-title", "untitled-legacy", "missing-sidecar"].includes(f.kind))
+      .map((f) => f.stem),
+  );
+  const renames = second.filter((f) => f.kind === "name-mismatch");
+  total = done + renames.length;
+  const plan: Planned[] = renames.map((finding) => ({
+    finding,
+    title: finding.newTitle!,
+    base: alignedBase(finding.newTitle!, kindFromExt(finding.ext!), new Date(finding.createdAt!)),
+  }));
+  await runPlan(vault, plan, options, report, (finding, renamed) => {
+    // A retitled item was counted when its title was written.
+    if (renamed && !retitled.has(finding.stem)) report.fixed += 1;
+    step();
+  });
+
+  // 4. What is left.
+  const third = (await scanVault({ directory, cloud: options.cloud })).findings;
+  report.remaining = third.map(publicFinding);
+  const explained = new Set([
+    ...report.kept.map((k) => k.path),
+    ...report.failed.map((f) => f.path),
+  ]);
+  for (const finding of third) {
+    if (!finding.fixable || explained.has(finding.path)) continue;
+    console.error("[reconcile] still fixable after Fix all", finding.kind, finding.path);
+    fail(finding.path, `still ${finding.kind} after the fix`);
+  }
+  report.orphansDir = orphans.relativeDir;
+  report.logPath = await writeRunLog(directory, now, report);
+  return report;
+}
+
+/** The renderer's view of a finding (no internal fields). */
+function publicFinding(finding: ScanFinding): ReconcileFinding {
+  const { kind, fixable, path, title, newTitle, newName, action } = finding;
+  return { kind, fixable, path, title, newTitle, newName, action };
+}
+
+/**
+ * The planner (N10): move every item whose base is free, repeat until nothing moves (each
+ * move frees a name), then let the items that still wait take the first free suffix —
+ * those waiting on a name nobody pending holds first, else the first in order (a cycle).
+ * Order: capture date, then stem (N6). Only `renameItem`, never a temporary name.
+ */
+async function runPlan(
+  vault: LibraryVault,
+  plan: Planned[],
+  options: FixOptions,
+  report: ReconcileReport,
+  onRenamed: (finding: ScanFinding, renamed: boolean) => void,
+): Promise<void> {
+  const pending = [...plan].sort(
+    (a, b) =>
+      a.finding.createdAt! - b.finding.createdAt! || a.finding.stem.localeCompare(b.finding.stem),
+  );
+  const rename = async (item: Planned): Promise<void> => {
+    pending.splice(pending.indexOf(item), 1);
+    const { finding } = item;
+    let renamed = false;
+    try {
+      // Reconcile mints an identity only on items it is fixing (I2).
+      const assetId = finding.assetId ?? (await vault.describe(finding.stem))?.assetId;
+      if (!assetId) throw new Error("the item is gone");
+      const result = await vault.renameItem({ id: finding.stem, assetId }, item.title, {
+        allowLeftover: false,
+        refuseSharedCompanions: true,
+        isEditing: options.isEditing,
+        isBusy: options.isBusy,
+        retry: options.retry,
+      });
+      if (result.file === "kept-old-name") {
+        report.kept.push({ path: finding.path, reason: result.reason ?? "io" });
+      } else {
+        renamed = true;
+      }
+    } catch (error) {
+      if (error instanceof SharedCompanionError) {
+        report.kept.push({ path: finding.path, reason: "shared" });
+      } else {
+        report.failed.push({
+          path: finding.path,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    onRenamed(finding, renamed);
+  };
+
+  while (pending.length > 0) {
+    let moved = false;
+    // A copy: `rename` removes items from `pending` while this loop runs.
+    for (const item of pending.slice()) {
+      const self = fsFold(item.base) === fsFold(item.finding.stem);
+      if (self || (await vault.isStemFree(item.base))) {
+        await rename(item);
+        moved = true;
+      }
+    }
+    if (moved) continue;
+    const waitingOn = new Set(pending.map((item) => fsFold(item.finding.stem)));
+    const blocked = pending.filter((item) => !waitingOn.has(fsFold(item.base)));
+    for (const item of blocked.length > 0 ? blocked : [pending[0]!]) await rename(item);
+  }
+}
+
+/** `.kaipu/reconcile/<timestamp>-<id>.json`, best effort. */
+async function writeRunLog(
+  directory: string,
+  now: () => number,
+  report: ReconcileReport,
+): Promise<string | null> {
+  try {
+    const folder = join(directory, META_DIR, RECONCILE_DIR);
+    await mkdir(folder, { recursive: true });
+    const name = `${new Date(now()).toISOString().replace(/[:.]/g, "-")}-${randomUUID().slice(0, 8)}.json`;
+    await atomicWriteFile(join(folder, name), JSON.stringify(report, null, 2));
+    return `${META_DIR}/${RECONCILE_DIR}/${name}`;
+  } catch (error) {
+    console.error("[reconcile] could not write the run log", error);
+    return null;
+  }
 }
