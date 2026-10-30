@@ -102,6 +102,8 @@ async function readExportedSavedAt(id: string): Promise<number | null> {
 // atomic-write/prune/delete behaviour directly against a temp vault dir.
 export async function saveSession(id: string, payload: SavePayload): Promise<void> {
   const { sessionJson, assets, exported = false } = payload;
+  // Before any write: an item whose record cannot be read is read-only (F9).
+  await new LibraryVault(vaultDirectory().path).assertWritableRecord(id);
 
   // Atomic session JSON write (temp + rename so a crash never truncates the file).
   const sp = sessionPath(id);

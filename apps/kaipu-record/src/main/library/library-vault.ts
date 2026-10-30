@@ -16,6 +16,7 @@ import { randomUUID } from "node:crypto";
 import {
   AMBIGUOUS_IDENTITY_MARKER,
   ITEM_NOT_FOUND_MARKER,
+  UNREADABLE_RECORD_MARKER,
   type LocalRecording,
   type RenameResult,
 } from "@shared/types/library-storage";
@@ -121,6 +122,68 @@ export class ItemGoneError extends Error {
     super(`Library item "${id}" is gone (renamed or removed)`);
     this.name = "ItemGoneError";
   }
+}
+
+/** How a strict sidecar read ended (F9). Only `ok` and `missing` may be written over. */
+export type SidecarReadStatus = "ok" | "missing" | "unreadable" | "corrupt-json" | "invalid-schema";
+
+export type SidecarRead =
+  | { status: "ok"; sidecar: Sidecar }
+  | { status: "missing" }
+  | { status: "unreadable" | "corrupt-json" | "invalid-schema"; error: string };
+
+/**
+ * A write to an item whose sidecar is unreadable, corrupt or invalid. Merging over it would
+ * replace the item's title, identity and tags with whatever the caller had, so every
+ * mutation refuses before touching the record, the media or any companion.
+ */
+export class UnreadableRecordError extends Error {
+  constructor(
+    readonly id: string,
+    readonly status: SidecarReadStatus,
+  ) {
+    super(`${UNREADABLE_RECORD_MARKER}: the record of "${id}" is ${status}; nothing was written`);
+    this.name = "UnreadableRecordError";
+  }
+}
+
+const isOptional = (value: unknown, type: "string" | "number"): boolean =>
+  value === undefined || typeof value === type;
+
+/** The fields every reader relies on, checked so a wrong type is never merged over. */
+function isSidecarShape(value: unknown): value is Sidecar {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    isOptional(v.title, "string") &&
+    isOptional(v.createdAt, "number") &&
+    isOptional(v.localRemovedAt, "number") &&
+    (v.assetId === undefined || (typeof v.assetId === "string" && v.assetId.length > 0)) &&
+    (v.tagIds === undefined || Array.isArray(v.tagIds))
+  );
+}
+
+/**
+ * Read a sidecar without turning a failure into `{}` (which `sidecar()` does for readers):
+ * ENOENT is `missing`; any other read error is `unreadable`; then `corrupt-json` and
+ * `invalid-schema`. Never writes.
+ */
+export async function readSidecarStrict(path: string): Promise<SidecarRead> {
+  let raw: string;
+  try {
+    raw = await readFile(path, "utf-8");
+  } catch (error) {
+    if (errorCode(error) === "ENOENT") return { status: "missing" };
+    return { status: "unreadable", error: String(error) };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    return { status: "corrupt-json", error: String(error) };
+  }
+  if (!isSidecarShape(parsed)) return { status: "invalid-schema", error: "unexpected shape" };
+  return { status: "ok", sidecar: parsed };
 }
 
 export interface AllocateInput {
@@ -407,7 +470,7 @@ export class LibraryVault {
 
         // 1. The title first: whatever happens to the file, the user's name is saved.
         // The identity is settled here too, so `describe()` below never needs this lock.
-        const current = await this.sidecar(id);
+        const current = await this.writableSidecar(id);
         const meta: Sidecar = {
           ...current,
           sidecarVersion: 2,
@@ -544,7 +607,12 @@ export class LibraryVault {
     const ids = [...new Set(matches.map((item) => item.id))];
     if (ids.length > 1) throw new AmbiguousIdentityError(assetId, ids);
     const [sole] = matches;
-    if (!sole) return null;
+    if (!sole) {
+      // Nowhere else either: when the caller's own id names media under an unreadable
+      // record, say so rather than "not found" (its identity cannot be read, F9).
+      if (media !== null) await this.writableSidecar(id!);
+      return null;
+    }
     return kind === undefined || sole.kind === kind ? sole.id : null;
   }
 
@@ -650,6 +718,15 @@ export class LibraryVault {
     } catch (error) {
       // The file moved (a rename) between the stat above and the sidecar read.
       if (error instanceof ItemGoneError) return null;
+      // Listed read-only: one bad record never fails the whole list, and is never healed.
+      if (error instanceof UnreadableRecordError) {
+        return this.describeUnreadable(
+          id,
+          filePath,
+          info,
+          isImage ? "screenshot" : isGif ? "gif" : "recording",
+        );
+      }
       throw error;
     }
     const hashIsFresh =
@@ -689,6 +766,51 @@ export class LibraryVault {
     };
   }
 
+  /** A read-only listing of an item whose record cannot be read (F9). */
+  private describeUnreadable(
+    id: string,
+    filePath: string,
+    info: { size: number; birthtimeMs: number; mtimeMs: number },
+    kind: LocalRecording["kind"],
+  ): LocalRecording {
+    return {
+      id,
+      // Never persisted: no write accepts this item, so the placeholder cannot leak.
+      assetId: `unreadable:${id}`,
+      kind,
+      title: humanizeId(id),
+      filePath,
+      createdAt: captureDate({}, id, info),
+      sizeBytes: info.size,
+      durationSeconds: 0,
+      derivedFromAssetId: null,
+      contentSha256: null,
+      tagIds: [],
+      readable: false,
+      thumbnailUrl:
+        kind === "screenshot" ? mediaUrl("screenshot", id, Math.round(info.mtimeMs)) : null,
+    };
+  }
+
+  /**
+   * The sidecar a mutation may merge over: `{}` when there is none yet, else the strictly
+   * read record. Throws `UnreadableRecordError` for anything else (F9).
+   */
+  private async writableSidecar(id: string): Promise<Sidecar> {
+    const read = await readSidecarStrict(this.sidecarPath(id));
+    if (read.status === "ok") return read.sidecar;
+    if (read.status === "missing") return {};
+    throw new UnreadableRecordError(id, read.status);
+  }
+
+  /**
+   * For writers outside this class (edit-session saves): refuse before touching any file
+   * when the item's record is unreadable.
+   */
+  async assertWritableRecord(id: string): Promise<void> {
+    await this.writableSidecar(id);
+  }
+
   async sidecar(id: string): Promise<Sidecar> {
     try {
       return JSON.parse(await readFile(this.sidecarPath(id), "utf-8")) as Sidecar;
@@ -707,7 +829,7 @@ export class LibraryVault {
    */
   private async ensureIdentity(id: string): Promise<Sidecar & { assetId: string }> {
     // Fast path, no lock: the common case once an item has an identity.
-    const quick = await this.sidecar(id);
+    const quick = await this.writableSidecar(id);
     if (quick.assetId && quick.localRemovedAt === undefined) {
       return quick as Sidecar & { assetId: string };
     }
@@ -715,7 +837,7 @@ export class LibraryVault {
     // Module-level lock keyed by path: a second caller (even from another
     // LibraryVault instance) waits, then re-reads and finds the first one's id.
     return withLock(sidecarPath, async () => {
-      const current = await this.sidecar(id);
+      const current = await this.writableSidecar(id);
       if (current.assetId && current.localRemovedAt === undefined) {
         return current as Sidecar & { assetId: string };
       }
@@ -730,7 +852,7 @@ export class LibraryVault {
         readOnlyIdentityMemo.delete(sidecarPath);
       } catch (error) {
         // Renamed or removed while we read it: there is no item to give an identity to.
-        if (error instanceof ItemGoneError) throw error;
+        if (error instanceof ItemGoneError || error instanceof UnreadableRecordError) throw error;
         // Read-only vault: keep the in-memory identity; nothing else could persist either.
         readOnlyIdentityMemo.set(sidecarPath, next.assetId!);
       }
@@ -754,10 +876,12 @@ export class LibraryVault {
    * rename would otherwise resurrect the old stem as an orphan (`ItemGoneError`).
    */
   private async writeMetaLocked(id: string, meta: Sidecar): Promise<void> {
-    if (!(await exists(this.sidecarPath(id))) && !(await this.hasMedia(id))) {
-      throw new ItemGoneError(id);
+    const read = await readSidecarStrict(this.sidecarPath(id));
+    if (read.status === "missing" && !(await this.hasMedia(id))) throw new ItemGoneError(id);
+    if (read.status !== "ok" && read.status !== "missing") {
+      throw new UnreadableRecordError(id, read.status);
     }
-    const current = await this.sidecar(id);
+    const current = read.status === "ok" ? read.sidecar : {};
     await mkdir(this.metaDirectory(), { recursive: true });
     await atomicWriteFile(
       this.sidecarPath(id),
@@ -790,7 +914,7 @@ export class LibraryVault {
     } catch {
       return null;
     }
-    const meta = await this.sidecar(id);
+    const meta = await this.writableSidecar(id);
     if (
       meta.contentSha256 &&
       meta.hashedSizeBytes === info.size &&
@@ -904,6 +1028,8 @@ export class LibraryVault {
       if (target === null) throw new ItemGoneError(id);
       const resolved = target;
       await withLock(this.sidecarPath(resolved), async () => {
+        // Before the PNG: a refused record must not leave new pixels under the old record.
+        await this.writableSidecar(resolved);
         await this.writeImage(resolved, png);
         await this.writeMetaLocked(resolved, meta);
       });

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -43,6 +43,19 @@ describe("video-edit-session", () => {
     expect(loaded!.assets).toHaveLength(1);
     expect(loaded!.assets[0].assetId).toBe("asset-a");
     expect(Buffer.from(loaded!.assets[0].bytes).toString()).toBe("png-bytes-a");
+  });
+
+  it("refuses to save over an item whose record is unreadable, before writing anything (F9)", async () => {
+    await mkdir(join(vaultDir, ".kaipu"), { recursive: true });
+    await writeFile(join(vaultDir, "rec-1.mp4"), "video");
+    await writeFile(join(vaultDir, ".kaipu", "rec-1.json"), "{corrupt");
+    await expect(
+      saveSession("rec-1", {
+        sessionJson: '{"version":1}',
+        assets: [{ assetId: "asset-a", bytes: bytesOf("png") }],
+      }),
+    ).rejects.toThrow(/vault-unreadable-record/);
+    expect((await readdir(join(vaultDir, ".kaipu"))).sort()).toEqual(["rec-1.json"]);
   });
 
   it("returns null when no session was ever saved", async () => {

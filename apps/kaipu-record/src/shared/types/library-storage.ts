@@ -63,6 +63,13 @@ export interface LocalRecording {
    * sidecar. null for older recordings, screenshots, GIFs and exports. Optional like `tagIds`.
    */
   capture?: RecordingCapture | null;
+  /**
+   * false when the item's sidecar cannot be read (permission error, corrupt JSON, an
+   * invalid schema): the item is listed read-only, with a placeholder `assetId`, and every
+   * write to it is refused so the record is never overwritten (NIW2-561, F9). Absent
+   * otherwise.
+   */
+  readable?: boolean;
 }
 
 /** Where recordings are stored, and whether the user picked a custom folder. */
@@ -102,3 +109,10 @@ export const ITEM_NOT_FOUND_MARKER = "vault-item-not-found";
  * longer settles which one it means. Nothing was changed; the renderer shows a plain toast.
  */
 export const AMBIGUOUS_IDENTITY_MARKER = "vault-ambiguous-identity";
+
+/**
+ * Marker in the message of the error a vault write rejects with when the item's sidecar
+ * is unreadable, corrupt or invalid: nothing was written, so whatever the record still
+ * holds can be recovered by hand (NIW2-561).
+ */
+export const UNREADABLE_RECORD_MARKER = "vault-unreadable-record";
