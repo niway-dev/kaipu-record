@@ -1,17 +1,21 @@
-import { mkdtemp, readFile, writeFile, access } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, writeFile, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
-// Force the cross-volume path: rename always fails with EXDEV, so the move falls back to a real copy.
+// Force the cross-volume path: every folder is its own volume, so a link or rename between two
+// folders fails with EXDEV and the move falls back to a real copy.
 vi.mock("node:fs/promises", async (importActual) => {
   const actual = await importActual<typeof import("node:fs/promises")>();
-  return {
-    ...actual,
-    rename: vi.fn(async () => {
-      throw Object.assign(new Error("EXDEV"), { code: "EXDEV" });
-    }),
-  };
+  const { dirname } = await import("node:path");
+  const sameVolume =
+    (move: (from: string, to: string) => Promise<void>) => async (from: string, to: string) => {
+      if (dirname(from) !== dirname(to)) {
+        throw Object.assign(new Error("EXDEV"), { code: "EXDEV" });
+      }
+      return move(from, to);
+    };
+  return { ...actual, rename: sameVolume(actual.rename), link: sameVolume(actual.link) };
 });
 
 import { FinalizeMoveError, RecordingWriter } from "./recording-writer";
@@ -36,5 +40,7 @@ describe("RecordingWriter.salvage — overwrite confirmed in the save dialog", (
 
     expect((await readFile(picked)).toString()).toBe("new take");
     await expect(access(tempPath)).rejects.toThrow();
+    // Copied into a temporary sibling first, which became the file: nothing else is left.
+    expect(await readdir(join(picked, ".."))).toEqual(["mine.mp4"]);
   });
 });

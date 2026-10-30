@@ -52,7 +52,7 @@ vi.mock("node:fs/promises", async (importActual) => {
   };
 });
 
-import { STAGING_DIR, moveFile } from "./recording-writer";
+import { STAGING_DIR, placeTake } from "./recording-writer";
 import { recoverStrandedRecordings } from "./stranded-recordings";
 
 afterEach(() => {
@@ -71,15 +71,15 @@ async function stagedTake() {
   return { vaultDir, staging, from, to: join(vaultDir, "T.mp4") };
 }
 
-describe("moveFile on a volume without hard links", () => {
-  it.each(["EPERM", "ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EXDEV"])(
+describe("placeTake on a volume without hard links", () => {
+  it.each(["EPERM", "ENOTSUP", "EOPNOTSUPP", "ENOSYS", "EXDEV", "EMLINK"])(
     "(%s) never replaces a file that arrives while the take is placed",
     async (code) => {
       const { from, to } = await stagedTake();
       hooks.linkError = code;
       hooks.arrival = (path) => writeFile(path, "other recording");
 
-      await expect(moveFile(from, to)).rejects.toMatchObject({ code: "EEXIST" });
+      await expect(placeTake(from, to)).rejects.toMatchObject({ code: "EEXIST" });
       expect(await readFile(to, "utf-8")).toBe("other recording");
       expect(await readFile(from, "utf-8")).toBe("new recording");
     },
@@ -89,13 +89,13 @@ describe("moveFile on a volume without hard links", () => {
     const { from, to, staging } = await stagedTake();
     hooks.linkError = "EPERM";
 
-    await moveFile(from, to);
+    await placeTake(from, to);
     expect(await readFile(to, "utf-8")).toBe("new recording");
     expect(await readdir(staging)).toEqual([]);
   });
 });
 
-describe("moveFile when the staging file cannot be removed after placing the take", () => {
+describe("placeTake when the staging file cannot be removed after placing the take", () => {
   it.each([
     ["it is set aside under a name the sweep ignores", false],
     ["the sweep still skips it when it cannot even be renamed", true],
@@ -105,7 +105,7 @@ describe("moveFile when the staging file cannot be removed after placing the tak
     if (renameFails) hooks.failRename.add(from);
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await moveFile(from, to);
+    await placeTake(from, to);
     expect(await readFile(to, "utf-8")).toBe("new recording");
     expect(error).toHaveBeenCalled();
 

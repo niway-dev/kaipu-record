@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { copyFile, link, open, mkdir, rename, unlink, type FileHandle } from "node:fs/promises";
+import { open, mkdir, unlink, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { LocalRecording } from "@shared/types/library-storage";
 import type { RecordingFinalizeMeta } from "@shared/types/ipc";
 import { sanitizeRecordingCapture } from "@shared/recording-capture";
 import { LibraryVault } from "../library/library-vault";
+import { placeNoReplace, replaceConfirmed, takenError } from "../library/safe-place";
 
 /** Staging folder inside the vault, so the final move is a same-volume rename. Exported for the sweep. */
 export const STAGING_DIR = join(".kaipu", "tmp");
@@ -59,105 +60,12 @@ export class FinalizeMoveError extends Error {
 }
 
 /**
- * Move `from` to `to`. `overwrite` is for a destination the user already confirmed replacing (the
- * save dialog asks): a rename, else a copy that replaces too. Vault and sweep moves leave it off
- * and never clobber a file: see `placeExclusive`.
+ * Place a staging file at a vault path, never replacing a file there (`safe-place`): EEXIST
+ * when one is, whenever it arrived. A placed staging file that cannot be removed is set aside
+ * or marked, so the sweep never recovers it as a second recording.
  */
-export async function moveFile(
-  from: string,
-  to: string,
-  options: { overwrite?: boolean } = {},
-): Promise<void> {
-  if (!options.overwrite) return placeExclusive(from, to);
-  try {
-    await rename(from, to);
-    return;
-  } catch {
-    // EXDEV or any rename failure: fall through to copy.
-  }
-  try {
-    await copyFile(from, to);
-  } catch (error) {
-    await unlink(to).catch(() => {});
-    throw error;
-  }
-  await dropSource(from);
-}
-
-/**
- * Move `from` to `to` without ever replacing a file at `to`: EEXIST if one is there, whenever it
- * arrived (Finder, a sync tool and other processes are outside maintenance). A hard link fails
- * on an existing destination; a volume without them (exFAT, network shares) or another volume
- * gets an exclusive create and a copy instead. Never a rename onto `to`: it replaces silently.
- */
-async function placeExclusive(from: string, to: string): Promise<void> {
-  try {
-    await link(from, to);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "EEXIST" || code === "ENOENT") throw error;
-    await copyExclusive(from, to);
-  }
-  await dropSource(from);
-}
-
-const COPY_CHUNK = 1 << 20;
-
-/** Copy into a file this call creates (`wx`), flushed to disk. A failed copy removes only its own file. */
-async function copyExclusive(from: string, to: string): Promise<void> {
-  const source = await open(from, "r");
-  try {
-    const target = await open(to, "wx"); // EEXIST: the destination is taken
-    try {
-      const buffer = Buffer.allocUnsafe(COPY_CHUNK);
-      let position = 0;
-      for (;;) {
-        const { bytesRead } = await source.read(buffer, 0, COPY_CHUNK, position);
-        if (bytesRead === 0) break;
-        await target.write(buffer, 0, bytesRead, position);
-        position += bytesRead;
-      }
-      await target.sync();
-    } catch (error) {
-      await target.close().catch(() => {});
-      await unlink(to).catch(() => {});
-      throw error;
-    }
-    await target.close();
-  } finally {
-    await source.close().catch(() => {});
-  }
-}
-
-/** Suffix a placed staging file gets when it cannot be removed: the sweep's pattern skips it. */
-export const PLACED_SUFFIX = ".placed";
-
-/**
- * Remove the source of a move that has already placed the file. A source left under its staging
- * name would be swept up as a second recording, so a failed removal is retried, then the source
- * is set aside under a name the sweep ignores, and reported. (A hard-linked one the sweep also
- * recognises by its link count, should even that fail.)
- */
-async function dropSource(from: string): Promise<void> {
-  try {
-    await unlink(from);
-    return;
-  } catch (first) {
-    if ((first as NodeJS.ErrnoException).code === "ENOENT") return;
-  }
-  try {
-    await unlink(from);
-    return;
-  } catch {
-    // Fall through to setting it aside.
-  }
-  const aside = `${from}-${randomUUID().slice(0, 8)}${PLACED_SUFFIX}`;
-  try {
-    await rename(from, aside);
-    console.error(`could not remove the placed staging file; kept as "${aside}"`);
-  } catch (error) {
-    console.error(`could not remove the placed staging file "${from}"`, error);
-  }
+export async function placeTake(from: string, to: string): Promise<void> {
+  if ((await placeNoReplace(from, to)) === "taken") throw takenError(to);
 }
 
 /**
@@ -298,7 +206,7 @@ export class RecordingWriter {
     await this.closeHandle(session);
 
     try {
-      await moveFile(session.tempPath, dest);
+      await placeTake(session.tempPath, dest);
     } catch (cause) {
       // Release the reserved stem: only its stub sidecar exists. Unless a file took the
       // destination meanwhile: then the stem is no longer this take's, and removing it would
@@ -368,7 +276,11 @@ export class RecordingWriter {
     session: Session,
   ): Promise<boolean> {
     try {
-      await moveFile(dest, session.tempPath, { overwrite: true });
+      // Back to its own staging name, never a replacing move. A vault copy that cannot be
+      // removed undoes it: the take stays in the vault rather than in two places.
+      if ((await placeNoReplace(dest, session.tempPath, { stuck: "rollback" })) === "taken") {
+        return false;
+      }
     } catch {
       return false;
     }
@@ -386,7 +298,7 @@ export class RecordingWriter {
   async salvage(sessionId: string, destPath: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session?.stranded) throw new Error(`No stranded recording session "${sessionId}"`);
-    await moveFile(session.tempPath, destPath, { overwrite: true }); // the save dialog confirmed it
+    await replaceConfirmed(session.tempPath, destPath); // the save dialog confirmed replacing
     this.sessions.delete(sessionId);
   }
 
