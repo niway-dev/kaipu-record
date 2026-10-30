@@ -9,7 +9,7 @@ description: Five settings can be overridden per workspace and every other one s
 
 | Field         | Value                                                                                                                                                                                                                                                                                               |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | Proposed — [several workspaces design](/specs/2026-10-29-several-workspaces-design/), round 2; nothing implemented                                                                                                                                                                                  |
+| Status        | Proposed — [several workspaces design](/specs/2026-10-29-several-workspaces-design/), rounds 2 and 3; nothing implemented                                                                                                                                                                           |
 | Date          | 2026-10-29                                                                                                                                                                                                                                                                                          |
 | Supersedes    | —                                                                                                                                                                                                                                                                                                   |
 | Superseded by | —                                                                                                                                                                                                                                                                                                   |
@@ -18,9 +18,10 @@ description: Five settings can be overridden per workspace and every other one s
 ## Context
 
 ADR 0032 makes a workspace a folder, with one active at a time. The first draft kept every
-setting app-wide. On 2026-10-29 the owner asked for per-workspace settings in v1: a work
-workspace that records in high quality with the "Made with Kaipu" badge off, and a personal
-one with other choices.
+setting app-wide. On 2026-10-29 the owner asked for per-workspace settings in the first release
+of workspaces (the app is at 0.x, so this ADR never says "v1"): a work workspace that records
+in high quality with the "Made with Kaipu" badge off, and a personal one with other choices. On
+2026-10-30 the owner confirmed that timing and the five keys below.
 
 Today every setting is one flat object, `AppSettings` (`shared/types/ipc.ts:237-351`, 23 keys).
 `settings-store.ts` keeps it in `userData/settings.json` (`main/infrastructure/settings-store.ts:17-19`)
@@ -46,7 +47,7 @@ Two existing models were weighed:
    override some keys. The effective value of a key in workspace W is W's override when there
    is one, otherwise the All workspaces value. Nothing is copied. Changing an All workspaces
    value changes it in every workspace that does not override it.
-2. **Only five keys can be overridden in v1**: `showBrandBadge`, `uploadMode`, `recordingQuality`,
+2. **Only five keys can be overridden in the first release of workspaces**: `showBrandBadge`, `uploadMode`, `recordingQuality`,
    `exportQuality` and `screenshotCopy`. Every other key is app-wide (inventory below).
    **Shortcuts are always app-wide**: an OS-wide hotkey must not change its meaning because of
    which workspace happens to be active, since the user cannot see that state when pressing it.
@@ -83,7 +84,9 @@ Two existing models were weighed:
    modified in"), so a value that does not apply everywhere is visible from the base level.
    `uploadMode` is edited on the Cloud page (`renderer/src/pages/cloud/cloud-page.tsx:12-13`),
    not in Settings, so that row gets the same scope selector. With one workspace there is no
-   selector and no badge.
+   selector and no badge: "All workspaces" and the workspace would be the same values, and
+   nothing could be overridden. The scope selector appears with the second workspace, which the
+   rail's "+" tile and the one-time hint make easy to reach (ADR 0032, decision 4).
 7. **An unreachable workspace's overrides cannot be edited.** Its scope is listed, disabled,
    as "Not connected". Its folder file cannot be read or written, and both of its override
    files are left as they are until it is back.

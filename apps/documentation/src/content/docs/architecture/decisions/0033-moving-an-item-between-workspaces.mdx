@@ -15,13 +15,16 @@ description: A finished recording or screenshot moves to another workspace with 
 | Superseded by | —                                                                                                         |
 | Amends        | ADR 0003's wording "the editor never … moves … the original" (see Consequences)                           |
 | Amended       | 2026-10-29, in place while Proposed: synced folders met the first reopen condition (decisions 4, 9, 13)   |
+| Amended       | 2026-10-30, round 3, in place while Proposed: a group move and the exports suggestion (decisions 14, 15)  |
 
 ## Context
 
 ADR 0032 introduces several workspaces, one active at a time. A capture lands in the active
 workspace, and sometimes that is the wrong one. On the first launch every existing item is in
 the single migrated workspace, and the user will want to move the work ones out. The owner asked
-for a move from the Library and from the editor.
+for a move from the Library and from the editor. On 2026-10-30 the owner added a multi-select
+move in the first release of workspaces, and asked that moving a recording suggest moving its
+exports.
 
 An item is more than its media file. In a vault today (`library-vault.ts`, `video-edit-session.ts`):
 
@@ -191,6 +194,46 @@ Three more traps are about things that run **beside** the move:
     - The journal stays in userData, so a move between two Macs that share a synced folder is
       still a move on one Mac. There is no cross-machine lock (non-goal).
 
+14. **A group move is N single moves, not a transaction** (added 2026-10-30). The Library's
+    select mode (spec, UI) moves several items at once. Each item goes through decisions 1–13
+    unchanged: its own lock, journal entry, verification and healing, so each is crash-safe on
+    its own. The group adds only an order and a result:
+    - **One after another, in the order on screen.** There is no parallelism, so two copies never
+      compete for the same disk and the journal never holds more than one live entry from the
+      group.
+    - **The switch lock (ADR 0032, decision 5) is held from the first item to the last**,
+      including between two items, so a workspace switch cannot land between them.
+    - **A failure does not stop the rest.** Each item either completes or is left in the source
+      exactly as it was, with a reason: target not connected, not enough room, evicted, dragged
+      just now (decision 11), checksum mismatch (decision 4), a collision with the same `assetId`
+      (decision 3), or a tag registry that cannot be trusted (decision 7). The group ends with a
+      result: how many moved, and the list of those that stayed with a reason each. Failed items
+      stay selected so a retry is one click.
+    - **Stop** lets the move in flight finish and starts no further one.
+    - **A crash mid-group** is healed per item: the item in flight is rolled forward or back by
+      decision 6, so exactly one listed copy remains. Items not yet started were never touched.
+      The group is **not journaled and does not resume**: there is no state to resume from beyond
+      each item's own, and the user selects the rest again. Items already moved are simply no
+      longer in the source.
+    - Preconditions (decision 9) are checked **per item**, when its turn comes. A target that
+      becomes unavailable mid-group makes each remaining item fail fast with that reason.
+15. **Moving a recording suggests moving its exports** (added 2026-10-30). When the item is a
+    recording and the source workspace's loaded list holds exports of it
+    (`derivedFromAssetId` equal to its `assetId`), the dialog says "This recording has 2 exports
+    in Work. Move them too?" with **Move all 3** (primary) and **Move only the recording**.
+    - "Move all" is a group move (decision 14): the recording first, then each export, each as
+      a single move. The recording goes first because it is the user's intent; if an export then
+      fails, the recording is already where the user asked, and the export is the same
+      left-behind export as in the other branch.
+    - "Move only the recording" is the previous behavior: exports stay where they are, and their
+      item page says "Source recording is not in this workspace".
+    - There is **no reverse hint**: moving an export never offers to move its source.
+    - In a multi-select, the dialog counts the exports of all selected recordings once (an
+      export that is also selected is not counted twice).
+    - The count uses the already loaded list. It adds no `derivedFromAssetId` lookup to the list
+      and no lineage check.
+    - Cloud-only exports are not counted: the suggestion covers local files.
+
 ## Alternatives rejected
 
 - **Always copy, even on the same volume.** This doubles the disk space and the time for
@@ -219,15 +262,23 @@ Three more traps are about things that run **beside** the move:
   would pass it and resume mid-move.
 - The mover needs the tag registry of the **target** workspace, not the active one, so the tag
   repository is built per workspace (spec, Tags).
-- Moving an original does not move its exports. Exports left behind keep their
+- Moving an original **offers** to move its exports (decision 15) but does not do it unless the
+  user chooses "Move all". Exports left behind keep their
   `derivedFromAssetId`, but today nothing resolves it: `probeEditing` returns `exported-only`
   for a local item with a lineage id and no edit project, without looking for the source
   (`edit-project-probe.ts:35-37`). `needs-source` appears only when the item itself has no local
   file (`:35`, `:58`). So a left-behind export shows no warning. This ADR documents that and
   does **not** add a cross-workspace or workspace-local lineage check. A check would add a
-  `derivedFromAssetId` lookup to every list, and "should exports follow their source?" is an
-  open question for the owner (spec, Open question 4). The move dialog still counts the
-  exports from the already loaded local list.
+  `derivedFromAssetId` lookup to every list. The owner decided on 2026-10-30 that exports are
+  suggested, not forced (spec, decision 21), and the suggestion counts the exports from the
+  already loaded local list.
+- A group move shows more intermediate states than a single one: some items in the target,
+  the rest in the source, until it ends or the user stops it. Every state is a valid library,
+  because each item is either complete in the target or complete in the source.
+- "Move to ▸ New workspace…", offered when no other workspace exists (ADR 0032, decision 4),
+  registers the target first and then runs an ordinary move into it, with the same
+  preconditions. A cancelled folder picker or a failed add moves nothing. A move that fails
+  after the add leaves the workspace registered and the item in its source.
 - Tags created in the target by a move that is then rolled back remain as unused tags. This is
   accepted: a visible, empty tag, never a dangling id.
 - **ADR 0003** says the editor never "moves" the original. Its intent is the export path: an
@@ -239,21 +290,22 @@ Three more traps are about things that run **beside** the move:
 ## Non-goals
 
 Moving between machines; moving several items as one transaction (a multi-select runs single
-moves one after another); moving an export together with its source or flagging that its
-source moved; moving a workspace's whole folder (that is a Finder move, and the folder keeps
+moves one after another, decision 14, and an interrupted group does not resume); a reverse hint
+that moving an export should move its source; flagging that an export's source moved; moving a workspace's whole folder (that is a Finder move, and the folder keeps
 its id); downloading an evicted file as part of a move; locking an item against another Mac
 that opens the same synced folder.
 
 ## Reopen when
 
 - ~~Workspaces sit on cloud-synced folders (iCloud Drive, Dropbox) whose files can be evicted.~~
-  **Met on 2026-10-29**, when the owner allowed synced folders in v1. Addressed in place by
+  **Met on 2026-10-29**, when the owner allowed synced folders in the first release of workspaces. Addressed in place by
   decisions 4 (always copy, verify and delete when a synced side is involved), 9 (no evicted
   source, a verified target) and 13 (scratch outside the folder).
 - A sync provider is found to replace, rename or conflict-copy a file **after** Kaipu verified
   it at its final path, so "verified in place" no longer means "safe to delete the source".
-- Moves must be undone as one action, or batched as one transaction.
+- Moves must be undone as one action, or batched as one transaction (for example, an
+  interrupted group must resume, or a group must be all-or-nothing).
 - Exports left behind must show that their source moved (a workspace-local lineage check), or
-  follow it.
+  must follow it without asking.
 - The item gains a file outside `.kaipu/<id>*` (for example a screenshot scene document) that
   this list does not name.

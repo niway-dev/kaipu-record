@@ -7,13 +7,14 @@ description: A workspace is an existing folder with Kaipu files in it; its id an
 
 ## Status
 
-| Field         | Value                                                                                                           |
-| ------------- | --------------------------------------------------------------------------------------------------------------- |
-| Status        | Proposed — [several workspaces design](/specs/2026-10-29-several-workspaces-design/); nothing implemented       |
-| Date          | 2026-10-29                                                                                                      |
-| Supersedes    | —                                                                                                               |
-| Superseded by | —                                                                                                               |
-| Amended       | 2026-10-29, round 2, in place while Proposed: switcher, color and initials, synced folders, downgrade, settings |
+| Field         | Value                                                                                                               |
+| ------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — [several workspaces design](/specs/2026-10-29-several-workspaces-design/); nothing implemented           |
+| Date          | 2026-10-29                                                                                                          |
+| Supersedes    | —                                                                                                                   |
+| Superseded by | —                                                                                                                   |
+| Amended       | 2026-10-29, round 2, in place while Proposed: switcher, color and initials, synced folders, downgrade, settings     |
+| Amended       | 2026-10-30, round 3, in place while Proposed: visible with one workspace, "Default workspace", orphan cloud entries |
 
 ## Context
 
@@ -38,7 +39,11 @@ The user-facing word is **workspace**. "Vault" survives only in existing code id
    a missing root means "unavailable", not "empty".
 2. **A folder that already has `.kaipu/` is adopted**: its `workspace.json` is reused, or
    minted when absent (a vault from before this ADR). Its sidecars, tags and edit projects are
-   used as they are.
+   used as they are. The vault that exists at the first launch after the upgrade becomes the
+   first workspace and is named **"Default workspace"**, not after its folder, because the
+   folder's name ("Kaipu Record") says nothing and "Personal" would presume what it holds. A
+   workspace the user adds later defaults to its folder's name, which the add dialog lets them
+   change.
 3. **The list lives in userData**: `preferences.json` gains a `workspaces` object with the
    registered entries (id, path, cached name) and `activeId`. The folder holds the identity;
    userData holds which folders this machine knows and which one is active.
@@ -46,8 +51,13 @@ The user-facing word is **workspace**. "Vault" survives only in existing code id
    active workspace only. There is no combined view and no per-capture destination. "All
    workspaces" exists only as the Settings scope for defaults (ADR 0034), never as a Library
    view. The switcher is a stack of tiles in the navigation rail, and one click switches. The
-   active workspace is named wherever a capture or a write is about to land (spec, UI). With a
-   single workspace none of this is shown.
+   active workspace is named wherever a capture or a write is about to land (spec, UI).
+   **None of this depends on the number of workspaces.** With one workspace the rail still shows
+   the active tile and a "+" tile, the status bar still shows the chip, and a one-time,
+   dismissible hint ("New: workspaces — keep work and personal captures apart") shows after the
+   upgrade and is remembered in userData. The "Move to" menus offer "New workspace…" when no other
+   workspace exists. Only what needs a choice (the Settings scope selector, the tray submenu,
+   the ⌘digit switch, the window-title prefix) waits for a second workspace.
 5. **Switching is refused while anything writes into the active workspace**: a recording, an
    export, a GIF save, a screenshot save, or a move. Each writer also binds its folder when it
    starts, so a write always ends in the workspace it started in.
@@ -94,7 +104,10 @@ The user-facing word is **workspace**. "Vault" survives only in existing code id
 11. **Tags stay per workspace** (ADR 0020 unchanged). **The cloud catalog stays per account**,
     and every cloud asset records the `workspaceId` it belongs to. A workspace's Library hides
     cloud entries of other workspaces. Hiding is a view: it never removes other workspaces'
-    entries from the account cache.
+    entries from the account cache. The cloud entries of a **deleted** workspace stay on the
+    server and are hidden in every Library. Settings → Workspaces lists them ("N cloud items are
+    not in any workspace on this Mac") with **Assign to workspace…**, one explicit choice. They
+    are never assigned automatically, which would be the leak this ADR prevents.
 
 ## Alternatives rejected
 
@@ -103,7 +116,12 @@ The user-facing word is **workspace**. "Vault" survives only in existing code id
   bug in one query shows everything on a shared screen. Every surface (search, tags, the
   Editor home, counts) would have to remember the filter. The goal is that the other workspace
   is not loaded at all. This also covers an "All workspaces" Library sorted by time, which the
-  owner raised on 2026-10-29 (spec, Open question 6; the recommendation is no).
+  owner raised on 2026-10-29 and declined on 2026-10-30 (spec, decision 24). "All workspaces"
+  exists only as the Settings scope for defaults.
+- **Hiding the feature until a second workspace exists** (the first draft). A user with one
+  workspace would never learn that workspaces exist, so the owner asked for the tile, the chip
+  and a hint from the first launch. The cost is a little extra chrome for users who never add
+  one; the hint is shown once and the tiles take one 36 px slot.
 - **A destination picker on every capture.** It adds a decision to every capture, and a wrong
   click is the exact leak this exists to prevent. Quiet capture (ADR 0024) has no place to
   ask.
@@ -148,6 +166,9 @@ The user-facing word is **workspace**. "Vault" survives only in existing code id
 - Settings stay one app-wide level that a workspace can override for five keys (ADR 0034). This
   replaces the non-goal "settings … per workspace" that this ADR listed before the 2026-10-29
   amendment.
+- The one-time hint is remembered in userData (`workspaces.hintDismissedAt` in
+  `preferences.json`), not in the folder: it is about this install. An older version keeps the
+  key with the rest of the `workspaces` object.
 - `.kaipu/workspace.json` and `.kaipu/settings.json` are reserved names, like `tags.json`. A
   media file whose stem is `workspace`, `settings` or `tags` must never address them as its
   sidecar (spec, Things the code contradicted).
