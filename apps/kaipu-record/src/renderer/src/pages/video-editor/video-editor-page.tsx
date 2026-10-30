@@ -14,9 +14,11 @@ import {
 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { parseCursorTrack, type CursorTrack } from "@shared/cursor-track";
+import type { WebcamTrackMeta } from "@shared/webcam-track";
 import { captureException } from "@renderer/features/analytics";
 import {
   initialScene,
+  reconcileWebcam,
   newId,
   type SlideItem,
   type VideoOverlay,
@@ -146,6 +148,8 @@ export interface VideoEditorSource {
   sizeBytes?: number;
   /** Its poster frame, for the export sheet's framing preview. */
   thumbnailUrl?: string | null;
+  /** The recording's webcam track (ADR 0032), when it has one: seeds the webcam layer. */
+  webcam?: WebcamTrackMeta | null;
 }
 
 export function isVideoEditorSource(value: unknown): value is VideoEditorSource {
@@ -315,7 +319,8 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
             // Drop slide items whose asset wasn't returned (e.g. file was deleted on
             // disk) rather than leaving broken references that the worker can't render.
             const filteredScene: VideoScene = {
-              ...session.scene,
+              // The sidecar decides whether the recording has a webcam, not the session.
+              ...reconcileWebcam(session.scene, source.webcam ?? null),
               items: session.scene.items.filter(
                 (item) => item.kind !== "slide" || loadedIds.has(item.assetId),
               ),
@@ -325,15 +330,15 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
           } else {
             // Session file exists but is invalid (schema changed, corruption, etc.).
             showToast({ message: t("restoreError") });
-            open(initialScene(source.durationSeconds), false);
+            open(initialScene(source.durationSeconds, source.webcam ?? null), false);
           }
         } else {
           // No saved session — fresh start, no toast.
-          open(initialScene(source.durationSeconds), false);
+          open(initialScene(source.durationSeconds, source.webcam ?? null), false);
         }
       } catch {
         // IPC failure is non-fatal; open a fresh editor without surfacing the error.
-        open(initialScene(source.durationSeconds), false);
+        open(initialScene(source.durationSeconds, source.webcam ?? null), false);
       }
     })();
     return () => {

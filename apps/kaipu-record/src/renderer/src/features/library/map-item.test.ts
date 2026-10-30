@@ -84,6 +84,18 @@ describe("toLibraryVideo", () => {
     expect(toLibraryVideo(item).capture).toBeNull();
   });
 
+  it("carries the webcam track of the local copy, null when it has none", () => {
+    const webcam = {
+      startOffsetMs: 4,
+      offsetQuality: "exact",
+      width: 1280,
+      height: 720,
+      fps: 30,
+    } as const;
+    expect(toLibraryVideo({ ...item, local: { ...item.local!, webcam } }).webcam).toEqual(webcam);
+    expect(toLibraryVideo(item).webcam).toBeNull();
+  });
+
   it("a cloud-only item has no local id, no thumbnail yet, and the cloud size as its size", () => {
     const cloudOnly = { ...item, local: null, availability: "cloud" as const };
     expect(toLibraryVideo(cloudOnly)).toMatchObject({

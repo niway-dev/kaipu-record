@@ -44,4 +44,6 @@ export interface LibraryVideo {
   export?: LocalRecording["export"];
   /** How the recording was captured (library label); null for older and cloud-only items. */
   capture?: RecordingCapture | null;
+  /** The take's webcam track (ADR 0032) while its file exists; null otherwise. */
+  webcam?: LocalRecording["webcam"];
 }

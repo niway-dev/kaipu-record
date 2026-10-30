@@ -16,7 +16,7 @@ export type EditableItem = Pick<
   LibraryVideo,
   "id" | "assetId" | "kind" | "title" | "durationSeconds" | "thumbnailUrl"
 > &
-  Partial<Pick<LibraryVideo, "fileSizeBytes">>;
+  Partial<Pick<LibraryVideo, "fileSizeBytes" | "webcam">>;
 
 /**
  * Whether an item can open in an editor: it needs a local copy, and a video
@@ -44,6 +44,7 @@ export function videoSourceFor(item: EditableItem): VideoEditorSource | null {
     durationSeconds: item.durationSeconds,
     ...(item.fileSizeBytes ? { sizeBytes: item.fileSizeBytes } : {}),
     ...(item.thumbnailUrl ? { thumbnailUrl: item.thumbnailUrl } : {}),
+    ...(item.webcam ? { webcam: item.webcam } : {}),
   };
 }
 
