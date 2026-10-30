@@ -496,12 +496,18 @@ interface Manifest {
   entries: ManifestEntry[];
 }
 
-async function pathExists(path: string): Promise<boolean> {
+/**
+ * Whether a path is there. Only ENOENT (or ENOTDIR) means absent: any other error (EIO,
+ * EACCES, a dropped network drive) is `unknown`, never read as absence, because absence
+ * leads to a move onto that path.
+ */
+export async function pathState(path: string): Promise<"present" | "absent" | "unknown"> {
   try {
     await lstat(path);
-    return true;
-  } catch {
-    return false;
+    return "present";
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === "ENOENT" || code === "ENOTDIR" ? "absent" : "unknown";
   }
 }
 
@@ -563,7 +569,8 @@ async function writeManifest(folder: string, manifest: Manifest): Promise<void> 
 /**
  * Move an entry's files that have not moved yet. A destination that exists means that move
  * happened: it is kept, and a source present again at the old path (a new capture that
- * reused the free stem) is not taken (`conflict`).
+ * reused the free stem) is not taken (`conflict`). A path that cannot be checked leaves
+ * both files where they are (`failed`): the entry stays pending for the next run.
  */
 async function moveFiles(
   directory: string,
@@ -576,13 +583,18 @@ async function moveFiles(
     if (file.state === "moved" || file.state === "conflict") continue;
     const from = join(directory, file.from);
     const to = join(folder, file.to);
-    const [source, destination] = await Promise.all([pathExists(from), pathExists(to)]);
-    if (destination) {
-      file.state = source ? "conflict" : "moved";
-      if (source) problems.push(file.from);
+    const [source, destination] = await Promise.all([pathState(from), pathState(to)]);
+    if (source === "unknown" || destination === "unknown") {
+      file.state = "failed";
+      problems.push(file.from);
       continue;
     }
-    if (!source) {
+    if (destination === "present") {
+      file.state = source === "present" ? "conflict" : "moved";
+      if (source === "present") problems.push(file.from);
+      continue;
+    }
+    if (source === "absent") {
       file.state = "missing";
       continue;
     }
@@ -841,7 +853,8 @@ async function runPlan(
     // A copy: `rename` removes items from `pending` while this loop runs.
     for (const item of pending.slice()) {
       const self = fsFold(item.base) === fsFold(item.finding.stem);
-      if (self || (await vault.isStemFree(item.base))) {
+      // A name that cannot be checked is not free; `rename` reports it at the end.
+      if (self || (await vault.isStemFree(item.base).catch(() => false))) {
         await rename(item);
         moved = true;
       }

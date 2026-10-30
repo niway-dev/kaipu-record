@@ -291,6 +291,22 @@ async function exists(path: string): Promise<boolean> {
 }
 
 /**
+ * `exists` for checks whose "absent" answer leads to a write, a copy-then-delete or a
+ * move onto the path: only ENOENT (or ENOTDIR) means absent; any other error (EIO, EACCES,
+ * a dropped network drive) is thrown, never read as absence.
+ */
+async function existsStrict(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch (error) {
+    const code = errorCode(error);
+    if (code === "ENOENT" || code === "ENOTDIR") return false;
+    throw error;
+  }
+}
+
+/**
  * Local recordings vault. An item lives as `<id><ext>` (ext ∈ ALL_EXTS) with
  * optional companions under `.kaipu/` (`<id>.json` sidecar, `<id>.jpg` thumbnail,
  * cursor track, edit session, assets). The filename *is* the id, and a rename moves
@@ -364,7 +380,8 @@ export class LibraryVault {
       ...ALL_EXTS.map((ext) => join(this.directory, `${stem}${ext}`)),
       ...Object.values(companions),
     ];
-    const found = await Promise.all(paths.map(exists));
+    // Strict: a path that cannot be checked is not free (the caller would write onto it).
+    const found = await Promise.all(paths.map(existsStrict));
     return !found.includes(true);
   }
 
@@ -547,13 +564,19 @@ export class LibraryVault {
         const ext = extname(oldMedia);
         const createdAt = captureDate(meta, id, await stat(oldMedia));
         const stem = alignedBase(title, kindFromExt(ext), new Date(createdAt));
-        const target = await this.resolveRenameTarget(
-          stem,
-          id,
-          oldMedia,
-          meta.assetId!,
-          options.allowLeftover ?? true,
-        );
+        let target: StemResolution;
+        try {
+          target = await this.resolveRenameTarget(
+            stem,
+            id,
+            oldMedia,
+            meta.assetId!,
+            options.allowLeftover ?? true,
+          );
+        } catch {
+          // A candidate that could not be checked (EIO, EACCES): never treated as free.
+          return { recording: await describeOld(), file: "kept-old-name", reason: "io" };
+        }
         if (target.mode === "same") return { recording: await describeOld(), file: "unchanged" };
 
         // 3. The video editor holds this id (session saves, cursor track, source URL):
@@ -583,11 +606,13 @@ export class LibraryVault {
             await atomicWriteFile(to.sidecar, JSON.stringify(meta, null, 2));
             created.push(to.sidecar);
             for (const key of ["thumbnail", "cursorTrack", "editSession", "editMeta"] as const) {
-              if (!(await exists(from[key]))) continue;
+              // Strict: a companion that cannot be checked is not skipped, since the
+              // old companions are deleted after the commit.
+              if (!(await existsStrict(from[key]))) continue;
               await copyFile(from[key], to[key], constants.COPYFILE_EXCL);
               created.push(to[key]);
             }
-            if (await exists(from.assetsDir)) {
+            if (await existsStrict(from.assetsDir)) {
               created.push(to.assetsDir);
               await cp(from.assetsDir, to.assetsDir, {
                 recursive: true,
@@ -723,7 +748,7 @@ export class LibraryVault {
     const keys = ["sidecar", "thumbnail", "cursorTrack", "editSession", "editMeta", "assetsDir"];
     try {
       for (const key of keys as (keyof CompanionPaths)[]) {
-        if (!(await exists(from[key]))) continue;
+        if (!(await existsStrict(from[key]))) continue;
         await rename(from[key], to[key]);
         moved.push(key);
       }
@@ -956,7 +981,8 @@ export class LibraryVault {
   async hasMedia(id: string): Promise<boolean> {
     if (!isPlainItemId(id)) return false;
     for (const ext of ALL_EXTS) {
-      if (await exists(join(this.directory, `${id}${ext}`))) return true;
+      // Strict: "no media" lets a rename take the stem as a leftover and clear it.
+      if (await existsStrict(join(this.directory, `${id}${ext}`))) return true;
     }
     return false;
   }
