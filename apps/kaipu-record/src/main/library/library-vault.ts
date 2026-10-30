@@ -180,7 +180,7 @@ const sleepFor = (ms: number): Promise<void> => new Promise((resolve) => setTime
 /** Names a case-insensitive filesystem may treat as one (see `fsFold`). */
 const foldName = fsFold;
 
-function kindFromExt(ext: string): CaptureKind {
+export function kindFromExt(ext: string): CaptureKind {
   if ((IMAGE_EXTS as readonly string[]).includes(ext)) return "screenshot";
   if ((GIF_EXTS as readonly string[]).includes(ext)) return "gif";
   return "recording";
@@ -425,9 +425,8 @@ export class LibraryVault {
 
         // 2. The target stem.
         const ext = extname(oldMedia);
-        const createdAt = meta.createdAt ?? (await stat(oldMedia)).birthtimeMs;
-        const stem =
-          fileStemFromTitle(title) ?? defaultCaptureName(kindFromExt(ext), new Date(createdAt));
+        const createdAt = captureDate(meta, id, await stat(oldMedia));
+        const stem = alignedBase(title, kindFromExt(ext), new Date(createdAt));
         const target = await this.resolveRenameTarget(stem, id, oldMedia, meta.assetId!);
         if (target.mode === "same") return { recording: await describeOld(), file: "unchanged" };
 
@@ -962,7 +961,49 @@ function describeExport(meta: Sidecar): LocalRecording["export"] {
   };
 }
 
-const LEGACY_STEM = /^(recording|screenshot)-(\d{4})-(\d{2})-(\d{2})[-T](\d{2})-(\d{2})-(\d{2})/;
+export const LEGACY_STEM =
+  /^(recording|screenshot)-(\d{4})-(\d{2})-(\d{2})[-T](\d{2})-(\d{2})-(\d{2})/;
+
+/** The UTC instant a legacy writer stem encodes, or null for any other stem. */
+function legacyStemDate(stem: string): number | null {
+  const legacy = LEGACY_STEM.exec(stem);
+  if (!legacy) return null;
+  const [, , y, mo, d, h, mi, s] = legacy;
+  return Date.UTC(+y!, +mo! - 1, +d!, +h!, +mi!, +s!);
+}
+
+/**
+ * When an item was captured (N4): the sidecar's `createdAt`, then the date in a legacy
+ * stem (UTC), then the file's birthtime, then its mtime (filesystems that report no
+ * birthtime give 0). The one rule `renameItem` and reconcile both name defaults with.
+ */
+export function captureDate(
+  meta: Pick<Sidecar, "createdAt">,
+  stem: string,
+  stats: { birthtimeMs: number; mtimeMs: number },
+): number {
+  if (typeof meta.createdAt === "number" && Number.isFinite(meta.createdAt)) return meta.createdAt;
+  return legacyStemDate(stem) ?? (stats.birthtimeMs > 0 ? stats.birthtimeMs : stats.mtimeMs);
+}
+
+/** The stem a title projects to, or the default capture name when nothing survives (N3). */
+export function alignedBase(title: string, kind: CaptureKind, date: Date): string {
+  return fileStemFromTitle(title) ?? defaultCaptureName(kind, date);
+}
+
+/** A collision tail the resolver may have added: ` (2)` … ` (99)`, or a 4-hex random tail. */
+const COLLISION_TAIL = / \((?:[2-9]|[1-9]\d|[0-9a-f]{4})\)$/;
+
+/**
+ * Whether `stem` already follows `title` (N2): after NFC, it is the title's base, or the
+ * base plus a collision tail. Never "what the resolver would pick now", which re-rolls
+ * random tails; a case-only difference is not aligned (N8).
+ */
+export function isAligned(stem: string, title: string, kind: CaptureKind, date: Date): boolean {
+  const base = alignedBase(title, kind, date).normalize("NFC");
+  const name = stem.normalize("NFC");
+  return name === base || (COLLISION_TAIL.test(name) && name.replace(COLLISION_TAIL, "") === base);
+}
 
 /**
  * The title an item without a sidecar title shows. New stems are already readable
@@ -971,11 +1012,10 @@ const LEGACY_STEM = /^(recording|screenshot)-(\d{4})-(\d{2})-(\d{2})[-T](\d{2})-
  * legacy items look like new ones. Legacy stems were UTC; the default name is local time.
  */
 export function humanizeId(id: string): string {
-  const legacy = LEGACY_STEM.exec(id);
-  if (legacy) {
-    const [, kind, y, mo, d, h, mi, s] = legacy;
-    const utc = new Date(Date.UTC(+y!, +mo! - 1, +d!, +h!, +mi!, +s!));
-    return defaultCaptureName(kind === "screenshot" ? "screenshot" : "recording", utc);
+  const utc = legacyStemDate(id);
+  if (utc !== null) {
+    const kind = id.startsWith("screenshot") ? "screenshot" : "recording";
+    return defaultCaptureName(kind, new Date(utc));
   }
   return id.trim() || "Recording";
 }
