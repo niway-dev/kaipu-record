@@ -106,7 +106,7 @@ import { formatPrecise } from "@renderer/features/video-editor/components/inspec
 import { useSessionAutosave } from "@renderer/features/video-editor/use-session-autosave";
 import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-playback";
 import {
-  sourceThumbnailSpacing,
+  useCompanionThumbnails,
   useSourceThumbnails,
 } from "@renderer/features/video-editor/use-source-thumbnails";
 import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
@@ -460,8 +460,9 @@ function VideoEditor({
   const gifExport = useGifExport();
   const mediaUrl = `kaipu-media://recording/${source.id}`;
   const thumbnails = useSourceThumbnails(mediaUrl, source.durationSeconds);
-  // The webcam lane's filmstrip: the webcam file's frames, reported at SOURCE time.
-  const webcamThumbnails = useSourceThumbnails(
+  // The webcam lane's filmstrip: the webcam file's frames, reported at SOURCE time, and the
+  // source range it has footage for.
+  const webcamStrip = useCompanionThumbnails(
     hasWebcam ? `kaipu-media://webcam/${source.id}` : "",
     source.durationSeconds,
     (webcamTrack?.startOffsetMs ?? 0) / 1000,
@@ -1608,8 +1609,8 @@ function VideoEditor({
                       <WebcamLane
                         segments={webcamEdits.visibleSegments}
                         layout={layout}
-                        thumbnails={webcamThumbnails}
-                        thumbnailGap={sourceThumbnailSpacing(source.durationSeconds)}
+                        thumbnails={webcamStrip.thumbnails}
+                        covered={webcamStrip.covered}
                         selectedId={
                           selectedWebcamId === WEBCAM_LAYER_SELECTION ? null : selectedWebcamId
                         }

@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { openRecordingInput } from "@renderer/lib/open-recording-input";
 import {
   __resetSourceThumbnailCacheForTests,
+  companionCoveredRange,
   companionSampleTimes,
+  useCompanionThumbnails,
   useSourceThumbnails,
 } from "./use-source-thumbnails";
 
@@ -149,7 +151,18 @@ describe("companionSampleTimes", () => {
   });
 });
 
-describe("useSourceThumbnails over a companion file (the webcam)", () => {
+describe("companionCoveredRange", () => {
+  it("runs from the companion's first frame to its last, in SOURCE time", () => {
+    expect(companionCoveredRange(2, 30)).toEqual({ start: 2, end: 32 });
+    expect(companionCoveredRange(-1, 30)).toEqual({ start: -1, end: 29 });
+  });
+
+  it("bounds nothing past the start when the duration is unknown", () => {
+    expect(companionCoveredRange(2, Number.NaN)).toEqual({ start: 2, end: Infinity });
+  });
+});
+
+describe("useCompanionThumbnails (the webcam)", () => {
   const URL_CAM = "kaipu-media://webcam/r1";
 
   function stubEchoSink() {
@@ -166,8 +179,8 @@ describe("useSourceThumbnails over a companion file (the webcam)", () => {
   it("decodes at webcam time and reports each frame at its SOURCE time", async () => {
     stubInput({ computeDuration: vi.fn(async () => 40) });
     stubEchoSink();
-    const { result } = renderHook(() => useSourceThumbnails(URL_CAM, 48, 0.5));
-    await waitFor(() => expect(result.current.length).toBeGreaterThan(0));
+    const { result } = renderHook(() => useCompanionThumbnails(URL_CAM, 48, 0.5));
+    await waitFor(() => expect(result.current.thumbnails.length).toBeGreaterThan(0));
 
     const sink = CanvasSinkMock.mock.results[0]!.value as {
       canvasesAtTimestamps: ReturnType<typeof vi.fn>;
@@ -175,33 +188,46 @@ describe("useSourceThumbnails over a companion file (the webcam)", () => {
     const requested = sink.canvasesAtTimestamps.mock.calls[0]![0] as number[];
     expect(requested[0]).toBeCloseTo(0.5); // source 1 s − 0.5 s
     expect(requested.every((t) => t >= 0 && t < 40)).toBe(true);
-    expect(result.current[0]!.sourceTime).toBeCloseTo(1);
+    expect(result.current.thumbnails[0]!.sourceTime).toBeCloseTo(1);
+    // A 40 s webcam that started 0.5 s after the screen has footage over source 0.5–40.5 s.
+    expect(result.current.covered).toEqual({ start: 0.5, end: 40.5 });
+  });
+
+  it("serves the covered range from the cache too", async () => {
+    stubInput({ computeDuration: vi.fn(async () => 40) });
+    stubEchoSink();
+    const first = renderHook(() => useCompanionThumbnails(URL_CAM, 48, 2));
+    await waitFor(() => expect(first.result.current.covered).not.toBeNull());
+    first.unmount();
+    const second = renderHook(() => useCompanionThumbnails(URL_CAM, 48, 2));
+    await waitFor(() => expect(second.result.current.covered).toEqual({ start: 2, end: 42 }));
+    expect(openMock).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the screen and webcam caches apart", async () => {
     const screen = renderHook(() => useSourceThumbnails(URL_R1, 48));
     await waitFor(() => expect(screen.result.current).toHaveLength(24));
     stubInput({ computeDuration: vi.fn(async () => 48) });
-    const cam = renderHook(() => useSourceThumbnails(URL_CAM, 48, 0));
-    await waitFor(() => expect(cam.result.current.length).toBeGreaterThan(0));
+    const cam = renderHook(() => useCompanionThumbnails(URL_CAM, 48, 0));
+    await waitFor(() => expect(cam.result.current.thumbnails.length).toBeGreaterThan(0));
 
     expect(openMock).toHaveBeenCalledWith(URL_CAM);
     expect(openMock).toHaveBeenCalledTimes(2);
   });
 
   it("decodes nothing for an empty URL (a recording without a webcam)", async () => {
-    const { result } = renderHook(() => useSourceThumbnails("", 48, 0));
+    const { result } = renderHook(() => useCompanionThumbnails("", 48, 0));
     await Promise.resolve();
-    expect(result.current).toEqual([]);
+    expect(result.current).toEqual({ thumbnails: [], covered: null });
     expect(openMock).not.toHaveBeenCalled();
   });
 
   it("a different offset is a different cache entry", async () => {
     stubInput({ computeDuration: vi.fn(async () => 48) });
-    const a = renderHook(() => useSourceThumbnails(URL_CAM, 48, 0));
-    await waitFor(() => expect(a.result.current.length).toBeGreaterThan(0));
-    const b = renderHook(() => useSourceThumbnails(URL_CAM, 48, 1));
-    await waitFor(() => expect(b.result.current.length).toBeGreaterThan(0));
+    const a = renderHook(() => useCompanionThumbnails(URL_CAM, 48, 0));
+    await waitFor(() => expect(a.result.current.thumbnails.length).toBeGreaterThan(0));
+    const b = renderHook(() => useCompanionThumbnails(URL_CAM, 48, 1));
+    await waitFor(() => expect(b.result.current.thumbnails.length).toBeGreaterThan(0));
 
     expect(openMock).toHaveBeenCalledTimes(2);
   });

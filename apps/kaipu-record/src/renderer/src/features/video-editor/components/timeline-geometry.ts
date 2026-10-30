@@ -1,4 +1,4 @@
-import type { SourceThumbnail } from "../use-source-thumbnails";
+import type { CoveredRange, SourceThumbnail } from "../use-source-thumbnails";
 
 export function timeToFraction(t: number, duration: number): number {
   if (duration <= 0) return 0;
@@ -55,19 +55,18 @@ export function thumbnailsForRange(
 
 /**
  * {@link thumbnailsForRange} for a file that does not cover the whole source (the webcam
- * starts late or ends early): a tile whose nearest frame is more than `maxGap` seconds away
- * is null — there is no footage there, so it must not borrow the first or last frame.
+ * starts late or ends early): a tile outside `covered` ([start, end), SOURCE time) is null —
+ * there is no footage there, so it must not borrow the first or last frame.
  */
 export function thumbnailsForRangeWithin(
   thumbnails: SourceThumbnail[],
   sourceStart: number,
   sourceEnd: number,
   count: number,
-  maxGap: number,
+  covered: CoveredRange,
 ): (SourceThumbnail | null)[] {
   if (thumbnails.length === 0) return [];
-  return tileTargets(sourceStart, sourceEnd, count).map((t) => {
-    const nearest = nearestThumbnail(thumbnails, t);
-    return Math.abs(nearest.sourceTime - t) <= maxGap ? nearest : null;
-  });
+  return tileTargets(sourceStart, sourceEnd, count).map((t) =>
+    t >= covered.start && t < covered.end ? nearestThumbnail(thumbnails, t) : null,
+  );
 }

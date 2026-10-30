@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { SourceThumbnail } from "../use-source-thumbnails";
 import {
   fractionToTime,
   rulerTicks,
@@ -55,27 +56,23 @@ describe("thumbnailsForRange", () => {
 });
 
 describe("thumbnailsForRangeWithin", () => {
-  // A webcam that only has frames between source 20 s and 50 s, one thumbnail every 10 s.
-  const thumbs = [25, 35, 45].map((sourceTime, i) => ({ sourceTime, url: `c${i}` }));
+  // A long recording (240 s) has one thumbnail every 10 s of source: 5, 15, ... 235.
+  const thumbs = Array.from({ length: 24 }, (_, i) => ({ sourceTime: 5 + i * 10, url: `c${i}` }));
+  const urls = (picked: (SourceThumbnail | null)[]) => picked.map((t) => t?.url ?? null);
 
-  it("leaves a tile empty where the nearest frame is farther than the gap", () => {
-    // Targets 5, 15, 25, ... 95: with a 6 s gap only 25, 35 and 45 have a frame.
-    const picked = thumbnailsForRangeWithin(thumbs, 0, 100, 10, 6);
-    expect(picked.map((t) => t?.url ?? null)).toEqual([
-      null,
-      null,
-      "c0",
-      "c1",
-      "c2",
-      null,
-      null,
-      null,
-      null,
-      null,
-    ]);
+  it("leaves a tile empty before a late start shorter than one thumbnail spacing", () => {
+    // The webcam starts 3 s in: the tile at source 1 s has a frame 4 s away, but no footage.
+    const picked = thumbnailsForRangeWithin(thumbs, 0, 10, 5, { start: 3, end: 240 });
+    expect(urls(picked)).toEqual([null, "c0", "c0", "c0", "c0"]);
+  });
+
+  it("leaves a tile empty after an early end shorter than one thumbnail spacing", () => {
+    // The webcam ends 4 s before the screen: the tile at 239 s must not show the last face.
+    const picked = thumbnailsForRangeWithin(thumbs, 230, 240, 5, { start: 0, end: 236 });
+    expect(urls(picked)).toEqual(["c23", "c23", "c23", null, null]);
   });
 
   it("returns [] when there are no thumbnails", () => {
-    expect(thumbnailsForRangeWithin([], 0, 10, 4, 1)).toEqual([]);
+    expect(thumbnailsForRangeWithin([], 0, 10, 4, { start: 0, end: 10 })).toEqual([]);
   });
 });

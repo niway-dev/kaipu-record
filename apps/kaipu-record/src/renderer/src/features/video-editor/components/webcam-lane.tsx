@@ -14,7 +14,7 @@ import { EyeOff } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { sourceRangeToTimelineBlocks, sourceTimeAtTimeline } from "../source-time";
 import { type LayoutEntry, layoutDuration } from "../timeline";
-import type { SourceThumbnail } from "../use-source-thumbnails";
+import type { CoveredRange, SourceThumbnail } from "../use-source-thumbnails";
 import type { WebcamSegment } from "../webcam/webcam-model";
 import { fractionToTime, thumbnailsForRangeWithin, timeToFraction } from "./timeline-geometry";
 import type { EdgePhase } from "./zoom-lane";
@@ -22,14 +22,16 @@ import styles from "./webcam-lane.module.css";
 
 /** Same density as the clips lane: one tile roughly every 72px of clip width. */
 const THUMBS_PER_BLOCK_PX = 72;
+/** No known range: every tile gets its nearest frame. */
+const ALL_SOURCE: CoveredRange = { start: -Infinity, end: Infinity };
 
 export interface WebcamLaneProps {
   segments: WebcamSegment[];
   layout: LayoutEntry[];
   /** The webcam file's frames at SOURCE time (`useSourceThumbnails` with the offset). */
   thumbnails?: SourceThumbnail[];
-  /** Seconds a tile may be from its nearest frame; past it the webcam has no footage. */
-  thumbnailGap?: number;
+  /** Where the webcam file has footage, in SOURCE time; a tile outside it stays empty. */
+  covered?: CoveredRange | null;
   selectedId: string | null;
   onSelect(id: string): void;
   /** `sourceTime` is null when the pointer is over a slide — ignore that move. */
@@ -40,7 +42,7 @@ export function WebcamLane({
   segments,
   layout,
   thumbnails = [],
-  thumbnailGap = 0,
+  covered = null,
   selectedId,
   onSelect,
   onEdgeDrag,
@@ -109,7 +111,7 @@ export function WebcamLane({
             entry.sourceStart,
             entry.sourceEnd,
             Math.max(1, Math.round((width * laneWidthPx) / THUMBS_PER_BLOCK_PX)),
-            thumbnailGap,
+            covered ?? ALL_SOURCE,
           );
           return (
             <div

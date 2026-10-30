@@ -112,7 +112,7 @@ describe("WebcamLane", () => {
   });
 
   describe("filmstrip", () => {
-    // One thumbnail per second of source; the webcam has no frames after source 15 s.
+    // One thumbnail per second of source; the webcam has no footage after source 15 s.
     const thumbnails = Array.from({ length: 15 }, (_, i) => ({
       sourceTime: i + 0.5,
       url: `cam-${i}`,
@@ -126,7 +126,7 @@ describe("WebcamLane", () => {
           layout={layout}
           segments={[]}
           thumbnails={thumbnails}
-          thumbnailGap={1}
+          covered={{ start: 0, end: 15 }}
           selectedId={null}
           onSelect={vi.fn()}
           onEdgeDrag={vi.fn()}
@@ -153,7 +153,7 @@ describe("WebcamLane", () => {
           layout={toLayout([{ id: "c", kind: "clip", sourceStart: 16, sourceEnd: 20 }])}
           segments={[]}
           thumbnails={thumbnails}
-          thumbnailGap={1}
+          covered={{ start: 0, end: 15 }}
           selectedId={null}
           onSelect={vi.fn()}
           onEdgeDrag={vi.fn()}
@@ -169,7 +169,7 @@ describe("WebcamLane", () => {
           layout={layout}
           segments={[segment({ id: "h", start: 1, end: 2 })]}
           thumbnails={thumbnails}
-          thumbnailGap={1}
+          covered={{ start: 0, end: 15 }}
           selectedId={null}
           onSelect={onSelect}
           onEdgeDrag={vi.fn()}

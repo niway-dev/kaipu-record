@@ -71,6 +71,10 @@ vi.mock("@renderer/features/video-editor/use-source-thumbnails", async (importOr
     thumbnailCalls.push(args);
     return [];
   },
+  useCompanionThumbnails: (...args: unknown[]) => {
+    thumbnailCalls.push(args);
+    return { thumbnails: [], covered: null };
+  },
 }));
 
 // jsdom's Image never fires onload for blob: URLs (no real image decoding) — the
