@@ -17,6 +17,7 @@ import { uuidv7 } from "../library/tag-repository";
 import { defaultVaultDirectory, forgetCachedPreferences } from "../library/vault-location";
 import { StaleWorkspaceError, WorkspaceGate } from "./gate";
 import { WorkspaceRegistry, type WorkspaceEntry } from "./registry";
+import { PrepareRequests } from "./prepare-windows";
 import { switchWorkspace } from "./switch-transaction";
 import { APP_TITLE, composeWindowTitle } from "./window-title";
 import { toWorkspaceView } from "./workspace-view";
@@ -186,36 +187,7 @@ function refreshTitles(): void {
   for (const apply of titleAppliers) apply();
 }
 
-let nextRequestId = 0;
-const pendingPrepares = new Map<number, (ok: boolean) => void>();
-
-/**
- * Ask every window to prepare (flush, ask about unsaved work, close editors) and wait for
- * all of them. A window that does not answer in time cancels the switch.
- */
-function prepareWindows(): Promise<boolean> {
-  const windows = BrowserWindow.getAllWindows().filter(
-    (w) => !w.isDestroyed() && !w.webContents.isCrashed(),
-  );
-  return Promise.all(
-    windows.map(
-      (window) =>
-        new Promise<boolean>((resolve) => {
-          const requestId = ++nextRequestId;
-          const timer = setTimeout(() => {
-            pendingPrepares.delete(requestId);
-            resolve(false);
-          }, PREPARE_TIMEOUT_MS);
-          pendingPrepares.set(requestId, (ok) => {
-            clearTimeout(timer);
-            pendingPrepares.delete(requestId);
-            resolve(ok);
-          });
-          window.webContents.send(IPC_CHANNELS.workspacesPrepare, { requestId });
-        }),
-    ),
-  ).then((answers) => answers.every(Boolean));
-}
+const prepareRequests = new PrepareRequests(IPC_CHANNELS.workspacesPrepare, PREPARE_TIMEOUT_MS);
 
 async function runSwitch(id: string): Promise<WorkspaceSwitchResult> {
   const reg = requireRegistry();
@@ -227,7 +199,7 @@ async function runSwitch(id: string): Promise<WorkspaceSwitchResult> {
       readOnly: () => reg.readOnly,
       availability: (candidate) => reg.availability(candidate),
       busy: () => host?.busy() ?? null,
-      prepareWindows,
+      prepareWindows: () => prepareRequests.prepare(BrowserWindow.getAllWindows()),
       abortWindows: () => sendToAll(IPC_CHANNELS.workspacesPrepareAbort),
       dropPendingCaptures: () => host?.dropPendingCaptures(),
       persistActive: (target) => reg.setActive(target),
@@ -318,7 +290,7 @@ export function registerWorkspaceHandlers(deps: WorkspaceHost): void {
   });
   ipcMain.on(IPC_CHANNELS.workspacesPrepareResult, (_event, result: WorkspacePrepareResult) => {
     if (!result || typeof result.requestId !== "number") return;
-    pendingPrepares.get(result.requestId)?.(result.ok === true);
+    prepareRequests.answer(result.requestId, result.ok === true);
   });
 }
 
