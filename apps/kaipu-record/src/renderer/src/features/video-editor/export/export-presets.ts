@@ -302,9 +302,10 @@ export function defaultYoutubePreset(
 
 /**
  * GitHub's video attachment limits (source above): 10 MB on Free, 100 MB on Pro / Team /
- * Enterprise. The sheet and the Ready card show both, side by side (owner decision
- * 2026-10-13); the banner and the Recording saved card go by the paid limit, since teams are
- * assumed to be on one. None of them blocks an export or lowers the quality to fit — the
+ * Enterprise. The sheet, Prepare's GitHub destination and the Ready card show both, side by
+ * side (owner decision 2026-10-13); the heavy-to-send banner goes by the paid limit, since
+ * teams are assumed to be on one. Prepare's list says "under the 10 MB limit" only when the
+ * copy fits the free one. None of them blocks an export or lowers the quality to fit — the
  * tier IS the floor. (Free-plan sharing of bigger files will go through a Kaipu cloud link.)
  */
 export const GITHUB_FREE_LIMIT_BYTES = 10 * MB;

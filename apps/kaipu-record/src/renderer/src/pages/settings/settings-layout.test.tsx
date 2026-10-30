@@ -158,7 +158,7 @@ describe("Settings layout", () => {
     requestAccessibility.mockRestore();
   });
 
-  it("turns the Recording saved card off from the Export quality section (NIW2-218)", async () => {
+  it("turns the post-recording Where is it going panel off from Export quality (NIW2-578)", async () => {
     const updateSettings = vi
       .spyOn(window.electronAPI, "updateSettings")
       .mockImplementation(async (patch) => ({
@@ -167,7 +167,7 @@ describe("Settings layout", () => {
       }));
     renderAt("/settings/recording-quality");
     const toggle = await screen.findByRole("switch", {
-      name: "Offer a light copy after recording",
+      name: "Ask where a new recording is going",
     });
     await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "true"));
     fireEvent.click(toggle);

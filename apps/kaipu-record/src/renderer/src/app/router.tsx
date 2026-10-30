@@ -5,6 +5,7 @@ import { RouteErrorBoundary, NotFound } from "@renderer/shell/route-error";
 import { RecordPage } from "@renderer/pages/record/record-page";
 import { LibraryPage } from "@renderer/pages/library/library-page";
 import { LibraryDetailPage } from "@renderer/pages/library-detail/library-detail-page";
+import { PreparePage } from "@renderer/pages/prepare/prepare-page";
 import { SettingsLayout } from "@renderer/pages/settings/settings-layout";
 import {
   AppSettingsPage,
@@ -64,6 +65,8 @@ const router = createHashRouter([
           { index: true, element: <RecordPage /> },
           { path: ROUTES.library, element: <LibraryPage /> },
           { path: ROUTES.libraryDetail, element: <LibraryDetailPage /> },
+          // Prepare a copy for a destination (NIW2-578). Reached from a recording, not the sidebar.
+          { path: ROUTES.prepare, element: <PreparePage /> },
           { path: ROUTES.screenshots, element: <ScreenshotsPage /> },
           // Editor workspace: every Edit lands here, addressed by URL.
           { path: ROUTES.editor, element: <EditorHomePage /> },
