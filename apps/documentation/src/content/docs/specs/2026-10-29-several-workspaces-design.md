@@ -74,7 +74,7 @@ when no other workspace exists. Per-workspace settings ship in the same release.
 | 12  | Workspace **color** (a tag-palette key) and optional **initials** live in `.kaipu/workspace.json`. Confirmed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | The tile and the chip need them on every Mac that opens the folder.                                                                                                                                                | 0032 (amended)                 |
 | 13  | **"Move to" surfaces and "Saving to" labels** (the verb is "Move to", never "Send to": the item leaves the source). Library header: name + count. Card and row: a new "⋯" menu with "Move to ▸". Item page: "Workspace: Work" + "Move to…". Editors: a "Work ▾" chip. Export sheet: "Saves to Work". **Record page: "Recording to Work · Switch" replaces the "Ready to record" heading.** Control bar: "● Work". Capture panel and overlay: "Saving to Work". **Capture toast: "Saved to Work", a label only, with no move control (confirmed).** Disabled states are defined (target not connected, write in progress, cloud-only, dragged under 10 s, synced file not downloaded).                       | The cheapest guard against a capture in the wrong workspace is naming the workspace where the capture lands. "Send" suggests a copy.                                                                               | —                              |
 | 14  | **Per-workspace setting overrides**, inherited from an "All workspaces" level (VS Code's user vs workspace model). Five overridable keys: `showBrandBadge`, `uploadMode`, `recordingQuality`, `exportQuality`, `screenshotCopy`. Everything else, and **every shortcut**, is app-wide. All level = `userData/settings.json`, unchanged. Overrides = `<workspace>/.kaipu/settings.json`, validated, unknown keys ignored. `uploadMode` override stays in userData, keyed by workspace. Read at capture start. This **reverses** round 1's "Out of scope: different settings per workspace" and ADR 0032's settings non-goal. **Ships in the first release of workspaces**, with these five keys (confirmed). | The owner wants different capture defaults for work and personal. Inheritance avoids the drift of a one-time copy. Upload consent must not arrive inside someone else's folder.                                    | 0034 (new)                     |
-| 15  | **Synced folders are allowed in the first release of workspaces** (Google Drive, OneDrive, iCloud Drive through macOS File Provider). Detected by path, labelled "Synced by <provider>". Scratch files (staging, drag copies) move to userData for synced workspaces only. A move with a synced side always copies, verifies and deletes. Evicted files show "In the cloud — download to open" and never hang a probe or mark the workspace unreadable. Conflict copies are detected and warned about; no cross-machine locking.                                                                                                                                                                            | Per-workspace provider sync with zero integration code. Staying in the folder would upload partial takes and duplicate dragged items.                                                                              | 0033 (amended), 0032 (amended) |
+| 15  | **Synced folders are allowed in the first release of workspaces** (Google Drive, OneDrive, iCloud Drive through macOS File Provider). Detected by path, labelled "Synced by <provider>". Scratch files (staging, drag copies) move to userData for synced workspaces only, and a synced item's drag copy is a real copy, never a hard link. A move with a synced side always copies, verifies and deletes. Evicted files show "In the cloud — download to open" and never hang a probe or mark the workspace unreadable. Conflict copies are detected and warned about; no cross-machine locking.                                                                                                           | Per-workspace provider sync with zero integration code. Staying in the folder would upload partial takes and duplicate dragged items.                                                                              | 0033 (amended), 0032 (amended) |
 | 16  | **Not in the first release of workspaces**: a Kaipu Cloud account per workspace, and any direct Google Drive or OneDrive API integration.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | See Out of scope.                                                                                                                                                                                                  | —                              |
 | 17  | **Migration is additive, idempotent, crash-safe and downgrade-safe.** It adds the registry to `preferences.json` and writes `.kaipu/workspace.json`, and nothing else. `vaultDirectory` keeps mirroring the active path on every switch. Server column nullable. No flag. The feature is visible from the first launch (decision 19).                                                                                                                                                                                                                                                                                                                                                                       | Kaipu has paying customers. An upgrade must not change anything they see or risk anything they have, and a downgrade must still open a library.                                                                    | 0032 (amended)                 |
 | 18  | The Library keeps **every existing filter** per workspace: search, sort (Newest, Oldest, Largest), grid/list, kind chips with counts, storage chips with counts, tag chips with counts, the tag drawer and the "filtered by" summary line.                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | A workspace is a smaller Library, not a different one.                                                                                                                                                             | —                              |
@@ -413,6 +413,13 @@ Out of scope for the first release of workspaces; a later release may revisit th
       a one-time note.
 - [ ] Recording into a synced workspace writes no `.part` file inside the workspace folder, and
       dragging an item out writes no file inside it.
+- [ ] Dragging an item of a synced workspace out leaves the media file's link count at 1
+      (`stat -f %l`): the drag copy is a real copy, and the item keeps its name and sync state
+      in the provider.
+- [ ] Evicted-file detection reads `SF_DATALESS` (`/usr/bin/stat -f %f`), and a sparse local
+      file with zero blocks is not reported as evicted.
+- [ ] The availability check of a synced workspace never lists the provider root and returns
+      within its timeout when the provider does not answer.
 - [ ] A move whose source or target is synced copies, verifies sha256 at the final path and
       then deletes, even when both paths report the same `stat.dev`.
 - [ ] An evicted media file lists as "In the cloud — download to open", with no thumbnail
@@ -934,7 +941,14 @@ Opening an online-only file downloads it, and some apps fail on files not yet do
 `~/Library/CloudStorage/GoogleDrive-…` is "Synced by Google Drive", under
 `~/Library/CloudStorage/OneDrive-…` "Synced by OneDrive", under
 `~/Library/Mobile Documents/com~apple~CloudDocs` "Synced by iCloud Drive", and anything else
-under `~/Library/CloudStorage/` "Synced by a cloud provider". The Settings → Workspaces row
+under `~/Library/CloudStorage/` "Synced by a cloud provider". Google Drive's real root is
+`~/Library/CloudStorage/GoogleDrive-<email>/My Drive/` (shared drives sit beside it under the
+same `GoogleDrive-` prefix). `stat.dev` cannot detect a provider: in the spike it was identical
+for the Drive folder, `~/Movies`, `/tmp` and userData. The path rule is complemented by an
+xattr check on `workspace.json`: Google Drive tags its files with `com.google.drivefs.item-id#S`
+(no `com.apple.fileprovider.*` xattr exists on this Drive version). That also catches a folder
+the path rule misses, such as `~/Documents` with iCloud "Desktop & Documents" on (unverified, see
+below). The Settings → Workspaces row
 shows the label. Adding such a folder shows a one-time note: Kaipu keeps its working files
 outside the folder, items the provider has offloaded show as "In the cloud", and opening the
 same folder on two Macs at once can create conflict copies. The kind is stored on the entry
@@ -946,6 +960,20 @@ go to `userData/workspace-scratch/<workspaceId>/tmp/`, and drag copies to
 deletes, `drag-copies.ts:23-26`). Local and external-drive workspaces keep `.kaipu/tmp/` and
 `.kaipu/drag/`.
 
+**Drag copies of a synced item are real copies, never hard links.** The spike showed `link()`
+works everywhere on the internal drive (no `EXDEV` in any direction), so today's copy fallback
+would never run, and a hard link is harmful in both places:
+
+- inside the synced folder, Drive treats every name of the inode as one item and renames and
+  moves the real cloud item to the drag copy's name (`Fancy Title.bin` under `.kaipu/drag/…`)
+  until the link is removed; a crash before cleanup leaves the cloud item under that name;
+- from the synced folder to userData, the item loses its File Provider identity and stays
+  "not uploaded" (more than five minutes, even after the link is deleted) until its content is
+  written again.
+
+So `createDragCopy` uses `copyFile` for a synced workspace. An evicted item cannot be dragged
+(below), so the copy never forces a download.
+
 Why not for every workspace, which would be one rule: for an external drive, staging in
 userData would turn every finalize into a multi-GB copy across volumes and put the take on the
 internal disk, which is often the one without room. A synced folder is always on the internal
@@ -956,10 +984,18 @@ and quit sweeps (stranded takes, drag copies) also scan each synced workspace's 
 deletes (ADR 0033, decisions 4 and 13). This holds even when `stat.dev` matches, which it always
 does on the internal drive.
 
-**Evicted files.** Main checks before reading. A media file is treated as evicted when
-`stat.blocks === 0 && stat.size > 0`. That is a heuristic, because Node's `fs.Stats` does not
-expose the `SF_DATALESS` flag (unverified: whether every provider's placeholder reports zero
-blocks). An evicted media file:
+**Evicted files.** Main checks before reading. Node's `fs.Stats` does not expose `st_flags`,
+so main reads them with one `/usr/bin/stat -f '%f %N'` call per listing batch and treats a file
+as evicted when `flags & 0x40000000` (`SF_DATALESS`) is set. Verified on Google Drive: an evicted
+file keeps its size, has `blocks=0` and flags `0x40000060`, and `ls -lO` shows
+`compressed,dataless`. `stat.blocks === 0 && size > 0` is only a fallback when the `stat` call
+fails: the spike found a false positive (a sparse file has zero blocks and no flag).
+
+What downloads an evicted file, measured online on Google Drive: any `read` (100 bytes download
+the whole file), `link()` and `copyFile()`. What does not: `stat`, `lstat`, `access`, `open`
+without a read, `readdir`, and reading xattrs. Materializing took about 1 s for files up to
+20 KB and 5 s for 20 MB, so read timeouts are seconds, not milliseconds. An evicted media
+file:
 
 - lists from its sidecar (title, duration and size come from the sidecar and `stat`);
 - shows "In the cloud — download to open" in the Library and on the item page;
@@ -989,19 +1025,31 @@ tags (1).json". Kaipu neither merges nor deletes them. Media conflict copies in 
 (`<id> (1).mp4`) list as separate items with their own identity. There is no cross-machine
 locking in the first release.
 
-**Unverified, to check in a spike before implementation:**
+**Spike results (2026-10-30, Google Drive for desktop, DriveFS 133, macOS 26.6).** Run on the
+owner's Mac in a scratch folder inside `My Drive`, deleted afterwards.
 
-- whether `link()` from userData into, or inside, a File Provider folder fails, and with what
-  error (the copy fallback covers both cases, but an evicted file's copy downloads it);
-- whether a `rename()` from userData into a File Provider folder is atomic and keeps the
-  provider's sync state (the design does not rely on it: it verifies at the final path);
-- how reading an evicted file behaves offline: an error, a hang, or a wait (the timeout covers
-  all three);
-- whether the zero-blocks heuristic holds for Google Drive, OneDrive and iCloud Drive
-  placeholders;
-- whether iCloud's "Desktop & Documents" sync puts `~/Documents` under the iCloud path after
-  `realpath`. If it does not, a workspace in `~/Documents` is synced but not detected;
-- each provider's conflict-copy naming.
+| Question                                                             | Result                                                             | Consequence                                                                         |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `link()` inside, into or out of the Drive folder                     | Works, no `EXDEV`                                                  | Drag copies of synced items use `copyFile` (above)                                  |
+| A hard link to a Drive file                                          | Renames the cloud item (inside) or leaves it unsynced (outside)    | Never hard-link a synced item                                                       |
+| `rename()` from `~/Movies` or `/tmp` into Drive                      | Works, atomic, the file uploads                                    | Moves still verify sha256 at the final path                                         |
+| `atomicWriteFile` (temp + rename) 20 times                           | No errors, no leftover `.tmp`, no conflict copies; `.kaipu/` syncs | The current write pattern is safe on Drive                                          |
+| Evicted-file detection                                               | `SF_DATALESS` reliable; zero blocks has a false positive           | Use the flag, blocks only as fallback                                               |
+| What downloads an evicted file                                       | `read`, `link`, `copyFile`; not `stat`, `open`, `readdir`, xattrs  | Probe with `stat` only; disable drag, share and move on evicted items               |
+| Two writers on one Mac                                               | No conflict copies                                                 | Two Macs remain unverified                                                          |
+| Listing the provider's root (`~/Library/CloudStorage/GoogleDrive-…`) | `ls` and `xattr` hung for more than 3 minutes; `stat` answered     | The availability check uses `stat` with a timeout and never lists the provider root |
+
+**Still unverified:**
+
+- reading an evicted file **offline**: an error, a hang or a wait. The owner checks it by hand
+  before implementation: evict a file in a test workspace (Finder → Remove Download), turn off
+  Wi-Fi, open it in Kaipu and run `time cat <file>` in a terminal, note the result, reconnect;
+- OneDrive and iCloud Drive placeholders (flags, blocks, xattrs, conflict-copy naming): neither
+  is installed on the test Mac;
+- whether iCloud "Desktop & Documents" keeps `~/Documents` at the same path. Apple says the
+  contents are stored in iCloud Drive (https://support.apple.com/en-us/ht206985) but not where
+  the path resolves, so the xattr check above is the safety net;
+- conflict copies when the same folder is open on two Macs.
 
 ### IPC changes
 
