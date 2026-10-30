@@ -125,6 +125,17 @@ describe("LibraryVault — sidecar read errors never mint an identity", () => {
     expect((await metaFiles()).filter((f) => f.includes(".corrupt-"))).toHaveLength(1);
   });
 
+  it("keeps a new copy when a repaired sidecar is corrupted again in the same session", async () => {
+    await seed("again", "{not json");
+    const vault = new LibraryVault(directory);
+    await vault.describe("again");
+    await writeFile(sidecarFile("again"), original);
+    expect(await vault.describe("again")).not.toHaveProperty("metadataIssue");
+    await writeFile(sidecarFile("again"), "[]");
+    await vault.describe("again");
+    expect((await metaFiles()).filter((f) => f.includes(".corrupt-"))).toHaveLength(2);
+  });
+
   it("does not delete the media on removeLocalCopy when the sidecar cannot be read", async () => {
     await seed("clip", original);
     const vault = new LibraryVault(directory, failingWith("EIO"));

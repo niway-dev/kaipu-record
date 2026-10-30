@@ -69,7 +69,8 @@ export interface Sidecar {
 const readOnlyIdentityMemo = new Map<string, string>();
 
 // Sidecars already copied aside this session (`quarantine`), by absolute path, so a list
-// that re-reads a corrupt sidecar every few seconds keeps one copy, not hundreds.
+// that re-reads a corrupt sidecar every few seconds keeps one copy, not hundreds. A clean
+// read clears the path, so a sidecar that is repaired and later corrupted again gets a new copy.
 const quarantinedSidecars = new Set<string>();
 
 /**
@@ -280,6 +281,7 @@ export class LibraryVault {
       await this.quarantine(path);
       throw new SidecarUnavailableError("corrupt", path);
     }
+    quarantinedSidecars.delete(path);
     return parsed as Sidecar;
   }
 

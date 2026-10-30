@@ -53,4 +53,14 @@ describe("isCloudUploadEligible (NIW2-217)", () => {
     expect(isCloudUploadEligible({ kind: "recording" })).toBe(true);
     expect(isCloudUploadEligible({ kind: "screenshot" })).toBe(true);
   });
+
+  it("refuses an item whose sidecar cannot be read (NIW2-568)", () => {
+    expect(isCloudUploadEligible({ kind: "recording", local: { metadataIssue: "corrupt" } })).toBe(
+      false,
+    );
+    expect(
+      isCloudUploadEligible({ kind: "screenshot", local: { metadataIssue: "unreadable" } }),
+    ).toBe(false);
+    expect(isCloudUploadEligible({ kind: "recording", local: {} })).toBe(true);
+  });
 });
