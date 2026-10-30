@@ -531,7 +531,7 @@
   color: #f3f3f5;
 }
 
-/* The vertical widget attached to the box: modes, inputs, cancel. */
+/* The vertical widget attached to the box: modes, inputs, cancel, start. */
 .recordWidget {
   position: absolute;
   display: flex;
@@ -653,34 +653,33 @@
   background: rgba(255, 255, 255, 0.12);
 }
 
-/* "● Start recording ↵", centred under the selection. */
-.startPill {
-  position: absolute;
+/* Start recording (Enter), the widget's last button: the one solid pink action. */
+.widgetStart {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 36px;
-  padding: 0 15px;
-  font-family: inherit;
-  font-size: 13.5px;
-  font-weight: var(--font-weight-semibold);
-  color: #fff;
-  white-space: nowrap;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
   background: var(--overlay-accent);
   border: 0;
-  border-radius: 9px;
-  box-shadow: 0 12px 28px -12px rgba(246, 5, 92, 0.95);
-  transform: translateX(-50%);
+  border-radius: 8px;
+  box-shadow: 0 10px 22px -10px rgba(246, 5, 92, 0.95);
   cursor: pointer;
 }
 
-.startPill:hover:not(:disabled) {
+.widgetStart:hover:not(:disabled) {
   background: #ff3d82;
 }
 
-.startPill:disabled {
+.widgetStart:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.widgetStart .widgetDigit {
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .startDot {
