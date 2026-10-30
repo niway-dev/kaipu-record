@@ -932,58 +932,112 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     expect(vaultActivity.active()).toEqual([]);
   });
 
-  it("a renderer reload aborts its takes and releases the vault, even with a create pending", async () => {
+  it("a renderer reload keeps its take's partial, resets the recorder state and frees the vault", async () => {
     const { EventEmitter } = await import("node:events");
     const { registerSettings } = await import("../infrastructure/settings-store");
     const { registerRecordingHub } = await import("./recording-hub");
     const { RecordingWriter } = await import("./recording-writer");
     const { vaultActivity } = await import("../library/vault-activity");
     registerSettings();
-    registerRecordingHub(() => fakeMainWindow() as never);
+    const mainWindow = fakeMainWindow();
+    registerRecordingHub(() => mainWindow as never);
     const create = mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!;
+    const write = mockState.ipcOn.get(IPC_CHANNELS.recordingWrite)!;
+    const start = mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!;
+    const getState = mockState.ipcHandle.get(IPC_CHANNELS.recordingGetState)!;
     const abort = vi.spyOn(RecordingWriter.prototype, "abort");
     const renderer = Object.assign(new EventEmitter(), { id: 41 });
     const event = { sender: renderer };
-    const reload = (): void => {
-      renderer.emit("did-start-navigation", { isMainFrame: true, isSameDocument: false });
-    };
     try {
       // An in-page route change is not a reload: the take keeps its lease.
-      await create(event, "take-1");
+      const { tempPath } = (await create(event, "take-1")) as { tempPath: string };
+      write(event, "take-1", new TextEncoder().encode("only copy").buffer, 0);
+      start(event, { sourceId: "screen:1:0", sourceName: "Screen 1" });
       renderer.emit("did-start-navigation", { isMainFrame: true, isSameDocument: true });
       renderer.emit("did-start-navigation", { isMainFrame: false, isSameDocument: false });
       expect(vaultActivity.active()).toEqual(["recording"]);
+      expect(getState({})).toMatchObject({ active: true });
 
-      // A plain reload (no crash, no close): nobody will finalize or abort this take.
-      reload();
+      // A plain reload (no crash, no close) is not a discard: the bytes stay for the sweep.
+      renderer.emit("did-start-navigation", { isMainFrame: true, isSameDocument: false });
       await vi.waitFor(() => expect(vaultActivity.active()).toEqual([]));
-      expect(abort).toHaveBeenCalledWith("take-1");
-
-      // A reload while `writer.create()` is still opening the file.
-      let open!: () => void;
-      const realCreate = RecordingWriter.prototype.create;
-      const pending = vi
-        .spyOn(RecordingWriter.prototype, "create")
-        .mockImplementationOnce(async function (this: InstanceType<typeof RecordingWriter>, id) {
-          await new Promise<void>((resolve) => (open = resolve));
-          return realCreate.call(this, id);
-        });
-      const created = Promise.resolve(create(event, "export-2")).catch((error: unknown) => error);
-      await vi.waitFor(() => expect(open).toBeTypeOf("function"));
-      reload();
-      open();
-      expect(await created).toBeInstanceOf(Error);
-      await vi.waitFor(() => expect(vaultActivity.active()).toEqual([]));
-      expect(abort).toHaveBeenCalledWith("export-2");
-      pending.mockRestore();
+      expect(abort).not.toHaveBeenCalled();
+      expect(await readFile(tempPath, "utf-8")).toBe("only copy");
+      // The recorder that owned the bar is gone: the app is back as after a stop.
+      expect(getState({})).toMatchObject({ active: false });
+      expect(mockState.bar.hide).toHaveBeenCalled();
+      expect(mainWindow.show).toHaveBeenCalled();
 
       // The reloaded page records again; its take holds the vault as usual.
-      await create(event, "take-1");
+      await create(event, "take-2");
       expect(vaultActivity.active()).toEqual(["recording"]);
       renderer.emit("destroyed");
       await vi.waitFor(() => expect(vaultActivity.active()).toEqual([]));
     } finally {
       abort.mockRestore();
+    }
+  });
+
+  it("a take whose create is still opening its file holds the vault until that create settles", async () => {
+    const { EventEmitter } = await import("node:events");
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    const { RecordingWriter } = await import("./recording-writer");
+    const { vaultActivity, VaultBusyError } = await import("../library/vault-activity");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+    const create = mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!;
+    const abortIpc = mockState.ipcHandle.get(IPC_CHANNELS.recordingAbort)!;
+    const release = vi.spyOn(RecordingWriter.prototype, "release");
+    const abort = vi.spyOn(RecordingWriter.prototype, "abort");
+    const renderer = Object.assign(new EventEmitter(), { id: 42 });
+    const event = { sender: renderer };
+    const realCreate = RecordingWriter.prototype.create;
+    const holdCreate = () => {
+      const gate: { open?: () => void } = {};
+      vi.spyOn(RecordingWriter.prototype, "create").mockImplementationOnce(
+        async function (this: InstanceType<typeof RecordingWriter>, id) {
+          await new Promise<void>((resolve) => (gate.open = resolve));
+          return realCreate.call(this, id);
+        },
+      );
+      return gate;
+    };
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+    try {
+      // The page goes (several times: navigation, crash, destroy) while the file is opening.
+      const gate = holdCreate();
+      const created = Promise.resolve(create(event, "export-1")).catch((error: unknown) => error);
+      await vi.waitFor(() => expect(gate.open).toBeTypeOf("function"));
+      renderer.emit("did-start-navigation", { isMainFrame: true, isSameDocument: false });
+      renderer.emit("render-process-gone");
+      await settle();
+      // Nothing is open yet, but the create is: Fix all must still be refused.
+      expect(vaultActivity.active()).toEqual(["recording"]);
+      await expect(vaultActivity.enterMaintenance()).rejects.toBeInstanceOf(VaultBusyError);
+      gate.open!();
+      expect(await created).toBeInstanceOf(Error);
+      await vi.waitFor(() => expect(vaultActivity.active()).toEqual([]));
+      // Ended once, by release (kept), never deleted.
+      expect(release.mock.calls.filter(([id]) => id === "export-1")).toHaveLength(1);
+      expect(abort).not.toHaveBeenCalled();
+
+      // The user cancels while the file is opening: the abort waits for the create.
+      const gate2 = holdCreate();
+      const created2 = Promise.resolve(create(event, "export-2")).catch((error: unknown) => error);
+      await vi.waitFor(() => expect(gate2.open).toBeTypeOf("function"));
+      const aborted = Promise.resolve(abortIpc(event, "export-2"));
+      await settle();
+      expect(vaultActivity.active()).toEqual(["recording"]);
+      gate2.open!();
+      await aborted;
+      await created2;
+      expect(vaultActivity.active()).toEqual([]);
+      expect(abort).toHaveBeenCalledWith("export-2");
+    } finally {
+      release.mockRestore();
+      abort.mockRestore();
+      vi.restoreAllMocks();
     }
   });
 

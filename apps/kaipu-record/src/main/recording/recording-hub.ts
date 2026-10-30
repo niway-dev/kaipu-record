@@ -371,18 +371,23 @@ export function registerRecordingHub(
   //
   // A take (a recording, or an export's output) belongs to the page that created it. A page
   // that goes away without ending it (a plain reload, a dead renderer, a destroyed window)
-  // never will: its takes are aborted and their leases released, or the vault would stay
-  // busy until a restart. `pageGenerations` counts each renderer's pages, so a create still
-  // opening its file when the page left is aborted as soon as it resolves.
+  // never will: its takes are released (handle closed, `.part` kept for the stranded-take
+  // sweep, as a forced reset does) and their leases freed, or the vault would stay busy until
+  // a restart. A reload is not a discard; only the user's abort deletes the partial.
+  //
+  // One lifecycle per take: however many events end it (an abort, a navigation, a crash, a
+  // destroy), it ends once, and its lease is freed only after its create has settled and the
+  // writer is done with it. A create still opening its file therefore keeps the vault busy.
   interface Take {
     lease: ActivityLease;
     /** The creating renderer's webContents id, when the create came with a sender. */
     owner: number | null;
+    /** Settles (never rejects) once `writer.create()` has. */
+    created: Promise<void>;
+    /** Set by the first end: the writer cleanup, then the lease release. */
+    ending?: Promise<void>;
   }
   const recordingLeases = new Map<string, Take>();
-  const pageGenerations = new Map<number, number>();
-  const pageOf = (owner: number | null): number =>
-    owner === null ? 0 : (pageGenerations.get(owner) ?? 0);
   /** Releases `sessionId`'s lease; with `take`, only while that take still holds the id. */
   const releaseRecording = (sessionId: string, take?: Take): void => {
     const current = recordingLeases.get(sessionId);
@@ -393,50 +398,72 @@ export function registerRecordingHub(
     current?.lease.release();
     recordingLeases.delete(sessionId);
   };
-  /** The page is gone with a take open: end it as an abort would, then free the vault. */
+  /** Ends `take` once: waits for its create, runs `cleanup`, then frees the vault. */
+  const endTake = (
+    sessionId: string,
+    take: Take,
+    cleanup: (sessionId: string) => Promise<void>,
+  ): Promise<void> => {
+    take.ending ??= take.created
+      .then(() => cleanup(sessionId))
+      .finally(() => releaseRecording(sessionId, take));
+    return take.ending;
+  };
+  // The renderer whose `recordingStart` made the recording active: if its page goes, nobody
+  // will send the stop, so the bar and the hidden main window are restored here.
+  let activityOwner: number | null = null;
+  /** The page is gone with a take open: forget it as a forced reset would, then free the vault. */
   const abandonTake = (sessionId: string, take: Take): void => {
+    if (take.ending) return;
     markEnded(sessionId);
     cursorTracks.discard(sessionId);
     clickSessions.delete(sessionId);
     stopHookIfIdle();
-    void writer
-      .abort(sessionId)
-      .catch((error) => console.error("aborting an abandoned take failed", error))
-      .finally(() => releaseRecording(sessionId, take));
+    void endTake(sessionId, take, (id) => writer.release(id)).catch((error) =>
+      console.error("releasing an abandoned take failed", error),
+    );
   };
   const watchedPages = new Set<number>();
   const watchPage = (contents: RendererContents): void => {
     if (watchedPages.has(contents.id)) return;
     watchedPages.add(contents.id);
     onPageGone(contents, () => {
-      pageGenerations.set(contents.id, pageOf(contents.id) + 1);
-      for (const [sessionId, take] of [...recordingLeases]) {
+      for (const [sessionId, take] of recordingLeases) {
         if (take.owner === contents.id) abandonTake(sessionId, take);
       }
+      if (activity.active && activityOwner === contents.id) applyStopWindowState();
     });
   };
   ipcMain.handle(IPC_CHANNELS.recordingCreate, async (e, sessionId: string) => {
-    releaseRecording(sessionId);
+    // A take still ending under this id frees its own lease when its cleanup is done.
+    if (!recordingLeases.get(sessionId)?.ending) releaseRecording(sessionId);
     const sender = (e as { sender?: RendererContents } | undefined)?.sender;
     const owner = sender && typeof sender.on === "function" ? sender.id : null;
     if (sender && owner !== null) watchPage(sender);
-    const page = pageOf(owner);
-    const take: Take = { lease: vaultActivity.admit("recording"), owner };
+    const lease = vaultActivity.admit("recording");
+    const creating = writer.create(sessionId);
+    const take: Take = {
+      lease,
+      owner,
+      created: creating.then(
+        () => undefined,
+        () => undefined,
+      ),
+    };
     recordingLeases.set(sessionId, take);
     stoppedForWriteFailure = false;
     endedSessions.delete(sessionId);
     let created: Awaited<ReturnType<RecordingWriter["create"]>>;
     try {
-      created = await writer.create(sessionId);
+      created = await creating;
     } catch (error) {
       releaseRecording(sessionId, take);
       throw error;
     }
-    if (pageOf(owner) !== page) {
-      // The page left while the file was opening: nobody will write, finalize or abort it.
-      await writer.abort(sessionId).catch(() => {});
-      releaseRecording(sessionId, take);
-      throw new Error(`recording:create "${sessionId}": the page that asked for it is gone`);
+    if (take.ending) {
+      // Ended while the file was opening (its page left, or an abort): that end owns the file.
+      await take.ending.catch(() => {});
+      throw new Error(`recording:create "${sessionId}": the take ended before its file opened`);
     }
     return created;
   });
@@ -521,7 +548,11 @@ export function registerRecordingHub(
     cursorTracks.discard(sessionId);
     clickSessions.delete(sessionId);
     stopHookIfIdle();
-    return writer.abort(sessionId).finally(() => releaseRecording(sessionId));
+    // The user discarded it: the only end that deletes the partial. A take still being
+    // created is aborted once its file exists, and keeps the vault busy until then.
+    const take = recordingLeases.get(sessionId);
+    if (take) return endTake(sessionId, take, (id) => writer.abort(id));
+    return writer.abort(sessionId);
   });
   ipcMain.handle(
     IPC_CHANNELS.cursorTrackStart,
@@ -719,8 +750,10 @@ export function registerRecordingHub(
   // Bumped by every start: a display lookup still running for a take that was cancelled must
   // not show the bar or change the shade of the take that started after it.
   let takeCount = 0;
-  ipcMain.on(IPC_CHANNELS.recordingStart, (_e, info: RecordingStartInfo) => {
+  ipcMain.on(IPC_CHANNELS.recordingStart, (e, info: RecordingStartInfo) => {
     activity = startedActivity();
+    const senderId = (e as { sender?: { id?: unknown } } | undefined)?.sender?.id;
+    activityOwner = typeof senderId === "number" ? senderId : null;
     const take = ++takeCount;
     // Before any tick of this take (same IPC order) and before the bar can show: the hidden
     // bar may still hold the previous take's "Saving…".
@@ -979,11 +1012,14 @@ export function registerRecordingHub(
       // Its takes will never be finalized or aborted: release their file handles. The partial
       // files stay on disk, and a cursor track still resolving for one of them must not start.
       for (const id of writer.ids()) markEnded(id);
-      const leased = [...recordingLeases];
-      void writer
-        .releaseAll()
-        .catch((error) => console.error("releasing takes failed", error))
-        .finally(() => leased.forEach(([sessionId, take]) => releaseRecording(sessionId, take)));
+      for (const [sessionId] of recordingLeases) markEnded(sessionId);
+      // A take still being created is released once its file exists, holding the vault until then.
+      for (const [sessionId, take] of recordingLeases) {
+        void endTake(sessionId, take, (id) => writer.release(id)).catch((error) =>
+          console.error("releasing a take failed", error),
+        );
+      }
+      void writer.releaseAll().catch((error) => console.error("releasing takes failed", error));
       cursorTracks.discardAll();
       clickSessions.clear();
       clickHook.stop();
