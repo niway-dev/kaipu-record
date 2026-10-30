@@ -120,6 +120,8 @@ describe("presets (NIW2-218 export redesign)", () => {
     ].map((label) => text.indexOf(label));
     expect(order.every((index) => index >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
+    // One YouTube row: its 1440p / 4K choice lives inside it, not in the list.
+    expect(within(list).getAllByRole("radio", { name: /^YouTube/ })).toHaveLength(1);
     expect(within(list).getAllByRole("radio")).toHaveLength(6);
   });
 
@@ -129,7 +131,7 @@ describe("presets (NIW2-218 export redesign)", () => {
     expect(row(/^Balanced/).textContent).toContain("Recommended");
     expect(row(/^Balanced/).textContent).toContain("Good for almost anything");
     expect(sizeOf(/^Balanced/)).toContain("1662×1080");
-    expect(sizeOf(/^YouTube/)).toContain("1920×1080");
+    expect(sizeOf(/^YouTube/)).toContain("2560×1440");
     expect(sizeOf(/^Reels/)).toContain("1080×1920");
     expect(sizeOf(/^Feeds/)).toContain("1080×1080");
     expect(row(/^Light/).textContent).toContain("GitHub · Jira · Linear · Slack");
@@ -141,8 +143,8 @@ describe("presets (NIW2-218 export redesign)", () => {
     renderSheet({ timelineDuration: 60 });
     // 6 MB/min of q30 video + 128 kbps × 60 s / 8 ≈ 7 MB, plus the moov reservation.
     expect(sizeOf(/^Balanced/)).toMatch(/^~7\.2 MB/);
-    // (8 Mbps + 128 kbps) × 60 s / 8 ≈ 61 MB.
-    expect(sizeOf(/^YouTube/)).toMatch(/^up to ~61 MB/);
+    // The 1440p YouTube target (a bigger upload than the old 1080p one) × 60 s ≈ 123 MB.
+    expect(sizeOf(/^YouTube/)).toMatch(/^up to ~123 MB/);
     // 4.7 MB/min of q33 video + the same audio ≈ 5.7 MB, plus the moov reservation.
     expect(sizeOf(/^Light/)).toMatch(/^~5\.9 MB/);
     expect(sizeOf(/^Light/)).toContain("1920×1080");
@@ -157,7 +159,7 @@ describe("presets (NIW2-218 export redesign)", () => {
     fireEvent.click(row(/^Light/));
     expect(screen.getByText(/95% lighter/)).toBeInTheDocument();
     fireEvent.click(row(/^YouTube/));
-    expect(screen.getByText("Up to ~61 MB")).toBeInTheDocument();
+    expect(screen.getByText("Up to ~123 MB")).toBeInTheDocument();
     fireEvent.click(row(/^Maximum quality/));
     expect(screen.queryByText(/lighter/)).toBeNull();
   });
@@ -177,7 +179,10 @@ describe("presets (NIW2-218 export redesign)", () => {
     fireEvent.keyDown(row(/^YouTube/), { key: "Enter" });
     expect(props.onExportVideo).toHaveBeenCalledOnce();
     fireEvent.keyDown(screen.getByRole("alertdialog"), { key: "Enter" });
-    expect(props.onExportVideo).toHaveBeenLastCalledWith({ presetId: "youtube", framing: null });
+    expect(props.onExportVideo).toHaveBeenLastCalledWith({
+      presetId: "youtube-1440",
+      framing: null,
+    });
   });
 
   it("preselects the Settings default (Maximum) and exports it", () => {
@@ -203,8 +208,70 @@ describe("presets (NIW2-218 export redesign)", () => {
     expect(screen.getByText("Black bars if the screen isn't 16:9")).toBeInTheDocument();
   });
 
+  describe("YouTube resolution", () => {
+    const is4kSource = { width: 3024, height: 1964, fps: 30, hasAudio: true };
+    const resolution = (name: string) => screen.getByRole("radio", { name });
+
+    it("defaults to 1440p for a 1080p-class recording and shows it on the collapsed row", () => {
+      renderSheet({ presetSource: { width: 1916, height: 1048, fps: 30, hasAudio: true } });
+      expect(row(/^YouTube/).textContent).toContain("16:9 · 1440p");
+      expect(sizeOf(/^YouTube/)).toContain("2560×1440");
+      fireEvent.click(row(/^YouTube/));
+      expect(resolution("1440p")).toHaveAttribute("aria-checked", "true");
+      expect(resolution("4K")).toHaveAttribute("aria-checked", "false");
+    });
+
+    it("defaults to 4K when 1440p would shrink the recording", () => {
+      renderSheet({ presetSource: is4kSource });
+      expect(row(/^YouTube/).textContent).toContain("16:9 · 4K");
+      expect(sizeOf(/^YouTube/)).toContain("3840×2160");
+      fireEvent.click(row(/^YouTube/));
+      expect(resolution("4K")).toHaveAttribute("aria-checked", "true");
+    });
+
+    it("exports the chosen resolution and keeps it when the row is reselected", () => {
+      const props = renderSheet();
+      fireEvent.click(row(/^YouTube/));
+      fireEvent.click(resolution("4K"));
+      expect(row(/^YouTube/).textContent).toContain("16:9 · 4K");
+      expect(sizeOf(/^YouTube/)).toContain("3840×2160");
+      fireEvent.click(exportButton());
+      expect(props.onExportVideo).toHaveBeenLastCalledWith({
+        presetId: "youtube-4k",
+        framing: null,
+      });
+
+      fireEvent.click(row(/^Light/));
+      fireEvent.click(row(/^YouTube/));
+      expect(resolution("4K")).toHaveAttribute("aria-checked", "true");
+      fireEvent.click(exportButton());
+      expect(props.onExportVideo).toHaveBeenLastCalledWith({
+        presetId: "youtube-4k",
+        framing: null,
+      });
+    });
+
+    it("never shows the heavy styling or chip, even when it is bigger than the original", () => {
+      renderSheet({ timelineDuration: 60, sourceSizeBytes: 1_000_000 });
+      fireEvent.click(row(/^YouTube/));
+      fireEvent.click(resolution("4K"));
+      const mb = document.getElementById(
+        row(/^YouTube/).getAttribute("aria-describedby")!,
+      )!.firstElementChild!;
+      expect(mb).toHaveAttribute("data-heavy", "false");
+      expect(screen.queryByText(/Full-size file/i)).toBeNull();
+      expect(document.querySelector('[data-warn="true"]')).toBeNull();
+    });
+
+    it("keeps the black-bars chip for a source that isn't 16:9", () => {
+      renderSheet({ presetSource: { width: 1662, height: 1080, fps: 30, hasAudio: true } });
+      fireEvent.click(row(/^YouTube/));
+      expect(screen.getByText("Black bars if the screen isn't 16:9")).toBeInTheDocument();
+    });
+  });
+
   it("says nothing about bars when the recording already is 16:9", () => {
-    renderSheet({ defaultPreset: "youtube" });
+    renderSheet({ defaultPreset: "youtube-1440" });
     expect(screen.queryByText("Black bars if the screen isn't 16:9")).toBeNull();
   });
 
@@ -260,7 +327,7 @@ describe("presets (NIW2-218 export redesign)", () => {
   });
 
   it("no GitHub chips on the POST or KEEP rows", () => {
-    renderSheet({ defaultPreset: "youtube" });
+    renderSheet({ defaultPreset: "youtube-1440" });
     expect(screen.queryByText(/GitHub Free/)).toBeNull();
   });
 
@@ -307,12 +374,12 @@ describe("already exported → reuse (NIW2-218)", () => {
     derivedFromAssetId: "source",
     editSavedAt: null,
     editExportedSavedAt: null,
-    export: { preset: "youtube" as const, fingerprint: "whole" },
+    export: { preset: "youtube-1440" as const, fingerprint: "whole" },
   };
 
   it("badges the row and opens the existing file instead of encoding", () => {
     const onOpenExisting = vi.fn();
-    const props = renderSheet({ reusable: { youtube: existing }, onOpenExisting });
+    const props = renderSheet({ reusable: { "youtube-1440": existing }, onOpenExisting });
     const badge = screen.getByRole("button", { name: "Open the existing YouTube file" });
     expect(badge.textContent).toBe("Already exported · Open");
 
@@ -333,13 +400,13 @@ describe("already exported → reuse (NIW2-218)", () => {
   });
 
   it("other rows still export", () => {
-    const props = renderSheet({ reusable: { youtube: existing }, onOpenExisting: vi.fn() });
+    const props = renderSheet({ reusable: { "youtube-1440": existing }, onOpenExisting: vi.fn() });
     fireEvent.click(exportButton());
     expect(props.onExportVideo).toHaveBeenCalledWith({ presetId: "balanced", framing: null });
   });
 
   it("ignores reuse when the host can't open files", () => {
-    renderSheet({ reusable: { youtube: existing } });
+    renderSheet({ reusable: { "youtube-1440": existing } });
     expect(screen.queryByText("Already exported · Open")).toBeNull();
   });
 

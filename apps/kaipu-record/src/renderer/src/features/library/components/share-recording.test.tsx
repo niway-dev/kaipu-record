@@ -96,7 +96,8 @@ describe("ShareRecording", () => {
   it("exports through the same pipeline with a trivial plan: one clip, nothing else", async () => {
     renderShare();
     fireEvent.click(screen.getByRole("button", { name: "Share" }));
-    fireEvent.click(await screen.findByRole("radio", { name: /^YouTube/ }));
+    // The first YouTube row: 1440p, the default for this 1662×1080 source.
+    fireEvent.click((await screen.findAllByRole("radio", { name: /^YouTube/ }))[0]!);
     fireEvent.click(screen.getByRole("button", { name: /^Export / }));
 
     expect(exportController.start).toHaveBeenCalledOnce();
@@ -110,7 +111,7 @@ describe("ShareRecording", () => {
       videoWidth: 1662,
       videoHeight: 1080,
       cameraPath: null,
-      presetId: "youtube",
+      presetId: "youtube-1440",
       fingerprint: "whole",
     });
     expect(args.scene.items).toEqual([

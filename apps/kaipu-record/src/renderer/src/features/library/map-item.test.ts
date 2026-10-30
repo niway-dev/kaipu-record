@@ -53,9 +53,12 @@ describe("toLibraryVideo", () => {
     expect(toLibraryVideo(item).export).toBeNull();
     const exported = {
       ...item,
-      local: { ...item.local!, export: { preset: "youtube" as const, fingerprint: "whole" } },
+      local: { ...item.local!, export: { preset: "youtube-1440" as const, fingerprint: "whole" } },
     };
-    expect(toLibraryVideo(exported).export).toEqual({ preset: "youtube", fingerprint: "whole" });
+    expect(toLibraryVideo(exported).export).toEqual({
+      preset: "youtube-1440",
+      fingerprint: "whole",
+    });
   });
 
   it("keeps the local id, the asset id, both sizes and the axes", () => {
