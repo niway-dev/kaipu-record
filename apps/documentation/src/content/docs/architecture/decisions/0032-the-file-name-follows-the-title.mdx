@@ -47,7 +47,8 @@ same second already share a stem today.
 
 1. **The local id remains the file stem, and a rename changes it.** `LibraryVault.renameItem({ id, assetId }, title)`
    resolves the item by identity under the names lock (following it if it moved, never acting
-   on whatever item now holds a stale id), saves the title, moves the media file and every companion to the new stem, and returns the
+   on whatever item now holds a stale id, and refusing when two local files claim the
+   identity), saves the title, moves the media file and every companion to the new stem, and returns the
    new `LocalRecording`. Callers must treat `id` as valid only until the next rename and never
    persist it; `assetId` is the identity for anything that outlives a render.
 2. **The title is the source; the file name is a projection.** The title stays in the sidecar
