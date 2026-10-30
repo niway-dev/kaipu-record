@@ -524,4 +524,32 @@ describe("fixVault — an orphan bundle with a file that did not move", () => {
     expect(after.entries).toHaveLength(1);
     expect(after.entries[0]).toMatchObject({ stem: "Gone", status: "complete" });
   });
+  it("a replay that fails again never splits the bundle: its file waits for the original entry", async () => {
+    directory = await makeVault({
+      ".kaipu/Gone.json": sidecar({ assetId: "g", title: "Gone" }),
+      ".kaipu/Gone.jpg": "poster",
+    });
+    // The poster's move fails in the first run and again in the second run's replay; the
+    // second run must not then classify it afresh into a bundle of its own.
+    failure.source = "/.kaipu/Gone.jpg";
+    await fix();
+    const second = await fix();
+    failure.source = "";
+    expect(second.failed.map((f) => f.path)).toContain(".kaipu/Gone.jpg");
+    expect(await readFile(join(directory, ".kaipu/Gone.jpg"), "utf8")).toBe("poster");
+    const runs = await readdir(join(directory, ".kaipu", "orphans"));
+    expect(runs).toHaveLength(1);
+    const run = `.kaipu/orphans/${runs[0]}`;
+    expect((await json(`${run}/manifest.json`)).entries[0]).toMatchObject({ status: "pending" });
+
+    // Healthy again: the replay lands the poster beside its record, in the original bundle.
+    const third = await fix();
+    expect(third.failed).toEqual([]);
+    expect(await readdir(join(directory, ".kaipu", "orphans"))).toEqual(runs);
+    expect(await readFile(join(directory, run, "Gone.jpg"), "utf8")).toBe("poster");
+    expect((await json(`${run}/Gone.json`)).assetId).toBe("g");
+    const after = await json(`${run}/manifest.json`);
+    expect(after.entries).toHaveLength(1);
+    expect(after.entries[0]).toMatchObject({ stem: "Gone", status: "complete" });
+  });
 });

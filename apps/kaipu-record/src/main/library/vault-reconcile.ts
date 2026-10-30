@@ -648,23 +648,26 @@ async function moveFiles(
 
 /**
  * Complete every pending manifest entry a crashed run left, into that run's own folder.
- * Runs before classification, so a half-moved bundle is never classified again.
+ * Runs before classification, so a half-moved bundle is never classified again. `held`
+ * lists the files of entries still pending afterwards: they belong to that entry, and only
+ * its replay moves them (the caller keeps them out of a fresh classification).
  */
 export async function resumeOrphanManifests(
   directory: string,
-): Promise<{ moved: number; conflicts: string[]; failed: string[] }> {
+): Promise<{ moved: number; conflicts: string[]; failed: string[]; held: string[] }> {
   const parent = join(directory, META_DIR, ORPHANS_DIR);
   let runs: string[];
   try {
     runs = await readdir(parent);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT")
-      return { moved: 0, conflicts: [], failed: [] };
+      return { moved: 0, conflicts: [], failed: [], held: [] };
     throw error;
   }
   let moved = 0;
   const conflicts: string[] = [];
   const failed: string[] = [];
+  const held: string[] = [];
   for (const run of runs) {
     const folder = join(parent, run);
     let manifest: Manifest;
@@ -684,10 +687,12 @@ export async function resumeOrphanManifests(
         (state === "conflict" ? conflicts : failed).push(path);
       }
       if (isEntryComplete(entry)) entry.status = "complete";
+      // A file in conflict is a new owner's (a capture reused the free path): not held.
+      else for (const file of entry.files) if (file.state !== "conflict") held.push(file.from);
     }
     await writeManifest(folder, manifest);
   }
-  return { moved, conflicts, failed };
+  return { moved, conflicts, failed, held };
 }
 
 // ── The fix pipeline ──────────────────────────────────────────────────────────
@@ -741,6 +746,11 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
   report.movedToOrphans += resumed.moved;
   for (const path of [...resumed.conflicts, ...resumed.failed])
     fail(path, "orphan move left in place");
+  // A file an unfinished orphan bundle still holds waits for that bundle's replay: classified
+  // afresh, it would land in this run's folder and split the bundle in two.
+  const held = new Set(resumed.held);
+  const heldBy = (finding: ScanFinding): string | undefined =>
+    [finding.path, ...(finding.files ?? [])].find((path) => held.has(path));
 
   // 2. The first actions.
   const first = (await scanVault({ directory, cloud: options.cloud })).findings;
@@ -760,6 +770,14 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
   ];
   actions.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
   for (const finding of actions) {
+    const pending = heldBy(finding);
+    if (pending !== undefined) {
+      if (!report.failed.some((f) => f.path === finding.path)) {
+        fail(finding.path, `pending orphan move: ${pending} waits for its original bundle`);
+      }
+      step();
+      continue;
+    }
     try {
       if (finding.kind === "missing-media" && finding.action === "cloud-only") {
         await vault.writeMeta(finding.stem, { localRemovedAt: now() });
