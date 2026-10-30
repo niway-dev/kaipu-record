@@ -1,0 +1,138 @@
+---
+title: "ADR 0033: The library reconciles with its folder on demand"
+description: When the vault folder and the library disagree, one user-triggered "Check and fix files" pass aligns file names with titles, adopts files that have no record and moves records with no media to an orphans folder. The file name is the only link between a file and its record; nothing is deleted and no identity is guessed.
+---
+
+# ADR 0033: The library reconciles with its folder on demand
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                                                                         |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — implemented on branch `feature/niw2-561-reconcile-the-library-with-its-folder` (stacked on PR #435), owner QA pending                                                                                                                                                                                              |
+| Date          | 2026-10-30                                                                                                                                                                                                                                                                                                                    |
+| Relates to    | [ADR 0032](./0032-the-file-name-follows-the-title) (the file name follows the title; this ADR aligns the items that existed before it); [ADR 0020](./0020-tags-are-entities-with-stable-ids) (tags ride in the sidecar by id, so they follow the record); NIW2-561; follow-up NIW2-589 (orphans list and manual reassignment) |
+| Superseded by | —                                                                                                                                                                                                                                                                                                                             |
+
+## Context
+
+ADR 0032 made a rename move the file, but it left every existing item as it was. A read-only
+scan of the owner's vault on 2026-10-30 (561 media files) found zero items whose file name
+matched their title: 527 carried an old automatic title such as `Recording — 10/29/2026, 7:57:30 PM`
+over `recording-2026-10-30-00-57-30.mp4`, about 32 carried user-written or `Pasted image — …`
+titles, one had no title and one media file had no sidecar.
+
+Drift also comes back after the migration: a user renames or deletes a file in Finder or
+Explorer, a restored backup adds files, a rename in the app fails because the file is locked.
+The vault is a folder the user can touch, so the library has to be able to catch up with it.
+
+Two facts constrain the design. The app is local-only and cannot push a fix for a broken
+automatic migration. And the first design (pair a renamed file with its old record by inode,
+content hash or capture date) was broken by two adversarial review rounds, which is why this
+ADR links file and record by name alone.
+
+## Decision
+
+1. **On demand only.** When the scan finds drift, a banner in the Library and on Home offers
+   "Check and fix files"; the same action is a button in Settings → Files. A dialog lists what
+   will change, and "Fix all" runs one pass. There is no folder watcher and no startup
+   migration. Nothing changes until the user presses the button, and pressing it again finds
+   nothing to do.
+2. **The file name is the only link between a file and its record.** A record belongs to the
+   media file with the same stem. There is no pairing by inode, hash or date.
+3. **Same item, title ≠ file name: the file takes the title.** This covers pre-existing items
+   and in-app renames that never reached the disk. The item is renamed through ADR 0032's
+   `renameItem`, in a planner order that handles chains and cycles by giving the item still
+   waiting the first free suffix. Reconcile never reuses a "leftover" destination
+   (`allowLeftover: false`).
+4. **A file with no record becomes a new item under its disk name.** A rename in Finder is
+   intentional, so its name wins.
+5. **Nothing is deleted.** A record or companion with no media moves to
+   `.kaipu/orphans/<timestamp>-<uuid>/`. The manifest entry (original paths, title,
+   `assetId`) is written before the first file moves and marked complete after the last, so a
+   crash is finished by the next run, and an orphan destination is never overwritten.
+   A record whose `assetId` is in the cached cloud catalog becomes cloud-only instead, so the
+   cloud item keeps its tags.
+6. **Fix all runs in maintenance mode.** It does not start during a recording or an export,
+   and waits for short in-flight operations. Once the vault is idle it sets a per-process
+   flag, and every vault operation entering from outside is refused, not queued. A queued
+   operation would wake up holding a name the planner gave to another item. The flag is
+   checked only at entry points (IPC handlers, capture starts, hotkey screenshots, backfill,
+   stranded recovery, folder change), never inside vault methods, so there is no nested
+   locking and no deadlock. Editors keep their pending state and retry when maintenance ends.
+7. **Ambiguous cases are listed and left alone:** two media items claiming one `assetId`,
+   two media files on one stem (`Demo.mp4` + `Demo.png`), items whose companion paths overlap
+   a live item's (legacy `Demo` + `Demo.edit`), and unreadable records. Fixing them needs a
+   choice or a primitive we do not build.
+8. **Old automatic titles are replaced** by the default capture name built from the capture
+   date. Kept as titles they would become files like `Recording — 10 29 2026, 7 57 30 PM.mp4`.
+   A user title that happens to look automatic is replaced too; this risk is accepted.
+9. **Sidecar reads are strict.** An unreadable, corrupt or schema-invalid sidecar is reported
+   and never written by anyone: reconcile, backfill, identity minting, the editors or
+   `renameItem`. Today `sidecar()` turns it into `{}` and the writers merge over it, so the
+   strict read is added at every sidecar mutation boundary, before any media or companion is
+   touched. `list()` shows such an item read-only.
+
+## Alternatives rejected
+
+- **A folder watcher.** It would keep the library in step in real time, but it needs
+  debouncing, writer-awareness (our own renames and captures would trigger it) and a
+  decision on every transient state a file passes through. The user did not ask for live
+  tracking, and the on-demand pass is the same logic without the races.
+- **A startup migration.** The app is local-only, so a bug in an automatic pass over a
+  user's whole vault cannot be fixed by a release before it has run. On demand, the user
+  sees the problem before anything moves.
+- **Automatic re-association by inode, hash or date.** Review findings that killed it:
+  inode reuse after a delete, file ids that are unstable on exFAT and SMB, swaps of two
+  names made in Finder, and restored backups. A false pairing puts one item's tags and
+  edits on another file, silently.
+- **Deleting orphans.** The user is in charge of what is deleted. The old record of a file
+  renamed in Finder still carries tags, edits and an identity, and the cost of keeping it is
+  a folder.
+- **Choosing among duplicate identities.** Picking which of two files keeps the `assetId`
+  is a guess about intent. Renames of those items already refuse; the user decides.
+- **A journal.** Each action is safe alone (`renameItem` copies, commits, then cleans up;
+  adoption is one atomic sidecar write; the orphans manifest precedes its moves), and the
+  only decisions ("the title wins", "the disk name wins") can be read again from the vault.
+  A journal added crash windows of its own, found in review.
+- **Queueing operations during maintenance.** A request made before the fix and executed
+  after it would hold a stale id (`remove("B")` after B was renamed). Refusing means nothing
+  queues across a run.
+
+## Consequences
+
+- Accepted limitations:
+  - **A rename in Finder** turns the file into a new item. Its old tags and edits stay in
+    the orphans folder, readable from the manifest.
+  - **A swap of two names in Finder** swaps their tags and edits, and no record is orphaned,
+    so nothing can tell. This is what happens today; reconcile does not make it worse.
+  - **A pre-existing item renamed in Finder** keeps the Finder name instead of going back
+    to its old title.
+- A fix can refuse to start (recording, export) or refuse a user action (a capture or an
+  edit save during the run). Both say "Kaipu is fixing your files"; editor saves retry on
+  their own.
+- Every vault entry point takes an admission lease for the life of its operation, including
+  the recording session through the cursor-track write. New entry points must do the same.
+- Sidecar mutations now throw on an unreadable record instead of overwriting it.
+- Idempotence is the contract: a scan after a complete fix returns only findings that are
+  not fixable now (a file locked by another app, duplicate identities, stem conflicts,
+  shared companions, unreadable records).
+- `desktop/library-vault.mdx` documents the finding kinds, the orphans folder and
+  maintenance mode.
+
+## Non-goals
+
+- Watching the folder live.
+- Automatic or suggested re-association (NIW2-589, manual reassignment).
+- Emptying or restoring orphans in the UI (NIW2-589).
+- Adopting media from subfolders, symlinks or uppercase extensions.
+- Reconciling cloud-only items with the cloud.
+- A cross-process vault lock: two Kaipu processes on one vault (for example dev and prod)
+  are not protected, because maintenance mode is per process.
+
+## Reopen when
+
+- Auto-update ships, so a defect in a migration could be corrected after release and the
+  startup-migration alternative deserves a second look.
+- Users report lost tags after Finder renames often enough to justify NIW2-589's
+  suggestions, which would reopen automatic or assisted re-association.
