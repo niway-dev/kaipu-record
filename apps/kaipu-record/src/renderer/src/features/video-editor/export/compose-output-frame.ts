@@ -71,6 +71,11 @@ export interface OutputComposer {
    * span is [sourceTs, sourceTs + sourceDuration), at output (timeline) time `outTs`, with
    * the webcam frame for it (null: none there, or no webcam). The layer's layout and the
    * camera scale it shrinks with are read at the webcam frame's own `sourceTs`.
+   *
+   * `cameraTs` re-composes a held frame at a later source time (a webcam fill over a still
+   * screen, E9): the zoom crop follows the camera there, so it moves with the face's shrink,
+   * while the redactions stay the held frame's own — they are burned in before the crop, in
+   * source pixels, so the crop time cannot move them. Defaults to `sourceTs`.
    */
   clip(
     frame: CanvasImageSource,
@@ -78,6 +83,7 @@ export interface OutputComposer {
     sourceDuration: number,
     outTs: number,
     webcam?: WebcamLayerFrame | null,
+    cameraTs?: number,
   ): void;
   /** Compose a slide frame at output time `outTs`; a missing bitmap renders black. */
   slide(bitmap: ImageBitmap | undefined, outTs: number): void;
@@ -125,10 +131,19 @@ export function createOutputComposer(opts: OutputComposerOptions): OutputCompose
     sourceTs: number,
     sourceDuration: number,
     outTs: number,
+    cameraTs: number,
   ): void => {
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, width, height);
-    const frame = planClipFrame(camera, redactions, sourceTs, sourceDuration, width, height);
+    const frame = planClipFrame(
+      camera,
+      redactions,
+      sourceTs,
+      sourceDuration,
+      width,
+      height,
+      cameraTs,
+    );
     if (frame.mode === "direct") {
       // Unchanged pre-v2 path: no zoom and no privacy region on this frame.
       ctx.drawImage(frameCanvas, 0, 0);
@@ -165,8 +180,8 @@ export function createOutputComposer(opts: OutputComposerOptions): OutputCompose
   };
 
   return {
-    clip(frameCanvas, sourceTs, sourceDuration, outTs, webcamFrame) {
-      composeClip(frameCanvas, sourceTs, sourceDuration, outTs);
+    clip(frameCanvas, sourceTs, sourceDuration, outTs, webcamFrame, cameraTs = sourceTs) {
+      composeClip(frameCanvas, sourceTs, sourceDuration, outTs, cameraTs);
       if (framer && framing) framer.frame(framing.view, framing.mode);
       // Last, on the final canvas: after the crop and after the framer (ADR 0033).
       if (!webcamFrame) return;

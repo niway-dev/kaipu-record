@@ -354,13 +354,15 @@ async function runExportWithInput(
               if (prevOutTs !== null && outTs <= prevOutTs) return false;
               if (!cap.keep(outTs)) return false;
               const image = webcamImageOf(face);
-              // The held frame's own source span: its redactions and crop, unchanged.
+              // The held frame's own source span decides its redactions; the zoom crop
+              // follows the camera at the fill's time, like the face's shrink (E9).
               compose.clip(
                 frame.canvas,
                 frame.timestamp,
                 frame.duration,
                 outTs,
                 image ? { image, sourceTs: t } : null,
+                t,
               );
               await sendPosterOnce();
               await videoSource.add(outTs, duration);
