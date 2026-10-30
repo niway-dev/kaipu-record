@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Search,
   Tags,
+  Upload,
 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
@@ -20,6 +21,9 @@ import { DeleteConfirmDialog } from "@renderer/features/library/components/delet
 import { SortMenu } from "@renderer/features/library/components/sort-menu";
 import { FilterChip } from "@renderer/features/library/components/filter-chip";
 import { TagPanel, type TagPanelTab } from "@renderer/features/library/components/tag-panel";
+import { ImportDropZone } from "@renderer/features/library/components/import-drop-zone";
+import { useImportVideos } from "@renderer/features/library/hooks/use-import-videos";
+import { useFileDrop } from "@renderer/features/library/hooks/use-file-drop";
 import { useLocalLibrary } from "@renderer/features/library/hooks/use-local-library";
 import { useLibraryFilters } from "@renderer/features/library/hooks/use-library-filters";
 import { resolveTags, useTags } from "@renderer/features/library/hooks/use-tags";
@@ -45,6 +49,10 @@ export function LibraryPage(): React.JSX.Element {
   const { openItem } = useOpenInEditor();
   const { videos, isLoading, hasError, refresh, remove, setTags } = useLocalLibrary();
   const tagApi = useTags();
+  // NIW2-579: outside videos come in from the header button, the drop zone, or a drop
+  // anywhere on the window while the Library is open.
+  const { importing, pickAndImport, importDropped } = useImportVideos();
+  const fileDrop = useFileDrop((files) => void importDropped(files));
   const canShowVaultBanner = hasError && videos.length > 0;
   // Built from the unfiltered `videos`, not `visibleItems`: an export filtered out of
   // the current view must still count toward its source's badge.
@@ -123,20 +131,33 @@ export function LibraryPage(): React.JSX.Element {
           <h1 className={styles.pageTitle}>{t("title")}</h1>
           <p className={styles.pageSubtitle}>{t("subtitle")}</p>
         </div>
-        <button
-          className={styles.headerSyncButton}
-          title={t("rescan")}
-          type="button"
-          onClick={() => void refresh()}
-        >
-          <RefreshCw
-            size={15}
-            strokeWidth={1.8}
-            className={isLoading ? styles.spinning : undefined}
-          />
-          {t("sync")}
-        </button>
+        <div className={styles.headerActions}>
+          <button
+            className={styles.headerSyncButton}
+            title={t("rescan")}
+            type="button"
+            onClick={() => void refresh()}
+          >
+            <RefreshCw
+              size={15}
+              strokeWidth={1.8}
+              className={isLoading ? styles.spinning : undefined}
+            />
+            {t("sync")}
+          </button>
+          <Button variant="primary" disabled={importing} onClick={() => void pickAndImport()}>
+            <Upload size={15} strokeWidth={1.8} />
+            {importing ? t("importing") : t("importVideo")}
+          </Button>
+        </div>
       </div>
+
+      <ImportDropZone
+        className={styles.importZone}
+        active={fileDrop.dragging}
+        importing={importing}
+        onPick={() => void pickAndImport()}
+      />
 
       {/* Search, filters and the summary stay in view while the collection scrolls
           under them; the title above scrolls away to leave room. */}

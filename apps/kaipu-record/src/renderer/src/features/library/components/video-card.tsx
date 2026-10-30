@@ -43,6 +43,8 @@ export function VideoCard({
   // A few tags always visible under the title, the rest as "+N".
   const cardTags = tags.slice(0, CARD_TAGS_SHOWN);
   const hiddenTags = tags.length - cardTags.length;
+  // NIW2-579: an imported video says so in the metadata line, not as a capture pill.
+  const imported = video.capture?.mode === "import";
 
   return (
     <div
@@ -71,7 +73,7 @@ export function VideoCard({
 
         <span className={styles.kindBadge}>
           <KindBadge kind={video.kind} />
-          <RecordingCaptureTag capture={video.capture} />
+          {!imported && <RecordingCaptureTag capture={video.capture} />}
         </span>
 
         {video.durationSeconds > 0 && (
@@ -117,6 +119,7 @@ export function VideoCard({
         <span className={styles.specs}>
           {formatSize(video.fileSizeBytes)}
           {video.kind !== "screenshot" && ` · ${formatDuration(video.durationSeconds)}`}
+          {imported && ` · ${t("importedMeta")}`}
         </span>
         {cardTags.length > 0 && (
           <ul className={styles.tags} aria-label={t("tagsLabel")}>
