@@ -50,7 +50,9 @@ ADR links file and record by name alone.
 5. **Nothing is deleted.** A record or companion with no media moves to
    `.kaipu/orphans/<timestamp>-<uuid>/`. The manifest entry (original paths, title,
    `assetId`) is written before the first file moves and marked complete after the last, so a
-   crash is finished by the next run, and an orphan destination is never overwritten.
+   crash is finished by the next run, and an orphan destination is never overwritten. Only
+   ENOENT reads as "not there": a path that cannot be checked (EIO, EACCES) keeps both files
+   and leaves the entry pending.
    A record whose `assetId` is in the cached cloud catalog becomes cloud-only instead, so the
    cloud item keeps its tags.
 6. **Fix all runs in maintenance mode.** It does not start during a recording or an export,
@@ -62,16 +64,20 @@ ADR links file and record by name alone.
    locking and no deadlock. Editors keep their pending state and retry when maintenance ends.
 7. **Ambiguous cases are listed and left alone:** two media items claiming one `assetId`,
    two media files on one stem (`Demo.mp4` + `Demo.png`), items whose companion paths overlap
-   a live item's (legacy `Demo` + `Demo.edit`), and unreadable records. Fixing them needs a
+   any other present stem's (legacy `Demo` + `Demo.edit`, whether `Demo` is a live item, a
+   stem conflict, a symlink, an empty file or an uppercase extension), media whose record path
+   is a file the vault owns (`tags.mp4` would take the tag registry `.kaipu/tags.json`), and
+   unreadable records. Fixing them needs a
    choice or a primitive we do not build.
 8. **Old automatic titles are replaced** by the default capture name built from the capture
    date. Kept as titles they would become files like `Recording — 10 29 2026, 7 57 30 PM.mp4`.
    A user title that happens to look automatic is replaced too; this risk is accepted.
 9. **Sidecar reads are strict.** An unreadable, corrupt or schema-invalid sidecar is reported
    and never written by anyone: reconcile, backfill, identity minting, the editors or
-   `renameItem`. Today `sidecar()` turns it into `{}` and the writers merge over it, so the
-   strict read is added at every sidecar mutation boundary, before any media or companion is
-   touched. `list()` shows such an item read-only.
+   `renameItem`, `remove`. Today `sidecar()` turns it into `{}` and the writers merge over it,
+   so the strict read is added at every sidecar mutation boundary, before any media or
+   companion is touched. `list()` shows such an item read-only. A vault-owned stem (`tags`) is
+   treated the same way: its record path is never read as a record nor written.
 
 ## Alternatives rejected
 
@@ -113,6 +119,8 @@ ADR links file and record by name alone.
   their own.
 - Every vault entry point takes an admission lease for the life of its operation, including
   the recording session through the cursor-track write. New entry points must do the same.
+  A lease held for a renderer (a take, an export) is also released when that renderer's page
+  goes away: a reload, a crash or a destroyed window.
 - Sidecar mutations now throw on an unreadable record instead of overwriting it.
 - Idempotence is the contract: a scan after a complete fix returns only findings that are
   not fixable now (a file locked by another app, duplicate identities, stem conflicts,
