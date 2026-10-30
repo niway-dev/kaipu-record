@@ -37,11 +37,15 @@ export function admitted<A extends unknown[], R>(
   return (...args) => vaultActivity.run(kind, async (): Promise<Awaited<R>> => await fn(...args));
 }
 
+function broadcast(channel: string, ...args: unknown[]): void {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) window.webContents.send(channel, ...args);
+  }
+}
+
 /** Tell every window the library changed (a new item, a new vault folder) so open pages re-list. */
 export function broadcastLibraryChanged(): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) window.webContents.send(IPC_CHANNELS.libraryChanged);
-  }
+  broadcast(IPC_CHANNELS.libraryChanged);
 }
 
 /** True if we can create AND write into `dir` (probes with a temp file). */
@@ -149,6 +153,29 @@ export function registerLibraryVaultHandlers(deps: {
   ipcMain.on(IPC_CHANNELS.editorSessionClose, (event, id: unknown) => {
     if (typeof id === "string") editorSessions.close(event.sender.id, id);
   });
+
+  // NIW2-561: "Check and fix files". The scan is read-only; Fix all runs in maintenance
+  // mode, and while it waits for the vault to be idle the dialog may cancel it.
+  ipcMain.handle(IPC_CHANNELS.libraryReconcileScan, () => service.reconcileScan());
+  let reconcileWait: AbortController | null = null;
+  ipcMain.handle(IPC_CHANNELS.libraryReconcileFix, async () => {
+    const wait = new AbortController();
+    reconcileWait = wait;
+    try {
+      const result = await service.reconcileFix({
+        signal: wait.signal,
+        onProgress: (progress) => broadcast(IPC_CHANNELS.libraryReconcileProgress, progress),
+        isEditing: (id, assetId) => editorSessions.isOpen(id, assetId),
+      });
+      if (result.status === "done") broadcastLibraryChanged();
+      return result;
+    } finally {
+      if (reconcileWait === wait) reconcileWait = null;
+    }
+  });
+  // Only stops the wait: once files are being fixed, the run finishes.
+  ipcMain.handle(IPC_CHANNELS.libraryReconcileCancel, () => reconcileWait?.abort());
+  vaultActivity.onMaintenanceEnded(() => broadcast(IPC_CHANNELS.libraryMaintenanceEnded));
 
   // NIW2-560: the file follows the title. An export streams its source over the media
   // protocol for minutes, so while one runs the file keeps its name (the title is saved).

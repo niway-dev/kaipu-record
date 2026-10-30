@@ -43,6 +43,10 @@ const EXEMPT = new Set<string>([
   IPC_CHANNELS.revealLocalRecording,
   IPC_CHANNELS.getVaultDirectory,
   IPC_CHANNELS.openVaultDirectory,
+  // The reconcile channels answer for themselves ("maintenance", "already-running").
+  IPC_CHANNELS.libraryReconcileScan,
+  IPC_CHANNELS.libraryReconcileFix,
+  IPC_CHANNELS.libraryReconcileCancel,
 ]);
 
 describe("library IPC — maintenance mode refuses every entry point (C1)", () => {

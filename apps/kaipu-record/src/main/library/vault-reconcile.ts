@@ -781,7 +781,7 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
 }
 
 /** The renderer's view of a finding (no internal fields). */
-function publicFinding(finding: ScanFinding): ReconcileFinding {
+export function publicFinding(finding: ScanFinding): ReconcileFinding {
   const { kind, fixable, path, title, newTitle, newName, action } = finding;
   return { kind, fixable, path, title, newTitle, newName, action };
 }
