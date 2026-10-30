@@ -16,8 +16,11 @@ class FakeWindow extends EventEmitter {
 }
 
 const asWindows = (...windows: FakeWindow[]): PrepareWindow[] => windows as never;
-const requestIdOf = (window: FakeWindow): number =>
-  (window.sent[0]?.payload as { requestId: number }).requestId;
+const requestIdOf = (window: FakeWindow): number => {
+  const request = window.sent[0];
+  if (!request) throw new Error("no prepare request was sent");
+  return (request.payload as { requestId: number }).requestId;
+};
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
