@@ -15,6 +15,8 @@ type LocalLibraryVideo = LibraryVideo & { id: string };
  * zero duration, so they are explicitly excluded.
  */
 function isOrphan(video: LocalLibraryVideo): boolean {
+  // An unreadable record is read-only: main refuses the backfill, so never try (F9).
+  if (video.readable === false) return false;
   return video.kind === "recording" && (video.durationSeconds === 0 || !video.thumbnailUrl);
 }
 

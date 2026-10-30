@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { Cloud, Folder, Mic, Monitor, MousePointerClick, Video } from "lucide-react";
+import { Cloud, Folder, FolderSync, Mic, Monitor, MousePointerClick, Video } from "lucide-react";
+import { openReconcileDialog } from "@renderer/features/library/reconcile/reconcile-store";
 import { useTranslations } from "@kaipu/i18n";
 import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import { Row } from "@kaipu/ui";
@@ -243,6 +244,16 @@ export function FilesSettingsPage(): React.JSX.Element {
                 {t("openFolder")}
               </Button>
             </>
+          }
+        />
+        <Row
+          icon={<FolderSync size={16} />}
+          label={t("reconcileLabel")}
+          description={t("reconcileDescription")}
+          action={
+            <Button variant="outline" size="sm" onClick={openReconcileDialog}>
+              {t("reconcileButton")}
+            </Button>
           }
         />
       </Section>

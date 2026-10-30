@@ -55,6 +55,8 @@ import {
 } from "@renderer/features/screenshots/export";
 import { useTransientValue } from "@renderer/ui/use-transient-value";
 import { useCompactRow } from "@renderer/ui/use-compact-row";
+import { isMaintenanceError } from "@renderer/features/library/vault-errors";
+import { showToast } from "@renderer/ui/toast-store";
 import styles from "./screenshot-editor-page.module.css";
 
 const ZOOM_MIN = 0.5;
@@ -147,6 +149,8 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
   );
   // The item the auto-save on open created: the ONLY thing Discard may delete.
   const autoSavedId = useRef<string | null>(null);
+  /** The latest save main refused during maintenance mode, retried when it ends. */
+  const refusedDuringMaintenance = useRef<Parameters<typeof persist>[0] | null>(null);
   // The auto copy mode is read ONCE when the editor opens; a Settings change while
   // this capture is open neither un-copies nor re-copies it.
   const { settings } = useAppSettings();
@@ -373,6 +377,14 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
           notifyAmbiguousIdentity(tLibrary);
           return null;
         }
+        if (isMaintenanceError(error)) {
+          // "Check and fix files" is running (NIW2-561): nothing was written and nothing
+          // was queued in main. The edits stay dirty; the latest save runs again when it
+          // ends. Only a save the user asked for says so.
+          refusedDuringMaintenance.current = opts;
+          if (!opts.silent) showToast({ message: tLibrary("maintenanceRefused") });
+          return null;
+        }
         reportError(t("saveError"), error, {
           context: { phase: "save", overwrite: overwriteId !== undefined },
           retry: () => {
@@ -448,6 +460,19 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
    * not guarded behind a dialog. False when there was nothing to write or it failed.
    * A save or copy already running just delays it: the queue runs it afterwards.
    */
+  // NIW2-561: retry the latest refused save once the files are fixed.
+  const persistRef = useRef(persist);
+  persistRef.current = persist;
+  useEffect(
+    () =>
+      window.electronAPI.onLibraryMaintenanceEnded?.(() => {
+        const opts = refusedDuringMaintenance.current;
+        refusedDuringMaintenance.current = null;
+        if (opts && alive.current) void persistRef.current(opts);
+      }),
+    [],
+  );
+
   const autosaveEdits = async (): Promise<boolean> => {
     if (!savedId || !imageReady) return false;
     return (await persist({ overwriteId: savedId, silent: true, manual: true })) !== null;

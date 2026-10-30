@@ -99,6 +99,12 @@ describe("useOrphanHeal", () => {
     expect(healMock).not.toHaveBeenCalled();
   });
 
+  it("never heals an item whose record cannot be read (NIW2-561, F9)", async () => {
+    renderHook(() => useOrphanHeal([video({ id: "bad", readable: false })], vi.fn()));
+    await Promise.resolve();
+    expect(healMock).not.toHaveBeenCalled();
+  });
+
   it("leaves healthy recordings alone", async () => {
     renderHook(() =>
       useOrphanHeal(

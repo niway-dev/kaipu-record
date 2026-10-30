@@ -31,6 +31,7 @@ import {
 import { exclusive } from "@renderer/features/settings-controls/use-settings-disclosure";
 import { useTranslations } from "@kaipu/i18n";
 import type { CaptureMode } from "@shared/types/screenshot-capture";
+import { ReconcileBanner } from "@renderer/features/library/reconcile/reconcile-banner";
 import styles from "./record-page.module.css";
 
 /** Navigation state main's requests leave on the Record page (see AppRoot). */
@@ -253,6 +254,7 @@ export function RecordPage(): React.JSX.Element {
         <p className={styles.eyebrow}>{t("eyebrow")}</p>
         <h1 className={styles.idleTitle}>{t("readyToRecord")}</h1>
         <p className={styles.subtitle}>{t("subtitle")}</p>
+        <ReconcileBanner />
 
         <RecordModeButtons
           variant="page"

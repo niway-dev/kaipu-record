@@ -1,0 +1,74 @@
+.sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-lg);
+}
+
+.findings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.groupHeading {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.row,
+.more {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.more {
+  color: var(--text-secondary);
+}
+
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.bar {
+  width: 100%;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: var(--space-md);
+  padding: 10px 14px;
+  background: rgba(234, 179, 8, 0.08);
+  border: 1px solid rgba(234, 179, 8, 0.24);
+  border-radius: var(--radius-md);
+  color: var(--accent-yellow);
+  font-size: var(--font-size-sm);
+}
+
+.bannerText {
+  flex: 1;
+}

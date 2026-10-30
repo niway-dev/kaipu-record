@@ -140,6 +140,29 @@ describe("ScreenshotEditorPage — save races", () => {
     expect(saveCalls()).toHaveLength(1);
   });
 
+  it("a Save refused while files are fixed says so, then runs again when that ends (NIW2-561)", async () => {
+    let ended: (() => void) | null = null;
+    window.electronAPI.onLibraryMaintenanceEnded = (callback) => {
+      ended = callback;
+      return () => (ended = null);
+    };
+    window.electronAPI.saveScreenshot = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("vault-maintenance: Kaipu is fixing your files"))
+      .mockResolvedValueOnce(saved("s1")) as never;
+    mount(PASTE);
+    await loadImage();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(getToasts().map((x) => x.message)).toEqual([
+        "Kaipu is fixing your files. Try again in a moment.",
+      ]),
+    );
+    expect(saveCalls()).toHaveLength(1);
+    await act(async () => ended!());
+    await waitFor(() => expect(saveCalls()).toHaveLength(2));
+  });
+
   it("auto-saves when settings resolve after the image loaded (SHOT-B8)", async () => {
     const s = deferred<Settings>();
     mount(CAPTURE, () => s.promise);
