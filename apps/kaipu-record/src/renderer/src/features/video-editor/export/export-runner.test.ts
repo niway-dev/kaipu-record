@@ -177,6 +177,16 @@ describe("export runner (NIW2-218 background export)", () => {
     expect(window.electronAPI.setExportActive).toHaveBeenLastCalledWith(false);
   });
 
+  it("opens its writer session as an export, not a take", async () => {
+    await startVideoExport(args(), t);
+    await waitFor(() => expect(workers).toHaveLength(1));
+    expect(window.electronAPI.recordingCreate).toHaveBeenCalledWith(
+      expect.stringMatching(/^export-/),
+      "screen",
+      "export",
+    );
+  });
+
   it("ends in a Ready card with the saved file, then calls onSaved", async () => {
     const onSaved = vi.fn();
     await startVideoExport(args({ onSaved }), t);

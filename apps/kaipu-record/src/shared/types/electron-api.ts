@@ -284,9 +284,15 @@ export interface KaipuElectronAPI {
   // ── Recording engine (used by the main/recorder window) ───────────────
   /**
    * Open a disk-writer session; returns the temp path. `kind` "webcam" opens the take's
-   * second session, for its webcam file (ADR 0032); omitted, the screen.
+   * second session, for its webcam file (ADR 0032); omitted, the screen. `purpose` "export"
+   * marks a background export's session, which is not a take (the camera bubble's protection
+   * follows the live take alone); omitted, a take.
    */
-  recordingCreate(sessionId: string, kind?: RecordingWriterKind): Promise<{ tempPath: string }>;
+  recordingCreate(
+    sessionId: string,
+    kind?: RecordingWriterKind,
+    purpose?: "take" | "export",
+  ): Promise<{ tempPath: string }>;
   /** Write a chunk at an exact byte position (positional, not append) to the `kind` session. */
   recordingWrite(
     sessionId: string,

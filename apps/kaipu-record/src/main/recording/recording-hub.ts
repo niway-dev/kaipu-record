@@ -390,39 +390,45 @@ export function registerRecordingHub(
   };
   // A take with the webcam on has a second session of kind "webcam" (ADR 0032): the same id,
   // so `markEnded`, `recordingAbort`, finalize and a forced reset treat the pair as one take.
-  ipcMain.handle(IPC_CHANNELS.recordingCreate, (_e, sessionId: string, kind?: unknown) => {
-    const writerKind = recordingWriterKind(kind);
-    // The bubble leaves the screen capture through content protection (ADR 0032). Where that
-    // cannot exclude a window (Windows before 10 2004) it stays in the video, so a webcam
-    // file would draw the face twice: refuse the session and the renderer records the take
-    // without one, as it does for any webcam session that cannot be created.
-    if (writerKind === "webcam" && !fullDisplayBorderAllowed(process.platform, release())) {
-      throw new Error(
-        `${WEBCAM_TRACK_UNSUPPORTED_MARKER} webcam track unavailable: this Windows build cannot exclude the bubble`,
-      );
-    }
-    if (writerKind === "screen") {
-      stoppedForWriteFailure = false;
-      endedSessions.delete(sessionId);
-      // A new take: no webcam file until its webcam session says so. Before its screen
-      // capture starts (the renderer creates both sessions first), so a bubble turned on
-      // in a take without a webcam is created in the capture, and one that is already up
-      // is protected again by the webcam session below.
-      bubbleProtection.screenCreated(sessionId);
+  ipcMain.handle(
+    IPC_CHANNELS.recordingCreate,
+    (_e, sessionId: string, kind?: unknown, purpose?: unknown) => {
+      const writerKind = recordingWriterKind(kind);
+      // The bubble leaves the screen capture through content protection (ADR 0032). Where that
+      // cannot exclude a window (Windows before 10 2004) it stays in the video, so a webcam
+      // file would draw the face twice: refuse the session and the renderer records the take
+      // without one, as it does for any webcam session that cannot be created.
+      if (writerKind === "webcam" && !fullDisplayBorderAllowed(process.platform, release())) {
+        throw new Error(
+          `${WEBCAM_TRACK_UNSUPPORTED_MARKER} webcam track unavailable: this Windows build cannot exclude the bubble`,
+        );
+      }
+      // A background export writes through the same sessions but is not a take: it never
+      // touches the bubble's protection, which follows the live take alone.
+      if (purpose === "export") return writer.create(sessionId, writerKind);
+      if (writerKind === "screen") {
+        stoppedForWriteFailure = false;
+        endedSessions.delete(sessionId);
+        // A new take: no webcam file until its webcam session says so. Before its screen
+        // capture starts (the renderer creates both sessions first), so a bubble turned on
+        // in a take without a webcam is created in the capture, and one that is already up
+        // is protected again by the webcam session below.
+        bubbleProtection.screenCreated(sessionId);
+        cameraBubble.applyProtection();
+        return writer.create(sessionId, writerKind);
+      }
+      bubbleProtection.webcamCreated(sessionId);
       cameraBubble.applyProtection();
-      return writer.create(sessionId, writerKind);
-    }
-    bubbleProtection.webcamCreated(sessionId);
-    cameraBubble.applyProtection();
-    const created = writer.create(sessionId, writerKind);
-    // No webcam file after all: the bubble goes back into the capture before the renderer,
-    // told by the rejection, starts the screen.
-    created.catch(() => {
-      bubbleProtection.webcamEnded(sessionId);
-      cameraBubble.applyProtection();
-    });
-    return created;
-  });
+      const created = writer.create(sessionId, writerKind);
+      // No webcam file after all: the bubble goes back into the capture before the renderer,
+      // told by the rejection, starts the screen.
+      created.catch(() => {
+        bubbleProtection.webcamEnded(sessionId);
+        cameraBubble.applyProtection();
+      });
+      return created;
+    },
+  );
   // The take records no (more) webcam file (its camera did not open, was turned off, was
   // unplugged, or its encoder failed): the bubble must be in the screen recording again.
   ipcMain.handle(IPC_CHANNELS.recordingWebcamEnded, (_e, sessionId: unknown) => {

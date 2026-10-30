@@ -1779,6 +1779,50 @@ describe("recording hub — the webcam writer session (ADR 0032)", () => {
       }
     });
 
+    describe("an export writing in the background is not a take", () => {
+      const exportDuring = async (): Promise<void> => {
+        const { RecordingWriter } = await import("./recording-writer");
+        const finalize = vi
+          .spyOn(RecordingWriter.prototype, "finalize")
+          .mockRejectedValue(new Error("no file"));
+        try {
+          await ipc(IPC_CHANNELS.recordingCreate, "export-1", "screen", "export");
+          await ipc(IPC_CHANNELS.recordingFinalize, "export-1", { durationMs: 0 }).catch(() => {});
+        } finally {
+          finalize.mockRestore();
+        }
+      };
+
+      it("leaves the bubble in the capture of a take without a webcam file", async () => {
+        await registered();
+        await ipc(IPC_CHANNELS.recordingCreate, "s1");
+        await exportDuring();
+        expect(protects()).toBe(false);
+      });
+
+      it("leaves the bubble out of the capture of a take with a webcam file", async () => {
+        await registered();
+        await ipc(IPC_CHANNELS.recordingCreate, "s1");
+        await ipc(IPC_CHANNELS.recordingCreate, "s1", "webcam");
+        await ipc(IPC_CHANNELS.recordingCreate, "export-1", "screen", "export");
+        expect(protects()).toBe(true);
+        await exportDuring();
+        expect(protects()).toBe(true);
+      });
+
+      it("the live take's webcam end still applies after an export was created", async () => {
+        await registered();
+        await ipc(IPC_CHANNELS.recordingCreate, "s1");
+        await ipc(IPC_CHANNELS.recordingCreate, "s1", "webcam");
+        await ipc(IPC_CHANNELS.recordingCreate, "export-1", "screen", "export");
+        await ipc(IPC_CHANNELS.recordingWebcamEnded, "s1");
+        expect(protects()).toBe(false);
+        // The export ending does not end the take either.
+        await exportDuring();
+        expect(protects()).toBe(false);
+      });
+    });
+
     it("protects it again when the take is finalized, aborted or reset", async () => {
       const { RecordingWriter } = await import("./recording-writer");
       const finalize = vi

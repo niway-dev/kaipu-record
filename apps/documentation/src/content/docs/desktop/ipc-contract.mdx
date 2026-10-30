@@ -215,14 +215,14 @@ source) and `RecordingSettings.area` (or `null` for a whole display) and broadca
 
 ### Recording — writer (hot path a disco)
 
-| Canal                    | Dir | En `electronAPI`                       | Registrador        |
-| ------------------------ | --- | -------------------------------------- | ------------------ |
-| `recording:create`       | r→m | `recordingCreate(sessionId, kind?)`    | `recording-hub.ts` |
-| `recording:write`        | r→m | `recordingWrite(id, data, pos, kind?)` | `recording-hub.ts` |
-| `recording:stat`         | r→m | `recordingStat(id, kind?)`             | `recording-hub.ts` |
-| `recording:finalize`     | r→m | `recordingFinalize(id, meta)`          | `recording-hub.ts` |
-| `recording:abort`        | r→m | `recordingAbort(id)`                   | `recording-hub.ts` |
-| `recording:webcam-ended` | r→m | `recordingWebcamEnded(id)`             | `recording-hub.ts` |
+| Canal                    | Dir | En `electronAPI`                              | Registrador        |
+| ------------------------ | --- | --------------------------------------------- | ------------------ |
+| `recording:create`       | r→m | `recordingCreate(sessionId, kind?, purpose?)` | `recording-hub.ts` |
+| `recording:write`        | r→m | `recordingWrite(id, data, pos, kind?)`        | `recording-hub.ts` |
+| `recording:stat`         | r→m | `recordingStat(id, kind?)`                    | `recording-hub.ts` |
+| `recording:finalize`     | r→m | `recordingFinalize(id, meta)`                 | `recording-hub.ts` |
+| `recording:abort`        | r→m | `recordingAbort(id)`                          | `recording-hub.ts` |
+| `recording:webcam-ended` | r→m | `recordingWebcamEnded(id)`                    | `recording-hub.ts` |
 
 `kind` is `"screen"` (the default, what older callers send) or `"webcam"`: a take with the
 webcam on opens a second writer session under the same id for `.kaipu/<id>.webcam.mp4`
@@ -230,6 +230,9 @@ webcam on opens a second writer session under the same id for `.kaipu/<id>.webca
 `recordingAbort` discards both sessions of the take; `recordingFinalize` places both and
 writes `meta.webcam` (start offset, quality, size, fps, recorded bubble) to the sidecar. A
 failed webcam write never stops the take: finalize drops that webcam file.
+
+`purpose` is `"take"` (the default) or `"export"`: a background export writes through the same
+sessions but never changes the camera bubble's protection.
 
 The camera bubble is content-protected (left out of the screen capture) only while its face
 is recorded in the take's webcam file, or with no take active. `recording:create` of the

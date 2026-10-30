@@ -371,7 +371,8 @@ export async function startVideoExport(
 
     const id = `export-${crypto.randomUUID()}`;
     sessionId = id;
-    await window.electronAPI.recordingCreate(id);
+    // Not a take: main keeps the camera bubble's protection on the live take.
+    await window.electronAPI.recordingCreate(id, "screen", "export");
 
     if (!active) {
       teardown(id);
