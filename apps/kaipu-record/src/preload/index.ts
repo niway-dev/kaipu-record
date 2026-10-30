@@ -10,6 +10,7 @@ import type {
   OverlayState,
   QuietCaptureHandOff,
 } from "@shared/types/screenshot-capture";
+import { WorkspaceStampGuard } from "@shared/workspace-stamp-guard";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
 import {
   STALE_WORKSPACE,
@@ -41,19 +42,14 @@ function readInitialStamp(): WorkspaceStamp | null {
   }
   return null;
 }
-let stamp = readInitialStamp();
-/** Between this window's prepare answer and the switch's end: item calls are refused here. */
-let switching = false;
+const guard = new WorkspaceStampGuard(readInitialStamp());
 let prepareHandler: (() => Promise<boolean>) | null = null;
-const sameStamp = (a: WorkspaceStamp | null, b: WorkspaceStamp | null): boolean =>
-  a !== null && b !== null && a.workspaceId === b.workspaceId && a.generation === b.generation;
 
 ipcRenderer.on(IPC_CHANNELS.workspacesChanged, (_e: IpcRendererEvent, state: WorkspacesState) => {
-  stamp = { workspaceId: state.activeId, generation: state.generation };
-  switching = false;
+  guard.changed(state);
 });
 ipcRenderer.on(IPC_CHANNELS.workspacesPrepareAbort, () => {
-  switching = false;
+  guard.abort();
 });
 ipcRenderer.on(
   IPC_CHANNELS.workspacesPrepare,
@@ -67,7 +63,7 @@ ipcRenderer.on(
         ok = false;
       }
       // From here until the switch ends, nothing this window starts can reach main.
-      if (ok) switching = true;
+      guard.prepared(ok);
       ipcRenderer.send(IPC_CHANNELS.workspacesPrepareResult, { requestId: request.requestId, ok });
     })();
   },
@@ -75,15 +71,15 @@ ipcRenderer.on(
 
 /** An item-scoped invoke: stamped, and discarded when the answer comes back after a switch. */
 async function scopedInvoke<T>(channel: string, ...args: unknown[]): Promise<T> {
-  if (!stamp && !switching) {
+  if (!guard.stamp && !guard.switching) {
     // The synchronous read failed: learn the stamp from the registry instead.
     const state = (await ipcRenderer.invoke(IPC_CHANNELS.workspacesList)) as WorkspacesState;
-    stamp ??= { workspaceId: state.activeId, generation: state.generation };
+    guard.adopt({ workspaceId: state.activeId, generation: state.generation });
   }
-  const sent = stamp;
-  if (switching || !sent) throw new Error(STALE_WORKSPACE);
+  const sent = guard.stamp;
+  if (guard.switching || !sent) throw new Error(STALE_WORKSPACE);
   const result = (await ipcRenderer.invoke(channel, sent, ...args)) as T;
-  if (!sameStamp(stamp, sent)) throw new Error(STALE_WORKSPACE);
+  if (!guard.isCurrent(sent)) throw new Error(STALE_WORKSPACE);
   return result;
 }
 
@@ -151,8 +147,8 @@ const kaipuApi: KaipuElectronAPI = {
   revealLocalRecording: (id) => scopedInvoke(IPC_CHANNELS.revealLocalRecording, id),
   gifSave: (bytes, meta) => scopedInvoke(IPC_CHANNELS.gifSave, bytes, meta),
   startFileDrag: (id, name) => {
-    if (switching || !stamp) return;
-    ipcRenderer.send(IPC_CHANNELS.startFileDrag, stamp, id, name);
+    if (guard.switching || !guard.stamp) return;
+    ipcRenderer.send(IPC_CHANNELS.startFileDrag, guard.stamp, id, name);
   },
   setExportActive: (active) => ipcRenderer.send(IPC_CHANNELS.exportActive, active),
   onExportCommand: (callback) => {
