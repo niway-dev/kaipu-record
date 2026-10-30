@@ -57,7 +57,7 @@ vi.mock("node:fs/promises", async (importActual) => {
 });
 
 import { FinalizeMoveError, RecordingWriter } from "./recording-writer";
-import { recoverStrandedRecordings } from "./stranded-recordings";
+import { PLACED_PARTS_DIR, recoverStrandedRecordings } from "./stranded-recordings";
 
 afterEach(() => {
   hooks.linkError = null;
@@ -141,8 +141,10 @@ describe("a placed take whose staging file can be neither removed nor renamed", 
       expect((await readdir(vaultDir)).filter((n) => n.endsWith(".mp4"))).toEqual([
         `${recording.id}.mp4`,
       ]);
-      // The sweep finished the cleanup the placement could not.
-      expect(await readdir(join(vaultDir, ".kaipu", "tmp"))).toEqual([]);
+      // The marker never authorizes deleting the part: it is kept out of the sweep's way.
+      const staging = join(vaultDir, ".kaipu", "tmp");
+      expect(await readdir(staging)).toEqual([PLACED_PARTS_DIR]);
+      expect(await readdir(join(staging, PLACED_PARTS_DIR))).toHaveLength(1);
     },
   );
 });

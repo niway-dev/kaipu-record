@@ -3,8 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultCaptureName } from "@shared/default-capture-name";
+import { PLACED_MARKER_SUFFIX } from "../library/safe-place";
 import { STAGING_DIR } from "./recording-writer";
-import { recoverStrandedRecordings } from "./stranded-recordings";
+import { PLACED_PARTS_DIR, recoverStrandedRecordings } from "./stranded-recordings";
 
 describe("recoverStrandedRecordings", () => {
   let vaultDir: string;
@@ -111,5 +112,50 @@ describe("recoverStrandedRecordings", () => {
       now: () => now,
     });
     expect(result).toEqual({ recovered: [], discarded: 0, failed: [] });
+  });
+
+  // A marker says a part's bytes were placed in the vault; it never authorizes deleting the
+  // part (sixth review of NIW2-561, S4): the destination may hold a stranger's file by now.
+  describe("a part with a placement marker", () => {
+    const sweep = () =>
+      recoverStrandedRecordings({ vaultDir, fallbackTempDir, title: "Recovered", now: () => now });
+
+    async function marked(destinationContent: string) {
+      const staging = join(vaultDir, STAGING_DIR);
+      const path = await part(staging, "kaipu-rec-session-abcd.mp4.part", "original");
+      const destination = join(vaultDir, "Take.mp4");
+      await writeFile(destination, destinationContent);
+      await writeFile(
+        `${path}${PLACED_MARKER_SUFFIX}`,
+        JSON.stringify({ version: 1, destination, size: "original".length }),
+      );
+      return { staging, path, destination };
+    }
+
+    it("is not recovered a second time, and is kept out of the sweep, never deleted", async () => {
+      const { staging, destination } = await marked("original");
+      const result = await sweep();
+      expect(result.recovered).toEqual([]);
+      expect(await readdir(staging)).toEqual([PLACED_PARTS_DIR]);
+      const kept = join(staging, PLACED_PARTS_DIR, "kaipu-rec-session-abcd.mp4.part");
+      expect(await readFile(kept, "utf-8")).toBe("original");
+      expect(await readFile(destination, "utf-8")).toBe("original");
+    });
+
+    it("keeps the only remaining original when a same-size file replaced its destination", async () => {
+      const { staging, destination } = await marked("incoming");
+      await sweep();
+      expect(await readFile(destination, "utf-8")).toBe("incoming");
+      const kept = join(staging, PLACED_PARTS_DIR, "kaipu-rec-session-abcd.mp4.part");
+      expect(await readFile(kept, "utf-8")).toBe("original");
+    });
+
+    it("removes a marker whose part is gone", async () => {
+      const staging = join(vaultDir, STAGING_DIR);
+      const marker = join(staging, `kaipu-rec-session-gone.mp4.part${PLACED_MARKER_SUFFIX}`);
+      await writeFile(marker, JSON.stringify({ version: 1, destination: "/nowhere", size: 1 }));
+      await sweep();
+      expect(await readdir(staging)).toEqual([]);
+    });
   });
 });
