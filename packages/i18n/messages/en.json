@@ -1177,7 +1177,7 @@
     "webcamShadow": "Shadow",
     "webcamShrinkDuringZoom": "Shrink during zoom",
     "webcamShrinkAmount": "Size during zoom",
-    "webcamShrinkNote": "Makes room for the zoomed detail; the webcam stays in its corner either way.",
+    "webcamShrinkNote": "Makes room for the zoomed detail; the webcam keeps its position either way.",
     "webcamHideHere": "Hide webcam here",
     "hintHideWebcam": "Hides the webcam from the playhead to the next webcam section.",
     "webcamHideNoRoom": "Not enough room left to hide the webcam.",

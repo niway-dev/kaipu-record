@@ -1296,7 +1296,14 @@ function VideoEditor({
                     // open question 2); a slide has no webcam either.
                     hidden={holdingOriginal || onSlide}
                     interactive={videoTools.tool === "select"}
-                    selected={selectedWebcamId !== null}
+                    // Outlined for the layer and for an override (both are the bubble's look), not
+                    // for a hidden range, which has nothing to show.
+                    selected={
+                      selectedWebcamId === WEBCAM_LAYER_SELECTION ||
+                      scene.webcam.segments.some(
+                        (s) => s.id === selectedWebcamId && s.mode === "override",
+                      )
+                    }
                     onSelect={(sourceTime) => {
                       // Grabbing the bubble inside an override selects (and edits) that
                       // override, so the inspector shows what the user is looking at.

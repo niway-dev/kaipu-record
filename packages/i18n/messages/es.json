@@ -1177,7 +1177,7 @@
     "webcamShadow": "Sombra",
     "webcamShrinkDuringZoom": "Reducir durante el zoom",
     "webcamShrinkAmount": "Tamaño durante el zoom",
-    "webcamShrinkNote": "Deja más espacio al detalle ampliado; la cámara se queda en su esquina de todos modos.",
+    "webcamShrinkNote": "Deja más espacio al detalle ampliado; la cámara mantiene su posición de todos modos.",
     "webcamHideHere": "Ocultar la cámara aquí",
     "hintHideWebcam": "Oculta la cámara desde el cabezal hasta el siguiente tramo de cámara.",
     "webcamHideNoRoom": "No queda espacio suficiente para ocultar la cámara.",
