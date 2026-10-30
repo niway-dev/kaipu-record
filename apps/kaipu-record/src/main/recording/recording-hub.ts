@@ -23,6 +23,7 @@ import type {
   RecordingTick,
 } from "@shared/types/ipc";
 import { serializeCursorTrack } from "@shared/cursor-track";
+import { recordingWriterKind } from "@shared/webcam-track";
 import { buildRecordingStartedProperties, RECORDING_STARTED_EVENT } from "@shared/analytics";
 import { captureMainEvent } from "../services/analytics.service";
 import type { CaptureRect, RecordingRatio } from "@shared/types/screenshot-capture";
@@ -364,16 +365,24 @@ export function registerRecordingHub(
       if (oldest !== undefined) endedSessions.delete(oldest);
     }
   };
-  ipcMain.handle(IPC_CHANNELS.recordingCreate, (_e, sessionId: string) => {
-    stoppedForWriteFailure = false;
-    endedSessions.delete(sessionId);
-    return writer.create(sessionId);
+  // A take with the webcam on has a second session of kind "webcam" (ADR 0032): the same id,
+  // so `markEnded`, `recordingAbort`, finalize and a forced reset treat the pair as one take.
+  ipcMain.handle(IPC_CHANNELS.recordingCreate, (_e, sessionId: string, kind?: unknown) => {
+    const writerKind = recordingWriterKind(kind);
+    if (writerKind === "screen") {
+      stoppedForWriteFailure = false;
+      endedSessions.delete(sessionId);
+    }
+    return writer.create(sessionId, writerKind);
   });
   ipcMain.on(
     IPC_CHANNELS.recordingWrite,
-    (_e, sessionId: string, data: ArrayBuffer, position: number) => {
-      void writer.write(sessionId, data, position).catch((error) => {
-        console.error("recording write failed", error);
+    (_e, sessionId: string, data: ArrayBuffer, position: number, kind?: unknown) => {
+      const writerKind = recordingWriterKind(kind);
+      void writer.write(sessionId, data, position, writerKind).catch((error) => {
+        console.error(`recording ${writerKind} write failed`, error);
+        // The webcam never fails the take: finalize drops a webcam whose write failed.
+        if (writerKind === "webcam") return;
         // Writes are fire-and-forget, so without this the engine keeps encoding
         // and the bar keeps ticking while every chunk is dropped. Stop the
         // recorder promptly on the first failure: its stop runs finalize, which
@@ -430,10 +439,13 @@ export function registerRecordingHub(
     },
   );
   // NIW2-218: Small-file size check before finalize. Takes a session id only, like write.
-  ipcMain.handle(IPC_CHANNELS.recordingStat, (_e, sessionId: string): Promise<number> => {
-    if (typeof sessionId !== "string") throw new Error("recordingStat: invalid session id");
-    return writer.stat(sessionId);
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.recordingStat,
+    (_e, sessionId: string, kind?: unknown): Promise<number> => {
+      if (typeof sessionId !== "string") throw new Error("recordingStat: invalid session id");
+      return writer.stat(sessionId, recordingWriterKind(kind));
+    },
+  );
   ipcMain.handle(IPC_CHANNELS.recordingAbort, (_e, sessionId: string) => {
     markEnded(sessionId);
     cursorTracks.discard(sessionId);

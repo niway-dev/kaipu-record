@@ -1512,3 +1512,69 @@ describe("recording hub — camera bubble size", () => {
     expect(listening({})).toBe(false);
   });
 });
+
+describe("recording hub — the webcam writer session (ADR 0032)", () => {
+  async function registered() {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const mainWindow = fakeMainWindow();
+    registerRecordingHub(() => mainWindow as never);
+    return mainWindow;
+  }
+
+  it("forwards the kind to the writer on create, write and stat", async () => {
+    const { RecordingWriter } = await import("./recording-writer");
+    const create = vi.spyOn(RecordingWriter.prototype, "create").mockResolvedValue({
+      tempPath: "/tmp/x",
+    });
+    const write = vi.spyOn(RecordingWriter.prototype, "write").mockResolvedValue();
+    const stat = vi.spyOn(RecordingWriter.prototype, "stat").mockResolvedValue(3);
+    try {
+      await registered();
+      const data = new ArrayBuffer(1);
+      await mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!({}, "s1", "webcam");
+      mockState.ipcOn.get(IPC_CHANNELS.recordingWrite)!({}, "s1", data, 4, "webcam");
+      await mockState.ipcHandle.get(IPC_CHANNELS.recordingStat)!({}, "s1", "webcam");
+      // An older caller sends no kind: the screen, as before.
+      await mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!({}, "s1");
+      expect(create.mock.calls).toEqual([
+        ["s1", "webcam"],
+        ["s1", "screen"],
+      ]);
+      expect(write).toHaveBeenCalledWith("s1", data, 4, "webcam");
+      expect(stat).toHaveBeenCalledWith("s1", "webcam");
+    } finally {
+      create.mockRestore();
+      write.mockRestore();
+      stat.mockRestore();
+    }
+  });
+
+  it("a failed webcam write never stops the take; a failed screen write still does", async () => {
+    const { RecordingWriter } = await import("./recording-writer");
+    const write = vi
+      .spyOn(RecordingWriter.prototype, "write")
+      .mockRejectedValue(new Error("ENOSPC"));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const mainWindow = await registered();
+      const onWrite = mockState.ipcOn.get(IPC_CHANNELS.recordingWrite)!;
+      onWrite({}, "s1", new ArrayBuffer(1), 0, "webcam");
+      await new Promise((r) => setTimeout(r, 0));
+      expect(mainWindow.webContents.send).not.toHaveBeenCalledWith(
+        IPC_CHANNELS.recordingCommand,
+        "stop",
+      );
+      onWrite({}, "s1", new ArrayBuffer(1), 0);
+      await new Promise((r) => setTimeout(r, 0));
+      expect(mainWindow.webContents.send).toHaveBeenCalledWith(
+        IPC_CHANNELS.recordingCommand,
+        "stop",
+      );
+    } finally {
+      write.mockRestore();
+      error.mockRestore();
+    }
+  });
+});
