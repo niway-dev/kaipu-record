@@ -10,9 +10,9 @@ import { listFiles, makeVault, sidecar, snapshot } from "./vault-reconcile.test-
 const failure = vi.hoisted(() => ({ from: Infinity, calls: 0, source: "" }));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
-  return {
-    ...actual,
-    rename: vi.fn(async (from: string, to: string) => {
+  // A file is placed by a link (`safe-place`), a folder or sidecar by a rename: both move.
+  const move =
+    (fn: (from: string, to: string) => Promise<void>) => async (from: string, to: string) => {
       failure.calls += 1;
       if (
         failure.calls >= failure.from ||
@@ -20,9 +20,9 @@ vi.mock("node:fs/promises", async (importOriginal) => {
       ) {
         throw Object.assign(new Error("EIO: injected"), { code: "EIO" });
       }
-      return actual.rename(from, to);
-    }),
-  };
+      return fn(from, to);
+    };
+  return { ...actual, rename: vi.fn(move(actual.rename)), link: vi.fn(move(actual.link)) };
 });
 
 const T0 = new Date(2026, 9, 29, 19, 57, 30).getTime();

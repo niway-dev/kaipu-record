@@ -18,6 +18,7 @@ import type {
   ReconcileReport,
 } from "@shared/types/library-reconcile";
 import { atomicWriteFile } from "./atomic-write";
+import { placeNoReplace, type Placement } from "./safe-place";
 import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-name";
 import { fsFold, isVaultOwnedStem } from "./file-stem";
 import {
@@ -640,7 +641,12 @@ async function moveFiles(
     }
     try {
       await mkdir(dirname(to), { recursive: true });
-      await rename(from, to);
+      if ((await moveIntoRun(from, to)) === "taken") {
+        // Arrived since the check: kept, and the source stays (as for a present destination).
+        file.state = "conflict";
+        problems.push(file.from);
+        continue;
+      }
       file.state = "moved";
       moved += 1;
     } catch {
@@ -649,6 +655,20 @@ async function moveFiles(
     }
   }
   return { moved, problems };
+}
+
+/**
+ * Move one orphan path into the run folder without replacing anything there: a file through
+ * `safe-place` (a source that cannot be removed undoes the move). A folder (`.assets`) or a
+ * symlink is renamed as itself (a link or copy would follow it); the destination was checked
+ * absent in this run's own folder, which no other process names.
+ */
+async function moveIntoRun(from: string, to: string): Promise<Placement> {
+  if (!(await lstat(from)).isFile()) {
+    await rename(from, to);
+    return "placed";
+  }
+  return placeNoReplace(from, to, { stuck: "rollback" });
 }
 
 /** A run folder's manifest that passes the schema the replay relies on. */

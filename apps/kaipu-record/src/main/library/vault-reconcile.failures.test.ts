@@ -70,6 +70,8 @@ vi.mock("node:fs/promises", async (importOriginal) => {
     copyFile: wrap("copyFile", actual.copyFile),
     cp: wrap("cp", actual.cp),
     rename: wrap("rename", actual.rename),
+    link: wrap("link", actual.link),
+    unlink: wrap("unlink", actual.unlink),
     open,
   };
 });
@@ -238,6 +240,8 @@ describe("Fix all — every payload survives one failed call at any point", () =
     "handle-sync",
     "handle-close",
     "rename",
+    "link",
+    "unlink",
   ];
   const SAMPLE_EVERY: Record<string, number> = { access: 8 };
   const injectionPoints = (op: string, count: number): number[] => {
@@ -335,10 +339,8 @@ describe("Fix all — every payload survives one failed call at any point", () =
       for (const op of OPS.filter((op) => op !== "stat" && op !== "access")) {
         expect(counts[op], op).toBeGreaterThan(0);
       }
-      // The orphan moves are among the renames.
-      expect(clean.some((c) => c.op === "rename" && c.path.includes(".kaipu/Gone.json"))).toBe(
-        true,
-      );
+      // The orphan moves are among the placements (`safe-place` links a file).
+      expect(clean.some((c) => c.op === "link" && c.path.includes(".kaipu/Gone.json"))).toBe(true);
 
       for (const op of OPS) {
         for (const n of injectionPoints(op, counts[op]!)) {
