@@ -1524,6 +1524,26 @@ describe("recorder-store live settings", () => {
       await stopAndSettle();
     });
 
+    it("a camera turned off and on again during the countdown acquires the take again", async () => {
+      const first = fakePrepared(fakeEngine({ webcam: webcamHandle() }));
+      const second = fakePrepared(fakeEngine({ webcam: webcamHandle() }));
+      prepareEngineMock.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+      store.requestStartRecording(() => ({ ...input, webcam }));
+      await vi.advanceTimersByTimeAsync(0);
+      // Off ends the prepared engine's webcam for good; on again cannot reopen it.
+      broadcast({ isCameraEnabled: false });
+      expect(first.endWebcam).toHaveBeenCalledOnce();
+      broadcast({ isCameraEnabled: true });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(store.getRecorderSnapshot().status).toBe("recording");
+      // The input is the same as when the countdown began, yet the take is not the dead one.
+      expect(prepareEngineMock).toHaveBeenCalledTimes(2);
+      expect(first.begin).not.toHaveBeenCalled();
+      expect(first.release).toHaveBeenCalled();
+      expect(second.begin).toHaveBeenCalledOnce();
+      await stopAndSettle();
+    });
+
     it("a cancel during the countdown aborts the take once both sessions exist", async () => {
       let created!: () => void;
       recordingCreateMock.mockImplementation(async (...args: unknown[]) => {

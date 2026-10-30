@@ -346,7 +346,9 @@ function startTake(resolveInput: () => StartInput): void {
     if (wasIdle) sendPhaseReport({ phase: "idle" });
     return;
   }
-  if (early && needsNewAcquisition(early.input, input)) {
+  // A webcam the user turned off during the countdown is closed for good on the prepared
+  // engine: turned on again, the input matches but that engine would record no webcam.
+  if (early && (needsNewAcquisition(early.input, input) || early.live?.webcamEnded())) {
     markRecordTiming("input changed during countdown, acquiring again");
     pendingStart = null;
     discardStart(early);
@@ -742,6 +744,8 @@ interface LiveSettingsForwarder {
    * the forwarder are at least as new as it.
    */
   sync(input: StartInput): void;
+  /** Whether it ended the engine's webcam (camera turned off); the engine cannot reopen it. */
+  webcamEnded(): boolean;
   stop(): void;
 }
 
@@ -766,6 +770,7 @@ function forwardLiveSettings(
   // Turning the camera off ends the webcam file there and releases the camera. Turning it on
   // again mid-take records nothing: the take has no second webcam file.
   let webcamOn = Boolean(input.webcam);
+  let webcamEnded = false;
   let sysOn = input.systemAudio;
   let queue: Promise<void> = Promise.resolve();
   let active = true;
@@ -851,6 +856,7 @@ function forwardLiveSettings(
     );
     if (webcamOn && !settings.isCameraEnabled) {
       webcamOn = false;
+      webcamEnded = true;
       handle.endWebcam();
     }
   });
@@ -859,6 +865,7 @@ function forwardLiveSettings(
       if (!active) return;
       applyToggles(next.microphoneDeviceId !== null, next.microphoneDeviceId, next.systemAudio);
     },
+    webcamEnded: () => webcamEnded,
     stop() {
       active = false;
       unsubscribe();
