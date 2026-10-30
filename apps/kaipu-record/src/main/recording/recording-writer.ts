@@ -216,7 +216,15 @@ export class RecordingWriter {
       await this.closeHandle(session).catch(() => {});
       throw new FinalizeMoveError(session.tempPath, cause);
     }
-    await this.closeHandle(session);
+    try {
+      await this.closeHandle(session);
+    } catch (cause) {
+      // The bytes are in the staging file, which is the only copy: strand the take so the
+      // renderer's abort after a failed finalize keeps it for salvage or the sweep.
+      await vault.releaseReservation(reservation).catch(() => {});
+      session.stranded = true;
+      throw new FinalizeMoveError(session.tempPath, cause);
+    }
 
     let placed: PlacedFile;
     try {

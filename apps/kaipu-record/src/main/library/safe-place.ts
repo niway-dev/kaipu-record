@@ -18,7 +18,7 @@ import { randomUUID } from "node:crypto";
 import type { BigIntStats } from "node:fs";
 import { link, lstat, open, readFile, rename, unlink } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { atomicWriteFile, syncDir } from "./atomic-write";
 
 /** "taken": a file already exists at the destination; nothing was replaced or moved. */
@@ -447,6 +447,9 @@ async function moveBack(temp: string, from: string): Promise<void> {
  * is removed once the destination holds the bytes and its folder is flushed.
  */
 export async function replaceConfirmed(from: string, to: string): Promise<void> {
+  // Replacing a file with itself (the dialog pointed at the take's own path) is a no-op: going
+  // through a temporary sibling would leave the bytes under that hidden name.
+  if (resolve(from) === resolve(to) || (await isSameFile(from, to))) return;
   const temp = siblingTemp(to, "replace");
   const source = await open(from, "r");
   let sourceId: PlacedFile;
@@ -471,5 +474,15 @@ export async function replaceConfirmed(from: string, to: string): Promise<void> 
     }
   } catch {
     await setAside(from, sourceId, to, placed.size);
+  }
+}
+
+/** Whether two paths name the same existing file (bigint dev+ino); false when either is unreadable. */
+async function isSameFile(a: string, b: string): Promise<boolean> {
+  try {
+    const [x, y] = await Promise.all([lstat(a, { bigint: true }), lstat(b, { bigint: true })]);
+    return x.dev === y.dev && x.ino === y.ino;
+  } catch {
+    return false;
   }
 }
