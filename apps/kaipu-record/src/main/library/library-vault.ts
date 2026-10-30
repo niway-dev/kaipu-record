@@ -392,6 +392,7 @@ export class LibraryVault {
         rm(this.cursorTrackPath(id), { force: true }),
         // An interrupted writeCursorTrack can leave the temp file behind.
         rm(`${this.cursorTrackPath(id)}.tmp`, { force: true }),
+        rm(this.webcamFilePath(id), { force: true }),
       ]),
     );
     await rm(await this.filePath(id), { force: true });
