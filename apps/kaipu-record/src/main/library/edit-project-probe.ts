@@ -67,6 +67,23 @@ export async function probeEditing(
   return "project-available";
 }
 
+export type WebcamState = "present" | "missing" | "none";
+
+/**
+ * The webcam track of one item (ADR 0032): "present" while `.kaipu/<id>.webcam.mp4` exists,
+ * "missing" when the sidecar recorded a webcam but the file is gone (the editor shows that
+ * state), "none" for a recording that never had one. Read-only; never touches the video.
+ */
+export async function probeWebcam(vaultDir: string, id: string): Promise<WebcamState> {
+  if (await exists(join(vaultDir, ".kaipu", `${id}.webcam.mp4`))) return "present";
+  try {
+    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", `${id}.json`), "utf-8"));
+    return sidecar && typeof sidecar === "object" && sidecar.webcam ? "missing" : "none";
+  } catch {
+    return "none";
+  }
+}
+
 /** When the session was last written, and which of those writes has been exported. */
 export interface EditSessionState {
   /** Epoch ms of the last session write, or null with no session/meta sidecar. */

@@ -71,6 +71,8 @@ function removeLocalCopyBlockedKey(
   switch (reason) {
     case "edit-project":
       return "removeLocalCopyBlockedEdit";
+    case "webcam-track":
+      return "removeLocalCopyBlockedWebcam";
     case "different-bytes":
       return "removeLocalCopyBlockedBytes";
     case "no-cloud-copy":

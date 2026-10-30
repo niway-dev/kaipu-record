@@ -730,6 +730,7 @@
     "vaultUnreadableBanner": "No se puede leer tu carpeta de grabaciones ahora mismo. Los elementos en cloud se muestran desde el último catálogo conocido.",
     "removeLocalCopy": "Quitar descarga local",
     "removeLocalCopyBlockedEdit": "Este archivo se usa en un proyecto de edición local. Conserva sus archivos para poder continuar editando.",
+    "removeLocalCopyBlockedWebcam": "Esta grabación tiene una pista de webcam que solo existe en este equipo. Conserva el archivo para no perderla.",
     "removeLocalCopyBlockedBytes": "La copia en cloud no es idéntica a este archivo.",
     "removeLocalCopyBlockedNoCloud": "No hay copia en cloud de este archivo.",
     "kindGif": "GIF",

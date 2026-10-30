@@ -730,6 +730,7 @@
     "vaultUnreadableBanner": "Your recordings folder can't be read right now. Cloud items are shown from the last known catalog.",
     "removeLocalCopy": "Remove local download",
     "removeLocalCopyBlockedEdit": "This file is used by a local editing project. Keep its files to continue editing.",
+    "removeLocalCopyBlockedWebcam": "This recording has a webcam track that exists only on this computer. Keep the file so the track is not lost.",
     "removeLocalCopyBlockedBytes": "The cloud copy is not identical to this file.",
     "removeLocalCopyBlockedNoCloud": "There is no cloud copy of this file.",
     "kindGif": "GIF",

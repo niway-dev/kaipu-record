@@ -126,6 +126,10 @@ describe("LibraryService", () => {
     await writeFile(join(vaultDir, ".kaipu", "a.edit.json"), "{}");
     expect(await service.removeLocalCopy("a")).toEqual({ ok: false, reason: "edit-project" });
     await rm(join(vaultDir, ".kaipu", "a.edit.json"));
+    await writeFile(join(vaultDir, ".kaipu", "a.webcam.mp4"), "");
+    expect(await service.removeLocalCopy("a")).toEqual({ ok: false, reason: "webcam-track" });
+    await access(join(vaultDir, "a.mp4"));
+    await rm(join(vaultDir, ".kaipu", "a.webcam.mp4"));
     expect(await service.removeLocalCopy("a")).toEqual({ ok: true });
     const after = await service.list();
     expect(after.items.map((i) => i.availability)).toEqual(["cloud"]);

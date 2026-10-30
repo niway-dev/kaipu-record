@@ -12,6 +12,7 @@ import {
   hasEditSession,
   probeEditing,
   probeEditSession,
+  probeWebcam,
   type EditSessionState,
 } from "./edit-project-probe";
 import type { LibraryVault } from "./library-vault";
@@ -122,6 +123,7 @@ export class LibraryService {
       },
       cloud: cloud ? { contentSha256: cloud.contentSha256, sizeBytes: cloud.sizeBytes } : null,
       hasEditSession: await hasEditSession(this.deps.vaultDir(), id),
+      hasWebcamTrack: (await probeWebcam(this.deps.vaultDir(), id)) === "present",
     });
     if (!decision.allowed) return { ok: false, reason: decision.reason };
     await vault.removeLocalCopy(id);
