@@ -192,12 +192,15 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
   const candidates: Media[] = [];
   /** fsFold(stem) of present-but-ignored media: symlinks, empty files, uppercase extensions. */
   const protectedFolds = new Set<string>();
+  /** Every stem with something media-shaped in the root, live or not: the owners (M7). */
+  const present: string[] = [];
   await mapLimit(rootEntries, READ_CONCURRENCY, async (entry) => {
     const name = entry.name;
     if (name.startsWith(".")) return; // F1
     const ext = extname(name);
     const stem = name.slice(0, name.length - ext.length);
     if (!isPlainItemId(stem)) return;
+    if (MEDIA_EXTS.includes(ext.toLowerCase())) present.push(stem);
     if (MEDIA_EXTS.includes(ext.toLowerCase()) && isVaultOwnedStem(stem)) {
       // `tags.mp4`: its record path is the tag registry, which the vault owns. Listed
       // before any read, so nothing adopts, retitles or renames through it.
@@ -251,21 +254,26 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
   }));
   const liveFolds = new Set(live.map((item) => fsFold(item.stem)));
 
-  // Shared companion paths (M7): any potential path two live items both own.
+  // Shared companion paths (M7): any potential path two present stems both own. Every
+  // owner counts, not only live items: a stem conflict, a symlink, an empty file, an
+  // uppercase extension or a vault-owned stem still owns its companions, so a live item
+  // sharing one gets no title rewrite, no adoption and no rename. Stems that fold alike
+  // are one owner (a stem conflict lists those).
   const owners = new Map<string, Set<string>>();
-  for (const item of live) {
+  for (const stem of present) {
     const paths = [
-      ...MEDIA_EXTS.map((ext) => join(directory, `${item.stem}${ext}`)),
-      ...Object.values(vault.companionPaths(item.stem)),
+      ...MEDIA_EXTS.map((ext) => join(directory, `${stem}${ext}`)),
+      ...Object.values(vault.companionPaths(stem)),
     ];
     for (const path of paths) {
       const key = fsFold(path);
-      owners.set(key, (owners.get(key) ?? new Set()).add(item.stem));
+      owners.set(key, (owners.get(key) ?? new Set()).add(fsFold(stem)));
     }
   }
+  /** fsFold(stem) of every owner that shares a path with another owner. */
   const shared = new Set<string>();
-  for (const stems of owners.values()) {
-    if (stems.size > 1) for (const stem of stems) shared.add(stem);
+  for (const folds of owners.values()) {
+    if (folds.size > 1) for (const fold of folds) shared.add(fold);
   }
 
   const identities = new Map<string, string[]>();
@@ -280,7 +288,7 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
   for (const item of live) {
     const kind = kindFromExt(item.ext);
     const base = { stem: item.stem, ext: item.ext, path: item.name };
-    if (shared.has(item.stem)) {
+    if (shared.has(fsFold(item.stem))) {
       findings.push({ ...base, kind: "shared-companion", fixable: false });
       continue;
     }
