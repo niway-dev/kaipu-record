@@ -26,13 +26,19 @@ vi.mock("mediabunny", () => ({
       addAudioTrack: vi.fn(),
       start: vi.fn(async () => {}),
       finalize: vi.fn(async () => {}),
+      cancel: vi.fn(async () => {}),
     };
   }),
   StreamTarget: vi.fn(),
   Mp4OutputFormat: vi.fn(),
   // `errorPromise` stays pending so the engine's failure listener never fires.
   MediaStreamVideoTrackSource: vi.fn(function () {
-    return { pause: vi.fn(), resume: vi.fn(), errorPromise: new Promise(() => {}) };
+    return {
+      pause: vi.fn(),
+      resume: vi.fn(),
+      close: vi.fn(),
+      errorPromise: new Promise(() => {}),
+    };
   }),
   MediaStreamAudioTrackSource: vi.fn(function () {
     return { pause: vi.fn(), resume: vi.fn(), errorPromise: new Promise(() => {}) };
@@ -65,6 +71,7 @@ function fakeStream(video: unknown[], audio: unknown[]): MediaStream {
 let screenVideoTrack: ReturnType<typeof fakeTrack>;
 let screenSystemAudioTrack: ReturnType<typeof fakeTrack>;
 let micTrack: ReturnType<typeof fakeTrack>;
+let webcamTrack: ReturnType<typeof fakeTrack>;
 let destinationTrack: ReturnType<typeof fakeTrack>;
 let getUserMedia: ReturnType<typeof vi.fn>;
 let audioContextClose: ReturnType<typeof vi.fn>;
@@ -105,6 +112,7 @@ beforeEach(() => {
   screenVideoTrack = fakeTrack();
   screenSystemAudioTrack = fakeTrack();
   micTrack = fakeTrack();
+  webcamTrack = fakeTrack({ width: 1280, height: 720 });
   destinationTrack = fakeTrack();
   audioContextClose = vi.fn(async () => {});
   gains = [];
@@ -112,7 +120,11 @@ beforeEach(() => {
   sources = [];
 
   getUserMedia = vi.fn(async (constraints: MediaStreamConstraints) => {
-    // The screen request carries video constraints; everything else is the mic.
+    // The screen request carries Electron's `mandatory` desktop constraints, the webcam a
+    // plain video request; everything else is the mic.
+    if (constraints.video && !("mandatory" in (constraints.video as object))) {
+      return fakeStream([webcamTrack], []);
+    }
     if (constraints.video) {
       const systemAudio = Boolean(constraints.audio);
       return fakeStream([screenVideoTrack], systemAudio ? [screenSystemAudioTrack] : []);
@@ -1080,5 +1092,237 @@ describe("prepareEngine — the audio of a take waiting for its countdown", () =
     // A released take takes no more settings.
     expect(prepared.setSystemAudioVolume(50)).toBe("unavailable");
     expect(await prepared.setMicrophoneEnabled(true, "mic-1")).toBe("unavailable");
+  });
+});
+
+/**
+ * The webcam track (ADR 0032): a second getUserMedia stream encoded into its own MP4 by a
+ * second mediabunny Output, on the same clock as the screen. It never fails the take.
+ */
+describe("webcam", () => {
+  const webcam = { deviceId: "cam-1", lines: 720 };
+  /** The Outputs of this run, in creation order: the screen's, then the webcam's. */
+  const outputs = () =>
+    vi
+      .mocked(Output)
+      .mock.results.map(
+        (result) => result.value as ReturnType<typeof lastOutput> & { cancel?: unknown },
+      );
+  const webcamSource = () =>
+    vi
+      .mocked(MediaStreamVideoTrackSource)
+      .mock.calls.map((call, i) => ({
+        track: call[0],
+        config: call[1],
+        source: vi.mocked(MediaStreamVideoTrackSource).mock.results[i]!.value,
+      }))
+      .find((entry) => entry.track === (webcamTrack as unknown))!;
+  const webcamRequests = () =>
+    getUserMedia.mock.calls
+      .map((call) => call[0] as MediaStreamConstraints)
+      .filter((c) => c.video && !("mandatory" in (c.video as object)));
+
+  it("opens the chosen camera beside the screen and the mic, 16:9 at the asked lines, no audio", async () => {
+    await prepareEngine(baseOptions({ microphoneDeviceId: "mic-1", webcam }));
+    expect(webcamRequests()).toEqual([
+      {
+        video: { deviceId: { exact: "cam-1" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      },
+    ]);
+  });
+
+  it("asks for the user-facing camera when none is chosen, at 1080 lines with framing", async () => {
+    await prepareEngine(baseOptions({ webcam: { deviceId: null, lines: 1080 } }));
+    expect(webcamRequests()[0]).toEqual({
+      video: { facingMode: "user", width: { ideal: 1920 }, height: { ideal: 1080 } },
+      audio: false,
+    });
+  });
+
+  it("falls back to the default camera when the chosen one cannot be opened", async () => {
+    const original = getUserMedia.getMockImplementation() as (
+      c: MediaStreamConstraints,
+    ) => Promise<MediaStream>;
+    getUserMedia.mockImplementation(async (c: MediaStreamConstraints) => {
+      const video = c.video as Record<string, unknown> | undefined;
+      if (video && "deviceId" in video) throw new Error("OverconstrainedError");
+      return original(c);
+    });
+    const handle = await startEngine(baseOptions({ webcam }));
+    expect(webcamRequests()).toHaveLength(2);
+    expect(handle.webcam).not.toBeNull();
+  });
+
+  it("encodes the raw webcam track into a second MP4: H.264, realtime, 30 fps, no audio", async () => {
+    await prepareEngine(baseOptions({ webcam }));
+    expect(outputs()).toHaveLength(2);
+    const [, webcamOutput] = outputs();
+    const { config, source } = webcamSource();
+    // The raw camera track: no compositor, no mirror, no framing crop reaches the encoder.
+    expect(config).toMatchObject({
+      codec: "avc",
+      bitrate: 2_500_000,
+      hardwareAcceleration: "prefer-hardware",
+      latencyMode: "realtime",
+    });
+    expect(webcamOutput!.addVideoTrack).toHaveBeenCalledWith(source, { frameRate: 30 });
+    expect(webcamOutput!.addAudioTrack).not.toHaveBeenCalled();
+    // Both progressive (moov at the end), like the screen.
+    expect(vi.mocked(Mp4OutputFormat).mock.calls).toEqual([
+      [{ fastStart: false }],
+      [{ fastStart: false }],
+    ]);
+  });
+
+  it("sends the webcam's chunks to onWebcamChunk, the screen's to onChunk", async () => {
+    const onChunk = vi.fn();
+    const onWebcamChunk = vi.fn();
+    await startEngine(baseOptions({ webcam, onChunk, onWebcamChunk }));
+    const writable = vi.mocked(StreamTarget).mock.calls.at(-1)![0] as WritableStream;
+    await writable.getWriter().write({ data: new Uint8Array([7]), position: 3 } as never);
+    expect(onChunk).not.toHaveBeenCalled();
+    expect(onWebcamChunk).toHaveBeenCalledWith(expect.any(ArrayBuffer), 3);
+  });
+
+  it("starts both outputs when the take begins, the screen first, and reports the webcam", async () => {
+    const prepared = await prepareEngine(baseOptions({ webcam }));
+    const [screenOutput, webcamOutput] = outputs();
+    expect(webcamOutput!.start).not.toHaveBeenCalled();
+    const handle = await prepared.begin();
+    expect(screenOutput!.start).toHaveBeenCalledOnce();
+    expect(webcamOutput!.start).toHaveBeenCalledOnce();
+    expect(screenOutput!.start.mock.invocationCallOrder[0]).toBeLessThan(
+      webcamOutput!.start.mock.invocationCallOrder[0]!,
+    );
+    expect(handle.webcam?.size).toEqual({ width: 1280, height: 720 });
+    await expect(handle.webcam?.firstMediaTimestamp).resolves.toMatchObject({
+      quality: "estimated", // the mocked Output has no private field
+    });
+  });
+
+  it("pauses and resumes the screen and the webcam in the same call", async () => {
+    const handle = await startEngine(baseOptions({ webcam }));
+    const screen = vi.mocked(MediaStreamVideoTrackSource).mock.results[0]!.value;
+    const { source } = webcamSource();
+    handle.pause();
+    expect(screen.pause).toHaveBeenCalled();
+    expect(source.pause).toHaveBeenCalled();
+    handle.resume();
+    expect(screen.resume).toHaveBeenCalled();
+    expect(source.resume).toHaveBeenCalled();
+  });
+
+  it("stop finalizes the webcam after the screen and before the tracks stop", async () => {
+    const handle = await startEngine(baseOptions({ webcam }));
+    const [screenOutput, webcamOutput] = outputs();
+    webcamOutput!.finalize.mockImplementation(async () => {
+      expect(webcamTrack.stop).not.toHaveBeenCalled();
+    });
+    await handle.stop();
+    expect(screenOutput!.finalize.mock.invocationCallOrder[0]).toBeLessThan(
+      webcamOutput!.finalize.mock.invocationCallOrder[0]!,
+    );
+    expect(webcamTrack.stop).toHaveBeenCalled();
+    expect(handle.webcam?.isUsable()).toBe(true);
+  });
+
+  it("a webcam that cannot be opened does not fail the take: it records without one", async () => {
+    const original = getUserMedia.getMockImplementation() as (
+      c: MediaStreamConstraints,
+    ) => Promise<MediaStream>;
+    getUserMedia.mockImplementation(async (c: MediaStreamConstraints) => {
+      if (c.video && !("mandatory" in (c.video as object))) throw new Error("NotReadableError");
+      return original(c);
+    });
+    const handle = await startEngine(baseOptions({ webcam }));
+    expect(handle.webcam).toBeNull();
+    expect(outputs()).toHaveLength(1);
+  });
+
+  it("a webcam output that cannot start drops the webcam, not the take", async () => {
+    const prepared = await prepareEngine(baseOptions({ webcam }));
+    outputs()[1]!.start.mockRejectedValueOnce(new Error("no encoder"));
+    const handle = await prepared.begin();
+    expect(handle.webcam).toBeNull();
+    expect(webcamTrack.stop).toHaveBeenCalled();
+    expect(screenVideoTrack.stop).not.toHaveBeenCalled();
+  });
+
+  it("an unplugged webcam ends its file and the take goes on", async () => {
+    const onError = vi.fn();
+    const handle = await startEngine(baseOptions({ webcam, onError }));
+    const ended = webcamTrack.addEventListener.mock.calls.find(([type]) => type === "ended");
+    ended![1]();
+    expect(webcamSource().source.close).toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
+    handle.pause(); // no longer reaches a closed source
+    expect(webcamSource().source.pause).not.toHaveBeenCalled();
+    await handle.stop();
+    expect(handle.webcam?.isUsable()).toBe(true);
+  });
+
+  it("a webcam encoder error is not an engine error; the webcam is reported unusable", async () => {
+    const mocked = vi.mocked(MediaStreamVideoTrackSource);
+    const original = mocked.getMockImplementation()!;
+    const build = original as unknown as (...args: unknown[]) => Record<string, unknown>;
+    mocked.mockImplementation(function (track: unknown, config: unknown) {
+      const source = build(track, config);
+      if (track === (webcamTrack as unknown)) {
+        source.errorPromise = Promise.reject(new Error("encoder crashed"));
+      }
+      return source as never;
+    });
+    try {
+      const onError = vi.fn();
+      const handle = await startEngine(baseOptions({ webcam, onError }));
+      await new Promise((r) => setTimeout(r, 0));
+      expect(onError).not.toHaveBeenCalled();
+      await handle.stop();
+      expect(handle.webcam?.isUsable()).toBe(false);
+      expect(outputs()[1]!.finalize).not.toHaveBeenCalled();
+    } finally {
+      mocked.mockImplementation(original);
+    }
+  });
+
+  it("endWebcam closes the webcam mid-take and releases the camera", async () => {
+    const handle = await startEngine(baseOptions({ webcam }));
+    handle.endWebcam();
+    expect(webcamSource().source.close).toHaveBeenCalled();
+    expect(webcamTrack.stop).toHaveBeenCalled();
+    await handle.stop();
+    expect(handle.webcam?.isUsable()).toBe(true);
+  });
+
+  it("endWebcam before the take begins drops the webcam from it", async () => {
+    const prepared = await prepareEngine(baseOptions({ webcam }));
+    prepared.endWebcam();
+    expect(webcamTrack.stop).toHaveBeenCalled();
+    const handle = await prepared.begin();
+    expect(handle.webcam).toBeNull();
+    expect(outputs()[1]!.start).not.toHaveBeenCalled();
+  });
+
+  it("release before the take begins releases the camera too", async () => {
+    const prepared = await prepareEngine(baseOptions({ webcam }));
+    prepared.release();
+    await vi.waitFor(() => expect(webcamTrack.stop).toHaveBeenCalled());
+  });
+
+  it("releases the camera when the screen cannot be captured", async () => {
+    getUserMedia.mockImplementation(async (c: MediaStreamConstraints) => {
+      if (c.video && "mandatory" in (c.video as object)) throw new Error("NotAllowedError");
+      return fakeStream([webcamTrack], []);
+    });
+    await expect(startEngine(baseOptions({ webcam }))).rejects.toThrow("NotAllowedError");
+    await vi.waitFor(() => expect(webcamTrack.stop).toHaveBeenCalled());
+  });
+
+  it("opens no camera and builds one output with the webcam off", async () => {
+    const handle = await startEngine(baseOptions());
+    expect(webcamRequests()).toHaveLength(0);
+    expect(outputs()).toHaveLength(1);
+    expect(handle.webcam).toBeNull();
   });
 });

@@ -94,6 +94,8 @@ function fakeEngine(over: Partial<EngineHandle> = {}): EngineHandle {
     setNoiseSuppression: vi.fn(async () => "ok" as const),
     setSystemAudioVolume: vi.fn(() => "ok" as const),
     setDucking: vi.fn(() => "ok" as const),
+    webcam: null,
+    endWebcam: vi.fn(),
     ...over,
   };
 }
@@ -115,6 +117,7 @@ function fakePrepared(handle: EngineHandle = fakeEngine()): FakePrepared {
     setNoiseSuppression: handle.setNoiseSuppression,
     setSystemAudioVolume: handle.setSystemAudioVolume,
     setDucking: handle.setDucking,
+    endWebcam: vi.fn(),
     begin: vi.fn(async () => {
       callOrder.push("begin");
       return handle;
