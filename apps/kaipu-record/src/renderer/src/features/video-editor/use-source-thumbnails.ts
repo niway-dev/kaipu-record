@@ -21,8 +21,12 @@ export interface CompanionThumbnails {
 
 const THUMB_WIDTH = 160;
 const THUMB_COUNT = 24;
-/** Recordings whose thumbnails stay decoded (~250 KB each), so re-opening the editor is free. */
-const CACHE_LIMIT = 8;
+/**
+ * Filmstrips that stay decoded (~250 KB each), so re-opening the editor is free. A
+ * recording with a webcam holds two (the screen's and the webcam's): 16 keeps the last 8
+ * recordings either way.
+ */
+const CACHE_LIMIT = 16;
 
 interface CachedThumbnail {
   sourceTime: number;

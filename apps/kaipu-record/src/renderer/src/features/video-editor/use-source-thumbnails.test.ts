@@ -122,8 +122,8 @@ describe("useSourceThumbnails", () => {
     expect(openMock).toHaveBeenCalledTimes(2);
   });
 
-  it("evicts the least recently used recording past 8", async () => {
-    for (let i = 0; i < 9; i++) {
+  it("evicts the least recently used filmstrip past 16", async () => {
+    for (let i = 0; i < 17; i++) {
       const h = renderHook(() => useSourceThumbnails(`kaipu-media://recording/r${i}`, 48));
       await waitFor(() => expect(h.result.current).toHaveLength(24));
       h.unmount();
@@ -131,7 +131,25 @@ describe("useSourceThumbnails", () => {
     const again = renderHook(() => useSourceThumbnails("kaipu-media://recording/r0", 48));
     await waitFor(() => expect(again.result.current).toHaveLength(24));
 
-    expect(openMock).toHaveBeenCalledTimes(10);
+    expect(openMock).toHaveBeenCalledTimes(18);
+  });
+
+  it("keeps 8 recordings with a webcam: their screen and webcam strips both stay", async () => {
+    stubInput({ computeDuration: vi.fn(async () => 48) });
+    for (let i = 0; i < 8; i++) {
+      const screen = renderHook(() => useSourceThumbnails(`kaipu-media://recording/r${i}`, 48));
+      await waitFor(() => expect(screen.result.current).toHaveLength(24));
+      screen.unmount();
+      const cam = renderHook(() => useCompanionThumbnails(`kaipu-media://webcam/r${i}`, 48, 0));
+      await waitFor(() => expect(cam.result.current.thumbnails.length).toBeGreaterThan(0));
+      cam.unmount();
+    }
+    const again = renderHook(() => useSourceThumbnails("kaipu-media://recording/r0", 48));
+    await waitFor(() => expect(again.result.current).toHaveLength(24));
+    const cam = renderHook(() => useCompanionThumbnails("kaipu-media://webcam/r0", 48, 0));
+    await waitFor(() => expect(cam.result.current.thumbnails.length).toBeGreaterThan(0));
+
+    expect(openMock).toHaveBeenCalledTimes(16);
   });
 });
 
