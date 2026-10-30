@@ -2,6 +2,12 @@ import type { ExportPresetId } from "./export-preset";
 import type { RecordingCapture } from "../recording-capture";
 
 /**
+ * Why an item's sidecar cannot be trusted (NIW2-568): `unreadable` = a read error other
+ * than a missing file; `corrupt` = it read but is not a JSON object.
+ */
+export type MetadataIssue = "unreadable" | "corrupt";
+
+/**
  * A recording stored in the local vault, as returned by the main process.
  * Pure type — safe to import from both main and renderer.
  */
@@ -59,6 +65,12 @@ export interface LocalRecording {
    * sidecar. null for older recordings, screenshots, GIFs and exports. Optional like `tagIds`.
    */
   capture?: RecordingCapture | null;
+  /**
+   * Set only when the sidecar could not be read or parsed. Every sidecar-backed field above
+   * is then a placeholder (title from the file name, `assetId` a stand-in), and nothing is
+   * written for the item until a later read succeeds.
+   */
+  metadataIssue?: MetadataIssue;
 }
 
 /** Where recordings are stored, and whether the user picked a custom folder. */

@@ -711,6 +711,7 @@
     "availabilityLocalUnavailable": "Local location unavailable",
     "availabilityUnverified": "Location to verify",
     "comparisonLocalChanges": "Local changes · the cloud copy has not changed",
+    "metadataUnreadable": "Metadata unreadable · changes are paused until it reads again",
     "editingExportedOnly": "You can edit this video. The layers and assets of the original project are not stored in cloud.",
     "editingProjectAvailable": "Editing project available on this device",
     "editingMissingDependencies": "Project files are missing",

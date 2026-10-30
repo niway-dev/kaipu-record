@@ -1,7 +1,17 @@
 import { basename, join } from "node:path";
-import { access, mkdir, open, readFile, readdir, rename, rm, stat } from "node:fs/promises";
+import {
+  access,
+  copyFile,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+} from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import type { LocalRecording } from "@shared/types/library-storage";
+import type { LocalRecording, MetadataIssue } from "@shared/types/library-storage";
 import { sanitizeRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
 import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/types/export-preset";
 import { atomicWriteFile, withLock } from "./atomic-write";
@@ -58,6 +68,39 @@ export interface Sidecar {
 // directory (e.g. a fresh instance per IPC call) instead of re-minting on every read.
 const readOnlyIdentityMemo = new Map<string, string>();
 
+// Sidecars already copied aside this session (`quarantine`), by absolute path, so a list
+// that re-reads a corrupt sidecar every few seconds keeps one copy, not hundreds. A clean
+// read clears the path, so a sidecar that is repaired and later corrupted again gets a new copy.
+const quarantinedSidecars = new Set<string>();
+
+/**
+ * The sidecar exists but cannot be trusted: `unreadable` (a read error other than a missing
+ * file: EIO, EACCES, a cloud-synced file that is not downloaded) or `corrupt` (it read, but
+ * is not a JSON object: truncated by a crash, hand-edited). Nothing may be written for the
+ * item while this holds, or the next write would replace the unknown contents (title, tags,
+ * edit links, cloud association) with a freshly minted identity.
+ */
+export class SidecarUnavailableError extends Error {
+  constructor(
+    readonly issue: MetadataIssue,
+    readonly path: string,
+    options?: { cause?: unknown },
+  ) {
+    super(`sidecar ${issue}: ${path}`, options);
+    this.name = "SidecarUnavailableError";
+  }
+}
+
+/** File access the vault reads sidecars through; injected so tests can fail a read on demand. */
+export interface VaultReader {
+  readText(path: string): Promise<string>;
+}
+
+const fsReader: VaultReader = { readText: (path) => readFile(path, "utf-8") };
+
+/** Prefix of the stand-in `assetId` of an item whose sidecar cannot be read; never persisted. */
+export const UNREADABLE_ASSET_PREFIX = "unreadable:";
+
 async function exists(path: string): Promise<boolean> {
   try {
     await access(path);
@@ -74,7 +117,10 @@ async function exists(path: string): Promise<boolean> {
  * directory is injected so it's testable against a temp folder.
  */
 export class LibraryVault {
-  constructor(readonly directory: string) {}
+  constructor(
+    readonly directory: string,
+    private readonly reader: VaultReader = fsReader,
+  ) {}
 
   /** Resolve an id to its real file; if none exists yet, default to `.mp4`. */
   async filePath(id: string): Promise<string> {
@@ -128,7 +174,16 @@ export class LibraryVault {
     }
     const isImage = IMAGE_EXTS.some((ext) => filePath.endsWith(ext));
     const isGif = GIF_EXTS.some((ext) => filePath.endsWith(ext));
-    const meta = await this.ensureIdentity(id);
+    let meta: Sidecar & { assetId: string };
+    try {
+      meta = await this.ensureIdentity(id);
+    } catch (error) {
+      // Still listed, so the user sees the file exists; read-only until the sidecar reads again.
+      if (error instanceof SidecarUnavailableError) {
+        return this.describeUnreadable(id, filePath, info, error.issue);
+      }
+      throw error;
+    }
     const hashIsFresh =
       meta.contentSha256 !== undefined &&
       meta.hashedSizeBytes === info.size &&
@@ -166,17 +221,83 @@ export class LibraryVault {
     };
   }
 
-  async sidecar(id: string): Promise<Sidecar> {
-    try {
-      return JSON.parse(await readFile(this.sidecarPath(id), "utf-8")) as Sidecar;
-    } catch {
-      return {};
-    }
+  /**
+   * What the file alone can tell: the item, with the sidecar's fields unknown. It carries a
+   * stand-in assetId (derived from the file id, never written anywhere) so the Library can
+   * still key and list it; `metadataIssue` is what tells every consumer not to trust or
+   * write it.
+   */
+  private describeUnreadable(
+    id: string,
+    filePath: string,
+    info: { size: number; birthtimeMs: number },
+    issue: MetadataIssue,
+  ): LocalRecording {
+    const isImage = IMAGE_EXTS.some((ext) => filePath.endsWith(ext));
+    const isGif = GIF_EXTS.some((ext) => filePath.endsWith(ext));
+    return {
+      id,
+      assetId: `${UNREADABLE_ASSET_PREFIX}${id}`,
+      kind: isImage ? "screenshot" : isGif ? "gif" : "recording",
+      title: humanizeId(id),
+      filePath,
+      createdAt: info.birthtimeMs,
+      sizeBytes: info.size,
+      durationSeconds: 0,
+      derivedFromAssetId: null,
+      contentSha256: null,
+      tagIds: [],
+      gif: null,
+      export: null,
+      editorOpenedAt: null,
+      editorSavedAt: null,
+      capture: null,
+      thumbnailUrl: null,
+      metadataIssue: issue,
+    };
   }
 
   /**
-   * Read the sidecar and make sure it carries an assetId. A legacy (v1) item gets
-   * one minted here, on first read, and persisted best-effort: if the vault is
+   * The item's sidecar. Only a missing file (`ENOENT`) means "no sidecar yet" and reads as
+   * `{}`; any other failure throws {@link SidecarUnavailableError}, because `{}` here is
+   * indistinguishable from a legacy item and the caller would mint a new identity over it.
+   */
+  async sidecar(id: string): Promise<Sidecar> {
+    const path = this.sidecarPath(id);
+    let raw: string;
+    try {
+      raw = await this.reader.readText(path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+      throw new SidecarUnavailableError("unreadable", path, { cause: error });
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = undefined;
+    }
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      await this.quarantine(path);
+      throw new SidecarUnavailableError("corrupt", path);
+    }
+    quarantinedSidecars.delete(path);
+    return parsed as Sidecar;
+  }
+
+  /** Keep a copy of a corrupt sidecar, once per path per session. Never touches the original. */
+  private async quarantine(path: string): Promise<void> {
+    if (quarantinedSidecars.has(path)) return;
+    quarantinedSidecars.add(path);
+    await copyFile(path, `${path}.corrupt-${Date.now()}`).catch(() => undefined);
+  }
+
+  /**
+   * Read the sidecar and make sure it carries an assetId. A legacy (v1) item (no
+   * sidecar, or one without an id) gets one minted here, on first read, and persisted
+   * best-effort. A sidecar that cannot be read or parsed throws
+   * {@link SidecarUnavailableError} instead: it is not a legacy item, and minting would
+   * overwrite what is in it. Persisting is best-effort: if the vault is
    * read-only, the id is instead remembered in `readOnlyIdentityMemo` (keyed by the
    * sidecar's absolute path) so a later read for the same path reuses it instead of
    * minting a new one every time — the alternative (failing to list) reads as data
@@ -216,8 +337,9 @@ export class LibraryVault {
   /**
    * Merge fields into the sidecar (used by rename, finalize and tags). Serialized per
    * sidecar and atomic (unique temp + fsync + rename): concurrent writers never lose a
-   * field, and a crash mid-write never leaves a truncated sidecar, which would read
-   * back as `{}` and lose the item's title, identity and tags.
+   * field, and a crash mid-write never leaves a truncated sidecar. Throws
+   * {@link SidecarUnavailableError} without writing when the existing sidecar cannot be
+   * read or parsed: merging into `{}` would erase it.
    */
   async writeMeta(id: string, meta: Sidecar): Promise<void> {
     await withLock(this.sidecarPath(id), () => this.writeMetaLocked(id, meta));
@@ -396,6 +518,9 @@ export class LibraryVault {
    * the same assetId. Not `remove()`: that one is the destructive delete.
    */
   async removeLocalCopy(id: string): Promise<void> {
+    // Before deleting anything: the marker below cannot be written over an unreadable
+    // sidecar, and the media must not go without it.
+    await this.sidecar(id);
     const target = await this.filePath(id);
     if (!(await exists(target))) throw new Error(`No local media file for "${id}"`);
     await rm(target);

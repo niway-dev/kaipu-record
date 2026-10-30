@@ -26,6 +26,9 @@ export async function saveScreenshotToVault(
   const id = meta.overwriteId ?? screenshotId();
   const isNew = meta.overwriteId === undefined;
   const vault = currentVault();
+  // Overwriting: a sidecar that cannot be read refuses the save before the PNG is replaced,
+  // instead of after (the metadata write below would throw with the new pixels already down).
+  if (!isNew) await vault.sidecar(id);
   await vault.writeImage(id, png);
   const now = Date.now();
   try {
