@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryItem } from "@shared/types/library-item";
@@ -124,25 +124,21 @@ afterEach(() => {
   for (const t of getToasts()) dismissToast(t.id);
 });
 
-describe("PreparePage (NIW2-578)", () => {
-  it("shows the original, the destinations grouped by who compresses last, and asks to pick one", async () => {
+describe("PreparePage (NIW2-578, layout NIW2-583)", () => {
+  it("always has a destination: YouTube when the URL names none, with what changes and why", async () => {
     renderPrepare();
-    expect(await screen.findByRole("heading", { name: "Where is it going?" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "For YouTube", level: 1 })).toBeVisible();
+    expect(screen.getByText("From your recording · 3:02 · 1916 × 1048 · 119 MB")).toBeVisible();
 
-    const original = screen.getByRole("complementary", { name: "Original" });
-    expect(within(original).getByText("Demo")).toBeVisible();
-    expect(within(original).getByText(/3:02 · 1916 × 1048/)).toBeVisible();
-    expect(
-      within(original).getByText(
-        "Copies are made from this file. It is never changed or replaced.",
-      ),
-    ).toBeVisible();
-
-    expect(screen.getByText("They re-compress it · send more")).toBeVisible();
-    expect(screen.getByText("They play it as-is · keep it light")).toBeVisible();
-    expect(screen.getByText("Keep")).toBeVisible();
+    expect(screen.getByText("Post · they re-compress it · send more")).toBeVisible();
+    expect(screen.getByText("Send · they play it as-is · keep it light")).toBeVisible();
+    expect(screen.getByText("Keep · a full-quality copy")).toBeVisible();
+    const youtube = screen.getByRole("radio", { name: /^YouTube/ });
+    expect(youtube).toHaveAttribute("aria-checked", "true");
+    // A fixed-canvas estimate is a ceiling: the list says "up to" above the number.
+    expect(within(youtube).getByText("up to")).toBeVisible();
+    expect(within(youtube).getByText(/^~\d+ MB$/)).toBeVisible();
     for (const name of [
-      /^YouTube/,
       /^Reels · TikTok · Shorts/,
       /^LinkedIn · Feeds/,
       /^GitHub · Jira · Linear/,
@@ -151,19 +147,28 @@ describe("PreparePage (NIW2-578)", () => {
     ]) {
       expect(screen.getByRole("radio", { name })).toHaveAttribute("aria-checked", "false");
     }
-    expect(screen.getByText("Pick where it's going")).toBeVisible();
-    expect(screen.queryByRole("button", { name: /^Prepare for/ })).toBeNull();
+
+    const changes = screen.getByRole("region", { name: "What changes" });
+    expect(within(changes).getByText(/^119 MB → up to ~\d+ MB$/)).toBeVisible();
+    expect(within(changes).getByText("1916 × 1048 → 2560 × 1440")).toBeVisible();
+    expect(within(changes).getByText("studio quality")).toBeVisible();
+    expect(within(changes).getByText("3:02 · nothing cut")).toBeVisible();
+    expect(within(changes).queryByText(/bitrate|fps/i)).toBeNull();
+
+    const why = screen.getByRole("region", { name: "Why it gets bigger" });
+    expect(within(why).getByText(/YouTube compresses every video again/)).toBeVisible();
+    expect(screen.queryByText("Pick where it's going")).toBeNull();
   });
 
-  it("?to=youtube preselects YouTube: bigger on purpose, 1440p, and one button to start it", async () => {
+  it("?to=youtube: 1440p by default, and one button starts the copy in the background", async () => {
     const router = renderPrepare("/prepare/asset-1?to=youtube");
-    const youtube = await screen.findByRole("radio", { name: /^YouTube/ });
-    expect(youtube).toHaveAttribute("aria-checked", "true");
-
-    expect(screen.getByText("Bigger on purpose")).toBeVisible();
-    expect(screen.getByText(/YouTube compresses every video again/)).toBeVisible();
-    expect(screen.getByRole("radio", { name: /^1440p/ })).toHaveAttribute("aria-checked", "true");
+    expect(await screen.findByRole("radio", { name: /^1440p/ })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
     expect(screen.getByRole("radio", { name: /^4K/ })).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByText("If you uploaded 1080p")).toBeVisible();
+    expect(screen.getByText("With this copy · 1440p")).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: /^Prepare for YouTube · up to ~\d+ MB$/ }));
 
@@ -192,26 +197,64 @@ describe("PreparePage (NIW2-578)", () => {
   it("4K is a choice inside YouTube", async () => {
     renderPrepare("/prepare/asset-1?to=youtube");
     fireEvent.click(await screen.findByRole("radio", { name: /^4K/ }));
+    expect(screen.getByText("With this copy · 4K")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: /^Prepare for YouTube/ }));
     expect(startArgs()).toMatchObject({ presetId: "youtube-4k" });
   });
 
-  it("GitHub promises the 10 MB limit only when the copy fits it", async () => {
+  describe("Enter prepares", () => {
+    it("from anywhere on the page, including a destination row, which it does not re-select", async () => {
+      renderPrepare("/prepare/asset-1?to=github");
+      const youtube = await screen.findByRole("radio", { name: /^YouTube/ });
+      fireEvent.keyDown(youtube, { key: "Enter" });
+      expect(startArgs()).toMatchObject({ presetId: "light" });
+      expect(youtube).toHaveAttribute("aria-checked", "false");
+    });
+
+    it("from the page body", async () => {
+      renderPrepare("/prepare/asset-1?to=youtube");
+      await screen.findByRole("heading", { name: "For YouTube" });
+      fireEvent.keyDown(document.body, { key: "Enter" });
+      expect(startArgs()).toMatchObject({ presetId: "youtube-1440" });
+    });
+
+    it("not while typing in a field, not with a modifier, not on another button", async () => {
+      renderPrepare("/prepare/asset-1?to=youtube");
+      await screen.findByRole("heading", { name: "For YouTube" });
+      const field = document.createElement("input");
+      document.body.append(field);
+      try {
+        fireEvent.keyDown(field, { key: "Enter" });
+        fireEvent.keyDown(document.body, { key: "Enter", metaKey: true });
+        fireEvent.keyDown(screen.getByRole("button", { name: "Back to recording" }), {
+          key: "Enter",
+        });
+        expect(exportController.start).not.toHaveBeenCalled();
+      } finally {
+        field.remove();
+      }
+    });
+  });
+
+  it("GitHub: the size bar says how much lighter, and the 10 MB limit only as it is", async () => {
     renderPrepare("/prepare/asset-1?to=github");
     const github = await screen.findByRole("radio", { name: /^GitHub · Jira · Linear/ });
     expect(within(github).getByText("Small copy that plays inline")).toBeVisible();
-    expect(screen.getByText(/% lighter$/)).toBeVisible();
+    expect(screen.getByRole("region", { name: "Why it gets lighter" })).toBeVisible();
+    expect(screen.getByText(/% lighter · over GitHub's 10 MB free-plan limit$/)).toBeVisible();
+    expect(screen.queryByText(/under the 10 MB limit/)).toBeNull();
     fireEvent.click(
       screen.getByRole("button", { name: /^Prepare for GitHub · Jira · Linear · ~/ }),
     );
     expect(startArgs()).toMatchObject({ presetId: "light" });
   });
 
-  it("a short recording fits GitHub's 10 MB, and the list says so", async () => {
+  it("a short recording fits GitHub's 10 MB, and the list and the bar say so", async () => {
     probe.mockResolvedValue({ ...PROBE, durationSec: 20 });
-    renderPrepare();
+    renderPrepare("/prepare/asset-1?to=github");
     const github = await screen.findByRole("radio", { name: /^GitHub · Jira · Linear/ });
     expect(within(github).getByText("Under the 10 MB limit")).toBeVisible();
+    expect(screen.getByText(/% lighter · under the 10 MB limit$/)).toBeVisible();
   });
 
   it("Reels offers Fill or Fit, and the copy uses the one picked", async () => {
@@ -226,24 +269,10 @@ describe("PreparePage (NIW2-578)", () => {
     expect(startArgs()).toMatchObject({ presetId: "vertical", framing: "fit" });
   });
 
-  it("'What changes in the copy' unfolds into picture, smoothness and sound, in words", async () => {
-    renderPrepare("/prepare/asset-1?to=youtube");
-    const toggle = await screen.findByRole("button", { name: "What changes in the copy" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("2560 × 1440")).toBeNull();
-
-    fireEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("2560 × 1440")).toBeVisible();
-    expect(screen.getByText(/scaled up cleanly/)).toBeVisible();
-    expect(screen.getByText("same as the recording")).toBeVisible();
-    expect(screen.getByText("studio quality")).toBeVisible();
-    expect(screen.queryByText(/bitrate|fps/i)).toBeNull();
-  });
-
   it("Archive keeps the full size", async () => {
     renderPrepare("/prepare/asset-1?to=archive");
-    fireEvent.click(await screen.findByRole("button", { name: "Prepare for Archive copy" }));
+    expect(await screen.findByRole("region", { name: "Why keep one" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Prepare for Archive copy" }));
     expect(startArgs()).toMatchObject({ presetId: "maximum" });
   });
 
@@ -275,17 +304,14 @@ describe("PreparePage (NIW2-578)", () => {
     expect(probe).not.toHaveBeenCalled();
   });
 
-  it("lists what is already prepared, and opens that copy instead of encoding it again", async () => {
+  it("a copy that exists reads Ready, and opening it replaces encoding it again — Enter too", async () => {
     list(recording(), preparedCopy);
     const router = renderPrepare();
-    const already = await screen.findByRole("region", { name: "Already prepared" });
-    expect(within(already).getByText("Slack · Discord · Email")).toBeVisible();
-    expect(within(already).getByText(/^22 MB · /)).toBeVisible();
-
-    const chat = screen.getByRole("radio", { name: /^Slack · Discord · Email/ });
+    const chat = await screen.findByRole("radio", { name: /^Slack · Discord · Email/ });
     expect(within(chat).getByText("Ready")).toBeVisible();
     fireEvent.click(chat);
-    fireEvent.click(screen.getByRole("button", { name: "Open the copy you have" }));
+    expect(screen.getByRole("button", { name: "Prepare again" })).toBeVisible();
+    fireEvent.keyDown(chat, { key: "Enter" });
     await waitFor(() => expect(router.state.location.pathname).toBe("/library/asset-2"));
     expect(exportController.start).not.toHaveBeenCalled();
   });
@@ -300,9 +326,23 @@ describe("PreparePage (NIW2-578)", () => {
     ).toBeVisible();
   });
 
-  it("an unknown ?to= preselects nothing", async () => {
+  it("an unknown ?to= falls back to YouTube", async () => {
     renderPrepare("/prepare/asset-1?to=myspace");
-    await act(async () => {});
-    expect(await screen.findByText("Pick where it's going")).toBeVisible();
+    expect(await screen.findByRole("radio", { name: /^YouTube/ })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
+
+  it("Prepare another video opens the Library (dropping a file is NIW2-587)", async () => {
+    const router = renderPrepare();
+    fireEvent.click(await screen.findByRole("button", { name: /^Prepare another video/ }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/library"));
+  });
+
+  it("Back to recording returns to the recording", async () => {
+    const router = renderPrepare();
+    fireEvent.click(await screen.findByRole("button", { name: "Back to recording" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/library/asset-1"));
   });
 });
