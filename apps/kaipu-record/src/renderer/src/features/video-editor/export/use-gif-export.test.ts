@@ -7,6 +7,9 @@ import { createSlideAssetStore } from "../slide-assets";
 import { ESTIMATE_DEBOUNCE_MS, useGifExport } from "./use-gif-export";
 import type { GifStartMessage } from "./gif-messages";
 
+const { captureException } = vi.hoisted(() => ({ captureException: vi.fn() }));
+vi.mock("@renderer/features/analytics", () => ({ captureException }));
+
 // Like use-video-export.test.ts: jsdom can't run the real worker (WebCodecs, OffscreenCanvas),
 // so a fake Worker stands in and the suite covers what the HOOK owns — the start message,
 // routing, saving through gifSave, cancel and errors.
@@ -217,5 +220,14 @@ describe("useGifExport", () => {
     const msg = worker.postMessage.mock.calls[0][0] as GifStartMessage;
     expect(msg.webcam).toBeNull();
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("logs a webcam the worker could not decode, and keeps exporting without it", async () => {
+    const { result, worker } = await startExport();
+    act(() => worker.emit({ type: "webcam-error", message: "decode failed" }));
+    expect(captureException).toHaveBeenCalledWith(expect.any(Error), {
+      context: "gif-export-webcam",
+    });
+    expect(result.current.status).toBe("exporting");
   });
 });

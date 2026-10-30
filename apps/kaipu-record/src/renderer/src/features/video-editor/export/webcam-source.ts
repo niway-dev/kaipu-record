@@ -84,3 +84,78 @@ export async function openWebcamSource(
     throw error;
   }
 }
+
+/** A cursor that never has a frame. */
+const NO_FRAMES: WebcamCursor<WrappedCanvas> = {
+  frameAt: async () => null,
+  close: async () => {},
+};
+
+/**
+ * {@link openWebcamSource} for an export that must not fail because of the webcam: a file
+ * that cannot be opened, or a frame that cannot be decoded, is reported once through
+ * `onError` and the export carries on without the layer from then on, like a missing file
+ * (a 404 never gets here). The screen is the export; the face is a layer on top of it.
+ */
+export async function openWebcamSourceOrNone(
+  webcam: WebcamTrackMessage | null,
+  scene: WebcamScene | null,
+  onError: (error: unknown) => void,
+): Promise<WebcamSource | null> {
+  let source: WebcamSource | null;
+  try {
+    source = await openWebcamSource(webcam, scene);
+  } catch (error) {
+    onError(error);
+    return null;
+  }
+  if (!source) return null;
+  const inner = source;
+  let failed = false;
+  const fail = (error: unknown): void => {
+    if (failed) return;
+    failed = true;
+    onError(error);
+  };
+  return {
+    duration: inner.duration,
+    cursorFor(sourceStart, sourceEnd) {
+      if (failed) return NO_FRAMES;
+      const cursor = inner.cursorFor(sourceStart, sourceEnd);
+      return {
+        async frameAt(sourceTime) {
+          if (failed) return null;
+          try {
+            return await cursor.frameAt(sourceTime);
+          } catch (error) {
+            fail(error);
+            return null;
+          }
+        },
+        async close() {
+          try {
+            await cursor.close();
+          } catch {
+            /* the decode already failed; nothing left to stop */
+          }
+        },
+      };
+    },
+    async *framesAt(sourceTimes) {
+      let yielded = 0;
+      if (!failed) {
+        try {
+          for await (const image of inner.framesAt(sourceTimes)) {
+            yielded++;
+            yield image;
+          }
+        } catch (error) {
+          fail(error);
+        }
+      }
+      // One entry per time, whatever happened: the caller zips them with the screen's.
+      for (; yielded < sourceTimes.length; yielded++) yield null;
+    },
+    dispose: () => inner.dispose(),
+  };
+}

@@ -48,6 +48,8 @@ export interface GifStartMessage {
 export type GifWorkerMessage =
   | { type: "estimate"; bytes: number; frameCount: number }
   | { type: "progress"; fraction: number }
+  /** As for the MP4 export: the GIF goes on without the webcam layer; the renderer logs it. */
+  | { type: "webcam-error"; message: string }
   /** JPEG of the first composed GIF frame (transferable). */
   | { type: "poster"; data: ArrayBuffer }
   | {

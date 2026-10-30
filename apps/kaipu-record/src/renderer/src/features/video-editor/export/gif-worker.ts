@@ -26,7 +26,7 @@ import {
   measureFramePair,
 } from "./gif-encode";
 import { GIF_HARD_CAP_BYTES, type GifStartMessage, type GifWorkerMessage } from "./gif-messages";
-import { openWebcamSource, type WebcamSource } from "./webcam-source";
+import { openWebcamSourceOrNone, type WebcamSource } from "./webcam-source";
 
 type WorkerSelf = typeof self & {
   onmessage: ((event: MessageEvent<GifStartMessage>) => void) | null;
@@ -58,7 +58,13 @@ async function run(msg: GifStartMessage): Promise<void> {
   const input = new Input({ source: new BlobSource(msg.sourceBlob), formats: ALL_FORMATS });
   let webcam: WebcamSource | null = null;
   try {
-    webcam = await openWebcamSource(msg.webcam, msg.plan.webcam);
+    // A broken webcam file never fails the GIF: it goes on without the layer.
+    webcam = await openWebcamSourceOrNone(msg.webcam, msg.plan.webcam, (error) =>
+      post({
+        type: "webcam-error",
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
     const videoTrack = await input.getPrimaryVideoTrack();
     // A plan of only slides needs no track; anything with a clip does.
     if (!videoTrack && msg.plan.segments.some((s) => s.kind === "clip")) {

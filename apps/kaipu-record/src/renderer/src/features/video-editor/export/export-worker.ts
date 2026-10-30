@@ -95,7 +95,7 @@ import {
 import { cappedSlideFps, createFrameRateCap } from "./frame-rate-cap";
 import { chooseVideoEncoding, type VideoEncodingChoice } from "./video-encoding";
 import { webcamLookupTime } from "./webcam-lockstep";
-import { openWebcamSource, webcamImageOf, type WebcamSource } from "./webcam-source";
+import { openWebcamSourceOrNone, webcamImageOf, type WebcamSource } from "./webcam-source";
 
 // ---------------------------------------------------------------------------
 // Typing helper: TypeScript doesn't expose `Worker` on `self` in module workers.
@@ -124,7 +124,10 @@ async function runExport(msg: ExportStartMessage): Promise<void> {
   const input = new Input({ source: new BlobSource(msg.sourceBlob), formats: ALL_FORMATS });
   let webcam: WebcamSource | null = null;
   try {
-    webcam = await openWebcamSource(msg.webcam, msg.plan.webcam);
+    // A broken webcam file never fails the export: it goes on without the layer.
+    webcam = await openWebcamSourceOrNone(msg.webcam, msg.plan.webcam, (error) =>
+      post({ type: "webcam-error", message: errorMessage(error) }),
+    );
     await runExportWithInput(msg, input, webcam);
   } finally {
     webcam?.dispose();
@@ -462,6 +465,10 @@ async function runExportWithInput(
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 /**
  * Clips a decoded audio sample's data to `[rangeStart, rangeEnd)`.

@@ -275,6 +275,9 @@ export function useGifExport(): GifExportController {
             setState((s) => (s.status === "exporting" ? { ...s, fraction: msg.fraction } : s));
           } else if (msg.type === "poster") {
             poster = msg.data;
+          } else if (msg.type === "webcam-error") {
+            // The worker carries on without the layer; the GIF is still made.
+            captureException(new Error(msg.message), { context: "gif-export-webcam" });
           } else if (msg.type === "error") {
             fail(
               msg.code === "too-large" ? t("gifTooLargeError") : t("gifExportError"),

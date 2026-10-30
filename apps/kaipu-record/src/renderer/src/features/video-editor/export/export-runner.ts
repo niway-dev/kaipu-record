@@ -388,6 +388,9 @@ export async function startVideoExport(
         reportEncoderChoice(msg.choice, runTarget);
       } else if (msg.type === "progress") {
         if (snapshot.status === "exporting") set({ fraction: msg.fraction });
+      } else if (msg.type === "webcam-error") {
+        // The worker carries on without the layer; the file is still made.
+        captureException(new Error(msg.message), { context: "video-export-webcam" });
       } else if (msg.type === "error") {
         if (runTarget.fastStart === "reserve" && PACKET_RESERVE_ERROR.test(msg.message)) {
           // FR9 fallback: the moov reservation was too small. Drop this attempt (its

@@ -276,6 +276,17 @@ describe("export runner (NIW2-218 background export)", () => {
       expect(sent().plan.webcam).toBeNull();
     });
 
+    it("logs a webcam the worker could not decode, and keeps exporting without it", async () => {
+      await startVideoExport(args(), t);
+      workers[0]!.onmessage?.({
+        data: { type: "webcam-error", message: "decode failed" },
+      } as MessageEvent);
+      expect(captureException).toHaveBeenCalledWith(expect.any(Error), {
+        context: "video-export-webcam",
+      });
+      expect(getExportSnapshot().status).toBe("exporting");
+    });
+
     it("exports without the layer when the file is gone (404), instead of failing", async () => {
       vi.stubGlobal("fetch", fetchMock(404));
       await startVideoExport(args({ scene: WEBCAM_SCENE, webcamTrack: { startOffsetMs: 0 } }), t);

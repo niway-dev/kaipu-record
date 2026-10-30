@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WEBCAM_DEFAULTS, type WebcamScene } from "../webcam/webcam-model";
 
 // mediabunny cannot decode in jsdom: a fake Input/CanvasSink records what the workers open.
-const { inputs, sinks } = vi.hoisted(() => ({
+const { inputs, sinks, failures } = vi.hoisted(() => ({
+  /** Where the fake file breaks: opening it, or decoding after `afterFrames` frames. */
+  failures: { open: false, decodeAfter: null as number | null },
   inputs: [] as Array<{ source: unknown; disposed: boolean }>,
   sinks: [] as Array<{ options: unknown; ranges: Array<[number, number]>; at: number[][] }>,
 }));
@@ -25,6 +27,7 @@ vi.mock("mediabunny", () => {
     }
     dispose: () => void;
     async getPrimaryVideoTrack() {
+      if (failures.open) throw new Error("corrupt webcam file");
       return { computeDuration: async () => 2 };
     }
   }
@@ -36,23 +39,37 @@ vi.mock("mediabunny", () => {
     }
     async *canvases(start: number, end: number) {
       this.record.ranges.push([start, end]);
-      for (let i = Math.floor(start * fps + 1e-9); i / fps < end && i < 2 * fps; i++)
+      let n = 0;
+      for (let i = Math.floor(start * fps + 1e-9); i / fps < end && i < 2 * fps; i++) {
+        if (failures.decodeAfter !== null && n++ >= failures.decodeAfter) {
+          throw new Error("decode failed");
+        }
         yield frame(i);
+      }
     }
     async *canvasesAtTimestamps(times: number[]) {
       this.record.at.push(times);
-      for (const t of times) yield frame(Math.floor(t * fps + 1e-9));
+      let n = 0;
+      for (const t of times) {
+        if (failures.decodeAfter !== null && n++ >= failures.decodeAfter) {
+          throw new Error("decode failed");
+        }
+        yield frame(Math.floor(t * fps + 1e-9));
+      }
     }
   }
   return { ALL_FORMATS: [], BlobSource: class {}, CanvasSink, Input };
 });
 
-const { openWebcamSource, WEBCAM_CANVAS_POOL_SIZE } = await import("./webcam-source");
+const { openWebcamSource, openWebcamSourceOrNone, WEBCAM_CANVAS_POOL_SIZE } =
+  await import("./webcam-source");
 
 const SCENE: WebcamScene = { layout: { ...WEBCAM_DEFAULTS }, segments: [] };
 const MESSAGE = { blob: new Blob(["cam"]), startOffsetMs: 500 };
 
 beforeEach(() => {
+  failures.open = false;
+  failures.decodeAfter = null;
   inputs.length = 0;
   sinks.length = 0;
 });
@@ -99,5 +116,51 @@ describe("openWebcamSource", () => {
     }
     // 0.2 → webcam −0.3 (before); 1 → 0.5 (15); 2.4 → 1.9 (57); 2.6 → 2.1 (past its 2 s).
     expect(frames).toEqual([null, 15, 57, null]);
+  });
+});
+
+describe("openWebcamSourceOrNone (E3: a broken webcam file never fails the export)", () => {
+  it("reports a file that cannot be opened and exports without the layer", async () => {
+    failures.open = true;
+    const onError = vi.fn();
+    expect(await openWebcamSourceOrNone(MESSAGE, SCENE, onError)).toBeNull();
+    expect(onError).toHaveBeenCalledOnce();
+    expect(inputs[0]!.disposed).toBe(true);
+  });
+
+  it("reports nothing and opens nothing for a recording without a webcam", async () => {
+    const onError = vi.fn();
+    expect(await openWebcamSourceOrNone(null, SCENE, onError)).toBeNull();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("MP4: a decode failure mid-clip reports once, then no frame for the rest of the export", async () => {
+    failures.decodeAfter = 3;
+    const onError = vi.fn();
+    const source = (await openWebcamSourceOrNone(MESSAGE, SCENE, onError))!;
+    const cursor = source.cursorFor(0.5, 1.5);
+    expect(await cursor.frameAt(0.5)).not.toBeNull();
+    let lastFrame: unknown = "unset";
+    for (let t = 0.55; t < 1.5; t += 1 / 30) lastFrame = await cursor.frameAt(t);
+    expect(lastFrame).toBeNull();
+    await cursor.close();
+    // The next clip does not even try.
+    expect(await source.cursorFor(1.5, 2).frameAt(1.6)).toBeNull();
+    expect(onError).toHaveBeenCalledOnce();
+  });
+
+  it("GIF: a decode failure yields null for every remaining time, and reports once", async () => {
+    failures.decodeAfter = 1;
+    const onError = vi.fn();
+    const source = (await openWebcamSourceOrNone(MESSAGE, SCENE, onError))!;
+    const frames: unknown[] = [];
+    for await (const image of source.framesAt([1, 1.1, 1.2])) frames.push(image);
+    expect(frames).toHaveLength(3);
+    expect(frames[0]).not.toBeNull();
+    expect(frames.slice(1)).toEqual([null, null]);
+    const later: unknown[] = [];
+    for await (const image of source.framesAt([1.3])) later.push(image);
+    expect(later).toEqual([null]);
+    expect(onError).toHaveBeenCalledOnce();
   });
 });

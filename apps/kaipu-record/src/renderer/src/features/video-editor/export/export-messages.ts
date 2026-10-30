@@ -73,5 +73,10 @@ export type ExportWorkerMessage =
    */
   | { type: "encoder"; choice: VideoEncodingChoice }
   | { type: "progress"; fraction: number }
+  /**
+   * The webcam file could not be opened or decoded: the export goes on without the layer
+   * from here, and the renderer logs it (the worker has no analytics).
+   */
+  | { type: "webcam-error"; message: string }
   | { type: "done" }
   | { type: "error"; message: string };
