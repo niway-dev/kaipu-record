@@ -7,8 +7,10 @@
  * camera box): `webcamAt` picks the layout in force (null inside a hidden segment),
  * `webcamRect` places it in the output frame with the camera path's scale for "shrink
  * during zoom", and `webcam-sync` decides visibility (the file's own first and last frame)
- * and whether the element drifted past 80 ms and needs a seek. Play/pause mirror the main
- * element.
+ * and whether the element drifted past 80 ms and needs a seek. While the main video plays, a
+ * seek aims ahead by the last seek's measured duration, so it lands where the screen will be.
+ * Play/pause mirror the main element, and the webcam also pauses while the main one waits
+ * for data, so the face does not run ahead of a buffering screen.
  *
  * Dragging the bubble reports normalized centres already clamped inside the frame, with
  * the begin/move/end contract the scene history needs for one undo step per drag.
@@ -25,7 +27,12 @@ import {
   webcamRect,
 } from "../webcam/webcam-layout";
 import { webcamAt, type WebcamScene } from "../webcam/webcam-model";
-import { webcamHasFrameAt, webcamResyncTarget, webcamTimeFor } from "../webcam/webcam-sync";
+import {
+  webcamHasFrameAt,
+  webcamResyncTarget,
+  webcamSeekLead,
+  webcamTimeFor,
+} from "../webcam/webcam-sync";
 import styles from "./webcam-layer.module.css";
 
 type Point = { x: number; y: number };
@@ -96,6 +103,12 @@ export function WebcamLayer({
   const drawn = useRef<{ center: Point; side: number } | null>(null);
   const drag = useRef<{ x: number; y: number; from: Point; w: number; h: number } | null>(null);
   const [dragging, setDragging] = useState(false);
+  // When the webcam's seek in flight started (performance.now()), and how long the last one
+  // took, in seconds: the lead the next seek during playback is given.
+  const seekStartedAt = useRef<number | null>(null);
+  const lastSeekSeconds = useRef(0);
+  // The main video is playing but out of data (`waiting`); cleared on `playing`.
+  const mainWaiting = useRef(false);
 
   const apply = (t: number): void => {
     lastTime.current = t;
@@ -132,12 +145,17 @@ export function WebcamLayer({
     // While a seek is in flight, currentTime already reads the pending target and the main
     // clock keeps moving: re-seeking on every frame would cancel each seek with the next one
     // and freeze the bubble after a cut or a scrub. Wait for `seeked` (below), then catch up.
+    const main = videoRef.current;
     if (!cam.seeking) {
       const seekTo = webcamResyncTarget(cam.currentTime, webcamTime, cam.duration);
-      if (seekTo !== null) cam.currentTime = seekTo;
+      if (seekTo !== null) {
+        const lead = webcamSeekLead(!!main && !main.paused, lastSeekSeconds.current);
+        const end = Number.isFinite(cam.duration) && cam.duration > 0 ? cam.duration : Infinity;
+        seekStartedAt.current = performance.now();
+        cam.currentTime = Math.min(seekTo + lead, end);
+      }
     }
-    const main = videoRef.current;
-    if (main && !main.paused && cam.paused) safePlay(cam);
+    if (main && !main.paused && cam.paused && !mainWaiting.current) safePlay(cam);
     if (main?.paused && !cam.paused) safePause(cam);
   };
 
@@ -155,11 +173,32 @@ export function WebcamLayer({
     const main = videoRef.current;
     if (!main) return;
     const sync = (): void => applyRef.current(main.currentTime);
+    // Out of data: hold the face where it is until the screen moves again. `stalled` only
+    // means a fetch is slow — the screen may still be playing from its buffer — so it holds
+    // only when the main element has nothing ahead to play (below HAVE_FUTURE_DATA).
+    const waiting = (): void => {
+      mainWaiting.current = true;
+      const cam = camRef.current;
+      if (cam && !cam.paused) safePause(cam);
+    };
+    const stalled = (): void => {
+      if (main.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) waiting();
+    };
+    const resume = (): void => {
+      mainWaiting.current = false;
+      sync();
+    };
     main.addEventListener("play", sync);
     main.addEventListener("pause", sync);
+    main.addEventListener("waiting", waiting);
+    main.addEventListener("stalled", stalled);
+    main.addEventListener("playing", resume);
     return () => {
       main.removeEventListener("play", sync);
       main.removeEventListener("pause", sync);
+      main.removeEventListener("waiting", waiting);
+      main.removeEventListener("stalled", stalled);
+      main.removeEventListener("playing", resume);
     };
   }, [videoRef]);
 
@@ -244,7 +283,13 @@ export function WebcamLayer({
             preload="auto"
             data-testid="webcam-video"
             onLoadedMetadata={() => apply(videoRef.current?.currentTime ?? lastTime.current)}
-            onSeeked={() => apply(videoRef.current?.currentTime ?? lastTime.current)}
+            onSeeked={() => {
+              if (seekStartedAt.current !== null) {
+                lastSeekSeconds.current = (performance.now() - seekStartedAt.current) / 1000;
+                seekStartedAt.current = null;
+              }
+              apply(videoRef.current?.currentTime ?? lastTime.current);
+            }}
           />
         </div>
       </div>
