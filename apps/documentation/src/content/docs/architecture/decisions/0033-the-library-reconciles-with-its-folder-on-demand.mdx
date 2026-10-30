@@ -144,29 +144,65 @@ ADR links file and record by name alone.
   exclusively created file, and the final move into the vault never replaces an existing
   file (see "Placing a file" below). A staging file that cannot be removed once placed is
   set aside under a name the sweep ignores; when even that fails, a marker beside it records
-  where it was placed and its size, and the sweep skips it only while that marker's
-  destination exists with the same size. A link count is no proof of placement (another app
-  can hard-link a file anywhere), so the sweep no longer reads one.
+  where it was placed and its size. The marker only stops a second recovery: while its
+  destination exists with the same size, the sweep moves the part (never replacing) into
+  `.kaipu/tmp/placed-parts/`, out of its way, and never deletes it, since that destination
+  may hold another file by now. A marker whose part is gone is removed. A link count is no
+  proof of placement (another app can hard-link a file anywhere), so the sweep no longer
+  reads one.
 - **Placing a file.** Every round of review found another way of putting bytes at a vault
   path with its own bug, so there is one: `main/library/safe-place.ts`, and every placement
   goes through it — a take's finalize and take-back, the stranded sweep, a rename's media
   commit (its case-only branch included), Fix all's orphan moves, a GIF, a new screenshot,
-  and the save dialog's confirmed overwrite. `placeNoReplace` never replaces: a hard link,
-  else (a volume without them, another volume) an exclusively created copy that writes every
-  byte it read (a short write is continued, a write with no progress fails) and is flushed
-  before the source is removed; a file at the destination, whenever it arrived, is "taken"
-  and nothing changes. A failed copy removes only the file it created, checked by device and
-  inode. A case-only rename goes through a unique temporary sibling, the file's identity
-  checked at each step. `replaceConfirmed` is the one replacing move, for the save dialog's
-  "Replace": the bytes go into an exclusively created temporary sibling, which then replaces
-  the destination in one rename; a failure removes only that temporary file. A rename that
-  finds its new name taken keeps the old name (`reason: "taken"`) and removes the new
-  companions; a GIF or screenshot whose path is taken fails without removing the file that
-  took it. Still exempt, on purpose: the screenshot editor's overwrite of its own PNG
-  (identity-checked under the names lock), sidecar and metadata writes (`atomicWriteFile`),
-  and a folder or symlink moved into this run's orphans folder (a link or copy would follow
-  it). Cost: on a volume without hard links (exFAT, some network shares) a rename copies the
-  recording instead of renaming it.
+  and the save dialog's confirmed overwrite.
+  - **Threat model.** No data loss against (1) the app's own concurrency, (2) a process
+    crash at any point, (3) an I/O error at any call, and (4) a file that already exists at,
+    or arrives at, a destination before the no-replace step (the realistic Finder or sync
+    case). Not covered: another process replacing a path in the instant between two
+    consecutive calls of ours. Node has no `renameat2(RENAME_NOREPLACE)`, no
+    `renamex_np(RENAME_EXCL)` and no unlink by handle, so a check followed by an `unlink`
+    always leaves that window. Inside it the rule still holds: an identity merely observed at
+    a path is never authority to delete, and when ownership is uncertain the bytes are kept.
+    Power loss is best effort: file contents and the destination folder are flushed before
+    a source is removed.
+  - **Identity.** A file is named by device and inode, read as bigints (Windows file ids
+    overflow a double), and only from this operation's own handle or link: the source's
+    `fstat` when it is opened, the created copy's `fstat`, or the source's identity for a
+    hard link. A name is removed only while it still holds that identity; an unreadable name
+    or another file there is left alone.
+  - `placeNoReplace` (`placeNew` resolves the created file's identity) never replaces: a
+    hard link, else (a volume without them, another volume) an exclusively created copy that
+    writes every byte it read (a short write is continued, a write with no progress fails),
+    is flushed and closed before it counts. A close that fails voids the copy. A file at the
+    destination, whenever it arrived, is "taken" and nothing changes; a destination replaced
+    right after placing is "taken" too, the source keeping the bytes. Then the destination
+    folder is flushed and the source is removed, only while it still holds the file placed;
+    another file at the source's name is kept and logged. The residual window between that
+    check and the `unlink` is the one named above. A failed copy removes only the file it
+    created.
+  - A case-only rename goes through a unique temporary sibling in two `placeNoReplace`
+    steps with rollback, the first one checked against the file's identity; there is no
+    replacing rename onto a placeholder.
+  - A staging file that cannot be removed once placed is set aside by a rename onto an
+    empty placeholder this call created exclusively at a fresh name, or marked (the marker
+    written atomically).
+  - `replaceConfirmed` is the one replacing move, for the save dialog's "Replace": the
+    bytes go into an exclusively created temporary sibling, which then replaces the
+    destination in one rename; a failure removes only that temporary file.
+  - **Callers release only what they own.** A GIF, a screenshot, a take or a recovery whose
+    placement fails releases its own reservation (`releaseReservation`: the companions, only
+    while the record still carries the reservation's `assetId`) and never calls
+    `remove(id)`, which would delete whatever holds the media name. A metadata failure after
+    placing removes the media only while it is still the file placement created
+    (`discardCreated`); a take is moved back to staging only under the same check.
+  - A rename that finds its new name taken keeps the old name (`reason: "taken"`) and
+    removes the new companions; a GIF or screenshot whose path is taken fails without
+    removing the file that took it. Still exempt, on purpose: the screenshot editor's
+    overwrite of its own PNG (identity-checked under the names lock), sidecar and metadata
+    writes (`atomicWriteFile`, which flushes its folder best effort), and a folder or symlink
+    moved into this run's orphans folder (a link or copy would follow it). Cost: on a volume
+    without hard links (exFAT, some network shares) a rename copies the recording twice for
+    a case-only change, once otherwise.
 - Sidecar mutations now throw on an unreadable record instead of overwriting it.
 - Idempotence is the contract: a scan after a complete fix returns only findings that are
   not fixable now (a file locked by another app, duplicate identities, stem conflicts,
