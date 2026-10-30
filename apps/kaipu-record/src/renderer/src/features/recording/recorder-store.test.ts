@@ -1653,15 +1653,17 @@ describe("recorder-store live settings", () => {
         }
       });
 
-      it("still asks main for the session when the capability cannot be read", async () => {
+      it("takes the legacy path, silently, when the capability cannot be read", async () => {
         const supported = window.electronAPI.recordingWebcamTrackSupported;
         window.electronAPI.recordingWebcamTrackSupported = vi.fn(async () => {
           throw new Error("no handler");
         });
         try {
           await startWith(fakeEngine(), { webcam });
-          expect(createCalls().map((call) => call[1])).toEqual(["screen", "webcam"]);
+          expect(createCalls().map((call) => call[1])).toEqual(["screen"]);
+          expect(prepareEngineMock.mock.calls.at(-1)![0].webcam).toBeNull();
           await stopAndSettle();
+          expect(getToasts()).toEqual([]);
         } finally {
           window.electronAPI.recordingWebcamTrackSupported = supported;
         }

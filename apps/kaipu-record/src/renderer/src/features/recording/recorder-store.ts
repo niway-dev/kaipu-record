@@ -471,8 +471,9 @@ function acquireStart(input: StartInput): PendingStart {
   const webcamCreated = input.webcam
     ? window.electronAPI
         .recordingWebcamTrackSupported()
-        // Unanswered: ask for the session anyway, main refuses it where it cannot be recorded.
-        .catch(() => true)
+        // Unanswered: treat it as unsupported, the safe side (no webcam file, the bubble stays
+        // in the capture), so an old Windows never gets a notice it should not.
+        .catch(() => false)
         .then((supported) =>
           supported
             ? window.electronAPI.recordingCreate(id, "webcam", "take").then(
