@@ -33,6 +33,9 @@ import {
  * any capture stream could see it. Windows before 10 2004 cannot exclude a window from
  * capture (it comes out black), so there the bubble stays unprotected and the take records
  * no webcam file: the bubble appears in the screen recording, as it did before the track.
+ * The same legacy path applies while a take records no webcam file (the camera was off when
+ * it started, or its webcam did not open or ended): the hub's `protect` rule says so, and
+ * `applyProtection` brings an existing window in line (`BubbleProtection`).
  *
  * On macOS it is a `panel` and joins full-screen Spaces with
  * `skipTransformProcessType`: the bubble is destroyed and recreated on every
@@ -53,12 +56,17 @@ export class CameraBubbleWindow {
   private placedInArea: BubbleCorner | null = null;
   /** The window's corner when the current move began; `moveBy` offsets from it. */
   private moveStart: BubbleCorner | null = null;
+  /** Whether the current window is content-protected. */
+  private protectedNow = false;
 
   /** `size` reads the persisted bubble size; injected so this class never reads disk. */
   constructor(
     private readonly size: () => number = () => DEFAULT_CAMERA_BUBBLE.size,
-    /** Whether capture can exclude a window on this OS; injected for tests. */
-    private readonly excludable: () => boolean = () =>
+    /**
+     * Whether the bubble should leave the screen capture now: the OS can exclude a window and
+     * the active take (if any) records the face in its webcam file. Defaults to the OS alone.
+     */
+    private readonly protect: () => boolean = () =>
       fullDisplayBorderAllowed(process.platform, release()),
   ) {}
 
@@ -92,7 +100,8 @@ export class CameraBubbleWindow {
         backgroundThrottling: false,
       },
     });
-    if (this.excludable()) this.window.setContentProtection(true);
+    this.protectedNow = this.protect();
+    if (this.protectedNow) this.window.setContentProtection(true);
     this.window.setAlwaysOnTop(true, "screen-saver");
     this.window.setVisibleOnAllWorkspaces(true, {
       visibleOnFullScreen: true,
@@ -114,6 +123,22 @@ export class CameraBubbleWindow {
     this.window.on("closed", () => {
       this.window = null;
     });
+  }
+
+  /**
+   * Bring an existing window's protection in line with `protect`, when a take starts or ends
+   * or its webcam file ends. Called before a take's screen capture starts (its sessions are
+   * created first), the change is in effect for that capture. Called while a capture already
+   * runs (the webcam file ended mid-take: the bubble must come back into the recording), it
+   * is best effort: whether a running ScreenCaptureKit stream picks up a window that drops
+   * its protection is unverified (spike rows 4/5, ADR 0032).
+   */
+  applyProtection(): void {
+    if (!this.window || this.window.isDestroyed()) return;
+    const next = this.protect();
+    if (next === this.protectedNow) return;
+    this.protectedNow = next;
+    this.window.setContentProtection(next);
   }
 
   /**

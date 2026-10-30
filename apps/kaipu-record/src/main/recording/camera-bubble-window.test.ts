@@ -100,6 +100,34 @@ describe("CameraBubbleWindow content protection", () => {
     new CameraBubbleWindow(undefined, () => false).show();
     expect(created[0]!.setContentProtection).not.toHaveBeenCalled();
   });
+
+  it("applyProtection brings an existing window in line with the rule, only on a change", () => {
+    let protect = true;
+    const bubble = new CameraBubbleWindow(undefined, () => protect);
+    bubble.applyProtection(); // no window yet: nothing to do
+    bubble.show();
+    const win = created[0]!;
+    bubble.applyProtection();
+    expect(win.setContentProtection.mock.calls).toEqual([[true]]);
+    // The take's webcam file ended mid-take: the bubble comes back into the capture.
+    protect = false;
+    bubble.applyProtection();
+    bubble.applyProtection();
+    expect(win.setContentProtection.mock.calls).toEqual([[true], [false]]);
+    // The take ended: protected again before the next take's capture starts.
+    protect = true;
+    bubble.applyProtection();
+    expect(win.setContentProtection.mock.calls).toEqual([[true], [false], [true]]);
+  });
+
+  it("a window created unprotected is protected by applyProtection once the rule allows it", () => {
+    let protect = false;
+    const bubble = new CameraBubbleWindow(undefined, () => protect);
+    bubble.show();
+    protect = true;
+    bubble.applyProtection();
+    expect(created[0]!.setContentProtection.mock.calls).toEqual([[true]]);
+  });
 });
 
 describe("CameraBubbleWindow.raise", () => {

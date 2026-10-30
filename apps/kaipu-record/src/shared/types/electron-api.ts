@@ -300,6 +300,12 @@ export interface KaipuElectronAPI {
   recordingAbort(sessionId: string): Promise<void>;
   /** Byte size of an open session's temp file, after every queued write landed (NIW2-218). */
   recordingStat(sessionId: string, kind?: RecordingWriterKind): Promise<number>;
+  /**
+   * The take records no (more) webcam file: main stops excluding the camera bubble from the
+   * screen capture, so the face is in the screen recording instead. Resolves once main applied
+   * it, so a caller can wait for it before starting the screen capture.
+   */
+  recordingWebcamEnded(sessionId: string): Promise<void>;
   /** Push a live tick (elapsed/levels/status) to the hub for the bar. */
   recordingReportTick(tick: RecordingTick): void;
   /**

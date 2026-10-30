@@ -199,6 +199,13 @@ export interface EngineOptions {
   /** Same, for the webcam file's chunks (its own writer session). */
   onWebcamChunk?(data: ArrayBuffer, position: number): void;
   /**
+   * The opened webcam stops recording before the take stops: turned off, unplugged, its
+   * encoder failed or its output could not start. Fires at most once, never for the take's own
+   * stop or release. The face is then in no file unless the bubble comes back into the
+   * screen capture (ADR 0032).
+   */
+  onWebcamEnded?(): void;
+  /**
    * Fires if the engine fails once acquired — the encoder errors or the screen
    * capture ends (the user stops sharing / closes the source), during the recording
    * or while a prepared take waits for its countdown. The caller should tear the
@@ -632,14 +639,25 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
       webcamSource.errorPromise.catch((error: unknown) => {
         webcamFailed = true;
         console.warn("webcam encoder failed — the take goes on without it", error);
+        reportWebcamEnded();
       });
     }
     /** The webcam source still takes frames. */
     const webcamLive = (): boolean => webcamStarted && !webcamClosed && !webcamFailed;
+    /** Set by stop() and release(); a live toggle arriving after it is answered "unavailable". */
+    let stopped = false;
+    let webcamEndReported = false;
+    /** Tells the caller, once, that the webcam no longer records while the take goes on. */
+    const reportWebcamEnded = (): void => {
+      if (webcamEndReported || stopped) return;
+      webcamEndReported = true;
+      options.onWebcamEnded?.();
+    };
     /** Ends the webcam file where it is and releases the camera; the take goes on. */
     const endWebcam = (): void => {
       if (!webcam || webcamClosed) return;
       webcamClosed = true;
+      reportWebcamEnded();
       if (webcamStarted) {
         try {
           webcam.source.close();
@@ -657,8 +675,6 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
     // that ends during the countdown fails the start. Fires at most once, and not for our own
     // teardown (stop() and release() set the flag first).
     let teardownStarted = false;
-    /** Set by stop() and release(); a live toggle arriving after it is answered "unavailable". */
-    let stopped = false;
     /** Guards against a second late mic acquisition while one is in flight. */
     let acquiringMic = false;
     const notifyError = (error: unknown): void => {
@@ -839,6 +855,7 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
         } catch (error) {
           console.warn("webcam output could not start — recording without it", error);
           webcamClosed = true;
+          reportWebcamEnded();
           webcam.track.stop();
         }
       }

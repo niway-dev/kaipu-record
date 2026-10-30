@@ -1371,6 +1371,57 @@ describe("webcam", () => {
     await vi.waitFor(() => expect(webcamTrack.stop).toHaveBeenCalled());
   });
 
+  describe("onWebcamEnded: the face must come back into the screen capture", () => {
+    it("fires once when the camera is turned off or unplugged mid-take", async () => {
+      const onWebcamEnded = vi.fn();
+      const handle = await startEngine(baseOptions({ webcam, onWebcamEnded }));
+      expect(onWebcamEnded).not.toHaveBeenCalled();
+      handle.endWebcam();
+      const ended = webcamTrack.addEventListener.mock.calls.find(([type]) => type === "ended");
+      ended![1]();
+      expect(onWebcamEnded).toHaveBeenCalledOnce();
+    });
+
+    it("fires when the webcam output cannot start", async () => {
+      const onWebcamEnded = vi.fn();
+      const prepared = await prepareEngine(baseOptions({ webcam, onWebcamEnded }));
+      outputs()[1]!.start.mockRejectedValueOnce(new Error("no encoder"));
+      await prepared.begin();
+      expect(onWebcamEnded).toHaveBeenCalledOnce();
+    });
+
+    it("fires when the webcam encoder fails", async () => {
+      const mocked = vi.mocked(MediaStreamVideoTrackSource);
+      const original = mocked.getMockImplementation()!;
+      const build = original as unknown as (...args: unknown[]) => Record<string, unknown>;
+      mocked.mockImplementation(function (track: unknown, config: unknown) {
+        const source = build(track, config);
+        if (track === (webcamTrack as unknown)) {
+          source.errorPromise = Promise.reject(new Error("encoder crashed"));
+        }
+        return source as never;
+      });
+      try {
+        const onWebcamEnded = vi.fn();
+        await startEngine(baseOptions({ webcam, onWebcamEnded }));
+        await new Promise((r) => setTimeout(r, 0));
+        expect(onWebcamEnded).toHaveBeenCalledOnce();
+      } finally {
+        mocked.mockImplementation(original);
+      }
+    });
+
+    it("does not fire for the take's own stop or release", async () => {
+      const onWebcamEnded = vi.fn();
+      const handle = await startEngine(baseOptions({ webcam, onWebcamEnded }));
+      await handle.stop();
+      const prepared = await prepareEngine(baseOptions({ webcam, onWebcamEnded }));
+      prepared.release();
+      await new Promise((r) => setTimeout(r, 0));
+      expect(onWebcamEnded).not.toHaveBeenCalled();
+    });
+  });
+
   it("opens no camera and builds one output with the webcam off", async () => {
     const handle = await startEngine(baseOptions());
     expect(webcamRequests()).toHaveLength(0);

@@ -491,6 +491,13 @@ function acquireStart(input: StartInput): PendingStart {
       onWebcamChunk: (data, position) => {
         if (sessionId === id) window.electronAPI.recordingWrite(id, data, position, "webcam");
       },
+      // The webcam file ended mid-take (or before it began): main puts the bubble back in
+      // the screen capture, so a camera left on or turned on again is recorded there.
+      onWebcamEnded: () => {
+        void window.electronAPI.recordingWebcamEnded(id).catch((error: unknown) => {
+          console.warn("could not report the webcam's end to main", error);
+        });
+      },
       // A failure mid-recording (encoder error or the screen capture ending)
       // runs the same robust stop — finalize-or-abort + always restore the
       // window/Dock/bar — so the app never gets stuck.
@@ -768,7 +775,8 @@ function forwardLiveSettings(
 ): LiveSettingsForwarder {
   let micOn = input.microphoneDeviceId !== null;
   // Turning the camera off ends the webcam file there and releases the camera. Turning it on
-  // again mid-take records nothing: the take has no second webcam file.
+  // again mid-take records no second webcam file: the engine reports the end (`onWebcamEnded`)
+  // and main leaves the new bubble in the screen capture, so the face is recorded there.
   let webcamOn = Boolean(input.webcam);
   let webcamEnded = false;
   let sysOn = input.systemAudio;

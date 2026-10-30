@@ -33,6 +33,7 @@ import { ClickHook, type HookLike } from "./click-hook";
 import { CursorTrackRegistry } from "./cursor-tracker";
 import { ControlBarWindow } from "./control-bar-window";
 import { CameraBubbleWindow } from "./camera-bubble-window";
+import { BubbleProtection } from "./bubble-protection";
 import { RecordingShadeWindow } from "./recording-shade-window";
 import { ScreenSourceCache, type ScreenSource } from "./screen-source-cache";
 import {
@@ -173,7 +174,13 @@ export function registerRecordingHub(
   onPendingChange?: (pending: boolean) => void,
 ): RecordingHubHandle {
   const bar = new ControlBarWindow();
-  const cameraBubble = new CameraBubbleWindow(() => getAppSettings().cameraBubble.size);
+  // The bubble leaves the capture only while its face is recorded in the take's webcam file
+  // (or before a take, which then records one): otherwise it stays in the screen recording.
+  const bubbleProtection = new BubbleProtection();
+  const cameraBubble = new CameraBubbleWindow(
+    () => getAppSettings().cameraBubble.size,
+    () => fullDisplayBorderAllowed(process.platform, release()) && bubbleProtection.protects(),
+  );
   // Shape and size apply live, mid-take included (the user sees the bubble change; the
   // recording does not, its face is the raw webcam file, restyled on export). The shape is
   // the renderer's; the size is the window's bounds, re-placed from the anchored corner.
@@ -391,8 +398,31 @@ export function registerRecordingHub(
     if (writerKind === "screen") {
       stoppedForWriteFailure = false;
       endedSessions.delete(sessionId);
+      // A new take: no webcam file until its webcam session says so. Before its screen
+      // capture starts (the renderer creates both sessions first), so a bubble turned on
+      // in a take without a webcam is created in the capture, and one that is already up
+      // is protected again by the webcam session below.
+      bubbleProtection.screenCreated(sessionId);
+      cameraBubble.applyProtection();
+      return writer.create(sessionId, writerKind);
     }
-    return writer.create(sessionId, writerKind);
+    bubbleProtection.webcamCreated(sessionId);
+    cameraBubble.applyProtection();
+    const created = writer.create(sessionId, writerKind);
+    // No webcam file after all: the bubble goes back into the capture before the renderer,
+    // told by the rejection, starts the screen.
+    created.catch(() => {
+      bubbleProtection.webcamEnded(sessionId);
+      cameraBubble.applyProtection();
+    });
+    return created;
+  });
+  // The take records no (more) webcam file (its camera did not open, was turned off, was
+  // unplugged, or its encoder failed): the bubble must be in the screen recording again.
+  ipcMain.handle(IPC_CHANNELS.recordingWebcamEnded, (_e, sessionId: unknown) => {
+    if (typeof sessionId !== "string") return;
+    bubbleProtection.webcamEnded(sessionId);
+    cameraBubble.applyProtection();
   });
   ipcMain.on(
     IPC_CHANNELS.recordingWrite,
@@ -419,6 +449,9 @@ export function registerRecordingHub(
     async (_e, sessionId: string, rendererMeta: RecordingFinalizeMeta) => {
       // The renderer never retries a finalize (it aborts), so the take ends here either way.
       markEnded(sessionId);
+      // The engine stopped before finalize: protect the bubble again for the next take.
+      bubbleProtection.ended(sessionId);
+      cameraBubble.applyProtection();
       // Where the bubble sat, as main sees its window: the stop has not released the area yet
       // (the renderer sends it after finalize), so the bubble is still where it was recorded.
       const bubbleBounds = cameraBubble.visibleBounds();
@@ -474,6 +507,8 @@ export function registerRecordingHub(
   );
   ipcMain.handle(IPC_CHANNELS.recordingAbort, (_e, sessionId: string) => {
     markEnded(sessionId);
+    bubbleProtection.ended(sessionId);
+    cameraBubble.applyProtection();
     cursorTracks.discard(sessionId);
     clickSessions.delete(sessionId);
     stopHookIfIdle();
@@ -938,6 +973,8 @@ export function registerRecordingHub(
       // Its takes will never be finalized or aborted: release their file handles. The partial
       // files stay on disk, and a cursor track still resolving for one of them must not start.
       for (const id of writer.ids()) markEnded(id);
+      bubbleProtection.reset();
+      cameraBubble.applyProtection();
       void writer.releaseAll().catch((error) => console.error("releasing takes failed", error));
       cursorTracks.discardAll();
       clickSessions.clear();

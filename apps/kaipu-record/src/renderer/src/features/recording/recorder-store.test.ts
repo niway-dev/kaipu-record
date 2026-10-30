@@ -1513,6 +1513,17 @@ describe("recorder-store live settings", () => {
       await stopAndSettle();
     });
 
+    it("tells main when the engine reports the webcam ended, so the bubble rejoins the capture", async () => {
+      const ended = vi.fn(async () => {});
+      window.electronAPI.recordingWebcamEnded = ended;
+      await startWith(fakeEngine({ webcam: webcamHandle() }), { webcam });
+      const id = createCalls()[0]![0];
+      expect(ended).not.toHaveBeenCalled();
+      prepareEngineMock.mock.calls.at(-1)![0].onWebcamEnded!();
+      expect(ended).toHaveBeenCalledExactlyOnceWith(id);
+      await stopAndSettle();
+    });
+
     it("a camera turned off during the countdown acquires the take again, without it", async () => {
       prepareEngineMock.mockImplementation(async () => fakePrepared());
       let resolves = 0;
