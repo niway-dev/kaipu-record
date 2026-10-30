@@ -29,6 +29,12 @@ import { finalizeErrorKey } from "./finalize-error-message";
 import { buildRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
 import { runtimeT } from "@renderer/lib/runtime-i18n";
 import { beginRecordTiming, endRecordTiming, markRecordTiming } from "./record-timing";
+import {
+  WEBCAM_FPS,
+  webcamStartOffset,
+  type WebcamRecordedLayout,
+  type WebcamTrackMeta,
+} from "@shared/webcam-track";
 
 export type RecorderStatus =
   | "idle"
@@ -54,6 +60,11 @@ export interface StartInput {
   videoBitrate?: number;
   /** Watermark to burn in, or `null` to encode the raw screen (decided by `useWatermark`). */
   watermark?: WatermarkConfig | null;
+  /**
+   * Record the webcam into its own file (ADR 0032): the camera, the lines to ask for and the
+   * bubble as it looks now (stored on the sidecar). Absent or null with the camera off.
+   */
+  webcam?: { deviceId: string | null; lines: number; bubble: WebcamRecordedLayout } | null;
 }
 
 export interface RecorderSnapshot {
@@ -109,6 +120,8 @@ let cursorTrack: CursorTrackSession | null = null;
 let sessionId: string | null = null;
 /** How the active take is captured; sent with finalize so the library can label it. */
 let capture: RecordingCapture | null = null;
+/** The bubble as the active take started with it, for its webcam file's sidecar entry. */
+let webcamBubble: WebcamRecordedLayout | null = null;
 let clock: ElapsedState | null = null;
 /** Video-time clock: zero = the MP4's first media sample, renderer `performance.now()`, pauses removed. */
 let videoClock: ElapsedState | null = null;
@@ -129,6 +142,8 @@ interface PendingStart {
   /** What it was acquired with: a take whose input changed during the countdown re-acquires. */
   input: StartInput;
   created: Promise<unknown>;
+  /** The webcam's writer session, with the camera on: true once main created it. */
+  webcamCreated: Promise<boolean>;
   engine: Promise<PreparedEngine> | null;
   /** Session file, devices and cursor track, all acquired; nothing is encoded yet. */
   acquired: Promise<[CursorTrackSession, PreparedEngine]>;
@@ -366,6 +381,8 @@ function needsNewAcquisition(early: StartInput, input: StartInput): boolean {
       start.frameRate ?? null,
       start.videoBitrate ?? null,
       start.watermark ?? null,
+      // The webcam opens with the take: turned on or off during the countdown, it acquires again.
+      start.webcam ? [start.webcam.deviceId, start.webcam.lines] : null,
     ]);
   if (fixed(early) !== fixed(input)) return true;
   return (
@@ -432,9 +449,21 @@ function acquireStart(input: StartInput): PendingStart {
   // Unique across renderer restarts: a recreated renderer must not reuse a dead take's id.
   const id = `session-${Date.now().toString(36)}-${++sessionCounter}`;
   const created = window.electronAPI.recordingCreate(id);
+  // The webcam's own session (ADR 0032), only with the camera on. One that cannot be created
+  // leaves the take without a webcam, never without the take.
+  const webcamCreated = input.webcam
+    ? window.electronAPI.recordingCreate(id, "webcam").then(
+        () => true,
+        (error: unknown) => {
+          console.warn("webcam session could not be created — recording without it", error);
+          return false;
+        },
+      )
+    : Promise.resolve(false);
   // Reads `start` only after its first await, once `start` exists.
   const acquire = async (): Promise<[CursorTrackSession, PreparedEngine]> => {
     await created;
+    const withWebcam = await webcamCreated;
     // Cancelled while the take's file was being created: the engine must not open the
     // screen or the mic for a take that is already gone (`discardStart` aborts the file).
     if (pendingStart !== start) throw new Error("start cancelled before it was created");
@@ -449,9 +478,16 @@ function acquireStart(input: StartInput): PendingStart {
       frameRate: input.frameRate,
       videoBitrate: input.videoBitrate,
       watermark: input.watermark,
+      webcam:
+        withWebcam && input.webcam
+          ? { deviceId: input.webcam.deviceId, lines: input.webcam.lines }
+          : null,
       // Chunks only flow once the take has begun; a discarded take's go nowhere.
       onChunk: (data, position) => {
         if (sessionId === id) window.electronAPI.recordingWrite(id, data, position);
+      },
+      onWebcamChunk: (data, position) => {
+        if (sessionId === id) window.electronAPI.recordingWrite(id, data, position, "webcam");
       },
       // A failure mid-recording (encoder error or the screen capture ending)
       // runs the same robust stop — finalize-or-abort + always restore the
@@ -503,6 +539,7 @@ function acquireStart(input: StartInput): PendingStart {
     id,
     input,
     created,
+    webcamCreated,
     engine: null,
     acquired: acquire(),
     audio,
@@ -562,6 +599,7 @@ async function beginTake(
       area: input.area ?? null,
       output: handle.outputSize,
     });
+    webcamBubble = input.webcam?.bubble ?? null;
     // The forwarder attached when the take was acquired keeps running for the take.
     stopLiveSettings = start.live?.stop ?? null;
     stopMicLevelListening = followMicLevelListeners();
@@ -668,8 +706,9 @@ function discardStart(start: PendingStart): void {
   start.audio.stop();
   start.live?.stop();
   void start.engine?.then((prepared) => prepared.release()).catch(() => undefined);
-  void start.created
-    .catch(() => undefined)
+  // After both sessions exist: an abort that reached main before the webcam's create would
+  // leave that file open with nobody to delete it.
+  void Promise.all([start.created.catch(() => undefined), start.webcamCreated])
     .then(() => window.electronAPI.recordingAbort(start.id))
     .catch(() => undefined);
 }
@@ -719,11 +758,14 @@ interface LiveSettingsForwarder {
  * Returns the unsubscribe.
  */
 function forwardLiveSettings(
-  handle: LiveAudioControls,
+  handle: LiveAudioControls & Pick<EngineHandle, "endWebcam">,
   input: StartInput,
   early: AudioSettingsTracker,
 ): LiveSettingsForwarder {
   let micOn = input.microphoneDeviceId !== null;
+  // Turning the camera off ends the webcam file there and releases the camera. Turning it on
+  // again mid-take records nothing: the take has no second webcam file.
+  let webcamOn = Boolean(input.webcam);
   let sysOn = input.systemAudio;
   let queue: Promise<void> = Promise.resolve();
   let active = true;
@@ -801,13 +843,17 @@ function forwardLiveSettings(
       }
     }
   };
-  const unsubscribe = window.electronAPI.onRecordingSettingsChanged((settings) =>
+  const unsubscribe = window.electronAPI.onRecordingSettingsChanged((settings) => {
     applyToggles(
       settings.isMicrophoneEnabled,
       settings.selectedMicrophone?.deviceId ?? null,
       settings.isSystemAudioEnabled,
-    ),
-  );
+    );
+    if (webcamOn && !settings.isCameraEnabled) {
+      webcamOn = false;
+      handle.endWebcam();
+    }
+  });
   return {
     sync(next) {
       if (!active) return;
@@ -847,6 +893,7 @@ async function stopRecording(): Promise<void> {
   const activeEngine = engine;
   const activeSessionId = sessionId;
   const activeCapture = capture;
+  const activeBubble = webcamBubble;
   // Guard re-entry: the user clicking Stop and an engine-failure can both fire.
   if (stopping || !activeEngine || !activeSessionId) return;
   stopping = true;
@@ -883,12 +930,14 @@ async function stopRecording(): Promise<void> {
         markRecordTiming("engine.stop resolved");
         // Settled by stop (or given up on): a poster frame still pending saves without one.
         const thumbnail = await Promise.race([activeEngine.thumbnail, Promise.resolve(null)]);
+        const webcam = await webcamFinalizeMeta(activeEngine, activeBubble);
         const finalized = await window.electronAPI.recordingFinalize(activeSessionId, {
           title,
           durationSeconds,
           durationMs,
           thumbnail,
           capture: activeCapture,
+          webcam,
         });
         markRecordTiming("finalize resolved");
         return finalized;
@@ -913,10 +962,36 @@ async function stopRecording(): Promise<void> {
   cursorTrack = null;
   sessionId = null;
   capture = null;
+  webcamBubble = null;
   clock = null;
   videoClock = null;
   stopping = false;
   update({ status: "idle", countdown: null });
+}
+
+/**
+ * The webcam entry finalize sends (ADR 0032): where the webcam file's time 0 sits against the
+ * screen's, both read from the same renderer clock. Null without a usable webcam file, which
+ * makes main discard its part. Both timestamps resolve within ~1 frame of the start (3 s at
+ * most, then "estimated"), so this never holds the save up past that.
+ */
+async function webcamFinalizeMeta(
+  handle: EngineHandle,
+  bubble: WebcamRecordedLayout | null,
+): Promise<WebcamTrackMeta | null> {
+  const webcam = handle.webcam;
+  if (!webcam || !webcam.isUsable()) return null;
+  const [screenStart, webcamStart] = await Promise.all([
+    handle.firstMediaTimestamp,
+    webcam.firstMediaTimestamp,
+  ]);
+  return {
+    ...webcamStartOffset(screenStart, webcamStart),
+    width: webcam.size.width,
+    height: webcam.size.height,
+    fps: WEBCAM_FPS,
+    ...(bubble ? { recordedLayout: bubble } : {}),
+  };
 }
 
 // The countdown length (Settings → Recording). Registered at import like the command listener
