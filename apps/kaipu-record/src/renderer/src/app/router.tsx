@@ -67,6 +67,8 @@ const router = createHashRouter([
           { path: ROUTES.libraryDetail, element: <LibraryDetailPage /> },
           // Prepare a copy for a destination (NIW2-578). Reached from a recording, not the sidebar.
           { path: ROUTES.prepare, element: <PreparePage /> },
+          // Prepare with no recording: a drop zone for an outside video (NIW2-587).
+          { path: ROUTES.prepareNew, element: <PreparePage /> },
           { path: ROUTES.screenshots, element: <ScreenshotsPage /> },
           // Editor workspace: every Edit lands here, addressed by URL.
           { path: ROUTES.editor, element: <EditorHomePage /> },

@@ -16,6 +16,8 @@ export const ROUTES = {
   libraryDetail: "/library/:assetId",
   /** Prepare a copy of a recording for where it is going (NIW2-578); `?to=` preselects one. */
   prepare: "/prepare/:assetId",
+  /** Prepare with no recording yet: drop or pick an outside video to prepare it (NIW2-587). */
+  prepareNew: "/prepare",
   screenshots: "/screenshots",
   /** The Editor workspace: recent items when nothing is open. */
   editor: "/editor",

@@ -19,6 +19,7 @@ describe("presetForPath", () => {
       ROUTES.library,
       "/library/abc-123",
       "/prepare/abc-123",
+      ROUTES.prepareNew,
       ROUTES.screenshots,
       ROUTES.shortcuts,
       ROUTES.cloud,

@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   RefreshCw,
   Search,
+  Send,
   Tags,
   Upload,
 } from "lucide-react";
@@ -30,7 +31,7 @@ import { resolveTags, useTags } from "@renderer/features/library/hooks/use-tags"
 import { TagChip } from "@renderer/features/library/tags/tag-chip";
 import { buildLineage, editBadge } from "@renderer/features/library/lineage";
 import { canOpenInEditor, useOpenInEditor } from "@renderer/features/editor/open-in-editor";
-import { preparePath } from "@renderer/features/prepare/prepare-path";
+import { prepareNewPath, preparePath } from "@renderer/features/prepare/prepare-path";
 import { asPreparable } from "@renderer/features/prepare/use-prepare-copy";
 import styles from "./library-page.module.css";
 
@@ -47,6 +48,7 @@ const sxLibrary = stylex.create({
 
 export function LibraryPage(): React.JSX.Element {
   const t = useTranslations("library");
+  const tPrepare = useTranslations("prepare");
   const navigate = useNavigate();
   const { openItem } = useOpenInEditor();
   const { videos, isLoading, hasError, refresh, remove, setTags } = useLocalLibrary();
@@ -146,6 +148,15 @@ export function LibraryPage(): React.JSX.Element {
               className={isLoading ? styles.spinning : undefined}
             />
             {t("sync")}
+          </button>
+          {/* Prepare with no recording yet: drop or pick an outside video (NIW2-587). */}
+          <button
+            className={styles.headerSyncButton}
+            type="button"
+            onClick={() => navigate(prepareNewPath())}
+          >
+            <Send size={15} strokeWidth={1.8} aria-hidden />
+            {tPrepare("prepareAVideo")}
           </button>
           <Button variant="primary" disabled={importing} onClick={() => void pickAndImport()}>
             <Upload size={15} strokeWidth={1.8} />

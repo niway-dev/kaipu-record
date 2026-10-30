@@ -26,7 +26,11 @@ import {
   planCopy,
   presetForDestination,
 } from "@renderer/features/prepare/destinations";
-import { PREPARE_DESTINATION_PARAM } from "@renderer/features/prepare/prepare-path";
+import { PREPARE_DESTINATION_PARAM, prepareNewPath } from "@renderer/features/prepare/prepare-path";
+import {
+  type PrepareImport,
+  usePrepareImport,
+} from "@renderer/features/prepare/use-prepare-import";
 import {
   asPreparable,
   type PreparableVideo,
@@ -35,6 +39,7 @@ import {
 } from "@renderer/features/prepare/use-prepare-copy";
 import { DESTINATION_TITLE_ID, DestinationDetail } from "./destination-detail";
 import { DestinationList } from "./destination-list";
+import { PrepareDropZone } from "./prepare-drop-zone";
 import styles from "./prepare-page.module.css";
 
 /**
@@ -49,7 +54,9 @@ export const DEFAULT_DESTINATION: DestinationId = "youtube";
  * original and is never changed; Prepare makes a new copy of it for one destination, in the
  * background, through the same export pipeline as the editor. Reached from the recording page
  * (its "Prepare for…" button, the quick chips, the heavy-to-send banner, the post-recording
- * panel) and from the Library cards.
+ * panel) and from the Library cards. With no recording (`/prepare`, NIW2-587) it is a drop zone:
+ * a video dropped on any Prepare screen is imported into the Library and opened here, keeping
+ * the selected destination.
  */
 export function PreparePage(): React.JSX.Element {
   const t = useTranslations("prepare");
@@ -57,8 +64,24 @@ export function PreparePage(): React.JSX.Element {
   const { assetId } = useParams<{ assetId: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { videos, isLoading } = useLocalLibrary();
+  const { videos, isLoading, refresh } = useLocalLibrary();
   const lineage = useMemo(() => buildLineage(videos), [videos]);
+
+  const to = searchParams.get(PREPARE_DESTINATION_PARAM);
+  const urlDestination = isDestinationId(to) ? to : null;
+  // The destination picked on this screen, read when a dropped video finishes importing. A
+  // new recording starts from its URL again.
+  const chosen = useRef<DestinationId | null>(null);
+  useEffect(() => {
+    chosen.current = null;
+  }, [assetId]);
+  const choose = (d: DestinationId): void => {
+    chosen.current = d;
+  };
+  const drop = usePrepareImport({
+    destination: () => chosen.current ?? urlDestination,
+    refresh,
+  });
 
   const video = videos.find((v) => v.assetId === assetId);
   const preparable = asPreparable(video);
@@ -72,9 +95,20 @@ export function PreparePage(): React.JSX.Element {
     navigate(recordingPath, { replace: true });
   }, [probe.status, navigate, recordingPath, tLib]);
 
+  if (!assetId) {
+    return (
+      <PrepareWithoutRecording
+        initialDestination={urlDestination}
+        onSelect={choose}
+        drop={drop}
+        onBack={() => navigate("/library")}
+      />
+    );
+  }
+
   if (isLoading) return <div className={styles.centered}>{tLib("loading")}</div>;
 
-  if (!video || !assetId) {
+  if (!video) {
     return (
       <div className={styles.centered}>
         <FileX2 size={40} strokeWidth={1.5} className={styles.mutedIcon} />
@@ -103,7 +137,6 @@ export function PreparePage(): React.JSX.Element {
     return <div className={styles.centered}>{t("reading")}</div>;
   }
 
-  const to = searchParams.get(PREPARE_DESTINATION_PARAM);
   const badge = editBadge(video, lineage);
   return (
     <PrepareScreen
@@ -113,11 +146,13 @@ export function PreparePage(): React.JSX.Element {
       probe={probe.probe}
       exports={lineage.exportsOf.get(video.assetId) ?? []}
       hasUnexportedEdits={badge === "never-exported" || badge === "stale"}
-      initialDestination={isDestinationId(to) ? to : DEFAULT_DESTINATION}
+      initialDestination={urlDestination ?? DEFAULT_DESTINATION}
+      onSelect={choose}
+      drop={drop}
       onBack={() => navigate(recordingPath)}
       onStarted={() => navigate(recordingPath)}
       onOpenExisting={(existing) => navigate(`/library/${existing.assetId}`)}
-      onPrepareAnother={() => navigate("/library")}
+      onPrepareAnother={(d) => navigate(prepareNewPath(d))}
     />
   );
 }
@@ -130,12 +165,15 @@ interface PrepareScreenProps {
   /** The edit session holds edits no file carries: a copy from here would not have them. */
   hasUnexportedEdits: boolean;
   initialDestination: DestinationId;
+  /** The user picked a destination; a video dropped next opens with it. */
+  onSelect(destination: DestinationId): void;
+  drop: PrepareImport;
   onBack(): void;
   /** The copy is being made in the background. */
   onStarted(): void;
   onOpenExisting(existing: LibraryVideo): void;
-  /** "Prepare another video": the Library for now; dropping a file is NIW2-587. */
-  onPrepareAnother(): void;
+  /** "Prepare another video": Prepare with no recording, keeping the destination (NIW2-587). */
+  onPrepareAnother(destination: DestinationId): void;
 }
 
 /**
@@ -149,15 +187,22 @@ function PrepareScreen({
   exports,
   hasUnexportedEdits,
   initialDestination,
+  onSelect,
+  drop,
   onBack,
   onStarted,
   onOpenExisting,
   onPrepareAnother,
 }: PrepareScreenProps): React.JSX.Element {
+  const t = useTranslations("prepare");
   const tEditor = useTranslations("videoEditor");
   const prepare = usePrepareCopy();
 
   const [selected, setSelected] = useState<DestinationId>(initialDestination);
+  const select = (d: DestinationId): void => {
+    setSelected(d);
+    onSelect(d);
+  };
   const [youtube, setYoutube] = useState<YoutubePresetId>(defaultYoutubePreset(probe));
   const [framings, setFramings] = useState<Record<"vertical" | "square", ExportFraming>>({
     vertical: PRESETS.vertical.defaultFraming!,
@@ -223,12 +268,17 @@ function PrepareScreen({
     <div className={styles.screen}>
       <DestinationList
         selected={selected}
-        onSelect={setSelected}
-        planFor={planFor}
-        estimateText={estimateText}
-        isReady={(d) => reusable[presetForDestination(d, probe, youtube)] !== undefined}
+        onSelect={select}
+        sizes={{
+          planFor,
+          estimateText,
+          isReady: (d) => reusable[presetForDestination(d, probe, youtube)] !== undefined,
+        }}
+        backLabel={t("back")}
         onBack={onBack}
-        onPrepareAnother={onPrepareAnother}
+        onPrepareAnother={() => onPrepareAnother(selected)}
+        dropActive={drop.dragging}
+        importing={drop.importing}
       />
       <section className={styles.detail} aria-labelledby={DESTINATION_TITLE_ID}>
         <DestinationDetail
@@ -250,6 +300,52 @@ function PrepareScreen({
           onPrepareAgain={startCopy}
         />
       </section>
+    </div>
+  );
+}
+
+interface PrepareWithoutRecordingProps {
+  /** From `?to=`; nothing is selected when the URL names no destination. */
+  initialDestination: DestinationId | null;
+  onSelect(destination: DestinationId): void;
+  drop: PrepareImport;
+  onBack(): void;
+}
+
+/**
+ * Prepare before there is a video (NIW2-587): the destinations, without sizes since there is
+ * no source yet, and a drop zone. Picking a destination first is optional; the video opens
+ * with whichever one is selected.
+ */
+function PrepareWithoutRecording({
+  initialDestination,
+  onSelect,
+  drop,
+  onBack,
+}: PrepareWithoutRecordingProps): React.JSX.Element {
+  const tLib = useTranslations("library");
+  const [selected, setSelected] = useState<DestinationId | null>(initialDestination);
+  const pick = (): void => void drop.pickAndImport();
+  return (
+    <div className={styles.screen}>
+      <DestinationList
+        selected={selected}
+        onSelect={(d) => {
+          setSelected(d);
+          onSelect(d);
+        }}
+        backLabel={tLib("backToLibrary")}
+        onBack={onBack}
+        onPrepareAnother={pick}
+        dropActive={drop.dragging}
+        importing={drop.importing}
+      />
+      <PrepareDropZone
+        active={drop.dragging}
+        importing={drop.importing}
+        onChooseFile={pick}
+        onFromLibrary={onBack}
+      />
     </div>
   );
 }

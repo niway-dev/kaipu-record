@@ -178,8 +178,23 @@
   transition: border-color var(--transition);
 }
 
-.another:hover {
+.another:hover:not(:disabled) {
   border-color: var(--text-muted);
+}
+
+.another:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+/* A file is being dragged over the window: this is where it can go (NIW2-587). */
+.another[data-active="true"] {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-soft);
+}
+
+.another[data-active="true"] .anotherIcon {
+  color: var(--accent-primary);
 }
 
 .another:focus-visible {

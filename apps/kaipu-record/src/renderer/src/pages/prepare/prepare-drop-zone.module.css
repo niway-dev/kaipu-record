@@ -1,0 +1,53 @@
+/* Prepare with no recording (NIW2-587): the dashed pink target in the right column. */
+.wrap {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  overflow-y: auto;
+}
+
+.zone {
+  width: min(520px, 100%);
+  padding: 40px 30px;
+  border: 2px dashed color-mix(in srgb, var(--accent-primary) 50%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--accent-primary) 5%, transparent);
+  text-align: center;
+  transition:
+    background var(--transition),
+    border-color var(--transition);
+}
+
+.zone[data-active="true"] {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-soft);
+}
+
+.icon {
+  color: var(--accent-primary);
+}
+
+.title {
+  margin: 14px 0 0;
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.body {
+  margin: 6px 0 0;
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}

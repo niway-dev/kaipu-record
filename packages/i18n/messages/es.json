@@ -785,7 +785,7 @@
     "groupSendLabel": "Enviar · la reproducen tal cual · que sea liviana",
     "groupKeepLabel": "Guardar · una copia con toda la calidad",
     "anotherTitle": "Preparar otro video",
-    "anotherHint": "Elige uno de tu Biblioteca",
+    "anotherHint": "Suelta un archivo aquí o elige uno de tu Biblioteca",
     "detailTitle": "Para {destination}",
     "detailMeta": "De tu grabación · {duration} · {width} × {height} · {size}",
     "changesCard": "Qué cambia",
@@ -902,7 +902,15 @@
     "panelChatSub": "Liviana, se reproduce en el chat",
     "panelMore": "Más lugares",
     "panelEditFirst": "Editar primero",
-    "panelNotNow": "Ahora no — dejarlo en la Biblioteca"
+    "panelNotNow": "Ahora no — dejarlo en la Biblioteca",
+    "dropTitle": "Suelta un video para prepararlo",
+    "dropBody": "MP4 o MOV de cualquier lugar: un clip del teléfono, una grabación de Zoom, un archivo que te envió un colega. Se convierte en un máster en tu Biblioteca y tú eliges a dónde va.",
+    "dropActive": "Suéltalo para prepararlo",
+    "dropImporting": "Trayéndolo a tu Biblioteca…",
+    "dropChooseFile": "Elegir un archivo…",
+    "dropFromLibrary": "Desde tu Biblioteca",
+    "dropMoreInLibrary": "{count, plural, one {# video más está} other {# videos más están}} en tu Biblioteca",
+    "prepareAVideo": "Preparar un video"
   },
   "screenshots": {
     "toast": {

@@ -785,7 +785,7 @@
     "groupSendLabel": "Send · they play it as-is · keep it light",
     "groupKeepLabel": "Keep · a full-quality copy",
     "anotherTitle": "Prepare another video",
-    "anotherHint": "Pick one from your Library",
+    "anotherHint": "Drop a file here or from your Library",
     "detailTitle": "For {destination}",
     "detailMeta": "From your recording · {duration} · {width} × {height} · {size}",
     "changesCard": "What changes",
@@ -902,7 +902,15 @@
     "panelChatSub": "Light, plays in the chat",
     "panelMore": "More places",
     "panelEditFirst": "Edit first",
-    "panelNotNow": "Not now — keep it in the Library"
+    "panelNotNow": "Not now — keep it in the Library",
+    "dropTitle": "Drop a video to prepare it",
+    "dropBody": "MP4 or MOV from anywhere — a phone clip, a Zoom recording, a file a colleague sent. It becomes a master in your Library and you pick where it goes.",
+    "dropActive": "Drop to prepare it",
+    "dropImporting": "Bringing it into your Library…",
+    "dropChooseFile": "Choose a file…",
+    "dropFromLibrary": "From your Library",
+    "dropMoreInLibrary": "{count, plural, one {# more video is} other {# more videos are}} in your Library",
+    "prepareAVideo": "Prepare a video"
   },
   "screenshots": {
     "toast": {

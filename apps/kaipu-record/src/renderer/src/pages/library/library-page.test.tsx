@@ -7,11 +7,16 @@ import { LibraryPage } from "./library-page";
 const emptyLibrary = { items: [], vaultError: null, catalogVerifiedAt: null };
 const nothingImported = { imported: [], failed: [], canceled: false };
 
-function renderLibrary(): void {
-  const router = createMemoryRouter([{ path: "/library", element: <LibraryPage /> }], {
-    initialEntries: ["/library"],
-  });
+function renderLibrary() {
+  const router = createMemoryRouter(
+    [
+      { path: "/library", element: <LibraryPage /> },
+      { path: "/prepare", element: <div>prepare-page</div> },
+    ],
+    { initialEntries: ["/library"] },
+  );
   render(<RouterProvider router={router} />);
+  return router;
 }
 
 describe("LibraryPage import (NIW2-579)", () => {
@@ -52,5 +57,11 @@ describe("LibraryPage import (NIW2-579)", () => {
         "/Users/me/Movies/Zoom Meeting.mp4",
       ]),
     );
+  });
+
+  it("Prepare a video opens Prepare with no recording, where an outside video can be dropped (NIW2-587)", async () => {
+    const router = renderLibrary();
+    fireEvent.click(screen.getByRole("button", { name: "Prepare a video" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare"));
   });
 });

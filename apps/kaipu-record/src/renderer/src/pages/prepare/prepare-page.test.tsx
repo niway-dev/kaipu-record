@@ -98,6 +98,7 @@ function renderPrepare(path = "/prepare/asset-1") {
   const router = createMemoryRouter(
     [
       { path: "/prepare/:assetId", element: <PreparePage /> },
+      { path: "/prepare", element: <PreparePage /> },
       { path: "/library/:assetId", element: <div>recording-page</div> },
       { path: "/library", element: <div>library-page</div> },
     ],
@@ -334,15 +335,172 @@ describe("PreparePage (NIW2-578, layout NIW2-583)", () => {
     );
   });
 
-  it("Prepare another video opens the Library (dropping a file is NIW2-587)", async () => {
+  it("Prepare another video opens Prepare with no recording, keeping the destination (NIW2-587)", async () => {
     const router = renderPrepare();
-    fireEvent.click(await screen.findByRole("button", { name: /^Prepare another video/ }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/library"));
+    fireEvent.click(await screen.findByRole("radio", { name: /^GitHub/ }));
+    const another = screen.getByRole("button", { name: /^Prepare another video/ });
+    expect(another).toHaveTextContent("Drop a file here or from your Library");
+    fireEvent.click(another);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare"));
+    expect(router.state.location.search).toBe("?to=github");
   });
 
   it("Back to recording returns to the recording", async () => {
     const router = renderPrepare();
     fireEvent.click(await screen.findByRole("button", { name: "Back to recording" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/library/asset-1"));
+  });
+});
+
+/** A video that came in from outside (NIW2-579): a recording whose capture mode is "import". */
+const imported = (assetId: string): LibraryItem =>
+  recording({
+    assetId,
+    title: `Imported ${assetId}`,
+    capture: { mode: "import", width: 1080, height: 1920, ratio: null },
+    local: {
+      ...recording().local!,
+      id: `imported-${assetId}`,
+      assetId,
+      title: `Imported ${assetId}`,
+    },
+  });
+
+const importResult = (...assetIds: string[]) => ({
+  imported: assetIds.map((id) => imported(id).local!),
+  failed: [],
+  canceled: false,
+});
+
+/** Drag files from the OS over an element and drop them; whether the drop was handled. */
+function dropFiles(target: Element, ...names: string[]): boolean {
+  const files = names.map((name) => new File(["x"], name));
+  const dataTransfer = { types: ["Files"], files };
+  fireEvent.dragEnter(target, { dataTransfer });
+  // fireEvent answers false when a listener called preventDefault: Electron does not
+  // navigate the window to the file.
+  return !fireEvent.drop(target, { dataTransfer });
+}
+
+describe("PreparePage: a video from outside (NIW2-587)", () => {
+  beforeEach(() => {
+    window.electronAPI.pathForFile = vi.fn((f: File) => `/Users/me/Movies/${f.name}`);
+  });
+
+  it("with no recording: the destinations without sizes, nothing selected, and a drop zone", async () => {
+    renderPrepare("/prepare");
+    expect(
+      await screen.findByRole("heading", { name: "Drop a video to prepare it" }),
+    ).toBeVisible();
+    expect(screen.getByText(/^MP4 or MOV from anywhere/)).toBeVisible();
+
+    const youtube = screen.getByRole("radio", { name: /^YouTube/ });
+    expect(youtube).toHaveAttribute("aria-checked", "false");
+    for (const row of screen.getAllByRole("radio")) {
+      expect(row).toHaveAttribute("aria-checked", "false");
+      expect(within(row).queryByText(/MB|GB|Ready/)).toBeNull();
+    }
+    fireEvent.click(youtube);
+    expect(youtube).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("with no recording: Choose a file opens the import dialog; From your Library and Back go to the Library", async () => {
+    window.electronAPI.importVideos = vi.fn(async () => ({
+      imported: [],
+      failed: [],
+      canceled: true,
+    }));
+    const router = renderPrepare("/prepare");
+    fireEvent.click(await screen.findByRole("button", { name: "Choose a file…" }));
+    await waitFor(() => expect(window.electronAPI.importVideos).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole("button", { name: "From your Library" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/library"));
+  });
+
+  it("with no recording: a dropped video is imported and opened, with the destination from the URL", async () => {
+    window.electronAPI.importVideoFiles = vi.fn(async () => importResult("asset-9"));
+    const router = renderPrepare("/prepare?to=github");
+    await screen.findByTestId("prepare-drop-zone");
+    // The library re-lists with the new video in it.
+    list(recording(), imported("asset-9"));
+
+    expect(dropFiles(document.body, "Zoom Meeting.mov")).toBe(true);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-9"));
+    expect(router.state.location.search).toBe("?to=github");
+    expect(window.electronAPI.importVideoFiles).toHaveBeenCalledWith([
+      "/Users/me/Movies/Zoom Meeting.mov",
+    ]);
+    expect(await screen.findByRole("heading", { name: /For GitHub/, level: 1 })).toBeVisible();
+  });
+
+  it("the drop zone lights up while a file is dragged over the window", async () => {
+    renderPrepare("/prepare");
+    const zone = await screen.findByTestId("prepare-drop-zone");
+    fireEvent.dragEnter(document.body, { dataTransfer: { types: ["Files"], files: [] } });
+    expect(zone).toHaveAttribute("data-active", "true");
+    expect(screen.getByRole("heading", { name: "Drop to prepare it" })).toBeVisible();
+  });
+
+  it("with a recording open: a video dropped anywhere opens Prepare on it, keeping the selected destination", async () => {
+    window.electronAPI.importVideoFiles = vi.fn(async () => importResult("asset-9"));
+    const router = renderPrepare("/prepare/asset-1");
+    fireEvent.click(await screen.findByRole("radio", { name: /^Slack/ }));
+    list(recording(), imported("asset-9"));
+
+    expect(dropFiles(document.body, "clip.mp4")).toBe(true);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-9"));
+    expect(router.state.location.search).toBe("?to=chat");
+  });
+
+  it("a video dropped on Prepare another video imports it too, and the footer shows it is a target", async () => {
+    window.electronAPI.importVideoFiles = vi.fn(async () => importResult("asset-9"));
+    const router = renderPrepare("/prepare/asset-1");
+    const footer = await screen.findByRole("button", { name: /^Prepare another video/ });
+    list(recording(), imported("asset-9"));
+
+    fireEvent.dragEnter(footer, { dataTransfer: { types: ["Files"], files: [] } });
+    expect(footer).toHaveAttribute("data-active", "true");
+    expect(dropFiles(footer, "clip.mp4")).toBe(true);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-9"));
+    expect(router.state.location.search).toBe("");
+  });
+
+  it("several videos: all are imported, Prepare opens on the first, and a toast names the rest", async () => {
+    window.electronAPI.importVideoFiles = vi.fn(async () =>
+      importResult("asset-7", "asset-8", "asset-9"),
+    );
+    const router = renderPrepare("/prepare");
+    await screen.findByTestId("prepare-drop-zone");
+    list(recording(), imported("asset-7"), imported("asset-8"), imported("asset-9"));
+
+    dropFiles(document.body, "a.mp4", "b.mov", "c.mp4");
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-7"));
+    expect(window.electronAPI.importVideoFiles).toHaveBeenCalledWith([
+      "/Users/me/Movies/a.mp4",
+      "/Users/me/Movies/b.mov",
+      "/Users/me/Movies/c.mp4",
+    ]);
+    expect(getToasts().map((t) => t.message)).toContain("2 more videos are in your Library");
+  });
+
+  it("a file that is not a video is not imported, and the window does not open it", async () => {
+    window.electronAPI.importVideoFiles = vi.fn(async () => importResult());
+    const router = renderPrepare("/prepare");
+    await screen.findByTestId("prepare-drop-zone");
+
+    expect(dropFiles(document.body, "notes.pdf")).toBe(true);
+
+    await waitFor(() =>
+      expect(getToasts().map((t) => t.message)).toContain(
+        "Only videos can be imported (MP4, MOV, M4V or WebM). Skipped: notes.pdf",
+      ),
+    );
+    expect(window.electronAPI.importVideoFiles).not.toHaveBeenCalled();
+    expect(router.state.location.pathname).toBe("/prepare");
   });
 });

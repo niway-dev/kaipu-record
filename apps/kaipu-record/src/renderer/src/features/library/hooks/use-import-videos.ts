@@ -9,6 +9,7 @@ import {
   type ImportVideoResult,
 } from "@shared/import-video";
 import { reportError } from "@renderer/features/analytics";
+import type { LocalRecording } from "@shared/types/library-storage";
 import { showToast } from "@renderer/ui/toast-store";
 
 /** i18n key (under `library`) of the sentence that explains each failure reason. */
@@ -22,6 +23,14 @@ const REASON_KEY = {
   "too-many": "importReasonTooMany",
   "already-in-library": "importReasonAlreadyInLibrary",
 } as const satisfies Record<ImportVideoFailureReason, string>;
+
+export interface ImportVideosOptions {
+  /**
+   * Take over what happens once videos came in, instead of the "is in your Library" toast
+   * (Prepare opens the first one, NIW2-587). Failures are still reported by the hook.
+   */
+  onImported?(imported: readonly LocalRecording[]): void;
+}
 
 export interface ImportVideos {
   /** An import is running; the button shows it and a second one waits for it. */
@@ -37,16 +46,21 @@ export interface ImportVideos {
  * re-lists (`library:changed`); this hook only starts the import and reports it: a
  * toast per outcome, with "Open" when exactly one video came in.
  */
-export function useImportVideos(): ImportVideos {
+export function useImportVideos(options: ImportVideosOptions = {}): ImportVideos {
   const t = useTranslations("library");
   const navigate = useNavigate();
   const [importing, setImporting] = useState(false);
   const busy = useRef(false);
+  const onImportedRef = useRef(options.onImported);
+  onImportedRef.current = options.onImported;
 
   const report = useCallback(
     (result: ImportVideoResult): void => {
       const [only] = result.imported;
-      if (result.imported.length === 1 && only) {
+      const onImported = onImportedRef.current;
+      if (onImported) {
+        if (result.imported.length > 0) onImported(result.imported);
+      } else if (result.imported.length === 1 && only) {
         showToast({
           message: t("importedOne", { title: only.title }),
           action: { label: t("importOpen"), onClick: () => navigate(`/library/${only.assetId}`) },

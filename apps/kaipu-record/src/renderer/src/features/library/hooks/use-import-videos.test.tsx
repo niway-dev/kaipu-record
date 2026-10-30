@@ -96,6 +96,32 @@ describe("useImportVideos", () => {
     ]);
   });
 
+  it("hands what came in to onImported instead of the toast; failures are still reported (NIW2-587)", async () => {
+    window.electronAPI.importVideos = vi.fn(async () =>
+      result({
+        imported: [recording("a", "1"), recording("b", "2")],
+        failed: [{ fileName: "c.mov", reason: "unreadable" }],
+      }),
+    );
+    const onImported = vi.fn();
+    const { result: hook } = renderHook(() => useImportVideos({ onImported }));
+
+    await act(() => hook.current.pickAndImport());
+
+    expect(onImported).toHaveBeenCalledWith([recording("a", "1"), recording("b", "2")]);
+    expect(toasts()).toEqual(["Couldn’t import c.mov: Kaipu can’t read this video"]);
+  });
+
+  it("does not call onImported when nothing came in", async () => {
+    window.electronAPI.importVideos = vi.fn(async () =>
+      result({ failed: [{ fileName: "c.mov", reason: "unreadable" }] }),
+    );
+    const onImported = vi.fn();
+    const { result: hook } = renderHook(() => useImportVideos({ onImported }));
+    await act(() => hook.current.pickAndImport());
+    expect(onImported).not.toHaveBeenCalled();
+  });
+
   it("says nothing when the dialog is closed", async () => {
     window.electronAPI.importVideos = vi.fn(async () => result({ canceled: true }));
     const { result: hook } = renderHook(() => useImportVideos());
