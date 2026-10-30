@@ -851,6 +851,64 @@ describe("VideoEditorPage — webcam track", () => {
     }
   });
 
+  // Review S1: with the layer selected the inspector follows the playhead into an override.
+  // A slider drag that crossed that boundary used to swap the inspector, unmount the slider
+  // mid-gesture and leave the scene's drag open — every later commit and undo was dropped.
+  it("a slider drag survives the playhead entering an override; commits and undo still land", async () => {
+    const scene = JSON.parse(SESSION_BEFORE_WEBCAM).scene;
+    const original = window.electronAPI.loadVideoEditSession;
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
+      sessionJson: JSON.stringify({
+        version: 1,
+        scene: {
+          ...scene,
+          webcam: {
+            layout: { ...WEBCAM_DEFAULTS },
+            segments: [{ id: "cam-ov", start: 5, end: 8, mode: "override", layout: {} }],
+          },
+        },
+      }),
+      assets: [],
+    }));
+    try {
+      renderEditor(WITH_WEBCAM);
+      await waitForEditorLoaded();
+      const bubble = screen.getByTestId("webcam-layer");
+      fireEvent.pointerDown(bubble, { pointerId: 1 });
+      fireEvent.pointerUp(bubble, { pointerId: 1 });
+      expect(await screen.findByRole("heading", { name: "Webcam" })).toBeInTheDocument();
+
+      const size = screen.getByRole("slider", { name: "Size" });
+      fireEvent.pointerDown(size, { pointerId: 2 });
+      fireEvent.change(size, { target: { value: "0.3" } });
+      const main = Array.from(document.querySelectorAll("video")).find(
+        (v) => v.dataset.testid !== "webcam-video",
+      )!;
+      main.currentTime = 6;
+      fireEvent.timeUpdate(main);
+      // The drag owns the inspector: it does not swap to the override under the playhead.
+      expect(screen.getByRole("heading", { name: "Webcam" })).toBeInTheDocument();
+      fireEvent.pointerUp(size, { pointerId: 2 });
+
+      // Drag over, the playhead's override takes the inspector — and a commit lands.
+      expect(await screen.findByRole("heading", { name: "Webcam section 1" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Rounded" }));
+      expect(screen.getByRole("button", { name: "Rounded" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Rounded" })).toHaveAttribute(
+          "aria-pressed",
+          "false",
+        ),
+      );
+    } finally {
+      window.electronAPI.loadVideoEditSession = original;
+    }
+  });
+
   it("grabbing the bubble opens the Webcam section of the inspector", async () => {
     renderEditor(WITH_WEBCAM);
     await waitForEditorLoaded();

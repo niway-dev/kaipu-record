@@ -1051,13 +1051,18 @@ function VideoEditor({
     ? (scene.overlays.find((o) => o.id === selectedOverlayId) ?? null)
     : null;
   // With the layer selected and the playhead inside an override, this is that override.
+  // A drag freezes the playhead the target is resolved at (review S1): playback crossing an
+  // override mid-drag would otherwise swap the inspector and unmount the dragged slider.
+  const playheadSource = sourceTimeAtTimeline(layout, playback.timelineTime);
+  const webcamTargetPlayhead = useRef(playheadSource);
+  if (!controller.interacting) webcamTargetPlayhead.current = playheadSource;
   const webcamTarget =
     hasWebcam && scene.webcam
       ? webcamInspectorTarget(
           scene.webcam,
           webcamEdits.visibleSegments,
           selectedWebcamId,
-          sourceTimeAtTimeline(layout, playback.timelineTime),
+          webcamTargetPlayhead.current,
         )
       : null;
   const selectedWebcamSegment = webcamTarget?.kind === "segment" ? webcamTarget.segment : null;

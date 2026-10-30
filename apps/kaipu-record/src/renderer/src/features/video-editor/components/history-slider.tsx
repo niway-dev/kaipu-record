@@ -10,7 +10,7 @@
  * helper text is a sibling referenced by `aria-describedby`, and the on-screen value is
  * `aria-hidden` (it duplicates the value the role announces).
  */
-import { useId, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import styles from "./history-slider.module.css";
 
 export interface HistorySliderProps {
@@ -51,6 +51,21 @@ export function HistorySlider({
     dragging.current = false;
     onEnd();
   };
+  // Unmounted mid-drag (the inspector swapped under the pointer): pointerup never reaches
+  // this input, so close the gesture here — an open drag makes the scene drop every later
+  // commit and undo.
+  const onEndRef = useRef(onEnd);
+  useEffect(() => {
+    onEndRef.current = onEnd;
+  });
+  useEffect(
+    () => () => {
+      if (!dragging.current) return;
+      dragging.current = false;
+      onEndRef.current();
+    },
+    [],
+  );
   return (
     <div className={styles.row}>
       <span className={styles.head}>
