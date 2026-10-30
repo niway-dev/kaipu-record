@@ -1,5 +1,6 @@
 import type { ExportPresetId } from "./export-preset";
 import type { RecordingCapture } from "../recording-capture";
+import type { WebcamTrackMeta } from "../webcam-track";
 
 /**
  * A recording stored in the local vault, as returned by the main process.
@@ -59,6 +60,11 @@ export interface LocalRecording {
    * sidecar. null for older recordings, screenshots, GIFs and exports. Optional like `tagIds`.
    */
   capture?: RecordingCapture | null;
+  /**
+   * The take's webcam track (ADR 0032): the sidecar's offset, quality, size and recorded
+   * layout, present only while `.kaipu/<id>.webcam.mp4` exists. Absent/null otherwise.
+   */
+  webcam?: WebcamTrackMeta | null;
 }
 
 /** Where recordings are stored, and whether the user picked a custom folder. */

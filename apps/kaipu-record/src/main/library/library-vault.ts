@@ -3,7 +3,7 @@ import { access, mkdir, open, readFile, readdir, rename, rm, stat } from "node:f
 import { randomUUID } from "node:crypto";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { sanitizeRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
-import type { WebcamTrackMeta } from "@shared/webcam-track";
+import { sanitizeWebcamTrackMeta, type WebcamTrackMeta } from "@shared/webcam-track";
 import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/types/export-preset";
 import { atomicWriteFile, withLock } from "./atomic-write";
 import { sha256FileBase64 } from "./content-hash";
@@ -163,6 +163,11 @@ export class LibraryVault {
       editorOpenedAt: typeof meta.editorOpenedAt === "number" ? meta.editorOpenedAt : null,
       editorSavedAt: typeof meta.editorSavedAt === "number" ? meta.editorSavedAt : null,
       capture: isImage || isGif ? null : sanitizeRecordingCapture(meta.capture),
+      // Only while the file is there: a sidecar field without its file is a missing track.
+      webcam:
+        isImage || isGif || !meta.webcam || !(await exists(this.webcamFilePath(id)))
+          ? null
+          : sanitizeWebcamTrackMeta(meta.webcam),
       thumbnailUrl: isImage
         ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
           // overwritten in place (same id/URL) — only the changed item, so the

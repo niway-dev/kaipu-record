@@ -152,6 +152,65 @@ describe("LibraryVault", () => {
     expect(await readdir(join(directory, ".kaipu"))).not.toContain("rec.webcam.mp4");
   });
 
+  describe("webcam track (ADR 0032)", () => {
+    const webcamMeta = {
+      startOffsetMs: 120.5,
+      offsetQuality: "exact",
+      width: 1280,
+      height: 720,
+      fps: 30,
+      recordedLayout: {
+        shape: "circle",
+        size: "medium",
+        mirrored: true,
+        framing: { enabled: false, zoom: 1, centerX: 0.5, centerY: 0.5 },
+      },
+    };
+
+    const writeWebcamFile = async (id: string): Promise<void> => {
+      await mkdir(join(directory, ".kaipu"), { recursive: true });
+      await writeFile(vault.webcamFilePath(id), "webcam");
+    };
+
+    it("describe exposes the sidecar's webcam when the file exists", async () => {
+      await writeRecording("rec");
+      await writeSidecar("rec", { webcam: webcamMeta });
+      await writeWebcamFile("rec");
+      const described = await vault.describe("rec");
+      expect(described?.webcam).toMatchObject({
+        startOffsetMs: 120.5,
+        offsetQuality: "exact",
+        width: 1280,
+        height: 720,
+        fps: 30,
+        recordedLayout: { shape: "circle", mirrored: true },
+      });
+    });
+
+    it("describe gives no webcam when the sidecar names one but the file is gone", async () => {
+      await writeRecording("rec");
+      await writeSidecar("rec", { webcam: webcamMeta });
+      expect((await vault.describe("rec"))?.webcam ?? null).toBeNull();
+    });
+
+    it("describe gives no webcam for a recording without the field, even with a stray file", async () => {
+      await writeRecording("rec");
+      await writeWebcamFile("rec");
+      expect((await vault.describe("rec"))?.webcam ?? null).toBeNull();
+    });
+
+    it("rename changes the title only and keeps the webcam file paired", async () => {
+      await writeRecording("rec");
+      await writeSidecar("rec", { webcam: webcamMeta });
+      await writeWebcamFile("rec");
+      await vault.rename("rec", "Renamed");
+      const described = await vault.describe("rec");
+      expect(described?.title).toBe("Renamed");
+      expect(described?.webcam).toBeTruthy();
+      expect(await readdir(join(directory, ".kaipu"))).toContain("rec.webcam.mp4");
+    });
+  });
+
   it("keeps the cursor track when only the local copy is removed", async () => {
     await writeRecording("rec");
     await vault.writeCursorTrack("rec", "{}");
