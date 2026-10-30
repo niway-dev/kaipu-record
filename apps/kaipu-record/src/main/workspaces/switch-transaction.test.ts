@@ -39,7 +39,7 @@ function setup(overrides: Partial<SwitchDeps> = {}): {
 }
 
 describe("switchWorkspace", () => {
-  it("runs the transaction in order: probe, prepare windows, drain, drop captures, persist, bump", async () => {
+  it("runs the transaction in order: probe, prepare windows, drain, persist, drop captures, bump", async () => {
     const { deps, log, gate } = setup();
 
     expect(await switchWorkspace(deps, "ws-b")).toEqual({ ok: true });
@@ -47,8 +47,8 @@ describe("switchWorkspace", () => {
     expect(log).toEqual([
       "probe ws-b",
       "prepare",
-      "drop captures",
       "persist ws-b",
+      "drop captures",
       "commit ws-b#2",
     ]);
     expect(gate.stamp).toEqual({ workspaceId: "ws-b", generation: 2 });
@@ -147,6 +147,17 @@ describe("switchWorkspace", () => {
     expect(gate.stamp).toEqual({ workspaceId: "ws-a", generation: 1 });
     expect(gate.switching).toBe(false);
     expect(log).toContain("abort");
+  });
+
+  it("a failed persist keeps the pending captures: they are dropped only once the switch is certain", async () => {
+    const { deps, log } = setup({
+      persistActive: async () => {
+        throw new Error("disk full");
+      },
+    });
+
+    await expect(switchWorkspace(deps, "ws-b")).rejects.toThrow("disk full");
+    expect(log).not.toContain("drop captures");
   });
 
   it("refuses an unknown id, a read-only registry, and a second switch while one runs", async () => {

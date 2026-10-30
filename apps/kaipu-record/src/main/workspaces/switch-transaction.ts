@@ -18,7 +18,7 @@ export interface SwitchDeps {
   prepareWindows(): Promise<boolean>;
   /** The switch is off after `prepareWindows`: windows go back to normal. */
   abortWindows(): void;
-  /** Dismiss pending quiet-capture toasts and drop their retained bytes. */
+  /** Dismiss pending quiet-capture toasts and drop their retained bytes (after `persistActive`). */
   dropPendingCaptures(): void;
   /** Store `activeId` and the mirrored `vaultDirectory`. */
   persistActive(id: string): Promise<void>;
@@ -65,13 +65,14 @@ export async function switchWorkspace(
 
     await deps.gate.close();
     try {
-      deps.dropPendingCaptures();
       await deps.persistActive(target);
     } catch (error) {
       deps.gate.reopen();
       deps.abortWindows();
       throw error;
     }
+    // Only now is the switch certain: a failed persist keeps the old workspace's captures.
+    deps.dropPendingCaptures();
     deps.afterCommit(deps.gate.commit(target));
     return { ok: true };
   } finally {
