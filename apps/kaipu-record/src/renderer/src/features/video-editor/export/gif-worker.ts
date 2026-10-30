@@ -144,7 +144,12 @@ function createFrameRenderer(
       try {
         for await (const wrapped of sink.canvasesAtTimestamps(batch.map((b) => b.sourceTime))) {
           const slot = batch[k++];
-          const webcamFrame = webcamFrames ? ((await webcamFrames.next()).value ?? null) : null;
+          const webcamImage = webcamFrames ? ((await webcamFrames.next()).value ?? null) : null;
+          // The slot's own source time picks the webcam frame, its layout and the camera
+          // scale alike; it is never before the clip's start (locateTimelineTime).
+          const webcamFrame = webcamImage
+            ? { image: webcamImage, sourceTs: slot.sourceTime }
+            : null;
           // A null = no decodable frame at that time (past the stream's end). The canvas
           // then still holds the previous, already-redacted composition, which is repeated.
           if (wrapped) {

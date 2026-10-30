@@ -39,6 +39,16 @@ export function webcamDecodeWindow(
   return { start: Math.max(0, start - WEBCAM_DECODE_LEAD), end };
 }
 
+/**
+ * The screen SOURCE time a clip frame stands for when picking its webcam frame: its own
+ * timestamp, or the clip's start for the frame that straddles it. mediabunny yields the
+ * frame spanning a clip's start first, and on a still screen it can begin seconds before
+ * the cut: looked up at its own time it would show cut footage's face, or none at all.
+ */
+export function webcamLookupTime(frameTimestamp: number, sourceStart: number): number {
+  return Math.max(frameTimestamp, sourceStart);
+}
+
 export interface WebcamCursor<T> {
   /**
    * The webcam frame on screen at screen SOURCE time `sourceTime`, or null before the

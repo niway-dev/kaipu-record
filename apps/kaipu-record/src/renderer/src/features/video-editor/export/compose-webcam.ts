@@ -30,6 +30,16 @@ export interface WebcamImage {
   height: number;
 }
 
+/**
+ * The webcam frame for one output frame, with the screen SOURCE time it stands for: the
+ * layer's layout and the camera scale are read at that time, the same one the frame was
+ * picked at, so all three agree (a clip's straddling first frame uses the clip's start).
+ */
+export interface WebcamLayerFrame {
+  image: WebcamImage;
+  sourceTs: number;
+}
+
 export interface WebcamDrawPlan {
   /** The bubble's square in the output frame. */
   rect: WebcamRect;

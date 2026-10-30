@@ -94,6 +94,7 @@ import {
 } from "./export-presets";
 import { cappedSlideFps, createFrameRateCap } from "./frame-rate-cap";
 import { chooseVideoEncoding, type VideoEncodingChoice } from "./video-encoding";
+import { webcamLookupTime } from "./webcam-lockstep";
 import { openWebcamSource, webcamImageOf, type WebcamSource } from "./webcam-source";
 
 // ---------------------------------------------------------------------------
@@ -334,10 +335,18 @@ async function runExportWithInput(
             // the next kept one (the muxer derives durations from timestamp deltas), so
             // timestamps stay monotonic and the timeline length is unchanged.
             if (!cap.keep(outTs)) continue;
-            const webcamFrame = webcamCursor
-              ? webcamImageOf(await webcamCursor.frameAt(wrapped.timestamp))
+            // One time for the webcam frame, its layout and the camera scale (E1).
+            const webcamAt = webcamLookupTime(wrapped.timestamp, segment.sourceStart);
+            const webcamImage = webcamCursor
+              ? webcamImageOf(await webcamCursor.frameAt(webcamAt))
               : null;
-            compose.clip(wrapped.canvas, wrapped.timestamp, wrapped.duration, outTs, webcamFrame);
+            compose.clip(
+              wrapped.canvas,
+              wrapped.timestamp,
+              wrapped.duration,
+              outTs,
+              webcamImage ? { image: webcamImage, sourceTs: webcamAt } : null,
+            );
             await sendPosterOnce();
             // The frame's own decoded duration (at least one cap slot); the muxer
             // stretches it to the next kept frame anyway.

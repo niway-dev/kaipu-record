@@ -24,7 +24,7 @@ import {
   drawWebcamLayer,
   planWebcamDraw,
   type WebcamCtx,
-  type WebcamImage,
+  type WebcamLayerFrame,
 } from "./compose-webcam";
 import {
   applyRedactions,
@@ -69,14 +69,15 @@ export interface OutputComposer {
   /**
    * Compose a decoded clip frame (`frame` already scaled to `width × height`) whose source
    * span is [sourceTs, sourceTs + sourceDuration), at output (timeline) time `outTs`, with
-   * the webcam frame on screen at `sourceTs` (null: none there, or no webcam).
+   * the webcam frame for it (null: none there, or no webcam). The layer's layout and the
+   * camera scale it shrinks with are read at the webcam frame's own `sourceTs`.
    */
   clip(
     frame: CanvasImageSource,
     sourceTs: number,
     sourceDuration: number,
     outTs: number,
-    webcam?: WebcamImage | null,
+    webcam?: WebcamLayerFrame | null,
   ): void;
   /** Compose a slide frame at output time `outTs`; a missing bitmap renders black. */
   slide(bitmap: ImageBitmap | undefined, outTs: number): void;
@@ -164,20 +165,20 @@ export function createOutputComposer(opts: OutputComposerOptions): OutputCompose
   };
 
   return {
-    clip(frameCanvas, sourceTs, sourceDuration, outTs, webcamImage) {
+    clip(frameCanvas, sourceTs, sourceDuration, outTs, webcamFrame) {
       composeClip(frameCanvas, sourceTs, sourceDuration, outTs);
       if (framer && framing) framer.frame(framing.view, framing.mode);
       // Last, on the final canvas: after the crop and after the framer (ADR 0033).
+      if (!webcamFrame) return;
+      const at = webcamFrame.sourceTs;
       const plan = planWebcamDraw(
         webcam,
-        sourceTs,
+        at,
         final,
-        camera ? cameraAt(camera, sourceTs).scale : 1,
-        webcamImage ?? null,
+        camera ? cameraAt(camera, at).scale : 1,
+        webcamFrame.image,
       );
-      if (plan && webcamImage) {
-        drawWebcamLayer(final.ctx as unknown as WebcamCtx, webcamImage.image, plan);
-      }
+      if (plan) drawWebcamLayer(final.ctx as unknown as WebcamCtx, webcamFrame.image.image, plan);
     },
     slide(bitmap, outTs) {
       ctx.fillStyle = "#000";

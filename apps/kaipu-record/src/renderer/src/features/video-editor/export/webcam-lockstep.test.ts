@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createWebcamCursor, webcamDecodeWindow, WEBCAM_DECODE_LEAD } from "./webcam-lockstep";
+import {
+  createWebcamCursor,
+  webcamDecodeWindow,
+  webcamLookupTime,
+  WEBCAM_DECODE_LEAD,
+} from "./webcam-lockstep";
 
 interface Frame {
   index: number;
@@ -143,5 +148,24 @@ describe("webcamDecodeWindow", () => {
 
   it("is null for a clip that starts after the webcam's last frame", () => {
     expect(webcamDecodeWindow(12, 14, 0, 10)).toBeNull();
+  });
+});
+
+describe("webcamLookupTime (E1)", () => {
+  it("is the frame's own time inside the clip", () => {
+    expect(webcamLookupTime(5.2, 5)).toBe(5.2);
+  });
+
+  it("is the clip's start for the frame that straddles it, however early that frame began", () => {
+    expect(webcamLookupTime(4.6, 5)).toBe(5);
+  });
+
+  it("keeps the bubble on the first frame after a cut whose screen frame began long before it", async () => {
+    // A still screen: the frame shown at the cut began 0.4 s earlier, beyond the decode lead.
+    const track = webcamTrack(30, 10);
+    const window = webcamDecodeWindow(5, 6, 0, track.duration)!;
+    const cursor = createWebcamCursor<Frame>(track.frames(window.start, window.end), 0, 10);
+    expect(await cursor.frameAt(4.6)).toBeNull(); // what looking up the raw timestamp gave
+    expect((await cursor.frameAt(webcamLookupTime(4.6, 5)))?.index).toBe(150);
   });
 });

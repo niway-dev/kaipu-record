@@ -48,7 +48,9 @@ afterEach(() => vi.unstubAllGlobals());
 
 const FRAME = { tag: "screen-frame" } as unknown as CanvasImageSource;
 const WEBCAM_FRAME = { tag: "webcam-frame" } as unknown as CanvasImageSource;
-const webcamImage = { image: WEBCAM_FRAME, width: 1280, height: 720 };
+const WEBCAM_IMAGE = { image: WEBCAM_FRAME, width: 1280, height: 720 };
+/** The webcam frame on screen at source time `sourceTs` (the time its layout is read at). */
+const cam = (sourceTs: number) => ({ image: WEBCAM_IMAGE, sourceTs });
 const SOURCE = { width: 1920, height: 1080 };
 
 const webcam = (segments: WebcamScene["segments"] = []): WebcamScene => ({
@@ -56,14 +58,14 @@ const webcam = (segments: WebcamScene["segments"] = []): WebcamScene => ({
   segments,
 });
 
-/** A camera path that holds `scale` at the frame centre for 10 s. */
-function camera(scale: number): CameraPathMessage {
+/** A camera path that holds `scale` at the frame centre for 10 s (`from` s on; 1 before). */
+function camera(scale: number, from = 0): CameraPathMessage {
   const n = 300;
   return {
     fps: 30,
     cx: new Float32Array(n).fill(0.5),
     cy: new Float32Array(n).fill(0.5),
-    scale: new Float32Array(n).fill(scale),
+    scale: new Float32Array(n).map((_, i) => (i / 30 >= from ? scale : 1)),
   };
 }
 
@@ -118,14 +120,14 @@ const webcamDraws = () => draws().filter((entry) => entry.args[0] === WEBCAM_FRA
 describe("createOutputComposer: the webcam layer (ADR 0033)", () => {
   it("draws on a direct frame (no zoom, no region): the frame, then the webcam on top", () => {
     const { compose } = composer({ webcam: webcam() });
-    compose.clip(FRAME, 1, 1 / 30, 1, webcamImage);
+    compose.clip(FRAME, 1, 1 / 30, 1, cam(1));
     expect(draws().map((d) => d.args[0])).toEqual([FRAME, WEBCAM_FRAME]);
     expect(webcamDraws()[0]!.canvas).toBe("output");
   });
 
   it("composes frame → redactions → crop, then the webcam last, at full size on the output", () => {
     const { compose } = composer({ webcam: webcam(), camera: camera(2), redactions: [cover] });
-    compose.clip(FRAME, 1, 1 / 30, 1, webcamImage);
+    compose.clip(FRAME, 1, 1 / 30, 1, cam(1));
     const calls = log.map((entry) => `${entry.canvas}:${entry.call}`);
     const redaction = calls.findIndex((c) => c.endsWith(":fillRect") && !c.startsWith("output"));
     const crop = log.findIndex(
@@ -149,7 +151,7 @@ describe("createOutputComposer: the webcam layer (ADR 0033)", () => {
       webcam: { ...webcam(), layout: { ...webcam().layout, size: 0.6, position: { x: 1, y: 1 } } },
       framed,
     });
-    compose.clip(FRAME, 1, 1 / 30, 1, webcamImage);
+    compose.clip(FRAME, 1, 1 / 30, 1, cam(1));
     const framedDraw = log.findIndex(
       (entry) => entry.canvas === "output" && entry.args[0] === view,
     );
@@ -168,16 +170,28 @@ describe("createOutputComposer: the webcam layer (ADR 0033)", () => {
     const { compose } = composer({
       webcam: webcam([{ id: "h", start: 2, end: 4, mode: "hidden" }]),
     });
-    compose.clip(FRAME, 3, 1 / 30, 3, webcamImage);
+    compose.clip(FRAME, 3, 1 / 30, 3, cam(3));
     compose.clip(FRAME, 5, 1 / 30, 5, null);
     expect(webcamDraws()).toEqual([]);
-    compose.clip(FRAME, 5, 1 / 30, 5, webcamImage);
+    compose.clip(FRAME, 5, 1 / 30, 5, cam(5));
     expect(webcamDraws()).toHaveLength(1);
+  });
+
+  it("reads the layer and the camera scale at the webcam frame's time, not the screen frame's (E1)", () => {
+    // The clip starts at 1 s; its first screen frame straddles the start (0.95 s). A hidden
+    // range and an un-zoomed camera before 1 s must not decide the layer of a frame shown at 1 s.
+    const { compose } = composer({
+      webcam: webcam([{ id: "h", start: 0.5, end: 1, mode: "hidden" }]),
+      camera: camera(2, 1),
+    });
+    compose.clip(FRAME, 0.95, 1 / 30, 0, cam(1));
+    expect(webcamDraws()).toHaveLength(1);
+    expect(webcamDraws()[0]!.args[7] as number).toBeCloseTo(0.22 * 1080 * 0.7);
   });
 
   it("a recording without a webcam composes exactly as before, whatever frame is passed", () => {
     const { compose } = composer({ webcam: null });
-    compose.clip(FRAME, 1, 1 / 30, 1, webcamImage);
+    compose.clip(FRAME, 1, 1 / 30, 1, cam(1));
     expect(draws().map((d) => d.args[0])).toEqual([FRAME]);
   });
 
