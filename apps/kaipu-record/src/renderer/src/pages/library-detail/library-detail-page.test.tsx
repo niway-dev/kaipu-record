@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, fireEvent, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryItem } from "@shared/types/library-item";
@@ -7,7 +7,7 @@ import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import { StatusStackProvider } from "@renderer/features/status-cards/status-stack";
 import { LibraryDetailPage } from "./library-detail-page";
 
-// The banner and the post-recording panel read the file through mediabunny; here only the
+// The banner and the post-recording card read the file through mediabunny; here only the
 // facts it returns matter.
 const probe = vi.hoisted(() =>
   vi.fn(async () => ({
@@ -683,21 +683,22 @@ describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
   });
 });
 
-describe("LibraryDetailPage — where is it going? (NIW2-578)", () => {
-  // Small on purpose: the panel shows after every recording, not only a heavy one.
+describe("LibraryDetailPage — your video is ready (NIW2-584)", () => {
+  // Small on purpose: the card shows after every recording, not only a heavy one.
   const fresh: LibraryItem = {
     ...exportedOnlyItem,
     local: { ...exportedOnlyItem.local!, sizeBytes: 4_000_000 },
     cloud: null,
     availability: "local",
   };
-  const PANEL = { name: "Where is your video going?" };
+  const CARD = { name: "Your video is ready" };
 
   function renderFresh(fromRecording: boolean) {
     const router = createMemoryRouter(
       [
         { path: "/library/:assetId", element: <LibraryDetailPage /> },
         { path: "/prepare/:assetId", element: <div>prepare-page</div> },
+        { path: "/editor/video/:assetId", element: <div>editor-video</div> },
       ],
       { initialEntries: [{ pathname: "/library/asset-b", state: { fromRecording } }] },
     );
@@ -718,42 +719,52 @@ describe("LibraryDetailPage — where is it going? (NIW2-578)", () => {
     }));
   });
 
-  it("right after recording, asks where it is going; a shortcut opens Prepare on it", async () => {
+  it("right after recording, the top-right card asks where it is going; a chip opens Prepare on it", async () => {
     window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
     const router = renderFresh(true);
-    const panel = await screen.findByRole("region", PANEL);
-    expect(within(panel).getByText("Your video is ready. Where is it going?")).toBeVisible();
+    const card = await screen.findByRole("region", CARD);
     // The file's own size and picture, once read.
-    expect(
-      await within(panel).findByText("1:18 · 2560 × 1440 · 4.0 MB · the original stays as it is"),
-    ).toBeVisible();
-    for (const name of [/^YouTube/, /^TikTok · Reels/, /^GitHub · Jira/, /^Slack · Discord/]) {
-      expect(within(panel).getByRole("button", { name })).toBeVisible();
+    expect(await within(card).findByText("1:18 · 2560 × 1440 · 4.0 MB")).toBeVisible();
+    for (const name of ["YouTube", "TikTok", "GitHub"]) {
+      expect(
+        within(card).getByRole("button", { name: `Prepare a copy for ${name}` }),
+      ).toBeVisible();
     }
 
-    fireEvent.click(within(panel).getByRole("button", { name: /^YouTube/ }));
+    fireEvent.click(within(card).getByRole("button", { name: "Prepare a copy for TikTok" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
-    expect(router.state.location.search).toBe("?to=youtube");
+    expect(router.state.location.search).toBe("?to=vertical");
+    expect(screen.queryByRole("region", CARD)).toBeNull();
   });
 
   it("More places opens Prepare with nothing preselected", async () => {
     window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
     const router = renderFresh(true);
-    const panel = await screen.findByRole("region", PANEL);
-    fireEvent.click(within(panel).getByRole("button", { name: "More places" }));
+    const card = await screen.findByRole("region", CARD);
+    fireEvent.click(within(card).getByRole("button", { name: "More places" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
     expect(router.state.location.search).toBe("");
   });
 
-  it("Not now dismisses it, and Send to… stays on the page", async () => {
+  it("Edit first opens the recording in the editor", async () => {
     window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
-    renderFresh(true);
-    const panel = await screen.findByRole("region", PANEL);
-    fireEvent.click(
-      within(panel).getByRole("button", { name: "Not now — keep it in the Library" }),
-    );
-    expect(screen.queryByRole("region", PANEL)).toBeNull();
-    expect(screen.getByRole("button", { name: "Send to…" })).toBeVisible();
+    const router = renderFresh(true);
+    const card = await screen.findByRole("region", CARD);
+    fireEvent.click(within(card).getByRole("button", { name: "Edit first" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/editor/video/asset-b"));
+  });
+
+  it("Open and ✕ close it and leave the user on the recording, Send to… still there", async () => {
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    for (const name of ["Open", "Dismiss"]) {
+      const router = renderFresh(true);
+      const card = await screen.findByRole("region", CARD);
+      fireEvent.click(within(card).getByRole("button", { name }));
+      expect(screen.queryByRole("region", CARD)).toBeNull();
+      expect(router.state.location.pathname).toBe("/library/asset-b");
+      expect(screen.getByRole("button", { name: "Send to…" })).toBeVisible();
+      cleanup();
+    }
   });
 
   it("not when Settings turned it off", async () => {
@@ -763,7 +774,7 @@ describe("LibraryDetailPage — where is it going? (NIW2-578)", () => {
     renderFresh(true);
     await waitForLoaded();
     await act(async () => {});
-    expect(screen.queryByRole("region", PANEL)).toBeNull();
+    expect(screen.queryByRole("region", CARD)).toBeNull();
   });
 
   it("not when the page was opened from the Library", async () => {
@@ -771,6 +782,6 @@ describe("LibraryDetailPage — where is it going? (NIW2-578)", () => {
     renderFresh(false);
     await waitForLoaded();
     await act(async () => {});
-    expect(screen.queryByRole("region", PANEL)).toBeNull();
+    expect(screen.queryByRole("region", CARD)).toBeNull();
   });
 });

@@ -36,10 +36,11 @@ import {
   runningCopyOf,
 } from "@renderer/features/prepare/components/master-copies-panel";
 import { WhereIsThisGoingStrip } from "@renderer/features/prepare/components/where-is-this-going-strip";
-import { WhereIsItGoingPanel } from "@renderer/features/prepare/components/where-is-it-going-panel";
 import { preparePath } from "@renderer/features/prepare/prepare-path";
 import { asPreparable, useSourceProbe } from "@renderer/features/prepare/use-prepare-copy";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
+import { StatusCardPortal } from "@renderer/features/status-cards/status-stack";
+import { PostRecordingCard } from "@renderer/features/status-cards/post-recording-card";
 import type { SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { RecordingTitle } from "@renderer/features/library/components/recording-title";
 import { TagEditor } from "@renderer/features/library/components/tag-editor";
@@ -115,21 +116,22 @@ export function LibraryDetailPage(): React.JSX.Element {
   const captureLabel = useRecordingCaptureLabel(video?.capture);
 
   // NIW2-578: Prepare — the core action — opens from "Send to…" (NIW2-585), the "Where is
-  // this going?" chips, the "heavy to send" banner and the post-recording panel. Only a local
+  // this going?" chips, the "heavy to send" banner and the post-recording card. Only a local
   // recording has a copy to make (no screenshots, no GIFs).
   const preparable = asPreparable(video);
   const heavy = preparable !== null && isHeavyToSend(preparable.fileSizeBytes);
-  // "Where is it going?" (NIW2-578): on the page a fresh recording lands on, once per
-  // arrival, until a shortcut or "Not now". The stored setting keeps its NIW2-218 name.
+  // "Your video is ready" (NIW2-584): the top-right card on the page a fresh recording lands
+  // on, once per arrival, until a chip, Open or ✕ — or leaving the page, which unmounts it.
+  // The stored setting keeps its NIW2-218 name.
   const { settings } = useAppSettings();
-  const [panelDismissedFor, setPanelDismissedFor] = useState<string | null>(null);
-  const showPanel =
+  const [cardDismissedFor, setCardDismissedFor] = useState<string | null>(null);
+  const showCard =
     Boolean(fromRecording) &&
     preparable !== null &&
     settings?.showRecordingSavedCard === true &&
-    panelDismissedFor !== location.key;
-  // Read the file up front only when the banner or the panel needs its numbers.
-  const probe = useSourceProbe(heavy || showPanel ? (preparable?.id ?? null) : null).probe;
+    cardDismissedFor !== location.key;
+  // Read the file up front only when the banner or the card needs its numbers.
+  const probe = useSourceProbe(heavy || showCard ? (preparable?.id ?? null) : null).probe;
   // A copy finished in the background: re-list, so it shows under "Copies from this master".
   const runner = useExportRunner();
   const readyId = runner.ready?.recording.id ?? null;
@@ -237,19 +239,20 @@ export function LibraryDetailPage(): React.JSX.Element {
         {t("title")}
       </button>
 
-      {showPanel && (
-        <WhereIsItGoingPanel
-          thumbnailUrl={video.thumbnailUrl ?? null}
-          durationSeconds={probe?.durationSec ?? video.durationSeconds}
-          dimensions={probe ? { width: probe.width, height: probe.height } : null}
-          sizeBytes={video.fileSizeBytes}
-          onPick={(destination) => {
-            setPanelDismissedFor(location.key);
-            openPrepare(destination ?? undefined);
-          }}
-          onEditFirst={canEditVideo ? editVideo : undefined}
-          onDismiss={() => setPanelDismissedFor(location.key)}
-        />
+      {showCard && (
+        <StatusCardPortal>
+          <PostRecordingCard
+            durationSeconds={probe?.durationSec ?? video.durationSeconds}
+            dimensions={probe ? { width: probe.width, height: probe.height } : null}
+            sizeBytes={video.fileSizeBytes}
+            onPick={(destination) => {
+              setCardDismissedFor(location.key);
+              openPrepare(destination ?? undefined);
+            }}
+            onEditFirst={canEditVideo ? editVideo : undefined}
+            onDismiss={() => setCardDismissedFor(location.key)}
+          />
+        </StatusCardPortal>
       )}
 
       {isScreenshot ? (
