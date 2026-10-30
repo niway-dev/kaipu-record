@@ -2,8 +2,11 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 
 /**
  * The bubble is at most 480 DIP (960 px on a Retina screen) and is recorded as part of
- * the screen, so 640×480 is the ceiling worth asking for without framing; more would only
- * cost CPU. Framing asks for more lines (see `cameraCaptureLines`), 4:3 like the default.
+ * the screen, so 480 lines is the ceiling worth asking for without framing; more would only
+ * cost CPU. Framing asks for more lines (see `cameraCaptureLines`). The request is 16:9, the
+ * webcam track's shape: Chromium shares one capture per device, so a 4:3 preview would hold
+ * the camera at 4:3 and the recorded webcam file could only be cut down from it (ADR 0032).
+ * The bubble crops with `object-fit: cover`, so its look does not change.
  */
 export const DEFAULT_PREVIEW_LINES = 480;
 
@@ -11,7 +14,7 @@ export const DEFAULT_PREVIEW_LINES = 480;
 const LINES_SETTLE_MS = 400;
 
 function previewSize(lines: number): { width: { ideal: number }; height: { ideal: number } } {
-  return { width: { ideal: Math.round((lines * 4) / 3) }, height: { ideal: lines } };
+  return { width: { ideal: Math.round((lines * 16) / 9) }, height: { ideal: lines } };
 }
 
 /** The chosen camera when there is one; otherwise the user-facing default. */
