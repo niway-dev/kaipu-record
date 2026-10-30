@@ -371,19 +371,28 @@ export class LibraryVault {
    * True when no media file and no companion exists for `stem`. Asked of the file
    * system, so on APFS/NTFS a differently-cased name counts as taken too. An orphan
    * sidecar (a cloud-only item after `removeLocalCopy`) takes its stem: renaming onto it
-   * would merge two identities.
+   * would merge two identities. A stem with a path that cannot be checked is not free.
    */
   async isStemFree(stem: string): Promise<boolean> {
+    return (await this.stemState(stem)) === "free";
+  }
+
+  /**
+   * `taken` as soon as any path of `stem` is proven to exist (a probe that failed elsewhere
+   * changes nothing); `unknown` when none does but some probe failed (EIO, EACCES); `free`
+   * only when every path is proven absent. Only a `free` stem is ever written onto.
+   */
+  private async stemState(stem: string): Promise<"free" | "taken" | "unknown"> {
     // A reserved stem's companions are another stem's (or the vault's own) files.
-    if (isReservedStem(stem)) return false;
+    if (isReservedStem(stem)) return "taken";
     const { cursorTrackTemp: _temp, ...companions } = this.companionPaths(stem);
     const paths = [
       ...ALL_EXTS.map((ext) => join(this.directory, `${stem}${ext}`)),
       ...Object.values(companions),
     ];
-    // Strict: a path that cannot be checked is not free (the caller would write onto it).
-    const found = await Promise.all(paths.map(existsStrict));
-    return !found.includes(true);
+    const probes = await Promise.allSettled(paths.map(existsStrict));
+    if (probes.some((probe) => probe.status === "fulfilled" && probe.value)) return "taken";
+    return probes.some((probe) => probe.status === "rejected") ? "unknown" : "free";
   }
 
   /** `stem`, `stem (2)` … `stem (99)`, then random tails until one is accepted. */

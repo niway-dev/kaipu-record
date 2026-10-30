@@ -56,10 +56,19 @@ const renameFailure = vi.hoisted(() => ({
   calls: 0,
 }));
 
+/** Paths whose existence probe (`access`) fails with EACCES: they can be neither confirmed nor ruled out. */
+const uncheckable = vi.hoisted(() => new Set<string>());
+
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
   return {
     ...actual,
+    access: vi.fn(async (path: string, mode?: number) => {
+      if (uncheckable.has(String(path))) {
+        throw Object.assign(new Error("EACCES: mocked"), { code: "EACCES" });
+      }
+      return actual.access(path, mode);
+    }),
     rename: vi.fn(async (from: string, to: string) => {
       const isMediaMove = /\.(mp4|webm|png|gif)$/.test(String(from)) && !from.endsWith(".part");
       if (isMediaMove) {
@@ -86,6 +95,7 @@ describe("LibraryVault.renameItem", () => {
     vault = new LibraryVault(directory);
     renameFailure.codes = [];
     renameFailure.calls = 0;
+    uncheckable.clear();
   });
 
   afterEach(async () => {
@@ -792,5 +802,58 @@ describe("LibraryVault — an identity claimed across media kinds", () => {
       vault.overwriteImage("Gone", Buffer.from("png"), { title: "x" }, "asset-A"),
     ).rejects.toBeInstanceOf(ItemGoneError);
     expect((await readdir(directory)).sort()).toEqual([".kaipu", "Clip.mp4"]);
+  });
+});
+
+describe("LibraryVault — a name whose files cannot all be checked", () => {
+  let directory: string;
+  let vault: LibraryVault;
+  const sidecar = (assetId: string, title: string) =>
+    JSON.stringify({ sidecarVersion: 2, assetId, title, createdAt: 1000 });
+
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), "kaipu-uncheckable-"));
+    vault = new LibraryVault(directory);
+    uncheckable.clear();
+    await mkdir(join(directory, ".kaipu"), { recursive: true });
+    await writeFile(join(directory, "Taken.mp4"), "media");
+    await writeFile(join(directory, ".kaipu", "Taken.json"), sidecar("t", "Taken"));
+    await writeFile(join(directory, "Old.mp4"), "old");
+    await writeFile(join(directory, ".kaipu", "Old.json"), sidecar("o", "Old"));
+  });
+
+  afterEach(async () => {
+    uncheckable.clear();
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  it("allocation moves past a stem that is taken even when one of its companions cannot be checked", async () => {
+    uncheckable.add(join(directory, ".kaipu", "Taken.jpg"));
+    await expect(
+      vault.allocateId({ kind: "recording", title: "Taken", createdAt: 1 }),
+    ).resolves.toBe("Taken (2)");
+  });
+
+  it("allocation never writes onto a stem it could not check, and takes the next free one", async () => {
+    uncheckable.add(join(directory, ".kaipu", "Fresh.jpg"));
+    await expect(
+      vault.allocateId({ kind: "recording", title: "Fresh", createdAt: 1 }),
+    ).resolves.toBe("Fresh (2)");
+    expect(await readdir(join(directory, ".kaipu"))).not.toContain("Fresh.json");
+  });
+
+  it("a rename onto a taken stem with an uncheckable companion lands on the next free name", async () => {
+    uncheckable.add(join(directory, ".kaipu", "Taken.jpg"));
+    const result = await renameById(vault, "Old", "Taken");
+    expect(result.file).toBe("renamed");
+    expect(result.recording.id).toBe("Taken (2)");
+    expect(await readFile(join(directory, "Taken.mp4"), "utf-8")).toBe("media");
+  });
+
+  it("a rename onto an unchecked stem skips it instead of keeping the old name", async () => {
+    uncheckable.add(join(directory, ".kaipu", "Fresh.jpg"));
+    const result = await renameById(vault, "Old", "Fresh");
+    expect(result.file).toBe("renamed");
+    expect(result.recording.id).toBe("Fresh (2)");
   });
 });
