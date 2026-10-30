@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { IPC_CHANNELS } from "@shared/types";
 import type { AppSettings } from "@shared/types";
@@ -85,6 +85,9 @@ const kaipuApi: KaipuElectronAPI = {
   revealLocalRecording: (id) => ipcRenderer.invoke(IPC_CHANNELS.revealLocalRecording, id),
   gifSave: (bytes, meta) => ipcRenderer.invoke(IPC_CHANNELS.gifSave, bytes, meta),
   startFileDrag: (id, name) => ipcRenderer.send(IPC_CHANNELS.startFileDrag, id, name),
+  importVideos: () => ipcRenderer.invoke(IPC_CHANNELS.importVideos),
+  importVideoFiles: (paths) => ipcRenderer.invoke(IPC_CHANNELS.importVideoFiles, paths),
+  pathForFile: (file) => webUtils.getPathForFile(file),
   setExportActive: (active) => ipcRenderer.send(IPC_CHANNELS.exportActive, active),
   onExportCommand: (callback) => {
     const listener = (_e: IpcRendererEvent, command: "cancel"): void => callback(command);

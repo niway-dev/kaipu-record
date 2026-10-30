@@ -3,6 +3,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
 import type { GifSaveMeta, RecordingBackfillMeta, TagSummary, VaultDirectory } from "@shared/types";
+import { IMPORTABLE_VIDEO_EXTENSIONS, type ImportVideoResult } from "@shared/import-video";
 import { createMainTranslator } from "@kaipu/i18n/main";
 import type { AuthHandle } from "../infrastructure/auth-store";
 import { getAppSettings } from "../infrastructure/settings-store";
@@ -13,6 +14,7 @@ import { LibraryVault } from "./library-vault";
 import { loadDeviceId, VaultTagRepository, type TagRepository } from "./tag-repository";
 import { isTagColor } from "@kaipu/domain/constants";
 import { saveGif } from "./gif-save";
+import { importVideoFiles, type ImportVideoDeps } from "./import-video";
 import { createDragCopy } from "./drag-copies";
 import { friendlyDragName } from "./drag-name";
 import { timestampId } from "../recording/recording-writer";
@@ -171,6 +173,43 @@ export function registerLibraryVaultHandlers(deps: { auth: AuthHandle; serverUrl
       event.sender.startDrag({ file: dragFile, icon: icon.resize({ width: 96 }) });
     })().catch((error) => console.error("file drag failed", error));
   });
+
+  // NIW2-579: bring outside videos into the vault. Main validates and copies; the renderer
+  // only ever names paths (from the dialog here, or from a drop), never writes.
+  const importDeps: ImportVideoDeps = {
+    vaultDir: () => vaultDirectory().path,
+    newId: (now) => timestampId(now).replace(/^recording-/, "imported-"),
+  };
+  const importAndBroadcast = async (paths: unknown): Promise<ImportVideoResult> => {
+    const result = await importVideoFiles(paths, importDeps);
+    if (result.imported.length > 0) broadcastLibraryChanged();
+    return result;
+  };
+  ipcMain.handle(IPC_CHANNELS.importVideos, async (event): Promise<ImportVideoResult> => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const t = createMainTranslator(getAppSettings().locale);
+    const options: Electron.OpenDialogOptions = {
+      title: t("dialogs.importVideoTitle"),
+      buttonLabel: t("dialogs.importVideoButton"),
+      properties: ["openFile", "multiSelections"],
+      filters: [
+        {
+          name: t("dialogs.importVideoFileType"),
+          extensions: IMPORTABLE_VIDEO_EXTENSIONS.map((ext) => ext.slice(1)),
+        },
+      ],
+    };
+    const picked = window
+      ? await dialog.showOpenDialog(window, options)
+      : await dialog.showOpenDialog(options);
+    if (picked.canceled || picked.filePaths.length === 0) {
+      return { imported: [], failed: [], canceled: true };
+    }
+    return importAndBroadcast(picked.filePaths);
+  });
+  ipcMain.handle(IPC_CHANNELS.importVideoFiles, (_event, paths: unknown) =>
+    importAndBroadcast(paths),
+  );
 
   ipcMain.handle(IPC_CHANNELS.getVaultDirectory, (): VaultDirectory => vaultDirectory());
   // shell.openPath resolves with an error string ("" on success) rather than rejecting.
