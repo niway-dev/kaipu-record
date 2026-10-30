@@ -5,6 +5,12 @@ description: "NIW2-218: one export sheet grouped by intent — Balanced (recomme
 
 # Video editor — export presets per destination
 
+> **Superseded for sharing a recording (NIW2-578):** the recording page no longer opens this sheet.
+> Share, the "Recording saved" card and the heavy banner's target moved to
+> [Prepare — where is your video going?](./prepare-screen), a full screen built around
+> destinations, on `feature/niw2-578-prepare-screen` (not merged yet). The editor's Export still
+> uses the sheet described here, and the presets, estimates and background runner are unchanged.
+
 > **Status: 🟢 Ready to validate — stacked PRs on top of NIW2-217 (#266): #269 → #271 → #272 →
 > export quality → Share button → redesign → background export → quality tiers → quantizer
 > encoding.** The encoder settings come from a spike on the app's own WebCodecs path, watched by
@@ -109,7 +115,7 @@ exporting “…”" instead of a sheet. Cards stack in the top-right corner of 
   under that name and cleans it on the next drag and on quit. Buttons: **View file** (the
   exported item's Library page), **Show in Finder**, **Done**. It replaces the old "Export saved"
   toast.
-- **Recording saved:** right after a recording over 10 MB, its page shows "Recording saved" with
+- **Recording saved** (replaced by Prepare's "Where is it going?" panel, NIW2-578): right after a recording over 10 MB, its page shows "Recording saved" with
   the Light estimate on a before/after bar ("~5.9 MB · fits GitHub", GitHub only when it fits)
   and **Share a light copy**, which opens the sheet on the Light row. Hides after 8 s (paused while hovered); Settings →
   Export quality → "Offer a light copy after recording" turns it off
@@ -124,6 +130,9 @@ the renderer to cancel (its writer session is aborted, no temp file left) and cl
 stops or 2 s.
 
 ## Share (export without the editor)
+
+> Replaced by [Prepare](./prepare-screen) (NIW2-578). The start logic below moved to
+> `features/prepare/use-prepare-copy.ts`; what it encodes is the same.
 
 **Share** is the primary button on the library item page of every local recording, raw or already
 an export, next to Edit video / Reveal / Delete. That page is also where a recording lands the
