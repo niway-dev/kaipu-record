@@ -64,7 +64,8 @@ The internal preset ids and numbers:
 - The old single `youtube` preset (fixed 1920×1080, 8 / 12 Mbps, AAC 128 kbps) is being replaced
   by the 1440p / 4K row (NIW2-564, below).
 - Fixed canvases always output the exact preset size (upscaling a smaller source).
-- Audio on fixed presets is AAC 128 kbps at the source layout and sample rate.
+- Audio on Vertical and Square is AAC 128 kbps at the source layout and sample rate; YouTube uses
+  384 kbps (see below).
 - **Fill** crops a centred window of the composed (zoomed) view, so it follows the zoom camera.
 - Slides are always contained (Fit), never cropped.
 - Fit/Fill show only under the selected row.
@@ -214,7 +215,8 @@ rate kept, keyframe every 2 s, fast start.
   68 Mbps. Audio is AAC 384 kbps, falling back to 256, 192 then 128 kbps if the encoder refuses.
 - **Default variant:** 4K when the source would be downscaled into 2560×1440, otherwise 1440p. The
   user can override it.
-- **Upscaling** now uses canvas `imageSmoothingQuality = "high"` (it used the default filter).
+- **Smoothing:** slides drawn onto the canvas now use `imageSmoothingQuality = "high"` as well; the
+  fixed-canvas framer and the zoom crop already did, so this is not what changed the YouTube result.
 - **Size is not a concern** for YouTube files, so this row shows no amber heavy-file warning.
 - **Stays on mediabunny / WebCodecs** per ADR 0001: no ffmpeg in the build (libx264 is GPL).
 
