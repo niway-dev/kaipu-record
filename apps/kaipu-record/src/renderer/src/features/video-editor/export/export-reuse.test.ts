@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { initialScene, type VideoScene } from "../scene";
 import { parseSession, serializeSession } from "../session";
-import { WHOLE_RECORDING_FINGERPRINT, editFingerprint, findReusableExports } from "./export-reuse";
+import { encodeFingerprint } from "./export-presets";
+import { seedWebcamScene } from "../webcam/webcam-model";
+import {
+  WHOLE_RECORDING_FINGERPRINT,
+  editFingerprint,
+  findReusableExports,
+  isWholeFingerprint,
+  wholeFingerprint,
+} from "./export-reuse";
 
 function exported(
   assetId: string,
@@ -146,5 +154,64 @@ describe("findReusableExports", () => {
       { id: null },
     );
     expect(findReusableExports([legacy, gif, cloudOnly], whole)).toEqual({});
+  });
+});
+
+describe("wholeFingerprint (Share)", () => {
+  const webcam = {
+    startOffsetMs: 0,
+    offsetQuality: "exact" as const,
+    width: 1280,
+    height: 720,
+    fps: 30,
+  };
+
+  it("is the plain whole-recording fingerprint without a webcam, so old Share files stay reusable", () => {
+    expect(wholeFingerprint(null)).toBe(WHOLE_RECORDING_FINGERPRINT);
+  });
+
+  it("with a webcam hashes the seeded layer: stable, and a different layout is a different file", () => {
+    const layer = seedWebcamScene(webcam);
+    expect(wholeFingerprint(layer)).toMatch(/^whole:[0-9a-z]+$/);
+    expect(wholeFingerprint(layer)).toBe(wholeFingerprint(seedWebcamScene({ ...webcam })));
+    const moved = seedWebcamScene({
+      ...webcam,
+      recordedLayout: {
+        shape: "circle",
+        mirrored: true,
+        size: 200,
+        framing: { enabled: false, zoom: 1, x: 0.5, y: 0.5 },
+        position: { x: 0.9, y: 0.9 },
+        sizeFraction: 0.3,
+      },
+    });
+    expect(wholeFingerprint(moved)).not.toBe(wholeFingerprint(layer));
+  });
+
+  it("is told apart from the pre-webcam whole and from an editor export", () => {
+    const enc = (f: string) => encodeFingerprint(f, "balanced");
+    const layer = seedWebcamScene(webcam);
+    const faceful = wholeFingerprint(layer);
+    const oldShare = exported("old", 1, {
+      preset: "balanced",
+      fingerprint: enc(WHOLE_RECORDING_FINGERPRINT),
+    });
+    const faceShare = exported("face", 2, { preset: "balanced", fingerprint: enc(faceful) });
+    const edit = exported("edit", 3, {
+      preset: "balanced",
+      fingerprint: enc(editFingerprint(initialScene(10, webcam))),
+    });
+    expect(findReusableExports([oldShare, edit], faceful)).toEqual({});
+    expect(findReusableExports([oldShare, faceShare, edit], faceful).balanced?.assetId).toBe(
+      "face",
+    );
+    expect(findReusableExports([faceShare, edit], WHOLE_RECORDING_FINGERPRINT)).toEqual({});
+  });
+
+  it("isWholeFingerprint recognizes both forms and nothing else", () => {
+    expect(isWholeFingerprint("whole")).toBe(true);
+    expect(isWholeFingerprint("whole:abc")).toBe(true);
+    expect(isWholeFingerprint("edit:wc1:abc")).toBe(false);
+    expect(isWholeFingerprint(undefined)).toBe(false);
   });
 });

@@ -17,7 +17,7 @@ import {
   resolveExportTarget,
   slideFrameCount,
 } from "./export-presets";
-import { WHOLE_RECORDING_FINGERPRINT } from "./export-reuse";
+import { isWholeFingerprint } from "./export-reuse";
 import type { VideoEncodingChoice } from "./video-encoding";
 import { type ExportWebcamTrack, fetchWebcamTrack } from "./webcam-fetch";
 
@@ -115,7 +115,7 @@ export function exportTitle(
     case "light":
       return t("presetTitleLight", { title });
     default:
-      return fingerprint === WHOLE_RECORDING_FINGERPRINT
+      return isWholeFingerprint(fingerprint)
         ? t("presetTitleShare", { title })
         : t("editedTitle", { title });
   }

@@ -120,6 +120,38 @@ describe("ShareRecording", () => {
     expect(screen.queryByRole("heading", { name: "Share a copy" })).toBeNull();
   });
 
+  it("composes the recording's webcam at its recorded layout and fingerprints it apart", async () => {
+    const webcam = {
+      startOffsetMs: 40,
+      offsetQuality: "exact" as const,
+      width: 1280,
+      height: 720,
+      fps: 30,
+      recordedLayout: {
+        shape: "circle" as const,
+        mirrored: true,
+        size: 200,
+        framing: { enabled: false, zoom: 1, x: 0.5, y: 0.5 },
+        position: { x: 0.85, y: 0.8 },
+        sizeFraction: 0.25,
+      },
+    };
+    renderShare({ video: { ...VIDEO, webcam } });
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Export / }));
+
+    const [args] = exportController.start.mock.calls[0] as unknown as [
+      {
+        scene: { webcam: { layout: { position: { x: number; y: number } } } | null };
+        webcamTrack: { startOffsetMs: number } | null;
+        fingerprint: string;
+      },
+    ];
+    expect(args.scene.webcam?.layout.position).toEqual({ x: 0.85, y: 0.8 });
+    expect(args.webcamTrack).toEqual(webcam);
+    expect(args.fingerprint).toMatch(/^whole:/);
+  });
+
   it("offers an existing whole-recording export instead of encoding it again", async () => {
     const existing: LibraryVideo = {
       ...VIDEO,

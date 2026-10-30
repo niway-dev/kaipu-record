@@ -11,11 +11,20 @@
  */
 import type { LibraryVideo } from "@renderer/features/library/types";
 import type { VideoScene } from "../scene";
+import type { WebcamScene } from "../webcam/webcam-model";
 import { parseSession, serializeSession } from "../session";
 import { encodeFingerprint, type ExportPresetId } from "./export-presets";
 
 /** Share (no editor): the whole source file, as it is on disk. */
 export const WHOLE_RECORDING_FINGERPRINT = "whole";
+
+/** True for Share's fingerprints: `whole`, or `whole:<hash>` when the face is composed. */
+export function isWholeFingerprint(fingerprint: string | undefined): boolean {
+  return (
+    fingerprint === WHOLE_RECORDING_FINGERPRINT ||
+    fingerprint?.startsWith(`${WHOLE_RECORDING_FINGERPRINT}:`) === true
+  );
+}
 
 /** JSON with object keys sorted, so a scene re-read from its session file hashes the same. */
 function stableStringify(value: unknown): string {
@@ -61,6 +70,18 @@ export function editFingerprint(scene: VideoScene): string {
   return webcam
     ? `edit:${WEBCAM_COMPOSE_REVISION}:${hash53(stableStringify(saved))}`
     : `edit:${hash53(stableStringify(withoutWebcam))}`;
+}
+
+/**
+ * Share's fingerprint (NIW2-576): plain `whole` for a recording without a webcam, so the
+ * Share files already made stay reusable; `whole:<hash of the seeded webcam layer>` with one.
+ * A pre-webcam "whole" export has no face and an editor export has its own `edit:` prefix,
+ * so neither is mistaken for it.
+ */
+export function wholeFingerprint(webcam: WebcamScene | null): string {
+  return webcam
+    ? `${WHOLE_RECORDING_FINGERPRINT}:${hash53(stableStringify(webcam))}`
+    : WHOLE_RECORDING_FINGERPRINT;
 }
 
 /** The newest playable MP4 export of each preset whose content matches `fingerprint`. */

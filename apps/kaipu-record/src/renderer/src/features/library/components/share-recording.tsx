@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Share2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { Button } from "@kaipu/ui";
@@ -12,8 +12,8 @@ import {
 } from "@renderer/features/video-editor/components/export-sheet";
 import type { ExportPresetId } from "@renderer/features/video-editor/export/export-presets";
 import {
-  WHOLE_RECORDING_FINGERPRINT,
   findReusableExports,
+  wholeFingerprint,
 } from "@renderer/features/video-editor/export/export-reuse";
 import { probeSource, type SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import {
@@ -120,12 +120,23 @@ export function useShareRecording({
     setSheet({ preset });
   };
 
+  // Share composes the face where the bubble sat during the take (ADR 0033): the scene seeds
+  // the layer from the sidecar, and the fingerprint hashes it, so a second Share reuses the
+  // file while a pre-webcam one (no face) and an editor export are never mistaken for it.
+  const scene = useMemo(
+    () => initialScene(probe?.durationSec ?? 0, video?.webcam ?? null),
+    [probe?.durationSec, video?.webcam],
+  );
+  const fingerprint = wholeFingerprint(scene.webcam);
+
   // Runs in the background (export-runner): the sheet closes, the progress and "Ready to
   // share" cards take over, and leaving this page does not stop it.
   const start = (choice: VideoExportChoice): void => {
     if (!probe || !video) return;
     void videoExport.start({
-      scene: initialScene(probe.durationSec),
+      scene,
+      // The sidecar's webcam: its file is fetched and composed at the recorded layout.
+      webcamTrack: video.webcam ?? null,
       sourceId: video.id,
       title: video.title,
       derivedFromAssetId: video.assetId,
@@ -138,7 +149,7 @@ export function useShareRecording({
       presetId: choice.presetId,
       framing: choice.framing,
       sourceInfo: probe,
-      fingerprint: WHOLE_RECORDING_FINGERPRINT,
+      fingerprint,
       onSaved: (recording) => {
         try {
           onSaved(recording);
@@ -169,7 +180,7 @@ export function useShareRecording({
             sampleRate: probe.sampleRate,
           }}
           defaultPreset={sheet.preset ?? appSettings.settings?.exportQuality}
-          reusable={findReusableExports(exports, WHOLE_RECORDING_FINGERPRINT)}
+          reusable={findReusableExports(exports, fingerprint)}
           onOpenExisting={(existing) => {
             setSheet(null);
             onOpenExisting(existing);
