@@ -382,6 +382,22 @@ export class RecordingWriter {
     await this.closeHandle(session).catch(() => {});
   }
 
+  /**
+   * Discard an export's partial, a stranded one included: an export's source is still in the
+   * library, so its partial is no take to recover, and a kept one would be swept up as a
+   * recording. Bound to the session that owns `tempPath` (required), so it can never reach a
+   * recording's partial or a later session; a finalized take is no longer a session, so its
+   * vault file is never touched.
+   */
+  async discardExport(sessionId: string, tempPath: string): Promise<void> {
+    const session = this.bound(sessionId, tempPath);
+    if (!session || session.finalizing) return;
+    this.sessions.delete(sessionId);
+    await session.queue;
+    await this.closeHandle(session).catch(() => {});
+    await unlink(session.tempPath).catch(() => {});
+  }
+
   /** Discard a session and its partial. `tempPath` binds it to one session, as in `release`. */
   async abort(sessionId: string, tempPath?: string): Promise<void> {
     const session = this.bound(sessionId, tempPath);

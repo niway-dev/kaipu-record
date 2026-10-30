@@ -416,11 +416,17 @@ export function registerRecordingHub(
       .finally(() => releaseTake(sessionId, take));
     return take.ending;
   };
+  /**
+   * An export's partial is discarded however its take ends, a stranded one included (a finalize
+   * that failed, its save dialog cancelled): kept, the sweep would recover it as a recording.
+   */
+  const discardExport = (id: string, tempPath: string | undefined): Promise<void> =>
+    tempPath === undefined ? Promise.resolve() : writer.discardExport(id, tempPath);
   /** What a page gone without ending its take does to it (see above). */
   const abandonCleanup =
     (take: Take) =>
     (id: string, tempPath: string | undefined): Promise<void> =>
-      take.kind === "export" ? writer.abort(id, tempPath) : writer.release(id, tempPath);
+      take.kind === "export" ? discardExport(id, tempPath) : writer.release(id, tempPath);
   // The renderer whose `recordingStart` made the recording active: if its page goes, nobody
   // will send the stop, so the bar and the hidden main window are restored here.
   let activityOwner: number | null = null;
@@ -531,9 +537,10 @@ export function registerRecordingHub(
       try {
         return await finalizing;
       } finally {
-        // Finalize leaves nothing to clean: a placed take is the vault's, a stranded one the
-        // save dialog's (and the renderer's abort after it).
-        await endTake(sessionId, take, async () => {}).catch(() => {});
+        // A placed take is the vault's. A stranded recording is kept for recovery (the save
+        // dialog has had its chance); a stranded export is discarded.
+        const cleanup = take.kind === "export" ? discardExport : async () => {};
+        await endTake(sessionId, take, cleanup).catch(() => {});
       }
     },
   );
@@ -592,7 +599,11 @@ export function registerRecordingHub(
     // The user discarded it: the only end that deletes a recording's partial. A take still
     // being created is aborted once its file exists, and keeps the vault busy until then.
     const take = recordingLeases.get(sessionId);
-    if (take) return endTake(sessionId, take, (id, tempPath) => writer.abort(id, tempPath));
+    if (take) {
+      return endTake(sessionId, take, (id, tempPath) =>
+        take.kind === "export" ? discardExport(id, tempPath) : writer.abort(id, tempPath),
+      );
+    }
     return writer.abort(sessionId);
   });
   ipcMain.handle(

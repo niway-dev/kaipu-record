@@ -1891,3 +1891,77 @@ describe("recording hub — one lifecycle per take (NIW2-561)", () => {
     await expect(readFile(exported.tempPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
+
+describe("recording hub — an export whose finalize fails is discarded (NIW2-561)", () => {
+  beforeEach(async () => {
+    mockState.userDataDir = await mkdtemp(join(tmpdir(), "kaipu-hub-"));
+    await writeFile(
+      join(mockState.userDataDir, "preferences.json"),
+      JSON.stringify({ vaultDirectory: join(mockState.userDataDir, "vault") }),
+    );
+    mockState.ipcOn.clear();
+    mockState.ipcHandle.clear();
+    mockState.showSaveDialog.mockReset();
+    vi.resetModules();
+  });
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await rm(mockState.userDataDir, { recursive: true, force: true });
+  });
+
+  async function failedFinalize(kind: "export" | "recording", abandon: boolean) {
+    const { EventEmitter } = await import("node:events");
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    const { LibraryVault } = await import("../library/library-vault");
+    const { vaultActivity } = await import("../library/vault-activity");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+    const renderer = Object.assign(new EventEmitter(), { id: 80 });
+    const event = { sender: renderer };
+    const create = mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!;
+    const write = mockState.ipcOn.get(IPC_CHANNELS.recordingWrite)!;
+    const finalize = mockState.ipcHandle.get(IPC_CHANNELS.recordingFinalize)!;
+    const abort = mockState.ipcHandle.get(IPC_CHANNELS.recordingAbort)!;
+
+    const { tempPath } = (await create(event, "take-1", kind)) as { tempPath: string };
+    write(event, "take-1", new TextEncoder().encode("partial").buffer, 0);
+    await vi.waitFor(async () => expect(await readFile(tempPath, "utf-8")).toBe("partial"));
+    vi.spyOn(LibraryVault.prototype, "allocateId").mockRejectedValueOnce(new Error("no stem"));
+    let answer!: (result: { canceled: boolean }) => void;
+    mockState.showSaveDialog.mockImplementationOnce(
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+
+    const finalized = Promise.resolve(
+      finalize(event, "take-1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
+    ).catch((error: unknown) => error);
+    await vi.waitFor(() => expect(mockState.showSaveDialog).toHaveBeenCalledOnce());
+    if (abandon) {
+      renderer.emit("did-start-navigation", { isMainFrame: true, isSameDocument: false });
+    }
+    answer({ canceled: true });
+    expect(await finalized).toBeInstanceOf(Error);
+    if (!abandon) await abort(event, "take-1"); // the renderer aborts after a failed finalize
+    await vi.waitFor(() => expect(vaultActivity.active()).toEqual([]));
+    return tempPath;
+  }
+
+  it.each([true, false])(
+    "an export's partial is deleted after a failed finalize and a cancelled dialog (page gone: %s)",
+    async (abandon) => {
+      const tempPath = await failedFinalize("export", abandon);
+      await vi.waitFor(() => expect(readFile(tempPath)).rejects.toMatchObject({ code: "ENOENT" }));
+    },
+  );
+
+  it.each([true, false])(
+    "a recording's partial is kept after the same sequence (page gone: %s)",
+    async (abandon) => {
+      const tempPath = await failedFinalize("recording", abandon);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(await readFile(tempPath, "utf-8")).toBe("partial");
+    },
+  );
+});

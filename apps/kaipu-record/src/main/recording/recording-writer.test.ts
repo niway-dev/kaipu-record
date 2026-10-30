@@ -273,6 +273,22 @@ describe("RecordingWriter", () => {
     expect(await readFile(join(vaultDir, "T.mp4"), "utf-8")).toBe("other recording");
   });
 
+  it("discardExport deletes a stranded partial, only for the session bound to its staging file", async () => {
+    const { writer, tempDir } = await setup();
+    const { tempPath } = await writer.create("e1");
+    await writer.write("e1", new TextEncoder().encode("export").buffer, 0);
+    vi.spyOn(LibraryVault.prototype, "allocateId").mockRejectedValueOnce(new Error("no stem"));
+    await expect(
+      writer.finalize("e1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
+    ).rejects.toBeInstanceOf(FinalizeMoveError);
+
+    await writer.discardExport("e1", join(tempDir, "another.mp4.part"));
+    expect(await readFile(tempPath, "utf-8")).toBe("export");
+    await writer.discardExport("e1", tempPath);
+    await expect(access(tempPath)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(writer.ids()).toEqual([]);
+  });
+
   it("throws when writing to an unknown session", async () => {
     const { writer } = await setup();
     await expect(writer.write("ghost", new ArrayBuffer(1), 0)).rejects.toThrow(/session/i);
