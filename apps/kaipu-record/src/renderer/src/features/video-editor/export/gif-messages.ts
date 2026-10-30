@@ -2,7 +2,7 @@
  * Message contracts between the renderer (`use-gif-export.ts`) and `gif-worker.ts`
  * (NIW2-217). Mirrors export-messages.ts; cancellation is `worker.terminate()`.
  */
-import type { CameraPathMessage } from "./export-messages";
+import type { CameraPathMessage, WebcamTrackMessage } from "./export-messages";
 import type { ExportPlan } from "./export-plan";
 
 /** GIF frame rates offered in the export sheet. 30 fps is ruled out (browser delay clamp). */
@@ -41,6 +41,8 @@ export interface GifStartMessage {
   output: { width: number; height: number };
   fps: GifFps;
   camera: CameraPathMessage | null;
+  /** The webcam file, as for the MP4 export; null without a webcam layer. */
+  webcam: WebcamTrackMessage | null;
 }
 
 export type GifWorkerMessage =

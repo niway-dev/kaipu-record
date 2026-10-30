@@ -684,6 +684,8 @@ function VideoEditor({
         previewWidth: video.clientWidth,
         slideAssets: assetStoreRef.current,
         cameraPath,
+        // The sidecar's webcam track: with a webcam layer in the scene, the export composes it.
+        webcamTrack: source.webcam ?? null,
         presetId: choice.presetId,
         framing: choice.framing,
         sourceInfo: sourceProbe,
@@ -776,12 +778,13 @@ function VideoEditor({
         previewWidth: video.clientWidth,
         slideAssets: assetStoreRef.current,
         cameraPath,
+        webcamTrack: source.webcam ?? null,
         range: settings.range,
         width: settings.width,
         fps: settings.fps,
       };
     },
-    [playback, scene, source.id, assetStoreRef, cameraPath],
+    [playback, scene, source.id, source.webcam, assetStoreRef, cameraPath],
   );
 
   const handleGifSettingsChange = useCallback(

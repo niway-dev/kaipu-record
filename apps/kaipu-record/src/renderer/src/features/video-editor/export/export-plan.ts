@@ -9,6 +9,7 @@ import type { VideoScene } from "../scene";
 import type { AudioEdits } from "../audio-edits";
 import type { Redaction } from "../privacy/redaction";
 import { isSourceRangeVisible } from "../source-time";
+import type { WebcamScene } from "../webcam/webcam-model";
 
 export interface RenderClipSegment {
   kind: "clip";
@@ -53,6 +54,12 @@ export interface ExportPlan {
    * worker skip the audio track entirely rather than write a silent one.
    */
   audio: AudioEdits;
+  /**
+   * The webcam layer (ADR 0033), or null for a recording without a webcam track. Not
+   * filtered by visibility, like the camera path: its segments are source-anchored and
+   * cheap, and the layer is decided per frame by `webcamAt`.
+   */
+  webcam: WebcamScene | null;
 }
 
 export function buildExportPlan(scene: VideoScene): ExportPlan {
@@ -100,6 +107,7 @@ export function buildExportPlan(scene: VideoScene): ExportPlan {
     // write time, so one sitting in deleted footage costs nothing and survives
     // an undo of the cut.
     audio: { audioMuted: scene.audioMuted, mutedRanges: scene.mutedRanges },
+    webcam: scene.webcam,
   };
 }
 
@@ -107,7 +115,8 @@ export function buildExportPlan(scene: VideoScene): ExportPlan {
  * The part of `plan` inside the timeline range [start, end), rebased so the range starts at
  * 0 (NIW2-217, GIF range export). Segments are clipped (a clip's source window moves with
  * its timeline window), overlay windows are clipped to the range, and everything that is in
- * SOURCE time — redactions, the camera path, audio edits — is carried through unchanged.
+ * SOURCE time — redactions, the camera path, audio edits, the webcam layer — is carried
+ * through unchanged.
  */
 export function sliceExportPlan(plan: ExportPlan, start: number, end: number): ExportPlan {
   const from = Math.max(0, Math.min(start, plan.totalDuration));

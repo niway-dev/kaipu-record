@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Translator } from "@kaipu/i18n";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { initialScene, type VideoScene } from "../scene";
+import { WEBCAM_DEFAULTS } from "../webcam/webcam-model";
+import type { ExportStartMessage } from "./export-messages";
 import { createSlideAssetStore } from "../slide-assets";
 import type { VideoEncodingChoice } from "./video-encoding";
 import {
@@ -238,5 +240,48 @@ describe("export runner (NIW2-218 background export)", () => {
     } as MessageEvent);
     await waitFor(() => expect(workers).toHaveLength(2));
     expect(entries).toHaveBeenCalledOnce();
+  });
+
+  describe("the webcam file (ADR 0033)", () => {
+    const WEBCAM_SCENE: VideoScene = {
+      ...SCENE,
+      webcam: { layout: { ...WEBCAM_DEFAULTS }, segments: [] },
+    };
+    const fetchMock = (webcamStatus: number) =>
+      vi.fn(async (url: string) =>
+        url.startsWith("kaipu-media://webcam/")
+          ? { ok: webcamStatus === 200, status: webcamStatus, blob: async () => new Blob(["cam"]) }
+          : { ok: true, status: 200, blob: async () => new Blob(["mp4"]) },
+      );
+    const sent = (): ExportStartMessage =>
+      workers[0]!.postMessage.mock.calls[0]![0] as ExportStartMessage;
+
+    it("fetches it like the source and sends it with the offset when the scene has a layer", async () => {
+      const fetch = fetchMock(200);
+      vi.stubGlobal("fetch", fetch);
+      await startVideoExport(args({ scene: WEBCAM_SCENE, webcamTrack: { startOffsetMs: 120 } }), t);
+      await waitFor(() => expect(workers).toHaveLength(1));
+      expect(fetch).toHaveBeenCalledWith("kaipu-media://webcam/rec-1");
+      expect(sent().webcam).toEqual({ blob: expect.any(Blob), startOffsetMs: 120 });
+      expect(sent().plan.webcam).toEqual(WEBCAM_SCENE.webcam);
+    });
+
+    it("asks for nothing for a recording without a webcam (no request, null in the message)", async () => {
+      const fetch = fetchMock(200);
+      vi.stubGlobal("fetch", fetch);
+      await startVideoExport(args({ webcamTrack: null }), t);
+      await waitFor(() => expect(workers).toHaveLength(1));
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(sent().webcam).toBeNull();
+      expect(sent().plan.webcam).toBeNull();
+    });
+
+    it("exports without the layer when the file is gone (404), instead of failing", async () => {
+      vi.stubGlobal("fetch", fetchMock(404));
+      await startVideoExport(args({ scene: WEBCAM_SCENE, webcamTrack: { startOffsetMs: 0 } }), t);
+      await waitFor(() => expect(workers).toHaveLength(1));
+      expect(sent().webcam).toBeNull();
+      expect(getExportSnapshot().status).toBe("exporting");
+    });
   });
 });

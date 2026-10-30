@@ -21,6 +21,11 @@
  * VIEW first (frame → redactions → overlays → zoom crop, exactly as Maximum) and then
  * frame it onto the target canvas (Fit/Fill, see `createFramer`).
  *
+ * Webcam (ADR 0033): when the plan has a webcam layer and the renderer sent its file, a
+ * second Input decodes it in lockstep with the screen (one cursor per clip segment over
+ * that segment's source range, `webcam-lockstep.ts`), and the composer draws the layer
+ * last, onto the final canvas. Without one, no second Input is opened.
+ *
  * Encoding (NIW2-218): AVC with a keyframe every 10 s (2 s for YouTube). The quality tiers
  * use quantizer mode (constant quality) on the hardware encoder, at most 24 fps; everything
  * else, and a platform without quantizer support, targets a bitrate. `pickVideoEncoding` probes
@@ -79,7 +84,7 @@ import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages"
 import { silencedSpansFor } from "../audio-edits";
 import { rebaseVideoTimestamp } from "./rebase-timestamp";
 import { exportCanvasSinkOptions } from "./canvas-sink-options";
-import { createFramer, createOutputComposer } from "./compose-output-frame";
+import { createOutputComposer } from "./compose-output-frame";
 import {
   audioEncodingCandidates,
   packetCountsFor,
@@ -89,6 +94,7 @@ import {
 } from "./export-presets";
 import { cappedSlideFps, createFrameRateCap } from "./frame-rate-cap";
 import { chooseVideoEncoding, type VideoEncodingChoice } from "./video-encoding";
+import { openWebcamSource, webcamImageOf, type WebcamSource } from "./webcam-source";
 
 // ---------------------------------------------------------------------------
 // Typing helper: TypeScript doesn't expose `Worker` on `self` in module workers.
@@ -115,9 +121,12 @@ workerSelf.onmessage = (event: MessageEvent<ExportStartMessage>) => {
 
 async function runExport(msg: ExportStartMessage): Promise<void> {
   const input = new Input({ source: new BlobSource(msg.sourceBlob), formats: ALL_FORMATS });
+  let webcam: WebcamSource | null = null;
   try {
-    await runExportWithInput(msg, input);
+    webcam = await openWebcamSource(msg.webcam, msg.plan.webcam);
+    await runExportWithInput(msg, input, webcam);
   } finally {
+    webcam?.dispose();
     // `Input` is the only Disposable handle mediabunny exposes here — neither
     // CanvasSink nor AudioBufferSink implement Disposable/close in the .d.ts,
     // and disposing the Input already cancels their in-flight decode
@@ -127,7 +136,11 @@ async function runExport(msg: ExportStartMessage): Promise<void> {
   }
 }
 
-async function runExportWithInput(msg: ExportStartMessage, input: Input): Promise<void> {
+async function runExportWithInput(
+  msg: ExportStartMessage,
+  input: Input,
+  webcam: WebcamSource | null,
+): Promise<void> {
   const { plan, output: size, target: preset } = msg;
   // Fixed-canvas presets compose at SOURCE size into a view canvas, then frame it onto the
   // output. Identity framing (Balanced, Light, Maximum) composes straight onto the output.
@@ -166,9 +179,6 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
   const view = framed ? new OffscreenCanvas(composeSize.width, composeSize.height) : null;
   const viewCtx = view ? view.getContext("2d") : ctx;
   if (!viewCtx) throw new Error("export-worker: no 2D context on the view canvas");
-  const framer = view
-    ? createFramer({ ctx, width: size.width, height: size.height, padding: preset.padding })
-    : null;
 
   // Hardware AVC in quantizer mode for the tiers, else at the bitrate, else whatever the
   // platform offers (see video-encoding.ts). Portrait 1080×1920 needs H.264 level ≥ 4.0, which
@@ -239,8 +249,8 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
 
   await out.start();
 
-  // Per-frame composition (fill → zoom/redactions/overlays) is shared with the GIF worker
-  // in compose-output-frame.ts so the two exports can never diverge on privacy.
+  // Per-frame composition (fill → zoom/redactions/overlays → framing → webcam) is shared
+  // with the GIF worker in compose-output-frame.ts so the two exports can never diverge.
   const compose = createOutputComposer({
     ctx: viewCtx,
     width: composeSize.width,
@@ -249,6 +259,17 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
     redactions: plan.redactions,
     overlayWindows: plan.overlayWindows,
     overlayBitmaps: new Map(msg.overlays.map((o) => [o.overlayId, o.bitmap])),
+    webcam: plan.webcam,
+    framing: view
+      ? {
+          view,
+          ctx,
+          width: size.width,
+          height: size.height,
+          mode: preset.framing === "fill" ? "fill" : "fit",
+          padding: preset.padding,
+        }
+      : null,
   });
   const slideBitmaps = new Map(msg.slides.map((s) => [s.assetId, s.bitmap]));
 
@@ -295,29 +316,37 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
           exportCanvasSinkOptions(composeSize.width, composeSize.height),
         );
 
-        for await (const wrapped of sink.canvases(segment.sourceStart, segment.sourceEnd)) {
-          // Remap the source timestamp to the output (collapsed) timeline, clamped
-          // to never go negative or regress — see the header comment and
-          // rebase-timestamp.ts for why the straddling first frame needs this.
-          const outTs = rebaseVideoTimestamp(
-            segment.timelineStart,
-            segment.sourceStart,
-            wrapped.timestamp,
-            prevOutTs,
-          );
-          if (outTs === null) continue; // straddle/duplicate frame — skip, don't advance prevOutTs
-          // fps cap: drop a frame whose slot is taken. The kept frame's sample lasts until
-          // the next kept one (the muxer derives durations from timestamp deltas), so
-          // timestamps stay monotonic and the timeline length is unchanged.
-          if (!cap.keep(outTs)) continue;
-          compose.clip(wrapped.canvas, wrapped.timestamp, wrapped.duration, outTs);
-          if (framer && view) framer.frame(view, preset.framing === "fill" ? "fill" : "fit");
-          await sendPosterOnce();
-          // The frame's own decoded duration (at least one cap slot); the muxer
-          // stretches it to the next kept frame anyway.
-          await videoSource.add(outTs, Math.max(wrapped.duration, minFrameGap));
-          reportProgress(outTs);
-          prevOutTs = outTs;
+        // The webcam frames of this clip, decoded beside the screen's (null: no webcam).
+        const webcamCursor = webcam?.cursorFor(segment.sourceStart, segment.sourceEnd) ?? null;
+        try {
+          for await (const wrapped of sink.canvases(segment.sourceStart, segment.sourceEnd)) {
+            // Remap the source timestamp to the output (collapsed) timeline, clamped
+            // to never go negative or regress — see the header comment and
+            // rebase-timestamp.ts for why the straddling first frame needs this.
+            const outTs = rebaseVideoTimestamp(
+              segment.timelineStart,
+              segment.sourceStart,
+              wrapped.timestamp,
+              prevOutTs,
+            );
+            if (outTs === null) continue; // straddle/duplicate frame — skip, don't advance prevOutTs
+            // fps cap: drop a frame whose slot is taken. The kept frame's sample lasts until
+            // the next kept one (the muxer derives durations from timestamp deltas), so
+            // timestamps stay monotonic and the timeline length is unchanged.
+            if (!cap.keep(outTs)) continue;
+            const webcamFrame = webcamCursor
+              ? webcamImageOf(await webcamCursor.frameAt(wrapped.timestamp))
+              : null;
+            compose.clip(wrapped.canvas, wrapped.timestamp, wrapped.duration, outTs, webcamFrame);
+            await sendPosterOnce();
+            // The frame's own decoded duration (at least one cap slot); the muxer
+            // stretches it to the next kept frame anyway.
+            await videoSource.add(outTs, Math.max(wrapped.duration, minFrameGap));
+            reportProgress(outTs);
+            prevOutTs = outTs;
+          }
+        } finally {
+          await webcamCursor?.close();
         }
       } else {
         // Slide segment: synthesize fixed-cadence frames at slideFps. These are
@@ -333,9 +362,8 @@ async function runExportWithInput(msg: ExportStartMessage, input: Input): Promis
         for (let i = 0; i < frameCount; i++) {
           const outTs = segment.timelineStart + i * frameDuration;
           if (!cap.keep(outTs)) continue;
+          // Slides are always contained ("fit"), never cropped, and carry no webcam.
           compose.slide(bitmap, outTs);
-          // Slides are always contained ("fit"), never cropped, whatever the clip framing.
-          if (framer && view) framer.frame(view, "fit");
           await sendPosterOnce();
           await videoSource.add(outTs, frameDuration);
           reportProgress(outTs);

@@ -19,6 +19,7 @@ import {
 } from "./export-presets";
 import { WHOLE_RECORDING_FINGERPRINT } from "./export-reuse";
 import type { VideoEncodingChoice } from "./video-encoding";
+import { type ExportWebcamTrack, fetchWebcamTrack } from "./webcam-fetch";
 
 export interface VideoExportState {
   status: "idle" | "exporting" | "error";
@@ -42,6 +43,11 @@ export interface StartExportArgs {
   slideAssets: SlideAssetStore;
   /** v2: the preview's camera path (useCameraPath). Sent whenever the plan has a zoom. */
   cameraPath: CameraPath | null;
+  /**
+   * The recording's webcam track (the sidecar's `webcam`), when it has one: with a webcam
+   * layer in the scene, its file is fetched and composed (ADR 0033).
+   */
+  webcamTrack?: ExportWebcamTrack | null;
   /** NIW2-218: destination preset; Balanced (the Settings default) when omitted. */
   presetId?: ExportPresetId;
   /** Fit/Fill for Vertical and Square; the preset's default when omitted. */
@@ -314,9 +320,11 @@ export async function startVideoExport(
   const slideAssets = args.slideAssets.entries().filter((asset) => usedAssetIds.has(asset.assetId));
 
   let sourceBlob: Blob;
+  let webcam: Awaited<ReturnType<typeof fetchWebcamTrack>>;
   try {
     const sourceResponse = await fetch(`kaipu-media://recording/${args.sourceId}`);
     sourceBlob = await sourceResponse.blob();
+    webcam = await fetchWebcamTrack(args.sourceId, plan.webcam, args.webcamTrack);
   } catch (error) {
     fail(GENERIC_ERROR, error);
     return true;
@@ -463,6 +471,7 @@ export async function startVideoExport(
       source: { width: args.videoWidth, height: args.videoHeight },
       target: runTarget,
       camera,
+      webcam,
     };
     runWorker.postMessage(startMessage, [
       ...overlays.map((o) => o.bitmap),
