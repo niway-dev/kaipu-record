@@ -1,4 +1,5 @@
 import type { LocalRecording, RecordingSettings } from "@shared/types";
+import { WEBCAM_TRACK_UNSUPPORTED_MARKER } from "@shared/types/ipc";
 import { sanitizeAudioSettings, type AudioSettings } from "@shared/audio-settings";
 import {
   DEFAULT_RECORDING_COUNTDOWN_SECONDS,
@@ -163,7 +164,10 @@ interface PendingStart {
   live: LiveSettingsForwarder | null;
   /** The engine failed before the take was set up; the start fails with it once acquired. */
   failure?: unknown;
-  /** The take asked for the webcam and its camera did not open. */
+  /**
+   * The take asked for the webcam and got none: its camera did not open, or main could not
+   * create its session (not the old-Windows legacy path, which is by design).
+   */
   webcamUnavailable?: boolean;
 }
 let pendingStart: PendingStart | null = null;
@@ -467,6 +471,10 @@ function acquireStart(input: StartInput): PendingStart {
         () => true,
         (error: unknown) => {
           console.warn("webcam session could not be created — recording without it", error);
+          // Main already put the bubble back in the capture. Tell the user, unless this is the
+          // old-Windows legacy path, where the bubble is always recorded in the screen.
+          const message = error instanceof Error ? error.message : String(error);
+          if (!message.includes(WEBCAM_TRACK_UNSUPPORTED_MARKER)) start.webcamUnavailable = true;
           return false;
         },
       )

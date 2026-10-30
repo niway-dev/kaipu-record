@@ -390,6 +390,13 @@ export const FINALIZE_KEPT_MARKER = "[finalize:kept]";
 export const FINALIZE_ELSEWHERE_MARKER = "[finalize:elsewhere]";
 
 /**
+ * Prefix on the `recording:create` rejection for a webcam session on a Windows build that
+ * cannot exclude the bubble from capture (before 10 2004): the legacy path, by design, so the
+ * renderer tells the user nothing. Any other rejection is a webcam that failed.
+ */
+export const WEBCAM_TRACK_UNSUPPORTED_MARKER = "[webcam:unsupported]";
+
+/**
  * Names of the IPC channels exposed by the preload bridge.
  * Using a const map keeps main and renderer in sync.
  */

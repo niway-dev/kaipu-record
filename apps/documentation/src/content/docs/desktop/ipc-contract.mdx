@@ -237,7 +237,11 @@ screen opens a take without a webcam file, `"webcam"` gives it one, and
 `recordingWebcamEnded(id)` (invoke) takes it away: the take's camera did not open (sent and
 awaited before the screen capture starts), or its webcam file ended mid-take (camera off,
 unplugged, encoder failure). Main then leaves the bubble in the capture, so the face is in
-the screen recording instead. Finalize, abort and a forced reset protect it again.
+the screen recording instead. Finalize, abort and a forced reset protect it again. A failed
+webcam write does the same in main. On Windows before 10 2004 `recordingCreate(id, "webcam")`
+rejects with `WEBCAM_TRACK_UNSUPPORTED_MARKER` (the legacy path, no notice); any other
+rejection makes the renderer tell the user, once the take is saved, that the face was recorded
+in the screen.
 
 ### Recording — barra y estado (cross-window)
 

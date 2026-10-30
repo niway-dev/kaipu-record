@@ -11,7 +11,11 @@ import { homedir, release } from "node:os";
 import { join } from "node:path";
 import { createMainTranslator } from "@kaipu/i18n/main";
 import { IPC_CHANNELS } from "@shared/types";
-import { FINALIZE_ELSEWHERE_MARKER, FINALIZE_KEPT_MARKER } from "@shared/types/ipc";
+import {
+  FINALIZE_ELSEWHERE_MARKER,
+  FINALIZE_KEPT_MARKER,
+  WEBCAM_TRACK_UNSUPPORTED_MARKER,
+} from "@shared/types/ipc";
 import type {
   ControlCommand,
   RecorderPhaseReport,
@@ -393,7 +397,9 @@ export function registerRecordingHub(
     // file would draw the face twice: refuse the session and the renderer records the take
     // without one, as it does for any webcam session that cannot be created.
     if (writerKind === "webcam" && !fullDisplayBorderAllowed(process.platform, release())) {
-      throw new Error("webcam track unavailable: this Windows build cannot exclude the bubble");
+      throw new Error(
+        `${WEBCAM_TRACK_UNSUPPORTED_MARKER} webcam track unavailable: this Windows build cannot exclude the bubble`,
+      );
     }
     if (writerKind === "screen") {
       stoppedForWriteFailure = false;

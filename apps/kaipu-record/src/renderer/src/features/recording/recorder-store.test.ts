@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { LocalRecording, RecordingSettings } from "@shared/types";
 import { DEFAULT_AUDIO_SETTINGS, type AudioSettings } from "@shared/audio-settings";
-import type { AppSettings, ControlCommand } from "@shared/types/ipc";
+import {
+  WEBCAM_TRACK_UNSUPPORTED_MARKER,
+  type AppSettings,
+  type ControlCommand,
+} from "@shared/types/ipc";
 import {
   prepareEngine,
   type EngineHandle,
@@ -1554,6 +1558,44 @@ describe("recorder-store live settings", () => {
         );
         expect(order).toEqual(["main told", "screen requested"]);
         await stopAndSettle();
+      });
+
+      it("tells the user when main could not create the webcam session", async () => {
+        recordingCreateMock.mockImplementation(async (...args: unknown[]) => {
+          if (args[1] === "webcam") throw new Error("Error invoking remote method: EACCES");
+          return { tempPath: "/tmp/s" };
+        });
+        try {
+          await startWith(fakeEngine(), { webcam });
+          await stopAndSettle();
+          expect(getToasts().map((t) => t.message)).toEqual([messages.record.webcamUnavailable]);
+        } finally {
+          recordingCreateMock.mockImplementation(async () => {
+            callOrder.push("recordingCreate");
+            return { tempPath: "/tmp/s" };
+          });
+        }
+      });
+
+      it("says nothing when this Windows build cannot record the webcam apart (legacy path)", async () => {
+        recordingCreateMock.mockImplementation(async (...args: unknown[]) => {
+          if (args[1] === "webcam") {
+            throw new Error(
+              `Error invoking remote method: Error: ${WEBCAM_TRACK_UNSUPPORTED_MARKER} …`,
+            );
+          }
+          return { tempPath: "/tmp/s" };
+        });
+        try {
+          await startWith(fakeEngine(), { webcam });
+          await stopAndSettle();
+          expect(getToasts()).toEqual([]);
+        } finally {
+          recordingCreateMock.mockImplementation(async () => {
+            callOrder.push("recordingCreate");
+            return { tempPath: "/tmp/s" };
+          });
+        }
       });
 
       it("tells the user once the take is saved, and not on the next take", async () => {

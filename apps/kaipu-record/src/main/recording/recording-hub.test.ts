@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FINALIZE_ELSEWHERE_MARKER, FINALIZE_KEPT_MARKER, IPC_CHANNELS } from "@shared/types/ipc";
+import {
+  FINALIZE_ELSEWHERE_MARKER,
+  FINALIZE_KEPT_MARKER,
+  IPC_CHANNELS,
+  WEBCAM_TRACK_UNSUPPORTED_MARKER,
+} from "@shared/types/ipc";
 
 const mockState = vi.hoisted(() => ({
   userDataDir: "",
@@ -1844,6 +1849,8 @@ describe("recording hub — the webcam writer session (ADR 0032)", () => {
         mockState.osRelease = "10.0.18363";
         // Electron turns a throwing handler into a rejected `invoke` in the renderer.
         expect(() => handler({}, "s1", "webcam")).toThrow(/webcam track unavailable/);
+        // Marked, so the renderer tells the legacy path apart from a webcam that failed.
+        expect(() => handler({}, "s1", "webcam")).toThrow(WEBCAM_TRACK_UNSUPPORTED_MARKER);
         expect(create).not.toHaveBeenCalled();
         await handler({}, "s1");
         expect(create).toHaveBeenCalledExactlyOnceWith("s1", "screen");
