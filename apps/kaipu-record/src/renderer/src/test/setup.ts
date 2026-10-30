@@ -154,6 +154,7 @@ window.electronAPI = {
   setExportActive: () => {},
   onExportCommand: () => () => {},
   workspaces: {
+    activeId: () => null,
     list: async () => ({
       activeId: "ws-default",
       generation: 1,

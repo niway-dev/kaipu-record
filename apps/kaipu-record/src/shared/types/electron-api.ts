@@ -128,6 +128,8 @@ export type AuthAttemptResult = { ok: true; status: AuthStatus } | { ok: false; 
  */
 export interface WorkspacesBridge {
   list(): Promise<WorkspacesState>;
+  /** The workspace this window's stamp names, read synchronously (null until it is known). */
+  activeId(): string | null;
   /** Folder picker, then adopt or initialize the folder and switch to it. */
   add(): Promise<WorkspaceAddResult>;
   switch(id: string): Promise<WorkspaceSwitchResult>;

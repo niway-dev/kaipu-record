@@ -5,6 +5,7 @@ import { extname } from "node:path";
 import { Readable } from "node:stream";
 import { recordingFilePath, screenshotFilePath, thumbnailFilePath } from "./library";
 import { activeWorkspace } from "./workspaces";
+import { isForeignWorkspaceUrl } from "./media-workspace";
 import { parseByteRange } from "./media-range";
 
 /**
@@ -93,10 +94,9 @@ export function registerMediaProtocol(): void {
     const url = new URL(request.url);
     const id = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
     if (isUnsafeId(id)) return new Response("Invalid recording id", { status: 400 });
-    // A URL handed out for another workspace (cached before a switch) never resolves an
-    // item with the same id in the active one (ADR 0032).
-    const workspace = url.searchParams.get("w");
-    if (workspace !== null && workspace !== activeWorkspace().id) {
+    // A URL stamped for another workspace (cached before a switch), of any kind, never
+    // resolves an item with the same id in the active one (ADR 0032).
+    if (isForeignWorkspaceUrl(url, activeWorkspace().id)) {
       return new Response("Not in the active workspace", { status: 404 });
     }
 

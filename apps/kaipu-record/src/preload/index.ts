@@ -158,6 +158,7 @@ const kaipuApi: KaipuElectronAPI = {
   },
   workspaces: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.workspacesList),
+    activeId: () => guard.stamp?.workspaceId ?? null,
     add: () => ipcRenderer.invoke(IPC_CHANNELS.workspacesAdd),
     switch: (id) => ipcRenderer.invoke(IPC_CHANNELS.workspacesSwitch, id),
     remove: (id) => ipcRenderer.invoke(IPC_CHANNELS.workspacesRemove, id),

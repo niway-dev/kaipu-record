@@ -136,6 +136,7 @@ const sxEditor = stylex.create({
 import { useMuteEditing } from "@renderer/features/video-editor/use-mute-editing";
 import { AudioLane } from "@renderer/features/video-editor/components/audio-lane";
 import { MuteInspector } from "@renderer/features/video-editor/components/inspector/mute-inspector";
+import { mediaUrl } from "@renderer/lib/media-url";
 
 export interface VideoEditorSource {
   id: string;
@@ -431,8 +432,8 @@ function VideoEditor({
   const videoTools = useVideoTools();
   const videoExport = useVideoExport();
   const gifExport = useGifExport();
-  const mediaUrl = `kaipu-media://recording/${source.id}`;
-  const thumbnails = useSourceThumbnails(mediaUrl, source.durationSeconds);
+  const sourceUrl = mediaUrl("recording", source.id);
+  const thumbnails = useSourceThumbnails(sourceUrl, source.durationSeconds);
   const selection = useEditorSelection();
   // `select` / `clear` are stable (useCallback, no deps); the `selection` object itself
   // is rebuilt every render, so never put it in a dependency array.
@@ -1211,7 +1212,7 @@ function VideoEditor({
           >
             <PreviewStage
               playback={playback}
-              mediaUrl={mediaUrl}
+              mediaUrl={sourceUrl}
               slideUrl={slideUrl}
               expanded={isFullscreen}
               contentRef={contentRef}
