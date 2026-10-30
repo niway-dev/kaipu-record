@@ -693,3 +693,44 @@ describe("LibraryVault — an identity two files claim (copied item)", () => {
     await untouched();
   });
 });
+
+describe("LibraryVault — an identity claimed across media kinds", () => {
+  let directory: string;
+  let meta: string;
+  let vault: LibraryVault;
+
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), "kaipu-kinds-"));
+    meta = join(directory, ".kaipu");
+    vault = new LibraryVault(directory);
+    await mkdir(meta, { recursive: true });
+  });
+  afterEach(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  const claim = async (id: string, ext: string): Promise<void> => {
+    await writeFile(join(directory, `${id}${ext}`), `bytes of ${id}`);
+    await writeFile(join(meta, `${id}.json`), JSON.stringify({ assetId: "asset-A", title: id }));
+  };
+
+  it("a stale overwrite refuses when a screenshot and a recording both claim the identity", async () => {
+    await claim("Shot", ".png");
+    await claim("Clip", ".mp4");
+    await expect(
+      vault.overwriteImage("Gone", Buffer.from("edit"), { title: "x" }, "asset-A"),
+    ).rejects.toBeInstanceOf(AmbiguousIdentityError);
+    expect(await readFile(join(directory, "Shot.png"), "utf-8")).toBe("bytes of Shot");
+  });
+
+  it("an overwrite never writes a PNG beside a recording that holds the identity", async () => {
+    await claim("Clip", ".mp4");
+    await expect(
+      vault.overwriteImage("Clip", Buffer.from("png"), { title: "x" }, "asset-A"),
+    ).rejects.toBeInstanceOf(ItemGoneError);
+    await expect(
+      vault.overwriteImage("Gone", Buffer.from("png"), { title: "x" }, "asset-A"),
+    ).rejects.toBeInstanceOf(ItemGoneError);
+    expect((await readdir(directory)).sort()).toEqual([".kaipu", "Clip.mp4"]);
+  });
+});

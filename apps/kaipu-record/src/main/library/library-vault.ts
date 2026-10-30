@@ -521,24 +521,30 @@ export class LibraryVault {
    * (rename, editor hold, screenshot overwrite). Caller holds NAMES_LOCK.
    *
    * Fast path: `id` still holds that identity → `id`; the caller's own item is never
-   * ambiguous to it. Otherwise exactly one media-bearing item must carry it: none → null
-   * (each caller maps that to its own "gone" outcome), more than one →
-   * `AmbiguousIdentityError`, thrown before any mutation or hold.
+   * ambiguous to it. Otherwise exactly one media-bearing item, of any kind, must carry it:
+   * more than one → `AmbiguousIdentityError`, thrown before any mutation or hold. With
+   * `kind`, the resolved item must be of that kind; none, or the wrong kind → null (each
+   * caller maps that to its own "gone" outcome).
    */
   private async resolveIdentity(
     id: string | null,
     assetId: string,
     kind?: LocalRecording["kind"],
   ): Promise<string | null> {
-    if (id !== null && (await this.hasMedia(id)) && (await this.sidecar(id)).assetId === assetId) {
-      return id;
+    const media = id === null ? null : await this.mediaPath(id);
+    if (media !== null && (await this.sidecar(id!)).assetId === assetId) {
+      // The caller's own item — but only as the kind it expects: a screenshot overwrite
+      // must never write `<id>.png` beside the recording `<id>.mp4` that holds the identity.
+      return kind === undefined || kindFromExt(extname(media)) === kind ? id : null;
     }
-    const matches = (await this.list()).filter(
-      (item) => item.assetId === assetId && (kind === undefined || item.kind === kind),
-    );
+    // Ambiguity is counted across every media kind first: a screenshot and a recording
+    // claiming one identity are as ambiguous as two screenshots.
+    const matches = (await this.list()).filter((item) => item.assetId === assetId);
     const ids = [...new Set(matches.map((item) => item.id))];
     if (ids.length > 1) throw new AmbiguousIdentityError(assetId, ids);
-    return ids[0] ?? null;
+    const [sole] = matches;
+    if (!sole) return null;
+    return kind === undefined || sole.kind === kind ? sole.id : null;
   }
 
   /**
