@@ -40,7 +40,8 @@ its own"):
    - **Keep · a full-quality copy**: Archive copy (Maximum quality).
      A destination that already has a matching copy shows **✓ Ready** instead of a size. The
      selected row has a pink tint and border. **Prepare another video** is pinned to the bottom:
-     for now it opens the Library (dropping a file there is NIW2-587).
+     it opens Prepare with no recording, and a video dropped on it is prepared
+     ([NIW2-587](./prepare-drop-zone)).
 2. **For &lt;destination&gt;** (right) — the destination's tile and name, "From your recording ·
    duration · W × H · size", the amber unexported-edits note when it applies, then:
    - **What changes**: Size (recording → copy, amber when bigger, teal when lighter), Picture
@@ -122,8 +123,8 @@ GIFs are not preparable.
   not a sample", but the app has no full-resolution frame of the recording to crop, and a
   softened copy of it would claim to show YouTube's output. It is drawn text, captioned as an
   illustration, until a real frame crop exists.
-- **"Prepare another video" says "Pick one from your Library"** until NIW2-587 makes dropping a
-  file work; the design's "Drop a file here" would promise something the page does not do yet.
+- **"Prepare another video" says "Drop a file here or from your Library"** since
+  [NIW2-587](./prepare-drop-zone) made dropping a file work.
 - **No time estimate** next to the button, for the same reason as in "What changes".
 - **Dropped from the page in NIW2-583**: the "Original" column (its facts moved to the header
   line), the "Already prepared" list (each row's ✓ Ready replaces it), the folded "What changes
