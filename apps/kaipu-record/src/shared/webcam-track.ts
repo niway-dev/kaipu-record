@@ -58,6 +58,16 @@ export function webcamCaptureLines(bubble: Pick<CameraBubbleSettings, "size" | "
   return Math.min(WEBCAM_LINES_MAX, Math.max(WEBCAM_LINES_DEFAULT, lines));
 }
 
+/**
+ * Lines the bubble's preview asks the camera for. The bubble and the recorder open the same
+ * device, and Chromium shares one capture per device that each track can only downscale: a
+ * preview asking for fewer lines than the webcam file records would starve it. So the
+ * preview asks for whichever is more, its own `cameraCaptureLines` or the webcam's.
+ */
+export function bubblePreviewLines(bubble: Pick<CameraBubbleSettings, "size" | "framing">): number {
+  return Math.max(cameraCaptureLines(bubble.size, bubble.framing), webcamCaptureLines(bubble));
+}
+
 interface FirstMediaTime {
   rendererMs: number;
   quality: WebcamOffsetQuality;

@@ -7,11 +7,11 @@ import {
   CAMERA_BUBBLE_WINDOW_PAD,
   DEFAULT_CAMERA_BUBBLE,
   cameraBubblePresetFor,
-  cameraCaptureLines,
   framingTransform,
   clampCameraBubbleSize,
   type CameraBubbleSettings,
 } from "@shared/camera-bubble";
+import { bubblePreviewLines } from "@shared/webcam-track";
 import styles from "./camera-bubble.module.css";
 
 /** The rounded square's corner, as a share of its side. */
@@ -111,7 +111,8 @@ export function CameraBubble(): React.JSX.Element {
   // A new resolution reopens the camera, and the bubble blinks while it does: during a take
   // that blink would be in the video. So the lines stay as they were when the take started
   // (the zoom itself still applies at once) and catch up when it ends.
-  const wantedLines = cameraCaptureLines(bubble.size, bubble.framing);
+  // Never fewer than the recorder's webcam track needs: both windows share the camera (ADR 0032).
+  const wantedLines = bubblePreviewLines(bubble);
   const takeLines = useRef(wantedLines);
   if (!activity.active) takeLines.current = wantedLines;
   const { videoRef, hasStream } = useCameraPreview(true, bubble.deviceId, takeLines.current);

@@ -3,6 +3,7 @@ import { DEFAULT_CAMERA_BUBBLE, DEFAULT_CAMERA_FRAMING } from "./camera-bubble";
 import {
   WEBCAM_FPS,
   WEBCAM_LINES_DEFAULT,
+  bubblePreviewLines,
   sanitizeWebcamTrackMeta,
   webcamCaptureLines,
   webcamSiblingPath,
@@ -23,6 +24,18 @@ describe("webcamCaptureLines", () => {
     // 360 × 2 × 1.5 = 1080.
     expect(webcamCaptureLines({ size: 360, framing: { ...framing, zoom: 1.5 } })).toBe(1080);
     expect(webcamCaptureLines({ size: 480, framing: { ...framing, zoom: 3 } })).toBe(1080);
+  });
+});
+
+describe("bubblePreviewLines", () => {
+  it("never asks the shared camera for fewer lines than the webcam file records", () => {
+    // Chromium shares one capture per device and only downscales per track: a 480-line
+    // bubble would starve the recorder's 720-line webcam track.
+    expect(bubblePreviewLines({ size: 240, framing: DEFAULT_CAMERA_FRAMING })).toBe(720);
+    const framing = { enabled: true, zoom: 1, x: 0, y: 0 };
+    expect(bubblePreviewLines({ size: 160, framing })).toBe(720);
+    // 240 × 2 × 2 = 960 → the bubble's own step, 1080.
+    expect(bubblePreviewLines({ size: 240, framing: { ...framing, zoom: 2 } })).toBe(1080);
   });
 });
 
