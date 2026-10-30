@@ -102,29 +102,15 @@ export function registerLibraryVaultHandlers(deps: {
   );
   // NIW2-560: the video editor holds its source id for its lifetime. Whatever asks for a
   // rename (a toast's Retry survives navigation), the file keeps its name while the item
-  // is open there. A window that goes away releases what it held.
+  // is open there. A window that is destroyed, crashes or reloads releases what it held.
   const editorSessions = new EditorSessions();
-  const watched = new Set<number>();
-  const watchOwner = (sender: Electron.WebContents): void => {
-    const owner = sender.id;
-    if (watched.has(owner)) return;
-    watched.add(owner);
-    sender.once("destroyed", () => {
-      editorSessions.releaseOwner(owner);
-      watched.delete(owner);
-    });
-    // A reload unmounts nothing: the new page starts with no editor open.
-    sender.on("did-start-navigation", (details) => {
-      if (details.isMainFrame && !details.isSameDocument) editorSessions.releaseOwner(owner);
-    });
-  };
   // Serialized with renames (names lock): an editor that opens while a rename is moving
   // the file waits, and loads under the id the rename produced.
   ipcMain.handle(IPC_CHANNELS.editorSessionAcquire, async (event, assetId: unknown) => {
     if (typeof assetId !== "string") return null;
     const sender = event.sender;
     const owner = sender.id;
-    watchOwner(sender);
+    editorSessions.watch(sender);
     // Captured on arrival: if the window reloads or closes while the request waits for
     // the names lock, the hold is refused instead of outliving the page that asked.
     const generation = editorSessions.generation(owner);

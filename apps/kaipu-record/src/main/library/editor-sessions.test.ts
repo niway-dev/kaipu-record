@@ -1,3 +1,4 @@
+import { EventEmitter } from "node:events";
 import { describe, expect, it } from "vitest";
 import { EditorSessions } from "./editor-sessions";
 
@@ -49,5 +50,47 @@ describe("EditorSessions", () => {
     // A request issued after the release is current again.
     expect(sessions.openIfCurrent(1, sessions.generation(1), "clip", "asset-1")).toBe(true);
     expect(sessions.isOpen("clip", "asset-1")).toBe(true);
+  });
+
+  describe("watch: a window's lifecycle releases its holds", () => {
+    /** The slice of WebContents the registry listens to, as a plain emitter. */
+    const fakeWindow = (id: number) => Object.assign(new EventEmitter(), { id });
+
+    it.each([
+      ["crashes (render-process-gone)", (w: EventEmitter) => w.emit("render-process-gone", {}, {})],
+      ["is destroyed", (w: EventEmitter) => w.emit("destroyed")],
+      [
+        "reloads (main-frame navigation)",
+        (w: EventEmitter) =>
+          w.emit("did-start-navigation", { isMainFrame: true, isSameDocument: false }),
+      ],
+    ])("releases everything and invalidates queued requests when the window %s", (_l, go) => {
+      const sessions = new EditorSessions();
+      const window = fakeWindow(3);
+      sessions.watch(window);
+      sessions.open(3, "clip", "asset-1");
+      const queued = sessions.generation(3);
+      go(window);
+      expect(sessions.isOpen("clip", "asset-1")).toBe(false);
+      expect(sessions.openIfCurrent(3, queued, "clip", "asset-1")).toBe(false);
+    });
+
+    it("keeps holds across in-page (same-document) navigation", () => {
+      const sessions = new EditorSessions();
+      const window = fakeWindow(4);
+      sessions.watch(window);
+      sessions.open(4, "clip", "asset-1");
+      window.emit("did-start-navigation", { isMainFrame: true, isSameDocument: true });
+      expect(sessions.isOpen("clip", "asset-1")).toBe(true);
+    });
+
+    it("subscribes once per window", () => {
+      const sessions = new EditorSessions();
+      const window = fakeWindow(5);
+      sessions.watch(window);
+      sessions.watch(window);
+      expect(window.listenerCount("render-process-gone")).toBe(1);
+      expect(window.listenerCount("did-start-navigation")).toBe(1);
+    });
   });
 });

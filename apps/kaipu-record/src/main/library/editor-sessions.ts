@@ -9,6 +9,17 @@
  *
  * Pure, no Electron: the IPC wiring lives in `./index.ts`.
  */
+/** The slice of Electron's WebContents the registry listens to (a fake emitter in tests). */
+export interface EditorOwner {
+  id: number;
+  once(event: "destroyed", listener: () => void): unknown;
+  on(event: "render-process-gone", listener: () => void): unknown;
+  on(
+    event: "did-start-navigation",
+    listener: (details: { isMainFrame: boolean; isSameDocument: boolean }) => void,
+  ): unknown;
+}
+
 interface Held {
   id: string;
   assetId: string;
@@ -24,6 +35,27 @@ export class EditorSessions {
    * request match again.
    */
   private readonly generations = new Map<number, number>();
+  private readonly watched = new Set<number>();
+
+  /**
+   * Release everything a window holds whenever its page goes away: destroyed, its renderer
+   * crashed (`render-process-gone` keeps the WebContents, so nothing else would release),
+   * or a main-frame navigation (a reload unmounts nothing). Each release also bumps the
+   * generation, so an acquisition still queued for that page is refused. Once per window.
+   */
+  watch(owner: EditorOwner): void {
+    const id = owner.id;
+    if (this.watched.has(id)) return;
+    this.watched.add(id);
+    owner.once("destroyed", () => {
+      this.releaseOwner(id);
+      this.watched.delete(id);
+    });
+    owner.on("render-process-gone", () => this.releaseOwner(id));
+    owner.on("did-start-navigation", (details) => {
+      if (details.isMainFrame && !details.isSameDocument) this.releaseOwner(id);
+    });
+  }
 
   generation(owner: number): number {
     return this.generations.get(owner) ?? 0;
