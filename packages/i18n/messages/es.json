@@ -1332,7 +1332,7 @@
     "eyebrow": "KAIPU / LEGAL",
     "title": "Las reglas, claras.",
     "intro": "Cómo funciona el servicio, qué puedes esperar de Cloud y cómo tratamos tus datos.",
-    "updated": "Actualizado el 19 de octubre de 2026 · Versión 2026-10-19",
+    "updated": "Actualizado el 30 de octubre de 2026 · Versión 2026-10-30",
     "contents": "En esta página",
     "navigation": "Documentos legales",
     "contact": "Contacto",
@@ -1364,7 +1364,7 @@
         },
         "license": {
           "title": "Software y propiedad intelectual",
-          "body": "Niway te otorga una licencia personal, revocable, no exclusiva e intransferible para usar la app y el servicio conforme a estos términos. Kaipu, su marca, diseño e infraestructura alojada pertenecen a Niway o a sus licenciantes. Los componentes distribuidos bajo licencias de código abierto se rigen por ellas, y estos términos no restringen los derechos que otorgan. No apliques ingeniería inversa al servicio alojado, no accedas sin autorización a sistemas o datos ni infrinjas derechos de terceros."
+          "body": "Niway te otorga una licencia revocable, no exclusiva e intransferible para usar la app y el servicio conforme a estos términos, con fines personales o comerciales. Usar la app de escritorio para trabajar, incluso dentro de una empresa, no requiere un plan de pago. Kaipu, su marca, diseño e infraestructura alojada pertenecen a Niway o a sus licenciantes. Los componentes distribuidos bajo licencias de código abierto se rigen por ellas, y estos términos no restringen los derechos que otorgan. No apliques ingeniería inversa al servicio alojado, no accedas sin autorización a sistemas o datos ni infrinjas derechos de terceros."
         },
         "evolution": {
           "title": "La app evoluciona",

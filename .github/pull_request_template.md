@@ -42,3 +42,5 @@ poller's CPU. One unchecked box per item, each one a thing a human does.
 -->
 
 - [ ]
+
+<!-- First pull request from someone other than the maintainer? Comment the CLA statement from CLA.md ("How to sign") before review. -->
