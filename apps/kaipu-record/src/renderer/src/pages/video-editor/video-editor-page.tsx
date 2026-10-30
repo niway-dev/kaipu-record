@@ -673,7 +673,12 @@ function VideoEditor({
             // Left the editor: its unmount flush wrote the latest edit (or Discard dropped
             // it). Stamp only if what is on disk is the edit that was exported.
             const saved = await window.electronAPI.loadVideoEditSession(source.id);
-            const savedScene = saved ? parseSession(saved.sessionJson)?.scene : null;
+            const parsedScene = saved ? parseSession(saved.sessionJson)?.scene : null;
+            // Reconciled like the loader does, or an old session (no webcam key) on a webcam
+            // recording would never fingerprint like the scene that was exported.
+            const savedScene = parsedScene
+              ? reconcileWebcam(parsedScene, source.webcam ?? null)
+              : null;
             if (savedScene && editFingerprint(savedScene) !== fingerprint) return;
           }
           try {
