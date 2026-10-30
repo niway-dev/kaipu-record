@@ -51,7 +51,9 @@ function hash53(text: string): string {
 export function editFingerprint(scene: VideoScene): string {
   const saved = parseSession(serializeSession(scene))?.scene ?? scene;
   // A recording without a webcam hashes as it did before the layer existed, so the exports
-  // already made from it stay reusable; with one, the layer is part of what the export burns in.
+  // already made from it stay reusable; with one, the layer is hashed so that a layout change
+  // is a new export. Nothing draws the layer until NIW2-575, which bumps ENCODE_REVISION so
+  // exports made before it (fingerprint matches, no face) are never reused.
   const { webcam, ...withoutWebcam } = saved;
   return `edit:${hash53(stableStringify(webcam ? saved : withoutWebcam))}`;
 }

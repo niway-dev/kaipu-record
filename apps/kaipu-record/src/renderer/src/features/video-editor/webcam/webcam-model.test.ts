@@ -71,6 +71,7 @@ describe("seedWebcamScene", () => {
       seedWebcamScene(track({ ...DEFAULT_CAMERA_BUBBLE, size: dip }))?.layout.size;
     expect(size(270)).toBe(0.25);
     expect(size(120)).toBeCloseTo(0.111, 3);
+    expect(size(60)).toBe(WEBCAM_LIMITS.minSize);
   });
 
   it("clamps a recorded fraction to the limits", () => {
