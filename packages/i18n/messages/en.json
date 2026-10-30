@@ -773,6 +773,7 @@
       "record": "Record",
       "cancel": "Cancel",
       "cancelTitle": "Cancel · Esc",
+      "startRecordingTitle": "Start recording · ↵",
       "modes": "Capture mode",
       "modeKey": "{mode} ({key})",
       "frame": "Capture frame",
