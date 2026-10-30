@@ -8,6 +8,8 @@ name: Agent review
 # This repository is public: the reusable workflow skips fork pull requests on purpose (they get no
 # secrets), and only the operator's comment starts an on-demand run.
 # The review focus for this repository is in `.github/agent-review.md`.
+# Opus 5.5 instead of the Sonnet 5.5 default: about twice the per-token price for a deeper review.
+# The default caps still bound each run ($0.75 per batch, $3 per review).
 on:
   pull_request: { types: [opened, ready_for_review] }
   issue_comment: { types: [created] }
@@ -17,5 +19,6 @@ jobs:
     uses: niway-dev/wachi-reviewer/.github/workflows/review.yml@v1.2.0
     with:
       operator: csdev19
+      model: claude-opus-5-5
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
