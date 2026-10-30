@@ -90,6 +90,7 @@ export default defineConfig({
             { slug: "backlog/live-recording-controls" },
             { slug: "backlog/record-capture-modes" },
             { slug: "backlog/recording-capture-metadata" },
+            { slug: "backlog/import-video" },
             { slug: "backlog/camera-bubble-shape-and-size" },
             { slug: "backlog/mic-and-system-audio-settings" },
             { slug: "backlog/tray-record-submenu" },
