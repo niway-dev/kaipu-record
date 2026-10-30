@@ -76,7 +76,8 @@ export interface RecordingHubHandle {
   toggleRecordingSetting(key: LiveRecordingToggle): void;
   /**
    * Hide the camera bubble for the duration of a screenshot capture (it sits
-   * always-on-top, so it would otherwise land in the shot) without releasing
+   * always-on-top, and where capture cannot exclude it — Windows before 10 2004 — it would
+   * land in the shot) without releasing
    * the camera device. No-ops if the bubble isn't currently shown.
    */
   hideCameraBubbleForCapture(): void;
@@ -173,9 +174,9 @@ export function registerRecordingHub(
 ): RecordingHubHandle {
   const bar = new ControlBarWindow();
   const cameraBubble = new CameraBubbleWindow(() => getAppSettings().cameraBubble.size);
-  // Shape and size apply live, mid-take included (the bubble is part of the recorded
-  // screen, so the video shows the change). The shape is the renderer's; the size is the
-  // window's bounds, re-placed from the anchored corner.
+  // Shape and size apply live, mid-take included (the user sees the bubble change; the
+  // recording does not, its face is the raw webcam file, restyled on export). The shape is
+  // the renderer's; the size is the window's bounds, re-placed from the anchored corner.
   let appliedBubbleSize = getAppSettings().cameraBubble.size;
   onSettingsChanged((next) => {
     if (next.cameraBubble.size === appliedBubbleSize) return;
@@ -380,6 +381,13 @@ export function registerRecordingHub(
   // so `markEnded`, `recordingAbort`, finalize and a forced reset treat the pair as one take.
   ipcMain.handle(IPC_CHANNELS.recordingCreate, (_e, sessionId: string, kind?: unknown) => {
     const writerKind = recordingWriterKind(kind);
+    // The bubble leaves the screen capture through content protection (ADR 0032). Where that
+    // cannot exclude a window (Windows before 10 2004) it stays in the video, so a webcam
+    // file would draw the face twice: refuse the session and the renderer records the take
+    // without one, as it does for any webcam session that cannot be created.
+    if (writerKind === "webcam" && !fullDisplayBorderAllowed(process.platform, release())) {
+      throw new Error("webcam track unavailable: this Windows build cannot exclude the bubble");
+    }
     if (writerKind === "screen") {
       stoppedForWriteFailure = false;
       endedSessions.delete(sessionId);
@@ -713,8 +721,9 @@ export function registerRecordingHub(
     // it isn't lost while only the floating panels are visible. Restored on stop.
     forceRegularPolicy();
     broadcastActivity();
-    // The area (above): mark it on its display and keep the camera bubble, which is
-    // recorded as part of the screen, inside the area. The shade sits under the bar and
+    // The area (above): mark it on its display and keep the camera bubble inside the area,
+    // as the user sees it against what is recorded (the face itself comes from the webcam
+    // file, not from this window). The shade sits under the bar and
     // the bubble; raising them once it shows covers Windows, which ignores window levels.
     const areaGlobal = area && areaDisplay ? areaToGlobal(area, areaDisplay.bounds) : null;
     recordedRect = areaGlobal;

@@ -1,4 +1,5 @@
 import { BrowserWindow, screen } from "electron";
+import { release } from "node:os";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 import { DEFAULT_CAMERA_BUBBLE, clampCameraBubbleSize } from "@shared/camera-bubble";
@@ -8,13 +9,13 @@ import {
   bubbleBoundsInArea,
   bubbleSizeOf,
   type BubbleCorner,
+  fullDisplayBorderAllowed,
   type Rect,
 } from "./area-geometry";
 
 /**
  * The floating webcam bubble. A frameless, transparent, always-on-top window
- * showing the live camera in a circle or a rounded square. Because it sits on screen,
- * the screen recording captures it — no compositing needed.
+ * showing the live camera in a circle or a rounded square, for the user to see themselves.
  *
  * It starts at the bottom-left corner of the recorded area (or of the display) and the user
  * moves it by pressing on it and dragging. The drag is driven from the renderer's pointer
@@ -26,8 +27,12 @@ import {
  * display, and per take inside an area (each area recording starts at the area's corner,
  * where the overlay's placeholder showed it).
  *
- * Unlike the control bar, this window is deliberately NOT content-protected, so it
- * *does* appear in the recording.
+ * It is content-protected from creation, so the screen recording never carries it: the face
+ * is recorded in the take's own webcam file and composed on export, where the editor can move,
+ * hide or restyle it (ADR 0032). The protection is set right after the window exists, before
+ * any capture stream could see it. Windows before 10 2004 cannot exclude a window from
+ * capture (it comes out black), so there the bubble stays unprotected and the take records
+ * no webcam file: the bubble appears in the screen recording, as it did before the track.
  *
  * On macOS it is a `panel` and joins full-screen Spaces with
  * `skipTransformProcessType`: the bubble is destroyed and recreated on every
@@ -50,7 +55,12 @@ export class CameraBubbleWindow {
   private moveStart: BubbleCorner | null = null;
 
   /** `size` reads the persisted bubble size; injected so this class never reads disk. */
-  constructor(private readonly size: () => number = () => DEFAULT_CAMERA_BUBBLE.size) {}
+  constructor(
+    private readonly size: () => number = () => DEFAULT_CAMERA_BUBBLE.size,
+    /** Whether capture can exclude a window on this OS; injected for tests. */
+    private readonly excludable: () => boolean = () =>
+      fullDisplayBorderAllowed(process.platform, release()),
+  ) {}
 
   show(): void {
     if (this.disposed) return;
@@ -82,6 +92,7 @@ export class CameraBubbleWindow {
         backgroundThrottling: false,
       },
     });
+    if (this.excludable()) this.window.setContentProtection(true);
     this.window.setAlwaysOnTop(true, "screen-saver");
     this.window.setVisibleOnAllWorkspaces(true, {
       visibleOnFullScreen: true,
@@ -106,9 +117,11 @@ export class CameraBubbleWindow {
   }
 
   /**
-   * Keep the bubble inside a recorded area (ADR 0030): the bubble is recorded as part of the
-   * screen, so outside the area it would vanish from the video without a word. An area too
-   * small for it hides it until the anchor is cleared; `null` returns it to its usual corner
+   * Keep the bubble inside a recorded area (ADR 0030): the bubble stays where the
+   * user sees it relative to what is recorded, and the face of the take is composed on export
+   * from the webcam file, not captured from this window (so the anchor no longer decides
+   * whether the face is recorded, only where it is seeded). An area too small for it hides it
+   * until the anchor is cleared; `null` returns it to its usual corner
    * (the caller shows it again if the camera is still on).
    */
   anchorTo(area: Rect | null): void {

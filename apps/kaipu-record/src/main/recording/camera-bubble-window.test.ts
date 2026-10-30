@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * `raise()` orders the bubble above the other floating windows. On macOS `moveTop()` also
@@ -8,7 +8,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const created: FakeWindow[] = [];
 
+const os = vi.hoisted(() => ({ release: "24.0.0" }));
+vi.mock("node:os", () => ({ release: () => os.release }));
+
 class FakeWindow {
+  setContentProtection = vi.fn();
   setAlwaysOnTop = vi.fn();
   setVisibleOnAllWorkspaces = vi.fn();
   bounds = { x: 0, y: 0, width: 288, height: 288 };
@@ -52,6 +56,50 @@ const { CameraBubbleWindow } = await import("./camera-bubble-window");
 
 beforeEach(() => {
   created.length = 0;
+  os.release = "24.0.0";
+});
+
+/**
+ * The bubble is excluded from the screen capture from creation (ADR 0032): its face is in the
+ * webcam file, so the screen recording must not carry it a second time. Before Windows 10
+ * 2004 exclusion paints the window black instead, so there the legacy path stays.
+ */
+describe("CameraBubbleWindow content protection", () => {
+  const realPlatform = process.platform;
+  const setPlatform = (platform: string): void => {
+    Object.defineProperty(process, "platform", { value: platform });
+  };
+  afterEach(() => setPlatform(realPlatform));
+
+  it("protects the window as soon as it exists, before anything loads into it", () => {
+    new CameraBubbleWindow().show();
+    const win = created[0]!;
+    expect(win.setContentProtection).toHaveBeenCalledExactlyOnceWith(true);
+    expect(win.setContentProtection.mock.invocationCallOrder[0]).toBeLessThan(
+      win.loadFile.mock.invocationCallOrder[0] ?? Infinity,
+    );
+  });
+
+  it("protects it on macOS and on a current Windows build", () => {
+    setPlatform("darwin");
+    new CameraBubbleWindow().show();
+    setPlatform("win32");
+    os.release = "10.0.22631";
+    new CameraBubbleWindow().show();
+    expect(created.map((w) => w.setContentProtection.mock.calls)).toEqual([[[true]], [[true]]]);
+  });
+
+  it("leaves it unprotected on Windows before 10 2004, where it would be captured black", () => {
+    setPlatform("win32");
+    os.release = "10.0.18363";
+    new CameraBubbleWindow().show();
+    expect(created[0]!.setContentProtection).not.toHaveBeenCalled();
+  });
+
+  it("follows an injected rule", () => {
+    new CameraBubbleWindow(undefined, () => false).show();
+    expect(created[0]!.setContentProtection).not.toHaveBeenCalled();
+  });
 });
 
 describe("CameraBubbleWindow.raise", () => {

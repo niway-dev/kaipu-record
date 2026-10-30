@@ -6,6 +6,8 @@ import { FINALIZE_ELSEWHERE_MARKER, FINALIZE_KEPT_MARKER, IPC_CHANNELS } from "@
 
 const mockState = vi.hoisted(() => ({
   userDataDir: "",
+  /** What `os.release()` reports: a Windows build number decides whether capture can exclude a window. */
+  osRelease: "24.0.0",
   ipcOn: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
   ipcHandle: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
   screenOn: new Map<string, () => void>(),
@@ -38,6 +40,11 @@ const mockState = vi.hoisted(() => ({
   getSources: vi.fn(
     async (): Promise<Array<{ id: string; name: string; display_id: string }>> => [],
   ),
+}));
+
+vi.mock("node:os", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:os")>()),
+  release: () => mockState.osRelease,
 }));
 
 vi.mock("electron", () => ({
@@ -1676,5 +1683,51 @@ describe("recording hub — the webcam writer session (ADR 0032)", () => {
       write.mockRestore();
       error.mockRestore();
     }
+  });
+
+  describe("where the bubble cannot leave the capture", () => {
+    afterEach(() => {
+      Object.defineProperty(process, "platform", { value: realPlatform, configurable: true });
+      mockState.osRelease = "24.0.0";
+    });
+
+    it("creates the webcam session on macOS and on a current Windows build", async () => {
+      const { RecordingWriter } = await import("./recording-writer");
+      const create = vi.spyOn(RecordingWriter.prototype, "create").mockResolvedValue({
+        tempPath: "/tmp/x",
+      });
+      try {
+        await registered();
+        const handler = mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!;
+        Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
+        await expect(handler({}, "s1", "webcam")).resolves.toBeDefined();
+        Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+        mockState.osRelease = "10.0.22631";
+        await expect(handler({}, "s2", "webcam")).resolves.toBeDefined();
+        expect(create).toHaveBeenCalledTimes(2);
+      } finally {
+        create.mockRestore();
+      }
+    });
+
+    it("refuses the webcam session on Windows before 10 2004, and still creates the screen's", async () => {
+      const { RecordingWriter } = await import("./recording-writer");
+      const create = vi.spyOn(RecordingWriter.prototype, "create").mockResolvedValue({
+        tempPath: "/tmp/x",
+      });
+      try {
+        await registered();
+        const handler = mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!;
+        Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+        mockState.osRelease = "10.0.18363";
+        // Electron turns a throwing handler into a rejected `invoke` in the renderer.
+        expect(() => handler({}, "s1", "webcam")).toThrow(/webcam track unavailable/);
+        expect(create).not.toHaveBeenCalled();
+        await handler({}, "s1");
+        expect(create).toHaveBeenCalledExactlyOnceWith("s1", "screen");
+      } finally {
+        create.mockRestore();
+      }
+    });
   });
 });
