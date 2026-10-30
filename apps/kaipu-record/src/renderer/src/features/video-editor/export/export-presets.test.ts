@@ -292,11 +292,25 @@ describe("githubPlans (Free 10 MB, Pro / Team / Enterprise 100 MB)", () => {
 
 describe("encodeFingerprint", () => {
   it("adds the tiers' encode revision, so files made with older numbers never match", () => {
-    expect(encodeFingerprint("whole", "light")).toBe("whole#q33-24fps-kfi10");
-    expect(encodeFingerprint("edit:abc", "balanced")).toBe("edit:abc#q30-24fps-kfi10");
-    // Unchanged encodes keep the bare fingerprint (their older files still match).
-    expect(encodeFingerprint("whole", "youtube")).toBe("whole");
-    expect(encodeFingerprint("whole", "maximum")).toBe("whole");
+    expect(encodeFingerprint("whole", "light")).toBe("whole#q33-24fps-kfi10-wc1");
+    expect(encodeFingerprint("edit:abc", "balanced")).toBe("edit:abc#q30-24fps-kfi10-wc1");
+  });
+
+  it("adds the composer's revision to every preset: an export from before the webcam layer never matches (W4)", () => {
+    for (const preset of [
+      "balanced",
+      "light",
+      "youtube",
+      "vertical",
+      "square",
+      "maximum",
+    ] as const) {
+      const fingerprint = encodeFingerprint("edit:abc", preset);
+      expect(fingerprint).toMatch(/wc1$/);
+      // What the same edit recorded before NIW2-575.
+      const before = { balanced: "#q30-24fps-kfi10", light: "#q33-24fps-kfi10" }[preset as string];
+      expect(fingerprint).not.toBe(`edit:abc${before ?? ""}`);
+    }
   });
 });
 

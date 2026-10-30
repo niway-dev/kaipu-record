@@ -52,8 +52,8 @@ export function editFingerprint(scene: VideoScene): string {
   const saved = parseSession(serializeSession(scene))?.scene ?? scene;
   // A recording without a webcam hashes as it did before the layer existed, so the exports
   // already made from it stay reusable; with one, the layer is hashed so that a layout change
-  // is a new export. Nothing draws the layer until NIW2-575, which bumps ENCODE_REVISION so
-  // exports made before it (fingerprint matches, no face) are never reused.
+  // is a new export. Exports made before the composer drew the layer (NIW2-575) match this
+  // fingerprint but have no face; ENCODE_REVISION's composer revision keeps them from reuse.
   const { webcam, ...withoutWebcam } = saved;
   return `edit:${hash53(stableStringify(webcam ? saved : withoutWebcam))}`;
 }
