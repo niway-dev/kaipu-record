@@ -206,6 +206,13 @@ export interface EngineOptions {
    */
   onWebcamEnded?(): void;
   /**
+   * The take asked for a webcam and it did not open (busy, denied, unplugged, or not within
+   * `WEBCAM_OPEN_TIMEOUT_MS`). Awaited BEFORE the screen capture is requested: the bubble is
+   * left out only of captures that start while it is protected, so main must put it back in
+   * first (`recordingWebcamEnded`), and the take records the face in the screen instead.
+   */
+  onWebcamUnavailable?(): Promise<void>;
+  /**
    * Fires if the engine fails once acquired — the encoder errors or the screen
    * capture ends (the user stops sharing / closes the source), during the recording
    * or while a prepared take waits for its countdown. The caller should tear the
@@ -229,8 +236,9 @@ const CAPTURE_CEILING = { width: 7680, height: 4320 } as const;
 /**
  * How long the take waits for the camera to open before it records without a webcam. A macOS
  * permission prompt left open or a hung device never settles, and the store fails the whole
- * start after 10 s (`START_TIMEOUT_MS`): 3 s leaves that budget to the screen, its frame-size
- * probe (1.5 s) and the encoder, and is far longer than a camera that works takes to open.
+ * start after 10 s (`START_TIMEOUT_MS`): 3 s leaves that budget to the screen (requested only
+ * once the webcam is settled), its frame-size probe (1.5 s) and the encoder, and is far longer
+ * than a camera that works takes to open. The countdown, which acquires the take, hides it.
  */
 export const WEBCAM_OPEN_TIMEOUT_MS = 3000;
 
@@ -293,13 +301,17 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
     }
     return navigator.mediaDevices.getUserMedia({ audio: false, video: videoConstraints });
   };
-  const screenRequest = acquireScreen();
-  // The mic opens alongside the screen instead of after it and the compositor: both are OS
+  // Without a webcam the screen is requested at once; with one, after the webcam (below).
+  const screenRequest = options.webcam ? null : acquireScreen();
+  // The mic opens alongside the screen and the webcam instead of after them: they are all OS
   // device opens, and the take waited for one, then the other.
   const micRequest = options.microphoneDeviceId
     ? openMicrophone(options.microphoneDeviceId, options.audio.noiseSuppression)
     : Promise.resolve(null);
-  // The webcam opens alongside them too, in its own request: it is not part of the screen.
+  // The webcam opens in its own request (it is not part of the screen), and is settled BEFORE
+  // the screen is requested: whether the bubble leaves the screen capture is decided when that
+  // capture starts (ADR 0032), so a webcam that did not open must put the bubble back in
+  // first, or the face would be in neither file.
   const webcamRequest = options.webcam
     ? openWebcamWithin(options.webcam, WEBCAM_OPEN_TIMEOUT_MS)
     : Promise.resolve(null);
@@ -310,7 +322,15 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
     void webcamRequest.then((cam) => cam?.getTracks().forEach((track) => track.stop()));
     throw error;
   };
-  const screenStream = await screenRequest.catch(releaseMicOnFailure);
+  if (options.webcam && !(await webcamRequest)) {
+    try {
+      await options.onWebcamUnavailable?.();
+    } catch (error) {
+      // The take still records; only the bubble may stay out of it.
+      console.warn("could not report the unavailable webcam before the screen", error);
+    }
+  }
+  const screenStream = await (screenRequest ?? acquireScreen()).catch(releaseMicOnFailure);
   const screenTrack = screenStream.getVideoTracks()[0];
   markRecordTiming("screen getUserMedia resolved");
 

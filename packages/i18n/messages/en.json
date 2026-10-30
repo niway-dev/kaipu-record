@@ -316,6 +316,7 @@
     "noWindows": "No windows found",
     "selectScreenOrWindow": "Select a Screen or Window",
     "errorStopped": "The recording stopped due to an error. We saved what we could.",
+    "webcamUnavailable": "The camera wasn't available, so your face was recorded in the screen instead.",
     "errorStart": "We couldn't start the recording. Please try again.",
     "errorSave": "We couldn't save the recording.",
     "errorSaveKept": "We couldn't reach your recordings folder. Your recording was kept and Kaipu will recover it the next time it opens.",

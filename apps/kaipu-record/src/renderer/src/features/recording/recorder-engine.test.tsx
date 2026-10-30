@@ -1371,6 +1371,88 @@ describe("webcam", () => {
     await vi.waitFor(() => expect(webcamTrack.stop).toHaveBeenCalled());
   });
 
+  describe("the webcam is settled before the screen capture starts", () => {
+    const isScreen = (c: MediaStreamConstraints) =>
+      Boolean(c.video && "mandatory" in (c.video as object));
+    const kinds = () =>
+      getUserMedia.mock.calls.map((call) => {
+        const c = call[0] as MediaStreamConstraints;
+        return isScreen(c) ? "screen" : c.video ? "webcam" : "mic";
+      });
+
+    it("opens the camera first, the mic beside it, and only then requests the screen", async () => {
+      const onWebcamUnavailable = vi.fn(async () => {});
+      await prepareEngine(
+        baseOptions({ microphoneDeviceId: "mic-1", webcam, onWebcamUnavailable }),
+      );
+      expect(kinds()).toEqual(["mic", "webcam", "screen"]);
+      expect(onWebcamUnavailable).not.toHaveBeenCalled();
+    });
+
+    it("a camera that cannot open is reported, and awaited, before the screen is requested", async () => {
+      const original = getUserMedia.getMockImplementation() as (
+        c: MediaStreamConstraints,
+      ) => Promise<MediaStream>;
+      getUserMedia.mockImplementation(async (c: MediaStreamConstraints) => {
+        // Windows: the bubble holds the device, a second open fails.
+        if (c.video && !isScreen(c)) throw new Error("NotReadableError");
+        return original(c);
+      });
+      let reported!: () => void;
+      const onWebcamUnavailable = vi.fn(() => new Promise<void>((r) => (reported = r)));
+      const preparing = prepareEngine(baseOptions({ webcam, onWebcamUnavailable }));
+      await vi.waitFor(() => expect(onWebcamUnavailable).toHaveBeenCalledOnce());
+      await new Promise((r) => setTimeout(r, 0));
+      // Main has not put the bubble back in the capture yet: the screen must wait.
+      expect(kinds()).not.toContain("screen");
+      reported();
+      const prepared = await preparing;
+      expect(kinds().at(-1)).toBe("screen");
+      const handle = await prepared.begin();
+      expect(handle.webcam).toBeNull();
+    });
+
+    it("a report that fails does not fail the take", async () => {
+      getUserMedia.mockImplementation(async (c: MediaStreamConstraints) => {
+        if (c.video && !isScreen(c)) throw new Error("NotAllowedError");
+        return fakeStream([screenVideoTrack], []);
+      });
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const handle = await startEngine(
+          baseOptions({
+            webcam,
+            onWebcamUnavailable: async () => Promise.reject(new Error("ipc")),
+          }),
+        );
+        expect(handle.webcam).toBeNull();
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("a camera that never answers holds the screen until the open timeout", async () => {
+      const original = getUserMedia.getMockImplementation() as (
+        c: MediaStreamConstraints,
+      ) => Promise<MediaStream>;
+      getUserMedia.mockImplementation((c: MediaStreamConstraints) =>
+        c.video && !isScreen(c) ? new Promise<MediaStream>(() => {}) : original(c),
+      );
+      const onWebcamUnavailable = vi.fn(async () => {});
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        void prepareEngine(baseOptions({ webcam, onWebcamUnavailable }));
+        await vi.advanceTimersByTimeAsync(WEBCAM_OPEN_TIMEOUT_MS - 1);
+        expect(kinds()).not.toContain("screen");
+        await vi.advanceTimersByTimeAsync(1);
+        expect(onWebcamUnavailable).toHaveBeenCalledOnce();
+        expect(kinds()).toContain("screen");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   describe("onWebcamEnded: the face must come back into the screen capture", () => {
     it("fires once when the camera is turned off or unplugged mid-take", async () => {
       const onWebcamEnded = vi.fn();

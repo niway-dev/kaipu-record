@@ -25,6 +25,7 @@ import {
 } from "@renderer/features/recording/recorder-engine";
 import type { WatermarkConfig } from "@renderer/features/watermark/watermark";
 import { reportError } from "@renderer/features/analytics";
+import { showToast } from "@renderer/ui/toast-store";
 import { finalizeErrorKey } from "./finalize-error-message";
 import { buildRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
 import { runtimeT } from "@renderer/lib/runtime-i18n";
@@ -122,6 +123,12 @@ let sessionId: string | null = null;
 let capture: RecordingCapture | null = null;
 /** The bubble as the active take started with it, for its webcam file's sidecar entry. */
 let webcamBubble: WebcamRecordedLayout | null = null;
+/**
+ * The active take asked for the webcam and its camera did not open: the face is in the screen
+ * recording instead, which the user is told once the take is saved (the app is hidden until
+ * then, so a toast during the take would expire unseen).
+ */
+let webcamUnavailable = false;
 let clock: ElapsedState | null = null;
 /** Video-time clock: zero = the MP4's first media sample, renderer `performance.now()`, pauses removed. */
 let videoClock: ElapsedState | null = null;
@@ -156,6 +163,8 @@ interface PendingStart {
   live: LiveSettingsForwarder | null;
   /** The engine failed before the take was set up; the start fails with it once acquired. */
   failure?: unknown;
+  /** The take asked for the webcam and its camera did not open. */
+  webcamUnavailable?: boolean;
 }
 let pendingStart: PendingStart | null = null;
 let sessionCounter = 0;
@@ -491,6 +500,12 @@ function acquireStart(input: StartInput): PendingStart {
       onWebcamChunk: (data, position) => {
         if (sessionId === id) window.electronAPI.recordingWrite(id, data, position, "webcam");
       },
+      // The camera did not open: main puts the bubble back in the screen capture, and the
+      // engine waits for it before it requests the screen (ADR 0032).
+      onWebcamUnavailable: async () => {
+        start.webcamUnavailable = true;
+        await window.electronAPI.recordingWebcamEnded(id);
+      },
       // The webcam file ended mid-take (or before it began): main puts the bubble back in
       // the screen capture, so a camera left on or turned on again is recorded there.
       onWebcamEnded: () => {
@@ -609,6 +624,7 @@ async function beginTake(
       output: handle.outputSize,
     });
     webcamBubble = input.webcam?.bubble ?? null;
+    webcamUnavailable = start.webcamUnavailable === true;
     // The forwarder attached when the take was acquired keeps running for the take.
     stopLiveSettings = start.live?.stop ?? null;
     stopMicLevelListening = followMicLevelListeners();
@@ -973,6 +989,9 @@ async function stopRecording(): Promise<void> {
   // shell's navigation) land before the window shows the previous page first.
   if (recording) for (const listener of completeListeners) listener(recording);
   window.electronAPI.recordingStop();
+  if (recording && webcamUnavailable)
+    showToast({ message: runtimeT()("record.webcamUnavailable") });
+  webcamUnavailable = false;
   engine = null;
   cursorTrack = null;
   sessionId = null;

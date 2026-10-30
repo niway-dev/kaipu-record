@@ -11,6 +11,7 @@ import {
 // Type-only (erased at runtime), so it does not run the store's import-time side effect early.
 import type { StartInput } from "./recorder-store";
 import { reportError } from "@renderer/features/analytics";
+import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import { DEFAULT_LOCALE } from "@kaipu/i18n";
 import es from "@kaipu/i18n/messages/es";
 import en from "@kaipu/i18n/messages/en";
@@ -1522,6 +1523,49 @@ describe("recorder-store live settings", () => {
       prepareEngineMock.mock.calls.at(-1)![0].onWebcamEnded!();
       expect(ended).toHaveBeenCalledExactlyOnceWith(id);
       await stopAndSettle();
+    });
+
+    describe("a camera that does not open at the start of the take", () => {
+      afterEach(() => {
+        for (const toast of getToasts()) dismissToast(toast.id);
+      });
+
+      /** The engine reports the camera unavailable while it prepares, as the real one does. */
+      const startWithUnavailableCamera = async (): Promise<string[]> => {
+        const order: string[] = [];
+        window.electronAPI.recordingWebcamEnded = vi.fn(async () => {
+          order.push("main told");
+        });
+        prepareEngineMock.mockImplementation(async (options: EngineOptions) => {
+          await options.onWebcamUnavailable!();
+          order.push("screen requested");
+          return fakePrepared(fakeEngine({ webcam: null }));
+        });
+        store.requestStartRecording(() => ({ ...input, webcam }));
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(store.getRecorderSnapshot().status).toBe("recording");
+        return order;
+      };
+
+      it("tells main before the screen is requested, so the bubble is recorded in the screen", async () => {
+        const order = await startWithUnavailableCamera();
+        expect(window.electronAPI.recordingWebcamEnded).toHaveBeenCalledExactlyOnceWith(
+          createCalls()[0]![0],
+        );
+        expect(order).toEqual(["main told", "screen requested"]);
+        await stopAndSettle();
+      });
+
+      it("tells the user once the take is saved, and not on the next take", async () => {
+        await startWithUnavailableCamera();
+        expect(getToasts()).toEqual([]); // the app is hidden during the take
+        await stopAndSettle();
+        expect(getToasts().map((t) => t.message)).toEqual([messages.record.webcamUnavailable]);
+        dismissToast(getToasts()[0]!.id);
+        await startWith(fakeEngine({ webcam: webcamHandle() }), { webcam });
+        await stopAndSettle();
+        expect(getToasts()).toEqual([]);
+      });
     });
 
     it("a camera turned off during the countdown acquires the take again, without it", async () => {
