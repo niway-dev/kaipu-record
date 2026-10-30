@@ -3,6 +3,7 @@ import {
   ArrowUpRight,
   Download,
   Droplet,
+  EyeOff,
   ImagePlus,
   MousePointer2,
   Redo2,
@@ -137,6 +138,8 @@ export interface EditorToolRailProps {
   onAddZoom(): void;
   /** Blur/Cover need footage: disabled while the playhead is on a slide. */
   privacyDisabled: boolean;
+  /** "Hide webcam here" (ADR 0033). Absent for a recording without a webcam: no button. */
+  onHideWebcam?(): void;
 }
 
 export function EditorToolRail({
@@ -147,6 +150,7 @@ export function EditorToolRail({
   onAddMute,
   onToggleMuteAll,
   audioMuted,
+  onHideWebcam,
 }: EditorToolRailProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
   return (
@@ -201,6 +205,18 @@ export function EditorToolRail({
             </button>
           );
         })}
+        {/* An action like Zoom: a hidden webcam section from the playhead on. */}
+        {onHideWebcam && (
+          <button
+            type="button"
+            title={t("hintHideWebcam")}
+            aria-label={t("webcamHideHere")}
+            className={styles.tool}
+            onClick={onHideWebcam}
+          >
+            <EyeOff size={19} />
+          </button>
+        )}
       </div>
       <span className={styles.railSeparator} aria-hidden />
       {/* Audio. Mute-a-section is an ACTION like Zoom — it drops a silent range

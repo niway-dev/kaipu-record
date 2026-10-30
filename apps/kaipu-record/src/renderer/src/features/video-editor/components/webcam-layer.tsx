@@ -79,7 +79,8 @@ export function WebcamLayer({
   /** False while a drawing tool is armed, so a stroke can start over the bubble. */
   interactive: boolean;
   selected: boolean;
-  onSelect(): void;
+  /** `sourceTime` is the frame the bubble was grabbed on, to pick the override in force. */
+  onSelect(sourceTime: number): void;
   onBegin(): void;
   /** `sourceTime` is the frame the drag happened over, for an override in force there. */
   onMove(center: Point, sourceTime: number): void;
@@ -176,7 +177,7 @@ export function WebcamLayer({
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => {
           event.stopPropagation();
-          onSelect();
+          onSelect(lastTime.current);
           const slot = boxRef.current?.parentElement?.getBoundingClientRect();
           const from = drawn.current;
           if (!slot || slot.width === 0 || slot.height === 0 || !from) return;

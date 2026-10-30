@@ -53,7 +53,10 @@ import {
 } from "@renderer/features/video-editor/slide-assets";
 import { parseSession, serializeSession } from "@renderer/features/video-editor/session";
 import { withInitialZooms } from "@renderer/features/video-editor/initial-zooms";
-import { useEditorSelection } from "@renderer/features/video-editor/editor-selection";
+import {
+  useEditorSelection,
+  WEBCAM_LAYER_SELECTION,
+} from "@renderer/features/video-editor/editor-selection";
 import {
   sourceRangeToTimelineBlocks,
   sourceTimeAtTimeline,
@@ -64,6 +67,14 @@ import { seekTargetForSegment } from "@renderer/features/video-editor/zoom/selec
 import { focusInspectorFirstControl } from "@renderer/features/video-editor/focus-inspector";
 import { ActivityLane } from "@renderer/features/video-editor/components/activity-lane";
 import { ZoomLane } from "@renderer/features/video-editor/components/zoom-lane";
+import { WebcamLane } from "@renderer/features/video-editor/components/webcam-lane";
+import { WebcamLayer } from "@renderer/features/video-editor/components/webcam-layer";
+import {
+  WebcamInspector,
+  WebcamSegmentInspector,
+} from "@renderer/features/video-editor/components/inspector/webcam-inspector";
+import { useWebcamEditing } from "@renderer/features/video-editor/webcam/use-webcam-editing";
+import { webcamAt } from "@renderer/features/video-editor/webcam/webcam-model";
 import { EditorInspector } from "@renderer/features/video-editor/components/inspector/editor-inspector";
 import { DetectionPanel } from "@renderer/features/video-editor/components/inspector/detection-panel";
 import { ZoomInspector } from "@renderer/features/video-editor/components/inspector/zoom-inspector";
@@ -415,6 +426,15 @@ function VideoEditor({
     cursorTrack,
   });
   const mutes = useMuteEditing(controller, layout, source.durationSeconds);
+  const webcamEdits = useWebcamEditing({
+    controller,
+    layout,
+    sourceDuration: source.durationSeconds,
+  });
+  // The sidecar decides whether there is a webcam (the loader reconciled the scene with
+  // it); without one there is no layer, lane, inspector section nor second <video>.
+  const webcamTrack = source.webcam ?? null;
+  const hasWebcam = webcamTrack !== null && scene.webcam !== null;
   const redactionEdits = useRedactionEditing({
     controller,
     layout,
@@ -478,6 +498,7 @@ function VideoEditor({
   const selectedZoomId = selection.zoomId;
   const selectedRedactionId = selection.redactionId;
   const selectedMuteId = selection.muteId;
+  const selectedWebcamId = selection.webcamId;
   useEffect(() => {
     if (selectedZoomId && !scene.zoomSegments.some((z) => z.id === selectedZoomId)) {
       selectKind("zoom", null);
@@ -493,6 +514,15 @@ function VideoEditor({
       selectKind("mute", null);
     }
   }, [scene.mutedRanges, selectedMuteId, selectKind]);
+  useEffect(() => {
+    if (
+      selectedWebcamId &&
+      selectedWebcamId !== WEBCAM_LAYER_SELECTION &&
+      !scene.webcam?.segments.some((s) => s.id === selectedWebcamId)
+    ) {
+      selectKind("webcam", null);
+    }
+  }, [scene.webcam, selectedWebcamId, selectKind]);
 
   // Track fullscreen state via the fullscreenchange event so pressing Esc (which the
   // browser handles natively) still syncs isFullscreen back to false.
@@ -973,6 +1003,23 @@ function VideoEditor({
     else if (result.reason === "no-room") showToast({ message: t("muteNoRoom") });
   }, [mutes, playback.timelineTime, selectKind, t]);
 
+  // "Hide webcam here": a hidden segment from the playhead to the next one, selected so its
+  // edges can be dragged straight away; inside a segment, that segment is selected instead.
+  const handleHideWebcam = useCallback(() => {
+    const result = webcamEdits.hideAtPlayhead(playback.timelineTime);
+    if (result.ok) selectKind("webcam", result.id);
+    else if (result.reason === "on-slide") showToast({ message: t("webcamHideOnSlide") });
+    else if (result.reason === "no-room") showToast({ message: t("webcamHideNoRoom") });
+  }, [webcamEdits, playback.timelineTime, selectKind, t]);
+
+  const handleRemoveWebcamSegment = useCallback(
+    (id: string) => {
+      webcamEdits.remove(id);
+      selectKind("webcam", null);
+    },
+    [webcamEdits, selectKind],
+  );
+
   const handleRemoveZoom = useCallback(
     (id: string) => {
       zooms.remove(id);
@@ -987,6 +1034,10 @@ function VideoEditor({
   const selectedOverlay = selectedOverlayId
     ? (scene.overlays.find((o) => o.id === selectedOverlayId) ?? null)
     : null;
+  const selectedWebcamSegment =
+    selectedWebcamId && selectedWebcamId !== WEBCAM_LAYER_SELECTION
+      ? (webcamEdits.visibleSegments.find((s) => s.id === selectedWebcamId) ?? null)
+      : null;
 
   // Privacy (doc 10). While a privacy tool is active or a region is selected the preview
   // shows the unzoomed original frame, so drawing/editing maps 1:1 to frame coordinates.
@@ -1065,16 +1116,16 @@ function VideoEditor({
   // lands and changing it never re-renders, so the hint would appear or not depending on
   // whether some unrelated render happened to arrive after the metadata did.
   const [sourceHeight, setSourceHeight] = useState(0);
-  useCameraPreview(
-    playback.videoRef,
-    contentRef,
-    cameraPath,
+  // The decoded frame as one state object: the webcam layer places itself against it (the
+  // preview's output frame is the source frame), and a stable object keeps its trigger quiet.
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+  const cameraApplied =
     !holdingOriginal &&
-      selectedZoom === null &&
-      selectedRedaction === null &&
-      privacyTool === null &&
-      !onSlide,
-  );
+    selectedZoom === null &&
+    selectedRedaction === null &&
+    privacyTool === null &&
+    !onSlide;
+  useCameraPreview(playback.videoRef, contentRef, cameraPath, cameraApplied);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -1130,6 +1181,8 @@ function VideoEditor({
       if (!isMod && (e.key === "Delete" || e.key === "Backspace")) {
         if (selectedRedactionId) handleRemoveRedaction(selectedRedactionId);
         else if (selectedZoomId) handleRemoveZoom(selectedZoomId);
+        else if (selectedWebcamId && selectedWebcamId !== WEBCAM_LAYER_SELECTION)
+          handleRemoveWebcamSegment(selectedWebcamId);
         else if (selectedOverlayId) handleDeleteOverlay();
         else if (!deleteDisabled) handleDeleteSelected();
       }
@@ -1153,6 +1206,8 @@ function VideoEditor({
     selectedRedactionId,
     handleRemoveZoom,
     handleRemoveRedaction,
+    selectedWebcamId,
+    handleRemoveWebcamSegment,
     videoTools,
     handleToolChange,
     handleAddZoom,
@@ -1205,6 +1260,7 @@ function VideoEditor({
           onToolChange={handleToolChange}
           onAddZoom={handleAddZoom}
           privacyDisabled={onSlide}
+          onHideWebcam={hasWebcam ? handleHideWebcam : undefined}
         />
         <main className={styles.stage} ref={stageRef}>
           {/* Video region: 1fr grid row — centers PreviewStage and constrains its height
@@ -1220,7 +1276,43 @@ function VideoEditor({
               slideUrl={slideUrl}
               expanded={isFullscreen}
               contentRef={contentRef}
-              onFrameSize={({ height }) => setSourceHeight(height)}
+              onFrameSize={(size) => {
+                setSourceHeight(size.height);
+                setFrameSize(size);
+              }}
+              webcam={
+                hasWebcam &&
+                webcamTrack &&
+                scene.webcam && (
+                  <WebcamLayer
+                    videoRef={playback.videoRef}
+                    src={`kaipu-media://webcam/${source.id}`}
+                    startOffsetMs={webcamTrack.startOffsetMs}
+                    webcam={scene.webcam}
+                    path={cameraPath}
+                    cameraEnabled={cameraApplied}
+                    frame={frameSize}
+                    // "Hold to see original" shows the original, which has no face (spec
+                    // open question 2); a slide has no webcam either.
+                    hidden={holdingOriginal || onSlide}
+                    interactive={videoTools.tool === "select"}
+                    selected={selectedWebcamId !== null}
+                    onSelect={(sourceTime) => {
+                      // Grabbing the bubble inside an override selects (and edits) that
+                      // override, so the inspector shows what the user is looking at.
+                      const override = scene.webcam?.segments.find(
+                        (s) => s.mode === "override" && sourceTime >= s.start && sourceTime < s.end,
+                      );
+                      selectKind("webcam", override?.id ?? WEBCAM_LAYER_SELECTION);
+                    }}
+                    onBegin={webcamEdits.begin}
+                    onMove={(position, sourceTime) =>
+                      webcamEdits.liveLayout({ position }, sourceTime)
+                    }
+                    onEnd={webcamEdits.end}
+                  />
+                )
+              }
               underlay={
                 <RedactionLayer
                   redactions={redactionEdits.visibleRedactions}
@@ -1396,6 +1488,23 @@ function VideoEditor({
               }
               onRemoved={() => selectKind("zoom", null)}
             />
+          ) : hasWebcam && scene.webcam && selectedWebcamId === WEBCAM_LAYER_SELECTION ? (
+            <WebcamInspector
+              layout={scene.webcam.layout}
+              edits={webcamEdits}
+              frame={frameSize}
+              onHideHere={handleHideWebcam}
+            />
+          ) : hasWebcam && selectedWebcamSegment ? (
+            <WebcamSegmentInspector
+              segment={selectedWebcamSegment}
+              index={webcamEdits.visibleSegments.indexOf(selectedWebcamSegment) + 1}
+              range={timelineRangeOf(selectedWebcamSegment.start, selectedWebcamSegment.end)}
+              layout={webcamAt(scene, selectedWebcamSegment.start) ?? scene.webcam!.layout}
+              edits={webcamEdits}
+              frame={frameSize}
+              onRemoved={() => selectKind("webcam", null)}
+            />
           ) : selectedOverlay ? (
             <AnnotationInspector
               overlay={selectedOverlay}
@@ -1464,6 +1573,25 @@ function VideoEditor({
                 />
               ),
             },
+            ...(hasWebcam
+              ? [
+                  {
+                    key: "webcam",
+                    label: t("laneWebcam"),
+                    node: (
+                      <WebcamLane
+                        segments={webcamEdits.visibleSegments}
+                        layout={layout}
+                        selectedId={
+                          selectedWebcamId === WEBCAM_LAYER_SELECTION ? null : selectedWebcamId
+                        }
+                        onSelect={(id) => selectKind("webcam", id)}
+                        onEdgeDrag={webcamEdits.edgeDrag}
+                      />
+                    ),
+                  },
+                ]
+              : []),
             {
               key: "privacy",
               label: t("lanePrivacy"),
