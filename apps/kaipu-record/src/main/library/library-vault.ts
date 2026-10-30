@@ -28,13 +28,15 @@ import { sha256FileBase64 } from "./content-hash";
 import { fileStemFromTitle, fsFold, isReservedStem } from "./file-stem";
 import { mediaUrl } from "@shared/media-url";
 
-const META_DIR = ".kaipu";
+export const META_DIR = ".kaipu";
 /** Known video containers, in preference order — `.mp4` is what we now write. */
 const VIDEO_EXTS = [".mp4", ".webm"] as const;
 const IMAGE_EXTS = [".png"] as const;
 /** Animated GIF exports (NIW2-217). Local-only; thumbnail in `.kaipu/<id>.jpg` like videos. */
 const GIF_EXTS = [".gif"] as const;
 const ALL_EXTS = [...VIDEO_EXTS, ...IMAGE_EXTS, ...GIF_EXTS] as const;
+/** Every media extension the vault lists, lowercase and exact (`Demo.MP4` is not one, F4). */
+export const MEDIA_EXTS: readonly string[] = ALL_EXTS;
 
 /** Version 2 adds identity + provenance + hash cache. Every field stays optional so a v1 file reads fine. */
 export interface Sidecar {
