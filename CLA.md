@@ -3,9 +3,13 @@
 **Version 1.0 — 2026-10-30.** Draft written for the project; not yet reviewed by a lawyer.
 
 This agreement is between you (**"You"**) and **Niway S.A.C.**, the publisher of Kaipu Record
-(**"Niway"**). It applies to every Contribution You submit to Kaipu Record. Read it before
-your first pull request: submitting one with the agreement statement (see
-[How to sign](#how-to-sign)) means You accept it.
+(**"Niway"**). It applies to every Contribution You submit to Kaipu Record once You have
+accepted it. Read it before your first pull request: submitting one with the agreement
+statement (see [How to sign](#how-to-sign)) means You accept it.
+
+Material posted by someone who has not accepted it — for example a patch or snippet in an
+issue — is not covered. Niway treats it as a report only and does not merge it until its
+author signs.
 
 ## In one minute
 

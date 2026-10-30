@@ -37,7 +37,8 @@ Never in a public issue. See [SECURITY.md](SECURITY.md).
 - **Sign the [Contributor License Agreement](CLA.md) once, on your first pull request.** You
   keep the copyright to your work; Niway gets a license broad enough to keep the whole project
   under one owner, including the right to change its license later. Without it a pull request
-  is not merged.
+  is not merged. The same applies to code pasted into an issue: it is read as part of the
+  report, and merged only once its author has signed.
 - **Issue first.** A pull request links the issue it resolves.
 - **One behaviour per pull request.** Refactors travel separately.
 - **The checks apply to everyone.** The pre-push hook runs lint, format, builds and type
