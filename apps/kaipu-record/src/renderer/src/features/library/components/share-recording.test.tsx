@@ -4,6 +4,8 @@ import { DEFAULT_SETTINGS } from "@shared/types";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import type { LibraryVideo } from "../types";
 import { ShareRecording } from "./share-recording";
+import { wholeFingerprint } from "@renderer/features/video-editor/export/export-reuse";
+import { seedWebcamScene } from "@renderer/features/video-editor/webcam/webcam-model";
 
 const probe = vi.hoisted(() => vi.fn());
 vi.mock("@renderer/features/video-editor/export/probe-source", () => ({ probeSource: probe }));
@@ -149,7 +151,8 @@ describe("ShareRecording", () => {
     ];
     expect(args.scene.webcam?.layout.position).toEqual({ x: 0.85, y: 0.8 });
     expect(args.webcamTrack).toEqual(webcam);
-    expect(args.fingerprint).toMatch(/^whole:/);
+    expect(args.fingerprint).toBe(wholeFingerprint(seedWebcamScene(webcam)));
+    expect(args.fingerprint).not.toBe(wholeFingerprint(null));
   });
 
   it("offers an existing whole-recording export instead of encoding it again", async () => {
