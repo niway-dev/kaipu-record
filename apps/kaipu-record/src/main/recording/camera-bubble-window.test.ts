@@ -10,6 +10,7 @@ const created: FakeWindow[] = [];
 
 class FakeWindow {
   setAlwaysOnTop = vi.fn();
+  setContentProtection = vi.fn();
   setVisibleOnAllWorkspaces = vi.fn();
   bounds = { x: 0, y: 0, width: 288, height: 288 };
   setBounds = vi.fn((bounds: { x: number; y: number; width: number; height: number }) => {
@@ -97,5 +98,16 @@ describe("CameraBubbleWindow on quit", () => {
     bubble.show();
 
     expect(created).toHaveLength(2);
+  });
+});
+
+describe("CameraBubbleWindow content protection (spike NIW2-570)", () => {
+  it("protects the bubble at creation, before it is ever shown", () => {
+    const bubble = new CameraBubbleWindow(() => 288);
+    bubble.show();
+    const [window] = created;
+
+    expect(window!.setContentProtection).toHaveBeenCalledWith(true);
+    expect(window!.showInactive).not.toHaveBeenCalled();
   });
 });

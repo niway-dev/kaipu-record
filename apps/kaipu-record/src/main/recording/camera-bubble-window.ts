@@ -82,6 +82,10 @@ export class CameraBubbleWindow {
         backgroundThrottling: false,
       },
     });
+    // SPIKE (NIW2-570, do not merge): protect the bubble from creation, before any capture
+    // stream starts, so Electron's desktopCapturer hands it to ScreenCaptureKit's
+    // excludingWindows. The owner checks the recording for the content under the bubble.
+    this.window.setContentProtection(true);
     this.window.setAlwaysOnTop(true, "screen-saver");
     this.window.setVisibleOnAllWorkspaces(true, {
       visibleOnFullScreen: true,
