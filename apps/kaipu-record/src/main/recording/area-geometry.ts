@@ -3,7 +3,7 @@
  * the numbers they read from Electron.
  */
 import { MIN_AREA_SIZE } from "@shared/capture-geometry";
-import type { RecordingArea } from "@shared/types/ipc";
+import type { RecordingArea, RecordingFinalizeMeta } from "@shared/types/ipc";
 import { isRecordingRatio } from "@shared/types/screenshot-capture";
 import {
   CAMERA_BUBBLE_AREA_MARGIN,
@@ -70,6 +70,42 @@ export function bubbleBoundsAt(container: Rect, side: number, corner: BubbleCorn
     y: clamp(corner.bottom - side, container.y, container.y + container.height - side),
     width: side,
     height: side,
+  };
+}
+
+/**
+ * Where the bubble sat in the recorded rectangle: its window's centre (the pad is symmetric,
+ * so it is the bubble's centre), as 0..1 fractions of `recorded`, to 4 decimals. `null` when
+ * the centre lies outside the rectangle (the bubble was on another display, so it is not in
+ * the video) or the rectangle is empty. Both are global DIP.
+ */
+export function bubbleCentreInRect(
+  windowBounds: Rect,
+  recorded: Rect,
+): { x: number; y: number } | null {
+  if (recorded.width <= 0 || recorded.height <= 0) return null;
+  const x = (windowBounds.x + windowBounds.width / 2 - recorded.x) / recorded.width;
+  const y = (windowBounds.y + windowBounds.height / 2 - recorded.y) / recorded.height;
+  if (!(x >= 0 && x <= 1 && y >= 0 && y <= 1)) return null;
+  const round = (value: number): number => Math.round(value * 10000) / 10000;
+  return { x: round(x), y: round(y) };
+}
+
+/**
+ * The finalize meta with the bubble's position set on its recorded layout, replacing
+ * whatever the renderer sent: main is the only one that knows where the bubble sat. Without
+ * a position the field is removed; without a recorded layout there is nothing to add it to.
+ */
+export function withRecordedBubblePosition(
+  meta: RecordingFinalizeMeta,
+  position: { x: number; y: number } | null,
+): RecordingFinalizeMeta {
+  const layout = meta.webcam?.recordedLayout;
+  if (!meta.webcam || !layout) return meta;
+  const { position: _renderer, ...rest } = layout;
+  return {
+    ...meta,
+    webcam: { ...meta.webcam, recordedLayout: position ? { ...rest, position } : rest },
   };
 }
 

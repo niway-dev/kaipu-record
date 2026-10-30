@@ -76,6 +76,18 @@ describe("CameraBubbleWindow.raise", () => {
   });
 });
 
+describe("CameraBubbleWindow.visibleBounds", () => {
+  it("is the window's bounds while the bubble is shown, null before and after", () => {
+    const bubble = new CameraBubbleWindow(() => 288);
+    expect(bubble.visibleBounds()).toBeNull();
+    bubble.show();
+    created[0]!.readyToShow?.();
+    expect(bubble.visibleBounds()).toEqual(created[0]!.bounds);
+    bubble.hide();
+    expect(bubble.visibleBounds()).toBeNull();
+  });
+});
+
 describe("CameraBubbleWindow on quit", () => {
   it("dispose() drops the window outright and a later show() creates no other", () => {
     const bubble = new CameraBubbleWindow(() => 288);

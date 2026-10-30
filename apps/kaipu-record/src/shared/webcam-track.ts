@@ -34,7 +34,14 @@ export type WebcamOffsetQuality = "exact" | "estimated";
  * The bubble as the user saw it during the take (its persisted settings, without the device).
  * The editor seeds its webcam layout from it; the file itself is raw (no mirror, no framing).
  */
-export type WebcamRecordedLayout = Omit<CameraBubbleSettings, "deviceId">;
+export type WebcamRecordedLayout = Omit<CameraBubbleSettings, "deviceId"> & {
+  /**
+   * The bubble's centre in the recorded rectangle (the display or the area), 0..1 from its
+   * top-left corner, as main saw the bubble window when the take ended. Absent when the
+   * bubble was not on the recorded rectangle. The editor seeds the layer's corner from it.
+   */
+  position?: { x: number; y: number };
+};
 
 /** The sidecar's `webcam` field, and what the recorder sends with finalize. */
 export interface WebcamTrackMeta {
@@ -91,6 +98,15 @@ const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 const isPositive = (value: unknown): value is number => isFiniteNumber(value) && value > 0;
 
+/** A point with both coordinates finite, clamped to 0..1; null for anything else. */
+function sanitizeUnitPoint(value: unknown): { x: number; y: number } | null {
+  if (!value || typeof value !== "object") return null;
+  const { x, y } = value as Record<string, unknown>;
+  if (!isFiniteNumber(x) || !isFiniteNumber(y)) return null;
+  const unit = (n: number): number => Math.min(1, Math.max(0, n));
+  return { x: unit(x), y: unit(y) };
+}
+
 /** A renderer-supplied webcam meta, validated before it lands on disk; null when unusable. */
 export function sanitizeWebcamTrackMeta(value: unknown): WebcamTrackMeta | null {
   if (!value || typeof value !== "object") return null;
@@ -107,7 +123,8 @@ export function sanitizeWebcamTrackMeta(value: unknown): WebcamTrackMeta | null 
   };
   if (safe.recordedLayout && typeof safe.recordedLayout === "object") {
     const { shape, size, mirrored, framing } = sanitizeCameraBubble(safe.recordedLayout);
-    meta.recordedLayout = { shape, size, mirrored, framing };
+    const position = sanitizeUnitPoint((safe.recordedLayout as Record<string, unknown>).position);
+    meta.recordedLayout = { shape, size, mirrored, framing, ...(position ? { position } : {}) };
   }
   return meta;
 }

@@ -18,6 +18,9 @@ const mockState = vi.hoisted(() => ({
     hide: vi.fn(),
     destroy: vi.fn(),
     isVisible: vi.fn(() => false),
+    visibleBounds: vi.fn(
+      () => null as null | { x: number; y: number; width: number; height: number },
+    ),
     anchorTo: vi.fn(),
     raise: vi.fn(),
     applySize: vi.fn(),
@@ -76,6 +79,7 @@ vi.mock("./camera-bubble-window", () => ({
     hide = mockState.bubble.hide;
     destroy = mockState.bubble.destroy;
     isVisible = mockState.bubble.isVisible;
+    visibleBounds = mockState.bubble.visibleBounds;
     anchorTo = mockState.bubble.anchorTo;
     raise = mockState.bubble.raise;
     applySize = mockState.bubble.applySize;
@@ -326,6 +330,100 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     stop({});
     expect(mockState.shade.hide).toHaveBeenCalled();
     expect(mockState.bubble.anchorTo).toHaveBeenLastCalledWith(null);
+  });
+
+  describe("the bubble's position is recorded at finalize", () => {
+    type Bounds = { x: number; y: number; width: number; height: number };
+    const webcam = {
+      startOffsetMs: 12,
+      offsetQuality: "exact",
+      width: 1280,
+      height: 720,
+      fps: 30,
+      // The renderer's copy never carries a position; one it forged is replaced by main's.
+      recordedLayout: {
+        shape: "circle",
+        size: 240,
+        mirrored: true,
+        framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        position: { x: 0.99, y: 0.99 },
+      },
+    };
+    const display1 = { id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } };
+    const area = {
+      displayId: 1,
+      rect: { x: 100, y: 50, width: 640, height: 360 },
+      displaySize: { width: 1512, height: 982 },
+    };
+
+    /** A take with a webcam, started on `sourceId`, finalized while the bubble is at `bubble`. */
+    async function recordWithWebcam(options: {
+      sourceId: string;
+      withArea?: boolean;
+      bubble: Bounds | null;
+    }) {
+      const { registerSettings } = await import("../infrastructure/settings-store");
+      const { registerRecordingHub } = await import("./recording-hub");
+      registerSettings();
+      const hub = registerRecordingHub(() => fakeMainWindow() as never);
+      mockState.displays = [display1];
+      mockState.getSources.mockResolvedValue([
+        { id: "screen:1:0", name: "Screen 1", display_id: "1" },
+      ]);
+      if (options.withArea) await hub.selectArea(1, area.rect);
+      mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+        {},
+        { sourceId: options.sourceId, sourceName: "S", ...(options.withArea ? { area } : {}) },
+      );
+      // The display lookup resolves the recorded rectangle of a whole-display take.
+      await new Promise((r) => setTimeout(r, 0));
+      const create = mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!;
+      const write = mockState.ipcOn.get(IPC_CHANNELS.recordingWrite)!;
+      await create({}, "s1");
+      await create({}, "s1", "webcam");
+      write({}, "s1", new TextEncoder().encode("screen").buffer, 0);
+      write({}, "s1", new TextEncoder().encode("face").buffer, 0, "webcam");
+      mockState.bubble.visibleBounds.mockReturnValue(options.bubble);
+      const recording = (await mockState.ipcHandle.get(IPC_CHANNELS.recordingFinalize)!({}, "s1", {
+        title: "T",
+        durationSeconds: 1,
+        durationMs: 1000,
+        webcam,
+      })) as { webcam?: { recordedLayout?: Record<string, unknown> } };
+      return recording.webcam?.recordedLayout;
+    }
+
+    it("normalizes the bubble to the area of an area take", async () => {
+      // Bottom-left of the area (global x 100, y 50): 288 DIP window, 32 from the edges.
+      const layout = await recordWithWebcam({
+        sourceId: "screen:1:0",
+        withArea: true,
+        bubble: { x: 132, y: 90, width: 288, height: 288 },
+      });
+      expect(layout?.position).toEqual({ x: 0.275, y: 0.5111 });
+    });
+
+    it("normalizes the bubble to the display of a whole-display take", async () => {
+      const layout = await recordWithWebcam({
+        sourceId: "screen:1:0",
+        bubble: { x: 32, y: 662, width: 288, height: 288 },
+      });
+      expect(layout?.position).toEqual({ x: 0.1164, y: 0.8208 });
+    });
+
+    it("leaves the position out when the bubble was not on screen, and drops the renderer's", async () => {
+      const layout = await recordWithWebcam({ sourceId: "screen:1:0", bubble: null });
+      expect(layout).toBeDefined();
+      expect(layout).not.toHaveProperty("position");
+    });
+
+    it("leaves the position out for a window take: its bounds are unknown", async () => {
+      const layout = await recordWithWebcam({
+        sourceId: "window:5:0",
+        bubble: { x: 32, y: 662, width: 288, height: 288 },
+      });
+      expect(layout).not.toHaveProperty("position");
+    });
   });
 
   it("draws the countdown on the region the overlay chose, and Esc cancels it", async () => {

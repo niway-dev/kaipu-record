@@ -35,7 +35,14 @@ import { ControlBarWindow } from "./control-bar-window";
 import { CameraBubbleWindow } from "./camera-bubble-window";
 import { RecordingShadeWindow } from "./recording-shade-window";
 import { ScreenSourceCache, type ScreenSource } from "./screen-source-cache";
-import { areaToGlobal, fullDisplayBorderAllowed, sanitizeArea } from "./area-geometry";
+import {
+  areaToGlobal,
+  bubbleCentreInRect,
+  fullDisplayBorderAllowed,
+  sanitizeArea,
+  withRecordedBubblePosition,
+  type Rect,
+} from "./area-geometry";
 import { holdTemporaryShortcut, releaseTemporaryShortcut } from "../shortcuts/global-shortcuts";
 import { FinalizeMoveError, RecordingWriter, timestampId } from "./recording-writer";
 import { createMicLevelRelay } from "./mic-level-relay";
@@ -184,6 +191,10 @@ export function registerRecordingHub(
     if (typeof dx === "number" && typeof dy === "number") cameraBubble.moveBy(dx, dy);
   });
   const shade = new RecordingShadeWindow();
+  // The rectangle of the screen the current take records (global DIP): its area, or its whole
+  // display; null for a window, whose bounds main cannot read. The bubble's recorded
+  // position is normalized to it at finalize.
+  let recordedRect: Rect | null = null;
   const screenSources = new ScreenSourceCache(listScreenSources);
   const writer = new RecordingWriter({
     vaultDir: () => vaultDirectory().path,
@@ -397,9 +408,16 @@ export function registerRecordingHub(
   );
   ipcMain.handle(
     IPC_CHANNELS.recordingFinalize,
-    async (_e, sessionId: string, meta: RecordingFinalizeMeta) => {
+    async (_e, sessionId: string, rendererMeta: RecordingFinalizeMeta) => {
       // The renderer never retries a finalize (it aborts), so the take ends here either way.
       markEnded(sessionId);
+      // Where the bubble sat, as main sees its window: the stop has not released the area yet
+      // (the renderer sends it after finalize), so the bubble is still where it was recorded.
+      const bubbleBounds = cameraBubble.visibleBounds();
+      const meta = withRecordedBubblePosition(
+        rendererMeta,
+        bubbleBounds && recordedRect ? bubbleCentreInRect(bubbleBounds, recordedRect) : null,
+      );
       let recording;
       try {
         recording = await writer.finalize(sessionId, meta);
@@ -699,6 +717,7 @@ export function registerRecordingHub(
     // recorded as part of the screen, inside the area. The shade sits under the bar and
     // the bubble; raising them once it shows covers Windows, which ignores window levels.
     const areaGlobal = area && areaDisplay ? areaToGlobal(area, areaDisplay.bounds) : null;
+    recordedRect = areaGlobal;
     // Place the bar on the screen being recorded (resolved from the source id), outside the
     // area when only part of it is recorded (design "Kaipu Record Modes").
     const includeInRecording = getAppSettings().showBarInRecording;
@@ -713,11 +732,12 @@ export function registerRecordingHub(
       // over a take that is already gone, nor act for it on a take started since.
       if (!activity.active || take !== takeCount) return;
       bar.show(displayId, { includeInRecording, anchor: areaGlobal });
-      if (area || wholeDisplayCountdown) return;
       const display =
         displayId === undefined
           ? undefined
           : screen.getAllDisplays().find((d) => String(d.id) === displayId);
+      if (!area && display) recordedRect = { ...display.bounds };
+      if (area || wholeDisplayCountdown) return;
       if (display && borderAllowed) shade.show(display, null, raiseFloating);
       // A lookup that failed (or a window) leaves no countdown dim behind.
       else shade.hide();

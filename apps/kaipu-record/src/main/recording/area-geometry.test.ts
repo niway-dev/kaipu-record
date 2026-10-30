@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   areaToGlobal,
   bubbleBoundsInArea,
+  bubbleCentreInRect,
   bubbleSizeOf,
   fullDisplayBorderAllowed,
   sanitizeArea,
@@ -121,5 +122,28 @@ describe("sanitizeArea — an area that crossed a process boundary", () => {
       sanitizeArea(area({ x: Number.NaN, y: 0, width: 640, height: 360 }), display),
     ).toBeNull();
     expect(sanitizeArea(area({ x: 1500, y: 0, width: 640, height: 360 }), display)).toBeNull();
+  });
+});
+
+describe("bubbleCentreInRect", () => {
+  const recorded = { x: 1512, y: 0, width: 1000, height: 500 };
+
+  it("normalizes the bubble window's centre to the recorded rectangle", () => {
+    // Bottom-left corner of the area: window 288 wide, 32 from the left, 32 from the bottom.
+    const window = { x: 1512 + 32, y: 500 - 32 - 288, width: 288, height: 288 };
+    expect(bubbleCentreInRect(window, recorded)).toEqual({ x: 0.176, y: 0.648 });
+  });
+
+  it("is null when the bubble's centre is outside the recorded rectangle (another display)", () => {
+    expect(bubbleCentreInRect({ x: 0, y: 0, width: 288, height: 288 }, recorded)).toBeNull();
+  });
+
+  it("is null for an empty recorded rectangle", () => {
+    expect(
+      bubbleCentreInRect(
+        { x: 0, y: 0, width: 10, height: 10 },
+        { x: 0, y: 0, width: 0, height: 0 },
+      ),
+    ).toBeNull();
   });
 });

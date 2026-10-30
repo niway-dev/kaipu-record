@@ -114,6 +114,25 @@ describe("sanitizeWebcamTrackMeta", () => {
     expect(meta?.recordedLayout).not.toHaveProperty("deviceId");
   });
 
+  it("keeps the bubble's recorded position clamped to 0..1, and drops a malformed one", () => {
+    const layout = { ...DEFAULT_CAMERA_BUBBLE };
+    expect(
+      sanitizeWebcamTrackMeta({
+        ...valid,
+        recordedLayout: { ...layout, position: { x: 0.2, y: 1.7 } },
+      })?.recordedLayout?.position,
+    ).toEqual({ x: 0.2, y: 1 });
+    expect(
+      sanitizeWebcamTrackMeta({
+        ...valid,
+        recordedLayout: { ...layout, position: { x: "a", y: 0.5 } },
+      })?.recordedLayout,
+    ).not.toHaveProperty("position");
+    expect(
+      sanitizeWebcamTrackMeta({ ...valid, recordedLayout: layout })?.recordedLayout,
+    ).not.toHaveProperty("position");
+  });
+
   it("ignores extra fields the renderer sent", () => {
     expect(sanitizeWebcamTrackMeta({ ...valid, path: "/etc/passwd" })).not.toHaveProperty("path");
   });

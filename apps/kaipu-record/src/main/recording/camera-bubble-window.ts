@@ -173,6 +173,14 @@ export class CameraBubbleWindow {
     if (this.isVisible()) this.window?.moveTop();
   }
 
+  /**
+   * The window's bounds (global DIP) while the bubble is on screen, else null: what the
+   * recording captured, for the take's recorded bubble position.
+   */
+  visibleBounds(): Rect | null {
+    return this.isVisible() ? (this.window?.getBounds() ?? null) : null;
+  }
+
   /** True while the bubble has an active (non-destroyed) window and is visible. */
   isVisible(): boolean {
     return Boolean(this.window && !this.window.isDestroyed() && this.window.isVisible());
