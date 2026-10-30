@@ -1513,7 +1513,7 @@ describe("recorder-store live settings", () => {
       await stopAndSettle();
     });
 
-    it("a camera turned on or off during the countdown acquires the take again", async () => {
+    it("a camera turned off during the countdown acquires the take again, without it", async () => {
       prepareEngineMock.mockImplementation(async () => fakePrepared());
       let resolves = 0;
       store.requestStartRecording(() => ({ ...input, webcam: resolves++ === 0 ? webcam : null }));
@@ -1521,6 +1521,20 @@ describe("recorder-store live settings", () => {
       expect(store.getRecorderSnapshot().status).toBe("recording");
       expect(prepareEngineMock).toHaveBeenCalledTimes(2);
       expect(prepareEngineMock.mock.calls.at(-1)![0].webcam).toBeNull();
+      await stopAndSettle();
+    });
+
+    it("a camera turned on during the countdown acquires the take again, with it", async () => {
+      prepareEngineMock.mockImplementation(async () => fakePrepared());
+      let resolves = 0;
+      store.requestStartRecording(() => ({ ...input, webcam: resolves++ === 0 ? null : webcam }));
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(store.getRecorderSnapshot().status).toBe("recording");
+      expect(prepareEngineMock).toHaveBeenCalledTimes(2);
+      expect(prepareEngineMock.mock.calls.at(-1)![0].webcam).toMatchObject({
+        deviceId: "cam-1",
+        lines: 720,
+      });
       await stopAndSettle();
     });
 

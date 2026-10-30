@@ -21,10 +21,10 @@ function parseArgs(argv: string[]): { id: string; vault: string } {
   let vault = DEFAULT_VAULT;
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--vault") vault = argv[++i];
+    if (argv[i] === "--vault") vault = argv[++i] ?? "";
     else positional.push(argv[i]);
   }
-  if (positional.length !== 1) {
+  if (positional.length !== 1 || !vault) {
     console.error("Usage: bun run webcam-track:check <recording-id> [--vault <dir>]");
     process.exit(2);
   }

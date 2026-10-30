@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 
 /**
- * The bubble is at most 480 DIP (960 px on a Retina screen) and is recorded as part of
- * the screen, so 480 lines is the ceiling worth asking for without framing; more would only
- * cost CPU. Framing asks for more lines (see `cameraCaptureLines`). The request is 16:9, the
+ * `DEFAULT_PREVIEW_LINES` is the hook's fallback. The bubble never asks for less than the
+ * webcam track records (`bubblePreviewLines`: at least 720, more with framing), because the
+ * camera is shared with the recorder. The request is 16:9, the
  * webcam track's shape: Chromium shares one capture per device, so a 4:3 preview would hold
  * the camera at 4:3 and the recorded webcam file could only be cut down from it (ADR 0032).
  * The bubble crops with `object-fit: cover`, so its shape is unchanged; on cameras that make

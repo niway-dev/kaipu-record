@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { LibraryVault } from "../library/library-vault";
 import { STAGING_DIR, moveFile, timestampId } from "./recording-writer";
 
-const PART_RE = /^kaipu-rec-(.+)\.mp4\.part$/;
+const PART_RE = /^kaipu-rec-.+\.mp4\.part$/;
 const WEBCAM_PART_RE = /^kaipu-rec-.+\.webcam\.mp4\.part$/;
 /** The webcam part staged beside a screen part of the same take (ADR 0032). */
 const webcamPartFor = (screenPart: string): string =>
