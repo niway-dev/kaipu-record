@@ -24,6 +24,7 @@ import { cleanupDragCopies, cleanupLegacyDragCopies } from "./library/drag-copie
 import { registerCloudStorageHandlers } from "./cloud";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
 import { registerRecordingHub, type RecordingHubHandle } from "./recording/recording-hub";
+import { onPageGone } from "./renderer-lifetime";
 import { recoverStrandedRecordings } from "./recording/stranded-recordings";
 import { proceedWhenRecordingStops } from "./recording/stop-guard";
 import { beginRecordTiming, markRecordTiming } from "./recording/record-timing";
@@ -408,6 +409,10 @@ function createWindow(showOnReady = true): void {
     // The renderer that owned the export is gone; nothing is left to cancel.
     endExport();
   });
+  // A plain reload drops the page mid-export without an `exportActive: false`: free the
+  // vault as the old page goes, not only once the new one mounts (`appReady`). The export's
+  // output take is the recording hub's to abort.
+  onPageGone(mainWindow.webContents, endExport);
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url);

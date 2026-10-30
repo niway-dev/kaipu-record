@@ -932,6 +932,61 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     expect(vaultActivity.active()).toEqual([]);
   });
 
+  it("a renderer reload aborts its takes and releases the vault, even with a create pending", async () => {
+    const { EventEmitter } = await import("node:events");
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    const { RecordingWriter } = await import("./recording-writer");
+    const { vaultActivity } = await import("../library/vault-activity");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+    const create = mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!;
+    const abort = vi.spyOn(RecordingWriter.prototype, "abort");
+    const renderer = Object.assign(new EventEmitter(), { id: 41 });
+    const event = { sender: renderer };
+    const reload = (): void => {
+      renderer.emit("did-start-navigation", { isMainFrame: true, isSameDocument: false });
+    };
+    try {
+      // An in-page route change is not a reload: the take keeps its lease.
+      await create(event, "take-1");
+      renderer.emit("did-start-navigation", { isMainFrame: true, isSameDocument: true });
+      renderer.emit("did-start-navigation", { isMainFrame: false, isSameDocument: false });
+      expect(vaultActivity.active()).toEqual(["recording"]);
+
+      // A plain reload (no crash, no close): nobody will finalize or abort this take.
+      reload();
+      await vi.waitFor(() => expect(vaultActivity.active()).toEqual([]));
+      expect(abort).toHaveBeenCalledWith("take-1");
+
+      // A reload while `writer.create()` is still opening the file.
+      let open!: () => void;
+      const realCreate = RecordingWriter.prototype.create;
+      const pending = vi
+        .spyOn(RecordingWriter.prototype, "create")
+        .mockImplementationOnce(async function (this: InstanceType<typeof RecordingWriter>, id) {
+          await new Promise<void>((resolve) => (open = resolve));
+          return realCreate.call(this, id);
+        });
+      const created = Promise.resolve(create(event, "export-2")).catch((error: unknown) => error);
+      await vi.waitFor(() => expect(open).toBeTypeOf("function"));
+      reload();
+      open();
+      expect(await created).toBeInstanceOf(Error);
+      await vi.waitFor(() => expect(vaultActivity.active()).toEqual([]));
+      expect(abort).toHaveBeenCalledWith("export-2");
+      pending.mockRestore();
+
+      // The reloaded page records again; its take holds the vault as usual.
+      await create(event, "take-1");
+      expect(vaultActivity.active()).toEqual(["recording"]);
+      renderer.emit("destroyed");
+      await vi.waitFor(() => expect(vaultActivity.active()).toEqual([]));
+    } finally {
+      abort.mockRestore();
+    }
+  });
+
   it("starts the region's TTL only once a recreated main window has loaded", async () => {
     vi.useFakeTimers();
     try {
