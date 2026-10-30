@@ -49,17 +49,17 @@ second `<video>` kept in step with the main one; the export worker decodes the w
 lockstep and draws it through the same composer the GIF export uses. The original `<id>.mp4`
 stays a screen-only video; every export and Share burns the layer in.
 
-| #   | Decision                                                                                                                                                                                                                                                                                                                                                                                        | Why                                                                                                                                                                                                                                                                                                                                            | ADR         |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| 1   | **The webcam is its own file**, `.kaipu/<id>.webcam.mp4`, H.264, no audio, encoded by the recorder renderer with a second mediabunny `Output` and written through a second `RecordingWriter` session; `recordingFinalize` moves it beside the screen file and records it on the sidecar.                                                                                                     | The screen file stays a universally playable video and the library, thumbnails and Share keep working unchanged; a second video track in one MP4 is invisible to every player we ship to and inflates the "original". Cap, Tella and Camtasia keep separate sources.                                                                            | 0032 (new)  |
-| 2   | **Sync is one clock plus a stored start offset.** Both `Output`s live in the same renderer; `waitForFirstMediaTimestamp` gives each file's time 0; `startOffsetMs = webcamT0 − screenT0` and its `quality` go on the sidecar. Pause and resume call both sources in the same breath, so no drift accumulates.                                                                                  | It is the model the cursor track already uses (`first-media-timestamp.ts`, `cursor-clock.ts`) and the model Cap uses (`start_time` per track against one epoch). Two recorders with two clocks cannot be aligned exactly (W3C thread, Sources).                                                                                                 | 0032        |
-| 3   | **The bubble is excluded from the capture, never hidden.** Plan A: `setContentProtection(true)` on the bubble **from creation**, always; the spike (task 0) proves it on the owner's Mac and on Windows. Plan B, only if the spike fails: a native ScreenCaptureKit capture behind the engine's source seam that excludes the bubble by window id, under the repo's native-dependencies rules. | The owner wants to see the framing while recording and the screen recorded correctly ("if Cap could, we can"). Electron's own `desktopCapturer` path carries a Chromium patch that passes in-process protected windows to `initWithDisplay:excludingWindows:` (Sources); the control bar and the shade already depend on it.                 | 0032        |
-| 4   | **Webcam capture: 1280×720 @ 30 fps**, 1080 lines only while framing is active (`cameraCaptureLines`), `avc`, ~2.5 Mbps, `prefer-hardware`, `realtime`. The file is **raw**: no mirror, no framing crop.                                                                                                                                                                                      | Cap's defaults; 720p covers a 480 DIP bubble on a Retina display. Mirror and framing become layout properties, so they stay editable and the preview still shows them.                                                                                                                                                                          | —           |
-| 5   | **The editor models the webcam as a viewport layer**: `scene.webcam = { layout, segments } \| null`, additive inside session `version: 1` like `zoomSegments`; `layout` is global, `segments` are source-anchored, sorted, non-overlapping, each `hidden` or an `override`. The position is a normalized centre in the **output** frame.                                                       | A viewport layer stays in its corner while the zoom moves — what every reference product does. Annotations are content-pinned and timeline-anchored; reusing them would zoom the face and lose it across cuts. Cap (`Camera` + style segments) and Tella (base layout + layout sections) use the same shape.                                   | 0033 (new)  |
-| 6   | **Composition order**: `frame → redactions → overlays → zoom crop → framing (fixed-canvas presets) → webcam layer`, in the shared `createOutputComposer`, so MP4 and GIF cannot diverge. The preview draws the layer in a third, untransformed slot above `.content` and below `chrome`.                                                                                                          | After the framer, a corner bubble is never cropped by Fill and is positioned against the real output. One composer is the v2 invariant that keeps privacy identical across exports; the webcam joins it rather than bypassing it.                                                                                                                | 0033        |
-| 7   | **Share composes the webcam at its recorded layout.** `WHOLE_RECORDING_FINGERPRINT` becomes `whole:<layout hash>` for recordings with a webcam, so an older "whole" export is not reused without the face.                                                                                                                                                                                       | Share means "what I recorded", and what the user saw while recording had the bubble. The original file is screen-only by decision 1, so the one export path without edits must add it back.                                                                                                                                                     | 0033        |
-| 8   | **The original stays screen-only** and nothing migrates: a recording without `webcam` on its sidecar opens, plays and exports exactly as today (its bubble is in the pixels). `remove` deletes the webcam file; `removeLocalCopy` is refused while one exists until the cloud carries it.                                                                                                      | ADR 0003: the original is never rewritten. Old recordings are already correct for what they are. The cloud transfer client is plan 03 and not built; the file must not be silently stranded.                                                                                                                                                    | 0032        |
-| 9   | **Task 0 is the exclusion spike**, run by the owner by hand, documented below with steps, pixels to check and the plan each outcome selects. It also settles the [terminal-line patch hypothesis](/backlog/bug-control-bar-hides-last-terminal-line/).                                                                                                                                         | Everything above the recorder depends on whether the bubble can stay on screen and out of the file. One day of evidence before five weeks of code.                                                                                                                                                                                              | —           |
+| #   | Decision                                                                                                                                                                                                                                                                                                                                                                                       | Why                                                                                                                                                                                                                                                                                                                          | ADR        |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 1   | **The webcam is its own file**, `.kaipu/<id>.webcam.mp4`, H.264, no audio, encoded by the recorder renderer with a second mediabunny `Output` and written through a second `RecordingWriter` session; `recordingFinalize` moves it beside the screen file and records it on the sidecar.                                                                                                       | The screen file stays a universally playable video and the library, thumbnails and Share keep working unchanged; a second video track in one MP4 is invisible to every player we ship to and inflates the "original". Cap, Tella and Camtasia keep separate sources.                                                         | 0032 (new) |
+| 2   | **Sync is one clock plus a stored start offset.** Both `Output`s live in the same renderer; `waitForFirstMediaTimestamp` gives each file's time 0; `startOffsetMs = webcamT0 − screenT0` and its `quality` go on the sidecar. Pause and resume call both sources in the same breath, so no drift accumulates.                                                                                  | It is the model the cursor track already uses (`first-media-timestamp.ts`, `cursor-clock.ts`) and the model Cap uses (`start_time` per track against one epoch). Two recorders with two clocks cannot be aligned exactly (W3C thread, Sources).                                                                              | 0032       |
+| 3   | **The bubble is excluded from the capture, never hidden.** Plan A: `setContentProtection(true)` on the bubble **from creation**, always; the spike (task 0) proves it on the owner's Mac and on Windows. Plan B, only if the spike fails: a native ScreenCaptureKit capture behind the engine's source seam that excludes the bubble by window id, under the repo's native-dependencies rules. | The owner wants to see the framing while recording and the screen recorded correctly ("if Cap could, we can"). Electron's own `desktopCapturer` path carries a Chromium patch that passes in-process protected windows to `initWithDisplay:excludingWindows:` (Sources); the control bar and the shade already depend on it. | 0032       |
+| 4   | **Webcam capture: 1280×720 @ 30 fps**, 1080 lines only while framing is active (`cameraCaptureLines`), `avc`, ~2.5 Mbps, `prefer-hardware`, `realtime`. The file is **raw**: no mirror, no framing crop.                                                                                                                                                                                       | Cap's defaults; 720p covers a 480 DIP bubble on a Retina display. Mirror and framing become layout properties, so they stay editable and the preview still shows them.                                                                                                                                                       | —          |
+| 5   | **The editor models the webcam as a viewport layer**: `scene.webcam = { layout, segments } \| null`, additive inside session `version: 1` like `zoomSegments`; `layout` is global, `segments` are source-anchored, sorted, non-overlapping, each `hidden` or an `override`. The position is a normalized centre in the **output** frame.                                                       | A viewport layer stays in its corner while the zoom moves — what every reference product does. Annotations are content-pinned and timeline-anchored; reusing them would zoom the face and lose it across cuts. Cap (`Camera` + style segments) and Tella (base layout + layout sections) use the same shape.                 | 0033 (new) |
+| 6   | **Composition order**: `frame → redactions → overlays → zoom crop → framing (fixed-canvas presets) → webcam layer`, in the shared `createOutputComposer`, so MP4 and GIF cannot diverge. The preview draws the layer in a third, untransformed slot above `.content` and below `chrome`.                                                                                                       | After the framer, a corner bubble is never cropped by Fill and is positioned against the real output. One composer is the v2 invariant that keeps privacy identical across exports; the webcam joins it rather than bypassing it.                                                                                            | 0033       |
+| 7   | **Share composes the webcam at its recorded layout.** `WHOLE_RECORDING_FINGERPRINT` becomes `whole:<layout hash>` for recordings with a webcam, so an older "whole" export is not reused without the face.                                                                                                                                                                                     | Share means "what I recorded", and what the user saw while recording had the bubble. The original file is screen-only by decision 1, so the one export path without edits must add it back.                                                                                                                                  | 0033       |
+| 8   | **The original stays screen-only** and nothing migrates: a recording without `webcam` on its sidecar opens, plays and exports exactly as today (its bubble is in the pixels). `remove` deletes the webcam file; `removeLocalCopy` is refused while one exists until the cloud carries it.                                                                                                      | ADR 0003: the original is never rewritten. Old recordings are already correct for what they are. The cloud transfer client is plan 03 and not built; the file must not be silently stranded.                                                                                                                                 | 0032       |
+| 9   | **Task 0 is the exclusion spike**, run by the owner by hand, documented below with steps, pixels to check and the plan each outcome selects. It also settles the [terminal-line patch hypothesis](/backlog/bug-control-bar-hides-last-terminal-line/).                                                                                                                                         | Everything above the recorder depends on whether the bubble can stay on screen and out of the file. One day of evidence before five weeks of code.                                                                                                                                                                           | —          |
 
 ### Open questions
 
@@ -117,7 +117,8 @@ Input for tests; each line is at least one test.
    hardware and the QA sheet repeats it on every release that touches capture.
 2. The bubble leaves a blank or black patch where it stood → task 0's pixel check (content
    underneath visible); on Windows before 10 2004 the same rule as `fullDisplayBorderAllowed`
-   selects Plan B's fallback behaviour, never a black square.
+   keeps the legacy path there: the bubble stays unprotected and burned into the screen as
+   today, no webcam track is recorded, and no take shows a black square.
 3. The webcam file and the screen file disagree by more than one frame at start → the offset
    is read from mediabunny's first-media timestamp for both outputs (`exact`), the fallback is
    logged as `estimated`, and `webcam-track:check` prints both; a unit test fails if the private
@@ -149,7 +150,7 @@ Input for tests; each line is at least one test.
     without the face; nothing throws. A new build opens an old session → `webcam` absent, the
     sidecar decides.
 13. The preview's two `<video>` elements drift → the frame clock re-seeks the webcam element
-    when `|webcam.currentTime − (t + offset)| > 80 ms`; a test on the pure drift rule.
+    when `|webcam.currentTime − (t − offset)| > 80 ms`; a test on the pure drift rule.
 14. Mirror or framing from the record-time settings are lost or applied twice → the webcam file
     is raw (engine test: no CSS transform reaches the encoder); the layout seeded from the
     sidecar carries `mirrored` and `framing`; the composer applies them once.
@@ -185,7 +186,7 @@ Input for tests; each line is at least one test.
 `recorder-engine.ts` (`prepareEngine`) gains `webcam?: { deviceId: string | null; lines: number } | null`
 in `EngineOptions`. When set:
 
-- A `getUserMedia({ video: { deviceId | facingMode: "user", width: { ideal: lines * 4/3 }, height: { ideal: lines } }, audio: false })`
+- A `getUserMedia({ video: { deviceId | facingMode: "user", width: { ideal: lines * 16/9 }, height: { ideal: lines } }, audio: false })`
   request opens beside the screen and the mic requests (same pattern as `micRequest`: in parallel,
   released by `releaseMicOnFailure` on a failed start). A webcam that cannot be opened does not
   fail the take: the take records without a webcam and the renderer reports it as the mic does
@@ -293,7 +294,8 @@ flip from "deliberately NOT content-protected" to the opposite, with this spec a
 Windows: `WDA_EXCLUDEFROMCAPTURE` removes the window from capture on Windows 10 2004 and later;
 before that the window is captured as black. The existing `fullDisplayBorderAllowed(platform,
 release)` rule already encodes that threshold; the bubble reuses it to decide "Plan A works
-here".
+here". Where it does not (before 10 2004) the take keeps the legacy path: the bubble stays
+unprotected and burned into the screen, and no webcam track is recorded. Plan B is macOS-only.
 
 ### 3.3 Plan B — native ScreenCaptureKit capture that excludes the bubble
 
@@ -342,15 +344,15 @@ Setup, once per machine:
 
 Matrix — one 5 s take each, stop, open the file in the library player and in QuickTime:
 
-| #   | Machine        | Target                             | Bubble state                  |
-| --- | -------------- | ---------------------------------- | ----------------------------- |
-| 1   | owner's Mac    | display                            | on before the take            |
-| 2   | owner's Mac    | area containing the bubble         | on before the take            |
-| 3   | owner's Mac    | window (the terminal)              | on before the take, over it   |
-| 4   | owner's Mac    | display                            | turned on 2 s into the take   |
-| 5   | owner's Mac    | display                            | moved during the take         |
-| 6   | Windows (beta) | display                            | on before the take            |
-| 7   | Windows (beta) | area containing the bubble         | on before the take            |
+| #   | Machine        | Target                     | Bubble state                |
+| --- | -------------- | -------------------------- | --------------------------- |
+| 1   | owner's Mac    | display                    | on before the take          |
+| 2   | owner's Mac    | area containing the bubble | on before the take          |
+| 3   | owner's Mac    | window (the terminal)      | on before the take, over it |
+| 4   | owner's Mac    | display                    | turned on 2 s into the take |
+| 5   | owner's Mac    | display                    | moved during the take       |
+| 6   | Windows (beta) | display                    | on before the take          |
+| 7   | Windows (beta) | area containing the bubble | on before the take          |
 
 What to check in each file, at the bubble's place and at the control bar's place:
 
@@ -366,13 +368,13 @@ assumption that a window capture never includes the bubble.
 
 Outcome → plan:
 
-| Outcome                                                              | Plan                                                                                                                                                                                                         |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| All Mac rows pass                                                    | Plan A. Windows rows decide only whether the Windows beta needs the 10 2004 gate (it already exists).                                                                                                        |
-| Rows 1–3 pass, row 4 fails (captured)                                | Plan A, with "protected from creation" as the rule (section 3.2) and a note that a bubble created mid-take may need the capture restarted; measure that cost before shipping.                                |
-| Any Mac row shows a **patch**                                        | Plan B (section 3.3). Also confirms the terminal-line hypothesis: write the result on that backlog page and move the bar off the content line as its fix option 1 suggests.                                  |
-| Any Mac row shows the bubble **captured** with protection on         | Plan B. Also records that content protection no longer excludes in-process windows on that macOS version; the shade and the bar need the same native path or a redesign.                                     |
-| Row 3 shows the bubble captured while rows 1–2 pass                  | Plan A for display and area; window targets route the capture through the display path with a crop (what Cap does when the target is an excluded window) in a follow-up ticket.                              |
+| Outcome                                                      | Plan                                                                                                                                                                            |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| All Mac rows pass                                            | Plan A. Windows rows decide only whether the Windows beta needs the 10 2004 gate (it already exists).                                                                           |
+| Rows 1–3 pass, row 4 fails (captured)                        | Plan A, with "protected from creation" as the rule (section 3.2) and a note that a bubble created mid-take may need the capture restarted; measure that cost before shipping.   |
+| Any Mac row shows a **patch**                                | Plan B (section 3.3). Also confirms the terminal-line hypothesis: write the result on that backlog page and move the bar off the content line as its fix option 1 suggests.     |
+| Any Mac row shows the bubble **captured** with protection on | Plan B. Also records that content protection no longer excludes in-process windows on that macOS version; the shade and the bar need the same native path or a redesign.        |
+| Row 3 shows the bubble captured while rows 1–2 pass          | Plan A for display and area; window targets route the capture through the display path with a crop (what Cap does when the target is an excluded window) in a follow-up ticket. |
 
 Close the terminal-line hypothesis either way: a pass at the bar's place disproves it (the bug
 is elsewhere, reopen with a fresh repro); a patch confirms it.
@@ -454,10 +456,10 @@ camera path, chrome is not; the webcam is a third kind, untransformed and above 
 positioned by `webcamAt` from the frame clock, with `clip-path` for the shape, `transform` for
 mirror and framing, and a drop shadow when `shadow`. Sync with the main video:
 
-- On seek: `webcam.currentTime = t + offset` (clamped to the webcam's duration).
+- On seek: `webcam.currentTime = t − offset` (clamped to the webcam's duration).
 - On play/pause: mirror the main element.
 - Each `requestVideoFrameCallback` of the main video (`useVideoFrameClock`): if
-  `|webcam.currentTime − (t + offset)| > 0.08`, re-seek. The rule is a pure function with a test.
+  `|webcam.currentTime − (t − offset)| > 0.08`, re-seek. The rule is a pure function with a test.
 - While the playhead is before the webcam's first frame or after its last, the element is hidden.
 - The zoom-edit view (a zoom selected) still draws the layer at its viewport position so the
   user sees what the zoom will not cover. "Hold to see original" hides it (open question 2).
@@ -514,17 +516,17 @@ exactly as today.
 
 ## 9. Size estimate
 
-| Area                 | Changes                                                                                                                                                                | Effort           |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| Task 0 spike         | `setContentProtection(true)` on the bubble + test; the owner's matrix; write-up on both backlog pages                                                                     | 1 day + owner QA |
-| Recorder             | `recorder-engine.ts` (webcam stream, second output, offsets, pause/stop order), `recorder-store.ts` (second session), `recording-writer.ts` (kind, finalize, salvage), hub | 3–5 days         |
-| Bubble               | Protection from creation, raise order, preview constraints decoupled from the recording's, Windows gate                                                                 | 1–2 days         |
-| Vault / library      | Sidecar `webcam`, `LocalRecording.webcam`, protocol route, remove/rename/removeLocalCopy, probe, IPC contract doc                                                       | 1–2 days         |
-| Editor model         | `scene.ts`, `session.ts`, `use-video-scene.ts`, seeding, `webcam-layout.ts`, `src/shared/webcam-track.ts`                                                              | 2–3 days         |
-| Preview + UI         | `WebcamLayer`, sync rule, drag/resize, inspector section, Webcam lane, toolbar action                                                                                   | 4–6 days         |
-| Export               | Plan, messages, runner, both workers, composer, framer placement, Share fingerprint                                                                                      | 3–5 days         |
-| Docs                 | This spec's status, ADR statuses, hub media-pipeline page, QA sheet, changelog                                                                                          | 1–2 days         |
-| **Total**            |                                                                                                                                                                        | **16–25 days**   |
+| Area            | Changes                                                                                                                                                                    | Effort           |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| Task 0 spike    | `setContentProtection(true)` on the bubble + test; the owner's matrix; write-up on both backlog pages                                                                      | 1 day + owner QA |
+| Recorder        | `recorder-engine.ts` (webcam stream, second output, offsets, pause/stop order), `recorder-store.ts` (second session), `recording-writer.ts` (kind, finalize, salvage), hub | 3–5 days         |
+| Bubble          | Protection from creation, raise order, preview constraints decoupled from the recording's, Windows gate                                                                    | 1–2 days         |
+| Vault / library | Sidecar `webcam`, `LocalRecording.webcam`, protocol route, remove/rename/removeLocalCopy, probe, IPC contract doc                                                          | 1–2 days         |
+| Editor model    | `scene.ts`, `session.ts`, `use-video-scene.ts`, seeding, `webcam-layout.ts`, `src/shared/webcam-track.ts`                                                                  | 2–3 days         |
+| Preview + UI    | `WebcamLayer`, sync rule, drag/resize, inspector section, Webcam lane, toolbar action                                                                                      | 4–6 days         |
+| Export          | Plan, messages, runner, both workers, composer, framer placement, Share fingerprint                                                                                        | 3–5 days         |
+| Docs            | This spec's status, ADR statuses, hub media-pipeline page, QA sheet, changelog                                                                                             | 1–2 days         |
+| **Total**       |                                                                                                                                                                            | **16–25 days**   |
 
 Plan B adds a native module (macOS only): 5–8 days plus the rebuild/stamp plumbing, and its own
 ticket.
@@ -600,7 +602,7 @@ Platform:
   (in-process `NSWindowSharingNone` windows → `initWithDisplay:excludingWindows:`; protected
   before the stream starts); [electron/electron#48258](https://github.com/electron/electron/issues/48258)
   (third-party capture, closed "not planned").
-- Apple — [`SCContentFilter.init(display:excludingWindows:)`](https://developer.apple.com/documentation/screencapturekit/sccontentfilter/init(display:excludingwindows:)).
+- Apple — [`SCContentFilter.init(display:excludingWindows:)`](<https://developer.apple.com/documentation/screencapturekit/sccontentfilter/init(display:excludingwindows:)>).
 - Electron on macOS 14.4+: [PR #41397 commit](https://ayakael.net/mirrors/electron/commit/ddd93529d59002288699c5fc16be4843265e7f89)
   (`ScreenCaptureKitPickerScreen`, `ScreenCaptureKitStreamPickerSonoma`).
 - Sync — W3C webrtc list: [separate MediaRecorders cannot be aligned exactly](https://lists.w3.org/Archives/Public/public-webrtc-logs/2021Dec/0029.html);
