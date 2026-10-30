@@ -116,6 +116,16 @@ export interface AllocateInput {
   stem?: string;
 }
 
+/**
+ * What a rename acts on: the id the caller last saw **and** the identity it expects there.
+ * A bare id is never enough — a toast's Retry can outlive a move, and another item may
+ * have taken that name since.
+ */
+export interface RenameTarget {
+  id: string;
+  assetId: string;
+}
+
 export interface RenameOptions {
   /** True while an export may be streaming the file: the file then keeps its name ("busy"). */
   isBusy?: () => boolean;
@@ -361,11 +371,19 @@ export class LibraryVault {
    * Throws `ItemNotFoundError` for an id without media, or when even the title cannot
    * be written. Every other failure resolves with `file: "kept-old-name"`.
    */
-  async renameItem(id: string, title: string, options: RenameOptions = {}): Promise<RenameResult> {
-    if (!isPlainItemId(id)) throw new ItemNotFoundError(id);
-    const oldSidecar = this.sidecarPath(id);
-    return withLock(NAMES_LOCK, () =>
-      withLock(oldSidecar, async () => {
+  async renameItem(
+    target: RenameTarget,
+    title: string,
+    options: RenameOptions = {},
+  ): Promise<RenameResult> {
+    if (!isPlainItemId(target.id) || !target.assetId) throw new ItemNotFoundError(target.id);
+    return withLock(NAMES_LOCK, async () => {
+      // The item by identity, under the names lock: `target.id` when it still holds
+      // `target.assetId`, else wherever that identity lives now (it moved since the caller
+      // looked). Never whatever item holds the name now.
+      const id = await this.resolveTarget(target);
+      const oldSidecar = this.sidecarPath(id);
+      return withLock(oldSidecar, async () => {
         const oldMedia = await this.mediaPath(id);
         if (!oldMedia) throw new ItemNotFoundError(id);
 
@@ -455,8 +473,21 @@ export class LibraryVault {
         const recording = await this.describe(newId);
         if (!recording) throw new ItemNotFoundError(newId);
         return { recording, file: "renamed" };
-      }),
-    );
+      });
+    });
+  }
+
+  /** The id `target.assetId` lives under now, or ItemNotFoundError. Caller holds NAMES_LOCK. */
+  private async resolveTarget(target: RenameTarget): Promise<string> {
+    if (
+      (await this.hasMedia(target.id)) &&
+      (await this.sidecar(target.id)).assetId === target.assetId
+    ) {
+      return target.id;
+    }
+    const item = (await this.list()).find((candidate) => candidate.assetId === target.assetId);
+    if (!item) throw new ItemNotFoundError(target.id);
+    return item.id;
   }
 
   /**

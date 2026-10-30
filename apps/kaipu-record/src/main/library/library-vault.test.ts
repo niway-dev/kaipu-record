@@ -6,6 +6,20 @@ import { defaultCaptureName } from "@shared/default-capture-name";
 import { parseMediaUrl } from "@shared/media-url";
 import { LibraryVault, humanizeId } from "./library-vault";
 
+/** Rename by the id a caller saw, with the identity it holds there (as the IPC does). */
+async function renameById(
+  v: LibraryVault,
+  id: string,
+  title: string,
+  options?: Parameters<LibraryVault["renameItem"]>[2],
+) {
+  return v.renameItem(
+    { id, assetId: (await v.describe(id))?.assetId ?? "missing" },
+    title,
+    options,
+  );
+}
+
 describe("LibraryVault", () => {
   let directory: string;
   let vault: LibraryVault;
@@ -322,7 +336,7 @@ describe("LibraryVault", () => {
     await writeRecording("race");
     const [described, renamed] = await Promise.all([
       vault.describe("race"),
-      new LibraryVault(directory).renameItem("race", "Mine"),
+      renameById(new LibraryVault(directory), "race", "Mine"),
     ]);
     const sidecar = JSON.parse(await readFile(join(directory, ".kaipu", "Mine.json"), "utf-8"));
     expect(sidecar.title).toBe("Mine");

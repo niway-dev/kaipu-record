@@ -201,7 +201,11 @@ describe("ScreenshotEditorPage — rename moves the file (NIW2-560)", () => {
     const { router } = mount(PASTE);
     await saveThenRename("Sprint demo");
     await waitFor(() =>
-      expect(window.electronAPI.renameLocalRecording).toHaveBeenCalledWith("s1", "Sprint demo"),
+      expect(window.electronAPI.renameLocalRecording).toHaveBeenCalledWith(
+        "s1",
+        "a-s1",
+        "Sprint demo",
+      ),
     );
     // An edit and a leave while the file is still moving: the autosave must wait for it.
     editPadding();
@@ -220,7 +224,7 @@ describe("ScreenshotEditorPage — rename moves the file (NIW2-560)", () => {
   });
 
   it("shows a Retry toast when the file kept its old name, and retries on the same id", async () => {
-    const rename = vi.fn(async (id: string, title: string) =>
+    const rename = vi.fn(async (id: string, _assetId: string, title: string) =>
       renameResult(id, title, "kept-old-name", "locked"),
     );
     window.electronAPI.renameLocalRecording = rename as never;
@@ -232,7 +236,7 @@ describe("ScreenshotEditorPage — rename moves the file (NIW2-560)", () => {
 
     await act(async () => toast!.action!.onClick());
     await waitFor(() => expect(rename).toHaveBeenCalledTimes(2));
-    expect(rename).toHaveBeenLastCalledWith("s1", "Locked");
+    expect(rename).toHaveBeenLastCalledWith("s1", "a-s1", "Locked");
   });
 
   it("a reopened vault screenshot renamed before any read still saves its edits", async () => {
@@ -242,10 +246,12 @@ describe("ScreenshotEditorPage — rename moves the file (NIW2-560)", () => {
       if (id !== currentId) throw new Error(`ENOENT: ${id}.png`);
       return new Uint8Array([9, 9]).buffer;
     });
-    window.electronAPI.renameLocalRecording = vi.fn(async (_id: string, title: string) => {
-      currentId = "Renamed";
-      return renameResult("Renamed", title);
-    }) as never;
+    window.electronAPI.renameLocalRecording = vi.fn(
+      async (_id: string, _assetId: string, title: string) => {
+        currentId = "Renamed";
+        return renameResult("Renamed", title);
+      },
+    ) as never;
     window.electronAPI.saveScreenshot = vi.fn(async () => saved("Renamed", "Renamed")) as never;
     const LOCAL: ImageSource = { kind: "local", id: "shot", assetId: "a-shot", title: "shot" };
     const { router } = mount(LOCAL);

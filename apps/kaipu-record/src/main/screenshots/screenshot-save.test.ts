@@ -95,7 +95,7 @@ describe("saveScreenshotToVault", () => {
     let renamed: Promise<unknown> | null = null;
     vi.spyOn(vault, "writeImage").mockImplementation(async (id, png) => {
       // The user renames the shot just as the overwrite is about to write.
-      renamed ??= new LibraryVault(directory).renameItem(saved.id, "New shot");
+      renamed ??= new LibraryVault(directory).renameItem(saved, "New shot");
       await Promise.race([renamed, new Promise((r) => setTimeout(r, 100))]);
       return writeImage(id, png);
     });
@@ -113,7 +113,7 @@ describe("saveScreenshotToVault", () => {
 
   it("follows the item to its new id when it was renamed before the overwrite", async () => {
     const saved = await saveScreenshotToVault(Buffer.from("one"), { title: "shot" });
-    await vault.renameItem(saved.id, "New shot");
+    await vault.renameItem(saved, "New shot");
     const result = await saveScreenshotToVault(Buffer.from("edit"), {
       title: "New shot",
       overwriteId: saved.id,
@@ -126,7 +126,7 @@ describe("saveScreenshotToVault", () => {
 
   it("does not overwrite another item that took the old name", async () => {
     const first = await saveScreenshotToVault(Buffer.from("one"), { title: "shot" });
-    await vault.renameItem(first.id, "Moved");
+    await vault.renameItem(first, "Moved");
     const other = await saveScreenshotToVault(Buffer.from("other"), { title: "shot" });
     expect(other.id).toBe(first.id); // the stem was free again
     const result = await saveScreenshotToVault(Buffer.from("edit"), {
@@ -142,7 +142,7 @@ describe("saveScreenshotToVault", () => {
     // Rename A Shot → Moved, then B takes "Shot": an identity-less overwrite of "Shot"
     // would write A's edits over B.
     const a = await saveScreenshotToVault(Buffer.from("A"), { title: "Shot" });
-    await vault.renameItem(a.id, "Moved");
+    await vault.renameItem(a, "Moved");
     const b = await saveScreenshotToVault(Buffer.from("B"), { title: "Shot" });
     expect(b.id).toBe("Shot");
     await expect(

@@ -131,11 +131,11 @@ window.electronAPI = {
   moveCameraBubble: () => {},
   listLocalRecordings: async () => [],
   // Echoes the title back with the file untouched; tests that care about the move override it.
-  renameLocalRecording: async (id, title) => ({
+  renameLocalRecording: async (id, assetId, title) => ({
     file: "unchanged" as const,
     recording: {
       id,
-      assetId: id,
+      assetId,
       kind: "recording" as const,
       title,
       filePath: `/vault/${id}.mp4`,

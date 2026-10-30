@@ -658,10 +658,12 @@ describe("LibraryDetailPage — Recording saved card (NIW2-218)", () => {
         catalogVerifiedAt: null,
       });
     }) as never;
-    window.electronAPI.renameLocalRecording = vi.fn(async (_id: string, title: string) => ({
-      file: "renamed" as const,
-      recording: { ...renamedItem.local!, title },
-    })) as never;
+    window.electronAPI.renameLocalRecording = vi.fn(
+      async (_id: string, _assetId: string, title: string) => ({
+        file: "renamed" as const,
+        recording: { ...renamedItem.local!, title },
+      }),
+    ) as never;
     renderDetail("asset-b");
     await waitForLoaded();
     const player = document.querySelector("video")!;
@@ -671,7 +673,13 @@ describe("LibraryDetailPage — Recording saved card (NIW2-218)", () => {
     const input = document.activeElement as HTMLInputElement;
     fireEvent.change(input, { target: { value: "Sprint demo" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() => expect(window.electronAPI.renameLocalRecording).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(window.electronAPI.renameLocalRecording).toHaveBeenCalledWith(
+        "local-b",
+        "asset-b",
+        "Sprint demo",
+      ),
+    );
     // Main broadcasts library:changed after the move; the re-list is still in flight.
     await act(async () => listeners.forEach((listener) => listener()));
     expect(window.electronAPI.listLibraryItems).toHaveBeenCalledTimes(2);

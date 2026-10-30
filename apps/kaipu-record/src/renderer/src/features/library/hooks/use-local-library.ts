@@ -23,7 +23,8 @@ export interface LocalLibrary {
   refresh(): Promise<void>;
   /** Ask main to re-confirm the cloud catalog against the server now. */
   refreshCloud(): Promise<CatalogRefreshResult>;
-  rename(id: string, title: string): Promise<void>;
+  /** Rename by id **and** identity: main follows the item if it moved, never renames another. */
+  rename(id: string, assetId: string, title: string): Promise<void>;
   /** Replace a local item's tags by id (main drops unknown ids before writing). */
   setTags(id: string, tagIds: readonly string[]): Promise<void>;
   remove(id: string): Promise<void>;
@@ -73,9 +74,9 @@ export function useLocalLibrary(): LocalLibrary {
   // NIW2-560: the file follows the title, so the item's id can change. Patched by
   // assetId (the identity), not by the old id; main also broadcasts `library:changed`.
   const rename = useCallback(
-    async (id: string, title: string): Promise<void> => {
+    async (id: string, assetId: string, title: string): Promise<void> => {
       try {
-        const result = await window.electronAPI.renameLocalRecording(id, title);
+        const result = await window.electronAPI.renameLocalRecording(id, assetId, title);
         const { recording } = result;
         setVideos((prev) =>
           prev.map((video) =>
@@ -92,7 +93,7 @@ export function useLocalLibrary(): LocalLibrary {
         // Retry goes straight to main with the same title: it is already saved, so the
         // "title changed" check of the rename field would skip it.
         notifyRenameOutcome(result, { library: t, common: tCommon }, () => {
-          void rename(recording.id, recording.title);
+          void rename(recording.id, recording.assetId, recording.title);
         });
       } catch (error) {
         // A double commit, or the item vanished: the list is stale, not the user's action.

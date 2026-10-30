@@ -127,10 +127,14 @@ export function registerLibraryVaultHandlers(deps: {
   // protocol for minutes, so while one runs the file keeps its name (the title is saved).
   ipcMain.handle(
     IPC_CHANNELS.renameLocalRecording,
-    async (_event, id: unknown, title: unknown): Promise<RenameResult> => {
+    async (_event, id: unknown, assetId: unknown, title: unknown): Promise<RenameResult> => {
       if (typeof id !== "string" || !isPlainItemId(id)) throw new Error("rename: invalid id");
+      // Never a bare id: the item is resolved by identity under the names lock.
+      if (typeof assetId !== "string" || assetId.length === 0) {
+        throw new Error("rename: invalid assetId");
+      }
       if (typeof title !== "string") throw new Error("rename: invalid title");
-      const result = await currentVault().renameItem(id, title.trim(), {
+      const result = await currentVault().renameItem({ id, assetId }, title.trim(), {
         isBusy: deps.isExportActive,
         isEditing: (itemId, assetId) => editorSessions.isOpen(itemId, assetId),
       });

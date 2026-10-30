@@ -222,10 +222,12 @@ export interface KaipuElectronAPI {
    * Rename a local item (NIW2-560, ADR 0032): saves the title and moves the file (and its
    * sidecars) to a name derived from it. `recording.id` is the id to use from now on.
    * `file` says what happened to the file; "kept-old-name" is not an error — the title
-   * was saved. Rejects for an unknown id (message carries `ITEM_NOT_FOUND_MARKER`) or
-   * when the title itself cannot be written.
+   * was saved. `assetId` is required: main resolves the item by it under the names lock,
+   * following it if it moved since `id` was read and never touching another item that took
+   * that name. Rejects when no item has `assetId` (message carries `ITEM_NOT_FOUND_MARKER`)
+   * or when the title itself cannot be written.
    */
-  renameLocalRecording(id: string, title: string): Promise<RenameResult>;
+  renameLocalRecording(id: string, assetId: string, title: string): Promise<RenameResult>;
   /** Stamp a vault item as opened in an editor now (orders the Editor home). */
   markOpenedInEditor(id: string): Promise<void>;
   /**

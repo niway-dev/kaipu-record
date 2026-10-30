@@ -70,8 +70,8 @@ const kaipuApi: KaipuElectronAPI = {
   beginCameraBubbleMove: () => ipcRenderer.send(IPC_CHANNELS.cameraBubbleMoveStart),
   moveCameraBubble: (dx, dy) => ipcRenderer.send(IPC_CHANNELS.cameraBubbleMove, dx, dy),
   listLocalRecordings: () => ipcRenderer.invoke(IPC_CHANNELS.listLocalRecordings),
-  renameLocalRecording: (id, title) =>
-    ipcRenderer.invoke(IPC_CHANNELS.renameLocalRecording, id, title),
+  renameLocalRecording: (id, assetId, title) =>
+    ipcRenderer.invoke(IPC_CHANNELS.renameLocalRecording, id, assetId, title),
   markOpenedInEditor: (id) => ipcRenderer.invoke(IPC_CHANNELS.markOpenedInEditor, id),
   acquireEditorSession: (assetId) => ipcRenderer.invoke(IPC_CHANNELS.editorSessionAcquire, assetId),
   closeEditorSession: (id) => ipcRenderer.send(IPC_CHANNELS.editorSessionClose, id),

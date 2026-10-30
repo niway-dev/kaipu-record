@@ -8,6 +8,8 @@ import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 
 vi.mock("@renderer/features/analytics", () => ({ reportError: vi.fn() }));
 
+const ASSET_A = "00000000-0000-0000-0000-000000000001";
+
 function localItem(
   over: Partial<LibraryItem> & { assetId: string; local: NonNullable<LibraryItem["local"]> },
 ): LibraryItem {
@@ -108,10 +110,12 @@ describe("useLocalLibrary", () => {
       catalogVerifiedAt: null,
     }));
     window.electronAPI.deleteLocalRecording = vi.fn(async () => {});
-    window.electronAPI.renameLocalRecording = vi.fn(async (id: string, title: string) => ({
-      file: "unchanged" as const,
-      recording: { ...items[0]!.local!, id, title },
-    }));
+    window.electronAPI.renameLocalRecording = vi.fn(
+      async (id: string, _assetId: string, title: string) => ({
+        file: "unchanged" as const,
+        recording: { ...items[0]!.local!, id, title },
+      }),
+    );
     window.electronAPI.removeLocalCopy = vi.fn(async () => ({ ok: true as const }));
     window.electronAPI.onLibraryChanged = () => () => {};
   });
@@ -194,7 +198,7 @@ describe("useLocalLibrary", () => {
     await waitFor(() => expect(result.current.videos).toHaveLength(2));
 
     await act(async () => {
-      await result.current.rename("a", "New");
+      await result.current.rename("a", ASSET_A, "New");
     });
 
     expect(reportError).toHaveBeenCalledWith(
@@ -205,20 +209,22 @@ describe("useLocalLibrary", () => {
   });
 
   it("patches the renamed item by assetId with its new id, title and thumbnail", async () => {
-    window.electronAPI.renameLocalRecording = vi.fn(async (_id: string, title: string) => ({
-      file: "renamed" as const,
-      recording: {
-        ...items[0]!.local!,
-        id: "Sprint demo",
-        title,
-        thumbnailUrl: "kaipu-media://thumb/Sprint demo",
-      },
-    }));
+    window.electronAPI.renameLocalRecording = vi.fn(
+      async (_id: string, _assetId: string, title: string) => ({
+        file: "renamed" as const,
+        recording: {
+          ...items[0]!.local!,
+          id: "Sprint demo",
+          title,
+          thumbnailUrl: "kaipu-media://thumb/Sprint demo",
+        },
+      }),
+    );
     const { result } = renderHook(() => useLocalLibrary());
     await waitFor(() => expect(result.current.videos).toHaveLength(2));
 
     await act(async () => {
-      await result.current.rename("a", "Sprint demo");
+      await result.current.rename("a", ASSET_A, "Sprint demo");
     });
 
     expect(result.current.videos[0]).toMatchObject({
@@ -232,7 +238,7 @@ describe("useLocalLibrary", () => {
   });
 
   it("shows a toast with Retry when the file kept its old name, and retries with the same title", async () => {
-    const rename = vi.fn(async (id: string, title: string) => ({
+    const rename = vi.fn(async (id: string, _assetId: string, title: string) => ({
       file: "kept-old-name" as const,
       reason: "locked" as const,
       recording: { ...items[0]!.local!, id, title },
@@ -242,7 +248,7 @@ describe("useLocalLibrary", () => {
     await waitFor(() => expect(result.current.videos).toHaveLength(2));
 
     await act(async () => {
-      await result.current.rename("a", "Locked name");
+      await result.current.rename("a", ASSET_A, "Locked name");
     });
 
     // The title is saved either way; the file kept its name.
@@ -254,7 +260,8 @@ describe("useLocalLibrary", () => {
 
     rename.mockClear();
     await act(async () => toast!.action!.onClick());
-    expect(rename).toHaveBeenCalledWith("a", "Locked name");
+    // Retry names the item by identity too, so it follows the item if it moved meanwhile.
+    expect(rename).toHaveBeenCalledWith("a", ASSET_A, "Locked name");
     for (const t of getToasts()) dismissToast(t.id);
   });
 
@@ -267,7 +274,7 @@ describe("useLocalLibrary", () => {
     expect(window.electronAPI.listLibraryItems).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      await result.current.rename("a", "Again");
+      await result.current.rename("a", ASSET_A, "Again");
     });
 
     expect(reportError).not.toHaveBeenCalled();

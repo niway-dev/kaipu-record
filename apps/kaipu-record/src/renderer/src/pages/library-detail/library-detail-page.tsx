@@ -260,7 +260,7 @@ export function LibraryDetailPage(): React.JSX.Element {
           <RecordingTitle
             title={video.title}
             onRename={(title) => {
-              if (localId) void rename(localId, title);
+              if (localId) void rename(localId, video.assetId, title);
             }}
           />
           {localId && (

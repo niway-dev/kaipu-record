@@ -164,6 +164,7 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
   const renameSaved = (next: string): Promise<void> =>
     enqueue(async () => {
       const id = savedIdRef.current;
+      const assetId = savedAssetIdRef.current;
       if (!id || !alive.current) return;
       try {
         // A reopened vault shot reads its original bytes lazily, by the id it opened
@@ -171,7 +172,9 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
         // that id names nothing, and the next save would fail.
         // Best effort: an unreadable file must not block the title.
         if (image) await image.getBytes().catch(() => {});
-        const result = await window.electronAPI.renameLocalRecording(id, next);
+        // The identity rides along: main renames the item it names, wherever it lives now.
+        if (!assetId) throw new Error("rename: the saved shot has no assetId");
+        const result = await window.electronAPI.renameLocalRecording(id, assetId, next);
         const newId = result.recording.id;
         savedIdRef.current = newId;
         savedAssetIdRef.current = result.recording.assetId;
