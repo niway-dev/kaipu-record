@@ -9,7 +9,7 @@ import {
   Leaf,
   Pencil,
   Scissors,
-  Share2,
+  Send,
   Trash2,
 } from "lucide-react";
 import { canOpenInEditor, useOpenInEditor } from "@renderer/features/editor/open-in-editor";
@@ -31,7 +31,11 @@ import {
 import { formatMB, isHeavyToSend } from "@renderer/features/video-editor/export/export-size";
 import { useExportRunner } from "@renderer/features/video-editor/export/export-runner";
 import type { DestinationId } from "@renderer/features/prepare/destinations";
-import { DestinationLogo } from "@renderer/features/prepare/components/destination-logo";
+import {
+  MasterCopiesPanel,
+  runningCopyOf,
+} from "@renderer/features/prepare/components/master-copies-panel";
+import { WhereIsThisGoingStrip } from "@renderer/features/prepare/components/where-is-this-going-strip";
 import { WhereIsItGoingPanel } from "@renderer/features/prepare/components/where-is-it-going-panel";
 import { preparePath } from "@renderer/features/prepare/prepare-path";
 import { asPreparable, useSourceProbe } from "@renderer/features/prepare/use-prepare-copy";
@@ -41,7 +45,8 @@ import { RecordingTitle } from "@renderer/features/library/components/recording-
 import { TagEditor } from "@renderer/features/library/components/tag-editor";
 import { resolveTags, useTags } from "@renderer/features/library/hooks/use-tags";
 import { formatDuration, formatSize, relativeDate } from "@renderer/features/library/format";
-import { buildLineage, editBadge } from "@renderer/features/library/lineage";
+import { buildLineage, editBadge, isMaster } from "@renderer/features/library/lineage";
+import { MasterTag } from "@renderer/features/library/components/master-tag";
 import type { EditingState, RemoveLocalCopyResult } from "@shared/types/library-item";
 import { Button } from "@kaipu/ui";
 import { Badge } from "@kaipu/ui";
@@ -77,19 +82,8 @@ function removeLocalCopyBlockedKey(
   }
 }
 
-/** The quick chips under the title: the three places a recording goes most. */
-const QUICK_DESTINATIONS = [
-  { destination: "youtube", label: "quickYoutube" },
-  { destination: "vertical", label: "quickVertical" },
-  { destination: "github", label: "quickGithub" },
-] as const satisfies ReadonlyArray<{
-  destination: DestinationId;
-  label: keyof Messages["prepare"];
-}>;
-
 export function LibraryDetailPage(): React.JSX.Element {
   const t = useTranslations("library");
-  const tPrepare = useTranslations("prepare");
   const { assetId } = useParams<{ assetId: string }>();
   const location = useLocation();
   const navigate = useNavigate();
@@ -120,9 +114,9 @@ export function LibraryDetailPage(): React.JSX.Element {
   const lineage = useMemo(() => buildLineage(videos), [videos]);
   const captureLabel = useRecordingCaptureLabel(video?.capture);
 
-  // NIW2-578: Prepare — the core action — opens from the button, the quick chips, the
-  // "heavy to send" banner and the post-recording panel. Only a local recording has a copy
-  // to make (no screenshots, no GIFs).
+  // NIW2-578: Prepare — the core action — opens from "Send to…" (NIW2-585), the "Where is
+  // this going?" chips, the "heavy to send" banner and the post-recording panel. Only a local
+  // recording has a copy to make (no screenshots, no GIFs).
   const preparable = asPreparable(video);
   const heavy = preparable !== null && isHeavyToSend(preparable.fileSizeBytes);
   // "Where is it going?" (NIW2-578): on the page a fresh recording lands on, once per
@@ -136,8 +130,9 @@ export function LibraryDetailPage(): React.JSX.Element {
     panelDismissedFor !== location.key;
   // Read the file up front only when the banner or the panel needs its numbers.
   const probe = useSourceProbe(heavy || showPanel ? (preparable?.id ?? null) : null).probe;
-  // A copy finished in the background: re-list, so it shows under Exports.
-  const readyId = useExportRunner().ready?.recording.id ?? null;
+  // A copy finished in the background: re-list, so it shows under "Copies from this master".
+  const runner = useExportRunner();
+  const readyId = runner.ready?.recording.id ?? null;
   useEffect(() => {
     if (readyId) void refresh();
   }, [readyId, refresh]);
@@ -176,6 +171,11 @@ export function LibraryDetailPage(): React.JSX.Element {
   const sourceDeleted = video.derivedFromAssetId !== null && source === undefined;
   const exports = lineage.exportsOf.get(video.assetId) ?? [];
   const badge = editBadge(video, lineage);
+  // NIW2-585: the recording is the master — tagged over the player, and the page asks where
+  // it is going and lists the copies made from it.
+  const master = isMaster(video);
+  const running = runningCopyOf(runner, video.assetId);
+  const showCopies = master || exports.length > 0 || running !== null;
 
   // `localId !== null` is implied by the condition below (it requires a local
   // copy to exist) but kept explicit here — the button's own name promises
@@ -258,22 +258,14 @@ export function LibraryDetailPage(): React.JSX.Element {
         localId && <GifViewer id={localId} />
       ) : (
         localId && (
-          <>
+          <div className={styles.player}>
             <RecordingPlayer id={localId} poster={video.thumbnailUrl} />
-            {/* This player streams the vault file, which ADR 0003 guarantees is the
-                untouched original — edits live in a sidecar session and are composited
-                only in the editor's preview and burned in only by an export. Nothing
-                said so, which made the surrounding edit badges read as contradictions:
-                a "not exported" pill above a player that was, in fact, showing the
-                unedited video. Saying it also makes the ADR's promise checkable — hit
-                play and see the original is still whole. */}
-            {video.derivedFromAssetId === null && (
-              <p className={styles.originalNote}>
-                <span className={styles.originalLabel}>{t("originalLabel")}</span>
-                {t("originalPlayerNote")}
-              </p>
+            {master && (
+              <span className={styles.masterTag}>
+                <MasterTag />
+              </span>
             )}
-          </>
+          </div>
         )
       )}
 
@@ -335,6 +327,19 @@ export function LibraryDetailPage(): React.JSX.Element {
                 </span>
               </>
             )}
+            {/* The player streams the vault file, which ADR 0003 keeps untouched: edits
+                live in a sidecar session, composited only in the editor and burned in only
+                by an export. Saying so keeps the edit badges below from reading as
+                contradictions, and makes the promise checkable — hit play. */}
+            {master && (
+              <>
+                <span className={styles.dot}>·</span>
+                <span className={styles.masterNote}>
+                  {t("masterNote")}
+                  {video.editSavedAt !== null && ` ${t("masterEditsNote")}`}
+                </span>
+              </>
+            )}
           </div>
           {!isScreenshot && !isGif && badge === null && (
             <p className={styles.editingLine}>{t(EDITING_LABEL_KEYS[video.editing])}</p>
@@ -368,17 +373,18 @@ export function LibraryDetailPage(): React.JSX.Element {
         </div>
 
         <div className={styles.actions}>
-          {/* NIW2-578: Prepare — the core action. This page is also where a fresh recording
-              lands (`fromRecording`), so it is the post-recording entry point too. */}
+          {/* Send to… opens Prepare (NIW2-578) — the core action. This page is also where a
+              fresh recording lands (`fromRecording`), so it is the post-recording entry point
+              too. "Prepare for…" did not say what it does (NIW2-585). */}
           {preparable && (
             <Button
               variant="primary"
               size="sm"
               onClick={() => openPrepare()}
-              title={tPrepare("prepareForHint")}
+              title={t("sendToHint")}
             >
-              <Share2 size={15} strokeWidth={1.8} />
-              {tPrepare("prepareFor")}
+              <Send size={15} strokeWidth={1.8} />
+              {t("sendTo")}
             </Button>
           )}
           {isScreenshot && localId && (
@@ -429,55 +435,36 @@ export function LibraryDetailPage(): React.JSX.Element {
         </div>
       </div>
 
-      {preparable && (
-        <div className={styles.quick}>
-          <span className={styles.quickLabel}>{tPrepare("quickLabel")}</span>
-          {QUICK_DESTINATIONS.map((q) => (
-            <button
-              key={q.destination}
-              type="button"
-              className={styles.quickChip}
-              aria-label={tPrepare("quickAria", { destination: tPrepare(q.label) })}
-              onClick={() => openPrepare(q.destination)}
-            >
-              <DestinationLogo destination={q.destination} size={22} />
-              {tPrepare(q.label)}
-            </button>
-          ))}
+      {showCopies && (
+        <div className={styles.masterRow}>
+          {/* The heavy-to-send hint folds into the strip: its GitHub chip is the light copy. */}
+          {master && preparable && (
+            <WhereIsThisGoingStrip
+              onPick={(destination) => openPrepare(destination ?? undefined)}
+              note={
+                heavy && (
+                  <HeavyToSendText
+                    sizeBytes={video.fileSizeBytes}
+                    lightEstimateBytes={lightEstimate(probe)}
+                  />
+                )
+              }
+            />
+          )}
+          <MasterCopiesPanel
+            source={master ? "master" : "copy"}
+            copies={exports}
+            running={running}
+          />
         </div>
       )}
 
-      {heavy && (
+      {heavy && !master && (
         <HeavyToSendBanner
           sizeBytes={video.fileSizeBytes}
           lightEstimateBytes={lightEstimate(probe)}
           onMakeLightCopy={() => openPrepare("github")}
         />
-      )}
-
-      {exports.length > 0 && (
-        <section className={styles.exports} aria-labelledby="exports-heading">
-          <h2 id="exports-heading" className={styles.exportsHeading}>
-            {t("exports")}
-          </h2>
-          <ul className={styles.exportsList}>
-            {exports.map((e) => (
-              <li key={e.assetId} className={styles.exportItem}>
-                {e.thumbnailUrl ? (
-                  <img src={e.thumbnailUrl} alt="" className={styles.exportThumb} />
-                ) : (
-                  <span className={styles.exportThumb} aria-hidden />
-                )}
-                <Link to={`/library/${e.assetId}`} className={styles.lineageLink}>
-                  {e.title}
-                </Link>
-                <span className={styles.metaItem}>
-                  {relativeDate(e.createdAt)} · {formatDuration(e.durationSeconds)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
       )}
 
       {confirmingDelete && (
@@ -500,7 +487,8 @@ function lightEstimate(probe: SourceProbe | null): number | null {
 /**
  * NIW2-218: a recording over 25 MB is heavy to send anywhere. Say so where the user looks
  * at it, with what a Light copy would weigh, and open Prepare on GitHub (NIW2-578). GitHub is
- * promised only when the Light copy fits.
+ * promised only when the Light copy fits. On a master the words live in the "Where is this
+ * going?" strip instead (NIW2-585); this banner is for a heavy copy.
  */
 function HeavyToSendBanner({
   sizeBytes,
@@ -514,18 +502,34 @@ function HeavyToSendBanner({
   const t = useTranslations("library");
   return (
     <div className={styles.heavyBanner}>
+      <HeavyToSendText sizeBytes={sizeBytes} lightEstimateBytes={lightEstimateBytes} />
+      <button type="button" className={styles.heavyAction} onClick={onMakeLightCopy}>
+        {t("heavyBannerAction")}
+      </button>
+    </div>
+  );
+}
+
+/** "119 MB is heavy to send. Prepare a light copy — about 9 MB…": the banner's words. */
+function HeavyToSendText({
+  sizeBytes,
+  lightEstimateBytes,
+}: {
+  sizeBytes: number;
+  lightEstimateBytes: number | null;
+}): React.JSX.Element {
+  const t = useTranslations("library");
+  return (
+    <p className={styles.heavyText}>
       <Leaf size={17} strokeWidth={1.8} className={styles.heavyIcon} aria-hidden />
-      <p className={styles.heavyText}>
+      <span>
         <strong>{t("heavyBannerTitle", { size: formatMB(sizeBytes) })}</strong>{" "}
         {lightEstimateBytes === null
           ? t("heavyBannerBodyNoEstimate")
           : githubFit(lightEstimateBytes) === "fits"
             ? t("heavyBannerBody", { estimate: formatMB(lightEstimateBytes) })
             : t("heavyBannerBodyNoGithub", { estimate: formatMB(lightEstimateBytes) })}
-      </p>
-      <button type="button" className={styles.heavyAction} onClick={onMakeLightCopy}>
-        {t("heavyBannerAction")}
-      </button>
-    </div>
+      </span>
+    </p>
   );
 }

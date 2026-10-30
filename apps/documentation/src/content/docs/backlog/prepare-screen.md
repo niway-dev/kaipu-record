@@ -66,11 +66,16 @@ GIFs are not preparable.
   only a heavy one) and stays until a shortcut or Not now. Settings → Export quality → "Ask where
   a new recording is going" turns it off (stored as `showRecordingSavedCard`, its NIW2-218 name).
   It replaces the "Recording saved" card.
-- **The recording page**: **Prepare for…** replaces Share as the primary button, with quick chips
-  (YouTube, TikTok · Reels, GitHub) under the title. The heavy-to-send banner's action is now
-  "Prepare a light copy →", which opens Prepare on GitHub.
-- **The Library**: a Prepare for… icon button on every local recording's card and row, next to
-  Edit.
+- **The recording page** (reworked in NIW2-585 — "Prepare for…" did not say what it does): the
+  recording is the **master**. A "MASTER · FULL QUALITY" tag sits over the player, the meta line
+  ends "This is your original. It never changes.", and **Send to…** replaces Share as the primary
+  button. Under the title, a "Where is this going?" strip (YouTube, GitHub, More) sits next to
+  **Copies from this master**: each copy with its destination, size and "✓ Ready", or
+  "38% · 2 min" while its background export runs. On a master the heavy-to-send hint lives in the
+  strip (its GitHub chip makes the light copy); a heavy copy keeps the banner with
+  "Prepare a light copy →".
+- **The Library**: a Send to… icon button on every local recording's card and row, next to
+  Edit; an original's card and row carry the master tag instead of the Recording badge.
 
 ## How it works
 
@@ -85,7 +90,10 @@ GIFs are not preparable.
   frame rate and duration.
 - "Already prepared" is `findReusableExports(exports, WHOLE_RECORDING_FINGERPRINT)` plus the
   lineage's exports list.
-- The recording page re-lists when an export becomes ready, so the new copy shows under Exports.
+- The recording page re-lists when an export becomes ready, so the new copy shows under Copies
+  from this master. A copy made for a destination (`WHOLE_RECORDING_FINGERPRINT`) is named by
+  `destinationOfPreset`; an editor export or a GIF goes by its own title. The running row comes
+  from `useExportRunner()` (`runningCopyOf`), whose job now records `wholeRecording`.
 
 ## Decisions
 
@@ -110,5 +118,5 @@ recording, a recording-quality floor, and uploading to any platform.
 Record a short clip → the "Where is it going?" panel appears → YouTube → Prepare opens on YouTube,
 1440p selected → try 4K, unfold "What changes in the copy" → Prepare → back on the recording, the
 progress card, then the Ready card → the copy is in the Library and under Already prepared. Then
-GitHub (Light) from the quick chip or the heavy banner, Fit / Fill on Reels, and a screenshot's
+GitHub (Light) from the "Where is this going?" chip, Fit / Fill on Reels, and a screenshot's
 page (no Prepare).

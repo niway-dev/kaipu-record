@@ -72,6 +72,11 @@ export interface ExportJobInfo {
   /** Output size. */
   width: number;
   height: number;
+  /**
+   * The whole recording, without edits (Prepare, Share) — a copy for a destination — rather
+   * than an editor export. Absent on jobs built before NIW2-585.
+   */
+  wholeRecording?: boolean;
 }
 
 /** A finished export, until the user dismisses its "Ready to share" card. */
@@ -286,6 +291,7 @@ export async function startVideoExport(
     estimateBytes: presetId === "maximum" ? null : target.estimateBytes,
     width: target.width,
     height: target.height,
+    wholeRecording: args.fingerprint === WHOLE_RECORDING_FINGERPRINT,
   };
 
   active = true;

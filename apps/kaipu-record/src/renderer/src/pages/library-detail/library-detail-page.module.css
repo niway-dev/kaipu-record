@@ -123,59 +123,36 @@
   color: var(--accent-primary);
 }
 
-.exports {
-  margin-top: 24px;
+/* NIW2-585: the master tag over the player's top-left corner. Clicks pass through to the
+   video. */
+.player {
+  position: relative;
 }
 
-.exportsHeading {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 10px;
+.masterTag {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1;
+  pointer-events: none;
 }
 
-.exportsList {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.exportItem {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.exportThumb {
-  width: 64px;
-  height: 36px;
-  border-radius: 6px;
-  background: var(--bg-card);
-  object-fit: cover;
-  flex-shrink: 0;
-}
-
-/* Caption under the player on an original recording: the player shows the vault file,
-   which never contains the edits. Muted on purpose — it is an orientation note, not a
-   warning; the badge in the bar below is what warns. */
-.originalNote {
-  margin: 8px 0 0;
+/* "This is your original. It never changes." — brighter than the facts before it. */
+.masterNote {
   font-size: var(--font-size-sm);
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
-.originalLabel {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  margin-right: 8px;
+/* "Where is this going?" and "Copies from this master", side by side. */
+.masterRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: 10px;
+  margin-top: calc(-1 * var(--space-sm));
+}
+
+.masterRow > :only-child {
+  grid-column: 1 / -1;
 }
 
 /* NIW2-218: the size in amber when the file is heavy to send (over 25 MB). */
@@ -197,11 +174,15 @@
 
 .heavyIcon {
   flex-shrink: 0;
+  margin-top: 1px;
   color: var(--tone-saving);
 }
 
 .heavyText {
   flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
   margin: 0;
   font-size: var(--font-size-base);
   line-height: 1.45;
@@ -229,47 +210,4 @@
 .heavyAction:hover {
   text-decoration: underline;
   text-underline-offset: 2px;
-}
-
-/* NIW2-578: quick chips that open Prepare on a destination. */
-.quick {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: calc(-1 * var(--space-sm));
-}
-
-.quickLabel {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.quickChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 32px;
-  padding: 0 11px 0 5px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--bg-card);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-  transition: border-color var(--transition);
-}
-
-.quickChip:hover {
-  border-color: var(--accent-primary-ring);
-}
-
-.quickChip:focus-visible {
-  outline: 2px solid var(--accent-primary);
-  outline-offset: 2px;
 }

@@ -1,0 +1,96 @@
+.panel {
+  min-width: 0;
+  padding: 13px 14px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.heading {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.empty {
+  margin: 9px 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.list {
+  list-style: none;
+  margin: 9px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 34px;
+  padding: 4px 6px;
+  margin: 0 -6px;
+  border-radius: 7px;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+a.row:hover {
+  background: var(--bg-card-hover);
+}
+
+a.row:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+.genericIcon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 27%;
+  background: #2a2a30;
+  color: #fff;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+}
+
+.size {
+  color: var(--text-muted);
+}
+
+.ready {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--tone-saving);
+}
+
+/* Amber while it encodes, as in the design: work in flight, not yet ready. */
+.progress {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--tone-heavy);
+}

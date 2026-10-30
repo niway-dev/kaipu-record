@@ -1,12 +1,13 @@
-import { Film, PenLine, Share2, Tag, Trash2, Play } from "lucide-react";
+import { Film, PenLine, Send, Tag, Trash2, Play } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
 import type { TagSummary } from "@shared/types";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { TagChip } from "../tags/tag-chip";
-import type { EditBadge as EditBadgeState } from "@renderer/features/library/lineage";
+import { type EditBadge as EditBadgeState, isMaster } from "@renderer/features/library/lineage";
 import { StorageMeta } from "./storage-meta";
 import { KindBadge } from "./kind-badge";
+import { MasterTag } from "./master-tag";
 import { RecordingCaptureTag } from "./recording-capture-tag";
 import { EditBadge } from "./edit-badge";
 import { cx } from "@renderer/ui/cx";
@@ -21,7 +22,7 @@ interface VideoCardProps {
   onDelete(): void;
   /** Opens the item in the Editor workspace; omitted when it cannot be edited. */
   onEdit?(): void;
-  /** Opens Prepare for this recording (NIW2-578); omitted when there is nothing to prepare. */
+  /** Opens Prepare — "Send to…" — for this recording (NIW2-578); omitted when there is nothing to prepare. */
   onPrepare?(): void;
   /** Opens the tag side panel for this item; omitted when it cannot be tagged. */
   onTags?(): void;
@@ -43,7 +44,6 @@ export function VideoCard({
   tags = [],
 }: VideoCardProps): React.JSX.Element {
   const t = useTranslations("library");
-  const tPrepare = useTranslations("prepare");
   // A few tags always visible under the title, the rest as "+N".
   const cardTags = tags.slice(0, CARD_TAGS_SHOWN);
   const hiddenTags = tags.length - cardTags.length;
@@ -74,7 +74,8 @@ export function VideoCard({
         <div className={styles.scrim} aria-hidden />
 
         <span className={styles.kindBadge}>
-          <KindBadge kind={video.kind} />
+          {/* An original reads as the master (NIW2-585); the tag also says it is a recording. */}
+          {isMaster(video) ? <MasterTag size="sm" /> : <KindBadge kind={video.kind} />}
           <RecordingCaptureTag capture={video.capture} />
         </span>
 
@@ -111,10 +112,10 @@ export function VideoCard({
               <button
                 className={styles.action}
                 onClick={onPrepare}
-                title={tPrepare("prepareFor")}
-                aria-label={tPrepare("prepareFor")}
+                title={t("sendTo")}
+                aria-label={t("sendTo")}
               >
-                <Share2 size={14} strokeWidth={1.8} />
+                <Send size={14} strokeWidth={1.8} />
               </button>
             )}
             {video.id !== null && (
