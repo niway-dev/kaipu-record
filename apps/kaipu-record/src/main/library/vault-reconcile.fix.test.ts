@@ -386,6 +386,7 @@ describe("the tag registry belongs to the vault, never to media named `tags`", (
       () => vault.writeMeta("tags", { title: "x" }),
       () => vault.adoptMedia("tags", { title: "x", createdAt: T0 }),
       () => vault.removeLocalCopy("tags"),
+      () => vault.remove("tags"),
     ]) {
       await mutation().catch(() => undefined);
     }

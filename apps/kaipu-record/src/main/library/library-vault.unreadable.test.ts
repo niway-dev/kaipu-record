@@ -55,6 +55,7 @@ describe("LibraryVault — an unreadable record is never written (F9)", () => {
     await mkdir(join(directory, ".kaipu"), { recursive: true });
     await writeFile(join(directory, "Demo.mp4"), "video");
     await writeFile(join(directory, ".kaipu", "Demo.json"), CORRUPT);
+    await writeFile(join(directory, ".kaipu", "Demo.jpg"), "poster");
     await writeFile(join(directory, "Shot.png"), "png");
     await writeFile(join(directory, ".kaipu", "Shot.json"), "[]");
   });
@@ -83,18 +84,21 @@ describe("LibraryVault — an unreadable record is never written (F9)", () => {
       () => vault.renameItem({ id: "Demo", assetId: "a-1" }, "Other"),
       () => vault.removeLocalCopy("Demo"),
       () => vault.ensureContentHash("Demo"),
+      () => vault.overwriteImage("Demo", Buffer.from("x"), {}, "a-1"),
+      () => vault.remove("Demo"),
     ];
     for (const refusal of refusals) {
       const error = await refusal().then(
         () => null,
         (e: unknown) => e,
       );
-      expect(error).toBeInstanceOf(UnreadableRecordError);
+      expect(error, String(refusal)).toBeInstanceOf(UnreadableRecordError);
       expect((error as Error).message).toContain(UNREADABLE_RECORD_MARKER);
     }
     expect(await sidecarBytes("Demo")).toBe(CORRUPT);
     expect((await stat(join(directory, ".kaipu", "Demo.json"))).mtimeMs).toBe(before.mtimeMs);
     expect(await readFile(join(directory, "Demo.mp4"), "utf8")).toBe("video");
+    expect(await readFile(join(directory, ".kaipu", "Demo.jpg"), "utf8")).toBe("poster");
   });
 
   it("a screenshot overwrite refuses before writing the PNG", async () => {

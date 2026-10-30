@@ -3,7 +3,11 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { useLocalLibrary } from "./use-local-library";
 import { reportError } from "@renderer/features/analytics";
 import type { LibraryItem } from "@shared/types/library-item";
-import { AMBIGUOUS_IDENTITY_MARKER, ITEM_NOT_FOUND_MARKER } from "@shared/types/library-storage";
+import {
+  AMBIGUOUS_IDENTITY_MARKER,
+  ITEM_NOT_FOUND_MARKER,
+  UNREADABLE_RECORD_MARKER,
+} from "@shared/types/library-storage";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 
 vi.mock("@renderer/features/analytics", () => ({ reportError: vi.fn() }));
@@ -221,6 +225,21 @@ describe("useLocalLibrary", () => {
     expect(getToasts().map((toast) => toast.message)).toContain(
       "Kaipu is fixing your files. Try again in a moment.",
     );
+    getToasts().forEach((toast) => dismissToast(toast.id));
+  });
+
+  it("a delete refused for an unreadable record is the read-only toast, and the item stays", async () => {
+    window.electronAPI.deleteLocalRecording = vi.fn(async () => {
+      throw new Error(`${UNREADABLE_RECORD_MARKER}: the record of "a" is corrupt-json`);
+    });
+    const { result } = renderHook(() => useLocalLibrary());
+    await waitFor(() => expect(result.current.videos).toHaveLength(2));
+    await act(async () => {
+      await result.current.remove("a");
+    });
+    expect(reportError).not.toHaveBeenCalled();
+    expect(getToasts()).toHaveLength(1);
+    expect(result.current.videos.map((v) => v.id)).toEqual(["a", "b"]);
     getToasts().forEach((toast) => dismissToast(toast.id));
   });
 

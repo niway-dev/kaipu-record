@@ -1146,11 +1146,15 @@ export class LibraryVault {
   /**
    * Removes the media file plus every companion (`companionPaths`). The companions are
    * best-effort (they may not exist), but a failure to delete the media itself
-   * propagates so the UI can report it.
+   * propagates so the UI can report it. An item whose record is unreadable (or whose record
+   * path the vault owns) is refused before anything is deleted: `UnreadableRecordError`.
    */
   async remove(id: string): Promise<void> {
     // Under the sidecar lock so a racing writeMeta cannot recreate the sidecar just after it is deleted.
-    await withLock(this.sidecarPath(id), () => this.removeCompanions(this.companionPaths(id)));
+    await withLock(this.sidecarPath(id), async () => {
+      await this.writableSidecar(id);
+      await this.removeCompanions(this.companionPaths(id));
+    });
     await rm(await this.filePath(id), { force: true });
   }
 
