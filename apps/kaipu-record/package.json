@@ -18,6 +18,7 @@
     "proof": "bun run build && node node_modules/@playwright/test/cli.js test -c verify/playwright.config.ts",
     "proof:run": "node node_modules/@playwright/test/cli.js test -c verify/playwright.config.ts",
     "cursor-track:check": "bun run scripts/cursor-track-check.ts",
+    "webcam-track:check": "bun run scripts/webcam-track-check.ts",
     "icons": "bash scripts/generate-app-icons.sh",
     "start": "electron-vite preview",
     "dev": "bash ../../scripts/require-env.sh .env && electron-vite dev",
