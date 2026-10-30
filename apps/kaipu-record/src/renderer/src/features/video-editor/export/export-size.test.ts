@@ -20,7 +20,8 @@ describe("export size wording", () => {
   it("says 'up to' only for the fixed canvases, and nothing for Maximum", () => {
     expect(sizeKindOf("balanced")).toBe("about");
     expect(sizeKindOf("light")).toBe("about");
-    expect(sizeKindOf("youtube")).toBe("up-to");
+    expect(sizeKindOf("youtube-1440")).toBe("up-to");
+    expect(sizeKindOf("youtube-4k")).toBe("up-to");
     expect(sizeKindOf("vertical")).toBe("up-to");
     expect(sizeKindOf("square")).toBe("up-to");
     expect(sizeKindOf("maximum")).toBe("full");

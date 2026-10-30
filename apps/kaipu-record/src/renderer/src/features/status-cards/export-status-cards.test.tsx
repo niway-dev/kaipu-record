@@ -75,7 +75,7 @@ describe("ExportProgressCard", () => {
     const { rerender } = render(
       <ExportProgressCard
         {...props}
-        job={{ ...JOB, presetId: "youtube", estimateBytes: 61_000_000 }}
+        job={{ ...JOB, presetId: "youtube-1440", estimateBytes: 61_000_000 }}
       />,
     );
     expect(screen.getByText("119 MB → up to ~61 MB")).toBeInTheDocument();
@@ -110,7 +110,7 @@ describe("ExportReadyCard", () => {
             path: "/",
             element: (
               <ExportReadyCard
-                ready={{ job: { ...JOB, presetId: "youtube" }, recording: RECORDING }}
+                ready={{ job: { ...JOB, presetId: "youtube-1440" }, recording: RECORDING }}
               />
             ),
           },
