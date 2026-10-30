@@ -14,6 +14,7 @@ import {
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import {
+  AMBIGUOUS_IDENTITY_MARKER,
   ITEM_NOT_FOUND_MARKER,
   type LocalRecording,
   type RenameResult,
@@ -96,6 +97,21 @@ export class ItemNotFoundError extends Error {
   constructor(readonly id: string) {
     super(`${ITEM_NOT_FOUND_MARKER}: no media file for "${id}"`);
     this.name = "ItemNotFoundError";
+  }
+}
+
+/**
+ * Two or more local items carry the identity a caller named by a stale id (a copied item
+ * with its sidecar, or media restored under a leftover's stem). Picking one would move or
+ * overwrite the wrong file, so the operation refuses before changing anything.
+ */
+export class AmbiguousIdentityError extends Error {
+  constructor(
+    readonly assetId: string,
+    readonly ids: string[],
+  ) {
+    super(`${AMBIGUOUS_IDENTITY_MARKER}: ${ids.length} local items claim "${assetId}"`);
+    this.name = "AmbiguousIdentityError";
   }
 }
 
@@ -479,15 +495,9 @@ export class LibraryVault {
 
   /** The id `target.assetId` lives under now, or ItemNotFoundError. Caller holds NAMES_LOCK. */
   private async resolveTarget(target: RenameTarget): Promise<string> {
-    if (
-      (await this.hasMedia(target.id)) &&
-      (await this.sidecar(target.id)).assetId === target.assetId
-    ) {
-      return target.id;
-    }
-    const item = (await this.list()).find((candidate) => candidate.assetId === target.assetId);
-    if (!item) throw new ItemNotFoundError(target.id);
-    return item.id;
+    const id = await this.resolveIdentity(target.id, target.assetId);
+    if (id === null) throw new ItemNotFoundError(target.id);
+    return id;
   }
 
   /**
@@ -500,10 +510,35 @@ export class LibraryVault {
    */
   async acquireForEditor(assetId: string, hold: (id: string) => boolean): Promise<string | null> {
     return withLock(NAMES_LOCK, async () => {
-      const item = (await this.list()).find((candidate) => candidate.assetId === assetId);
-      if (!item) return null;
-      return hold(item.id) ? item.id : null;
+      const id = await this.resolveIdentity(null, assetId);
+      if (id === null) return null;
+      return hold(id) ? id : null;
     });
+  }
+
+  /**
+   * The one local item holding `assetId`, for every operation that acts on an identity
+   * (rename, editor hold, screenshot overwrite). Caller holds NAMES_LOCK.
+   *
+   * Fast path: `id` still holds that identity → `id`; the caller's own item is never
+   * ambiguous to it. Otherwise exactly one media-bearing item must carry it: none → null
+   * (each caller maps that to its own "gone" outcome), more than one →
+   * `AmbiguousIdentityError`, thrown before any mutation or hold.
+   */
+  private async resolveIdentity(
+    id: string | null,
+    assetId: string,
+    kind?: LocalRecording["kind"],
+  ): Promise<string | null> {
+    if (id !== null && (await this.hasMedia(id)) && (await this.sidecar(id)).assetId === assetId) {
+      return id;
+    }
+    const matches = (await this.list()).filter(
+      (item) => item.assetId === assetId && (kind === undefined || item.kind === kind),
+    );
+    const ids = [...new Set(matches.map((item) => item.id))];
+    if (ids.length > 1) throw new AmbiguousIdentityError(assetId, ids);
+    return ids[0] ?? null;
   }
 
   /**
@@ -858,15 +893,7 @@ export class LibraryVault {
   ): Promise<string> {
     if (!expectedAssetId) throw new Error("overwriteImage: the expected assetId is required");
     return withLock(NAMES_LOCK, async () => {
-      let target: string | null = id;
-      const holds =
-        (await this.hasMedia(id)) && (await this.sidecar(id)).assetId === expectedAssetId;
-      if (!holds) {
-        target =
-          (await this.list()).find(
-            (item) => item.assetId === expectedAssetId && item.kind === "screenshot",
-          )?.id ?? null;
-      }
+      const target = await this.resolveIdentity(id, expectedAssetId, "screenshot");
       if (target === null) throw new ItemGoneError(id);
       const resolved = target;
       await withLock(this.sidecarPath(resolved), async () => {

@@ -21,7 +21,11 @@ import {
 import { DiscardChangesDialog } from "@renderer/features/screenshots/discard-changes-dialog";
 import { reportError } from "@renderer/features/analytics";
 import { screenshotTitle } from "@shared/screenshot-title";
-import { notifyRenameOutcome } from "@renderer/features/library/rename-outcome";
+import {
+  isAmbiguousIdentityError,
+  notifyAmbiguousIdentity,
+  notifyRenameOutcome,
+} from "@renderer/features/library/rename-outcome";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import {
   BeautifiedFrame,
@@ -184,6 +188,10 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
           if (alive.current) void renameSaved(next);
         });
       } catch (error) {
+        if (isAmbiguousIdentityError(error)) {
+          notifyAmbiguousIdentity(tLibrary);
+          return;
+        }
         reportError(t("renameError"), error, {
           context: { phase: "rename", id },
           retry: () => void renameSaved(next),
@@ -360,6 +368,11 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
         // A swallowed save (vault on a disconnected drive, disk full, composite
         // failure) let the user close the editor believing the shot was saved.
         // Surface it with a retry so the work isn't silently lost.
+        if (isAmbiguousIdentityError(error)) {
+          // Two files claim this shot: main refused before writing. A retry would refuse again.
+          notifyAmbiguousIdentity(tLibrary);
+          return null;
+        }
         reportError(t("saveError"), error, {
           context: { phase: "save", overwrite: overwriteId !== undefined },
           retry: () => {

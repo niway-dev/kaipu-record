@@ -270,4 +270,25 @@ describe("ScreenshotEditorPage — rename moves the file (NIW2-560)", () => {
     expect(saveCalls()[0][1]).toMatchObject({ overwriteId: "Renamed" });
     expect(exportScene.mock.calls[0]![1]).toMatchObject({ bytes: new Uint8Array([9, 9]).buffer });
   });
+
+  it("says plainly when two files claim the shot it overwrites", async () => {
+    const { AMBIGUOUS_IDENTITY_MARKER } = await import("@shared/types/library-storage");
+    window.electronAPI.saveScreenshot = vi
+      .fn()
+      .mockResolvedValueOnce(saved("s1"))
+      .mockRejectedValueOnce(new Error(`${AMBIGUOUS_IDENTITY_MARKER}: 2 local items`)) as never;
+    const { router } = mount(PASTE);
+    await loadImage();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saveCalls()).toHaveLength(1));
+    await act(async () => {});
+    editPadding();
+    act(() => void router.navigate("/library"));
+    await waitFor(() => expect(saveCalls()).toHaveLength(2));
+    await waitFor(() =>
+      expect(getToasts().map((t) => t.message)).toContainEqual(
+        expect.stringMatching(/two files in your folder/i),
+      ),
+    );
+  });
 });

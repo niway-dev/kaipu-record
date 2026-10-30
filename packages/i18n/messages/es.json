@@ -708,6 +708,7 @@
     "renameKeptBusy": "Nombre guardado. El archivo conserva su nombre anterior mientras se ejecuta una exportación.",
     "renameKeptEditing": "Nombre guardado. El archivo conserva su nombre anterior mientras está abierto en el editor.",
     "renameKeptError": "Nombre guardado, pero no se pudo renombrar el archivo.",
+    "itemAmbiguous": "Dos archivos de tu carpeta dicen ser este elemento, así que Kaipu no tocó ninguno. Quita el duplicado e inténtalo de nuevo.",
     "errorDelete": "No pudimos eliminar el archivo.",
     "availabilityLocal": "Local",
     "availabilityCloud": "Cloud",

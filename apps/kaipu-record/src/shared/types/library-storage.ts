@@ -94,3 +94,10 @@ export interface RenameResult {
  * reporting an error.
  */
 export const ITEM_NOT_FOUND_MARKER = "vault-item-not-found";
+
+/**
+ * Marker in the message of the error a vault operation rejects with when two local files
+ * claim the same identity (a Finder copy made with its sidecar) and the caller's id no
+ * longer settles which one it means. Nothing was changed; the renderer shows a plain toast.
+ */
+export const AMBIGUOUS_IDENTITY_MARKER = "vault-ambiguous-identity";

@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { useLocalLibrary } from "./use-local-library";
 import { reportError } from "@renderer/features/analytics";
 import type { LibraryItem } from "@shared/types/library-item";
-import { ITEM_NOT_FOUND_MARKER } from "@shared/types/library-storage";
+import { AMBIGUOUS_IDENTITY_MARKER, ITEM_NOT_FOUND_MARKER } from "@shared/types/library-storage";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 
 vi.mock("@renderer/features/analytics", () => ({ reportError: vi.fn() }));
@@ -279,6 +279,22 @@ describe("useLocalLibrary", () => {
 
     expect(reportError).not.toHaveBeenCalled();
     await waitFor(() => expect(window.electronAPI.listLibraryItems).toHaveBeenCalledTimes(2));
+  });
+
+  it("says plainly when two files claim the item, instead of an error report", async () => {
+    window.electronAPI.renameLocalRecording = vi.fn(async () => {
+      throw new Error(`Error invoking remote method: ${AMBIGUOUS_IDENTITY_MARKER}: 2 local items`);
+    });
+    const { result } = renderHook(() => useLocalLibrary());
+    await waitFor(() => expect(result.current.videos).toHaveLength(2));
+    await act(async () => {
+      await result.current.rename("a", ASSET_A, "New");
+    });
+    expect(reportError).not.toHaveBeenCalled();
+    const [toast] = getToasts();
+    expect(toast?.message).toMatch(/two files in your folder/i);
+    expect(toast?.action).toBeUndefined();
+    for (const t of getToasts()) dismissToast(t.id);
   });
 
   it("re-lists when the vault folder changes", async () => {

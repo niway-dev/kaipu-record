@@ -1,6 +1,10 @@
 import type { Translator } from "@kaipu/i18n";
 import { showToast } from "@renderer/ui/toast-store";
-import { ITEM_NOT_FOUND_MARKER, type RenameResult } from "@shared/types/library-storage";
+import {
+  AMBIGUOUS_IDENTITY_MARKER,
+  ITEM_NOT_FOUND_MARKER,
+  type RenameResult,
+} from "@shared/types/library-storage";
 
 const KEPT_MESSAGE = {
   locked: "renameKeptLocked",
@@ -32,4 +36,18 @@ export function notifyRenameOutcome(
  */
 export function isItemNotFoundError(error: unknown): boolean {
   return error instanceof Error && error.message.includes(ITEM_NOT_FOUND_MARKER);
+}
+
+/**
+ * True for the rejection of a vault operation that refused because two local files claim the
+ * item's identity (a Finder copy made with its sidecar). Nothing changed; the caller shows
+ * `notifyAmbiguousIdentity` instead of an error report — a retry would refuse again.
+ */
+export function isAmbiguousIdentityError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes(AMBIGUOUS_IDENTITY_MARKER);
+}
+
+/** A plain toast, no Retry: the user has to remove the duplicate first. */
+export function notifyAmbiguousIdentity(t: Translator<"library">): void {
+  showToast({ message: t("itemAmbiguous") });
 }

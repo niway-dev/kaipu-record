@@ -5,7 +5,9 @@ import { reportError } from "@renderer/features/analytics";
 import { toLibraryVideo } from "@renderer/features/library/map-item";
 import type { CatalogRefreshResult, RemoveLocalCopyResult } from "@shared/types/library-item";
 import {
+  isAmbiguousIdentityError,
   isItemNotFoundError,
+  notifyAmbiguousIdentity,
   notifyRenameOutcome,
 } from "@renderer/features/library/rename-outcome";
 import { useOrphanHeal } from "./use-orphan-heal";
@@ -99,6 +101,10 @@ export function useLocalLibrary(): LocalLibrary {
         // A double commit, or the item vanished: the list is stale, not the user's action.
         if (isItemNotFoundError(error)) {
           void refresh();
+          return;
+        }
+        if (isAmbiguousIdentityError(error)) {
+          notifyAmbiguousIdentity(t);
           return;
         }
         reportError(t("errorRename"), error, { context: { id } });

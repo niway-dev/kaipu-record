@@ -708,6 +708,7 @@
     "renameKeptBusy": "Name saved. The file keeps its old name while an export is running.",
     "renameKeptEditing": "Name saved. The file keeps its old name while it is open in the editor.",
     "renameKeptError": "Name saved, but the file could not be renamed.",
+    "itemAmbiguous": "Two files in your folder claim to be this item, so Kaipu left both alone. Remove the duplicate and try again.",
     "errorDelete": "We couldn't delete the file.",
     "availabilityLocal": "Local",
     "availabilityCloud": "Cloud",

@@ -4,9 +4,10 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultCaptureName } from "@shared/default-capture-name";
-import { ITEM_NOT_FOUND_MARKER } from "@shared/types/library-storage";
+import { AMBIGUOUS_IDENTITY_MARKER, ITEM_NOT_FOUND_MARKER } from "@shared/types/library-storage";
 import { EditorSessions } from "./editor-sessions";
 import {
+  AmbiguousIdentityError,
   DEFAULT_RENAME_RETRY,
   ItemGoneError,
   ItemNotFoundError,
@@ -632,5 +633,63 @@ describe("LibraryVault — writeMeta guard and companions", () => {
       join(".kaipu", "x.edit.meta.json"),
       join(".kaipu", "x.assets"),
     ]);
+  });
+});
+
+describe("LibraryVault — an identity two files claim (copied item)", () => {
+  let directory: string;
+  let meta: string;
+  let vault: LibraryVault;
+
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), "kaipu-dup-"));
+    meta = join(directory, ".kaipu");
+    vault = new LibraryVault(directory);
+    await mkdir(meta, { recursive: true });
+    // "Shot" and a Finder copy of it, sidecar included: both claim asset-A.
+    for (const id of ["Shot", "Shot copy"]) {
+      await writeFile(join(directory, `${id}.png`), `bytes of ${id}`);
+      await writeFile(join(meta, `${id}.json`), JSON.stringify({ assetId: "asset-A", title: id }));
+    }
+  });
+  afterEach(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  const untouched = async (): Promise<void> => {
+    expect((await readdir(directory)).sort()).toEqual([".kaipu", "Shot copy.png", "Shot.png"]);
+    expect(await readFile(join(directory, "Shot.png"), "utf-8")).toBe("bytes of Shot");
+    expect(await readFile(join(directory, "Shot copy.png"), "utf-8")).toBe("bytes of Shot copy");
+  };
+
+  it("a rename by a stale id refuses instead of picking one, and changes nothing", async () => {
+    const renaming = vault.renameItem({ id: "Gone", assetId: "asset-A" }, "New");
+    await expect(renaming).rejects.toBeInstanceOf(AmbiguousIdentityError);
+    await expect(vault.renameItem({ id: "Gone", assetId: "asset-A" }, "New")).rejects.toThrow(
+      AMBIGUOUS_IDENTITY_MARKER,
+    );
+    await untouched();
+    expect((await vault.sidecar("Shot")).title).toBe("Shot");
+  });
+
+  it("a rename by the id the caller holds still works (the fast path is unambiguous)", async () => {
+    const result = await vault.renameItem({ id: "Shot", assetId: "asset-A" }, "Mine");
+    expect(result).toMatchObject({ file: "renamed", recording: { id: "Mine" } });
+    expect(await readFile(join(directory, "Shot copy.png"), "utf-8")).toBe("bytes of Shot copy");
+  });
+
+  it("an editor acquisition refuses and holds nothing", async () => {
+    const hold = vi.fn(() => true);
+    await expect(vault.acquireForEditor("asset-A", hold)).rejects.toBeInstanceOf(
+      AmbiguousIdentityError,
+    );
+    expect(hold).not.toHaveBeenCalled();
+  });
+
+  it("a screenshot overwrite by a stale id refuses and replaces no bytes", async () => {
+    await expect(
+      vault.overwriteImage("Gone", Buffer.from("edit"), { title: "x" }, "asset-A"),
+    ).rejects.toBeInstanceOf(AmbiguousIdentityError);
+    await untouched();
   });
 });
