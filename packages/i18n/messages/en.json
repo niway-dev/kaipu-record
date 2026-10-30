@@ -2192,11 +2192,13 @@
   "workspaces": {
     "label": "Workspace",
     "thisMac": "This Mac",
+    "thisPc": "This PC",
     "notConnectedState": "Not connected · Captures paused",
     "currentStatItems": "Items",
     "currentStatLocation": "Location",
     "currentStatSavingTo": "Saving to",
     "savingToHere": "Here",
+    "savingToPaused": "Paused",
     "showInFinder": "Finder",
     "showInExplorer": "Explorer",
     "openSettings": "Settings",
@@ -2224,6 +2226,9 @@
     "removeConfirmTitle": "Remove {name} from the list?",
     "removeConfirmBody": "Nothing in the folder is deleted, and you can add it again later with everything in it.",
     "removeConfirm": "Remove from list",
+    "removeRefusedActive": "{name} is the active workspace. Switch to another one first.",
+    "removeRefusedLast": "Kaipu keeps at least one workspace.",
+    "removeRefusedUnknown": "That workspace is no longer in the list.",
     "addAction": "Add workspace"
   }
 }

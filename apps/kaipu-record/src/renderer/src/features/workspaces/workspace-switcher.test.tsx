@@ -123,14 +123,63 @@ describe("WorkspaceSwitcher with one workspace (spec decision 19)", () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Got it" }));
     expect(bridge.dismissHint).toHaveBeenCalledOnce();
-    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(screen.getByRole("button", { name: "Got it" }), { key: "Escape" });
     expect(bridge.dismissHint).toHaveBeenCalledTimes(2);
+  });
+
+  it("Escape pressed elsewhere does not dismiss the hint for good", async () => {
+    setup(state({ hintDismissed: false }));
+    renderSwitcher();
+    await screen.findByText(/New: workspaces/);
+    const elsewhere = document.createElement("input");
+    document.body.append(elsewhere);
+
+    fireEvent.keyDown(elsewhere, { key: "Escape" });
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(bridge.dismissHint).not.toHaveBeenCalled();
+    elsewhere.remove();
+  });
+
+  it("an Escape something else already handled does not dismiss the hint either", async () => {
+    setup(state({ hintDismissed: false }));
+    renderSwitcher();
+    const gotIt = await screen.findByRole("button", { name: "Got it" });
+
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+    event.preventDefault();
+    gotIt.dispatchEvent(event);
+
+    expect(bridge.dismissHint).not.toHaveBeenCalled();
   });
 
   it("does not show the hint once it was dismissed", async () => {
     renderSwitcher();
     await screen.findByRole("button", { name: /^Workspace:/ });
     expect(screen.queryByText(/New: workspaces/)).toBeNull();
+  });
+});
+
+describe("the label of a workspace on the internal drive follows the host", () => {
+  it("says This PC on Windows, in the bar and in the rows", async () => {
+    setup(state({ workspaces: [DEFAULT, PERSONAL] }));
+    window.electronAPI = { ...window.electronAPI, platform: "win32" };
+    renderSwitcher();
+    const bar = await screen.findByRole("button", { name: /^Workspace:/ });
+    expect(bar).toHaveTextContent("This PC");
+    expect(bar).not.toHaveTextContent("This Mac");
+    fireEvent.click(bar);
+    expect(screen.getByRole("menuitem", { name: /Personal/ })).toHaveTextContent(
+      "17 items · This PC",
+    );
+  });
+
+  it("says This Mac on macOS", async () => {
+    window.electronAPI = { ...window.electronAPI, platform: "darwin" };
+    renderSwitcher();
+    expect(await screen.findByRole("button", { name: /^Workspace:/ })).toHaveTextContent(
+      "This Mac",
+    );
   });
 });
 
@@ -176,6 +225,27 @@ describe("WorkspaceSwitcher with several workspaces", () => {
     expect(alert).toHaveTextContent(
       "Reconnect T7 Shield, or switch workspace. Nothing is saved elsewhere.",
     );
+  });
+
+  it("NOT CONNECTED: the menu does not claim captures are saved here, and Finder is disabled", async () => {
+    setup(state({ activeId: ARCHIVE.id, workspaces: [ARCHIVE, DEFAULT] }));
+    renderSwitcher();
+    await openMenu();
+    const menu = screen.getByRole("menu");
+    expect(menu).not.toHaveTextContent("Here");
+    expect(menu).toHaveTextContent("Saving to");
+    expect(menu).toHaveTextContent("Paused");
+    expect(screen.getByRole("button", { name: "Finder" })).toBeDisabled();
+  });
+
+  it("a connected workspace says it saves here, and Finder opens its folder", async () => {
+    renderSwitcher();
+    await openMenu();
+    expect(screen.getByRole("menu")).toHaveTextContent("Here");
+    const finder = screen.getByRole("button", { name: "Finder" });
+    expect(finder).toBeEnabled();
+    fireEvent.click(finder);
+    expect(bridge.openFolder).toHaveBeenCalledWith(DEFAULT.id);
   });
 
   it("remounts the pages on a new generation only, and closes the menu", async () => {

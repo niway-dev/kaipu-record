@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ChevronsUpDown,
@@ -44,7 +44,9 @@ export function WorkspaceTile({
 
 function useLocationLabel(): (workspace: WorkspaceView) => string {
   const t = useTranslations("workspaces");
-  return (workspace) => workspace.volume ?? t("thisMac");
+  // The internal drive has no volume name: name the machine by the host, like the folder
+  // shortcut does (Finder / Explorer).
+  return (workspace) => workspace.volume ?? (isWindowsHost() ? t("thisPc") : t("thisMac"));
 }
 
 /**
@@ -57,14 +59,19 @@ export function WorkspaceSwitcher(): React.JSX.Element | null {
   const t = useTranslations("workspaces");
   const { state, active, menuOpen, setMenuOpen, dismissHint } = useWorkspaces();
   const locationOf = useLocationLabel();
+  const anchorRef = useRef<HTMLDivElement>(null);
 
-  // Escape closes the menu, or answers the hint.
+  // Escape closes the menu. It answers the hint only when it was pressed inside the
+  // switcher (on the hint itself): an Escape meant for a dialog, a select or the editor
+  // must not dismiss a one-time hint for good.
   useEffect(() => {
     if (!menuOpen && (!state || state.hintDismissed)) return;
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || event.defaultPrevented) return;
       if (menuOpen) setMenuOpen(false);
-      else dismissHint();
+      else if (event.target instanceof Node && anchorRef.current?.contains(event.target)) {
+        dismissHint();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -76,7 +83,7 @@ export function WorkspaceSwitcher(): React.JSX.Element | null {
   const showHint = !state.hintDismissed && !menuOpen;
 
   return (
-    <div className={styles.anchor}>
+    <div className={styles.anchor} ref={anchorRef}>
       <button
         type="button"
         className={styles.bar}
@@ -126,6 +133,7 @@ function WorkspaceMenu({
   const t = useTranslations("workspaces");
   const navigate = useNavigate();
   const { setMenuOpen, switchTo, add, openFolder } = useWorkspaces();
+  const activeOff = active.state === "unavailable";
   const locationOf = useLocationLabel();
   // The LOCKED state: nothing can switch while a take or an export writes here.
   const lock =
@@ -146,7 +154,7 @@ function WorkspaceMenu({
       <div className={styles.menu} role="menu" aria-label={t("label")}>
         <div className={styles.current}>
           <div className={styles.currentHead}>
-            <WorkspaceTile workspace={active} size={28} dim={active.state === "unavailable"} />
+            <WorkspaceTile workspace={active} size={28} dim={activeOff} />
             <div className={styles.currentText}>
               <div className={styles.currentName}>{active.name}</div>
               <div className={styles.currentPath} title={active.path}>
@@ -157,12 +165,17 @@ function WorkspaceMenu({
           <div className={styles.stats}>
             <Stat label={t("currentStatItems")} value={active.itemCount?.toString() ?? "—"} />
             <Stat label={t("currentStatLocation")} value={locationOf(active)} />
-            <Stat label={t("currentStatSavingTo")} value={t("savingToHere")} />
+            <Stat
+              label={t("currentStatSavingTo")}
+              value={activeOff ? t("savingToPaused") : t("savingToHere")}
+            />
           </div>
           <div className={styles.shortcuts}>
             <button
               type="button"
               className={styles.shortcut}
+              // The folder is not there: opening it would only fail (Settings does the same).
+              disabled={activeOff}
               onClick={() => {
                 setMenuOpen(false);
                 openFolder(active.id);

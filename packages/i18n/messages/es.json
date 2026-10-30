@@ -2192,11 +2192,13 @@
   "workspaces": {
     "label": "Espacio de trabajo",
     "thisMac": "Este Mac",
+    "thisPc": "Este equipo",
     "notConnectedState": "No conectado · Capturas en pausa",
     "currentStatItems": "Elementos",
     "currentStatLocation": "Ubicación",
     "currentStatSavingTo": "Guarda en",
     "savingToHere": "Aquí",
+    "savingToPaused": "En pausa",
     "showInFinder": "Finder",
     "showInExplorer": "Explorador",
     "openSettings": "Ajustes",
@@ -2224,6 +2226,9 @@
     "removeConfirmTitle": "¿Quitar {name} de la lista?",
     "removeConfirmBody": "No se borra nada de la carpeta y puedes volver a agregarla más tarde con todo lo que tiene.",
     "removeConfirm": "Quitar de la lista",
+    "removeRefusedActive": "{name} es el espacio de trabajo activo. Cambia a otro primero.",
+    "removeRefusedLast": "Kaipu conserva al menos un espacio de trabajo.",
+    "removeRefusedUnknown": "Ese espacio de trabajo ya no está en la lista.",
     "addAction": "Agregar espacio de trabajo"
   }
 }
