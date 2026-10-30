@@ -229,19 +229,20 @@ describe("createOutputComposer: the webcam layer (ADR 0033)", () => {
   });
 });
 
-// A tripwire, not coverage: it reads the worker sources, so it only proves the webcam is
-// handed to the shared composer in both, not that the right frame or time reaches it
-// (that is the composer and lockstep tests). A harmless refactor of the call shape can trip it.
-describe("both exports draw the layer through the shared composer", () => {
-  // The workers cannot run in jsdom (WebCodecs); what keeps MP4 and GIF from diverging is
-  // that both hand the plan's webcam and the decoded webcam frame to createOutputComposer.
+// The GIF worker's wiring is run for real in gif-worker.test.ts, and the MP4 clip loop in
+// export-clip-frames.test.ts. What is left is the MP4 worker's own glue, which cannot be
+// mounted in jsdom without faking the whole muxer (Output, CanvasSource, StreamTarget,
+// the encoders): a tripwire over its source that the plan's webcam reaches both the composer
+// and the clip loop. A harmless refactor of the call shape can trip it.
+describe("the MP4 worker hands the plan's webcam to the composer and the clip loop", () => {
   const dir = path.dirname(new URL(import.meta.url).pathname);
-  const read = (file: string): string =>
-    readFileSync(path.join(dir, file), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+  const source = readFileSync(path.join(dir, "export-worker.ts"), "utf8").replace(
+    /\/\*[\s\S]*?\*\/|\/\/.*$/gm,
+    "",
+  );
 
-  it.each(["export-worker.ts", "gif-worker.ts"])("%s", (file) => {
-    const source = read(file);
+  it("export-worker.ts", () => {
     expect(source).toMatch(/createOutputComposer\(\{[^}]*webcam: plan\.webcam/);
-    expect(source).toMatch(/compose\.clip\([^)]*webcam/i);
+    expect(source).toMatch(/exportClipFrames\(\{[^}]*layer: plan\.webcam/);
   });
 });
