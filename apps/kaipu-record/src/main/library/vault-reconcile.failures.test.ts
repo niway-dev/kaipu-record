@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { LibraryVault } from "./library-vault";
-import { resumeOrphanManifests } from "./vault-reconcile";
-import { makeVault, sidecar } from "./vault-reconcile.test-helpers";
+import { fixVault, resumeOrphanManifests, scanVault } from "./vault-reconcile";
+import { listFiles, makeVault, sidecar } from "./vault-reconcile.test-helpers";
 
 /**
  * A fault injector over `node:fs/promises`: every wrapped call is counted, and `fail`
@@ -56,6 +56,7 @@ afterEach(async () => {
   directory = "";
 });
 
+const fix = () => fixVault(directory, { cloud: "unknown", retry: noWait, now: () => T0 });
 const read = (path: string) => readFile(join(directory, path), "utf8");
 const pendingManifest = () =>
   JSON.stringify({
@@ -152,4 +153,91 @@ describe("vault writes — only ENOENT means absent", () => {
     faults.fail = null;
     expect(await read(".kaipu/Taken.json")).toBe(record);
   });
+});
+
+describe("Fix all — every payload survives one failed call at any point", () => {
+  // Every kind of action: a retitle and rename with companions, a cycle, an adoption, a
+  // dead record with its companions, an ownerless companion.
+  const small = {
+    "recording-2026-10-30-00-57-30.mp4": "payload:a",
+    ".kaipu/recording-2026-10-30-00-57-30.json": sidecar({
+      assetId: "a",
+      createdAt: T0,
+      title: "Recording — 10/29/2026, 7:57:30 PM",
+      tagIds: ["tag-a"],
+    }),
+    ".kaipu/recording-2026-10-30-00-57-30.jpg": "payload:a-poster",
+    ".kaipu/recording-2026-10-30-00-57-30.edit.json": "payload:a-session",
+    ".kaipu/recording-2026-10-30-00-57-30.assets/s.png": "payload:a-slide",
+    "X.mp4": "payload:x",
+    ".kaipu/X.json": sidecar({ assetId: "x", title: "Y", createdAt: T0 }),
+    "Y.mp4": "payload:y",
+    ".kaipu/Y.json": sidecar({ assetId: "y", title: "X", createdAt: T0 + 1 }),
+    "Fresh.mp4": "payload:fresh",
+    ".kaipu/Gone.json": sidecar({ assetId: "gone", title: "Gone" }),
+    ".kaipu/Gone.jpg": "payload:gone-poster",
+    ".kaipu/Lost.jpg": "payload:lost",
+  };
+  const payloads = Object.values(small).filter((v) => v.startsWith("payload:"));
+  const identities = ["a", "x", "y", "gone"];
+  const OPS = ["lstat", "stat", "access", "readFile", "copyFile", "cp", "write", "rename"];
+
+  it(
+    "injects EIO on the n-th read, copy, sidecar write or move, then a clean run converges",
+    { timeout: 120_000 },
+    async () => {
+      // The calls a clean run makes, per operation.
+      directory = await makeVault(small);
+      faults.calls = [];
+      await fix();
+      const clean = faults.calls;
+      await rm(directory, { recursive: true, force: true });
+      const counts = Object.fromEntries(
+        OPS.map((op) => [op, clean.filter((c) => c.op === op).length]),
+      );
+      for (const op of ["lstat", "readFile", "copyFile", "cp", "write", "rename"]) {
+        expect(counts[op], op).toBeGreaterThan(0);
+      }
+      // The orphan moves are among the renames.
+      expect(clean.some((c) => c.op === "rename" && c.path.includes(".kaipu/Gone.json"))).toBe(
+        true,
+      );
+
+      for (const op of OPS) {
+        for (let n = 1; n <= counts[op]!; n++) {
+          const label = `${op} #${n}`;
+          directory = await makeVault(small);
+          faults.calls = [];
+          let seen = 0;
+          faults.fail = (called) => called === op && ++seen === n;
+          await fix().catch(() => undefined);
+          faults.fail = null;
+
+          const contents = await Promise.all(
+            (await listFiles(directory)).map((path) => read(path)),
+          );
+          for (const payload of payloads)
+            expect(contents, `${payload} after ${label}`).toContain(payload);
+          for (const id of identities) {
+            expect(
+              contents.some(
+                (c) => c.includes(`"assetId": "${id}"`) || c.includes(`"assetId":"${id}"`),
+              ),
+              `identity ${id} after ${label}`,
+            ).toBe(true);
+          }
+
+          const report = await fix();
+          expect(report.failed, `retry after ${label}`).toEqual([]);
+          const left = (await scanVault({ directory, cloud: "unknown" })).findings;
+          expect(
+            left.filter((f) => f.fixable),
+            `converged after ${label}`,
+          ).toEqual([]);
+          await rm(directory, { recursive: true, force: true });
+        }
+      }
+      directory = "";
+    },
+  );
 });
