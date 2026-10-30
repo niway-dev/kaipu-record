@@ -12,6 +12,10 @@
   animation: pop 200ms ease;
 }
 
+.card[data-wide="true"] {
+  width: 420px;
+}
+
 @keyframes pop {
   from {
     opacity: 0;
@@ -48,6 +52,7 @@
   width: auto;
   height: auto;
   border: 0;
+  border-radius: 0;
   background: none;
 }
 
@@ -70,6 +75,11 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.badge {
+  margin-top: 6px;
+  display: flex;
 }
 
 .dismiss {
@@ -111,6 +121,10 @@
 .actions {
   display: flex;
   gap: var(--space-sm);
+}
+
+.actions[data-equal="true"] > * {
+  flex: 1;
 }
 
 .button {

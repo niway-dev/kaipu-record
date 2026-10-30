@@ -57,3 +57,11 @@ export function editBadge(video: LibraryVideo, lineage: Lineage): EditBadge {
   if ((lineage.exportsOf.get(video.assetId)?.length ?? 0) === 0) return "never-exported";
   return video.editExportedSavedAt === video.editSavedAt ? "edited" : "stale";
 }
+
+/**
+ * The master (NIW2-585): an original recording, the file every copy is made from. Copies,
+ * screenshots and GIFs are never masters.
+ */
+export function isMaster(video: Pick<LibraryVideo, "kind" | "derivedFromAssetId">): boolean {
+  return video.kind === "recording" && video.derivedFromAssetId === null;
+}

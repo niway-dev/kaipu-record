@@ -35,6 +35,28 @@ function renderRow(overrides: Partial<React.ComponentProps<typeof VideoRow>> = {
 }
 
 describe("VideoRow", () => {
+  it("tags an original as the master; a copy keeps its kind badge (NIW2-585)", () => {
+    const { rerender } = renderRow();
+    expect(screen.getByText("Master · full quality")).toBeInTheDocument();
+    rerender(
+      <VideoRow
+        video={makeVideo({ derivedFromAssetId: "src" })}
+        onNavigate={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("Master · full quality")).toBeNull();
+    expect(screen.getByText("Recording")).toBeInTheDocument();
+  });
+
+  it("Send to… opens Prepare without opening the row (NIW2-585)", () => {
+    const onPrepare = vi.fn();
+    const { onNavigate } = renderRow({ onPrepare });
+    fireEvent.click(screen.getByRole("button", { name: "Send to…" }));
+    expect(onPrepare).toHaveBeenCalledOnce();
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
+
   it("navigates when the row is clicked", () => {
     const { container, onNavigate } = renderRow();
     fireEvent.click(container.firstChild as HTMLElement);

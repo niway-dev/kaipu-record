@@ -81,6 +81,11 @@ export interface ExportJobInfo {
    * Absent for an editor export, which the cards call "your export" (NIW2-586).
    */
   destination?: DestinationId;
+  /**
+   * The whole recording, without edits (Prepare, Share) — a copy for a destination — rather
+   * than an editor export. Absent on jobs built before NIW2-585.
+   */
+  wholeRecording?: boolean;
 }
 
 /** A finished export, until the user dismisses its ready card. */
@@ -307,6 +312,7 @@ export async function startVideoExport(
     width: target.width,
     height: target.height,
     ...(args.destination ? { destination: args.destination } : {}),
+    wholeRecording: args.fingerprint === WHOLE_RECORDING_FINGERPRINT,
   };
 
   active = true;

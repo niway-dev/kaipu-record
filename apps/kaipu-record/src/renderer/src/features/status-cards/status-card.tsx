@@ -14,6 +14,10 @@ export interface StatusCardProps {
   title: React.ReactNode;
   /** One mono line under the title (sizes, dimensions). */
   subtitle?: React.ReactNode;
+  /** A tag under the subtitle (the "Master · full quality" label). */
+  badge?: React.ReactNode;
+  /** 420 px instead of 380 px, for a card with a row of chips. */
+  wide?: boolean;
   /** ✕ in the corner; omitted for a card that must stay (an export in progress). */
   onDismiss?(): void;
   dismissLabel?: string;
@@ -36,6 +40,8 @@ export function StatusCard({
   bareIcon = false,
   title,
   subtitle,
+  badge,
+  wide = false,
   onDismiss,
   dismissLabel,
   footer,
@@ -46,6 +52,7 @@ export function StatusCard({
   return (
     <section
       className={styles.card}
+      data-wide={wide}
       aria-label={label}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -59,6 +66,7 @@ export function StatusCard({
         <div className={styles.heading}>
           <div className={styles.title}>{title}</div>
           {subtitle && <div className={styles.subtitle}>{subtitle}</div>}
+          {badge && <div className={styles.badge}>{badge}</div>}
         </div>
         {onDismiss && (
           <button
@@ -92,9 +100,20 @@ export function StatusCardText({
   );
 }
 
-/** The card's action row: a primary button that takes the room, then the others. */
-export function StatusCardActions({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <div className={styles.actions}>{children}</div>;
+/** The card's action row: a primary button that takes the room, then the others; `equal`
+ *  splits the row evenly instead. */
+export function StatusCardActions({
+  equal = false,
+  children,
+}: {
+  equal?: boolean;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <div className={styles.actions} data-equal={equal}>
+      {children}
+    </div>
+  );
 }
 
 /**
@@ -105,6 +124,7 @@ export function StatusCardActions({ children }: { children: React.ReactNode }): 
 export function StatusCardButton({
   variant = "secondary",
   grow = false,
+  title,
   onClick,
   onDragStart,
   label,
@@ -112,6 +132,8 @@ export function StatusCardButton({
 }: {
   variant?: "primary" | "secondary" | "text";
   grow?: boolean;
+  /** Native tooltip, for a hint the label does not say. */
+  title?: string;
   onClick?(): void;
   onDragStart?(event: React.DragEvent<HTMLButtonElement>): void;
   /** Accessible name, when the visible words are not enough. */
@@ -125,6 +147,7 @@ export function StatusCardButton({
       data-variant={variant}
       data-grow={grow}
       aria-label={label}
+      title={title}
       onClick={onClick}
       draggable={onDragStart ? true : undefined}
       onDragStart={onDragStart}

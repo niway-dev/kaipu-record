@@ -6,7 +6,9 @@ description: "NIW2-586: a copy prepared in the background names its destination 
 # Background copies — toasts, Library badge and "copy ready"
 
 > **Status: 🟢 Ready to validate — NIW2-586, on `feature/niw2-586-background-toasts`, stacked on
-> [#448](https://github.com/niway-dev/kaipu-record/pull/448) (Prepare, NIW2-578).** Unit and
+> [#457](https://github.com/niway-dev/kaipu-record/pull/457) (Send to…, NIW2-585), which sits on
+> the rest of the Prepare stack down to [#448](https://github.com/niway-dev/kaipu-record/pull/448)
+> (Prepare, NIW2-578).** Unit and
 > component tests pass; nothing has run in Electron yet. Owner QA pending. Design: Claude Design
 > project `71546ef1-baf5-42e9-8fcc-9b9b44f2c7ab`, file `Kaipu Prepare.dc.html`, section 4
 > "In the background".
