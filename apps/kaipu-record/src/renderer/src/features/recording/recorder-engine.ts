@@ -219,6 +219,14 @@ const ENGINE_DEFAULTS = qualityToEngine(DEFAULT_QUALITY);
 // (`fitToCap`) and applied, undistorted, by the compositor.
 const CAPTURE_CEILING = { width: 7680, height: 4320 } as const;
 
+/**
+ * How long the take waits for the camera to open before it records without a webcam. A macOS
+ * permission prompt left open or a hung device never settles, and the store fails the whole
+ * start after 10 s (`START_TIMEOUT_MS`): 3 s leaves that budget to the screen, its frame-size
+ * probe (1.5 s) and the encoder, and is far longer than a camera that works takes to open.
+ */
+export const WEBCAM_OPEN_TIMEOUT_MS = 3000;
+
 /** How long stop waits for a poster frame still being taken before it saves without one. */
 const THUMBNAIL_STOP_WAIT_MS = 1000;
 
@@ -285,7 +293,9 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
     ? openMicrophone(options.microphoneDeviceId, options.audio.noiseSuppression)
     : Promise.resolve(null);
   // The webcam opens alongside them too, in its own request: it is not part of the screen.
-  const webcamRequest = options.webcam ? openWebcam(options.webcam) : Promise.resolve(null);
+  const webcamRequest = options.webcam
+    ? openWebcamWithin(options.webcam, WEBCAM_OPEN_TIMEOUT_MS)
+    : Promise.resolve(null);
   // A start that fails before the mic and the webcam are wired in must still release them
   // (the mic light, the camera light).
   const releaseMicOnFailure = (error: unknown): never => {
@@ -914,6 +924,27 @@ async function openWebcam(webcam: {
     }
   }
   return null; // webcam unavailable — the take records without it
+}
+
+/**
+ * `openWebcam`, given up on after `timeoutMs`: the take then records without a webcam, and a
+ * camera that answers later is released at once (its light goes off).
+ */
+async function openWebcamWithin(
+  webcam: { deviceId: string | null; lines: number },
+  timeoutMs: number,
+): Promise<MediaStream | null> {
+  const opening = openWebcam(webcam);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<"timeout">((resolve) => {
+    timer = setTimeout(() => resolve("timeout"), timeoutMs);
+  });
+  const result = await Promise.race([opening, timedOut]);
+  clearTimeout(timer);
+  if (result !== "timeout") return result;
+  console.warn(`webcam did not open within ${timeoutMs} ms — recording without it`);
+  void opening.then((late) => late?.getTracks().forEach((track) => track.stop()));
+  return null;
 }
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));

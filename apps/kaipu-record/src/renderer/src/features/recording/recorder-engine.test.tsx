@@ -7,7 +7,12 @@ import {
 } from "mediabunny";
 import { Mp4OutputFormat } from "mediabunny";
 import { DEFAULT_AUDIO_SETTINGS } from "@shared/audio-settings";
-import { prepareEngine, startEngine, type EngineOptions } from "./recorder-engine";
+import {
+  WEBCAM_OPEN_TIMEOUT_MS,
+  prepareEngine,
+  startEngine,
+  type EngineOptions,
+} from "./recorder-engine";
 import { startRecordingCompositor } from "./recording-compositor";
 
 // The compositor touches a real <canvas>/captureStream (no-op in jsdom), so mock
@@ -1254,6 +1259,37 @@ describe("webcam", () => {
     const handle = await startEngine(baseOptions({ webcam }));
     expect(handle.webcam).toBeNull();
     expect(outputs()).toHaveLength(1);
+  });
+
+  it("a camera that never answers is given up on, and the take goes on without it", async () => {
+    // A permission prompt left open or a hung device: the request never settles on its own.
+    let answer!: (stream: MediaStream) => void;
+    const original = getUserMedia.getMockImplementation() as (
+      c: MediaStreamConstraints,
+    ) => Promise<MediaStream>;
+    getUserMedia.mockImplementation((c: MediaStreamConstraints) =>
+      c.video && !("mandatory" in (c.video as object))
+        ? new Promise<MediaStream>((resolve) => (answer = resolve))
+        : original(c),
+    );
+    // Well inside the store's 10 s start timeout, which would otherwise fail the whole take.
+    expect(WEBCAM_OPEN_TIMEOUT_MS).toBeLessThan(10_000);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      let prepared: Awaited<ReturnType<typeof prepareEngine>> | null = null;
+      void prepareEngine(baseOptions({ webcam })).then((p) => (prepared = p));
+      await vi.advanceTimersByTimeAsync(WEBCAM_OPEN_TIMEOUT_MS - 1);
+      expect(prepared).toBeNull();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(prepared).not.toBeNull();
+      expect(outputs()).toHaveLength(1); // no webcam output
+      // The camera answers late: released at once, so its light goes off.
+      answer(fakeStream([webcamTrack], []));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(webcamTrack.stop).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("a webcam output that cannot start drops the webcam, not the take", async () => {
