@@ -365,7 +365,6 @@ export class RecordingWriter {
     await session.handle.close();
   }
 
-  /** Move a stranded take to a path the user picked, then forget the session. */
   /**
    * Move a stranded take to a path the user picked, then forget the session. Its webcam, when
    * stranded with it, goes beside it as `<name>.webcam.mp4` (best-effort: the screen is the take).
