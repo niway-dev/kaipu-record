@@ -149,7 +149,9 @@ export function WebcamLayer({
     if (!cam.seeking) {
       const seekTo = webcamResyncTarget(cam.currentTime, webcamTime, cam.duration);
       if (seekTo !== null) {
-        const lead = webcamSeekLead(!!main && !main.paused, lastSeekSeconds.current);
+        // The lead is for a moving clock: a waiting main video is not paused but holds still.
+        const moving = !!main && !main.paused && !mainWaiting.current;
+        const lead = webcamSeekLead(moving, lastSeekSeconds.current);
         const end = Number.isFinite(cam.duration) && cam.duration > 0 ? cam.duration : Infinity;
         seekStartedAt.current = performance.now();
         cam.currentTime = Math.min(seekTo + lead, end);

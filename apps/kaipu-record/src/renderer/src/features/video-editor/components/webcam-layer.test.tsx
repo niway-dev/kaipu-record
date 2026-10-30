@@ -260,6 +260,38 @@ describe("WebcamLayer", () => {
     expect(writes[1]).toBeCloseTo(3.8);
   });
 
+  it("gives no lead while the main video waits for data: its clock is not moving", () => {
+    const { ref, el } = mainVideo(1);
+    renderLayer({ videoRef: ref });
+    const cam = loadWebcam(30);
+    let camTime = 1;
+    let seeking = false;
+    const writes: number[] = [];
+    Object.defineProperty(cam, "currentTime", {
+      configurable: true,
+      get: () => camTime,
+      set: (v: number) => {
+        writes.push(v);
+        camTime = v;
+        seeking = true;
+      },
+    });
+    Object.defineProperty(cam, "seeking", { configurable: true, get: () => seeking });
+    Object.defineProperty(el, "paused", { configurable: true, get: () => false });
+    const now = vi.spyOn(performance, "now").mockReturnValue(1_000);
+    act(() => setTime(el, 3));
+    // A 400 ms seek: during playback the next one would lead by 400 ms.
+    now.mockReturnValue(1_400);
+    seeking = false;
+    act(() => void fireEvent(cam, new Event("seeked")));
+    // The screen runs out of data and a scrub lands elsewhere: it holds at 6, so the face
+    // must too — a lead would jump it ahead, then back when `playing` resyncs it.
+    act(() => void fireEvent(el, new Event("waiting")));
+    writes.length = 0;
+    act(() => setTime(el, 6));
+    expect(writes).toEqual([6]);
+  });
+
   it("pauses the webcam while the main video waits for data, and resumes on playing", () => {
     const { ref, el } = mainVideo(1);
     renderLayer({ videoRef: ref });
