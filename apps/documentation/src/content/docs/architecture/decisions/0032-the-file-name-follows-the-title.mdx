@@ -45,8 +45,9 @@ same second already share a stem today.
 
 ## Decision
 
-1. **The local id remains the file stem, and a rename changes it.** `LibraryVault.renameItem(id, title)`
-   saves the title, moves the media file and every companion to the new stem, and returns the
+1. **The local id remains the file stem, and a rename changes it.** `LibraryVault.renameItem({ id, assetId }, title)`
+   resolves the item by identity under the names lock (following it if it moved, never acting
+   on whatever item now holds a stale id), saves the title, moves the media file and every companion to the new stem, and returns the
    new `LocalRecording`. Callers must treat `id` as valid only until the next rename and never
    persist it; `assetId` is the identity for anything that outlives a render.
 2. **The title is the source; the file name is a projection.** The title stays in the sidecar
@@ -85,7 +86,7 @@ same second already share a stem today.
    acquires its item through main under the same names lock as renames and is answered the
    item's current id, which it loads and writes under; with no answer (the item is gone, or
    main failed) it loads nothing and says the item is no longer available — never the route's
-   id, which another item may have taken. It releases on unmount or when its window goes away,
+   id, which another item may have taken. It releases on unmount or when its window is destroyed, reloads or its renderer crashes,
    and a request that waited for the lock is refused if its window closed or reloaded
    meanwhile (per-window generation), so no hold outlives its page. The
    title is saved either way; a non-blocking toast offers Retry. A rename never fails because
