@@ -83,9 +83,12 @@ Defaulted on 2026-10-30; each is taken as written unless its "revisit if" trigge
 6. **`removeLocalCopy` with a webcam file.** Defaulted: refused with a reason, like an edit
    session refuses it today. Revisit when cloud plan 03 uploads the webcam as an auxiliary
    object of the asset.
-7. **Webcam turned on or off mid-take.** Defaulted: supported — a late start is just a larger
-   `startOffsetMs`; turning it off ends the file and the layer disappears from that source time.
-   Revisit if the late `getUserMedia` costs a visible stall in the screen track.
+7. **Webcam turned on or off mid-take.** Decided in code (NIW2-576 review): turning it off ends
+   the file and the layer disappears from that source time; turning it on mid-take records **no**
+   second webcam file. Instead, the bubble is left in the screen capture for the rest of that
+   take (section 3.2), so the face is recorded in the screen pixels. Whether a running
+   ScreenCaptureKit stream picks up a bubble that drops its protection mid-stream is unverified
+   (spike rows 4/5).
 8. **`window` targets.** Defaulted: same path (separate file, protected bubble). Unverified
    inference: with ScreenCaptureKit window capture the bubble was probably never in a window
    recording; task 0 checks it.
@@ -189,10 +192,11 @@ Input for tests; each line is at least one test.
 in `EngineOptions`. When set:
 
 - A `getUserMedia({ video: { deviceId | facingMode: "user", width: { ideal: lines * 16/9 }, height: { ideal: lines } }, audio: false })`
-  request opens beside the screen and the mic requests (same pattern as `micRequest`: in parallel,
-  released by `releaseMicOnFailure` on a failed start). A webcam that cannot be opened does not
-  fail the take: the take records without a webcam and the renderer reports it as the mic does
-  ("off or unavailable").
+  request opens beside the mic request and is settled **before** the screen is requested
+  (released by `releaseMicOnFailure` on a failed start). A webcam that cannot be opened does not
+  fail the take: the engine awaits `onWebcamUnavailable` (the store tells main through
+  `recordingWebcamEnded`, which puts the bubble back in the capture) before it requests the
+  screen, the take records the face in the screen, and the user gets a toast once it is saved.
 - A second `Output({ format: new Mp4OutputFormat({ fastStart: false }), target: new StreamTarget(webcamWritable) })`
   with one `MediaStreamVideoTrackSource(webcamTrack, { codec: "avc", bitrate: WEBCAM_BITRATE_BPS, hardwareAcceleration: "prefer-hardware", latencyMode: "realtime" })`
   and `addVideoTrack(source, { frameRate: 30 })`. No audio track. Chunks go to
@@ -300,6 +304,14 @@ before that the window is captured as black. The existing `fullDisplayBorderAllo
 release)` rule already encodes that threshold; the bubble reuses it to decide "Plan A works
 here". Where it does not (before 10 2004) the take keeps the legacy path: the bubble stays
 unprotected and burned into the screen, and no webcam track is recorded. Plan B is macOS-only.
+
+Protection also follows the take (NIW2-576 review, `bubble-protection.ts`): the bubble is
+protected with no take active, or while the active take records a live webcam file. A take
+whose camera was off when it started, whose camera did not open, or whose webcam file ended
+(turned off, unplugged, encoder failure) leaves the bubble in the screen capture: created
+unprotected, or unprotected in place. Finalize, abort and a forced reset protect it again,
+before the next take's screen capture starts. Unprotecting a bubble while a stream already runs
+is best effort and unverified (spike rows 4/5).
 
 ### 3.3 Plan B — native ScreenCaptureKit capture that excludes the bubble (recorded, not scheduled)
 
