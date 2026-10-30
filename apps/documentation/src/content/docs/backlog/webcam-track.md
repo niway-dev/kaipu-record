@@ -33,10 +33,11 @@ The professional model (Screen Studio, Cap, Tella, Camtasia):
   renderer on the same clock as the screen; the start offset goes on the sidecar, as the cursor
   track is anchored today. The screen file stays screen-only and nothing changes for recordings
   made before.
-- **Keep the bubble on screen but out of the capture.** Plan A is content protection from
+- **Keep the bubble on screen but out of the capture.** Plan A is chosen (owner, 2026-10-30):
+  content protection from
   creation (Electron's `desktopCapturer` path hands in-process protected windows to
   ScreenCaptureKit's `excludingWindows`); a spike with written pass/fail criteria goes first. Plan
-  B, only if the spike fails, is a native ScreenCaptureKit capture that excludes the bubble by
+  B is recorded, not scheduled: only if the spike fails does it become a ticket — a native ScreenCaptureKit capture that excludes the bubble by
   window id, as Cap does. Hiding the bubble during a take is rejected.
 - **The editor composes the webcam as a viewport layer** — a global layout (shape, size,
   position, mirror, framing, shrink during zoom) plus source-anchored hide/override segments —

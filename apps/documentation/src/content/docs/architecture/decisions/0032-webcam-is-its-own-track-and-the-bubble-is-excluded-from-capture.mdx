@@ -47,15 +47,17 @@ composite, and why the bubble is still on screen while recording if it is not in
    `webcam`, beside the recorded layout, size and fps. Pause and resume act on both sources in the
    same call. `bun run webcam-track:check` reports the offset like `cursor-track:check` reports
    the track.
-3. **The bubble is excluded from the capture and stays on screen.** Plan A: the bubble window is
+3. **The bubble is excluded from the capture and stays on screen.** Plan A is the chosen path
+   (owner, 2026-10-30); Plan B is recorded as the fallback and is not scheduled. Plan A: the bubble window is
    content-protected **from creation**, always — the capture path is Electron's `desktopCapturer`
    (`chromeMediaSource: "desktop"`), where Electron's Chromium patch passes in-process
    `NSWindowSharingNone` windows to ScreenCaptureKit's `initWithDisplay:excludingWindows:`, and
    Windows uses `WDA_EXCLUDEFROMCAPTURE` (10 2004+). A one-day spike with written pass/fail
-   criteria (spec task 0) runs before any other work. Plan B, taken only if the spike fails on a
+   criteria (spec task 0) runs before any other work. Plan B, built only if the spike fails on a
    supported macOS: a native ScreenCaptureKit capture behind the engine's source seam that
    excludes the bubble by its window id, as Cap does, under the repo's native-dependencies rules
-   (no install scripts, explicit rebuild, degrade to the Chromium path when missing).
+   (no install scripts, explicit rebuild, degrade to the Chromium path when missing). Taking it
+   needs its own ticket and an amendment to this ADR.
 4. **The screen file stays screen-only.** `<id>.mp4` is the original (ADR 0003) and has no face
    in it; the webcam is composed by the editor, every export and Share (ADR 0033). A recording
    without `webcam` on its sidecar — every recording made before this — is unchanged.
