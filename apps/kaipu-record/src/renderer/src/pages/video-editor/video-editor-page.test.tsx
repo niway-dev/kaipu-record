@@ -257,6 +257,28 @@ describe("VideoEditorLoader — item no longer available (NIW2-560)", () => {
   });
 });
 
+describe("VideoEditorLoader — an identity two files claim (NIW2-560)", () => {
+  it("says the item is claimed twice instead of 'no longer in your library', and loads nothing", async () => {
+    window.electronAPI.acquireEditorSession = vi.fn(async () => {
+      throw new Error("Error invoking remote method: vault-ambiguous-identity: 2 local items");
+    }) as never;
+    const loadSession = vi.fn(async () => null);
+    window.electronAPI.loadVideoEditSession = loadSession;
+    render(
+      <RouterProvider
+        router={createMemoryRouter([
+          { path: "/", element: <VideoEditorLoader source={SOURCE} /> },
+          { path: "/library", element: <div>library-page</div> },
+        ])}
+      />,
+    );
+    expect(await screen.findByText(/two files in your folder/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no longer in your library/i)).toBeNull();
+    expect(loadSession).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /back to library/i })).toBeInTheDocument();
+  });
+});
+
 describe("VideoEditorPage — transport bar", () => {
   it("renders the play/pause button with aria-label Play by default", async () => {
     renderEditor();

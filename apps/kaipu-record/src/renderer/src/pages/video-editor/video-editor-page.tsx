@@ -122,6 +122,7 @@ import { ExportDialog } from "@renderer/features/video-editor/components/export-
 import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import { showToast } from "@renderer/ui/toast-store";
+import { isAmbiguousIdentityError } from "@renderer/features/library/rename-outcome";
 import styles from "./video-editor-page.module.css";
 
 /** The "original" pill's own shape, moved out of video-editor-page.module.css:
@@ -273,7 +274,8 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
     scene: VideoScene;
     cursorTrack: CursorTrack | null;
   } | null>(null);
-  const [unavailable, setUnavailable] = useState(false);
+  // Why nothing was loaded: the item is gone, or two files claim its identity.
+  const [unavailable, setUnavailable] = useState<"gone" | "ambiguous" | null>(null);
   const navigate = useNavigate();
   const tLibrary = useTranslations("library");
 
@@ -287,11 +289,13 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
     // CURRENT id; nothing is loaded or written before that answer, so a rename that was
     // moving the file as the editor opened can never leave it on the old name.
     let heldId: string | null = null;
+    let ambiguous = false;
     void (async () => {
       try {
         heldId = await window.electronAPI.acquireEditorSession(source.assetId);
-      } catch {
+      } catch (error) {
         heldId = null;
+        ambiguous = isAmbiguousIdentityError(error);
       }
       if (cancelled) {
         if (heldId !== null) window.electronAPI.closeEditorSession(heldId);
@@ -301,7 +305,7 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
       // id — another item may have taken that name since, and this editor would read its
       // media and overwrite its session.
       if (heldId === null) {
-        setUnavailable(true);
+        setUnavailable(ambiguous ? "ambiguous" : "gone");
         return;
       }
       const editorSource: VideoEditorSource = { ...source, id: heldId };
@@ -374,7 +378,7 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
   if (unavailable) {
     return (
       <div className={styles.unavailable} role="alert">
-        <p>{t("sourceUnavailable")}</p>
+        <p>{unavailable === "ambiguous" ? tLibrary("itemAmbiguous") : t("sourceUnavailable")}</p>
         <Button variant="ghost" onClick={() => navigate(ROUTES.library)}>
           {tLibrary("backToLibrary")}
         </Button>
