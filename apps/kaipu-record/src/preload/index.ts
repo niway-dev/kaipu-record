@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { IPC_CHANNELS } from "@shared/types";
-import type { AppSettings } from "@shared/types";
+import type { AppSettings, ReconcileProgress } from "@shared/types";
 import type { AuthError, AuthStatus } from "@shared/types/auth";
 import type {
   CaptureRequestPayload,
@@ -88,6 +88,7 @@ const kaipuApi: KaipuElectronAPI = {
   gifSave: (bytes, meta) => ipcRenderer.invoke(IPC_CHANNELS.gifSave, bytes, meta),
   startFileDrag: (id, name) => ipcRenderer.send(IPC_CHANNELS.startFileDrag, id, name),
   setExportActive: (active) => ipcRenderer.send(IPC_CHANNELS.exportActive, active),
+  beginExport: () => ipcRenderer.invoke(IPC_CHANNELS.exportBegin),
   onExportCommand: (callback) => {
     const listener = (_e: IpcRendererEvent, command: "cancel"): void => callback(command);
     ipcRenderer.on(IPC_CHANNELS.exportCommand, listener);
@@ -102,6 +103,20 @@ const kaipuApi: KaipuElectronAPI = {
     const listener = (): void => callback();
     ipcRenderer.on(IPC_CHANNELS.libraryChanged, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.libraryChanged, listener);
+  },
+  reconcileScan: () => ipcRenderer.invoke(IPC_CHANNELS.libraryReconcileScan),
+  reconcileFix: () => ipcRenderer.invoke(IPC_CHANNELS.libraryReconcileFix),
+  reconcileCancel: () => ipcRenderer.invoke(IPC_CHANNELS.libraryReconcileCancel),
+  onReconcileProgress: (callback) => {
+    const listener = (_e: IpcRendererEvent, progress: ReconcileProgress): void =>
+      callback(progress);
+    ipcRenderer.on(IPC_CHANNELS.libraryReconcileProgress, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.libraryReconcileProgress, listener);
+  },
+  onLibraryMaintenanceEnded: (callback) => {
+    const listener = (): void => callback();
+    ipcRenderer.on(IPC_CHANNELS.libraryMaintenanceEnded, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.libraryMaintenanceEnded, listener);
   },
   listLibraryItems: () => ipcRenderer.invoke(IPC_CHANNELS.listLibraryItems),
   refreshCloudCatalog: () => ipcRenderer.invoke(IPC_CHANNELS.refreshCloudCatalog),

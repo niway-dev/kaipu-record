@@ -19,6 +19,7 @@ import { ROUTES } from "@shared/routes";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
 import { currentVault, registerLibraryVaultHandlers } from "./library";
+import { vaultActivity, type ActivityLease } from "./library/vault-activity";
 import { cleanupDragCopies, cleanupLegacyDragCopies } from "./library/drag-copies";
 import { registerCloudStorageHandlers } from "./cloud";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
@@ -118,6 +119,17 @@ let closingWithRecording = false;
 let quittingWithRecording = false;
 /** Mirrors the renderer's `exportActive` message: true while a video export is writing. */
 let exportActive = false;
+/**
+ * The running export's vault lease (maintenance mode, NIW2-561), taken by the
+ * acknowledged `export:begin` before the source is read; released on completion,
+ * cancellation or the renderer going away.
+ */
+let exportLease: ActivityLease | null = null;
+function endExport(): void {
+  exportActive = false;
+  exportLease?.release();
+  exportLease = null;
+}
 /** True once the user confirmed "Cancel export and close" — lets the second `close` pass. */
 let closingWithExport = false;
 /** Same, for "Cancel export and quit" on `before-quit`. */
@@ -236,7 +248,7 @@ function cancelExportThen(done: () => void): void {
     if (finished) return;
     finished = true;
     // Whatever won, the confirmed cancel is final: don't let the guards prompt a second time.
-    exportActive = false;
+    endExport();
     clearTimeout(timeout);
     ipcMain.removeListener(IPC_CHANNELS.exportActive, onActive);
     done();
@@ -258,7 +270,7 @@ function createWindow(showOnReady = true): void {
   // A fresh window's renderer hasn't registered its IPC listeners yet; block
   // sends until it signals `appReady`.
   rendererReady = false;
-  exportActive = false;
+  endExport();
   // Create the browser window.
   mainWindow = new BrowserWindow({
     title: "Kaipu Record",
@@ -288,7 +300,7 @@ function createWindow(showOnReady = true): void {
     mainWindow = null;
     closingWithRecording = false;
     closingWithExport = false;
-    exportActive = false;
+    endExport();
     // A window closed mid-countdown takes its renderer, and the take with it. Release the
     // pending take (tray, Esc, shade) here; the user closed the window, so do not reopen it.
     hub?.forceReset();
@@ -394,7 +406,7 @@ function createWindow(showOnReady = true): void {
     console.error("main renderer process gone", details.reason);
     hub?.forceReset({ revealAbandoned: true });
     // The renderer that owned the export is gone; nothing is left to cancel.
-    exportActive = false;
+    endExport();
   });
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -675,8 +687,8 @@ const captureWindowHooks = createCaptureWindowHooks({
  * comes back already on the item — the same hand-off as the capture hotkey.
  */
 function openSavedScreenshot(target: "editor" | "library", id: string): void {
-  void currentVault()
-    .describe(id)
+  void vaultActivity
+    .run("library", () => currentVault().describe(id))
     .then((item) => {
       if (!item) {
         console.warn(`[screenshot] toast: ${id} is no longer in the vault`);
@@ -730,7 +742,14 @@ app.whenReady().then(() => {
   // The renderer reports when a video export starts and stops (NIW2-218); the close and quit
   // guards read it. Registered once, not per window.
   ipcMain.on(IPC_CHANNELS.exportActive, (_event, active: unknown) => {
-    exportActive = active === true;
+    if (active === true) exportActive = true;
+    else endExport();
+  });
+  // Before an export reads its source: refused while "Check and fix files" runs.
+  ipcMain.handle(IPC_CHANNELS.exportBegin, () => {
+    const lease = vaultActivity.admit("export");
+    exportLease?.release();
+    exportLease = lease;
   });
 
   // IPC test
@@ -741,6 +760,8 @@ app.whenReady().then(() => {
   ipcMain.on(IPC_CHANNELS.appReady, (event) => {
     if (event.sender !== mainWindow?.webContents) return;
     rendererReady = true;
+    // A reloaded renderer has no export running, whatever it last reported.
+    if (exportLease) endExport();
     const queued = pendingRendererSends;
     pendingRendererSends = [];
     for (const { channel, payload } of queued) mainWindow?.webContents.send(channel, payload);
@@ -1021,11 +1042,14 @@ app.whenReady().then(() => {
   registerMediaProtocol();
 
   // Recover takes a failed finalize or a crash left behind, so the first Library list sees them.
-  void recoverStrandedRecordings({
-    vaultDir: vaultDirectory().path,
-    fallbackTempDir: app.getPath("temp"),
-    title: createMainTranslator(getAppSettings().locale)("library.recoveredRecordingTitle"),
-  })
+  void vaultActivity
+    .run("recovery", () =>
+      recoverStrandedRecordings({
+        vaultDir: vaultDirectory().path,
+        fallbackTempDir: app.getPath("temp"),
+        title: createMainTranslator(getAppSettings().locale)("library.recoveredRecordingTitle"),
+      }),
+    )
     .then((r) => {
       if (r.recovered.length) console.info(`recovered ${r.recovered.length} stranded recording(s)`);
       if (r.failed.length) console.warn("stranded recordings left in place", r.failed);

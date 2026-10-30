@@ -885,6 +885,53 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     await expect(started).resolves.toEqual({ enabled: false });
   });
 
+  it("a take holds the vault from create through finalize: Fix all cannot start (C9, C10)", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    const { vaultActivity, VaultBusyError } = await import("../library/vault-activity");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+    const create = mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!;
+    const write = mockState.ipcOn.get(IPC_CHANNELS.recordingWrite)!;
+    const finalize = mockState.ipcHandle.get(IPC_CHANNELS.recordingFinalize)!;
+    await create({}, "session-1");
+    write({}, "session-1", new TextEncoder().encode("take").buffer, 0);
+    expect(vaultActivity.active()).toEqual(["recording"]);
+    await expect(vaultActivity.enterMaintenance()).rejects.toBeInstanceOf(VaultBusyError);
+
+    await finalize({}, "session-1", { title: "T", durationSeconds: 1, durationMs: 1000 });
+    expect(vaultActivity.active()).toEqual([]);
+    (await vaultActivity.enterMaintenance())();
+  });
+
+  it("an aborted take and a forced reset release the vault; a take is refused during a fix", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    const { vaultActivity, MaintenanceError } = await import("../library/vault-activity");
+    registerSettings();
+    const hub = registerRecordingHub(() => fakeMainWindow() as never);
+    const create = mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!;
+    const abort = mockState.ipcHandle.get(IPC_CHANNELS.recordingAbort)!;
+
+    await create({}, "session-1");
+    await abort({}, "session-1");
+    expect(vaultActivity.active()).toEqual([]);
+
+    await create({}, "session-2");
+    hub.forceReset();
+    await vi.waitFor(() => expect(vaultActivity.active()).toEqual([]));
+
+    const exit = await vaultActivity.enterMaintenance();
+    try {
+      await expect(Promise.resolve().then(() => create({}, "session-3"))).rejects.toBeInstanceOf(
+        MaintenanceError,
+      );
+    } finally {
+      exit();
+    }
+    expect(vaultActivity.active()).toEqual([]);
+  });
+
   it("starts the region's TTL only once a recreated main window has loaded", async () => {
     vi.useFakeTimers();
     try {

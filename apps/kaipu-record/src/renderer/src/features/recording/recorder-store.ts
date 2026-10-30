@@ -1,4 +1,5 @@
 import type { LocalRecording, RecordingSettings } from "@shared/types";
+import { isMaintenanceError } from "@renderer/features/library/vault-errors";
 import { defaultCaptureName } from "@shared/default-capture-name";
 import { sanitizeAudioSettings, type AudioSettings } from "@shared/audio-settings";
 import {
@@ -589,7 +590,9 @@ async function beginTake(
     pendingStart = null;
     // A timed-out start can still resolve later: release what it acquires.
     discardStart(start);
-    reportError(runtimeT()("record.errorStart"), error, {
+    // Refused while "Check and fix files" runs (NIW2-561): nothing was recorded.
+    const key = isMaintenanceError(error) ? "record.errorStartMaintenance" : "record.errorStart";
+    reportError(runtimeT()(key), error, {
       context: { sourceId: input.sourceId, phase: "start" },
       retry: () => {
         if (lastResolveInput) requestStartRecording(lastResolveInput);

@@ -14,6 +14,7 @@ import { join } from "node:path";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import { atomicWriteFile } from "./atomic-write";
 import { LibraryVault } from "./library-vault";
+import { vaultActivity } from "./vault-activity";
 import { vaultDirectory } from "./vault-location";
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
@@ -221,6 +222,8 @@ export async function deleteVideoEditSession(id: string): Promise<void> {
 // ── IPC registration ──────────────────────────────────────────────────────────
 
 export function registerVideoEditSessionHandlers(): void {
+  // Entry points (maintenance mode, NIW2-561): a refused save keeps its pending state in
+  // the editor, which retries on `library:maintenance-ended`.
   ipcMain.handle(
     IPC_CHANNELS.videoEditSaveSession,
     (
@@ -229,8 +232,10 @@ export function registerVideoEditSessionHandlers(): void {
       sessionJson: string,
       assets: { assetId: string; bytes: ArrayBuffer }[],
       exported?: boolean,
-    ) => saveSession(id, { sessionJson, assets, exported }),
+    ) => vaultActivity.run("editor", () => saveSession(id, { sessionJson, assets, exported })),
   );
 
-  ipcMain.handle(IPC_CHANNELS.videoEditLoadSession, (_event, id: string) => loadSession(id));
+  ipcMain.handle(IPC_CHANNELS.videoEditLoadSession, (_event, id: string) =>
+    vaultActivity.run("editor", () => loadSession(id)),
+  );
 }

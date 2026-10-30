@@ -116,3 +116,11 @@ export const AMBIGUOUS_IDENTITY_MARKER = "vault-ambiguous-identity";
  * holds can be recovered by hand (NIW2-561).
  */
 export const UNREADABLE_RECORD_MARKER = "vault-unreadable-record";
+
+/**
+ * Marker in the message of the error a vault operation is refused with while "Check and
+ * fix files" runs (NIW2-561, maintenance mode). Nothing was done and nothing is queued:
+ * the renderer says "Kaipu is fixing your files", and editors retry their pending save
+ * when `library:maintenance-ended` arrives.
+ */
+export const VAULT_MAINTENANCE_MARKER = "vault-maintenance";

@@ -455,6 +455,22 @@ export const IPC_CHANNELS = {
   exportActive: "export:active",
   /** NIW2-218: main → renderer, "cancel" the running export (the user confirmed quitting). */
   exportCommand: "export:command",
+  /**
+   * NIW2-561: renderer → main (invoke), before an export reads its source. Takes the
+   * export's vault lease; rejects with the maintenance marker while files are being fixed.
+   * Released by `exportActive: false`, or when the renderer goes away.
+   */
+  exportBegin: "export:begin",
+  /** NIW2-561: scan the vault for drift. Read-only; resolves `ReconcileScanResult`. */
+  libraryReconcileScan: "library:reconcile-scan",
+  /** NIW2-561: "Fix all", in maintenance mode. Resolves `ReconcileFixResult`. */
+  libraryReconcileFix: "library:reconcile-fix",
+  /** NIW2-561: stop waiting for the vault to be idle (before any file is touched). */
+  libraryReconcileCancel: "library:reconcile-cancel",
+  /** NIW2-561: main → renderer, `ReconcileProgress` while Fix all waits or runs. */
+  libraryReconcileProgress: "library:reconcile-progress",
+  /** NIW2-561: main → renderer, maintenance mode ended: editors retry their pending saves. */
+  libraryMaintenanceEnded: "library:maintenance-ended",
   getVaultDirectory: "library:get-vault-dir",
   chooseVaultDirectory: "library:choose-vault-dir",
   resetVaultDirectory: "library:reset-vault-dir",

@@ -8,7 +8,7 @@ import {
   systemPreferences,
 } from "electron";
 import { homedir, release } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createMainTranslator } from "@kaipu/i18n/main";
 import { IPC_CHANNELS } from "@shared/types";
 import { FINALIZE_ELSEWHERE_MARKER, FINALIZE_KEPT_MARKER } from "@shared/types/ipc";
@@ -27,6 +27,8 @@ import { buildRecordingStartedProperties, RECORDING_STARTED_EVENT } from "@share
 import { captureMainEvent } from "../services/analytics.service";
 import type { CaptureRect, RecordingRatio } from "@shared/types/screenshot-capture";
 import { LibraryVault } from "../library/library-vault";
+import { vaultActivity, type ActivityLease } from "../library/vault-activity";
+import type { LocalRecording } from "@shared/types/library-storage";
 import { areaCapturedDisplay, pickCapturedDisplay } from "./captured-display";
 import { ClickHook, type HookLike } from "./click-hook";
 import { CursorTrackRegistry } from "./cursor-tracker";
@@ -362,10 +364,26 @@ export function registerRecordingHub(
       if (oldest !== undefined) endedSessions.delete(oldest);
     }
   };
-  ipcMain.handle(IPC_CHANNELS.recordingCreate, (_e, sessionId: string) => {
+  // Maintenance mode (NIW2-561, C9): a take holds one activity lease from create through
+  // finalize, its cursor-track write and abort cleanup, so "Check and fix files" can never
+  // start in that window. A refused create starts nothing.
+  const recordingLeases = new Map<string, ActivityLease>();
+  const releaseRecording = (sessionId: string): void => {
+    recordingLeases.get(sessionId)?.release();
+    recordingLeases.delete(sessionId);
+  };
+  ipcMain.handle(IPC_CHANNELS.recordingCreate, async (_e, sessionId: string) => {
+    releaseRecording(sessionId);
+    const lease = vaultActivity.admit("recording");
+    recordingLeases.set(sessionId, lease);
     stoppedForWriteFailure = false;
     endedSessions.delete(sessionId);
-    return writer.create(sessionId);
+    try {
+      return await writer.create(sessionId);
+    } catch (error) {
+      releaseRecording(sessionId);
+      throw error;
+    }
   });
   ipcMain.on(
     IPC_CHANNELS.recordingWrite,
@@ -389,44 +407,55 @@ export function registerRecordingHub(
     async (_e, sessionId: string, meta: RecordingFinalizeMeta) => {
       // The renderer never retries a finalize (it aborts), so the take ends here either way.
       markEnded(sessionId);
-      let recording;
       try {
-        recording = await writer.finalize(sessionId, meta);
-      } catch (error) {
-        cursorTracks.discard(sessionId);
-        clickSessions.delete(sessionId);
-        stopHookIfIdle();
-        if (error instanceof FinalizeMoveError) {
-          const saved = await offerSaveElsewhere(sessionId);
-          throw new Error(
-            `${saved ? FINALIZE_ELSEWHERE_MARKER : FINALIZE_KEPT_MARKER} ${error.message}`,
-          );
-        }
-        throw error;
+        return await finalizeTake(sessionId, meta);
+      } finally {
+        releaseRecording(sessionId);
       }
-      // Best effort: a recording is never failed by its cursor track. The tracker
-      // is still sampling here (finalize runs after the encoder stopped), so the
-      // tail past the last frame is cut with the recording's VIDEO duration at the
-      // stop request (measured from the first media sample, see recorder-store
-      // `videoClock`) — the same time base as the samples. `+ 250` (not
-      // `meta.durationMs` exactly) covers the frames `output.finalize()` flushes
-      // after the request, the last frame's own duration and clock jitter: the
-      // whole point of this cut is to drop the 0.6–2 s of "saving" samples, not
-      // to be frame-exact.
-      const track = cursorTracks.finish(
-        sessionId,
-        clickSessions.delete(sessionId),
-        meta.durationMs + 250,
-      );
-      stopHookIfIdle();
-      if (track) {
-        await new LibraryVault(vaultDirectory().path)
-          .writeCursorTrack(recording.id, serializeCursorTrack(track))
-          .catch((error) => console.error("cursor track write failed", error));
-      }
-      return recording;
     },
   );
+  const finalizeTake = async (
+    sessionId: string,
+    meta: RecordingFinalizeMeta,
+  ): Promise<LocalRecording> => {
+    let recording;
+    try {
+      recording = await writer.finalize(sessionId, meta);
+    } catch (error) {
+      cursorTracks.discard(sessionId);
+      clickSessions.delete(sessionId);
+      stopHookIfIdle();
+      if (error instanceof FinalizeMoveError) {
+        const saved = await offerSaveElsewhere(sessionId);
+        throw new Error(
+          `${saved ? FINALIZE_ELSEWHERE_MARKER : FINALIZE_KEPT_MARKER} ${error.message}`,
+        );
+      }
+      throw error;
+    }
+    // Best effort: a recording is never failed by its cursor track. The tracker
+    // is still sampling here (finalize runs after the encoder stopped), so the
+    // tail past the last frame is cut with the recording's VIDEO duration at the
+    // stop request (measured from the first media sample, see recorder-store
+    // `videoClock`) — the same time base as the samples. `+ 250` (not
+    // `meta.durationMs` exactly) covers the frames `output.finalize()` flushes
+    // after the request, the last frame's own duration and clock jitter: the
+    // whole point of this cut is to drop the 0.6–2 s of "saving" samples, not
+    // to be frame-exact.
+    const track = cursorTracks.finish(
+      sessionId,
+      clickSessions.delete(sessionId),
+      meta.durationMs + 250,
+    );
+    stopHookIfIdle();
+    if (track) {
+      // The folder the take was saved in, not the setting read again (C9).
+      await new LibraryVault(dirname(recording.filePath))
+        .writeCursorTrack(recording.id, serializeCursorTrack(track))
+        .catch((error) => console.error("cursor track write failed", error));
+    }
+    return recording;
+  };
   // NIW2-218: Small-file size check before finalize. Takes a session id only, like write.
   ipcMain.handle(IPC_CHANNELS.recordingStat, (_e, sessionId: string): Promise<number> => {
     if (typeof sessionId !== "string") throw new Error("recordingStat: invalid session id");
@@ -437,7 +466,7 @@ export function registerRecordingHub(
     cursorTracks.discard(sessionId);
     clickSessions.delete(sessionId);
     stopHookIfIdle();
-    return writer.abort(sessionId);
+    return writer.abort(sessionId).finally(() => releaseRecording(sessionId));
   });
   ipcMain.handle(
     IPC_CHANNELS.cursorTrackStart,
@@ -895,7 +924,11 @@ export function registerRecordingHub(
       // Its takes will never be finalized or aborted: release their file handles. The partial
       // files stay on disk, and a cursor track still resolving for one of them must not start.
       for (const id of writer.ids()) markEnded(id);
-      void writer.releaseAll().catch((error) => console.error("releasing takes failed", error));
+      const leased = [...recordingLeases.keys()];
+      void writer
+        .releaseAll()
+        .catch((error) => console.error("releasing takes failed", error))
+        .finally(() => leased.forEach(releaseRecording));
       cursorTracks.discardAll();
       clickSessions.clear();
       clickHook.stop();

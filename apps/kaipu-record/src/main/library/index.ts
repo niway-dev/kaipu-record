@@ -24,6 +24,18 @@ import { createDragCopy } from "./drag-copies";
 import { friendlyDragName } from "./drag-name";
 import { resetVaultDirectory, setVaultDirectory, vaultDirectory } from "./vault-location";
 import { registerVideoEditSessionHandlers } from "./video-edit-session";
+import { MaintenanceError, vaultActivity, type ActivityKind } from "./vault-activity";
+
+/**
+ * An IPC handler that enters the vault from outside: it holds one activity lease for its
+ * whole run and is refused while "Check and fix files" runs (maintenance mode, NIW2-561).
+ */
+export function admitted<A extends unknown[], R>(
+  kind: ActivityKind,
+  fn: (...args: A) => R,
+): (...args: A) => Promise<Awaited<R>> {
+  return (...args) => vaultActivity.run(kind, async (): Promise<Awaited<R>> => await fn(...args));
+}
 
 /** Tell every window the library changed (a new item, a new vault folder) so open pages re-list. */
 export function broadcastLibraryChanged(): void {
@@ -78,17 +90,24 @@ export function registerLibraryVaultHandlers(deps: {
     fetchCatalog: (token) => fetchCloudCatalog({ serverUrl: deps.serverUrl }, token),
   });
 
-  ipcMain.handle(IPC_CHANNELS.listLibraryItems, () => service.list());
+  ipcMain.handle(
+    IPC_CHANNELS.listLibraryItems,
+    admitted("library", () => service.list()),
+  );
   ipcMain.handle(IPC_CHANNELS.refreshCloudCatalog, async () => {
     const result = await service.refreshCatalog();
     if (result.ok) broadcastLibraryChanged();
     return result;
   });
-  ipcMain.handle(IPC_CHANNELS.removeLocalCopy, async (_event, id: string) => {
-    const result = await service.removeLocalCopy(id);
-    if (result.ok) broadcastLibraryChanged();
-    return result;
-  });
+  // One lease around describe → hash → delete.
+  ipcMain.handle(
+    IPC_CHANNELS.removeLocalCopy,
+    admitted("library", async (_event: unknown, id: string) => {
+      const result = await service.removeLocalCopy(id);
+      if (result.ok) broadcastLibraryChanged();
+      return result;
+    }),
+  );
   // Account changes (sign-in, sign-out, switch) re-list so the previous account's cloud
   // items disappear at once, and kick a refresh for the new one.
   deps.auth.onAccountChanged((userId) => {
@@ -96,9 +115,13 @@ export function registerLibraryVaultHandlers(deps: {
     if (userId) void service.refreshCatalog().then((r) => r.ok && broadcastLibraryChanged());
   });
 
-  ipcMain.handle(IPC_CHANNELS.listLocalRecordings, () => currentVault().list());
-  ipcMain.handle(IPC_CHANNELS.loadCursorTrack, (_event, id: string) =>
-    currentVault().readCursorTrack(id),
+  ipcMain.handle(
+    IPC_CHANNELS.listLocalRecordings,
+    admitted("library", () => currentVault().list()),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.loadCursorTrack,
+    admitted("library", (_event: unknown, id: string) => currentVault().readCursorTrack(id)),
   );
   // NIW2-560: the video editor holds its source id for its lifetime. Whatever asks for a
   // rename (a toast's Retry survives navigation), the file keeps its name while the item
@@ -106,19 +129,23 @@ export function registerLibraryVaultHandlers(deps: {
   const editorSessions = new EditorSessions();
   // Serialized with renames (names lock): an editor that opens while a rename is moving
   // the file waits, and loads under the id the rename produced.
-  ipcMain.handle(IPC_CHANNELS.editorSessionAcquire, async (event, assetId: unknown) => {
-    if (typeof assetId !== "string") return null;
-    const sender = event.sender;
-    const owner = sender.id;
-    editorSessions.watch(sender);
-    // Captured on arrival: if the window reloads or closes while the request waits for
-    // the names lock, the hold is refused instead of outliving the page that asked.
-    const generation = editorSessions.generation(owner);
-    return currentVault().acquireForEditor(
-      assetId,
-      (id) => !sender.isDestroyed() && editorSessions.openIfCurrent(owner, generation, id, assetId),
-    );
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.editorSessionAcquire,
+    admitted("editor", async (event: Electron.IpcMainInvokeEvent, assetId: unknown) => {
+      if (typeof assetId !== "string") return null;
+      const sender = event.sender;
+      const owner = sender.id;
+      editorSessions.watch(sender);
+      // Captured on arrival: if the window reloads or closes while the request waits for
+      // the names lock, the hold is refused instead of outliving the page that asked.
+      const generation = editorSessions.generation(owner);
+      return currentVault().acquireForEditor(
+        assetId,
+        (id) =>
+          !sender.isDestroyed() && editorSessions.openIfCurrent(owner, generation, id, assetId),
+      );
+    }),
+  );
   ipcMain.on(IPC_CHANNELS.editorSessionClose, (event, id: unknown) => {
     if (typeof id === "string") editorSessions.close(event.sender.id, id);
   });
@@ -127,25 +154,39 @@ export function registerLibraryVaultHandlers(deps: {
   // protocol for minutes, so while one runs the file keeps its name (the title is saved).
   ipcMain.handle(
     IPC_CHANNELS.renameLocalRecording,
-    async (_event, id: unknown, assetId: unknown, title: unknown): Promise<RenameResult> => {
-      if (typeof id !== "string" || !isPlainItemId(id)) throw new Error("rename: invalid id");
-      // Never a bare id: the item is resolved by identity under the names lock.
-      if (typeof assetId !== "string" || assetId.length === 0) {
-        throw new Error("rename: invalid assetId");
-      }
-      if (typeof title !== "string") throw new Error("rename: invalid title");
-      const result = await currentVault().renameItem({ id, assetId }, title.trim(), {
-        isBusy: deps.isExportActive,
-        isEditing: (itemId, assetId) => editorSessions.isOpen(itemId, assetId),
-      });
-      if (result.file === "renamed") broadcastLibraryChanged();
-      return result;
-    },
+    admitted(
+      "library",
+      async (
+        _event: unknown,
+        id: unknown,
+        assetId: unknown,
+        title: unknown,
+      ): Promise<RenameResult> => {
+        if (typeof id !== "string" || !isPlainItemId(id)) throw new Error("rename: invalid id");
+        // Never a bare id: the item is resolved by identity under the names lock.
+        if (typeof assetId !== "string" || assetId.length === 0) {
+          throw new Error("rename: invalid assetId");
+        }
+        if (typeof title !== "string") throw new Error("rename: invalid title");
+        const result = await currentVault().renameItem({ id, assetId }, title.trim(), {
+          isBusy: deps.isExportActive,
+          isEditing: (itemId, assetId) => editorSessions.isOpen(itemId, assetId),
+        });
+        if (result.file === "renamed") broadcastLibraryChanged();
+        return result;
+      },
+    ),
   );
   // No broadcast: the stamp only reorders the Editor home, which re-lists on mount.
-  ipcMain.handle(IPC_CHANNELS.markOpenedInEditor, (_event, id: string) =>
-    currentVault().markOpenedInEditor(id),
+  ipcMain.handle(
+    IPC_CHANNELS.markOpenedInEditor,
+    admitted("library", (_event: unknown, id: string) => currentVault().markOpenedInEditor(id)),
   );
+  // Every vault handler below enters under one lease (maintenance mode).
+  const handleVault = <A extends unknown[]>(
+    channel: string,
+    fn: (event: Electron.IpcMainInvokeEvent, ...args: A) => unknown,
+  ): void => ipcMain.handle(channel, admitted("library", fn));
   // Tags (ADR 0020). Every change re-lists the Library in every window, so cards,
   // filters and the drawer never disagree about a tag's name or color.
   let deviceId = "unknown";
@@ -158,19 +199,19 @@ export function registerLibraryVaultHandlers(deps: {
     broadcastLibraryChanged();
     return result;
   };
-  ipcMain.handle(IPC_CHANNELS.listTags, () => tags.list());
-  ipcMain.handle(IPC_CHANNELS.createTag, async (_event, name: unknown, color: unknown) =>
+  handleVault(IPC_CHANNELS.listTags, () => tags.list());
+  handleVault(IPC_CHANNELS.createTag, async (_event, name: unknown, color: unknown) =>
     summary((await changed(tags.create(String(name), isTagColor(color) ? color : undefined))).id),
   );
-  ipcMain.handle(IPC_CHANNELS.renameTag, async (_event, id: unknown, name: unknown) =>
+  handleVault(IPC_CHANNELS.renameTag, async (_event, id: unknown, name: unknown) =>
     summary((await changed(tags.rename(String(id), String(name)))).id),
   );
-  ipcMain.handle(IPC_CHANNELS.recolorTag, async (_event, id: unknown, color: unknown) => {
+  handleVault(IPC_CHANNELS.recolorTag, async (_event, id: unknown, color: unknown) => {
     if (!isTagColor(color)) throw new Error("tags: not a palette color");
     return summary((await changed(tags.recolor(String(id), color))).id);
   });
-  ipcMain.handle(IPC_CHANNELS.deleteTag, (_event, id: unknown) => changed(tags.remove(String(id))));
-  ipcMain.handle(IPC_CHANNELS.setItemTags, (_event, itemId: unknown, tagIds: unknown) =>
+  handleVault(IPC_CHANNELS.deleteTag, (_event, id: unknown) => changed(tags.remove(String(id))));
+  handleVault(IPC_CHANNELS.setItemTags, (_event, itemId: unknown, tagIds: unknown) =>
     changed(
       tags.assign(
         String(itemId),
@@ -178,19 +219,17 @@ export function registerLibraryVaultHandlers(deps: {
       ),
     ),
   );
-  ipcMain.handle(
+  handleVault(
     IPC_CHANNELS.backfillLocalRecordingMeta,
     (_event, id: string, meta: RecordingBackfillMeta) => currentVault().backfill(id, meta),
   );
   // remove() deletes every companion, the edit session and its assets included.
-  ipcMain.handle(IPC_CHANNELS.deleteLocalRecording, (_event, id: string) =>
-    currentVault().remove(id),
-  );
+  handleVault(IPC_CHANNELS.deleteLocalRecording, (_event, id: string) => currentVault().remove(id));
   ipcMain.handle(IPC_CHANNELS.revealLocalRecording, async (_event, id: string) =>
     shell.showItemInFolder(await currentVault().filePath(id)),
   );
   // NIW2-217: GIF export. Bytes are validated (GIF89a, ≤ 64 MB) and the path is chosen here.
-  ipcMain.handle(IPC_CHANNELS.gifSave, async (_event, bytes: ArrayBuffer, meta: GifSaveMeta) => {
+  handleVault(IPC_CHANNELS.gifSave, async (_event, bytes: ArrayBuffer, meta: GifSaveMeta) => {
     const recording = await saveGif({ vaultDir: () => vaultDirectory().path }, bytes, meta);
     broadcastLibraryChanged();
     return recording;
@@ -229,6 +268,8 @@ export function registerLibraryVaultHandlers(deps: {
   ipcMain.handle(
     IPC_CHANNELS.chooseVaultDirectory,
     async (event): Promise<VaultDirectory | null> => {
+      // No dialog while files are being fixed (C7); the commit below is admitted again.
+      if (vaultActivity.inMaintenance) throw new MaintenanceError();
       const window = BrowserWindow.fromWebContents(event.sender);
       const t = createMainTranslator(getAppSettings().locale);
       const options: Electron.OpenDialogOptions = {
@@ -271,17 +312,20 @@ export function registerLibraryVaultHandlers(deps: {
         : dialog.showMessageBox(confirm));
       if (choice.response !== 1) return null;
 
-      setVaultDirectory(chosen);
+      await vaultActivity.run("folder", () => setVaultDirectory(chosen));
       broadcastLibraryChanged();
       return vaultDirectory();
     },
   );
 
-  ipcMain.handle(IPC_CHANNELS.resetVaultDirectory, (): VaultDirectory => {
-    resetVaultDirectory();
-    broadcastLibraryChanged();
-    return vaultDirectory();
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.resetVaultDirectory,
+    admitted("folder", (): VaultDirectory => {
+      resetVaultDirectory();
+      broadcastLibraryChanged();
+      return vaultDirectory();
+    }),
+  );
 
   // Video-editor session persistence (save on export, load on editor mount).
   registerVideoEditSessionHandlers();

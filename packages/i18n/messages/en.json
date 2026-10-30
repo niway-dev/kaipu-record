@@ -331,7 +331,8 @@
     "ratioFree": "Free",
     "lastUsedNote": "Last used: {mode}. Switch inside the selector.",
     "shadeRecTag": "REC · BORDER NOT RECORDED",
-    "shadeCountdownHint": "Recording starts… press Esc to cancel"
+    "shadeCountdownHint": "Recording starts… press Esc to cancel",
+    "errorStartMaintenance": "Kaipu is fixing your files. Start the recording again in a moment."
   },
   "header": {
     "brand": "Kaipu Record",
@@ -750,7 +751,9 @@
     "heavyBannerBody": "Share makes a lighter copy — about {estimate}, small enough for GitHub or Jira. The original stays as it is.",
     "heavyBannerBodyNoEstimate": "Share makes a lighter copy with text that stays readable. The original stays as it is.",
     "heavyBannerAction": "Make a light copy →",
-    "heavyBannerBodyNoGithub": "Share makes a lighter copy — about {estimate}, with text that stays readable. The original stays as it is."
+    "heavyBannerBodyNoGithub": "Share makes a lighter copy — about {estimate}, with text that stays readable. The original stays as it is.",
+    "maintenanceRefused": "Kaipu is fixing your files. Try again in a moment.",
+    "recordUnreadable": "Kaipu can't read this item's record, so it is read-only. Your file is untouched."
   },
   "screenshots": {
     "toast": {
@@ -912,7 +915,8 @@
     "bgForest": "Forest",
     "bgGraphite": "Graphite",
     "sizeCustom": "Custom",
-    "sizeCustomAria": "Custom size, set by dragging a corner"
+    "sizeCustomAria": "Custom size, set by dragging a corner",
+    "captureRefusedMaintenance": "Kaipu is fixing your files. Take the screenshot again in a moment."
   },
   "videoEditor": {
     "restored": "Restored your previous edit",
@@ -1159,7 +1163,8 @@
     "githubFitLabel": "Fits GitHub",
     "githubFree": "GitHub Free · {limit}",
     "githubFreeOver": "GitHub Free · over {limit}",
-    "githubPaid": "GitHub Pro / Team / Enterprise · {limit}"
+    "githubPaid": "GitHub Pro / Team / Enterprise · {limit}",
+    "exportRefusedMaintenance": "Kaipu is fixing your files. Export again in a moment."
   },
   "panel": {
     "saving": "Saving…",

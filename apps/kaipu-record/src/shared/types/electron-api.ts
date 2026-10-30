@@ -20,6 +20,11 @@ import type { SerializedError } from "../analytics";
 import type { AppSettings, ShortcutAction, TagSummary, UpdateStatus } from "./ipc";
 import type { TagColor } from "@kaipu/domain/constants";
 import type { LocalRecording, RenameResult, VaultDirectory } from "./library-storage";
+import type {
+  ReconcileFixResult,
+  ReconcileProgress,
+  ReconcileScanResult,
+} from "./library-reconcile";
 import type { StorageUsageResult } from "./cloud-storage";
 import type {
   CatalogRefreshResult,
@@ -274,6 +279,11 @@ export interface KaipuElectronAPI {
   startFileDrag(id: string, name?: string): void;
   /** NIW2-218: tell main whether a background export is running (close/quit confirmation). */
   setExportActive(active: boolean): void;
+  /**
+   * NIW2-561: called before an export reads its source; main takes the export's vault
+   * lease. Rejects with the maintenance marker while files are being fixed.
+   */
+  beginExport(): Promise<void>;
   /** NIW2-218: main asks to cancel the running export (the user confirmed close/quit). */
   onExportCommand(callback: (command: "cancel") => void): () => void;
 
@@ -289,6 +299,15 @@ export interface KaipuElectronAPI {
   getStorageUsage(): Promise<StorageUsageResult>;
   /** Subscribe to vault-folder changes (so open library pages re-list). Returns an unsubscribe fn. */
   onLibraryChanged(callback: () => void): () => void;
+  /** NIW2-561: scan the vault for drift ("Check and fix files"). Never writes. */
+  reconcileScan(): Promise<ReconcileScanResult>;
+  /** NIW2-561: "Fix all", in maintenance mode. */
+  reconcileFix(): Promise<ReconcileFixResult>;
+  /** NIW2-561: stop waiting for the vault to be idle; no effect once files are being fixed. */
+  reconcileCancel(): Promise<void>;
+  onReconcileProgress(callback: (progress: ReconcileProgress) => void): () => void;
+  /** NIW2-561: maintenance mode ended; editors retry their latest pending save. */
+  onLibraryMaintenanceEnded(callback: () => void): () => void;
   /** One entry per logical item (local, cloud, or both) plus vault/catalog status. */
   listLibraryItems(): Promise<LibraryListResult>;
   /** Re-fetch the cloud catalog for the signed-in account; resolves with why it could not. */

@@ -331,7 +331,8 @@
     "ratioFree": "Libre",
     "lastUsedNote": "Último usado: {mode}. Cámbialo dentro del selector.",
     "shadeRecTag": "REC · EL BORDE NO SE GRABA",
-    "shadeCountdownHint": "La grabación empieza… presiona Esc para cancelar"
+    "shadeCountdownHint": "La grabación empieza… presiona Esc para cancelar",
+    "errorStartMaintenance": "Kaipu está arreglando tus archivos. Vuelve a iniciar la grabación en un momento."
   },
   "header": {
     "brand": "Kaipu Record",
@@ -750,7 +751,9 @@
     "heavyBannerBody": "Compartir crea una copia más liviana: unos {estimate}, que entra en GitHub o Jira. El original queda como está.",
     "heavyBannerBodyNoEstimate": "Compartir crea una copia más liviana con texto que se sigue leyendo. El original queda como está.",
     "heavyBannerAction": "Crear una copia liviana →",
-    "heavyBannerBodyNoGithub": "Compartir crea una copia más liviana: unos {estimate}, con texto que se sigue leyendo. El original queda como está."
+    "heavyBannerBodyNoGithub": "Compartir crea una copia más liviana: unos {estimate}, con texto que se sigue leyendo. El original queda como está.",
+    "maintenanceRefused": "Kaipu está arreglando tus archivos. Inténtalo de nuevo en un momento.",
+    "recordUnreadable": "Kaipu no puede leer el registro de este elemento, así que es de solo lectura. Tu archivo no se tocó."
   },
   "screenshots": {
     "toast": {
@@ -912,7 +915,8 @@
     "bgForest": "Bosque",
     "bgGraphite": "Grafito",
     "sizeCustom": "Custom",
-    "sizeCustomAria": "Tamaño personalizado, fijado arrastrando una esquina"
+    "sizeCustomAria": "Tamaño personalizado, fijado arrastrando una esquina",
+    "captureRefusedMaintenance": "Kaipu está arreglando tus archivos. Vuelve a tomar la captura en un momento."
   },
   "videoEditor": {
     "restored": "Se restauró tu edición anterior",
@@ -1159,7 +1163,8 @@
     "githubFitLabel": "Entra en GitHub",
     "githubFree": "GitHub Free · {limit}",
     "githubFreeOver": "GitHub Free · supera {limit}",
-    "githubPaid": "GitHub Pro / Team / Enterprise · {limit}"
+    "githubPaid": "GitHub Pro / Team / Enterprise · {limit}",
+    "exportRefusedMaintenance": "Kaipu está arreglando tus archivos. Vuelve a exportar en un momento."
   },
   "panel": {
     "saving": "Guardando…",
