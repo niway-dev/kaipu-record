@@ -324,7 +324,9 @@ export async function startVideoExport(
   try {
     const sourceResponse = await fetch(`kaipu-media://recording/${args.sourceId}`);
     sourceBlob = await sourceResponse.blob();
-    webcam = await fetchWebcamTrack(args.sourceId, plan.webcam, args.webcamTrack);
+    webcam = await fetchWebcamTrack(args.sourceId, plan.webcam, args.webcamTrack, (error) =>
+      captureException(error, { context: "video-export-webcam" }),
+    );
   } catch (error) {
     fail(GENERIC_ERROR, error);
     return true;

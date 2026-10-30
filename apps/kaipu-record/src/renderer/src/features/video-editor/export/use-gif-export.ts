@@ -167,10 +167,17 @@ export function useGifExport(): GifExportController {
   const webcamTrack = useCallback((args: GifJobArgs): Promise<WebcamTrackMessage | null> => {
     if (!args.scene.webcam || !args.webcamTrack) return Promise.resolve(null);
     if (webcamRef.current?.id !== args.sourceId) {
-      const track = fetchWebcamTrack(args.sourceId, args.scene.webcam, args.webcamTrack);
-      track.catch(() => {
-        if (webcamRef.current?.track === track) webcamRef.current = null;
-      });
+      // A fetch that throws exports without the layer (reported), and is not cached: the
+      // next export tries again.
+      const track: Promise<WebcamTrackMessage | null> = fetchWebcamTrack(
+        args.sourceId,
+        args.scene.webcam,
+        args.webcamTrack,
+        (error) => {
+          captureException(error, { context: "gif-export-webcam" });
+          if (webcamRef.current?.track === track) webcamRef.current = null;
+        },
+      );
       webcamRef.current = { id: args.sourceId, track };
     }
     return webcamRef.current.track;

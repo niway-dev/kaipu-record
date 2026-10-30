@@ -208,6 +208,9 @@ describe("createOutputComposer: the webcam layer (ADR 0033)", () => {
   });
 });
 
+// A tripwire, not coverage: it reads the worker sources, so it only proves the webcam is
+// handed to the shared composer in both, not that the right frame or time reaches it
+// (that is the composer and lockstep tests). A harmless refactor of the call shape can trip it.
 describe("both exports draw the layer through the shared composer", () => {
   // The workers cannot run in jsdom (WebCodecs); what keeps MP4 and GIF from diverging is
   // that both hand the plan's webcam and the decoded webcam frame to createOutputComposer.

@@ -294,5 +294,19 @@ describe("export runner (NIW2-218 background export)", () => {
       expect(sent().webcam).toBeNull();
       expect(getExportSnapshot().status).toBe("exporting");
     });
+
+    it("exports without the layer when the webcam fetch throws, instead of failing", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          if (url.startsWith("kaipu-media://webcam/")) throw new Error("read failed");
+          return { ok: true, status: 200, blob: async () => new Blob(["mp4"]) };
+        }),
+      );
+      await startVideoExport(args({ scene: WEBCAM_SCENE, webcamTrack: { startOffsetMs: 0 } }), t);
+      await waitFor(() => expect(workers).toHaveLength(1));
+      expect(sent().webcam).toBeNull();
+      expect(getExportSnapshot().status).toBe("exporting");
+    });
   });
 });

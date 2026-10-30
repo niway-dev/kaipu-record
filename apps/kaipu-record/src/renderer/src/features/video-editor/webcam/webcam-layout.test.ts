@@ -149,6 +149,9 @@ describe("webcamSourceRect", () => {
     const r = webcamSourceRect(IMAGE, { zoom: 2, x: 1, y: 1 }, false);
     expect(r.sx + r.sw).toBe(1000); // 280 + 720, the cover square's right edge
     expect(r.sy + r.sh).toBe(720);
+    expect(webcamSourceRect(IMAGE, { zoom: 2, x: 3, y: -3 }, false)).toEqual(
+      webcamSourceRect(IMAGE, { zoom: 2, x: 1, y: -1 }, false),
+    );
   });
 
   it("moves the other way in the raw image when mirrored: x = 1 shows the bubble's right", () => {
