@@ -5,8 +5,10 @@ description: Design for taking the webcam out of the screen pixels. The recorder
 
 # Webcam track — design
 
-**Status: 🔵 Proposed · 2026-10-30.** Approved by the owner on 2026-10-30 from the design
-conversation; nothing is implemented. Linear:
+**Status: 🟢 Ready to validate (prod review pending) · 2026-10-30.** Approved by the owner on
+2026-10-30 from the design conversation; implemented across the NIW2-565 stack (recorder,
+editor layer, export, Share, bubble content protection). Owner QA is pending, including the
+exclusion matrix of section 3.5. Linear:
 [NIW2-565](https://linear.app/niway/issue/NIW2-565). ADRs:
 [0032](/architecture/decisions/0032-webcam-is-its-own-track-and-the-bubble-is-excluded-from-capture/)
 (capture, storage, exclusion) and
@@ -333,6 +335,13 @@ framing while recording, and the screen must still be recorded correctly. Record
 as a rejected alternative so it is not proposed again.
 
 ### 3.5 Task 0 — the exclusion spike
+
+> **Status (2026-10-30): pending owner QA on PR #440.** Plan A is implemented
+> (`setContentProtection(true)` from creation, NIW2-576), but the matrix below has **not** been
+> run and no row has passed. Until the owner fills the outcome table, "the bubble leaves the
+> capture" is the design's intent, not a verified fact. Where Windows before 10 2004 cannot
+> exclude a window, the code keeps the legacy path: the bubble stays unprotected and the take
+> records no webcam track.
 
 Run by the owner, by hand, on a dev build of a branch that only adds
 `setContentProtection(true)` to `CameraBubbleWindow` (one line plus its test). Agents never run
