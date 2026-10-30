@@ -245,6 +245,24 @@ describe("WebcamLayer", () => {
     expect(HTMLMediaElement.prototype.pause).toHaveBeenCalled();
   });
 
+  it("names the draggable bubble for assistive tech", () => {
+    const { ref } = mainVideo(1);
+    renderLayer({ videoRef: ref });
+    loadWebcam(30);
+    expect(screen.getByRole("button", { name: "Webcam: drag to move it" })).toBe(bubble());
+  });
+
+  it("selects from the keyboard without letting Space reach the page's play shortcut", () => {
+    const { ref } = mainVideo(1);
+    const { handlers } = renderLayer({ videoRef: ref });
+    const onWindowKey = vi.fn();
+    window.addEventListener("keydown", onWindowKey);
+    fireEvent.keyDown(bubble(), { key: " " });
+    window.removeEventListener("keydown", onWindowKey);
+    expect(handlers.onSelect).toHaveBeenCalledWith(1);
+    expect(onWindowKey).not.toHaveBeenCalled();
+  });
+
   it("a drag reports clamped centres between one begin and one end", () => {
     const { ref } = mainVideo(1);
     const { handlers, container } = renderLayer({ videoRef: ref });

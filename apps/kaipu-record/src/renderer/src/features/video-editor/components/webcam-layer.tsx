@@ -14,6 +14,7 @@
  * the begin/move/end contract the scene history needs for one undo step per drag.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "@kaipu/i18n";
 import { framingTransform } from "@shared/camera-bubble";
 import { useVideoFrameClock } from "../use-video-frame-clock";
 import { type CameraPath, cameraAt } from "../zoom/camera-path";
@@ -86,6 +87,7 @@ export function WebcamLayer({
   onMove(center: Point, sourceTime: number): void;
   onEnd(): void;
 }): React.JSX.Element {
+  const t = useTranslations("videoEditor");
   const boxRef = useRef<HTMLDivElement | null>(null);
   const clipRef = useRef<HTMLDivElement | null>(null);
   const camRef = useRef<HTMLVideoElement | null>(null);
@@ -176,6 +178,19 @@ export function WebcamLayer({
         className={styles.bubble}
         style={{ display: "none" }}
         data-testid="webcam-layer"
+        // A button, like the repo's other clickable non-<button> elements: activating it
+        // selects the layer (the inspector's Webcam section), dragging moves it. Enter and
+        // Space select from the keyboard and stop there, so Space does not also play.
+        role="button"
+        tabIndex={interactive ? 0 : -1}
+        aria-label={t("webcamLayerAria")}
+        aria-pressed={selected}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          event.stopPropagation();
+          onSelect(lastTime.current);
+        }}
         data-interactive={String(interactive)}
         data-selected={String(selected)}
         data-dragging={String(dragging)}
