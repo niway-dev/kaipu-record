@@ -9,7 +9,7 @@ import {
   bubbleBoundsInArea,
   bubbleSizeOf,
   type BubbleCorner,
-  fullDisplayBorderAllowed,
+  canExcludeWindowFromCapture,
   type Rect,
 } from "./area-geometry";
 
@@ -67,7 +67,7 @@ export class CameraBubbleWindow {
      * the active take (if any) records the face in its webcam file. Defaults to the OS alone.
      */
     private readonly protect: () => boolean = () =>
-      fullDisplayBorderAllowed(process.platform, release()),
+      canExcludeWindowFromCapture(process.platform, release()),
   ) {}
 
   show(): void {

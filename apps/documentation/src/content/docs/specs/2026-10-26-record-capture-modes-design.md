@@ -211,7 +211,7 @@ What changed against the decisions above:
   no shade window at all. It stays out of the video only if content protection is honoured. Check
   that the border is absent from the recorded file on macOS 15+ (ScreenCaptureKit) and on
   Windows. On Windows builds before 10 2004 (no `WDA_EXCLUDEFROMCAPTURE`, where a protected
-  window shows black in captures) the whole-display border is skipped (`fullDisplayBorderAllowed`);
+  window shows black in captures) the whole-display border is skipped (`canExcludeWindowFromCapture`);
   an area's shade is outside the recorded crop and is kept.
 - _Tray submenu._ The tray icon's right-click menu has Record → Record screen, Record area,
   Record window… ([backlog](/backlog/tray-record-submenu/)). Each opens the selector in its own

@@ -121,7 +121,7 @@ Input for tests; each line is at least one test.
    (`setContentProtection(true)` at creation, before any capture starts); task 0 proves it on
    hardware and the QA sheet repeats it on every release that touches capture.
 2. The bubble leaves a blank or black patch where it stood → task 0's pixel check (content
-   underneath visible); on Windows before 10 2004 the same rule as `fullDisplayBorderAllowed`
+   underneath visible); on Windows before 10 2004 the same rule as `canExcludeWindowFromCapture`
    keeps the legacy path there: the bubble stays unprotected and burned into the screen as
    today, no webcam track is recorded, and no take shows a black square.
 3. The webcam file and the screen file disagree by more than one frame at start → the offset
@@ -308,10 +308,12 @@ nothing. The comment at the top of `camera-bubble-window.ts` and the hub's media
 flip from "deliberately NOT content-protected" to the opposite, with this spec as the reason.
 
 Windows: `WDA_EXCLUDEFROMCAPTURE` removes the window from capture on Windows 10 2004 and later;
-before that the window is captured as black. The existing `fullDisplayBorderAllowed(platform,
-release)` rule already encodes that threshold; the bubble reuses it to decide "Plan A works
-here". Where it does not (before 10 2004) the take keeps the legacy path: the bubble stays
-unprotected and burned into the screen, and no webcam track is recorded. Plan B is macOS-only.
+before that the window is captured as black. The existing `canExcludeWindowFromCapture(platform,
+release)` rule (named `fullDisplayBorderAllowed` until NIW2-581) already encodes that threshold;
+the bubble reuses it to decide "Plan A works here". Where it does not (before 10 2004) the take
+keeps the legacy path: the bubble stays unprotected and burned into the screen, and no webcam
+track is recorded. The renderer reads it as a capability (`recordingWebcamTrackSupported`) and
+does not ask for a webcam session there. Plan B is macOS-only.
 
 Protection also follows the take (NIW2-576 review, `bubble-protection.ts`): the bubble is
 protected with no take active, or while the active take records a live webcam file. A take
@@ -596,7 +598,7 @@ Each PR ends with a "How to test it yourself" section; the manual steps below ar
 
 Repo (verified while designing, 2026-10-29): `apps/kaipu-record/src/renderer/src/features/recording/recorder-engine.ts`,
 `src/main/recording/camera-bubble-window.ts`, `src/main/recording/control-bar-window.ts`,
-`src/main/recording/area-geometry.ts` (`fullDisplayBorderAllowed`),
+`src/main/recording/area-geometry.ts` (`canExcludeWindowFromCapture`, then `fullDisplayBorderAllowed`),
 `src/renderer/src/features/recording/first-media-timestamp.ts`, `src/main/recording/cursor-clock.ts`,
 `src/renderer/src/features/video-editor/{scene,session}.ts`,
 `src/renderer/src/features/video-editor/export/{export-plan,export-messages,export-worker,gif-worker,compose-frame,compose-output-frame,export-reuse}.ts`,

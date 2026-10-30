@@ -4,21 +4,21 @@ import {
   bubbleBoundsInArea,
   bubblePlacementInRect,
   bubbleSizeOf,
-  fullDisplayBorderAllowed,
+  canExcludeWindowFromCapture,
   sanitizeArea,
   withRecordedBubble,
 } from "./area-geometry";
 
-describe("fullDisplayBorderAllowed", () => {
+describe("canExcludeWindowFromCapture", () => {
   it("skips the whole-display border only on Windows builds without capture exclusion", () => {
-    expect(fullDisplayBorderAllowed("darwin", "24.0.0")).toBe(true);
-    expect(fullDisplayBorderAllowed("linux", "6.8.0")).toBe(true);
-    expect(fullDisplayBorderAllowed("win32", "10.0.19041")).toBe(true);
-    expect(fullDisplayBorderAllowed("win32", "10.0.22631")).toBe(true);
-    expect(fullDisplayBorderAllowed("win32", "10.0.18363")).toBe(false);
-    expect(fullDisplayBorderAllowed("win32", "6.3.9600")).toBe(false);
+    expect(canExcludeWindowFromCapture("darwin", "24.0.0")).toBe(true);
+    expect(canExcludeWindowFromCapture("linux", "6.8.0")).toBe(true);
+    expect(canExcludeWindowFromCapture("win32", "10.0.19041")).toBe(true);
+    expect(canExcludeWindowFromCapture("win32", "10.0.22631")).toBe(true);
+    expect(canExcludeWindowFromCapture("win32", "10.0.18363")).toBe(false);
+    expect(canExcludeWindowFromCapture("win32", "6.3.9600")).toBe(false);
     // An unreadable release never hides the border.
-    expect(fullDisplayBorderAllowed("win32", "")).toBe(true);
+    expect(canExcludeWindowFromCapture("win32", "")).toBe(true);
   });
 });
 

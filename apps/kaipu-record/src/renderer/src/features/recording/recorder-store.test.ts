@@ -1,11 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import type { LocalRecording, RecordingSettings } from "@shared/types";
 import { DEFAULT_AUDIO_SETTINGS, type AudioSettings } from "@shared/audio-settings";
-import {
-  WEBCAM_TRACK_UNSUPPORTED_MARKER,
-  type AppSettings,
-  type ControlCommand,
-} from "@shared/types/ipc";
+import type { AppSettings, ControlCommand } from "@shared/types/ipc";
 import {
   prepareEngine,
   type EngineHandle,
@@ -1439,8 +1435,9 @@ describe("recorder-store live settings", () => {
     it("opens a webcam writer session beside the screen's and hands the engine the camera", async () => {
       await startWith(fakeEngine(), { webcam });
       const [screen, second] = createCalls();
-      expect(screen).toEqual([expect.stringMatching(/^session-/)]);
-      expect(second).toEqual([screen![0], "webcam"]);
+      // Both are a take's sessions, said explicitly (an export's say "export").
+      expect(screen).toEqual([expect.stringMatching(/^session-/), "screen", "take"]);
+      expect(second).toEqual([screen![0], "webcam", "take"]);
       expect(prepareEngineMock.mock.calls.at(-1)![0].webcam).toEqual({
         deviceId: "cam-1",
         lines: 720,
@@ -1642,24 +1639,31 @@ describe("recorder-store live settings", () => {
         }
       });
 
-      it("says nothing when this Windows build cannot record the webcam apart (legacy path)", async () => {
-        recordingCreateMock.mockImplementation(async (...args: unknown[]) => {
-          if (args[1] === "webcam") {
-            throw new Error(
-              `Error invoking remote method: Error: ${WEBCAM_TRACK_UNSUPPORTED_MARKER} …`,
-            );
-          }
-          return { tempPath: "/tmp/s" };
-        });
+      it("opens no webcam session or camera where this OS cannot record it apart, and says nothing (legacy path)", async () => {
+        const supported = window.electronAPI.recordingWebcamTrackSupported;
+        window.electronAPI.recordingWebcamTrackSupported = vi.fn(async () => false);
         try {
           await startWith(fakeEngine(), { webcam });
+          expect(createCalls().map((call) => call[1])).toEqual(["screen"]);
+          expect(prepareEngineMock.mock.calls.at(-1)![0].webcam).toBeNull();
           await stopAndSettle();
           expect(getToasts()).toEqual([]);
         } finally {
-          recordingCreateMock.mockImplementation(async () => {
-            callOrder.push("recordingCreate");
-            return { tempPath: "/tmp/s" };
-          });
+          window.electronAPI.recordingWebcamTrackSupported = supported;
+        }
+      });
+
+      it("still asks main for the session when the capability cannot be read", async () => {
+        const supported = window.electronAPI.recordingWebcamTrackSupported;
+        window.electronAPI.recordingWebcamTrackSupported = vi.fn(async () => {
+          throw new Error("no handler");
+        });
+        try {
+          await startWith(fakeEngine(), { webcam });
+          expect(createCalls().map((call) => call[1])).toEqual(["screen", "webcam"]);
+          await stopAndSettle();
+        } finally {
+          window.electronAPI.recordingWebcamTrackSupported = supported;
         }
       });
 

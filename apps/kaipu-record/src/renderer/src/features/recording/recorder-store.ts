@@ -1,5 +1,4 @@
 import type { LocalRecording, RecordingSettings } from "@shared/types";
-import { WEBCAM_TRACK_UNSUPPORTED_MARKER } from "@shared/types/ipc";
 import { sanitizeAudioSettings, type AudioSettings } from "@shared/audio-settings";
 import {
   DEFAULT_RECORDING_COUNTDOWN_SECONDS,
@@ -463,21 +462,30 @@ export function stopOrCancelRecording(): void {
 function acquireStart(input: StartInput): PendingStart {
   // Unique across renderer restarts: a recreated renderer must not reuse a dead take's id.
   const id = `session-${Date.now().toString(36)}-${++sessionCounter}`;
-  const created = window.electronAPI.recordingCreate(id);
-  // The webcam's own session (ADR 0032), only with the camera on. One that cannot be created
-  // leaves the take without a webcam, never without the take.
+  const created = window.electronAPI.recordingCreate(id, "screen", "take");
+  // The webcam's own session (ADR 0032), only with the camera on and where this OS can leave
+  // the bubble out of the capture. Elsewhere (Windows before 10 2004, the legacy path) the
+  // face is recorded in the screen by design and the user is told nothing. A session that
+  // cannot be created leaves the take without a webcam, never without the take. Created after
+  // the screen's, as main expects: the capability answer comes back after that request left.
   const webcamCreated = input.webcam
-    ? window.electronAPI.recordingCreate(id, "webcam").then(
-        () => true,
-        (error: unknown) => {
-          console.warn("webcam session could not be created — recording without it", error);
-          // Main already put the bubble back in the capture. Tell the user, unless this is the
-          // old-Windows legacy path, where the bubble is always recorded in the screen.
-          const message = error instanceof Error ? error.message : String(error);
-          if (!message.includes(WEBCAM_TRACK_UNSUPPORTED_MARKER)) start.webcamUnavailable = true;
-          return false;
-        },
-      )
+    ? window.electronAPI
+        .recordingWebcamTrackSupported()
+        // Unanswered: ask for the session anyway, main refuses it where it cannot be recorded.
+        .catch(() => true)
+        .then((supported) =>
+          supported
+            ? window.electronAPI.recordingCreate(id, "webcam", "take").then(
+                () => true,
+                (error: unknown) => {
+                  console.warn("webcam session could not be created — recording without it", error);
+                  // Main already put the bubble back in the capture: tell the user.
+                  start.webcamUnavailable = true;
+                  return false;
+                },
+              )
+            : false,
+        )
     : Promise.resolve(false);
   // Reads `start` only after its first await, once `start` exists.
   const acquire = async (): Promise<[CursorTrackSession, PreparedEngine]> => {

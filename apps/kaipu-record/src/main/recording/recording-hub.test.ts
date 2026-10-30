@@ -2,12 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  FINALIZE_ELSEWHERE_MARKER,
-  FINALIZE_KEPT_MARKER,
-  IPC_CHANNELS,
-  WEBCAM_TRACK_UNSUPPORTED_MARKER,
-} from "@shared/types/ipc";
+import { FINALIZE_ELSEWHERE_MARKER, FINALIZE_KEPT_MARKER, IPC_CHANNELS } from "@shared/types/ipc";
 
 const mockState = vi.hoisted(() => ({
   userDataDir: "",
@@ -1862,6 +1857,18 @@ describe("recording hub — the webcam writer session (ADR 0032)", () => {
       mockState.osRelease = "24.0.0";
     });
 
+    it("tells the renderer whether this OS can record the webcam apart", async () => {
+      await registered();
+      const supported = mockState.ipcHandle.get(IPC_CHANNELS.recordingWebcamTrackSupported)!;
+      Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
+      expect(supported({})).toBe(true);
+      Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+      mockState.osRelease = "10.0.22631";
+      expect(supported({})).toBe(true);
+      mockState.osRelease = "10.0.18363";
+      expect(supported({})).toBe(false);
+    });
+
     it("creates the webcam session on macOS and on a current Windows build", async () => {
       const { RecordingWriter } = await import("./recording-writer");
       const create = vi.spyOn(RecordingWriter.prototype, "create").mockResolvedValue({
@@ -1892,9 +1899,8 @@ describe("recording hub — the webcam writer session (ADR 0032)", () => {
         Object.defineProperty(process, "platform", { value: "win32", configurable: true });
         mockState.osRelease = "10.0.18363";
         // Electron turns a throwing handler into a rejected `invoke` in the renderer.
+        // A backstop: the renderer asks `recordingWebcamTrackSupported` first and never sends it.
         expect(() => handler({}, "s1", "webcam")).toThrow(/webcam track unavailable/);
-        // Marked, so the renderer tells the legacy path apart from a webcam that failed.
-        expect(() => handler({}, "s1", "webcam")).toThrow(WEBCAM_TRACK_UNSUPPORTED_MARKER);
         expect(create).not.toHaveBeenCalled();
         await handler({}, "s1");
         expect(create).toHaveBeenCalledExactlyOnceWith("s1", "screen");

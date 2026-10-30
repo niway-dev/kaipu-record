@@ -11,11 +11,7 @@ import { homedir, release } from "node:os";
 import { join } from "node:path";
 import { createMainTranslator } from "@kaipu/i18n/main";
 import { IPC_CHANNELS } from "@shared/types";
-import {
-  FINALIZE_ELSEWHERE_MARKER,
-  FINALIZE_KEPT_MARKER,
-  WEBCAM_TRACK_UNSUPPORTED_MARKER,
-} from "@shared/types/ipc";
+import { FINALIZE_ELSEWHERE_MARKER, FINALIZE_KEPT_MARKER } from "@shared/types/ipc";
 import type {
   ControlCommand,
   RecorderPhaseReport,
@@ -43,7 +39,7 @@ import { ScreenSourceCache, type ScreenSource } from "./screen-source-cache";
 import {
   areaToGlobal,
   bubblePlacementInRect,
-  fullDisplayBorderAllowed,
+  canExcludeWindowFromCapture,
   sanitizeArea,
   withRecordedBubble,
   type Rect,
@@ -183,7 +179,7 @@ export function registerRecordingHub(
   const bubbleProtection = new BubbleProtection();
   const cameraBubble = new CameraBubbleWindow(
     () => getAppSettings().cameraBubble.size,
-    () => fullDisplayBorderAllowed(process.platform, release()) && bubbleProtection.protects(),
+    () => canExcludeWindowFromCapture(process.platform, release()) && bubbleProtection.protects(),
   );
   // Shape and size apply live, mid-take included (the user sees the bubble change; the
   // recording does not, its face is the raw webcam file, restyled on export). The shape is
@@ -396,12 +392,10 @@ export function registerRecordingHub(
       const writerKind = recordingWriterKind(kind);
       // The bubble leaves the screen capture through content protection (ADR 0032). Where that
       // cannot exclude a window (Windows before 10 2004) it stays in the video, so a webcam
-      // file would draw the face twice: refuse the session and the renderer records the take
-      // without one, as it does for any webcam session that cannot be created.
-      if (writerKind === "webcam" && !fullDisplayBorderAllowed(process.platform, release())) {
-        throw new Error(
-          `${WEBCAM_TRACK_UNSUPPORTED_MARKER} webcam track unavailable: this Windows build cannot exclude the bubble`,
-        );
+      // file would draw the face twice. The renderer asks first (`recordingWebcamTrackSupported`)
+      // and never opens one there; this refusal only backs that up.
+      if (writerKind === "webcam" && !canExcludeWindowFromCapture(process.platform, release())) {
+        throw new Error("webcam track unavailable: this Windows build cannot exclude the bubble");
       }
       // A background export writes through the same sessions but is not a take: it never
       // touches the bubble's protection, which follows the live take alone.
@@ -428,6 +422,11 @@ export function registerRecordingHub(
       });
       return created;
     },
+  );
+  // Whether a take can record the webcam as its own file: only where the bubble can leave the
+  // screen capture. Elsewhere (Windows before 10 2004) the face stays in the screen, by design.
+  ipcMain.handle(IPC_CHANNELS.recordingWebcamTrackSupported, (): boolean =>
+    canExcludeWindowFromCapture(process.platform, release()),
   );
   // The take records no (more) webcam file (its camera did not open, was turned off, was
   // unplugged, or its encoder failed): the bubble must be in the screen recording again.
@@ -785,7 +784,7 @@ export function registerRecordingHub(
     const includeInRecording = getAppSettings().showBarInRecording;
     // A whole display gets the pink border around its edges, unless content protection
     // cannot keep it out of the video (old Windows); a window gets nothing (it moves).
-    const borderAllowed = fullDisplayBorderAllowed(process.platform, release());
+    const borderAllowed = canExcludeWindowFromCapture(process.platform, release());
     // The countdown of a whole display was drawn on that display: turn it into the border
     // now, without waiting for the source lookup below, which can fail.
     const wholeDisplayCountdown = !area && region !== null && region.rect === null;
