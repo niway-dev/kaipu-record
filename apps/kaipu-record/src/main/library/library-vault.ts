@@ -24,7 +24,14 @@ import { sanitizeRecordingCapture, type RecordingCapture } from "@shared/recordi
 import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/types/export-preset";
 import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-name";
 import { atomicWriteFile, uniqueTempPath, withLock } from "./atomic-write";
-import { placeNoReplace, renameCaseOnly, takenError } from "./safe-place";
+import {
+  type PlacedFile,
+  placeNew,
+  placeNoReplace,
+  removeIfSame,
+  renameCaseOnly,
+  takenError,
+} from "./safe-place";
 import { sha256FileBase64 } from "./content-hash";
 import { fileStemFromTitle, fsFold, isReservedStem, isVaultOwnedStem } from "./file-stem";
 import { mediaUrl } from "@shared/media-url";
@@ -188,6 +195,18 @@ export async function readSidecarStrict(path: string): Promise<SidecarRead> {
   }
   if (!isSidecarShape(parsed)) return { status: "invalid-schema", error: "unexpected shape" };
   return { status: "ok", sidecar: parsed };
+}
+
+/** A stem `reserve` took: its id, and the identity its stub record carries. */
+export interface Reservation {
+  id: string;
+  assetId: string;
+}
+
+/** A media file a new item placed: where, and which file (for `discardCreated`). */
+export interface NewMedia {
+  path: string;
+  file: PlacedFile;
 }
 
 export interface AllocateInput {
@@ -412,13 +431,19 @@ export class LibraryVault {
     throw new Error(`No free file name for "${stem}"`);
   }
 
+  /** `reserve`, for a caller that never gives the stem back. */
+  async allocateId(input: AllocateInput): Promise<string> {
+    return (await this.reserve(input)).id;
+  }
+
   /**
    * Reserve a stem for a new item: derive it from `title` (or sanitize `stem`), resolve
    * collisions with ` (2)`, ` (3)` …, and write a stub sidecar — all under NAMES_LOCK.
-   * From this moment the stem is taken; the caller writes the media next and calls
-   * `remove(id)` if that fails.
+   * From this moment the stem is taken; the caller places the media next and, if that fails,
+   * gives back only what it made: `releaseReservation`, or `discardCreated` once its media is
+   * placed. Never `remove(id)`: a file that took the media's name meanwhile is not this item's.
    */
-  async allocateId(input: AllocateInput): Promise<string> {
+  async reserve(input: AllocateInput): Promise<Reservation> {
     const fallback = defaultCaptureName(input.kind, new Date(input.createdAt));
     const stem = fileStemFromTitle(input.stem ?? input.title) ?? fallback;
     return withLock(NAMES_LOCK, async () => {
@@ -426,15 +451,43 @@ export class LibraryVault {
         (await this.isStemFree(candidate)) ? { id: candidate, mode: "free" } : null,
       );
       await mkdir(this.metaDirectory(), { recursive: true });
+      const assetId = randomUUID();
       const stub: Sidecar = {
         sidecarVersion: 2,
-        assetId: randomUUID(),
+        assetId,
         createdAt: input.createdAt,
         title: input.title,
       };
       await atomicWriteFile(this.sidecarPath(id), JSON.stringify(stub, null, 2));
-      return id;
+      return { id, assetId };
     });
+  }
+
+  /**
+   * Give back a stem `reserve` took: its companions go, only while its record still carries
+   * the reservation's identity. Never touches a media file.
+   */
+  async releaseReservation(reservation: Reservation): Promise<void> {
+    const { id, assetId } = reservation;
+    await withLock(this.sidecarPath(id), async () => {
+      const read = await readSidecarStrict(this.sidecarPath(id));
+      if (read.status !== "ok" || read.sidecar.assetId !== assetId) return;
+      await this.removeCompanions(this.companionPaths(id));
+    });
+  }
+
+  /**
+   * Undo a new item after its media was placed: the media goes only while `media.path` still
+   * holds the file the placement created (`media.file`), then the reservation is released.
+   */
+  async discardCreated(
+    reservation: Reservation,
+    media: { path: string; file: PlacedFile },
+  ): Promise<void> {
+    if (!(await removeIfSame(media.path, media.file))) {
+      console.error(`could not remove the new item's media "${media.path}"; kept`);
+    }
+    await this.releaseReservation(reservation);
   }
 
   /** Where a rename of `self` (owner of `assetId`, media at `selfMedia`) lands for `stem`. */
@@ -1096,15 +1149,17 @@ export class LibraryVault {
    * failure removes the `.part`, so no partial file is ever listed (`.part` is not a known
    * extension) or left behind.
    */
-  async writeGif(id: string, bytes: Uint8Array): Promise<string> {
+  async writeGif(id: string, bytes: Uint8Array): Promise<NewMedia> {
     await mkdir(this.directory, { recursive: true });
     const target = join(this.directory, `${id}${GIF_EXTS[0]}`);
-    await this.placeNewFile(target, bytes);
-    return target;
+    return { path: target, file: await this.placeNewFile(target, bytes) };
   }
 
-  /** Write `bytes` to a new file at `target`, never replacing one there: EEXIST if taken. */
-  private async placeNewFile(target: string, bytes: Uint8Array): Promise<void> {
+  /**
+   * Write `bytes` to a new file at `target`, never replacing one there: EEXIST if taken.
+   * Resolves the identity of the file placed, for a later undo (`discardCreated`).
+   */
+  private async placeNewFile(target: string, bytes: Uint8Array): Promise<PlacedFile> {
     const part = uniqueTempPath(target, "part");
     try {
       const handle = await open(part, "wx");
@@ -1114,7 +1169,9 @@ export class LibraryVault {
       } finally {
         await handle.close();
       }
-      if ((await placeNoReplace(part, target)) === "taken") throw takenError(target);
+      const placed = await placeNew(part, target);
+      if (placed === "taken") throw takenError(target);
+      return placed;
     } catch (error) {
       await rm(part, { force: true }).catch(() => {});
       throw error;
@@ -1157,11 +1214,17 @@ export class LibraryVault {
    * a file at its path (EEXIST). Either way `.part` is not a known extension, so `list()` never
    * shows a half-written shot, and a failed write leaves the previous PNG untouched.
    */
-  async writeImage(id: string, png: Buffer, options: { replace?: boolean } = {}): Promise<void> {
+  async writeImage(id: string, png: Buffer, options: { replace: true }): Promise<void>;
+  async writeImage(id: string, png: Buffer): Promise<NewMedia>;
+  async writeImage(
+    id: string,
+    png: Buffer,
+    options: { replace?: boolean } = {},
+  ): Promise<NewMedia | void> {
     await mkdir(this.directory, { recursive: true });
     const target = join(this.directory, `${id}.png`);
-    if (options.replace) await atomicWriteFile(target, png, "part");
-    else await this.placeNewFile(target, png);
+    if (options.replace) return atomicWriteFile(target, png, "part");
+    return { path: target, file: await this.placeNewFile(target, png) };
   }
 
   /** Stamp "opened in an editor now" — what the Editor home's Continue list orders by. */

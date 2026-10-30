@@ -8,8 +8,7 @@
  */
 import type { LocalRecording } from "@shared/types/library-storage";
 import type { GifSaveMeta } from "@shared/types/ipc";
-import { LibraryVault } from "./library-vault";
-import { isFileExists } from "./safe-place";
+import { LibraryVault, type NewMedia } from "./library-vault";
 
 /** Hard cap on a GIF payload (IPC safety). Mirrors `GIF_HARD_CAP_BYTES` in the renderer. */
 export const GIF_MAX_BYTES = 64 * 1024 * 1024;
@@ -45,9 +44,18 @@ export async function saveGif(
   const vault = new LibraryVault(deps.vaultDir());
   const createdAt = (deps.now ?? Date.now)();
   // The file name follows the title (ADR 0032); the stub sidecar reserves it.
-  const id = await vault.allocateId({ kind: "gif", title: meta.title, createdAt });
+  const reservation = await vault.reserve({ kind: "gif", title: meta.title, createdAt });
+  const { id } = reservation;
+  // No half-saved item: neither a GIF without its sidecar nor a stub without its GIF. Each
+  // failure gives back only what this save made — never a file that took `<id>.gif` meanwhile.
+  let media: NewMedia;
   try {
-    await vault.writeGif(id, bytes);
+    media = await vault.writeGif(id, bytes);
+  } catch (error) {
+    await vault.releaseReservation(reservation).catch(() => {});
+    throw error;
+  }
+  try {
     await vault.writeMeta(id, {
       title: meta.title,
       durationSeconds: meta.durationSeconds,
@@ -59,10 +67,7 @@ export async function saveGif(
     });
     if (meta.thumbnail) await vault.writeThumbnail(id, Buffer.from(meta.thumbnail));
   } catch (error) {
-    // No half-saved item: neither a GIF without its sidecar nor a stub without its GIF. Unless
-    // a file took `<id>.gif` meanwhile (never replaced): the stem is no longer this GIF's, and
-    // removing it would delete that file.
-    if (!isFileExists(error)) await vault.remove(id).catch(() => {});
+    await vault.discardCreated(reservation, media).catch(() => {});
     throw error;
   }
   const recording = await vault.describe(id);

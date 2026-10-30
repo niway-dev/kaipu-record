@@ -5,8 +5,15 @@ import { tmpdir } from "node:os";
 import type { LocalRecording } from "@shared/types/library-storage";
 import type { RecordingFinalizeMeta } from "@shared/types/ipc";
 import { sanitizeRecordingCapture } from "@shared/recording-capture";
-import { LibraryVault } from "../library/library-vault";
-import { isFileExists, placeNoReplace, replaceConfirmed, takenError } from "../library/safe-place";
+import { LibraryVault, type Reservation } from "../library/library-vault";
+import {
+  isFileExists,
+  type PlacedFile,
+  placeNew,
+  placeNoReplace,
+  replaceConfirmed,
+  takenError,
+} from "../library/safe-place";
 
 export { isFileExists };
 
@@ -66,8 +73,10 @@ export class FinalizeMoveError extends Error {
  * when one is, whenever it arrived. A placed staging file that cannot be removed is set aside
  * or marked, so the sweep never recovers it as a second recording.
  */
-export async function placeTake(from: string, to: string): Promise<void> {
-  if ((await placeNoReplace(from, to)) === "taken") throw takenError(to);
+export async function placeTake(from: string, to: string): Promise<PlacedFile> {
+  const placed = await placeNew(from, to);
+  if (placed === "taken") throw takenError(to);
+  return placed;
 }
 
 /**
@@ -194,11 +203,13 @@ export class RecordingWriter {
     const vaultDir = this.deps.vaultDir();
     const vault = new LibraryVault(vaultDir);
     const createdAt = this.now();
+    let reservation: Reservation;
     let id: string;
     let dest: string;
     try {
       await mkdir(vaultDir, { recursive: true });
-      id = await vault.allocateId({ kind: "recording", title: meta.title, createdAt });
+      reservation = await vault.reserve({ kind: "recording", title: meta.title, createdAt });
+      id = reservation.id;
       dest = await vault.filePath(id); // <id>.mp4 (does not exist yet)
     } catch (cause) {
       session.stranded = true;
@@ -207,13 +218,13 @@ export class RecordingWriter {
     }
     await this.closeHandle(session);
 
+    let placed: PlacedFile;
     try {
-      await placeTake(session.tempPath, dest);
+      placed = await placeTake(session.tempPath, dest);
     } catch (cause) {
-      // Release the reserved stem: only its stub sidecar exists. Unless a file took the
-      // destination meanwhile: then the stem is no longer this take's, and removing it would
-      // delete that file.
-      if (!isFileExists(cause)) await vault.remove(id).catch(() => {});
+      // Release the reserved stem (its stub sidecar): never the media path, which may hold a
+      // file that took it meanwhile.
+      await vault.releaseReservation(reservation).catch(() => {});
       session.stranded = true;
       throw new FinalizeMoveError(session.tempPath, cause);
     }
@@ -241,7 +252,7 @@ export class RecordingWriter {
       if (!described) throw new Error(`Finalized recording "${id}" not found in vault`);
       recording = described;
     } catch (cause) {
-      if (!(await this.takeBack(vault, id, dest, session))) {
+      if (!(await this.takeBack(vault, reservation, { path: dest, file: placed }, session))) {
         // The media stays in the vault (listed without its sidecar) and staging has nothing
         // left: a salvage would fail, so the error must not offer one.
         this.forget(sessionId, session);
@@ -268,25 +279,28 @@ export class RecordingWriter {
 
   /**
    * Move a finalized take back from the vault to its staging path and remove what was written
-   * for it. If the media cannot be moved back, the vault keeps it: removing it would lose it.
+   * for it. Only the file placement created moves: another file at `dest` stays where it is.
+   * If the media cannot be moved back, the vault keeps it: removing it would lose it.
    * Resolves whether the take is back in staging.
    */
   private async takeBack(
     vault: LibraryVault,
-    id: string,
-    dest: string,
+    reservation: Reservation,
+    media: { path: string; file: PlacedFile },
     session: Session,
   ): Promise<boolean> {
     try {
       // Back to its own staging name, never a replacing move. A vault copy that cannot be
       // removed undoes it: the take stays in the vault rather than in two places.
-      if ((await placeNoReplace(dest, session.tempPath, { stuck: "rollback" })) === "taken") {
-        return false;
-      }
+      const back = await placeNoReplace(media.path, session.tempPath, {
+        stuck: "rollback",
+        expect: media.file,
+      });
+      if (back === "taken") return false;
     } catch {
       return false;
     }
-    await vault.remove(id).catch(() => {});
+    await vault.releaseReservation(reservation).catch(() => {});
     return true;
   }
 

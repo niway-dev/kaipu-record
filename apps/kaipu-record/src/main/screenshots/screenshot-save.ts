@@ -1,6 +1,6 @@
 import type { LocalRecording } from "@shared/types/library-storage";
 import { broadcastLibraryChanged, currentVault } from "../library";
-import { isFileExists } from "../library/safe-place";
+import type { NewMedia } from "../library/library-vault";
 
 export interface SaveScreenshotMeta {
   title: string;
@@ -29,20 +29,30 @@ export async function saveScreenshotToVault(
   if (meta.overwriteId === undefined) {
     // The file name follows the title (ADR 0032); the stub sidecar reserves it, so two
     // shots in the same second get ` (2)` instead of overwriting each other.
-    id = await vault.allocateId({ kind: "screenshot", title: meta.title, createdAt: now });
+    const reservation = await vault.reserve({
+      kind: "screenshot",
+      title: meta.title,
+      createdAt: now,
+    });
+    id = reservation.id;
+    // A new item without a sidecar would be saved again under a second id when the caller
+    // retries, leaving this PNG orphaned. So a failure gives back what this save made — never
+    // a file that took `<id>.png` meanwhile.
+    let media: NewMedia;
     try {
-      await vault.writeImage(id, png);
+      media = await vault.writeImage(id, png);
+    } catch (error) {
+      await vault.releaseReservation(reservation).catch(() => {});
+      throw error;
+    }
+    try {
       await vault.writeMeta(id, {
         title: meta.title,
         createdAt: now,
         ...(meta.manual ? { editorSavedAt: now } : {}),
       });
     } catch (error) {
-      // A new item without a sidecar would be saved again under a second id when the
-      // caller retries, leaving this PNG orphaned. Remove it (and its reserved stem) so
-      // the retry starts clean. Unless a file took `<id>.png` meanwhile (never replaced): the
-      // stem is no longer this shot's, and removing it would delete that file.
-      if (!isFileExists(error)) await vault.remove(id).catch(() => {});
+      await vault.discardCreated(reservation, media).catch(() => {});
       throw error;
     }
   } else {

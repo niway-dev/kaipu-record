@@ -1736,13 +1736,13 @@ describe("recording hub — one lifecycle per take (NIW2-561)", () => {
       t.write(t.event, "take-1", new TextEncoder().encode("only copy").buffer, 0);
       await vi.waitFor(async () => expect(await readFile(tempPath, "utf-8")).toBe("only copy"));
       const { held, wait } = gate();
-      const allocate = t.LibraryVault.prototype.allocateId;
-      vi.spyOn(t.LibraryVault.prototype, "allocateId").mockImplementationOnce(
+      const reserve = t.LibraryVault.prototype.reserve;
+      vi.spyOn(t.LibraryVault.prototype, "reserve").mockImplementationOnce(
         async function (this: InstanceType<typeof t.LibraryVault>, input) {
           if (when === "before") await wait();
-          const id = await allocate.call(this, input);
+          const reservation = await reserve.call(this, input);
           if (when === "after") await wait();
-          return id;
+          return reservation;
         },
       );
 
@@ -1928,7 +1928,7 @@ describe("recording hub — an export whose finalize fails is discarded (NIW2-56
     const { tempPath } = (await create(event, "take-1", kind)) as { tempPath: string };
     write(event, "take-1", new TextEncoder().encode("partial").buffer, 0);
     await vi.waitFor(async () => expect(await readFile(tempPath, "utf-8")).toBe("partial"));
-    vi.spyOn(LibraryVault.prototype, "allocateId").mockRejectedValueOnce(new Error("no stem"));
+    vi.spyOn(LibraryVault.prototype, "reserve").mockRejectedValueOnce(new Error("no stem"));
     let answer!: (result: { canceled: boolean }) => void;
     mockState.showSaveDialog.mockImplementationOnce(
       () => new Promise((resolve) => (answer = resolve)),

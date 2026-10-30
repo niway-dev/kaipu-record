@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -34,6 +34,18 @@ describe("saveScreenshotToVault", () => {
     expect((await readdir(directory)).filter((n) => n.endsWith(".png"))).toEqual([]);
     // The reserved stem is released too: no stub sidecar is left behind.
     expect(await readdir(join(directory, ".kaipu"))).toEqual([]);
+  });
+
+  it("a failed sidecar write never removes a file that replaced the new PNG meanwhile", async () => {
+    vi.spyOn(vault, "writeMeta").mockImplementation(async (id: string) => {
+      await writeFile(join(directory, "foreign"), "incoming");
+      await rename(join(directory, "foreign"), join(directory, `${id}.png`));
+      throw new Error("disk full");
+    });
+    await expect(saveScreenshotToVault(Buffer.from("png"), { title: "Shot" })).rejects.toThrow(
+      "disk full",
+    );
+    expect(await readFile(join(directory, "Shot.png"), "utf-8")).toBe("incoming");
   });
 
   it("names a new shot after its title", async () => {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GIF_MAX_BYTES, GifSaveError, saveGif, validateGifBytes } from "./gif-save";
@@ -90,6 +90,22 @@ describe("saveGif", () => {
     }
     expect(await readdir(directory)).toEqual([".kaipu"]);
     expect(await readdir(join(directory, ".kaipu"))).toEqual([]);
+  });
+
+  it("a failed sidecar write never removes a file that replaced the GIF meanwhile", async () => {
+    const spy = vi
+      .spyOn(LibraryVault.prototype, "writeMeta")
+      .mockImplementationOnce(async (id: string) => {
+        await writeFile(join(directory, "foreign"), "incoming");
+        await rename(join(directory, "foreign"), join(directory, `${id}.gif`));
+        throw new Error("disk full");
+      });
+    try {
+      await expect(saveGif(deps(), gifBytes(), meta)).rejects.toThrow("disk full");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await readFile(join(directory, "Demo (GIF).gif"), "utf-8")).toBe("incoming");
   });
 
   it("delete removes the GIF, its sidecar and its thumbnail", async () => {

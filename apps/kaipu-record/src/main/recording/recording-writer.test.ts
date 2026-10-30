@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, readFile, readdir, access, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, access, rename, stat, writeFile } from "node:fs/promises";
 import { chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -215,6 +215,22 @@ describe("RecordingWriter", () => {
     }
   });
 
+  it("a metadata failure never moves out or removes a file that replaced the take meanwhile", async () => {
+    const { writer, vaultDir } = await setup();
+    const { tempPath } = await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("take").buffer, 0);
+    vi.spyOn(LibraryVault.prototype, "writeMeta").mockImplementationOnce(async () => {
+      await writeFile(join(vaultDir, "foreign"), "incoming");
+      await rename(join(vaultDir, "foreign"), join(vaultDir, "T.mp4"));
+      throw new Error("disk full");
+    });
+    await expect(
+      writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
+    ).rejects.toThrow();
+    expect(await readFile(join(vaultDir, "T.mp4"), "utf-8")).toBe("incoming");
+    await expect(access(tempPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("names the take after its title, and a second take with the same title ' (2)'", async () => {
     const { writer, vaultDir } = await setup();
     for (const session of ["s1", "s2"]) {
@@ -259,12 +275,12 @@ describe("RecordingWriter", () => {
     await writer.create("s1");
     await writer.write("s1", new TextEncoder().encode("new take").buffer, 0);
     // Something lands on the stem between the reservation and the move.
-    const allocate = LibraryVault.prototype.allocateId;
-    vi.spyOn(LibraryVault.prototype, "allocateId").mockImplementationOnce(
+    const reserve = LibraryVault.prototype.reserve;
+    vi.spyOn(LibraryVault.prototype, "reserve").mockImplementationOnce(
       async function (this: LibraryVault, input) {
-        const id = await allocate.call(this, input);
-        await writeFile(join(vaultDir, `${id}.mp4`), "other recording");
-        return id;
+        const reservation = await reserve.call(this, input);
+        await writeFile(join(vaultDir, `${reservation.id}.mp4`), "other recording");
+        return reservation;
       },
     );
     await expect(
@@ -277,7 +293,7 @@ describe("RecordingWriter", () => {
     const { writer, tempDir } = await setup();
     const { tempPath } = await writer.create("e1");
     await writer.write("e1", new TextEncoder().encode("export").buffer, 0);
-    vi.spyOn(LibraryVault.prototype, "allocateId").mockRejectedValueOnce(new Error("no stem"));
+    vi.spyOn(LibraryVault.prototype, "reserve").mockRejectedValueOnce(new Error("no stem"));
     await expect(
       writer.finalize("e1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
     ).rejects.toBeInstanceOf(FinalizeMoveError);
