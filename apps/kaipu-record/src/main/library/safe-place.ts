@@ -45,6 +45,11 @@ export function takenError(path: string): NodeJS.ErrnoException {
   return Object.assign(new Error(`"${path}" already exists`), { code: "EEXIST", path });
 }
 
+/** A placement found a file at its destination (it never replaces one). */
+export function isFileExists(error: unknown): boolean {
+  return codeOf(error) === "EEXIST";
+}
+
 function codeOf(error: unknown): string | undefined {
   return (error as NodeJS.ErrnoException | null)?.code;
 }
@@ -84,9 +89,12 @@ export function siblingTemp(path: string, tag: string): string {
  * Resolves the identity of the file created at `to`, or "taken".
  */
 async function duplicateAt(from: string, to: string): Promise<Stats | "taken"> {
+  // The identity is taken first: once the link exists, nothing may fail before the caller
+  // owns it, or both names would stay.
+  const source = await lstat(from);
   try {
     await link(from, to);
-    return await lstat(to);
+    return source;
   } catch (error) {
     const code = codeOf(error);
     if (code === "EEXIST") return "taken";
@@ -243,21 +251,31 @@ export async function renameCaseOnly(from: string, to: string): Promise<Placemen
 
   const temp = siblingTemp(from, "case");
   if ((await moveExclusive(from, temp, source)) === "taken") return "taken";
+  let second: Placement;
   try {
-    if ((await moveExclusive(temp, to, source)) === "placed") return "placed";
+    second = await moveExclusive(temp, to, source);
   } catch (error) {
     await moveBack(temp, from, source);
     throw error;
   }
+  if (second === "placed") return "placed";
   await moveBack(temp, from, source);
   return "taken";
 }
 
-/** Second step failed: the file goes back to its old name. If even that fails it stays at temp. */
+/**
+ * Second step failed: the file goes back to its old name. If even that fails (on a
+ * case-insensitive volume a file that took the new name also holds the old one) it stays at
+ * the temporary name, never removed, and the rename fails with an error naming it.
+ */
 async function moveBack(temp: string, from: string, source: Stats): Promise<void> {
   const back = await moveExclusive(temp, from, source).catch(() => "failed" as const);
   if (back !== "placed") {
     console.error(`case-only rename: the file could not return to its name; it is at "${temp}"`);
+    throw Object.assign(new Error(`The file could not return to its name; it is at "${temp}"`), {
+      code: "EIO",
+      path: temp,
+    });
   }
 }
 
@@ -282,7 +300,14 @@ async function moveExclusive(
     if (!code || !NO_HARD_LINK.has(code)) throw error;
   }
   if (linked) {
-    const placed = await lstat(to);
+    let placed: Stats;
+    try {
+      placed = await lstat(to);
+    } catch (error) {
+      // The link just created this name (a link never replaces): removing it is safe.
+      await unlink(to).catch(() => {});
+      throw error;
+    }
     if (!sameFile(placed, identity)) {
       await unlinkIfSame(to, placed);
       throw new Error(`"${from}" is no longer the file being renamed`);

@@ -75,11 +75,7 @@ async function recorded(content: Buffer | string) {
   const writer = new RecordingWriter({ vaultDir: () => vaultDir });
   const { tempPath } = await writer.create("s1");
   const bytes = typeof content === "string" ? Buffer.from(content) : content;
-  await writer.write(
-    "s1",
-    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length),
-    0,
-  );
+  await writer.write("s1", new Uint8Array(bytes).buffer, 0);
   return { vaultDir, writer, tempPath };
 }
 

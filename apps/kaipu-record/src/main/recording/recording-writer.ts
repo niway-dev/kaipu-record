@@ -6,7 +6,9 @@ import type { LocalRecording } from "@shared/types/library-storage";
 import type { RecordingFinalizeMeta } from "@shared/types/ipc";
 import { sanitizeRecordingCapture } from "@shared/recording-capture";
 import { LibraryVault } from "../library/library-vault";
-import { placeNoReplace, replaceConfirmed, takenError } from "../library/safe-place";
+import { isFileExists, placeNoReplace, replaceConfirmed, takenError } from "../library/safe-place";
+
+export { isFileExists };
 
 /** Staging folder inside the vault, so the final move is a same-volume rename. Exported for the sweep. */
 export const STAGING_DIR = join(".kaipu", "tmp");
@@ -360,11 +362,6 @@ export class RecordingWriter {
     await this.closeHandle(session).catch(() => {});
     await unlink(session.tempPath).catch(() => {});
   }
-}
-
-/** The move found a file at its destination (it never replaces one). */
-export function isFileExists(error: unknown): boolean {
-  return (error as NodeJS.ErrnoException | null)?.code === "EEXIST";
 }
 
 /** A renderer-supplied export fingerprint: a short token ("whole" or "edit:<hash>"). */

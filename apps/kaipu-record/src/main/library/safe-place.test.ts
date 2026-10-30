@@ -439,3 +439,31 @@ describe("replaceConfirmed", () => {
     await gone(from);
   });
 });
+
+describe("renameCaseOnly when the file cannot return to its old name", () => {
+  it("keeps it at the temporary name and fails, removing nothing", async () => {
+    const dir = await folder();
+    const from = join(dir, "clip.mp4");
+    const to = join(dir, "Clip-variant.mp4");
+    await writeFile(from, "mine");
+    const fs = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    await fs.link(from, to);
+    hooks.fold = { name: from, variant: to };
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    // A different file takes the new name between the steps, and the old one too (as both
+    // names fold to one entry on a case-insensitive volume).
+    hooks.arrival = {
+      onPath: "Clip-variant.mp4",
+      run: async (path) => {
+        await fs.writeFile(path, "theirs");
+        await fs.writeFile(from, "theirs too");
+      },
+    };
+    await expect(renameCaseOnly(from, to)).rejects.toMatchObject({ code: "EIO" });
+    const names = await readdir(dir);
+    const temp = names.find((n) => n.startsWith(".clip.mp4.case-"));
+    expect(temp).toBeDefined();
+    expect(await read(join(dir, temp!))).toBe("mine");
+    expect(await read(to)).toBe("theirs");
+  });
+});
