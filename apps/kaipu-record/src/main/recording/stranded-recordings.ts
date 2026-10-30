@@ -46,6 +46,8 @@ export async function recoverStrandedRecordings(deps: SweepDeps): Promise<SweepR
       try {
         const info = await stat(path);
         if (now - info.mtimeMs < MIN_AGE_MS) continue;
+        // Still hard-linked: the take was placed in the vault and only its staging name is left.
+        if (info.nlink > 1) continue;
         if (info.size === 0) {
           await unlink(path);
           result.discarded += 1;

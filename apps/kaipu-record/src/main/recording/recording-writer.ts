@@ -1,15 +1,5 @@
-import { constants } from "node:fs";
 import { randomUUID } from "node:crypto";
-import {
-  copyFile,
-  link,
-  lstat,
-  open,
-  mkdir,
-  rename,
-  unlink,
-  type FileHandle,
-} from "node:fs/promises";
+import { copyFile, link, open, mkdir, rename, unlink, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { LocalRecording } from "@shared/types/library-storage";
@@ -69,58 +59,104 @@ export class FinalizeMoveError extends Error {
 }
 
 /**
- * Rename, else copy (cross-volume). A failed copy removes the half-written destination, never an existing file.
- * `overwrite` is for a destination the user already confirmed replacing (the save dialog asks): rename
- * replaces on POSIX, so the copy fallback must too. Vault and sweep moves leave it off and never clobber
- * a take: a plain rename replaces silently, so they place the file with a hard link, which fails on an
- * existing destination (a volume without hard links checks that nothing is there, then renames).
+ * Move `from` to `to`. `overwrite` is for a destination the user already confirmed replacing (the
+ * save dialog asks): a rename, else a copy that replaces too. Vault and sweep moves leave it off
+ * and never clobber a file: see `placeExclusive`.
  */
 export async function moveFile(
   from: string,
   to: string,
   options: { overwrite?: boolean } = {},
 ): Promise<void> {
+  if (!options.overwrite) return placeExclusive(from, to);
   try {
-    if (options.overwrite) await rename(from, to);
-    else await placeExclusive(from, to);
+    await rename(from, to);
     return;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") throw error;
+  } catch {
     // EXDEV or any rename failure: fall through to copy.
   }
   try {
-    await copyFile(from, to, options.overwrite ? 0 : constants.COPYFILE_EXCL);
+    await copyFile(from, to);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") await unlink(to).catch(() => {});
+    await unlink(to).catch(() => {});
     throw error;
   }
-  await unlink(from).catch(() => {});
+  await dropSource(from);
 }
 
-/** Move `from` to `to` without ever replacing a file at `to`: EEXIST if one is there. */
+/**
+ * Move `from` to `to` without ever replacing a file at `to`: EEXIST if one is there, whenever it
+ * arrived (Finder, a sync tool and other processes are outside maintenance). A hard link fails
+ * on an existing destination; a volume without them (exFAT, network shares) or another volume
+ * gets an exclusive create and a copy instead. Never a rename onto `to`: it replaces silently.
+ */
 async function placeExclusive(from: string, to: string): Promise<void> {
   try {
     await link(from, to);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (code === "EEXIST" || code === "EXDEV" || code === "ENOENT") throw error;
-    // No hard links on this volume (exFAT, some network shares): check, then rename.
-    if (await exists(to)) {
-      throw Object.assign(new Error(`"${to}" already exists`), { code: "EEXIST" });
-    }
-    await rename(from, to);
-    return;
+    if (code === "EEXIST" || code === "ENOENT") throw error;
+    await copyExclusive(from, to);
   }
-  await unlink(from).catch(() => {});
+  await dropSource(from);
 }
 
-async function exists(path: string): Promise<boolean> {
+const COPY_CHUNK = 1 << 20;
+
+/** Copy into a file this call creates (`wx`), flushed to disk. A failed copy removes only its own file. */
+async function copyExclusive(from: string, to: string): Promise<void> {
+  const source = await open(from, "r");
   try {
-    await lstat(path);
-    return true;
+    const target = await open(to, "wx"); // EEXIST: the destination is taken
+    try {
+      const buffer = Buffer.allocUnsafe(COPY_CHUNK);
+      let position = 0;
+      for (;;) {
+        const { bytesRead } = await source.read(buffer, 0, COPY_CHUNK, position);
+        if (bytesRead === 0) break;
+        await target.write(buffer, 0, bytesRead, position);
+        position += bytesRead;
+      }
+      await target.sync();
+    } catch (error) {
+      await target.close().catch(() => {});
+      await unlink(to).catch(() => {});
+      throw error;
+    }
+    await target.close();
+  } finally {
+    await source.close().catch(() => {});
+  }
+}
+
+/** Suffix a placed staging file gets when it cannot be removed: the sweep's pattern skips it. */
+export const PLACED_SUFFIX = ".placed";
+
+/**
+ * Remove the source of a move that has already placed the file. A source left under its staging
+ * name would be swept up as a second recording, so a failed removal is retried, then the source
+ * is set aside under a name the sweep ignores, and reported. (A hard-linked one the sweep also
+ * recognises by its link count, should even that fail.)
+ */
+async function dropSource(from: string): Promise<void> {
+  try {
+    await unlink(from);
+    return;
+  } catch (first) {
+    if ((first as NodeJS.ErrnoException).code === "ENOENT") return;
+  }
+  try {
+    await unlink(from);
+    return;
+  } catch {
+    // Fall through to setting it aside.
+  }
+  const aside = `${from}-${randomUUID().slice(0, 8)}${PLACED_SUFFIX}`;
+  try {
+    await rename(from, aside);
+    console.error(`could not remove the placed staging file; kept as "${aside}"`);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
-    throw error;
+    console.error(`could not remove the placed staging file "${from}"`, error);
   }
 }
 

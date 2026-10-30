@@ -3,36 +3,31 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
-// Cross-volume rename failure (EXDEV) followed by a failed copy (ENOSPC) can't be
-// triggered portably against a real disk, so the move primitives are mocked.
-// Only the take's move fails: the vault's atomic sidecar writes rename too.
-const { renameMock, linkMock, copyFileMock, unlinkMock, realRename } = vi.hoisted(() => {
-  const realRename = { fn: null as null | ((from: string, to: string) => Promise<void>) };
-  return {
-    realRename,
-    renameMock: vi.fn(async (from: string, to: string) => {
-      if (from.endsWith(".mp4.part")) throw Object.assign(new Error("EXDEV"), { code: "EXDEV" });
-      return realRename.fn!(from, to);
-    }),
-    linkMock: vi.fn(async () => {
-      throw Object.assign(new Error("EXDEV"), { code: "EXDEV" });
-    }),
-    copyFileMock: vi.fn(async () => {
-      throw Object.assign(new Error("ENOSPC"), { code: "ENOSPC" });
-    }),
-    unlinkMock: vi.fn(async () => {}),
-  };
-});
+// A cross-volume move (EXDEV) whose copy then fails (ENOSPC) can't be triggered portably
+// against a real disk, so the move primitives are mocked: the take's copy into the vault fails
+// on its first write.
+const { linkMock, unlinkMock } = vi.hoisted(() => ({
+  linkMock: vi.fn(async () => {
+    throw Object.assign(new Error("EXDEV"), { code: "EXDEV" });
+  }),
+  unlinkMock: vi.fn(async () => {}),
+}));
 
 vi.mock("node:fs/promises", async (importActual) => {
   const actual = await importActual<typeof import("node:fs/promises")>();
-  realRename.fn = actual.rename;
   return {
     ...actual,
-    rename: renameMock,
     link: linkMock,
-    copyFile: copyFileMock,
     unlink: unlinkMock,
+    open: async (path: string, ...rest: [string?, number?]) => {
+      const handle = await actual.open(path, ...rest);
+      if (!path.endsWith(".mp4") || rest[0] !== "wx") return handle;
+      return Object.assign(handle, {
+        write: async () => {
+          throw Object.assign(new Error("ENOSPC"), { code: "ENOSPC" });
+        },
+      });
+    },
   };
 });
 
