@@ -137,6 +137,12 @@ export interface WebcamFillState<T> {
  * a new webcam frame, or the face disappearing. `emit` re-composes the held screen frame
  * with it and returns false when it could not add the frame (the timestamp did not
  * advance, or the fps cap took the slot). Returns the new state.
+ *
+ * Each fill is declared to last until the gap's end (the next screen frame, or the clip's
+ * end when that comes first). The muxer replaces every duration but the last with the gap
+ * to the next timestamp, so only the final frame's matters, and it must reach the end: a
+ * fill that removes the face (hidden, or the webcam ended or failed) can be the last frame
+ * of the clip, and a 1/fps duration there would cut the video track short.
  */
 export async function fillWebcamGap<T>(opts: {
   state: WebcamFillState<T>;
@@ -145,14 +151,15 @@ export async function fillWebcamGap<T>(opts: {
   fps: number;
   visible(sourceTime: number): boolean;
   frameAt(sourceTime: number): Promise<T | null>;
-  emit(sourceTime: number, face: T | null): Promise<boolean>;
+  emit(sourceTime: number, face: T | null, duration: number): Promise<boolean>;
 }): Promise<WebcamFillState<T>> {
   let { from, face } = opts.state;
+  const gapEnd = Math.min(opts.nextFrame, opts.segmentEnd);
   for (const t of webcamFillTimes(from, opts.nextFrame, opts.segmentEnd, opts.fps)) {
     from = t;
     const due = opts.visible(t) ? await opts.frameAt(t) : null;
     if (due === face) continue;
-    if (await opts.emit(t, due)) face = due;
+    if (await opts.emit(t, due, gapEnd - t)) face = due;
   }
   return { from, face };
 }

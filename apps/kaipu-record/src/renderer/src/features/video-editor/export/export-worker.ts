@@ -348,7 +348,8 @@ async function runExportWithInput(
             fps: fillFps,
             visible: (t) => webcamAt({ webcam: layer }, t) !== null,
             frameAt: (t) => webcamCursor.frameAt(t),
-            emit: async (t, face) => {
+            // `duration` reaches the gap's end: the last fill of a clip must (see fillWebcamGap).
+            emit: async (t, face, duration) => {
               const outTs = segment.timelineStart + (t - segment.sourceStart);
               if (prevOutTs !== null && outTs <= prevOutTs) return false;
               if (!cap.keep(outTs)) return false;
@@ -362,7 +363,7 @@ async function runExportWithInput(
                 image ? { image, sourceTs: t } : null,
               );
               await sendPosterOnce();
-              await videoSource.add(outTs, 1 / fillFps);
+              await videoSource.add(outTs, duration);
               reportProgress(outTs);
               prevOutTs = outTs;
               return true;

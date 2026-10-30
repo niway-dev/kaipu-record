@@ -301,3 +301,90 @@ describe("fillWebcamGap", () => {
     expect(asked).toEqual([...asked].sort((a, b) => a - b));
   });
 });
+
+describe("fillWebcamGap durations (C1: the last fill reaches the gap's end)", () => {
+  /** Runs a gap and returns what was emitted, as [time, face index or null, duration]. */
+  async function emitted(opts: {
+    nextFrame: number;
+    segmentEnd: number;
+    visible?: (t: number) => boolean;
+    frameAt: (t: number) => { index: number } | null;
+  }): Promise<Array<[number, number | null, number]>> {
+    const cache = new Map<number, { index: number }>();
+    const out: Array<[number, number | null, number]> = [];
+    await fillWebcamGap({
+      state: { from: 0, face: null },
+      nextFrame: opts.nextFrame,
+      segmentEnd: opts.segmentEnd,
+      fps: 30,
+      visible: opts.visible ?? (() => true),
+      frameAt: async (t) => {
+        const frame = opts.frameAt(t);
+        if (!frame) return null;
+        if (!cache.has(frame.index)) cache.set(frame.index, frame);
+        return cache.get(frame.index)!;
+      },
+      emit: async (t, face, duration) => {
+        out.push([t, face?.index ?? null, duration]);
+        return true;
+      },
+    });
+    return out;
+  }
+
+  /**
+   * No emitted frame ends before the next one starts (the muxer trims each to the next
+   * timestamp, so only the LAST declared duration survives), and the last reaches `end`.
+   */
+  const expectContiguous = (frames: Array<[number, number | null, number]>, end: number) => {
+    expect(frames.length).toBeGreaterThan(0);
+    for (let i = 0; i + 1 < frames.length; i++) {
+      expect(frames[i]![0] + frames[i]![2]).toBeGreaterThanOrEqual(frames[i + 1]![0] - 1e-9);
+    }
+    const last = frames.at(-1)!;
+    expect(last[0] + last[2]).toBeCloseTo(end);
+  };
+
+  const webcam30 = (t: number) => ({ index: Math.floor(t * 30 + 1e-9) });
+
+  it("webcam hidden mid final gap: the frame that removes the face lasts to the clip's end", async () => {
+    // A 10 s still screen, the last of its clip; the webcam is hidden from 5 s on.
+    const frames = await emitted({
+      nextFrame: 10,
+      segmentEnd: 10,
+      visible: (t) => t < 5 - 1e-9,
+      frameAt: webcam30,
+    });
+    expect(frames.at(-1)![1]).toBeNull();
+    expect(frames.at(-1)![0]).toBeCloseTo(5);
+    expectContiguous(frames, 10);
+  });
+
+  it("webcam ending mid final gap: its last frame's removal lasts to the clip's end", async () => {
+    const frames = await emitted({
+      nextFrame: 10,
+      segmentEnd: 10,
+      frameAt: (t) => (t < 3 ? webcam30(t) : null),
+    });
+    expect(frames.at(-1)![1]).toBeNull();
+    expectContiguous(frames, 10);
+  });
+
+  it("webcam failing mid gap (no frame from then on): the last fill reaches the next screen frame", async () => {
+    let failed = false;
+    const frames = await emitted({
+      nextFrame: 4,
+      segmentEnd: 10,
+      frameAt: (t) => {
+        if (t >= 2) failed = true;
+        return failed ? null : webcam30(t);
+      },
+    });
+    expectContiguous(frames, 4);
+  });
+
+  it("a gap that ends at a cut reaches the clip's end, not the next clip's frame", async () => {
+    const frames = await emitted({ nextFrame: 20, segmentEnd: 10, frameAt: webcam30 });
+    expectContiguous(frames, 10);
+  });
+});
