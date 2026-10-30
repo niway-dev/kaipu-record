@@ -68,15 +68,17 @@ the reopen condition below, a fork shipped as a competing product.
 The monorepo means there is no "open the desktop app, keep the server private." Splitting
 `apps/server-hono`, `packages/infra-*` and the Cloudflare workers into a second repository
 would cost more than it protects, and would break the single-source-of-truth docs site. So
-the decision is: **everything opens**, as Cap does, and the cost of that is a security pass on
-the server before the day it happens. That pass is already the
-[backend security hardening](/backlog/backend-security-hardening/) workstream; opening the
-repo makes it a hard prerequisite rather than a nice-to-have.
+the decision was: **everything opens**, as Cap does, with a security pass on the server as the
+price. That pass is the [backend security hardening](/backlog/backend-security-hardening/)
+workstream; with the server code public, it is a hard requirement rather than a nice-to-have.
 
-## Pre-open checklist
+## Open-time checklist
 
-Nothing below is optional. Each item is a way a public repository has hurt a project like
-this one.
+This was written as the list to finish before going public. The repository went public on
+2026-10-05 with items 5–7 done. The others have no recorded outcome on this page, and item 3
+is still open (the [filesystem-first monetization ADR](/desktop/filesystem-first-monetization/)
+is in Spanish). Treat every item without a date as open until someone records it. Each item
+is a way a public repository has hurt a project like this one.
 
 1. **Secrets.** Scan the _entire git history_, not just `HEAD`, for tokens, keys, database
    URLs and Infisical exports. Rotate anything found, then rewrite or squash history if
