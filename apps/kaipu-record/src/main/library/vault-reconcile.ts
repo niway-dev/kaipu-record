@@ -10,7 +10,7 @@
 import { randomUUID } from "node:crypto";
 import type { Dirent } from "node:fs";
 import { lstat, mkdir, readFile, readdir, rename } from "node:fs/promises";
-import { basename, dirname, extname, join } from "node:path";
+import { basename, dirname, extname, join, relative } from "node:path";
 import type {
   FixableFindingKind,
   ReconcileFinding,
@@ -748,9 +748,22 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
     fail(path, "orphan move left in place");
   // A file an unfinished orphan bundle still holds waits for that bundle's replay: classified
   // afresh, it would land in this run's folder and split the bundle in two.
-  const held = new Set(resumed.held);
-  const heldBy = (finding: ScanFinding): string | undefined =>
-    [finding.path, ...(finding.files ?? [])].find((path) => held.has(path));
+  // Every mutation checks the item's whole path set (its media, every companion of its stem,
+  // and for a rename those of its new stem too), not only the finding's own path.
+  const held = new Set(resumed.held.map(fsFold));
+  const stemPaths = (stem: string): string[] => [
+    ...MEDIA_EXTS.map((ext) => `${stem}${ext}`),
+    ...Object.values(vault.companionPaths(stem)).map((path) => relative(directory, path)),
+  ];
+  const heldBy = (finding: ScanFinding, ...stems: string[]): string | undefined =>
+    [finding.path, ...(finding.files ?? []), ...[finding.stem, ...stems].flatMap(stemPaths)].find(
+      (path) => held.has(fsFold(path)),
+    );
+  const failHeld = (finding: ScanFinding, path: string): void => {
+    if (!report.failed.some((f) => f.path === finding.path)) {
+      fail(finding.path, `pending orphan move: ${path} waits for its original bundle`);
+    }
+  };
 
   // 2. The first actions.
   const first = (await scanVault({ directory, cloud: options.cloud })).findings;
@@ -772,9 +785,7 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
   for (const finding of actions) {
     const pending = heldBy(finding);
     if (pending !== undefined) {
-      if (!report.failed.some((f) => f.path === finding.path)) {
-        fail(finding.path, `pending orphan move: ${pending} waits for its original bundle`);
-      }
+      failHeld(finding, pending);
       step();
       continue;
     }
@@ -822,7 +833,17 @@ export async function fixVault(directory: string, options: FixOptions): Promise<
     title: finding.newTitle!,
     base: alignedBase(finding.newTitle!, kindFromExt(finding.ext!), new Date(finding.createdAt!)),
   }));
-  await runPlan(vault, plan, options, report, (finding, renamed) => {
+  const free: Planned[] = [];
+  for (const item of plan) {
+    const pending = heldBy(item.finding, item.base);
+    if (pending === undefined) {
+      free.push(item);
+      continue;
+    }
+    failHeld(item.finding, pending);
+    step();
+  }
+  await runPlan(vault, free, options, report, (finding, renamed) => {
     // A retitled item was counted when its title was written.
     if (renamed && !retitled.has(finding.stem)) report.fixed += 1;
     step();

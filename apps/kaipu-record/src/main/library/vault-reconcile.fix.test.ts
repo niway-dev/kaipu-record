@@ -552,4 +552,42 @@ describe("fixVault — an orphan bundle with a file that did not move", () => {
     expect(after.entries).toHaveLength(1);
     expect(after.entries[0]).toMatchObject({ stem: "Gone", status: "complete" });
   });
+
+  it.each([
+    ["renamed", sidecar({ assetId: "n", title: "New title" })],
+    ["retitled", sidecar({ assetId: "n", title: "Recording — 10/29/2026, 7:57:30 PM" })],
+    ["adopted", null],
+  ])(
+    "a new item on a held stem is not %s while the replay of its file is pending",
+    async (_action, record) => {
+      directory = await makeVault({
+        ".kaipu/Gone.json": sidecar({ assetId: "g", title: "Gone" }),
+        ".kaipu/Gone.jpg": "poster",
+      });
+      failure.source = "/.kaipu/Gone.jpg";
+      await fix();
+      // A new capture reuses the freed stem while the old poster still waits for its bundle.
+      await writeFile(join(directory, "Gone.mp4"), "new take");
+      if (record) await writeFile(join(directory, ".kaipu/Gone.json"), record);
+      const before = await snapshot(directory);
+      const second = await fix();
+      failure.source = "";
+
+      expect(await readFile(join(directory, ".kaipu/Gone.jpg"), "utf8")).toBe("poster");
+      expect(await readFile(join(directory, "Gone.mp4"), "utf8")).toBe("new take");
+      // Nothing outside the run bookkeeping appeared or went away.
+      const items = (files: Record<string, string>) =>
+        Object.keys(files)
+          .filter((path) => !/^\.kaipu\/(?:orphans|reconcile)/.test(path))
+          .sort();
+      expect(items(await snapshot(directory))).toEqual(items(before));
+      if (record) {
+        expect(await readFile(join(directory, ".kaipu/Gone.json"), "utf8")).toBe(record);
+      }
+      expect(second.failed).toContainEqual({
+        path: "Gone.mp4",
+        error: expect.stringContaining("pending orphan move"),
+      });
+    },
+  );
 });
