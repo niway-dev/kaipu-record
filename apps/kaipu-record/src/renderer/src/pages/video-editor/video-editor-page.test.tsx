@@ -1,8 +1,10 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
+import { SESSION_BEFORE_WEBCAM } from "@renderer/features/video-editor/session-before-webcam.fixture";
+import { WEBCAM_DEFAULTS } from "@renderer/features/video-editor/webcam/webcam-model";
 import {
   toolForShortcut,
   VideoEditorLoader,
@@ -702,6 +704,67 @@ describe("VideoEditorPage — inspector column priority (annotation follow-ups)"
 });
 
 // The webcam layer (ADR 0033): everything it adds hangs off the sidecar's webcam track.
+// The loader (review W6): a saved session meets the sidecar, which alone decides whether the
+// recording has a webcam (`reconcileWebcam`).
+describe("VideoEditorPage — loading a session against the webcam sidecar", () => {
+  const WITH_WEBCAM: VideoEditorSource = {
+    ...SOURCE,
+    webcam: { startOffsetMs: 0, offsetQuality: "exact", width: 1280, height: 720, fps: 30 },
+  };
+  const original = window.electronAPI.loadVideoEditSession;
+  const savedSession = (sessionJson: string): void => {
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => ({ sessionJson, assets: [] }));
+  };
+  afterEach(() => {
+    window.electronAPI.loadVideoEditSession = original;
+  });
+
+  it("a session saved before the webcam keeps its edits and gets the layer seeded from the sidecar", async () => {
+    savedSession(SESSION_BEFORE_WEBCAM);
+    renderEditor(WITH_WEBCAM);
+    const footer = await waitForEditorLoaded();
+    expect(getToasts().map((toast) => toast.message)).toContain("Restored your previous edit");
+    expect(footer.querySelector('[data-zoom-id="zoom-1"]')).not.toBeNull();
+    expect(footer.querySelector('[data-testid="webcam-lane"]')).not.toBeNull();
+    expect(footer.querySelectorAll("[data-webcam-id]")).toHaveLength(0);
+    expect(screen.getByTestId("webcam-layer")).toBeInTheDocument();
+  });
+
+  it("the same session on a recording without a webcam opens exactly as before", async () => {
+    savedSession(SESSION_BEFORE_WEBCAM);
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    expect(footer.querySelector('[data-zoom-id="zoom-1"]')).not.toBeNull();
+    expect(footer.querySelector('[data-testid="webcam-lane"]')).toBeNull();
+    expect(screen.queryByTestId("webcam-layer")).toBeNull();
+  });
+
+  it("a saved layer is restored with its segments; the sidecar's absence drops it", async () => {
+    const scene = JSON.parse(SESSION_BEFORE_WEBCAM).scene;
+    const withLayer = JSON.stringify({
+      version: 1,
+      scene: {
+        ...scene,
+        webcam: {
+          layout: { ...WEBCAM_DEFAULTS },
+          segments: [{ id: "cam-hidden", start: 3, end: 6, mode: "hidden" }],
+        },
+      },
+    });
+    savedSession(withLayer);
+    renderEditor(WITH_WEBCAM);
+    let footer = await waitForEditorLoaded();
+    expect(footer.querySelector('[data-webcam-id="cam-hidden"]')).not.toBeNull();
+    cleanup();
+
+    savedSession(withLayer);
+    renderEditor();
+    footer = await waitForEditorLoaded();
+    expect(footer.querySelector('[data-testid="webcam-lane"]')).toBeNull();
+    expect(screen.queryByTestId("webcam-layer")).toBeNull();
+  });
+});
+
 describe("VideoEditorPage — webcam track", () => {
   const WITH_WEBCAM: VideoEditorSource = {
     ...SOURCE,
@@ -709,6 +772,7 @@ describe("VideoEditorPage — webcam track", () => {
   };
 
   it("a recording without a webcam shows no lane, no layer, no second video and no hide action", async () => {
+    thumbnailCalls.length = 0;
     renderEditor();
     const footer = await waitForEditorLoaded();
     expect(footer.querySelector('[data-testid="webcam-lane"]')).toBeNull();
