@@ -152,7 +152,9 @@ function gapSegments(gaps: WebcamGap[], durationSeconds?: number): WebcamSegment
       previous.end = Math.max(previous.end, end);
       continue;
     }
-    segments.push({ id: crypto.randomUUID(), start, end, mode: "hidden" });
+    // An id from where it starts (segments are apart, so it is unique): seeding the same take
+    // twice gives the same layer, and Share's fingerprint of it (`wholeFingerprint`) stays.
+    segments.push({ id: `gap-${Math.round(start * 1000)}`, start, end, mode: "hidden" });
   }
   return segments;
 }

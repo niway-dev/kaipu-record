@@ -188,6 +188,19 @@ describe("wholeFingerprint (Share)", () => {
     expect(wholeFingerprint(moved)).not.toBe(wholeFingerprint(layer));
   });
 
+  it("is the same for a take with camera-off gaps seeded twice, so its Share file is reused", () => {
+    const withGaps = {
+      ...webcam,
+      gaps: [
+        { startMs: 2000, endMs: 4000 },
+        { startMs: 6000, endMs: 6500 },
+      ],
+    };
+    expect(wholeFingerprint(seedWebcamScene(withGaps, 10))).toBe(
+      wholeFingerprint(seedWebcamScene({ ...withGaps }, 10)),
+    );
+  });
+
   it("is told apart from the pre-webcam whole and from an editor export", () => {
     const enc = (f: string) => encodeFingerprint(f, "balanced");
     const layer = seedWebcamScene(webcam);

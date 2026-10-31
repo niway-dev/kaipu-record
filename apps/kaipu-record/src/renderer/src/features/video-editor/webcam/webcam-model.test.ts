@@ -130,6 +130,14 @@ describe("seedWebcamScene: camera-off gaps", () => {
     expect(spans(scene)).toEqual([{ start: 8, end: 12, mode: "hidden" }]);
   });
 
+  it("seeds the same ids each time, so the seeded layer is the same", () => {
+    const gaps = withGaps([
+      { startMs: 5000, endMs: 10_000 },
+      { startMs: 20_000, endMs: 22_500 },
+    ]);
+    expect(seedWebcamScene(gaps, 30)).toEqual(seedWebcamScene(gaps, 30));
+  });
+
   it("seeds no segment for a take whose camera stayed on", () => {
     expect(seedWebcamScene(track())?.segments).toEqual([]);
   });
