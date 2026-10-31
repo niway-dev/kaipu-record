@@ -8,7 +8,7 @@
  */
 export const MEDIA_SCHEME = "kaipu-media";
 
-export type MediaKind = "recording" | "screenshot" | "thumb";
+export type MediaKind = "recording" | "screenshot" | "thumb" | "webcam";
 
 /**
  * `kaipu-media://<kind>/<encoded id>[?<query>]`. The query carries a cache-busting `v` and

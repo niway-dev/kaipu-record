@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RecordingActivity } from "@shared/types";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { RecordingActivity, RecordingSettings } from "@shared/types";
 
 const { mockPreview } = vi.hoisted(() => ({ mockPreview: vi.fn() }));
 vi.mock("@renderer/features/recording/hooks/use-camera-preview", () => ({
@@ -12,6 +12,13 @@ vi.mock("@renderer/features/recording/hooks/use-camera-preview", () => ({
 import { CameraBubble, gripDragSize } from "./camera-bubble";
 
 const original = { ...window.electronAPI };
+// The bubble window exists because the camera is on.
+beforeEach(() => {
+  window.electronAPI.getRecordingSettings = async () => ({
+    ...(await original.getRecordingSettings()),
+    isCameraEnabled: true,
+  });
+});
 afterEach(() => {
   Object.assign(window.electronAPI, original);
 });
@@ -448,6 +455,66 @@ describe("gripDragSize", () => {
   it("clamps to 120–480", () => {
     expect(gripDragSize(240, 1000, -1000)).toBe(480);
     expect(gripDragSize(240, -1000, 1000)).toBe(120);
+  });
+});
+
+/**
+ * A camera turned off mid-take parks the bubble window (main hides it, ADR 0037): the preview
+ * must release the camera itself then, so the in-use light goes off, and reopen it when the
+ * camera comes back on.
+ */
+describe("CameraBubble — the Camera toggle", () => {
+  it("releases the camera while the toggle is off and reopens it when it is on again", async () => {
+    withStream();
+    let broadcast: ((settings: RecordingSettings) => void) | null = null;
+    window.electronAPI.onRecordingSettingsChanged = (callback) => {
+      broadcast = callback;
+      return () => {};
+    };
+    render(<CameraBubble />);
+    await waitFor(() => expect(broadcast).not.toBeNull());
+    expect(mockPreview).toHaveBeenLastCalledWith(true, null, 720);
+    const base = await original.getRecordingSettings();
+    act(() => broadcast!({ ...base, isCameraEnabled: false }));
+    expect(mockPreview).toHaveBeenLastCalledWith(false, null, 720);
+    act(() => broadcast!({ ...base, isCameraEnabled: true }));
+    expect(mockPreview).toHaveBeenLastCalledWith(true, null, 720);
+  });
+
+  it("never opens the camera of a window parked before it read the toggle", async () => {
+    // Parked before ready-to-show: opening the camera until main answers would blink its light.
+    mockPreview.mockClear();
+    withStream();
+    let answer!: (settings: RecordingSettings) => void;
+    window.electronAPI.getRecordingSettings = () => new Promise((resolve) => (answer = resolve));
+    render(<CameraBubble />);
+    const base = await original.getRecordingSettings();
+    await act(async () => answer({ ...base, isCameraEnabled: false }));
+    expect(mockPreview).toHaveBeenCalled();
+    expect(mockPreview.mock.calls.every(([enabled]) => enabled === false)).toBe(true);
+  });
+
+  it("opens the camera when main cannot say whether it is on: the window exists for it", async () => {
+    withStream();
+    window.electronAPI.getRecordingSettings = () => Promise.reject(new Error("no ipc"));
+    render(<CameraBubble />);
+    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 720));
+  });
+
+  it("a broadcast that lands before the first read wins over it", async () => {
+    withStream();
+    let answer!: (settings: RecordingSettings) => void;
+    window.electronAPI.getRecordingSettings = () => new Promise((resolve) => (answer = resolve));
+    let broadcast: ((settings: RecordingSettings) => void) | null = null;
+    window.electronAPI.onRecordingSettingsChanged = (callback) => {
+      broadcast = callback;
+      return () => {};
+    };
+    render(<CameraBubble />);
+    const base = await original.getRecordingSettings();
+    act(() => broadcast!({ ...base, isCameraEnabled: false }));
+    await act(async () => answer({ ...base, isCameraEnabled: true }));
+    expect(mockPreview).toHaveBeenLastCalledWith(false, null, 720);
   });
 });
 

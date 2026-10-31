@@ -8,6 +8,8 @@ import type { CameraPath } from "../zoom/camera-path";
 import { buildExportPlan, gifOutputSize, sliceExportPlan, type ExportPlan } from "./export-plan";
 import type { GifFps, GifStartMessage, GifWorkerMessage } from "./gif-messages";
 import { rasterizeOverlays } from "./overlay-raster";
+import type { WebcamTrackMessage } from "./export-messages";
+import { type ExportWebcamTrack, fetchWebcamTrack } from "./webcam-fetch";
 import { mediaUrl } from "@renderer/lib/media-url";
 
 export interface GifJobArgs {
@@ -20,6 +22,8 @@ export interface GifJobArgs {
   previewWidth: number;
   slideAssets: SlideAssetStore;
   cameraPath: CameraPath | null;
+  /** The recording's webcam track, when it has one (ADR 0038), as for the MP4 export. */
+  webcamTrack?: ExportWebcamTrack | null;
   /** Range in edited-timeline seconds. */
   range: { start: number; end: number };
   /** Requested GIF width (capped at the source width). */
@@ -68,6 +72,7 @@ async function buildStartMessage(
   args: GifJobArgs,
   mode: GifStartMessage["mode"],
   sourceBlob: Blob,
+  webcam: WebcamTrackMessage | null,
 ): Promise<{ message: GifStartMessage; transfer: Transferable[]; plan: ExportPlan }> {
   const plan = sliceExportPlan(buildExportPlan(args.scene), args.range.start, args.range.end);
   const rasterized = await rasterizeOverlays(
@@ -113,6 +118,7 @@ async function buildStartMessage(
     output: gifOutputSize(args.videoWidth, args.videoHeight, args.width),
     fps: args.fps,
     camera,
+    webcam: plan.webcam ? webcam : null,
   };
   const transfer: Transferable[] = [
     ...overlays.map((o) => o.bitmap),
@@ -144,6 +150,8 @@ export function useGifExport(): GifExportController {
   const estimateSeqRef = useRef(0);
   // The source is fetched once per id and reused by every estimate and the export.
   const sourceRef = useRef<{ id: string; blob: Promise<Blob> } | null>(null);
+  // The webcam file, likewise fetched once per id (only for a scene with a webcam layer).
+  const webcamRef = useRef<{ id: string; track: Promise<WebcamTrackMessage | null> } | null>(null);
 
   const sourceBlob = useCallback((id: string): Promise<Blob> => {
     if (sourceRef.current?.id !== id) {
@@ -155,6 +163,25 @@ export function useGifExport(): GifExportController {
       sourceRef.current = { id, blob };
     }
     return sourceRef.current.blob;
+  }, []);
+
+  const webcamTrack = useCallback((args: GifJobArgs): Promise<WebcamTrackMessage | null> => {
+    if (!args.scene.webcam || !args.webcamTrack) return Promise.resolve(null);
+    if (webcamRef.current?.id !== args.sourceId) {
+      // A fetch that throws exports without the layer (reported), and is not cached: the
+      // next export tries again.
+      const track: Promise<WebcamTrackMessage | null> = fetchWebcamTrack(
+        args.sourceId,
+        args.scene.webcam,
+        args.webcamTrack,
+        (error) => {
+          captureException(error, { context: "gif-export-webcam" });
+          if (webcamRef.current?.track === track) webcamRef.current = null;
+        },
+      );
+      webcamRef.current = { id: args.sourceId, track };
+    }
+    return webcamRef.current.track;
   }, []);
 
   const cancelEstimate = useCallback(() => {
@@ -178,7 +205,8 @@ export function useGifExport(): GifExportController {
         void (async () => {
           try {
             const blob = await sourceBlob(args.sourceId);
-            const { message, transfer } = await buildStartMessage(args, "estimate", blob);
+            const webcam = await webcamTrack(args);
+            const { message, transfer } = await buildStartMessage(args, "estimate", blob, webcam);
             if (seq !== estimateSeqRef.current) return; // superseded meanwhile
             const worker = newGifWorker();
             estimateWorkerRef.current = worker;
@@ -206,7 +234,7 @@ export function useGifExport(): GifExportController {
         })();
       }, ESTIMATE_DEBOUNCE_MS);
     },
-    [sourceBlob],
+    [sourceBlob, webcamTrack],
   );
 
   const teardown = useCallback(() => {
@@ -241,7 +269,8 @@ export function useGifExport(): GifExportController {
 
       try {
         const blob = await sourceBlob(args.sourceId);
-        const { message, transfer, plan } = await buildStartMessage(args, "export", blob);
+        const webcam = await webcamTrack(args);
+        const { message, transfer, plan } = await buildStartMessage(args, "export", blob, webcam);
         if (!activeRef.current) return; // cancelled while preparing
 
         let poster: ArrayBuffer | null = null;
@@ -254,6 +283,9 @@ export function useGifExport(): GifExportController {
             setState((s) => (s.status === "exporting" ? { ...s, fraction: msg.fraction } : s));
           } else if (msg.type === "poster") {
             poster = msg.data;
+          } else if (msg.type === "webcam-error") {
+            // The worker carries on without the layer; the GIF is still made.
+            captureException(new Error(msg.message), { context: "gif-export-webcam" });
           } else if (msg.type === "error") {
             fail(
               msg.code === "too-large" ? t("gifTooLargeError") : t("gifExportError"),
@@ -295,7 +327,7 @@ export function useGifExport(): GifExportController {
         fail(t("gifExportError"), error);
       }
     },
-    [cancelEstimate, sourceBlob, teardown, t],
+    [cancelEstimate, sourceBlob, webcamTrack, teardown, t],
   );
 
   // Unmount: never leave a worker running behind the page.

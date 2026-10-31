@@ -1,6 +1,6 @@
 /**
  * "Hold to see original" (UI spec § 4.5): while pressed, the preview shows the raw frame —
- * no camera, no camera box, no privacy regions, no annotations — and an
+ * no camera, no camera box, no privacy regions, no annotations, no webcam — and an
  * "ORIGINAL · UNEDITED" chip. The only honest way to judge the edit, and the only state
  * where a secret is readable.
  */

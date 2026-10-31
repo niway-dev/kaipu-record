@@ -44,6 +44,8 @@ export interface LibraryVideo {
   export?: LocalRecording["export"];
   /** How the recording was captured (library label); null for older and cloud-only items. */
   capture?: RecordingCapture | null;
+  /** The take's webcam track (ADR 0037) while its file exists; null otherwise. */
+  webcam?: LocalRecording["webcam"];
   /** Set when the local sidecar could not be read: the item is listed but read-only (NIW2-568). */
   metadataIssue?: LocalRecording["metadataIssue"];
 }

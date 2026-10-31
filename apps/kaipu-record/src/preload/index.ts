@@ -212,6 +212,10 @@ const kaipuApi: KaipuElectronAPI = {
   recordingAbort: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.recordingAbort, sessionId),
   recordingStat: (sessionId, kind) =>
     ipcRenderer.invoke(IPC_CHANNELS.recordingStat, sessionId, kind),
+  recordingWebcamEnded: (sessionId) =>
+    ipcRenderer.invoke(IPC_CHANNELS.recordingWebcamEnded, sessionId),
+  recordingWebcamTrackSupported: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.recordingWebcamTrackSupported),
   recordingReportTick: (tick) => ipcRenderer.send(IPC_CHANNELS.recordingReportTick, tick),
   recordingReportMicLevels: (levels) => ipcRenderer.send(IPC_CHANNELS.micLevelsReport, levels),
   getMicLevelsListening: () => ipcRenderer.invoke(IPC_CHANNELS.micLevelsGetListening),

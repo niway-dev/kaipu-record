@@ -11,11 +11,20 @@
  */
 import type { LibraryVideo } from "@renderer/features/library/types";
 import type { VideoScene } from "../scene";
+import type { WebcamScene } from "../webcam/webcam-model";
 import { parseSession, serializeSession } from "../session";
 import { encodeFingerprint, type ExportPresetId } from "./export-presets";
 
 /** Share (no editor): the whole source file, as it is on disk. */
 export const WHOLE_RECORDING_FINGERPRINT = "whole";
+
+/** True for Share's fingerprints: `whole`, or `whole:<hash>` when the face is composed. */
+export function isWholeFingerprint(fingerprint: string | undefined): boolean {
+  return (
+    fingerprint === WHOLE_RECORDING_FINGERPRINT ||
+    fingerprint?.startsWith(`${WHOLE_RECORDING_FINGERPRINT}:`) === true
+  );
+}
 
 /** JSON with object keys sorted, so a scene re-read from its session file hashes the same. */
 function stableStringify(value: unknown): string {
@@ -43,6 +52,9 @@ function hash53(text: string): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
+/** The composer revision that draws the webcam layer; bump it when that drawing changes. */
+export const WEBCAM_COMPOSE_REVISION = "wc1";
+
 /**
  * The editor's fingerprint: the scene as the export burns it in. Hashed in its saved form
  * (a session round-trip), so reopening the editor on the same edit — the scene rebuilt by
@@ -50,7 +62,37 @@ function hash53(text: string): string {
  */
 export function editFingerprint(scene: VideoScene): string {
   const saved = parseSession(serializeSession(scene))?.scene ?? scene;
-  return `edit:${hash53(stableStringify(saved))}`;
+  // A recording without a webcam hashes as it did before the layer existed, so the exports
+  // already made from it stay reusable. With one, the layer is hashed (a layout change is a
+  // new export) and the fingerprint is tagged with the composer revision that first drew it
+  // (NIW2-575): an export made before then fingerprinted as `edit:<hash>` and has no face.
+  const { webcam, ...withoutWebcam } = saved;
+  return webcam
+    ? `edit:${WEBCAM_COMPOSE_REVISION}:${hash53(stableStringify(saved))}`
+    : `edit:${hash53(stableStringify(withoutWebcam))}`;
+}
+
+/**
+ * Share's fingerprint (NIW2-576): plain `whole` for a recording without a webcam, so the
+ * Share files already made stay reusable; `whole:<hash of the seeded webcam layer>` with one.
+ * A pre-webcam "whole" export has no face and an editor export has its own `edit:` prefix,
+ * so neither is mistaken for it.
+ */
+export function wholeFingerprint(webcam: WebcamScene | null): string {
+  return webcam
+    ? `${WHOLE_RECORDING_FINGERPRINT}:${hash53(stableStringify(webcam))}`
+    : WHOLE_RECORDING_FINGERPRINT;
+}
+
+/**
+ * What an export records when the scene has a webcam layer but the file came out without the
+ * face (the webcam file was missing, unreadable or could not be decoded): its fingerprint
+ * says "with the face", so stamping it would offer a faceless file as the reusable one. Share
+ * records the plain `whole` (the source as it is on disk, which this file is); an editor
+ * export records none, so it is never reused.
+ */
+export function facelessFingerprint(fingerprint: string): string | undefined {
+  return isWholeFingerprint(fingerprint) ? WHOLE_RECORDING_FINGERPRINT : undefined;
 }
 
 /** The newest playable MP4 export of each preset whose content matches `fingerprint`. */

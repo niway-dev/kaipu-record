@@ -68,6 +68,8 @@ function removeLocalCopyBlockedKey(
   switch (reason) {
     case "edit-project":
       return "removeLocalCopyBlockedEdit";
+    case "webcam-track":
+      return "removeLocalCopyBlockedWebcam";
     case "different-bytes":
       return "removeLocalCopyBlockedBytes";
     case "no-cloud-copy":
@@ -262,7 +264,12 @@ export function LibraryDetailPage(): React.JSX.Element {
       ) : (
         localId && (
           <>
-            <RecordingPlayer id={localId} poster={video.thumbnailUrl} />
+            <RecordingPlayer
+              id={localId}
+              poster={video.thumbnailUrl}
+              webcam={video.webcam}
+              durationSeconds={video.durationSeconds}
+            />
             {/* This player streams the vault file, which ADR 0003 guarantees is the
                 untouched original — edits live in a sidecar session and are composited
                 only in the editor's preview and burned in only by an export. Nothing

@@ -1,0 +1,55 @@
+/* The webcam layer's slot (ADR 0038): a sibling of .content, so the camera path's
+   transform never reaches it, and below the chrome (camera box, region editor and the
+   hold button sit at z-index 4–5). The slot itself lets every pointer through; only the
+   bubble takes them. */
+.slot {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.bubble {
+  position: absolute;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+}
+
+/* A drawing tool is armed: the bubble must not swallow the stroke that starts over it. */
+.bubble[data-interactive="false"] {
+  pointer-events: none;
+}
+
+.bubble[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+/* filter, not box-shadow: the clip-path below would cut a box-shadow off with the corners. */
+.bubble[data-shadow="true"] {
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35));
+}
+
+.bubble[data-selected="true"] {
+  filter: drop-shadow(0 0 1px var(--accent-primary)) drop-shadow(0 0 1px var(--accent-primary));
+}
+
+.bubble[data-selected="true"][data-shadow="true"] {
+  filter: drop-shadow(0 0 1px var(--accent-primary)) drop-shadow(0 0 1px var(--accent-primary))
+    drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35));
+}
+
+.clip {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Cover, like the recorder's bubble: the 16:9 webcam image fills the square, and the
+   framing transform zooms and pans inside it. */
+.video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

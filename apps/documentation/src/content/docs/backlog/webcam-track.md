@@ -5,14 +5,17 @@ description: "Proposal: the webcam stops being pixels of the screen capture. The
 
 # Webcam track
 
-> **Status: 🔵 Proposed** (2026-10-30). Design approved by the owner; nothing implemented.
+> **Status: 🟢 Ready to validate (prod review pending)** (2026-10-30). Implemented across the
+> NIW2-565 stack, last pull request NIW2-576 (Share composes the webcam; the bubble is
+> content-protected from creation). Owner QA is pending, including the exclusion matrix
+> (spec section 3.5, PR #440): nothing here is validated yet.
 > Design: [Webcam track](/specs/2026-10-30-webcam-track-design/) · ADRs
 > [0037](/architecture/decisions/0037-webcam-is-its-own-track-and-the-bubble-is-excluded-from-capture/)
 > (track and exclusion) and
 > [0038](/architecture/decisions/0038-webcam-is-a-viewport-layer-composed-after-the-zoom-crop/)
 > (editor layer) · Linear [NIW2-565](https://linear.app/niway/issue/NIW2-565).
-> Effort: High (16–25 days plus owner QA). First step: the one-day exclusion spike (spec task 0),
-> run by the owner by hand.
+> Effort: High (16–25 days plus owner QA). Open: the exclusion spike (spec task 0), run by the
+> owner by hand.
 
 ## The problem
 
@@ -59,4 +62,8 @@ the file with no bubble and no blank patch. Its outcome selects Plan A or B and 
 - Supersedes decision 6 of the [capture modes spec](/specs/2026-10-26-record-capture-modes-design/)
   (the bubble "recorded as part of the screen"); the bubble's shape, size, mirror and framing
   settings ([camera bubble](/backlog/camera-bubble-shape-and-size/)) become the layer's defaults.
+- Review follow-ups (NIW2-581): a take whose webcam file was not saved (its encoder failed, it
+  did not finalize at stop, or main could not place it) now tells the user after the take, and
+  keeps the screen recording. Still open: the editor drops a saved webcam layer while the
+  webcam file is missing, so the layout is lost if the file comes back.
 - Later: camera-only and split-screen scenes, background blur, layout transitions.

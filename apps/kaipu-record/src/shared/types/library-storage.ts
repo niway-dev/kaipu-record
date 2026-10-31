@@ -1,5 +1,6 @@
 import type { ExportPresetId } from "./export-preset";
 import type { RecordingCapture } from "../recording-capture";
+import type { WebcamTrackMeta } from "../webcam-track";
 
 /**
  * Why an item's sidecar cannot be trusted (NIW2-568): `unreadable` = a read error other
@@ -69,6 +70,11 @@ export interface LocalRecording {
    * sidecar. null for older recordings, screenshots, GIFs and exports. Optional like `tagIds`.
    */
   capture?: RecordingCapture | null;
+  /**
+   * The take's webcam track (ADR 0037): the sidecar's offset, quality, size and recorded
+   * layout, present only while `.kaipu/<id>.webcam.mp4` exists. Absent/null otherwise.
+   */
+  webcam?: WebcamTrackMeta | null;
   /**
    * Set only when the sidecar could not be read or parsed. Every sidecar-backed field above
    * is then a placeholder (title from the file name, `assetId` a stand-in), and nothing is

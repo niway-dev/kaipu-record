@@ -14,10 +14,7 @@ import {
   type YoutubePresetId,
 } from "@renderer/features/video-editor/export/export-presets";
 import { formatMB } from "@renderer/features/video-editor/export/export-size";
-import {
-  findReusableExports,
-  WHOLE_RECORDING_FINGERPRINT,
-} from "@renderer/features/video-editor/export/export-reuse";
+import { findReusableExports } from "@renderer/features/video-editor/export/export-reuse";
 import type { SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import {
   type CopyPlan,
@@ -30,6 +27,8 @@ import { PREPARE_DESTINATION_PARAM } from "@renderer/features/prepare/prepare-pa
 import {
   asPreparable,
   type PreparableVideo,
+  prepareFingerprint,
+  prepareScene,
   usePrepareCopy,
   useSourceProbe,
 } from "@renderer/features/prepare/use-prepare-copy";
@@ -176,11 +175,9 @@ function PrepareScreen({
       sourceSizeBytes: video.fileSizeBytes,
     });
 
-  // "Ready": a file that already is this copy (same preset, whole recording).
-  const reusable = useMemo(
-    () => findReusableExports(exports, WHOLE_RECORDING_FINGERPRINT),
-    [exports],
-  );
+  // "Ready": a file that already is this copy (same preset, whole recording, same face).
+  const fingerprint = useMemo(() => prepareFingerprint(prepareScene(video, probe)), [video, probe]);
+  const reusable = useMemo(() => findReusableExports(exports, fingerprint), [exports, fingerprint]);
 
   const estimateText = (plan: CopyPlan): string =>
     plan.sizeKind === "full" || plan.estimateBytes === null

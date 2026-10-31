@@ -11,6 +11,7 @@ import {
 // Type-only (erased at runtime), so it does not run the store's import-time side effect early.
 import type { StartInput } from "./recorder-store";
 import { reportError } from "@renderer/features/analytics";
+import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import { DEFAULT_LOCALE } from "@kaipu/i18n";
 import es from "@kaipu/i18n/messages/es";
 import en from "@kaipu/i18n/messages/en";
@@ -96,6 +97,9 @@ function fakeEngine(over: Partial<EngineHandle> = {}): EngineHandle {
     setDucking: vi.fn(() => "ok" as const),
     webcam: null,
     endWebcam: vi.fn(),
+    // The engine's default without a relay: off is refused, the store ends the file instead.
+    turnWebcamOff: vi.fn(() => false),
+    turnWebcamOn: vi.fn(async () => "unavailable" as const),
     ...over,
   };
 }
@@ -118,6 +122,8 @@ function fakePrepared(handle: EngineHandle = fakeEngine()): FakePrepared {
     setSystemAudioVolume: handle.setSystemAudioVolume,
     setDucking: handle.setDucking,
     endWebcam: handle.endWebcam,
+    turnWebcamOff: handle.turnWebcamOff,
+    turnWebcamOn: handle.turnWebcamOn,
     begin: vi.fn(async () => {
       callOrder.push("begin");
       return handle;
@@ -1411,6 +1417,10 @@ describe("recorder-store live settings", () => {
     const createCalls = (): unknown[][] => recordingCreateMock.mock.calls as unknown[][];
     const webcamHandle = (over: Partial<NonNullable<EngineHandle["webcam"]>> = {}) => ({
       firstMediaTimestamp: Promise.resolve({ rendererMs: 3020.5, quality: "exact" as const }),
+      startTimesAfterStop: async () => ({
+        screen: { rendererMs: 3000, quality: "exact" as const },
+        webcam: { rendererMs: 3020.5, quality: "exact" as const },
+      }),
       size: { width: 1280, height: 720 },
       isUsable: () => true,
       ...over,
@@ -1418,12 +1428,23 @@ describe("recorder-store live settings", () => {
     const finalizeMeta = () =>
       vi.mocked(window.electronAPI.recordingFinalize).mock.calls.at(-1)![1];
 
-    beforeEach(() => recordingCreateMock.mockClear());
+    afterEach(() => {
+      for (const toast of getToasts()) dismissToast(toast.id);
+    });
+    beforeEach(() => {
+      recordingCreateMock.mockClear();
+      // Main saves the webcam it was sent a usable meta for, as the writer does.
+      window.electronAPI.recordingFinalize = vi.fn(async (_id, meta) => ({
+        ...RECORDING,
+        webcam: meta.webcam ?? null,
+      }));
+    });
 
     it("opens a webcam writer session beside the screen's and hands the engine the camera", async () => {
       await startWith(fakeEngine(), { webcam });
       const [screen, second] = createCalls();
-      expect(screen).toEqual([expect.stringMatching(/^session-/)]);
+      // Both are a take's sessions, said explicitly (an export's say "export").
+      expect(screen).toEqual([expect.stringMatching(/^session-/), "recording"]);
       expect(second).toEqual([screen![0], "webcam"]);
       expect(prepareEngineMock.mock.calls.at(-1)![0].webcam).toEqual({
         deviceId: "cam-1",
@@ -1449,10 +1470,7 @@ describe("recorder-store live settings", () => {
     });
 
     it("finalizes with the webcam's start offset against the screen, its size and the bubble", async () => {
-      const engine = fakeEngine({
-        firstMediaTimestamp: Promise.resolve({ rendererMs: 3000, quality: "exact" as const }),
-        webcam: webcamHandle(),
-      });
+      const engine = fakeEngine({ webcam: webcamHandle() });
       await startWith(engine, { webcam });
       await stopAndSettle();
       expect(finalizeMeta().webcam).toEqual({
@@ -1465,10 +1483,14 @@ describe("recorder-store live settings", () => {
       });
     });
 
-    it("marks the offset estimated when either first-media timestamp is", async () => {
+    it("marks the offset estimated when either first-media timestamp is, even after stop", async () => {
       const engine = fakeEngine({
-        firstMediaTimestamp: Promise.resolve({ rendererMs: 3000, quality: "estimated" as const }),
-        webcam: webcamHandle(),
+        webcam: webcamHandle({
+          startTimesAfterStop: async () => ({
+            screen: { rendererMs: 3000, quality: "estimated" as const },
+            webcam: { rendererMs: 3020.5, quality: "exact" as const },
+          }),
+        }),
       });
       await startWith(engine, { webcam });
       await stopAndSettle();
@@ -1485,6 +1507,35 @@ describe("recorder-store live settings", () => {
       await startWith(fakeEngine({ webcam: null }), { webcam });
       await stopAndSettle();
       expect(finalizeMeta().webcam).toBeNull();
+    });
+
+    describe("a webcam file that did not make it into the recording (the face may be in no file)", () => {
+      it("tells the user once the take is saved, which keeps the screen", async () => {
+        await startWith(fakeEngine({ webcam: webcamHandle({ isUsable: () => false }) }), {
+          webcam,
+        });
+        expect(getToasts()).toEqual([]); // the app is hidden during the take
+        await stopAndSettle();
+        expect(window.electronAPI.recordingFinalize).toHaveBeenCalledOnce();
+        expect(getToasts().map((t) => t.message)).toEqual([messages.record.webcamNotSaved]);
+        dismissToast(getToasts()[0]!.id);
+      });
+
+      it("also when main could not place a webcam the renderer finalized", async () => {
+        window.electronAPI.recordingFinalize = vi.fn(async () => RECORDING);
+        await startWith(fakeEngine({ webcam: webcamHandle() }), { webcam });
+        await stopAndSettle();
+        expect(getToasts().map((t) => t.message)).toEqual([messages.record.webcamNotSaved]);
+        dismissToast(getToasts()[0]!.id);
+      });
+
+      it("says nothing for a saved webcam, or a take that recorded none", async () => {
+        await startWith(fakeEngine({ webcam: webcamHandle() }), { webcam });
+        await stopAndSettle();
+        await startWith(fakeEngine());
+        await stopAndSettle();
+        expect(getToasts()).toEqual([]);
+      });
     });
 
     it("a webcam session that cannot be created leaves the take without a webcam", async () => {
@@ -1514,6 +1565,273 @@ describe("recorder-store live settings", () => {
       expect(engine.endWebcam).toHaveBeenCalledOnce();
       expect(store.getRecorderSnapshot().status).toBe("recording");
       await stopAndSettle();
+    });
+
+    describe("the camera turned off and on mid-take, the file kept running", () => {
+      /** An engine that keeps the file through a camera-off gap (it has a relay). */
+      const relayEngine = (on: () => Promise<"ok" | "unavailable"> = async () => "ok") =>
+        fakeEngine({
+          webcam: webcamHandle(),
+          turnWebcamOff: vi.fn(() => true),
+          turnWebcamOn: vi.fn(on),
+        });
+
+      it("off keeps the webcam file; on feeds it again", async () => {
+        const engine = relayEngine();
+        await startWith(engine, { webcam });
+        broadcast({ isCameraEnabled: true });
+        broadcast({ isCameraEnabled: false });
+        expect(engine.turnWebcamOff).toHaveBeenCalledOnce();
+        expect(engine.endWebcam).not.toHaveBeenCalled();
+        broadcast({ isCameraEnabled: true });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(engine.turnWebcamOn).toHaveBeenCalledOnce();
+        await stopAndSettle();
+      });
+
+      it("finalizes each off period as a gap, in screen ms", async () => {
+        const engine = relayEngine();
+        await startWith(engine, { webcam });
+        await vi.advanceTimersByTimeAsync(2000);
+        broadcast({ isCameraEnabled: false });
+        await vi.advanceTimersByTimeAsync(3000);
+        broadcast({ isCameraEnabled: true });
+        await vi.advanceTimersByTimeAsync(1000);
+        await stopAndSettle();
+        const gaps = finalizeMeta().webcam?.gaps;
+        expect(gaps).toHaveLength(1);
+        expect(gaps![0]!.endMs - gaps![0]!.startMs).toBeCloseTo(3000, -1);
+        // Off 2 s into the take: on the take's own timeline, not the wall clock's.
+        expect(gaps![0]!.startMs).toBeGreaterThanOrEqual(2000);
+        expect(gaps![0]!.endMs).toBeLessThan(finalizeMeta().durationMs);
+      });
+
+      it("a camera still off at the stop is a trailing gap, closed at the take's end", async () => {
+        const engine = relayEngine();
+        await startWith(engine, { webcam });
+        await vi.advanceTimersByTimeAsync(1000);
+        broadcast({ isCameraEnabled: false });
+        await vi.advanceTimersByTimeAsync(2000);
+        await stopAndSettle();
+        const meta = finalizeMeta();
+        const gap = meta.webcam!.gaps![0]!;
+        expect(gap.endMs).toBe(meta.durationMs);
+        expect(gap.endMs - gap.startMs).toBeCloseTo(2000, -1);
+      });
+
+      it("sends no gaps for a take whose camera stayed on", async () => {
+        await startWith(relayEngine(), { webcam });
+        await stopAndSettle();
+        expect(finalizeMeta().webcam).not.toHaveProperty("gaps");
+      });
+
+      it("a camera that cannot be opened again ends the gap there and tells the user after", async () => {
+        const engine = relayEngine(async () => "unavailable");
+        await startWith(engine, { webcam });
+        await vi.advanceTimersByTimeAsync(1000);
+        broadcast({ isCameraEnabled: false });
+        await vi.advanceTimersByTimeAsync(1000);
+        broadcast({ isCameraEnabled: true });
+        await vi.advanceTimersByTimeAsync(0);
+        // The take records no more webcam: off and on again leave the file alone.
+        broadcast({ isCameraEnabled: false });
+        broadcast({ isCameraEnabled: true });
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(engine.turnWebcamOn).toHaveBeenCalledOnce();
+        await stopAndSettle();
+        const meta = finalizeMeta();
+        const gap = meta.webcam!.gaps![0]!;
+        expect(gap.endMs - gap.startMs).toBeCloseTo(1000, -1);
+        expect(gap.endMs).toBeLessThan(meta.durationMs);
+        expect(getToasts().map((t) => t.message)).toEqual([messages.record.webcamUnavailable]);
+      });
+
+      it("a camera turned off again while it reopened keeps its gap open", async () => {
+        let answer!: (result: "ok") => void;
+        const engine = relayEngine(() => new Promise((resolve) => (answer = resolve)));
+        await startWith(engine, { webcam });
+        await vi.advanceTimersByTimeAsync(1000);
+        broadcast({ isCameraEnabled: false });
+        broadcast({ isCameraEnabled: true });
+        await vi.advanceTimersByTimeAsync(0);
+        broadcast({ isCameraEnabled: false });
+        answer("ok");
+        await vi.advanceTimersByTimeAsync(2000);
+        await stopAndSettle();
+        const meta = finalizeMeta();
+        expect(meta.webcam!.gaps).toHaveLength(1);
+        expect(meta.webcam!.gaps![0]!.endMs).toBe(meta.durationMs);
+      });
+
+      /** Off, on, off, on: the first on still opening when the second arrives. */
+      async function onOffOnWhileOpening(): Promise<{
+        engine: ReturnType<typeof relayEngine>;
+        answers: Array<(result: "ok" | "unavailable") => void>;
+      }> {
+        const answers: Array<(result: "ok" | "unavailable") => void> = [];
+        const engine = relayEngine(() => new Promise((resolve) => answers.push(resolve)));
+        await startWith(engine, { webcam });
+        await vi.advanceTimersByTimeAsync(1000);
+        broadcast({ isCameraEnabled: false });
+        broadcast({ isCameraEnabled: true });
+        await vi.advanceTimersByTimeAsync(0);
+        broadcast({ isCameraEnabled: false });
+        broadcast({ isCameraEnabled: true });
+        await vi.advanceTimersByTimeAsync(500);
+        // The first on, dropped by the engine (turned off again), answers "ok".
+        answers[0]!("ok");
+        await vi.advanceTimersByTimeAsync(0);
+        return { engine, answers };
+      }
+
+      it("only the newest on closes the gap, once its camera's frames are back", async () => {
+        const { engine, answers } = await onOffOnWhileOpening();
+        expect(engine.turnWebcamOn).toHaveBeenCalledTimes(2);
+        // The second camera is still opening: the file still holds its last frame.
+        await vi.advanceTimersByTimeAsync(2000);
+        answers[1]!("ok");
+        await vi.advanceTimersByTimeAsync(1000);
+        await stopAndSettle();
+        const meta = finalizeMeta();
+        expect(meta.webcam!.gaps).toHaveLength(1);
+        const gap = meta.webcam!.gaps![0]!;
+        expect(gap.endMs - gap.startMs).toBeCloseTo(2500, -1);
+        expect(gap.endMs).toBeLessThan(meta.durationMs);
+      });
+
+      it("a newest on that fails ends the gap where the file ends, not at the first on", async () => {
+        const { answers } = await onOffOnWhileOpening();
+        await vi.advanceTimersByTimeAsync(2000);
+        answers[1]!("unavailable");
+        await vi.advanceTimersByTimeAsync(1000);
+        await stopAndSettle();
+        const meta = finalizeMeta();
+        const gap = meta.webcam!.gaps![0]!;
+        expect(gap.endMs - gap.startMs).toBeCloseTo(2500, -1);
+        expect(getToasts().map((t) => t.message)).toEqual([messages.record.webcamUnavailable]);
+      });
+    });
+
+    it("tells main when the engine reports the webcam ended, so the bubble rejoins the capture", async () => {
+      const ended = vi.fn(async () => {});
+      window.electronAPI.recordingWebcamEnded = ended;
+      await startWith(fakeEngine({ webcam: webcamHandle() }), { webcam });
+      const id = createCalls()[0]![0];
+      expect(ended).not.toHaveBeenCalled();
+      prepareEngineMock.mock.calls.at(-1)![0].onWebcamEnded!();
+      expect(ended).toHaveBeenCalledExactlyOnceWith(id);
+      await stopAndSettle();
+    });
+
+    describe("a camera that does not open at the start of the take", () => {
+      afterEach(() => {
+        for (const toast of getToasts()) dismissToast(toast.id);
+      });
+
+      /** The engine reports the camera unavailable while it prepares, as the real one does. */
+      const startWithUnavailableCamera = async (): Promise<string[]> => {
+        const order: string[] = [];
+        window.electronAPI.recordingWebcamEnded = vi.fn(async () => {
+          order.push("main told");
+        });
+        prepareEngineMock.mockImplementation(async (options: EngineOptions) => {
+          await options.onWebcamUnavailable!();
+          order.push("screen requested");
+          return fakePrepared(fakeEngine({ webcam: null }));
+        });
+        store.requestStartRecording(() => ({ ...input, webcam }));
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(store.getRecorderSnapshot().status).toBe("recording");
+        return order;
+      };
+
+      it("tells main before the screen is requested, so the bubble is recorded in the screen", async () => {
+        const order = await startWithUnavailableCamera();
+        expect(window.electronAPI.recordingWebcamEnded).toHaveBeenCalledExactlyOnceWith(
+          createCalls()[0]![0],
+        );
+        expect(order).toEqual(["main told", "screen requested"]);
+        await stopAndSettle();
+      });
+
+      it("fails the start when main cannot acknowledge the fallback, releasing the take", async () => {
+        // The engine refuses to record a screen whose capture would leave the bubble out.
+        window.electronAPI.recordingWebcamEnded = vi.fn(async () => {
+          throw new Error("ipc down");
+        });
+        prepareEngineMock.mockImplementation(async (options: EngineOptions) => {
+          await options.onWebcamUnavailable!();
+          return fakePrepared();
+        });
+        store.requestStartRecording(() => ({ ...input, webcam }));
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(store.getRecorderSnapshot().status).toBe("idle");
+        expect(reportErrorMock).toHaveBeenCalledWith(
+          messages.record.errorStart,
+          expect.any(Error),
+          expect.anything(),
+        );
+        expect(window.electronAPI.recordingAbort).toHaveBeenCalledWith(createCalls()[0]![0]);
+        expect(window.electronAPI.recordingStop).toHaveBeenCalled();
+      });
+
+      it("tells the user when main could not create the webcam session", async () => {
+        recordingCreateMock.mockImplementation(async (...args: unknown[]) => {
+          if (args[1] === "webcam") throw new Error("Error invoking remote method: EACCES");
+          return { tempPath: "/tmp/s" };
+        });
+        try {
+          await startWith(fakeEngine(), { webcam });
+          await stopAndSettle();
+          expect(getToasts().map((t) => t.message)).toEqual([messages.record.webcamUnavailable]);
+        } finally {
+          recordingCreateMock.mockImplementation(async () => {
+            callOrder.push("recordingCreate");
+            return { tempPath: "/tmp/s" };
+          });
+        }
+      });
+
+      it("opens no webcam session or camera where this OS cannot record it apart, and says nothing (legacy path)", async () => {
+        const supported = window.electronAPI.recordingWebcamTrackSupported;
+        window.electronAPI.recordingWebcamTrackSupported = vi.fn(async () => false);
+        try {
+          await startWith(fakeEngine(), { webcam });
+          expect(createCalls().map((call) => call[1])).toEqual(["recording"]);
+          expect(prepareEngineMock.mock.calls.at(-1)![0].webcam).toBeNull();
+          await stopAndSettle();
+          expect(getToasts()).toEqual([]);
+        } finally {
+          window.electronAPI.recordingWebcamTrackSupported = supported;
+        }
+      });
+
+      it("takes the legacy path, silently, when the capability cannot be read", async () => {
+        const supported = window.electronAPI.recordingWebcamTrackSupported;
+        window.electronAPI.recordingWebcamTrackSupported = vi.fn(async () => {
+          throw new Error("no handler");
+        });
+        try {
+          await startWith(fakeEngine(), { webcam });
+          expect(createCalls().map((call) => call[1])).toEqual(["recording"]);
+          expect(prepareEngineMock.mock.calls.at(-1)![0].webcam).toBeNull();
+          await stopAndSettle();
+          expect(getToasts()).toEqual([]);
+        } finally {
+          window.electronAPI.recordingWebcamTrackSupported = supported;
+        }
+      });
+
+      it("tells the user once the take is saved, and not on the next take", async () => {
+        await startWithUnavailableCamera();
+        expect(getToasts()).toEqual([]); // the app is hidden during the take
+        await stopAndSettle();
+        expect(getToasts().map((t) => t.message)).toEqual([messages.record.webcamUnavailable]);
+        dismissToast(getToasts()[0]!.id);
+        await startWith(fakeEngine({ webcam: webcamHandle() }), { webcam });
+        await stopAndSettle();
+        expect(getToasts()).toEqual([]);
+      });
     });
 
     it("a camera turned off during the countdown acquires the take again, without it", async () => {

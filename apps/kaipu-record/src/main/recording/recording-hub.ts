@@ -35,9 +35,17 @@ import { ClickHook, type HookLike } from "./click-hook";
 import { CursorTrackRegistry } from "./cursor-tracker";
 import { ControlBarWindow } from "./control-bar-window";
 import { CameraBubbleWindow } from "./camera-bubble-window";
+import { BubbleProtection } from "./bubble-protection";
 import { RecordingShadeWindow } from "./recording-shade-window";
 import { ScreenSourceCache, type ScreenSource } from "./screen-source-cache";
-import { areaToGlobal, fullDisplayBorderAllowed, sanitizeArea } from "./area-geometry";
+import {
+  areaToGlobal,
+  bubblePlacementInRect,
+  canExcludeWindowFromCapture,
+  sanitizeArea,
+  withRecordedBubble,
+  type Rect,
+} from "./area-geometry";
 import { holdTemporaryShortcut, releaseTemporaryShortcut } from "../shortcuts/global-shortcuts";
 import { defaultCaptureName } from "@shared/default-capture-name";
 import { FinalizeMoveError, RecordingWriter } from "./recording-writer";
@@ -75,7 +83,8 @@ export interface RecordingHubHandle {
   toggleRecordingSetting(key: LiveRecordingToggle): void;
   /**
    * Hide the camera bubble for the duration of a screenshot capture (it sits
-   * always-on-top, so it would otherwise land in the shot) without releasing
+   * always-on-top, and where capture cannot exclude it — Windows before 10 2004 — it would
+   * land in the shot) without releasing
    * the camera device. No-ops if the bubble isn't currently shown.
    */
   hideCameraBubbleForCapture(): void;
@@ -171,10 +180,16 @@ export function registerRecordingHub(
   onPendingChange?: (pending: boolean) => void,
 ): RecordingHubHandle {
   const bar = new ControlBarWindow();
-  const cameraBubble = new CameraBubbleWindow(() => getAppSettings().cameraBubble.size);
-  // Shape and size apply live, mid-take included (the bubble is part of the recorded
-  // screen, so the video shows the change). The shape is the renderer's; the size is the
-  // window's bounds, re-placed from the anchored corner.
+  // The bubble leaves the capture only while its face is recorded in the take's webcam file
+  // (or before a take, which then records one): otherwise it stays in the screen recording.
+  const bubbleProtection = new BubbleProtection();
+  const cameraBubble = new CameraBubbleWindow(
+    () => getAppSettings().cameraBubble.size,
+    () => canExcludeWindowFromCapture(process.platform, release()) && bubbleProtection.protects(),
+  );
+  // Shape and size apply live, mid-take included (the user sees the bubble change; the
+  // recording does not, its face is the raw webcam file, restyled on export). The shape is
+  // the renderer's; the size is the window's bounds, re-placed from the anchored corner.
   let appliedBubbleSize = getAppSettings().cameraBubble.size;
   onSettingsChanged((next) => {
     if (next.cameraBubble.size === appliedBubbleSize) return;
@@ -190,6 +205,10 @@ export function registerRecordingHub(
     if (typeof dx === "number" && typeof dy === "number") cameraBubble.moveBy(dx, dy);
   });
   const shade = new RecordingShadeWindow();
+  // The rectangle of the screen the current take records (global DIP): its area, or its whole
+  // display; null for a window, whose bounds main cannot read. The bubble's recorded
+  // position is normalized to it at finalize.
+  let recordedRect: Rect | null = null;
   const screenSources = new ScreenSourceCache(listScreenSources);
   const writer = new RecordingWriter({
     // The active workspace, checked to be connected: a take in a workspace that is not
@@ -288,18 +307,41 @@ export function registerRecordingHub(
     // matter which window flipped it.
     if (settings.isCameraEnabled !== cameraWasOn) {
       if (settings.isCameraEnabled) {
+        // A window parked by this take whose webcam file has since ended (its renderer could
+        // not keep it going) is replaced: a new window, unprotected, is the one a running
+        // capture is known to record, so the face lands in the screen as before (legacy path).
+        if (cameraBubble.isParked() && !takeRecordsWebcam()) cameraBubble.destroy();
         cameraBubble.show();
         // Showing a floating panel can drop the app from the Dock/Cmd+Tab on
         // macOS; re-assert the policy so the app stays reachable.
         applyDockPolicy();
+      } else if (takeRecordsWebcam()) {
+        // Mid-take, with the face going to its webcam file: park (hide, keep, still protected)
+        // instead. The running screen capture leaves out the windows that were on screen when
+        // it started, so turning the camera on again must bring back this same window; a new
+        // one would be captured. Its renderer stops its camera on the toggle (the light goes
+        // off), and the recorder holds the webcam file on the same clock through the gap.
+        cameraBubble.park();
       } else {
         // Destroy (not hide): the bubble holds the camera via getUserMedia, so
         // tearing down its window releases the device and turns the green
-        // in-use light off. Hiding alone would keep the camera held.
+        // in-use light off, whatever its renderer does.
         cameraBubble.destroy();
       }
     }
   };
+  /**
+   * The take in progress records the face in its own webcam file: a camera turned off parks the
+   * bubble then. A take that started with the camera off, or whose webcam file ended, does not:
+   * there the bubble is in the screen (legacy path).
+   */
+  function takeRecordsWebcam(): boolean {
+    return activity.active && bubbleProtection.recordsWebcam();
+  }
+  /** A parked bubble never outlives its take: once the take ends, the camera still off, it goes. */
+  function releaseParkedBubble(): void {
+    if (cameraBubble.isParked() && !settings.isCameraEnabled) cameraBubble.destroy();
+  }
   ipcMain.on(IPC_CHANNELS.recordingSettingsUpdate, (_e, patch: Partial<RecordingSettings>) => {
     applySettingsPatch(windowSettingsPatch(patch, settings));
   });
@@ -449,6 +491,10 @@ export function registerRecordingHub(
   const abandonTake = (sessionId: string, take: Take): void => {
     if (take.ending) return;
     markEnded(sessionId);
+    // No page will finalize or abort it: protect the bubble again for the next take.
+    bubbleProtection.ended(sessionId);
+    cameraBubble.applyProtection();
+    releaseParkedBubble();
     // A finalize in flight finishes its own cursor track; anything else is dropped.
     if (!take.finalizing) {
       cursorTracks.discard(sessionId);
@@ -476,6 +522,13 @@ export function registerRecordingHub(
    * so finalize waits for it and every end (`endTake`) releases or discards both files.
    */
   const createWebcam = async (sessionId: string): Promise<{ tempPath: string }> => {
+    // The bubble leaves the screen capture through content protection (ADR 0037). Where that
+    // cannot exclude a window (Windows before 10 2004) it stays in the video, so a webcam
+    // file would draw the face twice. The renderer asks first (`recordingWebcamTrackSupported`)
+    // and never opens one there; this refusal only backs that up.
+    if (!canExcludeWindowFromCapture(process.platform, release())) {
+      throw new Error("webcam track unavailable: this Windows build cannot exclude the bubble");
+    }
     const take = recordingLeases.get(sessionId);
     const refuse = (why: string): Error =>
       new Error(`recording:create "${sessionId}" webcam: ${why}`);
@@ -485,6 +538,8 @@ export function registerRecordingHub(
     // Claimed before the wait, so a second webcam create is refused and an end waits for it.
     let settle!: () => void;
     take.webcamCreated = new Promise<void>((resolve) => (settle = resolve));
+    bubbleProtection.webcamCreated(sessionId);
+    cameraBubble.applyProtection();
     try {
       await take.created; // the webcam part sits beside the screen's, in its folder
       if (take.tempPath === undefined) throw refuse("the screen file did not open");
@@ -495,6 +550,12 @@ export function registerRecordingHub(
         throw refuse("the take ended before its webcam file opened");
       }
       return created;
+    } catch (error) {
+      // No webcam file after all: the bubble goes back into the capture before the renderer,
+      // told by the rejection, starts the screen.
+      bubbleProtection.webcamEnded(sessionId);
+      cameraBubble.applyProtection();
+      throw error;
     } finally {
       settle();
     }
@@ -529,6 +590,16 @@ export function registerRecordingHub(
       recordingLeases.set(sessionId, take);
       stoppedForWriteFailure = false;
       endedSessions.delete(sessionId);
+      // A background export writes through the same sessions but is not a live take: it never
+      // touches the bubble's protection, which follows the live take alone.
+      if (kind === "recording") {
+        // A new take: no webcam file until its webcam session says so. Before its screen
+        // capture starts (the renderer creates both sessions first), so a bubble turned on
+        // in a take without a webcam is created in the capture, and one that is already up
+        // is protected again by the webcam session.
+        bubbleProtection.screenCreated(sessionId);
+        cameraBubble.applyProtection();
+      }
       let created: Awaited<ReturnType<RecordingWriter["create"]>>;
       try {
         created = await creating;
@@ -545,14 +616,55 @@ export function registerRecordingHub(
       return created;
     },
   );
+  // Whether a take can record the webcam as its own file: only where the bubble can leave the
+  // screen capture. Elsewhere (Windows before 10 2004) the face stays in the screen, by design.
+  ipcMain.handle(IPC_CHANNELS.recordingWebcamTrackSupported, (): boolean =>
+    canExcludeWindowFromCapture(process.platform, release()),
+  );
+  /**
+   * The take records no (more) webcam file (its camera did not open, was turned off, was
+   * unplugged, could not be opened again, or its encoder or writes failed): the bubble must be
+   * in the screen recording again. Before the take's capture starts, dropping the protection is
+   * enough. Once it runs, a protected window on screen is replaced by a new one, unprotected,
+   * at the same place: a running ScreenCaptureKit stream is known to record a window created
+   * after it started, while one that only drops its protection is unverified (spike rows 4/5,
+   * ADR 0037). A parked window (camera off) is replaced when the camera is turned on again.
+   */
+  function bubbleRejoinsCapture(sessionId: string): void {
+    bubbleProtection.webcamEnded(sessionId);
+    if (
+      activity.active &&
+      !takeRecordsWebcam() &&
+      settings.isCameraEnabled &&
+      cameraBubble.isProtected() &&
+      !cameraBubble.isParked()
+    ) {
+      // Hidden for a screenshot: the restore after it shows the new window.
+      cameraBubble.replace(!cameraBubbleHiddenForCapture);
+      applyDockPolicy();
+      return;
+    }
+    cameraBubble.applyProtection();
+  }
+  // The take records no (more) webcam file (its camera did not open, was turned off, was
+  // unplugged, or its encoder failed): the bubble must be in the screen recording again.
+  ipcMain.handle(IPC_CHANNELS.recordingWebcamEnded, (_e, sessionId: unknown) => {
+    if (typeof sessionId !== "string") return;
+    bubbleRejoinsCapture(sessionId);
+  });
   ipcMain.on(
     IPC_CHANNELS.recordingWrite,
     (_e, sessionId: string, data: ArrayBuffer, position: number, kind?: unknown) => {
       const writerKind = recordingWriterKind(kind);
       void writer.write(sessionId, data, position, writerKind).catch((error) => {
         console.error(`recording ${writerKind} write failed`, error);
-        // The webcam never fails the take: finalize drops a webcam whose write failed.
-        if (writerKind === "webcam") return;
+        // The webcam never fails the take: finalize drops a webcam whose write failed. Its
+        // face then has to be in the screen: the bubble rejoins the capture, as for an
+        // unplugged camera (`bubbleRejoinsCapture`).
+        if (writerKind === "webcam") {
+          bubbleRejoinsCapture(sessionId);
+          return;
+        }
         // Writes are fire-and-forget, so without this the engine keeps encoding
         // and the bar keeps ticking while every chunk is dropped. Stop the
         // recorder promptly on the first failure: its stop runs finalize, which
@@ -567,9 +679,21 @@ export function registerRecordingHub(
   );
   ipcMain.handle(
     IPC_CHANNELS.recordingFinalize,
-    async (_e, sessionId: string, meta: RecordingFinalizeMeta) => {
+    async (_e, sessionId: string, rendererMeta: RecordingFinalizeMeta) => {
       // The renderer never retries a finalize (it aborts), so the take ends here either way.
       markEnded(sessionId);
+      // The engine stopped before finalize: protect the bubble again for the next take.
+      bubbleProtection.ended(sessionId);
+      cameraBubble.applyProtection();
+      // Where the bubble sat, as main sees its window: the stop has not released the area yet
+      // (the renderer sends it after finalize), so the bubble is still where it was recorded.
+      // A camera off at the end parked it: where it was before it was turned off.
+      const bubbleBounds = cameraBubble.placedBounds();
+      releaseParkedBubble();
+      const meta = withRecordedBubble(
+        rendererMeta,
+        bubbleBounds && recordedRect ? bubblePlacementInRect(bubbleBounds, recordedRect) : null,
+      );
       const take = recordingLeases.get(sessionId);
       if (!take) return finalizeTake(sessionId, meta); // the writer refuses an unknown session
       if (take.ending || take.finalizing) {
@@ -646,6 +770,9 @@ export function registerRecordingHub(
   );
   ipcMain.handle(IPC_CHANNELS.recordingAbort, (_e, sessionId: string) => {
     markEnded(sessionId);
+    bubbleProtection.ended(sessionId);
+    cameraBubble.applyProtection();
+    releaseParkedBubble();
     cursorTracks.discard(sessionId);
     clickSessions.delete(sessionId);
     stopHookIfIdle();
@@ -903,16 +1030,18 @@ export function registerRecordingHub(
     // it isn't lost while only the floating panels are visible. Restored on stop.
     forceRegularPolicy();
     broadcastActivity();
-    // The area (above): mark it on its display and keep the camera bubble, which is
-    // recorded as part of the screen, inside the area. The shade sits under the bar and
+    // The area (above): mark it on its display and keep the camera bubble inside the area,
+    // as the user sees it against what is recorded (the face itself comes from the webcam
+    // file, not from this window). The shade sits under the bar and
     // the bubble; raising them once it shows covers Windows, which ignores window levels.
     const areaGlobal = area && areaDisplay ? areaToGlobal(area, areaDisplay.bounds) : null;
+    recordedRect = areaGlobal;
     // Place the bar on the screen being recorded (resolved from the source id), outside the
     // area when only part of it is recorded (design "Kaipu Record Modes").
     const includeInRecording = getAppSettings().showBarInRecording;
     // A whole display gets the pink border around its edges, unless content protection
     // cannot keep it out of the video (old Windows); a window gets nothing (it moves).
-    const borderAllowed = fullDisplayBorderAllowed(process.platform, release());
+    const borderAllowed = canExcludeWindowFromCapture(process.platform, release());
     // The countdown of a whole display was drawn on that display: turn it into the border
     // now, without waiting for the source lookup below, which can fail.
     const wholeDisplayCountdown = !area && region !== null && region.rect === null;
@@ -921,11 +1050,12 @@ export function registerRecordingHub(
       // over a take that is already gone, nor act for it on a take started since.
       if (!activity.active || take !== takeCount) return;
       bar.show(displayId, { includeInRecording, anchor: areaGlobal });
-      if (area || wholeDisplayCountdown) return;
       const display =
         displayId === undefined
           ? undefined
           : screen.getAllDisplays().find((d) => String(d.id) === displayId);
+      if (!area && display) recordedRect = { ...display.bounds };
+      if (area || wholeDisplayCountdown) return;
       if (display && borderAllowed) shade.show(display, null, raiseFloating);
       // A lookup that failed (or a window) leaves no countdown dim behind.
       else shade.hide();
@@ -944,6 +1074,7 @@ export function registerRecordingHub(
   });
   const applyStopWindowState = (): void => {
     activity = stoppedActivity(activity);
+    releaseParkedBubble();
     bar.hide();
     shade.hide();
     if (bubbleAnchoredToArea) {
@@ -1118,6 +1249,9 @@ export function registerRecordingHub(
       // Its takes will never be finalized or aborted: release their file handles. The partial
       // files stay on disk, and a cursor track still resolving for one of them must not start.
       for (const id of writer.ids()) markEnded(id);
+      bubbleProtection.reset();
+      cameraBubble.applyProtection();
+      releaseParkedBubble();
       for (const [sessionId] of recordingLeases) markEnded(sessionId);
       // A take still being created (or finalized) ends once that settles, holding the vault
       // until then; an export's partial is discarded, a recording's kept, as for a reload.

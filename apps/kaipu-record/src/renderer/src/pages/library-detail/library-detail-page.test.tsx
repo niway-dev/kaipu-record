@@ -2,6 +2,7 @@ import { act, render, screen, waitFor, fireEvent, within } from "@testing-librar
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryItem } from "@shared/types/library-item";
+import type { WebcamTrackMeta } from "@shared/webcam-track";
 import { DEFAULT_SETTINGS } from "@shared/types";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import { StatusStackProvider } from "@renderer/features/status-cards/status-stack";
@@ -740,6 +741,123 @@ describe("LibraryDetailPage — where is it going? (NIW2-578)", () => {
       relist.resolve({ items: [renamedItem], vaultError: null, catalogVerifiedAt: null }),
     );
     expect(document.querySelector("video")).toBe(player);
+  });
+});
+
+describe("LibraryDetailPage — the recorded face over the original (NIW2-565)", () => {
+  /** A take with a webcam file: a rounded bubble centred in the frame, the camera off 2–4 s. */
+  const webcam: WebcamTrackMeta = {
+    startOffsetMs: 0,
+    offsetQuality: "exact",
+    width: 1280,
+    height: 720,
+    fps: 30,
+    recordedLayout: {
+      shape: "rounded",
+      size: 200,
+      mirrored: false,
+      framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+      position: { x: 0.5, y: 0.5 },
+      sizeFraction: 0.2,
+    },
+    gaps: [{ startMs: 2000, endMs: 4000 }],
+  };
+  const withWebcam: LibraryItem = {
+    ...exportedOnlyItem,
+    local: { ...exportedOnlyItem.local!, webcam },
+  };
+
+  const list = (item: LibraryItem) =>
+    vi.fn(async () => ({ items: [item], vaultError: null, catalogVerifiedAt: null }));
+
+  /** The screen video, decoded at 1000×1000, with a clock the test sets by hand. */
+  function loadScreen(): HTMLVideoElement {
+    const main = screen.getByTestId("recording-video") as HTMLVideoElement;
+    let current = 1;
+    Object.defineProperty(main, "currentTime", {
+      configurable: true,
+      get: () => current,
+      set: (v: number) => {
+        current = v;
+      },
+    });
+    Object.defineProperty(main, "videoWidth", { configurable: true, get: () => 1000 });
+    Object.defineProperty(main, "videoHeight", { configurable: true, get: () => 1000 });
+    fireEvent.loadedMetadata(main);
+    return main;
+  }
+
+  function loadWebcam(duration: number): HTMLVideoElement {
+    const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
+    Object.defineProperty(cam, "duration", { configurable: true, get: () => duration });
+    fireEvent.loadedMetadata(cam);
+    return cam;
+  }
+
+  beforeEach(() => {
+    window.electronAPI.onLibraryChanged = () => () => {};
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(() => Promise.resolve());
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("plays the take's webcam file over the screen, at the bubble's recorded spot and shape", async () => {
+    window.electronAPI.listLibraryItems = list(withWebcam);
+    renderDetail("asset-b");
+    await waitForLoaded();
+    loadScreen();
+    const cam = loadWebcam(30);
+    expect(cam.getAttribute("src")).toBe("kaipu-media://webcam/local-b");
+    const bubble = screen.getByTestId("webcam-layer");
+    expect(bubble.style.display).toBe("");
+    expect(bubble.style.left).toBe("40%");
+    expect(bubble.style.top).toBe("40%");
+    expect(bubble.style.width).toBe("20%");
+    expect((bubble.firstElementChild as HTMLElement).style.clipPath).toBe("inset(0 round 18%)");
+    // Read-only: nothing to select or drag over the player's controls.
+    expect(screen.queryByRole("button", { name: /webcam/i })).toBeNull();
+  });
+
+  it("hides the face while the camera was off, and follows a seek back out of it", async () => {
+    window.electronAPI.listLibraryItems = list(withWebcam);
+    renderDetail("asset-b");
+    await waitForLoaded();
+    const main = loadScreen();
+    loadWebcam(30);
+    const bubble = screen.getByTestId("webcam-layer");
+    act(() => {
+      main.currentTime = 3;
+      fireEvent(main, new Event("seeked"));
+    });
+    expect(bubble.style.display).toBe("none");
+    act(() => {
+      main.currentTime = 5;
+      fireEvent(main, new Event("seeked"));
+    });
+    expect(bubble.style.display).toBe("");
+  });
+
+  it("plays the face at the screen's speed", async () => {
+    window.electronAPI.listLibraryItems = list(withWebcam);
+    renderDetail("asset-b");
+    await waitForLoaded();
+    const main = loadScreen();
+    const cam = loadWebcam(30);
+    act(() => {
+      main.playbackRate = 2;
+      fireEvent(main, new Event("ratechange"));
+    });
+    expect(cam.playbackRate).toBe(2);
+  });
+
+  it("a take without a webcam file plays the screen alone, as before", async () => {
+    window.electronAPI.listLibraryItems = list(exportedOnlyItem);
+    renderDetail("asset-b");
+    await waitForLoaded();
+    loadScreen();
+    expect(screen.queryByTestId("webcam-video")).toBeNull();
   });
 });
 
