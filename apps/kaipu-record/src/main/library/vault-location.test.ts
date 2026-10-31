@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,18 +13,14 @@ vi.mock("electron", () => ({
   },
 }));
 
-import {
-  defaultVaultDirectory,
-  resetVaultDirectory,
-  setVaultDirectory,
-  vaultDirectory,
-} from "./vault-location";
+import { defaultVaultDirectory, forgetCachedPreferences, vaultDirectory } from "./vault-location";
 
 const prefs = () => join(mockState.userDataDir, "preferences.json");
 
 describe("vault-location", () => {
   beforeEach(async () => {
     mockState.userDataDir = await mkdtemp(join(tmpdir(), "kaipu-prefs-"));
+    forgetCachedPreferences();
   });
 
   afterEach(async () => {
@@ -36,47 +32,28 @@ describe("vault-location", () => {
     expect(vaultDirectory()).toEqual({ path: join("/Movies", "Kaipu Record"), isCustom: false });
   });
 
-  it("persists a custom directory and flags it as custom", () => {
-    setVaultDirectory("/Users/me/Recordings");
+  it("reads the mirrored vaultDirectory and flags it as custom", () => {
+    writeFileSync(prefs(), JSON.stringify({ vaultDirectory: "/Users/me/Recordings" }));
     expect(vaultDirectory()).toEqual({ path: "/Users/me/Recordings", isCustom: true });
   });
 
-  it("reset restores the default", () => {
-    setVaultDirectory("/custom");
-    resetVaultDirectory();
-    expect(vaultDirectory()).toEqual({ path: join("/Movies", "Kaipu Record"), isCustom: false });
-  });
-
-  it("serves later reads from memory", () => {
-    setVaultDirectory("/a");
-    writeFileSync(prefs(), JSON.stringify({ vaultDirectory: "/b" }));
-    expect(vaultDirectory().path).toBe("/a");
-  });
-
-  it("a set after a hand edit merges the file's other keys", () => {
-    writeFileSync(prefs(), JSON.stringify({ vaultDirectory: "/x", other: 1 }));
-    setVaultDirectory("/y");
-    expect(JSON.parse(readFileSync(prefs(), "utf-8"))).toEqual({ vaultDirectory: "/y", other: 1 });
-    expect(vaultDirectory().path).toBe("/y");
-  });
-
-  it("reset after a hand edit drops only vaultDirectory", () => {
-    writeFileSync(prefs(), JSON.stringify({ vaultDirectory: "/x", other: 1 }));
-    resetVaultDirectory();
-    expect(JSON.parse(readFileSync(prefs(), "utf-8"))).toEqual({ other: 1 });
+  it("an unparseable file reads as the default folder, as before workspaces", () => {
+    writeFileSync(prefs(), "{ nope");
     expect(vaultDirectory().isCustom).toBe(false);
   });
 
-  it("a failed write keeps the previous value", async () => {
-    setVaultDirectory("/ok");
-    // afterEach's rm is then a no-op on the removed dir (force: true).
-    await rm(mockState.userDataDir, { recursive: true, force: true });
-    expect(() => setVaultDirectory("/new")).toThrow();
-    expect(vaultDirectory().path).toBe("/ok");
+  it("serves later reads from memory until the registry says it wrote the file", () => {
+    writeFileSync(prefs(), JSON.stringify({ vaultDirectory: "/a" }));
+    expect(vaultDirectory().path).toBe("/a");
+    writeFileSync(prefs(), JSON.stringify({ vaultDirectory: "/b" }));
+    expect(vaultDirectory().path).toBe("/a");
+    forgetCachedPreferences();
+    expect(vaultDirectory().path).toBe("/b");
   });
 
   it("a different userData dir does not see another dir's cache", async () => {
-    setVaultDirectory("/one");
+    writeFileSync(prefs(), JSON.stringify({ vaultDirectory: "/one" }));
+    expect(vaultDirectory().isCustom).toBe(true);
     mockState.userDataDir = await mkdtemp(join(tmpdir(), "kaipu-prefs-b-"));
     expect(vaultDirectory().isCustom).toBe(false);
   });

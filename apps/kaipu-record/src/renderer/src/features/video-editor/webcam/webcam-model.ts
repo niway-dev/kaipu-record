@@ -1,5 +1,5 @@
 /**
- * The webcam layer's data (ADR 0033): one global layout plus source-anchored segments that
+ * The webcam layer's data (ADR 0038): one global layout plus source-anchored segments that
  * hide it or override part of it. Pure and import-light on purpose: scene.ts, the export
  * worker and the session parser all read it, so it takes nothing but constants and types.
  *

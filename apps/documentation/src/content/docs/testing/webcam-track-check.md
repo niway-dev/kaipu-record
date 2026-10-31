@@ -10,7 +10,7 @@ A take recorded with the webcam on writes two files: `<vault>/<id>.mp4` (the scr
 `.kaipu/<id>.json` stores where the webcam's time 0 sits against the screen's, under
 `webcam.startOffsetMs`, with `webcam.offsetQuality` (`exact` when both first-media timestamps
 came from mediabunny, `estimated` otherwise)
-([ADR 0032](/architecture/decisions/0032-webcam-is-its-own-track-and-the-bubble-is-excluded-from-capture/),
+([ADR 0037](/architecture/decisions/0037-webcam-is-its-own-track-and-the-bubble-is-excluded-from-capture/),
 [design, section 2](/specs/2026-10-30-webcam-track-design/#2-sync-and-the-check-script)).
 
 `src/shared/webcam-track-report.ts` (`inspectWebcamTrack`) checks the sidecar entry against

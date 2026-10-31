@@ -1,4 +1,6 @@
 import type { LocalRecording, RecordingSettings } from "@shared/types";
+import { isMaintenanceError } from "@renderer/features/library/vault-errors";
+import { defaultCaptureName } from "@shared/default-capture-name";
 import { sanitizeAudioSettings, type AudioSettings } from "@shared/audio-settings";
 import {
   DEFAULT_RECORDING_COUNTDOWN_SECONDS,
@@ -61,7 +63,7 @@ export interface StartInput {
   /** Watermark to burn in, or `null` to encode the raw screen (decided by `useWatermark`). */
   watermark?: WatermarkConfig | null;
   /**
-   * Record the webcam into its own file (ADR 0032): the camera, the lines to ask for and the
+   * Record the webcam into its own file (ADR 0037): the camera, the lines to ask for and the
    * bubble as it looks now (stored on the sidecar). Absent or null with the camera off.
    */
   webcam?: { deviceId: string | null; lines: number; bubble: WebcamRecordedLayout } | null;
@@ -451,7 +453,7 @@ function acquireStart(input: StartInput): PendingStart {
   // Unique across renderer restarts: a recreated renderer must not reuse a dead take's id.
   const id = `session-${Date.now().toString(36)}-${++sessionCounter}`;
   const created = window.electronAPI.recordingCreate(id);
-  // The webcam's own session (ADR 0032), only with the camera on. One that cannot be created
+  // The webcam's own session (ADR 0037), only with the camera on. One that cannot be created
   // leaves the take without a webcam, never without the take.
   const webcamCreated = input.webcam
     ? window.electronAPI.recordingCreate(id, "webcam").then(
@@ -628,7 +630,9 @@ async function beginTake(
     pendingStart = null;
     // A timed-out start can still resolve later: release what it acquires.
     discardStart(start);
-    reportError(runtimeT()("record.errorStart"), error, {
+    // Refused while "Check and fix files" runs (NIW2-561): nothing was recorded.
+    const key = isMaintenanceError(error) ? "record.errorStartMaintenance" : "record.errorStart";
+    reportError(runtimeT()(key), error, {
       context: { sourceId: input.sourceId, phase: "start" },
       retry: () => {
         if (lastResolveInput) requestStartRecording(lastResolveInput);
@@ -928,7 +932,8 @@ async function stopRecording(): Promise<void> {
 
   let recording: LocalRecording | null = null;
   try {
-    const title = `Recording — ${new Date().toLocaleString()}`;
+    // The vault names the file after this title (ADR 0035), so it is a valid file name.
+    const title = defaultCaptureName("recording");
     // Run the real finalize and a minimum dwell together so "Saving…" is visible
     // even when the clip is tiny and the write is instant.
     [recording] = await Promise.all([
@@ -977,7 +982,7 @@ async function stopRecording(): Promise<void> {
 }
 
 /**
- * The webcam entry finalize sends (ADR 0032): where the webcam file's time 0 sits against the
+ * The webcam entry finalize sends (ADR 0037): where the webcam file's time 0 sits against the
  * screen's, both read from the same renderer clock. Null without a usable webcam file, which
  * makes main discard its part. Both timestamps resolve within ~1 frame of the start (3 s at
  * most, then "estimated"), so this never holds the save up past that.

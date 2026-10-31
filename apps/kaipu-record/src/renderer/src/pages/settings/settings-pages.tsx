@@ -1,15 +1,18 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { Cloud, Folder, Mic, Monitor, MousePointerClick, Video } from "lucide-react";
+import { Cloud, FolderSync, Mic, Monitor, MousePointerClick, Video } from "lucide-react";
+import { openReconcileDialog } from "@renderer/features/library/reconcile/reconcile-store";
 import { useTranslations } from "@kaipu/i18n";
 import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
-import { Row } from "@kaipu/ui";
+import { ModalActions, ModalButton, ModalOverlay, ModalText, ModalTitle, Row } from "@kaipu/ui";
 import { Button } from "@kaipu/ui";
 import { Toggle } from "@kaipu/ui";
 import { Select } from "@renderer/ui/select";
 import { useOnboarding } from "@renderer/features/onboarding";
 import { usePermissions, useAccessibility } from "@renderer/features/permissions";
-import { useVaultDirectory } from "@renderer/features/library/hooks/use-vault-directory";
+import { useWorkspaces } from "@renderer/features/workspaces/workspaces-context";
+import { WorkspaceTile } from "@renderer/features/workspaces/workspace-switcher";
+import type { WorkspaceView } from "@shared/types/workspaces";
 import {
   SIM_ACCOUNTS,
   SIM_CAPACITIES,
@@ -207,45 +210,105 @@ export function RecordingSettingsPage(): React.JSX.Element {
   );
 }
 
-export function FilesSettingsPage(): React.JSX.Element {
+/**
+ * Settings → Workspaces (was Files): one row per workspace with its folder and state, Show
+ * folder and Remove from list, and Add workspace (ADR 0032). Remove changes nothing on disk.
+ */
+export function WorkspacesSettingsPage(): React.JSX.Element {
   const t = useTranslations("settings");
-  const vault = useVaultDirectory();
+  const tw = useTranslations("workspaces");
+  const tc = useTranslations("common");
+  const { state, add, remove, openFolder } = useWorkspaces();
+  const [removing, setRemoving] = React.useState<WorkspaceView | null>(null);
+  const count = state?.workspaces.length ?? 0;
   return (
-    <SettingsPanel title={t("files")} subtitle={t("filesDescription")}>
-      <Section title={t("recordingsFolder")}>
+    <SettingsPanel title={t("workspaces")} subtitle={t("workspacesDescription")}>
+      {state?.readOnly && <p className={styles.pathValue}>{tw("readOnly")}</p>}
+      <Section title={t("workspaces")}>
+        {state?.workspaces.map((workspace) => {
+          const isActive = workspace.id === state.activeId;
+          const status =
+            workspace.state === "unavailable"
+              ? tw(`reason_${workspace.reason ?? "missing"}`)
+              : isActive
+                ? tw("active")
+                : null;
+          return (
+            <Row
+              key={workspace.id}
+              icon={
+                <WorkspaceTile
+                  workspace={workspace}
+                  size={22}
+                  dim={workspace.state === "unavailable"}
+                />
+              }
+              label={workspace.name}
+              description={
+                <span className={styles.pathValue} title={workspace.path}>
+                  {status ? `${workspace.path} · ${status}` : workspace.path}
+                </span>
+              }
+              action={
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={workspace.state === "unavailable"}
+                    onClick={() => openFolder(workspace.id)}
+                  >
+                    {tw("showFolder")}
+                  </Button>
+                  {!isActive && count > 1 && !state.readOnly && (
+                    <Button variant="ghost" size="sm" onClick={() => setRemoving(workspace)}>
+                      {tw("removeFromList")}
+                    </Button>
+                  )}
+                </>
+              }
+            />
+          );
+        })}
+        {/* Checks the active workspace's folder (NIW2-561). */}
         <Row
-          icon={<Folder size={16} />}
-          label={
-            vault.directory ? (vault.directory.path.split(/[\\/]/).pop() ?? "") : t("folderLoading")
-          }
-          description={
-            vault.directory ? (
-              <span className={styles.pathValue} title={vault.directory.path}>
-                {`${vault.directory.path} · ${vault.directory.isCustom ? t("folderCustom") : t("folderDefault")}`}
-              </span>
-            ) : undefined
-          }
+          icon={<FolderSync size={16} />}
+          label={t("reconcileLabel")}
+          description={t("reconcileDescription")}
           action={
-            <>
-              {vault.directory?.isCustom && (
-                <Button variant="ghost" size="sm" onClick={() => void vault.reset()}>
-                  {t("reset")}
-                </Button>
-              )}
-              <Button variant="outline" size="sm" onClick={() => void vault.choose()}>
-                {t("browse")}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void window.electronAPI.openVaultDirectory()}
-              >
-                {t("openFolder")}
-              </Button>
-            </>
+            <Button variant="outline" size="sm" onClick={openReconcileDialog}>
+              {t("reconcileButton")}
+            </Button>
           }
         />
       </Section>
+      <div className={styles.workspacesActions}>
+        <Button variant="outline" size="sm" disabled={state?.readOnly} onClick={() => void add()}>
+          {tw("addAction")}
+        </Button>
+      </div>
+      {removing && (
+        <ModalOverlay onCancel={() => setRemoving(null)} labelledBy="remove-workspace-title">
+          <ModalTitle id="remove-workspace-title">
+            {tw("removeConfirmTitle", { name: removing.name })}
+          </ModalTitle>
+          <ModalText>{tw("removeConfirmBody")}</ModalText>
+          <ModalActions>
+            <ModalButton variant="ghost" onClick={() => setRemoving(null)}>
+              {tc("cancel")}
+            </ModalButton>
+            <ModalButton
+              variant="danger"
+              onClick={() => {
+                const id = removing.id;
+                setRemoving(null);
+                void remove(id);
+              }}
+            >
+              {tw("removeConfirm")}
+            </ModalButton>
+          </ModalActions>
+        </ModalOverlay>
+      )}
     </SettingsPanel>
   );
 }

@@ -65,10 +65,11 @@ describe("open-in-editor", () => {
     expect(videoSourceFor(recording)).not.toHaveProperty("webcam");
   });
 
-  it("builds a local image source carrying the thumbnail's version token", () => {
+  it("builds a local image source carrying the thumbnail's version token and the identity", () => {
     expect(imageSourceFor(screenshot)).toEqual({
       kind: "local",
       id: "local-2",
+      assetId: screenshot.assetId,
       title: "Shot",
       version: 42,
     });

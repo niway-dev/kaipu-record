@@ -1,5 +1,5 @@
 /**
- * Pure scene edits for the webcam layer (ADR 0033). Each returns the SAME scene object when
+ * Pure scene edits for the webcam layer (ADR 0038). Each returns the SAME scene object when
  * the edit changes nothing: `commit` and `endInteract` no-op on reference equality, so a
  * no-op never pushes an undo step, never marks the editor dirty and never wakes the autosave.
  * A recording without a webcam has no layer to edit, so every edit passes the scene through.

@@ -14,7 +14,9 @@ import { join } from "node:path";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import { atomicWriteFile } from "./atomic-write";
 import { LibraryVault } from "./library-vault";
+import { vaultActivity } from "./vault-activity";
 import { vaultDirectory } from "./vault-location";
+import { workspaceGate } from "../workspaces";
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
 
@@ -102,6 +104,8 @@ async function readExportedSavedAt(id: string): Promise<number | null> {
 // atomic-write/prune/delete behaviour directly against a temp vault dir.
 export async function saveSession(id: string, payload: SavePayload): Promise<void> {
   const { sessionJson, assets, exported = false } = payload;
+  // Before any write: an item whose record cannot be read is read-only (F9).
+  await new LibraryVault(vaultDirectory().path).assertWritableRecord(id);
 
   // Atomic session JSON write (temp + rename so a crash never truncates the file).
   const sp = sessionPath(id);
@@ -219,16 +223,26 @@ export async function deleteVideoEditSession(id: string): Promise<void> {
 // ── IPC registration ──────────────────────────────────────────────────────────
 
 export function registerVideoEditSessionHandlers(): void {
+  // Item-scoped: stamped with the workspace (ADR 0032). A save that reaches main after a
+  // switch is refused, so it can never write the session into the other workspace.
+  // Entry points (maintenance mode, NIW2-561): a refused save keeps its pending state in
+  // the editor, which retries on `library:maintenance-ended`.
   ipcMain.handle(
     IPC_CHANNELS.videoEditSaveSession,
     (
       _event,
+      stamp: unknown,
       id: string,
       sessionJson: string,
       assets: { assetId: string; bytes: ArrayBuffer }[],
       exported?: boolean,
-    ) => saveSession(id, { sessionJson, assets, exported }),
+    ) =>
+      workspaceGate().run(stamp, () =>
+        vaultActivity.run("editor", () => saveSession(id, { sessionJson, assets, exported })),
+      ),
   );
 
-  ipcMain.handle(IPC_CHANNELS.videoEditLoadSession, (_event, id: string) => loadSession(id));
+  ipcMain.handle(IPC_CHANNELS.videoEditLoadSession, (_event, stamp: unknown, id: string) =>
+    workspaceGate().run(stamp, () => vaultActivity.run("editor", () => loadSession(id))),
+  );
 }
