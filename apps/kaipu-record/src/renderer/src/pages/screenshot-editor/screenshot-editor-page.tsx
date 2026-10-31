@@ -20,6 +20,12 @@ import {
 } from "@renderer/features/screenshots/auto-capture-policy";
 import { DiscardChangesDialog } from "@renderer/features/screenshots/discard-changes-dialog";
 import { reportError } from "@renderer/features/analytics";
+import { screenshotTitle } from "@shared/screenshot-title";
+import {
+  isAmbiguousIdentityError,
+  notifyAmbiguousIdentity,
+  notifyRenameOutcome,
+} from "@renderer/features/library/rename-outcome";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import {
   BeautifiedFrame,
@@ -49,6 +55,8 @@ import {
 } from "@renderer/features/screenshots/export";
 import { useTransientValue } from "@renderer/ui/use-transient-value";
 import { useCompactRow } from "@renderer/ui/use-compact-row";
+import { isMaintenanceError } from "@renderer/features/library/vault-errors";
+import { showToast } from "@renderer/ui/toast-store";
 import styles from "./screenshot-editor-page.module.css";
 
 const ZOOM_MIN = 0.5;
@@ -90,6 +98,8 @@ export function ScreenshotEditorPage(): React.JSX.Element {
 /** The image editor itself. The Editor workspace routes render it, keyed per item. */
 export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX.Element {
   const t = useTranslations("screenshots");
+  const tLibrary = useTranslations("library");
+  const tCommon = useTranslations("common");
   const image = useImageSource(source);
   // A re-opened saved shot is already framed/flattened — start it unframed so the
   // editor doesn't beautify it twice; a fresh capture gets the default frame.
@@ -133,8 +143,14 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
   const [savedId, setSavedId] = useState<string | null>(source.kind === "local" ? source.id : null);
   // Queued jobs read these when they RUN, not from the render that queued them.
   const savedIdRef = useRef(savedId);
+  // The saved item's identity: an overwrite names it so main can follow a rename.
+  const savedAssetIdRef = useRef<string | undefined>(
+    source.kind === "local" ? source.assetId : undefined,
+  );
   // The item the auto-save on open created: the ONLY thing Discard may delete.
   const autoSavedId = useRef<string | null>(null);
+  /** The latest save main refused during maintenance mode, retried when it ends. */
+  const refusedDuringMaintenance = useRef<Parameters<typeof persist>[0] | null>(null);
   // The auto copy mode is read ONCE when the editor opens; a Settings change while
   // this capture is open neither un-copies nor re-copies it.
   const { settings } = useAppSettings();
@@ -149,22 +165,46 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
   // The auto title is computed once; the toolbar field starts from it and is
   // what Save writes. On a saved shot, committing the field renames the vault item
   // in place — the same IPC the Library's inline rename uses.
-  const [autoTitle] = useState(
-    () => source.title ?? `${t("screenshotPrefix")} — ${new Date().toLocaleString()}`,
-  );
-  const renameSaved = async (id: string, next: string): Promise<void> => {
-    try {
-      await window.electronAPI.renameLocalRecording(id, next);
-    } catch (error) {
-      reportError(t("renameError"), error, {
-        context: { phase: "rename", id },
-        retry: () => void renameSaved(id, next),
-      });
-    }
-  };
+  const [autoTitle] = useState(() => source.title ?? screenshotTitle());
+  // NIW2-560: a rename moves the file, so the vault id changes. It runs through the
+  // same queue as saves, so a save never overwrites the old (vanished) name while the
+  // file is moving, and the new id is adopted everywhere this editor holds it.
+  const renameSaved = (next: string): Promise<void> =>
+    enqueue(async () => {
+      const id = savedIdRef.current;
+      const assetId = savedAssetIdRef.current;
+      if (!id || !alive.current) return;
+      try {
+        // A reopened vault shot reads its original bytes lazily, by the id it opened
+        // with. Read (and cache) them now, while the file is still there: after the move
+        // that id names nothing, and the next save would fail.
+        // Best effort: an unreadable file must not block the title.
+        if (image) await image.getBytes().catch(() => {});
+        // The identity rides along: main renames the item it names, wherever it lives now.
+        if (!assetId) throw new Error("rename: the saved shot has no assetId");
+        const result = await window.electronAPI.renameLocalRecording(id, assetId, next);
+        const newId = result.recording.id;
+        savedIdRef.current = newId;
+        savedAssetIdRef.current = result.recording.assetId;
+        setSavedId(newId);
+        if (autoSavedId.current === id) autoSavedId.current = newId;
+        notifyRenameOutcome(result, { library: tLibrary, common: tCommon }, () => {
+          if (alive.current) void renameSaved(next);
+        });
+      } catch (error) {
+        if (isAmbiguousIdentityError(error)) {
+          notifyAmbiguousIdentity(tLibrary);
+          return;
+        }
+        reportError(t("renameError"), error, {
+          context: { phase: "rename", id },
+          retry: () => void renameSaved(next),
+        });
+      }
+    });
   const captureTitle = useCaptureTitle(
     autoTitle,
-    savedId ? (next) => void renameSaved(savedId, next) : null,
+    savedId ? (next) => void renameSaved(next) : null,
   );
 
   // Unsaved-changes guard. A fresh capture (blob) lives ONLY in memory, so it's
@@ -292,18 +332,25 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
       const revision = sceneRevision.current;
       const snap = latest.current.scene;
       const draftAtStart = latest.current.draft;
+      // Callers pass the saved id they saw; a rename queued before this save moved it.
       const overwriteId =
-        opts.overwriteId ?? (opts.bindToSaved ? (savedIdRef.current ?? undefined) : undefined);
+        opts.overwriteId !== undefined
+          ? (savedIdRef.current ?? opts.overwriteId)
+          : opts.bindToSaved
+            ? (savedIdRef.current ?? undefined)
+            : undefined;
       try {
         const saved = await window.electronAPI.saveScreenshot(await exportAs("png", snap), {
           // The live field, not only its committed value: Save must write what the
           // user sees even if the field has not blurred yet (e.g. a shortcut).
           title: opts.title ?? resolveCaptureTitle(draftAtStart, captureTitle.autoTitle),
           overwriteId,
+          ...(overwriteId !== undefined ? { overwriteAssetId: savedAssetIdRef.current } : {}),
           // The auto-save on open is not the user's work; every other save is.
           manual: opts.manual ?? !opts.silent,
         });
         savedIdRef.current = saved.id;
+        savedAssetIdRef.current = saved.assetId;
         setSavedId(saved.id);
         // Don't clobber a title typed while the save was running.
         if (latest.current.draft === draftAtStart) captureTitle.adopt(saved.title);
@@ -325,6 +372,19 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
         // A swallowed save (vault on a disconnected drive, disk full, composite
         // failure) let the user close the editor believing the shot was saved.
         // Surface it with a retry so the work isn't silently lost.
+        if (isAmbiguousIdentityError(error)) {
+          // Two files claim this shot: main refused before writing. A retry would refuse again.
+          notifyAmbiguousIdentity(tLibrary);
+          return null;
+        }
+        if (isMaintenanceError(error)) {
+          // "Check and fix files" is running (NIW2-561): nothing was written and nothing
+          // was queued in main. The edits stay dirty; the latest save runs again when it
+          // ends. Only a save the user asked for says so.
+          refusedDuringMaintenance.current = opts;
+          if (!opts.silent) showToast({ message: tLibrary("maintenanceRefused") });
+          return null;
+        }
         reportError(t("saveError"), error, {
           context: { phase: "save", overwrite: overwriteId !== undefined },
           retry: () => {
@@ -393,6 +453,19 @@ export function ScreenshotEditor({ source }: { source: ImageSource }): React.JSX
     void runAutoActions(actions);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once when image AND settings are ready
   }, [imageReady, actionsReady]);
+
+  // NIW2-561: retry the latest refused save once the files are fixed.
+  const persistRef = useRef(persist);
+  persistRef.current = persist;
+  useEffect(
+    () =>
+      window.electronAPI.onLibraryMaintenanceEnded?.(() => {
+        const opts = refusedDuringMaintenance.current;
+        refusedDuringMaintenance.current = null;
+        if (opts && alive.current) void persistRef.current(opts);
+      }),
+    [],
+  );
 
   /**
    * Write the current edits over the vault item, quietly. Every capture is in the vault,

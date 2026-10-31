@@ -3,6 +3,8 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryItem } from "@shared/types/library-item";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
+import { wholeFingerprint } from "@renderer/features/video-editor/export/export-reuse";
+import { seedWebcamScene } from "@renderer/features/video-editor/webcam/webcam-model";
 import { PreparePage } from "./prepare-page";
 
 const probe = vi.hoisted(() => vi.fn());
@@ -193,6 +195,44 @@ describe("PreparePage (NIW2-578, layout NIW2-583)", () => {
     expect(startArgs().scene.overlays).toEqual([]);
     // It runs in the background: back to the recording, where the cards show progress.
     await waitFor(() => expect(router.state.location.pathname).toBe("/library/asset-1"));
+  });
+
+  it("composes the recording's webcam at its recorded layout and fingerprints it apart (NIW2-576)", async () => {
+    const webcam = {
+      startOffsetMs: 40,
+      offsetQuality: "exact" as const,
+      width: 1280,
+      height: 720,
+      fps: 30,
+      recordedLayout: {
+        shape: "circle" as const,
+        mirrored: true,
+        size: 200,
+        framing: { enabled: false, zoom: 1, x: 0.5, y: 0.5 },
+        position: { x: 0.85, y: 0.8 },
+        sizeFraction: 0.25,
+      },
+    };
+    // A faceless "whole" copy of the same preset exists: it is not this copy.
+    const facelessCopy: LibraryItem = {
+      ...preparedCopy,
+      local: { ...preparedCopy.local!, export: { preset: "youtube-1440", fingerprint: "whole" } },
+    };
+    list(recording({ local: { ...recording().local!, webcam } }), facelessCopy);
+    renderPrepare("/prepare/asset-1?to=youtube");
+    fireEvent.click(
+      await screen.findByRole("button", { name: /^Prepare for YouTube · up to ~\d+ MB$/ }),
+    );
+
+    const args = startArgs() as unknown as {
+      scene: { webcam: { layout: { position: { x: number; y: number } } } | null };
+      webcamTrack: { startOffsetMs: number } | null;
+      fingerprint: string;
+    };
+    expect(args.scene.webcam?.layout.position).toEqual({ x: 0.85, y: 0.8 });
+    expect(args.webcamTrack).toEqual(webcam);
+    expect(args.fingerprint).toBe(wholeFingerprint(seedWebcamScene(webcam)));
+    expect(args.fingerprint).not.toBe(wholeFingerprint(null));
   });
 
   it("4K is a choice inside YouTube", async () => {

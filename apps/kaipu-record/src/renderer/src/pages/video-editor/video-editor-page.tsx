@@ -14,9 +14,11 @@ import {
 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { parseCursorTrack, type CursorTrack } from "@shared/cursor-track";
+import type { WebcamTrackMeta } from "@shared/webcam-track";
 import { captureException } from "@renderer/features/analytics";
 import {
   initialScene,
+  reconcileWebcam,
   newId,
   type SlideItem,
   type VideoOverlay,
@@ -31,7 +33,7 @@ import {
   ModalTitle,
 } from "@kaipu/ui";
 import * as stylex from "@stylexjs/stylex";
-import { Badge } from "@kaipu/ui";
+import { Badge, Button } from "@kaipu/ui";
 import {
   boundaryIndexAt,
   clampOverlays,
@@ -51,7 +53,10 @@ import {
 } from "@renderer/features/video-editor/slide-assets";
 import { parseSession, serializeSession } from "@renderer/features/video-editor/session";
 import { withInitialZooms } from "@renderer/features/video-editor/initial-zooms";
-import { useEditorSelection } from "@renderer/features/video-editor/editor-selection";
+import {
+  useEditorSelection,
+  WEBCAM_LAYER_SELECTION,
+} from "@renderer/features/video-editor/editor-selection";
 import {
   sourceRangeToTimelineBlocks,
   sourceTimeAtTimeline,
@@ -62,6 +67,14 @@ import { seekTargetForSegment } from "@renderer/features/video-editor/zoom/selec
 import { focusInspectorFirstControl } from "@renderer/features/video-editor/focus-inspector";
 import { ActivityLane } from "@renderer/features/video-editor/components/activity-lane";
 import { ZoomLane } from "@renderer/features/video-editor/components/zoom-lane";
+import { WebcamLane } from "@renderer/features/video-editor/components/webcam-lane";
+import { WebcamLayer } from "@renderer/features/video-editor/components/webcam-layer";
+import {
+  WebcamInspector,
+  WebcamSegmentInspector,
+} from "@renderer/features/video-editor/components/inspector/webcam-inspector";
+import { useWebcamEditing } from "@renderer/features/video-editor/webcam/use-webcam-editing";
+import { webcamAt } from "@renderer/features/video-editor/webcam/webcam-model";
 import { EditorInspector } from "@renderer/features/video-editor/components/inspector/editor-inspector";
 import { DetectionPanel } from "@renderer/features/video-editor/components/inspector/detection-panel";
 import { ZoomInspector } from "@renderer/features/video-editor/components/inspector/zoom-inspector";
@@ -122,6 +135,8 @@ import { ExportDialog } from "@renderer/features/video-editor/components/export-
 import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import { showToast } from "@renderer/ui/toast-store";
+import { isAmbiguousIdentityError } from "@renderer/features/library/rename-outcome";
+import { registerSwitchFlush } from "@renderer/features/workspaces/prepare-switch";
 import styles from "./video-editor-page.module.css";
 
 /** The "original" pill's own shape, moved out of video-editor-page.module.css:
@@ -135,6 +150,7 @@ const sxEditor = stylex.create({
 import { useMuteEditing } from "@renderer/features/video-editor/use-mute-editing";
 import { AudioLane } from "@renderer/features/video-editor/components/audio-lane";
 import { MuteInspector } from "@renderer/features/video-editor/components/inspector/mute-inspector";
+import { mediaUrl } from "@renderer/lib/media-url";
 
 export interface VideoEditorSource {
   id: string;
@@ -146,6 +162,8 @@ export interface VideoEditorSource {
   sizeBytes?: number;
   /** Its poster frame, for the export sheet's framing preview. */
   thumbnailUrl?: string | null;
+  /** The recording's webcam track (ADR 0037), when it has one: seeds the webcam layer. */
+  webcam?: WebcamTrackMeta | null;
 }
 
 export function isVideoEditorSource(value: unknown): value is VideoEditorSource {
@@ -267,21 +285,51 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
   }, [source.title]);
 
   const [resolved, setResolved] = useState<{
+    /** The source under the id main acknowledged holding (see below). */
+    source: VideoEditorSource;
     scene: VideoScene;
     cursorTrack: CursorTrack | null;
   } | null>(null);
+  // Why nothing was loaded: the item is gone, or two files claim its identity.
+  const [unavailable, setUnavailable] = useState<"gone" | "ambiguous" | null>(null);
+  const navigate = useNavigate();
+  const tLibrary = useTranslations("library");
 
   useEffect(() => {
     // Guards against calling restoreAsset or setting state after unmount —
     // without this, a mid-load unmount would run dispose() (other effect) and
     // then restoreAsset would recreate object URLs that are never revoked.
     let cancelled = false;
+    // NIW2-560: this editor holds its source id for its lifetime (session autosave, cursor
+    // track, source URL). Main serializes the hold with renames and answers the item's
+    // CURRENT id; nothing is loaded or written before that answer, so a rename that was
+    // moving the file as the editor opened can never leave it on the old name.
+    let heldId: string | null = null;
+    let ambiguous = false;
     void (async () => {
+      try {
+        heldId = await window.electronAPI.acquireEditorSession(source.assetId);
+      } catch (error) {
+        heldId = null;
+        ambiguous = isAmbiguousIdentityError(error);
+      }
+      if (cancelled) {
+        if (heldId !== null) window.electronAPI.closeEditorSession(heldId);
+        return;
+      }
+      // No hold: the item is gone (or main could not say). Never fall back to the route's
+      // id — another item may have taken that name since, and this editor would read its
+      // media and overwrite its session.
+      if (heldId === null) {
+        setUnavailable(ambiguous ? "ambiguous" : "gone");
+        return;
+      }
+      const editorSource: VideoEditorSource = { ...source, id: heldId };
       // The cursor track is best-effort and independent of the session: a missing or
       // malformed track just means no auto zooms (the editor behaves as before v2).
       let cursorTrack: CursorTrack | null = null;
       try {
-        const trackJson = await window.electronAPI.loadCursorTrack(source.id);
+        const trackJson = await window.electronAPI.loadCursorTrack(editorSource.id);
         cursorTrack = trackJson ? parseCursorTrack(trackJson) : null;
       } catch {
         cursorTrack = null;
@@ -292,12 +340,13 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
       const open = (scene: VideoScene, hasZoomData: boolean): void => {
         if (cancelled) return;
         setResolved({
+          source: editorSource,
           scene: withInitialZooms(scene, hasZoomData, cursorTrack, source.durationSeconds),
           cursorTrack,
         });
       };
       try {
-        const saved = await window.electronAPI.loadVideoEditSession(source.id);
+        const saved = await window.electronAPI.loadVideoEditSession(editorSource.id);
         if (cancelled) return;
         if (saved !== null) {
           const session = parseSession(saved.sessionJson);
@@ -315,7 +364,8 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
             // Drop slide items whose asset wasn't returned (e.g. file was deleted on
             // disk) rather than leaving broken references that the worker can't render.
             const filteredScene: VideoScene = {
-              ...session.scene,
+              // The sidecar decides whether the recording has a webcam, not the session.
+              ...reconcileWebcam(session.scene, source.webcam ?? null, source.durationSeconds),
               items: session.scene.items.filter(
                 (item) => item.kind !== "slide" || loadedIds.has(item.assetId),
               ),
@@ -325,21 +375,33 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
           } else {
             // Session file exists but is invalid (schema changed, corruption, etc.).
             showToast({ message: t("restoreError") });
-            open(initialScene(source.durationSeconds), false);
+            open(initialScene(source.durationSeconds, source.webcam ?? null), false);
           }
         } else {
           // No saved session — fresh start, no toast.
-          open(initialScene(source.durationSeconds), false);
+          open(initialScene(source.durationSeconds, source.webcam ?? null), false);
         }
       } catch {
         // IPC failure is non-fatal; open a fresh editor without surfacing the error.
-        open(initialScene(source.durationSeconds), false);
+        open(initialScene(source.durationSeconds, source.webcam ?? null), false);
       }
     })();
     return () => {
       cancelled = true;
+      if (heldId !== null) window.electronAPI.closeEditorSession(heldId);
     };
   }, []); // [] correct: source is stable per VideoEditorLoader's key (the asset id)
+
+  if (unavailable) {
+    return (
+      <div className={styles.unavailable} role="alert">
+        <p>{unavailable === "ambiguous" ? tLibrary("itemAmbiguous") : t("sourceUnavailable")}</p>
+        <Button variant="ghost" onClick={() => navigate(ROUTES.library)}>
+          {tLibrary("backToLibrary")}
+        </Button>
+      </div>
+    );
+  }
 
   if (resolved === null) {
     // Brief loading state while the session IPC resolves. The editor grows the window
@@ -349,7 +411,7 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
 
   return (
     <VideoEditor
-      source={source}
+      source={resolved.source}
       resolvedScene={resolved.scene}
       cursorTrack={resolved.cursorTrack}
       assetStoreRef={assetStoreRef}
@@ -379,6 +441,10 @@ function VideoEditor({
   // threw away every cut, zoom and redaction, because useBlocker below only ever sees
   // in-app navigation.
   const autosave = useSessionAutosave(source.id, scene, controller.interacting, assetStoreRef);
+  // A workspace switch writes the pending edit first, while this editor is still open and
+  // its workspace still active (ADR 0032, decision 7); the leave guard below then sees it saved.
+  const flushAutosave = autosave.flush;
+  useEffect(() => registerSwitchFlush(flushAutosave), [flushAutosave]);
   // Blocks in-app navigation (e.g. the sidebar) while an edit has NOT reached the
   // session file yet — same useBlocker pattern as the screenshot editor, but now about
   // "not written" rather than "edited": with autosave on, an edit that is already on
@@ -410,6 +476,15 @@ function VideoEditor({
     cursorTrack,
   });
   const mutes = useMuteEditing(controller, layout, source.durationSeconds);
+  const webcamEdits = useWebcamEditing({
+    controller,
+    layout,
+    sourceDuration: source.durationSeconds,
+  });
+  // The sidecar decides whether there is a webcam (the loader reconciled the scene with
+  // it); without one there is no layer, lane, inspector section nor second <video>.
+  const webcamTrack = source.webcam ?? null;
+  const hasWebcam = webcamTrack !== null && scene.webcam !== null;
   const redactionEdits = useRedactionEditing({
     controller,
     layout,
@@ -426,8 +501,8 @@ function VideoEditor({
   const videoTools = useVideoTools();
   const videoExport = useVideoExport();
   const gifExport = useGifExport();
-  const mediaUrl = `kaipu-media://recording/${source.id}`;
-  const thumbnails = useSourceThumbnails(mediaUrl, source.durationSeconds);
+  const sourceUrl = mediaUrl("recording", source.id);
+  const thumbnails = useSourceThumbnails(sourceUrl, source.durationSeconds);
   const selection = useEditorSelection();
   // `select` / `clear` are stable (useCallback, no deps); the `selection` object itself
   // is rebuilt every render, so never put it in a dependency array.
@@ -473,6 +548,7 @@ function VideoEditor({
   const selectedZoomId = selection.zoomId;
   const selectedRedactionId = selection.redactionId;
   const selectedMuteId = selection.muteId;
+  const selectedWebcamId = selection.webcamId;
   useEffect(() => {
     if (selectedZoomId && !scene.zoomSegments.some((z) => z.id === selectedZoomId)) {
       selectKind("zoom", null);
@@ -488,6 +564,15 @@ function VideoEditor({
       selectKind("mute", null);
     }
   }, [scene.mutedRanges, selectedMuteId, selectKind]);
+  useEffect(() => {
+    if (
+      selectedWebcamId &&
+      selectedWebcamId !== WEBCAM_LAYER_SELECTION &&
+      !scene.webcam?.segments.some((s) => s.id === selectedWebcamId)
+    ) {
+      selectKind("webcam", null);
+    }
+  }, [scene.webcam, selectedWebcamId, selectKind]);
 
   // Track fullscreen state via the fullscreenchange event so pressing Esc (which the
   // browser handles natively) still syncs isFullscreen back to false.
@@ -649,6 +734,8 @@ function VideoEditor({
         previewWidth: video.clientWidth,
         slideAssets: assetStoreRef.current,
         cameraPath,
+        // The sidecar's webcam track: with a webcam layer in the scene, the export composes it.
+        webcamTrack: source.webcam ?? null,
         presetId: choice.presetId,
         framing: choice.framing,
         sourceInfo: sourceProbe,
@@ -668,7 +755,12 @@ function VideoEditor({
             // Left the editor: its unmount flush wrote the latest edit (or Discard dropped
             // it). Stamp only if what is on disk is the edit that was exported.
             const saved = await window.electronAPI.loadVideoEditSession(source.id);
-            const savedScene = saved ? parseSession(saved.sessionJson)?.scene : null;
+            const parsedScene = saved ? parseSession(saved.sessionJson)?.scene : null;
+            // Reconciled like the loader does, or an old session (no webcam key) on a webcam
+            // recording would never fingerprint like the scene that was exported.
+            const savedScene = parsedScene
+              ? reconcileWebcam(parsedScene, source.webcam ?? null, source.durationSeconds)
+              : null;
             if (savedScene && editFingerprint(savedScene) !== fingerprint) return;
           }
           try {
@@ -736,12 +828,13 @@ function VideoEditor({
         previewWidth: video.clientWidth,
         slideAssets: assetStoreRef.current,
         cameraPath,
+        webcamTrack: source.webcam ?? null,
         range: settings.range,
         width: settings.width,
         fps: settings.fps,
       };
     },
-    [playback, scene, source.id, assetStoreRef, cameraPath],
+    [playback, scene, source.id, source.webcam, assetStoreRef, cameraPath],
   );
 
   const handleGifSettingsChange = useCallback(
@@ -963,6 +1056,23 @@ function VideoEditor({
     else if (result.reason === "no-room") showToast({ message: t("muteNoRoom") });
   }, [mutes, playback.timelineTime, selectKind, t]);
 
+  // "Hide webcam here": a hidden segment from the playhead to the next one, selected so its
+  // edges can be dragged straight away; inside a segment, that segment is selected instead.
+  const handleHideWebcam = useCallback(() => {
+    const result = webcamEdits.hideAtPlayhead(playback.timelineTime);
+    if (result.ok) selectKind("webcam", result.id);
+    else if (result.reason === "on-slide") showToast({ message: t("webcamHideOnSlide") });
+    else if (result.reason === "no-room") showToast({ message: t("webcamHideNoRoom") });
+  }, [webcamEdits, playback.timelineTime, selectKind, t]);
+
+  const handleRemoveWebcamSegment = useCallback(
+    (id: string) => {
+      webcamEdits.remove(id);
+      selectKind("webcam", null);
+    },
+    [webcamEdits, selectKind],
+  );
+
   const handleRemoveZoom = useCallback(
     (id: string) => {
       zooms.remove(id);
@@ -977,6 +1087,10 @@ function VideoEditor({
   const selectedOverlay = selectedOverlayId
     ? (scene.overlays.find((o) => o.id === selectedOverlayId) ?? null)
     : null;
+  const selectedWebcamSegment =
+    selectedWebcamId && selectedWebcamId !== WEBCAM_LAYER_SELECTION
+      ? (webcamEdits.visibleSegments.find((s) => s.id === selectedWebcamId) ?? null)
+      : null;
 
   // Privacy (doc 10). While a privacy tool is active or a region is selected the preview
   // shows the unzoomed original frame, so drawing/editing maps 1:1 to frame coordinates.
@@ -1055,16 +1169,16 @@ function VideoEditor({
   // lands and changing it never re-renders, so the hint would appear or not depending on
   // whether some unrelated render happened to arrive after the metadata did.
   const [sourceHeight, setSourceHeight] = useState(0);
-  useCameraPreview(
-    playback.videoRef,
-    contentRef,
-    cameraPath,
+  // The decoded frame as one state object: the webcam layer places itself against it (the
+  // preview's output frame is the source frame), and a stable object keeps its trigger quiet.
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+  const cameraApplied =
     !holdingOriginal &&
-      selectedZoom === null &&
-      selectedRedaction === null &&
-      privacyTool === null &&
-      !onSlide,
-  );
+    selectedZoom === null &&
+    selectedRedaction === null &&
+    privacyTool === null &&
+    !onSlide;
+  useCameraPreview(playback.videoRef, contentRef, cameraPath, cameraApplied);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -1120,6 +1234,8 @@ function VideoEditor({
       if (!isMod && (e.key === "Delete" || e.key === "Backspace")) {
         if (selectedRedactionId) handleRemoveRedaction(selectedRedactionId);
         else if (selectedZoomId) handleRemoveZoom(selectedZoomId);
+        else if (selectedWebcamId && selectedWebcamId !== WEBCAM_LAYER_SELECTION)
+          handleRemoveWebcamSegment(selectedWebcamId);
         else if (selectedOverlayId) handleDeleteOverlay();
         else if (!deleteDisabled) handleDeleteSelected();
       }
@@ -1143,6 +1259,8 @@ function VideoEditor({
     selectedRedactionId,
     handleRemoveZoom,
     handleRemoveRedaction,
+    selectedWebcamId,
+    handleRemoveWebcamSegment,
     videoTools,
     handleToolChange,
     handleAddZoom,
@@ -1195,6 +1313,7 @@ function VideoEditor({
           onToolChange={handleToolChange}
           onAddZoom={handleAddZoom}
           privacyDisabled={onSlide}
+          onHideWebcam={hasWebcam ? handleHideWebcam : undefined}
         />
         <main className={styles.stage} ref={stageRef}>
           {/* Video region: 1fr grid row — centers PreviewStage and constrains its height
@@ -1206,11 +1325,54 @@ function VideoEditor({
           >
             <PreviewStage
               playback={playback}
-              mediaUrl={mediaUrl}
+              mediaUrl={sourceUrl}
               slideUrl={slideUrl}
               expanded={isFullscreen}
               contentRef={contentRef}
-              onFrameSize={({ height }) => setSourceHeight(height)}
+              onFrameSize={(size) => {
+                setSourceHeight(size.height);
+                setFrameSize(size);
+              }}
+              webcam={
+                hasWebcam &&
+                webcamTrack &&
+                scene.webcam && (
+                  <WebcamLayer
+                    videoRef={playback.videoRef}
+                    src={mediaUrl("webcam", source.id)}
+                    startOffsetMs={webcamTrack.startOffsetMs}
+                    webcam={scene.webcam}
+                    path={cameraPath}
+                    cameraEnabled={cameraApplied}
+                    frame={frameSize}
+                    // "Hold to see original" shows the original, which has no face (spec
+                    // open question 2); a slide has no webcam either.
+                    hidden={holdingOriginal || onSlide}
+                    interactive={videoTools.tool === "select"}
+                    // Outlined for the layer and for an override (both are the bubble's look), not
+                    // for a hidden range, which has nothing to show.
+                    selected={
+                      selectedWebcamId === WEBCAM_LAYER_SELECTION ||
+                      scene.webcam.segments.some(
+                        (s) => s.id === selectedWebcamId && s.mode === "override",
+                      )
+                    }
+                    onSelect={(sourceTime) => {
+                      // Grabbing the bubble inside an override selects (and edits) that
+                      // override, so the inspector shows what the user is looking at.
+                      const override = scene.webcam?.segments.find(
+                        (s) => s.mode === "override" && sourceTime >= s.start && sourceTime < s.end,
+                      );
+                      selectKind("webcam", override?.id ?? WEBCAM_LAYER_SELECTION);
+                    }}
+                    onBegin={webcamEdits.begin}
+                    onMove={(position, sourceTime) =>
+                      webcamEdits.liveLayout({ position }, sourceTime)
+                    }
+                    onEnd={webcamEdits.end}
+                  />
+                )
+              }
               underlay={
                 <RedactionLayer
                   redactions={redactionEdits.visibleRedactions}
@@ -1386,6 +1548,23 @@ function VideoEditor({
               }
               onRemoved={() => selectKind("zoom", null)}
             />
+          ) : hasWebcam && scene.webcam && selectedWebcamId === WEBCAM_LAYER_SELECTION ? (
+            <WebcamInspector
+              layout={scene.webcam.layout}
+              edits={webcamEdits}
+              frame={frameSize}
+              onHideHere={handleHideWebcam}
+            />
+          ) : hasWebcam && selectedWebcamSegment ? (
+            <WebcamSegmentInspector
+              segment={selectedWebcamSegment}
+              index={webcamEdits.visibleSegments.indexOf(selectedWebcamSegment) + 1}
+              range={timelineRangeOf(selectedWebcamSegment.start, selectedWebcamSegment.end)}
+              layout={webcamAt(scene, selectedWebcamSegment.start) ?? scene.webcam!.layout}
+              edits={webcamEdits}
+              frame={frameSize}
+              onRemoved={() => selectKind("webcam", null)}
+            />
           ) : selectedOverlay ? (
             <AnnotationInspector
               overlay={selectedOverlay}
@@ -1454,6 +1633,25 @@ function VideoEditor({
                 />
               ),
             },
+            ...(hasWebcam
+              ? [
+                  {
+                    key: "webcam",
+                    label: t("laneWebcam"),
+                    node: (
+                      <WebcamLane
+                        segments={webcamEdits.visibleSegments}
+                        layout={layout}
+                        selectedId={
+                          selectedWebcamId === WEBCAM_LAYER_SELECTION ? null : selectedWebcamId
+                        }
+                        onSelect={(id) => selectKind("webcam", id)}
+                        onEdgeDrag={webcamEdits.edgeDrag}
+                      />
+                    ),
+                  },
+                ]
+              : []),
             {
               key: "privacy",
               label: t("lanePrivacy"),

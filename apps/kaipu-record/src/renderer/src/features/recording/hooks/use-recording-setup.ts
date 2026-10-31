@@ -10,6 +10,12 @@ import {
   sanitizeAudioSettings,
   type AudioSettings,
 } from "@shared/audio-settings";
+import {
+  DEFAULT_CAMERA_BUBBLE,
+  sanitizeCameraBubble,
+  type CameraBubbleSettings,
+} from "@shared/camera-bubble";
+import { webcamCaptureLines } from "@shared/webcam-track";
 import { useWatermark } from "@renderer/features/watermark/use-watermark";
 import { useMicrophones } from "@renderer/features/recording/hooks/use-microphones";
 import { useRecordingSettings } from "@renderer/features/recording/hooks/use-recording-settings";
@@ -101,6 +107,8 @@ export function useRecordingSetup(): RecordingSetup {
   // app settings too. Read on mount, then kept current through `onSettingsChanged`, so a
   // level changed in the popover before pressing Record is the one the take starts with.
   const audioRef = useRef<AudioSettings>(DEFAULT_AUDIO_SETTINGS);
+  // The bubble's camera, size and framing decide the webcam file's camera and lines (ADR 0037).
+  const cameraBubbleRef = useRef<CameraBubbleSettings>(DEFAULT_CAMERA_BUBBLE);
   // The microphone the user picked last (AppSettings.microphone); `undefined` until read.
   const [preferredMicrophone, setPreferredMicrophone] = useState<
     AppSettings["microphone"] | undefined
@@ -112,11 +120,13 @@ export function useRecordingSetup(): RecordingSetup {
     void window.electronAPI.getSettings().then((appSettings) => {
       if (heardChange) return;
       audioRef.current = sanitizeAudioSettings(appSettings.audio);
+      cameraBubbleRef.current = sanitizeCameraBubble(appSettings.cameraBubble);
       setPreferredMicrophone(appSettings.microphone ?? null);
     });
     return window.electronAPI.onSettingsChanged((appSettings) => {
       heardChange = true;
       audioRef.current = sanitizeAudioSettings(appSettings.audio);
+      cameraBubbleRef.current = sanitizeCameraBubble(appSettings.cameraBubble);
       setPreferredMicrophone(appSettings.microphone ?? null);
     });
   }, []);
@@ -156,6 +166,8 @@ export function useRecordingSetup(): RecordingSetup {
   micRef.current = selectedMicrophone;
   const systemAudioRef = useRef(isSystemAudioEnabled);
   systemAudioRef.current = isSystemAudioEnabled;
+  const cameraEnabledRef = useRef(isCameraEnabled);
+  cameraEnabledRef.current = isCameraEnabled;
 
   const startRecording = useCallback(() => {
     if (recorder.status !== "idle" || !sourceRef.current) return;
@@ -164,6 +176,7 @@ export function useRecordingSetup(): RecordingSetup {
       if (!source) throw new Error("startRecording: no source selected");
       const engineQuality = qualityToEngine(qualityRef.current);
       const wm = watermarkRef.current;
+      const { deviceId, ...bubble } = cameraBubbleRef.current;
       return {
         sourceId: source.id,
         sourceName: source.name,
@@ -176,6 +189,9 @@ export function useRecordingSetup(): RecordingSetup {
         frameRate: engineQuality.frameRate,
         videoBitrate: engineQuality.videoBitrate,
         watermark: wm.enabled ? wm.config : null,
+        webcam: cameraEnabledRef.current
+          ? { deviceId, lines: webcamCaptureLines(bubble), bubble }
+          : null,
       };
     });
   }, [recorder]);

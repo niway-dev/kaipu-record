@@ -7,11 +7,11 @@ import {
   CAMERA_BUBBLE_WINDOW_PAD,
   DEFAULT_CAMERA_BUBBLE,
   cameraBubblePresetFor,
-  cameraCaptureLines,
   framingTransform,
   clampCameraBubbleSize,
   type CameraBubbleSettings,
 } from "@shared/camera-bubble";
+import { bubblePreviewLines } from "@shared/webcam-track";
 import styles from "./camera-bubble.module.css";
 
 /** The rounded square's corner, as a share of its side. */
@@ -33,6 +33,35 @@ function useBubbleSettings(): CameraBubbleSettings {
     return window.electronAPI.onSettingsChanged((settings) => setBubble(settings.cameraBubble));
   }, []);
   return bubble;
+}
+
+/**
+ * Whether the Camera toggle is on. The window only exists while it is, except while a take
+ * keeps it parked (hidden) through a camera turned off mid-take (ADR 0037): the preview must
+ * then release the camera itself, so the in-use light goes off. Off until main answers, so a
+ * window parked before it was ready never opens the camera (its light would blink); on if
+ * main cannot answer, as the window exists for a camera that is on. A broadcast that lands
+ * before the first read wins, being newer.
+ */
+function useCameraOn(): boolean {
+  const [on, setOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    let heard = false;
+    const unsubscribe = window.electronAPI.onRecordingSettingsChanged((settings) => {
+      heard = true;
+      setOn(settings.isCameraEnabled);
+    });
+    void window.electronAPI
+      .getRecordingSettings()
+      .then((settings) => {
+        if (!heard) setOn(settings.isCameraEnabled);
+      })
+      .catch(() => {
+        if (!heard) setOn(true);
+      });
+    return unsubscribe;
+  }, []);
+  return on === true;
 }
 
 /**
@@ -100,9 +129,10 @@ async function settleGrip(
  *
  * Outside a recording, hovering shows a pink outline, the size ("240 px · M"), a resize
  * grip and a close button that turns the camera off; dragging the grip resizes the bubble
- * from its bottom-left corner. Once a recording starts none of that chrome renders, so the
- * bubble on screen is exactly the one in the video (the control bar, which the video
- * leaves out, offers the same "turn camera off" during a take).
+ * from its bottom-left corner. From the moment a take is pending (its countdown) none of
+ * that chrome renders, and at rest the bubble has no border, so the bubble on screen is
+ * exactly the one in the video (the control bar, which the video leaves out, offers the same
+ * "turn camera off" during a take).
  */
 export function CameraBubble(): React.JSX.Element {
   const t = useTranslations("cameraSettings");
@@ -111,10 +141,12 @@ export function CameraBubble(): React.JSX.Element {
   // A new resolution reopens the camera, and the bubble blinks while it does: during a take
   // that blink would be in the video. So the lines stay as they were when the take started
   // (the zoom itself still applies at once) and catch up when it ends.
-  const wantedLines = cameraCaptureLines(bubble.size, bubble.framing);
+  // Never fewer than the recorder's webcam track needs: both windows share the camera (ADR 0037).
+  const wantedLines = bubblePreviewLines(bubble);
   const takeLines = useRef(wantedLines);
   if (!activity.active) takeLines.current = wantedLines;
-  const { videoRef, hasStream } = useCameraPreview(true, bubble.deviceId, takeLines.current);
+  const cameraOn = useCameraOn();
+  const { videoRef, hasStream } = useCameraPreview(cameraOn, bubble.deviceId, takeLines.current);
   const [size, setSize] = useState(sizeFromWindow);
   const [hovered, setHovered] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -133,19 +165,23 @@ export function CameraBubble(): React.JSX.Element {
   }, []);
 
   const recording = activity.active;
-  // A recording that starts mid-drag ends the drag (no chrome may reach the video) and saves
-  // the size it reached, so the window never keeps an unsaved preview size for the take.
+  // A pending take (countdown, streams acquiring) hides the chrome too: the `active` broadcast
+  // reaches this window only after the capture has started, so waiting for it would put the
+  // chrome in the first frames of the video.
+  const inTake = recording || activity.pending === true;
+  // A take that starts mid-drag ends the drag (no chrome may reach the video) and saves the
+  // size it reached, so the window never keeps an unsaved preview size for the take.
   useEffect(() => {
-    if (!recording) return;
+    if (!inTake) return;
     const session = drag.current;
     drag.current = null;
     setDragging(false);
     if (session) void settleGrip(session, latestBubble);
-  }, [recording]);
-  const showChrome = !recording && (hovered || dragging);
+  }, [inTake]);
+  const showChrome = !inTake && (hovered || dragging);
 
   const onGripDown = (event: PointerEvent<HTMLDivElement>): void => {
-    if (recording) return;
+    if (inTake) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
     drag.current = {

@@ -1,0 +1,224 @@
+---
+title: "ADR 0034: Per-workspace setting overrides inherit from an all-workspaces level"
+description: Five settings can be overridden per workspace and every other one stays app-wide. A workspace inherits each value from the All workspaces level (today's userData/settings.json, unchanged) unless it overrides it. Folder-bound overrides live in .kaipu/workspace/settings.json and are schema-validated. A folder's overrides stay inactive until the user confirms that exact file once on this Mac. The upload mode override stays on the machine. Shortcuts are always global.
+---
+
+# ADR 0034: Per-workspace setting overrides inherit from an all-workspaces level
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                                               |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — [several workspaces design](/specs/2026-10-29-several-workspaces-design/), rounds 2 and 3; nothing implemented                                                                                                                                                                           |
+| Date          | 2026-10-29                                                                                                                                                                                                                                                                                          |
+| Supersedes    | —                                                                                                                                                                                                                                                                                                   |
+| Superseded by | —                                                                                                                                                                                                                                                                                                   |
+| Amended       | 2026-10-30, review round, in place while Proposed: folder overrides need a one-time confirmation on this Mac, every settings snapshot is effective, a capture carries its policy, and one workspace can still show an override (decisions 3, 4, 5, 6, 8)                                            |
+| Amends        | [ADR 0032](/architecture/decisions/0032-workspaces-identity-in-the-folder-one-active/) (Proposed): its non-goal "settings … per workspace" is withdrawn, and the spec's "Out of scope: different settings per workspace" is removed. Both were amended in place on 2026-10-29, as this ADR records. |
+
+## Context
+
+ADR 0032 makes a workspace a folder, with one active at a time. The first draft kept every
+setting app-wide. On 2026-10-29 the owner asked for per-workspace settings in the first release
+of workspaces (the app is at 0.x, so this ADR never says "v1"): a work workspace that records
+in high quality with the "Made with Kaipu" badge off, and a personal one with other choices. On
+2026-10-30 the owner confirmed that timing and the five keys below.
+
+Today every setting is one flat object, `AppSettings` (`shared/types/ipc.ts:237-351`, 23 keys).
+`settings-store.ts` keeps it in `userData/settings.json` (`main/infrastructure/settings-store.ts:17-19`)
+and rewrites the whole file on every change. `mergeSettings` builds that object field by field
+and drops any key it does not know (`main/services/settings.service.ts:112-160`), so an
+unknown key put into `settings.json` disappears on the next write. Renderers read the object
+through `settings:get` and `settings:changed` (`shared/types/ipc.ts:412-418`), and a few
+main modules read it through `getAppSettings()` (for example `main/screenshots/screenshot-ipc.ts:163`).
+
+Two existing models were weighed:
+
+- **VS Code** has User settings and Workspace settings. A workspace value overrides the user
+  value for that workspace only, and the editor shows where each value comes from
+  ([VS Code settings](https://code.visualstudio.com/docs/configure/settings)).
+- **Obsidian** keeps every setting inside the vault (`.obsidian/`), with nothing above it. A
+  long-running forum request asks to share settings across vaults, because each new vault
+  starts over and changes have to be repeated in every vault
+  ([forum](https://forum.obsidian.md/t/option-to-sync-settings-themes-and-plugins-across-multiple-vaults/41789)).
+
+## Decision
+
+1. **Two levels, with inheritance.** "All workspaces" is the base level, and a workspace may
+   override some keys. The effective value of a key in workspace W is W's override when there
+   is one, otherwise the All workspaces value. Nothing is copied. Changing an All workspaces
+   value changes it in every workspace that does not override it.
+2. **Only five keys can be overridden in the first release of workspaces**: `showBrandBadge`, `uploadMode`, `recordingQuality`,
+   `exportQuality` and `screenshotCopy`. Every other key is app-wide (inventory below).
+   **Shortcuts are always app-wide**: an OS-wide hotkey must not change its meaning because of
+   which workspace happens to be active, since the user cannot see that state when pressing it.
+3. **Where each level lives.**
+   - **All workspaces** = the existing `userData/settings.json`, format unchanged. A user with
+     one workspace has exactly today's file and today's behaviour.
+   - **Folder-bound overrides** = `<workspace>/.kaipu/workspace/settings.json`, so they travel with the
+     folder (another Mac, a synced folder). It may hold only `showBrandBadge`,
+     `recordingQuality`, `exportQuality` and `screenshotCopy`. Each value is checked with the
+     same validator `mergeSettings` uses for that key. An unknown key, a key outside that list,
+     or an invalid value is **ignored** (the key inherits), and it is never written back. The
+     guarantee is exact, and it is weaker than "a folder cannot change behaviour": a folder can
+     set only these four keys, only to accepted values, and **only after the user on this Mac has
+     confirmed that exact file** (decision 8). A valid value is not harmless: `screenshotCopy:
+"auto"` writes the clipboard (`renderer/src/features/screenshots/auto-capture-policy.ts:49`,
+     `main/screenshots/capture-handler.ts:240`, `:258`).
+   - **Machine-bound override** = `uploadMode`, kept in `userData/workspace-settings.json`
+     keyed by `workspaceId`. Upload consent belongs to this machine. A received folder whose
+     owner chose `automatic` must never start uploading here, so the folder never carries it.
+     It is still "per device", as the comment at `shared/types/ipc.ts:203-209` says, but now
+     per device × workspace. That comment changes with this ADR.
+4. **Bound at capture start.** A recording or screenshot reads its effective settings once,
+   when it starts, with the capture's `workspaceId`. That is the same rule as its folder
+   (ADR 0032, decision 9). A switch or a settings edit during the capture does not change it.
+   **The bound value travels with the capture.** For a screenshot it is the policy
+   `{ workspaceId, screenshotCopy }`, carried in the capture result, the retained quiet capture,
+   the toast payload and the editor source. The in-memory editor that opens after a failed save
+   (`capture-handler.ts:253`) takes its auto actions from that policy and never reads the
+   setting when it opens (`screenshot-editor-page.tsx:140-143` reads it today), so a switch or a
+   settings change between the capture and the editor cannot change what the editor copies. The
+   same holds for the toast's Save and Annotate.
+   An export reads `exportQuality` when its sheet opens; the sheet belongs to an editor of the
+   active workspace, and a switch closes it. An upload reads `uploadMode` for the **item's**
+   workspace, not the active one.
+5. **Main resolves; consumers stay as they are.** **Every snapshot a renderer or a main
+   listener receives is the effective settings of the active workspace**: the `settings:get`
+   result, the `settings:update` response (`settings-store.ts:182-188`, handler `:200-203`),
+   the `settings:changed` broadcast, and the argument of `onSettingsChanged` and
+   `onSettingsKeysChanged` (`:138-158`). Today's renderer readers keep working without
+   knowing about scopes, and `useAppSettings` writing the update response into its cache
+   (`use-app-settings.ts:21`) stays correct: with Work overriding `screenshotCopy` to
+   `manual`, an update of an app-wide key returns `manual`, not the All value. A switch
+   broadcasts `settings:changed`. The persisted All workspaces level is reachable only through the
+   scoped read (`settings:get-scoped`: `all`, `overrides`, `effective` and `pending` for one
+   scope), which the Settings page uses for its rows. Writes name their scope.
+   `settings:update` keeps writing the All workspaces level and returns effective settings.
+6. **The UI shows the source of every value.** With two or more workspaces, Settings opens
+   with a scope selector, "All workspaces | Work | Personal". In a workspace scope, each
+   overridable row says "Inherited from All workspaces" or "Overridden · Reset". Every other row
+   carries an "App-wide" badge and edits the All workspaces value. In the All workspaces scope,
+   an overridable row that some workspace overrides says "Overridden in Work" (VS Code's "Also
+   modified in"), so a value that does not apply everywhere is visible from the base level.
+   `uploadMode` is edited on the Cloud page (`renderer/src/pages/cloud/cloud-page.tsx:12-13`),
+   not in Settings, so that row gets the same scope selector. **With one workspace the selector
+   stays hidden** (owner decision), but that does not mean nothing is overridden: an override
+   survives the removal of the other workspace, and it travels with an adopted folder
+   (`screenshot-copy-settings.tsx:22-23` reads the effective value and would write the All level,
+   so a hidden selector would show a value it cannot change). So the rows never infer "no
+   overrides" from the registry size. They read the active workspace's scoped settings: a row
+   whose value comes from an override shows "Set for this workspace · Reset", and its control
+   **edits the override**; Reset removes it. A row with no override on that key edits the All
+   level, as today. The scope selector appears with the second workspace, which the rail's "+"
+   tile and the one-time hint make easy to reach (ADR 0032, decision 4).
+7. **An unreachable workspace's overrides cannot be edited.** Its scope is listed, disabled,
+   as "Not connected". Its folder file cannot be read or written, and both of its override
+   files are left as they are until it is back.
+8. **Folder overrides are inactive until the user confirms them once on this Mac.** An override
+   in `.kaipu/workspace/settings.json` applies only while the file's sha256 equals the one
+   recorded in `userData/workspace-settings.json` for that workspace, because the user chose
+   "Use them" or because this Mac wrote the file. Anything else is **pending**: an adopted
+   folder, a file changed by sync from another machine, a restored backup, a hand edit. While
+   pending, and after "Ignore", the All workspaces values apply, and a capture never waits for the
+   answer. The sheet reads "This workspace brings its own settings: Screenshot copy: Auto …
+   Use them / Ignore" and lists every valid key with its value. "Ignore" leaves the file
+   untouched and the sheet returns only when the hash changes. A file that cannot be read is
+   inactive. `uploadMode` is not part of this flow: it never comes from a folder.
+
+### Inventory of `AppSettings`
+
+| Key                         | Class                     | Why                                                                                                 |
+| --------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------- |
+| `theme`                     | App-wide                  | One window chrome. A theme that flips on switch is noise, not separation.                           |
+| `locale`                    | App-wide                  | The tray and every window share one translator (`createMainTranslator`).                            |
+| `launchAtLogin`             | App-wide                  | An OS login item; there is one app.                                                                 |
+| `showInDock`                | App-wide                  | The macOS activation policy is per process.                                                         |
+| `recordingQuality`          | **Overridable**           | A work workspace may need sharper text than a personal one.                                         |
+| `showBarInRecording`        | App-wide                  | Concerns the control-bar window, not where the file goes.                                           |
+| `recordingCountdownSeconds` | App-wide                  | Muscle memory: a countdown that changes with invisible state starts takes by surprise.              |
+| `showBrandBadge`            | **Overridable**           | The owner's case: no "Made with Kaipu" mark on client work, kept on personal videos.                |
+| `screenshotCopy`            | **Overridable**           | Work shots pasted at once into a ticket; personal shots kept for later.                             |
+| `shortcuts`                 | App-wide, always          | OS-wide hotkeys must not change meaning with invisible state (decision 2).                          |
+| `deviceId`                  | App-wide                  | The analytics identity of the install, never per workspace.                                         |
+| `uploadMode`                | **Overridable** (machine) | Uploading work automatically and personal never is the natural split; consent stays on the machine. |
+| `exportQuality`             | **Overridable**           | The export sheet's default row follows where the video is shared.                                   |
+| `showRecordingSavedCard`    | App-wide                  | A UI hint about file size, the same in every workspace.                                             |
+| `screenshotFrame`           | App-wide                  | Display geometry memory; it belongs to the screens, not the folder.                                 |
+| `recordingArea`             | App-wide                  | Display geometry memory, like `screenshotFrame`.                                                    |
+| `recordingMode`             | App-wide                  | "Start recording" opens the last mode; an invisible per-workspace mode would surprise the shortcut. |
+| `screenshotMode`            | App-wide                  | Same reason: the generic capture shortcut uses it.                                                  |
+| `trayHintShown`             | App-wide                  | A once-per-install notice.                                                                          |
+| `diagnosticsEnabled`        | App-wide                  | Privacy consent of the install, and the opt-out SignPath's terms require; one switch for the app.   |
+| `cameraBubble`              | App-wide                  | The camera and its look; applied live to a bubble that can outlive a switch.                        |
+| `audio`                     | App-wide                  | The mic and system audio levels follow the hardware, not the folder.                                |
+| `microphone`                | App-wide                  | The input device is hardware.                                                                       |
+
+## Alternatives rejected
+
+- **A "Copy to all workspaces" button per row** (no inheritance). It copies once, so later
+  changes drift apart, and the drift is invisible because each workspace just shows its own
+  value. It also cannot write to a workspace that is unplugged at that moment, so "all" quietly
+  means "all that were connected".
+- **Fully per-workspace settings** (Obsidian's `.obsidian/`, nothing above it). Every new
+  workspace starts from defaults and every change has to be repeated. The recurring Obsidian
+  request to share settings across vaults is this cost showing up.
+- **Every setting overridable.** Shortcuts, the mic, the camera and the Dock policy would
+  change on switch with no visible cause, and the switch would have to reconfigure hardware and
+  OS state. The five chosen keys only affect what is written and where it goes.
+- **Overrides inside `userData/settings.json`.** `mergeSettings` drops unknown keys, so an
+  older version would erase every override on its first write. Also, the overrides would not
+  travel with the folder.
+- **Apply valid folder overrides at once** (the second draft: "validated and limited to four
+  keys"). A valid value can still act: `screenshotCopy: "auto"` writes the clipboard on this Mac
+  because a folder said so. The sheet costs one click per received or changed file.
+- **`uploadMode` in the folder file, like the others.** A shared or synced folder would then
+  carry another person's upload consent onto this machine.
+
+## Consequences
+
+- `settings-store.ts` gains a resolver: All workspaces level + active workspace overrides →
+  effective settings. The store still owns `settings.json`, and a small module owns the two
+  override files.
+- The Record page reads `recordingQuality` when its hook mounts
+  (`renderer/src/features/recording/hooks/use-recording-setup.ts:89-98`), not at start. That
+  read moves to the start of the take, so a switch on another window cannot leave a stale
+  quality.
+- `showBrandBadge` is read live by `useWatermark` (`renderer/src/features/watermark/use-watermark.ts:22`).
+  It must take the value bound at start, so a switch mid-take cannot remove or add the mark
+  halfway through.
+- `.kaipu/workspace/settings.json` lives in the `.kaipu/workspace/` subfolder, beside
+  `identity.json`, and not as `.kaipu/settings.json`: a customer's `settings.png` already owns
+  that sidecar path, and an older app deleting it would delete the overrides' file. No media stem
+  can address a subfolder, and on `main` nothing lists, sweeps or deletes an unknown subfolder
+  of `.kaipu/` (spec, Current state).
+- `userData/workspace-settings.json` also records, per workspace, the sha256 and the decision
+  (`use` or `ignore`) of the folder overrides file. The settings module hashes the file when a
+  workspace is added or becomes active, at app start and at each capture start.
+- `CaptureResult`, `QuietCapture` and the toast payload gain the capture's policy, and the
+  screenshot editor stops reading `screenshotCopy` for a capture source.
+- The update response and the main listeners switch from the persisted object to the effective
+  settings. A main listener that needs the All level (none does today; `locale`, `shortcuts` and
+  `diagnosticsEnabled` are app-wide and identical in both) asks the scoped read.
+- An older app version ignores both override files: nothing in it lists `.kaipu/`, and it
+  never opens `userData/workspace-settings.json`. After a downgrade, every workspace runs with
+  the All workspaces values.
+- Removing a workspace from the list keeps both override files, so adding it again restores
+  them. Deleting a workspace sends `.kaipu/workspace/settings.json` to the Trash with the rest of
+  `.kaipu/` and drops its `uploadMode` entry. A copied folder that gets a new id keeps its
+  folder-bound overrides and loses the machine-bound one, so its upload mode inherits.
+
+## Non-goals
+
+Per-workspace shortcuts; per-workspace devices (mic, camera); a third level (per item or per
+capture); syncing the All workspaces level between machines; a settings import or export.
+
+## Reopen when
+
+- Users need a key outside the five to differ by workspace, and its effect is limited to what
+  is written and where. Adding it is an amendment. A key that changes hardware or a hotkey
+  reopens this ADR.
+- Overrides must follow the user to another machine without the folder (account-level
+  settings).
+- A confirmed folder file still causes a surprise, or the confirmation proves too noisy
+  (synced folders rewriting the file often), and a different trust model is needed.
