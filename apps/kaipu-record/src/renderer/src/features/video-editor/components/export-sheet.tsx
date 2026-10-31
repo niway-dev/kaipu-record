@@ -17,13 +17,16 @@ import {
 } from "../export/gif-messages";
 import type { GifEstimateState } from "../export/use-gif-export";
 import {
+  defaultYoutubePreset,
   type ExportFraming,
   type ExportPresetId,
   type ExportSourceInfo,
   isQualityTier,
+  isYoutubePreset,
   PRESETS,
   type ResolvedExportTarget,
   resolveExportTarget,
+  type YoutubePresetId,
 } from "../export/export-presets";
 import { addsBarsAt169, formatMB, sizeKindOf } from "../export/export-size";
 import { FramingPreview } from "./framing-preview";
@@ -102,6 +105,20 @@ export interface ExportSheetProps {
 }
 
 /**
+ * One row of the list. YouTube is a single row backed by two presets (1440p / 4K): the
+ * resolution is a choice INSIDE the row, so the list never shows two near-identical rows.
+ */
+type RowKey = Exclude<ExportPresetId, YoutubePresetId> | "youtube";
+
+/** The row a preset belongs to. */
+const rowOf = (p: ExportPresetId): RowKey => (isYoutubePreset(p) ? "youtube" : p);
+
+const YOUTUBE_RESOLUTIONS = [
+  { id: "youtube-1440", label: "youtubeResolution1440", hint: "youtubeResolution1440Hint" },
+  { id: "youtube-4k", label: "youtubeResolution4k", hint: "youtubeResolution4kHint" },
+] as const satisfies ReadonlyArray<{ id: YoutubePresetId; label: string; hint: string }>;
+
+/**
  * The list, grouped by what the user is about to do with the file rather than by format:
  * nobody looks for "Small file", they look for where they will paste it.
  */
@@ -110,21 +127,23 @@ const GROUPS = [
   { label: "presetGroupShare", rows: ["light"] },
   { label: "presetGroupPost", rows: ["youtube", "vertical", "square"] },
   { label: "presetGroupKeep", rows: ["maximum"] },
-] as const satisfies ReadonlyArray<{ label: string; rows: readonly ExportPresetId[] }>;
+] as const satisfies ReadonlyArray<{ label: string; rows: readonly RowKey[] }>;
 
 export const PRESET_NAME = {
   balanced: "presetBalanced",
-  youtube: "presetYoutube",
+  "youtube-1440": "presetYoutube",
+  "youtube-4k": "presetYoutube",
   vertical: "presetVertical",
   square: "presetSquare",
   light: "presetLight",
   maximum: "presetMaximum",
 } as const satisfies Record<ExportPresetId, string>;
 
-/** Where the file works, under the row's name. */
+/** Where the file works, under the row's name; for YouTube it also names the resolution. */
 const PRESET_HINT = {
   balanced: "presetBalancedHint",
-  youtube: "presetYoutubeHint",
+  "youtube-1440": "presetYoutube1440Hint",
+  "youtube-4k": "presetYoutube4kHint",
   vertical: "presetVerticalHint",
   square: "presetSquareHint",
   light: "presetLightHint",
@@ -134,7 +153,8 @@ const PRESET_HINT = {
 /** The one-line explanation the selected row opens with. */
 const PRESET_SAY = {
   balanced: "presetBalancedSay",
-  youtube: "presetYoutubeSay",
+  "youtube-1440": "presetYoutubeSay",
+  "youtube-4k": "presetYoutubeSay",
   vertical: "presetVerticalSay",
   square: "presetSquareSay",
   light: "presetLightSay",
@@ -165,7 +185,9 @@ export function presetFacts(target: ResolvedExportTarget, source: ExportSourceIn
       return [{ key: "factTextReadable" }, { key: "factPlaysEverywhere" }];
     case "light":
       return [{ key: "factTextReadable" }, { key: "factSmallest" }];
-    case "youtube":
+    case "youtube-1440":
+    case "youtube-4k":
+      // No heavy chip: the YouTube upload is meant to be bigger than the recording.
       return addsBarsAt169(source.width, source.height)
         ? [{ key: "factBlackBars", warn: true }]
         : [];
@@ -228,6 +250,17 @@ export function ExportSheet({
   });
   const framingOf = (p: ExportPresetId): ExportFraming | null =>
     p === "vertical" || p === "square" ? framings[p] : null;
+  // YouTube's resolution sticks for the sheet's lifetime, like the framing. It starts from
+  // what suits the recording (4K when 1440p would shrink it), or from the preset the host
+  // preselected when that already is a YouTube one.
+  const [youtubeVariant, setYoutubeVariant] = useState<YoutubePresetId>(
+    isYoutubePreset(defaultPreset) ? defaultPreset : defaultYoutubePreset(presetSource),
+  );
+  const selectRow = (row: RowKey): void => setPresetId(row === "youtube" ? youtubeVariant : row);
+  const pickYoutubeVariant = (v: YoutubePresetId): void => {
+    setYoutubeVariant(v);
+    setPresetId(v);
+  };
   const targetOf = (p: ExportPresetId) =>
     resolveExportTarget(p, presetSource, timelineDuration, { framing: framingOf(p) });
   const selected = targetOf(presetId);
@@ -246,9 +279,11 @@ export function ExportSheet({
     return kind === "up-to" ? t("meterUpTo", { size }) : t("sizeAbout", { size });
   };
   // Amber when the copy would be no lighter than the original (or Maximum, which keeps it all).
+  // Never for YouTube: a bigger file than the recording is what that row is for.
   const isHeavy = (target: ResolvedExportTarget): boolean =>
     target.presetId === "maximum" ||
-    (sourceSizeBytes != null &&
+    (!isYoutubePreset(target.presetId) &&
+      sourceSizeBytes != null &&
       target.estimateBytes !== null &&
       target.estimateBytes >= sourceSizeBytes);
 
@@ -281,9 +316,9 @@ export function ExportSheet({
 
   // The list scrolls; keep the selected row (and its opened details) in view — also when
   // the sheet opens on a row below the fold, e.g. GitHub from "Share a light copy".
-  const rowRefs = useRef(new Map<ExportPresetId, HTMLDivElement>());
+  const rowRefs = useRef(new Map<RowKey, HTMLDivElement>());
   useEffect(() => {
-    rowRefs.current.get(presetId)?.scrollIntoView?.({ block: "nearest" });
+    rowRefs.current.get(rowOf(presetId))?.scrollIntoView?.({ block: "nearest" });
   }, [presetId]);
 
   const problem = gifRangeProblem(start, end, {
@@ -305,25 +340,27 @@ export function ExportSheet({
 
   const overWarn = estimate.status === "ready" && (estimate.bytes ?? 0) > GIF_WARN_BYTES;
 
-  const renderRow = (p: ExportPresetId): React.JSX.Element => {
+  const renderRow = (row: RowKey): React.JSX.Element => {
+    // The preset behind the row: YouTube's chosen resolution, otherwise the row itself.
+    const p: ExportPresetId = row === "youtube" ? youtubeVariant : row;
     const target = targetOf(p);
-    const active = presetId === p;
+    const active = rowOf(presetId) === row;
     const existing = existingOf(p);
     const facts = presetFacts(target, presetSource);
     const framing = framingOf(p);
-    const sizeId = `${id}-${p}-size`;
+    const sizeId = `${id}-${row}-size`;
     return (
       // The whole card selects its row on click (the radio inside is the keyboard and
       // screen-reader control; this is only a bigger mouse target).
       <div
-        key={p}
+        key={row}
         ref={(el) => {
-          if (el) rowRefs.current.set(p, el);
-          else rowRefs.current.delete(p);
+          if (el) rowRefs.current.set(row, el);
+          else rowRefs.current.delete(row);
         }}
         className={styles.row}
         data-active={active}
-        onClick={() => setPresetId(p)}
+        onClick={() => selectRow(row)}
       >
         <div className={styles.rowHead}>
           <button
@@ -332,7 +369,7 @@ export function ExportSheet({
             aria-checked={active}
             aria-describedby={sizeId}
             className={styles.rowRadio}
-            onClick={() => setPresetId(p)}
+            onClick={() => selectRow(row)}
           >
             <span className={styles.radioDot} aria-hidden />
             <span className={styles.rowText}>
@@ -376,10 +413,42 @@ export function ExportSheet({
           <div className={styles.rowDetail}>
             <p className={styles.say}>{t(PRESET_SAY[p])}</p>
 
-            {(p === "vertical" || p === "square") && framing && (
+            {row === "youtube" && (
+              <div className={styles.framingControls}>
+                <div
+                  className={styles.segmented}
+                  role="radiogroup"
+                  aria-label={t("youtubeResolutionLabel")}
+                >
+                  {YOUTUBE_RESOLUTIONS.map((r) => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={youtubeVariant === r.id}
+                      className={styles.segment}
+                      data-active={youtubeVariant === r.id}
+                      onClick={(e) => {
+                        // The card selects its row on click; with the stale variant that
+                        // would undo this choice.
+                        e.stopPropagation();
+                        pickYoutubeVariant(r.id);
+                      }}
+                    >
+                      {t(r.label)}
+                    </button>
+                  ))}
+                </div>
+                <span className={styles.hint}>
+                  {t(YOUTUBE_RESOLUTIONS.find((r) => r.id === youtubeVariant)!.hint)}
+                </span>
+              </div>
+            )}
+
+            {(row === "vertical" || row === "square") && framing && (
               <div className={styles.framing}>
                 <FramingPreview
-                  canvas={PRESETS[p].canvas!}
+                  canvas={PRESETS[row].canvas!}
                   source={{ width: presetSource.width, height: presetSource.height }}
                   framing={framing}
                   thumbnailUrl={thumbnailUrl ?? null}
@@ -398,7 +467,7 @@ export function ExportSheet({
                         aria-checked={framing === f}
                         className={styles.segment}
                         data-active={framing === f}
-                        onClick={() => setFramings((prev) => ({ ...prev, [p]: f }))}
+                        onClick={() => setFramings((prev) => ({ ...prev, [row]: f }))}
                       >
                         {f === "fit" ? t("framingFit") : t("framingFill")}
                       </button>
