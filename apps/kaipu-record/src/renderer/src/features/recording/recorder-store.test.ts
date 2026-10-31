@@ -1659,6 +1659,54 @@ describe("recorder-store live settings", () => {
         expect(meta.webcam!.gaps).toHaveLength(1);
         expect(meta.webcam!.gaps![0]!.endMs).toBe(meta.durationMs);
       });
+
+      /** Off, on, off, on: the first on still opening when the second arrives. */
+      async function onOffOnWhileOpening(): Promise<{
+        engine: ReturnType<typeof relayEngine>;
+        answers: Array<(result: "ok" | "unavailable") => void>;
+      }> {
+        const answers: Array<(result: "ok" | "unavailable") => void> = [];
+        const engine = relayEngine(() => new Promise((resolve) => answers.push(resolve)));
+        await startWith(engine, { webcam });
+        await vi.advanceTimersByTimeAsync(1000);
+        broadcast({ isCameraEnabled: false });
+        broadcast({ isCameraEnabled: true });
+        await vi.advanceTimersByTimeAsync(0);
+        broadcast({ isCameraEnabled: false });
+        broadcast({ isCameraEnabled: true });
+        await vi.advanceTimersByTimeAsync(500);
+        // The first on, dropped by the engine (turned off again), answers "ok".
+        answers[0]!("ok");
+        await vi.advanceTimersByTimeAsync(0);
+        return { engine, answers };
+      }
+
+      it("only the newest on closes the gap, once its camera's frames are back", async () => {
+        const { engine, answers } = await onOffOnWhileOpening();
+        expect(engine.turnWebcamOn).toHaveBeenCalledTimes(2);
+        // The second camera is still opening: the file still holds its last frame.
+        await vi.advanceTimersByTimeAsync(2000);
+        answers[1]!("ok");
+        await vi.advanceTimersByTimeAsync(1000);
+        await stopAndSettle();
+        const meta = finalizeMeta();
+        expect(meta.webcam!.gaps).toHaveLength(1);
+        const gap = meta.webcam!.gaps![0]!;
+        expect(gap.endMs - gap.startMs).toBeCloseTo(2500, -1);
+        expect(gap.endMs).toBeLessThan(meta.durationMs);
+      });
+
+      it("a newest on that fails ends the gap where the file ends, not at the first on", async () => {
+        const { answers } = await onOffOnWhileOpening();
+        await vi.advanceTimersByTimeAsync(2000);
+        answers[1]!("unavailable");
+        await vi.advanceTimersByTimeAsync(1000);
+        await stopAndSettle();
+        const meta = finalizeMeta();
+        const gap = meta.webcam!.gaps![0]!;
+        expect(gap.endMs - gap.startMs).toBeCloseTo(2500, -1);
+        expect(getToasts().map((t) => t.message)).toEqual([messages.record.webcamUnavailable]);
+      });
     });
 
     it("tells main when the engine reports the webcam ended, so the bubble rejoins the capture", async () => {

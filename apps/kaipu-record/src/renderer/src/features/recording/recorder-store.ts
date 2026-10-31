@@ -837,6 +837,8 @@ function forwardLiveSettings(
   /** The camera is off mid-take and the webcam file goes on: turning it on resumes it. */
   let webcamParked = false;
   let webcamReopenFailed = false;
+  /** Bumped by each camera turned on mid-take: only the newest closes the gap. */
+  let webcamOnRequest = 0;
   const gaps = new WebcamGapLog();
   let sysOn = input.systemAudio;
   let queue: Promise<void> = Promise.resolve();
@@ -935,12 +937,16 @@ function forwardLiveSettings(
     } else if (!webcamOn && webcamParked && settings.isCameraEnabled) {
       webcamOn = true;
       webcamParked = false;
-      // On the queue, so an off that follows waits for this camera to open and releases it.
+      const request = ++webcamOnRequest;
+      // On the queue, after any earlier on. An off is not queued: it reaches the engine at
+      // once, and the engine drops a camera still opening when it is turned off again.
       queue = queue.then(async () => {
         const result = await handle.turnWebcamOn();
         if (result === "ok") {
-          // Turned off again meanwhile: its gap goes on.
-          if (webcamOn) gaps.close(takeTimeMs());
+          // Turned off again meanwhile (the engine answers "ok" for a camera it dropped), or
+          // turned on again after that, by an on still to come: the gap goes on, and only the
+          // newest on closes it, once its own camera's frames are back.
+          if (webcamOn && request === webcamOnRequest) gaps.close(takeTimeMs());
           return;
         }
         // The file ended here (the engine reported it, main put the bubble back in the
