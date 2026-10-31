@@ -69,7 +69,6 @@ export default defineConfig({
           label: "Backlog",
           items: [
             "backlog/deploy-environments",
-            { slug: "backlog" },
             { slug: "backlog/technical-debt" },
             { slug: "backlog/code-quality-audit" },
             { slug: "backlog/secrets-and-dependency-audit-handoff" },
@@ -89,6 +88,7 @@ export default defineConfig({
             { slug: "backlog/video-editor-v2-handoff" },
             { slug: "backlog/live-recording-controls" },
             { slug: "backlog/several-workspaces" },
+            { slug: "backlog/check-and-fix-files" },
             { slug: "backlog/record-capture-modes" },
             { slug: "backlog/recording-capture-metadata" },
             { slug: "backlog/import-video" },

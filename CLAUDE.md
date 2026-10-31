@@ -59,17 +59,18 @@ Rules:
 - **Every new feature gets a doc.** Before/while building, add one under
   `apps/documentation/src/content/docs/`:
   - `backlog/` — proposed or in-flight work, and shipped-but-unvalidated features.
-    Start it with a status banner and add a row to `backlog/index.mdx`.
+    Start it with a status banner. The work queue is the issue tracker (Linear); there is no
+    hand-kept backlog index.
   - `specs/` and `plans/` — design specs and implementation plans (including those the
     superpowers brainstorming / writing-plans skills produce). **Do not leave them in
     `docs/superpowers/` — migrate them here** (add Starlight frontmatter `title` +
     `description`, keep the body).
   - `desktop/`, `features/`, `architecture/`, … — stable reference docs once a feature
     has shipped and been validated.
-- **Status legend** (use in backlog docs + `backlog/index.mdx`):
+- **Status legend** (use in backlog docs):
   🔵 Proposed · 🟡 In progress · 🟢 Ready to validate (prod review pending) · ✅ Done.
   When a backlog feature ships, flip it to 🟢; after prod validation, fold the lasting
-  knowledge into a `desktop/`/`features/` reference doc and drop the backlog row.
+  knowledge into a `desktop/`/`features/` reference doc.
 - **Sidebar:** `apps/documentation/astro.config.mjs`. `specs/`, `plans/`, `features/`,
   `architecture/`, `backend/`, `frontend/` autogenerate from their directory; `backlog/`
   and `desktop/` pages are listed manually — add new pages there.
