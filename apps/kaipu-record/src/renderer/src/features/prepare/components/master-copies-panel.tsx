@@ -4,9 +4,9 @@ import { useTranslations } from "@kaipu/i18n";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { formatSize } from "@renderer/features/library/format";
 import type { ExportPresetId } from "@renderer/features/video-editor/export/export-presets";
-import { WHOLE_RECORDING_FINGERPRINT } from "@renderer/features/video-editor/export/export-reuse";
 import { exportEtaSeconds } from "@renderer/features/video-editor/export/export-size";
 import type { ExportRunnerSnapshot } from "@renderer/features/video-editor/export/export-runner";
+import { copyPresetOf } from "../copy-destination";
 import { destinationOfPreset } from "../destinations";
 import { DESTINATION_COPY } from "../destination-copy";
 import { DestinationLogo } from "./destination-logo";
@@ -106,7 +106,7 @@ export function MasterCopiesPanel({
             </li>
           )}
           {copies.map((copy) => {
-            const preset = destinationPresetOf(copy);
+            const preset = copyPresetOf(copy);
             return (
               <li key={copy.assetId}>
                 <Link to={`/library/${copy.assetId}`} className={styles.row} data-state="ready">
@@ -127,12 +127,6 @@ export function MasterCopiesPanel({
       )}
     </section>
   );
-}
-
-/** The preset of a copy made for a destination; null for an editor export, a GIF or an older file. */
-function destinationPresetOf(copy: LibraryVideo): ExportPresetId | null {
-  if (copy.kind !== "recording" || !copy.export) return null;
-  return copy.export.fingerprint === WHOLE_RECORDING_FINGERPRINT ? copy.export.preset : null;
 }
 
 /** The destination's tile; a plain film (or GIF) tile for a copy that has no destination. */

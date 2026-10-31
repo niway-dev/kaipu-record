@@ -64,6 +64,17 @@ describe("MasterCopiesPanel (NIW2-585)", () => {
     ).toHaveAttribute("href", "/library/gh");
   });
 
+  it("reads the destination through the encode revision the sidecar stores", () => {
+    // What a real YouTube copy records: the content fingerprint plus "#<revision>".
+    const panel = renderPanel([
+      copy({
+        assetId: "yt",
+        export: { preset: "youtube-1440", fingerprint: "whole#2560x1440-v1" },
+      }),
+    ]);
+    expect(within(panel).getByRole("link", { name: /^YouTube 1440p/ })).toBeVisible();
+  });
+
   it("an editor export or a GIF goes by its own title: it was not made for a destination", () => {
     const panel = renderPanel([
       copy({
