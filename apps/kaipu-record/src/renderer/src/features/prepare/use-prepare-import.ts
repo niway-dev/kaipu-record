@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslations } from "@kaipu/i18n";
 import { useFileDrop } from "@renderer/features/library/hooks/use-file-drop";
@@ -32,23 +32,52 @@ interface PrepareImportOptions {
  * While Prepare is mounted the whole window takes file drops (`useFileDrop`), so a video
  * dropped anywhere on the page imports, and a drop never makes Electron navigate the
  * window to the file.
+ *
+ * An import can outlive the screen: the user may leave Export while a large file copies.
+ * Then nothing navigates; the Library's own toast says the video came in, with "Open".
  */
 export function usePrepareImport({ destination, refresh }: PrepareImportOptions): PrepareImport {
   const t = useTranslations("prepare");
+  const tLibrary = useTranslations("library");
   const navigate = useNavigate();
   const latest = useRef({ destination, refresh });
   latest.current = { destination, refresh };
+  const mounted = useRef(true);
+  useEffect(() => {
+    // Set here as well as in the initial value, so StrictMode's remount restores it.
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const onImported = useCallback(
-    (imported: readonly { assetId: string }[]): void => {
+    (imported: readonly { assetId: string; title: string }[]): void => {
       const [first, ...rest] = imported;
       if (!first) return;
+      if (!mounted.current) {
+        // The user left Export mid-import: do not pull them back, say where the video is.
+        showToast(
+          rest.length === 0
+            ? {
+                message: tLibrary("importedOne", { title: first.title }),
+                action: {
+                  label: tLibrary("importOpen"),
+                  onClick: () => navigate(`/library/${first.assetId}`),
+                },
+              }
+            : { message: tLibrary("importedMany", { count: imported.length }) },
+        );
+        return;
+      }
       const { destination: selected, refresh: relist } = latest.current;
       const to = selected() ?? undefined;
-      void relist().then(() => navigate(preparePath(first.assetId, to)));
+      void relist().then(() => {
+        if (mounted.current) navigate(preparePath(first.assetId, to));
+      });
       if (rest.length > 0) showToast({ message: t("dropMoreInLibrary", { count: rest.length }) });
     },
-    [navigate, t],
+    [navigate, t, tLibrary],
   );
 
   const { importing, pickAndImport, importDropped } = useImportVideos({ onImported });
