@@ -92,6 +92,8 @@ export default defineConfig({
             { slug: "backlog/recording-capture-metadata" },
             { slug: "backlog/camera-bubble-shape-and-size" },
             { slug: "backlog/webcam-track" },
+            { slug: "backlog/background-music" },
+            { slug: "backlog/camera-only-clips" },
             { slug: "backlog/mic-and-system-audio-settings" },
             { slug: "backlog/tray-record-submenu" },
             { slug: "backlog/settings-updates" },
