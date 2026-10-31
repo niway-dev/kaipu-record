@@ -14,6 +14,8 @@ export const ROUTES = {
   record: "/",
   library: "/library",
   libraryDetail: "/library/:assetId",
+  /** Prepare a copy of a recording for where it is going (NIW2-578); `?to=` preselects one. */
+  prepare: "/prepare/:assetId",
   screenshots: "/screenshots",
   /** The Editor workspace: recent items when nothing is open. */
   editor: "/editor",

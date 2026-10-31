@@ -102,7 +102,9 @@ export function exportTitle(
   fingerprint?: string,
 ): string {
   switch (presetId) {
-    case "youtube":
+    // Both canvases are "(YouTube)": the resolution is the file's, not the destination's.
+    case "youtube-1440":
+    case "youtube-4k":
       return t("presetTitleYoutube", { title });
     case "vertical":
       return t("presetTitleVertical", { title });

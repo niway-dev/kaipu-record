@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { initialScene, type VideoScene } from "../scene";
 import { parseSession, serializeSession } from "../session";
+import { normalizeExportPresetId } from "./export-presets";
 import { WHOLE_RECORDING_FINGERPRINT, editFingerprint, findReusableExports } from "./export-reuse";
 
 function exported(
@@ -67,11 +68,26 @@ describe("findReusableExports", () => {
   it("finds the newest export per preset with the same content", () => {
     const old = exported("old", 1, { preset: "balanced", fingerprint: "whole#q30-24fps-kfi10" });
     const fresh = exported("new", 2, { preset: "balanced", fingerprint: "whole#q30-24fps-kfi10" });
-    const yt = exported("yt", 3, { preset: "youtube", fingerprint: whole });
-    const found = findReusableExports([old, fresh, yt], whole);
+    const yt = exported("yt", 3, { preset: "youtube-1440", fingerprint: "whole#2560x1440-v1" });
+    const sq = exported("sq", 4, { preset: "square", fingerprint: whole });
+    const found = findReusableExports([old, fresh, yt, sq], whole);
     expect(found.balanced?.assetId).toBe("new");
-    expect(found.youtube?.assetId).toBe("yt");
+    expect(found["youtube-1440"]?.assetId).toBe("yt");
+    expect(found.square?.assetId).toBe("sq");
     expect(found.vertical).toBeUndefined();
+  });
+
+  it('never reuses an old 1920×1080 "youtube" file for YouTube 1440p or 4K (NIW2-564)', () => {
+    // Main reads the legacy sidecar `exportPreset: "youtube"` as youtube-1440, and the file's
+    // fingerprint predates the canvases' encode revision.
+    const legacy = exported("legacy-yt", 1, {
+      preset: normalizeExportPresetId("youtube")!,
+      fingerprint: whole,
+    });
+    expect(legacy.export?.preset).toBe("youtube-1440");
+    expect(findReusableExports([legacy], whole)).toEqual({});
+    const fresh = exported("yt", 2, { preset: "youtube-1440", fingerprint: "whole#2560x1440-v1" });
+    expect(findReusableExports([legacy, fresh], whole)["youtube-1440"]?.assetId).toBe("yt");
   });
 
   it("never reuses a file with different content (an edit vs the whole recording, an older edit)", () => {
