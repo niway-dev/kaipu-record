@@ -7,7 +7,8 @@ import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import { StatusStackProvider } from "@renderer/features/status-cards/status-stack";
 import { LibraryDetailPage } from "./library-detail-page";
 
-// Share reads the file through mediabunny; here only the facts it returns matter.
+// The banner and the post-recording panel read the file through mediabunny; here only the
+// facts it returns matter.
 const probe = vi.hoisted(() =>
   vi.fn(async () => ({
     width: 2560,
@@ -124,6 +125,7 @@ function renderDetail(assetId: string) {
       { path: "/library/:assetId", element: <LibraryDetailPage /> },
       { path: "/library", element: <div>library-page</div> },
       { path: "/editor/video/:assetId", element: <div>editor-video</div> },
+      { path: "/prepare/:assetId", element: <div>prepare-page</div> },
     ],
     { initialEntries: [`/library/${assetId}`] },
   );
@@ -161,7 +163,8 @@ describe("LibraryDetailPage", () => {
     expect(screen.queryByRole("button", { name: /^copy$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /delete/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /remove local download/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Prepare for…" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Prepare for YouTube" })).toBeNull();
   });
 
   it("shows how a recording was captured in the metadata line", async () => {
@@ -187,17 +190,36 @@ describe("LibraryDetailPage", () => {
     expect(screen.getByTestId("capture-meta")).toHaveTextContent("FRAME · 1234 × 567");
   });
 
-  it("offers Share on a local recording, raw or already an export (NIW2-218)", async () => {
+  it("Prepare for… opens the Prepare screen with nothing preselected (NIW2-578)", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [exportedOnlyItem],
       vaultError: null,
       catalogVerifiedAt: null,
     }));
 
-    renderDetail("asset-b");
+    const router = renderDetail("asset-b");
     await waitForLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Prepare for…" }));
 
-    expect(screen.getByRole("button", { name: "Share" })).toBeEnabled();
+    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
+    expect(router.state.location.search).toBe("");
+  });
+
+  it("the quick chips open Prepare on their destination", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [exportedOnlyItem],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    const router = renderDetail("asset-b");
+    await waitForLoaded();
+    expect(screen.getByRole("button", { name: "Prepare for TikTok · Reels" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Prepare for GitHub" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Prepare for YouTube" }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
+    expect(router.state.location.search).toBe("?to=youtube");
   });
 
   it("Edit video lands on the recording's Editor URL", async () => {
@@ -533,13 +555,13 @@ describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
     probe.mockClear();
   });
 
-  it("over 25 MB: amber size, and a banner with the Light estimate that opens the sheet on that row", async () => {
+  it("over 25 MB: amber size, and a banner with the Light estimate that opens Prepare on GitHub", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [withSize(119_000_000)],
       vaultError: null,
       catalogVerifiedAt: null,
     }));
-    renderDetail("asset-b");
+    const router = renderDetail("asset-b");
     await waitForLoaded();
 
     expect(screen.getByText("119 MB")).toHaveAttribute("data-heavy", "true");
@@ -549,12 +571,12 @@ describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
       await screen.findByText(/about 7.6 MB, small enough for GitHub or Jira/),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Make a light copy →" }));
-    expect(await screen.findByRole("heading", { name: "Share a copy" })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /^Light/ })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Prepare a light copy →" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
+    expect(router.state.location.search).toBe("?to=github");
   });
 
-  it("up to 25 MB: no banner, no amber, and the file isn't read until Share", async () => {
+  it("up to 25 MB: no banner, no amber, and the file isn't read on this page", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [withSize(20_000_000)],
       vaultError: null,
@@ -566,28 +588,25 @@ describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
     expect(screen.queryByText(/heavy to send/)).toBeNull();
     expect(screen.getByText("20 MB")).toHaveAttribute("data-heavy", "false");
     expect(probe).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Share" }));
-    expect(await screen.findByRole("heading", { name: "Share a copy" })).toBeInTheDocument();
-    // Share itself opens on Settings → Export quality.
-    expect(screen.getByRole("radio", { name: /^Balanced/ })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
   });
 });
 
-describe("LibraryDetailPage — Recording saved card (NIW2-218)", () => {
-  const heavy: LibraryItem = {
+describe("LibraryDetailPage — where is it going? (NIW2-578)", () => {
+  // Small on purpose: the panel shows after every recording, not only a heavy one.
+  const fresh: LibraryItem = {
     ...exportedOnlyItem,
-    local: { ...exportedOnlyItem.local!, sizeBytes: 119_000_000 },
+    local: { ...exportedOnlyItem.local!, sizeBytes: 4_000_000 },
     cloud: null,
     availability: "local",
   };
+  const PANEL = { name: "Where is your video going?" };
 
   function renderFresh(fromRecording: boolean) {
     const router = createMemoryRouter(
-      [{ path: "/library/:assetId", element: <LibraryDetailPage /> }],
+      [
+        { path: "/library/:assetId", element: <LibraryDetailPage /> },
+        { path: "/prepare/:assetId", element: <div>prepare-page</div> },
+      ],
       { initialEntries: [{ pathname: "/library/asset-b", state: { fromRecording } }] },
     );
     render(
@@ -595,26 +614,54 @@ describe("LibraryDetailPage — Recording saved card (NIW2-218)", () => {
         <RouterProvider router={router} />
       </StatusStackProvider>,
     );
+    return router;
   }
 
   beforeEach(() => {
     window.electronAPI.onLibraryChanged = () => () => {};
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
-      items: [heavy],
+      items: [fresh],
       vaultError: null,
       catalogVerifiedAt: null,
     }));
   });
 
-  it("right after recording a file over 10 MB, offers a light copy that opens Share on Light", async () => {
+  it("right after recording, asks where it is going; a shortcut opens Prepare on it", async () => {
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    const router = renderFresh(true);
+    const panel = await screen.findByRole("region", PANEL);
+    expect(within(panel).getByText("Your video is ready. Where is it going?")).toBeVisible();
+    // The file's own size and picture, once read.
+    expect(
+      await within(panel).findByText("1:18 · 2560 × 1440 · 4.0 MB · the original stays as it is"),
+    ).toBeVisible();
+    for (const name of [/^YouTube/, /^TikTok · Reels/, /^GitHub · Jira/, /^Slack · Discord/]) {
+      expect(within(panel).getByRole("button", { name })).toBeVisible();
+    }
+
+    fireEvent.click(within(panel).getByRole("button", { name: /^YouTube/ }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
+    expect(router.state.location.search).toBe("?to=youtube");
+  });
+
+  it("More places opens Prepare with nothing preselected", async () => {
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    const router = renderFresh(true);
+    const panel = await screen.findByRole("region", PANEL);
+    fireEvent.click(within(panel).getByRole("button", { name: "More places" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
+    expect(router.state.location.search).toBe("");
+  });
+
+  it("Not now dismisses it, and Prepare for… stays on the page", async () => {
     window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
     renderFresh(true);
-    const card = await screen.findByRole("region", { name: "Recording saved" });
-    expect(await screen.findByText("~7.6 MB · fits GitHub")).toBeInTheDocument();
-    fireEvent.click(within(card).getByRole("button", { name: "Share a light copy" }));
-    expect(await screen.findByRole("heading", { name: "Share a copy" })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /^Light/ })).toHaveAttribute("aria-checked", "true");
-    expect(screen.queryByRole("region", { name: "Recording saved" })).toBeNull();
+    const panel = await screen.findByRole("region", PANEL);
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Not now — keep it in the Library" }),
+    );
+    expect(screen.queryByRole("region", PANEL)).toBeNull();
+    expect(screen.getByRole("button", { name: "Prepare for…" })).toBeVisible();
   });
 
   it("not when Settings turned it off", async () => {
@@ -624,7 +671,7 @@ describe("LibraryDetailPage — Recording saved card (NIW2-218)", () => {
     renderFresh(true);
     await waitForLoaded();
     await act(async () => {});
-    expect(screen.queryByRole("region", { name: "Recording saved" })).toBeNull();
+    expect(screen.queryByRole("region", PANEL)).toBeNull();
   });
 
   it("not when the page was opened from the Library", async () => {
@@ -632,7 +679,7 @@ describe("LibraryDetailPage — Recording saved card (NIW2-218)", () => {
     renderFresh(false);
     await waitForLoaded();
     await act(async () => {});
-    expect(screen.queryByRole("region", { name: "Recording saved" })).toBeNull();
+    expect(screen.queryByRole("region", PANEL)).toBeNull();
   });
 
   it("keeps the player mounted through the re-list a rename broadcasts (NIW2-560)", async () => {
