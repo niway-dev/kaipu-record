@@ -125,7 +125,7 @@ function renderDetail(assetId: string) {
       { path: "/library/:assetId", element: <LibraryDetailPage /> },
       { path: "/library", element: <div>library-page</div> },
       { path: "/editor/video/:assetId", element: <div>editor-video</div> },
-      { path: "/prepare/:assetId", element: <div>prepare-page</div> },
+      { path: "/export/:assetId", element: <div>export-page</div> },
     ],
     { initialEntries: [`/library/${assetId}`] },
   );
@@ -250,16 +250,19 @@ describe("LibraryDetailPage", () => {
     ).toBeVisible();
     // Its cards are the action, so "Export a copy" waits until the panel is gone.
     expect(screen.queryByRole("button", { name: "Export a copy" })).toBeNull();
+    // Every destination the code has, Email included.
+    expect(within(panel()).getAllByRole("button", { name: /^Export a copy for / })).toHaveLength(7);
     for (const [name, search] of [
       ["Export a copy for YouTube", "?to=youtube"],
       ["Export a copy for Reels · TikTok · Shorts", "?to=vertical"],
       ["Export a copy for LinkedIn · Feeds", "?to=square"],
       ["Export a copy for GitHub · Jira · Linear", "?to=github"],
       ["Export a copy for Slack · Discord · Email", "?to=chat"],
+      ["Export a copy for Email · anywhere", "?to=email"],
       ["Export a copy for Archive copy", "?to=archive"],
     ] as const) {
       fireEvent.click(within(panel()).getByRole("button", { name }));
-      await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-b"));
       expect(router.state.location.search).toBe(search);
       await act(() => router.navigate("/library/asset-b"));
       await waitForLoaded();
@@ -301,7 +304,7 @@ describe("LibraryDetailPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Not now" }));
     expect(screen.queryByRole("region", { name: "Where is it going?" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Export a copy" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-b"));
     expect(router.state.location.search).toBe("");
   });
 
@@ -735,7 +738,7 @@ describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
     fireEvent.click(
       within(panel).getByRole("button", { name: "Export a copy for GitHub · Jira · Linear" }),
     );
-    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-b"));
     expect(router.state.location.search).toBe("?to=github");
   });
 
@@ -750,7 +753,7 @@ describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
 
     expect(screen.queryByRole("region", { name: "Where is it going?" })).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: "Prepare a light copy →" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-b"));
     expect(router.state.location.search).toBe("?to=github");
   });
 
@@ -785,7 +788,7 @@ describe("LibraryDetailPage — your video is ready (NIW2-584)", () => {
     const router = createMemoryRouter(
       [
         { path: "/library/:assetId", element: <LibraryDetailPage /> },
-        { path: "/prepare/:assetId", element: <div>prepare-page</div> },
+        { path: "/export/:assetId", element: <div>export-page</div> },
         { path: "/editor/video/:assetId", element: <div>editor-video</div> },
       ],
       { initialEntries: [{ pathname: "/library/asset-b", state: { fromRecording } }] },
@@ -820,7 +823,7 @@ describe("LibraryDetailPage — your video is ready (NIW2-584)", () => {
     }
 
     fireEvent.click(within(card).getByRole("button", { name: "Prepare a copy for TikTok" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-b"));
     expect(router.state.location.search).toBe("?to=vertical");
     expect(screen.queryByRole("region", CARD)).toBeNull();
   });
@@ -830,7 +833,7 @@ describe("LibraryDetailPage — your video is ready (NIW2-584)", () => {
     const router = renderFresh(true);
     const card = await screen.findByRole("region", CARD);
     fireEvent.click(within(card).getByRole("button", { name: "More places" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-b"));
     expect(router.state.location.search).toBe("");
   });
 

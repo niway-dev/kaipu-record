@@ -1,35 +1,39 @@
-/* The right column: header, what changes + why, the destination's one choice, the action. */
-.detail {
+/*
+ * The Export screen's stage: between the fixed header and the fixed destination row, it takes
+ * what height is left. Sized so YouTube's card and the button fit the default 900 × 670
+ * window; below that the stage scrolls on its own, never the page.
+ */
+.stage {
+  width: 100%;
+  max-width: 760px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 18px 24px;
 }
-
-/* ── Header ───────────────────────────── */
 
 .head {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 4px;
+  gap: 12px;
 }
 
 .headText {
+  flex: 1;
   min-width: 0;
 }
 
 .title {
   margin: 0;
-  font-size: 22px;
+  font-size: 20px;
   font-weight: var(--font-weight-semibold);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   color: var(--text-primary);
 }
 
-.meta {
+.sentence {
   margin: 3px 0 0;
   font-size: var(--font-size-base);
+  line-height: 1.4;
   color: var(--text-secondary);
 }
 
@@ -39,106 +43,48 @@
   color: var(--tone-heavy);
 }
 
-/* ── Cards ────────────────────────────── */
+/* ── Nothing picked ───────────────────── */
 
-.grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 12px;
+.nothing {
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
-.card,
-.why {
+.nothingTitle {
+  margin: 14px 0 0;
+  font-size: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.nothingBody {
+  margin: 8px 0 0;
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* ── Cards ────────────────────────────── */
+
+.card {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   padding: 14px;
-  border-radius: 12px;
+  border-radius: 11px;
   border: 1px solid var(--border);
   background: var(--bg-card);
 }
 
-.kicker {
+.keepLine {
   margin: 0;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: var(--font-weight-normal);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-/* What changes */
-
-.changes {
-  margin: 4px 0 0;
-}
-
-.change {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--border);
-  font-size: var(--font-size-base);
-}
-
-.change:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.changeLabel {
-  flex-shrink: 0;
-  color: var(--text-secondary);
-}
-
-.changeValue {
-  margin: 0;
-  min-width: 0;
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
-  color: var(--text-primary);
-  text-align: right;
-}
-
-/* "studio quality" → "Studio quality": the values double as phrases elsewhere. */
-.changeValue::first-letter {
-  text-transform: uppercase;
-}
-
-.changeValue[data-direction="bigger"] {
-  color: var(--tone-heavy);
-}
-
-.changeValue[data-direction="lighter"] {
-  color: var(--tone-saving);
-}
-
-/* Why it gets bigger / lighter */
-
-.why[data-group="send-more"] {
-  border-color: var(--accent-primary-ring);
-  background: var(--accent-primary-soft);
-}
-
-.why[data-group="send-more"] .kicker {
-  color: var(--accent-primary);
-}
-
-.why[data-group="keep-light"] {
-  border-color: color-mix(in srgb, var(--tone-saving-strong) 35%, transparent);
-  background: color-mix(in srgb, var(--tone-saving-strong) 7%, transparent);
-}
-
-.why[data-group="keep-light"] .kicker {
-  color: var(--tone-saving);
-}
-
-.whyText {
-  margin: 8px 0 0;
-  font-size: 12.5px;
-  line-height: 1.45;
-  color: var(--text-primary);
+  color: var(--text-secondary);
 }
 
 /* ── The destination's choice ─────────── */
@@ -152,16 +98,12 @@
   gap: 8px 12px;
 }
 
-.optionHead + .optionHint {
-  margin-top: 6px;
-}
-
 .optionText {
   flex: 1;
   min-width: 180px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
 }
 
 .optionTitle {
@@ -217,7 +159,6 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-top: 12px;
 }
 
 .crop {
@@ -318,18 +259,20 @@
   color: var(--text-secondary);
 }
 
-.barTag[data-direction="lighter"] {
+.barTag[data-tone="lighter"],
+.barTag[data-tone="fits"] {
   color: var(--tone-saving);
 }
 
-.barTag[data-direction="not-lighter"] {
+.barTag[data-tone="not-lighter"],
+.barTag[data-tone="over"] {
   color: var(--tone-heavy);
 }
 
 .bar {
   position: relative;
   height: 9px;
-  margin-top: 9px;
+  margin-top: -3px;
   border-radius: 5px;
   overflow: hidden;
   background: repeating-linear-gradient(135deg, var(--border) 0 5px, var(--bg-card-hover) 5px 10px);
@@ -342,16 +285,15 @@
   background: linear-gradient(90deg, var(--tone-saving-strong), var(--tone-saving));
 }
 
-.barFill[data-direction="not-lighter"] {
+.barFill[data-tone="not-lighter"],
+.barFill[data-tone="over"] {
   background: var(--tone-heavy);
 }
 
-/* Reels and feeds: the shape preview beside its choice. */
-
-.shape {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
+.barPicture {
+  margin: -4px 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
 }
 
 /* ── Action ───────────────────────────── */

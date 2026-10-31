@@ -1,6 +1,7 @@
 import {
   Archive,
   Ellipsis,
+  Mail,
   MessageCircle,
   Smartphone,
   Square,
@@ -17,6 +18,7 @@ const ICONS: Record<DestinationId | "more", LucideIcon> = {
   square: Square,
   github: SquareCode,
   chat: MessageCircle,
+  email: Mail,
   archive: Archive,
   more: Ellipsis,
 };
