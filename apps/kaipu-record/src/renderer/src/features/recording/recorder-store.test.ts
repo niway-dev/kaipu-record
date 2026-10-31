@@ -97,6 +97,9 @@ function fakeEngine(over: Partial<EngineHandle> = {}): EngineHandle {
     setDucking: vi.fn(() => "ok" as const),
     webcam: null,
     endWebcam: vi.fn(),
+    // The engine's default without a relay: off is refused, the store ends the file instead.
+    turnWebcamOff: vi.fn(() => false),
+    turnWebcamOn: vi.fn(async () => "unavailable" as const),
     ...over,
   };
 }
@@ -119,6 +122,8 @@ function fakePrepared(handle: EngineHandle = fakeEngine()): FakePrepared {
     setSystemAudioVolume: handle.setSystemAudioVolume,
     setDucking: handle.setDucking,
     endWebcam: handle.endWebcam,
+    turnWebcamOff: handle.turnWebcamOff,
+    turnWebcamOn: handle.turnWebcamOn,
     begin: vi.fn(async () => {
       callOrder.push("begin");
       return handle;
@@ -1557,6 +1562,103 @@ describe("recorder-store live settings", () => {
       expect(engine.endWebcam).toHaveBeenCalledOnce();
       expect(store.getRecorderSnapshot().status).toBe("recording");
       await stopAndSettle();
+    });
+
+    describe("the camera turned off and on mid-take, the file kept running", () => {
+      /** An engine that keeps the file through a camera-off gap (it has a relay). */
+      const relayEngine = (on: () => Promise<"ok" | "unavailable"> = async () => "ok") =>
+        fakeEngine({
+          webcam: webcamHandle(),
+          turnWebcamOff: vi.fn(() => true),
+          turnWebcamOn: vi.fn(on),
+        });
+
+      it("off keeps the webcam file; on feeds it again", async () => {
+        const engine = relayEngine();
+        await startWith(engine, { webcam });
+        broadcast({ isCameraEnabled: true });
+        broadcast({ isCameraEnabled: false });
+        expect(engine.turnWebcamOff).toHaveBeenCalledOnce();
+        expect(engine.endWebcam).not.toHaveBeenCalled();
+        broadcast({ isCameraEnabled: true });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(engine.turnWebcamOn).toHaveBeenCalledOnce();
+        await stopAndSettle();
+      });
+
+      it("finalizes each off period as a gap, in screen ms", async () => {
+        const engine = relayEngine();
+        await startWith(engine, { webcam });
+        await vi.advanceTimersByTimeAsync(2000);
+        broadcast({ isCameraEnabled: false });
+        await vi.advanceTimersByTimeAsync(3000);
+        broadcast({ isCameraEnabled: true });
+        await vi.advanceTimersByTimeAsync(1000);
+        await stopAndSettle();
+        const gaps = finalizeMeta().webcam?.gaps;
+        expect(gaps).toHaveLength(1);
+        expect(gaps![0]!.endMs - gaps![0]!.startMs).toBeCloseTo(3000, -1);
+        // Off 2 s into the take: on the take's own timeline, not the wall clock's.
+        expect(gaps![0]!.startMs).toBeGreaterThanOrEqual(2000);
+        expect(gaps![0]!.endMs).toBeLessThan(finalizeMeta().durationMs);
+      });
+
+      it("a camera still off at the stop is a trailing gap, closed at the take's end", async () => {
+        const engine = relayEngine();
+        await startWith(engine, { webcam });
+        await vi.advanceTimersByTimeAsync(1000);
+        broadcast({ isCameraEnabled: false });
+        await vi.advanceTimersByTimeAsync(2000);
+        await stopAndSettle();
+        const meta = finalizeMeta();
+        const gap = meta.webcam!.gaps![0]!;
+        expect(gap.endMs).toBe(meta.durationMs);
+        expect(gap.endMs - gap.startMs).toBeCloseTo(2000, -1);
+      });
+
+      it("sends no gaps for a take whose camera stayed on", async () => {
+        await startWith(relayEngine(), { webcam });
+        await stopAndSettle();
+        expect(finalizeMeta().webcam).not.toHaveProperty("gaps");
+      });
+
+      it("a camera that cannot be opened again ends the gap there and tells the user after", async () => {
+        const engine = relayEngine(async () => "unavailable");
+        await startWith(engine, { webcam });
+        await vi.advanceTimersByTimeAsync(1000);
+        broadcast({ isCameraEnabled: false });
+        await vi.advanceTimersByTimeAsync(1000);
+        broadcast({ isCameraEnabled: true });
+        await vi.advanceTimersByTimeAsync(0);
+        // The take records no more webcam: off and on again leave the file alone.
+        broadcast({ isCameraEnabled: false });
+        broadcast({ isCameraEnabled: true });
+        await vi.advanceTimersByTimeAsync(3000);
+        expect(engine.turnWebcamOn).toHaveBeenCalledOnce();
+        await stopAndSettle();
+        const meta = finalizeMeta();
+        const gap = meta.webcam!.gaps![0]!;
+        expect(gap.endMs - gap.startMs).toBeCloseTo(1000, -1);
+        expect(gap.endMs).toBeLessThan(meta.durationMs);
+        expect(getToasts().map((t) => t.message)).toEqual([messages.record.webcamUnavailable]);
+      });
+
+      it("a camera turned off again while it reopened keeps its gap open", async () => {
+        let answer!: (result: "ok") => void;
+        const engine = relayEngine(() => new Promise((resolve) => (answer = resolve)));
+        await startWith(engine, { webcam });
+        await vi.advanceTimersByTimeAsync(1000);
+        broadcast({ isCameraEnabled: false });
+        broadcast({ isCameraEnabled: true });
+        await vi.advanceTimersByTimeAsync(0);
+        broadcast({ isCameraEnabled: false });
+        answer("ok");
+        await vi.advanceTimersByTimeAsync(2000);
+        await stopAndSettle();
+        const meta = finalizeMeta();
+        expect(meta.webcam!.gaps).toHaveLength(1);
+        expect(meta.webcam!.gaps![0]!.endMs).toBe(meta.durationMs);
+      });
     });
 
     it("tells main when the engine reports the webcam ended, so the bubble rejoins the capture", async () => {

@@ -21,8 +21,10 @@ import {
   prepareEngine,
   type EngineHandle,
   type LiveAudioControls,
+  type LiveWebcamControls,
   type PreparedEngine,
 } from "@renderer/features/recording/recorder-engine";
+import { WebcamGapLog } from "./webcam-gaps";
 import type { WatermarkConfig } from "@renderer/features/watermark/watermark";
 import { reportError } from "@renderer/features/analytics";
 import { showToast } from "@renderer/ui/toast-store";
@@ -33,6 +35,7 @@ import { beginRecordTiming, endRecordTiming, markRecordTiming } from "./record-t
 import {
   WEBCAM_FPS,
   webcamStartOffset,
+  type WebcamGap,
   type WebcamRecordedLayout,
   type WebcamTrackMeta,
 } from "@shared/webcam-track";
@@ -174,6 +177,8 @@ let sessionCounter = 0;
 let lastResolveInput: (() => StartInput) | null = null;
 /** Unsubscribes the live-settings forwarder of the active take. */
 let stopLiveSettings: (() => void) | null = null;
+/** The active take's live-settings forwarder: its camera-off gaps go into the sidecar. */
+let liveSettings: LiveSettingsForwarder | null = null;
 /** Stops following whether any window listens to the mic levels, for the active take. */
 let stopMicLevelListening: (() => void) | null = null;
 /** Whether any window subscribed to the mic levels; only then are they read and sent. */
@@ -644,6 +649,7 @@ async function beginTake(
     webcamUnavailable = start.webcamUnavailable === true;
     // The forwarder attached when the take was acquired keeps running for the take.
     stopLiveSettings = start.live?.stop ?? null;
+    liveSettings = start.live;
     stopMicLevelListening = followMicLevelListeners();
     const activeTrack = cursorTrack;
     void handle.firstMediaTimestamp.then(({ rendererMs, quality }) => {
@@ -786,7 +792,20 @@ interface LiveSettingsForwarder {
   sync(input: StartInput): void;
   /** Whether it ended the engine's webcam (camera turned off); the engine cannot reopen it. */
   webcamEnded(): boolean;
+  /** The take's camera-off periods (screen ms), one still open closed at `endMs`. */
+  webcamGaps(endMs: number): WebcamGap[];
+  /** The camera was turned on again mid-take and could not be opened: the face went to the screen. */
+  webcamReopenFailed(): boolean;
   stop(): void;
+}
+
+/**
+ * Now on the take's screen timeline (ms from its first media sample, pauses removed): where a
+ * camera-off gap starts or ends. The wall clock until the first sample's time is known.
+ */
+function takeTimeMs(): number {
+  if (videoClock) return elapsedMs(videoClock, performance.now());
+  return clock ? elapsedMs(clock, Date.now()) : 0;
 }
 
 /**
@@ -802,16 +821,23 @@ interface LiveSettingsForwarder {
  * Returns the unsubscribe.
  */
 function forwardLiveSettings(
-  handle: LiveAudioControls & Pick<EngineHandle, "endWebcam">,
+  handle: LiveAudioControls & LiveWebcamControls & Pick<EngineHandle, "endWebcam">,
   input: StartInput,
   early: AudioSettingsTracker,
 ): LiveSettingsForwarder {
   let micOn = input.microphoneDeviceId !== null;
-  // Turning the camera off ends the webcam file there and releases the camera. Turning it on
-  // again mid-take records no second webcam file: the engine reports the end (`onWebcamEnded`)
-  // and main leaves the new bubble in the screen capture, so the face is recorded there.
+  // Turning the camera off mid-take releases the camera and keeps the webcam file running on
+  // the take's clock (a gap, hidden by the editor); turning it on again feeds the same file
+  // (ADR 0032 § camera toggled mid-take). Where the engine cannot (the countdown, no relay),
+  // off ends the file there, as before: turned on again, the take records no second webcam
+  // file, the engine reports the end (`onWebcamEnded`) and main leaves the bubble in the
+  // screen capture, so the face is recorded there.
   let webcamOn = Boolean(input.webcam);
   let webcamEnded = false;
+  /** The camera is off mid-take and the webcam file goes on: turning it on resumes it. */
+  let webcamParked = false;
+  let webcamReopenFailed = false;
+  const gaps = new WebcamGapLog();
   let sysOn = input.systemAudio;
   let queue: Promise<void> = Promise.resolve();
   let active = true;
@@ -897,8 +923,33 @@ function forwardLiveSettings(
     );
     if (webcamOn && !settings.isCameraEnabled) {
       webcamOn = false;
-      webcamEnded = true;
-      handle.endWebcam();
+      // A webcam file already ended (here or by the engine) has nothing left to end or keep.
+      if (webcamEnded) return;
+      if (handle.turnWebcamOff()) {
+        webcamParked = true;
+        gaps.open(takeTimeMs());
+      } else {
+        webcamEnded = true;
+        handle.endWebcam();
+      }
+    } else if (!webcamOn && webcamParked && settings.isCameraEnabled) {
+      webcamOn = true;
+      webcamParked = false;
+      // On the queue, so an off that follows waits for this camera to open and releases it.
+      queue = queue.then(async () => {
+        const result = await handle.turnWebcamOn();
+        if (result === "ok") {
+          // Turned off again meanwhile: its gap goes on.
+          if (webcamOn) gaps.close(takeTimeMs());
+          return;
+        }
+        // The file ended here (the engine reported it, main put the bubble back in the
+        // capture): the gap ends with it, and the user is told once the take is saved.
+        gaps.close(takeTimeMs());
+        webcamParked = false;
+        webcamEnded = true;
+        webcamReopenFailed = true;
+      });
     }
   });
   return {
@@ -907,6 +958,8 @@ function forwardLiveSettings(
       applyToggles(next.microphoneDeviceId !== null, next.microphoneDeviceId, next.systemAudio);
     },
     webcamEnded: () => webcamEnded,
+    webcamGaps: (endMs) => gaps.finish(endMs),
+    webcamReopenFailed: () => webcamReopenFailed,
     stop() {
       active = false;
       unsubscribe();
@@ -946,8 +999,10 @@ async function stopRecording(): Promise<void> {
   if (stopping || !activeEngine || !activeSessionId) return;
   stopping = true;
   beginRecordTiming("stop requested", true);
+  const activeLive = liveSettings;
   stopLiveSettings?.();
   stopLiveSettings = null;
+  liveSettings = null;
   stopMicLevelListening?.();
   stopMicLevelListening = null;
   update({ status: "finalizing", countdown: null });
@@ -958,6 +1013,9 @@ async function stopRecording(): Promise<void> {
   // which the cursor tracker's tail cut cannot absorb. Falls back to the wall clock when
   // t0 never resolved (cursor track off, or the first-media wait timed out).
   const durationMs = videoClock ? elapsedMs(videoClock, performance.now()) : wallMs;
+  // The camera-off periods; one still open (the camera off at the stop) ends with the take.
+  const webcamGaps = activeLive?.webcamGaps(durationMs) ?? [];
+  if (activeLive?.webcamReopenFailed()) webcamUnavailable = true;
   // Flip the bar to "Saving…" before the timer stops, so the finalize wait reads
   // as progress instead of a frozen widget.
   window.electronAPI.recordingReportTick({
@@ -980,7 +1038,7 @@ async function stopRecording(): Promise<void> {
         markRecordTiming("engine.stop resolved");
         // Settled by stop (or given up on): a poster frame still pending saves without one.
         const thumbnail = await Promise.race([activeEngine.thumbnail, Promise.resolve(null)]);
-        const webcam = await webcamFinalizeMeta(activeEngine, activeBubble);
+        const webcam = await webcamFinalizeMeta(activeEngine, activeBubble, webcamGaps);
         const finalized = await window.electronAPI.recordingFinalize(activeSessionId, {
           title,
           durationSeconds,
@@ -1037,6 +1095,7 @@ async function stopRecording(): Promise<void> {
 async function webcamFinalizeMeta(
   handle: EngineHandle,
   bubble: WebcamRecordedLayout | null,
+  gaps: WebcamGap[] = [],
 ): Promise<WebcamTrackMeta | null> {
   const webcam = handle.webcam;
   if (!webcam || !webcam.isUsable()) return null;
@@ -1047,6 +1106,7 @@ async function webcamFinalizeMeta(
     height: webcam.size.height,
     fps: WEBCAM_FPS,
     ...(bubble ? { recordedLayout: bubble } : {}),
+    ...(gaps.length > 0 ? { gaps } : {}),
   };
 }
 
