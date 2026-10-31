@@ -9,8 +9,10 @@
  * renumbering took two cascade rounds. Run on every push (verify:local), this flags the
  * collision the day `main` takes the number, while it is one file to rename.
  *
- * Without an `origin/main` ref (a fresh clone with no fetch, CI checkouts) only the local
- * duplicate check runs.
+ * It fetches `origin/main` first (quietly, with a short timeout), because `git push` does not
+ * update the remote-tracking ref and a stale one would hide a number `main` took since the last
+ * fetch. Offline, or without an `origin/main` ref at all (CI checkouts), it uses whatever ref it
+ * has, or runs only the local duplicate check.
  *
  * Run: bun scripts/check-adr-numbers.ts
  */
@@ -31,7 +33,19 @@ function byNumber(names: string[]): Map<string, string[]> {
   return map;
 }
 
+function fetchMain(): void {
+  try {
+    execFileSync("git", ["fetch", "--quiet", "origin", "main"], {
+      stdio: "ignore",
+      timeout: 10_000,
+    });
+  } catch {
+    // Offline or no remote: check against the ref we already have.
+  }
+}
+
 function mainNames(): string[] | null {
+  fetchMain();
   try {
     const out = execFileSync("git", ["ls-tree", "--name-only", "origin/main", `${DIR}/`], {
       encoding: "utf8",
