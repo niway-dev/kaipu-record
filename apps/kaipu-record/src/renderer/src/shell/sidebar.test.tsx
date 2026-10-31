@@ -38,13 +38,28 @@ describe("Sidebar Library badge (NIW2-586)", () => {
     await act(() => router.navigate(ROUTES.library));
     expect(libraryLink()).toHaveTextContent(/^Library$/);
     // Still pointed at on the Library page until the copy itself is opened.
-    expect(getReadyCopies().copies).toEqual([{ assetId: "copy-1", announced: true }]);
+    expect(getReadyCopies().copies).toEqual([{ assetId: "copy-1", announced: true, card: true }]);
   });
 
   it("a copy that finishes while the Library is open never badges", () => {
     renderAt(ROUTES.library);
     act(() => noteFinishedCopy("copy-1"));
     expect(libraryLink()).toHaveTextContent(/^Library$/);
+  });
+
+  it("leaving the Library retires its Ready to upload cards, not the copies", async () => {
+    const router = renderAt(ROUTES.library);
+    act(() => noteFinishedCopy("copy-1"));
+    expect(getReadyCopies().copies[0]).toMatchObject({ card: true });
+    await act(() => router.navigate(ROUTES.screenshots));
+    expect(getReadyCopies().copies).toEqual([{ assetId: "copy-1", announced: true, card: false }]);
+    // A copy that finishes while away still gets its card on the next visit.
+    act(() => noteFinishedCopy("copy-2"));
+    await act(() => router.navigate(ROUTES.library));
+    expect(getReadyCopies().copies.map((c) => [c.assetId, c.card])).toEqual([
+      ["copy-1", false],
+      ["copy-2", true],
+    ]);
   });
 
   it("opening the copy's page forgets it", async () => {

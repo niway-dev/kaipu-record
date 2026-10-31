@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LibraryVideo } from "@renderer/features/library/types";
@@ -6,6 +6,7 @@ import {
   __resetReadyCopiesForTests,
   markCopySeen,
   noteFinishedCopy,
+  retireReadyCards,
 } from "@renderer/features/video-editor/export/ready-copies";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import { LibraryPage } from "./library-page";
@@ -30,7 +31,26 @@ const base: LibraryVideo = {
 };
 const VIDEOS: LibraryVideo[] = [
   base,
-  { ...base, id: "y", assetId: "asset-copy", title: "Master (YouTube)", createdAt: 2 },
+  {
+    ...base,
+    id: "y",
+    assetId: "asset-copy",
+    title: "Master (YouTube)",
+    createdAt: 2,
+    derivedFromAssetId: "asset-master",
+    fileSizeBytes: 566_000_000,
+    durationSeconds: 182,
+    export: { preset: "youtube-1440", fingerprint: "whole#2560x1440-v1" },
+  },
+  {
+    ...base,
+    id: "z",
+    assetId: "asset-gh",
+    title: "Master (GitHub)",
+    createdAt: 3,
+    derivedFromAssetId: "asset-master",
+    export: { preset: "light", fingerprint: "whole#q33-24fps-kfi10" },
+  },
 ];
 const nothingImported = { imported: [], failed: [], canceled: false };
 
@@ -58,6 +78,7 @@ function renderLibrary() {
     [
       { path: "/library", element: <LibraryPage /> },
       { path: "/prepare", element: <div>prepare-page</div> },
+      { path: "/library/:assetId", element: <div>detail-page</div> },
     ],
     { initialEntries: ["/library"] },
   );
@@ -116,6 +137,8 @@ describe("LibraryPage ready copies (NIW2-586)", () => {
     noteFinishedCopy("asset-copy");
     // A copy no longer in the Library (deleted) is not counted.
     noteFinishedCopy("asset-gone");
+    // Past its Ready to upload card: the regular card carries the outline.
+    act(() => retireReadyCards());
     renderLibrary();
     expect(screen.getByRole("status")).toHaveTextContent("1 copy ready");
     expect(card("Master (YouTube)")).toHaveAttribute("data-just-ready", "true");
@@ -138,5 +161,83 @@ describe("LibraryPage ready copies (NIW2-586)", () => {
       Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect(follows(chip, prepare)).toBe(true);
     expect(follows(prepare, importButton)).toBe(true);
+  });
+});
+
+const readyCard = (name: string): HTMLElement =>
+  screen.getByRole("article", { name: `${name} is ready to upload` });
+
+describe("LibraryPage Ready to upload card", () => {
+  it("leads the grid with the copy that just finished, in place of its regular card", () => {
+    noteFinishedCopy("asset-copy", { destination: "youtube", width: 2560, height: 1440 });
+    renderLibrary();
+    const ready = readyCard("Master (YouTube)");
+    const grid = ready.parentElement!;
+    expect(grid.firstElementChild).toBe(ready);
+    expect(ready).toHaveTextContent("Ready to upload");
+    expect(ready).toHaveTextContent("Master (YouTube).mp4");
+    expect(ready).toHaveTextContent("For YouTube");
+    expect(ready).toHaveTextContent("2560 × 1440 · 3:02 · 566 MB · from the original");
+    // Not twice: the regular card steps aside while the ready card shows.
+    expect(screen.queryByText("Master (YouTube)", { selector: "p" })).toBeNull();
+  });
+
+  it("shows one card per finished copy, newest first", () => {
+    noteFinishedCopy("asset-copy", { destination: "youtube" });
+    noteFinishedCopy("asset-gh", { destination: "github" });
+    renderLibrary();
+    const cards = screen.getAllByRole("article");
+    expect(cards.map((c) => c.getAttribute("aria-label"))).toEqual([
+      "Master (GitHub) is ready to upload",
+      "Master (YouTube) is ready to upload",
+    ]);
+  });
+
+  it("Show in Finder reveals the file; Drag to YouTube Studio drags it out", () => {
+    const reveal = vi.spyOn(window.electronAPI, "revealLocalRecording");
+    const drag = vi.spyOn(window.electronAPI, "startFileDrag");
+    noteFinishedCopy("asset-copy", { destination: "youtube" });
+    renderLibrary();
+    const ready = readyCard("Master (YouTube)");
+    fireEvent.click(within(ready).getByRole("button", { name: "Show in Finder" }));
+    expect(reveal).toHaveBeenCalledWith("y");
+    const dragButton = within(ready).getByRole("button", {
+      name: "Drag Master (YouTube).mp4 out of Kaipu",
+    });
+    expect(dragButton).toHaveTextContent("Drag to YouTube Studio");
+    expect(dragButton).toHaveAttribute("draggable", "true");
+    fireEvent.dragStart(dragButton);
+    expect(drag).toHaveBeenCalledWith("y", "Master (YouTube)");
+    reveal.mockRestore();
+    drag.mockRestore();
+  });
+
+  it("closing it brings back the regular card, still outlined as unseen", () => {
+    noteFinishedCopy("asset-copy", { destination: "youtube" });
+    renderLibrary();
+    fireEvent.click(
+      within(readyCard("Master (YouTube)")).getByRole("button", { name: "Close this card" }),
+    );
+    expect(screen.queryByRole("article")).toBeNull();
+    expect(card("Master (YouTube)")).toHaveAttribute("data-just-ready", "true");
+  });
+
+  it("opening the copy goes to its page and forgets it", async () => {
+    noteFinishedCopy("asset-copy", { destination: "youtube" });
+    const router = renderLibrary();
+    await act(async () => {
+      fireEvent.click(within(readyCard("Master (YouTube)")).getByText("Master (YouTube).mp4"));
+    });
+    expect(router.state.location.pathname).toBe("/library/asset-copy");
+  });
+});
+
+describe("LibraryPage grid tags", () => {
+  it("tags a copy with its destination, read back from the file, and the original as the master", () => {
+    renderLibrary();
+    expect(card("Master (YouTube)")).toHaveTextContent("For YouTube");
+    expect(card("Master (GitHub)")).toHaveTextContent("For GitHub");
+    expect(card("Master")).toHaveTextContent("Master · full quality");
+    expect(card("Master")).not.toHaveTextContent(/For /);
   });
 });

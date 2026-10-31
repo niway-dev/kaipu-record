@@ -71,3 +71,53 @@
 .libraryLink:hover {
   color: var(--text-primary);
 }
+
+/* The minimized widget: a pill with a progress ring. Clicking it opens the widget again. */
+.pill {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 40px;
+  padding: 0 12px 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-light);
+  background: var(--bg-modal);
+  color: var(--text-primary);
+  box-shadow: 0 20px 44px -16px rgba(0, 0, 0, 0.9);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pill:hover {
+  border-color: var(--accent-primary-ring);
+}
+
+.pill:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.ring {
+  flex-shrink: 0;
+  transform: rotate(-90deg);
+}
+
+.ringTrack,
+.ringFill {
+  fill: none;
+  stroke-width: 3;
+}
+
+.ringTrack {
+  stroke: var(--border);
+}
+
+.ringFill {
+  stroke: var(--accent-primary);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 300ms ease;
+}

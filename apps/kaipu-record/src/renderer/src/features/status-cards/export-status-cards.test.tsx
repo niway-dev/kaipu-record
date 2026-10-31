@@ -17,6 +17,11 @@ import {
   noteFinishedCopy,
 } from "@renderer/features/video-editor/export/ready-copies";
 import { ExportProgressCard, ExportReadyCard, ExportStatusCards } from "./export-status-cards";
+import {
+  __resetExportWidgetForTests,
+  isExportWidgetMinimized,
+  setExportWidgetMinimized,
+} from "./export-widget-state";
 
 const JOB: ExportJobInfo = {
   presetId: "light",
@@ -57,6 +62,7 @@ function inRouter(element: React.ReactNode) {
 afterEach(() => {
   __resetExportRunnerForTests();
   __resetReadyCopiesForTests();
+  __resetExportWidgetForTests();
 });
 
 describe("ExportProgressCard", () => {
@@ -71,20 +77,23 @@ describe("ExportProgressCard", () => {
 
   it("names the destination, how far along, about how long is left, and where the size is heading", () => {
     render(<ExportProgressCard {...props} job={{ ...JOB, destination: "github" }} />);
-    expect(screen.getByText("Preparing your GitHub copy…")).toBeInTheDocument();
+    expect(screen.getByText("Exporting for GitHub")).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "64");
-    expect(screen.getByText("64% · about 25 s left · you can keep working")).toBeInTheDocument();
+    expect(screen.getByText("64% · about 25 s left")).toBeInTheDocument();
     expect(screen.getByText("119 MB → ~9.2 MB")).toBeInTheDocument();
+    expect(
+      screen.getByText("Keep working. The copy lands in your Library when it’s done."),
+    ).toBeInTheDocument();
   });
 
-  it("calls an editor export (no destination) 'your export'", () => {
+  it("calls an editor export (no destination) 'your video'", () => {
     render(<ExportProgressCard {...props} />);
-    expect(screen.getByText("Preparing your export…")).toBeInTheDocument();
+    expect(screen.getByText("Exporting your video")).toBeInTheDocument();
   });
 
   it("shows only the percent until the rate is known", () => {
     render(<ExportProgressCard {...props} fraction={0.01} now={() => 500} />);
-    expect(screen.getByText("1% · you can keep working")).toBeInTheDocument();
+    expect(screen.getByText("1%")).toBeInTheDocument();
   });
 
   it("says 'up to' for a fixed canvas and nothing about sizes without the original's", () => {
@@ -123,7 +132,10 @@ describe("ExportReadyCard", () => {
         }}
       />,
     );
-    expect(screen.getByText("Your YouTube copy is ready")).toBeInTheDocument();
+    expect(screen.getByText("YouTube copy ready")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Drag .* out of Kaipu/ })).toHaveTextContent(
+      "Drag to YouTube Studio",
+    );
     expect(screen.getByText(/2560 × 1440 · 566 MB/)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Open Demo (light) in your Library" }),
@@ -171,11 +183,16 @@ describe("ExportReadyCard", () => {
 describe("ExportStatusCards", () => {
   const t = ((key: string) => key) as unknown as Translator<"videoEditor">;
 
+  const workers: Array<{ onmessage: ((e: MessageEvent) => void) | null }> = [];
+
   async function startExport(): Promise<void> {
     vi.stubGlobal(
       "Worker",
       class {
-        onmessage = null;
+        constructor() {
+          workers.push(this);
+        }
+        onmessage: ((e: MessageEvent) => void) | null = null;
         onerror = null;
         postMessage = vi.fn();
         terminate = vi.fn();
@@ -215,16 +232,43 @@ describe("ExportStatusCards", () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  it("✕ hides the progress card and the export keeps running; Cancel stops it", async () => {
+  it("minimizes to a pill with the percent and the export keeps running; the pill opens it again", async () => {
     await startExport();
     inRouter(<ExportStatusCards />);
-    expect(screen.getByText("Preparing your YouTube copy…")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Hide — it keeps going" }));
-    expect(screen.queryByText("Preparing your YouTube copy…")).toBeNull();
+    expect(screen.getByText("Exporting for YouTube")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Minimize — it keeps going" }));
+    expect(screen.queryByText("Exporting for YouTube")).toBeNull();
+    expect(screen.getByText("YouTube copy · 0%")).toBeInTheDocument();
     expect(getExportSnapshot().status).toBe("exporting");
+    expect(isExportWidgetMinimized()).toBe(true);
 
-    __resetExportRunnerForTests();
+    fireEvent.click(screen.getByRole("button", { name: "Show the export's progress" }));
+    expect(screen.getByText("Exporting for YouTube")).toBeInTheDocument();
+    expect(isExportWidgetMinimized()).toBe(false);
+  });
+
+  it("the minimized choice holds for the session: the next export opens as a pill", async () => {
+    setExportWidgetMinimized(true);
+    expect(window.sessionStorage.getItem("kaipu.exportWidgetMinimized")).toBe("1");
     await startExport();
+    inRouter(<ExportStatusCards />);
+    expect(screen.getByText("YouTube copy · 0%")).toBeInTheDocument();
+    expect(screen.queryByText("Exporting for YouTube")).toBeNull();
+  });
+
+  it("an error shows in full even while minimized", async () => {
+    setExportWidgetMinimized(true);
+    await startExport();
+    inRouter(<ExportStatusCards />);
+    act(() => {
+      workers.at(-1)!.onmessage?.({ data: { type: "error", message: "boom" } } as MessageEvent);
+    });
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+  });
+
+  it("Cancel in the widget stops the export", async () => {
+    await startExport();
+    inRouter(<ExportStatusCards />);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(getExportSnapshot().status).toBe("idle");
     expect(screen.queryByRole("progressbar")).toBeNull();

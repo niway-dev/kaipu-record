@@ -2,10 +2,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   __resetReadyCopiesForTests,
   announceReadyCopies,
+  dismissReadyCard,
   getReadyCopies,
   libraryBadgeCount,
   markCopySeen,
   noteFinishedCopy,
+  readyCards,
+  retireReadyCards,
   unseenCopyIds,
 } from "./ready-copies";
 
@@ -51,6 +54,35 @@ describe("ready copies (NIW2-586)", () => {
     noteFinishedCopy("a");
     announceReadyCopies();
     noteFinishedCopy("a");
-    expect(getReadyCopies().copies).toEqual([{ assetId: "a", announced: false }]);
+    expect(getReadyCopies().copies).toEqual([{ assetId: "a", announced: false, card: true }]);
+  });
+});
+
+describe("Ready to upload cards", () => {
+  it("leads with each finished copy, newest first, with what the runner knew", () => {
+    noteFinishedCopy("a", { destination: "youtube", width: 2560, height: 1440 });
+    noteFinishedCopy("b");
+    expect(readyCards(getReadyCopies()).map((c) => c.assetId)).toEqual(["b", "a"]);
+    expect(readyCards(getReadyCopies())[1]).toMatchObject({ destination: "youtube", width: 2560 });
+  });
+
+  it("closing a card keeps the copy unseen; leaving the Library retires every card", () => {
+    noteFinishedCopy("a");
+    noteFinishedCopy("b");
+    dismissReadyCard("a");
+    expect(readyCards(getReadyCopies()).map((c) => c.assetId)).toEqual(["b"]);
+    expect([...unseenCopyIds(getReadyCopies())]).toEqual(["a", "b"]);
+    retireReadyCards();
+    expect(readyCards(getReadyCopies())).toEqual([]);
+    const after = getReadyCopies();
+    retireReadyCards();
+    dismissReadyCard("a");
+    expect(getReadyCopies()).toBe(after);
+  });
+
+  it("opening the copy removes its card", () => {
+    noteFinishedCopy("a");
+    markCopySeen("a");
+    expect(readyCards(getReadyCopies())).toEqual([]);
   });
 });

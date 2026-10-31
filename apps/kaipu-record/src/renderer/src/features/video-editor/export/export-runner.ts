@@ -100,11 +100,6 @@ export interface ExportRunnerSnapshot extends VideoExportState {
   /** When the current encode attempt started (Date.now()), for "about N s left". */
   attemptStartedAt: number | null;
   ready: ReadyExport | null;
-  /**
-   * The user hid the progress card (its ✕): the export keeps running, and the ready card
-   * still shows when it finishes. An error shows again whatever this says (NIW2-586).
-   */
-  progressHidden: boolean;
 }
 
 /**
@@ -146,7 +141,6 @@ const IDLE: ExportRunnerSnapshot = {
   job: null,
   attemptStartedAt: null,
   ready: null,
-  progressHidden: false,
 };
 
 /*
@@ -256,11 +250,6 @@ export function dismissReadyExport(): void {
   if (snapshot.ready) set({ ready: null });
 }
 
-/** The progress card's ✕: hides the card, never the export (Cancel stops it). */
-export function hideExportProgress(): void {
-  if (snapshot.status === "exporting" && !snapshot.progressHidden) set({ progressHidden: true });
-}
-
 /**
  * Runs a video export end to end, in the background: builds the render plan, rasterizes
  * overlays + decodes slide assets to bitmaps, opens a vault writer session (the SAME
@@ -324,7 +313,6 @@ export async function startVideoExport(
     job,
     attemptStartedAt: Date.now(),
     ready: null,
-    progressHidden: false,
   });
 
   const fail = (message: string, error?: unknown): void => {
@@ -338,7 +326,6 @@ export async function startVideoExport(
       fraction: 0,
       error: message,
       attemptStartedAt: null,
-      progressHidden: false,
     });
   };
 
@@ -460,7 +447,11 @@ export async function startVideoExport(
             sessionId = null;
             active = false;
             set({ ...IDLE, ready: { job, recording } });
-            noteFinishedCopy(recording.assetId);
+            noteFinishedCopy(recording.assetId, {
+              destination: job.destination,
+              width: job.width,
+              height: job.height,
+            });
             try {
               await args.onSaved(recording);
             } catch (error) {

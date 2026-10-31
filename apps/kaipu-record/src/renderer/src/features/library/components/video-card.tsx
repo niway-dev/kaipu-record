@@ -11,6 +11,8 @@ import { MasterTag } from "./master-tag";
 import { RecordingCaptureTag } from "./recording-capture-tag";
 import { EditBadge } from "./edit-badge";
 import { cx } from "@renderer/ui/cx";
+import type { DestinationId } from "@renderer/features/prepare/destinations";
+import { DestinationTag } from "@renderer/features/prepare/components/destination-tag";
 import styles from "./video-card.module.css";
 
 const CARD_TAGS_SHOWN = 3;
@@ -32,6 +34,8 @@ interface VideoCardProps {
   justReady?: boolean;
   /** The item's tags, resolved from the registry (name + color). */
   tags?: readonly TagSummary[];
+  /** A copy made for a destination: its poster says where it is going ("For YouTube"). */
+  destination?: DestinationId | null;
 }
 
 export function VideoCard({
@@ -45,6 +49,7 @@ export function VideoCard({
   selected = false,
   justReady = false,
   tags = [],
+  destination = null,
 }: VideoCardProps): React.JSX.Element {
   const t = useTranslations("library");
   // A few tags always visible under the title, the rest as "+N".
@@ -80,8 +85,15 @@ export function VideoCard({
         <div className={styles.scrim} aria-hidden />
 
         <span className={styles.kindBadge}>
-          {/* An original reads as the master (NIW2-585); the tag also says it is a recording. */}
-          {isMaster(video) ? <MasterTag size="sm" /> : <KindBadge kind={video.kind} />}
+          {/* An original reads as the master (NIW2-585); the tag also says it is a recording.
+              A copy for a destination says where it is going instead. */}
+          {isMaster(video) ? (
+            <MasterTag size="sm" />
+          ) : destination ? (
+            <DestinationTag destination={destination} />
+          ) : (
+            <KindBadge kind={video.kind} />
+          )}
           {!imported && <RecordingCaptureTag capture={video.capture} />}
         </span>
 

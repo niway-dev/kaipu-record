@@ -1,4 +1,4 @@
-import { FolderOpen, GripVertical, Clapperboard, TriangleAlert } from "lucide-react";
+import { ChevronUp, FolderOpen, GripVertical, Clapperboard, TriangleAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { KaipuLogo } from "@kaipu/brand";
 import { useTranslations } from "@kaipu/i18n";
@@ -10,7 +10,6 @@ import {
   cancelVideoExport,
   dismissReadyExport,
   type ExportJobInfo,
-  hideExportProgress,
   type ReadyExport,
   retryVideoExport,
   useExportRunner,
@@ -22,25 +21,29 @@ import {
   sizeKindOf,
 } from "@renderer/features/video-editor/export/export-size";
 import { markCopySeen } from "@renderer/features/video-editor/export/ready-copies";
+import { setExportWidgetMinimized, useExportWidgetMinimized } from "./export-widget-state";
 import { StatusCard, StatusCardActions, StatusCardButton, StatusCardText } from "./status-card";
 import styles from "./export-status-cards.module.css";
 
 /**
- * The background export's cards (NIW2-586): progress (or its error) while it runs, then
- * "ready". The progress card can be hidden — the export keeps going, and an error brings it
- * back.
+ * The background export's cards (NIW2-586), bottom right on every screen: the progress
+ * widget (or its error) while it runs, then "ready". The widget minimizes to a pill with a
+ * progress ring — the export keeps going, the choice holds for the session, and an error
+ * always shows in full.
  */
 export function ExportStatusCards(): React.JSX.Element {
   const runner = useExportRunner();
-  const showProgress =
-    runner.job !== null &&
-    (runner.status === "error" || (runner.status === "exporting" && !runner.progressHidden));
+  const minimized = useExportWidgetMinimized();
+  const { job, status } = runner;
   return (
     <>
-      {showProgress && runner.job && runner.status !== "idle" && (
+      {job && status === "exporting" && minimized && (
+        <ExportProgressPill job={job} fraction={runner.fraction} />
+      )}
+      {job && (status === "error" || (status === "exporting" && !minimized)) && (
         <ExportProgressCard
-          job={runner.job}
-          status={runner.status}
+          job={job}
+          status={status}
           fraction={runner.fraction}
           error={runner.error}
           attemptStartedAt={runner.attemptStartedAt}
@@ -49,6 +52,10 @@ export function ExportStatusCards(): React.JSX.Element {
       {runner.ready && <ExportReadyCard ready={runner.ready} />}
     </>
   );
+}
+
+function percentOf(fraction: number): number {
+  return Math.round(Math.min(1, Math.max(0, fraction)) * 100);
 }
 
 /** The ICU `select` value the card titles name: the destination, or "your export". */
@@ -79,8 +86,8 @@ export interface ExportProgressCardProps {
 
 /**
  * The export running in the background: where it is going, how far along and about how long
- * is left, with a striped bar. ✕ hides the card and leaves the export running; Cancel stops
- * it, and nothing reaches the Library.
+ * is left, with a striped bar. − minimizes it to a pill and leaves the export running; Cancel
+ * stops it, and nothing reaches the Library.
  */
 export function ExportProgressCard({
   job,
@@ -115,7 +122,7 @@ export function ExportProgressCard({
     );
   }
 
-  const percent = Math.round(Math.min(1, Math.max(0, fraction)) * 100);
+  const percent = percentOf(fraction);
   const eta =
     attemptStartedAt !== null ? exportEtaSeconds(fraction, now() - attemptStartedAt) : null;
   const etaText =
@@ -142,8 +149,9 @@ export function ExportProgressCard({
       subtitle={
         etaText ? t("progressLineEta", { percent, eta: etaText }) : t("progressLine", { percent })
       }
-      onDismiss={hideExportProgress}
-      dismissLabel={t("hide")}
+      onDismiss={() => setExportWidgetMinimized(true)}
+      dismissLabel={t("minimize")}
+      dismissIcon="minimize"
     >
       <div
         className={styles.progressTrack}
@@ -155,6 +163,7 @@ export function ExportProgressCard({
       >
         <div className={styles.progressFill} style={{ width: `${percent}%` }} />
       </div>
+      <p className={styles.note}>{t("progressNote")}</p>
       <div className={styles.progressLine}>
         {target && job.sourceSizeBytes !== null ? (
           <span>{t("progressSizes", { from: formatMB(job.sourceSizeBytes), to: target })}</span>
@@ -169,10 +178,60 @@ export function ExportProgressCard({
   );
 }
 
+/** The ring's radius in the pill's 24 × 24 box. */
+const RING_RADIUS = 9;
+const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
+
+/**
+ * The minimized widget: a pill with a progress ring and "YouTube copy · 38%". Clicking it
+ * opens the widget again (where Cancel is).
+ */
+export function ExportProgressPill({
+  job,
+  fraction,
+}: {
+  job: ExportJobInfo;
+  fraction: number;
+}): React.JSX.Element {
+  const t = useTranslations("backgroundCopy");
+  const percent = percentOf(fraction);
+  return (
+    <button
+      type="button"
+      className={styles.pill}
+      aria-label={t("expand")}
+      onClick={() => setExportWidgetMinimized(false)}
+    >
+      <svg className={styles.ring} width={24} height={24} viewBox="0 0 24 24" aria-hidden>
+        <circle className={styles.ringTrack} cx={12} cy={12} r={RING_RADIUS} />
+        <circle
+          className={styles.ringFill}
+          cx={12}
+          cy={12}
+          r={RING_RADIUS}
+          strokeDasharray={RING_LENGTH}
+          strokeDashoffset={RING_LENGTH * (1 - percent / 100)}
+        />
+      </svg>
+      <span
+        role="progressbar"
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={t("progressTitle", { destination: destinationArg(job) })}
+      >
+        {t("pill", { destination: destinationArg(job), percent })}
+      </span>
+      <ChevronUp size={13} strokeWidth={1.9} aria-hidden />
+    </button>
+  );
+}
+
 /**
  * The finished copy: the fox, where it went, its real size and that it is in the Library
- * (a link to its page). Show in Finder, and "Drag to upload" — a native drag of the real
- * file, under the item's title rather than its vault id, straight into an upload page.
+ * (a link to its page). Show in Finder, and "Drag to YouTube Studio" (or wherever it is going)
+ * — a native drag of the real file, under the item's title rather than its vault id,
+ * straight into an upload page.
  * ✕ closes the card; the copy stays pointed at in the Library until it is opened.
  */
 export function ExportReadyCard({ ready }: { ready: ReadyExport }): React.JSX.Element {
@@ -236,7 +295,7 @@ export function ExportReadyCard({ ready }: { ready: ReadyExport }): React.JSX.El
           }}
         >
           <GripVertical size={14} strokeWidth={1.8} />
-          {t("readyDragToUpload")}
+          {t("dragTo", { destination: destinationArg(job) })}
         </StatusCardButton>
       </StatusCardActions>
     </StatusCard>

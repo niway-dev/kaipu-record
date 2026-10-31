@@ -69,6 +69,21 @@ describe("VideoCard", () => {
     }
   });
 
+  it("tags a copy with where it is going instead of its kind", () => {
+    const copy = { ...video, derivedFromAssetId: "src" };
+    const { rerender } = render(
+      <VideoCard video={copy} destination="youtube" onNavigate={vi.fn()} onDelete={vi.fn()} />,
+    );
+    expect(screen.getByText("For YouTube")).toHaveAttribute("data-destination", "youtube");
+    expect(screen.queryByText("Recording")).toBeNull();
+    // An original keeps the master tag whatever it is given.
+    rerender(
+      <VideoCard video={video} destination="github" onNavigate={vi.fn()} onDelete={vi.fn()} />,
+    );
+    expect(screen.getByText("Master · full quality")).toBeInTheDocument();
+    expect(screen.queryByText("For GitHub")).toBeNull();
+  });
+
   it("says an imported video was imported in the metadata line, not on the poster", () => {
     render(
       <VideoCard

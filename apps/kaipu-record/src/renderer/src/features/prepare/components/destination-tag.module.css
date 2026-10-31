@@ -1,0 +1,46 @@
+/* Solid destination colour, white mono caps: reads on any frame, like the master tag. The
+   colours match `destination-logo.module.css`. */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #2a2a30;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.tag[data-size="sm"] {
+  padding: 3px 6px;
+  font-size: 9px;
+}
+
+.tag[data-destination="youtube"] {
+  background: #e62117;
+  border-color: transparent;
+}
+
+.tag[data-destination="vertical"] {
+  background: #c13584;
+  border-color: transparent;
+}
+
+.tag[data-destination="square"] {
+  background: #0a66c2;
+  border-color: transparent;
+}
+
+.tag[data-destination="github"] {
+  background: #24292f;
+}
+
+.tag[data-destination="chat"] {
+  background: #4a154b;
+}

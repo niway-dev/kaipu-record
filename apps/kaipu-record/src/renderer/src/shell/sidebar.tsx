@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { NavLink, matchPath, useLocation } from "react-router-dom";
 import { Video, Library, Camera, Keyboard, Settings, User, Cloud, PenLine } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
@@ -10,6 +10,7 @@ import {
   announceReadyCopies,
   libraryBadgeCount,
   markCopySeen,
+  retireReadyCards,
   useReadyCopies,
 } from "@renderer/features/video-editor/export/ready-copies";
 
@@ -85,15 +86,21 @@ export function Sidebar(): React.JSX.Element {
  * The Library item's count of finished copies the user has not been shown (NIW2-586): one
  * finished while its ready card was hidden, or after the card was closed. Opening the Library
  * clears the count (the page points at the copies); opening a copy's page forgets that copy.
+ * Leaving the Library retires its "Ready to upload" cards: they were seen there.
  * The rail is on every page, so this is where the route is watched.
  */
 export function useLibraryBadge(pathname: string): number {
   const copies = useReadyCopies();
   const { ready } = useExportRunner();
+  const wasOnLibrary = useRef(false);
   useEffect(() => {
     const detail = matchPath(ROUTES.libraryDetail, pathname);
     if (detail?.params.assetId) markCopySeen(detail.params.assetId);
-    if (matchPath({ path: ROUTES.library, end: true }, pathname)) announceReadyCopies();
+    const onLibrary = matchPath({ path: ROUTES.library, end: true }, pathname) !== null;
+    if (onLibrary) announceReadyCopies();
+    // A route watch rather than the page's unmount, which StrictMode runs on every mount.
+    if (wasOnLibrary.current && !onLibrary) retireReadyCards();
+    wasOnLibrary.current = onLibrary;
   }, [pathname, copies]);
   return libraryBadgeCount(copies, ready?.recording.assetId ?? null);
 }

@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { Minus, X } from "lucide-react";
 import styles from "./status-card.module.css";
 
 export interface StatusCardProps {
@@ -18,9 +18,11 @@ export interface StatusCardProps {
   badge?: React.ReactNode;
   /** 420 px instead of 380 px, for a card with a row of chips. */
   wide?: boolean;
-  /** ✕ in the corner; omitted for a card that must stay (an export in progress). */
+  /** ✕ in the corner; omitted for a card that must stay. */
   onDismiss?(): void;
   dismissLabel?: string;
+  /** The corner button minimizes instead (−): the export widget keeps going as a pill. */
+  dismissIcon?: "close" | "minimize";
   /** Muted line under a hairline at the bottom. */
   footer?: React.ReactNode;
   onMouseEnter?(): void;
@@ -44,6 +46,7 @@ export function StatusCard({
   wide = false,
   onDismiss,
   dismissLabel,
+  dismissIcon = "close",
   footer,
   onMouseEnter,
   onMouseLeave,
@@ -75,7 +78,11 @@ export function StatusCard({
             aria-label={dismissLabel}
             onClick={onDismiss}
           >
-            <X size={14} strokeWidth={1.8} />
+            {dismissIcon === "minimize" ? (
+              <Minus size={14} strokeWidth={1.8} />
+            ) : (
+              <X size={14} strokeWidth={1.8} />
+            )}
           </button>
         )}
       </header>

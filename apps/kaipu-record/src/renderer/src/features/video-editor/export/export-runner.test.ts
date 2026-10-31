@@ -11,7 +11,6 @@ import {
   dismissReadyExport,
   exportTitle,
   getExportSnapshot,
-  hideExportProgress,
   isVideoExportBusy,
   retryVideoExport,
   startVideoExport,
@@ -254,29 +253,22 @@ describe("export runner in the background (NIW2-586)", () => {
     expect(getExportSnapshot().job).not.toHaveProperty("destination");
   });
 
-  it("hiding the progress card leaves the export running, and a new export shows it again", async () => {
-    await startVideoExport(args(), t);
-    hideExportProgress();
-    expect(getExportSnapshot()).toMatchObject({ status: "exporting", progressHidden: true });
-    expect(isVideoExportBusy()).toBe(true);
-    cancelVideoExport();
-    await startVideoExport(args(), t);
-    expect(getExportSnapshot().progressHidden).toBe(false);
-  });
-
-  it("a hidden export that fails shows its error", async () => {
-    await startVideoExport(args(), t);
-    hideExportProgress();
-    workers[0]!.onmessage?.({ data: { type: "error", message: "boom" } } as MessageEvent);
-    expect(getExportSnapshot()).toMatchObject({ status: "error", progressHidden: false });
-  });
-
   it("notes the finished copy as not seen yet", async () => {
-    await startVideoExport(args(), t);
-    hideExportProgress();
+    await startVideoExport(args({ destination: "github" }), t);
     finish(workers[0]!);
     await waitFor(() => expect(getExportSnapshot().ready).not.toBeNull());
-    expect(getReadyCopies().copies).toEqual([{ assetId: "asset-new", announced: false }]);
+    // With what its Library card shows: where it goes and the encoded size.
+    const job = getExportSnapshot().job ?? getExportSnapshot().ready!.job;
+    expect(getReadyCopies().copies).toEqual([
+      {
+        assetId: "asset-new",
+        announced: false,
+        card: true,
+        destination: "github",
+        width: job.width,
+        height: job.height,
+      },
+    ]);
   });
 
   it("a cancelled export notes nothing", async () => {
