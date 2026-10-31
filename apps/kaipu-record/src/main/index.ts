@@ -896,6 +896,7 @@ app.whenReady().then(() => {
   // an action closes it, then shows the main window and lets its renderer navigate.
   recordingReady = createRecordingReadyWindow({
     recordingDisplayId: () => hub?.lastTakeDisplayId() ?? null,
+    isMainSender: (sender) => sender === mainWindow?.webContents,
     openInMain: (handOff) => {
       showMainWindow();
       sendToRenderer(IPC_CHANNELS.recordingReadyOpen, handOff);

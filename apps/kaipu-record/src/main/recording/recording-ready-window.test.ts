@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Rectangle } from "electron";
 import { IPC_CHANNELS } from "@shared/types/ipc";
 import type { RecordingReadyPayload } from "@shared/types/recording-ready";
@@ -12,6 +12,7 @@ const {
   READY_WINDOW_WIDTH,
   READY_DEFAULT_CARD_HEIGHT,
   READY_WINDOW_PADDING,
+  READY_LOAD_TIMEOUT_MS,
 } = await import("./recording-ready-window");
 
 const PRIMARY = { id: 1, workArea: { x: 0, y: 25, width: 1512, height: 957 } };
@@ -26,7 +27,13 @@ const FRESH: RecordingReadyPayload = {
 };
 
 class FakeWindow {
-  webContents = { send: vi.fn() };
+  contentsListeners = new Map<string, () => void>();
+  webContents = {
+    send: vi.fn(),
+    on: vi.fn((event: string, listener: () => void) => {
+      this.contentsListeners.set(event, listener);
+    }),
+  };
   setAlwaysOnTop = vi.fn();
   setContentProtection = vi.fn();
   setVisibleOnAllWorkspaces = vi.fn();
@@ -44,9 +51,13 @@ class FakeWindow {
   });
 }
 
-function setup(options: { recordedOn?: number | null; createFails?: boolean } = {}) {
+const MAIN_SENDER = { main: true };
+
+function setup(
+  options: { recordedOn?: number | null; createFails?: boolean; loadRejects?: boolean } = {},
+) {
   const listeners = new Map<string, (event: { sender: unknown }, payload?: unknown) => void>();
-  const handlers = new Map<string, (event: unknown, payload?: unknown) => unknown>();
+  const handlers = new Map<string, (event: { sender: unknown }, payload?: unknown) => unknown>();
   const windows: FakeWindow[] = [];
   const created: Array<Record<string, unknown>> = [];
   const openInMain = vi.fn();
@@ -58,7 +69,8 @@ function setup(options: { recordedOn?: number | null; createFails?: boolean } = 
       windows.push(window);
       return window;
     },
-    load: vi.fn(),
+    load: vi.fn(() => (options.loadRejects ? Promise.reject(new Error("ERR_FAILED")) : undefined)),
+    isMainSender: (sender) => sender === MAIN_SENDER,
     ipc: {
       on: (channel, listener) => listeners.set(channel, listener),
       handle: (channel, listener) => handlers.set(channel, listener),
@@ -76,8 +88,8 @@ function setup(options: { recordedOn?: number | null; createFails?: boolean } = 
     listeners.get(channel)?.({ sender: window().webContents }, payload);
   const cardReady = (): void => fromCard(IPC_CHANNELS.recordingReadyCardReady);
   const press = (action: unknown): void => fromCard(IPC_CHANNELS.recordingReadyAction, action);
-  const askFromMainWindow = (payload: unknown): unknown =>
-    handlers.get(IPC_CHANNELS.recordingReadyShow)?.({}, payload);
+  const askFromMainWindow = (payload: unknown, sender: unknown = MAIN_SENDER): unknown =>
+    handlers.get(IPC_CHANNELS.recordingReadyShow)?.({ sender }, payload);
   return {
     ready,
     windows,
@@ -112,9 +124,11 @@ describe("readyWindowBounds", () => {
 });
 
 describe("RecordingReadyWindow", () => {
+  afterEach(() => vi.useRealTimers());
+
   it("creates a frameless, transparent, always-on-top panel that never takes focus by itself", () => {
     const { ready, created, window } = setup();
-    expect(ready.show(FRESH)).toBe(true);
+    void ready.show(FRESH);
     expect(created).toHaveLength(1);
     expect(created[0]).toMatchObject({
       type: "panel",
@@ -134,7 +148,7 @@ describe("RecordingReadyWindow", () => {
 
   it("shows inactive on the recorded display once the card is ready, joining every Space", () => {
     const { ready, window, cardReady } = setup({ recordedOn: 2 });
-    ready.show(FRESH);
+    void ready.show(FRESH);
     cardReady();
     expect(window().webContents.send).toHaveBeenCalledWith(
       IPC_CHANNELS.recordingReadyPayload,
@@ -152,7 +166,7 @@ describe("RecordingReadyWindow", () => {
 
   it("falls back to the display under the pointer when the take's display is unknown", () => {
     const { ready, window, cardReady } = setup({ recordedOn: 99 });
-    ready.show(FRESH);
+    void ready.show(FRESH);
     cardReady();
     expect(window().setBounds).toHaveBeenLastCalledWith(
       readyWindowBounds(PRIMARY.workArea, READY_DEFAULT_CARD_HEIGHT),
@@ -161,7 +175,7 @@ describe("RecordingReadyWindow", () => {
 
   it("fits the window to the height the card reports", () => {
     const { ready, window, cardReady, fromCard } = setup();
-    ready.show(FRESH);
+    void ready.show(FRESH);
     cardReady();
     fromCard(IPC_CHANNELS.recordingReadyResize, { height: 248.4 });
     expect(window().setBounds).toHaveBeenLastCalledWith(readyWindowBounds(PRIMARY.workArea, 248.4));
@@ -172,12 +186,12 @@ describe("RecordingReadyWindow", () => {
     expect(window().setBounds).not.toHaveBeenCalled();
   });
 
-  it("a new recording replaces the card in the same window", () => {
+  it("a new recording replaces the card in the same window", async () => {
     const { ready, windows, window, cardReady } = setup();
-    ready.show(FRESH);
+    void ready.show(FRESH);
     cardReady();
     const next = { ...FRESH, assetId: "asset-2" };
-    expect(ready.show(next)).toBe(true);
+    await expect(ready.show(next)).resolves.toBe(true);
     expect(windows).toHaveLength(1);
     expect(window().webContents.send).toHaveBeenLastCalledWith(
       IPC_CHANNELS.recordingReadyPayload,
@@ -185,25 +199,77 @@ describe("RecordingReadyWindow", () => {
     );
   });
 
-  it("is asked for by the main window through `recording-ready:show`, which validates", () => {
-    const { askFromMainWindow, windows } = setup();
+  it("is asked for by the main window through `recording-ready:show`, which validates", async () => {
+    const { askFromMainWindow, windows, cardReady } = setup();
     expect(askFromMainWindow({ assetId: "" })).toBe(false);
     expect(windows).toHaveLength(0);
-    expect(askFromMainWindow(FRESH)).toBe(true);
+    const shown = askFromMainWindow(FRESH);
     expect(windows).toHaveLength(1);
+    // True once the card is on screen, not before.
+    cardReady();
+    await expect(shown).resolves.toBe(true);
   });
 
-  it("answers false when the window cannot be created, so the page keeps its in-app card", () => {
+  it("refuses any other renderer, which cannot float a card", () => {
+    const { askFromMainWindow, windows } = setup();
+    expect(askFromMainWindow(FRESH, { someOtherWindow: true })).toBe(false);
+    expect(windows).toHaveLength(0);
+  });
+
+  it("answers false when the window cannot be created, so the page keeps its in-app card", async () => {
     const { ready, askFromMainWindow } = setup({ createFails: true });
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(ready.show(FRESH)).toBe(false);
-    expect(askFromMainWindow(FRESH)).toBe(false);
+    await expect(ready.show(FRESH)).resolves.toBe(false);
+    await expect(askFromMainWindow(FRESH)).resolves.toBe(false);
     error.mockRestore();
+  });
+
+  it("answers false when the card never reports ready, and drops the silent window", async () => {
+    vi.useFakeTimers();
+    const { ready, window, windows } = setup();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const shown = ready.show(FRESH);
+    vi.advanceTimersByTime(READY_LOAD_TIMEOUT_MS);
+    await expect(shown).resolves.toBe(false);
+    expect(window().destroy).toHaveBeenCalled();
+    expect(window().showInactive).not.toHaveBeenCalled();
+    // The next card gets a fresh window.
+    void ready.show(FRESH);
+    expect(windows).toHaveLength(2);
+    error.mockRestore();
+  });
+
+  it("answers false when the page fails to load", async () => {
+    const { ready, window } = setup();
+    const shown = ready.show(FRESH);
+    window().contentsListeners.get("did-fail-load")?.();
+    await expect(shown).resolves.toBe(false);
+    expect(window().destroy).toHaveBeenCalled();
+  });
+
+  it("answers false when loading the page rejects", async () => {
+    const { ready } = setup({ loadRejects: true });
+    await expect(ready.show(FRESH)).resolves.toBe(false);
+  });
+
+  it("a renderer that died is replaced, never shown blank", async () => {
+    const { ready, windows, cardReady } = setup();
+    const first = ready.show(FRESH);
+    cardReady();
+    await expect(first).resolves.toBe(true);
+    const dead = windows[0]!;
+    dead.contentsListeners.get("render-process-gone")?.();
+    dead.showInactive.mockClear();
+
+    void ready.show(FRESH);
+
+    expect(windows).toHaveLength(2);
+    expect(dead.showInactive).not.toHaveBeenCalled();
   });
 
   it("✕ (and Escape, the same action) closes it and opens nothing", () => {
     const { ready, window, cardReady, press, openInMain } = setup();
-    ready.show(FRESH);
+    void ready.show(FRESH);
     cardReady();
     press({ kind: "dismiss" });
     expect(window().hide).toHaveBeenCalledTimes(1);
@@ -234,7 +300,7 @@ describe("RecordingReadyWindow", () => {
     [{ kind: "open" }, { target: "detail", assetId: "asset-1" }],
   ])("%o closes the card first, then opens the main window on %o", (action, handOff) => {
     const { ready, window, cardReady, press, openInMain } = setup();
-    ready.show(FRESH);
+    void ready.show(FRESH);
     cardReady();
     press(action);
     expect(window().hide).toHaveBeenCalledTimes(1);
@@ -246,7 +312,7 @@ describe("RecordingReadyWindow", () => {
 
   it("ignores Edit first when the card did not offer it, and malformed or foreign presses", () => {
     const { ready, cardReady, press, listeners, openInMain, window } = setup();
-    ready.show({ ...FRESH, canEdit: false });
+    void ready.show({ ...FRESH, canEdit: false });
     cardReady();
     press({ kind: "pick", destination: "square" });
     press({ kind: "launch" });
@@ -258,15 +324,15 @@ describe("RecordingReadyWindow", () => {
     expect(openInMain).not.toHaveBeenCalled();
   });
 
-  it("recreates a window the system closed, and never shows again after quit", () => {
+  it("recreates a window the system closed, and never shows again after quit", async () => {
     const { ready, windows, window } = setup();
-    ready.show(FRESH);
+    void ready.show(FRESH);
     window().closed?.();
-    ready.show(FRESH);
+    void ready.show(FRESH);
     expect(windows).toHaveLength(2);
     ready.destroy();
     expect(window().destroy).toHaveBeenCalled();
-    expect(ready.show(FRESH)).toBe(false);
+    await expect(ready.show(FRESH)).resolves.toBe(false);
     expect(windows).toHaveLength(2);
   });
 });

@@ -14,17 +14,29 @@ import {
 
 /** The card's width (`StatusCard` wide), in DIP. */
 export const READY_CARD_WIDTH = 420;
-/** Transparent room around the card, so its shadow is not clipped by the window. */
+/**
+ * Transparent room around the card. The floating card's own shadow is sized to fit inside it
+ * (`recording-ready-card.module.css`), so the window does not clip it.
+ */
 export const READY_WINDOW_PADDING = 16;
 export const READY_WINDOW_WIDTH = READY_CARD_WIDTH + 2 * READY_WINDOW_PADDING;
 /** Until the card reports its height: about its size with every row. */
 export const READY_DEFAULT_CARD_HEIGHT = 290;
 /** Gap between the card (not the window) and the work area's top and right edges. */
 export const READY_CARD_MARGIN = 18;
+/**
+ * How long a new window's renderer has to report ready before `show()` gives up and the
+ * main window shows its in-app card instead.
+ */
+export const READY_LOAD_TIMEOUT_MS = 3000;
 
 /** The slice of `BrowserWindow` the card uses, so tests can pass a fake. */
 export interface ReadyWindow {
-  readonly webContents: { send(channel: string, payload: unknown): void };
+  readonly webContents: {
+    send(channel: string, payload: unknown): void;
+    /** A load that failed, or a renderer that died: the card cannot paint. */
+    on(event: "did-fail-load" | "render-process-gone", listener: () => void): void;
+  };
   setAlwaysOnTop(flag: boolean, level: "floating"): void;
   setContentProtection(enable: boolean): void;
   setVisibleOnAllWorkspaces(
@@ -44,11 +56,16 @@ type IpcListener = (event: { sender: unknown }, payload?: unknown) => void;
 
 export interface RecordingReadyDeps {
   createWindow(options: BrowserWindowConstructorOptions): ReadyWindow;
-  /** Load `?window=recording-ready` into the window. */
-  load(window: ReadyWindow): void;
+  /** Load `?window=recording-ready` into the window; a rejection counts as a failed load. */
+  load(window: ReadyWindow): Promise<unknown> | void;
+  /** Whether an IPC sender is the main window's renderer, the only one that may ask. */
+  isMainSender(sender: unknown): boolean;
   ipc: {
     on(channel: string, listener: IpcListener): void;
-    handle(channel: string, listener: (event: unknown, payload?: unknown) => unknown): void;
+    handle(
+      channel: string,
+      listener: (event: { sender: unknown }, payload?: unknown) => unknown,
+    ): void;
   };
   screen: {
     getAllDisplays(): Display[];
@@ -99,9 +116,15 @@ export class RecordingReadyWindow {
   private cardHeight = READY_DEFAULT_CARD_HEIGHT;
   /** `destroy()` ran: the app is quitting, so no window is created again. */
   private disposed = false;
+  /** The `show()` waiting for a new window's renderer: settled by card-ready or a failure. */
+  private pending: { resolve(shown: boolean): void; timer: ReturnType<typeof setTimeout> } | null =
+    null;
 
   constructor(private readonly deps: RecordingReadyDeps) {
-    deps.ipc.handle(IPC_CHANNELS.recordingReadyShow, (_event, payload) => {
+    deps.ipc.handle(IPC_CHANNELS.recordingReadyShow, (event, payload) => {
+      // Only the main window asks: no other renderer (this card, the capture toast, the
+      // overlays) may float a card for an arbitrary recording.
+      if (!deps.isMainSender(event.sender)) return false;
       const parsed = parseRecordingReadyPayload(payload);
       return parsed ? this.show(parsed) : false;
     });
@@ -109,6 +132,7 @@ export class RecordingReadyWindow {
       if (!this.isOwnSender(event.sender)) return;
       this.rendererReady = true;
       this.present();
+      this.settle(true);
     });
     deps.ipc.on(IPC_CHANNELS.recordingReadyResize, (event, payload) => {
       if (!this.isOwnSender(event.sender)) return;
@@ -127,23 +151,37 @@ export class RecordingReadyWindow {
   }
 
   /**
-   * Show `payload` on the recorded display, replacing whatever card is up. True when the
-   * window exists (it paints once its renderer reports ready); false when it could not be
-   * created, so the main window shows its in-app card instead.
+   * Show `payload` on the recorded display, replacing whatever card is up. Resolves true once
+   * the card is on screen; false when the window could not be created, its renderer failed to
+   * load or died, or did not report ready within `READY_LOAD_TIMEOUT_MS` — the main window
+   * then shows its in-app card instead, so the card is never lost.
    */
-  show(payload: RecordingReadyPayload): boolean {
-    if (this.disposed) return false;
+  show(payload: RecordingReadyPayload): Promise<boolean> {
+    if (this.disposed) return Promise.resolve(false);
     try {
       this.ensureWindow();
     } catch (error) {
       console.error("[recording-ready] could not create the floating window", error);
       this.window = null;
-      return false;
+      return Promise.resolve(false);
     }
     this.payload = payload;
     this.workArea = this.displayWorkArea();
-    this.present();
-    return true;
+    if (this.rendererReady) {
+      this.present();
+      return Promise.resolve(true);
+    }
+    // A newer card replaces an older one still waiting: the older one is not lost, it was
+    // superseded, so its page must not show it in-app either.
+    this.settle(true);
+    return new Promise<boolean>((resolve) => {
+      const window = this.window;
+      const timer = setTimeout(() => {
+        console.error("[recording-ready] the card's renderer never reported ready");
+        if (window) this.fail(window);
+      }, READY_LOAD_TIMEOUT_MS);
+      this.pending = { resolve, timer };
+    });
   }
 
   /** Hide the card (✕, Escape, or before an action hands off to the main window). */
@@ -157,6 +195,7 @@ export class RecordingReadyWindow {
   /** Quit: close, drop the window for good, never show again. */
   destroy(): void {
     this.disposed = true;
+    this.settle(false);
     this.close();
     if (this.window && !this.window.isDestroyed()) this.window.destroy();
     this.window = null;
@@ -210,9 +249,33 @@ export class RecordingReadyWindow {
       if (this.window !== window) return;
       this.window = null;
       this.rendererReady = false;
+      this.settle(false);
     });
+    window.webContents.on("did-fail-load", () => this.fail(window));
+    window.webContents.on("render-process-gone", () => this.fail(window));
     this.window = window;
-    this.deps.load(window);
+    void Promise.resolve(this.deps.load(window)).catch(() => this.fail(window));
+  }
+
+  /**
+   * The card cannot paint in `window`: drop the window, so the next `show()` creates a fresh
+   * one rather than `showInactive()`-ing a blank one, and answer a waiting `show()` false.
+   */
+  private fail(window: ReadyWindow): void {
+    if (this.window !== window) return;
+    this.window = null;
+    this.rendererReady = false;
+    this.payload = null;
+    if (!window.isDestroyed()) window.destroy();
+    this.settle(false);
+  }
+
+  private settle(shown: boolean): void {
+    const pending = this.pending;
+    if (!pending) return;
+    this.pending = null;
+    clearTimeout(pending.timer);
+    pending.resolve(shown);
   }
 
   /** Paint and show the current payload, once the renderer can receive it. */
@@ -250,7 +313,7 @@ export class RecordingReadyWindow {
 
 /** The production window: real `BrowserWindow`, `screen` and `ipcMain`. */
 export function createRecordingReadyWindow(
-  app: Pick<RecordingReadyDeps, "recordingDisplayId" | "openInMain">,
+  app: Pick<RecordingReadyDeps, "recordingDisplayId" | "openInMain" | "isMainSender">,
 ): RecordingReadyWindow {
   return new RecordingReadyWindow({
     ...app,
@@ -258,14 +321,13 @@ export function createRecordingReadyWindow(
     load: (window) => {
       const browserWindow = window as BrowserWindow;
       if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
-        void browserWindow.loadURL(
+        return browserWindow.loadURL(
           `${process.env["ELECTRON_RENDERER_URL"]}/?window=recording-ready`,
         );
-      } else {
-        void browserWindow.loadFile(join(__dirname, "../renderer/index.html"), {
-          search: "?window=recording-ready",
-        });
       }
+      return browserWindow.loadFile(join(__dirname, "../renderer/index.html"), {
+        search: "?window=recording-ready",
+      });
     },
     ipc: ipcMain,
     screen: {

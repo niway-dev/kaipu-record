@@ -1,10 +1,19 @@
 /*
  * The "Your video is ready" window: transparent, 452 DIP wide, the 420 px card inset by
- * 16 px so its shadow is not clipped (main/recording/recording-ready-window.ts). Main sizes
- * the window's height to this frame.
+ * 16 px (main/recording/recording-ready-window.ts). Main sizes the window's height to this
+ * frame.
  */
 .frame {
   display: flex;
   justify-content: flex-end;
   width: fit-content;
+}
+
+/*
+ * The in-app card's shadow (0 30px 80px -30px) reaches about 40 px below the card, past the
+ * window's 16 px padding, where it would end in a hard edge. Here it is sized to fit: 14 px
+ * below, 2 px at the sides. Doubled class so it wins over the card's own rule.
+ */
+.frame.frame > * {
+  box-shadow: 0 12px 28px -12px rgba(0, 0, 0, 0.7);
 }
