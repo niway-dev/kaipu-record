@@ -1,4 +1,4 @@
-export const LEGAL_VERSION = "2026-10-19";
+export const LEGAL_VERSION = "2026-10-30";
 export const LEGAL_CONTACT_EMAIL = "contacto@niway.dev";
 
 export const LEGAL_DOCUMENTS = {

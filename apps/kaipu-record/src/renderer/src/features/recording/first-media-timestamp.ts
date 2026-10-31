@@ -43,3 +43,19 @@ export async function waitForFirstMediaTimestamp(
   }
   return { rendererMs: fallbackMs, quality: "estimated" };
 }
+
+/**
+ * The first-media time once the output has stopped: `measured` when it is exact, else the
+ * private field read again. The live wait gives up after 3 s (a slow first frame) and settles
+ * for an estimate, but the field, once mediabunny sets it, stays set for the output's life, so
+ * a take that stops later can still record the exact time. Still the estimate when the field
+ * is absent or never filled.
+ */
+export function rereadFirstMediaTimestamp(
+  output: object,
+  measured: FirstMediaTimestamp,
+): FirstMediaTimestamp {
+  if (measured.quality === "exact") return measured;
+  const seconds = (output as OutputProbe)._firstMediaStreamTimestamp;
+  return typeof seconds === "number" ? { rendererMs: seconds * 1000, quality: "exact" } : measured;
+}

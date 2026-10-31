@@ -53,10 +53,23 @@ describe("open-in-editor", () => {
     expect(videoSourceFor({ ...recording, durationSeconds: 0 })).toBeNull();
   });
 
-  it("builds a local image source carrying the thumbnail's version token", () => {
+  it("carries the webcam track into the video editor's input", () => {
+    const webcam = {
+      startOffsetMs: 4,
+      offsetQuality: "exact",
+      width: 1280,
+      height: 720,
+      fps: 30,
+    } as const;
+    expect(videoSourceFor({ ...recording, webcam })?.webcam).toEqual(webcam);
+    expect(videoSourceFor(recording)).not.toHaveProperty("webcam");
+  });
+
+  it("builds a local image source carrying the thumbnail's version token and the identity", () => {
     expect(imageSourceFor(screenshot)).toEqual({
       kind: "local",
       id: "local-2",
+      assetId: screenshot.assetId,
       title: "Shot",
       version: 42,
     });
