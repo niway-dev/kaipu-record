@@ -927,7 +927,6 @@
     "barOverLimit": "supera el límite de 10 MB del plan gratuito de GitHub",
     "barLighter": "{percent}% más liviana",
     "barNotLighter": "no más liviana",
-    "barLabel": "Tu grabación {from}, la copia {to}",
     "barPicture": "{width} × {height} · el texto sigue legible",
     "keepPicture": "{width} × {height} · sonido tal como se grabó · {size}",
     "exportAction": "Exportar para {destination} · {size}",

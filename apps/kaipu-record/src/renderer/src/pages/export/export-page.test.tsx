@@ -238,6 +238,11 @@ describe("ExportPage", () => {
     expect(screen.getByText(/^What you send is what they watch/)).toBeVisible();
     expect(screen.getByText("Original 119 MB")).toBeVisible();
     expect(screen.getByText(/over GitHub's 10 MB free-plan limit$/)).toBeVisible();
+    // The verdict is read out: no image role swallows the bar's text.
+    expect(
+      screen.getByText(/over GitHub's 10 MB free-plan limit$/).closest("[role='img']"),
+    ).toBeNull();
+    expect(screen.queryByRole("img", { name: /Your recording/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /^Export for GitHub · Jira · ~/ }));
     expect(startArgs()).toMatchObject({ presetId: "light", destination: "github" });
   });

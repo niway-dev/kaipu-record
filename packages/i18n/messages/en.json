@@ -927,7 +927,6 @@
     "barOverLimit": "over GitHub's 10 MB free-plan limit",
     "barLighter": "{percent}% lighter",
     "barNotLighter": "not lighter",
-    "barLabel": "Your recording {from}, the copy {to}",
     "barPicture": "{width} × {height} · text stays readable",
     "keepPicture": "{width} × {height} · sound as recorded · {size}",
     "exportAction": "Export for {destination} · {size}",

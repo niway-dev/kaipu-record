@@ -306,11 +306,9 @@ function SizeBarCard({
           : t("barNotLighter");
   const tone = limited ? (plan.underGithubFreeLimit ? "fits" : "over") : plan.direction;
   return (
-    <section
-      className={styles.card}
-      role="img"
-      aria-label={t("barLabel", { from: formatMB(sourceSizeBytes), to: size })}
-    >
+    // Plain text, no role="img": an image role would make the verdict ("over GitHub's 10 MB
+    // free-plan limit", "N% lighter") presentational, and screen readers would miss it.
+    <section className={styles.card}>
       <div className={styles.barLabels}>
         <span className={styles.barOriginal}>
           {t("barOriginal", { size: formatMB(sourceSizeBytes) })}
