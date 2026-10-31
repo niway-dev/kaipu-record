@@ -6,6 +6,7 @@ import { DEFAULT_SETTINGS } from "@shared/types";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import { StatusStackProvider } from "@renderer/features/status-cards/status-stack";
 import { LibraryDetailPage } from "./library-detail-page";
+import { __resetFloatingReadyCardForTests } from "@renderer/features/recording-ready/use-floating-ready-card";
 
 // The banner and the post-recording card read the file through mediabunny; here only the
 // facts it returns matter.
@@ -835,6 +836,8 @@ describe("LibraryDetailPage — your video is ready (NIW2-584)", () => {
   }
 
   beforeEach(() => {
+    // Every test's router starts on the same history key; let each one ask again.
+    __resetFloatingReadyCardForTests();
     window.electronAPI.showRecordingReady = vi.fn(async () => false);
     window.electronAPI.onLibraryChanged = () => () => {};
     window.electronAPI.listLibraryItems = vi.fn(async () => ({

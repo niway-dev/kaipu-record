@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { RecordingReadyPayload } from "@shared/types/recording-ready";
 
 /** One arrival on a recording's page: `key` is its history entry, so a revisit is a new one. */
@@ -13,15 +13,26 @@ export interface FloatingReadyRequest {
  * then shows the same card in its status stack instead, so the card is never shown twice
  * and never lost.
  */
+/**
+ * History entries already asked for. Module-wide, not a ref: Back from Export or the editor
+ * remounts the page on the same entry (same key, `fromRecording` still in its state), and a
+ * ref would reset with the page and float a second card. It also covers StrictMode's second
+ * effect run.
+ */
+const askedKeys = new Set<string>();
+
+/** Forget every asked entry, so each test starts clean. */
+export function __resetFloatingReadyCardForTests(): void {
+  askedKeys.clear();
+}
+
 export function useFloatingReadyCard(request: FloatingReadyRequest | null): { inApp: boolean } {
-  // A ref, so StrictMode's second effect run does not ask again.
-  const asked = useRef<string | null>(null);
   const [fallbackFor, setFallbackFor] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!request || asked.current === request.key) return;
+    if (!request || askedKeys.has(request.key)) return;
     const { key, payload } = request;
-    asked.current = key;
+    askedKeys.add(key);
     const fallBack = (): void => setFallbackFor(key);
     window.electronAPI.showRecordingReady(payload).then((shown) => {
       if (!shown) fallBack();
