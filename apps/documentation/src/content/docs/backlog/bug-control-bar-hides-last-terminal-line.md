@@ -8,6 +8,10 @@ description: "Owner report: recording the terminal, the last line is not capture
 > **Status: 🔵 Reported, hypothesis unverified** (2026-09-23). Owner: "when I record the
 > terminal the last line of the terminal is not recorded, as if there were something
 > there."
+>
+> _2026-10-30:_ the [webcam track design](/specs/2026-10-30-webcam-track-design/#35-task-0--the-exclusion-spike)
+> settles this hypothesis as part of its task 0: the same takes check the pixels under the
+> control bar for a blank patch. Record the outcome here when the owner runs it.
 
 ## Hypothesis
 

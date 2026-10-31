@@ -4,7 +4,7 @@ import { useTranslations } from "@kaipu/i18n";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { formatSize } from "@renderer/features/library/format";
 import type { ExportPresetId } from "@renderer/features/video-editor/export/export-presets";
-import { WHOLE_RECORDING_FINGERPRINT } from "@renderer/features/video-editor/export/export-reuse";
+import { isWholeFingerprint } from "@renderer/features/video-editor/export/export-reuse";
 import { exportEtaSeconds } from "@renderer/features/video-editor/export/export-size";
 import type { ExportRunnerSnapshot } from "@renderer/features/video-editor/export/export-runner";
 import { destinationOfPreset } from "../destinations";
@@ -132,7 +132,7 @@ export function MasterCopiesPanel({
 /** The preset of a copy made for a destination; null for an editor export, a GIF or an older file. */
 function destinationPresetOf(copy: LibraryVideo): ExportPresetId | null {
   if (copy.kind !== "recording" || !copy.export) return null;
-  return copy.export.fingerprint === WHOLE_RECORDING_FINGERPRINT ? copy.export.preset : null;
+  return isWholeFingerprint(copy.export.fingerprint ?? undefined) ? copy.export.preset : null;
 }
 
 /** The destination's tile; a plain film (or GIF) tile for a copy that has no destination. */

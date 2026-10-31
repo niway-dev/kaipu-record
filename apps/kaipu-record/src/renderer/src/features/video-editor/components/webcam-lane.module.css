@@ -1,0 +1,66 @@
+/* Same geometry as the zoom lane, so the two read as one family. */
+.lane {
+  position: relative;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+}
+
+.block {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  min-width: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 4px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 35%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-primary) 15%, transparent);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+/* Hidden = striped (spec § 6): the stretch where the face is gone reads as a gap. */
+.hidden {
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--text-muted) 22%, transparent) 0 4px,
+    transparent 4px 8px
+  );
+  border-color: color-mix(in srgb, var(--text-muted) 45%, transparent);
+}
+
+.selected {
+  border-color: var(--accent-primary);
+  z-index: 1;
+}
+
+.block.selected:not(.hidden) {
+  background: color-mix(in srgb, var(--accent-primary) 32%, transparent);
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.icon {
+  flex-shrink: 0;
+}
+
+.handle {
+  position: absolute;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--accent-primary);
+  cursor: ew-resize;
+  touch-action: none;
+  z-index: 2;
+}

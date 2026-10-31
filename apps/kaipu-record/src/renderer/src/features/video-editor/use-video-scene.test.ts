@@ -2,6 +2,20 @@ import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { initialScene } from "./scene";
 import { useVideoScene } from "./use-video-scene";
+import {
+  addWebcamSegment,
+  removeWebcamSegment,
+  setWebcamLayout,
+  updateWebcamSegment,
+} from "./webcam/webcam-edits";
+
+const WEBCAM_TRACK = {
+  startOffsetMs: 0,
+  offsetQuality: "exact",
+  width: 1280,
+  height: 720,
+  fps: 30,
+} as const;
 
 describe("useVideoScene", () => {
   it("commit creates one undo step; undo/redo walk history", () => {
@@ -96,5 +110,71 @@ describe("useVideoScene", () => {
     // Undo has nothing left to walk back to — the scene stays exactly as it was.
     act(() => result.current.undo());
     expect(result.current.scene).toBe(afterCommit);
+  });
+});
+
+describe("useVideoScene — webcam edits", () => {
+  const open = () => renderHook(() => useVideoScene(initialScene(60, WEBCAM_TRACK)));
+
+  it("undoes and redoes layout, add, update and remove as one step each", () => {
+    const { result } = open();
+    const seeded = result.current.scene;
+
+    act(() => result.current.commit(setWebcamLayout(result.current.scene, { shape: "rounded" })));
+    const afterLayout = result.current.scene;
+    let id: string | null = null;
+    act(() => {
+      const added = addWebcamSegment(
+        result.current.scene,
+        { start: 10, end: 20, mode: "override", layout: { size: 0.4 } },
+        60,
+      );
+      id = added.id;
+      result.current.commit(added.scene);
+    });
+    act(() =>
+      result.current.commit(updateWebcamSegment(result.current.scene, id!, { mode: "hidden" })),
+    );
+    act(() => result.current.commit(removeWebcamSegment(result.current.scene, id!)));
+    expect(result.current.scene.webcam?.segments).toEqual([]);
+
+    act(() => result.current.undo()); // the removal
+    expect(result.current.scene.webcam?.segments[0]).toMatchObject({ id, mode: "hidden" });
+    act(() => result.current.undo()); // the update
+    expect(result.current.scene.webcam?.segments[0]).toMatchObject({ id, mode: "override" });
+    act(() => result.current.undo()); // the add
+    expect(result.current.scene).toBe(afterLayout);
+    act(() => result.current.undo()); // the layout
+    expect(result.current.scene).toBe(seeded);
+    expect(result.current.canUndo).toBe(false);
+
+    act(() => result.current.redo());
+    expect(result.current.scene.webcam?.layout.shape).toBe("rounded");
+  });
+
+  it("a no-op webcam edit pushes no history entry and does not make the editor dirty", () => {
+    const { result } = open();
+    act(() => result.current.commit(setWebcamLayout(result.current.scene, { mirrored: true })));
+    act(() => result.current.commit(setWebcamLayout(result.current.scene, {})));
+    expect(result.current.canUndo).toBe(false);
+    expect(result.current.dirty).toBe(false);
+  });
+
+  it("dragging the bubble collapses into one undo step", () => {
+    const { result } = open();
+    const base = result.current.scene;
+    act(() => result.current.beginInteract());
+    for (const x of [0.2, 0.4, 0.6]) {
+      act(() =>
+        result.current.updateLive(
+          setWebcamLayout(result.current.scene, { position: { x, y: 0.5 } }),
+        ),
+      );
+    }
+    act(() => result.current.endInteract());
+    expect(result.current.scene.webcam?.layout.position).toEqual({ x: 0.6, y: 0.5 });
+    act(() => result.current.undo());
+    expect(result.current.scene).toBe(base);
+    expect(result.current.canUndo).toBe(false);
   });
 });
