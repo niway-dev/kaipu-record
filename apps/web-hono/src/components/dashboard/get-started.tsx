@@ -19,7 +19,10 @@ import { AppleMark, GlowBox, WindowsMark, buttonProps, textLinkProps } from "./u
 export function GetStarted({
   os: forcedOs,
   withMark = true,
-}: { os?: DesktopOs; withMark?: boolean } = {}) {
+}: {
+  os?: DesktopOs;
+  withMark?: boolean;
+} = {}) {
   const t = useTranslations("dashboard");
   const [detected, setDetected] = useState<DesktopOs>("other");
 
