@@ -103,6 +103,7 @@ export default defineConfig({
             { slug: "backlog/video-editor-mute" },
             { slug: "backlog/gif-export" },
             { slug: "backlog/export-presets" },
+            { slug: "backlog/prepare-screen" },
             { slug: "backlog/editor-space-and-window-presets" },
             { slug: "backlog/capture-panel-latency" },
             { slug: "backlog/editor-title-input" },

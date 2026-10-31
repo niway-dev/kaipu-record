@@ -1,9 +1,15 @@
 ---
 title: "Video editor — export presets per destination"
-description: "NIW2-218: one export sheet grouped by intent — Balanced (recommended, 1080p · 24 fps · AVC quantizer 30), Light (the same at quantizer 33) for GitHub · Jira · Linear · Slack, YouTube, Reels · TikTok · Shorts, Feeds, Maximum quality — constant-quality tiers measured on screen text, 10 s keyframes, fast start. Exports run in the background with in-app progress and Ready to share cards; Share exports the whole recording from its library page."
+description: "NIW2-218: one export sheet grouped by intent — Balanced (recommended, 1080p · 24 fps · AVC quantizer 30), Light (the same at quantizer 33) for GitHub · Jira · Linear · Slack, YouTube (1440p / 4K), Reels · TikTok · Shorts, Feeds, Maximum quality — constant-quality tiers measured on screen text, 10 s keyframes, fast start. Exports run in the background with in-app progress and Ready to share cards; Share exports the whole recording from its library page."
 ---
 
 # Video editor — export presets per destination
+
+> **Superseded for sharing a recording (NIW2-578):** the recording page no longer opens this sheet.
+> Share, the "Recording saved" card and the heavy banner's target moved to
+> [Prepare — where is your video going?](./prepare-screen), a full screen built around
+> destinations, on `feature/niw2-578-prepare-screen` (not merged yet). The editor's Export still
+> uses the sheet described here, and the presets, estimates and background runner are unchanged.
 
 > **Status: 🟢 Ready to validate — stacked PRs on top of NIW2-217 (#266): #269 → #271 → #272 →
 > export quality → Share button → redesign → background export → quality tiers → quantizer
@@ -24,6 +30,8 @@ description: "NIW2-218: one export sheet grouped by intent — Balanced (recomme
 > 7. Quality tiers replace the size-capped Small-file rows (`feat/NIW2-218-quality-tiers`).
 > 8. Quantizer encoding: the tiers move to constant quality at 24 fps, every preset to 10 s
 >    keyframes, mediabunny to 1.61 (`feat/NIW2-218-quantizer-encoding`).
+> 9. YouTube 1440p / 4K (NIW2-564, **in progress** on `feat/niw2-564-youtube-1440-4k`, not
+>    shipped): see "YouTube 1440p / 4K" below.
 >
 > Unit, hook and component tests pass; real exports (WebCodecs in the worker, VideoToolbox rate
 > control, `ffprobe` on the outputs, playback in Safari/Chrome/QuickTime) still need a pass on the
@@ -46,21 +54,24 @@ from a "light copy" shortcut), and Enter exports it ("Export ~5.9 MB ↵").
 
 The internal preset ids and numbers:
 
-| Row                             | Output                                           | Rate control                                          | Notes                                                      |
-| ------------------------------- | ------------------------------------------------ | ----------------------------------------------------- | ---------------------------------------------------------- |
-| ⭐ **Balanced** (`balanced`)    | Source aspect, short side ≤ 1080, never upscaled | AVC quantizer 30, ≤ 24 fps (fallback 2.5 Mbps)        | Recommended default, estimated ~7 MB/min. AAC 128 kbps.    |
-| **Light** (`light`)             | Same as Balanced                                 | AVC quantizer 33, ≤ 24 fps (fallback 1.6 Mbps)        | Estimated ~5.7 MB/min. AAC 128 kbps.                       |
-| **YouTube 16:9**                | 1920×1080                                        | 8 Mbps ≤ 30 fps, 12 Mbps above                        | Always Fit, black padding. Keyframe every 2 s (see below). |
-| **Vertical 9:16**               | 1080×1920                                        | 8 / 12 Mbps                                           | Fill (default) or Fit with a blurred-frame padding.        |
-| **Square 1:1**                  | 1080×1080                                        | 4.5 / 6.75 Mbps (pixel-scaled)                        | Fit (default) or Fill.                                     |
-| **Maximum quality** (`maximum`) | Source's native size                             | mediabunny's `'high'` level as a bitrate (pre-preset) | Was "Original". Fast start.                                |
+| Row                                        | Output                                           | Rate control                                                | Notes                                                                                                 |
+| ------------------------------------------ | ------------------------------------------------ | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| ⭐ **Balanced** (`balanced`)               | Source aspect, short side ≤ 1080, never upscaled | AVC quantizer 30, ≤ 24 fps (fallback 2.5 Mbps)              | Recommended default, estimated ~7 MB/min. AAC 128 kbps.                                               |
+| **Light** (`light`)                        | Same as Balanced                                 | AVC quantizer 33, ≤ 24 fps (fallback 1.6 Mbps)              | Estimated ~5.7 MB/min. AAC 128 kbps.                                                                  |
+| **YouTube** (`youtube-1440`, `youtube-4k`) | 2560×1440 or 3840×2160 (selector on one row)     | 1440p: 16 Mbps ≤ 30 fps, 24 Mbps above; 2160p: 45 / 68 Mbps | Fit, black padding, source frame rate kept. Keyframe every 2 s. AAC 384 kbps. In progress (NIW2-564). |
+| **Vertical 9:16**                          | 1080×1920                                        | 8 / 12 Mbps                                                 | Fill (default) or Fit with a blurred-frame padding.                                                   |
+| **Square 1:1**                             | 1080×1080                                        | 4.5 / 6.75 Mbps (pixel-scaled)                              | Fit (default) or Fill.                                                                                |
+| **Maximum quality** (`maximum`)            | Source's native size                             | mediabunny's `'high'` level as a bitrate (pre-preset)       | Was "Original". Fast start.                                                                           |
 
 - Every preset but YouTube puts a keyframe every 10 s (mediabunny's default is 2 s). These are
   files to upload or attach, not streams, so the only cost is coarser seeking; on mostly static
   screen content the 2 s keyframes were most of the file. YouTube's upload guide asks for a short
   closed GOP and that preset targets a fixed bitrate anyway, so it keeps 2 s.
+- The old single `youtube` preset (fixed 1920×1080, 8 / 12 Mbps, AAC 128 kbps) is being replaced
+  by the 1440p / 4K row (NIW2-564, below).
 - Fixed canvases always output the exact preset size (upscaling a smaller source).
-- Audio on fixed presets is AAC 128 kbps at the source layout and sample rate.
+- Audio on Vertical and Square is AAC 128 kbps at the source layout and sample rate; YouTube uses
+  384 kbps (see below).
 - **Fill** crops a centred window of the composed (zoomed) view, so it follows the zoom camera.
 - Slides are always contained (Fit), never cropped.
 - Fit/Fill show only under the selected row.
@@ -77,13 +88,15 @@ The internal preset ids and numbers:
   export; nothing is remembered. It replaced the "last used" memory (`lastExportPreset` /
   `lastExportFraming`): settings files that still carry those keys load fine and drop them.
 - The export is a new library item with `derivedFromAssetId` and `exportPreset` in its sidecar; the
-  title suffix depends on the preset ("(edited)" for Balanced and Maximum, "(YouTube)",
+  title suffix depends on the preset ("(edited)" for Balanced and Maximum, "(YouTube)" for both YouTube variants,
   "(vertical)", "(square)", "(light)"). Older sidecars say `"original"` (read as `maximum`) or
   `"small-10"` / `"small-25"` (read as `light`), via `normalizeExportPresetId`.
 - "Already exported" compares the content fingerprint **plus the preset's encode revision**
   (`encodeFingerprint`, `ENCODE_REVISION`, now `q30-24fps-kfi10` / `q33-24fps-kfi10`): a
   Balanced or Light file from the bitrate tiers (15 fps), the old 30 fps · 3 Mbps Balanced, or an
-  old Small-file export now read as Light, is never offered as the new encode.
+  old Small-file export now read as Light, is never offered as the new encode. The same applies to
+  the legacy `"youtube"` id: a sidecar with it normalizes to `youtube-1440` for display but never
+  counts as "already exported", because the encode changed.
 
 ## Background exports and status cards
 
@@ -102,7 +115,7 @@ exporting “…”" instead of a sheet. Cards stack in the top-right corner of 
   under that name and cleans it on the next drag and on quit. Buttons: **View file** (the
   exported item's Library page), **Show in Finder**, **Done**. It replaces the old "Export saved"
   toast.
-- **Recording saved:** right after a recording over 10 MB, its page shows "Recording saved" with
+- **Recording saved** (replaced by Prepare's "Where is it going?" panel, NIW2-578): right after a recording over 10 MB, its page shows "Recording saved" with
   the Light estimate on a before/after bar ("~5.9 MB · fits GitHub", GitHub only when it fits)
   and **Share a light copy**, which opens the sheet on the Light row. Hides after 8 s (paused while hovered); Settings →
   Export quality → "Offer a light copy after recording" turns it off
@@ -117,6 +130,9 @@ the renderer to cancel (its writer session is aborted, no temp file left) and cl
 stops or 2 s.
 
 ## Share (export without the editor)
+
+> Replaced by [Prepare](./prepare-screen) (NIW2-578). The start logic below moved to
+> `features/prepare/use-prepare-copy.ts`; what it encodes is the same.
 
 **Share** is the primary button on the library item page of every local recording, raw or already
 an export, next to Edit video / Reveal / Delete. That page is also where a recording lands the
@@ -194,6 +210,32 @@ recording into an unreadable 852×480 at 245 kbps.
   rule ("no sooner than 1/fps after the last kept frame") halved anything slower than twice the
   cap: a 30 fps recording, the default, would have exported at 15 fps. Slides are synthesized at
   the cap.
+
+## YouTube 1440p / 4K (NIW2-564, in progress)
+
+> **Status: 🟡 In progress** on `feat/niw2-564-youtube-1440-4k`. Not shipped, not validated.
+
+The sheet's YouTube preset becomes one "YouTube" row with a **1440p / 4K** selector (preset ids
+`youtube-1440`, 2560×1440, and `youtube-4k`, 3840×2160). Fit with black padding, source frame
+rate kept, keyframe every 2 s, fast start.
+
+- **Bitrates** come from [YouTube's upload guide](https://support.google.com/youtube/answer/1722171),
+  SDR, top of the recommended range: 1440p 16 Mbps at ≤ 30 fps and 24 Mbps above; 2160p 45 and
+  68 Mbps. Audio is AAC 384 kbps, falling back to 256, 192 then 128 kbps if the encoder refuses.
+- **Default variant:** 4K when the source would be downscaled into 2560×1440, otherwise 1440p. The
+  user can override it.
+- **Smoothing:** slides drawn onto the canvas now use `imageSmoothingQuality = "high"` as well; the
+  fixed-canvas framer and the zoom crop already did, so this is not what changed the YouTube result.
+- **Size is not a concern** for YouTube files, so this row shows no amber heavy-file warning.
+- **Stays on mediabunny / WebCodecs** per ADR 0001: no ffmpeg in the build (libx264 is GPL).
+
+**Why.** YouTube re-encodes 1440p and 4K uploads at a much better quality than 1080p, even for
+viewers watching at 1080p. Evidence (owner, 2026-10-30): a 1916×1048 @ 48 fps screen recording
+looked soft on YouTube when uploaded at 1080p; the same video upscaled to 2560×1440 (ffmpeg
+lanczos, CRF 16) looked clearly sharper. That 1440p+ uploads get VP9/AV1 while 1080p stays on AVC
+is community knowledge (for example
+[this OBS forum thread](https://obsproject.com/forum/threads/youtube-choosing-its-own-encoders-how-to-get-the-best-quality-1080p.154105)),
+**not confirmed by YouTube**; the owner's comparison is a single recording judged by eye.
 
 ## Measured / to measure
 

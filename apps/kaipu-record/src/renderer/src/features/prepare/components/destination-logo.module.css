@@ -1,0 +1,34 @@
+.logo {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 27%;
+  color: #fff;
+  background: #2a2a30;
+}
+
+.logo[data-destination="youtube"] {
+  background: #e62117;
+}
+
+.logo[data-destination="vertical"] {
+  background: #c13584;
+}
+
+.logo[data-destination="square"] {
+  background: #0a66c2;
+}
+
+.logo[data-destination="github"] {
+  background: #24292f;
+}
+
+.logo[data-destination="chat"] {
+  background: #4a154b;
+}
+
+.logo[data-destination="more"] {
+  background: transparent;
+  color: var(--text-secondary);
+}
