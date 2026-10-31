@@ -163,11 +163,11 @@ describe("LibraryDetailPage", () => {
     expect(screen.queryByRole("button", { name: /^copy$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /delete/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /remove local download/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Send to…" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Send to YouTube" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Export a copy" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Where is it going?" })).toBeNull();
     // A screenshot is not a master: no tag, no copies.
     expect(screen.queryByText("Master · full quality")).toBeNull();
-    expect(screen.queryByRole("region", { name: "Copies from this master" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Copies from this original" })).toBeNull();
   });
 
   it("shows how a recording was captured in the metadata line", async () => {
@@ -211,7 +211,7 @@ describe("LibraryDetailPage", () => {
     expect(screen.getByTestId("capture-meta")).toHaveTextContent("IMPORTED");
   });
 
-  it("Send to… opens the Prepare screen with nothing preselected (NIW2-578, NIW2-585)", async () => {
+  it("puts the title in the top row with the way back and the master tag, never with the actions", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [exportedOnlyItem],
       vaultError: null,
@@ -220,13 +220,20 @@ describe("LibraryDetailPage", () => {
 
     const router = renderDetail("asset-b");
     await waitForLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "Send to…" }));
+    const title = screen.getByRole("heading", { level: 1, name: "Exported Recording" });
+    const back = screen.getByRole("button", { name: "Library" });
+    const row = back.parentElement!;
+    expect(row).toContainElement(title);
+    expect(within(row).getByText("Master · full quality")).toBeVisible();
+    expect(within(row).queryByRole("button", { name: "Delete" })).toBeNull();
+    // The resolution, once the file is read, joins the metadata line under it.
+    expect(await screen.findByTestId("dimensions-meta")).toHaveTextContent("2560 × 1440");
 
-    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
-    expect(router.state.location.search).toBe("");
+    fireEvent.click(back);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/library"));
   });
 
-  it("asks where it is going: YouTube and GitHub open Prepare on themselves, More on nothing", async () => {
+  it("before the first copy, asks where it is going: each card opens Export on its destination", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [exportedOnlyItem],
       vaultError: null,
@@ -235,14 +242,23 @@ describe("LibraryDetailPage", () => {
 
     const router = renderDetail("asset-b");
     await waitForLoaded();
-    const strip = () => screen.getByRole("region", { name: "Where is this going?" });
-    expect(within(strip()).getByText(/lighter for GitHub, bigger for YouTube/)).toBeVisible();
+    const panel = () => screen.getByRole("region", { name: "Where is it going?" });
+    expect(
+      within(panel()).getByText(
+        "Pick a place and we export a copy that fits it. The original stays as it is.",
+      ),
+    ).toBeVisible();
+    // Its cards are the action, so "Export a copy" waits until the panel is gone.
+    expect(screen.queryByRole("button", { name: "Export a copy" })).toBeNull();
     for (const [name, search] of [
-      ["Send to YouTube", "?to=youtube"],
-      ["Send to GitHub", "?to=github"],
-      ["More places", ""],
+      ["Export a copy for YouTube", "?to=youtube"],
+      ["Export a copy for Reels · TikTok · Shorts", "?to=vertical"],
+      ["Export a copy for LinkedIn · Feeds", "?to=square"],
+      ["Export a copy for GitHub · Jira · Linear", "?to=github"],
+      ["Export a copy for Slack · Discord · Email", "?to=chat"],
+      ["Export a copy for Archive copy", "?to=archive"],
     ] as const) {
-      fireEvent.click(within(strip()).getByRole("button", { name }));
+      fireEvent.click(within(panel()).getByRole("button", { name }));
       await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
       expect(router.state.location.search).toBe(search);
       await act(() => router.navigate("/library/asset-b"));
@@ -250,7 +266,7 @@ describe("LibraryDetailPage", () => {
     }
   });
 
-  it("tags the player as the master and says the original never changes", async () => {
+  it("each destination card shows the size of its copy: amber when uploaded, teal when light", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [exportedOnlyItem],
       vaultError: null,
@@ -259,12 +275,49 @@ describe("LibraryDetailPage", () => {
 
     renderDetail("asset-b");
     await waitForLoaded();
-    expect(screen.getByText("Master · full quality")).toBeVisible();
+    const card = (name: string) =>
+      within(screen.getByRole("region", { name: "Where is it going?" })).getByRole("button", {
+        name: `Export a copy for ${name}`,
+      });
+    // The archive copy is the recording itself; the others wait for the file to be read.
+    expect(within(card("Archive copy")).getByText(/MB$/)).toHaveAttribute("data-tone", "light");
+    await waitFor(() => expect(within(card("YouTube")).queryByText("…")).toBeNull());
+    expect(within(card("YouTube")).getByText(/~\d.* MB$/)).toHaveAttribute("data-tone", "upload");
+    expect(within(card("GitHub · Jira · Linear")).getByText(/~\d.* MB$/)).toHaveAttribute(
+      "data-tone",
+      "light",
+    );
+  });
+
+  it("Not now hides the panel and brings back Export a copy, which opens Export on nothing", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [exportedOnlyItem],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    const router = renderDetail("asset-b");
+    await waitForLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(screen.queryByRole("region", { name: "Where is it going?" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Export a copy" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
+    expect(router.state.location.search).toBe("");
+  });
+
+  it("tags the title and the player as the master and says the original never changes", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [exportedOnlyItem],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    renderDetail("asset-b");
+    await waitForLoaded();
+    expect(screen.getAllByText("Master · full quality")).toHaveLength(2);
     expect(screen.getByText("This is your original. It never changes.")).toBeVisible();
-    const copies = screen.getByRole("region", { name: "Copies from this master" });
-    expect(
-      within(copies).getByText("No copies yet. Each one you make shows up here."),
-    ).toBeVisible();
+    // Opened from the Library, not right after recording: no "Saved" notice.
+    expect(screen.queryByText("Saved to your Library.")).toBeNull();
   });
 
   it("Edit video lands on the recording's Editor URL", async () => {
@@ -428,13 +481,18 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     const link = await screen.findByRole("link", { name: /original take$/i });
     expect(link).toHaveAttribute("href", "/library/src");
 
+    cleanup();
     renderDetail("src");
     await waitForLoaded();
-    const copies = await screen.findByRole("region", { name: "Copies from this master" });
+    const copies = await screen.findByRole("region", { name: "Copies from this original" });
     expect(within(copies).getByRole("link", { name: /original take \(export\)/i })).toHaveAttribute(
       "href",
       "/library/exp",
     );
+    // With copies, the page lists them instead of asking where it is going.
+    expect(screen.queryByRole("region", { name: "Where is it going?" })).toBeNull();
+    expect(screen.getByText("1 copy")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Export a copy" })).toBeVisible();
   });
 
   it("names a copy made for a destination by its destination, and keeps the copy untagged", async () => {
@@ -460,14 +518,19 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     }));
     renderDetail("src");
     await waitForLoaded();
-    const copies = await screen.findByRole("region", { name: "Copies from this master" });
+    const copies = await screen.findByRole("region", { name: "Copies from this original" });
+    const row = within(copies).getByRole("link", { name: /^GitHub · Jira · Linear/ });
+    expect(row).toHaveAttribute("href", "/library/gh");
+    // The copy's picture size follows from the master's (2560 × 1440) and its preset.
+    expect(await within(row).findByText(/× \d+ · 9.0 MB$/)).toBeVisible();
     expect(
-      within(copies).getByRole("link", { name: /^GitHub · Jira · Linear · 9.0 MB/ }),
-    ).toHaveAttribute("href", "/library/gh");
+      within(copies).getByRole("button", { name: "Drag GitHub · Jira · Linear into another app" }),
+    ).toBeVisible();
 
+    cleanup();
     renderDetail("gh");
     await waitForLoaded();
-    expect(screen.getAllByText("Master · full quality")).toHaveLength(1);
+    expect(screen.queryByText("Master · full quality")).toBeNull();
   });
 
   it("says the source was deleted when the parent is not in the list", async () => {
@@ -628,7 +691,7 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     await waitForLoaded();
     expect(screen.queryByText(/it never changes/i)).toBeNull();
     expect(screen.queryByText("Master · full quality")).toBeNull();
-    expect(screen.queryByRole("region", { name: "Where is this going?" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Where is it going?" })).toBeNull();
   });
 });
 
@@ -646,7 +709,7 @@ describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
     probe.mockClear();
   });
 
-  it("over 25 MB: amber size, and the Light estimate in the strip, whose GitHub chip makes it", async () => {
+  it("over 25 MB: amber size, and the Light estimate in the panel, whose GitHub card makes it", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [withSize(119_000_000)],
       vaultError: null,
@@ -655,18 +718,23 @@ describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
     const router = renderDetail("asset-b");
     await waitForLoaded();
 
-    expect(screen.getByText("119 MB")).toHaveAttribute("data-heavy", "true");
+    expect(screen.getByText("119 MB", { selector: "[data-heavy]" })).toHaveAttribute(
+      "data-heavy",
+      "true",
+    );
     expect(screen.getByText("119 MB is heavy to send.")).toBeInTheDocument();
     // The Light row's estimate for 78 s, which fits GitHub's 100 MB.
     expect(
       await screen.findByText(/about 7.6 MB, small enough for GitHub or Jira/),
     ).toBeInTheDocument();
 
-    // Folded into "Where is this going?" (NIW2-585): no second banner, the chip is the action.
-    const strip = screen.getByRole("region", { name: "Where is this going?" });
-    expect(within(strip).getByText("119 MB is heavy to send.")).toBeVisible();
+    // Folded into "Where is it going?": no second banner, the GitHub card is the action.
+    const panel = screen.getByRole("region", { name: "Where is it going?" });
+    expect(within(panel).getByText("119 MB is heavy to send.")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Prepare a light copy →" })).toBeNull();
-    fireEvent.click(within(strip).getByRole("button", { name: "Send to GitHub" }));
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Export a copy for GitHub · Jira · Linear" }),
+    );
     await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
     expect(router.state.location.search).toBe("?to=github");
   });
@@ -680,13 +748,13 @@ describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
     const router = renderDetail("asset-b");
     await waitForLoaded();
 
-    expect(screen.queryByRole("region", { name: "Where is this going?" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Where is it going?" })).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: "Prepare a light copy →" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
     expect(router.state.location.search).toBe("?to=github");
   });
 
-  it("up to 25 MB: no banner, no amber, and the file isn't read on this page", async () => {
+  it("up to 25 MB: no banner and no amber", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [withSize(20_000_000)],
       vaultError: null,
@@ -696,8 +764,10 @@ describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
     await waitForLoaded();
 
     expect(screen.queryByText(/heavy to send/)).toBeNull();
-    expect(screen.getByText("20 MB")).toHaveAttribute("data-heavy", "false");
-    expect(probe).not.toHaveBeenCalled();
+    expect(screen.getByText("20 MB", { selector: "[data-heavy]" })).toHaveAttribute(
+      "data-heavy",
+      "false",
+    );
   });
 });
 
@@ -772,7 +842,7 @@ describe("LibraryDetailPage — your video is ready (NIW2-584)", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/editor/video/asset-b"));
   });
 
-  it("Open and ✕ close it and leave the user on the recording, Send to… still there", async () => {
+  it("Open and ✕ close it and leave the user on the recording, its question still there", async () => {
     window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
     for (const name of ["Open", "Dismiss"]) {
       const router = renderFresh(true);
@@ -780,7 +850,7 @@ describe("LibraryDetailPage — your video is ready (NIW2-584)", () => {
       fireEvent.click(within(card).getByRole("button", { name }));
       expect(screen.queryByRole("region", CARD)).toBeNull();
       expect(router.state.location.pathname).toBe("/library/asset-b");
-      expect(screen.getByRole("button", { name: "Send to…" })).toBeVisible();
+      expect(screen.getByRole("region", { name: "Where is it going?" })).toBeVisible();
       cleanup();
     }
   });
@@ -793,6 +863,21 @@ describe("LibraryDetailPage — your video is ready (NIW2-584)", () => {
     await waitForLoaded();
     await act(async () => {});
     expect(screen.queryByRole("region", CARD)).toBeNull();
+  });
+
+  it("right after recording, the page says it is saved and is the original, until ✕", async () => {
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    renderFresh(true);
+    await waitForLoaded();
+    const notice = screen.getByRole("status");
+    expect(notice).toHaveTextContent(
+      "Saved to your Library. This is the original — every copy you export is made from it and it never changes.",
+    );
+    // The notice says it, so the standing note waits.
+    expect(screen.queryByText("This is your original. It never changes.")).toBeNull();
+    fireEvent.click(within(notice).getByRole("button", { name: "Hide this notice" }));
+    expect(screen.queryByText("Saved to your Library.")).toBeNull();
+    expect(screen.getByText("This is your original. It never changes.")).toBeVisible();
   });
 
   it("not when the page was opened from the Library", async () => {
