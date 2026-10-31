@@ -59,4 +59,6 @@ the file with no bubble and no blank patch. Its outcome selects Plan A or B and 
 - Supersedes decision 6 of the [capture modes spec](/specs/2026-10-26-record-capture-modes-design/)
   (the bubble "recorded as part of the screen"); the bubble's shape, size, mirror and framing
   settings ([camera bubble](/backlog/camera-bubble-shape-and-size/)) become the layer's defaults.
-- Later: camera-only and split-screen scenes, background blur, layout transitions.
+- Later: camera-only and split-screen scenes ([camera-only clips](/backlog/camera-only-clips/)),
+  background blur. Layout transitions are designed in
+  [editor timeline v2](/specs/2026-10-31-editor-timeline-v2-design/).
