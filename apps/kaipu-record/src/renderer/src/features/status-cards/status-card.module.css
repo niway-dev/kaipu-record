@@ -12,6 +12,10 @@
   animation: pop 200ms ease;
 }
 
+.card[data-wide="true"] {
+  width: 420px;
+}
+
 @keyframes pop {
   from {
     opacity: 0;
@@ -43,6 +47,15 @@
   color: var(--accent-primary);
 }
 
+/* The icon is its own tile (a destination logo, the fox). */
+.icon[data-bare="true"] {
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
 .heading {
   flex: 1;
   min-width: 0;
@@ -62,6 +75,11 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.badge {
+  margin-top: 6px;
+  display: flex;
 }
 
 .dismiss {
@@ -105,6 +123,10 @@
   gap: var(--space-sm);
 }
 
+.actions[data-equal="true"] > * {
+  flex: 1;
+}
+
 .button {
   height: 36px;
   display: inline-flex;
@@ -141,6 +163,33 @@
 
 .button[data-variant="secondary"]:hover {
   background: var(--bg-card-hover);
+}
+
+.button[data-grow="true"] {
+  flex: 1;
+}
+
+.button[draggable="true"] {
+  cursor: grab;
+}
+
+.button[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* A quiet, word-only action: there when needed, never competing with the progress. */
+.button[data-variant="text"] {
+  height: auto;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.button[data-variant="text"]:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
 }
 
 .text {

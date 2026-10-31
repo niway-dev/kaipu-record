@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { Translator } from "@kaipu/i18n";
 import type { LocalRecording } from "@shared/types/library-storage";
+import type { DestinationId } from "@renderer/features/prepare/destinations";
 import { captureException } from "@renderer/features/analytics";
 import { showToast } from "@renderer/ui/toast-store";
 import type { SlideAssetStore } from "../slide-assets";
@@ -18,6 +19,7 @@ import {
   slideFrameCount,
 } from "./export-presets";
 import { facelessFingerprint, isWholeFingerprint } from "./export-reuse";
+import { noteFinishedCopy } from "./ready-copies";
 import type { VideoEncodingChoice } from "./video-encoding";
 import { type ExportWebcamTrack, fetchWebcamTrack } from "./webcam-fetch";
 import { mediaUrl } from "@renderer/lib/media-url";
@@ -61,6 +63,8 @@ export interface StartExportArgs {
    * `editFingerprint(scene)` from the editor, `WHOLE_RECORDING_FINGERPRINT` from Share.
    */
   fingerprint?: string;
+  /** Where the copy is going, when Prepare started it (NIW2-586): the cards name it. */
+  destination?: DestinationId;
   /**
    * The file landed in the vault. Runs even when the page that started the export is gone
    * (exports run in the background), so it must not assume its component is mounted.
@@ -80,9 +84,19 @@ export interface ExportJobInfo {
   /** Output size. */
   width: number;
   height: number;
+  /**
+   * Where the copy is going, when Prepare started it: "Preparing your YouTube copy…".
+   * Absent for an editor export, which the cards call "your export" (NIW2-586).
+   */
+  destination?: DestinationId;
+  /**
+   * The whole recording, without edits (Prepare, Share) — a copy for a destination — rather
+   * than an editor export. Absent on jobs built before NIW2-585.
+   */
+  wholeRecording?: boolean;
 }
 
-/** A finished export, until the user dismisses its "Ready to share" card. */
+/** A finished export, until the user dismisses its ready card. */
 export interface ReadyExport {
   job: ExportJobInfo;
   recording: LocalRecording;
@@ -239,7 +253,7 @@ export function retryVideoExport(): void {
   void startVideoExport(args, t);
 }
 
-/** The Ready card's Done (or ✕). */
+/** The Ready card's ✕. The copy stays unseen until it is opened (`ready-copies.ts`). */
 export function dismissReadyExport(): void {
   if (snapshot.ready) set({ ready: null });
 }
@@ -294,6 +308,8 @@ export async function startVideoExport(
     estimateBytes: presetId === "maximum" ? null : target.estimateBytes,
     width: target.width,
     height: target.height,
+    ...(args.destination ? { destination: args.destination } : {}),
+    wholeRecording: isWholeFingerprint(args.fingerprint),
   };
 
   active = true;
@@ -313,7 +329,12 @@ export async function startVideoExport(
     sessionId = null;
     active = false;
     teardown(id);
-    set({ status: "error", fraction: 0, error: message, attemptStartedAt: null });
+    set({
+      status: "error",
+      fraction: 0,
+      error: message,
+      attemptStartedAt: null,
+    });
   };
 
   // The editor's slide store is disposed when the editor unmounts, and the export may
@@ -455,6 +476,8 @@ export async function startVideoExport(
               ...(fingerprint
                 ? { exportFingerprint: encodeFingerprint(fingerprint, presetId) }
                 : {}),
+              // Kept with the file: chat's and email's copies share a preset.
+              ...(args.destination ? { exportDestination: args.destination } : {}),
             });
             // Re-check again: cancel() could have run during the finalize await too.
             if (!active) return;
@@ -463,6 +486,11 @@ export async function startVideoExport(
             sessionId = null;
             active = false;
             set({ ...IDLE, ready: { job, recording } });
+            noteFinishedCopy(recording.assetId, {
+              destination: job.destination,
+              width: job.width,
+              height: job.height,
+            });
             try {
               await args.onSaved(recording);
             } catch (error) {

@@ -14,3 +14,16 @@
 .slot {
   display: contents;
 }
+
+/* Bottom right, above the status bar (28 px): the export widget and its "ready" card. */
+.exportStack {
+  position: fixed;
+  right: 16px;
+  bottom: 40px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}

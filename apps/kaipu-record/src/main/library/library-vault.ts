@@ -23,7 +23,11 @@ import {
 } from "@shared/types/library-storage";
 import { sanitizeRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
-import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/types/export-preset";
+import {
+  isExportDestinationId,
+  normalizeExportPresetId,
+  type StoredExportPresetId,
+} from "@shared/types/export-preset";
 import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-name";
 import { atomicWriteFile, uniqueTempPath, withLock } from "./atomic-write";
 import {
@@ -40,8 +44,11 @@ import { fileStemFromTitle, fsFold, isReservedStem, isVaultOwnedStem } from "./f
 import { mediaUrl } from "@shared/media-url";
 
 export const META_DIR = ".kaipu";
-/** Known video containers, in preference order — `.mp4` is what we now write. */
-const VIDEO_EXTS = [".mp4", ".webm"] as const;
+/**
+ * Known video containers, in preference order — `.mp4` is what we now write. `.mov` and
+ * `.m4v` arrive only through an import (NIW2-579), which keeps the source's container.
+ */
+const VIDEO_EXTS = [".mp4", ".webm", ".mov", ".m4v"] as const;
 const IMAGE_EXTS = [".png"] as const;
 /** Animated GIF exports (NIW2-217). Local-only; thumbnail in `.kaipu/<id>.jpg` like videos. */
 const GIF_EXTS = [".gif"] as const;
@@ -75,6 +82,8 @@ export interface Sidecar {
   exportPreset?: StoredExportPresetId;
   /** What the export encoded ("whole" or "edit:<hash>"); see RecordingFinalizeMeta. */
   exportFingerprint?: string;
+  /** Copies for a destination: where it is going. Read back only when it is a known id. */
+  exportDestination?: string;
   /** GIF exports only (NIW2-217). */
   gifWidth?: number;
   gifHeight?: number;
@@ -1438,6 +1447,7 @@ function describeExport(meta: Sidecar): LocalRecording["export"] {
   return {
     preset,
     fingerprint: typeof meta.exportFingerprint === "string" ? meta.exportFingerprint : null,
+    destination: isExportDestinationId(meta.exportDestination) ? meta.exportDestination : null,
   };
 }
 

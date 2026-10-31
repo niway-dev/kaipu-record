@@ -53,6 +53,27 @@ export function normalizeExportPresetId(value: unknown): ExportPresetId | null {
   return isExportPresetId(value) ? value : null;
 }
 
+/**
+ * Where a copy is going (the Export screen's destinations), as stored in an export's sidecar
+ * (`exportDestination`). Literals, like the preset ids; the renderer's `DESTINATION_IDS` must
+ * name the same ones, which `destinations.test.ts` pins. Stored because one preset serves two
+ * destinations (chat's and email's Balanced), so the preset alone cannot say which it was.
+ */
+export const EXPORT_DESTINATION_IDS = [
+  "youtube",
+  "vertical",
+  "square",
+  "github",
+  "chat",
+  "email",
+  "archive",
+] as const;
+export type ExportDestinationId = (typeof EXPORT_DESTINATION_IDS)[number];
+
+export function isExportDestinationId(value: unknown): value is ExportDestinationId {
+  return typeof value === "string" && (EXPORT_DESTINATION_IDS as readonly string[]).includes(value);
+}
+
 /** How the composed frame lands on a fixed canvas: whole frame + padding, or cover + crop. */
 export const EXPORT_FRAMINGS = ["fit", "fill"] as const;
 export type ExportFraming = (typeof EXPORT_FRAMINGS)[number];

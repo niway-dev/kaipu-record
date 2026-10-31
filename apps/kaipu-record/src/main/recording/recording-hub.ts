@@ -75,6 +75,12 @@ export interface RecordingHubHandle {
   /** A writer session is open: a take or an editor export is writing into the workspace. */
   hasOpenWrites(): boolean;
   /**
+   * The display the latest take recorded (its area's, its countdown's, or its screen
+   * source's), or null before any take or when the source names none (a window). The
+   * "Your video is ready" window opens there.
+   */
+  lastTakeDisplayId(): number | null;
+  /**
    * Flip one of the three input toggles, exactly as clicking it in a window
    * does (the global shortcuts use this). Mid-take the recorder picks the
    * change up from the settings broadcast; outside a take it is just the
@@ -982,6 +988,7 @@ export function registerRecordingHub(
   // Bumped by every start: a display lookup still running for a take that was cancelled must
   // not show the bar or change the shade of the take that started after it.
   let takeCount = 0;
+  let lastTakeDisplayId: number | null = null;
   ipcMain.on(IPC_CHANNELS.recordingStart, (e, info: RecordingStartInfo) => {
     activity = startedActivity();
     const senderId = (e as { sender?: { id?: unknown } } | undefined)?.sender?.id;
@@ -1003,6 +1010,7 @@ export function registerRecordingHub(
       ? screen.getAllDisplays().find((display) => display.id === chosen.displayId)
       : undefined;
     const area = areaDisplay ? sanitizeArea(chosen, areaDisplay) : null;
+    lastTakeDisplayId = areaDisplay?.id ?? region?.display.id ?? null;
     try {
       const scale = areaDisplay?.scaleFactor || 1;
       captureMainEvent(
@@ -1049,6 +1057,9 @@ export function registerRecordingHub(
       // Stopped (or cancelled) while the lookup ran: the always-on-top bar must not come up
       // over a take that is already gone, nor act for it on a take started since.
       if (!activity.active || take !== takeCount) return;
+      if (!areaDisplay && displayId !== undefined && Number.isFinite(Number(displayId))) {
+        lastTakeDisplayId = Number(displayId);
+      }
       bar.show(displayId, { includeInRecording, anchor: areaGlobal });
       const display =
         displayId === undefined
@@ -1143,6 +1154,7 @@ export function registerRecordingHub(
   return {
     isActive: () => activity.active,
     isPending: () => pending && !activity.active,
+    lastTakeDisplayId: () => lastTakeDisplayId,
     hasOpenWrites: () => writer.ids().length > 0,
     toggleRecordingSetting: (key) => applySettingsPatch({ [key]: !settings[key] }),
     hideCameraBubbleForCapture: () => {

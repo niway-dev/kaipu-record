@@ -9,7 +9,8 @@
  *   again, so the copy is big on purpose — the platform gets more to work with and text stays
  *   sharp after its own encode.
  * - "keep-light": GitHub, Jira, Linear, Slack, Discord and email play the file as it is, so
- *   smaller is better.
+ *   smaller is better. Email is its own destination (the Export screen's row) over the same
+ *   preset as chat, so `destinationOfPreset("balanced")` still answers "chat".
  * - "keep": an archive copy outside Kaipu, full quality.
  *
  * Every number comes from `resolveExportTarget`; here it is only described. Pure: no React,
@@ -39,6 +40,7 @@ export const DESTINATION_IDS = [
   "square",
   "github",
   "chat",
+  "email",
   "archive",
 ] as const;
 export type DestinationId = (typeof DESTINATION_IDS)[number];
@@ -51,7 +53,7 @@ export const DESTINATION_GROUPS: ReadonlyArray<{
   destinations: readonly DestinationId[];
 }> = [
   { id: "send-more", destinations: ["youtube", "vertical", "square"] },
-  { id: "keep-light", destinations: ["github", "chat"] },
+  { id: "keep-light", destinations: ["github", "chat", "email"] },
   { id: "keep", destinations: ["archive"] },
 ];
 
@@ -65,6 +67,8 @@ const DESTINATION_PRESETS = {
   square: ["square"],
   github: ["light"],
   chat: ["balanced"],
+  // Email shares chat's preset: one file plays inline in a chat and fits an attachment.
+  email: ["balanced"],
   archive: ["maximum"],
 } as const satisfies Record<DestinationId, readonly ExportPresetId[]>;
 

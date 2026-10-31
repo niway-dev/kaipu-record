@@ -348,17 +348,37 @@ describe("LibraryVault", () => {
     expect((await vault.describe("share"))?.export).toEqual({
       preset: "balanced",
       fingerprint: "whole",
+      destination: null,
     });
     expect((await vault.describe("legacy"))?.export).toEqual({
       preset: "maximum",
       fingerprint: null,
+      destination: null,
     });
     // The 1920×1080 YouTube export (before NIW2-564) reads as YouTube 1440p.
     expect((await vault.describe("old-youtube"))?.export).toEqual({
       preset: "youtube-1440",
       fingerprint: "whole",
+      destination: null,
     });
     expect((await vault.describe("plain"))?.export).toBeNull();
+  });
+
+  it("reads back where a copy is going, and ignores a destination it does not know", async () => {
+    await writeRecording("email");
+    await writeSidecar("email", {
+      exportPreset: "balanced",
+      exportFingerprint: "whole",
+      exportDestination: "email",
+    });
+    await writeRecording("odd");
+    await writeSidecar("odd", {
+      exportPreset: "balanced",
+      exportFingerprint: "whole",
+      exportDestination: "fax",
+    });
+    expect((await vault.describe("email"))?.export?.destination).toBe("email");
+    expect((await vault.describe("odd"))?.export?.destination).toBeNull();
   });
 
   it("ensureContentHash computes once, caches by size+mtime, and recomputes after a change", async () => {
