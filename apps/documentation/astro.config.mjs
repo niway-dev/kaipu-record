@@ -89,6 +89,7 @@ export default defineConfig({
             { slug: "backlog/video-editor-v2-handoff" },
             { slug: "backlog/live-recording-controls" },
             { slug: "backlog/several-workspaces" },
+            { slug: "backlog/check-and-fix-files" },
             { slug: "backlog/record-capture-modes" },
             { slug: "backlog/recording-capture-metadata" },
             { slug: "backlog/camera-bubble-shape-and-size" },
