@@ -1,15 +1,18 @@
-import { Film, PenLine, Share2, Tag, Trash2, Play } from "lucide-react";
+import { Film, PenLine, Send, Tag, Trash2, Play } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
 import type { TagSummary } from "@shared/types";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { TagChip } from "../tags/tag-chip";
-import type { EditBadge as EditBadgeState } from "@renderer/features/library/lineage";
+import { type EditBadge as EditBadgeState, isMaster } from "@renderer/features/library/lineage";
 import { StorageMeta } from "./storage-meta";
 import { KindBadge } from "./kind-badge";
+import { MasterTag } from "./master-tag";
 import { RecordingCaptureTag } from "./recording-capture-tag";
 import { EditBadge } from "./edit-badge";
 import { cx } from "@renderer/ui/cx";
+import type { DestinationId } from "@renderer/features/prepare/destinations";
+import { DestinationTag } from "@renderer/features/prepare/components/destination-tag";
 import styles from "./video-card.module.css";
 
 const CARD_TAGS_SHOWN = 3;
@@ -21,14 +24,18 @@ interface VideoCardProps {
   onDelete(): void;
   /** Opens the item in the Editor workspace; omitted when it cannot be edited. */
   onEdit?(): void;
-  /** Opens Prepare for this recording (NIW2-578); omitted when there is nothing to prepare. */
+  /** Opens Prepare — "Send to…" — for this recording (NIW2-578); omitted when there is nothing to prepare. */
   onPrepare?(): void;
   /** Opens the tag side panel for this item; omitted when it cannot be tagged. */
   onTags?(): void;
   /** This item is the one in the tag side panel. */
   selected?: boolean;
+  /** A copy that finished in the background and has not been opened yet (NIW2-586). */
+  justReady?: boolean;
   /** The item's tags, resolved from the registry (name + color). */
   tags?: readonly TagSummary[];
+  /** A copy made for a destination: its poster says where it is going ("For YouTube"). */
+  destination?: DestinationId | null;
 }
 
 export function VideoCard({
@@ -40,18 +47,22 @@ export function VideoCard({
   onPrepare,
   onTags,
   selected = false,
+  justReady = false,
   tags = [],
+  destination = null,
 }: VideoCardProps): React.JSX.Element {
   const t = useTranslations("library");
-  const tPrepare = useTranslations("prepare");
   // A few tags always visible under the title, the rest as "+N".
   const cardTags = tags.slice(0, CARD_TAGS_SHOWN);
   const hiddenTags = tags.length - cardTags.length;
+  // NIW2-579: an imported video says so in the metadata line, not as a capture pill.
+  const imported = video.capture?.mode === "import";
 
   return (
     <div
       className={styles.card}
       data-selected={selected}
+      data-just-ready={justReady}
       onClick={onNavigate}
       role="button"
       tabIndex={0}
@@ -74,8 +85,16 @@ export function VideoCard({
         <div className={styles.scrim} aria-hidden />
 
         <span className={styles.kindBadge}>
-          <KindBadge kind={video.kind} />
-          <RecordingCaptureTag capture={video.capture} />
+          {/* An original reads as the master (NIW2-585); the tag also says it is a recording.
+              A copy for a destination says where it is going instead. */}
+          {isMaster(video) ? (
+            <MasterTag size="sm" />
+          ) : destination ? (
+            <DestinationTag destination={destination} />
+          ) : (
+            <KindBadge kind={video.kind} />
+          )}
+          {!imported && <RecordingCaptureTag capture={video.capture} />}
         </span>
 
         {video.durationSeconds > 0 && (
@@ -111,10 +130,10 @@ export function VideoCard({
               <button
                 className={styles.action}
                 onClick={onPrepare}
-                title={tPrepare("prepareFor")}
-                aria-label={tPrepare("prepareFor")}
+                title={t("sendTo")}
+                aria-label={t("sendTo")}
               >
-                <Share2 size={14} strokeWidth={1.8} />
+                <Send size={14} strokeWidth={1.8} />
               </button>
             )}
             {video.id !== null && (
@@ -131,6 +150,7 @@ export function VideoCard({
         <span className={styles.specs}>
           {formatSize(video.fileSizeBytes)}
           {video.kind !== "screenshot" && ` · ${formatDuration(video.durationSeconds)}`}
+          {imported && ` · ${t("importedMeta")}`}
         </span>
         {cardTags.length > 0 && (
           <ul className={styles.tags} aria-label={t("tagsLabel")}>

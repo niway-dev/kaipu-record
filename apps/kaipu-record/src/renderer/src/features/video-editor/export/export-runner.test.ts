@@ -3,8 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Translator } from "@kaipu/i18n";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { initialScene, type VideoScene } from "../scene";
+import { WEBCAM_DEFAULTS } from "../webcam/webcam-model";
+import type { ExportStartMessage } from "./export-messages";
 import { createSlideAssetStore } from "../slide-assets";
 import type { VideoEncodingChoice } from "./video-encoding";
+import { encodeFingerprint } from "./export-presets";
 import {
   __resetExportRunnerForTests,
   cancelVideoExport,
@@ -16,6 +19,7 @@ import {
   startVideoExport,
   type StartExportArgs,
 } from "./export-runner";
+import { __resetReadyCopiesForTests, getReadyCopies } from "./ready-copies";
 
 // The pipeline itself (plan, session lifecycle, FR8/FR9 retries) is covered through
 // `useVideoExport` in use-video-export.test.ts. Here: what makes the runner app-level —
@@ -100,6 +104,7 @@ beforeEach(() => {
 afterEach(() => {
   captureException.mockClear();
   __resetExportRunnerForTests();
+  __resetReadyCopiesForTests();
   vi.unstubAllGlobals();
 });
 
@@ -175,6 +180,15 @@ describe("export runner (NIW2-218 background export)", () => {
     expect(window.electronAPI.setExportActive).toHaveBeenLastCalledWith(false);
   });
 
+  it("opens its writer session as an export, not a take", async () => {
+    await startVideoExport(args(), t);
+    await waitFor(() => expect(workers).toHaveLength(1));
+    expect(window.electronAPI.recordingCreate).toHaveBeenCalledWith(
+      expect.stringMatching(/^export-/),
+      "export",
+    );
+  });
+
   it("ends in a Ready card with the saved file, then calls onSaved", async () => {
     const onSaved = vi.fn();
     await startVideoExport(args({ onSaved }), t);
@@ -239,6 +253,178 @@ describe("export runner (NIW2-218 background export)", () => {
     } as MessageEvent);
     await waitFor(() => expect(workers).toHaveLength(2));
     expect(entries).toHaveBeenCalledOnce();
+  });
+
+  describe("the webcam file (ADR 0038)", () => {
+    const WEBCAM_SCENE: VideoScene = {
+      ...SCENE,
+      webcam: { layout: { ...WEBCAM_DEFAULTS }, segments: [] },
+    };
+    const fetchMock = (webcamStatus: number) =>
+      vi.fn(async (url: string) =>
+        url.startsWith("kaipu-media://webcam/")
+          ? { ok: webcamStatus === 200, status: webcamStatus, blob: async () => new Blob(["cam"]) }
+          : { ok: true, status: 200, blob: async () => new Blob(["mp4"]) },
+      );
+    const sent = (): ExportStartMessage =>
+      workers[0]!.postMessage.mock.calls[0]![0] as ExportStartMessage;
+
+    it("fetches it like the source and sends it with the offset when the scene has a layer", async () => {
+      const fetch = fetchMock(200);
+      vi.stubGlobal("fetch", fetch);
+      await startVideoExport(args({ scene: WEBCAM_SCENE, webcamTrack: { startOffsetMs: 120 } }), t);
+      await waitFor(() => expect(workers).toHaveLength(1));
+      expect(fetch).toHaveBeenCalledWith("kaipu-media://webcam/rec-1");
+      expect(sent().webcam).toEqual({ blob: expect.any(Blob), startOffsetMs: 120 });
+      expect(sent().plan.webcam).toEqual(WEBCAM_SCENE.webcam);
+    });
+
+    it("asks for nothing for a recording without a webcam (no request, null in the message)", async () => {
+      const fetch = fetchMock(200);
+      vi.stubGlobal("fetch", fetch);
+      await startVideoExport(args({ webcamTrack: null }), t);
+      await waitFor(() => expect(workers).toHaveLength(1));
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(sent().webcam).toBeNull();
+      expect(sent().plan.webcam).toBeNull();
+    });
+
+    it("logs a webcam the worker could not decode, and keeps exporting without it", async () => {
+      await startVideoExport(args(), t);
+      workers[0]!.onmessage?.({
+        data: { type: "webcam-error", message: "decode failed" },
+      } as MessageEvent);
+      expect(captureException).toHaveBeenCalledWith(expect.any(Error), {
+        context: "video-export-webcam",
+      });
+      expect(getExportSnapshot().status).toBe("exporting");
+    });
+
+    it("exports without the layer when the file is gone (404), instead of failing", async () => {
+      vi.stubGlobal("fetch", fetchMock(404));
+      await startVideoExport(args({ scene: WEBCAM_SCENE, webcamTrack: { startOffsetMs: 0 } }), t);
+      await waitFor(() => expect(workers).toHaveLength(1));
+      expect(sent().webcam).toBeNull();
+      expect(getExportSnapshot().status).toBe("exporting");
+    });
+
+    describe("an export that lost its face is never offered as the reusable one", () => {
+      const WHOLE_WEBCAM = "whole:abc123";
+      const EDIT_WEBCAM = "edit:wc1:abc123";
+      const stamped = async (): Promise<string | undefined> => {
+        finish(workers[0]!);
+        await waitFor(() => expect(window.electronAPI.recordingFinalize).toHaveBeenCalled());
+        const meta = vi.mocked(window.electronAPI.recordingFinalize).mock.calls[0]![1];
+        return meta.exportFingerprint;
+      };
+
+      it("Share stamps the plain `whole` when the webcam file is missing", async () => {
+        vi.stubGlobal("fetch", fetchMock(404));
+        await startVideoExport(
+          args({
+            scene: WEBCAM_SCENE,
+            webcamTrack: { startOffsetMs: 0 },
+            fingerprint: WHOLE_WEBCAM,
+          }),
+          t,
+        );
+        await waitFor(() => expect(workers).toHaveLength(1));
+        expect(await stamped()).toBe(encodeFingerprint("whole", "light"));
+      });
+
+      it("an editor export stamps no fingerprint when the webcam file is missing", async () => {
+        vi.stubGlobal("fetch", fetchMock(404));
+        await startVideoExport(
+          args({
+            scene: WEBCAM_SCENE,
+            webcamTrack: { startOffsetMs: 0 },
+            fingerprint: EDIT_WEBCAM,
+          }),
+          t,
+        );
+        await waitFor(() => expect(workers).toHaveLength(1));
+        expect(await stamped()).toBeUndefined();
+      });
+
+      it("the same when the worker could not decode the webcam file", async () => {
+        vi.stubGlobal("fetch", fetchMock(200));
+        await startVideoExport(
+          args({
+            scene: WEBCAM_SCENE,
+            webcamTrack: { startOffsetMs: 0 },
+            fingerprint: EDIT_WEBCAM,
+          }),
+          t,
+        );
+        await waitFor(() => expect(workers).toHaveLength(1));
+        workers[0]!.onmessage?.({
+          data: { type: "webcam-error", message: "decode failed" },
+        } as MessageEvent);
+        expect(await stamped()).toBeUndefined();
+      });
+
+      it("keeps the full fingerprint when the face was composed", async () => {
+        vi.stubGlobal("fetch", fetchMock(200));
+        await startVideoExport(
+          args({
+            scene: WEBCAM_SCENE,
+            webcamTrack: { startOffsetMs: 0 },
+            fingerprint: EDIT_WEBCAM,
+          }),
+          t,
+        );
+        await waitFor(() => expect(workers).toHaveLength(1));
+        expect(await stamped()).toBe(encodeFingerprint(EDIT_WEBCAM, "light"));
+      });
+    });
+
+    it("exports without the layer when the webcam fetch throws, instead of failing", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => {
+          if (url.startsWith("kaipu-media://webcam/")) throw new Error("read failed");
+          return { ok: true, status: 200, blob: async () => new Blob(["mp4"]) };
+        }),
+      );
+      await startVideoExport(args({ scene: WEBCAM_SCENE, webcamTrack: { startOffsetMs: 0 } }), t);
+      await waitFor(() => expect(workers).toHaveLength(1));
+      expect(sent().webcam).toBeNull();
+      expect(getExportSnapshot().status).toBe("exporting");
+    });
+  });
+});
+
+describe("export runner in the background (NIW2-586)", () => {
+  it("carries Prepare's destination on the job; an editor export has none", async () => {
+    await startVideoExport(args({ destination: "github" }), t);
+    expect(getExportSnapshot().job?.destination).toBe("github");
+    cancelVideoExport();
+    await startVideoExport(args(), t);
+    expect(getExportSnapshot().job).not.toHaveProperty("destination");
+  });
+
+  it("notes the finished copy as not seen yet", async () => {
+    await startVideoExport(args({ destination: "github" }), t);
+    finish(workers[0]!);
+    await waitFor(() => expect(getExportSnapshot().ready).not.toBeNull());
+    // With what its Library card shows: where it goes and the encoded size.
+    const job = getExportSnapshot().job ?? getExportSnapshot().ready!.job;
+    expect(getReadyCopies().copies).toEqual([
+      {
+        assetId: "asset-new",
+        announced: false,
+        card: true,
+        destination: "github",
+        width: job.width,
+        height: job.height,
+      },
+    ]);
+  });
+
+  it("a cancelled export notes nothing", async () => {
+    await startVideoExport(args(), t);
+    cancelVideoExport();
+    expect(getReadyCopies().copies).toEqual([]);
   });
 });
 

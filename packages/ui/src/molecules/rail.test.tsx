@@ -88,4 +88,33 @@ describe("Rail", () => {
     );
     expect(screen.getAllByRole("link")).toHaveLength(2);
   });
+
+  it("shows a badge with its count and meaning, capped at 9+, and none at 0", () => {
+    const { rerender } = render(
+      <Rail
+        brand={null}
+        items={[{ ...items[1]!, badge: 2, badgeLabel: "2 new copies ready" }]}
+        renderLink={(item, props) => <a href={item.to} {...props} />}
+      />,
+    );
+    const link = screen.getByRole("link");
+    expect(link).toHaveTextContent("2");
+    expect(link).toHaveAccessibleName(/2 new copies ready/);
+    rerender(
+      <Rail
+        brand={null}
+        items={[{ ...items[1]!, badge: 12 }]}
+        renderLink={(item, props) => <a href={item.to} {...props} />}
+      />,
+    );
+    expect(screen.getByText("9+")).toBeInTheDocument();
+    rerender(
+      <Rail
+        brand={null}
+        items={[{ ...items[1]!, badge: 0 }]}
+        renderLink={(item, props) => <a href={item.to} {...props} />}
+      />,
+    );
+    expect(screen.getByRole("link")).toHaveTextContent(/^Library$/);
+  });
 });

@@ -4,7 +4,7 @@ import type { LocalRecording } from "@shared/types/library-storage";
 import { captureException } from "@renderer/features/analytics";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import type { VideoExportChoice } from "@renderer/features/video-editor/components/export-sheet";
-import { WHOLE_RECORDING_FINGERPRINT } from "@renderer/features/video-editor/export/export-reuse";
+import { wholeFingerprint } from "@renderer/features/video-editor/export/export-reuse";
 import {
   isVideoExportBusy,
   showExportBusyToast,
@@ -12,7 +12,8 @@ import {
 import { probeSource, type SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { useVideoExport } from "@renderer/features/video-editor/export/use-video-export";
 import { createSlideAssetStore } from "@renderer/features/video-editor/slide-assets";
-import { initialScene } from "@renderer/features/video-editor/scene";
+import { initialScene, type VideoScene } from "@renderer/features/video-editor/scene";
+import { type DestinationId, destinationOfPreset } from "./destinations";
 
 /** A local recording: the only kind Prepare makes copies of (no screenshots, no GIFs). */
 export type PreparableVideo = LibraryVideo & { id: string };
@@ -27,6 +28,24 @@ export function asPreparable(video: LibraryVideo | undefined): PreparableVideo |
 /** A probe the presets can work with: a picture and a duration. */
 export function isUsableProbe(probe: SourceProbe | null): probe is SourceProbe {
   return probe !== null && probe.width > 0 && probe.height > 0 && probe.durationSec > 0;
+}
+
+/**
+ * The scene a Prepare copy exports: one clip over the whole file and, for a take with a webcam
+ * file, the face composed where the bubble sat during the take (ADR 0038): the layer is seeded
+ * from the sidecar's recorded layout.
+ */
+export function prepareScene(video: PreparableVideo, probe: SourceProbe): VideoScene {
+  return initialScene(probe.durationSec, video.webcam ?? null);
+}
+
+/**
+ * The fingerprint of a Prepare copy (NIW2-576): plain `whole` without a webcam, so the copies
+ * already made stay reusable; `whole:<hash of the seeded layer>` with one, so a pre-webcam copy
+ * (no face) and an editor export are never offered as this one.
+ */
+export function prepareFingerprint(scene: VideoScene): string {
+  return wholeFingerprint(scene.webcam);
 }
 
 export type ProbeState =
@@ -69,6 +88,11 @@ export interface PrepareCopyInput {
   video: PreparableVideo;
   probe: SourceProbe;
   choice: VideoExportChoice;
+  /**
+   * Where the copy is going, for the progress and ready cards. Defaults to the preset's own
+   * destination; Email needs saying, since it shares chat's preset.
+   */
+  destination?: DestinationId;
   /** The copy landed in the library. */
   onSaved?(recording: LocalRecording): void;
 }
@@ -89,13 +113,16 @@ export function usePrepareCopy(): { start(input: PrepareCopyInput): boolean } {
   const videoExport = useVideoExport();
   const { start: startExport } = videoExport;
   const start = useCallback(
-    ({ video, probe, choice, onSaved }: PrepareCopyInput): boolean => {
+    ({ video, probe, choice, destination, onSaved }: PrepareCopyInput): boolean => {
       if (isVideoExportBusy()) {
         showExportBusyToast(tEditor);
         return false;
       }
+      const scene = prepareScene(video, probe);
       void startExport({
-        scene: initialScene(probe.durationSec),
+        scene,
+        // The sidecar's webcam: its file is fetched and composed at the recorded layout.
+        webcamTrack: video.webcam ?? null,
         sourceId: video.id,
         title: video.title,
         derivedFromAssetId: video.assetId,
@@ -108,7 +135,9 @@ export function usePrepareCopy(): { start(input: PrepareCopyInput): boolean } {
         presetId: choice.presetId,
         framing: choice.framing,
         sourceInfo: probe,
-        fingerprint: WHOLE_RECORDING_FINGERPRINT,
+        fingerprint: prepareFingerprint(scene),
+        // The progress and ready cards name the place: "Preparing your YouTube copy…".
+        destination: destination ?? destinationOfPreset(choice.presetId),
         onSaved: (recording) => {
           try {
             onSaved?.(recording);

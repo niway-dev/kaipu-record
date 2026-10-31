@@ -16,7 +16,13 @@ import type {
   OverlayState,
   QuietCaptureHandOff,
 } from "./screenshot-capture";
+import type {
+  RecordingReadyAction,
+  RecordingReadyHandOff,
+  RecordingReadyPayload,
+} from "./recording-ready";
 import type { SerializedError } from "../analytics";
+import type { RecordingWriterKind } from "../webcam-track";
 import type { AppSettings, ShortcutAction, TagSummary, UpdateStatus } from "./ipc";
 import type { TagColor } from "@kaipu/domain/constants";
 import type { LocalRecording, RenameResult } from "./library-storage";
@@ -32,6 +38,7 @@ import type {
   WorkspaceSwitchResult,
 } from "./workspaces";
 import type { StorageUsageResult } from "./cloud-storage";
+import type { ImportVideoResult } from "../import-video";
 import type {
   CatalogRefreshResult,
   LibraryListResult,
@@ -99,6 +106,21 @@ export interface CaptureToastBridge {
   action(action: CaptureToastAction): void;
   /** The pointer entered (`true`, pause the auto-hide) or left (`false`, restart it) the card. */
   hover(paused: boolean): void;
+}
+
+/**
+ * The "Your video is ready" window's bridge (`?window=recording-ready`). Like the capture
+ * toast, the card only renders what main sends and reports what the user pressed.
+ */
+export interface RecordingReadyCardBridge {
+  /** Main's payload for the card. Returns an unsubscribe fn. */
+  onShow(callback: (payload: RecordingReadyPayload) => void): () => void;
+  /** Tell main the listener is up, so it sends the current payload. */
+  ready(): void;
+  /** A chip, Edit first, Open, ✕ or Escape. */
+  action(action: RecordingReadyAction): void;
+  /** The card's height in DIP, so main sizes the window to it. */
+  resize(height: number): void;
 }
 
 /** macOS media permissions the recorder cares about. */
@@ -310,6 +332,18 @@ export interface KaipuElectronAPI {
    * vault id — main sanitizes it and drags a temporary link to the vault file.
    */
   startFileDrag(id: string, name?: string): void;
+  /**
+   * NIW2-579: open a file dialog for outside videos (mp4, mov, m4v, webm) and copy each one
+   * picked into the vault as a recording. `canceled` when the dialog was closed.
+   */
+  importVideos(): Promise<ImportVideoResult>;
+  /** NIW2-579: import dropped files by path (see `pathForFile`); main validates every path. */
+  importVideoFiles(paths: readonly string[]): Promise<ImportVideoResult>;
+  /**
+   * The absolute path of a `File` from a drop (Electron's `webUtils.getPathForFile`); "" for
+   * a file with no path on disk (e.g. made in the page).
+   */
+  pathForFile(file: File): string;
   /** NIW2-218: tell main whether a background export is running (close/quit confirmation). */
   setExportActive(active: boolean): void;
   /**
@@ -344,18 +378,41 @@ export interface KaipuElectronAPI {
 
   // ── Recording engine (used by the main/recorder window) ───────────────
   /**
-   * Open a disk-writer session; returns the temp path. `kind` defaults to a recording, whose
-   * partial is kept when its page goes away; an export's partial is discarded then.
+   * Open a disk-writer session; returns the temp path. `kind` "recording" opens a take, whose
+   * partial is kept when its page goes away; "export" a background export's session, whose
+   * partial is discarded then, and which is not a take (the camera bubble's protection follows
+   * the live take alone). "webcam" opens the open recording take's second session, for its
+   * webcam file (ADR 0037). Required, so no caller is a take by omission.
    */
-  recordingCreate(sessionId: string, kind?: "recording" | "export"): Promise<{ tempPath: string }>;
-  /** Write a chunk at an exact byte position (positional, not append). */
-  recordingWrite(sessionId: string, data: ArrayBuffer, position: number): void;
+  recordingCreate(
+    sessionId: string,
+    kind: "recording" | "export" | "webcam",
+  ): Promise<{ tempPath: string }>;
+  /** Write a chunk at an exact byte position (positional, not append) to the `kind` session. */
+  recordingWrite(
+    sessionId: string,
+    data: ArrayBuffer,
+    position: number,
+    kind?: RecordingWriterKind,
+  ): void;
   /** Close the file, move it into the vault, return the new recording. */
   recordingFinalize(sessionId: string, meta: RecordingFinalizeMeta): Promise<LocalRecording>;
-  /** Discard a failed session (delete temp). */
+  /** Discard a failed take (delete its temp files: the screen's and the webcam's). */
   recordingAbort(sessionId: string): Promise<void>;
   /** Byte size of an open session's temp file, after every queued write landed (NIW2-218). */
-  recordingStat(sessionId: string): Promise<number>;
+  recordingStat(sessionId: string, kind?: RecordingWriterKind): Promise<number>;
+  /**
+   * The take records no (more) webcam file: main stops excluding the camera bubble from the
+   * screen capture, so the face is in the screen recording instead. Resolves once main applied
+   * it, so a caller can wait for it before starting the screen capture.
+   */
+  recordingWebcamEnded(sessionId: string): Promise<void>;
+  /**
+   * Whether this OS can record the webcam as its own file: only where the camera bubble can
+   * leave the screen capture. False on Windows before 10 2004, where a take keeps the face in
+   * the screen recording and records no webcam file (the legacy path, by design).
+   */
+  recordingWebcamTrackSupported(): Promise<boolean>;
   /** Push a live tick (elapsed/levels/status) to the hub for the bar. */
   recordingReportTick(tick: RecordingTick): void;
   /**
@@ -480,6 +537,18 @@ export interface KaipuElectronAPI {
   captureOverlay: CaptureOverlayBridge;
   /** Only used by the capture toast window; see `CaptureToastBridge`. */
   captureToast: CaptureToastBridge;
+  /**
+   * Float "Your video is ready" on the desktop, outside the main window. Resolves false when
+   * the window could not be created; the caller then shows the card in-app instead.
+   */
+  showRecordingReady(payload: RecordingReadyPayload): Promise<boolean>;
+  /** Only used by the "Your video is ready" window; see `RecordingReadyCardBridge`. */
+  recordingReadyCard: RecordingReadyCardBridge;
+  /**
+   * An action on the floating "Your video is ready" card: main has closed it and shown this
+   * window; the renderer navigates. Returns an unsubscribe fn.
+   */
+  onRecordingReadyOpen(callback: (handOff: RecordingReadyHandOff) => void): () => void;
   /**
    * The capture toast asked to show a saved screenshot (Annotate, Open in Library). The
    * renderer navigates, then calls `revealAfterCapture()`. Returns an unsubscribe fn.

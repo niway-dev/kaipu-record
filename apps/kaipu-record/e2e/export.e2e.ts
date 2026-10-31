@@ -37,13 +37,13 @@ test("export produces a valid MP4 with in-sync video and audio", async () => {
       .getByRole("button", { name: /^Export( |$)/ })
       .click();
 
-    // The export runs in the background (NIW2-218): success = the "Ready to share" card,
-    // whose View file opens the new recording's detail route. The router is a hash router,
+    // The export runs in the background (NIW2-218): success = the "Your export is ready"
+    // card (NIW2-586), whose "in your Library" link opens the new recording's detail route. The router is a hash router,
     // so poll location.hash (a bare hash change does not reliably fire Playwright's
     // navigation events). Give the encode a generous window.
-    const ready = page.getByRole("region", { name: /^Ready to share/ });
+    const ready = page.getByRole("region", { name: "Your export is ready" });
     await expect(ready).toBeVisible({ timeout: 90_000 });
-    await ready.getByRole("button", { name: "View file" }).click();
+    await ready.getByRole("button", { name: /in your Library$/ }).click();
     await expect
       .poll(() => page.evaluate(() => location.hash), { timeout: 15_000 })
       .toMatch(/^#\/library\/.+/);

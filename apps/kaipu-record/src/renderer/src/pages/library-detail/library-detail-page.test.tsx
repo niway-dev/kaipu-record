@@ -1,13 +1,15 @@
-import { act, render, screen, waitFor, fireEvent, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryItem } from "@shared/types/library-item";
+import type { WebcamTrackMeta } from "@shared/webcam-track";
 import { DEFAULT_SETTINGS } from "@shared/types";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import { StatusStackProvider } from "@renderer/features/status-cards/status-stack";
 import { LibraryDetailPage } from "./library-detail-page";
+import { __resetFloatingReadyCardForTests } from "@renderer/features/recording-ready/use-floating-ready-card";
 
-// The banner and the post-recording panel read the file through mediabunny; here only the
+// The banner and the post-recording card read the file through mediabunny; here only the
 // facts it returns matter.
 const probe = vi.hoisted(() =>
   vi.fn(async () => ({
@@ -125,7 +127,7 @@ function renderDetail(assetId: string) {
       { path: "/library/:assetId", element: <LibraryDetailPage /> },
       { path: "/library", element: <div>library-page</div> },
       { path: "/editor/video/:assetId", element: <div>editor-video</div> },
-      { path: "/prepare/:assetId", element: <div>prepare-page</div> },
+      { path: "/export/:assetId", element: <div>export-page</div> },
     ],
     { initialEntries: [`/library/${assetId}`] },
   );
@@ -163,8 +165,11 @@ describe("LibraryDetailPage", () => {
     expect(screen.queryByRole("button", { name: /^copy$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /delete/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /remove local download/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Prepare for…" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Prepare for YouTube" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Export a copy" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Where is it going?" })).toBeNull();
+    // A screenshot is not a master: no tag, no copies.
+    expect(screen.queryByText("Master · full quality")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Copies from this original" })).toBeNull();
   });
 
   it("shows how a recording was captured in the metadata line", async () => {
@@ -190,7 +195,58 @@ describe("LibraryDetailPage", () => {
     expect(screen.getByTestId("capture-meta")).toHaveTextContent("FRAME · 1234 × 567");
   });
 
-  it("Prepare for… opens the Prepare screen with nothing preselected (NIW2-578)", async () => {
+  it("a re-list keeps the page on screen instead of swapping it for the loader", async () => {
+    const listeners: (() => void)[] = [];
+    window.electronAPI.onLibraryChanged = (listener: () => void) => {
+      listeners.push(listener);
+      return () => {};
+    };
+    let finishRelist: () => void = () => {};
+    window.electronAPI.listLibraryItems = vi
+      .fn()
+      .mockResolvedValueOnce({
+        items: [exportedOnlyItem],
+        vaultError: null,
+        catalogVerifiedAt: null,
+      })
+      .mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finishRelist = () =>
+              resolve({ items: [exportedOnlyItem], vaultError: null, catalogVerifiedAt: null });
+          }),
+      );
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    act(() => {
+      for (const l of listeners) l();
+    });
+
+    expect(screen.queryByText("Loading…")).toBeNull();
+    expect(screen.getAllByText("Exported Recording").length).toBeGreaterThan(0);
+    await act(async () => finishRelist());
+  });
+
+  it("says an imported video was imported in the metadata line (NIW2-579)", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [
+        {
+          ...exportedOnlyItem,
+          capture: { mode: "import" as const, width: 1080, height: 1920, ratio: null },
+        },
+      ],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    expect(screen.getByTestId("capture-meta")).toHaveTextContent("IMPORTED");
+  });
+
+  it("puts the title in the top row with the way back and the master tag, never with the actions", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [exportedOnlyItem],
       vaultError: null,
@@ -199,27 +255,107 @@ describe("LibraryDetailPage", () => {
 
     const router = renderDetail("asset-b");
     await waitForLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "Prepare for…" }));
+    const title = screen.getByRole("heading", { level: 1, name: "Exported Recording" });
+    const back = screen.getByRole("button", { name: "Library" });
+    const row = back.parentElement!;
+    expect(row).toContainElement(title);
+    expect(within(row).getByText("Master · full quality")).toBeVisible();
+    expect(within(row).queryByRole("button", { name: "Delete" })).toBeNull();
+    // The resolution, once the file is read, joins the metadata line under it.
+    expect(await screen.findByTestId("dimensions-meta")).toHaveTextContent("2560 × 1440");
 
-    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
+    fireEvent.click(back);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/library"));
+  });
+
+  it("before the first copy, asks where it is going: each card opens Export on its destination", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [exportedOnlyItem],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    const router = renderDetail("asset-b");
+    await waitForLoaded();
+    const panel = () => screen.getByRole("region", { name: "Where is it going?" });
+    expect(
+      within(panel()).getByText(
+        "Pick a place and we export a copy that fits it. The original stays as it is.",
+      ),
+    ).toBeVisible();
+    // Its cards are the action, so "Export a copy" waits until the panel is gone.
+    expect(screen.queryByRole("button", { name: "Export a copy" })).toBeNull();
+    // Every destination the code has, Email included.
+    expect(within(panel()).getAllByRole("button", { name: /^Export a copy for / })).toHaveLength(7);
+    for (const [name, search] of [
+      ["Export a copy for YouTube", "?to=youtube"],
+      ["Export a copy for Reels · TikTok · Shorts", "?to=vertical"],
+      ["Export a copy for LinkedIn · Feeds", "?to=square"],
+      ["Export a copy for GitHub · Jira · Linear", "?to=github"],
+      ["Export a copy for Slack · Discord · Email", "?to=chat"],
+      ["Export a copy for Email · anywhere", "?to=email"],
+      ["Export a copy for Archive copy", "?to=archive"],
+    ] as const) {
+      fireEvent.click(within(panel()).getByRole("button", { name }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-b"));
+      expect(router.state.location.search).toBe(search);
+      await act(() => router.navigate("/library/asset-b"));
+      await waitForLoaded();
+    }
+  });
+
+  it("each destination card shows the size of its copy: amber when uploaded, teal when light", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [exportedOnlyItem],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    renderDetail("asset-b");
+    await waitForLoaded();
+    const card = (name: string) =>
+      within(screen.getByRole("region", { name: "Where is it going?" })).getByRole("button", {
+        name: `Export a copy for ${name}`,
+      });
+    // The archive copy is the recording itself; the others wait for the file to be read.
+    expect(within(card("Archive copy")).getByText(/MB$/)).toHaveAttribute("data-tone", "light");
+    await waitFor(() => expect(within(card("YouTube")).queryByText("…")).toBeNull());
+    expect(within(card("YouTube")).getByText(/~\d.* MB$/)).toHaveAttribute("data-tone", "upload");
+    expect(within(card("GitHub · Jira · Linear")).getByText(/~\d.* MB$/)).toHaveAttribute(
+      "data-tone",
+      "light",
+    );
+  });
+
+  it("Not now hides the panel and brings back Export a copy, which opens Export on nothing", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [exportedOnlyItem],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+
+    const router = renderDetail("asset-b");
+    await waitForLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(screen.queryByRole("region", { name: "Where is it going?" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Export a copy" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-b"));
     expect(router.state.location.search).toBe("");
   });
 
-  it("the quick chips open Prepare on their destination", async () => {
+  it("tags the title and the player as the master and says the original never changes", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [exportedOnlyItem],
       vaultError: null,
       catalogVerifiedAt: null,
     }));
 
-    const router = renderDetail("asset-b");
+    renderDetail("asset-b");
     await waitForLoaded();
-    expect(screen.getByRole("button", { name: "Prepare for TikTok · Reels" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Prepare for GitHub" })).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Prepare for YouTube" }));
-
-    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
-    expect(router.state.location.search).toBe("?to=youtube");
+    expect(screen.getAllByText("Master · full quality")).toHaveLength(2);
+    expect(screen.getByText("This is your original. It never changes.")).toBeVisible();
+    // Opened from the Library, not right after recording: no "Saved" notice.
+    expect(screen.queryByText("Saved to your Library.")).toBeNull();
   });
 
   it("Edit video lands on the recording's Editor URL", async () => {
@@ -383,10 +519,56 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     const link = await screen.findByRole("link", { name: /original take$/i });
     expect(link).toHaveAttribute("href", "/library/src");
 
+    cleanup();
     renderDetail("src");
     await waitForLoaded();
-    expect(await screen.findByText(/^exports$/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /original take \(export\)/i })).toBeInTheDocument();
+    const copies = await screen.findByRole("region", { name: "Copies from this original" });
+    expect(within(copies).getByRole("link", { name: /original take \(export\)/i })).toHaveAttribute(
+      "href",
+      "/library/exp",
+    );
+    // With copies, the page lists them instead of asking where it is going.
+    expect(screen.queryByRole("region", { name: "Where is it going?" })).toBeNull();
+    expect(screen.getByText("1 copy")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Export a copy" })).toBeVisible();
+  });
+
+  it("names a copy made for a destination by its destination, and keeps the copy untagged", async () => {
+    const items = [
+      { ...base, assetId: "src", title: "Take", local: local("src") },
+      {
+        ...base,
+        assetId: "gh",
+        title: "Take (light)",
+        derivedFromAssetId: "src",
+        local: {
+          ...local("gh"),
+          derivedFromAssetId: "src",
+          sizeBytes: 9_000_000,
+          export: { preset: "light" as const, fingerprint: "whole" },
+        },
+      },
+    ];
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items,
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    renderDetail("src");
+    await waitForLoaded();
+    const copies = await screen.findByRole("region", { name: "Copies from this original" });
+    const row = within(copies).getByRole("link", { name: /^GitHub · Jira · Linear/ });
+    expect(row).toHaveAttribute("href", "/library/gh");
+    // The copy's picture size follows from the master's (2560 × 1440) and its preset.
+    expect(await within(row).findByText(/× \d+ · 9.0 MB$/)).toBeVisible();
+    expect(
+      within(copies).getByRole("button", { name: "Drag GitHub · Jira · Linear into another app" }),
+    ).toBeVisible();
+
+    cleanup();
+    renderDetail("gh");
+    await waitForLoaded();
+    expect(screen.queryByText("Master · full quality")).toBeNull();
   });
 
   it("says the source was deleted when the parent is not in the list", async () => {
@@ -523,21 +705,31 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
       catalogVerifiedAt: null,
     }));
 
-  it("labels the player on an original as showing the unedited file", async () => {
+  it("says on an edited original that the file never changes and the edits live in the editor", async () => {
     // The player streams the vault file, which ADR 0003 keeps untouched — so it never
     // shows the edits. Nothing said so, which is what made the badge above it read as
     // a contradiction.
-    window.electronAPI.listLibraryItems = pair();
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [{ ...base, assetId: "src", title: "Take", local: local("src"), editSavedAt: 5_000 }],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
     renderDetail("src");
     await waitForLoaded();
-    expect(await screen.findByText(/edits are not shown here/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "This is your original. It never changes. Your edits live in the editor.",
+      ),
+    ).toBeInTheDocument();
   });
 
-  it("omits that label on an export, where the player IS the edited video", async () => {
+  it("omits the master tag and note on an export, where the player IS the edited video", async () => {
     window.electronAPI.listLibraryItems = pair();
     renderDetail("exp");
     await waitForLoaded();
-    expect(screen.queryByText(/edits are not shown here/i)).toBeNull();
+    expect(screen.queryByText(/it never changes/i)).toBeNull();
+    expect(screen.queryByText("Master · full quality")).toBeNull();
+    expect(screen.queryByRole("region", { name: "Where is it going?" })).toBeNull();
   });
 });
 
@@ -555,7 +747,7 @@ describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
     probe.mockClear();
   });
 
-  it("over 25 MB: amber size, and a banner with the Light estimate that opens Prepare on GitHub", async () => {
+  it("over 25 MB: amber size, and the Light estimate in the panel, whose GitHub card makes it", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [withSize(119_000_000)],
       vaultError: null,
@@ -564,19 +756,43 @@ describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
     const router = renderDetail("asset-b");
     await waitForLoaded();
 
-    expect(screen.getByText("119 MB")).toHaveAttribute("data-heavy", "true");
+    expect(screen.getByText("119 MB", { selector: "[data-heavy]" })).toHaveAttribute(
+      "data-heavy",
+      "true",
+    );
     expect(screen.getByText("119 MB is heavy to send.")).toBeInTheDocument();
     // The Light row's estimate for 78 s, which fits GitHub's 100 MB.
     expect(
       await screen.findByText(/about 7.6 MB, small enough for GitHub or Jira/),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Prepare a light copy →" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
+    // Folded into "Where is it going?": no second banner, the GitHub card is the action.
+    const panel = screen.getByRole("region", { name: "Where is it going?" });
+    expect(within(panel).getByText("119 MB is heavy to send.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Prepare a light copy →" })).toBeNull();
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Export a copy for GitHub · Jira · Linear" }),
+    );
+    await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-b"));
     expect(router.state.location.search).toBe("?to=github");
   });
 
-  it("up to 25 MB: no banner, no amber, and the file isn't read on this page", async () => {
+  it("a heavy copy keeps its own banner, which opens Prepare on GitHub", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [{ ...withSize(119_000_000), derivedFromAssetId: "gone" }],
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+    const router = renderDetail("asset-b");
+    await waitForLoaded();
+
+    expect(screen.queryByRole("region", { name: "Where is it going?" })).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Prepare a light copy →" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-b"));
+    expect(router.state.location.search).toBe("?to=github");
+  });
+
+  it("up to 25 MB: no banner and no amber", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [withSize(20_000_000)],
       vaultError: null,
@@ -586,26 +802,29 @@ describe("LibraryDetailPage — heavy to send (NIW2-218)", () => {
     await waitForLoaded();
 
     expect(screen.queryByText(/heavy to send/)).toBeNull();
-    expect(screen.getByText("20 MB")).toHaveAttribute("data-heavy", "false");
-    expect(probe).not.toHaveBeenCalled();
+    expect(screen.getByText("20 MB", { selector: "[data-heavy]" })).toHaveAttribute(
+      "data-heavy",
+      "false",
+    );
   });
 });
 
-describe("LibraryDetailPage — where is it going? (NIW2-578)", () => {
-  // Small on purpose: the panel shows after every recording, not only a heavy one.
+describe("LibraryDetailPage — your video is ready (NIW2-584)", () => {
+  // Small on purpose: the card shows after every recording, not only a heavy one.
   const fresh: LibraryItem = {
     ...exportedOnlyItem,
     local: { ...exportedOnlyItem.local!, sizeBytes: 4_000_000 },
     cloud: null,
     availability: "local",
   };
-  const PANEL = { name: "Where is your video going?" };
+  const CARD = { name: "Your video is ready" };
 
   function renderFresh(fromRecording: boolean) {
     const router = createMemoryRouter(
       [
         { path: "/library/:assetId", element: <LibraryDetailPage /> },
-        { path: "/prepare/:assetId", element: <div>prepare-page</div> },
+        { path: "/export/:assetId", element: <div>export-page</div> },
+        { path: "/editor/video/:assetId", element: <div>editor-video</div> },
       ],
       { initialEntries: [{ pathname: "/library/asset-b", state: { fromRecording } }] },
     );
@@ -618,6 +837,9 @@ describe("LibraryDetailPage — where is it going? (NIW2-578)", () => {
   }
 
   beforeEach(() => {
+    // Every test's router starts on the same history key; let each one ask again.
+    __resetFloatingReadyCardForTests();
+    window.electronAPI.showRecordingReady = vi.fn(async () => false);
     window.electronAPI.onLibraryChanged = () => () => {};
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [fresh],
@@ -626,42 +848,95 @@ describe("LibraryDetailPage — where is it going? (NIW2-578)", () => {
     }));
   });
 
-  it("right after recording, asks where it is going; a shortcut opens Prepare on it", async () => {
+  it("right after recording, floats the card on the desktop once, with the file's numbers, and not in-app", async () => {
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    const showRecordingReady = vi.fn(async () => true);
+    window.electronAPI.showRecordingReady = showRecordingReady;
+    renderFresh(true);
+    await waitFor(() => expect(showRecordingReady).toHaveBeenCalledTimes(1));
+    expect(showRecordingReady).toHaveBeenCalledWith({
+      assetId: "asset-b",
+      durationSeconds: 78,
+      dimensions: { width: 2560, height: 1440 },
+      sizeBytes: 4_000_000,
+      canEdit: true,
+    });
+    await act(async () => {});
+    expect(screen.queryByRole("region", CARD)).toBeNull();
+    expect(showRecordingReady).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the in-app card when the floating window cannot be asked for", async () => {
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    window.electronAPI.showRecordingReady = vi.fn(async () => {
+      throw new Error("No handler registered for 'recording-ready:show'");
+    });
+    renderFresh(true);
+    expect(await screen.findByRole("region", CARD)).toBeVisible();
+  });
+
+  it("no floating card either when Settings turned it off or the page came from the Library", async () => {
+    const showRecordingReady = vi.fn(async () => true);
+    window.electronAPI.showRecordingReady = showRecordingReady;
+    window.electronAPI.getSettings = vi
+      .fn()
+      .mockResolvedValue({ ...DEFAULT_SETTINGS, showRecordingSavedCard: false });
+    renderFresh(true);
+    await waitForLoaded();
+    await act(async () => {});
+    cleanup();
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    renderFresh(false);
+    await waitForLoaded();
+    await act(async () => {});
+    expect(showRecordingReady).not.toHaveBeenCalled();
+  });
+
+  // The in-app card, when the floating window could not open (the test stub answers false).
+  it("in-app fallback: the top-right card asks where it is going; a chip opens Prepare on it", async () => {
     window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
     const router = renderFresh(true);
-    const panel = await screen.findByRole("region", PANEL);
-    expect(within(panel).getByText("Your video is ready. Where is it going?")).toBeVisible();
+    const card = await screen.findByRole("region", CARD);
     // The file's own size and picture, once read.
-    expect(
-      await within(panel).findByText("1:18 · 2560 × 1440 · 4.0 MB · the original stays as it is"),
-    ).toBeVisible();
-    for (const name of [/^YouTube/, /^TikTok · Reels/, /^GitHub · Jira/, /^Slack · Discord/]) {
-      expect(within(panel).getByRole("button", { name })).toBeVisible();
+    expect(await within(card).findByText("1:18 · 2560 × 1440 · 4.0 MB")).toBeVisible();
+    for (const name of ["YouTube", "TikTok", "GitHub"]) {
+      expect(
+        within(card).getByRole("button", { name: `Prepare a copy for ${name}` }),
+      ).toBeVisible();
     }
 
-    fireEvent.click(within(panel).getByRole("button", { name: /^YouTube/ }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
-    expect(router.state.location.search).toBe("?to=youtube");
+    fireEvent.click(within(card).getByRole("button", { name: "Prepare a copy for TikTok" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-b"));
+    expect(router.state.location.search).toBe("?to=vertical");
+    expect(screen.queryByRole("region", CARD)).toBeNull();
   });
 
   it("More places opens Prepare with nothing preselected", async () => {
     window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
     const router = renderFresh(true);
-    const panel = await screen.findByRole("region", PANEL);
-    fireEvent.click(within(panel).getByRole("button", { name: "More places" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare/asset-b"));
+    const card = await screen.findByRole("region", CARD);
+    fireEvent.click(within(card).getByRole("button", { name: "More places" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/export/asset-b"));
     expect(router.state.location.search).toBe("");
   });
 
-  it("Not now dismisses it, and Prepare for… stays on the page", async () => {
+  it("Edit first opens the recording in the editor", async () => {
     window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
-    renderFresh(true);
-    const panel = await screen.findByRole("region", PANEL);
-    fireEvent.click(
-      within(panel).getByRole("button", { name: "Not now — keep it in the Library" }),
-    );
-    expect(screen.queryByRole("region", PANEL)).toBeNull();
-    expect(screen.getByRole("button", { name: "Prepare for…" })).toBeVisible();
+    const router = renderFresh(true);
+    const card = await screen.findByRole("region", CARD);
+    fireEvent.click(within(card).getByRole("button", { name: "Edit first" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/editor/video/asset-b"));
+  });
+
+  it("✕ closes it and leaves the user on the recording, its question still there; no Open here", async () => {
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    const router = renderFresh(true);
+    const card = await screen.findByRole("region", CARD);
+    expect(within(card).queryByRole("button", { name: "Open" })).toBeNull();
+    fireEvent.click(within(card).getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("region", CARD)).toBeNull();
+    expect(router.state.location.pathname).toBe("/library/asset-b");
+    expect(screen.getByRole("region", { name: "Where is it going?" })).toBeVisible();
   });
 
   it("not when Settings turned it off", async () => {
@@ -671,7 +946,22 @@ describe("LibraryDetailPage — where is it going? (NIW2-578)", () => {
     renderFresh(true);
     await waitForLoaded();
     await act(async () => {});
-    expect(screen.queryByRole("region", PANEL)).toBeNull();
+    expect(screen.queryByRole("region", CARD)).toBeNull();
+  });
+
+  it("right after recording, the page says it is saved and is the original, until ✕", async () => {
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    renderFresh(true);
+    await waitForLoaded();
+    const notice = screen.getByRole("status");
+    expect(notice).toHaveTextContent(
+      "Saved to your Library. This is the original — every copy you export is made from it and it never changes.",
+    );
+    // The notice says it, so the standing note waits.
+    expect(screen.queryByText("This is your original. It never changes.")).toBeNull();
+    fireEvent.click(within(notice).getByRole("button", { name: "Hide this notice" }));
+    expect(screen.queryByText("Saved to your Library.")).toBeNull();
+    expect(screen.getByText("This is your original. It never changes.")).toBeVisible();
   });
 
   it("not when the page was opened from the Library", async () => {
@@ -679,7 +969,7 @@ describe("LibraryDetailPage — where is it going? (NIW2-578)", () => {
     renderFresh(false);
     await waitForLoaded();
     await act(async () => {});
-    expect(screen.queryByRole("region", PANEL)).toBeNull();
+    expect(screen.queryByRole("region", CARD)).toBeNull();
   });
 
   it("keeps the player mounted through the re-list a rename broadcasts (NIW2-560)", async () => {
@@ -740,6 +1030,123 @@ describe("LibraryDetailPage — where is it going? (NIW2-578)", () => {
       relist.resolve({ items: [renamedItem], vaultError: null, catalogVerifiedAt: null }),
     );
     expect(document.querySelector("video")).toBe(player);
+  });
+});
+
+describe("LibraryDetailPage — the recorded face over the original (NIW2-565)", () => {
+  /** A take with a webcam file: a rounded bubble centred in the frame, the camera off 2–4 s. */
+  const webcam: WebcamTrackMeta = {
+    startOffsetMs: 0,
+    offsetQuality: "exact",
+    width: 1280,
+    height: 720,
+    fps: 30,
+    recordedLayout: {
+      shape: "rounded",
+      size: 200,
+      mirrored: false,
+      framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+      position: { x: 0.5, y: 0.5 },
+      sizeFraction: 0.2,
+    },
+    gaps: [{ startMs: 2000, endMs: 4000 }],
+  };
+  const withWebcam: LibraryItem = {
+    ...exportedOnlyItem,
+    local: { ...exportedOnlyItem.local!, webcam },
+  };
+
+  const list = (item: LibraryItem) =>
+    vi.fn(async () => ({ items: [item], vaultError: null, catalogVerifiedAt: null }));
+
+  /** The screen video, decoded at 1000×1000, with a clock the test sets by hand. */
+  function loadScreen(): HTMLVideoElement {
+    const main = screen.getByTestId("recording-video") as HTMLVideoElement;
+    let current = 1;
+    Object.defineProperty(main, "currentTime", {
+      configurable: true,
+      get: () => current,
+      set: (v: number) => {
+        current = v;
+      },
+    });
+    Object.defineProperty(main, "videoWidth", { configurable: true, get: () => 1000 });
+    Object.defineProperty(main, "videoHeight", { configurable: true, get: () => 1000 });
+    fireEvent.loadedMetadata(main);
+    return main;
+  }
+
+  function loadWebcam(duration: number): HTMLVideoElement {
+    const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
+    Object.defineProperty(cam, "duration", { configurable: true, get: () => duration });
+    fireEvent.loadedMetadata(cam);
+    return cam;
+  }
+
+  beforeEach(() => {
+    window.electronAPI.onLibraryChanged = () => () => {};
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(() => Promise.resolve());
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("plays the take's webcam file over the screen, at the bubble's recorded spot and shape", async () => {
+    window.electronAPI.listLibraryItems = list(withWebcam);
+    renderDetail("asset-b");
+    await waitForLoaded();
+    loadScreen();
+    const cam = loadWebcam(30);
+    expect(cam.getAttribute("src")).toBe("kaipu-media://webcam/local-b");
+    const bubble = screen.getByTestId("webcam-layer");
+    expect(bubble.style.display).toBe("");
+    expect(bubble.style.left).toBe("40%");
+    expect(bubble.style.top).toBe("40%");
+    expect(bubble.style.width).toBe("20%");
+    expect((bubble.firstElementChild as HTMLElement).style.clipPath).toBe("inset(0 round 18%)");
+    // Read-only: nothing to select or drag over the player's controls.
+    expect(screen.queryByRole("button", { name: /webcam/i })).toBeNull();
+  });
+
+  it("hides the face while the camera was off, and follows a seek back out of it", async () => {
+    window.electronAPI.listLibraryItems = list(withWebcam);
+    renderDetail("asset-b");
+    await waitForLoaded();
+    const main = loadScreen();
+    loadWebcam(30);
+    const bubble = screen.getByTestId("webcam-layer");
+    act(() => {
+      main.currentTime = 3;
+      fireEvent(main, new Event("seeked"));
+    });
+    expect(bubble.style.display).toBe("none");
+    act(() => {
+      main.currentTime = 5;
+      fireEvent(main, new Event("seeked"));
+    });
+    expect(bubble.style.display).toBe("");
+  });
+
+  it("plays the face at the screen's speed", async () => {
+    window.electronAPI.listLibraryItems = list(withWebcam);
+    renderDetail("asset-b");
+    await waitForLoaded();
+    const main = loadScreen();
+    const cam = loadWebcam(30);
+    act(() => {
+      main.playbackRate = 2;
+      fireEvent(main, new Event("ratechange"));
+    });
+    expect(cam.playbackRate).toBe(2);
+  });
+
+  it("a take without a webcam file plays the screen alone, as before", async () => {
+    window.electronAPI.listLibraryItems = list(exportedOnlyItem);
+    renderDetail("asset-b");
+    await waitForLoaded();
+    loadScreen();
+    expect(screen.queryByTestId("webcam-video")).toBeNull();
   });
 });
 

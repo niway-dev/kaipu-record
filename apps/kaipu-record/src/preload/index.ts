@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { IPC_CHANNELS } from "@shared/types";
 import type { AppSettings, ReconcileProgress } from "@shared/types";
@@ -12,6 +12,7 @@ import type {
 } from "@shared/types/screenshot-capture";
 import { WorkspaceStampGuard } from "@shared/workspace-stamp-guard";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
+import type { RecordingReadyHandOff, RecordingReadyPayload } from "@shared/types/recording-ready";
 import {
   STALE_WORKSPACE,
   type WorkspacePrepareRequest,
@@ -153,6 +154,9 @@ const kaipuApi: KaipuElectronAPI = {
     if (guard.switching || !guard.stamp) return;
     ipcRenderer.send(IPC_CHANNELS.startFileDrag, guard.stamp, id, name);
   },
+  importVideos: () => scopedInvoke(IPC_CHANNELS.importVideos),
+  importVideoFiles: (paths) => scopedInvoke(IPC_CHANNELS.importVideoFiles, paths),
+  pathForFile: (file) => webUtils.getPathForFile(file),
   setExportActive: (active) => ipcRenderer.send(IPC_CHANNELS.exportActive, active),
   beginExport: () => ipcRenderer.invoke(IPC_CHANNELS.exportBegin),
   onExportCommand: (callback) => {
@@ -205,12 +209,17 @@ const kaipuApi: KaipuElectronAPI = {
   removeLocalCopy: (id) => scopedInvoke(IPC_CHANNELS.removeLocalCopy, id),
   recordingCreate: (sessionId, kind) =>
     ipcRenderer.invoke(IPC_CHANNELS.recordingCreate, sessionId, kind),
-  recordingWrite: (sessionId, data, position) =>
-    ipcRenderer.send(IPC_CHANNELS.recordingWrite, sessionId, data, position),
+  recordingWrite: (sessionId, data, position, kind) =>
+    ipcRenderer.send(IPC_CHANNELS.recordingWrite, sessionId, data, position, kind),
   recordingFinalize: (sessionId, meta) =>
     ipcRenderer.invoke(IPC_CHANNELS.recordingFinalize, sessionId, meta),
   recordingAbort: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.recordingAbort, sessionId),
-  recordingStat: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.recordingStat, sessionId),
+  recordingStat: (sessionId, kind) =>
+    ipcRenderer.invoke(IPC_CHANNELS.recordingStat, sessionId, kind),
+  recordingWebcamEnded: (sessionId) =>
+    ipcRenderer.invoke(IPC_CHANNELS.recordingWebcamEnded, sessionId),
+  recordingWebcamTrackSupported: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.recordingWebcamTrackSupported),
   recordingReportTick: (tick) => ipcRenderer.send(IPC_CHANNELS.recordingReportTick, tick),
   recordingReportMicLevels: (levels) => ipcRenderer.send(IPC_CHANNELS.micLevelsReport, levels),
   getMicLevelsListening: () => ipcRenderer.invoke(IPC_CHANNELS.micLevelsGetListening),
@@ -336,6 +345,24 @@ const kaipuApi: KaipuElectronAPI = {
     ready: () => ipcRenderer.send(IPC_CHANNELS.screenshotToastReady),
     action: (action) => ipcRenderer.send(IPC_CHANNELS.screenshotToastAction, { action }),
     hover: (paused) => ipcRenderer.send(IPC_CHANNELS.screenshotToastHover, { paused }),
+  },
+  showRecordingReady: (payload) => ipcRenderer.invoke(IPC_CHANNELS.recordingReadyShow, payload),
+  recordingReadyCard: {
+    onShow: (callback) => {
+      const listener = (_e: IpcRendererEvent, payload: RecordingReadyPayload): void =>
+        callback(payload);
+      ipcRenderer.on(IPC_CHANNELS.recordingReadyPayload, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingReadyPayload, listener);
+    },
+    ready: () => ipcRenderer.send(IPC_CHANNELS.recordingReadyCardReady),
+    action: (action) => ipcRenderer.send(IPC_CHANNELS.recordingReadyAction, action),
+    resize: (height) => ipcRenderer.send(IPC_CHANNELS.recordingReadyResize, { height }),
+  },
+  onRecordingReadyOpen: (callback) => {
+    const listener = (_e: IpcRendererEvent, handOff: RecordingReadyHandOff): void =>
+      callback(handOff);
+    ipcRenderer.on(IPC_CHANNELS.recordingReadyOpen, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingReadyOpen, listener);
   },
   onOpenSavedScreenshot: (callback) => {
     const listener = (_e: IpcRendererEvent, request: OpenSavedScreenshotRequest): void =>

@@ -3,7 +3,12 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { extname } from "node:path";
 import { Readable } from "node:stream";
-import { recordingFilePath, screenshotFilePath, thumbnailFilePath } from "./library";
+import {
+  recordingFilePath,
+  screenshotFilePath,
+  thumbnailFilePath,
+  webcamFilePath,
+} from "./library";
 import { activeWorkspace } from "./workspaces";
 import { isForeignWorkspaceUrl } from "./media-workspace";
 import { parseByteRange } from "./media-range";
@@ -13,6 +18,7 @@ import { MEDIA_SCHEME, parseMediaUrl } from "@shared/media-url";
  * Privileged, streamable protocol for local vault media.
  *   kaipu-media://recording/<id>  → the video file (Range-aware, for seeking)
  *   kaipu-media://thumb/<id>      → the poster jpg
+ *   kaipu-media://webcam/<id>     → the take's webcam track (Range-aware; ADR 0037)
  * `registerMediaScheme()` must run BEFORE `app.whenReady`; `registerMediaProtocol()` after.
  */
 export { MEDIA_SCHEME };
@@ -106,7 +112,9 @@ export function registerMediaProtocol(): void {
         ? await screenshotFilePath(id)
         : hostname === "thumb"
           ? thumbnailFilePath(id)
-          : await recordingFilePath(id);
+          : hostname === "webcam"
+            ? webcamFilePath(id)
+            : await recordingFilePath(id);
     try {
       return await streamFile(target, request.headers.get("range"));
     } catch {

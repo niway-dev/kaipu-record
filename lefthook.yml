@@ -13,11 +13,11 @@ pre-commit:
   jobs:
     - name: format
       glob: "*.{js,jsx,cjs,mjs,ts,tsx,cts,mts,json,jsonc,css,md,mdx}"
-      run: bunx oxfmt --write {staged_files}
+      run: ./node_modules/.bin/oxfmt --write {staged_files}
       stage_fixed: true
     - name: lint
       glob: "*.{js,jsx,cjs,mjs,ts,tsx,cts,mts}"
-      run: bunx oxlint {staged_files}
+      run: ./node_modules/.bin/oxlint {staged_files}
 
 commit-msg:
   skip:

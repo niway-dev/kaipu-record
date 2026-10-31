@@ -1,0 +1,57 @@
+/* Export with no video: the dashed target in the middle of the screen. */
+.wrap {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  /* Not a scroll box: the Library picker opens below its button and must not be clipped. */
+}
+
+.zone {
+  width: min(560px, 100%);
+  padding: 36px 30px;
+  border: 1.5px dashed var(--border-light);
+  border-radius: 14px;
+  text-align: center;
+  transition:
+    background var(--transition),
+    border-color var(--transition);
+}
+
+.zone[data-active="true"] {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-soft);
+}
+
+.icon {
+  color: var(--text-muted);
+}
+
+.zone[data-active="true"] .icon {
+  color: var(--accent-primary);
+}
+
+.title {
+  margin: 14px 0 0;
+  font-size: 18px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.body {
+  margin: 6px 0 0;
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}

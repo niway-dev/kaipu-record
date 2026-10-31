@@ -230,6 +230,40 @@ describe("useRecordingSetup", () => {
     }
   });
 
+  it("records the webcam only with the camera on, from the bubble's camera and framing", async () => {
+    const stored = await window.electronAPI.getSettings();
+    const cameraBubble = {
+      ...stored.cameraBubble,
+      deviceId: "cam-1",
+      size: 360,
+      framing: { enabled: true, zoom: 1.5, x: 0.2, y: 0 },
+    };
+    vi.spyOn(window.electronAPI, "getSettings").mockResolvedValue({ ...stored, cameraBubble });
+
+    mockSettings = SETTINGS({ selectedSource: SCREEN, isCameraEnabled: true });
+    const on = renderHook(() => useRecordingSetup());
+    await flushSettings();
+    act(() => on.result.current.startRecording());
+    const resolveOn = recorderRequestStart.mock.calls[0][0] as () => { webcam: unknown };
+    expect(resolveOn().webcam).toEqual({
+      deviceId: "cam-1",
+      lines: 1080, // 360 × 2 × 1.5
+      bubble: {
+        shape: cameraBubble.shape,
+        size: 360,
+        mirrored: cameraBubble.mirrored,
+        framing: cameraBubble.framing,
+      },
+    });
+
+    mockSettings = SETTINGS({ selectedSource: SCREEN, isCameraEnabled: false });
+    const off = renderHook(() => useRecordingSetup());
+    await flushSettings();
+    act(() => off.result.current.startRecording());
+    const resolveOff = recorderRequestStart.mock.calls[1][0] as () => { webcam: unknown };
+    expect(resolveOff().webcam).toBeNull();
+  });
+
   it("startRecording carries the shared recording area into the start input", () => {
     const area = {
       displayId: 1,

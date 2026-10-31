@@ -7,11 +7,11 @@ import {
   CAMERA_BUBBLE_WINDOW_PAD,
   DEFAULT_CAMERA_BUBBLE,
   cameraBubblePresetFor,
-  cameraCaptureLines,
   framingTransform,
   clampCameraBubbleSize,
   type CameraBubbleSettings,
 } from "@shared/camera-bubble";
+import { bubblePreviewLines } from "@shared/webcam-track";
 import styles from "./camera-bubble.module.css";
 
 /** The rounded square's corner, as a share of its side. */
@@ -33,6 +33,35 @@ function useBubbleSettings(): CameraBubbleSettings {
     return window.electronAPI.onSettingsChanged((settings) => setBubble(settings.cameraBubble));
   }, []);
   return bubble;
+}
+
+/**
+ * Whether the Camera toggle is on. The window only exists while it is, except while a take
+ * keeps it parked (hidden) through a camera turned off mid-take (ADR 0037): the preview must
+ * then release the camera itself, so the in-use light goes off. Off until main answers, so a
+ * window parked before it was ready never opens the camera (its light would blink); on if
+ * main cannot answer, as the window exists for a camera that is on. A broadcast that lands
+ * before the first read wins, being newer.
+ */
+function useCameraOn(): boolean {
+  const [on, setOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    let heard = false;
+    const unsubscribe = window.electronAPI.onRecordingSettingsChanged((settings) => {
+      heard = true;
+      setOn(settings.isCameraEnabled);
+    });
+    void window.electronAPI
+      .getRecordingSettings()
+      .then((settings) => {
+        if (!heard) setOn(settings.isCameraEnabled);
+      })
+      .catch(() => {
+        if (!heard) setOn(true);
+      });
+    return unsubscribe;
+  }, []);
+  return on === true;
 }
 
 /**
@@ -112,10 +141,12 @@ export function CameraBubble(): React.JSX.Element {
   // A new resolution reopens the camera, and the bubble blinks while it does: during a take
   // that blink would be in the video. So the lines stay as they were when the take started
   // (the zoom itself still applies at once) and catch up when it ends.
-  const wantedLines = cameraCaptureLines(bubble.size, bubble.framing);
+  // Never fewer than the recorder's webcam track needs: both windows share the camera (ADR 0037).
+  const wantedLines = bubblePreviewLines(bubble);
   const takeLines = useRef(wantedLines);
   if (!activity.active) takeLines.current = wantedLines;
-  const { videoRef, hasStream } = useCameraPreview(true, bubble.deviceId, takeLines.current);
+  const cameraOn = useCameraOn();
+  const { videoRef, hasStream } = useCameraPreview(cameraOn, bubble.deviceId, takeLines.current);
   const [size, setSize] = useState(sizeFromWindow);
   const [hovered, setHovered] = useState(false);
   const [dragging, setDragging] = useState(false);

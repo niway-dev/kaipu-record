@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type { SourceThumbnail } from "../use-source-thumbnails";
 import {
   fractionToTime,
   rulerTicks,
   thumbnailsForRange,
+  thumbnailsForRangeWithin,
   timeToFraction,
 } from "./timeline-geometry";
 
@@ -50,5 +52,27 @@ describe("thumbnailsForRange", () => {
 
   it("returns [] when there are no thumbnails", () => {
     expect(thumbnailsForRange([], 0, 10, 4)).toEqual([]);
+  });
+});
+
+describe("thumbnailsForRangeWithin", () => {
+  // A long recording (240 s) has one thumbnail every 10 s of source: 5, 15, ... 235.
+  const thumbs = Array.from({ length: 24 }, (_, i) => ({ sourceTime: 5 + i * 10, url: `c${i}` }));
+  const urls = (picked: (SourceThumbnail | null)[]) => picked.map((t) => t?.url ?? null);
+
+  it("leaves a tile empty before a late start shorter than one thumbnail spacing", () => {
+    // The webcam starts 3 s in: the tile at source 1 s has a frame 4 s away, but no footage.
+    const picked = thumbnailsForRangeWithin(thumbs, 0, 10, 5, { start: 3, end: 240 });
+    expect(urls(picked)).toEqual([null, "c0", "c0", "c0", "c0"]);
+  });
+
+  it("leaves a tile empty after an early end shorter than one thumbnail spacing", () => {
+    // The webcam ends 4 s before the screen: the tile at 239 s must not show the last face.
+    const picked = thumbnailsForRangeWithin(thumbs, 230, 240, 5, { start: 0, end: 236 });
+    expect(urls(picked)).toEqual(["c23", "c23", "c23", null, null]);
+  });
+
+  it("returns [] when there are no thumbnails", () => {
+    expect(thumbnailsForRangeWithin([], 0, 10, 4, { start: 0, end: 10 })).toEqual([]);
   });
 });

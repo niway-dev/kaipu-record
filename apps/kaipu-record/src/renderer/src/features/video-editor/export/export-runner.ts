@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { Translator } from "@kaipu/i18n";
 import type { LocalRecording } from "@shared/types/library-storage";
+import type { DestinationId } from "@renderer/features/prepare/destinations";
 import { captureException } from "@renderer/features/analytics";
 import { showToast } from "@renderer/ui/toast-store";
 import type { SlideAssetStore } from "../slide-assets";
@@ -17,8 +18,10 @@ import {
   resolveExportTarget,
   slideFrameCount,
 } from "./export-presets";
-import { WHOLE_RECORDING_FINGERPRINT } from "./export-reuse";
+import { facelessFingerprint, isWholeFingerprint } from "./export-reuse";
+import { noteFinishedCopy } from "./ready-copies";
 import type { VideoEncodingChoice } from "./video-encoding";
+import { type ExportWebcamTrack, fetchWebcamTrack } from "./webcam-fetch";
 import { mediaUrl } from "@renderer/lib/media-url";
 import { isMaintenanceError } from "@renderer/features/library/vault-errors";
 
@@ -44,6 +47,11 @@ export interface StartExportArgs {
   slideAssets: SlideAssetStore;
   /** v2: the preview's camera path (useCameraPath). Sent whenever the plan has a zoom. */
   cameraPath: CameraPath | null;
+  /**
+   * The recording's webcam track (the sidecar's `webcam`), when it has one: with a webcam
+   * layer in the scene, its file is fetched and composed (ADR 0038).
+   */
+  webcamTrack?: ExportWebcamTrack | null;
   /** NIW2-218: destination preset; Balanced (the Settings default) when omitted. */
   presetId?: ExportPresetId;
   /** Fit/Fill for Vertical and Square; the preset's default when omitted. */
@@ -55,6 +63,8 @@ export interface StartExportArgs {
    * `editFingerprint(scene)` from the editor, `WHOLE_RECORDING_FINGERPRINT` from Share.
    */
   fingerprint?: string;
+  /** Where the copy is going, when Prepare started it (NIW2-586): the cards name it. */
+  destination?: DestinationId;
   /**
    * The file landed in the vault. Runs even when the page that started the export is gone
    * (exports run in the background), so it must not assume its component is mounted.
@@ -74,9 +84,19 @@ export interface ExportJobInfo {
   /** Output size. */
   width: number;
   height: number;
+  /**
+   * Where the copy is going, when Prepare started it: "Preparing your YouTube copy…".
+   * Absent for an editor export, which the cards call "your export" (NIW2-586).
+   */
+  destination?: DestinationId;
+  /**
+   * The whole recording, without edits (Prepare, Share) — a copy for a destination — rather
+   * than an editor export. Absent on jobs built before NIW2-585.
+   */
+  wholeRecording?: boolean;
 }
 
-/** A finished export, until the user dismisses its "Ready to share" card. */
+/** A finished export, until the user dismisses its ready card. */
 export interface ReadyExport {
   job: ExportJobInfo;
   recording: LocalRecording;
@@ -113,7 +133,7 @@ export function exportTitle(
     case "light":
       return t("presetTitleLight", { title });
     default:
-      return fingerprint === WHOLE_RECORDING_FINGERPRINT
+      return isWholeFingerprint(fingerprint)
         ? t("presetTitleShare", { title })
         : t("editedTitle", { title });
   }
@@ -233,7 +253,7 @@ export function retryVideoExport(): void {
   void startVideoExport(args, t);
 }
 
-/** The Ready card's Done (or ✕). */
+/** The Ready card's ✕. The copy stays unseen until it is opened (`ready-copies.ts`). */
 export function dismissReadyExport(): void {
   if (snapshot.ready) set({ ready: null });
 }
@@ -288,6 +308,8 @@ export async function startVideoExport(
     estimateBytes: presetId === "maximum" ? null : target.estimateBytes,
     width: target.width,
     height: target.height,
+    ...(args.destination ? { destination: args.destination } : {}),
+    wholeRecording: isWholeFingerprint(args.fingerprint),
   };
 
   active = true;
@@ -307,7 +329,12 @@ export async function startVideoExport(
     sessionId = null;
     active = false;
     teardown(id);
-    set({ status: "error", fraction: 0, error: message, attemptStartedAt: null });
+    set({
+      status: "error",
+      fraction: 0,
+      error: message,
+      attemptStartedAt: null,
+    });
   };
 
   // The editor's slide store is disposed when the editor unmounts, and the export may
@@ -328,13 +355,22 @@ export async function startVideoExport(
   }
 
   let sourceBlob: Blob;
+  let webcam: Awaited<ReturnType<typeof fetchWebcamTrack>>;
   try {
     const sourceResponse = await fetch(mediaUrl("recording", args.sourceId));
     sourceBlob = await sourceResponse.blob();
+    webcam = await fetchWebcamTrack(args.sourceId, plan.webcam, args.webcamTrack, (error) =>
+      captureException(error, { context: "video-export-webcam" }),
+    );
   } catch (error) {
     fail(GENERIC_ERROR, error);
     return true;
   }
+  /**
+   * The scene has a webcam layer the file will not carry: no webcam file to send, or (set
+   * below) the worker could not decode it. Its fingerprint must not say "with the face".
+   */
+  let faceDropped = plan.webcam !== null && webcam === null;
 
   // One worker run into one fresh writer session. Bitmaps and camera arrays are
   // TRANSFERRED to the worker, so a retry rebuilds them instead of reusing detached ones.
@@ -370,6 +406,7 @@ export async function startVideoExport(
 
     const id = `export-${crypto.randomUUID()}`;
     sessionId = id;
+    // An export, not a take: main keeps the camera bubble's protection on the live take.
     await window.electronAPI.recordingCreate(id, "export");
 
     if (!active) {
@@ -394,6 +431,10 @@ export async function startVideoExport(
         reportEncoderChoice(msg.choice, runTarget);
       } else if (msg.type === "progress") {
         if (snapshot.status === "exporting") set({ fraction: msg.fraction });
+      } else if (msg.type === "webcam-error") {
+        // The worker carries on without the layer; the file is still made.
+        captureException(new Error(msg.message), { context: "video-export-webcam" });
+        faceDropped = true;
       } else if (msg.type === "error") {
         if (runTarget.fastStart === "reserve" && PACKET_RESERVE_ERROR.test(msg.message)) {
           // FR9 fallback: the moov reservation was too small. Drop this attempt (its
@@ -417,6 +458,10 @@ export async function startVideoExport(
           // onSaved past that point would resurrect a cancelled export.
           await Promise.resolve();
           if (!active) return;
+          const fingerprint =
+            args.fingerprint && faceDropped
+              ? facelessFingerprint(args.fingerprint)
+              : args.fingerprint;
           try {
             const recording = await window.electronAPI.recordingFinalize(id, {
               title: exportTitle(t, presetId, args.title, args.fingerprint),
@@ -427,9 +472,12 @@ export async function startVideoExport(
               exportPreset: presetId,
               // The content plus the preset's encode revision, so "already exported" never
               // reuses a file a different encode produced (see ENCODE_REVISION).
-              ...(args.fingerprint
-                ? { exportFingerprint: encodeFingerprint(args.fingerprint, presetId) }
+              // A file that lost its face records a fingerprint that says so.
+              ...(fingerprint
+                ? { exportFingerprint: encodeFingerprint(fingerprint, presetId) }
                 : {}),
+              // Kept with the file: chat's and email's copies share a preset.
+              ...(args.destination ? { exportDestination: args.destination } : {}),
             });
             // Re-check again: cancel() could have run during the finalize await too.
             if (!active) return;
@@ -438,6 +486,11 @@ export async function startVideoExport(
             sessionId = null;
             active = false;
             set({ ...IDLE, ready: { job, recording } });
+            noteFinishedCopy(recording.assetId, {
+              destination: job.destination,
+              width: job.width,
+              height: job.height,
+            });
             try {
               await args.onSaved(recording);
             } catch (error) {
@@ -477,6 +530,7 @@ export async function startVideoExport(
       source: { width: args.videoWidth, height: args.videoHeight },
       target: runTarget,
       camera,
+      webcam,
     };
     runWorker.postMessage(startMessage, [
       ...overlays.map((o) => o.bitmap),

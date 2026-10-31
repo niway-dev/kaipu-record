@@ -22,7 +22,12 @@ import {
   type RenameResult,
 } from "@shared/types/library-storage";
 import { sanitizeRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
-import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/types/export-preset";
+import type { WebcamTrackMeta } from "@shared/webcam-track";
+import {
+  isExportDestinationId,
+  normalizeExportPresetId,
+  type StoredExportPresetId,
+} from "@shared/types/export-preset";
 import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-name";
 import { atomicWriteFile, uniqueTempPath, withLock } from "./atomic-write";
 import {
@@ -34,12 +39,16 @@ import {
   takenError,
 } from "./safe-place";
 import { sha256FileBase64 } from "./content-hash";
+import { webcamTrackState } from "./webcam-track-state";
 import { fileStemFromTitle, fsFold, isReservedStem, isVaultOwnedStem } from "./file-stem";
 import { mediaUrl } from "@shared/media-url";
 
 export const META_DIR = ".kaipu";
-/** Known video containers, in preference order — `.mp4` is what we now write. */
-const VIDEO_EXTS = [".mp4", ".webm"] as const;
+/**
+ * Known video containers, in preference order — `.mp4` is what we now write. `.mov` and
+ * `.m4v` arrive only through an import (NIW2-579), which keeps the source's container.
+ */
+const VIDEO_EXTS = [".mp4", ".webm", ".mov", ".m4v"] as const;
 const IMAGE_EXTS = [".png"] as const;
 /** Animated GIF exports (NIW2-217). Local-only; thumbnail in `.kaipu/<id>.jpg` like videos. */
 const GIF_EXTS = [".gif"] as const;
@@ -73,6 +82,8 @@ export interface Sidecar {
   exportPreset?: StoredExportPresetId;
   /** What the export encoded ("whole" or "edit:<hash>"); see RecordingFinalizeMeta. */
   exportFingerprint?: string;
+  /** Copies for a destination: where it is going. Read back only when it is a known id. */
+  exportDestination?: string;
   /** GIF exports only (NIW2-217). */
   gifWidth?: number;
   gifHeight?: number;
@@ -83,6 +94,8 @@ export interface Sidecar {
   editorSavedAt?: number;
   /** New recordings: how the take was captured (library labels). Absent on older items. */
   capture?: RecordingCapture;
+  /** New recordings with the webcam on: the webcam file's offset and size (ADR 0037). */
+  webcam?: WebcamTrackMeta;
 }
 
 /**
@@ -255,6 +268,8 @@ export interface CompanionPaths {
   editSession: string;
   editMeta: string;
   assetsDir: string;
+  /** The take's webcam file (ADR 0037): moved and removed with the item like the others. */
+  webcam: string;
 }
 
 /** How a rename reaches its target stem. */
@@ -416,6 +431,11 @@ export class LibraryVault {
     return join(this.metaDirectory(), `${id}.cursor.json`);
   }
 
+  /** The take's webcam, recorded as its own file beside the screen (ADR 0037). */
+  webcamFilePath(id: string): string {
+    return join(this.metaDirectory(), `${id}.webcam.mp4`);
+  }
+
   /** Every companion path `id` owns. `remove()` and `renameItem()` go through this, so they cannot drift. */
   companionPaths(id: string): CompanionPaths {
     const meta = this.metaDirectory();
@@ -427,6 +447,7 @@ export class LibraryVault {
       editSession: join(meta, `${id}.edit.json`),
       editMeta: join(meta, `${id}.edit.meta.json`),
       assetsDir: join(meta, `${id}.assets`),
+      webcam: this.webcamFilePath(id),
     };
   }
 
@@ -723,11 +744,23 @@ export class LibraryVault {
           try {
             await atomicWriteFile(to.sidecar, JSON.stringify(meta, null, 2));
             created.push(to.sidecar);
-            for (const key of ["thumbnail", "cursorTrack", "editSession", "editMeta"] as const) {
+            const copied = [
+              "thumbnail",
+              "cursorTrack",
+              "editSession",
+              "editMeta",
+              "webcam",
+            ] as const;
+            for (const key of copied) {
               // Strict: a companion that cannot be checked is not skipped, since the
               // old companions are deleted after the commit.
               if (!(await existsStrict(from[key]))) continue;
-              await copyFile(from[key], to[key], constants.COPYFILE_EXCL);
+              // A clone where the volume has them: the webcam file is as large as a take.
+              await copyFile(
+                from[key],
+                to[key],
+                constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE,
+              );
               created.push(to[key]);
             }
             if (await existsStrict(from.assetsDir)) {
@@ -868,7 +901,15 @@ export class LibraryVault {
     const undo = async (): Promise<void> => {
       for (const key of moved.reverse()) await rename(to[key], from[key]).catch(() => {});
     };
-    const keys = ["sidecar", "thumbnail", "cursorTrack", "editSession", "editMeta", "assetsDir"];
+    const keys = [
+      "sidecar",
+      "thumbnail",
+      "cursorTrack",
+      "editSession",
+      "editMeta",
+      "assetsDir",
+      "webcam",
+    ];
     try {
       for (const key of keys as (keyof CompanionPaths)[]) {
         if (!(await existsStrict(from[key]))) continue;
@@ -968,6 +1009,12 @@ export class LibraryVault {
       editorOpenedAt: typeof meta.editorOpenedAt === "number" ? meta.editorOpenedAt : null,
       editorSavedAt: typeof meta.editorSavedAt === "number" ? meta.editorSavedAt : null,
       capture: isImage || isGif ? null : sanitizeRecordingCapture(meta.capture),
+      // Only while the file is there (`webcamTrackState`, the rule `probeWebcam` shares): a
+      // sidecar field without its file is a missing track. No field, no file check.
+      webcam:
+        isImage || isGif || !meta.webcam
+          ? null
+          : webcamTrackState(await exists(this.webcamFilePath(id)), meta.webcam).meta,
       thumbnailUrl: isImage
         ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
           // overwritten in place (same id/URL) — only the changed item, so the
@@ -1400,6 +1447,7 @@ function describeExport(meta: Sidecar): LocalRecording["export"] {
   return {
     preset,
     fingerprint: typeof meta.exportFingerprint === "string" ? meta.exportFingerprint : null,
+    destination: isExportDestinationId(meta.exportDestination) ? meta.exportDestination : null,
   };
 }
 

@@ -10,8 +10,9 @@ import type { TagColor } from "@kaipu/domain/constants";
 
 import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
-import type { ExportPresetId, ExportQuality } from "./export-preset";
+import type { ExportDestinationId, ExportPresetId, ExportQuality } from "./export-preset";
 import type { RecordingCapture } from "../recording-capture";
+import type { WebcamTrackMeta } from "../webcam-track";
 import {
   ENABLED_CAPTURE_MODES,
   type CaptureMode,
@@ -451,6 +452,10 @@ export const IPC_CHANNELS = {
   gifSave: "library:gif-save",
   /** NIW2-217: native drag-out of a vault file (e.g. a GIF into Slack or GitHub). */
   startFileDrag: "library:start-file-drag",
+  /** NIW2-579: pick outside videos in a file dialog and copy them into the vault. */
+  importVideos: "library:import-videos",
+  /** NIW2-579: copy dropped video files (absolute paths, validated in main) into the vault. */
+  importVideoFiles: "library:import-video-files",
   /** NIW2-218: renderer → main, whether a background export is running (close/quit guard). */
   exportActive: "export:active",
   /** NIW2-218: main → renderer, "cancel" the running export (the user confirmed quitting). */
@@ -554,6 +559,20 @@ export const IPC_CHANNELS = {
   screenshotOpenSaved: "screenshot:open-saved",
   // Main → main window: `QuietCaptureHandOff`, a copy-only capture's bytes for the editor.
   screenshotOpenQuietCapture: "screenshot:open-quiet-capture",
+  // "Your video is ready" window (main/recording/recording-ready-window.ts).
+  // Main window → main (invoke): `RecordingReadyPayload`; resolves true when the floating
+  // window is up, false when it could not be created (the page shows its in-app card).
+  recordingReadyShow: "recording-ready:show",
+  // Main → card: `RecordingReadyPayload` to render.
+  recordingReadyPayload: "recording-ready:payload",
+  // Card → main (no payload): the card's listener is up; main sends the current payload.
+  recordingReadyCardReady: "recording-ready:card-ready",
+  // Card → main: `RecordingReadyAction`, a chip, Edit first, Open, ✕ or Escape.
+  recordingReadyAction: "recording-ready:action",
+  // Card → main: `{ height: number }`, the card's height in DIP, so the window fits it.
+  recordingReadyResize: "recording-ready:resize",
+  // Main → main window: `RecordingReadyHandOff`, where to navigate after an action.
+  recordingReadyOpen: "recording-ready:open",
   // Recording engine (renderer ↔ main)
   recordingCreate: "recording:create",
   recordingWrite: "recording:write",
@@ -561,6 +580,16 @@ export const IPC_CHANNELS = {
   recordingAbort: "recording:abort",
   /** NIW2-218: byte size of an open writer session's temp file (Small-file size check). */
   recordingStat: "recording:stat",
+  /**
+   * The take records no (more) webcam file (ADR 0037): its camera did not open, was turned
+   * off, unplugged, or its encoder failed. Main puts the camera bubble back in the capture.
+   */
+  recordingWebcamEnded: "recording:webcam-ended",
+  /**
+   * Whether this OS can record the webcam as its own file (ADR 0037): only where the camera
+   * bubble can leave the screen capture. False on Windows before 10 2004 (the legacy path).
+   */
+  recordingWebcamTrackSupported: "recording:webcam-track-supported",
   recordingReportTick: "recording:report-tick",
   // Mic levels for the settings meter, kept off the activity broadcast (10/s would re-render
   // every window). A window subscribes (renderer → main, counted); the recorder reports
@@ -761,11 +790,19 @@ export interface RecordingFinalizeMeta {
    * `"edit:<hash>"` = the editor's scene at export time.
    */
   exportFingerprint?: string;
+  /** Where a copy made for a destination is going (sidecar `exportDestination`). */
+  exportDestination?: ExportDestinationId;
   /**
    * How a new take was captured (mode, output size, ratio), stored in the sidecar for
    * library labels. Set by the recorder only; exports leave it unset. Main sanitizes it.
    */
   capture?: RecordingCapture | null;
+  /**
+   * The take's webcam file (ADR 0037): where its time 0 sits against the screen's, its size
+   * and the bubble as recorded. Set only when the webcam session holds a usable file; absent
+   * or null, a webcam part is discarded. Main sanitizes it before the sidecar stores it.
+   */
+  webcam?: WebcamTrackMeta | null;
 }
 
 /**

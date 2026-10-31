@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { Minus, X } from "lucide-react";
 import styles from "./status-card.module.css";
 
 export interface StatusCardProps {
@@ -6,12 +6,23 @@ export interface StatusCardProps {
   label: string;
   /** A small tile on the left of the title. */
   icon?: React.ReactNode;
+  /**
+   * The icon brings its own tile (a destination logo, the fox): drawn as is, without the
+   * accent frame around it.
+   */
+  bareIcon?: boolean;
   title: React.ReactNode;
   /** One mono line under the title (sizes, dimensions). */
   subtitle?: React.ReactNode;
-  /** ✕ in the corner; omitted for a card that must stay (an export in progress). */
+  /** A tag under the subtitle (the "Master · full quality" label). */
+  badge?: React.ReactNode;
+  /** 420 px instead of 380 px, for a card with a row of chips. */
+  wide?: boolean;
+  /** ✕ in the corner; omitted for a card that must stay. */
   onDismiss?(): void;
   dismissLabel?: string;
+  /** The corner button minimizes instead (−): the export widget keeps going as a pill. */
+  dismissIcon?: "close" | "minimize";
   /** Muted line under a hairline at the bottom. */
   footer?: React.ReactNode;
   onMouseEnter?(): void;
@@ -28,10 +39,14 @@ export interface StatusCardProps {
 export function StatusCard({
   label,
   icon,
+  bareIcon = false,
   title,
   subtitle,
+  badge,
+  wide = false,
   onDismiss,
   dismissLabel,
+  dismissIcon = "close",
   footer,
   onMouseEnter,
   onMouseLeave,
@@ -40,19 +55,21 @@ export function StatusCard({
   return (
     <section
       className={styles.card}
+      data-wide={wide}
       aria-label={label}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
       <header className={styles.header}>
         {icon && (
-          <span className={styles.icon} aria-hidden>
+          <span className={styles.icon} data-bare={bareIcon} aria-hidden>
             {icon}
           </span>
         )}
         <div className={styles.heading}>
           <div className={styles.title}>{title}</div>
           {subtitle && <div className={styles.subtitle}>{subtitle}</div>}
+          {badge && <div className={styles.badge}>{badge}</div>}
         </div>
         {onDismiss && (
           <button
@@ -61,7 +78,11 @@ export function StatusCard({
             aria-label={dismissLabel}
             onClick={onDismiss}
           >
-            <X size={14} strokeWidth={1.8} />
+            {dismissIcon === "minimize" ? (
+              <Minus size={14} strokeWidth={1.8} />
+            ) : (
+              <X size={14} strokeWidth={1.8} />
+            )}
           </button>
         )}
       </header>
@@ -86,22 +107,61 @@ export function StatusCardText({
   );
 }
 
-/** The card's action row: a primary button that takes the room, then the others. */
-export function StatusCardActions({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <div className={styles.actions}>{children}</div>;
-}
-
-export function StatusCardButton({
-  variant = "secondary",
-  onClick,
+/** The card's action row: a primary button that takes the room, then the others; `equal`
+ *  splits the row evenly instead. */
+export function StatusCardActions({
+  equal = false,
   children,
 }: {
-  variant?: "primary" | "secondary";
-  onClick(): void;
+  equal?: boolean;
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <button type="button" className={styles.button} data-variant={variant} onClick={onClick}>
+    <div className={styles.actions} data-equal={equal}>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * A card button. `text` is a quiet word-only action (the progress card's Cancel); `grow`
+ * shares the row with the primary instead of hugging its label. A button with
+ * `onDragStart` is something to pick up (the ready card's "Drag to upload"). One that can only
+ * be dragged is out of the Tab order: Enter and Space cannot drag, and the card's "Show in
+ * Finder" is the keyboard's way to the same file.
+ */
+export function StatusCardButton({
+  variant = "secondary",
+  grow = false,
+  title,
+  onClick,
+  onDragStart,
+  label,
+  children,
+}: {
+  variant?: "primary" | "secondary" | "text";
+  grow?: boolean;
+  /** Native tooltip, for a hint the label does not say. */
+  title?: string;
+  onClick?(): void;
+  onDragStart?(event: React.DragEvent<HTMLButtonElement>): void;
+  /** Accessible name, when the visible words are not enough. */
+  label?: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className={styles.button}
+      data-variant={variant}
+      data-grow={grow}
+      aria-label={label}
+      title={title}
+      onClick={onClick}
+      tabIndex={onDragStart && !onClick ? -1 : undefined}
+      draggable={onDragStart ? true : undefined}
+      onDragStart={onDragStart}
+    >
       {children}
     </button>
   );

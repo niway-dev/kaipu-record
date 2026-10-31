@@ -1,4 +1,4 @@
-import type { SourceThumbnail } from "../use-source-thumbnails";
+import type { CoveredRange, SourceThumbnail } from "../use-source-thumbnails";
 
 export function timeToFraction(t: number, duration: number): number {
   if (duration <= 0) return 0;
@@ -26,23 +26,47 @@ export function rulerTicks(duration: number): { time: number; label: string }[] 
   return ticks;
 }
 
+function tileTargets(sourceStart: number, sourceEnd: number, count: number): number[] {
+  return Array.from(
+    { length: Math.max(0, count) },
+    (_, i) => sourceStart + ((i + 0.5) / count) * (sourceEnd - sourceStart),
+  );
+}
+
+function nearestThumbnail(thumbnails: SourceThumbnail[], target: number): SourceThumbnail {
+  let nearest = thumbnails[0];
+  for (const thumb of thumbnails) {
+    if (Math.abs(thumb.sourceTime - target) < Math.abs(nearest.sourceTime - target)) {
+      nearest = thumb;
+    }
+  }
+  return nearest;
+}
+
 export function thumbnailsForRange(
   thumbnails: SourceThumbnail[],
   sourceStart: number,
   sourceEnd: number,
   count: number,
 ): SourceThumbnail[] {
-  if (thumbnails.length === 0 || count <= 0) return [];
-  const picked: SourceThumbnail[] = [];
-  for (let i = 0; i < count; i++) {
-    const target = sourceStart + ((i + 0.5) / count) * (sourceEnd - sourceStart);
-    let nearest = thumbnails[0];
-    for (const thumb of thumbnails) {
-      if (Math.abs(thumb.sourceTime - target) < Math.abs(nearest.sourceTime - target)) {
-        nearest = thumb;
-      }
-    }
-    picked.push(nearest);
-  }
-  return picked;
+  if (thumbnails.length === 0) return [];
+  return tileTargets(sourceStart, sourceEnd, count).map((t) => nearestThumbnail(thumbnails, t));
+}
+
+/**
+ * {@link thumbnailsForRange} for a file that does not cover the whole source (the webcam
+ * starts late or ends early): a tile outside `covered` ([start, end), SOURCE time) is null —
+ * there is no footage there, so it must not borrow the first or last frame.
+ */
+export function thumbnailsForRangeWithin(
+  thumbnails: SourceThumbnail[],
+  sourceStart: number,
+  sourceEnd: number,
+  count: number,
+  covered: CoveredRange,
+): (SourceThumbnail | null)[] {
+  if (thumbnails.length === 0) return [];
+  return tileTargets(sourceStart, sourceEnd, count).map((t) =>
+    t >= covered.start && t < covered.end ? nearestThumbnail(thumbnails, t) : null,
+  );
 }

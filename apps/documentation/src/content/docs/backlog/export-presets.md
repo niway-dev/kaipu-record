@@ -6,10 +6,11 @@ description: "NIW2-218: one export sheet grouped by intent — Balanced (recomme
 # Video editor — export presets per destination
 
 > **Superseded for sharing a recording (NIW2-578):** the recording page no longer opens this sheet.
-> Share, the "Recording saved" card and the heavy banner's target moved to
-> [Prepare — where is your video going?](./prepare-screen), a full screen built around
-> destinations, on `feature/niw2-578-prepare-screen` (not merged yet). The editor's Export still
-> uses the sheet described here, and the presets, estimates and background runner are unchanged.
+> Share, the "Recording saved" card and the heavy banner's target moved to the Export screen
+> ([where is your video going?](./prepare-screen), first built as "Prepare" and renamed Export in
+> [the export screen](./export-screen)), a full screen built around destinations. The editor's
+> Export still uses the sheet described here, and the presets, estimates and background runner are
+> unchanged.
 
 > **Status: 🟢 Ready to validate — stacked PRs on top of NIW2-217 (#266): #269 → #271 → #272 →
 > export quality → Share button → redesign → background export → quality tiers → quantizer

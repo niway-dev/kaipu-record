@@ -86,7 +86,7 @@ watermark`). Check: odd/edge source dimensions, missing `getSettings()` values (
 
 - **Annotations** — freehand pen (smoothing), blur/redaction boxes, auto-select on create +
   resize handles, the scene model, compositor (SVG/canvas export). Watch the
-  [clip-path + translate double-shift gotcha](/backlog/) and the crop viewBox rework.
+  clip-path + translate double-shift gotcha and the crop viewBox rework.
 - **Crop** — non-destructive, canvas/frame-relative (viewBox), native-pixel export.
 - **Beautify** — backgrounds, padding, the beautified-frame export path.
 - **Re-edit** — loading a saved scene back into the editor without loss.

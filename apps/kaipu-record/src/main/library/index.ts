@@ -1,5 +1,13 @@
 import { extname, join } from "node:path";
-import { app, BrowserWindow, ipcMain, nativeImage, shell, type IpcMainInvokeEvent } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  nativeImage,
+  shell,
+  type IpcMainInvokeEvent,
+} from "electron";
 import { IPC_CHANNELS } from "@shared/types";
 import type {
   GifSaveMeta,
@@ -8,6 +16,9 @@ import type {
   RenameResult,
   TagSummary,
 } from "@shared/types";
+import { IMPORTABLE_VIDEO_EXTENSIONS, type ImportVideoResult } from "@shared/import-video";
+import { createMainTranslator } from "@kaipu/i18n/main";
+import { getAppSettings } from "../infrastructure/settings-store";
 import type { AuthHandle } from "../infrastructure/auth-store";
 import { CatalogCache } from "../cloud/catalog-cache";
 import { fetchCloudCatalog } from "../cloud/catalog-client";
@@ -17,11 +28,12 @@ import { LibraryVault, isPlainItemId } from "./library-vault";
 import { loadDeviceId, VaultTagRepository, type TagRepository } from "./tag-repository";
 import { isTagColor } from "@kaipu/domain/constants";
 import { saveGif } from "./gif-save";
+import { importVideoFiles, type ImportVideoDeps } from "./import-video";
 import { createDragCopy } from "./drag-copies";
 import { friendlyDragName } from "./drag-name";
 import { activeWorkspace, ownsLegacyCloud, workspaceGate } from "../workspaces";
 import { registerVideoEditSessionHandlers } from "./video-edit-session";
-import { vaultActivity, type ActivityKind } from "./vault-activity";
+import { MaintenanceError, vaultActivity, type ActivityKind } from "./vault-activity";
 
 function broadcast(channel: string, ...args: unknown[]): void {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -79,6 +91,11 @@ export async function recordingFilePath(id: string): Promise<string> {
 
 export async function screenshotFilePath(id: string): Promise<string> {
   return currentVault().filePath(id); // resolves <id>.png
+}
+
+/** Absolute path to a recording's webcam track (may not exist; ADR 0037). */
+export function webcamFilePath(id: string): string {
+  return currentVault().webcamFilePath(id);
 }
 
 /** Absolute path to a recording's thumbnail jpg (may not exist). */
@@ -300,6 +317,60 @@ export function registerLibraryVaultHandlers(deps: {
       .catch((error) => console.error("file drag failed", error));
   });
 
+  // NIW2-579: bring outside videos into the vault. Main validates and copies; the renderer
+  // only ever names paths (from the dialog here, or from a drop), never writes. Each import
+  // runs inside the workspace gate and under one vault lease, like every other vault write.
+  const importDeps: ImportVideoDeps = {
+    vaultDir: vaultPath,
+    newId: (now) => importedId(now),
+  };
+  const importAndBroadcast = async (stamp: unknown, paths: unknown): Promise<ImportVideoResult> =>
+    workspaceGate().run(stamp, () =>
+      vaultActivity.run("library", async () => {
+        const result = await importVideoFiles(paths, importDeps);
+        if (result.imported.length > 0) broadcastLibraryChanged();
+        return result;
+      }),
+    );
+  ipcMain.handle(
+    IPC_CHANNELS.importVideos,
+    async (event, stamp: unknown): Promise<ImportVideoResult> => {
+      // Refused before the dialog while "Check and fix files" runs, rather than after the
+      // user picked files.
+      if (vaultActivity.inMaintenance) throw new MaintenanceError();
+      const window = BrowserWindow.fromWebContents(event.sender);
+      const t = createMainTranslator(getAppSettings().locale);
+      const options: Electron.OpenDialogOptions = {
+        title: t("dialogs.importVideoTitle"),
+        buttonLabel: t("dialogs.importVideoButton"),
+        properties: ["openFile", "multiSelections"],
+        filters: [
+          {
+            name: t("dialogs.importVideoFileType"),
+            extensions: IMPORTABLE_VIDEO_EXTENSIONS.map((ext) => ext.slice(1)),
+          },
+        ],
+      };
+      // The dialog stays outside the gate: a workspace switch must not wait on the user.
+      const picked = window
+        ? await dialog.showOpenDialog(window, options)
+        : await dialog.showOpenDialog(options);
+      if (picked.canceled || picked.filePaths.length === 0) {
+        return { imported: [], failed: [], canceled: true };
+      }
+      return importAndBroadcast(stamp, picked.filePaths);
+    },
+  );
+  ipcMain.handle(IPC_CHANNELS.importVideoFiles, (_event, stamp: unknown, paths: unknown) =>
+    importAndBroadcast(stamp, paths),
+  );
+
   // Video-editor session persistence (save on export, load on editor mount).
   registerVideoEditSessionHandlers();
+}
+
+/** An imported item's id: `imported-2026-10-31-13-51-00`, the stamp of when it came in. */
+function importedId(now: number): string {
+  const iso = new Date(now).toISOString().replace(/[:.]/g, "-").replace("T", "-").slice(0, 19);
+  return `imported-${iso}`;
 }

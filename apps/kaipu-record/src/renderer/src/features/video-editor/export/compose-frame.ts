@@ -97,7 +97,9 @@ export function cropRectPx(
 
 /**
  * What to do with one decoded clip frame on screen during source
- * [frameStart, frameStart + frameDuration).
+ * [frameStart, frameStart + frameDuration). The redactions are always that span's; the crop
+ * is the camera at `cameraTs`, the frame's start unless the caller re-composes a held frame
+ * later (a webcam fill over a still screen), where the zoom keeps moving.
  */
 export function planClipFrame(
   camera: CameraPath | null,
@@ -106,9 +108,10 @@ export function planClipFrame(
   frameDuration: number,
   width: number,
   height: number,
+  cameraTs: number = frameStart,
 ): ClipFramePlan {
   const active = redactionsForFrame(redactions, frameStart, frameStart + frameDuration);
-  const cam = camera ? cameraAt(camera, frameStart) : null;
+  const cam = camera ? cameraAt(camera, cameraTs) : null;
   const crop = cam && !isIdentity(cam) ? cropRectPx(cam, width, height) : null;
   return { mode: crop || active.length > 0 ? "composite" : "direct", crop, redactions: active };
 }

@@ -1,0 +1,66 @@
+/*
+ * Export: header, stage, destination row, top to bottom.
+ *
+ * Sized for the window the app opens at (900 × 670, `createWindow` in main): the shell leaves
+ * 828 × 614 for the page. The header and the row keep their height and the stage takes the
+ * rest; when that is not enough the stage scrolls on its own and the row sideways on its own.
+ * The page itself never scrolls.
+ */
+.screen {
+  /* Edge to edge, like the editor: the parts carry their own padding. */
+  margin: calc(-1 * var(--space-xl));
+  height: calc(100% + 2 * var(--space-xl));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  padding: 18px 24px;
+  overflow-y: auto;
+}
+
+/* Centred while it fits; `margin: auto` rather than justify-content, so a stage taller than
+   the space scrolls from its top instead of losing it. */
+.stageInner {
+  margin: auto;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.row {
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+/* ── States ───────────────────────────── */
+
+.centered {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.mutedIcon {
+  color: var(--text-muted);
+}
+
+.centeredTitle {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.centeredBody {
+  margin: 0;
+  font-size: var(--font-size-base);
+}

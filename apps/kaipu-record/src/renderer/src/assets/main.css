@@ -77,3 +77,18 @@ body[data-window="capture-toast"] #root {
   min-height: 0;
   overflow: hidden;
 }
+
+/*
+ * "Your video is ready" on the desktop: a transparent window main sizes to the card, which
+ * sits 16 px in from every edge (READY_WINDOW_PADDING), room its own smaller shadow fits in;
+ * nothing scrolls.
+ */
+body[data-window="recording-ready"] {
+  margin: 0;
+  padding: 16px;
+  overflow: hidden;
+}
+
+body[data-window="recording-ready"] #root {
+  min-height: 0;
+}

@@ -1,0 +1,189 @@
+/* "Ready to upload" (Kaipu Prepare, step 4): a just-finished copy across two grid columns. */
+.card {
+  position: relative;
+  grid-column: span 2;
+  display: flex;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(246, 5, 92, 0.5);
+  background: var(--bg-card);
+  box-shadow: 0 0 0 3px rgba(246, 5, 92, 0.1);
+  animation: arrive 260ms ease;
+}
+
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.poster {
+  position: relative;
+  flex: 0 0 38%;
+  max-width: 220px;
+  align-self: flex-start;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: #101013;
+  cursor: pointer;
+}
+
+.posterImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.posterFallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.tag {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  display: flex;
+}
+
+.body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  /* Clear of the ✕ in the corner. */
+  padding-right: 26px;
+}
+
+.status svg {
+  color: var(--tone-saving);
+}
+
+.fileName {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.fileName:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.meta {
+  margin: 4px 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  line-height: 1.5;
+  /* At the 900 px default window the column is ~250 px: wrap rather than cut "from the
+     original" off. */
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.button:hover {
+  border-color: var(--text-muted);
+}
+
+.button[draggable="true"] {
+  cursor: grab;
+}
+
+.button[data-variant="primary"] {
+  border-color: transparent;
+  background: var(--accent-primary);
+  color: #fff;
+  box-shadow: 0 8px 20px -10px rgba(246, 5, 92, 0.9);
+}
+
+.button[data-variant="primary"]:hover {
+  background: color-mix(in srgb, var(--accent-primary) 88%, #fff);
+}
+
+.dismiss {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.dismiss:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+}
+
+.poster:focus-visible,
+.fileName:focus-visible,
+.button:focus-visible,
+.dismiss:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
