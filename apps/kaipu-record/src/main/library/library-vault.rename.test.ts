@@ -163,6 +163,8 @@ describe("LibraryVault.renameItem", () => {
 
   it("moves the media and every companion to the stem the title derives", async () => {
     await seedFullItem("recording-2026-10-29-13-51-00");
+    // The take's webcam file (ADR 0037) is a companion too.
+    await writeFile(join(meta, "recording-2026-10-29-13-51-00.webcam.mp4"), "webcam");
 
     const result = await renameById(
       vault,
@@ -185,8 +187,10 @@ describe("LibraryVault.renameItem", () => {
         `${newId}.edit.meta.json`,
         `${newId}.jpg`,
         `${newId}.json`,
+        `${newId}.webcam.mp4`,
       ].sort(),
     );
+    expect(await readFile(join(meta, `${newId}.webcam.mp4`), "utf-8")).toBe("webcam");
     expect(await readFile(join(meta, `${newId}.jpg`), "utf-8")).toBe("poster");
     expect(await readFile(join(meta, `${newId}.edit.json`), "utf-8")).toBe('{"scene":1}');
     expect(await readFile(join(meta, `${newId}.assets`, "slide-1.png"), "utf-8")).toBe("slide");
@@ -748,6 +752,7 @@ describe("LibraryVault — writeMeta guard and companions", () => {
       join(".kaipu", "x.edit.json"),
       join(".kaipu", "x.edit.meta.json"),
       join(".kaipu", "x.assets"),
+      join(".kaipu", "x.webcam.mp4"),
     ]);
   });
 });

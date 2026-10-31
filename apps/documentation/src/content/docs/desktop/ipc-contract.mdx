@@ -238,12 +238,22 @@ source) and `RecordingSettings.area` (or `null` for a whole display) and broadca
 
 ### Recording — writer (hot path a disco)
 
-| Canal                | Dir | En `electronAPI`                | Registrador        |
-| -------------------- | --- | ------------------------------- | ------------------ |
-| `recording:create`   | r→m | `recordingCreate(id, kind?)`    | `recording-hub.ts` |
-| `recording:write`    | r→m | `recordingWrite(id, data, pos)` | `recording-hub.ts` |
-| `recording:finalize` | r→m | `recordingFinalize(id, meta)`   | `recording-hub.ts` |
-| `recording:abort`    | r→m | `recordingAbort(id)`            | `recording-hub.ts` |
+| Canal                | Dir | En `electronAPI`                       | Registrador        |
+| -------------------- | --- | -------------------------------------- | ------------------ |
+| `recording:create`   | r→m | `recordingCreate(id, kind?)`           | `recording-hub.ts` |
+| `recording:write`    | r→m | `recordingWrite(id, data, pos, kind?)` | `recording-hub.ts` |
+| `recording:stat`     | r→m | `recordingStat(id, kind?)`             | `recording-hub.ts` |
+| `recording:finalize` | r→m | `recordingFinalize(id, meta)`          | `recording-hub.ts` |
+| `recording:abort`    | r→m | `recordingAbort(id)`                   | `recording-hub.ts` |
+
+`recordingCreate`'s `kind` is `"recording"` (the default), `"export"` or `"webcam"`. A take with
+the webcam on opens a second writer session under the same id for `.kaipu/<id>.webcam.mp4`
+([ADR 0037](/architecture/decisions/0037-webcam-is-its-own-track-and-the-bubble-is-excluded-from-capture/)):
+it joins the open recording take, its lease and its lifecycle. `recordingWrite` and
+`recordingStat` take a writer `kind`, `"screen"` (the default, what older callers send) or
+`"webcam"`. `recordingAbort` discards both sessions of the take; `recordingFinalize` places both
+and writes `meta.webcam` (start offset, quality, size, fps, recorded bubble) to the sidecar. A
+failed webcam write never stops the take: finalize drops that webcam file.
 
 A session (and its vault lease) belongs to the page that created it. A page that goes away
 with a session open (a reload, a dead renderer, a destroyed webContents) never finalizes or

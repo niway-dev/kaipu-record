@@ -172,6 +172,14 @@ describe("LibraryVault", () => {
     expect(await readdir(join(directory, ".kaipu"))).not.toContain("rec.cursor.json.tmp");
   });
 
+  it("removes the webcam file with the recording (ADR 0037)", async () => {
+    await writeRecording("rec");
+    await mkdir(join(directory, ".kaipu"), { recursive: true });
+    await writeFile(vault.webcamFilePath("rec"), "webcam");
+    await vault.remove("rec");
+    expect(await readdir(join(directory, ".kaipu"))).not.toContain("rec.webcam.mp4");
+  });
+
   it("keeps the cursor track when only the local copy is removed", async () => {
     await writeRecording("rec");
     await vault.writeCursorTrack("rec", "{}");

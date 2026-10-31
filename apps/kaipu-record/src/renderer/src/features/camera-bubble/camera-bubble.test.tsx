@@ -54,7 +54,7 @@ describe("CameraBubble", () => {
     await waitFor(() =>
       expect(container.firstElementChild).toHaveAttribute("data-shape", "rounded"),
     );
-    expect(mockPreview).toHaveBeenLastCalledWith(true, "cam-9", 480);
+    expect(mockPreview).toHaveBeenLastCalledWith(true, "cam-9", 720);
   });
 
   it("mirrors the preview by default and when the setting is on", async () => {
@@ -121,7 +121,7 @@ describe("CameraBubble", () => {
 
   it("leaves the video untouched while framing is off", async () => {
     const video = await renderWithFraming({ enabled: false, zoom: 2, x: 1, y: 1 });
-    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 480));
+    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 720));
     expect(video.style.transform).toBe("");
   });
 
@@ -148,7 +148,8 @@ describe("CameraBubble", () => {
     await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 1080));
     expect(video.style.transform).toContain("scale(2)");
     // The same bubble follows a pushed change: framing off clears the transform and the
-    // camera goes back to its usual lines.
+    // camera goes back to its usual lines: 720, what the recorder's webcam track needs from
+    // the camera both windows share (ADR 0037).
     act(() =>
       push?.({
         ...base,
@@ -162,7 +163,7 @@ describe("CameraBubble", () => {
       } as never),
     );
     expect(video.style.transform).toBe("");
-    expect(mockPreview).toHaveBeenLastCalledWith(true, null, 480);
+    expect(mockPreview).toHaveBeenLastCalledWith(true, null, 720);
   });
 
   it("keeps the camera resolution while recording, so a zoom change never reopens the camera mid-take", async () => {
@@ -189,12 +190,12 @@ describe("CameraBubble", () => {
         },
       }) as never;
     const video = await renderWithFraming({ enabled: true, zoom: 1, x: 0, y: 0 });
-    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 480));
+    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 720));
     act(() => pushActivity?.({ active: true, status: "recording", elapsedSeconds: 0 }));
     act(() => pushSettings?.(withZoom(2)));
     // The zoom applies at once; the stream keeps its lines until the take ends.
     expect(video.style.transform).toContain("scale(2)");
-    expect(mockPreview).toHaveBeenLastCalledWith(true, null, 480);
+    expect(mockPreview).toHaveBeenLastCalledWith(true, null, 720);
     act(() => pushActivity?.({ active: false, status: "recording", elapsedSeconds: 3 }));
     expect(mockPreview).toHaveBeenLastCalledWith(true, null, 1080);
   });

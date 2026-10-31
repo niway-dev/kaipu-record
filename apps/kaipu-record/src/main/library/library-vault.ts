@@ -22,6 +22,7 @@ import {
   type RenameResult,
 } from "@shared/types/library-storage";
 import { sanitizeRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
+import type { WebcamTrackMeta } from "@shared/webcam-track";
 import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/types/export-preset";
 import { defaultCaptureName, type CaptureKind } from "@shared/default-capture-name";
 import { atomicWriteFile, uniqueTempPath, withLock } from "./atomic-write";
@@ -83,6 +84,8 @@ export interface Sidecar {
   editorSavedAt?: number;
   /** New recordings: how the take was captured (library labels). Absent on older items. */
   capture?: RecordingCapture;
+  /** New recordings with the webcam on: the webcam file's offset and size (ADR 0037). */
+  webcam?: WebcamTrackMeta;
 }
 
 /**
@@ -255,6 +258,8 @@ export interface CompanionPaths {
   editSession: string;
   editMeta: string;
   assetsDir: string;
+  /** The take's webcam file (ADR 0037): moved and removed with the item like the others. */
+  webcam: string;
 }
 
 /** How a rename reaches its target stem. */
@@ -416,6 +421,11 @@ export class LibraryVault {
     return join(this.metaDirectory(), `${id}.cursor.json`);
   }
 
+  /** The take's webcam, recorded as its own file beside the screen (ADR 0037). */
+  webcamFilePath(id: string): string {
+    return join(this.metaDirectory(), `${id}.webcam.mp4`);
+  }
+
   /** Every companion path `id` owns. `remove()` and `renameItem()` go through this, so they cannot drift. */
   companionPaths(id: string): CompanionPaths {
     const meta = this.metaDirectory();
@@ -427,6 +437,7 @@ export class LibraryVault {
       editSession: join(meta, `${id}.edit.json`),
       editMeta: join(meta, `${id}.edit.meta.json`),
       assetsDir: join(meta, `${id}.assets`),
+      webcam: this.webcamFilePath(id),
     };
   }
 
@@ -723,11 +734,23 @@ export class LibraryVault {
           try {
             await atomicWriteFile(to.sidecar, JSON.stringify(meta, null, 2));
             created.push(to.sidecar);
-            for (const key of ["thumbnail", "cursorTrack", "editSession", "editMeta"] as const) {
+            const copied = [
+              "thumbnail",
+              "cursorTrack",
+              "editSession",
+              "editMeta",
+              "webcam",
+            ] as const;
+            for (const key of copied) {
               // Strict: a companion that cannot be checked is not skipped, since the
               // old companions are deleted after the commit.
               if (!(await existsStrict(from[key]))) continue;
-              await copyFile(from[key], to[key], constants.COPYFILE_EXCL);
+              // A clone where the volume has them: the webcam file is as large as a take.
+              await copyFile(
+                from[key],
+                to[key],
+                constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE,
+              );
               created.push(to[key]);
             }
             if (await existsStrict(from.assetsDir)) {
@@ -868,7 +891,15 @@ export class LibraryVault {
     const undo = async (): Promise<void> => {
       for (const key of moved.reverse()) await rename(to[key], from[key]).catch(() => {});
     };
-    const keys = ["sidecar", "thumbnail", "cursorTrack", "editSession", "editMeta", "assetsDir"];
+    const keys = [
+      "sidecar",
+      "thumbnail",
+      "cursorTrack",
+      "editSession",
+      "editMeta",
+      "assetsDir",
+      "webcam",
+    ];
     try {
       for (const key of keys as (keyof CompanionPaths)[]) {
         if (!(await existsStrict(from[key]))) continue;

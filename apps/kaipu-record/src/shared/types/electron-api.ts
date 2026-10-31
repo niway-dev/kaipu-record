@@ -17,6 +17,7 @@ import type {
   QuietCaptureHandOff,
 } from "./screenshot-capture";
 import type { SerializedError } from "../analytics";
+import type { RecordingWriterKind } from "../webcam-track";
 import type { AppSettings, ShortcutAction, TagSummary, UpdateStatus } from "./ipc";
 import type { TagColor } from "@kaipu/domain/constants";
 import type { LocalRecording, RenameResult } from "./library-storage";
@@ -345,17 +346,26 @@ export interface KaipuElectronAPI {
   // ── Recording engine (used by the main/recorder window) ───────────────
   /**
    * Open a disk-writer session; returns the temp path. `kind` defaults to a recording, whose
-   * partial is kept when its page goes away; an export's partial is discarded then.
+   * partial is kept when its page goes away; an export's partial is discarded then. "webcam"
+   * opens the open recording take's second session, for its webcam file (ADR 0037).
    */
-  recordingCreate(sessionId: string, kind?: "recording" | "export"): Promise<{ tempPath: string }>;
-  /** Write a chunk at an exact byte position (positional, not append). */
-  recordingWrite(sessionId: string, data: ArrayBuffer, position: number): void;
+  recordingCreate(
+    sessionId: string,
+    kind?: "recording" | "export" | "webcam",
+  ): Promise<{ tempPath: string }>;
+  /** Write a chunk at an exact byte position (positional, not append) to the `kind` session. */
+  recordingWrite(
+    sessionId: string,
+    data: ArrayBuffer,
+    position: number,
+    kind?: RecordingWriterKind,
+  ): void;
   /** Close the file, move it into the vault, return the new recording. */
   recordingFinalize(sessionId: string, meta: RecordingFinalizeMeta): Promise<LocalRecording>;
-  /** Discard a failed session (delete temp). */
+  /** Discard a failed take (delete its temp files: the screen's and the webcam's). */
   recordingAbort(sessionId: string): Promise<void>;
   /** Byte size of an open session's temp file, after every queued write landed (NIW2-218). */
-  recordingStat(sessionId: string): Promise<number>;
+  recordingStat(sessionId: string, kind?: RecordingWriterKind): Promise<number>;
   /** Push a live tick (elapsed/levels/status) to the hub for the bar. */
   recordingReportTick(tick: RecordingTick): void;
   /**

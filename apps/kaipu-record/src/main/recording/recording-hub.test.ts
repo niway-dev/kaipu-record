@@ -1682,6 +1682,73 @@ describe("recording hub — camera bubble size", () => {
   });
 });
 
+describe("recording hub — the webcam writer session (ADR 0037)", () => {
+  async function registered() {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const mainWindow = fakeMainWindow();
+    registerRecordingHub(() => mainWindow as never);
+    return mainWindow;
+  }
+
+  it("forwards the kind to the writer on create, write and stat", async () => {
+    const { RecordingWriter } = await import("./recording-writer");
+    const create = vi.spyOn(RecordingWriter.prototype, "create").mockResolvedValue({
+      tempPath: "/tmp/x",
+    });
+    const write = vi.spyOn(RecordingWriter.prototype, "write").mockResolvedValue();
+    const stat = vi.spyOn(RecordingWriter.prototype, "stat").mockResolvedValue(3);
+    try {
+      await registered();
+      const data = new ArrayBuffer(1);
+      const createIpc = mockState.ipcHandle.get(IPC_CHANNELS.recordingCreate)!;
+      // A webcam joins an open recording take: without one it is refused.
+      await expect(createIpc({}, "s0", "webcam")).rejects.toThrow(/no recording take/);
+      // An older caller sends no kind: the screen, as before.
+      await createIpc({}, "s1");
+      await createIpc({}, "s1", "webcam");
+      await expect(createIpc({}, "s1", "webcam")).rejects.toThrow(/already has a webcam/);
+      mockState.ipcOn.get(IPC_CHANNELS.recordingWrite)!({}, "s1", data, 4, "webcam");
+      await mockState.ipcHandle.get(IPC_CHANNELS.recordingStat)!({}, "s1", "webcam");
+      expect(create.mock.calls).toEqual([["s1"], ["s1", "webcam"]]);
+      expect(write).toHaveBeenCalledWith("s1", data, 4, "webcam");
+      expect(stat).toHaveBeenCalledWith("s1", "webcam");
+    } finally {
+      create.mockRestore();
+      write.mockRestore();
+      stat.mockRestore();
+    }
+  });
+
+  it("a failed webcam write never stops the take; a failed screen write still does", async () => {
+    const { RecordingWriter } = await import("./recording-writer");
+    const write = vi
+      .spyOn(RecordingWriter.prototype, "write")
+      .mockRejectedValue(new Error("ENOSPC"));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const mainWindow = await registered();
+      const onWrite = mockState.ipcOn.get(IPC_CHANNELS.recordingWrite)!;
+      onWrite({}, "s1", new ArrayBuffer(1), 0, "webcam");
+      await new Promise((r) => setTimeout(r, 0));
+      expect(mainWindow.webContents.send).not.toHaveBeenCalledWith(
+        IPC_CHANNELS.recordingCommand,
+        "stop",
+      );
+      onWrite({}, "s1", new ArrayBuffer(1), 0);
+      await new Promise((r) => setTimeout(r, 0));
+      expect(mainWindow.webContents.send).toHaveBeenCalledWith(
+        IPC_CHANNELS.recordingCommand,
+        "stop",
+      );
+    } finally {
+      write.mockRestore();
+      error.mockRestore();
+    }
+  });
+});
+
 describe("recording hub — one lifecycle per take (NIW2-561)", () => {
   let vaultDir = "";
 
@@ -1738,6 +1805,25 @@ describe("recording hub — one lifecycle per take (NIW2-561)", () => {
     };
     return { held, wait };
   };
+
+  it("a take's webcam session shares its lifecycle: a reload keeps both parts, an abort deletes both", async () => {
+    const t = await setup(71);
+    const screen = (await t.create(t.event, "take-w")) as { tempPath: string };
+    const webcam = (await t.create(t.event, "take-w", "webcam")) as { tempPath: string };
+    expect(webcam.tempPath).toBe(screen.tempPath.replace(/\.mp4\.part$/, ".webcam.mp4.part"));
+    t.reload();
+    await settle();
+    // Released, not discarded: both parts stay for the stranded-take sweep.
+    expect(await readFile(screen.tempPath, "utf-8")).toBe("");
+    expect(await readFile(webcam.tempPath, "utf-8")).toBe("");
+    await vi.waitFor(() => expect(t.vaultActivity.active()).toEqual([]));
+
+    const next = (await t.create(t.event, "take-x")) as { tempPath: string };
+    const nextWebcam = (await t.create(t.event, "take-x", "webcam")) as { tempPath: string };
+    await t.abort(t.event, "take-x");
+    await expect(readFile(next.tempPath)).rejects.toThrow(/ENOENT/);
+    await expect(readFile(nextWebcam.tempPath)).rejects.toThrow(/ENOENT/);
+  });
 
   it.each(["before", "after"] as const)(
     "a reload %s finalize reserves its destination: the vault stays busy until finalize settles, and nothing is overwritten",

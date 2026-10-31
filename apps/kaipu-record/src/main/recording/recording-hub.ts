@@ -23,6 +23,7 @@ import type {
   RecordingTick,
 } from "@shared/types/ipc";
 import { serializeCursorTrack } from "@shared/cursor-track";
+import { recordingWriterKind } from "@shared/webcam-track";
 import { buildRecordingStartedProperties, RECORDING_STARTED_EVENT } from "@shared/analytics";
 import { captureMainEvent } from "../services/analytics.service";
 import type { CaptureRect, RecordingRatio } from "@shared/types/screenshot-capture";
@@ -398,6 +399,11 @@ export function registerRecordingHub(
     created: Promise<void>;
     /** This take's staging file, once created: binds the writer cleanup to its own session. */
     tempPath?: string;
+    /**
+     * Settles (never rejects) once the take's webcam session create has, when it asked for one
+     * (ADR 0037): the same id, so finalize and every end treat the pair as one take.
+     */
+    webcamCreated?: Promise<void>;
     /** Settles (never rejects) once its finalize and cursor-track write have. */
     finalizing?: Promise<void>;
     /** Set by the first end: the writer cleanup, then the lease release. */
@@ -419,6 +425,7 @@ export function registerRecordingHub(
     cleanup: (sessionId: string, tempPath: string | undefined) => Promise<void>,
   ): Promise<void> => {
     take.ending ??= take.created
+      .then(() => take.webcamCreated)
       .then(() => take.finalizing)
       .then(() => cleanup(sessionId, take.tempPath))
       .finally(() => releaseTake(sessionId, take));
@@ -463,9 +470,39 @@ export function registerRecordingHub(
       if (activity.active && activityOwner === contents.id) applyStopWindowState();
     });
   };
+  /**
+   * A take with the webcam on has a second writer session of kind "webcam" under the same id
+   * (ADR 0037). It joins the open recording take: its lease, its owner and its one lifecycle,
+   * so finalize waits for it and every end (`endTake`) releases or discards both files.
+   */
+  const createWebcam = async (sessionId: string): Promise<{ tempPath: string }> => {
+    const take = recordingLeases.get(sessionId);
+    const refuse = (why: string): Error =>
+      new Error(`recording:create "${sessionId}" webcam: ${why}`);
+    if (!take || take.kind !== "recording") throw refuse("no recording take with this id");
+    if (take.webcamCreated) throw refuse("the take already has a webcam");
+    if (take.ending || take.finalizing) throw refuse("the take already ended");
+    // Claimed before the wait, so a second webcam create is refused and an end waits for it.
+    let settle!: () => void;
+    take.webcamCreated = new Promise<void>((resolve) => (settle = resolve));
+    try {
+      await take.created; // the webcam part sits beside the screen's, in its folder
+      if (take.tempPath === undefined) throw refuse("the screen file did not open");
+      if (take.ending || take.finalizing) throw refuse("the take already ended");
+      const created = await writer.create(sessionId, "webcam");
+      if (take.ending) {
+        // Ended while the file was opening: that end's cleanup (it waited for this) owns it.
+        throw refuse("the take ended before its webcam file opened");
+      }
+      return created;
+    } finally {
+      settle();
+    }
+  };
   ipcMain.handle(
     IPC_CHANNELS.recordingCreate,
     async (e, sessionId: string, requestedKind?: unknown) => {
+      if (requestedKind === "webcam") return createWebcam(sessionId);
       // An id still held by a take (open, finalizing or ending) is refused: its file may be the
       // only copy, and its cleanup must never land on a new session.
       if (recordingLeases.has(sessionId)) {
@@ -510,9 +547,12 @@ export function registerRecordingHub(
   );
   ipcMain.on(
     IPC_CHANNELS.recordingWrite,
-    (_e, sessionId: string, data: ArrayBuffer, position: number) => {
-      void writer.write(sessionId, data, position).catch((error) => {
-        console.error("recording write failed", error);
+    (_e, sessionId: string, data: ArrayBuffer, position: number, kind?: unknown) => {
+      const writerKind = recordingWriterKind(kind);
+      void writer.write(sessionId, data, position, writerKind).catch((error) => {
+        console.error(`recording ${writerKind} write failed`, error);
+        // The webcam never fails the take: finalize drops a webcam whose write failed.
+        if (writerKind === "webcam") return;
         // Writes are fire-and-forget, so without this the engine keeps encoding
         // and the bar keeps ticking while every chunk is dropped. Stop the
         // recorder promptly on the first failure: its stop runs finalize, which
@@ -537,7 +577,9 @@ export function registerRecordingHub(
       }
       // Finalize is part of the take: an end arriving meanwhile (a reload) waits for it, and
       // the lease is freed only once the file is placed and its cursor track written.
-      const finalizing = take.created.then(() => finalizeTake(sessionId, meta));
+      const finalizing = take.created
+        .then(() => take.webcamCreated)
+        .then(() => finalizeTake(sessionId, meta));
       take.finalizing = finalizing.then(
         () => undefined,
         () => undefined,
@@ -595,10 +637,13 @@ export function registerRecordingHub(
     return recording;
   };
   // NIW2-218: Small-file size check before finalize. Takes a session id only, like write.
-  ipcMain.handle(IPC_CHANNELS.recordingStat, (_e, sessionId: string): Promise<number> => {
-    if (typeof sessionId !== "string") throw new Error("recordingStat: invalid session id");
-    return writer.stat(sessionId);
-  });
+  ipcMain.handle(
+    IPC_CHANNELS.recordingStat,
+    (_e, sessionId: string, kind?: unknown): Promise<number> => {
+      if (typeof sessionId !== "string") throw new Error("recordingStat: invalid session id");
+      return writer.stat(sessionId, recordingWriterKind(kind));
+    },
+  );
   ipcMain.handle(IPC_CHANNELS.recordingAbort, (_e, sessionId: string) => {
     markEnded(sessionId);
     cursorTracks.discard(sessionId);

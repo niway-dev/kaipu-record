@@ -94,6 +94,8 @@ function fakeEngine(over: Partial<EngineHandle> = {}): EngineHandle {
     setNoiseSuppression: vi.fn(async () => "ok" as const),
     setSystemAudioVolume: vi.fn(() => "ok" as const),
     setDucking: vi.fn(() => "ok" as const),
+    webcam: null,
+    endWebcam: vi.fn(),
     ...over,
   };
 }
@@ -115,6 +117,7 @@ function fakePrepared(handle: EngineHandle = fakeEngine()): FakePrepared {
     setNoiseSuppression: handle.setNoiseSuppression,
     setSystemAudioVolume: handle.setSystemAudioVolume,
     setDucking: handle.setDucking,
+    endWebcam: handle.endWebcam,
     begin: vi.fn(async () => {
       callOrder.push("begin");
       return handle;
@@ -1395,5 +1398,192 @@ describe("recorder-store live settings", () => {
     expect(engine.setMicLevel).not.toHaveBeenCalled();
     broadcast({ isMicrophoneEnabled: false });
     expect(engine.setMicrophoneEnabled).not.toHaveBeenCalled();
+  });
+
+  describe("the webcam track (ADR 0037)", () => {
+    const bubble = {
+      shape: "circle" as const,
+      size: 240,
+      mirrored: true,
+      framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+    };
+    const webcam = { deviceId: "cam-1", lines: 720, bubble };
+    const createCalls = (): unknown[][] => recordingCreateMock.mock.calls as unknown[][];
+    const webcamHandle = (over: Partial<NonNullable<EngineHandle["webcam"]>> = {}) => ({
+      firstMediaTimestamp: Promise.resolve({ rendererMs: 3020.5, quality: "exact" as const }),
+      size: { width: 1280, height: 720 },
+      isUsable: () => true,
+      ...over,
+    });
+    const finalizeMeta = () =>
+      vi.mocked(window.electronAPI.recordingFinalize).mock.calls.at(-1)![1];
+
+    beforeEach(() => recordingCreateMock.mockClear());
+
+    it("opens a webcam writer session beside the screen's and hands the engine the camera", async () => {
+      await startWith(fakeEngine(), { webcam });
+      const [screen, second] = createCalls();
+      expect(screen).toEqual([expect.stringMatching(/^session-/)]);
+      expect(second).toEqual([screen![0], "webcam"]);
+      expect(prepareEngineMock.mock.calls.at(-1)![0].webcam).toEqual({
+        deviceId: "cam-1",
+        lines: 720,
+      });
+      await stopAndSettle();
+    });
+
+    it("opens no webcam session and no camera with the camera off", async () => {
+      await startWith(fakeEngine());
+      expect(createCalls()).toHaveLength(1);
+      expect(prepareEngineMock.mock.calls.at(-1)![0].webcam).toBeNull();
+      await stopAndSettle();
+    });
+
+    it("writes the webcam's chunks to its own session once the take has begun", async () => {
+      await startWith(fakeEngine(), { webcam });
+      const id = createCalls()[0]![0];
+      const data = new ArrayBuffer(2);
+      prepareEngineMock.mock.calls.at(-1)![0].onWebcamChunk!(data, 9);
+      expect(window.electronAPI.recordingWrite).toHaveBeenCalledWith(id, data, 9, "webcam");
+      await stopAndSettle();
+    });
+
+    it("finalizes with the webcam's start offset against the screen, its size and the bubble", async () => {
+      const engine = fakeEngine({
+        firstMediaTimestamp: Promise.resolve({ rendererMs: 3000, quality: "exact" as const }),
+        webcam: webcamHandle(),
+      });
+      await startWith(engine, { webcam });
+      await stopAndSettle();
+      expect(finalizeMeta().webcam).toEqual({
+        startOffsetMs: 20.5,
+        offsetQuality: "exact",
+        width: 1280,
+        height: 720,
+        fps: 30,
+        recordedLayout: bubble,
+      });
+    });
+
+    it("marks the offset estimated when either first-media timestamp is", async () => {
+      const engine = fakeEngine({
+        firstMediaTimestamp: Promise.resolve({ rendererMs: 3000, quality: "estimated" as const }),
+        webcam: webcamHandle(),
+      });
+      await startWith(engine, { webcam });
+      await stopAndSettle();
+      expect(finalizeMeta().webcam).toMatchObject({ offsetQuality: "estimated" });
+    });
+
+    it("finalizes without a webcam when its file is unusable or it never opened", async () => {
+      await startWith(fakeEngine({ webcam: webcamHandle({ isUsable: () => false }) }), {
+        webcam,
+      });
+      await stopAndSettle();
+      expect(finalizeMeta().webcam).toBeNull();
+
+      await startWith(fakeEngine({ webcam: null }), { webcam });
+      await stopAndSettle();
+      expect(finalizeMeta().webcam).toBeNull();
+    });
+
+    it("a webcam session that cannot be created leaves the take without a webcam", async () => {
+      recordingCreateMock.mockImplementation(async (...args: unknown[]) => {
+        if (args[1] === "webcam") throw new Error("EACCES");
+        return { tempPath: "/tmp/s" };
+      });
+      try {
+        await startWith(fakeEngine(), { webcam });
+        expect(prepareEngineMock.mock.calls.at(-1)![0].webcam).toBeNull();
+        await stopAndSettle();
+      } finally {
+        recordingCreateMock.mockImplementation(async () => {
+          callOrder.push("recordingCreate");
+          return { tempPath: "/tmp/s" };
+        });
+      }
+    });
+
+    it("turning the camera off mid-take ends the webcam file, and the take goes on", async () => {
+      const engine = fakeEngine({ webcam: webcamHandle() });
+      await startWith(engine, { webcam });
+      broadcast({ isCameraEnabled: true });
+      expect(engine.endWebcam).not.toHaveBeenCalled();
+      broadcast({ isCameraEnabled: false });
+      broadcast({ isCameraEnabled: false });
+      expect(engine.endWebcam).toHaveBeenCalledOnce();
+      expect(store.getRecorderSnapshot().status).toBe("recording");
+      await stopAndSettle();
+    });
+
+    it("a camera turned off during the countdown acquires the take again, without it", async () => {
+      prepareEngineMock.mockImplementation(async () => fakePrepared());
+      let resolves = 0;
+      store.requestStartRecording(() => ({ ...input, webcam: resolves++ === 0 ? webcam : null }));
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(store.getRecorderSnapshot().status).toBe("recording");
+      expect(prepareEngineMock).toHaveBeenCalledTimes(2);
+      expect(prepareEngineMock.mock.calls.at(-1)![0].webcam).toBeNull();
+      await stopAndSettle();
+    });
+
+    it("a camera turned on during the countdown acquires the take again, with it", async () => {
+      prepareEngineMock.mockImplementation(async () => fakePrepared());
+      let resolves = 0;
+      store.requestStartRecording(() => ({ ...input, webcam: resolves++ === 0 ? null : webcam }));
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(store.getRecorderSnapshot().status).toBe("recording");
+      expect(prepareEngineMock).toHaveBeenCalledTimes(2);
+      expect(prepareEngineMock.mock.calls.at(-1)![0].webcam).toMatchObject({
+        deviceId: "cam-1",
+        lines: 720,
+      });
+      await stopAndSettle();
+    });
+
+    it("a camera turned off and on again during the countdown acquires the take again", async () => {
+      const first = fakePrepared(fakeEngine({ webcam: webcamHandle() }));
+      const second = fakePrepared(fakeEngine({ webcam: webcamHandle() }));
+      prepareEngineMock.mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+      store.requestStartRecording(() => ({ ...input, webcam }));
+      await vi.advanceTimersByTimeAsync(0);
+      // Off ends the prepared engine's webcam for good; on again cannot reopen it.
+      broadcast({ isCameraEnabled: false });
+      expect(first.endWebcam).toHaveBeenCalledOnce();
+      broadcast({ isCameraEnabled: true });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(store.getRecorderSnapshot().status).toBe("recording");
+      // The input is the same as when the countdown began, yet the take is not the dead one.
+      expect(prepareEngineMock).toHaveBeenCalledTimes(2);
+      expect(first.begin).not.toHaveBeenCalled();
+      expect(first.release).toHaveBeenCalled();
+      expect(second.begin).toHaveBeenCalledOnce();
+      await stopAndSettle();
+    });
+
+    it("a cancel during the countdown aborts the take once both sessions exist", async () => {
+      let created!: () => void;
+      recordingCreateMock.mockImplementation(async (...args: unknown[]) => {
+        if (args[1] === "webcam") await new Promise<void>((r) => (created = r));
+        return { tempPath: "/tmp/s" };
+      });
+      try {
+        prepareEngineMock.mockImplementation(async () => fakePrepared());
+        store.requestStartRecording(() => ({ ...input, webcam }));
+        await vi.advanceTimersByTimeAsync(0);
+        store.stopOrCancelRecording();
+        await vi.advanceTimersByTimeAsync(0);
+        // Main would create the webcam file after the abort and nobody would delete it.
+        expect(window.electronAPI.recordingAbort).not.toHaveBeenCalled();
+        created();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(window.electronAPI.recordingAbort).toHaveBeenCalledOnce();
+      } finally {
+        recordingCreateMock.mockImplementation(async () => {
+          callOrder.push("recordingCreate");
+          return { tempPath: "/tmp/s" };
+        });
+      }
+    });
   });
 });
