@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ReconcileFinding,
@@ -118,15 +118,23 @@ describe("reconcile banner", () => {
 });
 
 describe("reconcile dialog", () => {
-  it("lists current → new names, runs Fix all with progress, and reports the result", async () => {
+  it("tables current → new names, runs Fix all with progress, and reports the result", async () => {
     mount();
     fireEvent.click(await screen.findByRole("button", { name: "Check and fix" }));
+    const [changes, listed] = await screen.findAllByRole("table");
+    const renameRow = within(changes!).getAllByRole("row")[1]!;
+    expect(within(changes!).getByRole("columnheader", { name: "Now" })).toBeInTheDocument();
     expect(
-      await screen.findByText(
-        "recording-2026-10-30-00-57-30.mp4 → Kaipu Recording 2026-10-29 at 19.57.30.mp4",
-      ),
+      within(changes!).getByRole("columnheader", { name: "After Fix all" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Pair\.png: another file has the same name/)).toBeInTheDocument();
+    expect(
+      within(renameRow)
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual(["recording-2026-10-30-00-57-30", "Kaipu Recording 2026-10-29 at 19.57.30"]);
+    const conflictRow = within(listed!).getAllByRole("row")[1]!;
+    expect(within(conflictRow).getByText("Pair.png")).toBeInTheDocument();
+    expect(within(conflictRow).getByText(/Another file has the same name/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Fix all" }));
     act(() => progress!({ phase: "waiting", waitingFor: ["screenshot"] }));

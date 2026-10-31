@@ -82,6 +82,9 @@ ADR links file and record by name alone.
 8. **Old automatic titles are replaced** by the default capture name built from the capture
    date. Kept as titles they would become files like `Recording — 10 29 2026, 7 57 30 PM.mp4`.
    A user title that happens to look automatic is replaced too; this risk is accepted.
+   An export of one (`Recording — 9/14/2026, … (edited)`) takes its source's new name plus
+   the same suffix, as the editor names exports, so the pair still reads as a pair. With
+   its source gone, it takes the default name from its own date, with the suffix.
 9. **Sidecar reads are strict.** An unreadable, corrupt or schema-invalid sidecar is reported
    and never written by anyone: reconcile, backfill, identity minting, the editors or
    `renameItem`, `remove`. Today `sidecar()` turns it into `{}` and the writers merge over it,

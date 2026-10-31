@@ -68,11 +68,22 @@ const DAY_PERIODS = [
  * title that looks automatic is replaced; accepted).
  */
 export function isStaleAutoTitle(title: string): boolean {
-  const match = AUTO_PREFIX.exec(title);
+  const match = AUTO_PREFIX.exec(splitEdited(title).base);
   if (!match) return false;
   let rest = match[1]!;
   for (const period of DAY_PERIODS) rest = rest.split(period).join(" ");
   return /\d/.test(rest) && /^[\d\s/.,:-]+$/u.test(rest);
+}
+
+/** What `editedTitle` appends to an export's title, once per export of an export. */
+const EDITED_SUFFIX = /(?: \((?:edited|editado)\))+$/u;
+
+/** `Recording — 9/14/2026 (edited)` → base `Recording — 9/14/2026`, suffix ` (edited)`. */
+function splitEdited(title: string): { base: string; suffix: string } {
+  const match = EDITED_SUFFIX.exec(title);
+  return match
+    ? { base: title.slice(0, match.index), suffix: match[0] }
+    : { base: title, suffix: "" };
 }
 
 // ── The scan ──────────────────────────────────────────────────────────────────
@@ -299,6 +310,26 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
   }
   const liveAssetIds = new Set(identities.keys());
 
+  /**
+   * The title each live, readable item ends up with: an old automatic title takes the
+   * default name. An export of one is named after its source's (`… (edited)`), as the
+   * editor names exports, so source and export still read as a pair.
+   */
+  const finalTitles = new Map<string, string>();
+  for (const item of live) {
+    if (item.read.status !== "ok" || !item.read.sidecar.assetId) continue;
+    const record = item.read.sidecar;
+    const title = typeof record.title === "string" ? record.title : "";
+    if (!title.trim() || splitEdited(title).suffix) continue;
+    const date = new Date(captureDate(record, item.stem, item));
+    finalTitles.set(
+      record.assetId!,
+      isStaleAutoTitle(title)
+        ? defaultCaptureName(kindFromExt(item.ext) as CaptureKind, date)
+        : title,
+    );
+  }
+
   for (const item of live) {
     const kind = kindFromExt(item.ext);
     const base = { stem: item.stem, ext: item.ext, path: item.name };
@@ -361,7 +392,11 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
       continue;
     }
     if (isStaleAutoTitle(title)) {
-      const newTitle = defaultCaptureName(kind as CaptureKind, date);
+      const { suffix } = splitEdited(title);
+      const source = record.derivedFromAssetId
+        ? finalTitles.get(record.derivedFromAssetId)
+        : undefined;
+      const newTitle = (source ?? defaultCaptureName(kind as CaptureKind, date)) + suffix;
       findings.push({
         ...withDate,
         kind: "stale-auto-title",

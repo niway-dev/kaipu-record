@@ -26,23 +26,88 @@
   color: var(--text-secondary);
 }
 
-.list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  /* Dates in names line up row under row, so the pattern reads at a glance. */
+  font-variant-numeric: tabular-nums;
 }
 
-.row,
-.more {
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 10px;
+  background: var(--bg-modal);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  text-align: left;
+}
+
+.table th:first-child {
+  border-top-left-radius: var(--radius-md);
+}
+
+.table th:last-child {
+  border-top-right-radius: var(--radius-md);
+}
+
+.table td {
+  padding: 5px 10px;
+  vertical-align: top;
   overflow-wrap: anywhere;
 }
 
+.table tbody tr + tr td {
+  border-top: 1px solid var(--border-light);
+}
+
+.table tbody tr:hover td {
+  background: var(--bg-card-hover);
+}
+
+.nowCell {
+  width: 46%;
+  color: var(--text-secondary);
+}
+
+.name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.icon {
+  flex: none;
+  align-self: center;
+  color: var(--text-muted);
+}
+
+.table .arrowCell {
+  width: 22px;
+  padding-inline: 0;
+  color: var(--accent-primary);
+  text-align: center;
+}
+
+.afterCell {
+  color: var(--text-primary);
+}
+
+.noteCell {
+  color: var(--text-muted);
+}
+
 .more {
+  margin: 0;
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
 }
 
