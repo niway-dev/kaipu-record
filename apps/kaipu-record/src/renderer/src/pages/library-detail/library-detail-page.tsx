@@ -175,7 +175,9 @@ export function LibraryDetailPage(): React.JSX.Element {
     navigate("/library");
   };
 
-  if (isLoading || recovering) {
+  // The loader only before the recording is known: a re-list (a copy landing, the cloud
+  // catalog refreshing) keeps the page, the player and its position on screen.
+  if ((isLoading && !video) || recovering) {
     return <div className={styles.centered}>{t("loading")}</div>;
   }
 

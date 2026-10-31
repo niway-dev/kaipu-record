@@ -193,6 +193,39 @@ describe("LibraryDetailPage", () => {
     expect(screen.getByTestId("capture-meta")).toHaveTextContent("FRAME · 1234 × 567");
   });
 
+  it("a re-list keeps the page on screen instead of swapping it for the loader", async () => {
+    const listeners: (() => void)[] = [];
+    window.electronAPI.onLibraryChanged = (listener: () => void) => {
+      listeners.push(listener);
+      return () => {};
+    };
+    let finishRelist: () => void = () => {};
+    window.electronAPI.listLibraryItems = vi
+      .fn()
+      .mockResolvedValueOnce({
+        items: [exportedOnlyItem],
+        vaultError: null,
+        catalogVerifiedAt: null,
+      })
+      .mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            finishRelist = () =>
+              resolve({ items: [exportedOnlyItem], vaultError: null, catalogVerifiedAt: null });
+          }),
+      );
+    renderDetail("asset-b");
+    await waitForLoaded();
+
+    act(() => {
+      for (const l of listeners) l();
+    });
+
+    expect(screen.queryByText("Loading…")).toBeNull();
+    expect(screen.getAllByText("Exported Recording").length).toBeGreaterThan(0);
+    await act(async () => finishRelist());
+  });
+
   it("says an imported video was imported in the metadata line (NIW2-579)", async () => {
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [
