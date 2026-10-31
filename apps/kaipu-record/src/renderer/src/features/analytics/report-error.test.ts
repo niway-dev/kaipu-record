@@ -21,6 +21,18 @@ describe("reportError", () => {
     expect(JSON.stringify(toastArg)).not.toContain("disk full");
   });
 
+  it("stays silent for a call a workspace switch made stale: it is expected, not a failure", () => {
+    vi.mocked(showToast).mockClear();
+    vi.mocked(captureException).mockClear();
+    reportError(
+      "Falló",
+      new Error("Error invoking remote method 'library:list-items': Error: stale-workspace"),
+    );
+    reportError("Falló", new Error("stale-workspace"));
+    expect(showToast).not.toHaveBeenCalled();
+    expect(captureException).not.toHaveBeenCalled();
+  });
+
   it("adds a Reintentar action when a retry is provided", () => {
     const retry = vi.fn();
     reportError("Falló", new Error("x"), { retry });

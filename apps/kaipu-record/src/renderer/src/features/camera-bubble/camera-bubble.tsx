@@ -100,9 +100,10 @@ async function settleGrip(
  *
  * Outside a recording, hovering shows a pink outline, the size ("240 px · M"), a resize
  * grip and a close button that turns the camera off; dragging the grip resizes the bubble
- * from its bottom-left corner. Once a recording starts none of that chrome renders, so the
- * bubble on screen is exactly the one in the video (the control bar, which the video
- * leaves out, offers the same "turn camera off" during a take).
+ * from its bottom-left corner. From the moment a take is pending (its countdown) none of
+ * that chrome renders, and at rest the bubble has no border, so the bubble on screen is
+ * exactly the one in the video (the control bar, which the video leaves out, offers the same
+ * "turn camera off" during a take).
  */
 export function CameraBubble(): React.JSX.Element {
   const t = useTranslations("cameraSettings");
@@ -133,19 +134,23 @@ export function CameraBubble(): React.JSX.Element {
   }, []);
 
   const recording = activity.active;
-  // A recording that starts mid-drag ends the drag (no chrome may reach the video) and saves
-  // the size it reached, so the window never keeps an unsaved preview size for the take.
+  // A pending take (countdown, streams acquiring) hides the chrome too: the `active` broadcast
+  // reaches this window only after the capture has started, so waiting for it would put the
+  // chrome in the first frames of the video.
+  const inTake = recording || activity.pending === true;
+  // A take that starts mid-drag ends the drag (no chrome may reach the video) and saves the
+  // size it reached, so the window never keeps an unsaved preview size for the take.
   useEffect(() => {
-    if (!recording) return;
+    if (!inTake) return;
     const session = drag.current;
     drag.current = null;
     setDragging(false);
     if (session) void settleGrip(session, latestBubble);
-  }, [recording]);
-  const showChrome = !recording && (hovered || dragging);
+  }, [inTake]);
+  const showChrome = !inTake && (hovered || dragging);
 
   const onGripDown = (event: PointerEvent<HTMLDivElement>): void => {
-    if (recording) return;
+    if (inTake) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
     drag.current = {
