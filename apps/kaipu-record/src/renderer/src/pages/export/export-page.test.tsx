@@ -484,6 +484,19 @@ describe("ExportPage with no video", () => {
     expect(screen.getByRole("heading", { name: "Drop it to bring it in" })).toBeVisible();
   });
 
+  it("while an import runs, neither Pick from Library nor Browse files can start another", async () => {
+    window.electronAPI.importVideoFiles = vi.fn(() => new Promise<never>(() => {}));
+    renderExport("/export");
+    await screen.findByTestId("export-drop-zone");
+
+    dropFiles(document.body, "clip.mp4");
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Pick from Library" })).toBeDisabled(),
+    );
+    expect(screen.getByRole("button", { name: "Browse files…" })).toBeDisabled();
+  });
+
   it("with a video open: a video dropped anywhere opens Export on it, keeping the selected destination", async () => {
     window.electronAPI.importVideoFiles = vi.fn(async () => importResult("asset-9"));
     const router = renderExport("/export/asset-1");

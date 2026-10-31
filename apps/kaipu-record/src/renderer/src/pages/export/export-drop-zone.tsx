@@ -42,7 +42,7 @@ export function ExportDropZone({
             onPick={onPickVideo}
             align="center"
             trigger={(props) => (
-              <Button variant="primary" {...props}>
+              <Button variant="primary" disabled={importing} {...props}>
                 <Library size={14} strokeWidth={1.8} aria-hidden />
                 {t("pickFromLibrary")}
               </Button>
