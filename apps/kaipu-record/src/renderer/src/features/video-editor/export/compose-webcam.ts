@@ -1,5 +1,5 @@
 /**
- * The webcam layer on an exported frame (ADR 0033): the last composition step, drawn onto
+ * The webcam layer on an exported frame (ADR 0038): the last composition step, drawn onto
  * the OUTPUT canvas after the camera path's crop and, for fixed-canvas presets, after the
  * framer, so the zoom moves the content under it and Fill never crops it.
  *

@@ -75,7 +75,7 @@ export interface LiveAudioControls {
   setDucking(on: boolean): LiveToggleResult;
 }
 
-/** The take's webcam file, encoded beside the screen on the same clock (ADR 0032). */
+/** The take's webcam file, encoded beside the screen on the same clock (ADR 0037). */
 export interface WebcamHandle {
   /** Renderer-clock time of the webcam file's time 0, like the screen's. */
   firstMediaTimestamp: Promise<FirstMediaTimestamp>;
@@ -208,7 +208,7 @@ export interface EngineOptions {
    */
   watermark?: WatermarkConfig | null;
   /**
-   * Record the webcam into its own file beside the screen (ADR 0032): the camera to open
+   * Record the webcam into its own file beside the screen (ADR 0037): the camera to open
    * (`null` = the user-facing default) and the lines to ask for, 16:9. A camera that cannot be
    * opened never fails the take; it records without a webcam.
    */
@@ -221,7 +221,7 @@ export interface EngineOptions {
    * The opened webcam stops recording before the take stops: turned off, unplugged, its
    * encoder failed or its output could not start. Fires at most once, never for the take's own
    * stop or release. The face is then in no file unless the bubble comes back into the
-   * screen capture (ADR 0032).
+   * screen capture (ADR 0037).
    */
   onWebcamEnded?(): void;
   /**
@@ -330,7 +330,7 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
     : Promise.resolve(null);
   // The webcam opens in its own request (it is not part of the screen), and is settled BEFORE
   // the screen is requested: whether the bubble leaves the screen capture is decided when that
-  // capture starts (ADR 0032), so a webcam that did not open must put the bubble back in
+  // capture starts (ADR 0037), so a webcam that did not open must put the bubble back in
   // first, or the face would be in neither file.
   const webcamRequest = options.webcam
     ? openWebcamWithin(options.webcam, WEBCAM_OPEN_TIMEOUT_MS)

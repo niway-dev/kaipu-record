@@ -5,7 +5,7 @@
  *   fill black → planClipFrame → direct draw, or (work canvas: frame → redactions →
  *   content-pinned overlays → camera crop) → overlays on the output for direct frames
  *   → framing (fixed-canvas presets: the composed view onto the target canvas, Fit/Fill)
- *   → webcam layer (ADR 0033), on the final canvas, at its size.
+ *   → webcam layer (ADR 0038), on the final canvas, at its size.
  *
  * Slides: fill black → contained bitmap → overlays → framing (always Fit). No webcam.
  *
@@ -49,7 +49,7 @@ export interface OutputComposerOptions {
    * which is then framed onto `ctx`/`width`/`height` here. Null composes straight onto `ctx`.
    */
   framing?: OutputFraming | null;
-  /** The webcam layer (ADR 0033); null for a recording without a webcam track. */
+  /** The webcam layer (ADR 0038); null for a recording without a webcam track. */
   webcam?: WebcamScene | null;
 }
 
@@ -168,7 +168,7 @@ export function createOutputComposer(opts: OutputComposerOptions): OutputCompose
     clip(frameCanvas, sourceTs, sourceDuration, outTs, webcamFrame) {
       composeClip(frameCanvas, sourceTs, sourceDuration, outTs);
       if (framer && framing) framer.frame(framing.view, framing.mode);
-      // Last, on the final canvas: after the crop and after the framer (ADR 0033).
+      // Last, on the final canvas: after the crop and after the framer (ADR 0038).
       if (!webcamFrame) return;
       const at = webcamFrame.sourceTs;
       const plan = planWebcamDraw(

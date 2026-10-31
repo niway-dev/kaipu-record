@@ -8,7 +8,7 @@
  */
 import type { LocalRecording } from "@shared/types/library-storage";
 import type { GifSaveMeta } from "@shared/types/ipc";
-import { LibraryVault } from "./library-vault";
+import { LibraryVault, type NewMedia } from "./library-vault";
 
 /** Hard cap on a GIF payload (IPC safety). Mirrors `GIF_HARD_CAP_BYTES` in the renderer. */
 export const GIF_MAX_BYTES = 64 * 1024 * 1024;
@@ -31,7 +31,6 @@ export function validateGifBytes(bytes: Uint8Array): void {
 
 export interface GifSaveDeps {
   vaultDir: () => string;
-  newId: () => string;
   now?: () => number;
 }
 
@@ -43,13 +42,24 @@ export async function saveGif(
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
   validateGifBytes(bytes);
   const vault = new LibraryVault(deps.vaultDir());
-  const id = deps.newId();
-  await vault.writeGif(id, bytes);
+  const createdAt = (deps.now ?? Date.now)();
+  // The file name follows the title (ADR 0035); the stub sidecar reserves it.
+  const reservation = await vault.reserve({ kind: "gif", title: meta.title, createdAt });
+  const { id } = reservation;
+  // No half-saved item: neither a GIF without its sidecar nor a stub without its GIF. Each
+  // failure gives back only what this save made — never a file that took `<id>.gif` meanwhile.
+  let media: NewMedia;
+  try {
+    media = await vault.writeGif(id, bytes);
+  } catch (error) {
+    await vault.releaseReservation(reservation).catch(() => {});
+    throw error;
+  }
   try {
     await vault.writeMeta(id, {
       title: meta.title,
       durationSeconds: meta.durationSeconds,
-      createdAt: (deps.now ?? Date.now)(),
+      createdAt,
       derivedFromAssetId: meta.derivedFromAssetId ?? null,
       gifWidth: meta.width,
       gifHeight: meta.height,
@@ -57,8 +67,7 @@ export async function saveGif(
     });
     if (meta.thumbnail) await vault.writeThumbnail(id, Buffer.from(meta.thumbnail));
   } catch (error) {
-    // No half-saved item: the GIF without its sidecar would list with a wrong title.
-    await vault.remove(id).catch(() => {});
+    await vault.discardCreated(reservation, media).catch(() => {});
     throw error;
   }
   const recording = await vault.describe(id);

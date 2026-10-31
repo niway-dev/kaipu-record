@@ -138,7 +138,7 @@ export interface EditorToolRailProps {
   onAddZoom(): void;
   /** Blur/Cover need footage: disabled while the playhead is on a slide. */
   privacyDisabled: boolean;
-  /** "Hide webcam here" (ADR 0033). Absent for a recording without a webcam: no button. */
+  /** "Hide webcam here" (ADR 0038). Absent for a recording without a webcam: no button. */
   onHideWebcam?(): void;
 }
 

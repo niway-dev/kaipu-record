@@ -71,7 +71,7 @@ export async function probeEditing(
 export type { WebcamState } from "./webcam-track-state";
 
 /**
- * The webcam track of one item (ADR 0032), by the rule `describe()` shares
+ * The webcam track of one item (ADR 0037), by the rule `describe()` shares
  * (`webcamTrackState`): "present" while `.kaipu/<id>.webcam.mp4` exists, "missing" when the
  * sidecar recorded a webcam but the file is gone, "none" for a recording that never had one.
  * Read-only; never touches the video.

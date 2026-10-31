@@ -29,7 +29,7 @@ import {
  *
  * It is content-protected from creation, so the screen recording never carries it: the face
  * is recorded in the take's own webcam file and composed on export, where the editor can move,
- * hide or restyle it (ADR 0032). The protection is set right after the window exists, before
+ * hide or restyle it (ADR 0037). The protection is set right after the window exists, before
  * any capture stream could see it. Windows before 10 2004 cannot exclude a window from
  * capture (it comes out black), so there the bubble stays unprotected and the take records
  * no webcam file: the bubble appears in the screen recording, as it did before the track.
@@ -131,7 +131,7 @@ export class CameraBubbleWindow {
    * created first), the change is in effect for that capture. Called while a capture already
    * runs (the webcam file ended mid-take: the bubble must come back into the recording), it
    * is best effort: whether a running ScreenCaptureKit stream picks up a window that drops
-   * its protection is unverified (spike rows 4/5, ADR 0032).
+   * its protection is unverified (spike rows 4/5, ADR 0037).
    */
   applyProtection(): void {
     if (!this.window || this.window.isDestroyed()) return;
