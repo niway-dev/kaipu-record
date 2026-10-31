@@ -229,17 +229,25 @@ export class LibraryService {
     const account = this.deps.account();
     const catalog = account ? await this.deps.cache.read(account.userId) : null;
     const cloud = catalog?.find((e) => e.assetId === rec.assetId) ?? null;
+    // The cheap refusals first: an edit project or a webcam file refuses whatever the bytes
+    // are, so the file is not hashed for them (a long recording takes seconds to hash).
+    const editSession = cloud ? await hasEditSession(this.deps.vaultDir(), id) : false;
+    const webcamTrack =
+      cloud && !editSession ? (await probeWebcam(this.deps.vaultDir(), id)) === "present" : false;
     // A file still being written cannot be proven identical to the cloud copy —
     // refuse, do not reject: the policy below turns a null hash into "hash-unknown".
-    const hashed = cloud ? await vault.ensureContentHash(id).catch(() => null) : null;
+    const hashed =
+      cloud && !editSession && !webcamTrack
+        ? await vault.ensureContentHash(id).catch(() => null)
+        : null;
     const decision = canRemoveLocalCopy({
       local: {
         contentSha256: hashed?.contentSha256 ?? null,
         sizeBytes: hashed?.sizeBytes ?? rec.sizeBytes,
       },
       cloud: cloud ? { contentSha256: cloud.contentSha256, sizeBytes: cloud.sizeBytes } : null,
-      hasEditSession: await hasEditSession(this.deps.vaultDir(), id),
-      hasWebcamTrack: (await probeWebcam(this.deps.vaultDir(), id)) === "present",
+      hasEditSession: editSession,
+      hasWebcamTrack: webcamTrack,
     });
     if (!decision.allowed) return { ok: false, reason: decision.reason };
     await vault.removeLocalCopy(id);

@@ -372,7 +372,7 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
             // disk) rather than leaving broken references that the worker can't render.
             const filteredScene: VideoScene = {
               // The sidecar decides whether the recording has a webcam, not the session.
-              ...reconcileWebcam(session.scene, source.webcam ?? null),
+              ...reconcileWebcam(session.scene, source.webcam ?? null, source.durationSeconds),
               items: session.scene.items.filter(
                 (item) => item.kind !== "slide" || loadedIds.has(item.assetId),
               ),
@@ -773,7 +773,7 @@ function VideoEditor({
             // Reconciled like the loader does, or an old session (no webcam key) on a webcam
             // recording would never fingerprint like the scene that was exported.
             const savedScene = parsedScene
-              ? reconcileWebcam(parsedScene, source.webcam ?? null)
+              ? reconcileWebcam(parsedScene, source.webcam ?? null, source.durationSeconds)
               : null;
             if (savedScene && editFingerprint(savedScene) !== fingerprint) return;
           }

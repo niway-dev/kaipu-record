@@ -2,12 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  FINALIZE_ELSEWHERE_MARKER,
-  FINALIZE_KEPT_MARKER,
-  IPC_CHANNELS,
-  WEBCAM_TRACK_UNSUPPORTED_MARKER,
-} from "@shared/types/ipc";
+import { FINALIZE_ELSEWHERE_MARKER, FINALIZE_KEPT_MARKER, IPC_CHANNELS } from "@shared/types/ipc";
 
 const mockState = vi.hoisted(() => ({
   userDataDir: "",
@@ -33,7 +28,12 @@ const mockState = vi.hoisted(() => ({
     applySize: vi.fn(),
     preview: vi.fn((size: number) => size),
     applyProtection: vi.fn(),
+    park: vi.fn(),
+    isProtected: vi.fn(() => false),
+    replace: vi.fn(),
   },
+  /** Whether the fake bubble has a parked window: `park` sets it, `show` and `destroy` clear it. */
+  bubbleParked: false,
   /** The protection rule the hub built the bubble with. */
   bubbleProtect: null as null | (() => boolean),
   bar: { show: vi.fn(), hide: vi.fn(), sendTick: vi.fn(), reset: vi.fn(), raise: vi.fn() },
@@ -101,18 +101,34 @@ vi.mock("../workspaces", async () => {
 
 vi.mock("./camera-bubble-window", () => ({
   CameraBubbleWindow: class {
-    show = mockState.bubble.show;
+    show = (): void => {
+      mockState.bubbleParked = false;
+      mockState.bubble.show();
+    };
     hide = mockState.bubble.hide;
-    destroy = mockState.bubble.destroy;
+    destroy = (): void => {
+      mockState.bubbleParked = false;
+      mockState.bubble.destroy();
+    };
+    park = (): void => {
+      mockState.bubbleParked = true;
+      mockState.bubble.park();
+    };
+    isParked = (): boolean => mockState.bubbleParked;
     isVisible = mockState.bubble.isVisible;
     visibleBounds = mockState.bubble.visibleBounds;
+    // The fake's parked window is where `visibleBounds` says the bubble was.
+    placedBounds = () => mockState.bubble.visibleBounds();
     anchorTo = mockState.bubble.anchorTo;
     raise = mockState.bubble.raise;
     applySize = mockState.bubble.applySize;
     preview = mockState.bubble.preview;
     applyProtection = mockState.bubble.applyProtection;
+    isProtected = mockState.bubble.isProtected;
+    replace = mockState.bubble.replace;
     constructor(_size: () => number, protect: () => boolean) {
       mockState.bubbleProtect = protect;
+      mockState.bubbleParked = false;
     }
   },
 }));
@@ -2035,6 +2051,18 @@ describe("recording hub — the webcam writer session (ADR 0037)", () => {
       mockState.osRelease = "24.0.0";
     });
 
+    it("tells the renderer whether this OS can record the webcam apart", async () => {
+      await registered();
+      const supported = mockState.ipcHandle.get(IPC_CHANNELS.recordingWebcamTrackSupported)!;
+      Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
+      expect(supported({})).toBe(true);
+      Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+      mockState.osRelease = "10.0.22631";
+      expect(supported({})).toBe(true);
+      mockState.osRelease = "10.0.18363";
+      expect(supported({})).toBe(false);
+    });
+
     it("creates the webcam session on macOS and on a current Windows build", async () => {
       const { RecordingWriter } = await import("./recording-writer");
       const create = vi.spyOn(RecordingWriter.prototype, "create").mockResolvedValue({
@@ -2068,14 +2096,207 @@ describe("recording hub — the webcam writer session (ADR 0037)", () => {
         mockState.osRelease = "10.0.18363";
         await handler({}, "s1");
         // Electron turns a rejecting handler into a rejected `invoke` in the renderer.
+        // A backstop: the renderer asks `recordingWebcamTrackSupported` first and never sends it.
         await expect(handler({}, "s1", "webcam")).rejects.toThrow(/webcam track unavailable/);
-        // Marked, so the renderer tells the legacy path apart from a webcam that failed.
-        await expect(handler({}, "s1", "webcam")).rejects.toThrow(WEBCAM_TRACK_UNSUPPORTED_MARKER);
         expect(create).toHaveBeenCalledExactlyOnceWith("s1");
       } finally {
         create.mockRestore();
       }
     });
+  });
+});
+
+/**
+ * The camera toggled mid-take (ADR 0037 § camera toggled mid-take): a running screen capture
+ * leaves out only the windows that were on screen when it started, so during a take that
+ * records a webcam file the bubble is parked, not destroyed, and comes back as the same window.
+ */
+describe("recording hub — the camera turned off and on mid-take", () => {
+  let create: { mockRestore(): void };
+  beforeEach(async () => {
+    mockState.userDataDir = await mkdtemp(join(tmpdir(), "kaipu-hub-"));
+    mockState.ipcOn.clear();
+    mockState.ipcHandle.clear();
+    for (const fn of Object.values(mockState.bubble)) fn.mockReset();
+    mockState.bubble.isVisible.mockReturnValue(false);
+    vi.resetModules();
+    const { RecordingWriter } = await import("./recording-writer");
+    create = vi.spyOn(RecordingWriter.prototype, "create").mockResolvedValue({
+      tempPath: "/tmp/x",
+    });
+  });
+  afterEach(async () => {
+    create.mockRestore();
+    await rm(mockState.userDataDir, { recursive: true, force: true });
+  });
+
+  const ipc = async (channel: string, ...args: unknown[]): Promise<unknown> =>
+    mockState.ipcHandle.get(channel)!({}, ...args);
+  const camera = (on: boolean): void => {
+    mockState.ipcOn.get(IPC_CHANNELS.recordingSettingsUpdate)!({}, { isCameraEnabled: on });
+  };
+
+  async function registered(): Promise<void> {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+  }
+
+  /** A take that began with the camera on and records a webcam file. */
+  async function takeWithWebcam(): Promise<void> {
+    await registered();
+    camera(true);
+    await ipc(IPC_CHANNELS.recordingCreate, "s1");
+    await ipc(IPC_CHANNELS.recordingCreate, "s1", "webcam");
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+      {},
+      { sourceId: "screen:1:0", sourceName: "S" },
+    );
+    mockState.bubble.show.mockClear();
+  }
+
+  it("turning the camera off parks the bubble, still protected, instead of destroying it", async () => {
+    await takeWithWebcam();
+    camera(false);
+    expect(mockState.bubble.park).toHaveBeenCalledOnce();
+    expect(mockState.bubble.destroy).not.toHaveBeenCalled();
+    expect(mockState.bubbleProtect!()).toBe(true);
+  });
+
+  it("turning it on again shows the same window, never a new one", async () => {
+    await takeWithWebcam();
+    camera(false);
+    camera(true);
+    expect(mockState.bubble.destroy).not.toHaveBeenCalled();
+    expect(mockState.bubble.show).toHaveBeenCalledOnce();
+    expect(mockState.bubbleProtect!()).toBe(true);
+  });
+
+  it("a webcam file that ended while parked gets a new, unprotected window: the legacy path", async () => {
+    await takeWithWebcam();
+    camera(false);
+    await ipc(IPC_CHANNELS.recordingWebcamEnded, "s1");
+    camera(true);
+    expect(mockState.bubble.destroy).toHaveBeenCalledOnce();
+    expect(mockState.bubble.destroy.mock.invocationCallOrder[0]).toBeLessThan(
+      mockState.bubble.show.mock.invocationCallOrder[0]!,
+    );
+    expect(mockState.bubbleProtect!()).toBe(false);
+  });
+
+  it("a webcam file that ends with the bubble on screen, protected, gets a new window in its place", async () => {
+    // A running capture is known to record a window created after it started; one that only
+    // drops its protection is unverified (ADR 0037). The face must land in the screen.
+    await takeWithWebcam();
+    mockState.bubble.isProtected.mockReturnValue(true);
+    await ipc(IPC_CHANNELS.recordingWebcamEnded, "s1");
+    expect(mockState.bubble.replace).toHaveBeenCalledExactlyOnceWith(true);
+    expect(mockState.bubbleProtect!()).toBe(false);
+  });
+
+  it("a webcam file that ends with the bubble parked or unprotected only updates its protection", async () => {
+    await takeWithWebcam();
+    camera(false);
+    mockState.bubble.isProtected.mockReturnValue(true);
+    await ipc(IPC_CHANNELS.recordingWebcamEnded, "s1");
+    expect(mockState.bubble.replace).not.toHaveBeenCalled();
+    expect(mockState.bubble.applyProtection).toHaveBeenCalled();
+  });
+
+  it("a webcam file that ends during the countdown only updates the protection, before the capture", async () => {
+    await registered();
+    camera(true);
+    await ipc(IPC_CHANNELS.recordingCreate, "s1");
+    await ipc(IPC_CHANNELS.recordingCreate, "s1", "webcam");
+    mockState.bubble.isProtected.mockReturnValue(true);
+    await ipc(IPC_CHANNELS.recordingWebcamEnded, "s1");
+    expect(mockState.bubble.replace).not.toHaveBeenCalled();
+    expect(mockState.bubble.applyProtection).toHaveBeenCalled();
+  });
+
+  it("after the webcam file ended, turning the camera off destroys the bubble as before", async () => {
+    await takeWithWebcam();
+    await ipc(IPC_CHANNELS.recordingWebcamEnded, "s1");
+    camera(false);
+    expect(mockState.bubble.park).not.toHaveBeenCalled();
+    expect(mockState.bubble.destroy).toHaveBeenCalledOnce();
+  });
+
+  it("a take that started with the camera off keeps the legacy path: off destroys", async () => {
+    await registered();
+    await ipc(IPC_CHANNELS.recordingCreate, "s1");
+    mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!(
+      {},
+      { sourceId: "screen:1:0", sourceName: "S" },
+    );
+    camera(true);
+    camera(false);
+    expect(mockState.bubble.park).not.toHaveBeenCalled();
+    expect(mockState.bubble.destroy).toHaveBeenCalledOnce();
+  });
+
+  it("outside a take, turning the camera off destroys the bubble (the device is released)", async () => {
+    await registered();
+    camera(true);
+    camera(false);
+    expect(mockState.bubble.park).not.toHaveBeenCalled();
+    expect(mockState.bubble.destroy).toHaveBeenCalledOnce();
+  });
+
+  it("during the countdown (before the take is active) off still destroys", async () => {
+    await registered();
+    camera(true);
+    await ipc(IPC_CHANNELS.recordingCreate, "s1");
+    await ipc(IPC_CHANNELS.recordingCreate, "s1", "webcam");
+    camera(false);
+    expect(mockState.bubble.park).not.toHaveBeenCalled();
+    expect(mockState.bubble.destroy).toHaveBeenCalledOnce();
+  });
+
+  it("a bubble parked when the take is finalized is destroyed, releasing the window", async () => {
+    const { RecordingWriter } = await import("./recording-writer");
+    const finalize = vi
+      .spyOn(RecordingWriter.prototype, "finalize")
+      .mockRejectedValue(new Error("no file"));
+    try {
+      await takeWithWebcam();
+      camera(false);
+      await ipc(IPC_CHANNELS.recordingFinalize, "s1", { durationMs: 0 }).catch(() => {});
+      expect(mockState.bubble.destroy).toHaveBeenCalledOnce();
+      expect(mockState.bubbleParked).toBe(false);
+    } finally {
+      finalize.mockRestore();
+    }
+  });
+
+  it("a bubble parked when the take is aborted or the hub reset is destroyed too", async () => {
+    const { RecordingWriter } = await import("./recording-writer");
+    const abort = vi.spyOn(RecordingWriter.prototype, "abort").mockResolvedValue();
+    try {
+      await takeWithWebcam();
+      camera(false);
+      await ipc(IPC_CHANNELS.recordingAbort, "s1");
+      expect(mockState.bubble.destroy).toHaveBeenCalledOnce();
+    } finally {
+      abort.mockRestore();
+    }
+  });
+
+  it("the camera back on before the take ends keeps the window", async () => {
+    const { RecordingWriter } = await import("./recording-writer");
+    const finalize = vi
+      .spyOn(RecordingWriter.prototype, "finalize")
+      .mockRejectedValue(new Error("no file"));
+    try {
+      await takeWithWebcam();
+      camera(false);
+      camera(true);
+      await ipc(IPC_CHANNELS.recordingFinalize, "s1", { durationMs: 0 }).catch(() => {});
+      expect(mockState.bubble.destroy).not.toHaveBeenCalled();
+    } finally {
+      finalize.mockRestore();
+    }
   });
 });
 

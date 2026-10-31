@@ -304,7 +304,7 @@ export class RecordingWriter {
       id = reservation.id;
       dest = await vault.filePath(id); // <id>.mp4 (does not exist yet)
     } catch (cause) {
-      await this.strand(session, webcamSession);
+      await this.strand(session, webcamSession, meta);
       throw new FinalizeMoveError(session.tempPath, cause);
     }
     try {
@@ -313,7 +313,7 @@ export class RecordingWriter {
       // The bytes are in the staging file, which is the only copy: strand the take so the
       // renderer's abort after a failed finalize keeps it for salvage or the sweep.
       await vault.releaseReservation(reservation).catch(() => {});
-      await this.strand(session, webcamSession);
+      await this.strand(session, webcamSession, meta);
       throw new FinalizeMoveError(session.tempPath, cause);
     }
 
@@ -324,7 +324,7 @@ export class RecordingWriter {
       // Release the reserved stem (its stub sidecar): never the media path, which may hold a
       // file that took it meanwhile.
       await vault.releaseReservation(reservation).catch(() => {});
-      await this.strand(session, webcamSession);
+      await this.strand(session, webcamSession, meta);
       throw new FinalizeMoveError(session.tempPath, cause);
     }
 
@@ -417,13 +417,25 @@ export class RecordingWriter {
     await unlink(session.tempPath).catch(() => {});
   }
 
-  /** Finalize could not place the take: both parts stay in staging for a salvage. */
-  private async strand(session: Session, webcamSession: Session | null): Promise<void> {
+  /**
+   * Finalize could not place the take: its parts stay in staging for a salvage. The webcam's
+   * only when finalize would have placed it (`placeWebcam`): one the renderer sent no usable
+   * meta for, or whose write failed, is discarded, so a salvage never hands back a broken file.
+   */
+  private async strand(
+    session: Session,
+    webcamSession: Session | null,
+    meta: RecordingFinalizeMeta,
+  ): Promise<void> {
     session.stranded = true;
     await this.closeHandle(session).catch(() => {});
     if (!webcamSession) return;
-    webcamSession.stranded = true;
     await webcamSession.queue;
+    if (webcamSession.failed || !sanitizeWebcamTrackMeta(meta.webcam)) {
+      await this.discard(webcamSession);
+      return;
+    }
+    webcamSession.stranded = true;
     await this.closeHandle(webcamSession).catch(() => {});
   }
 
@@ -492,6 +504,8 @@ export class RecordingWriter {
   /**
    * Move a stranded take to a path the user picked, then forget the session. Its webcam, when
    * stranded with it, goes beside it as `<name>.webcam.mp4` (best-effort: the screen is the take).
+   * The save dialog only confirmed replacing the screen file: an existing `<name>.webcam.mp4`
+   * is kept, and the webcam takes the first free `<name>.webcam-<n>.mp4`.
    */
   async salvage(sessionId: string, destPath: string): Promise<void> {
     const session = this.sessions.get(sessionKey(sessionId, "screen"));
@@ -501,7 +515,8 @@ export class RecordingWriter {
     this.forget(session);
     if (webcam?.stranded) {
       this.forget(webcam);
-      await replaceConfirmed(webcam.tempPath, webcamSiblingPath(destPath)).catch((error) =>
+      // The save dialog only confirmed replacing the screen file: never a webcam file there.
+      await placeWebcamBeside(webcam.tempPath, destPath).catch((error) =>
         console.error("webcam salvage failed", error),
       );
     }
@@ -598,6 +613,20 @@ interface PlacedWebcam {
   path: string;
   file: PlacedFile;
   session: Session;
+}
+
+/**
+ * Place a salvaged webcam part beside its screen file as `<name>.webcam.mp4`, or
+ * `<name>.webcam-<n>.mp4` from 2 up when that is taken: never replacing a file there
+ * (`safe-place`), so an existing webcam file beside it is kept.
+ */
+async function placeWebcamBeside(from: string, screenPath: string): Promise<string> {
+  const first = webcamSiblingPath(screenPath);
+  for (let n = 1; n < 1000; n++) {
+    const candidate = n === 1 ? first : first.replace(/\.webcam\.mp4$/, `.webcam-${n}.mp4`);
+    if ((await placeNoReplace(from, candidate)) === "placed") return candidate;
+  }
+  throw new Error(`No free webcam file name beside "${screenPath}"`);
 }
 
 /** The map key of a take's session of one kind; the screen's is the bare id. */

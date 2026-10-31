@@ -42,6 +42,14 @@ export class BubbleProtection {
     this.take = null;
   }
 
+  /**
+   * Whether the active take records the face in a live webcam file: a camera turned off then
+   * parks the bubble rather than destroying it, and the file goes on through the gap.
+   */
+  recordsWebcam(): boolean {
+    return this.take?.webcam === true;
+  }
+
   /** Whether the bubble should be content-protected now. */
   protects(): boolean {
     return this.take === null || this.take.webcam;

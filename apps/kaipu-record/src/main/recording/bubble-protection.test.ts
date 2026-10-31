@@ -54,3 +54,19 @@ describe("BubbleProtection", () => {
     expect(state.protects()).toBe(false);
   });
 });
+
+describe("BubbleProtection.recordsWebcam", () => {
+  it("is true only while the active take records a live webcam file", () => {
+    const protection = new BubbleProtection();
+    expect(protection.recordsWebcam()).toBe(false); // no take
+    protection.screenCreated("a");
+    expect(protection.recordsWebcam()).toBe(false); // no webcam yet
+    protection.webcamCreated("a");
+    expect(protection.recordsWebcam()).toBe(true);
+    protection.webcamEnded("a");
+    expect(protection.recordsWebcam()).toBe(false);
+    protection.webcamCreated("a");
+    protection.ended("a");
+    expect(protection.recordsWebcam()).toBe(false);
+  });
+});

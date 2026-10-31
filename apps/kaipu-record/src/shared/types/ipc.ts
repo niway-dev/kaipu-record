@@ -390,13 +390,6 @@ export const FINALIZE_KEPT_MARKER = "[finalize:kept]";
 export const FINALIZE_ELSEWHERE_MARKER = "[finalize:elsewhere]";
 
 /**
- * Prefix on the `recording:create` rejection for a webcam session on a Windows build that
- * cannot exclude the bubble from capture (before 10 2004): the legacy path, by design, so the
- * renderer tells the user nothing. Any other rejection is a webcam that failed.
- */
-export const WEBCAM_TRACK_UNSUPPORTED_MARKER = "[webcam:unsupported]";
-
-/**
  * Names of the IPC channels exposed by the preload bridge.
  * Using a const map keeps main and renderer in sync.
  */
@@ -574,6 +567,11 @@ export const IPC_CHANNELS = {
    * off, unplugged, or its encoder failed. Main puts the camera bubble back in the capture.
    */
   recordingWebcamEnded: "recording:webcam-ended",
+  /**
+   * Whether this OS can record the webcam as its own file (ADR 0037): only where the camera
+   * bubble can leave the screen capture. False on Windows before 10 2004 (the legacy path).
+   */
+  recordingWebcamTrackSupported: "recording:webcam-track-supported",
   recordingReportTick: "recording:report-tick",
   // Mic levels for the settings meter, kept off the activity broadcast (10/s would re-render
   // every window). A window subscribes (renderer → main, counted); the recorder reports

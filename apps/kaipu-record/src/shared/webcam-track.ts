@@ -45,6 +45,19 @@ export type WebcamRecordedLayout = Omit<CameraBubbleSettings, "deviceId"> & {
   sizeFraction?: number;
 };
 
+/**
+ * A period of the take with the camera turned off, in screen ms (the screen file's timeline,
+ * pauses removed), [startMs, endMs). The webcam file keeps running through it on the same
+ * clock, holding its last frame, so the editor hides the face there (ADR 0037).
+ */
+export interface WebcamGap {
+  startMs: number;
+  endMs: number;
+}
+
+/** The most gaps a sidecar keeps: far more than anyone toggles a camera in one take. */
+const WEBCAM_GAPS_MAX = 1000;
+
 /** The sidecar's `webcam` field, and what the recorder sends with finalize. */
 export interface WebcamTrackMeta {
   /** Webcam time 0 − screen time 0, in ms on the recorder renderer's clock. */
@@ -55,6 +68,8 @@ export interface WebcamTrackMeta {
   height: number;
   fps: number;
   recordedLayout?: WebcamRecordedLayout;
+  /** The camera-off periods, sorted and apart; absent when the camera stayed on (old sidecars too). */
+  gaps?: WebcamGap[];
 }
 
 /**
@@ -109,6 +124,35 @@ function sanitizeUnitPoint(value: unknown): { x: number; y: number } | null {
   return { x: unit(x), y: unit(y) };
 }
 
+/**
+ * Renderer-supplied gaps, made safe: each malformed, empty or backwards one is dropped on its
+ * own, a start before time 0 is clamped to it, and overlapping ones are merged. Sorted.
+ */
+function sanitizeWebcamGaps(value: unknown): WebcamGap[] {
+  if (!Array.isArray(value)) return [];
+  const parsed: WebcamGap[] = [];
+  for (const raw of value as unknown[]) {
+    if (!raw || typeof raw !== "object") continue;
+    const { startMs, endMs } = raw as Record<string, unknown>;
+    if (!isFiniteNumber(startMs) || !isFiniteNumber(endMs)) continue;
+    const start = Math.max(0, startMs);
+    if (endMs <= start) continue;
+    parsed.push({ startMs: start, endMs });
+  }
+  parsed.sort((a, b) => a.startMs - b.startMs);
+  const gaps: WebcamGap[] = [];
+  for (const gap of parsed) {
+    const previous = gaps[gaps.length - 1];
+    if (previous && gap.startMs <= previous.endMs) {
+      previous.endMs = Math.max(previous.endMs, gap.endMs);
+      continue;
+    }
+    if (gaps.length === WEBCAM_GAPS_MAX) break;
+    gaps.push(gap);
+  }
+  return gaps;
+}
+
 /** A renderer-supplied webcam meta, validated before it lands on disk; null when unusable. */
 export function sanitizeWebcamTrackMeta(value: unknown): WebcamTrackMeta | null {
   if (!value || typeof value !== "object") return null;
@@ -137,6 +181,8 @@ export function sanitizeWebcamTrackMeta(value: unknown): WebcamTrackMeta | null 
       ...(sizeFraction ? { sizeFraction } : {}),
     };
   }
+  const gaps = sanitizeWebcamGaps(safe.gaps);
+  if (gaps.length > 0) meta.gaps = gaps;
   return meta;
 }
 

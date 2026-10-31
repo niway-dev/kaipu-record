@@ -137,7 +137,7 @@ export function initialScene(
     zoomSensitivity: ZOOM_DEFAULTS.sensitivity,
     audioMuted: false,
     mutedRanges: [],
-    webcam: seedWebcamScene(webcam),
+    webcam: seedWebcamScene(webcam, durationSeconds),
   };
 }
 
@@ -147,8 +147,13 @@ export function initialScene(
  * was); with one and no saved layer (a session from before the webcam) the layer is seeded
  * from the recording, like a fresh scene. A saved layer on a recording that still has its
  * track is the user's edit and stays. Returns the same scene when nothing changes.
+ * `durationSeconds` (the recording's) keeps a seeded gap inside it, as `initialScene` does.
  */
-export function reconcileWebcam(scene: VideoScene, webcam: WebcamTrackMeta | null): VideoScene {
+export function reconcileWebcam(
+  scene: VideoScene,
+  webcam: WebcamTrackMeta | null,
+  durationSeconds: number,
+): VideoScene {
   if (!webcam) return scene.webcam === null ? scene : { ...scene, webcam: null };
-  return scene.webcam ? scene : { ...scene, webcam: seedWebcamScene(webcam) };
+  return scene.webcam ? scene : { ...scene, webcam: seedWebcamScene(webcam, durationSeconds) };
 }

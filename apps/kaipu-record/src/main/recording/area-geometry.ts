@@ -123,12 +123,14 @@ export function withRecordedBubble(
 }
 
 /**
- * Windows builds before 10 2004 (build 19041) have no `WDA_EXCLUDEFROMCAPTURE`: content
- * protection there paints the window black in captures instead of leaving it out. An area's
- * shade is outside the recorded crop, so it does not matter; a whole display's border is
- * inside the recorded pixels, so it is skipped there. Every other platform and build: allowed.
+ * Whether this OS can leave a content-protected window out of a screen capture. Windows builds
+ * before 10 2004 (build 19041) have no `WDA_EXCLUDEFROMCAPTURE`: content protection there paints
+ * the window black in captures instead of leaving it out. So there, a whole display's border
+ * (inside the recorded pixels) is skipped, and the camera bubble stays in the capture with no
+ * webcam file (the legacy path); an area's shade is outside the recorded crop and does not
+ * matter. Every other platform and build: true.
  */
-export function fullDisplayBorderAllowed(platform: string, osRelease: string): boolean {
+export function canExcludeWindowFromCapture(platform: string, osRelease: string): boolean {
   if (platform !== "win32") return true;
   const [major, , build] = osRelease.split(".").map(Number);
   if (!Number.isFinite(major) || !Number.isFinite(build)) return true;

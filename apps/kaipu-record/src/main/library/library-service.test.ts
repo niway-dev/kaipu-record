@@ -190,6 +190,30 @@ describe("LibraryService", () => {
     expect(await service.removeLocalCopy("a")).toEqual({ ok: false, reason: "not-found" });
   });
 
+  it("removeLocalCopy refuses an edit project or a webcam track before hashing the file", async () => {
+    await writeFile(join(vaultDir, "a.mp4"), "");
+    const rec = (await new LibraryVault(vaultDir).describe("a"))!;
+    catalog = [cloudEntry(rec.assetId, { sizeBytes: 0 })];
+    await service.refreshCatalog();
+    const vault = new LibraryVault(vaultDir);
+    const ensureContentHash = vi.spyOn(vault, "ensureContentHash");
+    service = new LibraryService({
+      vault: () => vault,
+      vaultDir: () => vaultDir,
+      cache: new CatalogCache(userData),
+      account: () => account,
+      fetchCatalog,
+      now: () => 777,
+    });
+    await mkdir(join(vaultDir, ".kaipu"), { recursive: true });
+    await writeFile(join(vaultDir, ".kaipu", "a.edit.json"), "{}");
+    expect(await service.removeLocalCopy("a")).toEqual({ ok: false, reason: "edit-project" });
+    await rm(join(vaultDir, ".kaipu", "a.edit.json"));
+    await writeFile(join(vaultDir, ".kaipu", "a.webcam.mp4"), "");
+    expect(await service.removeLocalCopy("a")).toEqual({ ok: false, reason: "webcam-track" });
+    expect(ensureContentHash).not.toHaveBeenCalled();
+  });
+
   it("removeLocalCopy reports hash-unknown when hashing a file still being written rejects", async () => {
     await writeFile(join(vaultDir, "a.mp4"), "");
     const rec = (await new LibraryVault(vaultDir).describe("a"))!;

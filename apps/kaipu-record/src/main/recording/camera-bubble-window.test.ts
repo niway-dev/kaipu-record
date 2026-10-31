@@ -187,3 +187,115 @@ describe("CameraBubbleWindow on quit", () => {
     expect(created).toHaveLength(2);
   });
 });
+
+/**
+ * A camera turned off during a take that records a webcam file parks the bubble: the running
+ * screen capture leaves out the windows that were on screen when it started, so turning the
+ * camera on again must show that same window, not a new one (ADR 0037).
+ */
+describe("CameraBubbleWindow.park", () => {
+  it("hides the window and keeps it, with its protection", () => {
+    const bubble = new CameraBubbleWindow();
+    bubble.show();
+    const win = created[0]!;
+    win.readyToShow?.();
+    bubble.park();
+    expect(win.hide).toHaveBeenCalled();
+    expect(win.destroy).not.toHaveBeenCalled();
+    expect(win.setContentProtection.mock.calls).toEqual([[true]]);
+    expect(bubble.isParked()).toBe(true);
+    expect(bubble.isVisible()).toBe(false);
+  });
+
+  it("show brings back the same window, still protected", () => {
+    const bubble = new CameraBubbleWindow();
+    bubble.show();
+    created[0]!.readyToShow?.();
+    bubble.park();
+    bubble.show();
+    expect(created).toHaveLength(1);
+    expect(created[0]!.showInactive).toHaveBeenCalledTimes(2);
+    expect(created[0]!.setContentProtection.mock.calls).toEqual([[true]]);
+    expect(bubble.isParked()).toBe(false);
+  });
+
+  it("a window parked before it was ready stays hidden when it becomes ready", () => {
+    const bubble = new CameraBubbleWindow();
+    bubble.show();
+    bubble.park();
+    created[0]!.readyToShow?.();
+    expect(created[0]!.showInactive).not.toHaveBeenCalled();
+  });
+
+  it("does nothing without a window", () => {
+    const bubble = new CameraBubbleWindow();
+    bubble.park();
+    expect(bubble.isParked()).toBe(false);
+  });
+
+  it("destroy releases a parked window", () => {
+    const bubble = new CameraBubbleWindow();
+    bubble.show();
+    bubble.park();
+    bubble.destroy();
+    expect(created[0]!.destroy).toHaveBeenCalled();
+    expect(bubble.isParked()).toBe(false);
+  });
+
+  it("placedBounds is where a parked bubble was; visibleBounds stays null for it", () => {
+    const bubble = new CameraBubbleWindow();
+    bubble.show();
+    created[0]!.readyToShow?.();
+    const shown = bubble.visibleBounds();
+    expect(bubble.placedBounds()).toEqual(shown);
+    bubble.park();
+    expect(bubble.visibleBounds()).toBeNull();
+    expect(bubble.placedBounds()).toEqual(shown);
+  });
+});
+
+/**
+ * The webcam file ended mid-take with the bubble on screen and protected: the face must be in
+ * the screen from there on, and a running capture is known to record a new window (ADR 0037).
+ */
+describe("CameraBubbleWindow.replace", () => {
+  it("creates a new window where the old one was, its protection decided again", () => {
+    let protect = true;
+    const bubble = new CameraBubbleWindow(undefined, () => protect);
+    bubble.show();
+    const old = created[0]!;
+    old.readyToShow?.();
+    old.bounds = { x: 500, y: 300, width: 288, height: 288 };
+    expect(bubble.isProtected()).toBe(true);
+    protect = false;
+    bubble.replace();
+    expect(old.destroy).toHaveBeenCalledOnce();
+    const next = created[1]!;
+    expect(next.setContentProtection).not.toHaveBeenCalled();
+    expect(bubble.isProtected()).toBe(false);
+    next.readyToShow?.();
+    expect(next.showInactive).toHaveBeenCalledOnce();
+    expect(next.bounds.x).toBe(500);
+    expect(next.bounds.y + next.bounds.height).toBe(588);
+  });
+
+  it("without show, the next show() creates the new window at the same place", () => {
+    const bubble = new CameraBubbleWindow(undefined, () => false);
+    bubble.show();
+    created[0]!.readyToShow?.();
+    created[0]!.bounds = { x: 400, y: 200, width: 288, height: 288 };
+    bubble.replace(false);
+    expect(created).toHaveLength(1);
+    bubble.show();
+    created[1]!.readyToShow?.();
+    expect(created[1]!.bounds.x).toBe(400);
+    expect(created[1]!.bounds.y + created[1]!.bounds.height).toBe(488);
+  });
+
+  it("does nothing without a window", () => {
+    const bubble = new CameraBubbleWindow();
+    bubble.replace();
+    expect(created).toHaveLength(0);
+    expect(bubble.isProtected()).toBe(false);
+  });
+});

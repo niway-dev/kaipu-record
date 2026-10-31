@@ -64,18 +64,27 @@ describe("initialScene — webcam", () => {
 describe("reconcileWebcam", () => {
   it("drops a saved layer when the recording has no webcam track any more", () => {
     const saved = initialScene(10, WEBCAM);
-    expect(reconcileWebcam(saved, null).webcam).toBeNull();
+    expect(reconcileWebcam(saved, null, 10).webcam).toBeNull();
   });
 
   it("seeds a saved scene that predates the webcam when the recording has one", () => {
     const saved = initialScene(10);
-    expect(reconcileWebcam(saved, WEBCAM).webcam).toEqual(initialScene(10, WEBCAM).webcam);
+    expect(reconcileWebcam(saved, WEBCAM, 10).webcam).toEqual(initialScene(10, WEBCAM).webcam);
+  });
+
+  it("keeps a seeded gap inside the recording, as a fresh scene does", () => {
+    const withGap = { ...WEBCAM, gaps: [{ startMs: 9800, endMs: 10_000 }] };
+    const seeded = reconcileWebcam(initialScene(10), withGap, 10).webcam!;
+    expect(seeded.segments.map(({ start, end }) => ({ start, end }))).toEqual([
+      { start: 9, end: 10 },
+    ]);
+    expect(seeded).toEqual(initialScene(10, withGap).webcam);
   });
 
   it("keeps the user's saved layer, and returns the same scene when nothing changes", () => {
     const saved = initialScene(10, WEBCAM);
-    expect(reconcileWebcam(saved, WEBCAM)).toBe(saved);
+    expect(reconcileWebcam(saved, WEBCAM, 10)).toBe(saved);
     const none = initialScene(10);
-    expect(reconcileWebcam(none, null)).toBe(none);
+    expect(reconcileWebcam(none, null, 10)).toBe(none);
   });
 });

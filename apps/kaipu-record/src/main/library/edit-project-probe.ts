@@ -7,7 +7,7 @@
 import { access, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { EditingState } from "@shared/types/library-item";
-import { sanitizeWebcamTrackMeta } from "@shared/webcam-track";
+import { webcamTrackState, type WebcamState } from "./webcam-track-state";
 import { sessionMetaPath, type SessionMeta } from "./video-edit-session";
 
 async function exists(path: string): Promise<boolean> {
@@ -68,21 +68,26 @@ export async function probeEditing(
   return "project-available";
 }
 
-export type WebcamState = "present" | "missing" | "none";
+export type { WebcamState } from "./webcam-track-state";
 
 /**
- * The webcam track of one item (ADR 0037): "present" while `.kaipu/<id>.webcam.mp4` exists,
- * "missing" when the sidecar recorded a webcam but the file is gone (the editor shows that
- * state), "none" for a recording that never had one. Read-only; never touches the video.
+ * The webcam track of one item (ADR 0037), by the rule `describe()` shares
+ * (`webcamTrackState`): "present" while `.kaipu/<id>.webcam.mp4` exists, "missing" when the
+ * sidecar recorded a webcam but the file is gone, "none" for a recording that never had one.
+ * Read-only; never touches the video.
  */
 export async function probeWebcam(vaultDir: string, id: string): Promise<WebcamState> {
-  if (await exists(join(vaultDir, ".kaipu", `${id}.webcam.mp4`))) return "present";
+  const fileExists = await exists(join(vaultDir, ".kaipu", `${id}.webcam.mp4`));
+  // The file alone makes it "present": the sidecar is only read when it is not there.
+  if (fileExists) return webcamTrackState(true, undefined).state;
+  let sidecarWebcam: unknown;
   try {
     const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", `${id}.json`), "utf-8"));
-    return sanitizeWebcamTrackMeta(sidecar?.webcam) ? "missing" : "none";
+    sidecarWebcam = sidecar?.webcam;
   } catch {
-    return "none";
+    sidecarWebcam = undefined;
   }
+  return webcamTrackState(false, sidecarWebcam).state;
 }
 
 /** When the session was last written, and which of those writes has been exported. */

@@ -345,14 +345,15 @@ export interface KaipuElectronAPI {
 
   // ── Recording engine (used by the main/recorder window) ───────────────
   /**
-   * Open a disk-writer session; returns the temp path. `kind` defaults to a recording, whose
-   * partial is kept when its page goes away; an export's partial is discarded then, and an
-   * export is not a take (the camera bubble's protection follows the live take alone).
-   * "webcam" opens the open recording take's second session, for its webcam file (ADR 0037).
+   * Open a disk-writer session; returns the temp path. `kind` "recording" opens a take, whose
+   * partial is kept when its page goes away; "export" a background export's session, whose
+   * partial is discarded then, and which is not a take (the camera bubble's protection follows
+   * the live take alone). "webcam" opens the open recording take's second session, for its
+   * webcam file (ADR 0037). Required, so no caller is a take by omission.
    */
   recordingCreate(
     sessionId: string,
-    kind?: "recording" | "export" | "webcam",
+    kind: "recording" | "export" | "webcam",
   ): Promise<{ tempPath: string }>;
   /** Write a chunk at an exact byte position (positional, not append) to the `kind` session. */
   recordingWrite(
@@ -373,6 +374,12 @@ export interface KaipuElectronAPI {
    * it, so a caller can wait for it before starting the screen capture.
    */
   recordingWebcamEnded(sessionId: string): Promise<void>;
+  /**
+   * Whether this OS can record the webcam as its own file: only where the camera bubble can
+   * leave the screen capture. False on Windows before 10 2004, where a take keeps the face in
+   * the screen recording and records no webcam file (the legacy path, by design).
+   */
+  recordingWebcamTrackSupported(): Promise<boolean>;
   /** Push a live tick (elapsed/levels/status) to the hub for the bar. */
   recordingReportTick(tick: RecordingTick): void;
   /**

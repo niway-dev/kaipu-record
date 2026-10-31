@@ -62,4 +62,8 @@ the file with no bubble and no blank patch. Its outcome selects Plan A or B and 
 - Supersedes decision 6 of the [capture modes spec](/specs/2026-10-26-record-capture-modes-design/)
   (the bubble "recorded as part of the screen"); the bubble's shape, size, mirror and framing
   settings ([camera bubble](/backlog/camera-bubble-shape-and-size/)) become the layer's defaults.
+- Review follow-ups (NIW2-581): a take whose webcam file was not saved (its encoder failed, it
+  did not finalize at stop, or main could not place it) now tells the user after the take, and
+  keeps the screen recording. Still open: the editor drops a saved webcam layer while the
+  webcam file is missing, so the layout is lost if the file comes back.
 - Later: camera-only and split-screen scenes, background blur, layout transitions.

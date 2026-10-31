@@ -9,7 +9,7 @@
  * the clamp that keeps the bubble inside the frame) belongs to the preview and the composer.
  */
 import { clampCameraPan, clampCameraZoom, type CameraBubbleShape } from "@shared/camera-bubble";
-import type { WebcamTrackMeta } from "@shared/webcam-track";
+import type { WebcamGap, WebcamTrackMeta } from "@shared/webcam-track";
 import { ZOOM_LIMITS } from "../zoom/zoom-model";
 
 export interface WebcamLayout {
@@ -98,11 +98,19 @@ export function clampWebcamPatch(patch: Partial<WebcamLayout>): Partial<WebcamLa
  * what the user saw. A bubble that was never recorded gets the defaults. The size is the
  * fraction main measured; a take from before main measured it falls back to the DIP size over
  * a nominal 1080-DIP frame. The file is raw, so framing only carries over while it was on.
+ *
+ * Each period the camera was off during the take (`gaps`) is seeded as a hidden segment: the
+ * webcam file holds its last frame there, so the lane shows it striped and the export leaves
+ * the face out. `durationSeconds`, when known, keeps a stretched gap inside the recording.
  */
-export function seedWebcamScene(webcam: WebcamTrackMeta | null | undefined): WebcamScene | null {
+export function seedWebcamScene(
+  webcam: WebcamTrackMeta | null | undefined,
+  durationSeconds?: number,
+): WebcamScene | null {
   if (!webcam) return null;
+  const segments = gapSegments(webcam.gaps ?? [], durationSeconds);
   const recorded = webcam.recordedLayout;
-  if (!recorded) return { layout: { ...WEBCAM_DEFAULTS }, segments: [] };
+  if (!recorded) return { layout: { ...WEBCAM_DEFAULTS }, segments };
   const framing = recorded.framing.enabled
     ? { zoom: recorded.framing.zoom, x: recorded.framing.x, y: recorded.framing.y }
     : { ...WEBCAM_DEFAULTS.framing };
@@ -116,7 +124,39 @@ export function seedWebcamScene(webcam: WebcamTrackMeta | null | undefined): Web
       framing,
     }),
   };
-  return { layout, segments: [] };
+  return { layout, segments };
+}
+
+/**
+ * Gaps (screen ms, sorted, apart) as hidden segments (source seconds). One shorter than a
+ * segment can be is stretched to that length (the session drops a shorter one on reload), from
+ * its start, or back from the recording's end; those that then overlap are merged.
+ */
+function gapSegments(gaps: WebcamGap[], durationSeconds?: number): WebcamSegment[] {
+  const segments: WebcamSegment[] = [];
+  for (const gap of gaps) {
+    let start = gap.startMs / 1000;
+    let end = Math.max(gap.endMs / 1000, start + WEBCAM_MIN_SEGMENT_SECONDS);
+    if (
+      durationSeconds !== undefined &&
+      Number.isFinite(durationSeconds) &&
+      end > durationSeconds
+    ) {
+      end = durationSeconds;
+      start = Math.max(0, Math.min(start, end - WEBCAM_MIN_SEGMENT_SECONDS));
+    }
+    // Only a recording shorter than a segment leaves one too short (1e-6: float noise).
+    if (end - start < WEBCAM_MIN_SEGMENT_SECONDS - 1e-6) continue;
+    const previous = segments[segments.length - 1];
+    if (previous && start <= previous.end) {
+      previous.end = Math.max(previous.end, end);
+      continue;
+    }
+    // An id from where it starts (segments are apart, so it is unique): seeding the same take
+    // twice gives the same layer, and Share's fingerprint of it (`wholeFingerprint`) stays.
+    segments.push({ id: `gap-${Math.round(start * 1000)}`, start, end, mode: "hidden" });
+  }
+  return segments;
 }
 
 /**

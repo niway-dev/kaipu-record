@@ -83,12 +83,22 @@ Defaulted on 2026-10-30; each is taken as written unless its "revisit if" trigge
 6. **`removeLocalCopy` with a webcam file.** Defaulted: refused with a reason, like an edit
    session refuses it today. Revisit when cloud plan 03 uploads the webcam as an auxiliary
    object of the asset.
-7. **Webcam turned on or off mid-take.** Decided in code (NIW2-576 review): turning it off ends
-   the file and the layer disappears from that source time; turning it on mid-take records **no**
-   second webcam file. Instead, the bubble is left in the screen capture for the rest of that
-   take (section 3.2), so the face is recorded in the screen pixels. Whether a running
-   ScreenCaptureKit stream picks up a bubble that drops its protection mid-stream is unverified
-   (spike rows 4/5).
+7. **Webcam turned on or off mid-take.** Revised after owner QA (2026-10-30, pending owner QA
+   of the fix; ADR 0037 decision 6). In a take that records a webcam file, turning the camera
+   off hides (parks) the bubble window instead of destroying it, stops both camera streams and
+   keeps the webcam file running on the same clock; turning it on again shows the same window
+   and feeds the same file. Each off period lands in the sidecar as `webcam.gaps` (screen ms)
+   and is seeded as a hidden webcam segment, so the lane stripes it and exports hide the face
+   there. A camera that cannot be opened again (one deadline for the open and its first
+   frame), or whose frames stop reaching the file, ends the file at that point and falls back:
+   a bubble on screen is replaced by a new, unprotected window at the same place, and the face
+   goes into the screen pixels. A take that
+   started with the camera off keeps the legacy path (the bubble, turned on, is burned into the
+   screen). The earlier rule (off ends the file; on records no second file) still applies where
+   the recorder has no relay track (no `MediaStreamTrackGenerator`) and during the countdown.
+   Unverified: whether the running ScreenCaptureKit stream keeps a hidden-then-shown window
+   excluded, and whether it picks up a bubble that drops its protection mid-stream (spike rows
+   4/5).
 8. **`window` targets.** Defaulted: same path (separate file, protected bubble). Unverified
    inference: with ScreenCaptureKit window capture the bubble was probably never in a window
    recording; task 0 checks it.
@@ -121,7 +131,7 @@ Input for tests; each line is at least one test.
    (`setContentProtection(true)` at creation, before any capture starts); task 0 proves it on
    hardware and the QA sheet repeats it on every release that touches capture.
 2. The bubble leaves a blank or black patch where it stood → task 0's pixel check (content
-   underneath visible); on Windows before 10 2004 the same rule as `fullDisplayBorderAllowed`
+   underneath visible); on Windows before 10 2004 the same rule as `canExcludeWindowFromCapture`
    keeps the legacy path there: the bubble stays unprotected and burned into the screen as
    today, no webcam track is recorded, and no take shows a black square.
 3. The webcam file and the screen file disagree by more than one frame at start → the offset
@@ -262,10 +272,16 @@ Both outputs are stamped by mediabunny with the recorder renderer's `performance
 (`timestampBase: "synced-zero"` per output). The two files therefore share a clock and differ
 only by their first accepted sample. The store computes
 `startOffsetMs = webcam.firstMediaTimestamp.rendererMs − screen.firstMediaTimestamp.rendererMs`
-and `offsetQuality = "exact"` only when both are exact. Paused time is dropped by both sources
-identically (`MediaStreamVideoTrackSource` subtracts discarded frames), so the offset is constant
-for the whole take; the residual error is one frame of jitter at each pause edge, inside the
-tolerance the acceptance criteria set.
+and `offsetQuality = "exact"` only when both are exact. A reading the live 3 s wait gave up on
+is read again after the stop (NIW2-581), and is exact if the first sample arrived late. Paused
+time is dropped by both sources (`MediaStreamVideoTrackSource` subtracts the gaps between the
+frames it discards), each in steps of its own frames, so a pause can shift the webcam against
+the screen by up to about one webcam frame (33 ms). The shifts of several pauses add up: the
+bound is ±1 frame per pause, and one pause stays inside the tolerance the acceptance criteria
+set. A pause before the webcam's first frame is not dropped from the webcam at all: its time 0
+becomes the first frame after the resume, the offset then counts paused time the screen
+dropped, and the webcam plays that much late. That window is about one frame after the take
+begins.
 
 Editor time mapping: for screen source time `t`, the webcam frame is the last one with
 `webcamTs ≤ t − startOffsetMs / 1000`; before the webcam's first frame (a late start) the layer
@@ -302,18 +318,23 @@ nothing. The comment at the top of `camera-bubble-window.ts` and the hub's media
 flip from "deliberately NOT content-protected" to the opposite, with this spec as the reason.
 
 Windows: `WDA_EXCLUDEFROMCAPTURE` removes the window from capture on Windows 10 2004 and later;
-before that the window is captured as black. The existing `fullDisplayBorderAllowed(platform,
-release)` rule already encodes that threshold; the bubble reuses it to decide "Plan A works
-here". Where it does not (before 10 2004) the take keeps the legacy path: the bubble stays
-unprotected and burned into the screen, and no webcam track is recorded. Plan B is macOS-only.
+before that the window is captured as black. The existing `canExcludeWindowFromCapture(platform,
+release)` rule (named `fullDisplayBorderAllowed` until NIW2-581) already encodes that threshold;
+the bubble reuses it to decide "Plan A works here". Where it does not (before 10 2004) the take
+keeps the legacy path: the bubble stays unprotected and burned into the screen, and no webcam
+track is recorded. The renderer reads it as a capability (`recordingWebcamTrackSupported`) and
+does not ask for a webcam session there. Plan B is macOS-only.
 
 Protection also follows the take (NIW2-576 review, `bubble-protection.ts`): the bubble is
 protected with no take active, or while the active take records a live webcam file. A take
 whose camera was off when it started, whose camera did not open, or whose webcam file ended
 (turned off, unplugged, encoder failure) leaves the bubble in the screen capture: created
-unprotected, or unprotected in place. Finalize, abort and a forced reset protect it again,
-before the next take's screen capture starts. Unprotecting a bubble while a stream already runs
-is best effort and unverified (spike rows 4/5).
+unprotected, or unprotected in place before the take's capture starts. Once the capture runs, a
+protected bubble on screen is replaced by a new, unprotected window at the same place
+(`bubbleRejoinsCapture` in `recording-hub.ts`): a window created mid-take is known to be
+captured (owner QA), while unprotecting one the stream already excludes is unverified (spike
+rows 4/5). Finalize, abort and a forced reset protect it again, before the next take's screen
+capture starts.
 
 ### 3.3 Plan B — native ScreenCaptureKit capture that excludes the bubble (recorded, not scheduled)
 
@@ -593,7 +614,7 @@ Each PR ends with a "How to test it yourself" section; the manual steps below ar
 
 Repo (verified while designing, 2026-10-29): `apps/kaipu-record/src/renderer/src/features/recording/recorder-engine.ts`,
 `src/main/recording/camera-bubble-window.ts`, `src/main/recording/control-bar-window.ts`,
-`src/main/recording/area-geometry.ts` (`fullDisplayBorderAllowed`),
+`src/main/recording/area-geometry.ts` (`canExcludeWindowFromCapture`, then `fullDisplayBorderAllowed`),
 `src/renderer/src/features/recording/first-media-timestamp.ts`, `src/main/recording/cursor-clock.ts`,
 `src/renderer/src/features/video-editor/{scene,session}.ts`,
 `src/renderer/src/features/video-editor/export/{export-plan,export-messages,export-worker,gif-worker,compose-frame,compose-output-frame,export-reuse}.ts`,
