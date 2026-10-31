@@ -16,19 +16,24 @@ recorder — can be brought into the Library, where it becomes a recording item 
 other: it plays, opens in the editor, takes tags, and can be exported or prepared for a
 destination (the "Prepare for…" screen, NIW2-578, works on any recording item).
 
-Three ways in, all on the Library page:
+The ways in are on the **Export** screen (they started on the Library page; the Export screen
+took them over, see [drop a video from outside](./prepare-drop-zone)):
 
-- **Import a video** next to the Library title opens a file dialog (`mp4`, `mov`, `m4v`,
-  `webm`; several at once).
-- The dashed **Drop a video here — from your phone, Zoom, another app** strip opens the same
-  dialog when clicked.
-- **Dropping files anywhere on the window while the Library is open** imports them (the
-  whole window, not one element: a file dropped where nothing handles it makes Electron
-  navigate the window to it). The strip lights up while files are over the window. Files that are not videos are skipped, and a toast names them.
+- With no video open, **Browse files…** opens a file dialog (`mp4`, `mov`, `m4v`, `webm`;
+  several at once).
+- **Dropping files anywhere on the window while Export is open** imports them (the whole
+  window, not one element: a file dropped where nothing handles it makes Electron navigate
+  the window to it). The drop zone lights up while files are over the window.
+- Files that are not videos are skipped, and a toast names them. A video with no file on
+  disk (dragged out of a web page) gets its own toast: save it first, then drop it again.
+- A drop that lands while an import is still running waits for it and imports next.
 
-After an import, the Library re-lists. One video in: a toast offers **Open** (its page).
-Several: a count. Every file that failed is named in an error toast with the reason; the
-other files in the batch still import.
+The import pipeline behind them (validation and the copy in main) is the one described
+below. After an import, Export opens on the first new video, keeping the selected
+destination; the others are counted in a toast. If the user left Export while the copy ran,
+nothing navigates: a toast says the video is in the Library and offers **Open**. One failed
+file is named with its reason; several failures list the file names only. The other files
+in the batch still import.
 
 Imported items show **Imported** in the metadata line of the Library card and row, and
 **IMPORTED** in the detail page's metadata, where a recording made in Kaipu shows
@@ -93,11 +98,11 @@ Failure reasons (`ImportVideoFailureReason`): `unsupported-type`, `not-found`,
   codec WebCodecs cannot decode here imports, then shows no poster (the heal retries on
   each scan) and fails in the editor. Not yet checked on real files: owner QA covers an
   iPhone HEVC `.mov`.
-- The import runs file by file in main; a multi-gigabyte copy keeps the button in
+- The import runs file by file in main; a multi-gigabyte copy keeps the drop zone in
   "Importing…" until it ends. There is no progress bar or cancel.
 - `createdAt` is the import time, not the time the video was shot.
-- Dropping a file while **another** page is open still does Electron's default (the
-  window navigates to the file). Not changed here.
+- Drops are caught only while the Export screen is open; on every other page a dropped file
+  still does Electron's default (the window navigates to it).
 
 ## Code
 
@@ -109,5 +114,6 @@ Failure reasons (`ImportVideoFailureReason`): `unsupported-type`, `not-found`,
 | Drop path bridge              | `apps/kaipu-record/src/preload/index.ts` (`pathForFile`)             |
 | Import + toasts               | `.../renderer/src/features/library/hooks/use-import-videos.ts`       |
 | Window drop target            | `.../renderer/src/features/library/hooks/use-file-drop.ts`           |
-| Drop zone                     | `.../renderer/src/features/library/components/import-drop-zone.tsx`  |
+| Drop zone                     | `.../renderer/src/pages/export/export-drop-zone.tsx`                 |
+| Export's import + navigation  | `.../renderer/src/features/prepare/use-prepare-import.ts`            |
 | "Imported" label              | `src/shared/recording-capture.ts`, `video-card.tsx`, `video-row.tsx` |

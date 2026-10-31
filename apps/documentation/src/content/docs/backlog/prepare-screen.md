@@ -99,8 +99,8 @@ GIFs are not preparable.
     it never changes.", only when the page was opened by a fresh recording), the player, and at
     the bottom **Where is it going?**: one row of equal cards, one per destination — logo, name,
     short line, and the size of its copy (amber where the platform compresses again, teal where
-    it plays as is; the archive card shows the recording's own size). A card opens Prepare on
-    that destination through `preparePath`; "Not now" hides the panel for that visit and brings
+    it plays as is; the archive card shows the recording's own size). A card opens Export
+    (`/export/:assetId?to=…`) on that destination through `preparePath`; "Not now" hides the panel for that visit and brings
     back **Export a copy** among the actions. On a heavy master the heavy-to-send hint sits
     inside this panel (its GitHub card makes the light copy). It replaces the "Where is this
     going?" strip.
@@ -113,9 +113,9 @@ GIFs are not preparable.
   - A heavy copy, or a heavy master with copies, keeps the banner with "Prepare a light copy →".
   - The page now reads the file whenever it shows a local recording (for the resolution and the
     estimates), not only when it is heavy.
-  - The design has seven destinations (email apart from Slack · Discord); the code has six, and
-    the panel shows what `DESTINATION_IDS` lists, so the Export screen and this panel cannot
-    disagree.
+  - Seven destinations, as in the design: Email is its own card over chat's Balanced preset
+    (see [the export screen](./export-screen)), and the panel lists `DESTINATION_IDS`, so the
+    Export screen and this panel cannot disagree.
 - **The Library**: a Send to… icon button on every local recording's card and row, next to
   Edit; an original's card and row carry the master tag instead of the Recording badge.
 
