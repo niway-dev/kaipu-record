@@ -99,6 +99,9 @@ Defaulted on 2026-10-30; each is taken as written unless its "revisit if" trigge
 
 - Camera-only, split-screen and fullscreen-webcam scenes (Cap `SceneMode`, Screen Studio
   "dynamic layouts"); animated transitions between layouts.
+  _Reopened 2026-10-31 at the owner's request: transitions are designed in
+  [editor timeline v2](/specs/2026-10-31-editor-timeline-v2-design/) (ADR 0039); camera-only
+  clips are on the [backlog](/backlog/camera-only-clips/)._
 - Background blur or removal; shadows beyond a flat drop shadow.
 - Audio on the webcam file (the microphone is already on the screen file).
 - Uploading the webcam file to the cloud: it depends on the transfer client of
