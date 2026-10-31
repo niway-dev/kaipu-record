@@ -126,7 +126,9 @@ export const DEFAULT_CAMERA_CORNER_RADIUS = 0.18;
 export function clampCameraCornerRadius(radius: number): number {
   if (!Number.isFinite(radius)) return DEFAULT_CAMERA_CORNER_RADIUS;
   const clamped = Math.min(CAMERA_CORNER_RADIUS_MAX, Math.max(CAMERA_CORNER_RADIUS_MIN, radius));
-  return Math.round(clamped / CAMERA_CORNER_RADIUS_STEP) / 100 + 0;
+  const snapped = Math.round(clamped / CAMERA_CORNER_RADIUS_STEP) * CAMERA_CORNER_RADIUS_STEP;
+  // Two decimals drop the float noise of the multiplication (0.07 is 0.07000000000000001).
+  return Math.round(snapped * 100) / 100 + 0;
 }
 
 /** Width over height for a shape: 3/4 for the rectangle, 1 for the others. */

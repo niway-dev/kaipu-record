@@ -7,13 +7,13 @@ description: The camera shape stays one list of named shapes, now circle, rounde
 
 ## Status
 
-| Field         | Value                                                                                                                                                                                                                 |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | Accepted — implemented in [NIW2-596](https://linear.app/niway/issue/NIW2-596); owner QA pending                                                                                                                       |
-| Date          | 2026-10-31                                                                                                                                                                                                            |
-| Amends        | [0038](/architecture/decisions/0038-webcam-is-a-viewport-layer-composed-after-the-zoom-crop/): the webcam layer's box was a square with a fixed 18 % corner; it is now a width × height box. The rest of 0038 stands. |
-| Relates to    | [0039](/architecture/decisions/0039-camera-sections-with-eased-transitions/) (shape stays global; the corner radius joins it), [camera bubble shape and size](/backlog/camera-bubble-shape-and-size/)                 |
-| Superseded by | —                                                                                                                                                                                                                     |
+| Field         | Value                                                                                                                                                                                                                                                       |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Accepted — implemented in [NIW2-596](https://linear.app/niway/issue/NIW2-596); owner QA pending                                                                                                                                                             |
+| Date          | 2026-10-31                                                                                                                                                                                                                                                  |
+| Amends        | [0038](/architecture/decisions/0038-webcam-is-a-viewport-layer-composed-after-the-zoom-crop/): the webcam layer's box was a square with a fixed 18 % corner; it is now a width × height box. The rest of 0038 stands.                                       |
+| Relates to    | [0039](/architecture/decisions/0039-camera-sections-with-eased-transitions/) (proposed: sections hold only position and size, so shape and corner become global-only when it lands), [camera bubble shape and size](/backlog/camera-bubble-shape-and-size/) |
+| Superseded by | —                                                                                                                                                                                                                                                           |
 
 ## Context
 
@@ -33,8 +33,11 @@ preview, the MP4 composer and the GIF composer. Old settings, sidecars and sessi
    `rounded` is kept and labelled "Square" in the UI. `rectangle` is a fixed 3:4 portrait.
 2. **The corner is its own field, `cornerRadius`**, a share of the shorter side from 0 to 0.5,
    in 0.01 steps, default 0.18. The circle ignores it. At 0.5 a square becomes a circle and the
-   rectangle a pill. It lives in `CameraBubbleSettings`, the recorded layout and the global
-   `WebcamLayout`; like shape it is never per section (ADR 0039).
+   rectangle a pill. It lives in `CameraBubbleSettings`, the recorded layout and
+   `WebcamLayout`, and follows the same per-section rule as `shape`: today an override segment
+   may carry either (the inspector edits a selected override with the same controls, and the
+   session keeps both); when ADR 0039's sections land, they hold only position and size, and
+   the parser drops both from overrides.
 3. **`size` keeps meaning the height**, in DIP for the bubble and as a fraction of the output's
    height in the editor. The rectangle's width is 3/4 of it.
 4. **Missing radius reads as 0.18** in settings, sidecars and sessions, so everything saved
@@ -75,7 +78,8 @@ preview, the MP4 composer and the GIF composer. Old settings, sidecars and sessi
 
 - Landscape or 9:16 rectangles; a free aspect ratio.
 - Stronger or configurable shadows.
-- Shape, corner or aspect per camera section.
+- Shape, corner or aspect per camera section as a designed feature. Overrides carry them today
+  only because the pre-ADR 0039 override format allows any layout field.
 
 ## What would reopen this
 

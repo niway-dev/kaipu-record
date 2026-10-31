@@ -88,6 +88,18 @@ function WebcamControls({
   const commit = (patch: Partial<WebcamLayout>): void => edits.commitLayout(patch, target);
   const live = (patch: Partial<WebcamLayout>): void => edits.liveLayout(patch, target);
   const shrinking = layout.scaleDuringZoom < 1;
+  // A bubble snapped to a preset stays snapped when its width changes with the shape: the
+  // stored centre was placed for the old box, so it is recomputed for the new one.
+  const snappedPreset = WEBCAM_POSITION_PRESETS.find((preset) => {
+    const center = webcamPresetCenter(preset, layout.size, frame, layout.shape);
+    return near(center.x, layout.position.x) && near(center.y, layout.position.y);
+  });
+  const changeShape = (shape: CameraBubbleShape): void =>
+    commit(
+      snappedPreset
+        ? { shape, position: webcamPresetCenter(snappedPreset, layout.size, frame, shape) }
+        : { shape },
+    );
   return (
     <>
       <p className={styles.sectionLabel}>{t("webcamShape")}</p>
@@ -98,7 +110,7 @@ function WebcamControls({
             type="button"
             aria-pressed={layout.shape === shape}
             className={layout.shape === shape ? styles.segmentActive : styles.segment}
-            onClick={() => commit({ shape })}
+            onClick={() => changeShape(shape)}
           >
             {t(SHAPE_LABEL[shape])}
           </button>

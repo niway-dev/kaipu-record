@@ -38,6 +38,25 @@ describe("WebcamInspector", () => {
     expect(edits.commitLayout).toHaveBeenCalledWith({ shape: "rounded" }, null);
   });
 
+  it("keeps a bubble snapped to a preset snapped when the shape changes its width", () => {
+    const corner = webcamPresetCenter({ x: 0, y: 1 }, 0.22, FRAME, "circle");
+    const { edits } = renderGlobal(layout({ size: 0.22, position: corner }));
+    fireEvent.click(screen.getByRole("button", { name: "Rectangle" }));
+    expect(edits.commitLayout).toHaveBeenCalledWith(
+      {
+        shape: "rectangle",
+        position: webcamPresetCenter({ x: 0, y: 1 }, 0.22, FRAME, "rectangle"),
+      },
+      null,
+    );
+  });
+
+  it("leaves a free position where it is when the shape changes", () => {
+    const { edits } = renderGlobal(layout({ position: { x: 0.4, y: 0.6 } }));
+    fireEvent.click(screen.getByRole("button", { name: "Rectangle" }));
+    expect(edits.commitLayout).toHaveBeenCalledWith({ shape: "rectangle" }, null);
+  });
+
   it("sets the size: a keyboard step commits, a drag is one begin…end gesture", () => {
     const { edits } = renderGlobal();
     const slider = screen.getByRole("slider", { name: "Size" });

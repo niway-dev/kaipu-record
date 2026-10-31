@@ -179,6 +179,7 @@ describe("camera shapes and corners (ADR 0041)", () => {
     expect(clampCameraCornerRadius(-1)).toBe(0);
     expect(clampCameraCornerRadius(0.9)).toBe(0.5);
     expect(clampCameraCornerRadius(0.234)).toBe(0.23);
+    expect(clampCameraCornerRadius(0.07)).toBe(0.07);
     expect(clampCameraCornerRadius(Number.NaN)).toBe(0.18);
   });
 
