@@ -105,7 +105,6 @@
 
 /* ── Toolbar ────────────────────────────────── */
 
-/* NIW2-579: the "Drop a video here" strip, between the header and the toolbar. */
 /* Sticks to the top of the shell's scroll area. The negative top and the
    matching padding cancel the shell's own padding, so the bar sits flush with
    the edge and the cards scroll out of sight behind it. */
