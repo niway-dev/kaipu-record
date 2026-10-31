@@ -36,8 +36,13 @@ export interface WebcamRelay {
    * Copy `camera`'s frames into the relay from now on, instead of the previous camera's.
    * Resolves true once its first frame went through; false when it ended (or was cut, or
    * could not be read) before one did. The camera itself stays the caller's to stop.
+   *
+   * `onLost` is called, once, when the copying stops after that first frame for any reason
+   * but `cut`, a later `feed` or `stop`: the camera ended, a frame could not be read or
+   * written. The relay then carries no frame, so the file holds its last one: the caller
+   * ends the file there.
    */
-  feed(camera: MediaStreamTrack): Promise<boolean>;
+  feed(camera: MediaStreamTrack, onLost?: () => void): Promise<boolean>;
   /** Stop copying frames (the camera was turned off); the relay track goes on, empty. */
   cut(): void;
   /** End the relay track: the take, or its webcam file, is over. */
@@ -71,7 +76,7 @@ export function createWebcamRelay(
 
   return {
     track: generator,
-    feed(camera) {
+    feed(camera, onLost) {
       cut();
       if (stopped) return Promise.resolve(false);
       let reader: ReadableStreamDefaultReader<VideoFrame>;
@@ -105,9 +110,14 @@ export function createWebcamRelay(
               }
             }
           } catch {
-            // The camera ended, the feed was cut, or the relay stopped: nothing to copy.
+            // Cut or stopped (the read was cancelled), or the camera could not be read or the
+            // frame written: told apart below.
           }
+          // Still the relay's camera: the copying stopped on its own, not by cut, feed or stop.
+          const lost = current === reader;
+          if (lost) cut(); // a write that failed leaves the camera's stream open
           if (first) resolve(false);
+          else if (lost) onLost?.();
         };
         void pump();
       });

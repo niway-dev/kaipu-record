@@ -33,7 +33,7 @@ import {
 } from "./first-media-timestamp";
 import { markRecordTiming } from "./record-timing";
 import { WEBCAM_BITRATE_BPS, WEBCAM_FPS } from "@shared/webcam-track";
-import { createWebcamRelay } from "./webcam-relay";
+import { createWebcamRelay, type WebcamRelay } from "./webcam-relay";
 
 /**
  * The take's live audio controls. A prepared take (`PreparedEngine`, during the countdown)
@@ -656,7 +656,6 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
     // mid-take (a new camera track) still writes into the same file on the same clock. Without
     // a relay (no track processor or generator) it reads the camera track, as before.
     const webcamRelay = webcamTrack && options.webcam ? createWebcamRelay() : null;
-    if (webcamRelay && webcamTrack) void webcamRelay.feed(webcamTrack);
     /** The camera track recording now: null while the camera is turned off mid-take. */
     let webcamCamera: MediaStreamTrack | null = webcamTrack;
     releaseWebcam = () => {
@@ -759,12 +758,63 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
       });
     };
     if (webcamTrack) endWhenUnplugged(webcamTrack);
+    /**
+     * Feed `camera` to the relay: true once its first frame reached the file. A camera whose
+     * frames stop reaching it afterwards (unread, unwritten: the relay lost it) would leave the
+     * file holding its last frame with no gap to hide it, so the file ends there, as for an
+     * unplugged camera, and the face goes back to the screen (`onWebcamEnded`).
+     */
+    const feedWebcam = (relay: WebcamRelay, camera: MediaStreamTrack): Promise<boolean> =>
+      relay.feed(camera, () => {
+        if (webcamCamera !== camera || stopped) return;
+        console.warn("webcam frames stopped reaching its file — the file ends here");
+        endWebcam();
+      });
+    /** The take's own camera, fed from the start; its first frame is awaited once it begins. */
+    const firstWebcamFeed =
+      webcamRelay && webcamTrack ? feedWebcam(webcamRelay, webcamTrack) : null;
 
     /** The camera is wanted on; bumped by each toggle so a late camera knows it was superseded. */
     let cameraWanted = true;
     let cameraRequest = 0;
     /** The device the take opened (it may be the fallback), so turning it on again opens it. */
     const openedDeviceId = webcamTrack?.getSettings().deviceId ?? options.webcam?.deviceId ?? null;
+    /** `turnWebcamOn` past its checks: open the camera again and feed it, by `expired`. */
+    const reopen = async (
+      request: number,
+      expired: Promise<"timeout">,
+    ): Promise<LiveToggleResult> => {
+      if (!webcamRelay || !options.webcam) return "unavailable";
+      const stream = await openWebcamBy(
+        { deviceId: openedDeviceId, lines: options.webcam.lines },
+        expired,
+        WEBCAM_OPEN_TIMEOUT_MS,
+      );
+      const camera = stream?.getVideoTracks()[0] ?? null;
+      // The take or its file ended, or the camera was turned off again, while it opened.
+      if (stopped || !webcamLive() || request !== cameraRequest) {
+        stream?.getTracks().forEach((track) => track.stop());
+        return stopped || !webcamLive() ? "unavailable" : "ok";
+      }
+      if (!camera) {
+        stream?.getTracks().forEach((track) => track.stop());
+        console.warn("webcam could not be opened again — its file ends here");
+        endWebcam();
+        return "unavailable";
+      }
+      webcamCamera = camera;
+      endWhenUnplugged(camera);
+      const fed = await Promise.race([feedWebcam(webcamRelay, camera), expired.then(() => false)]);
+      if (request !== cameraRequest) return stopped ? "unavailable" : "ok";
+      if (!fed || stopped || !webcamLive()) {
+        if (!stopped && webcamLive()) {
+          console.warn("webcam opened again but sent no frame — its file ends here");
+        }
+        endWebcam();
+        return "unavailable";
+      }
+      return "ok";
+    };
     const webcamControls: LiveWebcamControls = {
       turnWebcamOff() {
         if (!webcamRelay || !webcamLive()) return false;
@@ -781,41 +831,13 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
         if (cameraWanted) return "ok";
         cameraWanted = true;
         const request = ++cameraRequest;
-        const stream = await openWebcamWithin(
-          { deviceId: openedDeviceId, lines: options.webcam.lines },
-          WEBCAM_OPEN_TIMEOUT_MS,
-        );
-        const camera = stream?.getVideoTracks()[0] ?? null;
-        // The take or its file ended, or the camera was turned off again, while it opened.
-        if (stopped || !webcamLive() || request !== cameraRequest) {
-          stream?.getTracks().forEach((track) => track.stop());
-          return stopped || !webcamLive() ? "unavailable" : "ok";
+        // One deadline for the camera to open and its first frame to reach the file.
+        const deadline = deadlineIn(WEBCAM_OPEN_TIMEOUT_MS);
+        try {
+          return await reopen(request, deadline.expired);
+        } finally {
+          deadline.clear();
         }
-        if (!camera) {
-          stream?.getTracks().forEach((track) => track.stop());
-          console.warn("webcam could not be opened again — its file ends here");
-          endWebcam();
-          return "unavailable";
-        }
-        webcamCamera = camera;
-        endWhenUnplugged(camera);
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const fed = await Promise.race([
-          webcamRelay.feed(camera),
-          new Promise<boolean>((resolve) => {
-            timer = setTimeout(() => resolve(false), WEBCAM_OPEN_TIMEOUT_MS);
-          }),
-        ]);
-        clearTimeout(timer);
-        if (request !== cameraRequest) return stopped ? "unavailable" : "ok";
-        if (!fed || stopped || !webcamLive()) {
-          if (!stopped && webcamLive()) {
-            console.warn("webcam opened again but sent no frame — its file ends here");
-          }
-          endWebcam();
-          return "unavailable";
-        }
-        return "ok";
       },
     };
 
@@ -1008,6 +1030,17 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
           await webcam.output.start();
           webcamStarted = true;
           markRecordTiming("webcam output.start resolved");
+          if (firstWebcamFeed) {
+            // A camera that sends no frame (or none the relay can pass on) would leave a file
+            // with no face in it while the bubble stays out of the screen: it ends there.
+            const deadline = deadlineIn(WEBCAM_OPEN_TIMEOUT_MS);
+            void Promise.race([firstWebcamFeed, deadline.expired.then(() => false)]).then((fed) => {
+              deadline.clear();
+              if (fed || webcamCamera !== webcamTrack || stopped) return;
+              console.warn("webcam sent no frame to its file — the file ends here");
+              endWebcam();
+            });
+          }
           const reportedSize = webcam.reportedSize;
           const webcamOutput = webcam.output;
           const webcamFirstMediaTimestamp = waitForFirstMediaTimestamp(
@@ -1131,17 +1164,35 @@ async function openWebcamWithin(
   webcam: { deviceId: string | null; lines: number },
   timeoutMs: number,
 ): Promise<MediaStream | null> {
+  const deadline = deadlineIn(timeoutMs);
+  try {
+    return await openWebcamBy(webcam, deadline.expired, timeoutMs);
+  } finally {
+    deadline.clear();
+  }
+}
+
+/** `openWebcam`, given up on once `expired` resolves (`timeoutMs` is only for the log). */
+async function openWebcamBy(
+  webcam: { deviceId: string | null; lines: number },
+  expired: Promise<"timeout">,
+  timeoutMs: number,
+): Promise<MediaStream | null> {
   const opening = openWebcam(webcam);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timedOut = new Promise<"timeout">((resolve) => {
-    timer = setTimeout(() => resolve("timeout"), timeoutMs);
-  });
-  const result = await Promise.race([opening, timedOut]);
-  clearTimeout(timer);
+  const result = await Promise.race([opening, expired]);
   if (result !== "timeout") return result;
   console.warn(`webcam did not open within ${timeoutMs} ms — recording without it`);
   void opening.then((late) => late?.getTracks().forEach((track) => track.stop()));
   return null;
+}
+
+/** A deadline `ms` from now: `expired` resolves then, unless `clear` ran first. */
+function deadlineIn(ms: number): { expired: Promise<"timeout">; clear(): void } {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<"timeout">((resolve) => {
+    timer = setTimeout(() => resolve("timeout"), ms);
+  });
+  return { expired, clear: () => clearTimeout(timer) };
 }
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));

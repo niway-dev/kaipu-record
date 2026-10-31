@@ -6,6 +6,8 @@ interface FakeCamera {
   track: MediaStreamTrack;
   push(frame: FakeFrame): void;
   end(): void;
+  /** The camera's stream errors: its next read fails. */
+  fail(): void;
 }
 interface FakeFrame {
   id: string;
@@ -13,7 +15,7 @@ interface FakeFrame {
 }
 const frame = (id: string): FakeFrame => ({ id, close: vi.fn() });
 
-function fakes() {
+function fakes({ failWriteAfter = Infinity }: { failWriteAfter?: number } = {}) {
   const cameras = new Map<MediaStreamTrack, ReadableStreamDefaultController<FakeFrame>>();
   const written: string[] = [];
   const generatorStop = vi.fn();
@@ -29,7 +31,12 @@ function fakes() {
       return {
         kind: "video",
         stop: generatorStop,
-        writable: new WritableStream<FakeFrame>({ write: (f) => void written.push(f.id) }),
+        writable: new WritableStream<FakeFrame>({
+          write: (f) => {
+            if (written.length >= failWriteAfter) throw new Error("generator closed");
+            written.push(f.id);
+          },
+        }),
       };
     }) as never,
   };
@@ -39,6 +46,7 @@ function fakes() {
       track,
       push: (f) => cameras.get(track)!.enqueue(f),
       end: () => cameras.get(track)!.close(),
+      fail: () => cameras.get(track)!.error(new Error("could not read")),
     };
   };
   return { env, camera, written, generatorStop };
@@ -98,6 +106,77 @@ describe("createWebcamRelay", () => {
     const fed = relay.feed(cam.track);
     cam.end();
     await expect(fed).resolves.toBe(false);
+  });
+
+  it("reports a camera lost after its first frame: a read that fails", async () => {
+    const { env, camera } = fakes();
+    const relay = createWebcamRelay(env)!;
+    const cam = camera();
+    const onLost = vi.fn();
+    const fed = relay.feed(cam.track, onLost);
+    cam.push(frame("a1"));
+    await expect(fed).resolves.toBe(true);
+    cam.fail();
+    await flush();
+    expect(onLost).toHaveBeenCalledOnce();
+  });
+
+  it("reports a camera lost after its first frame: a write that fails", async () => {
+    const { env, camera } = fakes({ failWriteAfter: 1 });
+    const relay = createWebcamRelay(env)!;
+    const cam = camera();
+    const onLost = vi.fn();
+    void relay.feed(cam.track, onLost);
+    cam.push(frame("a1"));
+    await flush();
+    const unwritten = frame("a2");
+    cam.push(unwritten);
+    await flush();
+    expect(onLost).toHaveBeenCalledOnce();
+    expect(unwritten.close).toHaveBeenCalled();
+  });
+
+  it("reports a camera that ends after its first frame", async () => {
+    const { env, camera } = fakes();
+    const relay = createWebcamRelay(env)!;
+    const cam = camera();
+    const onLost = vi.fn();
+    void relay.feed(cam.track, onLost);
+    cam.push(frame("a1"));
+    await flush();
+    cam.end();
+    await flush();
+    expect(onLost).toHaveBeenCalledOnce();
+  });
+
+  it("never reports a camera it was told to leave: cut, a later feed, stop", async () => {
+    const { env, camera } = fakes();
+    const relay = createWebcamRelay(env)!;
+    const onLost = vi.fn();
+    for (const leave of [
+      () => relay.cut(),
+      () => void relay.feed(camera().track),
+      () => relay.stop(),
+    ]) {
+      const cam = camera();
+      void relay.feed(cam.track, onLost);
+      cam.push(frame("x"));
+      await flush();
+      leave();
+      await flush();
+    }
+    expect(onLost).not.toHaveBeenCalled();
+  });
+
+  it("does not report a camera lost before its first frame: feed resolves false instead", async () => {
+    const { env, camera } = fakes();
+    const relay = createWebcamRelay(env)!;
+    const cam = camera();
+    const onLost = vi.fn();
+    const fed = relay.feed(cam.track, onLost);
+    cam.fail();
+    await expect(fed).resolves.toBe(false);
+    expect(onLost).not.toHaveBeenCalled();
   });
 
   it("stop ends the relay track, and a later feed is refused", async () => {
