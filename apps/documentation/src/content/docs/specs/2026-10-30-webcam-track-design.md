@@ -89,8 +89,10 @@ Defaulted on 2026-10-30; each is taken as written unless its "revisit if" trigge
    keeps the webcam file running on the same clock; turning it on again shows the same window
    and feeds the same file. Each off period lands in the sidecar as `webcam.gaps` (screen ms)
    and is seeded as a hidden webcam segment, so the lane stripes it and exports hide the face
-   there. A camera that cannot be opened again ends the file at that point and falls back as
-   before: the bubble is unprotected and the face goes into the screen pixels. A take that
+   there. A camera that cannot be opened again (one deadline for the open and its first
+   frame), or whose frames stop reaching the file, ends the file at that point and falls back:
+   a bubble on screen is replaced by a new, unprotected window at the same place, and the face
+   goes into the screen pixels. A take that
    started with the camera off keeps the legacy path (the bubble, turned on, is burned into the
    screen). The earlier rule (off ends the file; on records no second file) still applies where
    the recorder has no relay track (no `MediaStreamTrackGenerator`) and during the countdown.
@@ -327,9 +329,12 @@ Protection also follows the take (NIW2-576 review, `bubble-protection.ts`): the 
 protected with no take active, or while the active take records a live webcam file. A take
 whose camera was off when it started, whose camera did not open, or whose webcam file ended
 (turned off, unplugged, encoder failure) leaves the bubble in the screen capture: created
-unprotected, or unprotected in place. Finalize, abort and a forced reset protect it again,
-before the next take's screen capture starts. Unprotecting a bubble while a stream already runs
-is best effort and unverified (spike rows 4/5).
+unprotected, or unprotected in place before the take's capture starts. Once the capture runs, a
+protected bubble on screen is replaced by a new, unprotected window at the same place
+(`bubbleRejoinsCapture` in `recording-hub.ts`): a window created mid-take is known to be
+captured (owner QA), while unprotecting one the stream already excludes is unverified (spike
+rows 4/5). Finalize, abort and a forced reset protect it again, before the next take's screen
+capture starts.
 
 ### 3.3 Plan B — native ScreenCaptureKit capture that excludes the bubble (recorded, not scheduled)
 
