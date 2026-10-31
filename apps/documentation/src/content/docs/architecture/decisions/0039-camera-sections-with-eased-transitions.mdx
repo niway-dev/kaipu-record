@@ -1,0 +1,117 @@
+---
+title: "ADR 0039: Camera sections move and resize the camera with a per-section eased transition, and hiding fades outside the hidden range"
+description: An override webcam segment becomes a section that changes only position and size and carries its own Slide or Cut transition, played inside the section at its start, with a duration capped at half the section and a CSS-style easing (presets plus cubic-bezier). Hiding and showing fade over 200 ms outside the hidden range. One stateless function of source time feeds the preview, the MP4 and the GIF. Extends ADR 0038 and lifts its non-goal on animated layout transitions.
+---
+
+# ADR 0039: Camera sections move and resize the camera with a per-section eased transition, and hiding fades outside the hidden range
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                                                                                               |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — owner decisions 2026-10-31, nothing implemented — [design](/specs/2026-10-31-editor-timeline-v2-design/), phase A; no Linear ticket (free issue limit)                                                                                                                                                                                   |
+| Date          | 2026-10-31                                                                                                                                                                                                                                                                                                                                          |
+| Amends        | [0038](/architecture/decisions/0038-webcam-is-a-viewport-layer-composed-after-the-zoom-crop/): its decision 2 (an override now holds only position and size, plus a transition) and its non-goal "animated layout transitions". Its reopen conditions did not trigger this: the owner asked for transitions on 2026-10-31. The rest of 0038 stands. |
+| Relates to    | [0040](/architecture/decisions/0040-typed-tracks-on-demand-and-stackable-media-lanes/) (the timeline the Camera lane lives in), the [webcam track design](/specs/2026-10-30-webcam-track-design/) (whose out-of-scope line this reopens)                                                                                                            |
+| Superseded by | —                                                                                                                                                                                                                                                                                                                                                   |
+
+## Context
+
+ADR 0038 made the webcam a viewport layer: a global layout plus source-anchored segments that
+either hide it or override some of its fields. A segment switches the layout in one frame. The
+webcam design listed "animated transitions between layouts" and "camera-only scenes" as out of
+scope, and ADR 0038 repeated the first as a non-goal.
+
+On 2026-10-31 the owner reviewed the "Kaipu Timeline v2" mock and asked for camera sections that
+move and resize the camera from a point in the video, with an animated or cut transition per
+section, a duration per section, CSS-like easing with presets and a custom curve, and a 200 ms
+fade when the camera hides or shows. Tella (layout sections), CANVID (camera layout segments),
+Choppity (cut or animated transitions) and Screen Studio (dynamic camera layouts) all ship this
+shape.
+
+Three constraints come from the code. The preview, the MP4 worker and the GIF worker must agree
+frame for frame, and they sample time in different orders (scrubbing, sequential decode, a GIF's
+own frame rate). The zoom's camera path gets that agreement by simulating once at a fixed step,
+because a spring has state. And segments are source-anchored, so cuts must never orphan or move
+a transition.
+
+## Decision
+
+1. **A section is an `override` segment that changes `position` and `size` only.** Shape,
+   mirror, shadow, "shrink during zoom" and framing stay global. The session parser drops other
+   override fields.
+2. **The transition belongs to the section and plays inside it, at its start.** The segment
+   carries an optional `transition` with `kind` (`slide` or `cut`), `ms` (100–2000) and `easing`.
+   If it is absent the section is a Cut, which is how every section saved before this ADR
+   behaves. New sections default to Slide, 400 ms, ease-in-out. The effective duration is the
+   smaller of `ms` and half the section. A section that ends into a gap returns to the global
+   layout with its own transition, played at the start of the gap and capped at half of it.
+3. **"From" is static.** A transition starts from the target of the stretch that ends where the
+   section starts: the previous section if it ends exactly there, otherwise the global layout.
+   Because every transition finishes inside its own stretch, that target is always reached, and
+   the camera's state is a pure function of the webcam scene and the source time:
+   `webcamStateAt(webcam, t)` returns a layout and an opacity, or nothing. The preview, the MP4
+   composer and the GIF all call it.
+4. **Easing is CSS's model**: the presets `ease-in-out`, `linear`, `ease-out` and `back` (one
+   overshoot), and a custom `cubic-bezier` with x clamped to [0, 1] and y to [−1, 2], solved the
+   way browsers solve it. After easing, size is clamped to the layer's limits and the rectangle
+   to the frame.
+5. **Hiding and showing fade over 200 ms, outside the hidden range.** The fade-out ends where a
+   hidden segment starts and the fade-in begins where it ends. Inside the range the camera is
+   never drawn. Coming out of hidden into a section, the camera fades in at the section's
+   layout instead of sliding.
+6. **The export fills frames while anything animates.** The screen capture is change-driven, so
+   the MP4 worker emits frames at the output rate during a transition or a fade, as it already
+   does for webcam frames over a still screen.
+7. **The composer revision moves from `wc1` to `wc2`**, for edit and whole-recording
+   fingerprints, because fades change how existing hidden segments draw.
+
+## Alternatives rejected
+
+- **The transition between two sections as its own object** (a "transition clip" at the
+  boundary, as in general video editors). Every cut, split and delete would need to decide who
+  owns it, and a boundary between a section and a gap would need one too. Owning it inside the
+  section gives exactly one owner.
+- **A spring or a simulated path, like the zoom.** It would need the camera path's fixed-step
+  simulation and its recompute-on-change contract for a motion between two known layouts.
+  Easing curves are stateless and the owner asked for CSS's model.
+- **Interpolating from wherever the previous transition "was"** (interruptible animations).
+  Would make the state depend on history, not on `t`. The 50 % cap makes it unnecessary.
+- **Fades inside the hidden range.** It would show 200 ms of the face the user hid, often
+  because something private was on camera.
+- **Transitions on every layout field** (shape morphing, mirror flips). Owner decision 1; a
+  bubble that changes shape mid-video reads as a glitch.
+- **Keeping per-override shape and mirror.** The webcam stack that allowed them is unreleased,
+  so dropping them now costs no user data.
+
+## Consequences
+
+- `webcam-model.ts` gains the transition types, `webcamStateAt` replaces `webcamAt`, and a small
+  `webcam/easing.ts` joins the worker-safe, DOM-free set.
+- `webcam-edits.ts` gains "Move from here", section targets, split and transition edits; the
+  Camera lane draws a striped band at each section's start; the inspector shows only position,
+  size and the transition for a section.
+- `WebcamLayer` and `compose-webcam.ts` apply opacity; `fillWebcamGap` also fills during
+  transitions and fades.
+- Old sessions open with every section as a Cut; hidden segments now fade, which is visible on
+  sessions made with the webcam stack and is why the revision changes. Old exports are not
+  reused.
+- A cut through a transition shows a partial transition, because state is read at each kept
+  source time. That is accepted.
+
+## Non-goals
+
+- Framing, shape or mirror per section.
+- Multi-bounce springs (CSS `linear()` is the model if ever wanted).
+- Transitions on media overlays (ADR 0040) or on zooms.
+- Camera-only, split-screen or fullscreen-camera scenes; they stay on the backlog
+  ([camera-only clips](/backlog/camera-only-clips/)).
+
+## What would reopen this
+
+- Users want a different transition out of a section than into the next stretch: add an
+  explicit `exit` transition to the section.
+- The owner wants framing per section: add `framing` to the section fields and interpolate it.
+- A real spring is asked for: adopt CSS `linear()` easing, which stays stateless.
+- Camera-only clips get designed: they become a section kind or a scene mode, and this ADR's
+  section model is the starting point.

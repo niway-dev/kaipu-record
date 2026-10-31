@@ -1,0 +1,121 @@
+---
+title: "ADR 0040: The timeline keeps typed tracks shown on demand, plus stackable media lanes whose audio stays per source and is mixed at export"
+description: Zooms, privacy and annotations stay typed lanes over one recording; they appear when they have content and, when removed, keep their edits hidden and out of the export. Videos and images placed over the recording live on media lanes that stack (upper covers lower), are timeline-anchored, and are composed after the zoom crop below the camera. Each media lane with sound gets its own audio lane, muted independently; the export mixes every audible source. A generic any-item-on-any-track timeline is rejected.
+---
+
+# ADR 0040: The timeline keeps typed tracks shown on demand, plus stackable media lanes whose audio stays per source and is mixed at export
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — owner decisions 2026-10-31, nothing implemented — [design](/specs/2026-10-31-editor-timeline-v2-design/), phases B–D; no Linear ticket (free issue limit)                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Date          | 2026-10-31                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Relates to    | [0038](/architecture/decisions/0038-webcam-is-a-viewport-layer-composed-after-the-zoom-crop/) (media items are viewport layers like the camera, drawn below it), [0039](/architecture/decisions/0039-camera-sections-with-eased-transitions/) (the Camera lane), [0003](/architecture/decisions/0003-export-never-replaces-the-original/) (exports stay new files), [0001](/architecture/decisions/0001-mediabunny-over-ffmpeg/) (mixing in the mediabunny worker), ADR 0018 on [PR #279](https://github.com/niway-dev/kaipu-record/pull/279) (imports copied into the vault) |
+| Superseded by | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+
+## Context
+
+The editor's timeline is a fixed list of lanes: Annotations above the main track, Clips, then
+Activity, Zooms, Webcam, Privacy and Audio (`timeline-strip.tsx`, `extraLanes` in
+`video-editor-page.tsx`). Every lane shows even when empty. The scene has one source: the main
+track's clips and slides cut one recording, and everything else is an effect on it — zooms,
+privacy regions and the camera are source-anchored, annotations timeline-anchored.
+
+The owner asked, on 2026-10-31, for three things the fixed list cannot express: lanes that
+appear only when used and whose edits survive being removed; videos and images placed over the
+recording, able to overlap ("a base video with a small one on top, both visible"), each on its
+own line as CapCut does; and audio kept per source, each mutable, mixed in the export. The
+editor compose design (PR #279) already decided how Library items and Finder files enter the
+editor and listed picture-in-picture as out of scope; the owner's request reopens that.
+
+The obvious alternative is the general-purpose model of CapCut, TikTok or Premiere: a timeline of
+N generic tracks where any item — clip, zoom, blur, text — can go on any track.
+
+## Decision
+
+1. **Typed tracks stay typed and show on demand.** Clips and the recording's Audio are always
+   shown. The Camera lane is always shown when the take recorded a camera and cannot be removed.
+   Annotations, Zooms and Privacy appear when they have content or through "+ Add track".
+   Removing one records it in `scene.removedTracks`. Its edits stay in the session, are not drawn
+   and are not exported. Adding it back restores them. Removing a non-empty Privacy track needs
+   a confirmation, and the export dialog names the regions not applied.
+2. **Activity is not a lane.** Its marks are drawn inside Zooms. A fresh recording's detected
+   zooms are suggestions until added.
+3. **Media gets stackable lanes.** `scene.mediaLanes` is ordered bottom to top. Each lane holds
+   non-overlapping image or video items that reference a Library item by `assetId`. An upper lane
+   covers a lower one, and there is no limit on the number of lanes. A removed media lane is
+   hidden and kept, like a typed track. In code these are "media"; the UI says "Overlay", because
+   `VideoOverlay` already means annotations.
+4. **Media items are timeline-anchored**, as annotations are, and play continuously across cuts
+   in the recording.
+5. **Media items are viewport layers.** They are placed in the output frame with the camera's
+   controls and drawn after the zoom crop and the framer, below the camera:
+   `frame → redactions → annotations → zoom crop → framing → media lanes → camera`.
+6. **Sources come only through the compose design's import and drag path.** A Finder file is
+   copied into the vault first. The drop target decides: Clips keeps the compose rule, while an
+   Overlay lane or the preview makes a media item.
+7. **Audio stays per source.** The recording keeps its Audio lane and mute model. Each media lane
+   with a video that has sound gets its own audio lane, muted per lane or per item. The export
+   decodes every audible source, resamples it to 48 kHz, sums the sources with a soft clip and
+   writes one AAC track. The file has audio while any source is audible.
+8. **Decoding is bounded.** The preview runs one `<video>` per visible video item, kept in step
+   by the webcam's drift rule. The export opens one input per video item for the length of its
+   span, read by range. At most two video items may be visible at the same instant.
+
+## Alternatives rejected
+
+- **A generic timeline where any item goes on any track.** It would rewrite the scene model
+  (every effect becomes a clip with a track index), the session format (a new version, breaking
+  the additive rule every v2 field has followed), the export plan and both workers, and the
+  preview's layer contract. And the user would gain little: a zoom, a blur or a camera section is
+  an effect on the recording with its own anchoring rule, not a clip, so putting a blur "on
+  track 3" means nothing. Media is the one kind of item that really stacks, so only media gets
+  free lanes.
+- **One overlay track with no overlap.** The owner's case is two visible at once.
+- **Deleting a removed track's edits** (or asking to). Removing would become destructive, and
+  undo would be the only way back. Hiding keeps the edits and costs one array in the session.
+- **Source-anchored media items** (Final Cut's connected clips). They follow the narration
+  through cuts, but either chop the overlay at every jump cut or need a second anchoring rule.
+  This is kept as the reopen path.
+- **The mock's three-way sound control** ("Overlay audio / Keep mine / Both") stored on the
+  overlay. Two independent mutes express all three. A stored mode would be a second model to keep
+  consistent with mute ranges.
+- **Pre-mixing overlay audio into one lane at import.** The owner wants each source muted on
+  its own, and that is lost the moment it is mixed.
+- **Mixing with FFmpeg after the export.** ADR 0001 keeps the pipeline in mediabunny, and the
+  worker already decodes and re-encodes audio.
+
+## Consequences
+
+- `scene.ts` gains `removedTracks`, `mediaLanes` and a `visibleScene` that the preview, the export
+  plan and the GIF plan read. `session.ts` parses both additively inside version 1.
+- `timeline-strip.tsx` builds its rows from the scene instead of a fixed list; `ActivityLane`
+  becomes marks in `ZoomLane`; a "+ Add track" menu appears.
+- `withInitialZooms` stops writing zooms on a fresh open. That reverses video editor v2's
+  default and is recorded as the design's first open question.
+- A new `features/video-editor/media/` holds the pure model and edits. The composer gains the
+  media step; the preview gains media slots between `.content` and the camera.
+- Phase D needs range reads over `kaipu-media://` (the compose design's spike) and adds a pure
+  mixer and resampler to the export worker.
+- Privacy regions blur the recording only. A media item is not redacted, and the Privacy
+  inspector says so.
+- Exports with media lanes carry an `md1` composer revision in their fingerprint.
+
+## Non-goals
+
+- Transitions, masks, rotation, crop or blend modes on media items; "Swap: my recording on top".
+- Free lanes for zooms, privacy, annotations or the camera.
+- Volume, fades, ducking or muted ranges inside overlay audio; background music (backlog).
+- Media sources that bypass the vault.
+
+## What would reopen this
+
+- A second kind of item that really stacks (music beds, captions as clips) wants its own free
+  lanes. Generalize media lanes then, not the typed tracks.
+- Users report that cuts misalign overlays from what they illustrate: adopt source-anchored
+  ("connected") media items.
+- Hardware measurements show the preview holds more than two simultaneous videos, or not two:
+  move the limit, which is a constant.
+- The compose design's range-reading spike fails: the export's decoding plan for overlays is
+  redesigned before phase D.

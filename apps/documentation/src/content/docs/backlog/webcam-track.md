@@ -122,8 +122,10 @@ stands; plan B (native exclusion by window id) stays unscheduled.
   instead of moving to orphans. Safe, but untidy.
 - The Library thumbnail is grabbed from the screen stream, so it has no face.
 - The spec and ADR 0037 still say "Share" for what is now the Prepare copy.
-- Camera sections with transitions, tracks on demand and media overlays: the editor timeline v2
-  design (#469). Camera-only clips and background music go to the backlog with it.
+- Camera sections with transitions, tracks on demand and media overlays: the
+  [editor timeline v2](/specs/2026-10-31-editor-timeline-v2-design/) design (#469).
+  [Camera-only clips](/backlog/camera-only-clips/) and
+  [background music](/backlog/background-music/) go to the backlog with it; background blur later.
 
 ## Lessons
 
