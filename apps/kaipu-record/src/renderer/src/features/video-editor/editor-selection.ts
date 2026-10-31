@@ -6,8 +6,11 @@
  */
 import { useCallback, useState } from "react";
 
-export type SelectionKind = "item" | "overlay" | "zoom" | "redaction" | "mute";
+export type SelectionKind = "item" | "overlay" | "zoom" | "redaction" | "mute" | "webcam";
 export type EditorSelection = { kind: SelectionKind; id: string } | null;
+
+/** The webcam selection that means "the layer itself" (its global layout), not a segment. */
+export const WEBCAM_LAYER_SELECTION = "layer";
 
 export function selectedIdOf(selection: EditorSelection, kind: SelectionKind): string | null {
   return selection?.kind === kind ? selection.id : null;
@@ -20,6 +23,8 @@ export interface EditorSelectionController {
   zoomId: string | null;
   redactionId: string | null;
   muteId: string | null;
+  /** A webcam segment's id, or {@link WEBCAM_LAYER_SELECTION} for the global layout. */
+  webcamId: string | null;
   /** `id = null` clears the selection only if it currently is of that kind. */
   select(kind: SelectionKind, id: string | null): void;
   clear(): void;
@@ -40,6 +45,7 @@ export function useEditorSelection(): EditorSelectionController {
     zoomId: selectedIdOf(selection, "zoom"),
     redactionId: selectedIdOf(selection, "redaction"),
     muteId: selectedIdOf(selection, "mute"),
+    webcamId: selectedIdOf(selection, "webcam"),
     select,
     clear,
   };

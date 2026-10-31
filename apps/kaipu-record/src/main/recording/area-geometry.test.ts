@@ -2,21 +2,23 @@ import { describe, expect, it } from "vitest";
 import {
   areaToGlobal,
   bubbleBoundsInArea,
+  bubblePlacementInRect,
   bubbleSizeOf,
-  fullDisplayBorderAllowed,
+  canExcludeWindowFromCapture,
   sanitizeArea,
+  withRecordedBubble,
 } from "./area-geometry";
 
-describe("fullDisplayBorderAllowed", () => {
+describe("canExcludeWindowFromCapture", () => {
   it("skips the whole-display border only on Windows builds without capture exclusion", () => {
-    expect(fullDisplayBorderAllowed("darwin", "24.0.0")).toBe(true);
-    expect(fullDisplayBorderAllowed("linux", "6.8.0")).toBe(true);
-    expect(fullDisplayBorderAllowed("win32", "10.0.19041")).toBe(true);
-    expect(fullDisplayBorderAllowed("win32", "10.0.22631")).toBe(true);
-    expect(fullDisplayBorderAllowed("win32", "10.0.18363")).toBe(false);
-    expect(fullDisplayBorderAllowed("win32", "6.3.9600")).toBe(false);
+    expect(canExcludeWindowFromCapture("darwin", "24.0.0")).toBe(true);
+    expect(canExcludeWindowFromCapture("linux", "6.8.0")).toBe(true);
+    expect(canExcludeWindowFromCapture("win32", "10.0.19041")).toBe(true);
+    expect(canExcludeWindowFromCapture("win32", "10.0.22631")).toBe(true);
+    expect(canExcludeWindowFromCapture("win32", "10.0.18363")).toBe(false);
+    expect(canExcludeWindowFromCapture("win32", "6.3.9600")).toBe(false);
     // An unreadable release never hides the border.
-    expect(fullDisplayBorderAllowed("win32", "")).toBe(true);
+    expect(canExcludeWindowFromCapture("win32", "")).toBe(true);
   });
 });
 
@@ -121,5 +123,65 @@ describe("sanitizeArea — an area that crossed a process boundary", () => {
       sanitizeArea(area({ x: Number.NaN, y: 0, width: 640, height: 360 }), display),
     ).toBeNull();
     expect(sanitizeArea(area({ x: 1500, y: 0, width: 640, height: 360 }), display)).toBeNull();
+  });
+});
+
+describe("bubblePlacementInRect", () => {
+  const recorded = { x: 1512, y: 0, width: 1000, height: 500 };
+
+  it("normalizes the bubble's centre and side to the recorded rectangle", () => {
+    // Bottom-left corner of the area: window 288 wide (240 bubble), 32 from the left and bottom.
+    const window = { x: 1512 + 32, y: 500 - 32 - 288, width: 288, height: 288 };
+    expect(bubblePlacementInRect(window, recorded)).toEqual({
+      position: { x: 0.176, y: 0.648 },
+      sizeFraction: 0.48,
+    });
+  });
+
+  it("is null when the bubble's centre is outside the recorded rectangle (another display)", () => {
+    expect(bubblePlacementInRect({ x: 0, y: 0, width: 288, height: 288 }, recorded)).toBeNull();
+  });
+
+  it("is null for an empty recorded rectangle", () => {
+    expect(
+      bubblePlacementInRect(
+        { x: 0, y: 0, width: 10, height: 10 },
+        { x: 0, y: 0, width: 0, height: 0 },
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("withRecordedBubble", () => {
+  const webcam = {
+    startOffsetMs: 0,
+    offsetQuality: "exact",
+    width: 1280,
+    height: 720,
+    fps: 30,
+    recordedLayout: {
+      shape: "circle",
+      size: 240,
+      mirrored: true,
+      framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+      position: { x: 0.9, y: 0.9 },
+    },
+  } as const;
+  const meta = { title: "T", durationSeconds: 1, durationMs: 1000, webcam };
+  const placement = { position: { x: 0.2, y: 0.8 }, sizeFraction: 0.3 };
+
+  it("replaces the renderer's position with main's", () => {
+    expect(withRecordedBubble(meta, placement).webcam?.recordedLayout).toMatchObject(placement);
+  });
+
+  it("removes the renderer's position when main has none", () => {
+    expect(withRecordedBubble(meta, null).webcam?.recordedLayout).not.toHaveProperty("position");
+  });
+
+  it("returns the meta untouched without a webcam or a recorded layout", () => {
+    const bare = { title: "T", durationSeconds: 1, durationMs: 1000 };
+    expect(withRecordedBubble(bare, placement)).toBe(bare);
+    const noLayout = { ...bare, webcam: { ...webcam, recordedLayout: undefined } };
+    expect(withRecordedBubble(noLayout, placement)).toBe(noLayout);
   });
 });

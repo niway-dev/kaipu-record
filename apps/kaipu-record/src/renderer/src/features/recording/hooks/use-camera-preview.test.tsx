@@ -37,7 +37,7 @@ describe("useCameraPreview", () => {
 
     await waitFor(() => expect(result.current.hasStream).toBe(true));
     expect(getUserMedia).toHaveBeenCalledWith({
-      video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+      video: { facingMode: "user", width: { ideal: 853 }, height: { ideal: 480 } },
       audio: false,
     });
   });
@@ -51,11 +51,11 @@ describe("useCameraPreview", () => {
 
     await waitFor(() => expect(result.current.hasStream).toBe(true));
     expect(getUserMedia).toHaveBeenNthCalledWith(1, {
-      video: { deviceId: { exact: "cam-2" }, width: { ideal: 640 }, height: { ideal: 480 } },
+      video: { deviceId: { exact: "cam-2" }, width: { ideal: 853 }, height: { ideal: 480 } },
       audio: false,
     });
     expect(getUserMedia).toHaveBeenNthCalledWith(2, {
-      video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+      video: { facingMode: "user", width: { ideal: 853 }, height: { ideal: 480 } },
       audio: false,
     });
   });
@@ -121,7 +121,7 @@ describe("useCameraPreview", () => {
     const { result } = renderHook(() => useCameraPreview(true, null, 1080));
     await waitFor(() => expect(result.current.hasStream).toBe(true));
     expect(getUserMedia).toHaveBeenCalledWith({
-      video: { facingMode: "user", width: { ideal: 1440 }, height: { ideal: 1080 } },
+      video: { facingMode: "user", width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false,
     });
   });
@@ -139,7 +139,7 @@ describe("useCameraPreview", () => {
     expect(stop).not.toHaveBeenCalled();
     await waitFor(() => expect(getUserMedia).toHaveBeenCalledTimes(2));
     expect(getUserMedia).toHaveBeenLastCalledWith({
-      video: { facingMode: "user", width: { ideal: 1440 }, height: { ideal: 1080 } },
+      video: { facingMode: "user", width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false,
     });
     expect(stop).toHaveBeenCalledTimes(1);
