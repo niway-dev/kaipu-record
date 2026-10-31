@@ -2,6 +2,7 @@ import { Check } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { DestinationLogo } from "@renderer/features/prepare/components/destination-logo";
+import { copyDestinationOf } from "@renderer/features/prepare/copy-destination";
 import { destinationOfPreset } from "@renderer/features/prepare/destinations";
 import { useExportRunner } from "@renderer/features/video-editor/export/export-runner";
 import { formatMB } from "@renderer/features/video-editor/export/export-size";
@@ -64,7 +65,8 @@ export function RecentExports({
             </li>
           )}
           {done.map((copy) => {
-            const destination = destinationOfPreset(copy.export!.preset);
+            // The stored destination first: an Email copy is Balanced, like chat's.
+            const destination = copyDestinationOf(copy) ?? destinationOfPreset(copy.export!.preset);
             return (
               <li key={copy.assetId}>
                 <button type="button" className={styles.row} onClick={() => onOpen(copy)}>

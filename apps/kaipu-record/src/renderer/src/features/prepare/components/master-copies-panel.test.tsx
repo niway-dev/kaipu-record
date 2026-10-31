@@ -130,6 +130,14 @@ describe("MasterCopiesPanel (Export v3, NIW2-585)", () => {
     startFileDrag.mockRestore();
   });
 
+  it("names an Email copy by the destination its sidecar stored, not by its Balanced preset", () => {
+    const panel = renderPanel([
+      copy({ export: { preset: "balanced", fingerprint: "whole", destination: "email" } }),
+    ]);
+    expect(within(panel).getByRole("link", { name: /^Email · anywhere/ })).toBeVisible();
+    expect(within(panel).queryByText(/Slack/)).toBeNull();
+  });
+
   it("a copy with no local file has nothing to drag", () => {
     const panel = renderPanel([copy({ id: null })]);
     expect(within(panel).queryByRole("button", { name: /^Drag/ })).toBeNull();

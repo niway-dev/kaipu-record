@@ -516,6 +516,23 @@ describe("ExportPage with no video", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/library/asset-2"));
   });
 
+  it("a recent Email copy is named Email, though its preset is chat's Balanced", async () => {
+    list(
+      recording(),
+      recording({
+        ...preparedCopy,
+        local: {
+          ...preparedCopy.local!,
+          export: { preset: "balanced", fingerprint: "whole", destination: "email" },
+        },
+      }),
+    );
+    renderExport("/export");
+    const recent = await screen.findByRole("region", { name: "Recent exports" });
+    expect(within(recent).getByRole("button", { name: /^Email/ })).toBeVisible();
+    expect(within(recent).queryByRole("button", { name: /Slack · Discord/ })).toBeNull();
+  });
+
   it("Pick from Library lists the originals, not their copies, and opens the one picked", async () => {
     list(recording(), preparedCopy);
     const router = renderExport("/export?to=github");

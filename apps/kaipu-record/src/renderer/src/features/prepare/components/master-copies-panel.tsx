@@ -11,8 +11,8 @@ import { exportEtaSeconds } from "@renderer/features/video-editor/export/export-
 import type { ExportRunnerSnapshot } from "@renderer/features/video-editor/export/export-runner";
 import { markCopySeen } from "@renderer/features/video-editor/export/ready-copies";
 import type { SourceProbe } from "@renderer/features/video-editor/export/probe-source";
-import { copyPresetOf } from "../copy-destination";
-import { destinationOfPreset } from "../destinations";
+import { copyDestinationOf, copyPresetOf } from "../copy-destination";
+import { type DestinationId, destinationOfPreset } from "../destinations";
 import { DESTINATION_COPY } from "../destination-copy";
 import { DestinationLogo } from "./destination-logo";
 import styles from "./master-copies-panel.module.css";
@@ -20,6 +20,8 @@ import styles from "./master-copies-panel.module.css";
 /** The background export of this master, while it runs (`useExportRunner`). */
 export interface RunningCopy {
   presetId: ExportPresetId;
+  /** Where it is going, when the job says (chat's and email's copies share a preset). */
+  destination?: DestinationId;
   /** A copy for a destination (Prepare, Share), not an editor export. */
   wholeRecording: boolean;
   fraction: number;
@@ -38,6 +40,7 @@ export function runningCopyOf(
   }
   return {
     presetId: job.presetId,
+    ...(job.destination ? { destination: job.destination } : {}),
     wholeRecording: job.wholeRecording === true,
     fraction: snapshot.fraction,
     attemptStartedAt: snapshot.attemptStartedAt,
@@ -79,8 +82,13 @@ export function MasterCopiesPanel({
   const tPrepare = useTranslations("prepare");
   const tEditor = useTranslations("videoEditor");
 
-  const destinationName = (presetId: ExportPresetId): string => {
-    const d = destinationOfPreset(presetId);
+  // The destination when known (the job's, or the one the copy's sidecar stored), else the
+  // preset's; the preset still gives YouTube's resolution.
+  const destinationName = (
+    presetId: ExportPresetId,
+    destination?: DestinationId | null,
+  ): string => {
+    const d = destination ?? destinationOfPreset(presetId);
     const name = tPrepare(DESTINATION_COPY[d].name);
     if (presetId === "youtube-1440") return `${name} ${t("copyRes1440")}`;
     if (presetId === "youtube-4k") return `${name} ${t("copyRes4k")}`;
@@ -129,10 +137,18 @@ export function MasterCopiesPanel({
       <ul className={styles.grid}>
         {running && (
           <li className={styles.row} data-state="running">
-            <CopyIcon preset={running.wholeRecording ? running.presetId : null} />
+            <CopyIcon
+              destination={
+                running.wholeRecording
+                  ? (running.destination ?? destinationOfPreset(running.presetId))
+                  : null
+              }
+            />
             <span className={styles.text}>
               <span className={styles.name}>
-                {running.wholeRecording ? destinationName(running.presetId) : t("edited")}
+                {running.wholeRecording
+                  ? destinationName(running.presetId, running.destination)
+                  : t("edited")}
               </span>
               <span className={styles.facts}>{progressText(running)}</span>
             </span>
@@ -148,11 +164,12 @@ export function MasterCopiesPanel({
         )}
         {copies.map((copy) => {
           const preset = copyPresetOf(copy);
-          const name = preset ? destinationName(preset) : copy.title;
+          const destination = copyDestinationOf(copy);
+          const name = preset ? destinationName(preset, destination) : copy.title;
           return (
             <li key={copy.assetId} className={styles.row} data-state="ready">
               <Link to={`/library/${copy.assetId}`} className={styles.link}>
-                <CopyIcon preset={preset} gif={copy.kind === "gif"} />
+                <CopyIcon destination={destination} gif={copy.kind === "gif"} />
                 <span className={styles.text}>
                   <span className={styles.name}>{name}</span>
                   <span className={styles.facts}>{factsOf(copy, preset)}</span>
@@ -193,13 +210,13 @@ export function MasterCopiesPanel({
 
 /** The destination's tile; a plain film (or GIF) tile for a copy that has no destination. */
 function CopyIcon({
-  preset,
+  destination,
   gif = false,
 }: {
-  preset: ExportPresetId | null;
+  destination: DestinationId | null;
   gif?: boolean;
 }): React.JSX.Element {
-  if (preset) return <DestinationLogo destination={destinationOfPreset(preset)} size={30} />;
+  if (destination) return <DestinationLogo destination={destination} size={30} />;
   const Icon = gif ? ImagePlay : Film;
   return (
     <span className={styles.genericIcon} aria-hidden>
