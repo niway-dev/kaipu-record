@@ -64,6 +64,21 @@ composite, and why the bubble is still on screen while recording if it is not in
 5. **Vault rules follow the cursor track's**, with one difference: `remove` deletes the webcam
    file, rename moves it with the id, and `removeLocalCopy` is **refused** while it exists, because
    the file is media the cloud does not carry yet (plan 03), not metadata it can drop.
+6. **Camera toggled mid-take: hide, not destroy** (pending owner QA, 2026-10-30). During a take
+   that records a webcam file, turning the camera off **parks** the bubble window (hidden, kept,
+   still protected) and releases both camera streams (the bubble's preview and the recorder's),
+   so the in-use light goes off; the webcam file keeps running on the same clock, holding its
+   last frame. Turning it on again shows the **same** native window, because a running capture
+   leaves out only the windows that were on screen when it started (owner QA: a window created
+   mid-take, unprotected, was captured), and the recorder feeds a new camera track into the same
+   file through a relay track (`webcam-relay.ts`). Each off period is stored on the sidecar as
+   `webcam.gaps: [{ startMs, endMs }]` in screen ms; the editor seeds each as a hidden segment.
+   A camera still off at the stop is a trailing gap. A camera that cannot be opened again ends
+   the file there and falls back as before (the bubble is unprotected, the post-take notice
+   says the face went into the screen). Outside a take, after it, and in a take that started
+   with the camera off (legacy path: a bubble turned on is burned into the screen), the window
+   is destroyed as before. Unverified: that a hidden-then-shown window stays excluded by the
+   running stream.
 
 ## Alternatives rejected
 

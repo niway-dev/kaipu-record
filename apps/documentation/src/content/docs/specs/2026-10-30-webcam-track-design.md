@@ -83,12 +83,20 @@ Defaulted on 2026-10-30; each is taken as written unless its "revisit if" trigge
 6. **`removeLocalCopy` with a webcam file.** Defaulted: refused with a reason, like an edit
    session refuses it today. Revisit when cloud plan 03 uploads the webcam as an auxiliary
    object of the asset.
-7. **Webcam turned on or off mid-take.** Decided in code (NIW2-576 review): turning it off ends
-   the file and the layer disappears from that source time; turning it on mid-take records **no**
-   second webcam file. Instead, the bubble is left in the screen capture for the rest of that
-   take (section 3.2), so the face is recorded in the screen pixels. Whether a running
-   ScreenCaptureKit stream picks up a bubble that drops its protection mid-stream is unverified
-   (spike rows 4/5).
+7. **Webcam turned on or off mid-take.** Revised after owner QA (2026-10-30, pending owner QA
+   of the fix; ADR 0032 decision 6). In a take that records a webcam file, turning the camera
+   off hides (parks) the bubble window instead of destroying it, stops both camera streams and
+   keeps the webcam file running on the same clock; turning it on again shows the same window
+   and feeds the same file. Each off period lands in the sidecar as `webcam.gaps` (screen ms)
+   and is seeded as a hidden webcam segment, so the lane stripes it and exports hide the face
+   there. A camera that cannot be opened again ends the file at that point and falls back as
+   before: the bubble is unprotected and the face goes into the screen pixels. A take that
+   started with the camera off keeps the legacy path (the bubble, turned on, is burned into the
+   screen). The earlier rule (off ends the file; on records no second file) still applies where
+   the recorder has no relay track (no `MediaStreamTrackGenerator`) and during the countdown.
+   Unverified: whether the running ScreenCaptureKit stream keeps a hidden-then-shown window
+   excluded, and whether it picks up a bubble that drops its protection mid-stream (spike rows
+   4/5).
 8. **`window` targets.** Defaulted: same path (separate file, protected bubble). Unverified
    inference: with ScreenCaptureKit window capture the bubble was probably never in a window
    recording; task 0 checks it.
