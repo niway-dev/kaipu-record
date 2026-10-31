@@ -377,7 +377,8 @@ describe("RecordingWriter", () => {
       exportFingerprint: "whole#q30",
       exportDestination: "email",
     });
-    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "rec-fixed.json"), "utf-8"));
+    // The file name follows the title (ADR 0035), so the sidecar is found by the item's id.
+    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", `${rec.id}.json`), "utf-8"));
     expect(sidecar.exportDestination).toBe("email");
     expect(rec.export?.destination).toBe("email");
   });
