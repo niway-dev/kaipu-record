@@ -54,7 +54,7 @@ repo has real, usable PR history, so no `git log` fallback was needed.
 ## Next
 
 Sourced from the project's own living backlog
-([backlog index](../backlog/), [kill-order roadmap](../backlog/roadmap)) — not
+([kill-order roadmap](../backlog/roadmap)) — not
 promoted from a speculative plan doc.
 
 - **Finish cloud recordings end-to-end**: backend is built and validated locally

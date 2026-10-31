@@ -1,0 +1,25 @@
+/* Pink outline, mono caps. It sits over a video or a poster, so the fill stays dark in both
+   themes for the text to read on any frame. */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(246, 5, 92, 0.55);
+  background: rgba(20, 6, 12, 0.72);
+  backdrop-filter: blur(6px);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ff3a7c;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.tag[data-size="sm"] {
+  padding: 3px 6px;
+  font-size: 9px;
+}

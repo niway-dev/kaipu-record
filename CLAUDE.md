@@ -59,20 +59,24 @@ Rules:
 - **Every new feature gets a doc.** Before/while building, add one under
   `apps/documentation/src/content/docs/`:
   - `backlog/` — proposed or in-flight work, and shipped-but-unvalidated features.
-    Start it with a status banner and add a row to `backlog/index.mdx`.
+    Start it with a status banner. The work queue is the issue tracker (Linear); there is no
+    hand-kept backlog index.
   - `specs/` and `plans/` — design specs and implementation plans (including those the
     superpowers brainstorming / writing-plans skills produce). **Do not leave them in
     `docs/superpowers/` — migrate them here** (add Starlight frontmatter `title` +
     `description`, keep the body).
   - `desktop/`, `features/`, `architecture/`, … — stable reference docs once a feature
     has shipped and been validated.
-- **Status legend** (use in backlog docs + `backlog/index.mdx`):
+- **Status legend** (use in backlog docs):
   🔵 Proposed · 🟡 In progress · 🟢 Ready to validate (prod review pending) · ✅ Done.
   When a backlog feature ships, flip it to 🟢; after prod validation, fold the lasting
-  knowledge into a `desktop/`/`features/` reference doc and drop the backlog row.
-- **Sidebar:** `apps/documentation/astro.config.mjs`. `specs/`, `plans/`, `features/`,
-  `architecture/`, `backend/`, `frontend/` autogenerate from their directory; `backlog/`
-  and `desktop/` pages are listed manually — add new pages there.
+  knowledge into a `desktop/`/`features/` reference doc.
+- **Sidebar:** `apps/documentation/astro.config.mjs`. Every content folder autogenerates from
+  its directory; creating the page is enough (Getting Started is the one fixed group). Order
+  inside a group comes from `sidebar.order` in a page's frontmatter, never from a list. No hand-kept index anywhere: no rows to add to
+  an index page, no changelog table, no ADR table, no sidebar list. Each PR that edits a
+  shared list conflicts with every other branch in flight
+  ([general-knowledge: adr-pattern, feature-docs-as-memory](https://github.com/csdev19/general-knowledge/blob/main/conventions/adr-pattern.md#no-hand-kept-index)).
 - **Language:** doc bodies are English (repo content rule). Legacy Spanish docs are tech
   debt to translate; don't add new Spanish docs.
 

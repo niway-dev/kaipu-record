@@ -103,6 +103,9 @@ Clicking the badge opens the editor. On the detail page it sits where the
 | `library.originalLabel`         | Original                                                                                  | Original                                                                        |
 | `library.originalPlayerNote`    | Tus ediciones no se muestran aquí — abre el editor para verlas, o reproduce un export.    | Your edits are not shown here — open the editor to see them, or play an export. |
 
+`library.originalLabel` and `library.originalPlayerNote` no longer exist: NIW2-585 (#457) removed them. The rows stay as
+the historical copy spec.
+
 ## Correction: the badge rule was wrong in every case
 
 Found during prod review of #156, on the very first edited recording: the detail page

@@ -337,6 +337,28 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
     expect(mainWindow.show).toHaveBeenCalled();
   });
 
+  it("remembers the display the latest take recorded, for the window that says it is ready", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    registerSettings();
+    const hub = registerRecordingHub(() => fakeMainWindow() as never);
+    mockState.displays = [
+      { id: 1, bounds: { x: 0, y: 0, width: 1512, height: 982 } },
+      { id: 2, bounds: { x: 1512, y: 0, width: 1512, height: 982 } },
+    ];
+    mockState.getSources.mockResolvedValue([
+      { id: "screen:2:0", name: "Screen 2", display_id: "2" },
+    ]);
+    expect(hub.lastTakeDisplayId()).toBeNull();
+
+    const start = mockState.ipcOn.get(IPC_CHANNELS.recordingStart)!;
+    const stop = mockState.ipcOn.get(IPC_CHANNELS.recordingStop)!;
+    start({}, { sourceId: "screen:2:0", sourceName: "Screen 2" });
+    await vi.waitFor(() => expect(mockState.bar.show).toHaveBeenCalledTimes(1));
+    stop({});
+    expect(hub.lastTakeDisplayId()).toBe(2);
+  });
+
   it("an area recording shades the display outside it and keeps the bubble inside, until stop", async () => {
     const { registerSettings } = await import("../infrastructure/settings-store");
     const { registerRecordingHub } = await import("./recording-hub");

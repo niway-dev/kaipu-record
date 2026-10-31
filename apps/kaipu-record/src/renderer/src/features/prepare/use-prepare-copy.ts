@@ -13,6 +13,7 @@ import { probeSource, type SourceProbe } from "@renderer/features/video-editor/e
 import { useVideoExport } from "@renderer/features/video-editor/export/use-video-export";
 import { createSlideAssetStore } from "@renderer/features/video-editor/slide-assets";
 import { initialScene, type VideoScene } from "@renderer/features/video-editor/scene";
+import { type DestinationId, destinationOfPreset } from "./destinations";
 
 /** A local recording: the only kind Prepare makes copies of (no screenshots, no GIFs). */
 export type PreparableVideo = LibraryVideo & { id: string };
@@ -87,6 +88,11 @@ export interface PrepareCopyInput {
   video: PreparableVideo;
   probe: SourceProbe;
   choice: VideoExportChoice;
+  /**
+   * Where the copy is going, for the progress and ready cards. Defaults to the preset's own
+   * destination; Email needs saying, since it shares chat's preset.
+   */
+  destination?: DestinationId;
   /** The copy landed in the library. */
   onSaved?(recording: LocalRecording): void;
 }
@@ -107,7 +113,7 @@ export function usePrepareCopy(): { start(input: PrepareCopyInput): boolean } {
   const videoExport = useVideoExport();
   const { start: startExport } = videoExport;
   const start = useCallback(
-    ({ video, probe, choice, onSaved }: PrepareCopyInput): boolean => {
+    ({ video, probe, choice, destination, onSaved }: PrepareCopyInput): boolean => {
       if (isVideoExportBusy()) {
         showExportBusyToast(tEditor);
         return false;
@@ -130,6 +136,8 @@ export function usePrepareCopy(): { start(input: PrepareCopyInput): boolean } {
         framing: choice.framing,
         sourceInfo: probe,
         fingerprint: prepareFingerprint(scene),
+        // The progress and ready cards name the place: "Preparing your YouTube copy…".
+        destination: destination ?? destinationOfPreset(choice.presetId),
         onSaved: (recording) => {
           try {
             onSaved?.(recording);

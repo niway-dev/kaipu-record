@@ -3,6 +3,7 @@ import { open, mkdir, stat, unlink, type FileHandle } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import type { LocalRecording } from "@shared/types/library-storage";
+import { isExportDestinationId } from "@shared/types/export-preset";
 import type { RecordingFinalizeMeta } from "@shared/types/ipc";
 import { sanitizeRecordingCapture } from "@shared/recording-capture";
 import {
@@ -348,6 +349,9 @@ export class RecordingWriter {
         ...(meta.exportPreset ? { exportPreset: meta.exportPreset } : {}),
         ...(isFingerprint(meta.exportFingerprint)
           ? { exportFingerprint: meta.exportFingerprint }
+          : {}),
+        ...(isExportDestinationId(meta.exportDestination)
+          ? { exportDestination: meta.exportDestination }
           : {}),
       });
       if (meta.thumbnail) await vault.writeThumbnail(id, Buffer.from(meta.thumbnail));

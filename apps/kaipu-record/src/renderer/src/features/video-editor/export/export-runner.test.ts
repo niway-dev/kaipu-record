@@ -19,6 +19,7 @@ import {
   startVideoExport,
   type StartExportArgs,
 } from "./export-runner";
+import { __resetReadyCopiesForTests, getReadyCopies } from "./ready-copies";
 
 // The pipeline itself (plan, session lifecycle, FR8/FR9 retries) is covered through
 // `useVideoExport` in use-video-export.test.ts. Here: what makes the runner app-level —
@@ -103,6 +104,7 @@ beforeEach(() => {
 afterEach(() => {
   captureException.mockClear();
   __resetExportRunnerForTests();
+  __resetReadyCopiesForTests();
   vi.unstubAllGlobals();
 });
 
@@ -389,6 +391,40 @@ describe("export runner (NIW2-218 background export)", () => {
       expect(sent().webcam).toBeNull();
       expect(getExportSnapshot().status).toBe("exporting");
     });
+  });
+});
+
+describe("export runner in the background (NIW2-586)", () => {
+  it("carries Prepare's destination on the job; an editor export has none", async () => {
+    await startVideoExport(args({ destination: "github" }), t);
+    expect(getExportSnapshot().job?.destination).toBe("github");
+    cancelVideoExport();
+    await startVideoExport(args(), t);
+    expect(getExportSnapshot().job).not.toHaveProperty("destination");
+  });
+
+  it("notes the finished copy as not seen yet", async () => {
+    await startVideoExport(args({ destination: "github" }), t);
+    finish(workers[0]!);
+    await waitFor(() => expect(getExportSnapshot().ready).not.toBeNull());
+    // With what its Library card shows: where it goes and the encoded size.
+    const job = getExportSnapshot().job ?? getExportSnapshot().ready!.job;
+    expect(getReadyCopies().copies).toEqual([
+      {
+        assetId: "asset-new",
+        announced: false,
+        card: true,
+        destination: "github",
+        width: job.width,
+        height: job.height,
+      },
+    ]);
+  });
+
+  it("a cancelled export notes nothing", async () => {
+    await startVideoExport(args(), t);
+    cancelVideoExport();
+    expect(getReadyCopies().copies).toEqual([]);
   });
 });
 

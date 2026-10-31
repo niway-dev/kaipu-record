@@ -6,11 +6,11 @@ import styles from "./status-stack.module.css";
 const SlotContext = createContext<HTMLElement | null>(null);
 
 /**
- * The top-right stack of in-app status cards (NIW2-218 export redesign), mounted once at
- * the app root so it outlives every page. App-level cards (the background export's progress
- * and "Ready to share") render here directly; a page adds its own (its "Recording saved"
- * card) through `StatusCardPortal`, so every card lines up in one column instead of
- * overlapping.
+ * The in-app status cards (NIW2-218 export redesign), mounted once at the app root so they
+ * outlive every page. A page adds its own card (its "Recording saved" card) through
+ * `StatusCardPortal` into the top-right column, so those line up instead of overlapping.
+ * The background export's widget and its "ready" card sit bottom right, out of the way of
+ * the page's own controls up top.
  */
 export function StatusStackProvider({
   children,
@@ -23,6 +23,8 @@ export function StatusStackProvider({
       {children}
       <div className={styles.stack}>
         <div ref={setSlot} className={styles.slot} />
+      </div>
+      <div className={styles.exportStack}>
         <ExportStatusCards />
       </div>
     </SlotContext.Provider>

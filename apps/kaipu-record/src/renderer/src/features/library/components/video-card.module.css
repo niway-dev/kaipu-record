@@ -11,6 +11,12 @@
   border-color: rgba(246, 5, 92, 0.4);
 }
 
+/* A copy that just finished in the background, not opened yet (NIW2-586). */
+.card[data-just-ready="true"] {
+  border-color: rgba(246, 5, 92, 0.5);
+  box-shadow: 0 0 0 1px rgba(246, 5, 92, 0.25);
+}
+
 .card[data-selected="true"] {
   border-color: var(--accent-primary);
 }

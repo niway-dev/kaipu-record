@@ -168,6 +168,9 @@ window.electronAPI = {
     throw new Error("gifSave not stubbed in this test");
   },
   startFileDrag: () => {},
+  importVideos: async () => ({ imported: [], failed: [], canceled: true }),
+  importVideoFiles: async () => ({ imported: [], failed: [], canceled: false }),
+  pathForFile: () => "",
   setExportActive: () => {},
   beginExport: async () => {},
   onExportCommand: () => () => {},
@@ -293,6 +296,15 @@ window.electronAPI = {
     action: () => {},
     hover: () => {},
   },
+  // No floating window in tests unless one asks for it: the page keeps its in-app card.
+  showRecordingReady: async () => false,
+  recordingReadyCard: {
+    onShow: () => () => {},
+    ready: () => {},
+    action: () => {},
+    resize: () => {},
+  },
+  onRecordingReadyOpen: () => () => {},
   onOpenSavedScreenshot: () => () => {},
   onOpenQuietCapture: () => () => {},
   applyWindowPreset: () => {},

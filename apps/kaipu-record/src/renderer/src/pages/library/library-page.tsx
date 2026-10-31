@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  Check,
   Library,
   LayoutGrid,
   LayoutList,
@@ -15,6 +16,7 @@ import * as stylex from "@stylexjs/stylex";
 import { SearchInput } from "@kaipu/ui";
 import { Button } from "@kaipu/ui";
 import { VideoCard } from "@renderer/features/library/components/video-card";
+import { ReadyCopyCard } from "@renderer/features/library/components/ready-copy-card";
 import { VideoRow } from "@renderer/features/library/components/video-row";
 import { DeleteConfirmDialog } from "@renderer/features/library/components/delete-confirm-dialog";
 import { SortMenu } from "@renderer/features/library/components/sort-menu";
@@ -28,6 +30,17 @@ import { buildLineage, editBadge } from "@renderer/features/library/lineage";
 import { canOpenInEditor, useOpenInEditor } from "@renderer/features/editor/open-in-editor";
 import { preparePath } from "@renderer/features/prepare/prepare-path";
 import { asPreparable } from "@renderer/features/prepare/use-prepare-copy";
+import { copyDestinationOf } from "@renderer/features/prepare/copy-destination";
+import {
+  dismissReadyCard,
+  markCopySeen,
+  noteCopyActedOn,
+  noteReadyCardsShown,
+  readyCards,
+  type ReadyCopy,
+  unseenCopyIds,
+  useReadyCopies,
+} from "@renderer/features/video-editor/export/ready-copies";
 import { ReconcileBanner } from "@renderer/features/library/reconcile/reconcile-banner";
 import { WorkspaceNotConnectedNotice } from "@renderer/features/workspaces/not-connected-notice";
 import styles from "./library-page.module.css";
@@ -45,15 +58,27 @@ const sxLibrary = stylex.create({
 
 export function LibraryPage(): React.JSX.Element {
   const t = useTranslations("library");
+  const tCopy = useTranslations("backgroundCopy");
   const navigate = useNavigate();
   const { openItem } = useOpenInEditor();
   const { videos, isLoading, hasError, refresh, remove, setTags } = useLocalLibrary();
   const tagApi = useTags();
+  // Outside videos come in through Export, the door for any video: the Library only lists.
   const canShowVaultBanner = hasError && videos.length > 0;
   // Built from the unfiltered `videos`, not `visibleItems`: an export filtered out of
   // the current view must still count toward its source's badge.
   const lineage = useMemo(() => buildLineage(videos), [videos]);
   const showFullPageError = hasError && videos.length === 0;
+  // NIW2-586: finished copies not opened yet — a chip by the title, and their cards outlined.
+  // Only those still in the Library count (a deleted copy has nothing to point at).
+  const readyCopies = useReadyCopies();
+  const unseenCopies = useMemo(() => unseenCopyIds(readyCopies), [readyCopies]);
+  const unseenCount = videos.filter((v) => unseenCopies.has(v.assetId)).length;
+  // What the runner knew about each finished copy (its destination, its size), by asset id.
+  const readyInfo = useMemo(
+    () => new Map<string, ReadyCopy>(readyCopies.copies.map((c) => [c.assetId, c])),
+    [readyCopies],
+  );
   const {
     kindFilter,
     storageFilter,
@@ -90,6 +115,23 @@ export function LibraryPage(): React.JSX.Element {
 
   const [view, setView] = useState<"grid" | "list">("grid");
 
+  // A copy that just finished leads the grid as a "Ready to upload" card, newest first, in
+  // place of its regular card — until it is opened, its card is closed, or the user leaves
+  // the Library (`retireReadyCards`) after the card was on screen. Only copies the current
+  // filters show, and only in the grid: a card noted shown here is one the user could see.
+  const leading = useMemo(() => {
+    const visible = new Map(visibleItems.map((v) => [v.assetId, v]));
+    return readyCards(readyCopies).flatMap((copy) => {
+      const video = visible.get(copy.assetId);
+      return video ? [{ video, copy }] : [];
+    });
+  }, [readyCopies, visibleItems]);
+  const leadingIds = new Set(leading.map(({ video }) => video.assetId));
+  const leadingKey = leading.map(({ video }) => video.assetId).join("\n");
+  useEffect(() => {
+    if (view === "grid" && leadingKey) noteReadyCardsShown(leadingKey.split("\n"));
+  }, [view, leadingKey]);
+
   // A 0-height marker right above the sticky bar: once it scrolls out of view the
   // bar is stuck, and gets a divider so the cards do not run into the filters.
   const stuckSentinel = useRef<HTMLDivElement>(null);
@@ -125,22 +167,32 @@ export function LibraryPage(): React.JSX.Element {
       <WorkspaceNotConnectedNotice />
       <div className={styles.pageHeader}>
         <div className={styles.pageHeaderText}>
-          <h1 className={styles.pageTitle}>{t("title")}</h1>
+          <div className={styles.pageTitleRow}>
+            <h1 className={styles.pageTitle}>{t("title")}</h1>
+            {unseenCount > 0 && (
+              <span className={styles.copiesReady} role="status">
+                <Check size={12} strokeWidth={2.4} aria-hidden />
+                {tCopy("libraryChip", { count: unseenCount })}
+              </span>
+            )}
+          </div>
           <p className={styles.pageSubtitle}>{t("subtitle")}</p>
         </div>
-        <button
-          className={styles.headerSyncButton}
-          title={t("rescan")}
-          type="button"
-          onClick={() => void refresh()}
-        >
-          <RefreshCw
-            size={15}
-            strokeWidth={1.8}
-            className={isLoading ? styles.spinning : undefined}
-          />
-          {t("sync")}
-        </button>
+        <div className={styles.headerActions}>
+          <button
+            className={styles.headerSyncButton}
+            title={t("rescan")}
+            type="button"
+            onClick={() => void refresh()}
+          >
+            <RefreshCw
+              size={15}
+              strokeWidth={1.8}
+              className={isLoading ? styles.spinning : undefined}
+            />
+            {t("sync")}
+          </button>
+        </div>
       </div>
 
       {/* Search, filters and the summary stay in view while the collection scrolls
@@ -337,25 +389,43 @@ export function LibraryPage(): React.JSX.Element {
         </div>
       ) : view === "grid" ? (
         <div className={styles.grid}>
-          {visibleItems.map((video) => (
-            <VideoCard
+          {leading.map(({ video, copy }) => (
+            <ReadyCopyCard
               key={video.assetId}
               video={video}
-              badge={editBadge(video, lineage)}
-              onNavigate={() => navigate(`/library/${video.assetId}`)}
-              onEdit={canOpenInEditor(video) ? () => openItem(video) : undefined}
-              onPrepare={
-                asPreparable(video) ? () => navigate(preparePath(video.assetId)) : undefined
-              }
-              onTags={video.id !== null ? () => openTagPanel(video.assetId) : undefined}
-              selected={video.assetId === taggingId}
-              tags={resolveTags(video.tagIds, tagApi.byId)}
-              onDelete={() => {
-                const { id, title } = video;
-                if (id !== null) setPendingDelete({ id, title });
+              copy={copy}
+              destination={copyDestinationOf(video, copy.destination)}
+              onOpen={() => {
+                markCopySeen(video.assetId);
+                navigate(`/library/${video.assetId}`);
               }}
+              onDismiss={() => dismissReadyCard(video.assetId)}
+              onActed={() => noteCopyActedOn(video.assetId)}
             />
           ))}
+          {visibleItems
+            .filter((video) => !leadingIds.has(video.assetId))
+            .map((video) => (
+              <VideoCard
+                key={video.assetId}
+                video={video}
+                destination={copyDestinationOf(video, readyInfo.get(video.assetId)?.destination)}
+                badge={editBadge(video, lineage)}
+                onNavigate={() => navigate(`/library/${video.assetId}`)}
+                onEdit={canOpenInEditor(video) ? () => openItem(video) : undefined}
+                onPrepare={
+                  asPreparable(video) ? () => navigate(preparePath(video.assetId)) : undefined
+                }
+                onTags={video.id !== null ? () => openTagPanel(video.assetId) : undefined}
+                selected={video.assetId === taggingId}
+                justReady={unseenCopies.has(video.assetId)}
+                tags={resolveTags(video.tagIds, tagApi.byId)}
+                onDelete={() => {
+                  const { id, title } = video;
+                  if (id !== null) setPendingDelete({ id, title });
+                }}
+              />
+            ))}
         </div>
       ) : (
         <div className={styles.scrollContainer}>

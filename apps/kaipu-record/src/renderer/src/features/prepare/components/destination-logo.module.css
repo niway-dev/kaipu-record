@@ -28,6 +28,10 @@
   background: #4a154b;
 }
 
+.logo[data-destination="email"] {
+  background: #3b5ba5;
+}
+
 .logo[data-destination="more"] {
   background: transparent;
   color: var(--text-secondary);

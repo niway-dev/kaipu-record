@@ -158,5 +158,5 @@ stands; plan B (native exclusion by window id) stays unscheduled.
   which reverses today's behaviour (detected zooms are applied on open). Compare a mock with
   current behaviour and ask about every difference.
 - **The two hand-kept index tables conflicted on every move of `main`.** The ADR index and the
-  backlog index caused the only conflicts in #437 and #469. The knowledge hub's ADR pattern says
-  to generate the ADR list instead; that is a follow-up here.
+  backlog index caused the only conflicts in #437 and #469, as the knowledge hub's ADR pattern
+  predicts. #473 removed both: the sidebar is generated, and each page carries its own status.

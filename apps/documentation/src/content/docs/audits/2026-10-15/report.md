@@ -48,7 +48,7 @@ code; magnitudes come from micro-benchmarks outside the app, **not from measurin
 Recording itself is **not** the culprit: the 8 ms cursor poll, the 100 ms tick and the chunk stream
 are each well under 1 % of a core and bounded for a 1 h take (REC-A summary).
 
-**Fix order.** Each batch's plans are listed in the [fix plans index](/plans/audit-2026-10-15/00-index/).
+**Fix order.** The plans are one page per root cause under [fix plans](/plans/audit-2026-10-15/00-index/).
 
 | #   | Batch                                                                                                                                                                                          | Findings                                                                    | Effort | Why this order                                                           |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------ |
@@ -93,7 +93,7 @@ Severity: 🔴 high · 🟠 medium · ⚪ low. Confidence: ✔ confirmed · ? pl
 another auditor's finding. Full evidence, fix sketch and effort are on each detail page.
 
 These tables are the snapshot at `d36b19dd` and do not change as fixes land. Which findings have
-shipped, and in which PR, is in the [fix plans index](/plans/audit-2026-10-15/00-index/) (Shipped table).
+shipped, and in which PR, is in Linear (NIW2-381 to NIW2-422) and in each plan's deleting PR; see the [fix plans index](/plans/audit-2026-10-15/00-index/).
 
 ### Record — [lens A](/audits/2026-10-15/findings/record-a/) · [lens B](/audits/2026-10-15/findings/record-b/)
 
