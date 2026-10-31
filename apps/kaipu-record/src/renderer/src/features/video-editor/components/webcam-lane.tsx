@@ -1,5 +1,5 @@
 /**
- * Webcam lane (ADR 0033): one block per VISIBLE piece of each hide/override segment,
+ * Webcam lane (ADR 0038): one block per VISIBLE piece of each hide/override segment,
  * source-anchored like the zoom lane, whose patterns it follows — click selects the whole
  * segment, the selected segment shows an edge handle only where its real start/end is
  * visible, and edge drags report SOURCE time (null over a slide) with the start/move/end

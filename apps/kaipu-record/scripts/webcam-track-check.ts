@@ -2,7 +2,7 @@
 /**
  * CLI for `inspectWebcamTrack` (src/shared/webcam-track-report.ts): prints a take's screen and
  * webcam durations, the webcam's start offset and its quality, and its size and fps, from the
- * sidecar's `webcam` entry and ffprobe. The sibling of `cursor-track:check` (ADR 0032).
+ * sidecar's `webcam` entry and ffprobe. The sibling of `cursor-track:check` (ADR 0037).
  *
  * Usage:
  *   bun run webcam-track:check <recording-id> [--vault <dir>]

@@ -3,7 +3,7 @@ import { BubbleProtection } from "./bubble-protection";
 
 /**
  * The bubble leaves the capture only while its face is recorded in the active take's webcam
- * file (ADR 0032). Otherwise the face would be in neither file.
+ * file (ADR 0037). Otherwise the face would be in neither file.
  */
 describe("BubbleProtection", () => {
   it("protects with no take active, so the next take starts with the bubble excluded", () => {

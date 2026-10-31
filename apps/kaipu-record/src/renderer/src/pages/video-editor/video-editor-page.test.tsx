@@ -92,6 +92,11 @@ const SOURCE: VideoEditorSource = {
   durationSeconds: 30,
 };
 
+// Main holds the item under its current id before the editor loads anything (NIW2-560).
+beforeEach(() => {
+  window.electronAPI.acquireEditorSession = async () => SOURCE.id;
+});
+
 function renderEditor(source: VideoEditorSource = SOURCE) {
   const router = createMemoryRouter(
     [
@@ -179,6 +184,98 @@ describe("VideoEditorPage — legacy /video-editor redirect", () => {
   it("sends a stateless (or unusable) navigation to the Editor home", () => {
     renderLegacy({ ...SOURCE, durationSeconds: 0 });
     expect(screen.getByText("editor-home")).not.toBeNull();
+  });
+});
+
+describe("VideoEditorLoader — editor hold (NIW2-560)", () => {
+  afterEach(() => {
+    window.electronAPI.closeEditorSession = () => {};
+  });
+
+  it("loads nothing before main acknowledges the hold, then loads under the current id", async () => {
+    let acknowledge!: (id: string) => void;
+    window.electronAPI.acquireEditorSession = vi.fn(
+      () => new Promise<string | null>((resolve) => (acknowledge = resolve)),
+    );
+    const loadSession = vi.fn(async () => null);
+    const loadTrack = vi.fn(async () => null);
+    window.electronAPI.loadVideoEditSession = loadSession;
+    window.electronAPI.loadCursorTrack = loadTrack;
+    const close = vi.fn();
+    window.electronAPI.closeEditorSession = close;
+
+    const { unmount } = render(
+      <RouterProvider
+        router={createMemoryRouter([{ path: "/", element: <VideoEditorLoader source={SOURCE} /> }])}
+      />,
+    );
+    await waitFor(() =>
+      expect(window.electronAPI.acquireEditorSession).toHaveBeenCalledWith("asset-1"),
+    );
+    expect(loadSession).not.toHaveBeenCalled();
+    expect(loadTrack).not.toHaveBeenCalled();
+
+    // A rename moved the file while the editor was opening.
+    await act(async () => acknowledge("Renamed clip"));
+    await waitFor(() => expect(loadSession).toHaveBeenCalledWith("Renamed clip"));
+    expect(loadTrack).toHaveBeenCalledWith("Renamed clip");
+    unmount();
+    expect(close).toHaveBeenCalledWith("Renamed clip");
+  });
+});
+
+describe("VideoEditorLoader — item no longer available (NIW2-560)", () => {
+  it.each([
+    ["main answers null (deleted; another item took its name)", async () => null],
+    [
+      "the acquisition rejects",
+      async () => {
+        throw new Error("ipc down");
+      },
+    ],
+  ])("never loads under the route's id when %s", async (_label, acquire) => {
+    window.electronAPI.acquireEditorSession = vi.fn(acquire) as never;
+    const loadSession = vi.fn(async () => null);
+    const loadTrack = vi.fn(async () => null);
+    window.electronAPI.loadVideoEditSession = loadSession;
+    window.electronAPI.loadCursorTrack = loadTrack;
+    const router = createMemoryRouter(
+      [
+        { path: "/", element: <VideoEditorLoader source={SOURCE} /> },
+        { path: "/library", element: <div>library-page</div> },
+      ],
+      { initialEntries: ["/"] },
+    );
+    render(<RouterProvider router={router} />);
+
+    expect(await screen.findByText(/no longer in your library/i)).toBeInTheDocument();
+    expect(loadSession).not.toHaveBeenCalled();
+    expect(loadTrack).not.toHaveBeenCalled();
+    expect(document.querySelector("footer")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /back to library/i }));
+    expect(await screen.findByText("library-page")).toBeInTheDocument();
+  });
+});
+
+describe("VideoEditorLoader — an identity two files claim (NIW2-560)", () => {
+  it("says the item is claimed twice instead of 'no longer in your library', and loads nothing", async () => {
+    window.electronAPI.acquireEditorSession = vi.fn(async () => {
+      throw new Error("Error invoking remote method: vault-ambiguous-identity: 2 local items");
+    }) as never;
+    const loadSession = vi.fn(async () => null);
+    window.electronAPI.loadVideoEditSession = loadSession;
+    render(
+      <RouterProvider
+        router={createMemoryRouter([
+          { path: "/", element: <VideoEditorLoader source={SOURCE} /> },
+          { path: "/library", element: <div>library-page</div> },
+        ])}
+      />,
+    );
+    expect(await screen.findByText(/two files in your folder/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no longer in your library/i)).toBeNull();
+    expect(loadSession).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /back to library/i })).toBeInTheDocument();
   });
 });
 
@@ -688,7 +785,7 @@ describe("VideoEditorPage — inspector column priority (annotation follow-ups)"
   // pattern already in this file, so it is skipped here too.
 });
 
-// The webcam layer (ADR 0033): everything it adds hangs off the sidecar's webcam track.
+// The webcam layer (ADR 0038): everything it adds hangs off the sidecar's webcam track.
 describe("VideoEditorPage — webcam track", () => {
   const WITH_WEBCAM: VideoEditorSource = {
     ...SOURCE,

@@ -517,6 +517,9 @@ describe("recorder-store", () => {
       expect.any(String),
       expect.objectContaining({ durationSeconds: 2, durationMs: 2400 }),
     );
+    // NIW2-560: the default title is also the file name, so it is file-system safe.
+    const [, meta] = vi.mocked(window.electronAPI.recordingFinalize).mock.calls[0]!;
+    expect(meta.title).toMatch(/^Kaipu Recording \d{4}-\d{2}-\d{2} at \d{2}\.\d{2}\.\d{2}$/);
   });
 
   it("reports durationMs in video time: measured from the first media sample, not from when the bar started", async () => {
@@ -1402,7 +1405,7 @@ describe("recorder-store live settings", () => {
     expect(engine.setMicrophoneEnabled).not.toHaveBeenCalled();
   });
 
-  describe("the webcam track (ADR 0032)", () => {
+  describe("the webcam track (ADR 0037)", () => {
     const bubble = {
       shape: "circle" as const,
       size: 240,

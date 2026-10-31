@@ -1,5 +1,5 @@
 /**
- * The webcam track (ADR 0032): the recorder encodes the webcam into its own file,
+ * The webcam track (ADR 0037): the recorder encodes the webcam into its own file,
  * `.kaipu/<id>.webcam.mp4`, on the same renderer clock as the screen, and the sidecar stores
  * where its time 0 sits against the screen's (`startOffsetMs`).
  *

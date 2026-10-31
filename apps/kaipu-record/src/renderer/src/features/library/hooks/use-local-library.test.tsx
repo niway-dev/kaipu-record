@@ -3,8 +3,16 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { useLocalLibrary } from "./use-local-library";
 import { reportError } from "@renderer/features/analytics";
 import type { LibraryItem } from "@shared/types/library-item";
+import {
+  AMBIGUOUS_IDENTITY_MARKER,
+  ITEM_NOT_FOUND_MARKER,
+  UNREADABLE_RECORD_MARKER,
+} from "@shared/types/library-storage";
+import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 
 vi.mock("@renderer/features/analytics", () => ({ reportError: vi.fn() }));
+
+const ASSET_A = "00000000-0000-0000-0000-000000000001";
 
 function localItem(
   over: Partial<LibraryItem> & { assetId: string; local: NonNullable<LibraryItem["local"]> },
@@ -106,7 +114,12 @@ describe("useLocalLibrary", () => {
       catalogVerifiedAt: null,
     }));
     window.electronAPI.deleteLocalRecording = vi.fn(async () => {});
-    window.electronAPI.renameLocalRecording = vi.fn(async () => {});
+    window.electronAPI.renameLocalRecording = vi.fn(
+      async (id: string, _assetId: string, title: string) => ({
+        file: "unchanged" as const,
+        recording: { ...items[0]!.local!, id, title },
+      }),
+    );
     window.electronAPI.removeLocalCopy = vi.fn(async () => ({ ok: true as const }));
     window.electronAPI.onLibraryChanged = () => () => {};
   });
@@ -189,7 +202,7 @@ describe("useLocalLibrary", () => {
     await waitFor(() => expect(result.current.videos).toHaveLength(2));
 
     await act(async () => {
-      await result.current.rename("a", "New");
+      await result.current.rename("a", ASSET_A, "New");
     });
 
     expect(reportError).toHaveBeenCalledWith(
@@ -197,6 +210,126 @@ describe("useLocalLibrary", () => {
       expect.any(Error),
       expect.anything(),
     );
+  });
+
+  it("a rename refused while files are fixed is a plain toast, not an error report", async () => {
+    window.electronAPI.renameLocalRecording = vi.fn(async () => {
+      throw new Error("vault-maintenance: Kaipu is fixing your files");
+    });
+    const { result } = renderHook(() => useLocalLibrary());
+    await waitFor(() => expect(result.current.videos).toHaveLength(2));
+    await act(async () => {
+      await result.current.rename("a", ASSET_A, "New");
+    });
+    expect(reportError).not.toHaveBeenCalled();
+    expect(getToasts().map((toast) => toast.message)).toContain(
+      "Kaipu is fixing your files. Try again in a moment.",
+    );
+    getToasts().forEach((toast) => dismissToast(toast.id));
+  });
+
+  it("a delete refused for an unreadable record is the read-only toast, and the item stays", async () => {
+    window.electronAPI.deleteLocalRecording = vi.fn(async () => {
+      throw new Error(`${UNREADABLE_RECORD_MARKER}: the record of "a" is corrupt-json`);
+    });
+    const { result } = renderHook(() => useLocalLibrary());
+    await waitFor(() => expect(result.current.videos).toHaveLength(2));
+    await act(async () => {
+      await result.current.remove("a");
+    });
+    expect(reportError).not.toHaveBeenCalled();
+    expect(getToasts()).toHaveLength(1);
+    expect(result.current.videos.map((v) => v.id)).toEqual(["a", "b"]);
+    getToasts().forEach((toast) => dismissToast(toast.id));
+  });
+
+  it("patches the renamed item by assetId with its new id, title and thumbnail", async () => {
+    window.electronAPI.renameLocalRecording = vi.fn(
+      async (_id: string, _assetId: string, title: string) => ({
+        file: "renamed" as const,
+        recording: {
+          ...items[0]!.local!,
+          id: "Sprint demo",
+          title,
+          thumbnailUrl: "kaipu-media://thumb/Sprint demo",
+        },
+      }),
+    );
+    const { result } = renderHook(() => useLocalLibrary());
+    await waitFor(() => expect(result.current.videos).toHaveLength(2));
+
+    await act(async () => {
+      await result.current.rename("a", ASSET_A, "Sprint demo");
+    });
+
+    expect(result.current.videos[0]).toMatchObject({
+      assetId: "00000000-0000-0000-0000-000000000001",
+      id: "Sprint demo",
+      title: "Sprint demo",
+      thumbnailUrl: "kaipu-media://thumb/Sprint demo",
+    });
+    expect(result.current.videos[1]).toMatchObject({ id: "b", title: "B" });
+    expect(getToasts()).toEqual([]);
+  });
+
+  it("shows a toast with Retry when the file kept its old name, and retries with the same title", async () => {
+    const rename = vi.fn(async (id: string, _assetId: string, title: string) => ({
+      file: "kept-old-name" as const,
+      reason: "locked" as const,
+      recording: { ...items[0]!.local!, id, title },
+    }));
+    window.electronAPI.renameLocalRecording = rename;
+    const { result } = renderHook(() => useLocalLibrary());
+    await waitFor(() => expect(result.current.videos).toHaveLength(2));
+
+    await act(async () => {
+      await result.current.rename("a", ASSET_A, "Locked name");
+    });
+
+    // The title is saved either way; the file kept its name.
+    expect(result.current.videos[0]).toMatchObject({ id: "a", title: "Locked name" });
+    const [toast] = getToasts();
+    expect(toast?.message).toMatch(/another app is using it/i);
+    expect(toast?.action?.label).toBe("Retry");
+    expect(reportError).not.toHaveBeenCalled();
+
+    rename.mockClear();
+    await act(async () => toast!.action!.onClick());
+    // Retry names the item by identity too, so it follows the item if it moved meanwhile.
+    expect(rename).toHaveBeenCalledWith("a", ASSET_A, "Locked name");
+    for (const t of getToasts()) dismissToast(t.id);
+  });
+
+  it("refreshes quietly when the item is no longer there (double commit)", async () => {
+    window.electronAPI.renameLocalRecording = vi.fn(async () => {
+      throw new Error(`Error invoking remote method: ${ITEM_NOT_FOUND_MARKER}: no media file`);
+    });
+    const { result } = renderHook(() => useLocalLibrary());
+    await waitFor(() => expect(result.current.videos).toHaveLength(2));
+    expect(window.electronAPI.listLibraryItems).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await result.current.rename("a", ASSET_A, "Again");
+    });
+
+    expect(reportError).not.toHaveBeenCalled();
+    await waitFor(() => expect(window.electronAPI.listLibraryItems).toHaveBeenCalledTimes(2));
+  });
+
+  it("says plainly when two files claim the item, instead of an error report", async () => {
+    window.electronAPI.renameLocalRecording = vi.fn(async () => {
+      throw new Error(`Error invoking remote method: ${AMBIGUOUS_IDENTITY_MARKER}: 2 local items`);
+    });
+    const { result } = renderHook(() => useLocalLibrary());
+    await waitFor(() => expect(result.current.videos).toHaveLength(2));
+    await act(async () => {
+      await result.current.rename("a", ASSET_A, "New");
+    });
+    expect(reportError).not.toHaveBeenCalled();
+    const [toast] = getToasts();
+    expect(toast?.message).toMatch(/two files in your folder/i);
+    expect(toast?.action).toBeUndefined();
+    for (const t of getToasts()) dismissToast(t.id);
   });
 
   it("re-lists when the vault folder changes", async () => {

@@ -1,5 +1,5 @@
 /**
- * The Webcam section of the inspector (ADR 0033, spec § 6): Shape, Size, nine position
+ * The Webcam section of the inspector (ADR 0038, spec § 6): Shape, Size, nine position
  * presets, Mirror, Shadow and Shrink during zoom, for the global layout — or, when a lane
  * block is selected, for that segment: a hidden one shows its range and Delete, an override
  * the same controls over its own fields. A recording without a webcam never renders it.
