@@ -8,7 +8,8 @@
 export const EXPORT_PRESET_IDS = [
   "balanced",
   "light",
-  "youtube",
+  "youtube-1440",
+  "youtube-4k",
   "vertical",
   "square",
   "maximum",
@@ -20,12 +21,26 @@ export function isExportPresetId(value: unknown): value is ExportPresetId {
 }
 
 /**
+ * YouTube's two canvases (NIW2-564): 2560×1440 and 3840×2160. YouTube gives 1440p and 4K
+ * uploads a better codec and far more bitrate than 1080p ones, so even a 1080p-class screen
+ * recording, upscaled, looks sharper there than the same recording uploaded at 1080p.
+ */
+export const YOUTUBE_PRESET_IDS = ["youtube-1440", "youtube-4k"] as const;
+export type YoutubePresetId = (typeof YOUTUBE_PRESET_IDS)[number];
+
+export function isYoutubePreset(id: unknown): id is YoutubePresetId {
+  return typeof id === "string" && (YOUTUBE_PRESET_IDS as readonly string[]).includes(id);
+}
+
+/**
  * Ids older sidecars may still carry. "original" was the native-size `QUALITY_HIGH` export
  * before Balanced became the default; it is today's "maximum". "small-10" / "small-25" were
  * the size-capped rows the quality tiers replaced; they read as "light", the tier that took
- * their place. ("Already exported" still never reuses them: see `ENCODE_REVISION`.)
+ * their place. "youtube" was the fixed 1920×1080 YouTube export before the 1440p and 4K
+ * canvases replaced it (NIW2-564); it reads as "youtube-1440", the row for the same
+ * destination. ("Already exported" still never reuses any of them: see `ENCODE_REVISION`.)
  */
-export type LegacyExportPresetId = "original" | "small-10" | "small-25";
+export type LegacyExportPresetId = "original" | "small-10" | "small-25" | "youtube";
 
 /** What a sidecar's `exportPreset` may hold: a current id, or a legacy one. */
 export type StoredExportPresetId = ExportPresetId | LegacyExportPresetId;
@@ -34,6 +49,7 @@ export type StoredExportPresetId = ExportPresetId | LegacyExportPresetId;
 export function normalizeExportPresetId(value: unknown): ExportPresetId | null {
   if (value === "original") return "maximum";
   if (value === "small-10" || value === "small-25") return "light";
+  if (value === "youtube") return "youtube-1440";
   return isExportPresetId(value) ? value : null;
 }
 

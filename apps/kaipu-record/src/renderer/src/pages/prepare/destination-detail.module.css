@@ -1,0 +1,380 @@
+/* The right column: header, what changes + why, the destination's one choice, the action. */
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 24px;
+}
+
+/* ── Header ───────────────────────────── */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+
+.headText {
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.meta {
+  margin: 3px 0 0;
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+}
+
+.warn {
+  margin: 4px 0 0;
+  font-size: var(--font-size-sm);
+  color: var(--tone-heavy);
+}
+
+/* ── Cards ────────────────────────────── */
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.card,
+.why {
+  min-width: 0;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.kicker {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: var(--font-weight-normal);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* What changes */
+
+.changes {
+  margin: 4px 0 0;
+}
+
+.change {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--font-size-base);
+}
+
+.change:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.changeLabel {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.changeValue {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  text-align: right;
+}
+
+/* "studio quality" → "Studio quality": the values double as phrases elsewhere. */
+.changeValue::first-letter {
+  text-transform: uppercase;
+}
+
+.changeValue[data-direction="bigger"] {
+  color: var(--tone-heavy);
+}
+
+.changeValue[data-direction="lighter"] {
+  color: var(--tone-saving);
+}
+
+/* Why it gets bigger / lighter */
+
+.why[data-group="send-more"] {
+  border-color: var(--accent-primary-ring);
+  background: var(--accent-primary-soft);
+}
+
+.why[data-group="send-more"] .kicker {
+  color: var(--accent-primary);
+}
+
+.why[data-group="keep-light"] {
+  border-color: color-mix(in srgb, var(--tone-saving-strong) 35%, transparent);
+  background: color-mix(in srgb, var(--tone-saving-strong) 7%, transparent);
+}
+
+.why[data-group="keep-light"] .kicker {
+  color: var(--tone-saving);
+}
+
+.whyText {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
+/* ── The destination's choice ─────────── */
+
+/* Title and its choice on one line, so the card stays short. */
+.optionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.optionHead + .optionHint {
+  margin-top: 6px;
+}
+
+.optionText {
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.optionTitle {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.optionHint {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+.segmented {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-app);
+  align-self: flex-start;
+}
+
+.segment {
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 11px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+  background: transparent;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.segment[data-active="true"] {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.segment:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* YouTube: an illustrated before / after of small text. */
+
+.crops {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.crop {
+  flex-shrink: 0;
+  width: 120px;
+  margin: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+}
+
+.cropFrame {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.cropText {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+  color: #0f172a;
+}
+
+.crop[data-soft="true"] .cropText {
+  filter: blur(1.1px);
+  opacity: 0.8;
+}
+
+.crop[data-soft="true"] .cropFrame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.05) 0 1px, transparent 1px 3px);
+}
+
+.cropLabel {
+  padding: 4px 8px;
+  background: var(--bg-app);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--tone-saving);
+}
+
+.crop[data-soft="true"] .cropLabel {
+  color: var(--tone-heavy);
+}
+
+.cropArrow {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.cropNote {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* Keep-light: the recording and the copy on one scale. */
+
+.barLabels {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.barOriginal {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.barCopy {
+  font-size: var(--font-size-base);
+  color: var(--text-primary);
+}
+
+.barTag {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+}
+
+.barTag[data-direction="lighter"] {
+  color: var(--tone-saving);
+}
+
+.barTag[data-direction="not-lighter"] {
+  color: var(--tone-heavy);
+}
+
+.bar {
+  position: relative;
+  height: 9px;
+  margin-top: 9px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: repeating-linear-gradient(135deg, var(--border) 0 5px, var(--bg-card-hover) 5px 10px);
+}
+
+.barFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--tone-saving-strong), var(--tone-saving));
+}
+
+.barFill[data-direction="not-lighter"] {
+  background: var(--tone-heavy);
+}
+
+/* Reels and feeds: the shape preview beside its choice. */
+
+.shape {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+/* ── Action ───────────────────────────── */
+
+.action {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 4px;
+}
+
+.kbd {
+  margin-left: 2px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  opacity: 0.75;
+}
+
+.actionNote {
+  flex: 1;
+  min-width: 140px;
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  color: var(--text-muted);
+}

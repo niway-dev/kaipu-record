@@ -1,13 +1,15 @@
 /**
  * Export presets per destination (NIW2-218): every number behind "Balanced", "Light",
- * "YouTube", "Reels · TikTok · Shorts", "Feeds" and "Maximum quality" lives in this one
+ * "YouTube 1440p", "YouTube 4K", "Reels · TikTok · Shorts", "Feeds" and "Maximum quality" lives in this one
  * table, so updating a platform limit or a quality tier is a one-line change.
  *
  * WORKER-BUNDLE INVARIANT: pure and DOM-free. The export worker imports it too.
  *
  * Sources (verified 2026-10-08, see the NIW2-218 spec):
- * - YouTube: https://support.google.com/youtube/answer/1722171 — 8 Mbps @ 1080p ≤ 30 fps,
- *   12 Mbps @ 1080p > 30 fps, AAC, moov at the front ("Fast Start").
+ * - YouTube: https://support.google.com/youtube/answer/1722171 (re-checked 2026-10-30 for
+ *   NIW2-564) — SDR video at 8 / 12 Mbps @ 1080p, 16 / 24 Mbps @ 1440p and 45 / 68 Mbps @ 2160p
+ *   (≤ 30 fps / > 30 fps; the top of each range), AAC-LC with stereo at 384 kbps, moov at the
+ *   front ("Fast Start").
  * - GitHub attachments: videos up to 100 MB on paid plans (10 MB on free ones) —
  *   https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files
  */
@@ -17,14 +19,19 @@ export {
   EXPORT_PRESET_IDS,
   isExportFraming,
   isExportPresetId,
+  isYoutubePreset,
   normalizeExportPresetId,
+  YOUTUBE_PRESET_IDS,
   type ExportFraming,
   type ExportPresetId,
+  type YoutubePresetId,
 } from "@shared/types/export-preset";
 import {
   EXPORT_FRAMINGS,
+  isYoutubePreset,
   type ExportFraming,
   type ExportPresetId,
+  type YoutubePresetId,
 } from "@shared/types/export-preset";
 
 /** What fills the canvas around a Fit frame (spec Q2): black, or a blurred copy of the frame. */
@@ -33,13 +40,40 @@ export type PaddingFill = "black" | "blur";
 /** Decimal megabytes, as GitHub counts them (and Finder shows them). */
 export const MB = 1_000_000;
 
-/** Video bitrate for a 1920×1080 (or 1080×1920) frame, per YouTube's recommendation. */
+/**
+ * Video bitrate for a 1920×1080 (or 1080×1920) frame, per YouTube's recommendation. Vertical
+ * and Square scale it by pixel count (`fixedVideoBitrate`).
+ */
 const BITRATE_1080_LOW_FPS = 8_000_000;
 const BITRATE_1080_HIGH_FPS = 12_000_000;
 const PIXELS_1080 = 1920 * 1080;
 
-/** AAC for every preset but Maximum: 128 kbps, source channels (stereo today). */
+/**
+ * Video bits/s of the YouTube canvases, straight from YouTube's SDR upload table (source in
+ * the header), at the top of each range: the encode is bitrate-driven, and a screen recording
+ * rarely fills a ceiling this high, so the top costs little and keeps fast motion clean.
+ * `lowFps` is ≤ 30 fps, `highFps` above (48 and 60 fps recordings).
+ */
+export const YOUTUBE_VIDEO_BITRATES = {
+  "youtube-1440": { lowFps: 16_000_000, highFps: 24_000_000 },
+  "youtube-4k": { lowFps: 45_000_000, highFps: 68_000_000 },
+} as const satisfies Record<YoutubePresetId, { lowFps: number; highFps: number }>;
+
+/** Video bitrate for a YouTube canvas at the source frame rate. */
+export function youtubeVideoBitrate(presetId: YoutubePresetId, fps: number): number {
+  const band = YOUTUBE_VIDEO_BITRATES[presetId];
+  return fps > 30 ? band.highFps : band.lowFps;
+}
+
+/** AAC for every preset but Maximum and YouTube: 128 kbps, source channels (stereo today). */
 export const FIXED_AUDIO_BITRATE = 128_000;
+/** AAC for the YouTube canvases: YouTube's recommended 384 kbps stereo. */
+export const YOUTUBE_AUDIO_BITRATE = 384_000;
+/**
+ * Lower AAC bitrates to step down through when the encoder refuses a higher one at the
+ * source layout (see `audioEncodingCandidates`), ending at the 128 kbps every preset uses.
+ */
+const AAC_BITRATE_STEPS = [384_000, 256_000, 192_000, FIXED_AUDIO_BITRATE] as const;
 
 /**
  * Seconds between keyframes. mediabunny's default is 2 s, and on screen recordings — mostly
@@ -51,8 +85,8 @@ export const FIXED_AUDIO_BITRATE = 128_000;
 export const KEY_FRAME_INTERVAL_SEC = 10;
 /**
  * YouTube's upload guide asks for a short closed GOP ("GOP of half the frame rate"), and the
- * YouTube preset targets a fixed bitrate, so a longer interval would save it nothing: it keeps
- * mediabunny's 2 s default.
+ * YouTube presets (1440p and 4K) target a fixed bitrate, so a longer interval would save them
+ * nothing: they keep mediabunny's 2 s default.
  */
 export const YOUTUBE_KEY_FRAME_INTERVAL_SEC = 2;
 
@@ -136,11 +170,15 @@ export function isQualityTier(presetId: ExportPresetId): presetId is QualityTier
  * reuses a file encoded the same way: the tiers moved to quantizer encoding at 24 fps on
  * 2026-10-13, so a Balanced or Light file must carry this revision in its fingerprint (the
  * bitrate-tier files, older Balanced files and the old Small-file exports, now read as Light,
- * never match). Bump a revision when its numbers change.
+ * never match). The YouTube canvases carry one from the start (NIW2-564): the old 1920×1080
+ * "youtube" files read as "youtube-1440" (`normalizeExportPresetId`) with a bare fingerprint,
+ * and must never pass for a 1440p file. Bump a revision when its numbers change.
  */
 export const ENCODE_REVISION: Partial<Record<ExportPresetId, string>> = {
   balanced: "q30-24fps-kfi10",
   light: "q33-24fps-kfi10",
+  "youtube-1440": "2560x1440-v1",
+  "youtube-4k": "3840x2160-v1",
 };
 
 /** The fingerprint a file of `presetId` records: its content plus the encode revision. */
@@ -161,6 +199,10 @@ export interface AudioEncoding {
  * target's fallbacks stay cheap: keeping the source channels at its bitrate first, then 96 and
  * 128 kbps — a few hundred KB a minute at most. (No preset downmixes since the tiers moved to
  * stereo 128 kbps on 2026-10-13; the path stays for a tier that wants it.)
+ *
+ * A target above 128 kbps (YouTube's 384 kbps) steps down 256 → 192 → 128 kbps at the source
+ * layout: AAC encoders cap the bitrate per channel and sample rate, and a lower rate is better
+ * than a failed export.
  */
 export function audioEncodingCandidates(
   target: Pick<ResolvedExportTarget, "audioBitrate" | "audioChannels">,
@@ -172,6 +214,10 @@ export function audioEncodingCandidates(
   if (target.audioChannels !== null) {
     for (const fallback of [bitrate, 96_000, FIXED_AUDIO_BITRATE]) {
       candidates.push({ numberOfChannels: sourceChannels, bitrate: fallback });
+    }
+  } else {
+    for (const fallback of AAC_BITRATE_STEPS) {
+      if (fallback < bitrate) candidates.push({ numberOfChannels: channels, bitrate: fallback });
     }
   }
   return candidates.filter(
@@ -208,9 +254,16 @@ export interface PresetDefinition {
 export const PRESETS: Record<ExportPresetId, PresetDefinition> = {
   balanced: { id: "balanced", canvas: null, framings: [], defaultFraming: null, padding: "black" },
   light: { id: "light", canvas: null, framings: [], defaultFraming: null, padding: "black" },
-  youtube: {
-    id: "youtube",
-    canvas: { width: 1920, height: 1080 },
+  "youtube-1440": {
+    id: "youtube-1440",
+    canvas: { width: 2560, height: 1440 },
+    framings: [],
+    defaultFraming: "fit",
+    padding: "black",
+  },
+  "youtube-4k": {
+    id: "youtube-4k",
+    canvas: { width: 3840, height: 2160 },
     framings: [],
     defaultFraming: "fit",
     padding: "black",
@@ -233,10 +286,26 @@ export const PRESETS: Record<ExportPresetId, PresetDefinition> = {
 };
 
 /**
+ * The YouTube row the sheet preselects for a source: 1440p unless fitting the source into
+ * 2560×1440 would shrink it (wider than 2560 or taller than 1440 — a Retina or 4K capture),
+ * where 4K keeps every source pixel. A 1080p-class source is upscaled either way, and 1440p
+ * already gets YouTube's better encode at a third of 4K's size.
+ */
+export function defaultYoutubePreset(
+  source: Pick<ExportSourceInfo, "width" | "height">,
+): YoutubePresetId {
+  const canvas = PRESETS["youtube-1440"].canvas!;
+  return source.width > canvas.width || source.height > canvas.height
+    ? "youtube-4k"
+    : "youtube-1440";
+}
+
+/**
  * GitHub's video attachment limits (source above): 10 MB on Free, 100 MB on Pro / Team /
- * Enterprise. The sheet and the Ready card show both, side by side (owner decision
- * 2026-10-13); the banner and the Recording saved card go by the paid limit, since teams are
- * assumed to be on one. None of them blocks an export or lowers the quality to fit — the
+ * Enterprise. The sheet, Prepare's GitHub destination and the Ready card show both, side by
+ * side (owner decision 2026-10-13); the heavy-to-send banner goes by the paid limit, since
+ * teams are assumed to be on one. Prepare's list says "under the 10 MB limit" only when the
+ * copy fits the free one. None of them blocks an export or lowers the quality to fit — the
  * tier IS the floor. (Free-plan sharing of bigger files will go through a Kaipu cloud link.)
  */
 export const GITHUB_FREE_LIMIT_BYTES = 10 * MB;
@@ -299,7 +368,10 @@ export function even(n: number): number {
   return Math.max(2, Math.floor(n) & ~1);
 }
 
-/** Video bitrate for a fixed canvas: YouTube's 1080p rule, scaled by pixel count. */
+/**
+ * Video bitrate for Vertical and Square: YouTube's 1080p rule, scaled by pixel count. (The
+ * YouTube canvases take their own row of the upload table, `youtubeVideoBitrate`.)
+ */
 export function fixedVideoBitrate(width: number, height: number, fps: number): number {
   const base = fps > 30 ? BITRATE_1080_HIGH_FPS : BITRATE_1080_LOW_FPS;
   return Math.round((base * (width * height)) / PIXELS_1080);
@@ -411,8 +483,12 @@ export function resolveExportTarget(
           ? options.framing
           : (preset.defaultFraming ?? "fit");
     const { width, height } = preset.canvas;
-    const videoBitrate = fixedVideoBitrate(width, height, source.fps);
-    const audioBitrate = source.hasAudio ? FIXED_AUDIO_BITRATE : 0;
+    const youtube = isYoutubePreset(presetId);
+    const videoBitrate = youtube
+      ? youtubeVideoBitrate(presetId, source.fps)
+      : fixedVideoBitrate(width, height, source.fps);
+    const targetAudioBitrate = youtube ? YOUTUBE_AUDIO_BITRATE : FIXED_AUDIO_BITRATE;
+    const audioBitrate = source.hasAudio ? targetAudioBitrate : 0;
     const packetCounts = packetCountsFor({
       durationSec: d,
       fps: source.fps,
@@ -429,9 +505,8 @@ export function resolveExportTarget(
       padding: preset.padding,
       videoBitrate,
       quantizer: null,
-      keyFrameInterval:
-        presetId === "youtube" ? YOUTUBE_KEY_FRAME_INTERVAL_SEC : KEY_FRAME_INTERVAL_SEC,
-      audioBitrate: FIXED_AUDIO_BITRATE,
+      keyFrameInterval: youtube ? YOUTUBE_KEY_FRAME_INTERVAL_SEC : KEY_FRAME_INTERVAL_SEC,
+      audioBitrate: targetAudioBitrate,
       audioChannels: null,
       maxFps: null,
       fastStart: "reserve",
