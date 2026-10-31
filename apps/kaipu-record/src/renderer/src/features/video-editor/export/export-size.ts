@@ -6,12 +6,6 @@
 import { type ExportPresetId, MB, PRESETS } from "./export-presets";
 
 /**
- * Above this, right after recording, the "Recording saved" card offers a light copy (owner
- * decision: a file over 10 MB is worth slimming before sending, whatever GitHub's limit).
- */
-export const SHARE_LIMIT_BYTES = 10 * MB;
-
-/**
  * Above this a file is heavy to send anywhere — chat apps included: amber size and the
  * "heavy to send" banner on its page.
  */

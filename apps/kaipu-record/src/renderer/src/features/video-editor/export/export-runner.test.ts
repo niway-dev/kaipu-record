@@ -11,6 +11,7 @@ import {
   __resetExportRunnerForTests,
   cancelVideoExport,
   dismissReadyExport,
+  exportTitle,
   getExportSnapshot,
   isVideoExportBusy,
   retryVideoExport,
@@ -164,7 +165,7 @@ describe("export runner (NIW2-218 background export)", () => {
   it("runs one export at a time", async () => {
     expect(await startVideoExport(args(), t)).toBe(true);
     expect(isVideoExportBusy()).toBe(true);
-    expect(await startVideoExport(args({ presetId: "youtube" }), t)).toBe(false);
+    expect(await startVideoExport(args({ presetId: "youtube-1440" }), t)).toBe(false);
     expect(workers).toHaveLength(1);
     expect(getExportSnapshot().job?.presetId).toBe("light");
   });
@@ -207,7 +208,7 @@ describe("export runner (NIW2-218 background export)", () => {
     finish(workers[0]);
     await waitFor(() => expect(getExportSnapshot().ready).not.toBeNull());
 
-    await startVideoExport(args({ presetId: "youtube" }), t);
+    await startVideoExport(args({ presetId: "youtube-1440" }), t);
     expect(getExportSnapshot().ready).toBeNull();
     finish(workers[1]);
     await waitFor(() => expect(getExportSnapshot().ready).not.toBeNull());
@@ -308,5 +309,13 @@ describe("export runner (NIW2-218 background export)", () => {
       expect(sent().webcam).toBeNull();
       expect(getExportSnapshot().status).toBe("exporting");
     });
+  });
+});
+
+describe("exportTitle", () => {
+  it("titles both YouTube canvases \"(YouTube)\": the resolution is the file's, not the destination's", () => {
+    expect(exportTitle(t, "youtube-1440", "Demo")).toBe("Demo (presetTitleYoutube)");
+    expect(exportTitle(t, "youtube-4k", "Demo")).toBe("Demo (presetTitleYoutube)");
+    expect(exportTitle(t, "vertical", "Demo")).toBe("Demo (presetTitleVertical)");
   });
 });

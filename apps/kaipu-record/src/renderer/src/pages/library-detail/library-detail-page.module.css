@@ -230,3 +230,46 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* NIW2-578: quick chips that open Prepare on a destination. */
+.quick {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: calc(-1 * var(--space-sm));
+}
+
+.quickLabel {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.quickChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 11px 0 5px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+
+.quickChip:hover {
+  border-color: var(--accent-primary-ring);
+}
+
+.quickChip:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
