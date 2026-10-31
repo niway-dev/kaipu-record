@@ -7,11 +7,14 @@
  * camera box): `webcamAt` picks the layout in force (null inside a hidden segment),
  * `webcamRect` places it in the output frame with the camera path's scale for "shrink
  * during zoom", and `webcam-sync` decides visibility (the file's own first and last frame)
- * and whether the element drifted past 80 ms and needs a seek. Play/pause mirror the main
- * element.
+ * and whether the element drifted past 80 ms and needs a seek. Play/pause/rate mirror the
+ * main element.
  *
  * Dragging the bubble reports normalized centres already clamped inside the frame, with
  * the begin/move/end contract the scene history needs for one undo step per drag.
+ *
+ * `WebcamPlaybackLayer` is the same drawing without the editing: the Library's original
+ * player puts the face where it was recorded with it.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
@@ -47,66 +50,59 @@ function safePause(video: HTMLVideoElement): void {
   }
 }
 
-export function WebcamLayer({
+/** What both layers draw from: the main video's clock and the webcam's layout over time. */
+interface WebcamSyncInput {
+  /** The MAIN video: its frame clock drives the layer and its play/pause/rate the webcam's. */
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  /** Webcam time 0 − screen time 0 (ADR 0032): webcam time = t − startOffsetMs / 1000. */
+  startOffsetMs: number;
+  webcam: WebcamScene;
+  /** The camera path, for "shrink during zoom"; null where nothing zooms (the Library). */
+  path: CameraPath | null;
+  /** False when the preview shows the unzoomed frame (zoom-edit view, privacy editing). */
+  cameraEnabled: boolean;
+  /** The output frame the layout is relative to; in a player, the decoded source size. */
+  frame: FrameSize;
+  /** Hold-to-see-original and slides: nothing of the webcam shows. */
+  hidden: boolean;
+}
+
+/**
+ * Places the bubble and keeps the webcam element in step with the main one, per frame and
+ * without React re-renders. Shared by the editor's layer and the Library's read-only one, so
+ * the original player draws the face exactly where the editor's first preview does.
+ */
+function useWebcamSync({
   videoRef,
-  src,
   startOffsetMs,
   webcam,
   path,
   cameraEnabled,
   frame,
   hidden,
-  interactive,
-  selected,
-  onSelect,
-  onBegin,
-  onMove,
-  onEnd,
-}: {
-  /** The MAIN video: its frame clock drives the layer and its play/pause the webcam's. */
-  videoRef: React.RefObject<HTMLVideoElement | null>;
-  /** `kaipu-media://webcam/<id>`. */
-  src: string;
-  /** Webcam time 0 − screen time 0 (ADR 0032): webcam time = t − startOffsetMs / 1000. */
-  startOffsetMs: number;
-  webcam: WebcamScene;
-  path: CameraPath;
-  /** False when the preview shows the unzoomed frame (zoom-edit view, privacy editing). */
-  cameraEnabled: boolean;
-  /** The output frame the layout is relative to; in the preview, the decoded source size. */
-  frame: FrameSize;
-  /** Hold-to-see-original and slides: nothing of the webcam shows. */
-  hidden: boolean;
-  /** False while a drawing tool is armed, so a stroke can start over the bubble. */
-  interactive: boolean;
-  selected: boolean;
-  /** `sourceTime` is the frame the bubble was grabbed on, to pick the override in force. */
-  onSelect(sourceTime: number): void;
-  onBegin(): void;
-  /** `sourceTime` is the frame the drag happened over, for an override in force there. */
-  onMove(center: Point, sourceTime: number): void;
-  onEnd(): void;
-}): React.JSX.Element {
-  const t = useTranslations("videoEditor");
+}: WebcamSyncInput) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const clipRef = useRef<HTMLDivElement | null>(null);
   const camRef = useRef<HTMLVideoElement | null>(null);
   const lastTime = useRef(0);
-  // Where the bubble is drawn right now: the drag starts from it.
+  // Where the bubble is drawn right now: the editor's drag starts from it.
   const drawn = useRef<{ center: Point; side: number } | null>(null);
-  const drag = useRef<{ x: number; y: number; from: Point; w: number; h: number } | null>(null);
-  const [dragging, setDragging] = useState(false);
 
   const apply = (t: number): void => {
     lastTime.current = t;
     const box = boxRef.current;
     const cam = camRef.current;
     if (!box || !cam) return;
+    const main = videoRef.current;
+    // A faster or slower main video would otherwise drift past the resync threshold on
+    // every frame and turn the face into a series of seeks.
+    if (main && cam.playbackRate !== main.playbackRate) cam.playbackRate = main.playbackRate;
     const layout = hidden ? null : webcamAt({ webcam }, t);
     const webcamTime = webcamTimeFor(t, startOffsetMs);
+    const scale = cameraEnabled && path ? cameraAt(path, t).scale : 1;
     const rect =
       layout && webcamHasFrameAt(webcamTime, cam.duration)
-        ? webcamRect(layout, frame, cameraEnabled ? cameraAt(path, t).scale : 1)
+        ? webcamRect(layout, frame, scale)
         : null;
     if (!layout || !rect) {
       box.style.display = "none";
@@ -136,7 +132,6 @@ export function WebcamLayer({
       const seekTo = webcamResyncTarget(cam.currentTime, webcamTime, cam.duration);
       if (seekTo !== null) cam.currentTime = seekTo;
     }
-    const main = videoRef.current;
     if (main && !main.paused && cam.paused) safePlay(cam);
     if (main?.paused && !cam.paused) safePause(cam);
   };
@@ -147,8 +142,8 @@ export function WebcamLayer({
   );
   useVideoFrameClock(videoRef, apply, trigger);
 
-  // Play and pause land between frames (a paused element presents no frame), so mirror
-  // them as they happen. A play outside the file is undone by the next apply().
+  // Play, pause and a rate change land between frames (a paused element presents no frame),
+  // so mirror them as they happen. A play outside the file is undone by the next apply().
   const applyRef = useRef(apply);
   applyRef.current = apply;
   useEffect(() => {
@@ -157,11 +152,113 @@ export function WebcamLayer({
     const sync = (): void => applyRef.current(main.currentTime);
     main.addEventListener("play", sync);
     main.addEventListener("pause", sync);
+    main.addEventListener("ratechange", sync);
     return () => {
       main.removeEventListener("play", sync);
       main.removeEventListener("pause", sync);
+      main.removeEventListener("ratechange", sync);
     };
   }, [videoRef]);
+
+  const resync = (): void => apply(videoRef.current?.currentTime ?? lastTime.current);
+  return { boxRef, clipRef, camRef, lastTime, drawn, resync };
+}
+
+/** The webcam file inside the bubble's shape: the part both layers render the same way. */
+function WebcamMedia({
+  sync,
+  src,
+}: {
+  sync: ReturnType<typeof useWebcamSync>;
+  src: string;
+}): React.JSX.Element {
+  return (
+    <div ref={sync.clipRef} className={styles.clip}>
+      <video
+        ref={sync.camRef}
+        className={styles.video}
+        src={src}
+        muted
+        playsInline
+        preload="auto"
+        data-testid="webcam-video"
+        onLoadedMetadata={sync.resync}
+        onSeeked={sync.resync}
+      />
+    </div>
+  );
+}
+
+/**
+ * The face over a player that only plays (the Library's original): the same placement,
+ * gaps and sync as the editor's layer, with nothing to select or drag. Pointers pass
+ * through to the player's controls.
+ */
+export function WebcamPlaybackLayer({
+  src,
+  ...input
+}: Omit<WebcamSyncInput, "path" | "cameraEnabled" | "hidden"> & {
+  /** `kaipu-media://webcam/<id>`. */
+  src: string;
+}): React.JSX.Element {
+  const sync = useWebcamSync({ ...input, path: null, cameraEnabled: false, hidden: false });
+  return (
+    <div className={styles.slot} data-testid="webcam-slot" aria-hidden>
+      <div
+        ref={sync.boxRef}
+        className={styles.bubble}
+        style={{ display: "none" }}
+        data-testid="webcam-layer"
+        data-interactive="false"
+      >
+        <WebcamMedia sync={sync} src={src} />
+      </div>
+    </div>
+  );
+}
+
+export function WebcamLayer({
+  videoRef,
+  src,
+  startOffsetMs,
+  webcam,
+  path,
+  cameraEnabled,
+  frame,
+  hidden,
+  interactive,
+  selected,
+  onSelect,
+  onBegin,
+  onMove,
+  onEnd,
+}: Omit<WebcamSyncInput, "path"> & {
+  /** `kaipu-media://webcam/<id>`. */
+  src: string;
+  path: CameraPath;
+  /** False while a drawing tool is armed, so a stroke can start over the bubble. */
+  interactive: boolean;
+  selected: boolean;
+  /** `sourceTime` is the frame the bubble was grabbed on, to pick the override in force. */
+  onSelect(sourceTime: number): void;
+  onBegin(): void;
+  /** `sourceTime` is the frame the drag happened over, for an override in force there. */
+  onMove(center: Point, sourceTime: number): void;
+  onEnd(): void;
+}): React.JSX.Element {
+  const t = useTranslations("videoEditor");
+  const sync = useWebcamSync({
+    videoRef,
+    startOffsetMs,
+    webcam,
+    path,
+    cameraEnabled,
+    frame,
+    hidden,
+  });
+  const { boxRef, lastTime, drawn } = sync;
+  const drag = useRef<{ x: number; y: number; from: Point; w: number; h: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   // Same abort contract as the camera box: a drag can end without a pointerup.
   const abort = (): void => {
@@ -234,19 +331,7 @@ export function WebcamLayer({
         onPointerCancel={abort}
         onLostPointerCapture={abort}
       >
-        <div ref={clipRef} className={styles.clip}>
-          <video
-            ref={camRef}
-            className={styles.video}
-            src={src}
-            muted
-            playsInline
-            preload="auto"
-            data-testid="webcam-video"
-            onLoadedMetadata={() => apply(videoRef.current?.currentTime ?? lastTime.current)}
-            onSeeked={() => apply(videoRef.current?.currentTime ?? lastTime.current)}
-          />
-        </div>
+        <WebcamMedia sync={sync} src={src} />
       </div>
     </div>
   );
