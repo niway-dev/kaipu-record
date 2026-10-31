@@ -75,6 +75,8 @@ function removeLocalCopyBlockedKey(
   switch (reason) {
     case "edit-project":
       return "removeLocalCopyBlockedEdit";
+    case "webcam-track":
+      return "removeLocalCopyBlockedWebcam";
     case "different-bytes":
       return "removeLocalCopyBlockedBytes";
     case "no-cloud-copy":
@@ -154,7 +156,7 @@ export function LibraryDetailPage(): React.JSX.Element {
     navigate("/library");
   };
 
-  if (isLoading || recovering) {
+  if ((isLoading && !video) || recovering) {
     return <div className={styles.centered}>{t("loading")}</div>;
   }
 
@@ -257,7 +259,7 @@ export function LibraryDetailPage(): React.JSX.Element {
           <RecordingTitle
             title={video.title}
             onRename={(title) => {
-              if (localId) void rename(localId, title);
+              if (localId) void rename(localId, video.assetId, title);
             }}
           />
         </div>
@@ -418,7 +420,12 @@ export function LibraryDetailPage(): React.JSX.Element {
       ) : (
         localId && (
           <div className={styles.player}>
-            <RecordingPlayer id={localId} poster={video.thumbnailUrl} />
+            <RecordingPlayer
+              id={localId}
+              poster={video.thumbnailUrl}
+              webcam={video.webcam}
+              durationSeconds={video.durationSeconds}
+            />
             {master && (
               <span className={styles.masterTag}>
                 <MasterTag />

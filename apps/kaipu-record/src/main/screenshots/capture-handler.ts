@@ -6,6 +6,7 @@ import {
   type CaptureMode,
   type CaptureResult,
   type CaptureToastPayload,
+  type CaptureWorkspace,
   type RecordingRatio,
   type SavedScreenshotRef,
 } from "@shared/types/screenshot-capture";
@@ -60,8 +61,17 @@ interface CaptureHandlerDeps {
   rememberMode(mode: CaptureMode): void;
   /** The current copy preference, read per capture. */
   settings(): { copy: ScreenshotCopyMode };
-  /** The vault write the `screenshot:save` handler uses (`manual: false`); resolves the new item. */
-  saveToVault(png: Buffer, title: string): Promise<SavedScreenshotRef>;
+  /**
+   * The vault write the `screenshot:save` handler uses (`manual: false`); resolves the new
+   * item. `workspaceId` is the workspace the capture started in: the write is refused if
+   * that is no longer the active one, or if its folder is not connected.
+   */
+  saveToVault(png: Buffer, title: string, workspaceId?: string): Promise<SavedScreenshotRef>;
+  /**
+   * The active workspace, read once when the capture starts (ADR 0032, decision 9): the
+   * retained bytes, the toast and its Save carry it. Optional for handlers built without it.
+   */
+  workspace?(): CaptureWorkspace;
   /** `clipboard.writeImage` of the PNG. */
   copyToClipboard(png: Buffer): void;
   /** Data URL of the PNG at most 160 px wide, for the toast. */
@@ -143,6 +153,7 @@ export function createCaptureHandler(
     capturing = true;
     // A new capture frees the previous quiet capture's bytes.
     clearLastQuietCapture();
+    const workspace = readWorkspace(deps);
     let result: ProviderResult = { kind: "cancelled" };
     let answer: CaptureResult = { kind: "cancelled" };
     let failed = false;
@@ -156,7 +167,7 @@ export function createCaptureHandler(
         // Before the policy: a quiet save that fails and falls back to the editor still
         // remembers the mode the user captured in.
         remember(deps, result.mode);
-        answer = await finish(deps, result);
+        answer = await finish(deps, result, workspace);
       } else if (result.kind === "record") {
         // A recording target, not a screenshot: no save, no mode memory, no analytics here.
         const { displayId, rect, start, ratio } = result;
@@ -195,6 +206,15 @@ export function createCaptureHandler(
   };
 }
 
+function readWorkspace(deps: CaptureHandlerDeps): CaptureWorkspace | null {
+  try {
+    return deps.workspace?.() ?? null;
+  } catch (error) {
+    console.error("screenshot capture: active workspace unknown", error);
+    return null;
+  }
+}
+
 /** Remembering the mode is a convenience: a throw never blocks the shot from reaching the user. */
 function remember(deps: CaptureHandlerDeps, mode: CaptureMode): void {
   try {
@@ -210,7 +230,11 @@ type Captured = Extract<ProviderResult, { kind: "captured" }>;
  * Saves a captured shot, applies the after-capture policy and builds the renderer's
  * answer. Every capture lands in the vault; only a failed save hands the bytes over.
  */
-async function finish(deps: CaptureHandlerDeps, shot: Captured): Promise<CaptureResult> {
+async function finish(
+  deps: CaptureHandlerDeps,
+  shot: Captured,
+  workspace: CaptureWorkspace | null,
+): Promise<CaptureResult> {
   const { png } = shot;
   const { width, height } = deps.measure(png);
   const answer = (
@@ -245,7 +269,7 @@ async function finish(deps: CaptureHandlerDeps, shot: Captured): Promise<Capture
 
   let saved: SavedScreenshotRef | null = null;
   try {
-    saved = await deps.saveToVault(png, screenshotTitle());
+    saved = await deps.saveToVault(png, screenshotTitle(), workspace?.id);
   } catch (error) {
     console.error("screenshot save failed", error);
   }
@@ -267,7 +291,15 @@ async function finish(deps: CaptureHandlerDeps, shot: Captured): Promise<Capture
   if (!saved && !copied) return toEditor();
 
   // Copy-only (the save failed): Annotate has no vault item to open, so main keeps the bytes.
-  if (!saved) keepLastQuietCapture({ png, width, height, mode: shot.mode });
+  if (!saved) {
+    keepLastQuietCapture({
+      png,
+      width,
+      height,
+      mode: shot.mode,
+      workspaceId: workspace?.id ?? null,
+    });
+  }
   try {
     deps.onQuietCapture?.({
       thumbnail: deps.thumbnail(png),
@@ -276,6 +308,7 @@ async function finish(deps: CaptureHandlerDeps, shot: Captured): Promise<Capture
       mode: shot.mode,
       saved,
       copied,
+      workspace,
     });
   } catch (error) {
     // A broken toast must never turn a finished capture into an error.

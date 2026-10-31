@@ -1585,8 +1585,9 @@ describe("CaptureOverlay — opened to record (ADR 0030)", () => {
     await screen.findByTestId("capture-frame");
     expect(screen.queryByTestId("selection-toolbar")).toBeNull();
     expect(screen.queryByRole("button", { name: /Use selection/ })).toBeNull();
-    expect(screen.getByTestId("start-pill")).toBeEnabled();
-    expect(screen.getByTestId("record-widget")).toBeInTheDocument();
+    // Start sits in the widget, not under the box: a full-screen box would put it on the hint.
+    const widget = screen.getByTestId("record-widget");
+    expect(within(widget).getByRole("button", { name: "Start recording" })).toBeEnabled();
     expect(screen.getByTestId("ratio-bar")).toBeInTheDocument();
 
     press("r");
@@ -1609,7 +1610,7 @@ describe("CaptureOverlay — opened to record (ADR 0030)", () => {
       />,
     );
     await screen.findByTestId("capture-frame");
-    expect(screen.getByTestId("start-pill")).toBeDisabled();
+    expect(screen.getByTestId("start-recording")).toBeDisabled();
 
     press("Enter");
     press("r");
@@ -1742,7 +1743,7 @@ describe("CaptureOverlay — record chrome (design Kaipu Record Modes)", () => {
     expect(box.width).toBe(box.height);
     expect(box.x + box.width / 2).toBe(420);
 
-    fireEvent.click(screen.getByTestId("start-pill"));
+    fireEvent.click(screen.getByTestId("start-recording"));
     await waitFor(() =>
       expect(answer).toHaveBeenCalledExactlyOnceWith(
         expect.objectContaining({ kind: "rect", action: "record", rect: box }),
@@ -1793,7 +1794,7 @@ describe("CaptureOverlay — record chrome (design Kaipu Record Modes)", () => {
     expect(Math.abs(locked.width / locked.height - 16 / 9)).toBeLessThan(0.01);
   });
 
-  it("the widget offers the modes, then Mic, System audio and Camera, then Cancel", async () => {
+  it("the widget offers the modes, then Mic, System audio and Camera, then Cancel and Start", async () => {
     const { api } = renderRecord();
     await screen.findByTestId("capture-frame");
     const widget = screen.getByTestId("record-widget");
@@ -1811,6 +1812,7 @@ describe("CaptureOverlay — record chrome (design Kaipu Record Modes)", () => {
       "System audio",
       "Camera",
       "Cancel",
+      "Start recording",
     ]);
     // Main's settings: the microphone is on, system audio is off.
     await waitFor(() =>
@@ -1959,7 +1961,7 @@ describe("CaptureOverlay — the Capture | Record switch", () => {
       />,
     );
     await screen.findByTestId("capture-frame");
-    expect(screen.getByTestId("start-pill")).toBeInTheDocument();
+    expect(screen.getByTestId("start-recording")).toBeInTheDocument();
 
     press("p");
     // Screenshot actions now: Capture (Enter) and Copy; the record chrome is gone.
@@ -1970,12 +1972,12 @@ describe("CaptureOverlay — the Capture | Record switch", () => {
       "aria-pressed",
       "true",
     );
-    expect(screen.queryByTestId("start-pill")).toBeNull();
+    expect(screen.queryByTestId("start-recording")).toBeNull();
     expect(frameGeometry()).toEqual(area);
     expect(setMode).not.toHaveBeenCalled();
 
     press("v");
-    expect(screen.getByTestId("start-pill")).toBeInTheDocument();
+    expect(screen.getByTestId("start-recording")).toBeInTheDocument();
     expect(frameGeometry()).toEqual(area);
 
     press("p");

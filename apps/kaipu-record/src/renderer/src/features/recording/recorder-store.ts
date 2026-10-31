@@ -1,4 +1,6 @@
 import type { LocalRecording, RecordingSettings } from "@shared/types";
+import { isMaintenanceError } from "@renderer/features/library/vault-errors";
+import { defaultCaptureName } from "@shared/default-capture-name";
 import { sanitizeAudioSettings, type AudioSettings } from "@shared/audio-settings";
 import {
   DEFAULT_RECORDING_COUNTDOWN_SECONDS,
@@ -21,14 +23,24 @@ import {
   prepareEngine,
   type EngineHandle,
   type LiveAudioControls,
+  type LiveWebcamControls,
   type PreparedEngine,
 } from "@renderer/features/recording/recorder-engine";
+import { WebcamGapLog } from "./webcam-gaps";
 import type { WatermarkConfig } from "@renderer/features/watermark/watermark";
 import { reportError } from "@renderer/features/analytics";
+import { showToast } from "@renderer/ui/toast-store";
 import { finalizeErrorKey } from "./finalize-error-message";
 import { buildRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
 import { runtimeT } from "@renderer/lib/runtime-i18n";
 import { beginRecordTiming, endRecordTiming, markRecordTiming } from "./record-timing";
+import {
+  WEBCAM_FPS,
+  webcamStartOffset,
+  type WebcamGap,
+  type WebcamRecordedLayout,
+  type WebcamTrackMeta,
+} from "@shared/webcam-track";
 
 export type RecorderStatus =
   | "idle"
@@ -54,6 +66,11 @@ export interface StartInput {
   videoBitrate?: number;
   /** Watermark to burn in, or `null` to encode the raw screen (decided by `useWatermark`). */
   watermark?: WatermarkConfig | null;
+  /**
+   * Record the webcam into its own file (ADR 0037): the camera, the lines to ask for and the
+   * bubble as it looks now (stored on the sidecar). Absent or null with the camera off.
+   */
+  webcam?: { deviceId: string | null; lines: number; bubble: WebcamRecordedLayout } | null;
 }
 
 export interface RecorderSnapshot {
@@ -109,6 +126,14 @@ let cursorTrack: CursorTrackSession | null = null;
 let sessionId: string | null = null;
 /** How the active take is captured; sent with finalize so the library can label it. */
 let capture: RecordingCapture | null = null;
+/** The bubble as the active take started with it, for its webcam file's sidecar entry. */
+let webcamBubble: WebcamRecordedLayout | null = null;
+/**
+ * The active take asked for the webcam and its camera did not open: the face is in the screen
+ * recording instead, which the user is told once the take is saved (the app is hidden until
+ * then, so a toast during the take would expire unseen).
+ */
+let webcamUnavailable = false;
 let clock: ElapsedState | null = null;
 /** Video-time clock: zero = the MP4's first media sample, renderer `performance.now()`, pauses removed. */
 let videoClock: ElapsedState | null = null;
@@ -129,6 +154,8 @@ interface PendingStart {
   /** What it was acquired with: a take whose input changed during the countdown re-acquires. */
   input: StartInput;
   created: Promise<unknown>;
+  /** The webcam's writer session, with the camera on: true once main created it. */
+  webcamCreated: Promise<boolean>;
   engine: Promise<PreparedEngine> | null;
   /** Session file, devices and cursor track, all acquired; nothing is encoded yet. */
   acquired: Promise<[CursorTrackSession, PreparedEngine]>;
@@ -141,12 +168,19 @@ interface PendingStart {
   live: LiveSettingsForwarder | null;
   /** The engine failed before the take was set up; the start fails with it once acquired. */
   failure?: unknown;
+  /**
+   * The take asked for the webcam and got none: its camera did not open, or main could not
+   * create its session (not the old-Windows legacy path, which is by design).
+   */
+  webcamUnavailable?: boolean;
 }
 let pendingStart: PendingStart | null = null;
 let sessionCounter = 0;
 let lastResolveInput: (() => StartInput) | null = null;
 /** Unsubscribes the live-settings forwarder of the active take. */
 let stopLiveSettings: (() => void) | null = null;
+/** The active take's live-settings forwarder: its camera-off gaps go into the sidecar. */
+let liveSettings: LiveSettingsForwarder | null = null;
 /** Stops following whether any window listens to the mic levels, for the active take. */
 let stopMicLevelListening: (() => void) | null = null;
 /** Whether any window subscribed to the mic levels; only then are they read and sent. */
@@ -331,7 +365,9 @@ function startTake(resolveInput: () => StartInput): void {
     if (wasIdle) sendPhaseReport({ phase: "idle" });
     return;
   }
-  if (early && needsNewAcquisition(early.input, input)) {
+  // A webcam the user turned off during the countdown is closed for good on the prepared
+  // engine: turned on again, the input matches but that engine would record no webcam.
+  if (early && (needsNewAcquisition(early.input, input) || early.live?.webcamEnded())) {
     markRecordTiming("input changed during countdown, acquiring again");
     pendingStart = null;
     discardStart(early);
@@ -366,6 +402,8 @@ function needsNewAcquisition(early: StartInput, input: StartInput): boolean {
       start.frameRate ?? null,
       start.videoBitrate ?? null,
       start.watermark ?? null,
+      // The webcam opens with the take: turned on or off during the countdown, it acquires again.
+      start.webcam ? [start.webcam.deviceId, start.webcam.lines] : null,
     ]);
   if (fixed(early) !== fixed(input)) return true;
   return (
@@ -431,10 +469,36 @@ export function stopOrCancelRecording(): void {
 function acquireStart(input: StartInput): PendingStart {
   // Unique across renderer restarts: a recreated renderer must not reuse a dead take's id.
   const id = `session-${Date.now().toString(36)}-${++sessionCounter}`;
-  const created = window.electronAPI.recordingCreate(id);
+  const created = window.electronAPI.recordingCreate(id, "recording");
+  // The webcam's own session (ADR 0037), only with the camera on and where this OS can leave
+  // the bubble out of the capture. Elsewhere (Windows before 10 2004, the legacy path) the
+  // face is recorded in the screen by design and the user is told nothing. A session that
+  // cannot be created leaves the take without a webcam, never without the take. Created after
+  // the screen's, as main expects: the capability answer comes back after that request left.
+  const webcamCreated = input.webcam
+    ? window.electronAPI
+        .recordingWebcamTrackSupported()
+        // Unanswered: treat it as unsupported, the safe side (no webcam file, the bubble stays
+        // in the capture), so an old Windows never gets a notice it should not.
+        .catch(() => false)
+        .then((supported) =>
+          supported
+            ? window.electronAPI.recordingCreate(id, "webcam").then(
+                () => true,
+                (error: unknown) => {
+                  console.warn("webcam session could not be created — recording without it", error);
+                  // Main already put the bubble back in the capture: tell the user.
+                  start.webcamUnavailable = true;
+                  return false;
+                },
+              )
+            : false,
+        )
+    : Promise.resolve(false);
   // Reads `start` only after its first await, once `start` exists.
   const acquire = async (): Promise<[CursorTrackSession, PreparedEngine]> => {
     await created;
+    const withWebcam = await webcamCreated;
     // Cancelled while the take's file was being created: the engine must not open the
     // screen or the mic for a take that is already gone (`discardStart` aborts the file).
     if (pendingStart !== start) throw new Error("start cancelled before it was created");
@@ -449,9 +513,29 @@ function acquireStart(input: StartInput): PendingStart {
       frameRate: input.frameRate,
       videoBitrate: input.videoBitrate,
       watermark: input.watermark,
+      webcam:
+        withWebcam && input.webcam
+          ? { deviceId: input.webcam.deviceId, lines: input.webcam.lines }
+          : null,
       // Chunks only flow once the take has begun; a discarded take's go nowhere.
       onChunk: (data, position) => {
         if (sessionId === id) window.electronAPI.recordingWrite(id, data, position);
+      },
+      onWebcamChunk: (data, position) => {
+        if (sessionId === id) window.electronAPI.recordingWrite(id, data, position, "webcam");
+      },
+      // The camera did not open: main puts the bubble back in the screen capture, and the
+      // engine waits for it before it requests the screen (ADR 0037).
+      onWebcamUnavailable: async () => {
+        start.webcamUnavailable = true;
+        await window.electronAPI.recordingWebcamEnded(id);
+      },
+      // The webcam file ended mid-take (or before it began): main puts the bubble back in
+      // the screen capture, so a camera left on or turned on again is recorded there.
+      onWebcamEnded: () => {
+        void window.electronAPI.recordingWebcamEnded(id).catch((error: unknown) => {
+          console.warn("could not report the webcam's end to main", error);
+        });
       },
       // A failure mid-recording (encoder error or the screen capture ending)
       // runs the same robust stop — finalize-or-abort + always restore the
@@ -503,6 +587,7 @@ function acquireStart(input: StartInput): PendingStart {
     id,
     input,
     created,
+    webcamCreated,
     engine: null,
     acquired: acquire(),
     audio,
@@ -562,8 +647,11 @@ async function beginTake(
       area: input.area ?? null,
       output: handle.outputSize,
     });
+    webcamBubble = input.webcam?.bubble ?? null;
+    webcamUnavailable = start.webcamUnavailable === true;
     // The forwarder attached when the take was acquired keeps running for the take.
     stopLiveSettings = start.live?.stop ?? null;
+    liveSettings = start.live;
     stopMicLevelListening = followMicLevelListeners();
     const activeTrack = cursorTrack;
     void handle.firstMediaTimestamp.then(({ rendererMs, quality }) => {
@@ -588,7 +676,9 @@ async function beginTake(
     pendingStart = null;
     // A timed-out start can still resolve later: release what it acquires.
     discardStart(start);
-    reportError(runtimeT()("record.errorStart"), error, {
+    // Refused while "Check and fix files" runs (NIW2-561): nothing was recorded.
+    const key = isMaintenanceError(error) ? "record.errorStartMaintenance" : "record.errorStart";
+    reportError(runtimeT()(key), error, {
       context: { sourceId: input.sourceId, phase: "start" },
       retry: () => {
         if (lastResolveInput) requestStartRecording(lastResolveInput);
@@ -668,8 +758,9 @@ function discardStart(start: PendingStart): void {
   start.audio.stop();
   start.live?.stop();
   void start.engine?.then((prepared) => prepared.release()).catch(() => undefined);
-  void start.created
-    .catch(() => undefined)
+  // After both sessions exist: an abort that reached main before the webcam's create would
+  // leave that file open with nobody to delete it.
+  void Promise.all([start.created.catch(() => undefined), start.webcamCreated])
     .then(() => window.electronAPI.recordingAbort(start.id))
     .catch(() => undefined);
 }
@@ -703,7 +794,22 @@ interface LiveSettingsForwarder {
    * the forwarder are at least as new as it.
    */
   sync(input: StartInput): void;
+  /** Whether it ended the engine's webcam (camera turned off); the engine cannot reopen it. */
+  webcamEnded(): boolean;
+  /** The take's camera-off periods (screen ms), one still open closed at `endMs`. */
+  webcamGaps(endMs: number): WebcamGap[];
+  /** The camera was turned on again mid-take and could not be opened: the face went to the screen. */
+  webcamReopenFailed(): boolean;
   stop(): void;
+}
+
+/**
+ * Now on the take's screen timeline (ms from its first media sample, pauses removed): where a
+ * camera-off gap starts or ends. The wall clock until the first sample's time is known.
+ */
+function takeTimeMs(): number {
+  if (videoClock) return elapsedMs(videoClock, performance.now());
+  return clock ? elapsedMs(clock, Date.now()) : 0;
 }
 
 /**
@@ -719,11 +825,25 @@ interface LiveSettingsForwarder {
  * Returns the unsubscribe.
  */
 function forwardLiveSettings(
-  handle: LiveAudioControls,
+  handle: LiveAudioControls & LiveWebcamControls & Pick<EngineHandle, "endWebcam">,
   input: StartInput,
   early: AudioSettingsTracker,
 ): LiveSettingsForwarder {
   let micOn = input.microphoneDeviceId !== null;
+  // Turning the camera off mid-take releases the camera and keeps the webcam file running on
+  // the take's clock (a gap, hidden by the editor); turning it on again feeds the same file
+  // (ADR 0037 § camera toggled mid-take). Where the engine cannot (the countdown, no relay),
+  // off ends the file there, as before: turned on again, the take records no second webcam
+  // file, the engine reports the end (`onWebcamEnded`) and main leaves the bubble in the
+  // screen capture, so the face is recorded there.
+  let webcamOn = Boolean(input.webcam);
+  let webcamEnded = false;
+  /** The camera is off mid-take and the webcam file goes on: turning it on resumes it. */
+  let webcamParked = false;
+  let webcamReopenFailed = false;
+  /** Bumped by each camera turned on mid-take: only the newest closes the gap. */
+  let webcamOnRequest = 0;
+  const gaps = new WebcamGapLog();
   let sysOn = input.systemAudio;
   let queue: Promise<void> = Promise.resolve();
   let active = true;
@@ -801,18 +921,55 @@ function forwardLiveSettings(
       }
     }
   };
-  const unsubscribe = window.electronAPI.onRecordingSettingsChanged((settings) =>
+  const unsubscribe = window.electronAPI.onRecordingSettingsChanged((settings) => {
     applyToggles(
       settings.isMicrophoneEnabled,
       settings.selectedMicrophone?.deviceId ?? null,
       settings.isSystemAudioEnabled,
-    ),
-  );
+    );
+    if (webcamOn && !settings.isCameraEnabled) {
+      webcamOn = false;
+      // A webcam file already ended (here or by the engine) has nothing left to end or keep.
+      if (webcamEnded) return;
+      if (handle.turnWebcamOff()) {
+        webcamParked = true;
+        gaps.open(takeTimeMs());
+      } else {
+        webcamEnded = true;
+        handle.endWebcam();
+      }
+    } else if (!webcamOn && webcamParked && settings.isCameraEnabled) {
+      webcamOn = true;
+      webcamParked = false;
+      const request = ++webcamOnRequest;
+      // On the queue, after any earlier on. An off is not queued: it reaches the engine at
+      // once, and the engine drops a camera still opening when it is turned off again.
+      queue = queue.then(async () => {
+        const result = await handle.turnWebcamOn();
+        if (result === "ok") {
+          // Turned off again meanwhile (the engine answers "ok" for a camera it dropped), or
+          // turned on again after that, by an on still to come: the gap goes on, and only the
+          // newest on closes it, once its own camera's frames are back.
+          if (webcamOn && request === webcamOnRequest) gaps.close(takeTimeMs());
+          return;
+        }
+        // The file ended here (the engine reported it, main put the bubble back in the
+        // capture): the gap ends with it, and the user is told once the take is saved.
+        gaps.close(takeTimeMs());
+        webcamParked = false;
+        webcamEnded = true;
+        webcamReopenFailed = true;
+      });
+    }
+  });
   return {
     sync(next) {
       if (!active) return;
       applyToggles(next.microphoneDeviceId !== null, next.microphoneDeviceId, next.systemAudio);
     },
+    webcamEnded: () => webcamEnded,
+    webcamGaps: (endMs) => gaps.finish(endMs),
+    webcamReopenFailed: () => webcamReopenFailed,
     stop() {
       active = false;
       unsubscribe();
@@ -847,12 +1004,15 @@ async function stopRecording(): Promise<void> {
   const activeEngine = engine;
   const activeSessionId = sessionId;
   const activeCapture = capture;
+  const activeBubble = webcamBubble;
   // Guard re-entry: the user clicking Stop and an engine-failure can both fire.
   if (stopping || !activeEngine || !activeSessionId) return;
   stopping = true;
   beginRecordTiming("stop requested", true);
+  const activeLive = liveSettings;
   stopLiveSettings?.();
   stopLiveSettings = null;
+  liveSettings = null;
   stopMicLevelListening?.();
   stopMicLevelListening = null;
   update({ status: "finalizing", countdown: null });
@@ -863,6 +1023,9 @@ async function stopRecording(): Promise<void> {
   // which the cursor tracker's tail cut cannot absorb. Falls back to the wall clock when
   // t0 never resolved (cursor track off, or the first-media wait timed out).
   const durationMs = videoClock ? elapsedMs(videoClock, performance.now()) : wallMs;
+  // The camera-off periods; one still open (the camera off at the stop) ends with the take.
+  const webcamGaps = activeLive?.webcamGaps(durationMs) ?? [];
+  if (activeLive?.webcamReopenFailed()) webcamUnavailable = true;
   // Flip the bar to "Saving…" before the timer stops, so the finalize wait reads
   // as progress instead of a frozen widget.
   window.electronAPI.recordingReportTick({
@@ -873,8 +1036,11 @@ async function stopRecording(): Promise<void> {
   stopTicks();
 
   let recording: LocalRecording | null = null;
+  /** The take recorded a webcam file: the saved recording should carry it. */
+  const recordedWebcam = activeEngine.webcam !== null;
   try {
-    const title = `Recording — ${new Date().toLocaleString()}`;
+    // The vault names the file after this title (ADR 0035), so it is a valid file name.
+    const title = defaultCaptureName("recording");
     // Run the real finalize and a minimum dwell together so "Saving…" is visible
     // even when the clip is tiny and the write is instant.
     [recording] = await Promise.all([
@@ -883,12 +1049,14 @@ async function stopRecording(): Promise<void> {
         markRecordTiming("engine.stop resolved");
         // Settled by stop (or given up on): a poster frame still pending saves without one.
         const thumbnail = await Promise.race([activeEngine.thumbnail, Promise.resolve(null)]);
+        const webcam = await webcamFinalizeMeta(activeEngine, activeBubble, webcamGaps);
         const finalized = await window.electronAPI.recordingFinalize(activeSessionId, {
           title,
           durationSeconds,
           durationMs,
           thumbnail,
           capture: activeCapture,
+          webcam,
         });
         markRecordTiming("finalize resolved");
         return finalized;
@@ -909,14 +1077,48 @@ async function stopRecording(): Promise<void> {
   // shell's navigation) land before the window shows the previous page first.
   if (recording) for (const listener of completeListeners) listener(recording);
   window.electronAPI.recordingStop();
+  if (recording && webcamUnavailable)
+    showToast({ message: runtimeT()("record.webcamUnavailable") });
+  // The webcam file failed (its encoder, its finalize at stop, or main could not place it):
+  // the bubble was out of the capture while it recorded, so the face may be in no file.
+  // Nothing signals this during the take; the screen recording is kept, and the user told.
+  else if (recording && recordedWebcam && !recording.webcam)
+    showToast({ message: runtimeT()("record.webcamNotSaved") });
+  webcamUnavailable = false;
   engine = null;
   cursorTrack = null;
   sessionId = null;
   capture = null;
+  webcamBubble = null;
   clock = null;
   videoClock = null;
   stopping = false;
   update({ status: "idle", countdown: null });
+}
+
+/**
+ * The webcam entry finalize sends (ADR 0037): where the webcam file's time 0 sits against the
+ * screen's, both read from the same renderer clock. Null without a usable webcam file, which
+ * makes main discard its part. Both timestamps resolve within ~1 frame of the start (3 s at
+ * most, then "estimated"), so this never holds the save up past that; one the live wait gave
+ * up on is read again after the stop (`startTimesAfterStop`), and is exact if it filled late.
+ */
+async function webcamFinalizeMeta(
+  handle: EngineHandle,
+  bubble: WebcamRecordedLayout | null,
+  gaps: WebcamGap[] = [],
+): Promise<WebcamTrackMeta | null> {
+  const webcam = handle.webcam;
+  if (!webcam || !webcam.isUsable()) return null;
+  const starts = await webcam.startTimesAfterStop();
+  return {
+    ...webcamStartOffset(starts.screen, starts.webcam),
+    width: webcam.size.width,
+    height: webcam.size.height,
+    fps: WEBCAM_FPS,
+    ...(bubble ? { recordedLayout: bubble } : {}),
+    ...(gaps.length > 0 ? { gaps } : {}),
+  };
 }
 
 // The countdown length (Settings → Recording). Registered at import like the command listener

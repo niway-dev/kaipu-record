@@ -18,7 +18,7 @@ export interface ShadeDisplay {
  * the chosen region and shows the number. While an area records it keeps the dark fill
  * outside the area and adds a pink border just outside it and a "REC · border not recorded"
  * tag; a whole-display recording gets only a pink border around the display, no fill (and
- * none at all where content protection cannot exclude it, see `fullDisplayBorderAllowed`).
+ * none at all where content protection cannot exclude it, see `canExcludeWindowFromCapture`).
  *
  * Three properties carry the whole design and are pinned by `floating-window-policy.test.ts`:
  * - content-protected, so the shade itself is never in the video;

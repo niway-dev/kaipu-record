@@ -3,7 +3,7 @@
  * the numbers they read from Electron.
  */
 import { MIN_AREA_SIZE } from "@shared/capture-geometry";
-import type { RecordingArea } from "@shared/types/ipc";
+import type { RecordingArea, RecordingFinalizeMeta } from "@shared/types/ipc";
 import { isRecordingRatio } from "@shared/types/screenshot-capture";
 import {
   CAMERA_BUBBLE_AREA_MARGIN,
@@ -78,13 +78,59 @@ export function bubbleSizeOf(bounds: Rect): number {
   return bounds.width - 2 * BUBBLE_PAD;
 }
 
+/** Where the bubble sat in the recorded rectangle, and how big. */
+export interface BubblePlacement {
+  /** The bubble's centre, 0..1 from the rectangle's top-left corner. */
+  position: { x: number; y: number };
+  /** The bubble's side as a fraction of the rectangle's height. */
+  sizeFraction: number;
+}
+
 /**
- * Windows builds before 10 2004 (build 19041) have no `WDA_EXCLUDEFROMCAPTURE`: content
- * protection there paints the window black in captures instead of leaving it out. An area's
- * shade is outside the recorded crop, so it does not matter; a whole display's border is
- * inside the recorded pixels, so it is skipped there. Every other platform and build: allowed.
+ * The bubble's placement in `recorded` (both global DIP), from its window's bounds: the pad
+ * is symmetric, so the window's centre is the bubble's, and its side is the window's minus
+ * the pad. 4 decimals. `null` when the centre lies outside the rectangle (the bubble was on
+ * another display, so it is not in the video) or the rectangle is empty.
  */
-export function fullDisplayBorderAllowed(platform: string, osRelease: string): boolean {
+export function bubblePlacementInRect(windowBounds: Rect, recorded: Rect): BubblePlacement | null {
+  if (recorded.width <= 0 || recorded.height <= 0) return null;
+  const x = (windowBounds.x + windowBounds.width / 2 - recorded.x) / recorded.width;
+  const y = (windowBounds.y + windowBounds.height / 2 - recorded.y) / recorded.height;
+  if (!(x >= 0 && x <= 1 && y >= 0 && y <= 1)) return null;
+  const round = (value: number): number => Math.round(value * 10000) / 10000;
+  return {
+    position: { x: round(x), y: round(y) },
+    sizeFraction: round(Math.min(1, bubbleSizeOf(windowBounds) / recorded.height)),
+  };
+}
+
+/**
+ * The finalize meta with the bubble's placement set on its recorded layout, replacing
+ * whatever the renderer sent: main is the only one that knows where the bubble sat. Without
+ * a placement the fields are removed; without a recorded layout there is nothing to add them to.
+ */
+export function withRecordedBubble(
+  meta: RecordingFinalizeMeta,
+  placement: BubblePlacement | null,
+): RecordingFinalizeMeta {
+  const layout = meta.webcam?.recordedLayout;
+  if (!meta.webcam || !layout) return meta;
+  const { position: _position, sizeFraction: _sizeFraction, ...rest } = layout;
+  return {
+    ...meta,
+    webcam: { ...meta.webcam, recordedLayout: placement ? { ...rest, ...placement } : rest },
+  };
+}
+
+/**
+ * Whether this OS can leave a content-protected window out of a screen capture. Windows builds
+ * before 10 2004 (build 19041) have no `WDA_EXCLUDEFROMCAPTURE`: content protection there paints
+ * the window black in captures instead of leaving it out. So there, a whole display's border
+ * (inside the recorded pixels) is skipped, and the camera bubble stays in the capture with no
+ * webcam file (the legacy path); an area's shade is outside the recorded crop and does not
+ * matter. Every other platform and build: true.
+ */
+export function canExcludeWindowFromCapture(platform: string, osRelease: string): boolean {
   if (platform !== "win32") return true;
   const [major, , build] = osRelease.split(".").map(Number);
   if (!Number.isFinite(major) || !Number.isFinite(build)) return true;

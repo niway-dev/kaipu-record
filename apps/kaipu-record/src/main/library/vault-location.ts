@@ -1,5 +1,5 @@
 import { app } from "electron";
-import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { VaultDirectory } from "@shared/types";
@@ -16,11 +16,11 @@ function preferencesFile(): string {
 }
 
 /**
- * Parsed preferences, remembered per file path. Main is the only writer, so the
- * set/reset paths keep it exact and `vaultDirectory()` never touches disk after the
- * first call. Keyed by path so a different userData dir (tests) never sees another
- * dir's value. A hand edit of preferences.json while the app runs is picked up on
- * restart or merged into the next set/reset write.
+ * Parsed preferences, remembered per file path. Main is the only writer (the workspace
+ * registry, which calls `forgetCachedPreferences` after every write), so `vaultDirectory()`
+ * touches disk once per write. Keyed by path so a different userData dir (tests) never sees
+ * another dir's value. A file that does not parse reads as `{}` here, the default folder, as
+ * before workspaces; the registry refuses to write over it.
  */
 let cached: { file: string; preferences: StoredPreferences } | null = null;
 
@@ -38,17 +38,12 @@ function read(): StoredPreferences {
   return cached.preferences;
 }
 
-function write(preferences: StoredPreferences): void {
-  // Atomic write (temp + rename) so a crash mid-write can't truncate
-  // preferences.json and lose the user's custom vault folder. Errors propagate
-  // on purpose — a failed folder change should reject its IPC and surface to the
-  // user, not be swallowed.
-  const path = preferencesFile();
-  const tmp = `${path}.tmp`;
-  writeFileSync(tmp, JSON.stringify(preferences, null, 2));
-  renameSync(tmp, path);
-  // Only after the rename succeeded: a failed write leaves the cache on the old value.
-  cached = { file: path, preferences };
+/**
+ * Drop the cached file: the workspace registry just wrote it (`vaultDirectory` mirrors the
+ * active workspace's path, ADR 0032), so the next `vaultDirectory()` re-reads.
+ */
+export function forgetCachedPreferences(): void {
+  cached = null;
 }
 
 /** Platform default: Videos folder + "Kaipu Record". */
@@ -60,22 +55,14 @@ export function defaultVaultDirectory(): string {
   }
 }
 
-/** The configured recordings folder, flagged custom when the user picked one. */
+/**
+ * The active workspace's folder, flagged custom when it is not the default one. Read from
+ * `vaultDirectory`, which the registry keeps equal to the active path on every switch (the
+ * same key an older version reads).
+ */
 export function vaultDirectory(): VaultDirectory {
   const stored = read().vaultDirectory;
   return stored
     ? { path: stored, isCustom: true }
     : { path: defaultVaultDirectory(), isCustom: false };
-}
-
-export function setVaultDirectory(directory: string): void {
-  // Re-read from disk so a hand-edited preferences.json (any key) is merged
-  // into this write instead of being clobbered by a stale cache.
-  write({ ...readFromDisk(), vaultDirectory: directory });
-}
-
-export function resetVaultDirectory(): void {
-  const preferences = readFromDisk();
-  delete preferences.vaultDirectory;
-  write(preferences);
 }

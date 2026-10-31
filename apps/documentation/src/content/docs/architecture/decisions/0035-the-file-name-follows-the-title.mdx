@@ -1,0 +1,179 @@
+---
+title: "ADR 0035: The vault file name follows the title"
+description: A library item's local id is still its file name without extension, and renaming the item renames the file and every sidecar under a sanitized, collision-free stem reserved through one lock. The title stays in the sidecar; assetId stays the only durable identity. New captures are named for people, not for the writer.
+---
+
+# ADR 0035: The vault file name follows the title
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                  |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — implemented on branch `feature/niw2-560-renaming-a-library-item-renames-its-file-on-disk-with` ([NIW2-560 spec](/specs/2026-10-29-niw2-560-rename-renames-the-file/)); accepted once owner QA and the spec's manual Windows steps have run                  |
+| Date          | 2026-10-29                                                                                                                                                                                                                                                             |
+| Relates to    | [ADR 0020](./0020-tags-are-entities-with-stable-ids) (tags ride in the sidecar by id, so they move with it); [ADR 0003](./0003-export-never-replaces-the-original) (an export is its own item with its own name); NIW2-561 (reconciling files changed outside the app) |
+| Superseded by | —                                                                                                                                                                                                                                                                      |
+
+## Context
+
+The vault is a folder of media files with a hidden `.kaipu/` directory of sidecars; there is
+no database (hub: [filesystem-first monetization](https://github.com/csdev19/general-knowledge/blob/main/desktop/filesystem-first-monetization.md)).
+The first recorder commit made the **file name without extension the local id**: `list()` is a
+`readdir`, and every companion (`.kaipu/<id>.json`, `.jpg`, `.cursor.json`, `.edit.json`,
+`.edit.meta.json`, `.assets/`) is found by that stem. Renaming an item only wrote `title` into
+the sidecar; the file kept the writer's name, `recording-2026-10-29-13-51-00.mp4` or
+`screenshot-2026-10-29T13-51-00-800Z.png`. No ADR recorded that choice.
+
+The cost is now visible: users rename an item in the app, open the folder (Windows users in
+particular, who live in Explorer) and cannot find it. The folder is the product's promise —
+"your recordings are files you own" — and it does not show the names the user gave.
+
+What changed since that first commit is that nothing durable points at the local id any more.
+Sidecar v2 introduced `assetId`, a UUID minted once and never changed; routes
+(`/library/:assetId`, `/editor/video/:assetId`), the cloud catalog, tags (ADR 0020, `tagIds`
+inside the sidecar) and export provenance (`derivedFromAssetId`) all key on it. The local id is
+held only transiently: in `kaipu-media://` URLs of mounted components, in IPC arguments, and
+in a few main-process maps. Renaming the file is therefore a bounded change, and the spec
+inventories every holder.
+
+Two constraints shape the design. A title is free text (`Sprint demo: part 1/2?`, 500
+characters, any script) while a file name is not (Windows forbids `<>:"/\|?*`, reserved
+`CON`/`NUL`, trailing dots; macOS hides a leading dot; components are capped at 255 bytes).
+And `fs.rename` silently replaces an existing target on both POSIX and Windows, so "check that
+the name is free, then move" is a race against every other writer — two screenshots in the
+same second already share a stem today.
+
+## Decision
+
+1. **The local id remains the file stem, and a rename changes it.** `LibraryVault.renameItem({ id, assetId }, title)`
+   resolves the item by identity under the names lock (following it if it moved, never acting
+   on whatever item now holds a stale id, and refusing when two local files claim the
+   identity), saves the title, moves the media file and every companion to the new stem, and returns the
+   new `LocalRecording`. Callers must treat `id` as valid only until the next rename and never
+   persist it; `assetId` is the identity for anything that outlives a render.
+2. **The title is the source; the file name is a projection.** The title stays in the sidecar
+   exactly as typed. `fileStemFromTitle()` derives the stem: NFKC (so a file name never holds a
+   compatibility character such as `ſ` or fullwidth letters, which case-insensitive filesystems
+   alias to ASCII), forbidden characters and
+   control characters to spaces, dot runs collapsed (so `isUnsafeId`'s `..` guard holds),
+   leading dots and trailing dots/spaces trimmed, Windows reserved names prefixed with `Kaipu `,
+   capped at 100 code points and 180 UTF-8 bytes (room for the longest companion suffix and
+   for a ` (99)` tail under the 255-byte component and the Windows 260-character path limits).
+   A stem never owns another stem's files: one ending in `.edit`, `.cursor` or `.edit.meta`
+   (whose `.json` is another stem's edit session, cursor track or session metadata) has that
+   dot turned into a space, and the vault-owned name `tags` (`.kaipu/tags.json`) becomes
+   `Kaipu tags`; the vault also refuses any candidate whose paths overlap the source's.
+   An empty projection falls back to the default name.
+3. **Default names are for people.** New items are named `Kaipu Recording 2026-10-29 at 13.51.00`,
+   `Kaipu Screenshot …`, `Kaipu GIF …` (local time, dots in the time because colons are not
+   allowed on Windows); exports keep their derived title (`Sprint demo (YouTube)`). The title
+   and the stem are the same string at capture time, so the folder reads well before anyone
+   renames anything.
+4. **A stem is taken when its sidecar exists.** `LibraryVault.allocateId()` derives the stem,
+   resolves collisions with ` (2)`, ` (3)` … against media **and** companions (an orphan sidecar
+   may be a cloud-only item whose identity must not be merged), writes a stub sidecar, and does
+   all of it under one module-level names lock. Every writer — recording finalize, screenshot
+   save, GIF save, stranded recovery — and the rename itself go through that lock, which is
+   what makes "check, then move" safe.
+5. **The move is ordered so the title is never lost and no crash leaves a half item visible.**
+   Title into the old sidecar first; companions copied to the new stem; `fs.rename` of the
+   media as the single commit point; old companions deleted last. `list()` is driven by media
+   files, so any leftover is invisible; a leftover is identifiable as "sidecar without media
+   whose `assetId` a sidecar with media also holds", which NIW2-561 sweeps.
+6. **A file the OS will not release keeps its name, and the user is told.** Windows `EPERM`/
+   `EBUSY`/`EACCES` is retried three times (≈1.5 s), then the rename resolves with
+   `file: "kept-old-name"`; a running export (`exportActive`, reason `busy`) or the item being
+   open in the video editor (reason `editing`) short-circuits to the same outcome. The editor
+   acquires its item through main under the same names lock as renames and is answered the
+   item's current id, which it loads and writes under; with no answer (the item is gone, or
+   main failed) it loads nothing and says the item is no longer available — never the route's
+   id, which another item may have taken. It releases on unmount or when its window is destroyed, reloads or its renderer crashes,
+   and a request that waited for the lock is refused if its window closed or reloaded
+   meanwhile (per-window generation), so no hold outlives its page. The
+   title is saved either way; a non-blocking toast offers Retry. A rename never fails because
+   of the file.
+7. **`writeMeta` never creates a sidecar for an id with neither sidecar nor media.** A hash,
+   tag or backfill write that was queued behind a rename cannot resurrect the old stem. A
+   screenshot overwrite is checked and written under the names lock and names the identity it
+   expects (required), so it follows a renamed item instead of recreating the old file, and
+   never writes over another shot that took the old name.
+8. **A media URL carries the id percent-encoded.** Ids are titles now (`#`, `?`, `%` are
+   legal), so every `kaipu-media://` URL is built by one shared helper that encodes the id,
+   and the protocol handler decodes it once, answering 400 to a malformed escape.
+9. **Name comparisons use a filesystem fold.** Reservation and overlap checks compare names
+   through `fsFold` (NFKC, then lower → upper → lower case, so `ß` and `ẞ` meet), stricter than APFS or NTFS on purpose:
+   a false "same name" costs a ` (2)`, a missed one merges two items.
+
+## Alternatives rejected
+
+- **Decouple the id from the file name entirely: id = `assetId`, with an index from `assetId`
+  to the current path.** It would make renames trivial and survive external renames too. But
+  it needs an index that is rebuilt on every `readdir` (or persisted and kept consistent — the
+  "single index file" the hub page argues against), every `.kaipu/<id>.*` companion would be
+  renamed to the UUID or looked up through the index, the vault stops being readable without
+  the app (`.kaipu/3f9c….json` says nothing next to `Sprint demo.mp4`), and the migration
+  touches every existing vault. The external-rename case it buys is NIW2-561's job, which can
+  do it with the content hash and `birthtime` without changing what an id is.
+- **Keep the file name fixed and only show it in the UI** ("stored as `recording-…mp4`" under
+  the title, plus Reveal in Finder). Cheapest, and it does not solve the complaint: the folder
+  is where the user is when they cannot find the file, and the name they gave is the only one
+  they remember. It also leaves the writer's names (`…T13-51-00-800Z`) as the product's face.
+- **Rename only the media file and keep companions under the old stem via a pointer in the
+  sidecar.** Two names per item forever, a pointer to keep consistent, and every companion
+  lookup becomes two reads. The companions are small; moving them is one `copyFile` each.
+- **Make the file name authoritative and drop `title` from the sidecar.** Loses every title
+  with characters a file name cannot hold, and makes a title's length a filesystem question.
+- **Ask for confirmation, or block the rename, when the file is locked.** A modal for a
+  condition the user cannot see (an antivirus scan, Explorer's preview pane) in exchange for
+  a filename. The title is what they asked for; the toast with Retry costs them nothing.
+- **Reconcile external renames in the same change.** Owner decision: separate ticket
+  (NIW2-561). This ADR only guarantees that what the app writes is identifiable afterwards.
+
+## Consequences
+
+- `LocalRecording.id` changes on rename. Renderer state keyed by it is patched from the
+  rename result by `assetId`; the detail page's player remounts under the new id (position
+  preserved, and a background re-list keeps it mounted); the screenshot editor caches its
+  original bytes before the move and adopts the new id for its next overwrite. The video
+  editor keeps its source id for its lifetime; main enforces that no file moves while it is
+  mounted (reason `editing`), whatever surface asks — a future editor that wants renames must
+  re-key on `id` and drop that guard.
+- `kaipu-media://` URLs are valid for the current id only. Anything that streams a file for
+  minutes (an export) is protected by the `busy` outcome, not by the URL surviving.
+- Every writer allocates its id through the vault; `timestampId()` and `screenshotId()` go
+  away. Two captures in the same second get ` (2)` instead of overwriting each other.
+- Existing items keep their stems until renamed; `humanizeId` renders a legacy
+  `recording-2026-10-29-13-51-00` as the new default name so untitled legacy items read the
+  same as new ones.
+- On a case-sensitive filesystem (ext4) `demo` and `Demo` can coexist and would collide if the
+  vault is later synced to macOS or Windows. Accepted: the vault's default location is a
+  local folder, and the collision shows up as a ` (2)` on the receiving side at worst.
+- Windows behaviour (replace-on-rename, error codes under a lock, our own read streams not
+  holding the file) is taken from libuv and Microsoft documentation, not observed. The design
+  does not depend on the hypothesis being right, but the ADR is not accepted until the manual
+  Windows steps in the spec have run.
+- Documentation that states "rename never touches the file" (`desktop/library-vault.mdx`,
+  `desktop/ipc-contract.mdx`, the hub's `desktop/library-vault.md`) is wrong once this lands
+  and is updated by the implementing PR (hub: follow-up).
+
+## Non-goals
+
+- Reconciling files renamed, moved or deleted outside the app, and sweeping rename leftovers:
+  [NIW2-561](https://linear.app/niway/issue/NIW2-561/reconcile-the-library-with-files-changed-outside-the-app-on-reload).
+- Changing `assetId`, the sidecar schema version, the cloud catalog, or the tag registry.
+- Renaming cloud-only items (there is no file; the title write is unchanged) and renaming
+  from the video editor (no UI).
+- Migrating existing files to the new default names.
+- Windows long-path support; the length budget keeps a default-location vault under 260.
+
+## Reopen when
+
+- A second durable consumer of the local id appears (something that must persist it across
+  sessions or devices) — at that point the index-by-`assetId` alternative is the right one.
+- NIW2-561 shows that external renames are frequent enough that the app must follow them in
+  real time (a watcher), which changes who owns the file name.
+- The Windows manual test shows the app's own streams block the rename (the `FILE_SHARE_DELETE`
+  hypothesis fails): the media protocol would then have to close streams around a rename, or
+  the rename would have to be deferred to a quiet moment.
+- A vault on a filesystem where `rename` within a directory is not atomic (some network
+  mounts) is supported officially; step 5's crash analysis assumes atomicity.

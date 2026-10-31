@@ -436,3 +436,142 @@ describe("audio edits", () => {
     expect(withScene({ audioMuted: "yes" })).toBeNull();
   });
 });
+
+describe("webcam layer", () => {
+  const LAYOUT = {
+    shape: "circle",
+    size: 0.25,
+    position: { x: 0.12, y: 0.82 },
+    mirrored: true,
+    framing: { zoom: 1.5, x: 0.2, y: -0.2 },
+    scaleDuringZoom: 0.7,
+    shadow: true,
+  };
+  const HIDDEN = { id: "h", start: 2, end: 4, mode: "hidden" };
+  const OVERRIDE = { id: "o", start: 6, end: 9, mode: "override", layout: { size: 0.4 } };
+  const withWebcam = (webcam: unknown) =>
+    parseSession(
+      JSON.stringify({
+        version: 1,
+        scene: { items: [CLIP_ITEM], overlays: [], webcam },
+      }),
+    );
+  const segments = (list: unknown[]) => withWebcam({ layout: LAYOUT, segments: list });
+
+  it("round-trips the layer", () => {
+    const scene: VideoScene = {
+      ...initialScene(10),
+      webcam: { layout: LAYOUT as never, segments: [HIDDEN, OVERRIDE] as never },
+    };
+    expect(parseSession(serializeSession(scene))!.scene.webcam).toEqual(scene.webcam);
+  });
+
+  it("opens a session saved before the webcam, and a null one, with no layer", () => {
+    const old = JSON.stringify({ version: 1, scene: { items: [CLIP_ITEM], overlays: [] } });
+    expect(parseSession(old)!.scene.webcam).toBeNull();
+    expect(withWebcam(null)!.scene.webcam).toBeNull();
+  });
+
+  it("is additive: a build that does not know the key finds a valid version-1 session", () => {
+    const json = serializeSession({
+      ...initialScene(10),
+      webcam: { layout: LAYOUT as never, segments: [] },
+    });
+    const raw = JSON.parse(json) as { version: number; scene: Record<string, unknown> };
+    expect(raw.version).toBe(1);
+    const { webcam: _ignored, ...rest } = raw.scene;
+    expect(parseSession(JSON.stringify({ version: 1, scene: rest }))).not.toBeNull();
+  });
+
+  it("clamps out-of-range layout numbers on load", () => {
+    const layer = withWebcam({
+      layout: {
+        ...LAYOUT,
+        size: 3,
+        position: { x: -2, y: 5 },
+        scaleDuringZoom: 0,
+        framing: { zoom: 9, x: 4, y: -4 },
+      },
+      segments: [],
+    })!.scene.webcam!;
+    expect(layer.layout).toMatchObject({
+      size: 0.6,
+      position: { x: 0, y: 1 },
+      scaleDuringZoom: 0.3,
+      framing: { zoom: 3, x: 1, y: -1 },
+    });
+  });
+
+  it("clamps an override's numbers too, and ignores the layout of a hidden segment", () => {
+    const layer = segments([
+      { ...OVERRIDE, layout: { size: 0.01, position: { x: 2, y: 0.5 } } },
+      { ...HIDDEN, layout: { size: 0.3 } },
+    ])!.scene.webcam!;
+    expect(layer.segments).toEqual([
+      { id: "h", start: 2, end: 4, mode: "hidden" },
+      {
+        id: "o",
+        start: 6,
+        end: 9,
+        mode: "override",
+        layout: { size: 0.1, position: { x: 1, y: 0.5 } },
+      },
+    ]);
+  });
+
+  it("sorts segments and drops the ones that overlap the one before", () => {
+    const layer = segments([OVERRIDE, { id: "late", start: 8, end: 10, mode: "hidden" }, HIDDEN])!
+      .scene.webcam!;
+    expect(layer.segments.map((s) => s.id)).toEqual(["h", "o"]);
+  });
+
+  it.each([
+    ["a non-object layer", "nope"],
+    ["a layer without a layout", { segments: [] }],
+    ["a layout with a bad shape", { layout: { ...LAYOUT, shape: "star" }, segments: [] }],
+    ["a layout with a non-numeric size", { layout: { ...LAYOUT, size: "big" }, segments: [] }],
+    ["a layout with a non-boolean mirror", { layout: { ...LAYOUT, mirrored: 1 }, segments: [] }],
+    ["a layout with a bad position", { layout: { ...LAYOUT, position: { x: 0 } }, segments: [] }],
+    ["non-array segments", { layout: LAYOUT, segments: {} }],
+  ])("loads the session without the layer for %s", (_label: string, webcam: unknown) => {
+    // The cuts and zooms are worth more than a layer the sidecar can re-seed.
+    const parsed = parseSession(
+      JSON.stringify({
+        version: 1,
+        scene: { items: [CLIP_ITEM], overlays: [], zoomSegments: [ZOOM], webcam },
+      }),
+    );
+    expect(parsed).not.toBeNull();
+    expect(parsed!.scene.zoomSegments).toEqual([ZOOM]);
+    expect(parsed!.scene.webcam).toBeNull();
+  });
+
+  it.each([
+    ["a bad mode", { ...HIDDEN, mode: "fade" }],
+    ["a length under the minimum", { ...HIDDEN, end: 2.5 }],
+    ["no id", { start: 1, end: 3, mode: "hidden" }],
+    ["an override with a bad field", { ...OVERRIDE, layout: { shadow: "yes" } }],
+  ])("drops only the segment with %s and keeps the layer", (_label: string, bad: unknown) => {
+    const layer = segments([bad, { id: "ok", start: 30, end: 33, mode: "hidden" }])!.scene.webcam!;
+    expect(layer.layout).toMatchObject({ size: 0.25 });
+    expect(layer.segments.map((s) => s.id)).toEqual(["ok"]);
+  });
+
+  it("accepts a segment a float short of the minimum, as the edge drag produces", () => {
+    const start = 15.190612791990477;
+    const end = 16.190612791990475;
+    expect(end - start).toBeLessThan(1);
+    const layer = segments([{ id: "d", start, end, mode: "hidden" }])!.scene.webcam!;
+    expect(layer.segments).toHaveLength(1);
+  });
+
+  it("accepts a zoom a float short of the minimum, as the edge drag produces", () => {
+    const start = 15.190612791990477;
+    const end = 16.190612791990475;
+    const json = JSON.stringify({
+      version: 1,
+      scene: { items: [CLIP_ITEM], overlays: [], zoomSegments: [{ ...ZOOM, start, end }] },
+    });
+    expect(parseSession(json)?.scene.zoomSegments).toHaveLength(1);
+  });
+});

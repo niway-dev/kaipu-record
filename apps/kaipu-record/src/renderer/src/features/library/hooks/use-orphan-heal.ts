@@ -12,9 +12,12 @@ type LocalLibraryVideo = LibraryVideo & { id: string };
 /**
  * A recording whose metadata was never derived from the file: no duration (shows
  * `0:00`, editor disabled) or no poster (generic icon). Screenshots also carry a
- * zero duration, so they are explicitly excluded.
+ * zero duration, so they are explicitly excluded, and so is an item whose sidecar
+ * cannot be read (main refuses to write it).
  */
 function isOrphan(video: LocalLibraryVideo): boolean {
+  // Unreadable metadata is not "never derived": the sidecar exists, and a backfill would be refused.
+  if (video.metadataIssue) return false;
   return video.kind === "recording" && (video.durationSeconds === 0 || !video.thumbnailUrl);
 }
 

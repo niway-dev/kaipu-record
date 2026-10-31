@@ -1,88 +1,226 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createFramer, createOutputComposer } from "./compose-output-frame";
+import { WEBCAM_DEFAULTS, type WebcamScene } from "../webcam/webcam-model";
+import type { Redaction } from "../privacy/redaction";
+import type { CameraPathMessage } from "./export-messages";
+import { createOutputComposer } from "./compose-output-frame";
 
-/** Records every call and property write, in order (as compose-frame.test.ts does). */
-function fakeCtx(): { ctx: OffscreenCanvasRenderingContext2D; log: unknown[][] } {
-  const log: unknown[][] = [];
-  // The browser defaults: smoothing on, at "low" (bilinear).
-  const state: Record<string, unknown> = {
-    imageSmoothingEnabled: true,
-    imageSmoothingQuality: "low",
-  };
-  const ctx = new Proxy({} as OffscreenCanvasRenderingContext2D, {
+/** Every draw call on every fake canvas, in order, tagged with the canvas it hit. */
+let log: Array<{ canvas: string; call: string; args: unknown[] }> = [];
+
+function fakeContext(canvas: string): OffscreenCanvasRenderingContext2D {
+  const state: Record<string, unknown> = { imageSmoothingEnabled: true };
+  return new Proxy({} as OffscreenCanvasRenderingContext2D, {
     get: (_t, key: string) =>
-      key in state ? state[key] : (...args: unknown[]) => void log.push([key, ...args]),
+      key in state
+        ? state[key]
+        : (...args: unknown[]) => void log.push({ canvas, call: key, args }),
     set: (_t, key: string, value) => {
       state[key] = value;
-      log.push([`=${key}`, value]);
       return true;
     },
   });
-  return { ctx, log };
 }
 
-/** The smoothing in effect at each drawImage call, replayed from the log. */
-function smoothingAtDraws(log: unknown[][]): Array<{ enabled: unknown; quality: unknown }> {
-  let enabled: unknown = true;
-  let quality: unknown = "low";
-  const draws: Array<{ enabled: unknown; quality: unknown }> = [];
-  for (const [key, value] of log) {
-    if (key === "=imageSmoothingEnabled") enabled = value;
-    else if (key === "=imageSmoothingQuality") quality = value;
-    else if (key === "drawImage") draws.push({ enabled, quality });
-  }
-  return draws;
-}
-
-// jsdom has no OffscreenCanvas: the composer's scratch canvases only need a 2D context.
+let canvases = 0;
 class FakeOffscreenCanvas {
+  readonly name: string;
+  private readonly context: OffscreenCanvasRenderingContext2D;
   constructor(
     public width: number,
     public height: number,
-  ) {}
-  getContext() {
-    return fakeCtx().ctx;
+  ) {
+    this.name = `offscreen-${canvases++}`;
+    this.context = fakeContext(this.name);
+  }
+  getContext(): OffscreenCanvasRenderingContext2D {
+    return this.context;
   }
 }
 
-beforeEach(() => vi.stubGlobal("OffscreenCanvas", FakeOffscreenCanvas));
+beforeEach(() => {
+  log = [];
+  canvases = 0;
+  vi.stubGlobal("OffscreenCanvas", FakeOffscreenCanvas);
+});
 afterEach(() => vi.unstubAllGlobals());
 
-describe("upscale quality on fixed canvases (NIW2-564)", () => {
-  it("frames a 1916×1048 view onto 2560×1440 with high-quality smoothing (YouTube Fit)", () => {
-    const { ctx, log } = fakeCtx();
-    const framer = createFramer({ ctx, width: 2560, height: 1440, padding: "black" });
-    framer.frame(new FakeOffscreenCanvas(1916, 1048) as unknown as OffscreenCanvas, "fit");
-    const draws = smoothingAtDraws(log);
-    expect(draws).toHaveLength(1);
-    expect(draws[0]).toEqual({ enabled: true, quality: "high" });
+const FRAME = { tag: "screen-frame" } as unknown as CanvasImageSource;
+const WEBCAM_FRAME = { tag: "webcam-frame" } as unknown as CanvasImageSource;
+const WEBCAM_IMAGE = { image: WEBCAM_FRAME, width: 1280, height: 720 };
+/** The webcam frame on screen at source time `sourceTs` (the time its layout is read at). */
+const cam = (sourceTs: number) => ({ image: WEBCAM_IMAGE, sourceTs });
+const SOURCE = { width: 1920, height: 1080 };
+
+const webcam = (segments: WebcamScene["segments"] = []): WebcamScene => ({
+  layout: { ...WEBCAM_DEFAULTS, shadow: false, mirrored: false },
+  segments,
+});
+
+/** A camera path that holds `scale` at the frame centre for 10 s (`from` s on; 1 before). */
+function camera(scale: number, from = 0): CameraPathMessage {
+  const n = 300;
+  return {
+    fps: 30,
+    cx: new Float32Array(n).fill(0.5),
+    cy: new Float32Array(n).fill(0.5),
+    scale: new Float32Array(n).map((_, i) => (i / 30 >= from ? scale : 1)),
+  };
+}
+
+const cover: Redaction = {
+  id: "r",
+  kind: "cover",
+  start: 0,
+  end: 10,
+  rect: { x: 0.1, y: 0.1, w: 0.2, h: 0.2 },
+  fill: "#18181b",
+  label: "",
+} as Redaction;
+
+function composer(opts: {
+  camera?: CameraPathMessage | null;
+  redactions?: Redaction[];
+  webcam?: WebcamScene | null;
+  framed?: { width: number; height: number; mode: "fit" | "fill" };
+}) {
+  const output = fakeContext("output");
+  const view = opts.framed ? new FakeOffscreenCanvas(SOURCE.width, SOURCE.height) : null;
+  const ctx = view ? fakeContext("view") : output;
+  const compose = createOutputComposer({
+    ctx,
+    width: SOURCE.width,
+    height: SOURCE.height,
+    camera: opts.camera ?? null,
+    redactions: opts.redactions ?? [],
+    overlayWindows: [],
+    overlayBitmaps: new Map(),
+    webcam: opts.webcam ?? null,
+    framing:
+      view && opts.framed
+        ? {
+            view: view as unknown as OffscreenCanvas,
+            ctx: output,
+            width: opts.framed.width,
+            height: opts.framed.height,
+            mode: opts.framed.mode,
+            padding: "black",
+          }
+        : null,
+  });
+  // Construction probes the canvas filter; only what the frames draw matters below.
+  log = [];
+  return { compose, view };
+}
+
+const draws = () => log.filter((entry) => entry.call === "drawImage");
+const webcamDraws = () => draws().filter((entry) => entry.args[0] === WEBCAM_FRAME);
+
+describe("createOutputComposer: the webcam layer (ADR 0038)", () => {
+  it("draws on a direct frame (no zoom, no region): the frame, then the webcam on top", () => {
+    const { compose } = composer({ webcam: webcam() });
+    compose.clip(FRAME, 1, 1 / 30, 1, cam(1));
+    expect(draws().map((d) => d.args[0])).toEqual([FRAME, WEBCAM_FRAME]);
+    expect(webcamDraws()[0]!.canvas).toBe("output");
   });
 
-  it("uses high-quality smoothing for Fill and the blurred padding too", () => {
-    const { ctx, log } = fakeCtx();
-    const framer = createFramer({ ctx, width: 1080, height: 1920, padding: "blur" });
-    const view = new FakeOffscreenCanvas(1916, 1048) as unknown as OffscreenCanvas;
-    framer.frame(view, "fill");
-    framer.frame(view, "fit");
-    const draws = smoothingAtDraws(log);
-    expect(draws.length).toBeGreaterThanOrEqual(3);
-    for (const draw of draws) expect(draw).toEqual({ enabled: true, quality: "high" });
+  it("composes frame → redactions → crop, then the webcam last, at full size on the output", () => {
+    const { compose } = composer({ webcam: webcam(), camera: camera(2), redactions: [cover] });
+    compose.clip(FRAME, 1, 1 / 30, 1, cam(1));
+    const calls = log.map((entry) => `${entry.canvas}:${entry.call}`);
+    const redaction = calls.findIndex((c) => c.endsWith(":fillRect") && !c.startsWith("output"));
+    const crop = log.findIndex(
+      (entry) => entry.canvas === "output" && entry.call === "drawImage" && entry.args.length === 9,
+    );
+    const face = log.findIndex((entry) => entry.args[0] === WEBCAM_FRAME);
+    expect(redaction).toBeGreaterThanOrEqual(0);
+    expect(redaction).toBeLessThan(crop);
+    expect(crop).toBeLessThan(face);
+    expect(face).toBe(log.length - 2); // drawImage, then the clip's restore
+    // Shrink during zoom: scale 2 ≥ 1.5 → the full scaleDuringZoom (0.7) of a 0.22 bubble.
+    const side = webcamDraws()[0]!.args[7] as number;
+    expect(side).toBeCloseTo(0.22 * 1080 * 0.7);
   });
 
-  it("draws a contained slide with high-quality smoothing", () => {
-    const { ctx, log } = fakeCtx();
-    const compose = createOutputComposer({
-      ctx,
-      width: 3840,
-      height: 2160,
-      camera: null,
-      redactions: [],
-      overlayWindows: [],
-      overlayBitmaps: new Map(),
+  it.each([
+    ["Vertical (Fill)", { width: 1080, height: 1920, mode: "fill" as const }],
+    ["Square (Fit)", { width: 1080, height: 1080, mode: "fit" as const }],
+  ])("%s: the webcam is drawn after the framer, inside the target canvas", (_name, framed) => {
+    const { compose, view } = composer({
+      webcam: { ...webcam(), layout: { ...webcam().layout, size: 0.6, position: { x: 1, y: 1 } } },
+      framed,
     });
-    compose.slide({ width: 1280, height: 720 } as ImageBitmap, 0);
-    const draws = smoothingAtDraws(log);
-    expect(draws).toHaveLength(1);
-    expect(draws[0]).toEqual({ enabled: true, quality: "high" });
+    compose.clip(FRAME, 1, 1 / 30, 1, cam(1));
+    const framedDraw = log.findIndex(
+      (entry) => entry.canvas === "output" && entry.args[0] === view,
+    );
+    const face = log.findIndex((entry) => entry.args[0] === WEBCAM_FRAME);
+    expect(framedDraw).toBeGreaterThanOrEqual(0);
+    expect(framedDraw).toBeLessThan(face);
+    const [, , , , , dx, dy, dw, dh] = webcamDraws()[0]!.args as number[];
+    expect(webcamDraws()[0]!.canvas).toBe("output");
+    expect(dx).toBeGreaterThanOrEqual(0);
+    expect(dy).toBeGreaterThanOrEqual(0);
+    expect(dx + dw).toBeLessThanOrEqual(framed.width + 1e-6);
+    expect(dy + dh).toBeLessThanOrEqual(framed.height + 1e-6);
+  });
+
+  it("draws nothing inside a hidden segment, or without a webcam frame at that time", () => {
+    const { compose } = composer({
+      webcam: webcam([{ id: "h", start: 2, end: 4, mode: "hidden" }]),
+    });
+    compose.clip(FRAME, 3, 1 / 30, 3, cam(3));
+    compose.clip(FRAME, 5, 1 / 30, 5, null);
+    expect(webcamDraws()).toEqual([]);
+    compose.clip(FRAME, 5, 1 / 30, 5, cam(5));
+    expect(webcamDraws()).toHaveLength(1);
+  });
+
+  it("reads the layer and the camera scale at the webcam frame's time, not the screen frame's (E1)", () => {
+    // The clip starts at 1 s; its first screen frame straddles the start (0.95 s). A hidden
+    // range and an un-zoomed camera before 1 s must not decide the layer of a frame shown at 1 s.
+    const { compose } = composer({
+      webcam: webcam([{ id: "h", start: 0.5, end: 1, mode: "hidden" }]),
+      camera: camera(2, 1),
+    });
+    compose.clip(FRAME, 0.95, 1 / 30, 0, cam(1));
+    expect(webcamDraws()).toHaveLength(1);
+    expect(webcamDraws()[0]!.args[7] as number).toBeCloseTo(0.22 * 1080 * 0.7);
+  });
+
+  it("a recording without a webcam composes exactly as before, whatever frame is passed", () => {
+    const { compose } = composer({ webcam: null });
+    compose.clip(FRAME, 1, 1 / 30, 1, cam(1));
+    expect(draws().map((d) => d.args[0])).toEqual([FRAME]);
+  });
+
+  it("slides draw no webcam, and frame Fit on fixed-canvas presets", () => {
+    const { compose, view } = composer({
+      webcam: webcam(),
+      framed: { width: 1080, height: 1920, mode: "fill" },
+    });
+    compose.slide(undefined, 1);
+    expect(webcamDraws()).toEqual([]);
+    const framedDraw = log.find((entry) => entry.canvas === "output" && entry.args[0] === view)!;
+    // Fit on a portrait canvas: the landscape view is letterboxed, not cropped (sx = 0).
+    expect(framedDraw.args[1]).toBe(0);
+  });
+});
+
+// A tripwire, not coverage: it reads the worker sources, so it only proves the webcam is
+// handed to the shared composer in both, not that the right frame or time reaches it
+// (that is the composer and lockstep tests). A harmless refactor of the call shape can trip it.
+describe("both exports draw the layer through the shared composer", () => {
+  // The workers cannot run in jsdom (WebCodecs); what keeps MP4 and GIF from diverging is
+  // that both hand the plan's webcam and the decoded webcam frame to createOutputComposer.
+  const dir = path.dirname(new URL(import.meta.url).pathname);
+  const read = (file: string): string =>
+    readFileSync(path.join(dir, file), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+
+  it.each(["export-worker.ts", "gif-worker.ts"])("%s", (file) => {
+    const source = read(file);
+    expect(source).toMatch(/createOutputComposer\(\{[^}]*webcam: plan\.webcam/);
+    expect(source).toMatch(/compose\.clip\([^)]*webcam/i);
   });
 });

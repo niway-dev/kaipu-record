@@ -6,6 +6,8 @@ export interface QuietCapture {
   width: number;
   height: number;
   mode: CaptureMode;
+  /** The workspace the capture started in; the toast's Save writes nothing anywhere else. */
+  workspaceId: string | null;
 }
 
 /** The kept bytes, and the capture they belong to (`sequence`, see `peekLastQuietCapture`). */
