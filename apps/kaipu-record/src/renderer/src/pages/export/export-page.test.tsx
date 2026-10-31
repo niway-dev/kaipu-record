@@ -280,17 +280,42 @@ describe("ExportPage", () => {
       expect(screen.getByRole("heading", { name: "For YouTube" })).toBeVisible();
     });
 
-    it("the arrows leave YouTube's 1440p / 4K choice alone", async () => {
+    it("inside YouTube's 1440p / 4K choice the arrows move that choice, not the row", async () => {
       renderExport("/export/asset-1?to=youtube");
       const r1440 = await screen.findByRole("radio", { name: /^1440p/ });
+      const r4k = screen.getByRole("radio", { name: /^4K/ });
+      expect(r1440).toHaveAttribute("tabindex", "0");
+      expect(r4k).toHaveAttribute("tabindex", "-1");
+
       fireEvent.keyDown(r1440, { key: "ArrowRight" });
+
       expect(card(/^YouTube/)).toHaveAttribute("aria-checked", "true");
+      expect(r4k).toHaveAttribute("aria-checked", "true");
+      expect(r4k).toHaveAttribute("tabindex", "0");
+      expect(r1440).toHaveAttribute("tabindex", "-1");
+      expect(r4k).toHaveFocus();
+      // It stops at the end, like the row.
+      fireEvent.keyDown(r4k, { key: "ArrowRight" });
+      expect(r4k).toHaveAttribute("aria-checked", "true");
+    });
+
+    it("the arrows move Fill / Fit too", async () => {
+      renderExport("/export/asset-1?to=vertical");
+      const fill = await screen.findByRole("radio", { name: /^Fill/ });
+      const fit = screen.getByRole("radio", { name: /^Fit/ });
+      expect(fill).toHaveAttribute("aria-checked", "true");
+      expect(fill).toHaveAttribute("tabindex", "0");
+      fireEvent.keyDown(fill, { key: "ArrowRight" });
+      expect(fit).toHaveAttribute("aria-checked", "true");
+      expect(fit).toHaveFocus();
+      expect(card(/^TikTok/)).toHaveAttribute("aria-checked", "true");
     });
 
     it("Enter exports, from the page or a card, without re-selecting the card", async () => {
       renderExport("/export/asset-1?to=github");
       await screen.findByRole("heading", { name: "For GitHub · Jira" });
-      fireEvent.keyDown(card(/^YouTube/), { key: "Enter" });
+      // false: the default was prevented, so Enter cannot also click (select) the card.
+      expect(fireEvent.keyDown(card(/^YouTube/), { key: "Enter" })).toBe(false);
       expect(startArgs()).toMatchObject({ presetId: "light" });
       expect(card(/^YouTube/)).toHaveAttribute("aria-checked", "false");
     });
@@ -355,7 +380,7 @@ describe("ExportPage", () => {
     expect(within(chat).getByText("Ready")).toBeVisible();
     fireEvent.click(chat);
     expect(screen.getByRole("button", { name: "Export again" })).toBeVisible();
-    fireEvent.keyDown(chat, { key: "Enter" });
+    expect(fireEvent.keyDown(chat, { key: "Enter" })).toBe(false);
     await waitFor(() => expect(router.state.location.pathname).toBe("/library/asset-2"));
     expect(exportController.start).not.toHaveBeenCalled();
   });

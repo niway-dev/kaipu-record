@@ -198,13 +198,19 @@ function UploadSizeCard({
           </p>
         </div>
         {plan.destination === "youtube" ? (
-          <div className={styles.segmented} role="radiogroup" aria-labelledby="export-upload-size">
+          <div
+            className={styles.segmented}
+            role="radiogroup"
+            aria-labelledby="export-upload-size"
+            onKeyDown={(event) => onSegmentArrow(event, YOUTUBE_PRESET_IDS, youtube, onYoutube)}
+          >
             {YOUTUBE_PRESET_IDS.map((p) => (
               <button
                 key={p}
                 type="button"
                 role="radio"
                 aria-checked={youtube === p}
+                tabIndex={youtube === p ? 0 : -1}
                 className={styles.segment}
                 data-active={youtube === p}
                 onClick={() => onYoutube(p)}
@@ -230,13 +236,19 @@ function UploadSizeCard({
           <h3 id="export-framing" className={styles.optionTitle}>
             {t("framingTitle")}
           </h3>
-          <div className={styles.segmented} role="radiogroup" aria-labelledby="export-framing">
-            {(["fill", "fit"] as const).map((f) => (
+          <div
+            className={styles.segmented}
+            role="radiogroup"
+            aria-labelledby="export-framing"
+            onKeyDown={(event) => onSegmentArrow(event, FRAMINGS, framing, onFraming)}
+          >
+            {FRAMINGS.map((f) => (
               <button
                 key={f}
                 type="button"
                 role="radio"
                 aria-checked={framing === f}
+                tabIndex={framing === f ? 0 : -1}
                 title={f === "fit" ? tEditor("framingFitHint") : tEditor("framingFillHint")}
                 className={styles.segment}
                 data-active={framing === f}
@@ -257,6 +269,37 @@ function UploadSizeCard({
       </div>
     </section>
   );
+}
+
+const FRAMINGS = ["fill", "fit"] as const;
+
+/**
+ * Arrow keys inside a segmented radio group (1440p / 4K, Fill / Fit), as in any radio group:
+ * the arrows move the choice, which stops at the ends, and focus follows it. Only the checked
+ * segment is a Tab stop. The page's own arrows (moving the destination row) skip radio groups,
+ * so these keys stay here.
+ */
+function onSegmentArrow<T extends string>(
+  event: React.KeyboardEvent<HTMLElement>,
+  values: readonly T[],
+  current: T,
+  select: (next: T) => void,
+): void {
+  const by =
+    event.key === "ArrowRight" || event.key === "ArrowDown"
+      ? 1
+      : event.key === "ArrowLeft" || event.key === "ArrowUp"
+        ? -1
+        : 0;
+  if (by === 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+  event.preventDefault();
+  const index = values.indexOf(current) + by;
+  const next = values[Math.max(0, Math.min(values.length - 1, index))];
+  if (next === undefined) return;
+  if (next !== current) select(next);
+  event.currentTarget
+    .querySelectorAll<HTMLElement>("[role='radio']")
+    [values.indexOf(next)]?.focus();
 }
 
 /** The text an illustration shows: a terminal command, the kind of text screen recordings carry. */
