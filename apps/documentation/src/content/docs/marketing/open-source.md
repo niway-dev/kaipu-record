@@ -1,14 +1,22 @@
 ---
 title: Open source under AGPL-3.0
-description: Why Kaipu opens its source, why the whole monorepo opens at once, what has to happen before the repository goes public, and how contributions are kept from breaking the product.
+description: Why Kaipu is open source under AGPL-3.0-only, why the whole monorepo is open, how the CLA keeps one owner, why the name is not licensed, and how contributions are kept from breaking the product.
 ---
 
 # Open source under AGPL-3.0
 
-**Owner decision · 2026-09-27.** Kaipu Record will be open source under the
-**GNU Affero General Public License v3**. The license file and every `package.json` `license`
-field already say `AGPL-3.0-only` on this branch; the repository itself stays private until
-the checklist below is done. Opening it is the launch event, not a quiet flag flip.
+**Owner decision · 2026-09-27.** Kaipu Record is open source under the
+**GNU Affero General Public License v3, version 3 only** (`AGPL-3.0-only`). The repository has
+been public since 2026-10-05.
+
+Where the license is stated (2026-10-30, NIW2-566):
+
+- `LICENSE` holds the unmodified AGPL-3.0 text, so GitHub and license scanners detect it.
+  It used to carry a header saying "or any later version", which contradicted
+  `AGPL-3.0-only`; the copyright and version-3-only notice now live in the README.
+- The root `package.json` and `packages/application`, `packages/domain` and
+  `packages/web-ui` declare `"license": "AGPL-3.0-only"`. The other workspace packages are
+  private and declare nothing; the root `LICENSE` covers them.
 
 ## Why open source is an asset here
 
@@ -32,22 +40,45 @@ free to read, build and modify the app. Cap and Recordly both chose AGPL for the
 
 **Relicensing is clean.** Every commit in the history is by the owner; there are no outside
 contributors whose consent would be needed. Nobody outside received the code under MIT, so
-there is no earlier MIT copy in circulation. The change is a single commit on this branch.
+there is no earlier MIT copy in circulation.
+
+## Keeping one owner: the CLA
+
+The owner wants outside contributions **and** full ownership of the project. Under plain AGPL
+those conflict: each contributor would keep the copyright to their part, and any later license
+change — including the source-available fallback below — would need every one of them to
+agree. Cap has this problem: it restricts commercial use of its official builds while
+accepting outside contributions without a contributor agreement.
+
+So every contributor signs the [Contributor License Agreement](https://github.com/niway-dev/kaipu-record/blob/main/CLA.md)
+on their first pull request (decided 2026-10-30, NIW2-566). The contributor keeps their
+copyright and grants Niway S.A.C. a broad license, including the right to relicense; versions
+already published under the AGPL stay under the AGPL. Until a lawyer reviews it, the text is a
+project draft. Signing is a comment on the pull request; there is no CLA bot, because every
+contributor is a collaborator the owner added by hand.
+
+## The name is not licensed
+
+The AGPL covers the code, not the brand. [TRADEMARKS.md](https://github.com/niway-dev/kaipu-record/blob/main/TRADEMARKS.md)
+says a distributed fork uses its own name and icon. That is the cheapest protection against
+the reopen condition below, a fork shipped as a competing product.
 
 ## The monorepo opens as a whole
 
 The monorepo means there is no "open the desktop app, keep the server private." Splitting
 `apps/server-hono`, `packages/infra-*` and the Cloudflare workers into a second repository
 would cost more than it protects, and would break the single-source-of-truth docs site. So
-the decision is: **everything opens**, as Cap does, and the cost of that is a security pass on
-the server before the day it happens. That pass is already the
-[backend security hardening](/backlog/backend-security-hardening/) workstream; opening the
-repo makes it a hard prerequisite rather than a nice-to-have.
+the decision was: **everything opens**, as Cap does, with a security pass on the server as the
+price. That pass is the [backend security hardening](/backlog/backend-security-hardening/)
+workstream; with the server code public, it is a hard requirement rather than a nice-to-have.
 
-## Pre-open checklist
+## Open-time checklist
 
-Nothing below is optional. Each item is a way a public repository has hurt a project like
-this one.
+This was written as the list to finish before going public. The repository went public on
+2026-10-05 with items 5–7 done. The others have no recorded outcome on this page, and item 3
+is still open (the [filesystem-first monetization ADR](/desktop/filesystem-first-monetization/)
+is in Spanish). Treat every item without a date as open until someone records it. Each item
+is a way a public repository has hurt a project like this one.
 
 1. **Secrets.** Scan the _entire git history_, not just `HEAD`, for tokens, keys, database
    URLs and Infisical exports. Rotate anything found, then rewrite or squash history if
@@ -96,10 +127,10 @@ to catch them. Kaipu is also a one-person project. The rules exist so that stays
 
 ## Timing
 
-Open the repository as part of the launch bundle, not before: Windows beta, no-watermark free
-tier, the new landing, the benchmarks page and the AGPL repository land in one announcement.
-Each of those is stronger with the others beside it. Until then the license change sits on
-`main` in a private repo, which is harmless.
+The plan was to open the repository as part of the launch bundle: Windows beta, no-watermark
+free tier, the new landing, the benchmarks page and the AGPL repository in one announcement.
+The repository went public earlier, on 2026-10-05, together with `CONTRIBUTING.md`,
+`SECURITY.md` and the issue templates; the announcement can still bundle the rest.
 
 ## Alternatives kept in reserve
 

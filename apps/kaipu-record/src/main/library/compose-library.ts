@@ -36,19 +36,34 @@ function compare(local: LocalRecording, cloud: CloudCatalogEntry): Comparison {
 export function composeLibrary(input: ComposeInput): ComposeResult {
   const vaultReadable = input.local !== null;
   const localByAsset = new Map<string, LocalRecording>();
-  for (const rec of input.local ?? []) localByAsset.set(rec.assetId, rec);
+  // Items whose sidecar could not be read carry a stand-in assetId, so they never join by
+  // assetId. They are claimed by file id instead, through the catalog's `lastSeenLocalId`.
+  const unreadableByLocalId = new Map<string, LocalRecording>();
+  for (const rec of input.local ?? []) {
+    if (rec.metadataIssue) unreadableByLocalId.set(rec.id, rec);
+    else localByAsset.set(rec.assetId, rec);
+  }
 
   const items: LibraryItem[] = [];
   const catalogUpdates: CloudCatalogEntry[] = [];
   const merged = new Set<string>();
 
   for (const entry of input.catalog ?? []) {
-    const local = localByAsset.get(entry.assetId) ?? null;
+    const healthy = localByAsset.get(entry.assetId) ?? null;
+    // The file this entry was last merged with exists but its sidecar cannot be read: the
+    // association is kept (clearing it would orphan the cloud item for good) and the item
+    // reads as "local unavailable" until the sidecar reads again.
+    const unreadable = healthy
+      ? null
+      : (unreadableByLocalId.get(entry.lastSeenLocalId ?? "") ?? null);
+    const local = healthy ?? unreadable;
     let availability: Availability;
-    if (local) availability = "local-and-cloud";
-    else if (!vaultReadable && entry.lastSeenLocalId) availability = "local-unavailable";
-    else availability = "cloud";
+    if (healthy) availability = "local-and-cloud";
+    else if (unreadable || (!vaultReadable && entry.lastSeenLocalId)) {
+      availability = "local-unavailable";
+    } else availability = "cloud";
     merged.add(entry.assetId);
+    if (unreadable) merged.add(unreadable.assetId);
     catalogUpdates.push({
       ...entry,
       // A readable vault where the file is now gone clears the association (the item
@@ -59,21 +74,22 @@ export function composeLibrary(input: ComposeInput): ComposeResult {
     });
     items.push({
       assetId: entry.assetId,
-      kind: local?.kind ?? entry.kind,
-      title: local?.title ?? entry.title,
-      createdAt: local?.createdAt ?? entry.createdAt,
+      kind: healthy?.kind ?? entry.kind,
+      // An unreadable local copy has placeholders only: the cloud entry's values win.
+      title: healthy?.title ?? entry.title,
+      createdAt: healthy?.createdAt ?? entry.createdAt,
       // `||` on purpose: a local 0 means "unknown (no sidecar metadata)", so the
       // cloud value is the better answer.
-      durationSeconds: local?.durationSeconds || entry.durationSeconds,
-      derivedFromAssetId: local?.derivedFromAssetId ?? entry.derivedFromAssetId,
+      durationSeconds: healthy?.durationSeconds || entry.durationSeconds,
+      derivedFromAssetId: healthy?.derivedFromAssetId ?? entry.derivedFromAssetId,
       editSavedAt: local ? (input.editSession[local.id]?.savedAt ?? null) : null,
       editExportedSavedAt: local ? (input.editSession[local.id]?.exportedSavedAt ?? null) : null,
-      capture: local?.capture ?? null,
+      capture: healthy?.capture ?? null,
       local,
       cloud: entry,
       availability,
       transfer: { state: "idle" },
-      comparison: local ? compare(local, entry) : "pending",
+      comparison: healthy ? compare(healthy, entry) : "pending",
       editing: local ? (input.editing[local.id] ?? "project-available") : "needs-source",
       sharing: "private",
     });

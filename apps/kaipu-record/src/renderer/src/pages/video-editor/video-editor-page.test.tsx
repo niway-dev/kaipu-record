@@ -92,10 +92,15 @@ const SOURCE: VideoEditorSource = {
   durationSeconds: 30,
 };
 
-function renderEditor() {
+// Main holds the item under its current id before the editor loads anything (NIW2-560).
+beforeEach(() => {
+  window.electronAPI.acquireEditorSession = async () => SOURCE.id;
+});
+
+function renderEditor(source: VideoEditorSource = SOURCE) {
   const router = createMemoryRouter(
     [
-      { path: "/", element: <VideoEditorLoader source={SOURCE} /> },
+      { path: "/", element: <VideoEditorLoader source={source} /> },
       { path: "/library/:assetId", element: <div>library-detail</div> },
     ],
     { initialEntries: ["/"] },
@@ -179,6 +184,98 @@ describe("VideoEditorPage — legacy /video-editor redirect", () => {
   it("sends a stateless (or unusable) navigation to the Editor home", () => {
     renderLegacy({ ...SOURCE, durationSeconds: 0 });
     expect(screen.getByText("editor-home")).not.toBeNull();
+  });
+});
+
+describe("VideoEditorLoader — editor hold (NIW2-560)", () => {
+  afterEach(() => {
+    window.electronAPI.closeEditorSession = () => {};
+  });
+
+  it("loads nothing before main acknowledges the hold, then loads under the current id", async () => {
+    let acknowledge!: (id: string) => void;
+    window.electronAPI.acquireEditorSession = vi.fn(
+      () => new Promise<string | null>((resolve) => (acknowledge = resolve)),
+    );
+    const loadSession = vi.fn(async () => null);
+    const loadTrack = vi.fn(async () => null);
+    window.electronAPI.loadVideoEditSession = loadSession;
+    window.electronAPI.loadCursorTrack = loadTrack;
+    const close = vi.fn();
+    window.electronAPI.closeEditorSession = close;
+
+    const { unmount } = render(
+      <RouterProvider
+        router={createMemoryRouter([{ path: "/", element: <VideoEditorLoader source={SOURCE} /> }])}
+      />,
+    );
+    await waitFor(() =>
+      expect(window.electronAPI.acquireEditorSession).toHaveBeenCalledWith("asset-1"),
+    );
+    expect(loadSession).not.toHaveBeenCalled();
+    expect(loadTrack).not.toHaveBeenCalled();
+
+    // A rename moved the file while the editor was opening.
+    await act(async () => acknowledge("Renamed clip"));
+    await waitFor(() => expect(loadSession).toHaveBeenCalledWith("Renamed clip"));
+    expect(loadTrack).toHaveBeenCalledWith("Renamed clip");
+    unmount();
+    expect(close).toHaveBeenCalledWith("Renamed clip");
+  });
+});
+
+describe("VideoEditorLoader — item no longer available (NIW2-560)", () => {
+  it.each([
+    ["main answers null (deleted; another item took its name)", async () => null],
+    [
+      "the acquisition rejects",
+      async () => {
+        throw new Error("ipc down");
+      },
+    ],
+  ])("never loads under the route's id when %s", async (_label, acquire) => {
+    window.electronAPI.acquireEditorSession = vi.fn(acquire) as never;
+    const loadSession = vi.fn(async () => null);
+    const loadTrack = vi.fn(async () => null);
+    window.electronAPI.loadVideoEditSession = loadSession;
+    window.electronAPI.loadCursorTrack = loadTrack;
+    const router = createMemoryRouter(
+      [
+        { path: "/", element: <VideoEditorLoader source={SOURCE} /> },
+        { path: "/library", element: <div>library-page</div> },
+      ],
+      { initialEntries: ["/"] },
+    );
+    render(<RouterProvider router={router} />);
+
+    expect(await screen.findByText(/no longer in your library/i)).toBeInTheDocument();
+    expect(loadSession).not.toHaveBeenCalled();
+    expect(loadTrack).not.toHaveBeenCalled();
+    expect(document.querySelector("footer")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /back to library/i }));
+    expect(await screen.findByText("library-page")).toBeInTheDocument();
+  });
+});
+
+describe("VideoEditorLoader — an identity two files claim (NIW2-560)", () => {
+  it("says the item is claimed twice instead of 'no longer in your library', and loads nothing", async () => {
+    window.electronAPI.acquireEditorSession = vi.fn(async () => {
+      throw new Error("Error invoking remote method: vault-ambiguous-identity: 2 local items");
+    }) as never;
+    const loadSession = vi.fn(async () => null);
+    window.electronAPI.loadVideoEditSession = loadSession;
+    render(
+      <RouterProvider
+        router={createMemoryRouter([
+          { path: "/", element: <VideoEditorLoader source={SOURCE} /> },
+          { path: "/library", element: <div>library-page</div> },
+        ])}
+      />,
+    );
+    expect(await screen.findByText(/two files in your folder/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no longer in your library/i)).toBeNull();
+    expect(loadSession).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /back to library/i })).toBeInTheDocument();
   });
 });
 
@@ -686,4 +783,84 @@ describe("VideoEditorPage — inspector column priority (annotation follow-ups)"
   // focus-inspector.test.ts; asserting the rAF callback fired from inside this page's
   // jsdom harness would be timing-fragile without an existing fake-timers/rAF-flush
   // pattern already in this file, so it is skipped here too.
+});
+
+// The webcam layer (ADR 0038): everything it adds hangs off the sidecar's webcam track.
+describe("VideoEditorPage — webcam track", () => {
+  const WITH_WEBCAM: VideoEditorSource = {
+    ...SOURCE,
+    webcam: { startOffsetMs: 120, offsetQuality: "exact", width: 1280, height: 720, fps: 30 },
+  };
+
+  it("a recording without a webcam shows no lane, no layer, no second video and no hide action", async () => {
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    expect(footer.querySelector('[data-testid="webcam-lane"]')).toBeNull();
+    expect(screen.queryByTestId("webcam-layer")).toBeNull();
+    expect(document.querySelectorAll("video")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Hide webcam here" })).toBeNull();
+  });
+
+  it("a recording with a webcam gets the lane, the layer's own muted video and the hide action", async () => {
+    renderEditor(WITH_WEBCAM);
+    const footer = await waitForEditorLoaded();
+    expect(footer.querySelector('[data-testid="webcam-lane"]')).not.toBeNull();
+    expect(screen.getByText("WEBCAM")).toBeInTheDocument();
+    const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
+    expect(cam.getAttribute("src")).toBe("kaipu-media://webcam/rec-1");
+    expect(cam.muted).toBe(true);
+    expect(screen.getByRole("button", { name: "Hide webcam here" })).toBeInTheDocument();
+  });
+
+  it("Hide webcam here adds a selected hidden section; Delete removes it", async () => {
+    renderEditor(WITH_WEBCAM);
+    const footer = await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Hide webcam here" }));
+    const block = await waitFor(() => {
+      const found = footer.querySelector('[data-webcam-id][data-mode="hidden"]');
+      expect(found).not.toBeNull();
+      return found as HTMLElement;
+    });
+    expect(block).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByRole("heading", { name: "Webcam section 1" })).toBeInTheDocument();
+    await waitFor(() => {
+      fireEvent.keyDown(window, { key: "Delete" });
+      expect(footer.querySelector("[data-webcam-id]")).toBeNull();
+    });
+  });
+
+  it("draws the bubble once both files report their size, and hides it while holding the original", async () => {
+    stubDecodedVideoSize(1280, 720);
+    try {
+      renderEditor(WITH_WEBCAM);
+      await waitForEditorLoaded();
+      const main = Array.from(document.querySelectorAll("video")).find(
+        (v) => v.dataset.testid !== "webcam-video",
+      )!;
+      fireEvent.loadedMetadata(main);
+      const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
+      Object.defineProperty(cam, "duration", { configurable: true, get: () => 60 });
+      fireEvent.loadedMetadata(cam);
+      // Main video at 0 s, webcam started 120 ms later: no webcam frame yet.
+      expect(screen.getByTestId("webcam-layer").style.display).toBe("none");
+      main.currentTime = 1;
+      fireEvent(main, new Event("seeked"));
+      expect(screen.getByTestId("webcam-layer").style.display).toBe("");
+      const hold = screen.getByRole("button", { name: /original/i, pressed: false });
+      fireEvent.pointerDown(hold, { pointerId: 1 });
+      await waitFor(() => expect(screen.getByTestId("webcam-layer").style.display).toBe("none"));
+      fireEvent.pointerUp(hold, { pointerId: 1 });
+      await waitFor(() => expect(screen.getByTestId("webcam-layer").style.display).toBe(""));
+    } finally {
+      stubDecodedVideoSize(0, 0);
+    }
+  });
+
+  it("grabbing the bubble opens the Webcam section of the inspector", async () => {
+    renderEditor(WITH_WEBCAM);
+    await waitForEditorLoaded();
+    fireEvent.pointerDown(screen.getByTestId("webcam-layer"), { pointerId: 1 });
+    expect(await screen.findByRole("heading", { name: "Webcam" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Position" })).toBeInTheDocument();
+  });
 });

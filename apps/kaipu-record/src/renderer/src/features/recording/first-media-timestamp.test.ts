@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BufferTarget, Mp4OutputFormat, Output } from "mediabunny";
-import { waitForFirstMediaTimestamp } from "./first-media-timestamp";
+import { rereadFirstMediaTimestamp, waitForFirstMediaTimestamp } from "./first-media-timestamp";
 
 describe("waitForFirstMediaTimestamp", () => {
   it("mediabunny still exposes the private field (upgrade guard)", () => {
@@ -42,5 +42,29 @@ describe("waitForFirstMediaTimestamp", () => {
       rendererMs: 5,
       quality: "estimated",
     });
+  });
+});
+
+describe("rereadFirstMediaTimestamp", () => {
+  it("keeps an exact reading as it is", () => {
+    const exact = { rendererMs: 40, quality: "exact" as const };
+    expect(rereadFirstMediaTimestamp({ _firstMediaStreamTimestamp: 9 }, exact)).toBe(exact);
+  });
+
+  it("turns an estimate exact once the field has filled (the live wait gave up too early)", () => {
+    expect(
+      rereadFirstMediaTimestamp(
+        { _firstMediaStreamTimestamp: 3.25 },
+        { rendererMs: 3000, quality: "estimated" },
+      ),
+    ).toEqual({ rendererMs: 3250, quality: "exact" });
+  });
+
+  it("keeps the estimate while the field is still empty or does not exist", () => {
+    const estimate = { rendererMs: 3000, quality: "estimated" as const };
+    expect(rereadFirstMediaTimestamp({ _firstMediaStreamTimestamp: null }, estimate)).toBe(
+      estimate,
+    );
+    expect(rereadFirstMediaTimestamp({}, estimate)).toBe(estimate);
   });
 });

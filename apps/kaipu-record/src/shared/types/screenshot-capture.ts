@@ -233,6 +233,14 @@ export interface CaptureToastPayload {
   /** The vault item when the shot was saved. */
   saved: { id: string } | null;
   copied: boolean;
+  /** The workspace the capture started in: the toast says "Saved to <name>" (a label only). */
+  workspace?: CaptureWorkspace | null;
+}
+
+/** The workspace a capture is bound to when it starts (ADR 0032, decision 9). */
+export interface CaptureWorkspace {
+  id: string;
+  name: string;
 }
 
 /** What the toast's buttons ask main to do (toast → main, `screenshot:toast-action`). */

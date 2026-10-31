@@ -7,6 +7,20 @@ import { CatalogCache } from "../cloud/catalog-cache";
 import { LibraryService } from "./library-service";
 import { LibraryVault } from "./library-vault";
 
+/** Rename by the id a caller saw, with the identity it holds there (as the IPC does). */
+async function renameById(
+  v: LibraryVault,
+  id: string,
+  title: string,
+  options?: Parameters<LibraryVault["renameItem"]>[2],
+) {
+  return v.renameItem(
+    { id, assetId: (await v.describe(id))?.assetId ?? "missing" },
+    title,
+    options,
+  );
+}
+
 const SHA_EMPTY = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=";
 
 describe("LibraryService", () => {
@@ -64,6 +78,20 @@ describe("LibraryService", () => {
     await rm(userData, { recursive: true, force: true });
   });
 
+  it("lists a renamed item once, under its new id and the same assetId", async () => {
+    account = null;
+    await writeFile(join(vaultDir, "old.mp4"), "");
+    const [before] = (await service.list()).items;
+    await renameById(new LibraryVault(vaultDir), "old", "Sprint demo");
+    const { items } = await service.list();
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      assetId: before!.assetId,
+      title: "Sprint demo",
+      local: { id: "Sprint demo" },
+    });
+  });
+
   it("lists local items only when signed out, with catalogVerifiedAt null", async () => {
     account = null;
     await writeFile(join(vaultDir, "a.mp4"), "");
@@ -71,6 +99,32 @@ describe("LibraryService", () => {
     expect(result.items.map((i) => i.availability)).toEqual(["local"]);
     expect(result.catalogVerifiedAt).toBeNull();
     expect(result.vaultError).toBeNull();
+  });
+
+  it("a workspace that does not own the legacy cloud entries hides them and leaves the cache alone", async () => {
+    await writeFile(join(vaultDir, "a.mp4"), "");
+    const rec = (await new LibraryVault(vaultDir).describe("a"))!;
+    catalog = [cloudEntry(rec.assetId), cloudEntry("from-default", { lastSeenLocalId: "x" })];
+    await service.refreshCatalog();
+    const before = await cache.read("u1");
+    const other = new LibraryService({
+      vault: () => new LibraryVault(vaultDir),
+      vaultDir: () => vaultDir,
+      cache,
+      account: () => account,
+      fetchCatalog,
+      ownsLegacyCloud: () => false,
+      now: () => 777,
+    });
+
+    const result = await other.list();
+
+    // Its own item still shows its cloud copy; the other workspace's cloud-only item does not.
+    expect(result.items.map((i) => [i.assetId, i.availability])).toEqual([
+      [rec.assetId, "local-and-cloud"],
+    ]);
+    expect(await cache.read("u1")).toEqual(before);
+    expect(result.catalogVerifiedAt).toBe(777);
   });
 
   it("refreshCatalog caches per account and list merges by assetId", async () => {
@@ -126,10 +180,38 @@ describe("LibraryService", () => {
     await writeFile(join(vaultDir, ".kaipu", "a.edit.json"), "{}");
     expect(await service.removeLocalCopy("a")).toEqual({ ok: false, reason: "edit-project" });
     await rm(join(vaultDir, ".kaipu", "a.edit.json"));
+    await writeFile(join(vaultDir, ".kaipu", "a.webcam.mp4"), "");
+    expect(await service.removeLocalCopy("a")).toEqual({ ok: false, reason: "webcam-track" });
+    await access(join(vaultDir, "a.mp4"));
+    await rm(join(vaultDir, ".kaipu", "a.webcam.mp4"));
     expect(await service.removeLocalCopy("a")).toEqual({ ok: true });
     const after = await service.list();
     expect(after.items.map((i) => i.availability)).toEqual(["cloud"]);
     expect(await service.removeLocalCopy("a")).toEqual({ ok: false, reason: "not-found" });
+  });
+
+  it("removeLocalCopy refuses an edit project or a webcam track before hashing the file", async () => {
+    await writeFile(join(vaultDir, "a.mp4"), "");
+    const rec = (await new LibraryVault(vaultDir).describe("a"))!;
+    catalog = [cloudEntry(rec.assetId, { sizeBytes: 0 })];
+    await service.refreshCatalog();
+    const vault = new LibraryVault(vaultDir);
+    const ensureContentHash = vi.spyOn(vault, "ensureContentHash");
+    service = new LibraryService({
+      vault: () => vault,
+      vaultDir: () => vaultDir,
+      cache: new CatalogCache(userData),
+      account: () => account,
+      fetchCatalog,
+      now: () => 777,
+    });
+    await mkdir(join(vaultDir, ".kaipu"), { recursive: true });
+    await writeFile(join(vaultDir, ".kaipu", "a.edit.json"), "{}");
+    expect(await service.removeLocalCopy("a")).toEqual({ ok: false, reason: "edit-project" });
+    await rm(join(vaultDir, ".kaipu", "a.edit.json"));
+    await writeFile(join(vaultDir, ".kaipu", "a.webcam.mp4"), "");
+    expect(await service.removeLocalCopy("a")).toEqual({ ok: false, reason: "webcam-track" });
+    expect(ensureContentHash).not.toHaveBeenCalled();
   });
 
   it("removeLocalCopy reports hash-unknown when hashing a file still being written rejects", async () => {

@@ -1,6 +1,8 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RecordingActivity } from "@shared/types";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { RecordingActivity, RecordingSettings } from "@shared/types";
 
 const { mockPreview } = vi.hoisted(() => ({ mockPreview: vi.fn() }));
 vi.mock("@renderer/features/recording/hooks/use-camera-preview", () => ({
@@ -10,6 +12,13 @@ vi.mock("@renderer/features/recording/hooks/use-camera-preview", () => ({
 import { CameraBubble, gripDragSize } from "./camera-bubble";
 
 const original = { ...window.electronAPI };
+// The bubble window exists because the camera is on.
+beforeEach(() => {
+  window.electronAPI.getRecordingSettings = async () => ({
+    ...(await original.getRecordingSettings()),
+    isCameraEnabled: true,
+  });
+});
 afterEach(() => {
   Object.assign(window.electronAPI, original);
 });
@@ -52,7 +61,7 @@ describe("CameraBubble", () => {
     await waitFor(() =>
       expect(container.firstElementChild).toHaveAttribute("data-shape", "rounded"),
     );
-    expect(mockPreview).toHaveBeenLastCalledWith(true, "cam-9", 480);
+    expect(mockPreview).toHaveBeenLastCalledWith(true, "cam-9", 720);
   });
 
   it("mirrors the preview by default and when the setting is on", async () => {
@@ -119,7 +128,7 @@ describe("CameraBubble", () => {
 
   it("leaves the video untouched while framing is off", async () => {
     const video = await renderWithFraming({ enabled: false, zoom: 2, x: 1, y: 1 });
-    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 480));
+    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 720));
     expect(video.style.transform).toBe("");
   });
 
@@ -146,7 +155,8 @@ describe("CameraBubble", () => {
     await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 1080));
     expect(video.style.transform).toContain("scale(2)");
     // The same bubble follows a pushed change: framing off clears the transform and the
-    // camera goes back to its usual lines.
+    // camera goes back to its usual lines: 720, what the recorder's webcam track needs from
+    // the camera both windows share (ADR 0037).
     act(() =>
       push?.({
         ...base,
@@ -160,7 +170,7 @@ describe("CameraBubble", () => {
       } as never),
     );
     expect(video.style.transform).toBe("");
-    expect(mockPreview).toHaveBeenLastCalledWith(true, null, 480);
+    expect(mockPreview).toHaveBeenLastCalledWith(true, null, 720);
   });
 
   it("keeps the camera resolution while recording, so a zoom change never reopens the camera mid-take", async () => {
@@ -187,12 +197,12 @@ describe("CameraBubble", () => {
         },
       }) as never;
     const video = await renderWithFraming({ enabled: true, zoom: 1, x: 0, y: 0 });
-    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 480));
+    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 720));
     act(() => pushActivity?.({ active: true, status: "recording", elapsedSeconds: 0 }));
     act(() => pushSettings?.(withZoom(2)));
     // The zoom applies at once; the stream keeps its lines until the take ends.
     expect(video.style.transform).toContain("scale(2)");
-    expect(mockPreview).toHaveBeenLastCalledWith(true, null, 480);
+    expect(mockPreview).toHaveBeenLastCalledWith(true, null, 720);
     act(() => pushActivity?.({ active: false, status: "recording", elapsedSeconds: 3 }));
     expect(mockPreview).toHaveBeenLastCalledWith(true, null, 1080);
   });
@@ -228,6 +238,28 @@ describe("CameraBubble", () => {
     fireEvent.pointerLeave(container.firstElementChild!);
     fireEvent.pointerEnter(container.firstElementChild!);
     expect(screen.queryByTestId("bubble-resize-grip")).not.toBeInTheDocument();
+  });
+
+  it("drops the chrome as soon as a take is pending, before the capture starts", () => {
+    withStream();
+    let push: ((activity: RecordingActivity) => void) | null = null;
+    window.electronAPI.onRecordingState = (callback) => {
+      push = callback;
+      return () => {};
+    };
+    const { container } = render(<CameraBubble />);
+    fireEvent.pointerEnter(container.firstElementChild!);
+    expect(screen.getByTestId("bubble-resize-grip")).toBeInTheDocument();
+
+    // Countdown or stream acquisition: not active yet, but the capture is about to start.
+    act(() => push?.({ active: false, pending: true, status: "recording", elapsedSeconds: 0 }));
+    expect(container.firstElementChild).not.toHaveAttribute("data-chrome");
+    expect(screen.queryByTestId("bubble-resize-grip")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("bubble-camera-off")).not.toBeInTheDocument();
+
+    // A cancelled countdown gives the chrome back to the pointer still on the bubble.
+    act(() => push?.({ active: false, status: "recording", elapsedSeconds: 0 }));
+    expect(screen.getByTestId("bubble-resize-grip")).toBeInTheDocument();
   });
 
   it("previews a grip drag through main and persists the applied size on release", async () => {
@@ -423,5 +455,93 @@ describe("gripDragSize", () => {
   it("clamps to 120–480", () => {
     expect(gripDragSize(240, 1000, -1000)).toBe(480);
     expect(gripDragSize(240, -1000, 1000)).toBe(120);
+  });
+});
+
+/**
+ * A camera turned off mid-take parks the bubble window (main hides it, ADR 0037): the preview
+ * must release the camera itself then, so the in-use light goes off, and reopen it when the
+ * camera comes back on.
+ */
+describe("CameraBubble — the Camera toggle", () => {
+  it("releases the camera while the toggle is off and reopens it when it is on again", async () => {
+    withStream();
+    let broadcast: ((settings: RecordingSettings) => void) | null = null;
+    window.electronAPI.onRecordingSettingsChanged = (callback) => {
+      broadcast = callback;
+      return () => {};
+    };
+    render(<CameraBubble />);
+    await waitFor(() => expect(broadcast).not.toBeNull());
+    expect(mockPreview).toHaveBeenLastCalledWith(true, null, 720);
+    const base = await original.getRecordingSettings();
+    act(() => broadcast!({ ...base, isCameraEnabled: false }));
+    expect(mockPreview).toHaveBeenLastCalledWith(false, null, 720);
+    act(() => broadcast!({ ...base, isCameraEnabled: true }));
+    expect(mockPreview).toHaveBeenLastCalledWith(true, null, 720);
+  });
+
+  it("never opens the camera of a window parked before it read the toggle", async () => {
+    // Parked before ready-to-show: opening the camera until main answers would blink its light.
+    mockPreview.mockClear();
+    withStream();
+    let answer!: (settings: RecordingSettings) => void;
+    window.electronAPI.getRecordingSettings = () => new Promise((resolve) => (answer = resolve));
+    render(<CameraBubble />);
+    const base = await original.getRecordingSettings();
+    await act(async () => answer({ ...base, isCameraEnabled: false }));
+    expect(mockPreview).toHaveBeenCalled();
+    expect(mockPreview.mock.calls.every(([enabled]) => enabled === false)).toBe(true);
+  });
+
+  it("opens the camera when main cannot say whether it is on: the window exists for it", async () => {
+    withStream();
+    window.electronAPI.getRecordingSettings = () => Promise.reject(new Error("no ipc"));
+    render(<CameraBubble />);
+    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 720));
+  });
+
+  it("a broadcast that lands before the first read wins over it", async () => {
+    withStream();
+    let answer!: (settings: RecordingSettings) => void;
+    window.electronAPI.getRecordingSettings = () => new Promise((resolve) => (answer = resolve));
+    let broadcast: ((settings: RecordingSettings) => void) | null = null;
+    window.electronAPI.onRecordingSettingsChanged = (callback) => {
+      broadcast = callback;
+      return () => {};
+    };
+    render(<CameraBubble />);
+    const base = await original.getRecordingSettings();
+    act(() => broadcast!({ ...base, isCameraEnabled: false }));
+    await act(async () => answer({ ...base, isCameraEnabled: true }));
+    expect(mockPreview).toHaveBeenLastCalledWith(false, null, 720);
+  });
+});
+
+/**
+ * The bubble window is part of the recorded screen, so whatever it paints at rest is in every
+ * video. jsdom applies no stylesheet, so this reads the real one: the bubble itself carries no
+ * border or outline, and the accent outline exists only under the hover-chrome selector.
+ */
+describe("camera bubble stylesheet", () => {
+  const dir = path.dirname(new URL(import.meta.url).pathname);
+  const css = readFileSync(path.join(dir, "camera-bubble.module.css"), "utf8").replace(
+    /\/\*[\s\S]*?\*\//g,
+    "",
+  );
+  const rule = (selector: string): string => {
+    const start = css.indexOf(`${selector} {`);
+    expect(start, `${selector} rule`).toBeGreaterThanOrEqual(0);
+    return css.slice(start, css.indexOf("}", start));
+  };
+
+  it("draws no border or outline on the bubble at rest", () => {
+    expect(rule(".bubble")).not.toMatch(/\b(border|outline)\s*:/);
+  });
+
+  it("draws the accent outline only while the hover chrome is on", () => {
+    expect(rule(".root[data-chrome] .bubble")).toMatch(
+      /outline:\s*2px solid var\(--accent-primary\)/,
+    );
   });
 });

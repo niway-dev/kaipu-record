@@ -54,9 +54,14 @@ export function CaptureToast({
       ? [t("toast.pasteWith", { key: platform === "mac" ? "⌘V" : "Ctrl+V" })]
       : []),
   ].join(" · ");
+  // Where the shot landed, by workspace name (spec decision 13). A label only: the toast
+  // offers no way to move it.
+  const workspace = payload.workspace?.name ?? null;
   const footer = payload.saved
     ? payload.copied
-      ? t("toast.footerAlsoSaved", { seconds: AUTO_HIDE_SECONDS })
+      ? workspace
+        ? t("toast.footerAlsoSavedTo", { seconds: AUTO_HIDE_SECONDS, name: workspace })
+        : t("toast.footerAlsoSaved", { seconds: AUTO_HIDE_SECONDS })
       : t("toast.footer", { seconds: AUTO_HIDE_SECONDS })
     : t("toast.footerNotSaved", { seconds: AUTO_HIDE_SECONDS });
 
@@ -72,7 +77,11 @@ export function CaptureToast({
         <img className={styles.thumbnail} src={payload.thumbnail} alt="" draggable={false} />
         <div className={styles.text}>
           <p className={styles.title}>
-            {payload.copied ? t("toast.copiedTitle") : t("toast.savedTitle")}
+            {payload.copied
+              ? t("toast.copiedTitle")
+              : workspace
+                ? t("toast.savedToWorkspace", { name: workspace })
+                : t("toast.savedTitle")}
           </p>
           <p className={styles.meta}>{meta}</p>
         </div>
@@ -102,7 +111,7 @@ export function CaptureToast({
         ) : (
           <button type="button" className={styles.secondary} onClick={() => api.action("save")}>
             <Save size={14} aria-hidden />
-            {t("toast.saveToLibrary")}
+            {workspace ? t("toast.saveToWorkspace", { name: workspace }) : t("toast.saveToLibrary")}
           </button>
         )}
       </div>

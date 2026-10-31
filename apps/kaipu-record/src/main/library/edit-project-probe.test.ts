@@ -9,7 +9,7 @@ vi.mock("./vault-location", () => ({
 }));
 
 import { saveSession, sessionMetaPath } from "./video-edit-session";
-import { hasEditSession, probeEditing, probeEditSession } from "./edit-project-probe";
+import { hasEditSession, probeEditing, probeEditSession, probeWebcam } from "./edit-project-probe";
 
 describe("probeEditing", () => {
   let dir: string;
@@ -136,5 +136,43 @@ describe("probeEditing", () => {
     } finally {
       clock.mockRestore();
     }
+  });
+});
+
+describe("probeWebcam", () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "kaipu-probe-webcam-"));
+    await mkdir(join(dir, ".kaipu"), { recursive: true });
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const sidecar = (id: string, data: object) =>
+    writeFile(join(dir, ".kaipu", `${id}.json`), JSON.stringify(data));
+
+  it("none for a recording that never had a webcam", async () => {
+    await sidecar("r", { title: "x" });
+    expect(await probeWebcam(dir, "r")).toBe("none");
+    expect(await probeWebcam(dir, "no-sidecar")).toBe("none");
+  });
+
+  it("present when the file exists", async () => {
+    await sidecar("r", { webcam: { startOffsetMs: 0 } });
+    await writeFile(join(dir, ".kaipu", "r.webcam.mp4"), "w");
+    expect(await probeWebcam(dir, "r")).toBe("present");
+  });
+
+  it("missing when the sidecar names a webcam but the file is gone", async () => {
+    await sidecar("r", {
+      webcam: { startOffsetMs: 0, offsetQuality: "exact", width: 1280, height: 720, fps: 30 },
+    });
+    expect(await probeWebcam(dir, "r")).toBe("missing");
+  });
+
+  it("none when the sidecar's webcam field is malformed, as describe() reads it", async () => {
+    await sidecar("r", { webcam: { startOffsetMs: 0 } });
+    expect(await probeWebcam(dir, "r")).toBe("none");
   });
 });

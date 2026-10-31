@@ -1,0 +1,362 @@
+/*
+ * Design "Kaipu Workspaces v2", section 1 (switcher), on the app's tokens. The tile reads
+ * its color from the tag palette (`--tag`, tag-palette.css) through `data-color`.
+ */
+
+.anchor {
+  position: relative;
+  min-width: 0;
+}
+
+.placeholder {
+  height: 30px;
+}
+
+.tile {
+  --tag: var(--text-muted);
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 28%;
+  background: var(--tag);
+  color: rgba(0, 0, 0, 0.78);
+  font-family: var(--font-mono);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  user-select: none;
+}
+
+.tile[data-dim] {
+  background: var(--bg-card-hover);
+  color: var(--text-muted);
+}
+
+/* ── The bar ─────────────────────────────── */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 420px;
+  height: 30px;
+  padding: 0 10px 0 5px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition:
+    border-color var(--transition),
+    background var(--transition);
+}
+
+.bar:hover {
+  border-color: var(--accent-primary);
+}
+
+.bar[data-state="off"] {
+  border-color: color-mix(in srgb, var(--warning) 50%, transparent);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+.barName {
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar[data-state="off"] .barName,
+.barOff {
+  color: var(--warning);
+}
+
+.barDivider {
+  flex-shrink: 0;
+  width: 1px;
+  height: 14px;
+  background: var(--border-light);
+}
+
+.barLocation {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.barOff {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.barChevron {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+/* ── The one-time hint (decision 19): no backdrop, never blocks a click elsewhere ── */
+
+.hint {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: max-content;
+  max-width: 360px;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 45%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--bg-modal);
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.55);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+}
+
+.hintDismiss {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.hintDismiss:hover {
+  background: var(--bg-card-hover);
+}
+
+/* ── The menu ─────────────────────────────── */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 46;
+  width: 330px;
+  overflow: hidden;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  background: var(--bg-modal);
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.85);
+  color: var(--text-primary);
+}
+
+.current {
+  padding: 12px 13px 11px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+.currentHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.currentText {
+  flex: 1;
+  min-width: 0;
+}
+
+.currentName {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+}
+
+.currentPath {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.stat {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-app);
+}
+
+.statLabel {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.statValue {
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shortcuts {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.shortcut {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.shortcut:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+.shortcut:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.section {
+  padding: 6px;
+}
+
+.sectionLabel {
+  padding: 6px 9px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.lock {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 3px 6px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 30%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.lock svg {
+  flex-shrink: 0;
+  color: var(--accent-primary);
+}
+
+.row,
+.action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 9px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  text-align: left;
+  cursor: pointer;
+}
+
+.row:hover:not(:disabled),
+.action:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+}
+
+.row:disabled,
+.action:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.rowText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rowName {
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.rowMeta[data-off] {
+  color: var(--warning);
+}
+
+.action {
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.separator {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--border);
+}

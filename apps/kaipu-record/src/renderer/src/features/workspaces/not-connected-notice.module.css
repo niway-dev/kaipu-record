@@ -1,0 +1,28 @@
+.notice {
+  display: flex;
+  gap: 12px;
+  margin-bottom: var(--space-lg);
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  text-align: left;
+}
+
+.icon {
+  flex-shrink: 0;
+  color: var(--warning);
+}
+
+.title {
+  color: var(--text-primary);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+}
+
+.body {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  word-break: break-word;
+}

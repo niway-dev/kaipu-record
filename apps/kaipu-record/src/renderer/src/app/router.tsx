@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { createHashRouter, Navigate, RouterProvider } from "react-router-dom";
 import { AppRoot } from "@renderer/shell/app-root";
 import { AppShell } from "@renderer/shell/app-shell";
@@ -10,7 +11,7 @@ import { SettingsLayout } from "@renderer/pages/settings/settings-layout";
 import {
   AppSettingsPage,
   DeveloperSettingsPage,
-  FilesSettingsPage,
+  WorkspacesSettingsPage,
   GeneralSettingsPage,
   PermissionsSettingsPage,
   RecordingQualitySettingsPage,
@@ -31,6 +32,7 @@ import {
 } from "@renderer/pages/editor/editor-routes";
 import { AuthPage } from "@renderer/pages/auth/auth-page";
 import { ROUTES } from "@shared/routes";
+import { prepareForSwitch, switchFlushers } from "@renderer/features/workspaces/prepare-switch";
 
 /**
  * Route tree for the app.
@@ -91,7 +93,9 @@ const router = createHashRouter([
               { path: "recording-quality", element: <RecordingQualitySettingsPage /> },
               { path: "recording", element: <RecordingSettingsPage /> },
               { path: "screenshots", element: <ScreenshotsSettingsPage /> },
-              { path: "files", element: <FilesSettingsPage /> },
+              { path: "workspaces", element: <WorkspacesSettingsPage /> },
+              // The page was "Files" before workspaces (ADR 0032).
+              { path: "files", element: <Navigate to="../workspaces" replace /> },
               { path: "app", element: <AppSettingsPage /> },
               ...(import.meta.env.DEV
                 ? [{ path: "developer", element: <DeveloperSettingsPage /> }]
@@ -107,5 +111,11 @@ const router = createHashRouter([
 ]);
 
 export function AppRouter(): React.JSX.Element {
+  // This window's part of a workspace switch: flush editors, let their leave guards ask
+  // about unsaved work, close what holds an item (ADR 0032, decision 7).
+  useEffect(
+    () => window.electronAPI.workspaces.onPrepare(() => prepareForSwitch(router, switchFlushers())),
+    [],
+  );
   return <RouterProvider router={router} />;
 }

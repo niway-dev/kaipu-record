@@ -34,7 +34,16 @@ export type ImageSource =
        */
       origin?: "capture" | "paste" | "quiet";
     })
-  | (ImageSourceBase & { kind: "local"; id: string; version?: number })
+  | (ImageSourceBase & {
+      kind: "local";
+      id: string;
+      version?: number;
+      /**
+       * The item's identity, required: an overwrite names it, so a save follows the item
+       * if a rename moved the file and never writes over another shot (NIW2-560).
+       */
+      assetId: string;
+    })
   | (ImageSourceBase & { kind: "cloud"; url: string });
 
 /** What every reader resolves a source into, for the generic editor to consume. */

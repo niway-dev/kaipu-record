@@ -1,4 +1,5 @@
 import { showToast } from "@renderer/ui/toast-store";
+import { isStaleWorkspaceError } from "@renderer/features/workspaces/stale";
 import { captureException } from "./analytics-client";
 
 export interface ReportErrorOptions {
@@ -19,6 +20,8 @@ export function reportError(
   error: unknown,
   options: ReportErrorOptions = {},
 ): void {
+  // A call answered after a workspace switch: its page is gone and nothing was written.
+  if (isStaleWorkspaceError(error)) return;
   captureException(error, options.context);
   showToast({
     message: userMessage,
