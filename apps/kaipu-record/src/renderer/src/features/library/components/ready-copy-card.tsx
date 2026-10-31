@@ -86,6 +86,8 @@ export function ReadyCopyCard({
               type="button"
               className={styles.button}
               draggable
+              // Drag only: Enter and Space cannot drag, and Show in Finder is the keyboard's way.
+              tabIndex={-1}
               aria-label={t("readyDragLabel", { name: fileName })}
               onDragStart={(e) => {
                 // Main runs a native drag (a real file), so the browser's own drag never starts.

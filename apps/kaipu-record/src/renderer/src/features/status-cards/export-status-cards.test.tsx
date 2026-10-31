@@ -171,6 +171,9 @@ describe("ExportReadyCard", () => {
     inRouter(<ExportReadyCard ready={{ job: JOB, recording: RECORDING }} />);
     const drag = screen.getByRole("button", { name: "Drag Demo (light).mp4 out of Kaipu" });
     expect(drag).toHaveAttribute("draggable", "true");
+    // Nothing for Enter or Space to do, so not a Tab stop; Show in Finder is.
+    expect(drag).toHaveAttribute("tabindex", "-1");
+    expect(screen.getByRole("button", { name: "Show in Finder" })).not.toHaveAttribute("tabindex");
     expect(drag).toHaveTextContent("Drag to upload");
     fireEvent.dragStart(drag);
     expect(startFileDrag).toHaveBeenCalledWith("new-rec", "Demo (light)");

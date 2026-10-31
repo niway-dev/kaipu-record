@@ -166,6 +166,8 @@ export function MasterCopiesPanel({
                 <button
                   type="button"
                   draggable
+                  // Drag only: Enter and Space cannot drag; the copy's own link opens it.
+                  tabIndex={-1}
                   className={styles.drag}
                   aria-label={t("copyDragLabel", { name })}
                   title={t("copyDragLabel", { name })}

@@ -126,7 +126,9 @@ export function StatusCardActions({
 /**
  * A card button. `text` is a quiet word-only action (the progress card's Cancel); `grow`
  * shares the row with the primary instead of hugging its label. A button with
- * `onDragStart` is something to pick up (the ready card's "Drag to upload").
+ * `onDragStart` is something to pick up (the ready card's "Drag to upload"). One that can only
+ * be dragged is out of the Tab order: Enter and Space cannot drag, and the card's "Show in
+ * Finder" is the keyboard's way to the same file.
  */
 export function StatusCardButton({
   variant = "secondary",
@@ -156,6 +158,7 @@ export function StatusCardButton({
       aria-label={label}
       title={title}
       onClick={onClick}
+      tabIndex={onDragStart && !onClick ? -1 : undefined}
       draggable={onDragStart ? true : undefined}
       onDragStart={onDragStart}
     >
