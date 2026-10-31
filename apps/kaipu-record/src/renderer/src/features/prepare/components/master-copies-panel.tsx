@@ -9,6 +9,7 @@ import {
 } from "@renderer/features/video-editor/export/export-presets";
 import { exportEtaSeconds } from "@renderer/features/video-editor/export/export-size";
 import type { ExportRunnerSnapshot } from "@renderer/features/video-editor/export/export-runner";
+import { markCopySeen } from "@renderer/features/video-editor/export/ready-copies";
 import type { SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { copyPresetOf } from "../copy-destination";
 import { destinationOfPreset } from "../destinations";
@@ -171,6 +172,8 @@ export function MasterCopiesPanel({
                   onDragStart={(e) => {
                     // Main runs a native drag (a real file), so the browser's own never starts.
                     e.preventDefault();
+                    // Dragging it out is acting on it, as from the export card.
+                    markCopySeen(copy.assetId);
                     window.electronAPI.startFileDrag(copy.id!, copy.title);
                   }}
                 >

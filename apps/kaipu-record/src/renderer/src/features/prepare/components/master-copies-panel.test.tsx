@@ -1,8 +1,14 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import type { ExportJobInfo } from "@renderer/features/video-editor/export/export-runner";
+import {
+  __resetReadyCopiesForTests,
+  getReadyCopies,
+  noteFinishedCopy,
+  unseenCopyIds,
+} from "@renderer/features/video-editor/export/ready-copies";
 import { MasterCopiesPanel, type RunningCopy, runningCopyOf } from "./master-copies-panel";
 
 const copy = (overrides: Partial<LibraryVideo>): LibraryVideo => ({
@@ -107,8 +113,11 @@ describe("MasterCopiesPanel (Export v3, NIW2-585)", () => {
   });
 
   it("Drag hands the real file to main for a native drag, under the copy's title", () => {
-    const startFileDrag = vi.fn();
-    window.electronAPI.startFileDrag = startFileDrag;
+    const startFileDrag = vi
+      .spyOn(window.electronAPI, "startFileDrag")
+      .mockImplementation(() => {});
+    noteFinishedCopy("copy");
+    expect(unseenCopyIds(getReadyCopies()).has("copy")).toBe(true);
     const panel = renderPanel([copy({ id: "copy-file", title: "Take (for sharing)" })]);
     const drag = within(panel).getByRole("button", {
       name: "Drag Slack · Discord · Email into another app",
@@ -116,6 +125,9 @@ describe("MasterCopiesPanel (Export v3, NIW2-585)", () => {
     expect(drag).toHaveAttribute("draggable", "true");
     fireEvent.dragStart(drag);
     expect(startFileDrag).toHaveBeenCalledWith("copy-file", "Take (for sharing)");
+    // Dragging it out counts as seeing it, as from the export card.
+    expect(unseenCopyIds(getReadyCopies()).has("copy")).toBe(false);
+    startFileDrag.mockRestore();
   });
 
   it("a copy with no local file has nothing to drag", () => {
@@ -153,8 +165,14 @@ describe("MasterCopiesPanel (Export v3, NIW2-585)", () => {
     const panel = renderPanel([copy({})], null, { onOpenExport });
     fireEvent.click(within(panel).getByRole("button", { name: "Open in Export →" }));
     expect(onOpenExport).toHaveBeenCalledOnce();
+
+    cleanup();
+    const without = renderPanel([copy({})]);
+    expect(within(without).queryByRole("button", { name: "Open in Export →" })).toBeNull();
   });
 });
+
+afterEach(() => __resetReadyCopiesForTests());
 
 describe("runningCopyOf", () => {
   const job: ExportJobInfo = {
