@@ -228,6 +228,7 @@
     "mirrorHint": "Desactívalo cuando la cámara no te apunta, para que el texto se lea bien",
     "framingTitle": "Encuadre",
     "framingHint": "Acerca la imagen y muévela dentro de la burbuja",
+    "centerStageHint": "¿La imagen sigue tu cara? Es el Encuadre centrado de macOS, no el Encuadre de Kaipu. Apágalo desde el ícono verde de cámara en la barra de menú.",
     "zoom": "Zoom",
     "zoomValue": "{percent}%",
     "position": "Posición de la imagen",

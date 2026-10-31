@@ -343,3 +343,29 @@ describe("CameraSettingsFields — framing", () => {
     });
   });
 });
+
+describe("CameraSettingsFields — macOS Center Stage hint", () => {
+  const hint = /That is macOS Center Stage, not Framing/;
+
+  it("on macOS with the camera on, says where to turn Center Stage off", () => {
+    renderFields({ platform: "darwin" });
+    expect(screen.getByText(hint)).toHaveTextContent(
+      "Image following your face? That is macOS Center Stage, not Framing. Turn it off from the green camera icon in the menu bar.",
+    );
+  });
+
+  it("is not there while the camera is off", () => {
+    renderFields({ platform: "darwin", cameraOn: false });
+    expect(screen.queryByText(hint)).toBeNull();
+  });
+
+  it("is not there on Windows or Linux", () => {
+    renderFields({ platform: "win32" });
+    expect(screen.queryByText(hint)).toBeNull();
+  });
+
+  it("is left out of the compact capture-panel drawer", () => {
+    renderFields({ platform: "darwin", compact: true });
+    expect(screen.queryByText(hint)).toBeNull();
+  });
+});

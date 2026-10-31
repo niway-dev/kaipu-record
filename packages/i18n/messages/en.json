@@ -228,6 +228,7 @@
     "mirrorHint": "Turn off when the camera faces away from you, so text reads correctly",
     "framingTitle": "Framing",
     "framingHint": "Zoom in and move the image inside the bubble",
+    "centerStageHint": "Image following your face? That is macOS Center Stage, not Framing. Turn it off from the green camera icon in the menu bar.",
     "zoom": "Zoom",
     "zoomValue": "{percent}%",
     "position": "Image position",
