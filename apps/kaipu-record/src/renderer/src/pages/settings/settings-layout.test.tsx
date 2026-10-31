@@ -5,12 +5,13 @@ import { OnboardingContext } from "@renderer/features/onboarding/onboarding-cont
 import { SettingsLayout } from "./settings-layout";
 import {
   AppSettingsPage,
-  FilesSettingsPage,
   GeneralSettingsPage,
   PermissionsSettingsPage,
   RecordingQualitySettingsPage,
   RecordingSettingsPage,
+  WorkspacesSettingsPage,
 } from "./settings-pages";
+import { WorkspacesProvider } from "@renderer/features/workspaces/workspaces-context";
 
 function renderAt(path: string, open = vi.fn()) {
   const router = createMemoryRouter(
@@ -25,7 +26,7 @@ function renderAt(path: string, open = vi.fn()) {
           { path: "permissions", element: <PermissionsSettingsPage /> },
           { path: "recording-quality", element: <RecordingQualitySettingsPage /> },
           { path: "recording", element: <RecordingSettingsPage /> },
-          { path: "files", element: <FilesSettingsPage /> },
+          { path: "workspaces", element: <WorkspacesSettingsPage /> },
           { path: "app", element: <AppSettingsPage /> },
         ],
       },
@@ -34,7 +35,9 @@ function renderAt(path: string, open = vi.fn()) {
   );
   render(
     <OnboardingContext.Provider value={{ isOpen: false, open }}>
-      <RouterProvider router={router} />
+      <WorkspacesProvider>
+        <RouterProvider router={router} />
+      </WorkspacesProvider>
     </OnboardingContext.Provider>,
   );
   return router;
@@ -50,7 +53,7 @@ describe("Settings layout", () => {
       "Permissions",
       "Recording quality",
       "Recording",
-      "Files",
+      "Workspaces",
       "App",
     ]) {
       expect(
@@ -85,13 +88,19 @@ describe("Settings layout", () => {
     expect(screen.getAllByRole("button", { name: /request/i }).length).toBeGreaterThan(0);
   });
 
-  it("Files shows the vault and opens it", async () => {
-    const openFolder = vi.spyOn(window.electronAPI, "openVaultDirectory");
-    renderAt("/settings/files");
-    expect(await screen.findByText("/tmp/vault · Default")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Open folder" }));
-    expect(openFolder).toHaveBeenCalledOnce();
+  it("Workspaces lists each workspace with its folder, opens it, and adds one", async () => {
+    const openFolder = vi.spyOn(window.electronAPI.workspaces, "openFolder");
+    const add = vi.spyOn(window.electronAPI.workspaces, "add");
+    renderAt("/settings/workspaces");
+    expect(await screen.findByText("/tmp/vault · Active")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show folder" }));
+    expect(openFolder).toHaveBeenCalledWith("ws-default");
+    // With one workspace there is nothing to remove: it is the active and the last one.
+    expect(screen.queryByRole("button", { name: "Remove from list" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Add workspace" }));
+    expect(add).toHaveBeenCalledOnce();
     openFolder.mockRestore();
+    add.mockRestore();
   });
 
   it("App replays onboarding", async () => {

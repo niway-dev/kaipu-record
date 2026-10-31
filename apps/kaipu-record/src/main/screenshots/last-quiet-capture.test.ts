@@ -8,7 +8,13 @@ import {
   type QuietCapture,
 } from "./last-quiet-capture";
 
-const SHOT: QuietCapture = { png: Buffer.from([1]), width: 1, height: 1, mode: "frame" };
+const SHOT: QuietCapture = {
+  png: Buffer.from([1]),
+  width: 1,
+  height: 1,
+  mode: "frame",
+  workspaceId: null,
+};
 const NEXT: QuietCapture = { ...SHOT, png: Buffer.from([2]) };
 
 beforeEach(() => {

@@ -1,4 +1,4 @@
-/* The webcam layer's slot (ADR 0033): a sibling of .content, so the camera path's
+/* The webcam layer's slot (ADR 0038): a sibling of .content, so the camera path's
    transform never reaches it, and below the chrome (camera box, region editor and the
    hold button sit at z-index 4–5). The slot itself lets every pointer through; only the
    bubble takes them. */

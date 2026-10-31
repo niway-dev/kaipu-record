@@ -5,6 +5,8 @@ import { MemoryRouter, useNavigate } from "react-router-dom";
 import type { RecorderStatus } from "@renderer/features/recording/recorder-store";
 import type { RecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
 import { RecordPage } from "./record-page";
+import { WorkspacesProvider } from "@renderer/features/workspaces/workspaces-context";
+import { WorkspaceSwitcher } from "@renderer/features/workspaces/workspace-switcher";
 
 // The record page is composition over hooks; mock them so we can drive the
 // auto-start / open-picker effects (finding 15 — the subtlest logic in the app,
@@ -95,8 +97,11 @@ function renderAt(state: Record<string, unknown> | undefined): { rerender: () =>
   // A fresh element on every render: React skips a rerender of the identical element.
   const ui = (): React.JSX.Element => (
     <MemoryRouter initialEntries={[{ pathname: "/", state }]}>
-      <NavProbe />
-      <RecordPage />
+      <WorkspacesProvider>
+        <NavProbe />
+        <WorkspaceSwitcher />
+        <RecordPage />
+      </WorkspacesProvider>
     </MemoryRouter>
   );
   const view = render(ui());
@@ -188,7 +193,12 @@ describe("RecordPage idle layout (design Kaipu Record Modes)", () => {
     };
     renderAt(undefined);
     expect(screen.getByText("RECORD")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Ready to record" })).toBeInTheDocument();
+    // Spec decision 13: the heading names where the take lands, in place of "Ready to record".
+    expect(
+      await screen.findByRole("heading", { name: "Recording to Default workspace" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Ready to record")).toBeNull();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(await screen.findByTestId("frame-caption")).toHaveTextContent("16:9 · 1280 × 720");
     expect(screen.getByRole("button", { name: /^Frame/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("SOUND & CAMERA")).toBeInTheDocument();
@@ -200,6 +210,14 @@ describe("RecordPage idle layout (design Kaipu Record Modes)", () => {
     expect(requestRecordSelector.mock.calls).toEqual([[undefined], ["screen"]]);
     // A click never starts a take by itself: main opens the selector first.
     expect(startRecording).not.toHaveBeenCalled();
+  });
+
+  it("Switch beside the heading opens the workspace list, with Add workspace when there is one", async () => {
+    renderAt(undefined);
+    fireEvent.click(await screen.findByRole("button", { name: "Switch" }));
+    const menu = screen.getByRole("menu");
+    expect(menu).toHaveTextContent("Default workspace");
+    expect(screen.getByRole("menuitem", { name: /Add workspace/ })).toBeInTheDocument();
   });
 
   it("opens the camera settings drawer from the split Camera tile in the idle layout", () => {
