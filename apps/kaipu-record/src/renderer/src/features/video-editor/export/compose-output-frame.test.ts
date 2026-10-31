@@ -189,6 +189,27 @@ describe("createOutputComposer: the webcam layer (ADR 0038)", () => {
     expect(webcamDraws()[0]!.args[7] as number).toBeCloseTo(0.22 * 1080 * 0.7);
   });
 
+  it("a webcam fill over a still screen crops at the fill's time; redactions stay the held frame's (E9)", () => {
+    // The screen frame was decoded at 0.5 s (no zoom yet) and stays up; the zoom starts at
+    // 1 s. A fill at 1.5 s re-composes that frame: the crop follows the camera at 1.5 s,
+    // while the redaction is still the one over the held frame's own span.
+    const early: Redaction = { ...cover, start: 0, end: 0.6 };
+    const { compose } = composer({ webcam: webcam(), camera: camera(2, 1), redactions: [early] });
+    compose.clip(FRAME, 0.5, 1 / 30, 1.5, cam(1.5), 1.5);
+    const crop = log.find(
+      (entry) => entry.canvas === "output" && entry.call === "drawImage" && entry.args.length === 9,
+    );
+    expect(crop).toBeDefined();
+    expect(crop!.args[3]).toBeCloseTo(SOURCE.width / 2); // sw: half the frame at 2×
+    expect(log.some((entry) => entry.canvas !== "output" && entry.call === "fillRect")).toBe(true);
+  });
+
+  it("without a camera time the crop is the held frame's, as before", () => {
+    const { compose } = composer({ webcam: webcam(), camera: camera(2, 1) });
+    compose.clip(FRAME, 0.5, 1 / 30, 1.5, cam(1.5));
+    expect(draws().map((d) => d.args[0])).toEqual([FRAME, WEBCAM_FRAME]); // direct: no crop
+  });
+
   it("a recording without a webcam composes exactly as before, whatever frame is passed", () => {
     const { compose } = composer({ webcam: null });
     compose.clip(FRAME, 1, 1 / 30, 1, cam(1));
@@ -208,19 +229,20 @@ describe("createOutputComposer: the webcam layer (ADR 0038)", () => {
   });
 });
 
-// A tripwire, not coverage: it reads the worker sources, so it only proves the webcam is
-// handed to the shared composer in both, not that the right frame or time reaches it
-// (that is the composer and lockstep tests). A harmless refactor of the call shape can trip it.
-describe("both exports draw the layer through the shared composer", () => {
-  // The workers cannot run in jsdom (WebCodecs); what keeps MP4 and GIF from diverging is
-  // that both hand the plan's webcam and the decoded webcam frame to createOutputComposer.
+// The GIF worker's wiring is run for real in gif-worker.test.ts, and the MP4 clip loop in
+// export-clip-frames.test.ts. What is left is the MP4 worker's own glue, which cannot be
+// mounted in jsdom without faking the whole muxer (Output, CanvasSource, StreamTarget,
+// the encoders): a tripwire over its source that the plan's webcam reaches both the composer
+// and the clip loop. A harmless refactor of the call shape can trip it.
+describe("the MP4 worker hands the plan's webcam to the composer and the clip loop", () => {
   const dir = path.dirname(new URL(import.meta.url).pathname);
-  const read = (file: string): string =>
-    readFileSync(path.join(dir, file), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+  const source = readFileSync(path.join(dir, "export-worker.ts"), "utf8").replace(
+    /\/\*[\s\S]*?\*\/|\/\/.*$/gm,
+    "",
+  );
 
-  it.each(["export-worker.ts", "gif-worker.ts"])("%s", (file) => {
-    const source = read(file);
+  it("export-worker.ts", () => {
     expect(source).toMatch(/createOutputComposer\(\{[^}]*webcam: plan\.webcam/);
-    expect(source).toMatch(/compose\.clip\([^)]*webcam/i);
+    expect(source).toMatch(/exportClipFrames\(\{[^}]*layer: plan\.webcam/);
   });
 });

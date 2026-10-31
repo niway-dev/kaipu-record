@@ -3,6 +3,7 @@ import {
   WEBCAM_DRIFT_SECONDS,
   webcamHasFrameAt,
   webcamResyncTarget,
+  webcamSeekLead,
   webcamTimeFor,
 } from "./webcam-sync";
 
@@ -56,5 +57,21 @@ describe("webcamResyncTarget", () => {
 
   it("does not seek when already parked at the clamped end", () => {
     expect(webcamResyncTarget(30, 40, 30)).toBeNull();
+  });
+});
+
+describe("webcamSeekLead", () => {
+  it("leads a seek during playback by the last seek's duration, so it lands on time", () => {
+    expect(webcamSeekLead(true, 0.4)).toBeCloseTo(0.4);
+  });
+
+  it("does not lead while paused: the main clock is not moving", () => {
+    expect(webcamSeekLead(false, 0.4)).toBe(0);
+  });
+
+  it("ignores seeks short enough for the drift rule, and caps a pathological one", () => {
+    expect(webcamSeekLead(true, WEBCAM_DRIFT_SECONDS / 2)).toBe(0);
+    expect(webcamSeekLead(true, 5)).toBe(1);
+    expect(webcamSeekLead(true, Number.NaN)).toBe(0);
   });
 });

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { HistorySlider } from "./history-slider";
 
@@ -28,6 +28,22 @@ describe("HistorySlider", () => {
     expect(handlers.onLive).toHaveBeenCalledWith(2.5);
     expect(handlers.onEnd).toHaveBeenCalledTimes(1);
     expect(handlers.onCommit).not.toHaveBeenCalled();
+  });
+
+  it("unmounting mid-drag ends the gesture, so the scene's drag is never left open", () => {
+    const handlers = { onBegin: vi.fn(), onLive: vi.fn(), onEnd: vi.fn(), onCommit: vi.fn() };
+    const { unmount } = render(
+      <HistorySlider label="Level" value={2} min={1} max={4} step={0.1} {...handlers} />,
+    );
+    fireEvent.pointerDown(screen.getByRole("slider"), { pointerId: 1 });
+    unmount();
+    expect(handlers.onEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it("unmounting without a drag does not end anything", () => {
+    const { handlers } = setup();
+    cleanup();
+    expect(handlers.onEnd).not.toHaveBeenCalled();
   });
 
   it("a change without a pointer (keyboard) is a commit", () => {

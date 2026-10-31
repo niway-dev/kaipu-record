@@ -41,3 +41,18 @@ export function webcamResyncTarget(
   const wanted = Math.max(0, bounded);
   return Math.abs(current - wanted) > WEBCAM_DRIFT_SECONDS ? wanted : null;
 }
+
+/** The longest lead a seek is given; a slower seek than this is not worth predicting. */
+export const WEBCAM_MAX_SEEK_LEAD_SECONDS = 1;
+
+/**
+ * How far past the target to seek the webcam: while the main video plays, a seek that took
+ * `lastSeekSeconds` (a long keyframe interval decodes from far back) lands that much behind
+ * the screen, and the catch-up seek would lag the same way. Aiming ahead by the last
+ * measured seek lands it on time. Nothing while paused, and nothing for seeks short enough
+ * that the drift rule already absorbs them.
+ */
+export function webcamSeekLead(mainPlaying: boolean, lastSeekSeconds: number): number {
+  if (!mainPlaying || !(lastSeekSeconds > WEBCAM_DRIFT_SECONDS)) return 0;
+  return Math.min(lastSeekSeconds, WEBCAM_MAX_SEEK_LEAD_SECONDS);
+}

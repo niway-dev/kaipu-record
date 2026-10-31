@@ -213,6 +213,34 @@ describe("useGifExport", () => {
     ).toHaveLength(1);
   });
 
+  it("a webcam fetch that throws synchronously exports without the layer and is retried (E11)", async () => {
+    // fetch() itself throwing (not a rejected promise) reaches onError before the hook's
+    // `track` binding exists; it must still be reported and must not be cached.
+    const fetch = vi.fn((url: string) => {
+      if (url.startsWith("kaipu-media://webcam/")) throw new TypeError("bad scheme");
+      return Promise.resolve({ ok: true, status: 200, blob: async () => new Blob(["x"]) });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const scene: VideoScene = {
+      ...SCENE,
+      webcam: { layout: { ...WEBCAM_DEFAULTS }, segments: [] },
+    };
+    const a = args({ scene, webcamTrack: { startOffsetMs: 80 } });
+    const { result, worker } = await startExport(a);
+    const msg = worker.postMessage.mock.calls[0][0] as GifStartMessage;
+    expect(msg.webcam).toBeNull();
+    expect(captureException).toHaveBeenCalledWith(expect.any(TypeError), {
+      context: "gif-export-webcam",
+    });
+    act(() => worker.emit({ type: "error", message: "stop" }));
+    await act(async () => {
+      await result.current.start(a);
+    });
+    expect(
+      fetch.mock.calls.filter(([url]) => url.startsWith("kaipu-media://webcam/")),
+    ).toHaveLength(2);
+  });
+
   it("sends no webcam and fetches none for a recording without one", async () => {
     const fetch = vi.fn(async () => ({ ok: true, status: 200, blob: async () => new Blob(["x"]) }));
     vi.stubGlobal("fetch", fetch);

@@ -6,7 +6,7 @@
  * WORKER-BUNDLE INVARIANT, like compose-frame.ts: pure and DOM-free. It reads nothing but
  * the layout's own fields, so the export worker can import it.
  */
-import type { CameraBubbleShape } from "@shared/camera-bubble";
+import { type CameraBubbleShape, clampCameraPan, clampCameraZoom } from "@shared/camera-bubble";
 import type { WebcamLayout } from "./webcam-model";
 
 export interface WebcamRect {
@@ -106,15 +106,17 @@ export function webcamClipPath(shape: CameraBubbleShape): string {
  * of `1/zoom` of the side whose centre sits `pan · (zoom − 1) / (2·zoom)` of the side from
  * the middle, toward the pan. The mirror flips the image before that, so in the raw
  * (unmirrored) image a mirrored bubble's window moves the other way on x; the caller then
- * draws the window flipped.
+ * draws the window flipped. Zoom and pan are clamped exactly as `framingTransform` does.
  */
 export function webcamSourceRect(
   image: FrameSize,
   framing: { zoom: number; x: number; y: number },
   mirrored: boolean,
 ): { sx: number; sy: number; sw: number; sh: number } {
-  const zoom = Number.isFinite(framing.zoom) ? Math.max(1, framing.zoom) : 1;
-  const pan = (value: number): number => (Number.isFinite(value) ? clamp(value, -1, 1) : 0);
+  // The preview's own clamps (`framingTransform`): the 3× cap, the zoom step and the pan's
+  // two decimals, so a hand-edited session never frames the export differently.
+  const zoom = clampCameraZoom(Number.isFinite(framing.zoom) ? framing.zoom : 1);
+  const pan = (value: number): number => clampCameraPan(Number.isFinite(value) ? value : 0);
   const side = Math.min(image.width, image.height);
   const window = side / zoom;
   const reach = ((zoom - 1) / (2 * zoom)) * side;

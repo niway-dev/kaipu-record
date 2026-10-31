@@ -110,4 +110,90 @@ describe("WebcamLane", () => {
       ["w", "end", null, "end"],
     ]);
   });
+
+  describe("filmstrip", () => {
+    // One thumbnail per second of source; the webcam has no footage after source 15 s.
+    const thumbnails = Array.from({ length: 15 }, (_, i) => ({
+      sourceTime: i + 0.5,
+      url: `cam-${i}`,
+    }));
+    const tiles = (container: HTMLElement) =>
+      Array.from(container.querySelectorAll<HTMLImageElement>("[data-webcam-filmstrip] img"));
+
+    it("shows the webcam's frames under each clip, picked at source time", () => {
+      const { container } = render(
+        <WebcamLane
+          layout={layout}
+          segments={[]}
+          thumbnails={thumbnails}
+          covered={{ start: 0, end: 15 }}
+          selectedId={null}
+          onSelect={vi.fn()}
+          onEdgeDrag={vi.fn()}
+        />,
+      );
+      const strips = Array.from(container.querySelectorAll("[data-webcam-filmstrip] > *"));
+      const frameSeconds = (strip: Element) =>
+        Array.from(strip.querySelectorAll("img")).map((img) =>
+          Number(img.getAttribute("src")!.slice("cam-".length)),
+        );
+      // Clip a (source 0–5) then clip b (source 10–20), placed like the clips lane: the
+      // second strip starts where the first ends, and the cut (5–10) shows no frame at all.
+      expect(strips).toHaveLength(2);
+      expect((strips[1] as HTMLElement).style.left).toBe((strips[0] as HTMLElement).style.width);
+      expect(frameSeconds(strips[0]).length).toBeGreaterThan(0);
+      expect(frameSeconds(strips[0]).every((s) => s < 5)).toBe(true);
+      expect(frameSeconds(strips[1]).length).toBeGreaterThan(0);
+      expect(frameSeconds(strips[1]).every((s) => s >= 10)).toBe(true);
+    });
+
+    it("leaves a tile empty where the webcam has no frame", () => {
+      const late = render(
+        <WebcamLane
+          layout={toLayout([{ id: "c", kind: "clip", sourceStart: 16, sourceEnd: 20 }])}
+          segments={[]}
+          thumbnails={thumbnails}
+          covered={{ start: 0, end: 15 }}
+          selectedId={null}
+          onSelect={vi.fn()}
+          onEdgeDrag={vi.fn()}
+        />,
+      );
+      expect(tiles(late.container)).toHaveLength(0);
+    });
+
+    it("keeps the segments clickable above it and the strip out of the accessibility tree", () => {
+      const onSelect = vi.fn();
+      const { container } = render(
+        <WebcamLane
+          layout={layout}
+          segments={[segment({ id: "h", start: 1, end: 2 })]}
+          thumbnails={thumbnails}
+          covered={{ start: 0, end: 15 }}
+          selectedId={null}
+          onSelect={onSelect}
+          onEdgeDrag={vi.fn()}
+        />,
+      );
+      expect(container.querySelector("[data-webcam-filmstrip]")).toHaveAttribute(
+        "aria-hidden",
+        "true",
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Webcam section 1" }));
+      expect(onSelect).toHaveBeenCalledWith("h");
+    });
+
+    it("renders no strip without thumbnails", () => {
+      const { container } = render(
+        <WebcamLane
+          layout={layout}
+          segments={[]}
+          selectedId={null}
+          onSelect={vi.fn()}
+          onEdgeDrag={vi.fn()}
+        />,
+      );
+      expect(container.querySelector("[data-webcam-filmstrip]")).toBeNull();
+    });
+  });
 });

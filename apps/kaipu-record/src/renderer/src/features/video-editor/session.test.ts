@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { initialScene, type VideoScene } from "./scene";
 import { parseSession, serializeSession } from "./session";
+import { SESSION_BEFORE_WEBCAM } from "./session-before-webcam.fixture";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -464,6 +465,17 @@ describe("webcam layer", () => {
       webcam: { layout: LAYOUT as never, segments: [HIDDEN, OVERRIDE] as never },
     };
     expect(parseSession(serializeSession(scene))!.scene.webcam).toEqual(scene.webcam);
+  });
+
+  it("opens the frozen pre-webcam session with every edit intact and no layer (W6)", () => {
+    const parsed = parseSession(SESSION_BEFORE_WEBCAM)!;
+    expect(parsed).not.toBeNull();
+    expect(parsed.hasZoomData).toBe(true);
+    expect(parsed.scene.webcam).toBeNull();
+    expect(parsed.scene.items.map((i) => i.id)).toEqual(["clip-a", "clip-b"]);
+    expect(parsed.scene.zoomSegments.map((z) => z.id)).toEqual(["zoom-1"]);
+    expect(parsed.scene.redactions.map((r) => r.id)).toEqual(["cover-1"]);
+    expect(parsed.scene.mutedRanges).toEqual([{ id: "mute-1", sourceStart: 20, sourceEnd: 22 }]);
   });
 
   it("opens a session saved before the webcam, and a null one, with no layer", () => {

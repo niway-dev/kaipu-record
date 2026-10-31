@@ -84,10 +84,10 @@ import {
   Quality,
   StreamTarget,
 } from "mediabunny";
-import type { StreamTargetChunk, WrappedCanvas } from "mediabunny";
+import type { StreamTargetChunk } from "mediabunny";
 import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
 import { silencedSpansFor } from "../audio-edits";
-import { rebaseVideoTimestamp } from "./rebase-timestamp";
+import { exportClipFrames } from "./export-clip-frames";
 import { exportCanvasSinkOptions } from "./canvas-sink-options";
 import { createOutputComposer } from "./compose-output-frame";
 import {
@@ -100,8 +100,6 @@ import {
 import { cappedSlideFps, createFrameRateCap } from "./frame-rate-cap";
 import { chooseVideoEncoding, type VideoEncodingChoice } from "./video-encoding";
 import { WEBCAM_FPS } from "@shared/webcam-track";
-import { webcamAt } from "../webcam/webcam-model";
-import { fillWebcamGap, webcamLookupTime, type WebcamFillState } from "./webcam-lockstep";
 import { openWebcamSourceOrNone, webcamImageOf, type WebcamSource } from "./webcam-source";
 
 // ---------------------------------------------------------------------------
@@ -332,89 +330,25 @@ async function runExportWithInput(
 
         // The webcam frames of this clip, decoded beside the screen's (null: no webcam).
         const webcamCursor = webcam?.cursorFor(segment.sourceStart, segment.sourceEnd) ?? null;
-        const layer = plan.webcam;
-        // The latest screen frame decoded (kept or not): what the source shows until the next
-        // one, so the fills re-compose it. Its canvas stays intact while the next is decoded
-        // (the sink's pool has two slots, see canvas-sink-options.ts).
-        let held: WrappedCanvas | null = null;
-        let fills: WebcamFillState<WrappedCanvas> = { from: segment.sourceStart, face: null };
-        const fillUntil = async (nextFrame: number): Promise<void> => {
-          if (!held || !webcamCursor || !layer) return;
-          const frame = held;
-          fills = await fillWebcamGap({
-            state: fills,
-            nextFrame,
-            segmentEnd: segment.sourceEnd,
-            fps: fillFps,
-            visible: (t) => webcamAt({ webcam: layer }, t) !== null,
-            frameAt: (t) => webcamCursor.frameAt(t),
-            // `duration` reaches the gap's end: the last fill of a clip must (see fillWebcamGap).
-            emit: async (t, face, duration) => {
-              const outTs = segment.timelineStart + (t - segment.sourceStart);
-              if (prevOutTs !== null && outTs <= prevOutTs) return false;
-              if (!cap.keep(outTs)) return false;
-              const image = webcamImageOf(face);
-              // The held frame's own source span: its redactions and crop, unchanged.
-              compose.clip(
-                frame.canvas,
-                frame.timestamp,
-                frame.duration,
-                outTs,
-                image ? { image, sourceTs: t } : null,
-              );
+        try {
+          // Fills, rebase, fps cap and composition: export-clip-frames.ts.
+          prevOutTs = await exportClipFrames({
+            segment,
+            frames: sink.canvases(segment.sourceStart, segment.sourceEnd),
+            webcamCursor,
+            layer: plan.webcam,
+            webcamImageOf,
+            fillFps,
+            cap,
+            minFrameGap,
+            prevOutTs,
+            compose,
+            emit: async (outTs, duration) => {
               await sendPosterOnce();
               await videoSource.add(outTs, duration);
               reportProgress(outTs);
-              prevOutTs = outTs;
-              return true;
             },
           });
-        };
-        try {
-          for await (const wrapped of sink.canvases(segment.sourceStart, segment.sourceEnd)) {
-            // One time for the webcam frame, its layout and the camera scale (E1).
-            const webcamTime = webcamLookupTime(wrapped.timestamp, segment.sourceStart);
-            // Keep the face moving over the gap the previous screen frame left (E2).
-            await fillUntil(webcamTime);
-            held = wrapped;
-            fills = { ...fills, from: Math.max(fills.from, webcamTime) };
-            // Remap the source timestamp to the output (collapsed) timeline, clamped
-            // to never go negative or regress — see the header comment and
-            // rebase-timestamp.ts for why the straddling first frame needs this.
-            const outTs = rebaseVideoTimestamp(
-              segment.timelineStart,
-              segment.sourceStart,
-              wrapped.timestamp,
-              prevOutTs,
-            );
-            if (outTs === null) continue; // straddle/duplicate frame — skip, don't advance prevOutTs
-            // fps cap: drop a frame whose slot is taken. The kept frame's sample lasts until
-            // the next kept one (the muxer derives durations from timestamp deltas), so
-            // timestamps stay monotonic and the timeline length is unchanged.
-            if (!cap.keep(outTs)) continue;
-            const face = webcamCursor ? await webcamCursor.frameAt(webcamTime) : null;
-            const webcamImage = webcamImageOf(face);
-            compose.clip(
-              wrapped.canvas,
-              wrapped.timestamp,
-              wrapped.duration,
-              outTs,
-              webcamImage ? { image: webcamImage, sourceTs: webcamTime } : null,
-            );
-            // What is on screen now, for the next gap's fills.
-            fills = {
-              ...fills,
-              face: layer && webcamAt({ webcam: layer }, webcamTime) ? face : null,
-            };
-            await sendPosterOnce();
-            // The frame's own decoded duration (at least one cap slot); the muxer
-            // stretches it to the next kept frame anyway.
-            await videoSource.add(outTs, Math.max(wrapped.duration, minFrameGap));
-            reportProgress(outTs);
-            prevOutTs = outTs;
-          }
-          // The last screen frame of the clip stays up until the clip ends: fill that too.
-          await fillUntil(segment.sourceEnd);
         } finally {
           await webcamCursor?.close();
         }
