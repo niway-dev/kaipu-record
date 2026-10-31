@@ -40,6 +40,19 @@ describe("VideoCard", () => {
     expect(screen.queryByText(/FRAME|SCREEN|WINDOW/)).toBeNull();
   });
 
+  it("Prepare for… opens Prepare without opening the card (NIW2-578)", async () => {
+    const onNavigate = vi.fn();
+    const onPrepare = vi.fn();
+    const { rerender } = render(
+      <VideoCard video={video} onNavigate={onNavigate} onDelete={vi.fn()} onPrepare={onPrepare} />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Prepare for…" }));
+    expect(onPrepare).toHaveBeenCalledOnce();
+    expect(onNavigate).not.toHaveBeenCalled();
+    rerender(<VideoCard video={video} onNavigate={onNavigate} onDelete={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Prepare for…" })).toBeNull();
+  });
+
   it("shows the title and formatted size", () => {
     render(<VideoCard video={video} onNavigate={vi.fn()} onDelete={vi.fn()} />);
     expect(screen.getByText("My Recording")).toBeInTheDocument();

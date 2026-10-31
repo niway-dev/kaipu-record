@@ -1,0 +1,49 @@
+/*
+ * Prepare (NIW2-578, layout NIW2-583): where it is going · what the copy will be.
+ *
+ * Sized for the window the app opens at (900 × 670, `createWindow` in main): the shell leaves
+ * 828 × 614 for the page, and both columns fit it without scrolling. Below that, each column
+ * scrolls on its own; the page itself never does.
+ */
+.screen {
+  /* Edge to edge, like the editor: the columns carry their own padding. */
+  margin: calc(-1 * var(--space-xl));
+  height: calc(100% + 2 * var(--space-xl));
+  display: grid;
+  grid-template-columns: clamp(280px, 36%, 330px) minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.detail {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ── States ───────────────────────────── */
+
+.centered {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.mutedIcon {
+  color: var(--text-muted);
+}
+
+.centeredTitle {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.centeredBody {
+  margin: 0;
+  font-size: var(--font-size-base);
+}

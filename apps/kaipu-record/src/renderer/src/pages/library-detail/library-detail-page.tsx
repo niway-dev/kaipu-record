@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -9,6 +9,7 @@ import {
   Leaf,
   Pencil,
   Scissors,
+  Share2,
   Trash2,
 } from "lucide-react";
 import { canOpenInEditor, useOpenInEditor } from "@renderer/features/editor/open-in-editor";
@@ -24,20 +25,16 @@ import { RecordingPlayer } from "@renderer/features/library/components/recording
 import { ScreenshotViewer } from "@renderer/features/library/components/screenshot-viewer";
 import { GifViewer } from "@renderer/features/library/components/gif-viewer";
 import {
-  ShareButton,
-  useShareRecording,
-} from "@renderer/features/library/components/share-recording";
-import {
   githubFit,
   resolveExportTarget,
 } from "@renderer/features/video-editor/export/export-presets";
-import {
-  formatMB,
-  isHeavyToSend,
-  SHARE_LIMIT_BYTES,
-} from "@renderer/features/video-editor/export/export-size";
-import { RecordingSavedCard } from "@renderer/features/status-cards/recording-saved-card";
-import { StatusCardPortal } from "@renderer/features/status-cards/status-stack";
+import { formatMB, isHeavyToSend } from "@renderer/features/video-editor/export/export-size";
+import { useExportRunner } from "@renderer/features/video-editor/export/export-runner";
+import type { DestinationId } from "@renderer/features/prepare/destinations";
+import { DestinationLogo } from "@renderer/features/prepare/components/destination-logo";
+import { WhereIsItGoingPanel } from "@renderer/features/prepare/components/where-is-it-going-panel";
+import { preparePath } from "@renderer/features/prepare/prepare-path";
+import { asPreparable, useSourceProbe } from "@renderer/features/prepare/use-prepare-copy";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import type { SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { RecordingTitle } from "@renderer/features/library/components/recording-title";
@@ -82,8 +79,19 @@ function removeLocalCopyBlockedKey(
   }
 }
 
+/** The quick chips under the title: the three places a recording goes most. */
+const QUICK_DESTINATIONS = [
+  { destination: "youtube", label: "quickYoutube" },
+  { destination: "vertical", label: "quickVertical" },
+  { destination: "github", label: "quickGithub" },
+] as const satisfies ReadonlyArray<{
+  destination: DestinationId;
+  label: keyof Messages["prepare"];
+}>;
+
 export function LibraryDetailPage(): React.JSX.Element {
   const t = useTranslations("library");
+  const tPrepare = useTranslations("prepare");
   const { assetId } = useParams<{ assetId: string }>();
   const location = useLocation();
   const navigate = useNavigate();
@@ -114,28 +122,30 @@ export function LibraryDetailPage(): React.JSX.Element {
   const lineage = useMemo(() => buildLineage(videos), [videos]);
   const captureLabel = useRecordingCaptureLabel(video?.capture);
 
-  // NIW2-218: Share — the core action — opens from the button and from the "heavy to send"
-  // banner. Reading the file up front only when the banner needs its estimate.
-  const shareable =
-    video && video.id !== null && video.kind === "recording" ? { ...video, id: video.id } : null;
-  const heavy = shareable !== null && isHeavyToSend(shareable.fileSizeBytes);
-  // "Recording saved" (NIW2-218): only on the page a fresh recording lands on, only when
-  // the file is too heavy for GitHub, and only once per arrival (dismissed or timed out).
+  // NIW2-578: Prepare — the core action — opens from the button, the quick chips, the
+  // "heavy to send" banner and the post-recording panel. Only a local recording has a copy
+  // to make (no screenshots, no GIFs).
+  const preparable = asPreparable(video);
+  const heavy = preparable !== null && isHeavyToSend(preparable.fileSizeBytes);
+  // "Where is it going?" (NIW2-578): on the page a fresh recording lands on, once per
+  // arrival, until a shortcut or "Not now". The stored setting keeps its NIW2-218 name.
   const { settings } = useAppSettings();
-  const [savedCardDismissedFor, setSavedCardDismissedFor] = useState<string | null>(null);
-  const showSavedCard =
+  const [panelDismissedFor, setPanelDismissedFor] = useState<string | null>(null);
+  const showPanel =
     Boolean(fromRecording) &&
-    shareable !== null &&
-    shareable.fileSizeBytes > SHARE_LIMIT_BYTES &&
+    preparable !== null &&
     settings?.showRecordingSavedCard === true &&
-    savedCardDismissedFor !== location.key;
-  const share = useShareRecording({
-    video: shareable,
-    exports: video ? (lineage.exportsOf.get(video.assetId) ?? []) : [],
-    onSaved: () => void refresh(),
-    onOpenExisting: (existing) => navigate(`/library/${existing.assetId}`),
-    prefetch: heavy || showSavedCard,
-  });
+    panelDismissedFor !== location.key;
+  // Read the file up front only when the banner or the panel needs its numbers.
+  const probe = useSourceProbe(heavy || showPanel ? (preparable?.id ?? null) : null).probe;
+  // A copy finished in the background: re-list, so it shows under Exports.
+  const readyId = useExportRunner().ready?.recording.id ?? null;
+  useEffect(() => {
+    if (readyId) void refresh();
+  }, [readyId, refresh]);
+  const openPrepare = (destination?: DestinationId): void => {
+    if (assetId) navigate(preparePath(assetId, destination));
+  };
 
   const back = (): void => {
     navigate("/library");
@@ -231,6 +241,21 @@ export function LibraryDetailPage(): React.JSX.Element {
         <ArrowLeft size={16} strokeWidth={1.8} />
         {t("title")}
       </button>
+
+      {showPanel && (
+        <WhereIsItGoingPanel
+          thumbnailUrl={video.thumbnailUrl ?? null}
+          durationSeconds={probe?.durationSec ?? video.durationSeconds}
+          dimensions={probe ? { width: probe.width, height: probe.height } : null}
+          sizeBytes={video.fileSizeBytes}
+          onPick={(destination) => {
+            setPanelDismissedFor(location.key);
+            openPrepare(destination ?? undefined);
+          }}
+          onEditFirst={canEditVideo ? editVideo : undefined}
+          onDismiss={() => setPanelDismissedFor(location.key)}
+        />
+      )}
 
       {isScreenshot ? (
         <ScreenshotViewer src={video.thumbnailUrl} />
@@ -353,16 +378,18 @@ export function LibraryDetailPage(): React.JSX.Element {
         </div>
 
         <div className={styles.actions}>
-          {/* NIW2-218: Share — the core action. This page is also where a fresh recording
+          {/* NIW2-578: Prepare — the core action. This page is also where a fresh recording
               lands (`fromRecording`), so it is the post-recording entry point too. */}
-          {shareable && (
-            <ShareButton
-              onClick={() => share.open()}
-              disabled={share.probing}
-              title={t("shareHint")}
+          {preparable && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => openPrepare()}
+              title={tPrepare("prepareForHint")}
             >
-              {t("share")}
-            </ShareButton>
+              <Share2 size={15} strokeWidth={1.8} />
+              {tPrepare("prepareFor")}
+            </Button>
           )}
           {isScreenshot && localId && (
             <>
@@ -412,11 +439,29 @@ export function LibraryDetailPage(): React.JSX.Element {
         </div>
       </div>
 
+      {preparable && (
+        <div className={styles.quick}>
+          <span className={styles.quickLabel}>{tPrepare("quickLabel")}</span>
+          {QUICK_DESTINATIONS.map((q) => (
+            <button
+              key={q.destination}
+              type="button"
+              className={styles.quickChip}
+              aria-label={tPrepare("quickAria", { destination: tPrepare(q.label) })}
+              onClick={() => openPrepare(q.destination)}
+            >
+              <DestinationLogo destination={q.destination} size={22} />
+              {tPrepare(q.label)}
+            </button>
+          ))}
+        </div>
+      )}
+
       {heavy && (
         <HeavyToSendBanner
           sizeBytes={video.fileSizeBytes}
-          lightEstimateBytes={lightEstimate(share.probe)}
-          onMakeLightCopy={() => share.open("light")}
+          lightEstimateBytes={lightEstimate(probe)}
+          onMakeLightCopy={() => openPrepare("github")}
         />
       )}
 
@@ -445,23 +490,6 @@ export function LibraryDetailPage(): React.JSX.Element {
         </section>
       )}
 
-      {share.ui}
-
-      {showSavedCard && (
-        <StatusCardPortal>
-          <RecordingSavedCard
-            durationSeconds={share.probe?.durationSec ?? video.durationSeconds}
-            sizeBytes={video.fileSizeBytes}
-            dimensions={
-              share.probe ? { width: share.probe.width, height: share.probe.height } : null
-            }
-            lightEstimateBytes={lightEstimate(share.probe)}
-            onShare={() => share.open("light")}
-            onDismiss={() => setSavedCardDismissedFor(location.key)}
-          />
-        </StatusCardPortal>
-      )}
-
       {confirmingDelete && (
         <DeleteConfirmDialog
           title={video.title}
@@ -473,7 +501,7 @@ export function LibraryDetailPage(): React.JSX.Element {
   );
 }
 
-/** What a Light copy would weigh, from the same math as the sheet; null until the file is read. */
+/** What a Light copy would weigh, from the same math as Prepare; null until the file is read. */
 function lightEstimate(probe: SourceProbe | null): number | null {
   if (!probe) return null;
   return resolveExportTarget("light", probe, probe.durationSec).estimateBytes;
@@ -481,8 +509,8 @@ function lightEstimate(probe: SourceProbe | null): number | null {
 
 /**
  * NIW2-218: a recording over 25 MB is heavy to send anywhere. Say so where the user looks
- * at it, with what a Light copy would weigh, and open the sheet on the Light row. GitHub is
- * promised only when the Light copy fits its 10 MB.
+ * at it, with what a Light copy would weigh, and open Prepare on GitHub (NIW2-578). GitHub is
+ * promised only when the Light copy fits.
  */
 function HeavyToSendBanner({
   sizeBytes,
