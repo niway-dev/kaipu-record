@@ -1,6 +1,6 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ROUTES } from "@shared/routes";
 import {
   __resetReadyCopiesForTests,
@@ -8,6 +8,36 @@ import {
   noteFinishedCopy,
 } from "@renderer/features/video-editor/export/ready-copies";
 import { Sidebar } from "./sidebar";
+
+/** The runner's status, set by a test as if an export were encoding. */
+const runnerStatus = vi.hoisted(() => {
+  let value: "idle" | "exporting" = "idle";
+  const listeners = new Set<() => void>();
+  return {
+    get: () => value,
+    set(next: "idle" | "exporting") {
+      value = next;
+      for (const l of listeners) l();
+    },
+    subscribe(l: () => void) {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+  };
+});
+vi.mock("@renderer/features/video-editor/export/export-runner", async (importOriginal) => {
+  const real =
+    await importOriginal<typeof import("@renderer/features/video-editor/export/export-runner")>();
+  const { useSyncExternalStore } = await import("react");
+  return {
+    ...real,
+    useExportRunner: () => {
+      const snapshot = real.useExportRunner();
+      const status = useSyncExternalStore(runnerStatus.subscribe, runnerStatus.get);
+      return status === "exporting" ? { ...snapshot, status } : snapshot;
+    },
+  };
+});
 
 function renderAt(path: string) {
   const router = createMemoryRouter(
@@ -27,7 +57,10 @@ function renderAt(path: string) {
 
 const exportLink = (): HTMLElement => screen.getByRole("link", { name: /^Export/ });
 
-afterEach(() => __resetReadyCopiesForTests());
+afterEach(() => {
+  __resetReadyCopiesForTests();
+  runnerStatus.set("idle");
+});
 
 describe("Sidebar Export entry and badge", () => {
   it("sits right under Editor", () => {
@@ -39,6 +72,18 @@ describe("Sidebar Export entry and badge", () => {
   it("is active on Export with and without a video", () => {
     renderAt("/export/asset-1");
     expect(exportLink()).toHaveAttribute("aria-current", "page");
+    cleanup();
+    renderAt(ROUTES.exportNew);
+    expect(exportLink()).toHaveAttribute("aria-current", "page");
+  });
+
+  it("counts an export that is encoding, on top of the finished copies", () => {
+    renderAt("/");
+    act(() => runnerStatus.set("exporting"));
+    expect(exportLink()).toHaveAccessibleName(/1 copy in progress or ready/);
+    expect(exportLink()).toHaveTextContent("1");
+    act(() => noteFinishedCopy("copy-1"));
+    expect(exportLink()).toHaveTextContent("2");
   });
 
   it("counts copies that finished out of sight, and clears when Export opens", async () => {

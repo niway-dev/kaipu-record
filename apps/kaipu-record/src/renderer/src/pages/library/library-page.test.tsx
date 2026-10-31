@@ -101,13 +101,20 @@ describe("LibraryPage: no import door", () => {
     expect(screen.queryByRole("button", { name: "Import a video" })).toBeNull();
   });
 
-  it("does not take a video dropped on the window", () => {
+  it("does not take a video dropped on the window", async () => {
     window.electronAPI.importVideoFiles = vi.fn(async () => nothingImported);
+    // A real path, so the drop would import if anything on the page caught it.
+    const pathForFile = vi
+      .spyOn(window.electronAPI, "pathForFile")
+      .mockImplementation((f: File) => `/Users/me/Movies/${f.name}`);
     renderLibrary();
     const files = [new File(["x"], "Zoom Meeting.mp4")];
     fireEvent.dragEnter(document.body, { dataTransfer: { types: ["Files"], files } });
-    fireEvent.drop(document.body, { dataTransfer: { types: ["Files"], files } });
+    // true: nobody called preventDefault, so no drop target took it.
+    expect(fireEvent.drop(document.body, { dataTransfer: { types: ["Files"], files } })).toBe(true);
+    await act(async () => {});
     expect(window.electronAPI.importVideoFiles).not.toHaveBeenCalled();
+    pathForFile.mockRestore();
   });
 });
 
