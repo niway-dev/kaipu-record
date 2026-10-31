@@ -33,6 +33,9 @@ export function RecentExports({
   const t = useTranslations("export");
   const runner = useExportRunner();
   const running = runner.status === "exporting" && runner.job ? runner.job : null;
+  const runningDestination = running
+    ? (running.destination ?? destinationOfPreset(running.presetId))
+    : null;
   const done = recentCopies(videos, running ? RECENT_COUNT - 1 : RECENT_COUNT);
 
   return (
@@ -44,16 +47,15 @@ export function RecentExports({
         <p className={styles.empty}>{t("recentEmpty")}</p>
       ) : (
         <ul className={styles.grid}>
-          {running && (
+          {running && runningDestination && (
             <li className={styles.row}>
-              <DestinationLogo
-                destination={running.destination ?? destinationOfPreset(running.presetId)}
-                size={30}
-              />
+              <DestinationLogo destination={runningDestination} size={30} />
+              {/* The same slots as a finished row: where it is going, then what and how far. */}
               <span className={styles.text}>
-                <span className={styles.name}>{running.sourceTitle}</span>
-                <span className={styles.meta}>
-                  {t("recentExporting", { percent: Math.round(runner.fraction * 100) })}
+                <span className={styles.name}>{t(EXPORT_NAME[runningDestination])}</span>
+                <span className={styles.meta} title={running.sourceTitle}>
+                  {t("recentExporting", { percent: Math.round(runner.fraction * 100) })} ·{" "}
+                  {running.sourceTitle}
                 </span>
               </span>
               <span className={styles.progress} aria-hidden>
