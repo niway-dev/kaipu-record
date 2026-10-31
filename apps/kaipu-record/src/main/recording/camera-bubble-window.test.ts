@@ -60,7 +60,7 @@ beforeEach(() => {
 });
 
 /**
- * The bubble is excluded from the screen capture from creation (ADR 0032): its face is in the
+ * The bubble is excluded from the screen capture from creation (ADR 0037): its face is in the
  * webcam file, so the screen recording must not carry it a second time. Before Windows 10
  * 2004 exclusion paints the window black instead, so there the legacy path stays.
  */
@@ -191,7 +191,7 @@ describe("CameraBubbleWindow on quit", () => {
 /**
  * A camera turned off during a take that records a webcam file parks the bubble: the running
  * screen capture leaves out the windows that were on screen when it started, so turning the
- * camera on again must show that same window, not a new one (ADR 0032).
+ * camera on again must show that same window, not a new one (ADR 0037).
  */
 describe("CameraBubbleWindow.park", () => {
   it("hides the window and keeps it, with its protection", () => {
@@ -256,7 +256,7 @@ describe("CameraBubbleWindow.park", () => {
 
 /**
  * The webcam file ended mid-take with the bubble on screen and protected: the face must be in
- * the screen from there on, and a running capture is known to record a new window (ADR 0032).
+ * the screen from there on, and a running capture is known to record a new window (ADR 0037).
  */
 describe("CameraBubbleWindow.replace", () => {
   it("creates a new window where the old one was, its protection decided again", () => {

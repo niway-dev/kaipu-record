@@ -518,6 +518,9 @@ describe("recorder-store", () => {
       expect.any(String),
       expect.objectContaining({ durationSeconds: 2, durationMs: 2400 }),
     );
+    // NIW2-560: the default title is also the file name, so it is file-system safe.
+    const [, meta] = vi.mocked(window.electronAPI.recordingFinalize).mock.calls[0]!;
+    expect(meta.title).toMatch(/^Kaipu Recording \d{4}-\d{2}-\d{2} at \d{2}\.\d{2}\.\d{2}$/);
   });
 
   it("reports durationMs in video time: measured from the first media sample, not from when the bar started", async () => {
@@ -1403,7 +1406,7 @@ describe("recorder-store live settings", () => {
     expect(engine.setMicrophoneEnabled).not.toHaveBeenCalled();
   });
 
-  describe("the webcam track (ADR 0032)", () => {
+  describe("the webcam track (ADR 0037)", () => {
     const bubble = {
       shape: "circle" as const,
       size: 240,
@@ -1441,8 +1444,8 @@ describe("recorder-store live settings", () => {
       await startWith(fakeEngine(), { webcam });
       const [screen, second] = createCalls();
       // Both are a take's sessions, said explicitly (an export's say "export").
-      expect(screen).toEqual([expect.stringMatching(/^session-/), "screen", "take"]);
-      expect(second).toEqual([screen![0], "webcam", "take"]);
+      expect(screen).toEqual([expect.stringMatching(/^session-/), "recording"]);
+      expect(second).toEqual([screen![0], "webcam"]);
       expect(prepareEngineMock.mock.calls.at(-1)![0].webcam).toEqual({
         deviceId: "cam-1",
         lines: 720,
@@ -1794,7 +1797,7 @@ describe("recorder-store live settings", () => {
         window.electronAPI.recordingWebcamTrackSupported = vi.fn(async () => false);
         try {
           await startWith(fakeEngine(), { webcam });
-          expect(createCalls().map((call) => call[1])).toEqual(["screen"]);
+          expect(createCalls().map((call) => call[1])).toEqual(["recording"]);
           expect(prepareEngineMock.mock.calls.at(-1)![0].webcam).toBeNull();
           await stopAndSettle();
           expect(getToasts()).toEqual([]);
@@ -1810,7 +1813,7 @@ describe("recorder-store live settings", () => {
         });
         try {
           await startWith(fakeEngine(), { webcam });
-          expect(createCalls().map((call) => call[1])).toEqual(["screen"]);
+          expect(createCalls().map((call) => call[1])).toEqual(["recording"]);
           expect(prepareEngineMock.mock.calls.at(-1)![0].webcam).toBeNull();
           await stopAndSettle();
           expect(getToasts()).toEqual([]);

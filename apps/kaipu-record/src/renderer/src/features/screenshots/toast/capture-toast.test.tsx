@@ -75,6 +75,22 @@ describe("CaptureToast", () => {
     expect(screen.getByText("Auto-hides in 6 s")).toBeInTheDocument();
   });
 
+  it("names the workspace the shot landed in, as a label with no move control", () => {
+    const work = { id: "ws-work", name: "Work" };
+    renderToast({ ...COPIED, mode: "window", saved: { id: "s1" }, copied: false, workspace: work });
+    expect(screen.getByText("Saved to Work")).toBeInTheDocument();
+    expect(screen.queryByText("Saved to Library")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Move/ })).not.toBeInTheDocument();
+  });
+
+  it("offers Save to <workspace> on a copy-only shot, and says where it was also saved", () => {
+    const work = { id: "ws-work", name: "Work" };
+    const { show } = renderToast({ ...COPIED, workspace: work });
+    expect(screen.getByRole("button", { name: "Save to Work" })).toBeInTheDocument();
+    show({ ...COPIED, saved: { id: "s1" }, workspace: work });
+    expect(screen.getByText("Auto-hides in 6 s · Also saved to Work")).toBeInTheDocument();
+  });
+
   it("prints Ctrl+V off macOS", () => {
     renderToast(COPIED, "other");
     expect(screen.getByText("1126 × 604 · Frame · paste with Ctrl+V")).toBeInTheDocument();

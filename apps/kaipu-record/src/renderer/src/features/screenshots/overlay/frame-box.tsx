@@ -24,10 +24,8 @@ import {
   CameraPreview,
   RatioBar,
   RecordWidget,
-  StartPill,
   cameraPreviewPlacement,
   ratioBarPlacement,
-  startPillPlacement,
   widgetPlacement,
 } from "./record-chrome";
 import { workAreaInWindow, type OverlayQuery } from "./overlay-query";
@@ -362,8 +360,8 @@ export function FrameBox({
 
 /**
  * The Frame box's chrome when the overlay opened to record: the ratio bar and size readout
- * above it, the mode and input widget beside it, the Start pill under it and the camera
- * preview inside it while the camera is on.
+ * above it, the mode, input and Start widget beside it and the camera preview inside it
+ * while the camera is on.
  */
 function RecordFrameChrome({
   frame,
@@ -382,10 +380,8 @@ function RecordFrameChrome({
   chrome: OverlayChrome;
   onStart(): void;
 }): React.JSX.Element {
-  const t = useTranslations("screenshots");
   const bar = ratioBarPlacement(frame, area);
   const widget = widgetPlacement(frame, area);
-  const pill = startPillPlacement(frame, area);
   const preview = chrome.toggles?.camera
     ? cameraPreviewPlacement(frame, chrome.toggles.cameraBubble.size)
     : null;
@@ -399,14 +395,14 @@ function RecordFrameChrome({
         left={bar.left}
         top={bar.top}
       />
-      {chrome.toggles && <RecordWidget chrome={chrome} toggles={chrome.toggles} {...widget} />}
-      <StartPill
-        label={t("overlay.startRecording")}
-        onStart={onStart}
-        disabled={!recordable(frame)}
-        centerX={pill.centerX}
-        top={pill.top}
-      />
+      {chrome.toggles && (
+        <RecordWidget
+          chrome={chrome}
+          toggles={chrome.toggles}
+          {...widget}
+          start={{ onStart, disabled: !recordable(frame) }}
+        />
+      )}
     </>
   );
 }

@@ -1,8 +1,7 @@
 import type { ImageSource, ImageSourceReader } from "./types";
+import { mediaUrl } from "@renderer/lib/media-url";
 
 type LocalSource = Extract<ImageSource, { kind: "local" }>;
-
-const mediaUrl = (id: string): string => `kaipu-media://screenshot/${encodeURIComponent(id)}`;
 
 /** A screenshot saved in the vault, served via the bypass-CSP media protocol. */
 export const localReader: ImageSourceReader<LocalSource> = {
@@ -10,7 +9,9 @@ export const localReader: ImageSourceReader<LocalSource> = {
     // Carry the version token so a re-opened shot shows fresh bytes after an
     // in-place overwrite (same id) instead of the cached pre-overwrite image.
     const url =
-      source.version != null ? `${mediaUrl(source.id)}?v=${source.version}` : mediaUrl(source.id);
+      source.version != null
+        ? mediaUrl("screenshot", source.id, { v: String(source.version) })
+        : mediaUrl("screenshot", source.id);
     return { displayUrl: url };
   },
   async getBytes(source) {

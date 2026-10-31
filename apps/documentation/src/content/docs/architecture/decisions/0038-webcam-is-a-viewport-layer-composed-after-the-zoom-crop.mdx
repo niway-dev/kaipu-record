@@ -1,9 +1,9 @@
 ---
-title: "ADR 0033: The webcam is a viewport layer, composed after the zoom crop and after the output framing"
+title: "ADR 0038: The webcam is a viewport layer, composed after the zoom crop and after the output framing"
 description: In the editor the webcam is a global layout plus source-anchored hide/override segments, positioned in the output frame, drawn by the shared composer after the camera path's crop and after the fixed-canvas framing, so it stays in its corner while the zoom moves and is never cropped by Fill. The preview draws it in its own untransformed slot; Share composes it at the recorded layout and its reuse fingerprint accounts for it. The original file stays screen-only.
 ---
 
-# ADR 0033: The webcam is a viewport layer, composed after the zoom crop and after the output framing
+# ADR 0038: The webcam is a viewport layer, composed after the zoom crop and after the output framing
 
 ## Status
 
@@ -11,7 +11,7 @@ description: In the editor the webcam is a global layout plus source-anchored hi
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Status        | Proposed — implemented across the NIW2-565 stack (last pull request NIW2-576), owner QA pending; read as Accepted once the owner validates the exclusion (spec task 0, [design](/specs/2026-10-30-webcam-track-design/)), Linear [NIW2-565](https://linear.app/niway/issue/NIW2-565)                                                                                                                                         |
 | Date          | 2026-10-30                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Relates to    | [0032](/architecture/decisions/0032-webcam-is-its-own-track-and-the-bubble-is-excluded-from-capture/) (the track this layer reads), [0003](/architecture/decisions/0003-export-never-replaces-the-original/) (exports are new files; the original keeps no face), [plan 09](/plans/video-editor-v2/09-preview-compositing/) (the preview's layer contract), [plan 11](/plans/video-editor-v2/11-export-pass/) (the composer) |
+| Relates to    | [0037](/architecture/decisions/0037-webcam-is-its-own-track-and-the-bubble-is-excluded-from-capture/) (the track this layer reads), [0003](/architecture/decisions/0003-export-never-replaces-the-original/) (exports are new files; the original keeps no face), [plan 09](/plans/video-editor-v2/09-preview-compositing/) (the preview's layer contract), [plan 11](/plans/video-editor-v2/11-export-pass/) (the composer) |
 | Superseded by | —                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ## Context
@@ -23,7 +23,7 @@ as DOM layers: a `.content` element that receives the camera path as a CSS trans
 `chrome` slot that does not (plan 09). Annotations are content-pinned and anchored to timeline
 time; zoom segments and redactions are anchored to source time.
 
-ADR 0032 gives the editor a raw webcam file beside the screen. Where it is drawn decides whether
+ADR 0037 gives the editor a raw webcam file beside the screen. Where it is drawn decides whether
 the face survives a zoom (the whole reason for the track), whether it follows cuts, whether a
 Vertical Fill export crops it away, and what "Share" means for a recording whose original has no
 face. Screen Studio, Cap and Tella all draw the webcam as an overlay pinned to the viewport that

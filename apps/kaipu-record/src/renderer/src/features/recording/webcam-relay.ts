@@ -1,6 +1,6 @@
 /**
  * The track the webcam encoder reads for the whole take, fed from whichever camera track is
- * live (ADR 0032 § camera toggled mid-take).
+ * live (ADR 0037 § camera toggled mid-take).
  *
  * mediabunny's `MediaStreamVideoTrackSource` is bound to the one track it was built with, and
  * a camera turned off mid-take must be released (its in-use light goes off), so a new camera

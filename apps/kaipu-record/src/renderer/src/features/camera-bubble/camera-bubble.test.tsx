@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RecordingActivity, RecordingSettings } from "@shared/types";
@@ -154,7 +156,7 @@ describe("CameraBubble", () => {
     expect(video.style.transform).toContain("scale(2)");
     // The same bubble follows a pushed change: framing off clears the transform and the
     // camera goes back to its usual lines: 720, what the recorder's webcam track needs from
-    // the camera both windows share (ADR 0032).
+    // the camera both windows share (ADR 0037).
     act(() =>
       push?.({
         ...base,
@@ -236,6 +238,28 @@ describe("CameraBubble", () => {
     fireEvent.pointerLeave(container.firstElementChild!);
     fireEvent.pointerEnter(container.firstElementChild!);
     expect(screen.queryByTestId("bubble-resize-grip")).not.toBeInTheDocument();
+  });
+
+  it("drops the chrome as soon as a take is pending, before the capture starts", () => {
+    withStream();
+    let push: ((activity: RecordingActivity) => void) | null = null;
+    window.electronAPI.onRecordingState = (callback) => {
+      push = callback;
+      return () => {};
+    };
+    const { container } = render(<CameraBubble />);
+    fireEvent.pointerEnter(container.firstElementChild!);
+    expect(screen.getByTestId("bubble-resize-grip")).toBeInTheDocument();
+
+    // Countdown or stream acquisition: not active yet, but the capture is about to start.
+    act(() => push?.({ active: false, pending: true, status: "recording", elapsedSeconds: 0 }));
+    expect(container.firstElementChild).not.toHaveAttribute("data-chrome");
+    expect(screen.queryByTestId("bubble-resize-grip")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("bubble-camera-off")).not.toBeInTheDocument();
+
+    // A cancelled countdown gives the chrome back to the pointer still on the bubble.
+    act(() => push?.({ active: false, status: "recording", elapsedSeconds: 0 }));
+    expect(screen.getByTestId("bubble-resize-grip")).toBeInTheDocument();
   });
 
   it("previews a grip drag through main and persists the applied size on release", async () => {
@@ -435,7 +459,7 @@ describe("gripDragSize", () => {
 });
 
 /**
- * A camera turned off mid-take parks the bubble window (main hides it, ADR 0032): the preview
+ * A camera turned off mid-take parks the bubble window (main hides it, ADR 0037): the preview
  * must release the camera itself then, so the in-use light goes off, and reopen it when the
  * camera comes back on.
  */
@@ -491,5 +515,33 @@ describe("CameraBubble — the Camera toggle", () => {
     act(() => broadcast!({ ...base, isCameraEnabled: false }));
     await act(async () => answer({ ...base, isCameraEnabled: true }));
     expect(mockPreview).toHaveBeenLastCalledWith(false, null, 720);
+  });
+});
+
+/**
+ * The bubble window is part of the recorded screen, so whatever it paints at rest is in every
+ * video. jsdom applies no stylesheet, so this reads the real one: the bubble itself carries no
+ * border or outline, and the accent outline exists only under the hover-chrome selector.
+ */
+describe("camera bubble stylesheet", () => {
+  const dir = path.dirname(new URL(import.meta.url).pathname);
+  const css = readFileSync(path.join(dir, "camera-bubble.module.css"), "utf8").replace(
+    /\/\*[\s\S]*?\*\//g,
+    "",
+  );
+  const rule = (selector: string): string => {
+    const start = css.indexOf(`${selector} {`);
+    expect(start, `${selector} rule`).toBeGreaterThanOrEqual(0);
+    return css.slice(start, css.indexOf("}", start));
+  };
+
+  it("draws no border or outline on the bubble at rest", () => {
+    expect(rule(".bubble")).not.toMatch(/\b(border|outline)\s*:/);
+  });
+
+  it("draws the accent outline only while the hover chrome is on", () => {
+    expect(rule(".root[data-chrome] .bubble")).toMatch(
+      /outline:\s*2px solid var\(--accent-primary\)/,
+    );
   });
 });

@@ -55,7 +55,7 @@ export interface ExportPlan {
    */
   audio: AudioEdits;
   /**
-   * The webcam layer (ADR 0033), or null for a recording without a webcam track. Not
+   * The webcam layer (ADR 0038), or null for a recording without a webcam track. Not
    * filtered by visibility, like the camera path: its segments are source-anchored and
    * cheap, and the layer is decided per frame by `webcamAt`.
    */

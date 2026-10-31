@@ -1,5 +1,5 @@
 /**
- * The webcam layer in the preview (ADR 0033, spec § 6): a second <video> playing the
+ * The webcam layer in the preview (ADR 0038, spec § 6): a second <video> playing the
  * recording's webcam file, drawn in PreviewStage's `webcam` slot — untransformed, so with a
  * zoom active the face stays in its corner — and kept in step with the main video.
  *
@@ -54,7 +54,7 @@ function safePause(video: HTMLVideoElement): void {
 interface WebcamSyncInput {
   /** The MAIN video: its frame clock drives the layer and its play/pause/rate the webcam's. */
   videoRef: React.RefObject<HTMLVideoElement | null>;
-  /** Webcam time 0 − screen time 0 (ADR 0032): webcam time = t − startOffsetMs / 1000. */
+  /** Webcam time 0 − screen time 0 (ADR 0037): webcam time = t − startOffsetMs / 1000. */
   startOffsetMs: number;
   webcam: WebcamScene;
   /** The camera path, for "shrink during zoom"; null where nothing zooms (the Library). */
@@ -198,7 +198,7 @@ export function WebcamPlaybackLayer({
   src,
   ...input
 }: Omit<WebcamSyncInput, "path" | "cameraEnabled" | "hidden"> & {
-  /** `kaipu-media://webcam/<id>`. */
+  /** The take's webcam URL, built with `mediaUrl("webcam", id)`. */
   src: string;
 }): React.JSX.Element {
   const sync = useWebcamSync({ ...input, path: null, cameraEnabled: false, hidden: false });
@@ -233,7 +233,7 @@ export function WebcamLayer({
   onMove,
   onEnd,
 }: Omit<WebcamSyncInput, "path"> & {
-  /** `kaipu-media://webcam/<id>`. */
+  /** The take's webcam URL, built with `mediaUrl("webcam", id)`. */
   src: string;
   path: CameraPath;
   /** False while a drawing tool is armed, so a stroke can start over the bubble. */

@@ -104,7 +104,7 @@ export interface VideoScene {
   /** Source-anchored silenced spans; may overlap, and are never merged on input. */
   mutedRanges: MutedRange[];
   /**
-   * The webcam layer (ADR 0033): a global layout plus source-anchored hide/override
+   * The webcam layer (ADR 0038): a global layout plus source-anchored hide/override
    * segments. `null` = this recording has no webcam track; the sidecar decides, never the
    * session (see `reconcileWebcam`).
    */

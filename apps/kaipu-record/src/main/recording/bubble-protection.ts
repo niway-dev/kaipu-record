@@ -1,5 +1,5 @@
 /**
- * Whether the camera bubble may leave the screen capture right now (ADR 0032).
+ * Whether the camera bubble may leave the screen capture right now (ADR 0037).
  *
  * Protecting the bubble only makes sense while its face is recorded somewhere else: in the
  * active take's webcam file. A take that records no webcam file (the camera was off when it

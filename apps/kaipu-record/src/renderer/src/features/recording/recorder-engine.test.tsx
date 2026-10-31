@@ -1101,7 +1101,7 @@ describe("prepareEngine — the audio of a take waiting for its countdown", () =
 });
 
 /**
- * The webcam track (ADR 0032): a second getUserMedia stream encoded into its own MP4 by a
+ * The webcam track (ADR 0037): a second getUserMedia stream encoded into its own MP4 by a
  * second mediabunny Output, on the same clock as the screen. It never fails the take.
  */
 describe("webcam", () => {
@@ -1596,7 +1596,7 @@ describe("webcam", () => {
 });
 
 /**
- * The camera turned off and on mid-take (ADR 0032 § camera toggled mid-take): the encoder reads
+ * The camera turned off and on mid-take (ADR 0037 § camera toggled mid-take): the encoder reads
  * a relay track, so a new camera track feeds the same webcam file on the same clock.
  */
 describe("webcam: the camera turned off and on mid-take", () => {
