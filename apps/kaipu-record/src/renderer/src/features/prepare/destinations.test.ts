@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EXPORT_PRESET_IDS } from "@renderer/features/video-editor/export/export-presets";
+import { EXPORT_DESTINATION_IDS } from "@shared/types/export-preset";
 import {
   DESTINATION_GROUPS,
   DESTINATION_IDS,
@@ -10,6 +11,12 @@ import {
   presetForDestination,
   presetsOf,
 } from "./destinations";
+
+describe("DESTINATION_IDS", () => {
+  it("names the same destinations a sidecar may store", () => {
+    expect([...DESTINATION_IDS]).toEqual([...EXPORT_DESTINATION_IDS]);
+  });
+});
 
 /** A Retina-ish 16:10 screen recording: 3:02, 48 fps, with sound, 119 MB. */
 const SOURCE = { width: 1916, height: 1048, fps: 48, hasAudio: true, sampleRate: 48000 };
@@ -33,7 +40,7 @@ describe("destinations", () => {
   it("lists every destination exactly once, grouped by who compresses last", () => {
     expect(DESTINATION_GROUPS.map((g) => [g.id, g.destinations])).toEqual([
       ["send-more", ["youtube", "vertical", "square"]],
-      ["keep-light", ["github", "chat"]],
+      ["keep-light", ["github", "chat", "email"]],
       ["keep", ["archive"]],
     ]);
     expect(DESTINATION_GROUPS.flatMap((g) => g.destinations).sort()).toEqual(
@@ -42,11 +49,13 @@ describe("destinations", () => {
   });
 
   it("covers every export preset, and maps each back to its destination", () => {
-    const covered = DESTINATION_IDS.flatMap((d) => presetsOf(d));
+    const covered = new Set(DESTINATION_IDS.flatMap((d) => presetsOf(d)));
     expect([...covered].sort()).toEqual([...EXPORT_PRESET_IDS].sort());
-    for (const d of DESTINATION_IDS) {
+    // Email shares chat's preset, so a Balanced file reads as the chat copy.
+    for (const d of DESTINATION_IDS.filter((id) => id !== "email")) {
       for (const p of presetsOf(d)) expect(destinationOfPreset(p)).toBe(d);
     }
+    expect(destinationOfPreset("balanced")).toBe("chat");
   });
 
   it("reads only known ids from the URL", () => {
@@ -61,6 +70,7 @@ describe("destinations", () => {
     expect(presetForDestination("youtube", SOURCE, "youtube-4k")).toBe("youtube-4k");
     expect(presetForDestination("github", SOURCE)).toBe("light");
     expect(presetForDestination("chat", SOURCE)).toBe("balanced");
+    expect(presetForDestination("email", SOURCE)).toBe("balanced");
     expect(presetForDestination("archive", SOURCE)).toBe("maximum");
   });
 

@@ -1,10 +1,11 @@
-import { CircleCheck, FolderOpen, GripVertical, TriangleAlert } from "lucide-react";
+import { ChevronUp, FolderOpen, GripVertical, Clapperboard, TriangleAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { KaipuLogo } from "@kaipu/brand";
 import { useTranslations } from "@kaipu/i18n";
+import { DestinationLogo } from "@renderer/features/prepare/components/destination-logo";
 import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import { PRESET_NAME } from "@renderer/features/video-editor/components/export-sheet";
 import { GithubFitChips } from "@renderer/features/video-editor/components/github-fit-chips";
-import { SizeMeter } from "@renderer/features/video-editor/components/size-meter";
 import {
   cancelVideoExport,
   dismissReadyExport,
@@ -13,25 +14,36 @@ import {
   retryVideoExport,
   useExportRunner,
 } from "@renderer/features/video-editor/export/export-runner";
-import { githubPlans, isQualityTier } from "@renderer/features/video-editor/export/export-presets";
+import { isQualityTier } from "@renderer/features/video-editor/export/export-presets";
 import {
   exportEtaSeconds,
   formatMB,
-  percentLighter,
   sizeKindOf,
 } from "@renderer/features/video-editor/export/export-size";
+import { markCopySeen } from "@renderer/features/video-editor/export/ready-copies";
+import { setExportWidgetMinimized, useExportWidgetMinimized } from "./export-widget-state";
 import { StatusCard, StatusCardActions, StatusCardButton, StatusCardText } from "./status-card";
 import styles from "./export-status-cards.module.css";
 
-/** The background export's cards: progress (or its error) while it runs, then "Ready to share". */
+/**
+ * The background export's cards (NIW2-586), bottom right on every screen: the progress
+ * widget (or its error) while it runs, then "ready". The widget minimizes to a pill with a
+ * progress ring — the export keeps going, the choice holds for the session, and an error
+ * always shows in full.
+ */
 export function ExportStatusCards(): React.JSX.Element {
   const runner = useExportRunner();
+  const minimized = useExportWidgetMinimized();
+  const { job, status } = runner;
   return (
     <>
-      {runner.status !== "idle" && runner.job && (
+      {job && status === "exporting" && minimized && (
+        <ExportProgressPill job={job} fraction={runner.fraction} />
+      )}
+      {job && (status === "error" || (status === "exporting" && !minimized)) && (
         <ExportProgressCard
-          job={runner.job}
-          status={runner.status}
+          job={job}
+          status={status}
           fraction={runner.fraction}
           error={runner.error}
           attemptStartedAt={runner.attemptStartedAt}
@@ -39,6 +51,26 @@ export function ExportStatusCards(): React.JSX.Element {
       )}
       {runner.ready && <ExportReadyCard ready={runner.ready} />}
     </>
+  );
+}
+
+function percentOf(fraction: number): number {
+  return Math.round(Math.min(1, Math.max(0, fraction)) * 100);
+}
+
+/** The ICU `select` value the card titles name: the destination, or "your export". */
+function destinationArg(job: ExportJobInfo): string {
+  return job.destination ?? "export";
+}
+
+/** The destination's own tile when Prepare started the copy; a neutral clapper otherwise. */
+function JobIcon({ job }: { job: ExportJobInfo }): React.JSX.Element {
+  return job.destination ? (
+    <DestinationLogo destination={job.destination} size={36} />
+  ) : (
+    <span className={styles.genericIcon}>
+      <Clapperboard size={18} strokeWidth={1.8} />
+    </span>
   );
 }
 
@@ -53,8 +85,9 @@ export interface ExportProgressCardProps {
 }
 
 /**
- * The export running in the background: what it makes, how far along, about how long is
- * left, and the size it is heading for. Cancel stops it; nothing reaches the Library.
+ * The export running in the background: where it is going, how far along and about how long
+ * is left, with a striped bar. − minimizes it to a pill and leaves the export running; Cancel
+ * stops it, and nothing reaches the Library.
  */
 export function ExportProgressCard({
   job,
@@ -64,52 +97,62 @@ export function ExportProgressCard({
   attemptStartedAt,
   now = Date.now,
 }: ExportProgressCardProps): React.JSX.Element {
-  const t = useTranslations("videoEditor");
-  const name = t(PRESET_NAME[job.presetId]);
-  const subtitle = `${name} · ${t("presetDimensions", { width: job.width, height: job.height })}`;
+  const t = useTranslations("backgroundCopy");
+  const tEditor = useTranslations("videoEditor");
 
   if (status === "error") {
+    const name = tEditor(PRESET_NAME[job.presetId]);
     return (
       <StatusCard
-        label={t("exportError")}
+        label={tEditor("exportError")}
         icon={<TriangleAlert size={18} strokeWidth={1.8} />}
-        title={t("exportError")}
-        subtitle={subtitle}
+        title={tEditor("exportError")}
+        subtitle={`${name} · ${tEditor("presetDimensions", { width: job.width, height: job.height })}`}
         onDismiss={cancelVideoExport}
-        dismissLabel={t("close")}
+        dismissLabel={tEditor("close")}
       >
         <StatusCardText>{error}</StatusCardText>
         <StatusCardActions>
           <StatusCardButton variant="primary" onClick={retryVideoExport}>
-            {t("retry")}
+            {tEditor("retry")}
           </StatusCardButton>
-          <StatusCardButton onClick={cancelVideoExport}>{t("close")}</StatusCardButton>
+          <StatusCardButton onClick={cancelVideoExport}>{tEditor("close")}</StatusCardButton>
         </StatusCardActions>
       </StatusCard>
     );
   }
 
-  const percent = Math.round(Math.min(1, Math.max(0, fraction)) * 100);
+  const percent = percentOf(fraction);
   const eta =
     attemptStartedAt !== null ? exportEtaSeconds(fraction, now() - attemptStartedAt) : null;
   const etaText =
     eta === null
       ? null
       : eta < 60
-        ? t("etaSeconds", { seconds: eta })
-        : t("etaMinutes", { minutes: Math.round(eta / 60) });
+        ? tEditor("etaSeconds", { seconds: eta })
+        : tEditor("etaMinutes", { minutes: Math.round(eta / 60) });
   const kind = sizeKindOf(job.presetId);
   const target =
     job.estimateBytes === null || kind === "full"
       ? null
       : kind === "up-to"
-        ? t("sizeUpTo", { size: formatMB(job.estimateBytes) })
-        : t("sizeAbout", { size: formatMB(job.estimateBytes) });
-  const title =
-    job.presetId === "maximum" ? t("exportProgressTitleFull") : t("exportProgressTitle");
+        ? tEditor("sizeUpTo", { size: formatMB(job.estimateBytes) })
+        : tEditor("sizeAbout", { size: formatMB(job.estimateBytes) });
+  const title = t("progressTitle", { destination: destinationArg(job) });
 
   return (
-    <StatusCard label={title} title={title} subtitle={subtitle}>
+    <StatusCard
+      label={title}
+      icon={<JobIcon job={job} />}
+      bareIcon
+      title={title}
+      subtitle={
+        etaText ? t("progressLineEta", { percent, eta: etaText }) : t("progressLine", { percent })
+      }
+      onDismiss={() => setExportWidgetMinimized(true)}
+      dismissLabel={t("minimize")}
+      dismissIcon="minimize"
+    >
       <div
         className={styles.progressTrack}
         role="progressbar"
@@ -120,97 +163,136 @@ export function ExportProgressCard({
       >
         <div className={styles.progressFill} style={{ width: `${percent}%` }} />
       </div>
+      <p className={styles.note}>{t("progressNote")}</p>
       <div className={styles.progressLine}>
-        <span>{etaText ? t("exportProgressEta", { percent, eta: etaText }) : `${percent}%`}</span>
-        {target && job.sourceSizeBytes !== null && (
-          <span className={styles.muted}>
-            {t("exportProgressSizes", { from: formatMB(job.sourceSizeBytes), to: target })}
-          </span>
+        {target && job.sourceSizeBytes !== null ? (
+          <span>{t("progressSizes", { from: formatMB(job.sourceSizeBytes), to: target })}</span>
+        ) : (
+          <span />
         )}
+        <StatusCardButton variant="text" onClick={cancelVideoExport}>
+          {t("cancel")}
+        </StatusCardButton>
       </div>
-      <StatusCardActions>
-        <span className={styles.spacer} />
-        <StatusCardButton onClick={cancelVideoExport}>{t("cancel")}</StatusCardButton>
-      </StatusCardActions>
     </StatusCard>
   );
 }
 
+/** The ring's radius in the pill's 24 × 24 box. */
+const RING_RADIUS = 9;
+const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
+
 /**
- * "Ready to share": the finished export with its real size against the original, a file
- * chip the user drags straight into GitHub, Slack or Finder (a native drag, under the
- * item's title rather than its vault id), View file (its Library page), Show in Finder and
- * Done.
+ * The minimized widget: a pill with a progress ring and "YouTube copy · 38%". Clicking it
+ * opens the widget again (where Cancel is).
+ */
+export function ExportProgressPill({
+  job,
+  fraction,
+}: {
+  job: ExportJobInfo;
+  fraction: number;
+}): React.JSX.Element {
+  const t = useTranslations("backgroundCopy");
+  const percent = percentOf(fraction);
+  const text = t("pill", { destination: destinationArg(job), percent });
+  return (
+    // The name starts with the visible words ("YouTube copy · 38%"), then what a click does: a
+    // button's children are presentational, so an inner progressbar would never be read.
+    <button
+      type="button"
+      className={styles.pill}
+      aria-label={`${text}. ${t("expand")}`}
+      title={t("expand")}
+      onClick={() => setExportWidgetMinimized(false)}
+    >
+      <svg className={styles.ring} width={24} height={24} viewBox="0 0 24 24" aria-hidden>
+        <circle className={styles.ringTrack} cx={12} cy={12} r={RING_RADIUS} />
+        <circle
+          className={styles.ringFill}
+          cx={12}
+          cy={12}
+          r={RING_RADIUS}
+          strokeDasharray={RING_LENGTH}
+          strokeDashoffset={RING_LENGTH * (1 - percent / 100)}
+        />
+      </svg>
+      <span>{text}</span>
+      <ChevronUp size={13} strokeWidth={1.9} aria-hidden />
+    </button>
+  );
+}
+
+/**
+ * The finished copy: the fox, where it went, its real size and that it is in the Library
+ * (a link to its page). Show in Finder, and "Drag to YouTube Studio" (or wherever it is going)
+ * — a native drag of the real file, under the item's title rather than its vault id,
+ * straight into an upload page.
+ * ✕ closes the card; the copy stays pointed at in the Library until it is opened.
  */
 export function ExportReadyCard({ ready }: { ready: ReadyExport }): React.JSX.Element {
-  const t = useTranslations("videoEditor");
+  const t = useTranslations("backgroundCopy");
+  const tEditor = useTranslations("videoEditor");
   const navigate = useNavigate();
   const { job, recording } = ready;
   const size = recording.sizeBytes;
-  const lighter = percentLighter(size, job.sourceSizeBytes);
-  // The quality tiers are the "share in a tool" files: say where on GitHub this one attaches,
-  // from its real size. It never blocks anything.
-  const tier = isQualityTier(job.presetId);
-  const fitsGithubFree = githubPlans(size).free;
   const extension = recording.filePath.match(/\.[a-z0-9]+$/i)?.[0] ?? ".mp4";
   const fileName = `${recording.title}${extension}`;
-  const hint = tier && fitsGithubFree ? t("readyDragHintTool") : t("readyDragHint");
-  const title = t("readyTitle", { size: formatMB(size) });
+  const title = t("readyTitle", { destination: destinationArg(job) });
 
   return (
     <StatusCard
       label={title}
-      icon={<CircleCheck size={20} strokeWidth={1.8} />}
+      icon={<KaipuLogo use="done" size={36} />}
+      bareIcon
       title={title}
-      subtitle={recording.title}
+      subtitle={
+        <>
+          {t("readyLine", { width: job.width, height: job.height, size: formatMB(size) })}
+          {" · "}
+          <button
+            type="button"
+            className={styles.libraryLink}
+            aria-label={t("readyOpenLabel", { name: recording.title })}
+            onClick={() => {
+              dismissReadyExport();
+              navigate(`/library/${recording.assetId}`);
+            }}
+          >
+            {t("readyInLibrary")}
+          </button>
+        </>
+      }
       onDismiss={dismissReadyExport}
-      dismissLabel={t("readyDone")}
+      dismissLabel={t("close")}
     >
-      {lighter !== null && (
-        <StatusCardText>{t("readyLighter", { percent: lighter })}</StatusCardText>
-      )}
-      {tier && <GithubFitChips bytes={size} />}
-      {job.sourceSizeBytes !== null && job.sourceSizeBytes > 0 && (
-        <SizeMeter originalBytes={job.sourceSizeBytes} resultBytes={size} label={formatMB(size)} />
-      )}
-      <div
-        className={styles.fileChip}
-        draggable
-        role="button"
-        tabIndex={-1}
-        aria-label={t("readyDragLabel", { name: fileName })}
-        onDragStart={(e) => {
-          // Main runs a native drag (a real file), so the browser's own drag never starts.
-          e.preventDefault();
-          window.electronAPI.startFileDrag(recording.id, recording.title);
-        }}
-      >
-        <GripVertical size={15} strokeWidth={1.8} className={styles.grip} aria-hidden />
-        <span className={styles.fileBadge} aria-hidden>
-          {extension.slice(1).toUpperCase()}
-        </span>
-        <span className={styles.fileText}>
-          <span className={styles.fileName}>{fileName}</span>
-          <span className={styles.fileHint}>{hint}</span>
-        </span>
-      </div>
+      {/* The light tiers are the "attach it in a tool" files: say where on GitHub this one
+          fits, from its real size. It never blocks anything. */}
+      {isQualityTier(job.presetId) && <GithubFitChips bytes={size} />}
       <StatusCardActions>
         <StatusCardButton
           variant="primary"
           onClick={() => {
-            dismissReadyExport();
-            navigate(`/library/${recording.assetId}`);
+            markCopySeen(recording.assetId);
+            void window.electronAPI.revealLocalRecording(recording.id);
           }}
         >
-          {t("readyViewFile")}
+          <FolderOpen size={14} strokeWidth={1.8} />
+          {tEditor(isWindowsHost() ? "exportShowInFinderWindows" : "exportShowInFinder")}
         </StatusCardButton>
         <StatusCardButton
-          onClick={() => void window.electronAPI.revealLocalRecording(recording.id)}
+          grow
+          label={t("readyDragLabel", { name: fileName })}
+          onDragStart={(e) => {
+            // Main runs a native drag (a real file), so the browser's own drag never starts.
+            e.preventDefault();
+            markCopySeen(recording.assetId);
+            window.electronAPI.startFileDrag(recording.id, recording.title);
+          }}
         >
-          <FolderOpen size={14} strokeWidth={1.8} />
-          {t(isWindowsHost() ? "exportShowInFinderWindows" : "exportShowInFinder")}
+          <GripVertical size={14} strokeWidth={1.8} />
+          {t("dragTo", { destination: destinationArg(job) })}
         </StatusCardButton>
-        <StatusCardButton onClick={dismissReadyExport}>{t("readyDone")}</StatusCardButton>
       </StatusCardActions>
     </StatusCard>
   );

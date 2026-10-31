@@ -1,12 +1,13 @@
-import { Film, PenLine, Share2, Tag, Trash2 } from "lucide-react";
+import { Film, PenLine, Send, Tag, Trash2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
 import type { TagSummary } from "@shared/types";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { TagChip } from "../tags/tag-chip";
-import type { EditBadge as EditBadgeState } from "@renderer/features/library/lineage";
+import { type EditBadge as EditBadgeState, isMaster } from "@renderer/features/library/lineage";
 import { StorageMeta } from "./storage-meta";
 import { KindBadge } from "./kind-badge";
+import { MasterTag } from "./master-tag";
 import { EditBadge } from "./edit-badge";
 import { cx } from "@renderer/ui/cx";
 import styles from "./video-row.module.css";
@@ -19,7 +20,7 @@ interface VideoRowProps {
   onDelete(): void;
   /** Opens the item in the Editor workspace; omitted when it cannot be edited. */
   onEdit?(): void;
-  /** Opens Prepare for this recording (NIW2-578); omitted when there is nothing to prepare. */
+  /** Opens Prepare — "Send to…" — for this recording (NIW2-578); omitted when there is nothing to prepare. */
   onPrepare?(): void;
   /** Opens the tag side panel for this item; omitted when it cannot be tagged. */
   onTags?(): void;
@@ -44,7 +45,6 @@ export function VideoRow({
   tags = [],
 }: VideoRowProps): React.JSX.Element {
   const t = useTranslations("library");
-  const tPrepare = useTranslations("prepare");
   const rowTags = tags.slice(0, ROW_TAGS_SHOWN);
 
   return (
@@ -77,12 +77,14 @@ export function VideoRow({
       <div className={styles.info}>
         <p className={styles.title}>{video.title || t("untitled")}</p>
         <div className={styles.metaLine}>
-          <KindBadge kind={video.kind} />
+          {/* An original reads as the master (NIW2-585); the tag also says it is a recording. */}
+          {isMaster(video) ? <MasterTag size="sm" /> : <KindBadge kind={video.kind} />}
           <StorageMeta video={video} />
           <EditBadge state={badge} />
           <span className={styles.specs}>
             {formatSize(video.fileSizeBytes)}
             {video.kind !== "screenshot" && ` · ${formatDuration(video.durationSeconds)}`}
+            {video.capture?.mode === "import" && ` · ${t("importedMeta")}`}
           </span>
           {rowTags.length > 0 && (
             <ul className={styles.tags} aria-label={t("tagsLabel")}>
@@ -114,10 +116,10 @@ export function VideoRow({
           <button
             className={styles.action}
             onClick={onPrepare}
-            title={tPrepare("prepareFor")}
-            aria-label={tPrepare("prepareFor")}
+            title={t("sendTo")}
+            aria-label={t("sendTo")}
           >
-            <Share2 size={15} strokeWidth={1.8} />
+            <Send size={15} strokeWidth={1.8} />
           </button>
         )}
         {video.id !== null && (

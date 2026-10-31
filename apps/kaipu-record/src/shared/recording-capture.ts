@@ -15,7 +15,13 @@ import {
   type RecordingRatio,
 } from "./types/screenshot-capture";
 
-export const RECORDING_CAPTURE_MODES = ["screen", "area", "window"] as const;
+/**
+ * `import` (NIW2-579) is not a capture: the video came from outside Kaipu (a phone, Zoom,
+ * another app) and was copied into the vault. It lives here because this is the field that
+ * says where a take came from, and it carries the imported video's size the same way.
+ * Builds that predate it read the field as null (`sanitizeRecordingCapture`).
+ */
+export const RECORDING_CAPTURE_MODES = ["screen", "area", "window", "import"] as const;
 export type RecordingCaptureMode = (typeof RECORDING_CAPTURE_MODES)[number];
 
 export interface RecordingCapture {
@@ -33,7 +39,10 @@ export interface RecordingCapture {
  * The target kind (ADR 0030): a `window:` source is a window; a `screen:` source is a
  * whole display unless an area was set. The same rule feeds `recording_started` analytics.
  */
-export function recordingCaptureMode(sourceId: string, hasArea: boolean): RecordingCaptureMode {
+export function recordingCaptureMode(
+  sourceId: string,
+  hasArea: boolean,
+): Exclude<RecordingCaptureMode, "import"> {
   if (sourceId.startsWith("window:")) return "window";
   return hasArea ? "area" : "screen";
 }
@@ -117,18 +126,19 @@ export function sanitizeRecordingCapture(value: unknown): RecordingCapture | nul
 export type RecordingCaptureLabelKey =
   | "captureScreen"
   | "captureWindow"
+  | "captureImported"
   | "captureFrame"
   | "captureFrameRatio"
   | "captureFrameSize";
 
 export type RecordingCaptureLabel =
-  | { key: "captureScreen" | "captureWindow" | "captureFrame" }
+  | { key: "captureScreen" | "captureWindow" | "captureImported" | "captureFrame" }
   | { key: "captureFrameRatio"; params: { ratio: string } }
   | { key: "captureFrameSize"; params: { width: number; height: number } };
 
 /**
- * Which label a capture reads as: SCREEN, WINDOW, FRAME · 16:9 for a fixed ratio,
- * FRAME · 1280 × 720 for a free one, plain FRAME when the size is unknown.
+ * Which label a capture reads as: SCREEN, WINDOW, IMPORTED, FRAME · 16:9 for a fixed
+ * ratio, FRAME · 1280 × 720 for a free one, plain FRAME when the size is unknown.
  */
 export function recordingCaptureLabelKey(
   capture: RecordingCapture | null | undefined,
@@ -136,6 +146,7 @@ export function recordingCaptureLabelKey(
   if (!capture) return null;
   if (capture.mode === "screen") return { key: "captureScreen" };
   if (capture.mode === "window") return { key: "captureWindow" };
+  if (capture.mode === "import") return { key: "captureImported" };
   if (capture.ratio && capture.ratio !== "free") {
     return { key: "captureFrameRatio", params: { ratio: capture.ratio } };
   }

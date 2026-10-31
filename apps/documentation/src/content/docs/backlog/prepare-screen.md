@@ -40,7 +40,8 @@ its own"):
    - **Keep · a full-quality copy**: Archive copy (Maximum quality).
      A destination that already has a matching copy shows **✓ Ready** instead of a size. The
      selected row has a pink tint and border. **Prepare another video** is pinned to the bottom:
-     for now it opens the Library (dropping a file there is NIW2-587).
+     it opens Prepare with no recording, and a video dropped on it is prepared
+     ([NIW2-587](./prepare-drop-zone)).
 2. **For &lt;destination&gt;** (right) — the destination's tile and name, "From your recording ·
    duration · W × H · size", the amber unexported-edits note when it applies, then:
    - **What changes**: Size (recording → copy, amber when bigger, teal when lighter), Picture
@@ -64,25 +65,59 @@ the primary button, from anywhere on the page, including a focused destination r
 1440p / 4K choice; not while typing in a field, with a modifier held, or on another button or
 link (those answer Enter themselves).
 
-Clicking Prepare starts the export and goes back to the recording page; the existing progress
-card (Cancel, time left) and then the Ready card take over. While another export runs, the
+Clicking Prepare starts the export and goes back to the recording page; the progress card
+("Preparing your YouTube copy…", Cancel, time left) and then the ready card ("Your YouTube copy
+is ready") take over, top-right — see [background copies](./background-copy-toasts) (NIW2-586). While another export runs, the
 existing "Already exporting …" toast shows and the user stays on Prepare. An unreadable file shows
 the existing "Couldn't read this recording" toast and goes back to the recording. Screenshots and
 GIFs are not preparable.
 
 ### Ways in
 
-- **Right after recording**: the recording page shows "Your video is ready. Where is it going?"
-  with shortcuts — YouTube, TikTok · Reels, GitHub · Jira, Slack · Discord, More places — plus
-  **Edit first** and **Not now — keep it in the Library**. It shows after every recording (not
-  only a heavy one) and stays until a shortcut or Not now. Settings → Export quality → "Ask where
-  a new recording is going" turns it off (stored as `showRecordingSavedCard`, its NIW2-218 name).
-  It replaces the "Recording saved" card.
-- **The recording page**: **Prepare for…** replaces Share as the primary button, with quick chips
-  (YouTube, TikTok · Reels, GitHub) under the title. The heavy-to-send banner's action is now
-  "Prepare a light copy →", which opens Prepare on GitHub.
-- **The Library**: a Prepare for… icon button on every local recording's card and row, next to
-  Edit.
+- **Right after recording** (NIW2-584): the "Your video is ready" card, top-right in the app's
+  status-card stack, over the recording page a fresh recording lands on. It shows the file's
+  length, picture size and weight, a "Master · full quality" tag, chips — YouTube, TikTok,
+  GitHub, More places — and **Edit first**, plus **Open** only on the floating card (in the app
+  the card already sits on the recording's page, so Open would be a second ✕). It shows after
+  every recording (not only a heavy one), has no timer, and stays until a chip, ✕ or leaving
+  the page. Settings →
+  Export quality → "Ask where a new recording is going" turns it off (stored as
+  `showRecordingSavedCard`, its NIW2-218 name). It replaces the "Recording saved" card and the
+  inline panel NIW2-578 first shipped. It lives in the app, not in a floating window, because
+  main already shows and focuses the app window when a recording stops.
+- **The recording page** (reworked in NIW2-585, then laid out after Claude Design
+  `Kaipu Export v3.dc.html`, sections 1 and 2, on `feature/recording-detail-title-and-copies` —
+  no Linear ticket, the workspace hit its issue limit): the recording is the **master**.
+  - **Title row.** The top row is "← Library", the title (rename pencil, the full width the row
+    leaves, ellipsis only at that edge) and a "MASTER · FULL QUALITY" tag. The owner's feedback:
+    the title shared its row with the actions and was truncated as buttons were added. The
+    metadata line sits under it — Local · age · duration · resolution (once the file is read) ·
+    size · N copies — and the action row under the player holds only buttons, wrapping as it
+    grows. The tag also stays over the player.
+  - **Before the first copy** (and right after recording): a dismissable green notice
+    ("Saved to your Library. This is the original — every copy you export is made from it and
+    it never changes.", only when the page was opened by a fresh recording), the player, and at
+    the bottom **Where is it going?**: one row of equal cards, one per destination — logo, name,
+    short line, and the size of its copy (amber where the platform compresses again, teal where
+    it plays as is; the archive card shows the recording's own size). A card opens Export
+    (`/export/:assetId?to=…`) on that destination through `preparePath`; "Not now" hides the panel for that visit and brings
+    back **Export a copy** among the actions. On a heavy master the heavy-to-send hint sits
+    inside this panel (its GitHub card makes the light copy). It replaces the "Where is this
+    going?" strip.
+  - **With copies**: a pink **Export a copy** first among the actions (it replaces "Send to…")
+    and, at the bottom, **Copies from this original** with "Open in Export →" and the copies two
+    to a row: the destination logo and name, "2560 × 1440 · 566 MB" (the picture size follows
+    from the master's probe and the copy's preset) or "Exporting · 38% · 2 min left" with a bar,
+    ✓ Ready, and a **Drag** handle that starts a native file drag through the same IPC as the
+    ready card. A copy's name links to its page, which links back to its source.
+  - A heavy copy, or a heavy master with copies, keeps the banner with "Prepare a light copy →".
+  - The page now reads the file whenever it shows a local recording (for the resolution and the
+    estimates), not only when it is heavy.
+  - Seven destinations, as in the design: Email is its own card over chat's Balanced preset
+    (see [the export screen](./export-screen)), and the panel lists `DESTINATION_IDS`, so the
+    Export screen and this panel cannot disagree.
+- **The Library**: a Send to… icon button on every local recording's card and row, next to
+  Edit; an original's card and row carry the master tag instead of the Recording badge.
 
 ## How it works
 
@@ -95,9 +130,12 @@ GIFs are not preparable.
   the whole file (`initialScene`), `WHOLE_RECORDING_FINGERPRINT`, the chosen preset and framing,
   through `useVideoExport().start`. No second pipeline. `useSourceProbe` reads the file's size,
   frame rate and duration.
-- "Ready" is `findReusableExports(exports, WHOLE_RECORDING_FINGERPRINT)` over the lineage's
-  exports list.
-- The recording page re-lists when an export becomes ready, so the new copy shows under Exports.
+- "Ready" (a destination's ✓ Ready on Prepare) is
+  `findReusableExports(exports, WHOLE_RECORDING_FINGERPRINT)` over the lineage's exports list.
+- The recording page re-lists when an export becomes ready, so the new copy shows under Copies
+  from this master. A copy made for a destination (`WHOLE_RECORDING_FINGERPRINT`) is named by
+  `destinationOfPreset`; an editor export or a GIF goes by its own title. The running row comes
+  from `useExportRunner()` (`runningCopyOf`), whose job now records `wholeRecording`.
 
 ## Decisions
 
@@ -110,7 +148,8 @@ GIFs are not preparable.
 - **"Under the 10 MB limit"** is said only when the estimate fits GitHub's free plan
   (`githubPlans().free`); `githubFit()` is against the paid 100 MB limit, which would make the
   claim false for most recordings.
-- **The Ready card keeps "Ready to share"**: it is shared with the editor's export.
+- **The progress and ready cards** are shared with the editor's export; NIW2-586 names the
+  destination on them ([background copies](./background-copy-toasts)).
 - **Sized for the window the app opens at** (NIW2-583). `createWindow` opens the main window at
   900 × 670 (the `main` preset's minimum; the first screen does not resize it), which leaves the
   page 828 × 614 below the status bar. Both columns fit that without scrolling; below it each
@@ -122,14 +161,15 @@ GIFs are not preparable.
   not a sample", but the app has no full-resolution frame of the recording to crop, and a
   softened copy of it would claim to show YouTube's output. It is drawn text, captioned as an
   illustration, until a real frame crop exists.
-- **"Prepare another video" says "Pick one from your Library"** until NIW2-587 makes dropping a
-  file work; the design's "Drop a file here" would promise something the page does not do yet.
+- **"Prepare another video" says "Drop a file here or from your Library"** since
+  [NIW2-587](./prepare-drop-zone) made dropping a file work.
 - **No time estimate** next to the button, for the same reason as in "What changes".
 - **Dropped from the page in NIW2-583**: the "Original" column (its facts moved to the header
   line), the "Already prepared" list (each row's ✓ Ready replaces it), the folded "What changes
   in the copy" (now always shown, as a card), and GitHub's free / paid plan chips (the size bar
-  says the free-plan fit; the Ready card still shows the chips). Their i18n keys stay in the
-  `prepare` namespace for now, to keep sibling branches mergeable; prune them once those land.
+  says the free-plan fit; the ready card still shows where a light copy fits on GitHub). Their
+  i18n keys, and the old quick chips' and "Prepare for…" keys NIW2-585 replaced, were pruned
+  once the sibling branches were stacked (NIW2-586's branch).
 
 ## Out of scope
 
@@ -138,9 +178,11 @@ recording, a recording-quality floor, and uploading to any platform.
 
 ## How to validate
 
-Record a short clip → the "Where is it going?" panel appears → YouTube → Prepare opens on YouTube,
-1440p selected, at the default window size with no scrollbar → try 4K → press Enter → back on the
-recording, the progress card, then the Ready card → the copy is in the Library, and its row on
-Prepare reads ✓ Ready. Then
-GitHub (Light) from the quick chip or the heavy banner, Fit / Fill on Reels, and a screenshot's
-page (no Prepare).
+Record a short clip → the "Your video is ready" card appears top-right → YouTube → Prepare opens
+on YouTube, 1440p selected, at the default window size with no scrollbar → try 4K → press Enter →
+back on the recording: the master tag by the title and over the player, the copy under Copies
+from this original with its progress, "Preparing your YouTube copy…" top-right, then "Your YouTube
+copy is ready" → the copy is in the Library, and its row on Prepare reads ✓ Ready. Drag the copy's
+row out of the page into Finder. Then GitHub from the "Where is it going?" panel on another fresh
+recording, Export a copy (no `?to=`, so Prepare opens on YouTube), Fit / Fill on Reels, and a
+screenshot's page (no Prepare). At 900 × 670 the title, tag and actions never truncate each other.
