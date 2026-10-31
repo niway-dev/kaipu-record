@@ -426,7 +426,9 @@ describe("ExportPage with no video", () => {
     const router = renderExport("/export");
     expect(await screen.findByRole("heading", { name: "Export", level: 1 })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Drop a video here" })).toBeVisible();
-    expect(screen.getByText(/^Any MP4 or MOV, from Kaipu or from somewhere else/)).toBeVisible();
+    expect(
+      screen.getByText(/^Any MP4, MOV, M4V or WebM, from Kaipu or from somewhere else/),
+    ).toBeVisible();
 
     const recent = await screen.findByRole("region", { name: "Recent exports" });
     const row = within(recent).getByRole("button", { name: /Slack · Discord/ });
