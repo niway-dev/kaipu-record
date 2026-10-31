@@ -230,6 +230,106 @@ describe("WebcamLayer", () => {
     expect(writes).toEqual([3, 3.3]);
   });
 
+  it("leads the catch-up seek during playback by how long the last seek took", () => {
+    const { ref, el } = mainVideo(1);
+    renderLayer({ videoRef: ref });
+    const cam = loadWebcam(30);
+    let camTime = 1;
+    let seeking = false;
+    const writes: number[] = [];
+    Object.defineProperty(cam, "currentTime", {
+      configurable: true,
+      get: () => camTime,
+      set: (v: number) => {
+        writes.push(v);
+        camTime = v;
+        seeking = true;
+      },
+    });
+    Object.defineProperty(cam, "seeking", { configurable: true, get: () => seeking });
+    Object.defineProperty(el, "paused", { configurable: true, get: () => false });
+    const now = vi.spyOn(performance, "now").mockReturnValue(1_000);
+    act(() => setTime(el, 3)); // 2 s off: the first seek has no measured duration yet
+    expect(writes).toEqual([3]);
+    // That seek takes 400 ms (a long keyframe interval) while the main video plays on.
+    now.mockReturnValue(1_400);
+    el.currentTime = 3.4;
+    seeking = false;
+    act(() => void fireEvent(cam, new Event("seeked")));
+    // Seeking to 3.4 would land at 3.4 when the screen is at 3.8: aim where it will be.
+    expect(writes[1]).toBeCloseTo(3.8);
+  });
+
+  it("gives no lead while the main video waits for data: its clock is not moving", () => {
+    const { ref, el } = mainVideo(1);
+    renderLayer({ videoRef: ref });
+    const cam = loadWebcam(30);
+    let camTime = 1;
+    let seeking = false;
+    const writes: number[] = [];
+    Object.defineProperty(cam, "currentTime", {
+      configurable: true,
+      get: () => camTime,
+      set: (v: number) => {
+        writes.push(v);
+        camTime = v;
+        seeking = true;
+      },
+    });
+    Object.defineProperty(cam, "seeking", { configurable: true, get: () => seeking });
+    Object.defineProperty(el, "paused", { configurable: true, get: () => false });
+    const now = vi.spyOn(performance, "now").mockReturnValue(1_000);
+    act(() => setTime(el, 3));
+    // A 400 ms seek: during playback the next one would lead by 400 ms.
+    now.mockReturnValue(1_400);
+    seeking = false;
+    act(() => void fireEvent(cam, new Event("seeked")));
+    // The screen runs out of data and a scrub lands elsewhere: it holds at 6, so the face
+    // must too — a lead would jump it ahead, then back when `playing` resyncs it.
+    act(() => void fireEvent(el, new Event("waiting")));
+    writes.length = 0;
+    act(() => setTime(el, 6));
+    expect(writes).toEqual([6]);
+  });
+
+  it("pauses the webcam while the main video waits for data, and resumes on playing", () => {
+    const { ref, el } = mainVideo(1);
+    renderLayer({ videoRef: ref });
+    const cam = loadWebcam(30);
+    let camPaused = false;
+    Object.defineProperty(el, "paused", { configurable: true, get: () => false });
+    Object.defineProperty(cam, "paused", { configurable: true, get: () => camPaused });
+    const pause = vi.mocked(HTMLMediaElement.prototype.pause);
+    const play = vi.mocked(HTMLMediaElement.prototype.play);
+    pause.mockClear();
+    play.mockClear();
+    act(() => void fireEvent(el, new Event("waiting")));
+    expect(pause).toHaveBeenCalledOnce();
+    camPaused = true;
+    // Still buffering: a timeupdate or seeked must not restart the face on its own.
+    act(() => setTime(el, 1));
+    expect(play).not.toHaveBeenCalled();
+    act(() => void fireEvent(el, new Event("playing")));
+    expect(play).toHaveBeenCalledOnce();
+  });
+
+  it("a stalled fetch pauses the webcam only when the main video has run out of data", () => {
+    const { ref, el } = mainVideo(1);
+    renderLayer({ videoRef: ref });
+    const cam = loadWebcam(30);
+    let readyState = 4;
+    Object.defineProperty(el, "paused", { configurable: true, get: () => false });
+    Object.defineProperty(cam, "paused", { configurable: true, get: () => false });
+    Object.defineProperty(el, "readyState", { configurable: true, get: () => readyState });
+    const pause = vi.mocked(HTMLMediaElement.prototype.pause);
+    pause.mockClear();
+    act(() => void fireEvent(el, new Event("stalled")));
+    expect(pause).not.toHaveBeenCalled(); // still playing from its buffer
+    readyState = 2;
+    act(() => void fireEvent(el, new Event("stalled")));
+    expect(pause).toHaveBeenCalledOnce();
+  });
+
   it("mirrors the main element's play and pause", () => {
     const { ref, el } = mainVideo(1);
     renderLayer({ videoRef: ref });

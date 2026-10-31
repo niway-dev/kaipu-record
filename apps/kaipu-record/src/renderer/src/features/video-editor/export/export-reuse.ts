@@ -53,7 +53,7 @@ function hash53(text: string): string {
 }
 
 /** The composer revision that draws the webcam layer; bump it when that drawing changes. */
-export const WEBCAM_COMPOSE_REVISION = "wc1";
+export const WEBCAM_COMPOSE_REVISION = "wc2";
 
 /**
  * The editor's fingerprint: the scene as the export burns it in. Hashed in its saved form

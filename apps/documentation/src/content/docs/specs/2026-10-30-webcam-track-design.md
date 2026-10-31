@@ -515,9 +515,12 @@ Interaction: pointer drag on the layer updates `layout.position` (or the active 
 the four corners resize with the aspect locked; the inspector shows Shape, Size, nine position
 presets, Mirror, Framing (reusing the camera settings' pad and slider), Shrink during zoom and
 Shadow. A **Webcam** lane on the timeline shows the segments as blocks (hidden = striped), with
-the Zoom lane's drag and edge handles reused; "Hide webcam here" is a toolbar action over the
+the Zoom lane's drag and edge handles reused, over a filmstrip of the webcam file's own frames
+laid out per clip like the Clips lane (NIW2-582), so the row reads as the face even with no
+segment on it; "Hide webcam here" is a toolbar action over the
 selected range or from the playhead to the next segment. Selecting a block switches the
-inspector to the override's fields.
+inspector to the override's fields, and so does selecting the layer while the playhead is
+inside an override: the inspector edits what the preview shows.
 
 A recording with `webcam: null` shows neither lane nor inspector section: the editor looks
 exactly as today.

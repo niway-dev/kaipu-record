@@ -1,8 +1,10 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
+import { SESSION_BEFORE_WEBCAM } from "@renderer/features/video-editor/session-before-webcam.fixture";
+import { WEBCAM_DEFAULTS } from "@renderer/features/video-editor/webcam/webcam-model";
 import {
   toolForShortcut,
   VideoEditorLoader,
@@ -56,6 +58,23 @@ vi.mock("@renderer/features/video-editor/export/use-video-export", () => ({
     start: startExport,
     cancel: vi.fn(),
   }),
+}));
+
+// Thumbnails never decode in jsdom (no WebCodecs); spying on the hook lets the webcam tests
+// pin which file and offset the webcam lane's filmstrip is decoded from.
+const thumbnailCalls = vi.hoisted(() => [] as unknown[][]);
+vi.mock("@renderer/features/video-editor/use-source-thumbnails", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@renderer/features/video-editor/use-source-thumbnails")
+  >()),
+  useSourceThumbnails: (...args: unknown[]) => {
+    thumbnailCalls.push(args);
+    return [];
+  },
+  useCompanionThumbnails: (...args: unknown[]) => {
+    thumbnailCalls.push(args);
+    return { thumbnails: [], covered: null };
+  },
 }));
 
 // jsdom's Image never fires onload for blob: URLs (no real image decoding) — the
@@ -786,6 +805,67 @@ describe("VideoEditorPage — inspector column priority (annotation follow-ups)"
 });
 
 // The webcam layer (ADR 0038): everything it adds hangs off the sidecar's webcam track.
+// The loader (review W6): a saved session meets the sidecar, which alone decides whether the
+// recording has a webcam (`reconcileWebcam`).
+describe("VideoEditorPage — loading a session against the webcam sidecar", () => {
+  const WITH_WEBCAM: VideoEditorSource = {
+    ...SOURCE,
+    webcam: { startOffsetMs: 0, offsetQuality: "exact", width: 1280, height: 720, fps: 30 },
+  };
+  const original = window.electronAPI.loadVideoEditSession;
+  const savedSession = (sessionJson: string): void => {
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => ({ sessionJson, assets: [] }));
+  };
+  afterEach(() => {
+    window.electronAPI.loadVideoEditSession = original;
+  });
+
+  it("a session saved before the webcam keeps its edits and gets the layer seeded from the sidecar", async () => {
+    savedSession(SESSION_BEFORE_WEBCAM);
+    renderEditor(WITH_WEBCAM);
+    const footer = await waitForEditorLoaded();
+    expect(getToasts().map((toast) => toast.message)).toContain("Restored your previous edit");
+    expect(footer.querySelector('[data-zoom-id="zoom-1"]')).not.toBeNull();
+    expect(footer.querySelector('[data-testid="webcam-lane"]')).not.toBeNull();
+    expect(footer.querySelectorAll("[data-webcam-id]")).toHaveLength(0);
+    expect(screen.getByTestId("webcam-layer")).toBeInTheDocument();
+  });
+
+  it("the same session on a recording without a webcam opens exactly as before", async () => {
+    savedSession(SESSION_BEFORE_WEBCAM);
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    expect(footer.querySelector('[data-zoom-id="zoom-1"]')).not.toBeNull();
+    expect(footer.querySelector('[data-testid="webcam-lane"]')).toBeNull();
+    expect(screen.queryByTestId("webcam-layer")).toBeNull();
+  });
+
+  it("a saved layer is restored with its segments; the sidecar's absence drops it", async () => {
+    const scene = JSON.parse(SESSION_BEFORE_WEBCAM).scene;
+    const withLayer = JSON.stringify({
+      version: 1,
+      scene: {
+        ...scene,
+        webcam: {
+          layout: { ...WEBCAM_DEFAULTS },
+          segments: [{ id: "cam-hidden", start: 3, end: 6, mode: "hidden" }],
+        },
+      },
+    });
+    savedSession(withLayer);
+    renderEditor(WITH_WEBCAM);
+    let footer = await waitForEditorLoaded();
+    expect(footer.querySelector('[data-webcam-id="cam-hidden"]')).not.toBeNull();
+    cleanup();
+
+    savedSession(withLayer);
+    renderEditor();
+    footer = await waitForEditorLoaded();
+    expect(footer.querySelector('[data-testid="webcam-lane"]')).toBeNull();
+    expect(screen.queryByTestId("webcam-layer")).toBeNull();
+  });
+});
+
 describe("VideoEditorPage — webcam track", () => {
   const WITH_WEBCAM: VideoEditorSource = {
     ...SOURCE,
@@ -793,12 +873,28 @@ describe("VideoEditorPage — webcam track", () => {
   };
 
   it("a recording without a webcam shows no lane, no layer, no second video and no hide action", async () => {
+    thumbnailCalls.length = 0;
     renderEditor();
     const footer = await waitForEditorLoaded();
     expect(footer.querySelector('[data-testid="webcam-lane"]')).toBeNull();
     expect(screen.queryByTestId("webcam-layer")).toBeNull();
     expect(document.querySelectorAll("video")).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "Hide webcam here" })).toBeNull();
+    // No webcam file to decode: the webcam filmstrip is asked for nothing.
+    expect(thumbnailCalls.some((args) => String(args[0]).startsWith("kaipu-media://webcam"))).toBe(
+      false,
+    );
+  });
+
+  it("the webcam lane's filmstrip decodes the webcam file at its offset", async () => {
+    thumbnailCalls.length = 0;
+    renderEditor(WITH_WEBCAM);
+    await waitForEditorLoaded();
+    expect(thumbnailCalls).toContainEqual([
+      "kaipu-media://webcam/rec-1",
+      SOURCE.durationSeconds,
+      0.12,
+    ]);
   });
 
   it("a recording with a webcam gets the lane, the layer's own muted video and the hide action", async () => {
@@ -853,6 +949,64 @@ describe("VideoEditorPage — webcam track", () => {
       await waitFor(() => expect(screen.getByTestId("webcam-layer").style.display).toBe(""));
     } finally {
       stubDecodedVideoSize(0, 0);
+    }
+  });
+
+  // Review S1: with the layer selected the inspector follows the playhead into an override.
+  // A slider drag that crossed that boundary used to swap the inspector, unmount the slider
+  // mid-gesture and leave the scene's drag open — every later commit and undo was dropped.
+  it("a slider drag survives the playhead entering an override; commits and undo still land", async () => {
+    const scene = JSON.parse(SESSION_BEFORE_WEBCAM).scene;
+    const original = window.electronAPI.loadVideoEditSession;
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
+      sessionJson: JSON.stringify({
+        version: 1,
+        scene: {
+          ...scene,
+          webcam: {
+            layout: { ...WEBCAM_DEFAULTS },
+            segments: [{ id: "cam-ov", start: 5, end: 8, mode: "override", layout: {} }],
+          },
+        },
+      }),
+      assets: [],
+    }));
+    try {
+      renderEditor(WITH_WEBCAM);
+      await waitForEditorLoaded();
+      const bubble = screen.getByTestId("webcam-layer");
+      fireEvent.pointerDown(bubble, { pointerId: 1 });
+      fireEvent.pointerUp(bubble, { pointerId: 1 });
+      expect(await screen.findByRole("heading", { name: "Webcam" })).toBeInTheDocument();
+
+      const size = screen.getByRole("slider", { name: "Size" });
+      fireEvent.pointerDown(size, { pointerId: 2 });
+      fireEvent.change(size, { target: { value: "0.3" } });
+      const main = Array.from(document.querySelectorAll("video")).find(
+        (v) => v.dataset.testid !== "webcam-video",
+      )!;
+      main.currentTime = 6;
+      fireEvent.timeUpdate(main);
+      // The drag owns the inspector: it does not swap to the override under the playhead.
+      expect(screen.getByRole("heading", { name: "Webcam" })).toBeInTheDocument();
+      fireEvent.pointerUp(size, { pointerId: 2 });
+
+      // Drag over, the playhead's override takes the inspector — and a commit lands.
+      expect(await screen.findByRole("heading", { name: "Webcam section 1" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Rounded" }));
+      expect(screen.getByRole("button", { name: "Rounded" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Rounded" })).toHaveAttribute(
+          "aria-pressed",
+          "false",
+        ),
+      );
+    } finally {
+      window.electronAPI.loadVideoEditSession = original;
     }
   });
 

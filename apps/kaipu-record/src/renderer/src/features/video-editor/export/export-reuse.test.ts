@@ -69,8 +69,8 @@ describe("editFingerprint — webcam", () => {
 
   it("is tagged only with a webcam, so an export made before the layer was drawn never matches", () => {
     // Before NIW2-575 a webcam scene fingerprinted as `edit:<hash>` and its file had no face.
-    expect(editFingerprint(fixed(track))).toMatch(/^edit:wc1:[0-9a-z]+$/);
-    expect(editFingerprint(fixed(null))).not.toMatch(/wc1/);
+    expect(editFingerprint(fixed(track))).toMatch(/^edit:wc2:[0-9a-z]+$/);
+    expect(editFingerprint(fixed(null))).not.toMatch(/wc2/);
   });
 });
 
