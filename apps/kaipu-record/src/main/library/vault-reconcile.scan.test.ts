@@ -39,6 +39,10 @@ describe("isStaleAutoTitle (N1, N12)", () => {
     "Captura — 29/10/2026, 7:57:30 a. m.",
     "Recording — 2026/10/29 午後7:57:30",
     "Screenshot — 2026-10-07",
+    // An export of an old automatic title (`editedTitle`).
+    "Recording — 9/14/2026, 10:57:31 AM (edited)",
+    "Recording — 14/9/2026, 10:57:31 a. m. (editado)",
+    "Recording — 9/14/2026, 10:57:31 AM (edited) (edited)",
   ])("%s is an old automatic title", (title) => {
     expect(isStaleAutoTitle(title)).toBe(true);
   });
@@ -50,6 +54,8 @@ describe("isStaleAutoTitle (N1, N12)", () => {
     "Demo — 10/29/2026",
     "Recording — ",
     "Kaipu Recording 2026-10-29 at 19.57.30",
+    "Recording — my demo (edited)",
+    "Recording — 10/29/2026 (edited) final",
   ])("%s is user-written (or new)", (title) => {
     expect(isStaleAutoTitle(title)).toBe(false);
   });
@@ -121,6 +127,57 @@ describe("scanVault — names", () => {
       expect(at(aligned), aligned).toBeUndefined();
     }
     expect(findings).toHaveLength(6);
+  });
+
+  it("names an export of an old automatic title after its source's new name, keeping (edited)", async () => {
+    const SOURCE = new Date(2026, 8, 14, 10, 57, 31).getTime();
+    const EXPORTED = new Date(2026, 8, 14, 10, 58, 52).getTime();
+    const sourceName = defaultCaptureName("recording", new Date(SOURCE));
+    const { at } = await scan({
+      "recording-2026-09-14-15-57-31.mp4": "v",
+      ".kaipu/recording-2026-09-14-15-57-31.json": sidecar({
+        assetId: "src",
+        createdAt: SOURCE,
+        title: "Recording — 9/14/2026, 10:57:31 AM",
+      }),
+      "recording-2026-09-14-15-58-52.mp4": "v",
+      ".kaipu/recording-2026-09-14-15-58-52.json": sidecar({
+        assetId: "exp",
+        createdAt: EXPORTED,
+        derivedFromAssetId: "src",
+        title: "Recording — 9/14/2026, 10:57:31 AM (edited)",
+      }),
+      // An export of a user-titled source follows that title.
+      "Demo.mp4": "v",
+      ".kaipu/Demo.json": sidecar({ assetId: "demo", createdAt: SOURCE, title: "Demo" }),
+      "recording-2026-09-14-16-00-00.mp4": "v",
+      ".kaipu/recording-2026-09-14-16-00-00.json": sidecar({
+        assetId: "exp2",
+        createdAt: EXPORTED,
+        derivedFromAssetId: "demo",
+        title: "Recording — 9/14/2026, 10:57:31 AM (editado)",
+      }),
+      // Its source is gone: the export's own date, still marked as edited.
+      "recording-2026-09-14-16-01-00.mp4": "v",
+      ".kaipu/recording-2026-09-14-16-01-00.json": sidecar({
+        assetId: "exp3",
+        createdAt: EXPORTED,
+        derivedFromAssetId: "gone",
+        title: "Recording — 9/14/2026, 10:57:31 AM (edited)",
+      }),
+    });
+    expect(at("recording-2026-09-14-15-57-31.mp4")).toMatchObject({ newTitle: sourceName });
+    expect(at("recording-2026-09-14-15-58-52.mp4")).toMatchObject({
+      kind: "stale-auto-title",
+      newTitle: `${sourceName} (edited)`,
+      newName: `${sourceName} (edited).mp4`,
+    });
+    expect(at("recording-2026-09-14-16-00-00.mp4")).toMatchObject({
+      newTitle: "Demo (editado)",
+    });
+    expect(at("recording-2026-09-14-16-01-00.mp4")).toMatchObject({
+      newTitle: `${defaultCaptureName("recording", new Date(EXPORTED))} (edited)`,
+    });
   });
 
   it("adopts media without a record, under its disk name (a legacy stem reads as its default name)", async () => {

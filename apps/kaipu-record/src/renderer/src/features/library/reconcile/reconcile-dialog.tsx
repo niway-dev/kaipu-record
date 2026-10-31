@@ -1,4 +1,4 @@
-import { FolderSync } from "lucide-react";
+import { FileText, Film, FolderSync, Image as ImageIcon } from "lucide-react";
 import { useTranslations, type Translator } from "@kaipu/i18n";
 import {
   ModalActions,
@@ -19,51 +19,84 @@ import {
 } from "./reconcile-store";
 import styles from "./reconcile.module.css";
 
-/** Rows rendered per list; a vault with hundreds of findings shows "…and N more". */
+/** Rows rendered per table; a vault with hundreds of findings shows "…and N more". */
 const MAX_ROWS = 200;
 
 type LibraryT = Translator<"library">;
 
 const fileName = (path: string): string => path.split("/").pop() ?? path;
 
-/** One finding in plain language: current name → new name, or what happens to it. */
-export function describeFinding(finding: ReconcileFinding, t: LibraryT): string {
+const MEDIA_EXT = /\.(mp4|webm|mov|gif|png|jpe?g|webp)$/u;
+const IMAGE_EXT = /\.(png|jpe?g|webp)$/u;
+
+/** A file's name without its media extension: the row icon carries the kind. */
+const withoutExt = (name: string): string => name.replace(MEDIA_EXT, "");
+
+/** One finding as a table row: the file as it is now, and what happens to it. */
+export interface FindingRow {
+  /** The file (or record) as it is now. */
+  now: string;
+  /** Renames: the new name. */
+  renamedTo?: string;
+  /** Everything else: what happens to it, or why it stays. */
+  note?: string;
+  icon: "video" | "image" | "record";
+}
+
+function rowIcon(path: string): FindingRow["icon"] {
+  if (IMAGE_EXT.test(path)) return "image";
+  return MEDIA_EXT.test(path) ? "video" : "record";
+}
+
+export function describeFinding(finding: ReconcileFinding, t: LibraryT): FindingRow {
   const path = finding.path;
-  const name = finding.title || fileName(path);
+  const icon = rowIcon(path);
+  const note = (text: string, now = path): FindingRow => ({ now, note: text, icon });
   switch (finding.kind) {
     case "stale-auto-title":
     case "untitled-legacy":
     case "name-mismatch":
-      return t("reconcileRename", { from: path, to: finding.newName ?? path });
+      return {
+        now: withoutExt(path),
+        renamedTo: withoutExt(finding.newName ?? path),
+        icon,
+      };
     case "missing-sidecar":
-      return t("reconcileAdopt", { path });
-    case "missing-media":
-      return finding.action === "cloud-only"
-        ? t("reconcileCloudOnly", { name })
-        : t("reconcileToOrphans", { name });
+      return note(t("reconcileAdopt"), withoutExt(path));
+    case "missing-media": {
+      const name = finding.title || fileName(path);
+      return note(
+        finding.action === "cloud-only" ? t("reconcileCloudOnly") : t("reconcileToOrphans"),
+        name,
+      );
+    }
     case "orphan-companion":
-      return t("reconcileOrphanCompanion", { path });
+      return note(t("reconcileOrphanCompanion"));
     case "stem-conflict":
-      return t("reconcileStemConflict", { path });
+      return note(t("reconcileStemConflict"));
     case "shared-companion":
-      return t("reconcileSharedCompanion", { path });
+      return note(t("reconcileSharedCompanion"));
     case "duplicate-identity":
-      return t("reconcileDuplicateIdentity", { path });
+      return note(t("reconcileDuplicateIdentity"));
     case "unreadable-record":
-      return t("reconcileUnreadable", { path });
+      return note(t("reconcileUnreadable"));
     case "not-recognized":
-      return t("reconcileNotRecognized", { path });
+      return note(t("reconcileNotRecognized"));
     case "unreadable-orphan-run":
-      return t("reconcileUnreadableOrphanRun", { path });
+      return note(t("reconcileUnreadableOrphanRun"));
   }
 }
 
-function FindingList({
+const ICONS = { video: Film, image: ImageIcon, record: FileText } as const;
+
+function FindingTable({
   heading,
+  columns,
   findings,
   t,
 }: {
   heading: string;
+  columns: [string, string];
   findings: ReconcileFinding[];
   t: LibraryT;
 }): React.JSX.Element | null {
@@ -71,18 +104,42 @@ function FindingList({
   return (
     <section className={styles.group}>
       <h3 className={styles.groupHeading}>{heading}</h3>
-      <ul className={styles.list}>
-        {findings.slice(0, MAX_ROWS).map((finding) => (
-          <li key={`${finding.kind}:${finding.path}`} className={styles.row}>
-            {describeFinding(finding, t)}
-          </li>
-        ))}
-        {findings.length > MAX_ROWS && (
-          <li className={styles.more}>
-            {t("reconcileMore", { count: findings.length - MAX_ROWS })}
-          </li>
-        )}
-      </ul>
+      <table className={styles.table}>
+        <thead>
+          <tr>
+            <th scope="col" className={styles.nowCell}>
+              {columns[0]}
+            </th>
+            <th scope="col" aria-hidden className={styles.arrowCell} />
+            <th scope="col">{columns[1]}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {findings.slice(0, MAX_ROWS).map((finding) => {
+            const row = describeFinding(finding, t);
+            const Icon = ICONS[row.icon];
+            return (
+              <tr key={`${finding.kind}:${finding.path}`}>
+                <td className={styles.nowCell}>
+                  <span className={styles.name}>
+                    <Icon size={13} strokeWidth={1.8} aria-hidden className={styles.icon} />
+                    {row.now}
+                  </span>
+                </td>
+                <td aria-hidden className={styles.arrowCell}>
+                  {row.renamedTo !== undefined && "→"}
+                </td>
+                <td className={row.renamedTo !== undefined ? styles.afterCell : styles.noteCell}>
+                  {row.renamedTo ?? row.note}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {findings.length > MAX_ROWS && (
+        <p className={styles.more}>{t("reconcileMore", { count: findings.length - MAX_ROWS })}</p>
+      )}
     </section>
   );
 }
@@ -98,13 +155,15 @@ function Findings({
   const listed = findings.filter((f) => !f.fixable);
   return (
     <div className={styles.findings}>
-      <FindingList
+      <FindingTable
         heading={t("reconcileFixableHeading", { count: fixable.length })}
+        columns={[t("reconcileColumnNow"), t("reconcileColumnAfter")]}
         findings={fixable}
         t={t}
       />
-      <FindingList
+      <FindingTable
         heading={t("reconcileListedHeading", { count: listed.length })}
+        columns={[t("reconcileColumnFile"), t("reconcileColumnWhy")]}
         findings={listed}
         t={t}
       />
