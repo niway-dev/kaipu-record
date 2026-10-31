@@ -32,7 +32,7 @@ export default defineConfig({
         },
         {
           label: "Stack",
-          items: [{ slug: "stack/hono" }, { slug: "stack/better-auth-electron-bug" }],
+          autogenerate: { directory: "stack" },
         },
         {
           label: "Desktop App",
@@ -72,12 +72,7 @@ export default defineConfig({
         },
         {
           label: "Authentication",
-          items: [
-            { slug: "authentication" },
-            { slug: "authentication/overview" },
-            { slug: "authentication/implementation" },
-            { slug: "authentication/quick-reference" },
-          ],
+          autogenerate: { directory: "authentication" },
         },
         {
           label: "Backend",

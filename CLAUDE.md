@@ -72,7 +72,8 @@ Rules:
   When a backlog feature ships, flip it to 🟢; after prod validation, fold the lasting
   knowledge into a `desktop/`/`features/` reference doc.
 - **Sidebar:** `apps/documentation/astro.config.mjs`. Every content folder autogenerates from
-  its directory; creating the page is enough. No hand-kept index anywhere: no rows to add to
+  its directory; creating the page is enough (Getting Started is the one fixed group). Order
+  inside a group comes from `sidebar.order` in a page's frontmatter, never from a list. No hand-kept index anywhere: no rows to add to
   an index page, no changelog table, no ADR table, no sidebar list. Each PR that edits a
   shared list conflicts with every other branch in flight
   ([general-knowledge: adr-pattern, feature-docs-as-memory](https://github.com/csdev19/general-knowledge/blob/main/conventions/adr-pattern.md#no-hand-kept-index)).
