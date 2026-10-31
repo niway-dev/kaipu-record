@@ -152,4 +152,34 @@ describe("useSessionAutosave", () => {
     expect(save).toHaveBeenCalledTimes(2);
     expect(result.current.state).toBe("saved");
   });
+
+  it("a save refused during Check and fix files stays pending and is retried when it ends", async () => {
+    let refuse = true;
+    let ended: (() => void) | null = null;
+    window.electronAPI = {
+      saveVideoEditSession: async (id: string, json: string) => {
+        if (refuse) throw new Error("vault-maintenance: Kaipu is fixing your files");
+        saved.push({ id, json });
+      },
+      onLibraryMaintenanceEnded: (callback: () => void) => {
+        ended = callback;
+        return () => (ended = null);
+      },
+    } as unknown as typeof window.electronAPI;
+    const { result, rerender } = render();
+    rerender({ scene: { ...OPENED, zoomSensitivity: 61 }, interacting: false });
+    await act(async () => {
+      vi.advanceTimersByTime(AUTOSAVE_DEBOUNCE_MS);
+    });
+    expect(saved).toHaveLength(0);
+    expect(result.current.pendingRef.current).toBe(true);
+
+    refuse = false;
+    await act(async () => {
+      ended!();
+    });
+    expect(saved).toHaveLength(1);
+    expect(JSON.parse(saved[0].json).scene.zoomSensitivity).toBe(61);
+    expect(result.current.pendingRef.current).toBe(false);
+  });
 });

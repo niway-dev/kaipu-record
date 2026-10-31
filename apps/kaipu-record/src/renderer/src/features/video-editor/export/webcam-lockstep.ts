@@ -1,5 +1,5 @@
 /**
- * Which webcam frame goes with each exported screen frame (ADR 0033, spec failure 8). The
+ * Which webcam frame goes with each exported screen frame (ADR 0038, spec failure 8). The
  * MP4 worker decodes the webcam file sequentially beside the screen and asks, for every
  * screen frame it keeps, for the webcam frame on screen at that SOURCE time: the last one
  * whose `timestamp + offset ≤ sourceTs`, held until the next one is due (a 30 fps webcam

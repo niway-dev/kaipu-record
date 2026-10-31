@@ -10,6 +10,7 @@ import type { GifFps, GifStartMessage, GifWorkerMessage } from "./gif-messages";
 import { rasterizeOverlays } from "./overlay-raster";
 import type { WebcamTrackMessage } from "./export-messages";
 import { type ExportWebcamTrack, fetchWebcamTrack } from "./webcam-fetch";
+import { mediaUrl } from "@renderer/lib/media-url";
 
 export interface GifJobArgs {
   scene: VideoScene;
@@ -21,7 +22,7 @@ export interface GifJobArgs {
   previewWidth: number;
   slideAssets: SlideAssetStore;
   cameraPath: CameraPath | null;
-  /** The recording's webcam track, when it has one (ADR 0033), as for the MP4 export. */
+  /** The recording's webcam track, when it has one (ADR 0038), as for the MP4 export. */
   webcamTrack?: ExportWebcamTrack | null;
   /** Range in edited-timeline seconds. */
   range: { start: number; end: number };
@@ -154,7 +155,7 @@ export function useGifExport(): GifExportController {
 
   const sourceBlob = useCallback((id: string): Promise<Blob> => {
     if (sourceRef.current?.id !== id) {
-      const blob = fetch(`kaipu-media://recording/${id}`).then((r) => r.blob());
+      const blob = fetch(mediaUrl("recording", id)).then((r) => r.blob());
       // A failed fetch must not be cached for the next attempt.
       blob.catch(() => {
         if (sourceRef.current?.blob === blob) sourceRef.current = null;

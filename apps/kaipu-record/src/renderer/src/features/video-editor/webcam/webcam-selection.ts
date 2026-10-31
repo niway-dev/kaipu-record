@@ -1,5 +1,5 @@
 /**
- * What a webcam selection means for the preview and the inspector (ADR 0033). Pure, so the
+ * What a webcam selection means for the preview and the inspector (ADR 0038). Pure, so the
  * page's two rules are pinned by tests instead of living inline in JSX.
  */
 import { WEBCAM_LAYER_SELECTION } from "../editor-selection";

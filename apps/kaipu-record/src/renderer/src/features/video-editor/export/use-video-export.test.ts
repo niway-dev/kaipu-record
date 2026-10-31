@@ -146,7 +146,6 @@ describe("useVideoExport", () => {
 
     expect(window.electronAPI.recordingCreate).toHaveBeenCalledWith(
       expect.stringMatching(/^export-/),
-      "screen",
       "export",
     );
     const sessionId = (window.electronAPI.recordingCreate as ReturnType<typeof vi.fn>).mock

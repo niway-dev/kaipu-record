@@ -12,12 +12,23 @@ describe("image-source readers", () => {
   });
 
   it("localReader resolves to the bypass-CSP media protocol URL", () => {
-    const resolved = localReader.resolve({ kind: "local", id: "shot-1", width: 10, height: 10 });
+    const resolved = localReader.resolve({
+      kind: "local",
+      id: "shot-1",
+      assetId: "a-shot-1",
+      width: 10,
+      height: 10,
+    });
     expect(resolved.displayUrl).toBe("kaipu-media://screenshot/shot-1");
   });
 
   it("localReader appends the version token so an overwrite busts the cache", () => {
-    const resolved = localReader.resolve({ kind: "local", id: "shot-1", version: 42 });
+    const resolved = localReader.resolve({
+      kind: "local",
+      id: "shot-1",
+      assetId: "a-shot-1",
+      version: 42,
+    });
     expect(resolved.displayUrl).toBe("kaipu-media://screenshot/shot-1?v=42");
   });
 
@@ -30,7 +41,13 @@ describe("image-source readers", () => {
     const buf = new Uint8Array([9]).buffer;
     const readMock = vi.fn(async () => buf);
     window.electronAPI.readScreenshotBytes = readMock;
-    const bytes = await localReader.getBytes({ kind: "local", id: "shot-2", width: 1, height: 1 });
+    const bytes = await localReader.getBytes({
+      kind: "local",
+      id: "shot-2",
+      assetId: "a-shot-2",
+      width: 1,
+      height: 1,
+    });
     expect(bytes).toBe(buf);
     expect(readMock).toHaveBeenCalledWith("shot-2");
   });

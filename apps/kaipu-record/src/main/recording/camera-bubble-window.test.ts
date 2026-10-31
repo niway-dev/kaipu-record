@@ -60,7 +60,7 @@ beforeEach(() => {
 });
 
 /**
- * The bubble is excluded from the screen capture from creation (ADR 0032): its face is in the
+ * The bubble is excluded from the screen capture from creation (ADR 0037): its face is in the
  * webcam file, so the screen recording must not carry it a second time. Before Windows 10
  * 2004 exclusion paints the window black instead, so there the legacy path stays.
  */

@@ -105,7 +105,7 @@ export function useSourceThumbnails(mediaUrl: string, durationSeconds: number): 
 
 /**
  * {@link useSourceThumbnails} for a file played alongside the recording (the webcam, ADR
- * 0032) whose own time is source time − `offsetSeconds`, and which may start after or end
+ * 0037) whose own time is source time − `offsetSeconds`, and which may start after or end
  * before the screen: frames are decoded at its own time and reported at SOURCE time, so
  * the same `thumbnailsForRange` lookups work for both, and `covered` says where it has
  * footage at all. The cache is keyed by URL and offset, so the screen and webcam

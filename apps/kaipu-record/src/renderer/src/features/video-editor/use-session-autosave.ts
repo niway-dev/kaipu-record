@@ -22,6 +22,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { captureException } from "@renderer/features/analytics";
+import { isMaintenanceError } from "@renderer/features/library/vault-errors";
 import type { VideoScene } from "./scene";
 import { serializeSession } from "./session";
 import type { SlideAssetStore } from "./slide-assets";
@@ -72,8 +73,11 @@ export function useSessionAutosave(
       }
     } catch (error) {
       // Non-fatal: keep `pendingRef` true so the discard dialog still warns on the way
-      // out, and let the next edit retry.
-      captureException(error, { context: "video-edit-session-autosave" });
+      // out, and let the next edit retry. A refusal during "Check and fix files" is not
+      // a fault: it is retried when maintenance ends (below).
+      if (!isMaintenanceError(error)) {
+        captureException(error, { context: "video-edit-session-autosave" });
+      }
       setState("failed");
     }
   }, [sourceId, assetStoreRef]);
@@ -117,6 +121,15 @@ export function useSessionAutosave(
       timerRef.current = null;
     };
   }, [scene, interacting, write]);
+
+  // NIW2-561: main refuses saves while it fixes the vault's files, and queues nothing; the
+  // latest pending scene is written again once it is done.
+  const retryRef = useRef(retry);
+  retryRef.current = retry;
+  useEffect(
+    () => window.electronAPI.onLibraryMaintenanceEnded?.(() => void retryRef.current()),
+    [],
+  );
 
   const flushRef = useRef(flush);
   flushRef.current = flush;

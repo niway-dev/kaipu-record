@@ -1,5 +1,5 @@
 /**
- * Webcam layer editing for the editor page (ADR 0033), on the scene-history contract of
+ * Webcam layer editing for the editor page (ADR 0038), on the scene-history contract of
  * plans/video-editor-v2/07 like `useZoomEditing`: discrete actions commit; continuous
  * gestures (dragging the bubble, a slider, a lane edge) run begin → live… → end and land as
  * ONE undo step.

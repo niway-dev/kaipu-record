@@ -1,9 +1,9 @@
 /**
  * Keeping the preview's second <video> (the webcam file) in step with the main one
- * (ADR 0033 § consequences). Pure: the WebcamLayer reads the elements and applies the
+ * (ADR 0038 § consequences). Pure: the WebcamLayer reads the elements and applies the
  * verdict, so the rule is testable without media.
  *
- * Offset semantics (ADR 0032): `startOffsetMs = webcamT0 − screenT0`. A webcam that started
+ * Offset semantics (ADR 0037): `startOffsetMs = webcamT0 − screenT0`. A webcam that started
  * 500 ms after the screen shows its first frame at screen time 0.5 s, so for screen source
  * time `t` the webcam time is `t − startOffsetMs / 1000`.
  */

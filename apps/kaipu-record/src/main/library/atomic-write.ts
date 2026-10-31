@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { open, rename, rm } from "node:fs/promises";
+import { dirname } from "node:path";
 
 /**
  * Per-key async mutex, module scope: it spans every `LibraryVault` instance
@@ -27,7 +28,33 @@ export function uniqueTempPath(target: string, suffix = "tmp"): string {
   return `${target}.${process.pid}.${randomUUID()}.${suffix}`;
 }
 
-/** Write to a unique temp file, fsync, rename over `target`. A failure removes the temp file. */
+/**
+ * Codes a directory fsync fails with where the platform cannot do one (Windows opens no
+ * directory handle; some file systems refuse the sync): nothing to flush there.
+ */
+const NO_DIR_SYNC = new Set(["EISDIR", "EPERM", "EACCES", "EINVAL", "ENOTSUP", "EOPNOTSUPP"]);
+
+/**
+ * Flush a directory's entries, so a file just named in it survives a power loss. A no-op where
+ * the platform cannot sync a directory; any other failure propagates.
+ */
+export async function syncDir(directory: string): Promise<void> {
+  let handle;
+  try {
+    handle = await open(directory, "r");
+    await handle.sync();
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | null)?.code;
+    if (!code || !NO_DIR_SYNC.has(code)) throw error;
+  } finally {
+    await handle?.close().catch(() => {});
+  }
+}
+
+/**
+ * Write to a unique temp file, fsync, rename over `target`, then flush the folder (best effort).
+ * A failure removes the temp file.
+ */
 export async function atomicWriteFile(
   target: string,
   data: string | Uint8Array,
@@ -47,4 +74,5 @@ export async function atomicWriteFile(
     await rm(temp, { force: true }).catch(() => {});
     throw error;
   }
+  await syncDir(dirname(target)).catch(() => {});
 }

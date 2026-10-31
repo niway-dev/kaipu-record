@@ -218,3 +218,14 @@
   font-size: var(--font-size-xs);
   color: var(--text-muted);
 }
+
+/* NIW2-560: the item the route named is gone; nothing is loaded under its old id. */
+.unavailable {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+}
