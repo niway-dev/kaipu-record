@@ -2,9 +2,9 @@
 name: feature-docs
 description: Template and format for feature documentation. Use when
   creating or updating feature docs. Also use when the user asks to
-  document a feature, save feature context, or update the changelog.
-  Provides templates for parent index pages, sub-feature docs, and
-  the changelog table.
+  document a feature or save feature context. Provides templates for
+  parent index pages and sub-feature docs. There is no hand-kept
+  changelog: what changed is in the merged PRs and release notes.
 ---
 
 # Feature Documentation Templates
@@ -24,7 +24,8 @@ All paths and templates below are derived from these values.
 ---
 
 This skill defines the exact format for all feature documentation.
-There are three templates: Parent Index, Sub-Feature Doc, and Changelog.
+There are two templates: Parent Index and Sub-Feature Doc. There is no changelog
+table to update: a hand-kept log every PR edits is a merge-conflict magnet.
 
 ALWAYS follow these templates exactly. Do not add extra sections.
 Do not skip sections — if a section has no content, write "None" or "N/A".
@@ -166,39 +167,6 @@ describe the pattern/algorithm/flow in 3-5 sentences max.}
 - [{Other sub-feature}]({other-sub-feature}) — {how they relate}
 - {Links to external docs, ADRs, or API references}
 ````
-
----
-
-## Changelog Template
-
-Location: `{DOCS_BASE}/CHANGELOG{DOCS_EXT}`
-
-Purpose: Global log of all feature work across the project.
-Newest entries at the TOP of the table.
-
-```mdx
----
-title: Changelog
-description: All notable feature work documented in this project.
----
-
-# Changelog
-
-| Date | Feature | Type | Summary |
-|------|---------|------|---------|
-| YYYY-MM-DD | [{name}](features/{parent}/{sub-feature}) | ✨ Feature | {one-line summary} |
-```
-
-Type icons:
-
-- ✨ Feature — New capability
-- 🐛 Fix — Bug fix
-- 🔄 Refactor — Internal change, no user-facing difference
-- 📝 Docs — Documentation only
-- ⚡ Performance — Optimization
-- 🔒 Security — Security fix
-- 💄 UI — Visual/UX change
-- ♻️ Migration — Database or data migration
 
 ---
 

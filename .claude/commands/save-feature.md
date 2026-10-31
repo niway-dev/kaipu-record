@@ -24,7 +24,6 @@ Use these values for ALL paths in the steps below. Resolved paths follow this pa
 - Feature folder: `{DOCS_BASE}/features/{parent}/`
 - Parent index: `{DOCS_BASE}/features/{parent}/{INDEX_FILE}`
 - Sub-feature doc: `{DOCS_BASE}/features/{parent}/{sub-feature}{DOCS_EXT}`
-- Changelog: `{DOCS_BASE}/CHANGELOG{DOCS_EXT}`
 
 ## Step 2: Identify the feature
 
@@ -109,14 +108,7 @@ date +%Y-%m-%d
 
 Follow the template format strictly. Do not invent sections that aren't in the template.
 
-## Step 7: Update the changelog
-
-If `{DOCS_BASE}/CHANGELOG{DOCS_EXT}` doesn't exist, create it with the header from the template.
-
-Append an entry to the **top of the table** (newest first) following the changelog
-format in the template skill. Link to the sub-feature doc, not the parent index.
-
-## Step 8: Update CLAUDE.md pointer (if needed)
+## Step 7: Update CLAUDE.md pointer (if needed)
 
 Only add a pointer if this is a **new main feature area** not yet referenced
 in any CLAUDE.md file. Don't add pointers for every sub-feature.
@@ -126,12 +118,11 @@ Format: `For {feature} details, see {DOCS_BASE}/features/{parent}/{INDEX_FILE}`
 Check if a subdirectory CLAUDE.md (e.g., `apps/web/CLAUDE.md` or
 `packages/core/CLAUDE.md`) is more appropriate than the root CLAUDE.md.
 
-## Step 9: Present summary
+## Step 8: Present summary
 
 Show the user:
 
 - Path to the new/updated doc files
-- Changelog entry added
 - Any CLAUDE.md updates made
 - Updated sub-features table in parent index
 

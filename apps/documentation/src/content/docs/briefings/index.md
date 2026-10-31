@@ -26,4 +26,4 @@ These are panoramas, not the source of truth for any single decision. For the
 reasoning behind a specific architectural choice, see the
 [architecture decision records](../architecture/decisions/). For what's actively
 being worked on item-by-item, see the issue tracker (Linear, project Kaipu). For what changed in a
-specific release, see the [changelog](../changelog).
+specific release, see the release notes and the merged PRs.
