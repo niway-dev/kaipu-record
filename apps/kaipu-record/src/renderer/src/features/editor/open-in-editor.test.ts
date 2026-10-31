@@ -53,10 +53,11 @@ describe("open-in-editor", () => {
     expect(videoSourceFor({ ...recording, durationSeconds: 0 })).toBeNull();
   });
 
-  it("builds a local image source carrying the thumbnail's version token", () => {
+  it("builds a local image source carrying the thumbnail's version token and the identity", () => {
     expect(imageSourceFor(screenshot)).toEqual({
       kind: "local",
       id: "local-2",
+      assetId: screenshot.assetId,
       title: "Shot",
       version: 42,
     });

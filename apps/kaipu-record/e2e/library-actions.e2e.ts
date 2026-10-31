@@ -1,16 +1,17 @@
 import { test, expect } from "@playwright/test";
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { launchApp, dismissOnboarding, RECORDING_ASSET_ID, RECORDING_ID } from "./helpers/launch";
 
-// Path to the seeded recording's on-disk metadata sidecar. rename() merges { title } into
-// this file, so it is the deterministic boundary for the rename assertion (vs. the optimistic
-// in-memory list update, which can pass even if persistence failed).
-function sidecarPath(vaultDir: string): string {
-  return path.join(vaultDir, ".kaipu", `${RECORDING_ID}.json`);
+// Path to a recording's on-disk metadata sidecar. A rename moves the item to a stem derived
+// from the title (NIW2-560) and writes the title into that sidecar, so it is the deterministic
+// boundary for the rename assertion (vs. the optimistic in-memory list update, which can pass
+// even if persistence failed).
+function sidecarPath(vaultDir: string, id: string): string {
+  return path.join(vaultDir, ".kaipu", `${id}.json`);
 }
 
-test("rename persists the new title to the vault sidecar", async () => {
+test("rename persists the new title and renames the file to match", async () => {
   const { page, vaultDir, teardown } = await launchApp();
   try {
     // Onboarding's full-window modal intercepts pointer events, so it must go before any click.
@@ -36,10 +37,18 @@ test("rename persists the new title to the vault sidecar", async () => {
     // the renameLocalRecording IPC writes the file asynchronously after the Enter keypress.
     await expect
       .poll(async () => {
-        const raw = await readFile(sidecarPath(vaultDir), "utf-8");
-        return JSON.parse(raw).title as string;
+        const raw = await readFile(sidecarPath(vaultDir, "Renamed Clip"), "utf-8").catch(
+          () => "{}",
+        );
+        return JSON.parse(raw).title as string | undefined;
       })
       .toBe("Renamed Clip");
+    // The media file followed the title, and the old name is gone.
+    const files = await readdir(vaultDir);
+    expect(files).toContain("Renamed Clip.mp4");
+    expect(files).not.toContain(`${RECORDING_ID}.mp4`);
+    // The detail page keeps working under the new id (it is keyed by assetId).
+    await expect(page.getByRole("heading", { name: "Renamed Clip" })).toBeVisible();
   } finally {
     await teardown();
   }

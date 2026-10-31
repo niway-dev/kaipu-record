@@ -1,5 +1,5 @@
 /**
- * Pure inspector for a take's webcam track (ADR 0032): the sidecar's `webcam` entry against
+ * Pure inspector for a take's webcam track (ADR 0037): the sidecar's `webcam` entry against
  * the two files it describes. Used by `scripts/webcam-track-check.ts`; the expectations live
  * here so they are tested, like `cursor-track-report.ts`.
  */

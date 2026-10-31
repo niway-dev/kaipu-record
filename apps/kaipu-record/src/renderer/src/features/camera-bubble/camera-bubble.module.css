@@ -16,7 +16,8 @@
   inset: var(--pad);
   overflow: hidden;
   background: var(--bg-card);
-  border: 3px solid var(--accent-primary);
+  /* No border: this window is part of the recorded screen, so anything painted at rest is
+     in every video. The accent outline below is hover chrome only. */
   box-sizing: border-box;
   /* On a transparent floating window a box-shadow is CLIPPED to the window's bounds;
      keep it small enough to fade well inside the 24 px pad. */
@@ -32,7 +33,7 @@
   cursor: grabbing;
 }
 
-/* Hover chrome (never while recording): a 2 px pink outline around the bubble. */
+/* Hover chrome (never during a take, countdown included): a 2 px pink outline. */
 .root[data-chrome] .bubble {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;

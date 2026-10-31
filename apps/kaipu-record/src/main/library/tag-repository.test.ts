@@ -160,6 +160,20 @@ describe("VaultTagRepository", () => {
     expect((await sidecar("two")).tagIds).toEqual([list[0]!.id]);
   });
 
+  it("leaves an unreadable item's sidecar untouched while importing the others (NIW2-568)", async () => {
+    await writeItem("good");
+    await writeItem("bad");
+    await mkdir(kaipu(), { recursive: true });
+    await writeFile(join(kaipu(), "good.json"), JSON.stringify({ tags: ["demo"] }));
+    const broken = '{"title": "Keep", "tags": ["demo"';
+    await writeFile(join(kaipu(), "bad.json"), broken);
+
+    expect((await repo.list()).map((t) => [t.slug, t.count])).toEqual([["demo", 1]]);
+    expect(await readFile(join(kaipu(), "bad.json"), "utf8")).toBe(broken);
+    await expect(repo.assign("bad", [])).rejects.toThrow(/sidecar corrupt/);
+    expect(await readFile(join(kaipu(), "bad.json"), "utf8")).toBe(broken);
+  });
+
   it("persists an empty registry on first list so the import never re-runs", async () => {
     await writeItem("clip");
     expect(await repo.list()).toEqual([]);

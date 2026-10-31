@@ -71,7 +71,7 @@ export interface LiveAudioControls {
   setDucking(on: boolean): LiveToggleResult;
 }
 
-/** The take's webcam file, encoded beside the screen on the same clock (ADR 0032). */
+/** The take's webcam file, encoded beside the screen on the same clock (ADR 0037). */
 export interface WebcamHandle {
   /** Renderer-clock time of the webcam file's time 0, like the screen's. */
   firstMediaTimestamp: Promise<FirstMediaTimestamp>;
@@ -189,7 +189,7 @@ export interface EngineOptions {
    */
   watermark?: WatermarkConfig | null;
   /**
-   * Record the webcam into its own file beside the screen (ADR 0032): the camera to open
+   * Record the webcam into its own file beside the screen (ADR 0037): the camera to open
    * (`null` = the user-facing default) and the lines to ask for, 16:9. A camera that cannot be
    * opened never fails the take; it records without a webcam.
    */

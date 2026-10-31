@@ -40,37 +40,6 @@
   text-overflow: ellipsis;
 }
 
-[data-color="rose"] {
-  --tag: #fb7185;
-}
-[data-color="coral"] {
-  --tag: #fb923c;
-}
-[data-color="amber"] {
-  --tag: #fbbf24;
-}
-[data-color="lime"] {
-  --tag: #a3e635;
-}
-[data-color="mint"] {
-  --tag: #34d399;
-}
-[data-color="lagoon"] {
-  --tag: #2dd4bf;
-}
-[data-color="sky"] {
-  --tag: #38bdf8;
-}
-[data-color="iris"] {
-  --tag: #818cf8;
-}
-[data-color="orchid"] {
-  --tag: #c084fc;
-}
-[data-color="slate"] {
-  --tag: #94a3b8;
-}
-
 /* ── Mini color menu ─────────────────────── */
 
 .menuAnchor {

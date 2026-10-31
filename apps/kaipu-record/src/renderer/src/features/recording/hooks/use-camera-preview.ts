@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
  * webcam track records (`bubblePreviewLines`: at least 720, more with framing), because the
  * camera is shared with the recorder. The request is 16:9, the
  * webcam track's shape: Chromium shares one capture per device, so a 4:3 preview would hold
- * the camera at 4:3 and the recorded webcam file could only be cut down from it (ADR 0032).
+ * the camera at 4:3 and the recorded webcam file could only be cut down from it (ADR 0037).
  * The bubble crops with `object-fit: cover`, so its shape is unchanged; on cameras that make
  * 16:9 by cropping a 4:3 sensor (the MacBook camera among them) the face looks slightly closer.
  */
