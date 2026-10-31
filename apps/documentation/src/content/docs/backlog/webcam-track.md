@@ -7,7 +7,7 @@ description: "Proposal: the webcam stops being pixels of the screen capture. The
 
 > **Status: 🟢 Ready to validate (prod review pending)** (2026-10-31). Merged to `main` on
 > 2026-10-31: #437, #441–#446, #452, #463 and #468; #454 (webcam lane filmstrip and editor
-> follow-ups) was retargeted to `main` after its base merged. Owner QA on `qa/webcam-all`
+> follow-ups) is still open: it was retargeted to `main` after its base merged. Owner QA on `qa/webcam-all`
 > passed the main flows (face as its own layer under zoom, camera off and on mid-take, the
 > Library player); a packaged build and Windows are not checked yet.
 > Design: [Webcam track](/specs/2026-10-30-webcam-track-design/) · ADRs
@@ -59,7 +59,7 @@ The professional model (Screen Studio, Cap, Tella, Camtasia):
 | #445 | MP4 and GIF exports compose the face above the zoom, also over a still screen                                                                             |
 | #446 | The bubble is content-protected from creation when the take records a webcam file; the copy (Share, now Prepare) composes the face at the recorded layout |
 | #452 | Recorder and library follow-ups: "webcam not saved" toast, salvage never overwrites a webcam file, an unreadable capability falls back to the legacy path |
-| #454 | Webcam lane filmstrip, editor and export follow-ups (export-reuse revision `wc2`)                                                                         |
+| #454 | **Open, not merged yet** (retargeted to `main`): webcam lane filmstrip, editor and export follow-ups (export-reuse revision `wc2`)                        |
 | #463 | Camera off and on mid-take: the bubble is parked, a relay track keeps the webcam output open, `webcam.gaps` become hidden segments                        |
 | #468 | The Library's original player draws the face at the recorded layout                                                                                       |
 
@@ -70,7 +70,7 @@ stands; plan B (native exclusion by window id) stays unscheduled.
 ## How it was built and reviewed
 
 - **Design first, then a spike, then a stack.** One spec and two ADRs, a hand-run spike for the
-  one assumption nobody had verified (protection from creation), then seven stacked PRs, one
+  one assumption nobody had verified (protection from creation), then six stacked PRs, one
   per layer: recorder, vault, scene, preview, export, protection.
 - **Each PR: an implementer agent, then a fresh reviewer that never saw the implementation
   conversation (Opus 5.5, plus Codex on the original stack), then fixes, then a confirmation
@@ -80,9 +80,17 @@ stands; plan B (native exclusion by window id) stays unscheduled.
   overwriting an existing webcam file; a capability probe whose failure sent old Windows down the
   wrong path; the inspector editing a different target than the one being dragged; the GIF
   worker reading the camera at the wrong timestamp; stale export copies reused after the
-  webcam changed (hence the `wc2` revision).
+  webcam changed (the fix, export-reuse revision `wc2`, is in #454, still open).
+- **Two review bots now run on every PR: the Agent review (Claude Opus in GitHub Actions) and
+  Pullfrog.** On the PR that wrote this record, Pullfrog's findings were the better ones, in the
+  owner's judgment. It ran the new ADR script both ways (exit 0 on the branch, exit 1 with a
+  dummy `0032` file) instead of reading it, and it checked the record's claims against the
+  repository rather than against the diff: it caught #454 listed as shipped while it was still
+  open. The Agent review found that the ADR check read a stale `origin/main`. Both caught a
+  wrong count. Keep both; weigh a finding by whether the reviewer verified it against the
+  repository.
 - **Owner QA found what no diff review could, because each gap sat between PRs or outside them:**
-  - the webcam lane had no thumbnails (#454);
+  - the webcam lane had no thumbnails (fix in #454, still open);
   - turning the camera off and on mid-take burned the bubble back into the screen and cut the
     webcam file short (#463);
   - the Library player showed the screen file alone, so the face looked lost (#468).
