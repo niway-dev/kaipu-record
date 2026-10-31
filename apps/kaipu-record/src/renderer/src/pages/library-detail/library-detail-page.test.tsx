@@ -681,4 +681,70 @@ describe("LibraryDetailPage — where is it going? (NIW2-578)", () => {
     await act(async () => {});
     expect(screen.queryByRole("region", PANEL)).toBeNull();
   });
+
+  it("keeps the player mounted through the re-list a rename broadcasts (NIW2-560)", async () => {
+    const renamedItem: LibraryItem = {
+      ...exportedOnlyItem,
+      title: "Sprint demo",
+      local: { ...exportedOnlyItem.local!, id: "Sprint demo", title: "Sprint demo" },
+    };
+    // Every subscriber (the library list, the tags) hears the broadcast.
+    const listeners = new Set<() => void>();
+    window.electronAPI.onLibraryChanged = (callback: () => void) => {
+      listeners.add(callback);
+      return () => listeners.delete(callback);
+    };
+    const relist = deferred<{ items: LibraryItem[]; vaultError: null; catalogVerifiedAt: null }>();
+    let listed = false;
+    window.electronAPI.listLibraryItems = vi.fn(() => {
+      if (listed) return relist.promise;
+      listed = true;
+      return Promise.resolve({
+        items: [exportedOnlyItem],
+        vaultError: null,
+        catalogVerifiedAt: null,
+      });
+    }) as never;
+    window.electronAPI.renameLocalRecording = vi.fn(
+      async (_id: string, _assetId: string, title: string) => ({
+        file: "renamed" as const,
+        recording: { ...renamedItem.local!, title },
+      }),
+    ) as never;
+    renderDetail("asset-b");
+    await waitForLoaded();
+    const player = document.querySelector("video")!;
+    expect(player).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Rename" }));
+    const input = document.activeElement as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Sprint demo" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() =>
+      expect(window.electronAPI.renameLocalRecording).toHaveBeenCalledWith(
+        "local-b",
+        "asset-b",
+        "Sprint demo",
+      ),
+    );
+    // Main broadcasts library:changed after the move; the re-list is still in flight.
+    await act(async () => listeners.forEach((listener) => listener()));
+    expect(window.electronAPI.listLibraryItems).toHaveBeenCalledTimes(2);
+
+    expect(screen.queryByText("Loading…")).toBeNull();
+    // The very same element: unmounting it would drop the playback position.
+    expect(document.querySelector("video")).toBe(player);
+    expect(player.getAttribute("src")).toBe("kaipu-media://recording/Sprint%20demo");
+
+    await act(async () =>
+      relist.resolve({ items: [renamedItem], vaultError: null, catalogVerifiedAt: null }),
+    );
+    expect(document.querySelector("video")).toBe(player);
+  });
 });
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => (resolve = r));
+  return { promise, resolve };
+}

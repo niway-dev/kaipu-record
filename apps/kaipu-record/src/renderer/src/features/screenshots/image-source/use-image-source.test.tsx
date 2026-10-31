@@ -12,7 +12,7 @@ describe("useImageSource", () => {
 
   it("dispatches a local source to the media-protocol reader", () => {
     const { result } = renderHook(() =>
-      useImageSource({ kind: "local", id: "shot-1", width: 1, height: 1 }),
+      useImageSource({ kind: "local", id: "shot-1", assetId: "a-shot-1", width: 1, height: 1 }),
     );
     expect(result.current?.displayUrl).toBe("kaipu-media://screenshot/shot-1");
   });
@@ -40,7 +40,7 @@ describe("useImageSource", () => {
   it("exposes a getBytes function on the resolved image", () => {
     // A local source resolves without URL.createObjectURL (absent in jsdom).
     const { result } = renderHook(() =>
-      useImageSource({ kind: "local", id: "shot-9", width: 1, height: 1 }),
+      useImageSource({ kind: "local", id: "shot-9", assetId: "a-shot-9", width: 1, height: 1 }),
     );
     expect(typeof result.current?.getBytes).toBe("function");
   });
@@ -54,7 +54,7 @@ describe("useImageSource", () => {
       return new Uint8Array([readCount]).buffer;
     });
     const { result } = renderHook(() =>
-      useImageSource({ kind: "local", id: "shot-1", width: 1, height: 1 }),
+      useImageSource({ kind: "local", id: "shot-1", assetId: "a-shot-1", width: 1, height: 1 }),
     );
 
     const first = new Uint8Array((await result.current!.getBytes()) as ArrayBuffer);

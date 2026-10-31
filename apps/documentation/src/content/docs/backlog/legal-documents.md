@@ -29,6 +29,7 @@ description: Where the legal pages live, how sign-up links to them, and the oper
 | Terms changes                                               | Normally ≥ 15 days notice; continued use means acceptance                                   |
 | Liability                                                   | Capped at the greater of 12 months of fees or USD 50; indirect damages excluded             |
 | Content license                                             | Operate, secure, improve and support; no general-purpose AI training without permission     |
+| App license                                                 | Personal **or commercial** use; no paid plan needed to use the desktop app at work          |
 | Providers                                                   | "Currently including" Cloudflare, Neon, PostHog; may be added or replaced                   |
 | Paid plans                                                  | Subscriptions auto-renew; processor or merchant of record; prices change for future periods |
 | Plan ends                                                   | Account returns to free limits; over-limit rules apply to stored content                    |
@@ -42,7 +43,8 @@ preserved, so the clauses stay enforceable.
 ## Open work
 
 1. Record acceptance: store `termsVersion` and `termsAcceptedAt` on sign-up.
-2. Legal review before production launch.
+2. Legal review before production launch. Include the repository's [CLA](https://github.com/niway-dev/kaipu-record/blob/main/CLA.md)
+   and [trademark policy](https://github.com/niway-dev/kaipu-record/blob/main/TRADEMARKS.md) (NIW2-566), which are project drafts too.
 3. Implement the inactive-account and over-limit deletion jobs before relying on those clauses.
 4. Record the 18+ confirmation the sign-up notice now asks for (store it with the acceptance
    record from item 1).

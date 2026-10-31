@@ -343,8 +343,10 @@ describe("presets (NIW2-218 export redesign)", () => {
   });
 
   it("subtitles the sheet with the title, duration and resolution", () => {
-    renderSheet({ sourceTitle: "Recording — 10/12/2026", timelineDuration: 78 });
-    expect(screen.getByText("Recording — 10/12/2026 · 1:18 · 1920×1080")).toBeInTheDocument();
+    renderSheet({ sourceTitle: "Kaipu Recording 2026-10-12 at 16.05.31", timelineDuration: 78 });
+    expect(
+      screen.getByText("Kaipu Recording 2026-10-12 at 16.05.31 · 1:18 · 1920×1080"),
+    ).toBeInTheDocument();
   });
 
   it("closes from the ✕ and from Cancel", () => {

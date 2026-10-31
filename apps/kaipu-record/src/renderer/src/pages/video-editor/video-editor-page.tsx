@@ -31,7 +31,7 @@ import {
   ModalTitle,
 } from "@kaipu/ui";
 import * as stylex from "@stylexjs/stylex";
-import { Badge } from "@kaipu/ui";
+import { Badge, Button } from "@kaipu/ui";
 import {
   boundaryIndexAt,
   clampOverlays,
@@ -122,6 +122,8 @@ import { ExportDialog } from "@renderer/features/video-editor/components/export-
 import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import { showToast } from "@renderer/ui/toast-store";
+import { isAmbiguousIdentityError } from "@renderer/features/library/rename-outcome";
+import { registerSwitchFlush } from "@renderer/features/workspaces/prepare-switch";
 import styles from "./video-editor-page.module.css";
 
 /** The "original" pill's own shape, moved out of video-editor-page.module.css:
@@ -135,6 +137,7 @@ const sxEditor = stylex.create({
 import { useMuteEditing } from "@renderer/features/video-editor/use-mute-editing";
 import { AudioLane } from "@renderer/features/video-editor/components/audio-lane";
 import { MuteInspector } from "@renderer/features/video-editor/components/inspector/mute-inspector";
+import { mediaUrl } from "@renderer/lib/media-url";
 
 export interface VideoEditorSource {
   id: string;
@@ -267,21 +270,51 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
   }, [source.title]);
 
   const [resolved, setResolved] = useState<{
+    /** The source under the id main acknowledged holding (see below). */
+    source: VideoEditorSource;
     scene: VideoScene;
     cursorTrack: CursorTrack | null;
   } | null>(null);
+  // Why nothing was loaded: the item is gone, or two files claim its identity.
+  const [unavailable, setUnavailable] = useState<"gone" | "ambiguous" | null>(null);
+  const navigate = useNavigate();
+  const tLibrary = useTranslations("library");
 
   useEffect(() => {
     // Guards against calling restoreAsset or setting state after unmount —
     // without this, a mid-load unmount would run dispose() (other effect) and
     // then restoreAsset would recreate object URLs that are never revoked.
     let cancelled = false;
+    // NIW2-560: this editor holds its source id for its lifetime (session autosave, cursor
+    // track, source URL). Main serializes the hold with renames and answers the item's
+    // CURRENT id; nothing is loaded or written before that answer, so a rename that was
+    // moving the file as the editor opened can never leave it on the old name.
+    let heldId: string | null = null;
+    let ambiguous = false;
     void (async () => {
+      try {
+        heldId = await window.electronAPI.acquireEditorSession(source.assetId);
+      } catch (error) {
+        heldId = null;
+        ambiguous = isAmbiguousIdentityError(error);
+      }
+      if (cancelled) {
+        if (heldId !== null) window.electronAPI.closeEditorSession(heldId);
+        return;
+      }
+      // No hold: the item is gone (or main could not say). Never fall back to the route's
+      // id — another item may have taken that name since, and this editor would read its
+      // media and overwrite its session.
+      if (heldId === null) {
+        setUnavailable(ambiguous ? "ambiguous" : "gone");
+        return;
+      }
+      const editorSource: VideoEditorSource = { ...source, id: heldId };
       // The cursor track is best-effort and independent of the session: a missing or
       // malformed track just means no auto zooms (the editor behaves as before v2).
       let cursorTrack: CursorTrack | null = null;
       try {
-        const trackJson = await window.electronAPI.loadCursorTrack(source.id);
+        const trackJson = await window.electronAPI.loadCursorTrack(editorSource.id);
         cursorTrack = trackJson ? parseCursorTrack(trackJson) : null;
       } catch {
         cursorTrack = null;
@@ -292,12 +325,13 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
       const open = (scene: VideoScene, hasZoomData: boolean): void => {
         if (cancelled) return;
         setResolved({
+          source: editorSource,
           scene: withInitialZooms(scene, hasZoomData, cursorTrack, source.durationSeconds),
           cursorTrack,
         });
       };
       try {
-        const saved = await window.electronAPI.loadVideoEditSession(source.id);
+        const saved = await window.electronAPI.loadVideoEditSession(editorSource.id);
         if (cancelled) return;
         if (saved !== null) {
           const session = parseSession(saved.sessionJson);
@@ -338,8 +372,20 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
     })();
     return () => {
       cancelled = true;
+      if (heldId !== null) window.electronAPI.closeEditorSession(heldId);
     };
   }, []); // [] correct: source is stable per VideoEditorLoader's key (the asset id)
+
+  if (unavailable) {
+    return (
+      <div className={styles.unavailable} role="alert">
+        <p>{unavailable === "ambiguous" ? tLibrary("itemAmbiguous") : t("sourceUnavailable")}</p>
+        <Button variant="ghost" onClick={() => navigate(ROUTES.library)}>
+          {tLibrary("backToLibrary")}
+        </Button>
+      </div>
+    );
+  }
 
   if (resolved === null) {
     // Brief loading state while the session IPC resolves. The editor grows the window
@@ -349,7 +395,7 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
 
   return (
     <VideoEditor
-      source={source}
+      source={resolved.source}
       resolvedScene={resolved.scene}
       cursorTrack={resolved.cursorTrack}
       assetStoreRef={assetStoreRef}
@@ -379,6 +425,10 @@ function VideoEditor({
   // threw away every cut, zoom and redaction, because useBlocker below only ever sees
   // in-app navigation.
   const autosave = useSessionAutosave(source.id, scene, controller.interacting, assetStoreRef);
+  // A workspace switch writes the pending edit first, while this editor is still open and
+  // its workspace still active (ADR 0032, decision 7); the leave guard below then sees it saved.
+  const flushAutosave = autosave.flush;
+  useEffect(() => registerSwitchFlush(flushAutosave), [flushAutosave]);
   // Blocks in-app navigation (e.g. the sidebar) while an edit has NOT reached the
   // session file yet — same useBlocker pattern as the screenshot editor, but now about
   // "not written" rather than "edited": with autosave on, an edit that is already on
@@ -426,8 +476,8 @@ function VideoEditor({
   const videoTools = useVideoTools();
   const videoExport = useVideoExport();
   const gifExport = useGifExport();
-  const mediaUrl = `kaipu-media://recording/${source.id}`;
-  const thumbnails = useSourceThumbnails(mediaUrl, source.durationSeconds);
+  const sourceUrl = mediaUrl("recording", source.id);
+  const thumbnails = useSourceThumbnails(sourceUrl, source.durationSeconds);
   const selection = useEditorSelection();
   // `select` / `clear` are stable (useCallback, no deps); the `selection` object itself
   // is rebuilt every render, so never put it in a dependency array.
@@ -1206,7 +1256,7 @@ function VideoEditor({
           >
             <PreviewStage
               playback={playback}
-              mediaUrl={mediaUrl}
+              mediaUrl={sourceUrl}
               slideUrl={slideUrl}
               expanded={isFullscreen}
               contentRef={contentRef}

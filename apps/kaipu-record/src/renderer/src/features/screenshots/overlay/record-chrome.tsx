@@ -28,22 +28,20 @@ import styles from "./capture-overlay.module.css";
 /**
  * The chrome of the overlay opened to RECORD (Claude Design "Kaipu Record Modes"): a ratio
  * bar above the Frame box, a vertical widget attached to its right (modes, then Mic,
- * System audio and Camera, then Cancel), a "Start recording ↵" pill under it and, when the
- * camera is on, a placeholder where the camera bubble will sit. Everything is window-local
- * DIP; placements are pure so tests pin them.
+ * System audio and Camera, then Cancel and Start recording) and, when the camera is on, a
+ * placeholder where the camera bubble will sit. Start lives in the widget, not under the
+ * box: a box that fills the screen would push it onto the key hint at the bottom. Everything
+ * is window-local DIP; placements are pure so tests pin them.
  */
 
-/** The vertical widget's footprint: 38 px buttons in a 4 px padded card. */
+/** The vertical widget's footprint: 38 px buttons in a 4 px padded card, Start included. */
 export const WIDGET_WIDTH_DIP = 48;
-export const WIDGET_HEIGHT_DIP = 390;
+export const WIDGET_HEIGHT_DIP = 436;
 /** What the active mode's floating label needs to the right of the widget. */
 export const WIDGET_LABEL_DIP = 70;
 /** The ratio bar's height and its distance above the box. */
 export const RATIO_BAR_HEIGHT_DIP = 34;
 export const RATIO_BAR_GAP_DIP = 8;
-/** The Start pill's height and its gap under the box. */
-export const START_PILL_HEIGHT_DIP = 36;
-export const START_PILL_GAP_DIP = 14;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max));
@@ -80,19 +78,6 @@ export function widgetPlacement(
   const left = frame.x - CHROME_GAP_DIP - WIDGET_WIDTH_DIP;
   if (left >= area.x) return { side: "left", left, top };
   return { side: "inside", left: frame.x + frame.width - WIDGET_WIDTH_DIP - 8, top };
-}
-
-/** Centred under the box; inside its bottom edge when the work area ends first. */
-export function startPillPlacement(
-  frame: CaptureRect,
-  area: CaptureRect,
-): { centerX: number; top: number } {
-  const below = frame.y + frame.height + START_PILL_GAP_DIP;
-  const fits = below + START_PILL_HEIGHT_DIP <= area.y + area.height;
-  return {
-    centerX: frame.x + frame.width / 2,
-    top: fits ? below : frame.y + frame.height - START_PILL_HEIGHT_DIP - START_PILL_GAP_DIP,
-  };
 }
 
 /**
@@ -242,7 +227,8 @@ const TOGGLES = [
 /**
  * The vertical widget attached to the selection: one 38 DIP button per enabled mode (keys
  * 1..n; the active one solid pink with its name floating beside it), the three input
- * toggles (pink when on, struck through when off), and Cancel (Esc).
+ * toggles (pink when on, struck through when off), Cancel (Esc) and, when `start` is given,
+ * the pink Start recording button (Enter) at the bottom.
  */
 export function RecordWidget({
   chrome,
@@ -250,12 +236,14 @@ export function RecordWidget({
   left,
   top,
   side,
+  start,
 }: {
   chrome: OverlayChrome;
   toggles: OverlayToggles;
   left: number;
   top: number;
   side: "right" | "left" | "inside";
+  start?: { onStart(): void; disabled: boolean };
 }): React.JSX.Element {
   const t = useTranslations("screenshots");
   const tCamera = useTranslations("cameraSettings");
@@ -347,6 +335,29 @@ export function RecordWidget({
       >
         <X size={14} aria-hidden />
       </button>
+      {start && (
+        <>
+          <span className={styles.widgetDivider} aria-hidden />
+          <button
+            type="button"
+            className={styles.widgetStart}
+            data-testid="start-recording"
+            aria-label={t("overlay.startRecording")}
+            title={t("overlay.startRecordingTitle")}
+            disabled={start.disabled}
+            onClick={(event) => {
+              // A click on Start must not reach the sheet (which would draw or answer).
+              event.stopPropagation();
+              start.onStart();
+            }}
+          >
+            <span className={styles.startDot} aria-hidden />
+            <span className={styles.widgetDigit} aria-hidden>
+              ↵
+            </span>
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -391,43 +402,6 @@ export function RatioBar({
         {size.width} × {size.height}
       </span>
     </div>
-  );
-}
-
-/** The pink "● Start recording ↵" (or "Record this window") pill under the selection. */
-export function StartPill({
-  label,
-  onStart,
-  disabled = false,
-  centerX,
-  top,
-}: {
-  label: string;
-  onStart(): void;
-  disabled?: boolean;
-  centerX: number;
-  top: number;
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      className={styles.startPill}
-      data-testid="start-pill"
-      style={{ left: centerX, top }}
-      disabled={disabled}
-      {...keepPointer}
-      onClick={(event) => {
-        // A click on the pill must not reach the sheet (which would draw or answer).
-        event.stopPropagation();
-        onStart();
-      }}
-    >
-      <span className={styles.startDot} aria-hidden />
-      {label}
-      <kbd className={styles.kbd} aria-hidden>
-        ↵
-      </kbd>
-    </button>
   );
 }
 
