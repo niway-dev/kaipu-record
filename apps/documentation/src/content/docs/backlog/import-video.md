@@ -31,7 +31,8 @@ took them over, see [drop a video from outside](./prepare-drop-zone)):
 The import pipeline behind them (validation and the copy in main) is the one described
 below. After an import, Export opens on the first new video, keeping the selected
 destination; the others are counted in a toast. If the user left Export while the copy ran,
-nothing navigates: a toast says the video is in the Library and offers **Open**. One failed
+nothing navigates: for one video, a toast says it is in the Library and offers **Open**;
+for several, a toast gives the count. One failed
 file is named with its reason; several failures list the file names only. The other files
 in the batch still import.
 
