@@ -4,7 +4,7 @@ import { startScenario } from "./helpers";
 
 // Export flow: editor -> export sheet -> "Your export is ready" card (NIW2-586). Needs WebCodecs H.264
 // (macOS / dev machine); headless Linux has no encoder, same as e2e/export.e2e.ts.
-test("export: editor to the Ready to share card", async () => {
+test("export: editor to the Your export is ready card", async () => {
   test.skip(process.platform === "linux", "WebCodecs H.264 encoding unavailable on Linux");
   const s = await startScenario("export");
   try {

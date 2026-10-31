@@ -1484,7 +1484,7 @@
     "readyLine": "{width} × {height} · {size}",
     "readyInLibrary": "en tu Biblioteca",
     "readyOpenLabel": "Abrir {name} en tu Biblioteca",
-    "readyDragLabel": "Arrastra {name} fuera de Kaipu",
+    "readyDragLabel": "Arrastrar {name} fuera de Kaipu",
     "close": "Cerrar",
     "libraryBadge": "{count, plural, one {# copia nueva lista} other {# copias nuevas listas}}",
     "libraryChip": "{count, plural, one {# copia lista} other {# copias listas}}",
