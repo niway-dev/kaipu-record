@@ -259,7 +259,10 @@ describe("ExportStatusCards", () => {
     expect(getExportSnapshot().status).toBe("exporting");
     expect(isExportWidgetMinimized()).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: "Show the export's progress" }));
+    // Its name says what it shows, then what it does.
+    fireEvent.click(
+      screen.getByRole("button", { name: "YouTube copy · 0%. Show the export's progress" }),
+    );
     expect(screen.getByText("Exporting for YouTube")).toBeInTheDocument();
     expect(isExportWidgetMinimized()).toBe(false);
   });

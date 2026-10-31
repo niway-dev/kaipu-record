@@ -195,11 +195,15 @@ export function ExportProgressPill({
 }): React.JSX.Element {
   const t = useTranslations("backgroundCopy");
   const percent = percentOf(fraction);
+  const text = t("pill", { destination: destinationArg(job), percent });
   return (
+    // The name starts with the visible words ("YouTube copy · 38%"), then what a click does: a
+    // button's children are presentational, so an inner progressbar would never be read.
     <button
       type="button"
       className={styles.pill}
-      aria-label={t("expand")}
+      aria-label={`${text}. ${t("expand")}`}
+      title={t("expand")}
       onClick={() => setExportWidgetMinimized(false)}
     >
       <svg className={styles.ring} width={24} height={24} viewBox="0 0 24 24" aria-hidden>
@@ -213,15 +217,7 @@ export function ExportProgressPill({
           strokeDashoffset={RING_LENGTH * (1 - percent / 100)}
         />
       </svg>
-      <span
-        role="progressbar"
-        aria-valuenow={percent}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={t("progressTitle", { destination: destinationArg(job) })}
-      >
-        {t("pill", { destination: destinationArg(job), percent })}
-      </span>
+      <span>{text}</span>
       <ChevronUp size={13} strokeWidth={1.9} aria-hidden />
     </button>
   );
