@@ -137,7 +137,7 @@ export function initialScene(
     zoomSensitivity: ZOOM_DEFAULTS.sensitivity,
     audioMuted: false,
     mutedRanges: [],
-    webcam: seedWebcamScene(webcam),
+    webcam: seedWebcamScene(webcam, durationSeconds),
   };
 }
 

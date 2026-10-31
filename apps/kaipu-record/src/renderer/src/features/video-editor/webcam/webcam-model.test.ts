@@ -86,6 +86,55 @@ describe("seedWebcamScene", () => {
   });
 });
 
+describe("seedWebcamScene: camera-off gaps", () => {
+  const withGaps = (gaps: WebcamTrackMeta["gaps"]): WebcamTrackMeta => ({ ...track(), gaps });
+  const spans = (scene: WebcamScene | null) =>
+    scene?.segments.map(({ start, end, mode }) => ({ start, end, mode }));
+
+  it("seeds each gap as a hidden segment, in source seconds, so the lane stripes it", () => {
+    const scene = seedWebcamScene(
+      withGaps([
+        { startMs: 5000, endMs: 10_000 },
+        { startMs: 20_000, endMs: 22_500 },
+      ]),
+    );
+    expect(spans(scene)).toEqual([
+      { start: 5, end: 10, mode: "hidden" },
+      { start: 20, end: 22.5, mode: "hidden" },
+    ]);
+    expect(new Set(scene!.segments.map((s) => s.id)).size).toBe(2);
+    // The face is hidden inside a gap, shown on both sides of it.
+    expect(webcamAt({ webcam: scene }, 7)).toBeNull();
+    expect(webcamAt({ webcam: scene }, 4.9)).not.toBeNull();
+    expect(webcamAt({ webcam: scene }, 10)).not.toBeNull();
+  });
+
+  it("stretches a gap shorter than a segment can be, merging what then overlaps", () => {
+    // A quick off/on still hides the held frame; a segment under 1 s would not survive a reload.
+    const scene = seedWebcamScene(
+      withGaps([
+        { startMs: 3000, endMs: 3200 },
+        { startMs: 3600, endMs: 3700 },
+      ]),
+    );
+    expect(spans(scene)).toEqual([{ start: 3, end: 4.6, mode: "hidden" }]);
+  });
+
+  it("keeps a stretched gap inside the recording when its length is known", () => {
+    const scene = seedWebcamScene(withGaps([{ startMs: 9800, endMs: 10_000 }]), 10);
+    expect(spans(scene)).toEqual([{ start: 9, end: 10, mode: "hidden" }]);
+  });
+
+  it("seeds a trailing gap (the camera off at the end of the take) like any other", () => {
+    const scene = seedWebcamScene(withGaps([{ startMs: 8000, endMs: 12_000 }]), 12);
+    expect(spans(scene)).toEqual([{ start: 8, end: 12, mode: "hidden" }]);
+  });
+
+  it("seeds no segment for a take whose camera stayed on", () => {
+    expect(seedWebcamScene(track())?.segments).toEqual([]);
+  });
+});
+
 describe("clampWebcamPatch", () => {
   it("holds every field inside its range and leaves absent fields absent", () => {
     expect(

@@ -149,6 +149,59 @@ describe("sanitizeWebcamTrackMeta", () => {
   });
 });
 
+describe("sanitizeWebcamTrackMeta: gaps", () => {
+  const valid = {
+    startOffsetMs: 0,
+    offsetQuality: "exact",
+    width: 1280,
+    height: 720,
+    fps: WEBCAM_FPS,
+  };
+
+  it("keeps the camera-off periods, in screen ms, sorted", () => {
+    const gaps = [
+      { startMs: 12_000, endMs: 15_000 },
+      { startMs: 5000, endMs: 8000 },
+    ];
+    expect(sanitizeWebcamTrackMeta({ ...valid, gaps })?.gaps).toEqual([
+      { startMs: 5000, endMs: 8000 },
+      { startMs: 12_000, endMs: 15_000 },
+    ]);
+  });
+
+  it("drops a malformed or empty gap on its own, and merges overlapping ones", () => {
+    const gaps = [
+      { startMs: 1000, endMs: 3000 },
+      { startMs: 2500, endMs: 4000 }, // overlaps the first
+      { startMs: 6000, endMs: 6000 }, // empty
+      { startMs: 9000, endMs: 7000 }, // backwards
+      { startMs: -50, endMs: 100 }, // before time 0: clamped
+      { startMs: "1", endMs: 2 },
+      null,
+    ];
+    expect(sanitizeWebcamTrackMeta({ ...valid, gaps })?.gaps).toEqual([
+      { startMs: 0, endMs: 100 },
+      { startMs: 1000, endMs: 4000 },
+    ]);
+  });
+
+  it("leaves the key out with no usable gap: an old sidecar and a take without gaps read the same", () => {
+    expect(sanitizeWebcamTrackMeta(valid)).not.toHaveProperty("gaps");
+    expect(sanitizeWebcamTrackMeta({ ...valid, gaps: [] })).not.toHaveProperty("gaps");
+    expect(sanitizeWebcamTrackMeta({ ...valid, gaps: "x" })).not.toHaveProperty("gaps");
+    expect(
+      sanitizeWebcamTrackMeta({ ...valid, gaps: [{ startMs: 1, endMs: 1 }] }),
+    ).not.toHaveProperty("gaps");
+  });
+
+  it("keeps at most the cap, the earliest first", () => {
+    const gaps = Array.from({ length: 1500 }, (_, i) => ({ startMs: i * 10, endMs: i * 10 + 5 }));
+    const kept = sanitizeWebcamTrackMeta({ ...valid, gaps })?.gaps ?? [];
+    expect(kept).toHaveLength(1000);
+    expect(kept[0]).toEqual({ startMs: 0, endMs: 5 });
+  });
+});
+
 describe("webcamSiblingPath", () => {
   it("puts the webcam file next to the screen file", () => {
     expect(webcamSiblingPath("/Users/me/Movies/take.mp4")).toBe("/Users/me/Movies/take.webcam.mp4");
