@@ -38,11 +38,13 @@ function useBubbleSettings(): CameraBubbleSettings {
 /**
  * Whether the Camera toggle is on. The window only exists while it is, except while a take
  * keeps it parked (hidden) through a camera turned off mid-take (ADR 0032): the preview must
- * then release the camera itself, so the in-use light goes off. On until main says otherwise;
- * a broadcast that lands before the first read wins, being newer.
+ * then release the camera itself, so the in-use light goes off. Off until main answers, so a
+ * window parked before it was ready never opens the camera (its light would blink); on if
+ * main cannot answer, as the window exists for a camera that is on. A broadcast that lands
+ * before the first read wins, being newer.
  */
 function useCameraOn(): boolean {
-  const [on, setOn] = useState(true);
+  const [on, setOn] = useState<boolean | null>(null);
   useEffect(() => {
     let heard = false;
     const unsubscribe = window.electronAPI.onRecordingSettingsChanged((settings) => {
@@ -54,10 +56,12 @@ function useCameraOn(): boolean {
       .then((settings) => {
         if (!heard) setOn(settings.isCameraEnabled);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!heard) setOn(true);
+      });
     return unsubscribe;
   }, []);
-  return on;
+  return on === true;
 }
 
 /**

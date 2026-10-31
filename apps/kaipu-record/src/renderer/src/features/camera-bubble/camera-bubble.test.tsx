@@ -457,6 +457,26 @@ describe("CameraBubble — the Camera toggle", () => {
     expect(mockPreview).toHaveBeenLastCalledWith(true, null, 720);
   });
 
+  it("never opens the camera of a window parked before it read the toggle", async () => {
+    // Parked before ready-to-show: opening the camera until main answers would blink its light.
+    mockPreview.mockClear();
+    withStream();
+    let answer!: (settings: RecordingSettings) => void;
+    window.electronAPI.getRecordingSettings = () => new Promise((resolve) => (answer = resolve));
+    render(<CameraBubble />);
+    const base = await original.getRecordingSettings();
+    await act(async () => answer({ ...base, isCameraEnabled: false }));
+    expect(mockPreview).toHaveBeenCalled();
+    expect(mockPreview.mock.calls.every(([enabled]) => enabled === false)).toBe(true);
+  });
+
+  it("opens the camera when main cannot say whether it is on: the window exists for it", async () => {
+    withStream();
+    window.electronAPI.getRecordingSettings = () => Promise.reject(new Error("no ipc"));
+    render(<CameraBubble />);
+    await waitFor(() => expect(mockPreview).toHaveBeenLastCalledWith(true, null, 720));
+  });
+
   it("a broadcast that lands before the first read wins over it", async () => {
     withStream();
     let answer!: (settings: RecordingSettings) => void;
