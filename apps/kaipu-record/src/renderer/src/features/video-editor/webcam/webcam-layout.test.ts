@@ -149,6 +149,13 @@ describe("webcamPresetCenter", () => {
     expect(c.y * 1080).toBeCloseTo(1080 - 216 - WEBCAM_PRESET_MARGIN * 1080);
   });
 
+  it("sizes the bubble with webcamRect's caps, so a capped bubble keeps its edge margin", () => {
+    // 0.6 of a 1920 px height is 1152 px, wider than the 1080 px frame: capped to 1080.
+    const portrait = { width: 1080, height: 1920 };
+    const c = webcamPresetCenter({ x: 0, y: 1 }, 0.6, portrait);
+    expect(c.y * 1920).toBeCloseTo(1920 - 540 - WEBCAM_PRESET_MARGIN * 1920);
+  });
+
   it("falls back to the raw preset before the frame size is known", () => {
     expect(webcamPresetCenter({ x: 1, y: 0 }, 0.2, { width: 0, height: 0 })).toEqual({
       x: 1,

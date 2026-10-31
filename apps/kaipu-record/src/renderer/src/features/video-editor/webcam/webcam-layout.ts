@@ -185,8 +185,10 @@ export function webcamPresetCenter(
   shape: CameraBubbleShape = "circle",
 ): { x: number; y: number } {
   if (!(frame.width > 0) || !(frame.height > 0)) return { x: preset.x, y: preset.y };
-  const height = size * frame.height;
-  const width = height * cameraShapeAspect(shape);
+  // The same caps as webcamRect: never wider than the frame nor taller, the aspect kept.
+  const aspect = cameraShapeAspect(shape);
+  const height = Math.min(size * frame.height, frame.width / aspect, frame.height);
+  const width = height * aspect;
   const margin = WEBCAM_PRESET_MARGIN * frame.height;
   const reach = (value: number, side: number, length: number): number => {
     const half = side / 2 + margin;
