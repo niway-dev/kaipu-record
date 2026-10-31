@@ -71,6 +71,6 @@ describe("openKindOf", () => {
   });
 
   it("treats a vault image as re-opened, whatever else it carries", () => {
-    expect(openKindOf({ kind: "local", id: "s1" })).toBe("local");
+    expect(openKindOf({ kind: "local", id: "s1", assetId: "a-s1" })).toBe("local");
   });
 });

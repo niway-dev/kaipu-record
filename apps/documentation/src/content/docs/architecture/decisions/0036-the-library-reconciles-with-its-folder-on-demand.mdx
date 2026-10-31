@@ -1,0 +1,231 @@
+---
+title: "ADR 0036: The library reconciles with its folder on demand"
+description: When the vault folder and the library disagree, one user-triggered "Check and fix files" pass aligns file names with titles, adopts files that have no record and moves records with no media to an orphans folder. The file name is the only link between a file and its record; nothing is deleted and no identity is guessed.
+---
+
+# ADR 0036: The library reconciles with its folder on demand
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                                                                         |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — implemented on branch `feature/niw2-561-reconcile-the-library-with-its-folder` (stacked on PR #435), owner QA pending                                                                                                                                                                                              |
+| Date          | 2026-10-30                                                                                                                                                                                                                                                                                                                    |
+| Relates to    | [ADR 0035](./0035-the-file-name-follows-the-title) (the file name follows the title; this ADR aligns the items that existed before it); [ADR 0020](./0020-tags-are-entities-with-stable-ids) (tags ride in the sidecar by id, so they follow the record); NIW2-561; follow-up NIW2-589 (orphans list and manual reassignment) |
+| Superseded by | —                                                                                                                                                                                                                                                                                                                             |
+
+## Context
+
+ADR 0035 made a rename move the file, but it left every existing item as it was. A read-only
+scan of the owner's vault on 2026-10-30 (561 media files) found zero items whose file name
+matched their title: 527 carried an old automatic title such as `Recording — 10/29/2026, 7:57:30 PM`
+over `recording-2026-10-30-00-57-30.mp4`, about 32 carried user-written or `Pasted image — …`
+titles, one had no title and one media file had no sidecar.
+
+Drift also comes back after the migration: a user renames or deletes a file in Finder or
+Explorer, a restored backup adds files, a rename in the app fails because the file is locked.
+The vault is a folder the user can touch, so the library has to be able to catch up with it.
+
+Two facts constrain the design. The app is local-only and cannot push a fix for a broken
+automatic migration. And the first design (pair a renamed file with its old record by inode,
+content hash or capture date) was broken by two adversarial review rounds, which is why this
+ADR links file and record by name alone.
+
+## Decision
+
+1. **On demand only.** When the scan finds drift, a banner in the Library and on Home offers
+   "Check and fix files"; the same action is a button in Settings → Files. A dialog lists what
+   will change, and "Fix all" runs one pass. There is no folder watcher and no startup
+   migration. Nothing changes until the user presses the button, and pressing it again finds
+   nothing to do.
+2. **The file name is the only link between a file and its record.** A record belongs to the
+   media file with the same stem. There is no pairing by inode, hash or date.
+3. **Same item, title ≠ file name: the file takes the title.** This covers pre-existing items
+   and in-app renames that never reached the disk. The item is renamed through ADR 0035's
+   `renameItem`, in a planner order that handles chains and cycles by giving the item still
+   waiting the first free suffix. Reconcile never reuses a "leftover" destination
+   (`allowLeftover: false`).
+4. **A file with no record becomes a new item under its disk name.** A rename in Finder is
+   intentional, so its name wins.
+5. **Nothing is deleted.** A record or companion with no media moves to
+   `.kaipu/orphans/<timestamp>-<uuid>/`. The manifest entry (original paths, title,
+   `assetId`) is written before the first file moves and marked complete only once every file
+   has moved, so a crash or a failed move is finished by the next run in the same bundle, and
+   an orphan destination is never overwritten. Only ENOENT reads as "not there": a path that
+   cannot be checked (EIO, EACCES) keeps both files and leaves the entry pending. A file a
+   pending entry still holds is never classified afresh: only that entry's replay moves it,
+   so a bundle is never split across two run folders. That hold covers every action, not
+   only orphan moves: an adoption, a title rewrite or a rename whose stem (or, for a rename,
+   whose new stem) has any path held waits too. A run whose manifest cannot be read or
+   validated fails closed: its remaining files are unknown, so the scan lists it
+   (`unreadable-orphan-run`) and Fix all changes nothing until it is repaired or removed. The same
+   rule picks names: a stem is free only when every one of its paths is proven absent; one
+   proven path makes it taken, and a stem that cannot be checked is skipped for the next
+   candidate, never written onto.
+   A record whose `assetId` is in the cached cloud catalog becomes cloud-only instead, so the
+   cloud item keeps its tags.
+6. **Fix all runs in maintenance mode.** It does not start during a recording or an export,
+   and waits for short in-flight operations. Once the vault is idle it sets a per-process
+   flag, and every vault operation entering from outside is refused, not queued. A queued
+   operation would wake up holding a name the planner gave to another item. The flag is
+   checked only at entry points (IPC handlers, capture starts, hotkey screenshots, backfill,
+   stranded recovery, folder change), never inside vault methods, so there is no nested
+   locking and no deadlock. Editors keep their pending state and retry when maintenance ends.
+7. **Ambiguous cases are listed and left alone:** two media items claiming one `assetId`,
+   two media files on one stem (`Demo.mp4` + `Demo.png`, counting ignored media: `Demo.mp4` +
+   `Demo.PNG`, an empty or a symlinked file), items whose companion paths overlap
+   any other present stem's (legacy `Demo` + `Demo.edit`, whether `Demo` is a live item, a
+   stem conflict, a symlink, an empty file or an uppercase extension), media whose record path
+   is a file the vault owns (`tags.mp4` would take the tag registry `.kaipu/tags.json`), and
+   unreadable records. Fixing them needs a
+   choice or a primitive we do not build.
+8. **Old automatic titles are replaced** by the default capture name built from the capture
+   date. Kept as titles they would become files like `Recording — 10 29 2026, 7 57 30 PM.mp4`.
+   A user title that happens to look automatic is replaced too; this risk is accepted.
+   An export of one (`Recording — 9/14/2026, … (edited)`) takes its source's new name plus
+   the same suffix, as the editor names exports, so the pair still reads as a pair. With
+   its source gone, it takes the default name from its own date, with the suffix.
+9. **Sidecar reads are strict.** An unreadable, corrupt or schema-invalid sidecar is reported
+   and never written by anyone: reconcile, backfill, identity minting, the editors or
+   `renameItem`, `remove`. Today `sidecar()` turns it into `{}` and the writers merge over it,
+   so the strict read is added at every sidecar mutation boundary, before any media or
+   companion is touched. `list()` shows such an item read-only. A vault-owned stem (`tags`) is
+   treated the same way: its record path is never read as a record nor written.
+
+## Alternatives rejected
+
+- **A folder watcher.** It would keep the library in step in real time, but it needs
+  debouncing, writer-awareness (our own renames and captures would trigger it) and a
+  decision on every transient state a file passes through. The user did not ask for live
+  tracking, and the on-demand pass is the same logic without the races.
+- **A startup migration.** The app is local-only, so a bug in an automatic pass over a
+  user's whole vault cannot be fixed by a release before it has run. On demand, the user
+  sees the problem before anything moves.
+- **Automatic re-association by inode, hash or date.** Review findings that killed it:
+  inode reuse after a delete, file ids that are unstable on exFAT and SMB, swaps of two
+  names made in Finder, and restored backups. A false pairing puts one item's tags and
+  edits on another file, silently.
+- **Deleting orphans.** The user is in charge of what is deleted. The old record of a file
+  renamed in Finder still carries tags, edits and an identity, and the cost of keeping it is
+  a folder.
+- **Choosing among duplicate identities.** Picking which of two files keeps the `assetId`
+  is a guess about intent. Renames of those items already refuse; the user decides.
+- **A journal.** Each action is safe alone (`renameItem` copies, commits, then cleans up;
+  adoption is one atomic sidecar write; the orphans manifest precedes its moves), and the
+  only decisions ("the title wins", "the disk name wins") can be read again from the vault.
+  A journal added crash windows of its own, found in review.
+- **Queueing operations during maintenance.** A request made before the fix and executed
+  after it would hold a stale id (`remove("B")` after B was renamed). Refusing means nothing
+  queues across a run.
+
+## Consequences
+
+- Accepted limitations:
+  - **A rename in Finder** turns the file into a new item. Its old tags and edits stay in
+    the orphans folder, readable from the manifest.
+  - **A swap of two names in Finder** swaps their tags and edits, and no record is orphaned,
+    so nothing can tell. This is what happens today; reconcile does not make it worse.
+  - **A pre-existing item renamed in Finder** keeps the Finder name instead of going back
+    to its old title.
+- A fix can refuse to start (recording, export) or refuse a user action (a capture or an
+  edit save during the run). Both say "Kaipu is fixing your files"; editor saves retry on
+  their own.
+- Every vault entry point takes an admission lease for the life of its operation, including
+  the recording session through the cursor-track write. New entry points must do the same.
+  A lease held for a renderer (a take, an export) is also released when that renderer's page
+  goes away: a reload, a crash or a destroyed window. A take carries its kind. A recording
+  ends as a forced reset does: its handle is closed and its `.part` kept for the
+  stranded-take sweep; only the user's abort deletes it. An export's partial is discarded
+  however its take ends, a finalize that failed and left it stranded included (its source is
+  still in the library, and the sweep would otherwise list it as a recovered recording); that
+  discard is bound to the export's own staging file, so it never reaches a recording's
+  partial or a placed file. A partial of unknown kind is kept. A take ends once, however many events end
+  it (finalize included), and its lease is released exactly once, after its create, any
+  finalize in flight with its cursor-track write, and its cleanup have all settled: a reload
+  mid-finalize cannot let a fix orphan the stem that finalize reserved. A create reusing the
+  id of a take that is still open or ending is refused, every take stages to its own
+  exclusively created file, and the final move into the vault never replaces an existing
+  file (see "Placing a file" below). A staging file that cannot be removed once placed is
+  set aside under a name the sweep ignores; when even that fails, a marker beside it records
+  where it was placed and its size. The marker only stops a second recovery: while its
+  destination exists with the same size, the sweep moves the part (never replacing) into
+  `.kaipu/tmp/placed-parts/`, out of its way, and never deletes it, since that destination
+  may hold another file by now. A marker whose part is gone is removed. A link count is no
+  proof of placement (another app can hard-link a file anywhere), so the sweep no longer
+  reads one.
+- **Placing a file.** Every round of review found another way of putting bytes at a vault
+  path with its own bug, so there is one: `main/library/safe-place.ts`, and every placement
+  goes through it — a take's finalize and take-back, the stranded sweep, a rename's media
+  commit (its case-only branch included), Fix all's orphan moves, a GIF, a new screenshot,
+  and the save dialog's confirmed overwrite.
+  - **Threat model.** No data loss against (1) the app's own concurrency, (2) a process
+    crash at any point, (3) an I/O error at any call, and (4) a file that already exists at,
+    or arrives at, a destination before the no-replace step (the realistic Finder or sync
+    case). Not covered: another process replacing a path in the instant between two
+    consecutive calls of ours. Node has no `renameat2(RENAME_NOREPLACE)`, no
+    `renamex_np(RENAME_EXCL)` and no unlink by handle, so a check followed by an `unlink`
+    always leaves that window. Inside it the rule still holds: an identity merely observed at
+    a path is never authority to delete, and when ownership is uncertain the bytes are kept.
+    Power loss is best effort: file contents and the destination folder are flushed before
+    a source is removed.
+  - **Identity.** A file is named by device and inode, read as bigints (Windows file ids
+    overflow a double), and only from this operation's own handle or link: the source's
+    `fstat` when it is opened, the created copy's `fstat`, or the source's identity for a
+    hard link. A name is removed only while it still holds that identity; an unreadable name
+    or another file there is left alone.
+  - `placeNoReplace` (`placeNew` resolves the created file's identity) never replaces: a
+    hard link, else (a volume without them, another volume) an exclusively created copy that
+    writes every byte it read (a short write is continued, a write with no progress fails),
+    is flushed and closed before it counts. A close that fails voids the copy. A file at the
+    destination, whenever it arrived, is "taken" and nothing changes; a destination replaced
+    right after placing is "taken" too, the source keeping the bytes. Then the destination
+    folder is flushed and the source is removed, only while it still holds the file placed;
+    another file at the source's name is kept and logged. The residual window between that
+    check and the `unlink` is the one named above. A failed copy removes only the file it
+    created.
+  - A case-only rename goes through a unique temporary sibling in two `placeNoReplace`
+    steps with rollback, the first one checked against the file's identity; there is no
+    replacing rename onto a placeholder.
+  - A staging file that cannot be removed once placed is set aside by a rename onto an
+    empty placeholder this call created exclusively at a fresh name, or marked (the marker
+    written atomically).
+  - `replaceConfirmed` is the one replacing move, for the save dialog's "Replace": the
+    bytes go into an exclusively created temporary sibling, which then replaces the
+    destination in one rename; a failure removes only that temporary file.
+  - **Callers release only what they own.** A GIF, a screenshot, a take or a recovery whose
+    placement fails releases its own reservation (`releaseReservation`: the companions, only
+    while the record still carries the reservation's `assetId`) and never calls
+    `remove(id)`, which would delete whatever holds the media name. A metadata failure after
+    placing removes the media only while it is still the file placement created
+    (`discardCreated`); a take is moved back to staging only under the same check.
+  - A rename that finds its new name taken keeps the old name (`reason: "taken"`) and
+    removes the new companions; a GIF or screenshot whose path is taken fails without
+    removing the file that took it. Still exempt, on purpose: the screenshot editor's
+    overwrite of its own PNG (identity-checked under the names lock), sidecar and metadata
+    writes (`atomicWriteFile`, which flushes its folder best effort), and a folder or symlink
+    moved into this run's orphans folder (a link or copy would follow it). Cost: on a volume
+    without hard links (exFAT, some network shares) a rename copies the recording twice for
+    a case-only change, once otherwise.
+- Sidecar mutations now throw on an unreadable record instead of overwriting it.
+- Idempotence is the contract: a scan after a complete fix returns only findings that are
+  not fixable now (a file locked by another app, duplicate identities, stem conflicts,
+  shared companions, unreadable records).
+- `desktop/library-vault.mdx` documents the finding kinds, the orphans folder and
+  maintenance mode.
+
+## Non-goals
+
+- Watching the folder live.
+- Automatic or suggested re-association (NIW2-589, manual reassignment).
+- Emptying or restoring orphans in the UI (NIW2-589).
+- Adopting media from subfolders, symlinks or uppercase extensions.
+- Reconciling cloud-only items with the cloud.
+- A cross-process vault lock: two Kaipu processes on one vault (for example dev and prod)
+  are not protected, because maintenance mode is per process.
+
+## Reopen when
+
+- Auto-update ships, so a defect in a migration could be corrected after release and the
+  startup-migration alternative deserves a second look.
+- Users report lost tags after Finder renames often enough to justify NIW2-589's
+  suggestions, which would reopen automatic or assisted re-association.

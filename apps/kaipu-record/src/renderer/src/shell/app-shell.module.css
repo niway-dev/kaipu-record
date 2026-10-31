@@ -14,6 +14,25 @@
   overflow: hidden;
 }
 
+/* Right of the rail: the workspace header above the page. */
+.column {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 12px;
+  height: 46px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-app);
+}
+
 .content {
   flex: 1;
   overflow-y: auto;

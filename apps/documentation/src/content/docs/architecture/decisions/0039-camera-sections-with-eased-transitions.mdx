@@ -1,6 +1,6 @@
 ---
 title: "ADR 0039: Camera sections move and resize the camera with a per-section eased transition, and hiding fades outside the hidden range"
-description: An override webcam segment becomes a section that changes only position and size and carries its own Slide or Cut transition, played inside the section at its start, with a duration capped at half the section and a CSS-style easing (presets plus cubic-bezier). Hiding and showing fade over 200 ms outside the hidden range. One stateless function of source time feeds the preview, the MP4 and the GIF. Extends ADR 0033 and lifts its non-goal on animated layout transitions.
+description: An override webcam segment becomes a section that changes only position and size and carries its own Slide or Cut transition, played inside the section at its start, with a duration capped at half the section and a CSS-style easing (presets plus cubic-bezier). Hiding and showing fade over 200 ms outside the hidden range. One stateless function of source time feeds the preview, the MP4 and the GIF. Extends ADR 0038 and lifts its non-goal on animated layout transitions.
 ---
 
 # ADR 0039: Camera sections move and resize the camera with a per-section eased transition, and hiding fades outside the hidden range
@@ -11,16 +11,16 @@ description: An override webcam segment becomes a section that changes only posi
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Status        | Proposed — owner decisions 2026-10-31, nothing implemented — [design](/specs/2026-10-31-editor-timeline-v2-design/), phase A; no Linear ticket (free issue limit)                                                                                                                                                                                   |
 | Date          | 2026-10-31                                                                                                                                                                                                                                                                                                                                          |
-| Amends        | [0033](/architecture/decisions/0033-webcam-is-a-viewport-layer-composed-after-the-zoom-crop/): its decision 2 (an override now holds only position and size, plus a transition) and its non-goal "animated layout transitions". Its reopen conditions did not trigger this: the owner asked for transitions on 2026-10-31. The rest of 0033 stands. |
+| Amends        | [0038](/architecture/decisions/0038-webcam-is-a-viewport-layer-composed-after-the-zoom-crop/): its decision 2 (an override now holds only position and size, plus a transition) and its non-goal "animated layout transitions". Its reopen conditions did not trigger this: the owner asked for transitions on 2026-10-31. The rest of 0038 stands. |
 | Relates to    | [0040](/architecture/decisions/0040-typed-tracks-on-demand-and-stackable-media-lanes/) (the timeline the Camera lane lives in), the [webcam track design](/specs/2026-10-30-webcam-track-design/) (whose out-of-scope line this reopens)                                                                                                            |
 | Superseded by | —                                                                                                                                                                                                                                                                                                                                                   |
 
 ## Context
 
-ADR 0033 made the webcam a viewport layer: a global layout plus source-anchored segments that
+ADR 0038 made the webcam a viewport layer: a global layout plus source-anchored segments that
 either hide it or override some of its fields. A segment switches the layout in one frame. The
 webcam design listed "animated transitions between layouts" and "camera-only scenes" as out of
-scope, and ADR 0033 repeated the first as a non-goal.
+scope, and ADR 0038 repeated the first as a non-goal.
 
 On 2026-10-31 the owner reviewed the "Kaipu Timeline v2" mock and asked for camera sections that
 move and resize the camera from a point in the video, with an animated or cut transition per

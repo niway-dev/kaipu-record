@@ -1,6 +1,6 @@
 ---
 title: "Camera-only clips — moments where the camera fills the frame"
-description: "Proposal: insert moments of your own camera video in the edited recording (a fullscreen camera intro, a talking-head aside), using the take's webcam file. Not designed; it reopens ADR 0033's condition for a scene where the camera is the subject."
+description: "Proposal: insert moments of your own camera video in the edited recording (a fullscreen camera intro, a talking-head aside), using the take's webcam file. Not designed; it reopens ADR 0038's condition for a scene where the camera is the subject."
 ---
 
 # Camera-only clips
@@ -8,7 +8,7 @@ description: "Proposal: insert moments of your own camera video in the edited re
 > **Status: 🔵 Proposed** (2026-10-31). Owner decision 7 of the
 > [editor timeline v2 design](/specs/2026-10-31-editor-timeline-v2-design/): backlog only, no
 > design decisions yet. Reopens the condition of
-> [ADR 0033](/architecture/decisions/0033-webcam-is-a-viewport-layer-composed-after-the-zoom-crop/)
+> [ADR 0038](/architecture/decisions/0038-webcam-is-a-viewport-layer-composed-after-the-zoom-crop/)
 > "the owner wants a scene where the webcam is the subject", which the
 > [webcam track design](/specs/2026-10-30-webcam-track-design/) left out of scope. No Linear
 > ticket (free issue limit). Effort: Medium to High, after timeline v2 phases A and D.

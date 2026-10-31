@@ -7,9 +7,9 @@ description: "Proposal: the webcam stops being pixels of the screen capture. The
 
 > **Status: 🔵 Proposed** (2026-10-30). Design approved by the owner; nothing implemented.
 > Design: [Webcam track](/specs/2026-10-30-webcam-track-design/) · ADRs
-> [0032](/architecture/decisions/0032-webcam-is-its-own-track-and-the-bubble-is-excluded-from-capture/)
+> [0037](/architecture/decisions/0037-webcam-is-its-own-track-and-the-bubble-is-excluded-from-capture/)
 > (track and exclusion) and
-> [0033](/architecture/decisions/0033-webcam-is-a-viewport-layer-composed-after-the-zoom-crop/)
+> [0038](/architecture/decisions/0038-webcam-is-a-viewport-layer-composed-after-the-zoom-crop/)
 > (editor layer) · Linear [NIW2-565](https://linear.app/niway/issue/NIW2-565).
 > Effort: High (16–25 days plus owner QA). First step: the one-day exclusion spike (spec task 0),
 > run by the owner by hand.

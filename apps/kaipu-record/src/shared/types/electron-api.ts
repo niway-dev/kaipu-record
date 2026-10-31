@@ -19,7 +19,18 @@ import type {
 import type { SerializedError } from "../analytics";
 import type { AppSettings, ShortcutAction, TagSummary, UpdateStatus } from "./ipc";
 import type { TagColor } from "@kaipu/domain/constants";
-import type { LocalRecording, VaultDirectory } from "./library-storage";
+import type { LocalRecording, RenameResult } from "./library-storage";
+import type {
+  ReconcileFixResult,
+  ReconcileProgress,
+  ReconcileScanResult,
+} from "./library-reconcile";
+import type {
+  WorkspaceAddResult,
+  WorkspaceRemoveResult,
+  WorkspacesState,
+  WorkspaceSwitchResult,
+} from "./workspaces";
 import type { StorageUsageResult } from "./cloud-storage";
 import type {
   CatalogRefreshResult,
@@ -114,6 +125,33 @@ export type AccessibilityStatus = "granted" | "denied" | "not-required";
  * every failure would collapse into the generic copy. Returning the error round-trips cleanly.
  */
 export type AuthAttemptResult = { ok: true; status: AuthStatus } | { ok: false; error: AuthError };
+
+/**
+ * Workspaces (ADR 0032). Item-scoped calls elsewhere on this bridge carry the window's
+ * workspace stamp, added by the preload: a call made before a switch and answered after it
+ * rejects with `stale-workspace` instead of resolving with the other workspace's data.
+ */
+export interface WorkspacesBridge {
+  list(): Promise<WorkspacesState>;
+  /** The workspace this window's stamp names, read synchronously (null until it is known). */
+  activeId(): string | null;
+  /** Folder picker, then adopt or initialize the folder and switch to it. */
+  add(): Promise<WorkspaceAddResult>;
+  switch(id: string): Promise<WorkspaceSwitchResult>;
+  /** Unregister; nothing on disk changes. Refused for the active and the last one. */
+  remove(id: string): Promise<WorkspaceRemoveResult>;
+  /** Reveal the workspace's folder in Finder / Explorer (never creates it). */
+  openFolder(id: string): Promise<void>;
+  /** The one-time "New: workspaces" hint was dismissed. */
+  dismissHint(): Promise<void>;
+  /** After any registry change or switch, with the new state. */
+  onChanged(callback: (state: WorkspacesState) => void): () => void;
+  /**
+   * The one handler that prepares this window for a switch: flush pending saves, resolve
+   * unsaved editors and close them. Resolve false to cancel the switch. Returns an unsubscribe.
+   */
+  onPrepare(handler: () => Promise<boolean>): () => void;
+}
 
 export interface KaipuElectronAPI {
   /** Host OS (`process.platform`), exposed because the renderer must not read `process` itself. */
@@ -218,10 +256,26 @@ export interface KaipuElectronAPI {
 
   /** List recordings stored in the local vault. */
   listLocalRecordings(): Promise<LocalRecording[]>;
-  /** Rename a local recording (updates sidecar metadata; the file is untouched). */
-  renameLocalRecording(id: string, title: string): Promise<void>;
+  /**
+   * Rename a local item (NIW2-560, ADR 0035): saves the title and moves the file (and its
+   * sidecars) to a name derived from it. `recording.id` is the id to use from now on.
+   * `file` says what happened to the file; "kept-old-name" is not an error — the title
+   * was saved. `assetId` is required: main resolves the item by it under the names lock,
+   * following it if it moved since `id` was read and never touching another item that took
+   * that name. Rejects when no item has `assetId` (message carries `ITEM_NOT_FOUND_MARKER`)
+   * or when the title itself cannot be written.
+   */
+  renameLocalRecording(id: string, assetId: string, title: string): Promise<RenameResult>;
   /** Stamp a vault item as opened in an editor now (orders the Editor home). */
   markOpenedInEditor(id: string): Promise<void>;
+  /**
+   * The video editor holds this item while mounted (NIW2-560, ADR 0035): a rename keeps
+   * the file's name ("editing") until `closeEditorSession`, or until the window goes away.
+   * Serialized with renames in main; resolves the item's current id, which the editor
+   * must load and write under, or null when no local item has `assetId`.
+   */
+  acquireEditorSession(assetId: string): Promise<string | null>;
+  closeEditorSession(id: string): void;
   /** Every live tag with its item count, most used first. */
   listTags(): Promise<TagSummary[]>;
   /** Create a tag; rejects when the name (case-insensitively) is taken. */
@@ -258,21 +312,29 @@ export interface KaipuElectronAPI {
   startFileDrag(id: string, name?: string): void;
   /** NIW2-218: tell main whether a background export is running (close/quit confirmation). */
   setExportActive(active: boolean): void;
+  /**
+   * NIW2-561: called before an export reads its source; main takes the export's vault
+   * lease. Rejects with the maintenance marker while files are being fixed.
+   */
+  beginExport(): Promise<void>;
   /** NIW2-218: main asks to cancel the running export (the user confirmed close/quit). */
   onExportCommand(callback: (command: "cancel") => void): () => void;
 
-  /** Current recordings-folder location (custom or platform default). */
-  getVaultDirectory(): Promise<VaultDirectory>;
-  /** Open a folder picker; persists & returns the new location, or null if cancelled. */
-  chooseVaultDirectory(): Promise<VaultDirectory | null>;
-  /** Reset the recordings folder back to the platform default. */
-  resetVaultDirectory(): Promise<VaultDirectory>;
-  /** Open the recordings folder in the OS file manager (creating it if missing). */
-  openVaultDirectory(): Promise<void>;
+  /** Workspaces (ADR 0032): the registry, the active one, and the switch. */
+  workspaces: WorkspacesBridge;
   /** The signed-in account's cloud capacity; never zeros for a failed query. */
   getStorageUsage(): Promise<StorageUsageResult>;
   /** Subscribe to vault-folder changes (so open library pages re-list). Returns an unsubscribe fn. */
   onLibraryChanged(callback: () => void): () => void;
+  /** NIW2-561: scan the vault for drift ("Check and fix files"). Never writes. */
+  reconcileScan(): Promise<ReconcileScanResult>;
+  /** NIW2-561: "Fix all", in maintenance mode. */
+  reconcileFix(): Promise<ReconcileFixResult>;
+  /** NIW2-561: stop waiting for the vault to be idle; no effect once files are being fixed. */
+  reconcileCancel(): Promise<void>;
+  onReconcileProgress(callback: (progress: ReconcileProgress) => void): () => void;
+  /** NIW2-561: maintenance mode ended; editors retry their latest pending save. */
+  onLibraryMaintenanceEnded(callback: () => void): () => void;
   /** One entry per logical item (local, cloud, or both) plus vault/catalog status. */
   listLibraryItems(): Promise<LibraryListResult>;
   /** Re-fetch the cloud catalog for the signed-in account; resolves with why it could not. */
@@ -281,8 +343,11 @@ export interface KaipuElectronAPI {
   removeLocalCopy(id: string): Promise<RemoveLocalCopyResult>;
 
   // ── Recording engine (used by the main/recorder window) ───────────────
-  /** Open a disk-writer session; returns the temp path. */
-  recordingCreate(sessionId: string): Promise<{ tempPath: string }>;
+  /**
+   * Open a disk-writer session; returns the temp path. `kind` defaults to a recording, whose
+   * partial is kept when its page goes away; an export's partial is discarded then.
+   */
+  recordingCreate(sessionId: string, kind?: "recording" | "export"): Promise<{ tempPath: string }>;
   /** Write a chunk at an exact byte position (positional, not append). */
   recordingWrite(sessionId: string, data: ArrayBuffer, position: number): void;
   /** Close the file, move it into the vault, return the new recording. */
@@ -458,13 +523,14 @@ export interface KaipuElectronAPI {
   peekClipboardImage(): Promise<{ width: number; height: number } | null>;
   /**
    * Write a PNG into the vault and return the stored item. With `overwriteId` it
-   * replaces that existing screenshot (keeping its createdAt); without, it creates
-   * a new timestamped item.
+   * replaces that existing screenshot (keeping its createdAt), and `overwriteAssetId` is
+   * required with it: main follows the item if a rename moved it and refuses an overwrite
+   * without it (NIW2-560). Without `overwriteId`, it creates a new item named after the title.
    */
   saveScreenshot(
     png: ArrayBuffer,
     /** `manual`: the user pressed Save (stamps the Editor home's "Saved"), not the auto-save. */
-    meta: { title: string; overwriteId?: string; manual?: boolean },
+    meta: { title: string; overwriteId?: string; overwriteAssetId?: string; manual?: boolean },
   ): Promise<LocalRecording>;
   /**
    * Ask where to put an exported capture (a native save dialog seeded with
