@@ -2,9 +2,13 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { initialScene, type VideoScene } from "../scene";
+import { WEBCAM_DEFAULTS } from "../webcam/webcam-model";
 import { createSlideAssetStore } from "../slide-assets";
 import { ESTIMATE_DEBOUNCE_MS, useGifExport } from "./use-gif-export";
 import type { GifStartMessage } from "./gif-messages";
+
+const { captureException } = vi.hoisted(() => ({ captureException: vi.fn() }));
+vi.mock("@renderer/features/analytics", () => ({ captureException }));
 
 // Like use-video-export.test.ts: jsdom can't run the real worker (WebCodecs, OffscreenCanvas),
 // so a fake Worker stands in and the suite covers what the HOOK owns — the start message,
@@ -187,5 +191,43 @@ describe("useGifExport", () => {
     expect(msg.fps).toBe(15);
     act(() => worker.emit({ type: "estimate", bytes: 6_200_000, frameCount: 60 }));
     expect(result.current.estimate).toEqual({ status: "ready", bytes: 6_200_000, frameCount: 60 });
+  });
+
+  it("sends the webcam file with the offset, like the MP4 export, and fetches it once", async () => {
+    const fetch = vi.fn(async (url: string) => ({
+      ok: true,
+      status: 200,
+      blob: async () => new Blob([url]),
+    }));
+    vi.stubGlobal("fetch", fetch);
+    const scene: VideoScene = {
+      ...SCENE,
+      webcam: { layout: { ...WEBCAM_DEFAULTS }, segments: [] },
+    };
+    const { worker } = await startExport(args({ scene, webcamTrack: { startOffsetMs: 80 } }));
+    const msg = worker.postMessage.mock.calls[0][0] as GifStartMessage;
+    expect(msg.webcam).toEqual({ blob: expect.any(Blob), startOffsetMs: 80 });
+    expect(msg.plan.webcam).toEqual(scene.webcam);
+    expect(
+      fetch.mock.calls.filter(([url]) => url.startsWith("kaipu-media://webcam/")),
+    ).toHaveLength(1);
+  });
+
+  it("sends no webcam and fetches none for a recording without one", async () => {
+    const fetch = vi.fn(async () => ({ ok: true, status: 200, blob: async () => new Blob(["x"]) }));
+    vi.stubGlobal("fetch", fetch);
+    const { worker } = await startExport(args({ webcamTrack: null }));
+    const msg = worker.postMessage.mock.calls[0][0] as GifStartMessage;
+    expect(msg.webcam).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("logs a webcam the worker could not decode, and keeps exporting without it", async () => {
+    const { result, worker } = await startExport();
+    act(() => worker.emit({ type: "webcam-error", message: "decode failed" }));
+    expect(captureException).toHaveBeenCalledWith(expect.any(Error), {
+      context: "gif-export-webcam",
+    });
+    expect(result.current.status).toBe("exporting");
   });
 });

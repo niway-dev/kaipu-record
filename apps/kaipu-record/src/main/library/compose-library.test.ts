@@ -192,4 +192,44 @@ describe("composeLibrary", () => {
     expect(items[0]?.cloud).toBeNull();
     expect(catalogUpdates).toEqual([]);
   });
+
+  describe("an item whose sidecar cannot be read (NIW2-568)", () => {
+    const unreadable = local("f1", "unreadable:f1", {
+      metadataIssue: "unreadable",
+      title: "F1",
+      durationSeconds: 0,
+    });
+
+    it("is still listed, local-only, when no cloud entry points at it", () => {
+      const { items } = composeLibrary({
+        local: [unreadable],
+        catalog: [],
+        editing: {},
+        editSession: {},
+      });
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({
+        availability: "local",
+        local: { metadataIssue: "unreadable" },
+      });
+    });
+
+    it("keeps the cloud association instead of clearing it, as ONE local-unavailable item", () => {
+      const { items, catalogUpdates } = composeLibrary({
+        local: [unreadable],
+        catalog: [cloud("A", { lastSeenLocalId: "f1" })],
+        editing: {},
+        editSession: {},
+      });
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({
+        assetId: "A",
+        title: "Cloud A",
+        availability: "local-unavailable",
+        comparison: "pending",
+        local: { id: "f1", metadataIssue: "unreadable" },
+      });
+      expect(catalogUpdates[0].lastSeenLocalId).toBe("f1");
+    });
+  });
 });

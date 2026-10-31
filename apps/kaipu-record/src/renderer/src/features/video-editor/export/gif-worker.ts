@@ -10,6 +10,9 @@
  *
  * "estimate" mode runs the same pipeline on a few sampled frame pairs and reports an
  * approximate file size (FR 6).
+ *
+ * Webcam (ADR 0038): the same layer as the MP4, through the same composer; the webcam frame
+ * for each sampled time comes from a second Input opened only when the plan has a webcam.
  */
 import { ALL_FORMATS, BlobSource, CanvasSink, Input } from "mediabunny";
 import type { InputVideoTrack } from "mediabunny";
@@ -23,6 +26,7 @@ import {
   measureFramePair,
 } from "./gif-encode";
 import { GIF_HARD_CAP_BYTES, type GifStartMessage, type GifWorkerMessage } from "./gif-messages";
+import { openWebcamSourceOrNone, type WebcamSource } from "./webcam-source";
 
 type WorkerSelf = typeof self & {
   onmessage: ((event: MessageEvent<GifStartMessage>) => void) | null;
@@ -52,16 +56,25 @@ workerSelf.onmessage = (event: MessageEvent<GifStartMessage>) => {
 
 async function run(msg: GifStartMessage): Promise<void> {
   const input = new Input({ source: new BlobSource(msg.sourceBlob), formats: ALL_FORMATS });
+  let webcam: WebcamSource | null = null;
   try {
+    // A broken webcam file never fails the GIF: it goes on without the layer.
+    webcam = await openWebcamSourceOrNone(msg.webcam, msg.plan.webcam, (error) =>
+      post({
+        type: "webcam-error",
+        message: error instanceof Error ? error.message : String(error),
+      }),
+    );
     const videoTrack = await input.getPrimaryVideoTrack();
     // A plan of only slides needs no track; anything with a clip does.
     if (!videoTrack && msg.plan.segments.some((s) => s.kind === "clip")) {
       throw new Error("source has no video track");
     }
-    const renderer = createFrameRenderer(msg, videoTrack);
+    const renderer = createFrameRenderer(msg, videoTrack, webcam);
     if (msg.mode === "estimate") await runEstimate(msg, renderer);
     else await runExport(msg, renderer);
   } finally {
+    webcam?.dispose();
     input.dispose();
   }
 }
@@ -73,7 +86,11 @@ interface FrameRenderer {
   canvas: OffscreenCanvas;
 }
 
-function createFrameRenderer(msg: GifStartMessage, track: InputVideoTrack | null): FrameRenderer {
+function createFrameRenderer(
+  msg: GifStartMessage,
+  track: InputVideoTrack | null,
+  webcam: WebcamSource | null,
+): FrameRenderer {
   const { source, output, plan } = msg;
   const full = new OffscreenCanvas(source.width, source.height);
   const fullCtx = full.getContext("2d");
@@ -94,6 +111,7 @@ function createFrameRenderer(msg: GifStartMessage, track: InputVideoTrack | null
     redactions: plan.redactions,
     overlayWindows: plan.overlayWindows,
     overlayBitmaps: new Map(msg.overlays.map((o) => [o.overlayId, o.bitmap])),
+    webcam: plan.webcam,
   });
   const slides = new Map(msg.slides.map((s) => [s.assetId, s.bitmap]));
   const sink = track
@@ -127,12 +145,26 @@ function createFrameRenderer(msg: GifStartMessage, track: InputVideoTrack | null
       }
       if (!sink) throw new Error("source has no video track");
       let k = 0;
-      for await (const wrapped of sink.canvasesAtTimestamps(batch.map((b) => b.sourceTime))) {
-        const slot = batch[k++];
-        // A null = no decodable frame at that time (past the stream's end). The canvas
-        // then still holds the previous, already-redacted composition, which is repeated.
-        if (wrapped) compose.clip(wrapped.canvas, wrapped.timestamp, wrapped.duration, slot.t);
-        yield { i: slot.i, rgba: grab() };
+      // The webcam frame on screen at each sampled time, read in step with the screen's.
+      const webcamFrames = webcam?.framesAt(batch.map((b) => b.sourceTime)) ?? null;
+      try {
+        for await (const wrapped of sink.canvasesAtTimestamps(batch.map((b) => b.sourceTime))) {
+          const slot = batch[k++];
+          const webcamImage = webcamFrames ? ((await webcamFrames.next()).value ?? null) : null;
+          // The slot's own source time picks the webcam frame, its layout and the camera
+          // scale alike; it is never before the clip's start (locateTimelineTime).
+          const webcamFrame = webcamImage
+            ? { image: webcamImage, sourceTs: slot.sourceTime }
+            : null;
+          // A null = no decodable frame at that time (past the stream's end). The canvas
+          // then still holds the previous, already-redacted composition, which is repeated.
+          if (wrapped) {
+            compose.clip(wrapped.canvas, wrapped.timestamp, wrapped.duration, slot.t, webcamFrame);
+          }
+          yield { i: slot.i, rgba: grab() };
+        }
+      } finally {
+        await webcamFrames?.return();
       }
     }
   }

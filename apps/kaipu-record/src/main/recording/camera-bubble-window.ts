@@ -1,4 +1,5 @@
 import { BrowserWindow, screen } from "electron";
+import { release } from "node:os";
 import { join } from "path";
 import { is } from "@electron-toolkit/utils";
 import { DEFAULT_CAMERA_BUBBLE, clampCameraBubbleSize } from "@shared/camera-bubble";
@@ -8,13 +9,13 @@ import {
   bubbleBoundsInArea,
   bubbleSizeOf,
   type BubbleCorner,
+  canExcludeWindowFromCapture,
   type Rect,
 } from "./area-geometry";
 
 /**
  * The floating webcam bubble. A frameless, transparent, always-on-top window
- * showing the live camera in a circle or a rounded square. Because it sits on screen,
- * the screen recording captures it — no compositing needed.
+ * showing the live camera in a circle or a rounded square, for the user to see themselves.
  *
  * It starts at the bottom-left corner of the recorded area (or of the display) and the user
  * moves it by pressing on it and dragging. The drag is driven from the renderer's pointer
@@ -26,12 +27,25 @@ import {
  * display, and per take inside an area (each area recording starts at the area's corner,
  * where the overlay's placeholder showed it).
  *
- * Unlike the control bar, this window is deliberately NOT content-protected, so it
- * *does* appear in the recording.
+ * It is content-protected from creation, so the screen recording never carries it: the face
+ * is recorded in the take's own webcam file and composed on export, where the editor can move,
+ * hide or restyle it (ADR 0037). The protection is set right after the window exists, before
+ * any capture stream could see it. Windows before 10 2004 cannot exclude a window from
+ * capture (it comes out black), so there the bubble stays unprotected and the take records
+ * no webcam file: the bubble appears in the screen recording, as it did before the track.
+ * The same legacy path applies while a take records no webcam file (the camera was off when
+ * it started, or its webcam did not open or ended): the hub's `protect` rule says so, and
+ * `applyProtection` brings an existing window in line (`BubbleProtection`).
+ *
+ * During a take that records a webcam file, turning the camera off parks the window instead
+ * (`park`): hidden, still protected, its renderer releasing the camera. Turning it on again
+ * shows the same native window, which the running capture already leaves out; a new window
+ * would not be (ADR 0037 § camera toggled mid-take). Outside such a take the window is
+ * destroyed, so the device is released whatever the renderer does.
  *
  * On macOS it is a `panel` and joins full-screen Spaces with
  * `skipTransformProcessType`: the bubble is destroyed and recreated on every
- * camera toggle, and each creation used to hide the Dock icon (and Cmd+Tab)
+ * camera toggle outside a take, and each creation used to hide the Dock icon (and Cmd+Tab)
  * through Electron's default process transform. See ADR 0029.
  */
 export class CameraBubbleWindow {
@@ -48,12 +62,25 @@ export class CameraBubbleWindow {
   private placedInArea: BubbleCorner | null = null;
   /** The window's corner when the current move began; `moveBy` offsets from it. */
   private moveStart: BubbleCorner | null = null;
+  /** Whether the current window is content-protected. */
+  private protectedNow = false;
+  /** The camera was turned off mid-take: the window is kept hidden until it comes back on. */
+  private parked = false;
 
   /** `size` reads the persisted bubble size; injected so this class never reads disk. */
-  constructor(private readonly size: () => number = () => DEFAULT_CAMERA_BUBBLE.size) {}
+  constructor(
+    private readonly size: () => number = () => DEFAULT_CAMERA_BUBBLE.size,
+    /**
+     * Whether the bubble should leave the screen capture now: the OS can exclude a window and
+     * the active take (if any) records the face in its webcam file. Defaults to the OS alone.
+     */
+    private readonly protect: () => boolean = () =>
+      canExcludeWindowFromCapture(process.platform, release()),
+  ) {}
 
   show(): void {
     if (this.disposed) return;
+    this.parked = false;
     if (this.window && !this.window.isDestroyed()) {
       if (this.fits()) this.window.showInactive();
       return;
@@ -82,6 +109,8 @@ export class CameraBubbleWindow {
         backgroundThrottling: false,
       },
     });
+    this.protectedNow = this.protect();
+    if (this.protectedNow) this.window.setContentProtection(true);
     this.window.setAlwaysOnTop(true, "screen-saver");
     this.window.setVisibleOnAllWorkspaces(true, {
       visibleOnFullScreen: true,
@@ -98,7 +127,8 @@ export class CameraBubbleWindow {
 
     this.window.once("ready-to-show", () => {
       this.position();
-      if (this.fits()) this.window?.showInactive();
+      // Parked before it was ready (the camera turned off at once): it stays hidden.
+      if (this.fits() && !this.parked) this.window?.showInactive();
     });
     this.window.on("closed", () => {
       this.window = null;
@@ -106,9 +136,27 @@ export class CameraBubbleWindow {
   }
 
   /**
-   * Keep the bubble inside a recorded area (ADR 0030): the bubble is recorded as part of the
-   * screen, so outside the area it would vanish from the video without a word. An area too
-   * small for it hides it until the anchor is cleared; `null` returns it to its usual corner
+   * Bring an existing window's protection in line with `protect`, when a take starts or ends
+   * or its webcam file ends. Called before a take's screen capture starts (its sessions are
+   * created first), the change is in effect for that capture. Called while a capture already
+   * runs (the webcam file ended mid-take: the bubble must come back into the recording), it
+   * is best effort: whether a running ScreenCaptureKit stream picks up a window that drops
+   * its protection is unverified (spike rows 4/5, ADR 0037).
+   */
+  applyProtection(): void {
+    if (!this.window || this.window.isDestroyed()) return;
+    const next = this.protect();
+    if (next === this.protectedNow) return;
+    this.protectedNow = next;
+    this.window.setContentProtection(next);
+  }
+
+  /**
+   * Keep the bubble inside a recorded area (ADR 0030): the bubble stays where the
+   * user sees it relative to what is recorded, and the face of the take is composed on export
+   * from the webcam file, not captured from this window (so the anchor no longer decides
+   * whether the face is recorded, only where it is seeded). An area too small for it hides it
+   * until the anchor is cleared; `null` returns it to its usual corner
    * (the caller shows it again if the camera is still on).
    */
   anchorTo(area: Rect | null): void {
@@ -173,6 +221,23 @@ export class CameraBubbleWindow {
     if (this.isVisible()) this.window?.moveTop();
   }
 
+  /**
+   * The window's bounds (global DIP) while the bubble is on screen, else null: what the
+   * recording captured, for the take's recorded bubble position.
+   */
+  visibleBounds(): Rect | null {
+    return this.isVisible() ? (this.window?.getBounds() ?? null) : null;
+  }
+
+  /**
+   * Where the bubble sits while it is on screen or parked (global DIP), else null: a take whose
+   * camera was off at its end records where the bubble was before it was turned off.
+   */
+  placedBounds(): Rect | null {
+    if (this.parked && this.window && !this.window.isDestroyed()) return this.window.getBounds();
+    return this.visibleBounds();
+  }
+
   /** True while the bubble has an active (non-destroyed) window and is visible. */
   isVisible(): boolean {
     return Boolean(this.window && !this.window.isDestroyed() && this.window.isVisible());
@@ -189,11 +254,48 @@ export class CameraBubbleWindow {
   }
 
   /**
-   * Destroy the bubble window. Unlike the control bar we never just `hide()` it:
+   * The camera was turned off during a take that records a webcam file: hide the window and
+   * keep it, with its protection, so `show()` brings back the same native window, the one the
+   * running screen capture leaves out. Its renderer releases the camera itself (it follows the
+   * Camera toggle), so the in-use light goes off. No window: nothing to park.
+   */
+  park(): void {
+    if (!this.window || this.window.isDestroyed()) return;
+    this.parked = true;
+    this.window.hide();
+  }
+
+  /**
+   * Destroy the window and create a new one where it was, its protection decided again by
+   * `protect` (the webcam file ended mid-take: a new window is what a running capture is known
+   * to record). Shown at once unless `show` is false (hidden for a screenshot: the later
+   * `show()` brings it back, at the same place). No window: nothing to replace.
+   */
+  replace(show = true): void {
+    if (!this.window || this.window.isDestroyed()) return;
+    const { x, y, height } = this.window.getBounds();
+    this.place({ x, bottom: y + height });
+    this.destroy();
+    if (show) this.show();
+  }
+
+  /** True while a window exists and is content-protected (left out of the screen capture). */
+  isProtected(): boolean {
+    return this.protectedNow && Boolean(this.window && !this.window.isDestroyed());
+  }
+
+  /** True while a window is parked (hidden by a camera turned off mid-take). */
+  isParked(): boolean {
+    return this.parked && Boolean(this.window && !this.window.isDestroyed());
+  }
+
+  /**
+   * Destroy the bubble window. Outside a take we never just `hide()` it:
    * the renderer holds the camera via getUserMedia, so the window must be torn
    * down to release the device (and turn the macOS green in-use light off).
    */
   destroy(): void {
+    this.parked = false;
     if (this.window && !this.window.isDestroyed()) this.window.destroy();
     this.window = null;
   }

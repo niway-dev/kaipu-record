@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { TAG_COLORS, type TagColor } from "@kaipu/domain/constants";
+import "./tag-palette.css";
 import styles from "./tag-chip.module.css";
 
 /** A colored tag pill: a dot in the tag's color and its name. */

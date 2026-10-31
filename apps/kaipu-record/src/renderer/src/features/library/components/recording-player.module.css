@@ -14,6 +14,18 @@
   background: #0a0a0c;
 }
 
+/* The picture's own rectangle inside the player (sized from the decoded ratio in
+   recording-player.tsx), centred like `object-fit: contain` centres it, so the webcam
+   layer, positioned in percentages of the picture, lands where it was recorded. It lets
+   every pointer through to the video's controls. */
+.picture {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
 .unavailable {
   position: absolute;
   inset: 0;

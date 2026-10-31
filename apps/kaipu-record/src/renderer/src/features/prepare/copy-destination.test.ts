@@ -16,6 +16,15 @@ describe("copyDestinationOf", () => {
     ).toBe("github");
   });
 
+  it("a copy of a take with a webcam keeps its destination (NIW2-576)", () => {
+    expect(
+      copyDestinationOf({
+        ...recording,
+        export: { preset: "youtube-1440", fingerprint: "whole:1a2b3c#2560x1440-v1" },
+      }),
+    ).toBe("youtube");
+  });
+
   it("an editor export, an original and an older file have none", () => {
     expect(
       copyPresetOf({ ...recording, export: { preset: "balanced", fingerprint: "edit:abc#q30" } }),
