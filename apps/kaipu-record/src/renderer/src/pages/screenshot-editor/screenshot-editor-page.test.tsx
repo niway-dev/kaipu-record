@@ -140,6 +140,29 @@ describe("ScreenshotEditorPage — save races", () => {
     expect(saveCalls()).toHaveLength(1);
   });
 
+  it("a Save refused while files are fixed says so, then runs again when that ends (NIW2-561)", async () => {
+    let ended: (() => void) | null = null;
+    window.electronAPI.onLibraryMaintenanceEnded = (callback) => {
+      ended = callback;
+      return () => (ended = null);
+    };
+    window.electronAPI.saveScreenshot = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("vault-maintenance: Kaipu is fixing your files"))
+      .mockResolvedValueOnce(saved("s1")) as never;
+    mount(PASTE);
+    await loadImage();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(getToasts().map((x) => x.message)).toEqual([
+        "Kaipu is fixing your files. Try again in a moment.",
+      ]),
+    );
+    expect(saveCalls()).toHaveLength(1);
+    await act(async () => ended!());
+    await waitFor(() => expect(saveCalls()).toHaveLength(2));
+  });
+
   it("auto-saves when settings resolve after the image loaded (SHOT-B8)", async () => {
     const s = deferred<Settings>();
     mount(CAPTURE, () => s.promise);
@@ -174,5 +197,121 @@ describe("ScreenshotEditorPage — save races", () => {
     fireEvent.click(save);
     await waitFor(() => expect(saveCalls()).toHaveLength(2));
     expect(saveCalls()[1][1]).toMatchObject({ overwriteId: "s1" });
+  });
+});
+
+describe("ScreenshotEditorPage — rename moves the file (NIW2-560)", () => {
+  const renameResult = (id: string, title: string, file = "renamed", reason?: string) => ({
+    file,
+    reason,
+    recording: { ...saved(id, title), filePath: `/vault/${id}.png` },
+  });
+
+  /** Save a pasted shot (bound to "s1"), then commit a new title in the field. */
+  async function saveThenRename(title: string): Promise<void> {
+    await loadImage();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saveCalls()).toHaveLength(1));
+    await act(async () => {});
+    const field = screen.getByRole("textbox", { name: /title/i });
+    fireEvent.change(field, { target: { value: title } });
+    fireEvent.blur(field);
+  }
+
+  it("a save that follows a rename in flight overwrites the new id, not the vanished one", async () => {
+    const d = deferred<ReturnType<typeof renameResult>>();
+    window.electronAPI.renameLocalRecording = vi.fn(() => d.promise) as never;
+    const { router } = mount(PASTE);
+    await saveThenRename("Sprint demo");
+    await waitFor(() =>
+      expect(window.electronAPI.renameLocalRecording).toHaveBeenCalledWith(
+        "s1",
+        "a-s1",
+        "Sprint demo",
+      ),
+    );
+    // An edit and a leave while the file is still moving: the autosave must wait for it.
+    editPadding();
+    act(() => void router.navigate("/library"));
+    await act(async () => {});
+    expect(saveCalls()).toHaveLength(1);
+
+    d.resolve(renameResult("Sprint demo", "Sprint demo"));
+    expect(await screen.findByText("library")).toBeInTheDocument();
+    expect(saveCalls()).toHaveLength(2);
+    // The identity rides along, so main can follow a rename it has not seen yet.
+    expect(saveCalls()[1][1]).toMatchObject({
+      overwriteId: "Sprint demo",
+      overwriteAssetId: "a-Sprint demo",
+    });
+  });
+
+  it("shows a Retry toast when the file kept its old name, and retries on the same id", async () => {
+    const rename = vi.fn(async (id: string, _assetId: string, title: string) =>
+      renameResult(id, title, "kept-old-name", "locked"),
+    );
+    window.electronAPI.renameLocalRecording = rename as never;
+    mount(PASTE);
+    await saveThenRename("Locked");
+    await waitFor(() => expect(getToasts()).toHaveLength(1));
+    const [toast] = getToasts();
+    expect(toast!.message).toMatch(/another app is using it/i);
+
+    await act(async () => toast!.action!.onClick());
+    await waitFor(() => expect(rename).toHaveBeenCalledTimes(2));
+    expect(rename).toHaveBeenLastCalledWith("s1", "a-s1", "Locked");
+  });
+
+  it("a reopened vault screenshot renamed before any read still saves its edits", async () => {
+    // The vault: bytes live under the current id only; the rename moves them.
+    let currentId = "shot";
+    window.electronAPI.readScreenshotBytes = vi.fn(async (id: string) => {
+      if (id !== currentId) throw new Error(`ENOENT: ${id}.png`);
+      return new Uint8Array([9, 9]).buffer;
+    });
+    window.electronAPI.renameLocalRecording = vi.fn(
+      async (_id: string, _assetId: string, title: string) => {
+        currentId = "Renamed";
+        return renameResult("Renamed", title);
+      },
+    ) as never;
+    window.electronAPI.saveScreenshot = vi.fn(async () => saved("Renamed", "Renamed")) as never;
+    const LOCAL: ImageSource = { kind: "local", id: "shot", assetId: "a-shot", title: "shot" };
+    const { router } = mount(LOCAL);
+    await loadImage();
+
+    // Rename first: nothing has read the bytes yet.
+    const field = screen.getByRole("textbox", { name: /title/i });
+    fireEvent.change(field, { target: { value: "Renamed" } });
+    fireEvent.blur(field);
+    await waitFor(() => expect(window.electronAPI.renameLocalRecording).toHaveBeenCalled());
+
+    editPadding();
+    act(() => void router.navigate("/library"));
+    expect(await screen.findByText("library")).toBeInTheDocument();
+    expect(saveCalls()).toHaveLength(1);
+    expect(saveCalls()[0][1]).toMatchObject({ overwriteId: "Renamed" });
+    expect(exportScene.mock.calls[0]![1]).toMatchObject({ bytes: new Uint8Array([9, 9]).buffer });
+  });
+
+  it("says plainly when two files claim the shot it overwrites", async () => {
+    const { AMBIGUOUS_IDENTITY_MARKER } = await import("@shared/types/library-storage");
+    window.electronAPI.saveScreenshot = vi
+      .fn()
+      .mockResolvedValueOnce(saved("s1"))
+      .mockRejectedValueOnce(new Error(`${AMBIGUOUS_IDENTITY_MARKER}: 2 local items`)) as never;
+    const { router } = mount(PASTE);
+    await loadImage();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saveCalls()).toHaveLength(1));
+    await act(async () => {});
+    editPadding();
+    act(() => void router.navigate("/library"));
+    await waitFor(() => expect(saveCalls()).toHaveLength(2));
+    await waitFor(() =>
+      expect(getToasts().map((t) => t.message)).toContainEqual(
+        expect.stringMatching(/two files in your folder/i),
+      ),
+    );
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { initialScene, type TrackItem } from "../scene";
-import { buildExportPlan } from "./export-plan";
+import { WEBCAM_DEFAULTS } from "../webcam/webcam-model";
+import { buildExportPlan, sliceExportPlan } from "./export-plan";
 
 // Copied from timeline.test.ts — the same fixture factories, kept local so this
 // test file has no cross-test-file coupling.
@@ -129,5 +130,21 @@ describe("audio edits reach the export plan", () => {
       mutedRanges: [{ id: "m", sourceStart: 10, sourceEnd: 15 }],
     };
     expect(buildExportPlan(scene).audio.mutedRanges).toHaveLength(1);
+  });
+});
+
+describe("buildExportPlan: the webcam layer", () => {
+  it("carries the scene's webcam unfiltered, segments in deleted footage included", () => {
+    const webcam = {
+      layout: { ...WEBCAM_DEFAULTS },
+      segments: [{ id: "h", start: 12, end: 14, mode: "hidden" as const }],
+    };
+    const plan = buildExportPlan({ ...initialScene(30), items: [clip("a", 0, 10)], webcam });
+    expect(plan.webcam).toBe(webcam);
+    expect(sliceExportPlan(plan, 2, 4).webcam).toBe(webcam);
+  });
+
+  it("is null for a recording without a webcam track", () => {
+    expect(buildExportPlan({ ...initialScene(10), items: [clip("a", 0, 10)] }).webcam).toBeNull();
   });
 });

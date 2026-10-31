@@ -17,6 +17,17 @@ export interface CameraPathMessage {
   scale: Float32Array;
 }
 
+/**
+ * The recording's webcam file (ADR 0037) for the webcam layer: sent only when the plan has a
+ * webcam (`plan.webcam`) and the file could be read. The layer's layout is `plan.webcam`.
+ */
+export interface WebcamTrackMessage {
+  /** The webcam file (`mediaUrl("webcam", id)`) as a Blob (not transferred: Blobs are cheap to clone). */
+  blob: Blob;
+  /** Webcam time 0 − screen time 0, in ms: webcam time = source time − startOffsetMs / 1000. */
+  startOffsetMs: number;
+}
+
 /** Sent once from the renderer to the worker to kick off the export. */
 export interface ExportStartMessage {
   type: "start";
@@ -39,6 +50,8 @@ export interface ExportStartMessage {
   target: ResolvedExportTarget;
   /** v2: the preview's camera path (same simulation), or null when the scene has no zoom. */
   camera: CameraPathMessage | null;
+  /** The webcam file, or null: no webcam layer, and no second decoder in the worker. */
+  webcam: WebcamTrackMessage | null;
 }
 
 /**
@@ -60,5 +73,10 @@ export type ExportWorkerMessage =
    */
   | { type: "encoder"; choice: VideoEncodingChoice }
   | { type: "progress"; fraction: number }
+  /**
+   * The webcam file could not be opened or decoded: the export goes on without the layer
+   * from here, and the renderer logs it (the worker has no analytics).
+   */
+  | { type: "webcam-error"; message: string }
   | { type: "done" }
   | { type: "error"; message: string };

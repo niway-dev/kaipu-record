@@ -30,6 +30,8 @@ import { canOpenInEditor, useOpenInEditor } from "@renderer/features/editor/open
 import { preparePath } from "@renderer/features/prepare/prepare-path";
 import { asPreparable } from "@renderer/features/prepare/use-prepare-copy";
 import { unseenCopyIds, useReadyCopies } from "@renderer/features/video-editor/export/ready-copies";
+import { ReconcileBanner } from "@renderer/features/library/reconcile/reconcile-banner";
+import { WorkspaceNotConnectedNotice } from "@renderer/features/workspaces/not-connected-notice";
 import styles from "./library-page.module.css";
 
 /** The search field's share of the toolbar, moved out of the module: the shared
@@ -128,6 +130,7 @@ export function LibraryPage(): React.JSX.Element {
 
   return (
     <div className={styles.page}>
+      <WorkspaceNotConnectedNotice />
       <div className={styles.pageHeader}>
         <div className={styles.pageHeaderText}>
           <div className={styles.pageTitleRow}>
@@ -281,6 +284,8 @@ export function LibraryPage(): React.JSX.Element {
             </div>
           </div>
         </div>
+
+        <ReconcileBanner />
 
         {canShowVaultBanner && (
           <div className={styles.vaultBanner} role="status" aria-live="polite">

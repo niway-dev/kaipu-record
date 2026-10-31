@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { resolveCaptureTitle, useCaptureTitle } from "./use-capture-title";
 
-const AUTO = "Screenshot — 2026-10-07";
+const AUTO = "Kaipu Screenshot 2026-10-07 at 15.04.05";
 
 describe("resolveCaptureTitle", () => {
   it("trims the draft and falls back to the auto title when empty", () => {

@@ -281,6 +281,17 @@ vulnerability privately.
 
 ## License
 
-This project is licensed under **AGPL-3.0-only**. See [LICENSE](LICENSE).
+Kaipu Record — Copyright (C) 2025-2026 Cristian Sotomayor, published by Niway S.A.C.
+
+This program is free software: you can redistribute it and/or modify it under the terms of
+the GNU Affero General Public License as published by the Free Software Foundation,
+**version 3 only** (`AGPL-3.0-only`) — not any later version. It is distributed WITHOUT ANY
+WARRANTY. The full text is in [LICENSE](LICENSE), unmodified.
+
+- **Use is free, commercial use included.** The license puts no limit on who uses Kaipu or why.
+- **The name and logo are not licensed.** A fork ships under its own name; see
+  [TRADEMARKS.md](TRADEMARKS.md).
+- **Contributions** are accepted under the [Contributor License Agreement](CLA.md).
+
 The [open-source plan](apps/documentation/src/content/docs/marketing/open-source.md)
 records why the repository is open and how contributions are handled.

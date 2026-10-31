@@ -6,6 +6,7 @@ import { showToast } from "@renderer/ui/toast-store";
 import type { CaptureIntent, CaptureMode } from "@shared/types/screenshot-capture";
 import { screenshotTitle } from "@shared/screenshot-title";
 import type { ImageSource } from "./image-source";
+import { isMaintenanceError } from "@renderer/features/library/vault-errors";
 
 export function useScreenshotCapture(): {
   capture: (mode?: CaptureMode, intent?: CaptureIntent) => Promise<void>;
@@ -24,9 +25,18 @@ export function useScreenshotCapture(): {
       }
       // `record` opens the overlay to choose what to record (ADR 0030); main handles that
       // answer itself and replies `cancelled`, so the rest of this flow is screenshot-only.
-      const shot = await (intent === "record"
-        ? window.electronAPI.captureScreenshot(mode, intent)
-        : window.electronAPI.captureScreenshot(mode));
+      let shot;
+      try {
+        shot = await (intent === "record"
+          ? window.electronAPI.captureScreenshot(mode, intent)
+          : window.electronAPI.captureScreenshot(mode));
+      } catch (error) {
+        // Refused before any window hid or any pixel was grabbed (NIW2-561).
+        if (!isMaintenanceError(error)) throw error;
+        showToast({ message: t("captureRefusedMaintenance") });
+        window.electronAPI.revealAfterCapture();
+        return;
+      }
       if (shot.kind === "cancelled") return; // main already restored the window if needed
       if (shot.kind === "unsupported") {
         showToast({

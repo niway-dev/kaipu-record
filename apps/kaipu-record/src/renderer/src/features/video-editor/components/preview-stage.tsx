@@ -8,6 +8,7 @@ export function PreviewStage({
   slideUrl,
   overlay,
   underlay,
+  webcam,
   chrome,
   contentRef,
   expanded = false,
@@ -26,6 +27,10 @@ export function PreviewStage({
   /** Privacy regions (video-editor v2): inside the content layer, UNDER the annotations,
    *  so they zoom with the footage — export order frame → redactions → overlays → crop. */
   underlay?: React.ReactNode;
+  /** The webcam layer (ADR 0038): a third kind of layer, ABOVE the content and below the
+   *  chrome, and like the chrome never transformed by the camera path — so with a zoom
+   *  active the face stays in its corner instead of being cropped away with the frame. */
+  webcam?: React.ReactNode;
   /** Stage-level UI that must NOT zoom: camera box, hold-to-compare button and chip. */
   chrome?: React.ReactNode;
   /** The content layer (video + slide + underlay + overlay); the camera transform is
@@ -80,6 +85,7 @@ export function PreviewStage({
         {underlay}
         {overlay}
       </div>
+      {webcam}
       {chrome}
     </div>
   );

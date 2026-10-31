@@ -37,4 +37,13 @@ describe("canRemoveLocalCopy", () => {
       reason: "edit-project",
     });
   });
+
+  it("refuses while a webcam track exists, even with identical bytes (ADR 0037)", () => {
+    expect(
+      canRemoveLocalCopy({ local, cloud, hasEditSession: false, hasWebcamTrack: true }),
+    ).toEqual({ allowed: false, reason: "webcam-track" });
+    expect(
+      canRemoveLocalCopy({ local, cloud, hasEditSession: false, hasWebcamTrack: false }),
+    ).toEqual({ allowed: true });
+  });
 });
