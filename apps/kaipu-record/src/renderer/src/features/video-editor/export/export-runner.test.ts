@@ -242,7 +242,7 @@ describe("export runner (NIW2-218 background export)", () => {
     expect(entries).toHaveBeenCalledOnce();
   });
 
-  describe("the webcam file (ADR 0033)", () => {
+  describe("the webcam file (ADR 0038)", () => {
     const WEBCAM_SCENE: VideoScene = {
       ...SCENE,
       webcam: { layout: { ...WEBCAM_DEFAULTS }, segments: [] },

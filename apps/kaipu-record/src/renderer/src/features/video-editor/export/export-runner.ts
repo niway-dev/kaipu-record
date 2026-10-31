@@ -20,6 +20,8 @@ import {
 import { WHOLE_RECORDING_FINGERPRINT } from "./export-reuse";
 import type { VideoEncodingChoice } from "./video-encoding";
 import { type ExportWebcamTrack, fetchWebcamTrack } from "./webcam-fetch";
+import { mediaUrl } from "@renderer/lib/media-url";
+import { isMaintenanceError } from "@renderer/features/library/vault-errors";
 
 export interface VideoExportState {
   status: "idle" | "exporting" | "error";
@@ -45,7 +47,7 @@ export interface StartExportArgs {
   cameraPath: CameraPath | null;
   /**
    * The recording's webcam track (the sidecar's `webcam`), when it has one: with a webcam
-   * layer in the scene, its file is fetched and composed (ADR 0033).
+   * layer in the scene, its file is fetched and composed (ADR 0038).
    */
   webcamTrack?: ExportWebcamTrack | null;
   /** NIW2-218: destination preset; Balanced (the Settings default) when omitted. */
@@ -319,10 +321,20 @@ export async function startVideoExport(
   );
   const slideAssets = args.slideAssets.entries().filter((asset) => usedAssetIds.has(asset.assetId));
 
+  // Main takes the export's vault lease before the source is read; refused while
+  // "Check and fix files" runs (NIW2-561).
+  try {
+    await window.electronAPI.beginExport?.();
+  } catch (error) {
+    if (isMaintenanceError(error)) fail(t("exportRefusedMaintenance"));
+    else fail(GENERIC_ERROR, error);
+    return true;
+  }
+
   let sourceBlob: Blob;
   let webcam: Awaited<ReturnType<typeof fetchWebcamTrack>>;
   try {
-    const sourceResponse = await fetch(`kaipu-media://recording/${args.sourceId}`);
+    const sourceResponse = await fetch(mediaUrl("recording", args.sourceId));
     sourceBlob = await sourceResponse.blob();
     webcam = await fetchWebcamTrack(args.sourceId, plan.webcam, args.webcamTrack, (error) =>
       captureException(error, { context: "video-export-webcam" }),
@@ -366,7 +378,7 @@ export async function startVideoExport(
 
     const id = `export-${crypto.randomUUID()}`;
     sessionId = id;
-    await window.electronAPI.recordingCreate(id);
+    await window.electronAPI.recordingCreate(id, "export");
 
     if (!active) {
       teardown(id);

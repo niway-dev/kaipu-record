@@ -21,7 +21,7 @@
  * VIEW first (frame → redactions → overlays → zoom crop, exactly as Maximum) and then
  * frame it onto the target canvas (Fit/Fill, see `createFramer`).
  *
- * Webcam (ADR 0033): when the plan has a webcam layer and the renderer sent its file, a
+ * Webcam (ADR 0038): when the plan has a webcam layer and the renderer sent its file, a
  * second Input decodes it in lockstep with the screen (one cursor per clip segment over
  * that segment's source range, `webcam-lockstep.ts`), and the composer draws the layer
  * last, onto the final canvas. Without one, no second Input is opened.

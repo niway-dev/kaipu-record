@@ -30,6 +30,9 @@ export function StorageMeta({ video }: { video: LibraryVideo }): React.JSX.Eleme
         <span className={styles.dot} data-availability={video.availability} />
         {t(AVAILABILITY_LABEL_KEYS[video.availability])}
       </span>
+      {video.metadataIssue && (
+        <span className={styles.comparisonLine}>{t("metadataUnreadable")}</span>
+      )}
       {video.comparison === "local-changes" && (
         <span className={styles.comparisonLine}>{t("comparisonLocalChanges")}</span>
       )}

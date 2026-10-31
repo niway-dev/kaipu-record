@@ -1,5 +1,5 @@
 /**
- * The webcam file as a second decoder in the export workers (ADR 0033): opened only when the
+ * The webcam file as a second decoder in the export workers (ADR 0038): opened only when the
  * plan has a webcam layer and the renderer sent the file, so a recording without a webcam
  * pays for nothing (no second Input). Both workers read webcam frames through it; which
  * frame goes with which screen frame is `webcam-lockstep.ts`.

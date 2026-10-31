@@ -18,11 +18,11 @@ export interface CameraPathMessage {
 }
 
 /**
- * The recording's webcam file (ADR 0032) for the webcam layer: sent only when the plan has a
+ * The recording's webcam file (ADR 0037) for the webcam layer: sent only when the plan has a
  * webcam (`plan.webcam`) and the file could be read. The layer's layout is `plan.webcam`.
  */
 export interface WebcamTrackMessage {
-  /** `kaipu-media://webcam/<id>` as a Blob (not transferred: Blobs are cheap to clone). */
+  /** The webcam file (`mediaUrl("webcam", id)`) as a Blob (not transferred: Blobs are cheap to clone). */
   blob: Blob;
   /** Webcam time 0 − screen time 0, in ms: webcam time = source time − startOffsetMs / 1000. */
   startOffsetMs: number;

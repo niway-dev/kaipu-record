@@ -1,6 +1,7 @@
 import { ALL_FORMATS, BlobSource, Input } from "mediabunny";
 import type { RecordingBackfillMeta } from "@shared/types";
 import { generateThumbnail } from "@renderer/lib/generate-thumbnail";
+import { mediaUrl } from "@renderer/lib/media-url";
 
 /**
  * Derives duration + poster for a vault recording whose sidecar is missing — a
@@ -17,7 +18,7 @@ import { generateThumbnail } from "@renderer/lib/generate-thumbnail";
  */
 export async function healOrphanMetadata(id: string): Promise<RecordingBackfillMeta | null> {
   try {
-    const blob = await (await fetch(`kaipu-media://recording/${id}`)).blob();
+    const blob = await (await fetch(mediaUrl("recording", id))).blob();
     const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
     const durationSeconds = Math.floor(await input.computeDuration());
     if (durationSeconds <= 0) return null;

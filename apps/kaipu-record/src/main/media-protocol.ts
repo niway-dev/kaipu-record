@@ -9,20 +9,19 @@ import {
   thumbnailFilePath,
   webcamFilePath,
 } from "./library";
+import { activeWorkspace } from "./workspaces";
+import { isForeignWorkspaceUrl } from "./media-workspace";
 import { parseByteRange } from "./media-range";
+import { MEDIA_SCHEME, parseMediaUrl } from "@shared/media-url";
 
 /**
  * Privileged, streamable protocol for local vault media.
  *   kaipu-media://recording/<id>  → the video file (Range-aware, for seeking)
  *   kaipu-media://thumb/<id>      → the poster jpg
- *   kaipu-media://webcam/<id>     → the take's webcam track (Range-aware; ADR 0032)
+ *   kaipu-media://webcam/<id>     → the take's webcam track (Range-aware; ADR 0037)
  * `registerMediaScheme()` must run BEFORE `app.whenReady`; `registerMediaProtocol()` after.
  */
-export const MEDIA_SCHEME = "kaipu-media";
-
-function isUnsafeId(id: string): boolean {
-  return id.length === 0 || id.includes("/") || id.includes("\\") || id.includes("..");
-}
+export { MEDIA_SCHEME };
 
 export function registerMediaScheme(): void {
   protocol.registerSchemesAsPrivileged([
@@ -95,13 +94,19 @@ async function streamFile(target: string, rangeHeader: string | null): Promise<R
 
 export function registerMediaProtocol(): void {
   protocol.handle(MEDIA_SCHEME, async (request) => {
-    const url = new URL(request.url);
-    const id = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
-    if (isUnsafeId(id)) return new Response("Invalid recording id", { status: 400 });
+    // Decoded exactly once (ids are titles: `#`, `?`, `%` are legal); a malformed escape
+    // or an id reaching outside the vault is a 400, never a thrown handler.
+    const parsed = parseMediaUrl(request.url);
+    if (!parsed) return new Response("Invalid recording id", { status: 400 });
+    const { kind: hostname, id } = parsed;
+    // A URL stamped for another workspace (cached before a switch), of any kind, never
+    // resolves an item with the same id in the active one (ADR 0032).
+    if (isForeignWorkspaceUrl(new URL(request.url), activeWorkspace().id)) {
+      return new Response("Not in the active workspace", { status: 404 });
+    }
 
     // Screenshots are overwritten in place; freshness is handled by the `?v=<mtime>`
     // version token on the URL (see LibraryVault.describe), so normal caching is fine.
-    const { hostname } = url;
     const target =
       hostname === "screenshot"
         ? await screenshotFilePath(id)

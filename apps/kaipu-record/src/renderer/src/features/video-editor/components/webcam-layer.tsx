@@ -1,5 +1,5 @@
 /**
- * The webcam layer in the preview (ADR 0033, spec § 6): a second <video> playing the
+ * The webcam layer in the preview (ADR 0038, spec § 6): a second <video> playing the
  * recording's webcam file, drawn in PreviewStage's `webcam` slot — untransformed, so with a
  * zoom active the face stays in its corner — and kept in step with the main video.
  *
@@ -65,9 +65,9 @@ export function WebcamLayer({
 }: {
   /** The MAIN video: its frame clock drives the layer and its play/pause the webcam's. */
   videoRef: React.RefObject<HTMLVideoElement | null>;
-  /** `kaipu-media://webcam/<id>`. */
+  /** The take's webcam URL, built with `mediaUrl("webcam", id)`. */
   src: string;
-  /** Webcam time 0 − screen time 0 (ADR 0032): webcam time = t − startOffsetMs / 1000. */
+  /** Webcam time 0 − screen time 0 (ADR 0037): webcam time = t − startOffsetMs / 1000. */
   startOffsetMs: number;
   webcam: WebcamScene;
   path: CameraPath;
