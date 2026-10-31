@@ -265,6 +265,25 @@ export class CameraBubbleWindow {
     this.window.hide();
   }
 
+  /**
+   * Destroy the window and create a new one where it was, its protection decided again by
+   * `protect` (the webcam file ended mid-take: a new window is what a running capture is known
+   * to record). Shown at once unless `show` is false (hidden for a screenshot: the later
+   * `show()` brings it back, at the same place). No window: nothing to replace.
+   */
+  replace(show = true): void {
+    if (!this.window || this.window.isDestroyed()) return;
+    const { x, y, height } = this.window.getBounds();
+    this.place({ x, bottom: y + height });
+    this.destroy();
+    if (show) this.show();
+  }
+
+  /** True while a window exists and is content-protected (left out of the screen capture). */
+  isProtected(): boolean {
+    return this.protectedNow && Boolean(this.window && !this.window.isDestroyed());
+  }
+
   /** True while a window is parked (hidden by a camera turned off mid-take). */
   isParked(): boolean {
     return this.parked && Boolean(this.window && !this.window.isDestroyed());

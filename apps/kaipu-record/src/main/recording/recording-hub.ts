@@ -451,12 +451,36 @@ export function registerRecordingHub(
   ipcMain.handle(IPC_CHANNELS.recordingWebcamTrackSupported, (): boolean =>
     canExcludeWindowFromCapture(process.platform, release()),
   );
+  /**
+   * The take records no (more) webcam file (its camera did not open, was turned off, was
+   * unplugged, could not be opened again, or its encoder or writes failed): the bubble must be
+   * in the screen recording again. Before the take's capture starts, dropping the protection is
+   * enough. Once it runs, a protected window on screen is replaced by a new one, unprotected,
+   * at the same place: a running ScreenCaptureKit stream is known to record a window created
+   * after it started, while one that only drops its protection is unverified (spike rows 4/5,
+   * ADR 0032). A parked window (camera off) is replaced when the camera is turned on again.
+   */
+  function bubbleRejoinsCapture(sessionId: string): void {
+    bubbleProtection.webcamEnded(sessionId);
+    if (
+      activity.active &&
+      !takeRecordsWebcam() &&
+      settings.isCameraEnabled &&
+      cameraBubble.isProtected() &&
+      !cameraBubble.isParked()
+    ) {
+      // Hidden for a screenshot: the restore after it shows the new window.
+      cameraBubble.replace(!cameraBubbleHiddenForCapture);
+      applyDockPolicy();
+      return;
+    }
+    cameraBubble.applyProtection();
+  }
   // The take records no (more) webcam file (its camera did not open, was turned off, was
   // unplugged, or its encoder failed): the bubble must be in the screen recording again.
   ipcMain.handle(IPC_CHANNELS.recordingWebcamEnded, (_e, sessionId: unknown) => {
     if (typeof sessionId !== "string") return;
-    bubbleProtection.webcamEnded(sessionId);
-    cameraBubble.applyProtection();
+    bubbleRejoinsCapture(sessionId);
   });
   ipcMain.on(
     IPC_CHANNELS.recordingWrite,
@@ -465,11 +489,10 @@ export function registerRecordingHub(
       void writer.write(sessionId, data, position, writerKind).catch((error) => {
         console.error(`recording ${writerKind} write failed`, error);
         // The webcam never fails the take: finalize drops a webcam whose write failed. Its
-        // face then has to be in the screen: the bubble rejoins the capture, best effort while
-        // the stream runs, as for an unplugged camera (`CameraBubbleWindow.applyProtection`).
+        // face then has to be in the screen: the bubble rejoins the capture, as for an
+        // unplugged camera (`bubbleRejoinsCapture`).
         if (writerKind === "webcam") {
-          bubbleProtection.webcamEnded(sessionId);
-          cameraBubble.applyProtection();
+          bubbleRejoinsCapture(sessionId);
           return;
         }
         // Writes are fire-and-forget, so without this the engine keeps encoding

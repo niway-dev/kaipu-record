@@ -253,3 +253,49 @@ describe("CameraBubbleWindow.park", () => {
     expect(bubble.placedBounds()).toEqual(shown);
   });
 });
+
+/**
+ * The webcam file ended mid-take with the bubble on screen and protected: the face must be in
+ * the screen from there on, and a running capture is known to record a new window (ADR 0032).
+ */
+describe("CameraBubbleWindow.replace", () => {
+  it("creates a new window where the old one was, its protection decided again", () => {
+    let protect = true;
+    const bubble = new CameraBubbleWindow(undefined, () => protect);
+    bubble.show();
+    const old = created[0]!;
+    old.readyToShow?.();
+    old.bounds = { x: 500, y: 300, width: 288, height: 288 };
+    expect(bubble.isProtected()).toBe(true);
+    protect = false;
+    bubble.replace();
+    expect(old.destroy).toHaveBeenCalledOnce();
+    const next = created[1]!;
+    expect(next.setContentProtection).not.toHaveBeenCalled();
+    expect(bubble.isProtected()).toBe(false);
+    next.readyToShow?.();
+    expect(next.showInactive).toHaveBeenCalledOnce();
+    expect(next.bounds.x).toBe(500);
+    expect(next.bounds.y + next.bounds.height).toBe(588);
+  });
+
+  it("without show, the next show() creates the new window at the same place", () => {
+    const bubble = new CameraBubbleWindow(undefined, () => false);
+    bubble.show();
+    created[0]!.readyToShow?.();
+    created[0]!.bounds = { x: 400, y: 200, width: 288, height: 288 };
+    bubble.replace(false);
+    expect(created).toHaveLength(1);
+    bubble.show();
+    created[1]!.readyToShow?.();
+    expect(created[1]!.bounds.x).toBe(400);
+    expect(created[1]!.bounds.y + created[1]!.bounds.height).toBe(488);
+  });
+
+  it("does nothing without a window", () => {
+    const bubble = new CameraBubbleWindow();
+    bubble.replace();
+    expect(created).toHaveLength(0);
+    expect(bubble.isProtected()).toBe(false);
+  });
+});

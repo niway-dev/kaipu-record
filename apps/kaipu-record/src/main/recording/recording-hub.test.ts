@@ -29,6 +29,8 @@ const mockState = vi.hoisted(() => ({
     preview: vi.fn((size: number) => size),
     applyProtection: vi.fn(),
     park: vi.fn(),
+    isProtected: vi.fn(() => false),
+    replace: vi.fn(),
   },
   /** Whether the fake bubble has a parked window: `park` sets it, `show` and `destroy` clear it. */
   bubbleParked: false,
@@ -111,6 +113,8 @@ vi.mock("./camera-bubble-window", () => ({
     applySize = mockState.bubble.applySize;
     preview = mockState.bubble.preview;
     applyProtection = mockState.bubble.applyProtection;
+    isProtected = mockState.bubble.isProtected;
+    replace = mockState.bubble.replace;
     constructor(_size: () => number, protect: () => boolean) {
       mockState.bubbleProtect = protect;
       mockState.bubbleParked = false;
@@ -2005,6 +2009,36 @@ describe("recording hub — the camera turned off and on mid-take", () => {
       mockState.bubble.show.mock.invocationCallOrder[0]!,
     );
     expect(mockState.bubbleProtect!()).toBe(false);
+  });
+
+  it("a webcam file that ends with the bubble on screen, protected, gets a new window in its place", async () => {
+    // A running capture is known to record a window created after it started; one that only
+    // drops its protection is unverified (ADR 0032). The face must land in the screen.
+    await takeWithWebcam();
+    mockState.bubble.isProtected.mockReturnValue(true);
+    await ipc(IPC_CHANNELS.recordingWebcamEnded, "s1");
+    expect(mockState.bubble.replace).toHaveBeenCalledExactlyOnceWith(true);
+    expect(mockState.bubbleProtect!()).toBe(false);
+  });
+
+  it("a webcam file that ends with the bubble parked or unprotected only updates its protection", async () => {
+    await takeWithWebcam();
+    camera(false);
+    mockState.bubble.isProtected.mockReturnValue(true);
+    await ipc(IPC_CHANNELS.recordingWebcamEnded, "s1");
+    expect(mockState.bubble.replace).not.toHaveBeenCalled();
+    expect(mockState.bubble.applyProtection).toHaveBeenCalled();
+  });
+
+  it("a webcam file that ends during the countdown only updates the protection, before the capture", async () => {
+    await registered();
+    camera(true);
+    await ipc(IPC_CHANNELS.recordingCreate, "s1");
+    await ipc(IPC_CHANNELS.recordingCreate, "s1", "webcam");
+    mockState.bubble.isProtected.mockReturnValue(true);
+    await ipc(IPC_CHANNELS.recordingWebcamEnded, "s1");
+    expect(mockState.bubble.replace).not.toHaveBeenCalled();
+    expect(mockState.bubble.applyProtection).toHaveBeenCalled();
   });
 
   it("after the webcam file ended, turning the camera off destroys the bubble as before", async () => {
