@@ -11,6 +11,7 @@ import type {
   QuietCaptureHandOff,
 } from "@shared/types/screenshot-capture";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
+import type { RecordingReadyHandOff, RecordingReadyPayload } from "@shared/types/recording-ready";
 import type {
   ControlCommand,
   RecordingActivity,
@@ -239,6 +240,24 @@ const kaipuApi: KaipuElectronAPI = {
     ready: () => ipcRenderer.send(IPC_CHANNELS.screenshotToastReady),
     action: (action) => ipcRenderer.send(IPC_CHANNELS.screenshotToastAction, { action }),
     hover: (paused) => ipcRenderer.send(IPC_CHANNELS.screenshotToastHover, { paused }),
+  },
+  showRecordingReady: (payload) => ipcRenderer.invoke(IPC_CHANNELS.recordingReadyShow, payload),
+  recordingReadyCard: {
+    onShow: (callback) => {
+      const listener = (_e: IpcRendererEvent, payload: RecordingReadyPayload): void =>
+        callback(payload);
+      ipcRenderer.on(IPC_CHANNELS.recordingReadyPayload, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingReadyPayload, listener);
+    },
+    ready: () => ipcRenderer.send(IPC_CHANNELS.recordingReadyCardReady),
+    action: (action) => ipcRenderer.send(IPC_CHANNELS.recordingReadyAction, action),
+    resize: (height) => ipcRenderer.send(IPC_CHANNELS.recordingReadyResize, { height }),
+  },
+  onRecordingReadyOpen: (callback) => {
+    const listener = (_e: IpcRendererEvent, handOff: RecordingReadyHandOff): void =>
+      callback(handOff);
+    ipcRenderer.on(IPC_CHANNELS.recordingReadyOpen, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingReadyOpen, listener);
   },
   onOpenSavedScreenshot: (callback) => {
     const listener = (_e: IpcRendererEvent, request: OpenSavedScreenshotRequest): void =>

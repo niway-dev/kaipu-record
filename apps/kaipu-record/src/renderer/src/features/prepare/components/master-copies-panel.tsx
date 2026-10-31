@@ -1,11 +1,15 @@
 import { Link } from "react-router-dom";
-import { Check, Film, ImagePlay } from "lucide-react";
+import { Check, Film, GripVertical, ImagePlay } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { formatSize } from "@renderer/features/library/format";
-import type { ExportPresetId } from "@renderer/features/video-editor/export/export-presets";
+import {
+  type ExportPresetId,
+  resolveExportTarget,
+} from "@renderer/features/video-editor/export/export-presets";
 import { exportEtaSeconds } from "@renderer/features/video-editor/export/export-size";
 import type { ExportRunnerSnapshot } from "@renderer/features/video-editor/export/export-runner";
+import type { SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { copyPresetOf } from "../copy-destination";
 import { destinationOfPreset } from "../destinations";
 import { DESTINATION_COPY } from "../destination-copy";
@@ -45,18 +49,29 @@ interface MasterCopiesPanelProps {
   /** `buildLineage().exportsOf` for the master: newest first. */
   copies: readonly LibraryVideo[];
   running: RunningCopy | null;
+  /**
+   * The source as read from the file: a destination copy's picture size follows from it and
+   * its preset. Without it a row shows only the file size.
+   */
+  probe?: SourceProbe | null;
+  /** "Open in Export →": the export screen for this recording; omitted where there is none. */
+  onOpenExport?(): void;
   now?: () => number;
 }
 
 /**
- * "Copies from this master" (NIW2-585): every file made from the recording, with where it is
- * going and whether it is ready. A copy for a destination shows that destination; an editor
- * export or a GIF shows its own title.
+ * "Copies from this original" (Export v3, section 2; NIW2-585): every file made from the
+ * recording, two to a row — where it is going, its picture and file size, whether it is
+ * ready — with a Drag handle that hands the real file to another app. A copy's name links to
+ * its own page, which links back here. The caller renders it only when there is something to
+ * list.
  */
 export function MasterCopiesPanel({
   source = "master",
   copies,
   running,
+  probe = null,
+  onOpenExport,
   now = Date.now,
 }: MasterCopiesPanelProps): React.JSX.Element {
   const t = useTranslations("library");
@@ -77,54 +92,96 @@ export function MasterCopiesPanel({
       job.attemptStartedAt !== null
         ? exportEtaSeconds(job.fraction, now() - job.attemptStartedAt)
         : null;
-    if (eta === null) return t("copyProgressNoEta", { percent });
+    if (eta === null) return t("copyExportingNoEta", { percent });
     const etaText =
       eta < 60
         ? tEditor("etaSeconds", { seconds: eta })
         : tEditor("etaMinutes", { minutes: Math.round(eta / 60) });
-    return t("copyProgress", { percent, eta: etaText });
+    return t("copyExporting", { percent, eta: etaText });
   };
 
-  const empty = copies.length === 0 && running === null;
+  /** "2560 × 1440 · 566 MB", or just the size when the picture size is not known. */
+  const factsOf = (copy: LibraryVideo, preset: ExportPresetId | null): string => {
+    const size = formatSize(copy.fileSizeBytes);
+    const dims = copy.gif
+      ? { width: copy.gif.width, height: copy.gif.height }
+      : preset && probe
+        ? resolveExportTarget(preset, probe, probe.durationSec)
+        : null;
+    return dims
+      ? `${t("metaDimensions", { width: dims.width, height: dims.height })} · ${size}`
+      : size;
+  };
 
   return (
     <section className={styles.panel} aria-labelledby="master-copies-heading">
-      <h2 id="master-copies-heading" className={styles.heading}>
-        {source === "master" ? t("copiesHeading") : t("copiesHeadingCopy")}
-      </h2>
-      {empty ? (
-        <p className={styles.empty}>{t("copiesEmpty")}</p>
-      ) : (
-        <ul className={styles.list}>
-          {running && (
-            <li className={styles.row} data-state="running">
-              <CopyIcon preset={running.wholeRecording ? running.presetId : null} />
+      <div className={styles.head}>
+        <h2 id="master-copies-heading" className={styles.heading}>
+          {source === "master" ? t("copiesHeading") : t("copiesHeadingCopy")}
+        </h2>
+        {onOpenExport && (
+          <button type="button" className={styles.openExport} onClick={onOpenExport}>
+            {t("copiesOpenInExport")}
+          </button>
+        )}
+      </div>
+      <ul className={styles.grid}>
+        {running && (
+          <li className={styles.row} data-state="running">
+            <CopyIcon preset={running.wholeRecording ? running.presetId : null} />
+            <span className={styles.text}>
               <span className={styles.name}>
                 {running.wholeRecording ? destinationName(running.presetId) : t("edited")}
               </span>
-              <span className={styles.progress}>{progressText(running)}</span>
+              <span className={styles.facts}>{progressText(running)}</span>
+            </span>
+            <span className={styles.bar} aria-hidden>
+              <span
+                className={styles.barFill}
+                style={{
+                  width: `${Math.round(Math.min(1, Math.max(0, running.fraction)) * 100)}%`,
+                }}
+              />
+            </span>
+          </li>
+        )}
+        {copies.map((copy) => {
+          const preset = copyPresetOf(copy);
+          const name = preset ? destinationName(preset) : copy.title;
+          return (
+            <li key={copy.assetId} className={styles.row} data-state="ready">
+              <Link to={`/library/${copy.assetId}`} className={styles.link}>
+                <CopyIcon preset={preset} gif={copy.kind === "gif"} />
+                <span className={styles.text}>
+                  <span className={styles.name}>{name}</span>
+                  <span className={styles.facts}>{factsOf(copy, preset)}</span>
+                </span>
+                <span className={styles.ready}>
+                  <Check size={11} strokeWidth={2.6} aria-hidden />
+                  {t("copyReady")}
+                </span>
+              </Link>
+              {copy.id !== null && (
+                <button
+                  type="button"
+                  draggable
+                  className={styles.drag}
+                  aria-label={t("copyDragLabel", { name })}
+                  title={t("copyDragLabel", { name })}
+                  onDragStart={(e) => {
+                    // Main runs a native drag (a real file), so the browser's own never starts.
+                    e.preventDefault();
+                    window.electronAPI.startFileDrag(copy.id!, copy.title);
+                  }}
+                >
+                  <GripVertical size={12} strokeWidth={1.8} aria-hidden />
+                  {t("copyDrag")}
+                </button>
+              )}
             </li>
-          )}
-          {copies.map((copy) => {
-            const preset = copyPresetOf(copy);
-            return (
-              <li key={copy.assetId}>
-                <Link to={`/library/${copy.assetId}`} className={styles.row} data-state="ready">
-                  <CopyIcon preset={preset} gif={copy.kind === "gif"} />
-                  <span className={styles.name}>
-                    {preset ? destinationName(preset) : copy.title}{" "}
-                    <span className={styles.size}>· {formatSize(copy.fileSizeBytes)}</span>
-                  </span>
-                  <span className={styles.ready}>
-                    <Check size={11} strokeWidth={2.6} aria-hidden />
-                    {t("copyReady")}
-                  </span>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+          );
+        })}
+      </ul>
     </section>
   );
 }
@@ -137,11 +194,11 @@ function CopyIcon({
   preset: ExportPresetId | null;
   gif?: boolean;
 }): React.JSX.Element {
-  if (preset) return <DestinationLogo destination={destinationOfPreset(preset)} size={26} />;
+  if (preset) return <DestinationLogo destination={destinationOfPreset(preset)} size={30} />;
   const Icon = gif ? ImagePlay : Film;
   return (
     <span className={styles.genericIcon} aria-hidden>
-      <Icon size={13} strokeWidth={1.9} />
+      <Icon size={14} strokeWidth={1.9} />
     </span>
   );
 }

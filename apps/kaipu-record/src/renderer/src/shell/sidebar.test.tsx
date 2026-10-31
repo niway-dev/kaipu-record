@@ -16,6 +16,8 @@ function renderAt(path: string) {
       { path: ROUTES.screenshots, element: <Sidebar /> },
       { path: ROUTES.library, element: <Sidebar /> },
       { path: ROUTES.libraryDetail, element: <Sidebar /> },
+      { path: ROUTES.exportNew, element: <Sidebar /> },
+      { path: ROUTES.export, element: <Sidebar /> },
     ],
     { initialEntries: [path] },
   );
@@ -23,28 +25,48 @@ function renderAt(path: string) {
   return router;
 }
 
-const libraryLink = (): HTMLElement => screen.getByRole("link", { name: /^Library/ });
+const exportLink = (): HTMLElement => screen.getByRole("link", { name: /^Export/ });
 
 afterEach(() => __resetReadyCopiesForTests());
 
-describe("Sidebar Library badge (NIW2-586)", () => {
-  it("counts copies that finished out of sight, and clears when the Library opens", async () => {
-    const router = renderAt("/");
-    expect(libraryLink()).toHaveTextContent(/^Library$/);
-    act(() => noteFinishedCopy("copy-1"));
-    expect(libraryLink()).toHaveAccessibleName(/1 new copy ready/);
-    expect(libraryLink()).toHaveTextContent("1");
+describe("Sidebar Export entry and badge", () => {
+  it("sits right under Editor", () => {
+    renderAt("/");
+    const labels = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(labels.indexOf("Export")).toBe(labels.indexOf("Editor") + 1);
+  });
 
-    await act(() => router.navigate(ROUTES.library));
-    expect(libraryLink()).toHaveTextContent(/^Library$/);
-    // Still pointed at on the Library page until the copy itself is opened.
+  it("is active on Export with and without a video", () => {
+    renderAt("/export/asset-1");
+    expect(exportLink()).toHaveAttribute("aria-current", "page");
+  });
+
+  it("counts copies that finished out of sight, and clears when Export opens", async () => {
+    const router = renderAt("/");
+    expect(exportLink()).toHaveTextContent(/^Export$/);
+    act(() => noteFinishedCopy("copy-1"));
+    expect(exportLink()).toHaveAccessibleName(/1 copy in progress or ready/);
+    expect(exportLink()).toHaveTextContent("1");
+    // The Library no longer carries it.
+    expect(screen.getByRole("link", { name: /^Library/ })).toHaveTextContent(/^Library$/);
+
+    await act(() => router.navigate(ROUTES.exportNew));
+    expect(exportLink()).toHaveTextContent(/^Export$/);
+    // Still pointed at in the Library until the copy itself is opened.
     expect(getReadyCopies().copies).toEqual([{ assetId: "copy-1", announced: true, card: true }]);
   });
 
-  it("a copy that finishes while the Library is open never badges", () => {
-    renderAt(ROUTES.library);
+  it("opening the Library clears it too, since the Library points at the copies", async () => {
+    const router = renderAt("/");
     act(() => noteFinishedCopy("copy-1"));
-    expect(libraryLink()).toHaveTextContent(/^Library$/);
+    await act(() => router.navigate(ROUTES.library));
+    expect(exportLink()).toHaveTextContent(/^Export$/);
+  });
+
+  it("a copy that finishes while Export is open never badges", () => {
+    renderAt(ROUTES.exportNew);
+    act(() => noteFinishedCopy("copy-1"));
+    expect(exportLink()).toHaveTextContent(/^Export$/);
   });
 
   it("leaving the Library retires its Ready to upload cards, not the copies", async () => {
@@ -66,7 +88,7 @@ describe("Sidebar Library badge (NIW2-586)", () => {
     const router = renderAt("/");
     act(() => noteFinishedCopy("copy-1"));
     act(() => noteFinishedCopy("copy-2"));
-    expect(libraryLink()).toHaveAccessibleName(/2 new copies ready/);
+    expect(exportLink()).toHaveAccessibleName(/2 copies in progress or ready/);
     await act(() => router.navigate("/library/copy-1"));
     expect(getReadyCopies().copies.map((c) => c.assetId)).toEqual(["copy-2"]);
   });

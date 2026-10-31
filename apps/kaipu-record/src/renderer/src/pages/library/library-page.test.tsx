@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LibraryVideo } from "@renderer/features/library/types";
@@ -77,7 +77,6 @@ function renderLibrary() {
   const router = createMemoryRouter(
     [
       { path: "/library", element: <LibraryPage /> },
-      { path: "/prepare", element: <div>prepare-page</div> },
       { path: "/library/:assetId", element: <div>detail-page</div> },
     ],
     { initialEntries: ["/library"] },
@@ -94,41 +93,21 @@ afterEach(() => {
 const card = (title: string): HTMLElement =>
   screen.getByText(title, { selector: "p" }).closest("[role='button']")!;
 
-describe("LibraryPage import (NIW2-579)", () => {
-  it("opens the file dialog from the header button and from the drop zone", async () => {
-    window.electronAPI.importVideos = vi.fn(async () => ({ ...nothingImported, canceled: true }));
+describe("LibraryPage: no import door", () => {
+  it("has no drop strip and no Prepare or Import buttons: Export is where videos come in", () => {
     renderLibrary();
-
-    fireEvent.click(screen.getByRole("button", { name: "Import a video" }));
-    await waitFor(() => expect(window.electronAPI.importVideos).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.getByTestId("import-drop-zone")).toBeEnabled());
-    fireEvent.click(screen.getByTestId("import-drop-zone"));
-    await waitFor(() => expect(window.electronAPI.importVideos).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(/Drop a video here/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Prepare a video" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Import a video" })).toBeNull();
   });
 
-  it("imports a video dropped anywhere on the window", async () => {
-    window.electronAPI.pathForFile = vi.fn((f: File) => `/Users/me/Movies/${f.name}`);
+  it("does not take a video dropped on the window", () => {
     window.electronAPI.importVideoFiles = vi.fn(async () => nothingImported);
     renderLibrary();
-
-    // Outside the page's own markup (the app shell's sidebar, empty space): still imported.
-    const page = document.body;
     const files = [new File(["x"], "Zoom Meeting.mp4")];
-    fireEvent.dragEnter(page, { dataTransfer: { types: ["Files"], files } });
-    expect(screen.getByTestId("import-drop-zone")).toHaveAttribute("data-active", "true");
-    fireEvent.drop(page, { dataTransfer: { types: ["Files"], files } });
-
-    await waitFor(() =>
-      expect(window.electronAPI.importVideoFiles).toHaveBeenCalledWith([
-        "/Users/me/Movies/Zoom Meeting.mp4",
-      ]),
-    );
-  });
-
-  it("Prepare a video opens Prepare with no recording, where an outside video can be dropped (NIW2-587)", async () => {
-    const router = renderLibrary();
-    fireEvent.click(screen.getByRole("button", { name: "Prepare a video" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/prepare"));
+    fireEvent.dragEnter(document.body, { dataTransfer: { types: ["Files"], files } });
+    fireEvent.drop(document.body, { dataTransfer: { types: ["Files"], files } });
+    expect(window.electronAPI.importVideoFiles).not.toHaveBeenCalled();
   });
 });
 
@@ -149,18 +128,11 @@ describe("LibraryPage ready copies (NIW2-586)", () => {
     expect(card("Master (YouTube)")).toHaveAttribute("data-just-ready", "false");
   });
 
-  it("keeps the ready chip next to the title, before the Prepare and Import actions", () => {
+  it("keeps the ready chip next to the title", () => {
     noteFinishedCopy("asset-copy");
     renderLibrary();
     const title = screen.getByRole("heading", { name: "Library" });
-    const chip = screen.getByRole("status");
-    const prepare = screen.getByRole("button", { name: "Prepare a video" });
-    const importButton = screen.getByRole("button", { name: "Import a video" });
-    expect(title.parentElement).toContainElement(chip);
-    const follows = (a: Element, b: Element) =>
-      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(follows(chip, prepare)).toBe(true);
-    expect(follows(prepare, importButton)).toBe(true);
+    expect(title.parentElement).toContainElement(screen.getByRole("status"));
   });
 });
 

@@ -9,8 +9,9 @@ import {
   Leaf,
   Pencil,
   Scissors,
-  Send,
   Trash2,
+  Upload,
+  X,
 } from "lucide-react";
 import { canOpenInEditor, useOpenInEditor } from "@renderer/features/editor/open-in-editor";
 import { useTransientValue } from "@renderer/ui/use-transient-value";
@@ -35,12 +36,13 @@ import {
   MasterCopiesPanel,
   runningCopyOf,
 } from "@renderer/features/prepare/components/master-copies-panel";
-import { WhereIsThisGoingStrip } from "@renderer/features/prepare/components/where-is-this-going-strip";
+import { DestinationsPanel } from "@renderer/features/prepare/components/destinations-panel";
 import { preparePath } from "@renderer/features/prepare/prepare-path";
 import { asPreparable, useSourceProbe } from "@renderer/features/prepare/use-prepare-copy";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import { StatusCardPortal } from "@renderer/features/status-cards/status-stack";
 import { PostRecordingCard } from "@renderer/features/status-cards/post-recording-card";
+import { useFloatingReadyCard } from "@renderer/features/recording-ready/use-floating-ready-card";
 import type { SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { RecordingTitle } from "@renderer/features/library/components/recording-title";
 import { TagEditor } from "@renderer/features/library/components/tag-editor";
@@ -115,13 +117,14 @@ export function LibraryDetailPage(): React.JSX.Element {
   const lineage = useMemo(() => buildLineage(videos), [videos]);
   const captureLabel = useRecordingCaptureLabel(video?.capture);
 
-  // NIW2-578: Prepare — the core action — opens from "Send to…" (NIW2-585), the "Where is
-  // this going?" chips, the "heavy to send" banner and the post-recording card. Only a local
-  // recording has a copy to make (no screenshots, no GIFs).
+  // NIW2-578: Prepare — the core action — opens from "Export a copy", the "Where is it
+  // going?" cards, "Open in Export", the "heavy to send" banner and the post-recording card.
+  // Only a local recording has a copy to make (no screenshots, no GIFs).
   const preparable = asPreparable(video);
   const heavy = preparable !== null && isHeavyToSend(preparable.fileSizeBytes);
-  // "Your video is ready" (NIW2-584): the top-right card on the page a fresh recording lands
-  // on, once per arrival, until a chip, Open or ✕ — or leaving the page, which unmounts it.
+  // "Your video is ready" (NIW2-584): once per arrival of a fresh recording, floating on the
+  // desktop in its own window; on this page's status stack only when that window could not
+  // open, until a chip, Open or ✕ — or leaving the page, which unmounts it.
   // The stored setting keeps its NIW2-218 name.
   const { settings } = useAppSettings();
   const [cardDismissedFor, setCardDismissedFor] = useState<string | null>(null);
@@ -130,9 +133,35 @@ export function LibraryDetailPage(): React.JSX.Element {
     preparable !== null &&
     settings?.showRecordingSavedCard === true &&
     cardDismissedFor !== location.key;
-  // Read the file up front only when the banner or the card needs its numbers.
-  const probe = useSourceProbe(heavy || showCard ? (preparable?.id ?? null) : null).probe;
-  // A copy finished in the background: re-list, so it shows under "Copies from this master".
+  // "Saved to your Library": the green notice over the player of a fresh recording, once per
+  // arrival, until ✕.
+  const [noticeDismissedFor, setNoticeDismissedFor] = useState<string | null>(null);
+  const showSavedNotice = Boolean(fromRecording) && noticeDismissedFor !== location.key;
+  // "Not now" on "Where is it going?": hidden for this recording until the page is left.
+  const [destinationsDismissedFor, setDestinationsDismissedFor] = useState<string | null>(null);
+  // The file's picture size and duration: the resolution in the metadata line, the size of each
+  // destination's copy, the picture size of each copy made from it, and the ready card's numbers.
+  const probeState = useSourceProbe(preparable?.id ?? null);
+  const probe = probeState.probe;
+  // The floating card is asked for once the file has been read (or could not be), so it
+  // opens with its numbers instead of repainting them.
+  const probeSettled = probeState.status === "ready" || probeState.status === "error";
+  const floatingCard = useFloatingReadyCard(
+    showCard && probeSettled && preparable
+      ? {
+          key: location.key,
+          payload: {
+            assetId: preparable.assetId,
+            durationSeconds: probe?.durationSec ?? preparable.durationSeconds,
+            dimensions: probe ? { width: probe.width, height: probe.height } : null,
+            sizeBytes: preparable.fileSizeBytes,
+            canEdit: canOpenInEditor(preparable),
+          },
+        }
+      : null,
+  );
+  const showInAppCard = showCard && floatingCard.inApp;
+  // A copy finished in the background: re-list, so it shows under "Copies from this original".
   const runner = useExportRunner();
   const readyId = runner.ready?.recording.id ?? null;
   useEffect(() => {
@@ -173,11 +202,14 @@ export function LibraryDetailPage(): React.JSX.Element {
   const sourceDeleted = video.derivedFromAssetId !== null && source === undefined;
   const exports = lineage.exportsOf.get(video.assetId) ?? [];
   const badge = editBadge(video, lineage);
-  // NIW2-585: the recording is the master — tagged over the player, and the page asks where
-  // it is going and lists the copies made from it.
+  // NIW2-585: the recording is the master — tagged by its title and over the player. Until
+  // its first copy exists the page asks where it is going (Export v3, section 1); after, it
+  // lists the copies made from it (section 2).
   const master = isMaster(video);
   const running = runningCopyOf(runner, video.assetId);
-  const showCopies = master || exports.length > 0 || running !== null;
+  const hasCopies = exports.length > 0 || running !== null;
+  const showDestinations =
+    master && preparable !== null && !hasCopies && destinationsDismissedFor !== video.assetId;
 
   // `localId !== null` is implied by the condition below (it requires a local
   // copy to exist) but kept explicit here — the button's own name promises
@@ -234,12 +266,137 @@ export function LibraryDetailPage(): React.JSX.Element {
 
   return (
     <div className={styles.page}>
-      <button type="button" className={styles.back} onClick={back}>
-        <ArrowLeft size={16} strokeWidth={1.8} />
-        {t("title")}
-      </button>
+      {/* The title owns the top row (owner feedback on Export v3): it shares it only with the
+          way back and the master tag, never with the actions, so adding a button can't
+          truncate it. */}
+      <div className={styles.titleRow}>
+        <button type="button" className={styles.back} onClick={back}>
+          <ArrowLeft size={16} strokeWidth={1.8} />
+          {t("title")}
+        </button>
+        <div className={styles.title}>
+          <RecordingTitle
+            title={video.title}
+            onRename={(title) => {
+              if (localId) void rename(localId, title);
+            }}
+          />
+        </div>
+        {master && (
+          <span className={styles.titleTag}>
+            <MasterTag size="sm" />
+          </span>
+        )}
+      </div>
 
-      {showCard && (
+      <div className={styles.details}>
+        <div className={styles.meta}>
+          <StorageMeta video={video} />
+          <span className={styles.dot}>·</span>
+          <span className={styles.metaItem}>{relativeDate(video.createdAt)}</span>
+          {!isScreenshot && (
+            <>
+              <span className={styles.dot}>·</span>
+              <span className={styles.metaItem}>{formatDuration(video.durationSeconds)}</span>
+            </>
+          )}
+          {preparable && probe && (
+            <>
+              <span className={styles.dot}>·</span>
+              <span className={styles.metaItem} data-testid="dimensions-meta">
+                {t("metaDimensions", { width: probe.width, height: probe.height })}
+              </span>
+            </>
+          )}
+          {captureLabel && (
+            <>
+              <span className={styles.dot}>·</span>
+              <span className={styles.metaItem} data-testid="capture-meta">
+                {captureLabel}
+              </span>
+            </>
+          )}
+          <span className={styles.dot}>·</span>
+          <span className={styles.metaItem} data-heavy={heavy}>
+            {formatSize(video.fileSizeBytes)}
+          </span>
+          {gifInfo && (
+            <>
+              <span className={styles.dot}>·</span>
+              <span className={styles.metaItem}>
+                {t("gifSpecs", {
+                  width: gifInfo.width,
+                  height: gifInfo.height,
+                  fps: gifInfo.fps,
+                })}
+              </span>
+            </>
+          )}
+          {video.cloudSizeBytes !== null && video.cloudSizeBytes !== video.fileSizeBytes && (
+            <>
+              <span className={styles.dot}>·</span>
+              <span className={styles.metaItem}>
+                {t("availabilityCloud")} {formatSize(video.cloudSizeBytes)}
+              </span>
+            </>
+          )}
+          {exports.length > 0 && (
+            <>
+              <span className={styles.dot}>·</span>
+              <span className={styles.metaItem}>{t("metaCopies", { count: exports.length })}</span>
+            </>
+          )}
+        </div>
+        {localId && (
+          <TagEditor
+            assigned={resolveTags(video.tagIds, tagApi.byId)}
+            all={tagApi.tags}
+            onAssign={(next) => setTags(localId, next)}
+            onCreate={tagApi.create}
+          />
+        )}
+        {/* The player streams the vault file, which ADR 0003 keeps untouched: edits live in a
+            sidecar session, composited only in the editor and burned in only by an export.
+            Saying so keeps the edit badges below from reading as contradictions, and makes
+            the promise checkable — hit play. The fresh notice says it for a new recording. */}
+        {master && !showSavedNotice && (
+          <p className={styles.masterNote}>
+            {t("masterNote")}
+            {video.editSavedAt !== null && ` ${t("masterEditsNote")}`}
+          </p>
+        )}
+        {!isScreenshot && !isGif && badge === null && (
+          <p className={styles.editingLine}>{t(EDITING_LABEL_KEYS[video.editing])}</p>
+        )}
+        {(badge === "never-exported" || badge === "stale") && (
+          <button
+            type="button"
+            className={styles.badgeButton}
+            title={badge === "stale" ? t("editedStaleHint") : t("editedNotExportedHint")}
+            onClick={editVideo}
+            disabled={!canEditVideo}
+          >
+            <Badge variant="warning">
+              {badge === "stale" ? t("editedStale") : t("editedNotExported")}
+            </Badge>
+          </button>
+        )}
+        {badge === "edited" && <p className={styles.editingLine}>{t("edited")}</p>}
+        {(source || sourceDeleted) && (
+          <p className={styles.editingLine}>
+            <span className={styles.lineageLabel}>{t("source")}</span>
+            {source ? (
+              <Link to={`/library/${source.assetId}`} className={styles.lineageLink}>
+                {source.title}
+              </Link>
+            ) : (
+              t("sourceDeleted")
+            )}
+          </p>
+        )}
+      </div>
+
+      {showInAppCard && (
         <StatusCardPortal>
           <PostRecordingCard
             durationSeconds={probe?.durationSec ?? video.durationSeconds}
@@ -253,6 +410,26 @@ export function LibraryDetailPage(): React.JSX.Element {
             onDismiss={() => setCardDismissedFor(location.key)}
           />
         </StatusCardPortal>
+      )}
+
+      {master && showSavedNotice && (
+        <div className={styles.savedNotice} role="status">
+          <span className={styles.savedIcon} aria-hidden>
+            <Check size={11} strokeWidth={3} />
+          </span>
+          <p className={styles.savedText}>
+            <strong>{t("savedNoticeTitle")}</strong> {t("savedNoticeBody")}
+          </p>
+          <button
+            type="button"
+            className={styles.savedDismiss}
+            aria-label={t("savedNoticeDismiss")}
+            title={t("savedNoticeDismiss")}
+            onClick={() => setNoticeDismissedFor(location.key)}
+          >
+            <X size={13} strokeWidth={2} />
+          </button>
+        </div>
       )}
 
       {isScreenshot ? (
@@ -272,197 +449,93 @@ export function LibraryDetailPage(): React.JSX.Element {
         )
       )}
 
-      <div className={styles.bar}>
-        <div className={styles.titleBlock}>
-          <RecordingTitle
-            title={video.title}
-            onRename={(title) => {
-              if (localId) void rename(localId, title);
-            }}
-          />
-          {localId && (
-            <TagEditor
-              assigned={resolveTags(video.tagIds, tagApi.byId)}
-              all={tagApi.tags}
-              onAssign={(next) => setTags(localId, next)}
-              onCreate={tagApi.create}
-            />
-          )}
-          <div className={styles.meta}>
-            <StorageMeta video={video} />
-            <span className={styles.dot}>·</span>
-            <span className={styles.metaItem}>{relativeDate(video.createdAt)}</span>
-            {!isScreenshot && (
-              <>
-                <span className={styles.dot}>·</span>
-                <span className={styles.metaItem}>{formatDuration(video.durationSeconds)}</span>
-              </>
-            )}
-            {captureLabel && (
-              <>
-                <span className={styles.dot}>·</span>
-                <span className={styles.metaItem} data-testid="capture-meta">
-                  {captureLabel}
-                </span>
-              </>
-            )}
-            <span className={styles.dot}>·</span>
-            <span className={styles.metaItem} data-heavy={heavy}>
-              {formatSize(video.fileSizeBytes)}
-            </span>
-            {gifInfo && (
-              <>
-                <span className={styles.dot}>·</span>
-                <span className={styles.metaItem}>
-                  {t("gifSpecs", {
-                    width: gifInfo.width,
-                    height: gifInfo.height,
-                    fps: gifInfo.fps,
-                  })}
-                </span>
-              </>
-            )}
-            {video.cloudSizeBytes !== null && video.cloudSizeBytes !== video.fileSizeBytes && (
-              <>
-                <span className={styles.dot}>·</span>
-                <span className={styles.metaItem}>
-                  {t("availabilityCloud")} {formatSize(video.cloudSizeBytes)}
-                </span>
-              </>
-            )}
-            {/* The player streams the vault file, which ADR 0003 keeps untouched: edits
-                live in a sidecar session, composited only in the editor and burned in only
-                by an export. Saying so keeps the edit badges below from reading as
-                contradictions, and makes the promise checkable — hit play. */}
-            {master && (
-              <>
-                <span className={styles.dot}>·</span>
-                <span className={styles.masterNote}>
-                  {t("masterNote")}
-                  {video.editSavedAt !== null && ` ${t("masterEditsNote")}`}
-                </span>
-              </>
-            )}
-          </div>
-          {!isScreenshot && !isGif && badge === null && (
-            <p className={styles.editingLine}>{t(EDITING_LABEL_KEYS[video.editing])}</p>
-          )}
-          {(badge === "never-exported" || badge === "stale") && (
-            <button
-              type="button"
-              className={styles.badgeButton}
-              title={badge === "stale" ? t("editedStaleHint") : t("editedNotExportedHint")}
-              onClick={editVideo}
-              disabled={!canEditVideo}
-            >
-              <Badge variant="warning">
-                {badge === "stale" ? t("editedStale") : t("editedNotExported")}
-              </Badge>
-            </button>
-          )}
-          {badge === "edited" && <p className={styles.editingLine}>{t("edited")}</p>}
-          {(source || sourceDeleted) && (
-            <p className={styles.editingLine}>
-              <span className={styles.lineageLabel}>{t("source")}</span>
-              {source ? (
-                <Link to={`/library/${source.assetId}`} className={styles.lineageLink}>
-                  {source.title}
-                </Link>
+      {/* Buttons only: the row wraps when it grows, and nothing else lives in it. */}
+      <div className={styles.actions}>
+        {/* Export a copy opens Prepare (NIW2-578) — the core action. While "Where is it
+            going?" is showing, its cards are that action, so the button waits until it is
+            gone. */}
+        {preparable && !showDestinations && (
+          <Button variant="primary" size="sm" onClick={() => openPrepare()} title={t("sendToHint")}>
+            <Upload size={15} strokeWidth={1.8} />
+            {t("exportCopy")}
+          </Button>
+        )}
+        {isScreenshot && localId && (
+          <>
+            <Button variant="outline" size="sm" onClick={editScreenshot}>
+              <Pencil size={15} strokeWidth={1.8} />
+              {t("edit")}
+            </Button>
+            <Button variant="outline" size="sm" onClick={copyScreenshot}>
+              {copied ? (
+                <Check size={15} strokeWidth={1.8} />
               ) : (
-                t("sourceDeleted")
+                <Copy size={15} strokeWidth={1.8} />
               )}
-            </p>
-          )}
-        </div>
-
-        <div className={styles.actions}>
-          {/* Send to… opens Prepare (NIW2-578) — the core action. This page is also where a
-              fresh recording lands (`fromRecording`), so it is the post-recording entry point
-              too. "Prepare for…" did not say what it does (NIW2-585). */}
-          {preparable && (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => openPrepare()}
-              title={t("sendToHint")}
-            >
-              <Send size={15} strokeWidth={1.8} />
-              {t("sendTo")}
+              {copied ? t("copied") : t("copy")}
             </Button>
-          )}
-          {isScreenshot && localId && (
-            <>
-              <Button variant="outline" size="sm" onClick={editScreenshot}>
-                <Pencil size={15} strokeWidth={1.8} />
-                {t("edit")}
-              </Button>
-              <Button variant="outline" size="sm" onClick={copyScreenshot}>
-                {copied ? (
-                  <Check size={15} strokeWidth={1.8} />
-                ) : (
-                  <Copy size={15} strokeWidth={1.8} />
-                )}
-                {copied ? t("copied") : t("copy")}
-              </Button>
-            </>
-          )}
-          {!isScreenshot && !isGif && localId && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={editVideo}
-              disabled={!canEditVideo}
-              title={canEditVideo ? undefined : t("durationUnreadable")}
-            >
-              <Scissors size={15} strokeWidth={1.8} />
-              {t("editVideo")}
-            </Button>
-          )}
-          {localId && (
-            <Button variant="outline" size="sm" onClick={() => reveal(localId)}>
-              <FolderOpen size={15} strokeWidth={1.8} />
-              {t("reveal")}
-            </Button>
-          )}
-          {canRemoveLocalCopy && (
-            <Button variant="ghost" size="sm" onClick={() => void doRemoveLocalCopy()}>
-              {t("removeLocalCopy")}
-            </Button>
-          )}
-          {localId && (
-            <Button variant="outline" size="sm" onClick={() => setConfirmingDelete(true)}>
-              <Trash2 size={15} strokeWidth={1.8} />
-              {t("delete")}
-            </Button>
-          )}
-        </div>
+          </>
+        )}
+        {!isScreenshot && !isGif && localId && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={editVideo}
+            disabled={!canEditVideo}
+            title={canEditVideo ? undefined : t("durationUnreadable")}
+          >
+            <Scissors size={15} strokeWidth={1.8} />
+            {t("editVideo")}
+          </Button>
+        )}
+        {localId && (
+          <Button variant="outline" size="sm" onClick={() => reveal(localId)}>
+            <FolderOpen size={15} strokeWidth={1.8} />
+            {t("reveal")}
+          </Button>
+        )}
+        {canRemoveLocalCopy && (
+          <Button variant="ghost" size="sm" onClick={() => void doRemoveLocalCopy()}>
+            {t("removeLocalCopy")}
+          </Button>
+        )}
+        {localId && (
+          <Button variant="outline" size="sm" onClick={() => setConfirmingDelete(true)}>
+            <Trash2 size={15} strokeWidth={1.8} />
+            {t("delete")}
+          </Button>
+        )}
       </div>
 
-      {showCopies && (
-        <div className={styles.masterRow}>
-          {/* The heavy-to-send hint folds into the strip: its GitHub chip is the light copy. */}
-          {master && preparable && (
-            <WhereIsThisGoingStrip
-              onPick={(destination) => openPrepare(destination ?? undefined)}
-              note={
-                heavy && (
-                  <HeavyToSendText
-                    sizeBytes={video.fileSizeBytes}
-                    lightEstimateBytes={lightEstimate(probe)}
-                  />
-                )
-              }
-            />
-          )}
-          <MasterCopiesPanel
-            source={master ? "master" : "copy"}
-            copies={exports}
-            running={running}
-          />
-        </div>
+      {showDestinations && (
+        <DestinationsPanel
+          sizeBytes={video.fileSizeBytes}
+          probe={probe}
+          onPick={(destination) => openPrepare(destination)}
+          onDismiss={() => setDestinationsDismissedFor(video.assetId)}
+          // The heavy-to-send hint folds into the panel: its GitHub card is the light copy.
+          note={
+            heavy && (
+              <HeavyToSendText
+                sizeBytes={video.fileSizeBytes}
+                lightEstimateBytes={lightEstimate(probe)}
+              />
+            )
+          }
+        />
       )}
 
-      {heavy && !master && (
+      {hasCopies && (
+        <MasterCopiesPanel
+          source={master ? "master" : "copy"}
+          copies={exports}
+          running={running}
+          probe={probe}
+          onOpenExport={preparable ? () => openPrepare() : undefined}
+        />
+      )}
+
+      {heavy && !showDestinations && (
         <HeavyToSendBanner
           sizeBytes={video.fileSizeBytes}
           lightEstimateBytes={lightEstimate(probe)}
@@ -490,8 +563,8 @@ function lightEstimate(probe: SourceProbe | null): number | null {
 /**
  * NIW2-218: a recording over 25 MB is heavy to send anywhere. Say so where the user looks
  * at it, with what a Light copy would weigh, and open Prepare on GitHub (NIW2-578). GitHub is
- * promised only when the Light copy fits. On a master the words live in the "Where is this
- * going?" strip instead (NIW2-585); this banner is for a heavy copy.
+ * promised only when the Light copy fits. While "Where is it going?" shows, the words live in
+ * that panel instead; this banner is for every other page (a copy, a master with copies).
  */
 function HeavyToSendBanner({
   sizeBytes,

@@ -16,6 +16,11 @@ import type {
   OverlayState,
   QuietCaptureHandOff,
 } from "./screenshot-capture";
+import type {
+  RecordingReadyAction,
+  RecordingReadyHandOff,
+  RecordingReadyPayload,
+} from "./recording-ready";
 import type { SerializedError } from "../analytics";
 import type { AppSettings, ShortcutAction, TagSummary, UpdateStatus } from "./ipc";
 import type { TagColor } from "@kaipu/domain/constants";
@@ -89,6 +94,21 @@ export interface CaptureToastBridge {
   action(action: CaptureToastAction): void;
   /** The pointer entered (`true`, pause the auto-hide) or left (`false`, restart it) the card. */
   hover(paused: boolean): void;
+}
+
+/**
+ * The "Your video is ready" window's bridge (`?window=recording-ready`). Like the capture
+ * toast, the card only renders what main sends and reports what the user pressed.
+ */
+export interface RecordingReadyCardBridge {
+  /** Main's payload for the card. Returns an unsubscribe fn. */
+  onShow(callback: (payload: RecordingReadyPayload) => void): () => void;
+  /** Tell main the listener is up, so it sends the current payload. */
+  ready(): void;
+  /** A chip, Edit first, Open, ✕ or Escape. */
+  action(action: RecordingReadyAction): void;
+  /** The card's height in DIP, so main sizes the window to it. */
+  resize(height: number): void;
 }
 
 /** macOS media permissions the recorder cares about. */
@@ -428,6 +448,18 @@ export interface KaipuElectronAPI {
   captureOverlay: CaptureOverlayBridge;
   /** Only used by the capture toast window; see `CaptureToastBridge`. */
   captureToast: CaptureToastBridge;
+  /**
+   * Float "Your video is ready" on the desktop, outside the main window. Resolves false when
+   * the window could not be created; the caller then shows the card in-app instead.
+   */
+  showRecordingReady(payload: RecordingReadyPayload): Promise<boolean>;
+  /** Only used by the "Your video is ready" window; see `RecordingReadyCardBridge`. */
+  recordingReadyCard: RecordingReadyCardBridge;
+  /**
+   * An action on the floating "Your video is ready" card: main has closed it and shown this
+   * window; the renderer navigates. Returns an unsubscribe fn.
+   */
+  onRecordingReadyOpen(callback: (handOff: RecordingReadyHandOff) => void): () => void;
   /**
    * The capture toast asked to show a saved screenshot (Annotate, Open in Library). The
    * renderer navigates, then calls `revealAfterCapture()`. Returns an unsubscribe fn.

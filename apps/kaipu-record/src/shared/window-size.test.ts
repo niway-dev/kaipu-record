@@ -18,6 +18,8 @@ describe("presetForPath", () => {
       ROUTES.record,
       ROUTES.library,
       "/library/abc-123",
+      "/export/abc-123",
+      ROUTES.exportNew,
       "/prepare/abc-123",
       ROUTES.prepareNew,
       ROUTES.screenshots,

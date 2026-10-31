@@ -3,7 +3,7 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-lg);
+  gap: var(--space-md);
 }
 
 /* ── States ───────────────────────────── */
@@ -28,13 +28,21 @@
   color: var(--text-primary);
 }
 
-/* ── Back ─────────────────────────────── */
+/* ── Title row: back · title · master tag ─ */
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
+}
 
 .back {
-  align-self: flex-start;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  padding: 0;
   background: none;
   border: none;
   cursor: pointer;
@@ -49,24 +57,31 @@
   color: var(--text-primary);
 }
 
-/* ── Title + meta + actions bar ───────── */
-
-.bar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-lg);
+/* Takes every pixel the back link and the tag leave; it ellipsizes only at that edge. */
+.title {
+  flex: 1;
+  min-width: 0;
 }
 
-.titleBlock {
-  min-width: 0;
+.titleTag {
+  flex-shrink: 0;
+  display: inline-flex;
+}
+
+/* ── Metadata, tags, lineage ─────────── */
+
+.details {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: calc(-1 * var(--space-sm));
 }
 
 .meta {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 8px;
   flex-wrap: wrap;
 }
 
@@ -82,15 +97,16 @@
 }
 
 .editingLine {
-  margin: 6px 0 0;
+  margin: 0;
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
 }
 
-.actions {
-  display: flex;
-  gap: var(--space-sm);
-  flex-shrink: 0;
+/* "This is your original. It never changes." — brighter than the facts above it. */
+.masterNote {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
 }
 
 .badgeButton {
@@ -123,10 +139,69 @@
   color: var(--accent-primary);
 }
 
-/* NIW2-585: the master tag over the player's top-left corner. Clicks pass through to the
-   video. */
+/* ── "Saved to your Library" ─────────── */
+
+.savedNotice {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--accent-green) 35%, transparent);
+  background: color-mix(in srgb, var(--accent-green) 8%, transparent);
+}
+
+.savedIcon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent-green);
+  color: #fff;
+}
+
+.savedText {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.savedText strong {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.savedDismiss {
+  flex-shrink: 0;
+  display: inline-flex;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.savedDismiss:hover {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+
+/* ── Player ──────────────────────────── */
+
+/* Capped by the window's height, so at the default 900 × 670 the actions and most of the
+   panel below stay in view; the page scrolls for the rest. The master tag sits over the
+   top-left corner, and clicks pass through it to the video. */
 .player {
   position: relative;
+  width: min(100%, max(420px, calc((100vh - 300px) * 16 / 9)));
+  align-self: center;
 }
 
 .masterTag {
@@ -137,22 +212,12 @@
   pointer-events: none;
 }
 
-/* "This is your original. It never changes." — brighter than the facts before it. */
-.masterNote {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-}
+/* ── Actions: buttons only ───────────── */
 
-/* "Where is this going?" and "Copies from this master", side by side. */
-.masterRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
-  gap: 10px;
-  margin-top: calc(-1 * var(--space-sm));
-}
-
-.masterRow > :only-child {
-  grid-column: 1 / -1;
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
 }
 
 /* NIW2-218: the size in amber when the file is heavy to send (over 25 MB). */

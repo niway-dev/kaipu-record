@@ -14,6 +14,7 @@ export const DESTINATION_COPY = {
   square: { name: "destSquare", line: "lineSquare", say: "saySquare", why: "whySquare" },
   github: { name: "destGithub", line: "lineGithub", say: "sayGithub", why: "whyGithub" },
   chat: { name: "destChat", line: "lineChat", say: "sayChat", why: "whyChat" },
+  email: { name: "destEmail", line: "lineEmail", say: "sayEmail", why: "whyEmail" },
   archive: { name: "destArchive", line: "lineArchive", say: "sayArchive", why: "whyArchive" },
 } as const satisfies Record<
   DestinationId,
