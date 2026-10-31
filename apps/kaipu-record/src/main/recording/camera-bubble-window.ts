@@ -37,9 +37,15 @@ import {
  * it started, or its webcam did not open or ended): the hub's `protect` rule says so, and
  * `applyProtection` brings an existing window in line (`BubbleProtection`).
  *
+ * During a take that records a webcam file, turning the camera off parks the window instead
+ * (`park`): hidden, still protected, its renderer releasing the camera. Turning it on again
+ * shows the same native window, which the running capture already leaves out; a new window
+ * would not be (ADR 0032 § camera toggled mid-take). Outside such a take the window is
+ * destroyed, so the device is released whatever the renderer does.
+ *
  * On macOS it is a `panel` and joins full-screen Spaces with
  * `skipTransformProcessType`: the bubble is destroyed and recreated on every
- * camera toggle, and each creation used to hide the Dock icon (and Cmd+Tab)
+ * camera toggle outside a take, and each creation used to hide the Dock icon (and Cmd+Tab)
  * through Electron's default process transform. See ADR 0029.
  */
 export class CameraBubbleWindow {
@@ -58,6 +64,8 @@ export class CameraBubbleWindow {
   private moveStart: BubbleCorner | null = null;
   /** Whether the current window is content-protected. */
   private protectedNow = false;
+  /** The camera was turned off mid-take: the window is kept hidden until it comes back on. */
+  private parked = false;
 
   /** `size` reads the persisted bubble size; injected so this class never reads disk. */
   constructor(
@@ -72,6 +80,7 @@ export class CameraBubbleWindow {
 
   show(): void {
     if (this.disposed) return;
+    this.parked = false;
     if (this.window && !this.window.isDestroyed()) {
       if (this.fits()) this.window.showInactive();
       return;
@@ -118,7 +127,8 @@ export class CameraBubbleWindow {
 
     this.window.once("ready-to-show", () => {
       this.position();
-      if (this.fits()) this.window?.showInactive();
+      // Parked before it was ready (the camera turned off at once): it stays hidden.
+      if (this.fits() && !this.parked) this.window?.showInactive();
     });
     this.window.on("closed", () => {
       this.window = null;
@@ -219,6 +229,15 @@ export class CameraBubbleWindow {
     return this.isVisible() ? (this.window?.getBounds() ?? null) : null;
   }
 
+  /**
+   * Where the bubble sits while it is on screen or parked (global DIP), else null: a take whose
+   * camera was off at its end records where the bubble was before it was turned off.
+   */
+  placedBounds(): Rect | null {
+    if (this.parked && this.window && !this.window.isDestroyed()) return this.window.getBounds();
+    return this.visibleBounds();
+  }
+
   /** True while the bubble has an active (non-destroyed) window and is visible. */
   isVisible(): boolean {
     return Boolean(this.window && !this.window.isDestroyed() && this.window.isVisible());
@@ -235,11 +254,29 @@ export class CameraBubbleWindow {
   }
 
   /**
-   * Destroy the bubble window. Unlike the control bar we never just `hide()` it:
+   * The camera was turned off during a take that records a webcam file: hide the window and
+   * keep it, with its protection, so `show()` brings back the same native window, the one the
+   * running screen capture leaves out. Its renderer releases the camera itself (it follows the
+   * Camera toggle), so the in-use light goes off. No window: nothing to park.
+   */
+  park(): void {
+    if (!this.window || this.window.isDestroyed()) return;
+    this.parked = true;
+    this.window.hide();
+  }
+
+  /** True while a window is parked (hidden by a camera turned off mid-take). */
+  isParked(): boolean {
+    return this.parked && Boolean(this.window && !this.window.isDestroyed());
+  }
+
+  /**
+   * Destroy the bubble window. Outside a take we never just `hide()` it:
    * the renderer holds the camera via getUserMedia, so the window must be torn
    * down to release the device (and turn the macOS green in-use light off).
    */
   destroy(): void {
+    this.parked = false;
     if (this.window && !this.window.isDestroyed()) this.window.destroy();
     this.window = null;
   }

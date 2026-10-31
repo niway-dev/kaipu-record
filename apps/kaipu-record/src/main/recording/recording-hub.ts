@@ -298,18 +298,41 @@ export function registerRecordingHub(
     // matter which window flipped it.
     if (settings.isCameraEnabled !== cameraWasOn) {
       if (settings.isCameraEnabled) {
+        // A window parked by this take whose webcam file has since ended (its renderer could
+        // not keep it going) is replaced: a new window, unprotected, is the one a running
+        // capture is known to record, so the face lands in the screen as before (legacy path).
+        if (cameraBubble.isParked() && !takeRecordsWebcam()) cameraBubble.destroy();
         cameraBubble.show();
         // Showing a floating panel can drop the app from the Dock/Cmd+Tab on
         // macOS; re-assert the policy so the app stays reachable.
         applyDockPolicy();
+      } else if (takeRecordsWebcam()) {
+        // Mid-take, with the face going to its webcam file: park (hide, keep, still protected)
+        // instead. The running screen capture leaves out the windows that were on screen when
+        // it started, so turning the camera on again must bring back this same window; a new
+        // one would be captured. Its renderer stops its camera on the toggle (the light goes
+        // off), and the recorder holds the webcam file on the same clock through the gap.
+        cameraBubble.park();
       } else {
         // Destroy (not hide): the bubble holds the camera via getUserMedia, so
         // tearing down its window releases the device and turns the green
-        // in-use light off. Hiding alone would keep the camera held.
+        // in-use light off, whatever its renderer does.
         cameraBubble.destroy();
       }
     }
   };
+  /**
+   * The take in progress records the face in its own webcam file: a camera turned off parks the
+   * bubble then. A take that started with the camera off, or whose webcam file ended, does not:
+   * there the bubble is in the screen (legacy path).
+   */
+  function takeRecordsWebcam(): boolean {
+    return activity.active && bubbleProtection.recordsWebcam();
+  }
+  /** A parked bubble never outlives its take: once the take ends, the camera still off, it goes. */
+  function releaseParkedBubble(): void {
+    if (cameraBubble.isParked() && !settings.isCameraEnabled) cameraBubble.destroy();
+  }
   ipcMain.on(IPC_CHANNELS.recordingSettingsUpdate, (_e, patch: Partial<RecordingSettings>) => {
     applySettingsPatch(windowSettingsPatch(patch, settings));
   });
@@ -471,7 +494,9 @@ export function registerRecordingHub(
       cameraBubble.applyProtection();
       // Where the bubble sat, as main sees its window: the stop has not released the area yet
       // (the renderer sends it after finalize), so the bubble is still where it was recorded.
-      const bubbleBounds = cameraBubble.visibleBounds();
+      // A camera off at the end parked it: where it was before it was turned off.
+      const bubbleBounds = cameraBubble.placedBounds();
+      releaseParkedBubble();
       const meta = withRecordedBubble(
         rendererMeta,
         bubbleBounds && recordedRect ? bubblePlacementInRect(bubbleBounds, recordedRect) : null,
@@ -526,6 +551,7 @@ export function registerRecordingHub(
     markEnded(sessionId);
     bubbleProtection.ended(sessionId);
     cameraBubble.applyProtection();
+    releaseParkedBubble();
     cursorTracks.discard(sessionId);
     clickSessions.delete(sessionId);
     stopHookIfIdle();
@@ -817,6 +843,7 @@ export function registerRecordingHub(
   });
   const applyStopWindowState = (): void => {
     activity = stoppedActivity(activity);
+    releaseParkedBubble();
     bar.hide();
     shade.hide();
     if (bubbleAnchoredToArea) {
@@ -992,6 +1019,7 @@ export function registerRecordingHub(
       for (const id of writer.ids()) markEnded(id);
       bubbleProtection.reset();
       cameraBubble.applyProtection();
+      releaseParkedBubble();
       void writer.releaseAll().catch((error) => console.error("releasing takes failed", error));
       cursorTracks.discardAll();
       clickSessions.clear();

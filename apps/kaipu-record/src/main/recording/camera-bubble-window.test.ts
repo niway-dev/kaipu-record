@@ -187,3 +187,69 @@ describe("CameraBubbleWindow on quit", () => {
     expect(created).toHaveLength(2);
   });
 });
+
+/**
+ * A camera turned off during a take that records a webcam file parks the bubble: the running
+ * screen capture leaves out the windows that were on screen when it started, so turning the
+ * camera on again must show that same window, not a new one (ADR 0032).
+ */
+describe("CameraBubbleWindow.park", () => {
+  it("hides the window and keeps it, with its protection", () => {
+    const bubble = new CameraBubbleWindow();
+    bubble.show();
+    const win = created[0]!;
+    win.readyToShow?.();
+    bubble.park();
+    expect(win.hide).toHaveBeenCalled();
+    expect(win.destroy).not.toHaveBeenCalled();
+    expect(win.setContentProtection.mock.calls).toEqual([[true]]);
+    expect(bubble.isParked()).toBe(true);
+    expect(bubble.isVisible()).toBe(false);
+  });
+
+  it("show brings back the same window, still protected", () => {
+    const bubble = new CameraBubbleWindow();
+    bubble.show();
+    created[0]!.readyToShow?.();
+    bubble.park();
+    bubble.show();
+    expect(created).toHaveLength(1);
+    expect(created[0]!.showInactive).toHaveBeenCalledTimes(2);
+    expect(created[0]!.setContentProtection.mock.calls).toEqual([[true]]);
+    expect(bubble.isParked()).toBe(false);
+  });
+
+  it("a window parked before it was ready stays hidden when it becomes ready", () => {
+    const bubble = new CameraBubbleWindow();
+    bubble.show();
+    bubble.park();
+    created[0]!.readyToShow?.();
+    expect(created[0]!.showInactive).not.toHaveBeenCalled();
+  });
+
+  it("does nothing without a window", () => {
+    const bubble = new CameraBubbleWindow();
+    bubble.park();
+    expect(bubble.isParked()).toBe(false);
+  });
+
+  it("destroy releases a parked window", () => {
+    const bubble = new CameraBubbleWindow();
+    bubble.show();
+    bubble.park();
+    bubble.destroy();
+    expect(created[0]!.destroy).toHaveBeenCalled();
+    expect(bubble.isParked()).toBe(false);
+  });
+
+  it("placedBounds is where a parked bubble was; visibleBounds stays null for it", () => {
+    const bubble = new CameraBubbleWindow();
+    bubble.show();
+    created[0]!.readyToShow?.();
+    const shown = bubble.visibleBounds();
+    expect(bubble.placedBounds()).toEqual(shown);
+    bubble.park();
+    expect(bubble.visibleBounds()).toBeNull();
+    expect(bubble.placedBounds()).toEqual(shown);
+  });
+});

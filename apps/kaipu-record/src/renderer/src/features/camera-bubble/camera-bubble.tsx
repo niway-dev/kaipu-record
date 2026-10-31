@@ -36,6 +36,31 @@ function useBubbleSettings(): CameraBubbleSettings {
 }
 
 /**
+ * Whether the Camera toggle is on. The window only exists while it is, except while a take
+ * keeps it parked (hidden) through a camera turned off mid-take (ADR 0032): the preview must
+ * then release the camera itself, so the in-use light goes off. On until main says otherwise;
+ * a broadcast that lands before the first read wins, being newer.
+ */
+function useCameraOn(): boolean {
+  const [on, setOn] = useState(true);
+  useEffect(() => {
+    let heard = false;
+    const unsubscribe = window.electronAPI.onRecordingSettingsChanged((settings) => {
+      heard = true;
+      setOn(settings.isCameraEnabled);
+    });
+    void window.electronAPI
+      .getRecordingSettings()
+      .then((settings) => {
+        if (!heard) setOn(settings.isCameraEnabled);
+      })
+      .catch(() => undefined);
+    return unsubscribe;
+  }, []);
+  return on;
+}
+
+/**
  * Projects a pointer move from the grip's start onto the bubble's diagonal: the window
  * keeps its bottom-left corner, so growing by `d` moves the top-right grip by (+d, −d).
  */
@@ -115,7 +140,8 @@ export function CameraBubble(): React.JSX.Element {
   const wantedLines = bubblePreviewLines(bubble);
   const takeLines = useRef(wantedLines);
   if (!activity.active) takeLines.current = wantedLines;
-  const { videoRef, hasStream } = useCameraPreview(true, bubble.deviceId, takeLines.current);
+  const cameraOn = useCameraOn();
+  const { videoRef, hasStream } = useCameraPreview(cameraOn, bubble.deviceId, takeLines.current);
   const [size, setSize] = useState(sizeFromWindow);
   const [hovered, setHovered] = useState(false);
   const [dragging, setDragging] = useState(false);
