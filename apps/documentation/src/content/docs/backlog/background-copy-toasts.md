@@ -13,6 +13,10 @@ description: "NIW2-586: a copy prepared in the background names its destination 
 > project `71546ef1-baf5-42e9-8fcc-9b9b44f2c7ab`, file `Kaipu Prepare.dc.html`, section 4
 > "In the background".
 
+> **Update:** the progress card's ✕ became a minimize to a pill, the cards moved bottom right, and a
+> finished copy now leads the Library as a "Ready to upload" card — see
+> [Ready copy in the Library](./ready-copy-in-library).
+
 ## Why
 
 [Prepare](./prepare-screen) starts a copy that can take minutes (a 4K YouTube copy). The existing

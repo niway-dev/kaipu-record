@@ -104,6 +104,7 @@ export default defineConfig({
             { slug: "backlog/export-presets" },
             { slug: "backlog/prepare-screen" },
             { slug: "backlog/background-copy-toasts" },
+            { slug: "backlog/ready-copy-in-library" },
             { slug: "backlog/prepare-drop-zone" },
             { slug: "backlog/editor-space-and-window-presets" },
             { slug: "backlog/capture-panel-latency" },
