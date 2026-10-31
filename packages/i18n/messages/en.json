@@ -618,6 +618,7 @@
     "importReasonTooMany": "only {max} files can be imported at once",
     "importReasonAlreadyInLibrary": "it’s already in your Library",
     "importDropIgnored": "Only videos can be imported (MP4, MOV, M4V or WebM). Skipped: {fileNames}",
+    "importDropNoPath": "Couldn’t import {fileNames}: not a file on your computer. Save it first, then drop it again.",
     "searchPlaceholder": "Search recordings…",
     "galleryView": "Gallery view",
     "listView": "List view",

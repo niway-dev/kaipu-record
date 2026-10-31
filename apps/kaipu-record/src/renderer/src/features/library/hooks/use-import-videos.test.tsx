@@ -160,8 +160,41 @@ describe("useImportVideos", () => {
       "/in/zoom.mp4",
     ]);
     expect(toasts()).toEqual([
-      "Only videos can be imported (MP4, MOV, M4V or WebM). Skipped: notes.pdf, web.mp4",
+      "Only videos can be imported (MP4, MOV, M4V or WebM). Skipped: notes.pdf",
+      "Couldn’t import web.mp4: not a file on your computer. Save it first, then drop it again.",
     ]);
+  });
+
+  it("queues a drop that lands while an import runs, instead of discarding it", async () => {
+    window.electronAPI.pathForFile = vi.fn((f: File) => `/in/${f.name}`);
+    let finishFirst: (r: ImportVideoResult) => void = () => {};
+    window.electronAPI.importVideoFiles = vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise<ImportVideoResult>((resolve) => (finishFirst = resolve)),
+      )
+      .mockResolvedValueOnce(result({ imported: [recording("b", "2")] }));
+    const { result: hook } = renderHook(() => useImportVideos());
+
+    let first: Promise<void> = Promise.resolve();
+    let second: Promise<void> = Promise.resolve();
+    await act(async () => {
+      first = hook.current.importDropped([file("a.mp4")]);
+      second = hook.current.importDropped([file("b.mp4")]);
+    });
+    expect(window.electronAPI.importVideoFiles).toHaveBeenCalledTimes(1);
+    expect(window.electronAPI.importVideoFiles).toHaveBeenCalledWith(["/in/a.mp4"]);
+    expect(hook.current.importing).toBe(true);
+
+    await act(async () => {
+      finishFirst(result({ imported: [recording("a", "1")] }));
+      await first;
+      await second;
+    });
+
+    expect(window.electronAPI.importVideoFiles).toHaveBeenLastCalledWith(["/in/b.mp4"]);
+    expect(toasts()).toEqual(["“a” is in your Library", "“b” is in your Library"]);
+    expect(hook.current.importing).toBe(false);
   });
 
   it("does not call main when nothing dropped is a video", async () => {

@@ -33,7 +33,10 @@ export interface ImportVideosOptions {
 }
 
 export interface ImportVideos {
-  /** An import is running; the button shows it and a second one waits for it. */
+  /**
+   * An import is running or waiting. A second import started meanwhile (a second drop) is
+   * queued behind the running one, never dropped.
+   */
   importing: boolean;
   /** Open the file dialog and import what the user picks. */
   pickAndImport(): Promise<void>;
@@ -50,7 +53,10 @@ export function useImportVideos(options: ImportVideosOptions = {}): ImportVideos
   const t = useTranslations("library");
   const navigate = useNavigate();
   const [importing, setImporting] = useState(false);
-  const busy = useRef(false);
+  /** Imports started and not finished yet, the running one included. */
+  const pending = useRef(0);
+  /** The tail of the queue: each import starts once the one before it has settled. */
+  const queue = useRef<Promise<void>>(Promise.resolve());
   const onImportedRef = useRef(options.onImported);
   onImportedRef.current = options.onImported;
 
@@ -74,19 +80,22 @@ export function useImportVideos(options: ImportVideosOptions = {}): ImportVideos
   );
 
   const run = useCallback(
-    async (start: () => Promise<ImportVideoResult>): Promise<void> => {
-      if (busy.current) return;
-      busy.current = true;
+    (start: () => Promise<ImportVideoResult>): Promise<void> => {
+      pending.current += 1;
       setImporting(true);
-      try {
-        const result = await start();
-        if (!result.canceled) report(result);
-      } catch (error) {
-        reportError(t("importReasonCopyFailed"), error, { context: { phase: "import-video" } });
-      } finally {
-        busy.current = false;
-        setImporting(false);
-      }
+      const next = queue.current.then(async () => {
+        try {
+          const result = await start();
+          if (!result.canceled) report(result);
+        } catch (error) {
+          reportError(t("importReasonCopyFailed"), error, { context: { phase: "import-video" } });
+        } finally {
+          pending.current -= 1;
+          if (pending.current === 0) setImporting(false);
+        }
+      });
+      queue.current = next;
+      return next;
     },
     [report, t],
   );
@@ -96,17 +105,23 @@ export function useImportVideos(options: ImportVideosOptions = {}): ImportVideos
   const importDropped = useCallback(
     async (files: readonly File[]): Promise<void> => {
       const paths: string[] = [];
-      const skipped: string[] = [];
+      const notVideos: string[] = [];
+      const noPath: string[] = [];
       for (const file of files) {
-        // A file with no path on disk (dragged out of a web page) cannot be copied either.
-        const path = importableVideoExtension(file.name)
-          ? window.electronAPI.pathForFile(file)
-          : "";
+        if (!importableVideoExtension(file.name)) {
+          notVideos.push(file.name);
+          continue;
+        }
+        // A video with no path on disk (dragged out of a web page) cannot be copied.
+        const path = window.electronAPI.pathForFile(file);
         if (path) paths.push(path);
-        else skipped.push(file.name);
+        else noPath.push(file.name);
       }
-      if (skipped.length > 0) {
-        showToast({ message: t("importDropIgnored", { fileNames: skipped.join(", ") }) });
+      if (notVideos.length > 0) {
+        showToast({ message: t("importDropIgnored", { fileNames: notVideos.join(", ") }) });
+      }
+      if (noPath.length > 0) {
+        showToast({ message: t("importDropNoPath", { fileNames: noPath.join(", ") }) });
       }
       if (paths.length === 0) return;
       await run(() => window.electronAPI.importVideoFiles(paths));
