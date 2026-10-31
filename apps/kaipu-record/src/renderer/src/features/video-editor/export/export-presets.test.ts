@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   audioEncodingCandidates,
+  defaultYoutubePreset,
   encodeFingerprint,
   EXPORT_PRESET_IDS,
   FIXED_AUDIO_BITRATE,
@@ -15,13 +16,17 @@ import {
   isExportFraming,
   KEY_FRAME_INTERVAL_SEC,
   isExportPresetId,
+  isYoutubePreset,
   normalizeExportPresetId,
   packetCountsFor,
   reserveBytes,
   resolveExportTarget,
   sizeForShortSide,
   slideFrameCount,
+  YOUTUBE_AUDIO_BITRATE,
   YOUTUBE_KEY_FRAME_INTERVAL_SEC,
+  YOUTUBE_PRESET_IDS,
+  YOUTUBE_VIDEO_BITRATES,
 } from "./export-presets";
 
 const src = (width: number, height: number, extra: Partial<ExportSourceInfo> = {}) => ({
@@ -63,8 +68,32 @@ describe("ids and guards", () => {
     expect(normalizeExportPresetId("small-10")).toBe("light");
     expect(normalizeExportPresetId("small-25")).toBe("light");
     expect(normalizeExportPresetId("square")).toBe("square");
+    expect(normalizeExportPresetId("youtube-4k")).toBe("youtube-4k");
     expect(normalizeExportPresetId("tiktok")).toBeNull();
     expect(normalizeExportPresetId(undefined)).toBeNull();
+  });
+
+  it('reads the old 1920×1080 "youtube" export as YouTube 1440p, the row for its destination', () => {
+    expect(isExportPresetId("youtube")).toBe(false);
+    expect(normalizeExportPresetId("youtube")).toBe("youtube-1440");
+  });
+
+  it("lists the two YouTube canvases where the single YouTube row was, and guards them", () => {
+    expect(EXPORT_PRESET_IDS).toEqual([
+      "balanced",
+      "light",
+      "youtube-1440",
+      "youtube-4k",
+      "vertical",
+      "square",
+      "maximum",
+    ]);
+    expect(YOUTUBE_PRESET_IDS).toEqual(["youtube-1440", "youtube-4k"]);
+    expect(isYoutubePreset("youtube-1440")).toBe(true);
+    expect(isYoutubePreset("youtube-4k")).toBe(true);
+    expect(isYoutubePreset("youtube")).toBe(false);
+    expect(isYoutubePreset("vertical")).toBe(false);
+    expect(isYoutubePreset(undefined)).toBe(false);
   });
 });
 
@@ -91,7 +120,8 @@ describe("resolveExportTarget — dimensions per preset × source aspect", () =>
     });
 
     it(`${name}: fixed presets always output the exact canvas (upscale included)`, () => {
-      expect(pick(resolveExportTarget("youtube", source, 60))).toEqual([1920, 1080]);
+      expect(pick(resolveExportTarget("youtube-1440", source, 60))).toEqual([2560, 1440]);
+      expect(pick(resolveExportTarget("youtube-4k", source, 60))).toEqual([3840, 2160]);
       expect(pick(resolveExportTarget("vertical", source, 60))).toEqual([1080, 1920]);
       expect(pick(resolveExportTarget("square", source, 60))).toEqual([1080, 1080]);
     });
@@ -112,9 +142,11 @@ const pick = (t: { width: number; height: number }) => [t.width, t.height];
 
 describe("framing", () => {
   it("YouTube is always Fit with black padding, whatever is asked", () => {
-    const t = resolveExportTarget("youtube", SOURCES.macbook, 10, { framing: "fill" });
-    expect(t.framing).toBe("fit");
-    expect(t.padding).toBe("black");
+    for (const id of YOUTUBE_PRESET_IDS) {
+      const t = resolveExportTarget(id, SOURCES.macbook, 10, { framing: "fill" });
+      expect(t.framing).toBe("fit");
+      expect(t.padding).toBe("black");
+    }
   });
 
   it("defaults: Vertical = Fill, Square = Fit, both with blurred padding", () => {
@@ -192,7 +224,7 @@ describe("keyframes", () => {
   it("every preset puts a keyframe every 10 s, except YouTube (2 s, its upload guide)", () => {
     for (const id of EXPORT_PRESET_IDS) {
       const t = resolveExportTarget(id, SOURCES["16:9"], 60);
-      expect(t.keyFrameInterval).toBe(id === "youtube" ? YOUTUBE_KEY_FRAME_INTERVAL_SEC : 10);
+      expect(t.keyFrameInterval).toBe(isYoutubePreset(id) ? YOUTUBE_KEY_FRAME_INTERVAL_SEC : 10);
     }
     expect(YOUTUBE_KEY_FRAME_INTERVAL_SEC).toBe(2);
   });
@@ -207,8 +239,8 @@ describe("bitrates (FR5)", () => {
     expect(fixedVideoBitrate(1080, 1080, 60)).toBe(6_750_000);
   });
 
-  it("fixed presets use 128 kbps AAC and keep the source cadence", () => {
-    const t = resolveExportTarget("youtube", src(1920, 1080, { fps: 60 }), 10);
+  it("Vertical and Square use 128 kbps AAC and keep the source cadence", () => {
+    const t = resolveExportTarget("vertical", src(1920, 1080, { fps: 60 }), 10);
     expect(t.videoBitrate).toBe(12_000_000);
     expect(t.quantizer).toBeNull();
     expect(t.audioBitrate).toBe(128_000);
@@ -217,10 +249,76 @@ describe("bitrates (FR5)", () => {
   });
 });
 
+describe("YouTube 1440p and 4K (NIW2-564)", () => {
+  // The recording that prompted the canvases: 1916×1048 at 48 fps.
+  const recording = src(1916, 1048, { fps: 48 });
+
+  it("upscales the 1916×1048 recording to 2560×1440 and to 3840×2160, Fit", () => {
+    const qhd = resolveExportTarget("youtube-1440", recording, 60);
+    const uhd = resolveExportTarget("youtube-4k", recording, 60);
+    expect(pick(qhd)).toEqual([2560, 1440]);
+    expect(pick(uhd)).toEqual([3840, 2160]);
+    expect(qhd.framing).toBe("fit");
+    expect(uhd.framing).toBe("fit");
+  });
+
+  it("targets the top of YouTube's SDR ranges per fps band", () => {
+    expect(YOUTUBE_VIDEO_BITRATES).toEqual({
+      "youtube-1440": { lowFps: 16_000_000, highFps: 24_000_000 },
+      "youtube-4k": { lowFps: 45_000_000, highFps: 68_000_000 },
+    });
+    const at = (id: "youtube-1440" | "youtube-4k", fps: number) =>
+      resolveExportTarget(id, src(1916, 1048, { fps }), 10).videoBitrate;
+    expect(at("youtube-1440", 30)).toBe(16_000_000);
+    expect(at("youtube-1440", 48)).toBe(24_000_000);
+    expect(at("youtube-4k", 24)).toBe(45_000_000);
+    expect(at("youtube-4k", 60)).toBe(68_000_000);
+  });
+
+  it("encodes by bitrate at the source cadence, 2 s keyframes, 384 kbps AAC, fast start", () => {
+    for (const id of YOUTUBE_PRESET_IDS) {
+      const t = resolveExportTarget(id, recording, 10);
+      expect(t.quantizer).toBeNull();
+      expect(t.maxFps).toBeNull();
+      expect(t.keyFrameInterval).toBe(YOUTUBE_KEY_FRAME_INTERVAL_SEC);
+      expect(t.audioBitrate).toBe(YOUTUBE_AUDIO_BITRATE);
+      expect(YOUTUBE_AUDIO_BITRATE).toBe(384_000);
+      expect(t.audioChannels).toBeNull();
+      expect(t.fastStart).toBe("reserve");
+    }
+  });
+
+  it("estimates (V + A) × D / 8 plus the moov reservation with the YouTube bitrates", () => {
+    const qhd = resolveExportTarget("youtube-1440", recording, 120);
+    expect(qhd.estimateBytes).toBe(
+      Math.ceil(((24_000_000 + 384_000) * 120) / 8 + reserveBytes(qhd.packetCounts)),
+    );
+    const silent = resolveExportTarget("youtube-4k", { ...recording, hasAudio: false }, 120);
+    expect(silent.estimateBytes).toBe(
+      Math.ceil((68_000_000 * 120) / 8 + reserveBytes(silent.packetCounts)),
+    );
+  });
+});
+
+describe("defaultYoutubePreset", () => {
+  it("picks 1440p unless fitting the source into 2560×1440 would shrink it", () => {
+    expect(defaultYoutubePreset({ width: 1916, height: 1048 })).toBe("youtube-1440");
+    expect(defaultYoutubePreset({ width: 1920, height: 1080 })).toBe("youtube-1440");
+    expect(defaultYoutubePreset({ width: 2560, height: 1440 })).toBe("youtube-1440");
+    expect(defaultYoutubePreset({ width: 3024, height: 1964 })).toBe("youtube-4k");
+    expect(defaultYoutubePreset({ width: 3840, height: 2160 })).toBe("youtube-4k");
+  });
+
+  it("goes by height for a portrait source (a 1440-tall canvas would shrink it)", () => {
+    expect(defaultYoutubePreset({ width: 1080, height: 1920 })).toBe("youtube-4k");
+    expect(defaultYoutubePreset({ width: 810, height: 1440 })).toBe("youtube-1440");
+  });
+});
+
 describe("size estimate (FR7)", () => {
   it("fixed presets: (V + A) × D / 8 plus the moov reservation", () => {
-    const t = resolveExportTarget("youtube", SOURCES["16:9"], 120);
-    const content = ((8_000_000 + 128_000) * 120) / 8;
+    const t = resolveExportTarget("square", SOURCES["16:9"], 120);
+    const content = ((4_500_000 + 128_000) * 120) / 8;
     expect(t.estimateBytes).toBe(Math.ceil(content + reserveBytes(t.packetCounts)));
   });
 
@@ -295,8 +393,13 @@ describe("encodeFingerprint", () => {
     expect(encodeFingerprint("whole", "light")).toBe("whole#q33-24fps-kfi10");
     expect(encodeFingerprint("edit:abc", "balanced")).toBe("edit:abc#q30-24fps-kfi10");
     // Unchanged encodes keep the bare fingerprint (their older files still match).
-    expect(encodeFingerprint("whole", "youtube")).toBe("whole");
+    expect(encodeFingerprint("whole", "vertical")).toBe("whole");
     expect(encodeFingerprint("whole", "maximum")).toBe("whole");
+  });
+
+  it("revisions the YouTube canvases, so an old 1920×1080 file never passes for one", () => {
+    expect(encodeFingerprint("whole", "youtube-1440")).toBe("whole#2560x1440-v1");
+    expect(encodeFingerprint("edit:abc", "youtube-4k")).toBe("edit:abc#3840x2160-v1");
   });
 });
 
@@ -368,6 +471,19 @@ describe("audioEncodingCandidates", () => {
     expect(audioEncodingCandidates({ audioBitrate: 128_000, audioChannels: null }, 2)).toEqual([
       { numberOfChannels: 2, bitrate: 128_000 },
     ]);
+  });
+
+  it("steps YouTube's 384 kbps down to 256, 192 and 128 kbps at the source layout", () => {
+    expect(
+      audioEncodingCandidates({ audioBitrate: YOUTUBE_AUDIO_BITRATE, audioChannels: null }, 2),
+    ).toEqual([
+      { numberOfChannels: 2, bitrate: 384_000 },
+      { numberOfChannels: 2, bitrate: 256_000 },
+      { numberOfChannels: 2, bitrate: 192_000 },
+      { numberOfChannels: 2, bitrate: 128_000 },
+    ]);
+    const target = resolveExportTarget("youtube-4k", src(1916, 1048), 10);
+    expect(audioEncodingCandidates(target, 1).map((c) => c.numberOfChannels)).toEqual([1, 1, 1, 1]);
   });
 
   it("drops duplicates when the source is already mono", () => {

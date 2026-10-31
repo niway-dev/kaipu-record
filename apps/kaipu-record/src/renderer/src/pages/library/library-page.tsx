@@ -26,6 +26,8 @@ import { resolveTags, useTags } from "@renderer/features/library/hooks/use-tags"
 import { TagChip } from "@renderer/features/library/tags/tag-chip";
 import { buildLineage, editBadge } from "@renderer/features/library/lineage";
 import { canOpenInEditor, useOpenInEditor } from "@renderer/features/editor/open-in-editor";
+import { preparePath } from "@renderer/features/prepare/prepare-path";
+import { asPreparable } from "@renderer/features/prepare/use-prepare-copy";
 import { ReconcileBanner } from "@renderer/features/library/reconcile/reconcile-banner";
 import { WorkspaceNotConnectedNotice } from "@renderer/features/workspaces/not-connected-notice";
 import styles from "./library-page.module.css";
@@ -342,6 +344,9 @@ export function LibraryPage(): React.JSX.Element {
               badge={editBadge(video, lineage)}
               onNavigate={() => navigate(`/library/${video.assetId}`)}
               onEdit={canOpenInEditor(video) ? () => openItem(video) : undefined}
+              onPrepare={
+                asPreparable(video) ? () => navigate(preparePath(video.assetId)) : undefined
+              }
               onTags={video.id !== null ? () => openTagPanel(video.assetId) : undefined}
               selected={video.assetId === taggingId}
               tags={resolveTags(video.tagIds, tagApi.byId)}
@@ -363,6 +368,9 @@ export function LibraryPage(): React.JSX.Element {
                 badge={editBadge(video, lineage)}
                 onNavigate={() => navigate(`/library/${video.assetId}`)}
                 onEdit={canOpenInEditor(video) ? () => openItem(video) : undefined}
+                onPrepare={
+                  asPreparable(video) ? () => navigate(preparePath(video.assetId)) : undefined
+                }
                 onTags={video.id !== null ? () => openTagPanel(video.assetId) : undefined}
                 selected={video.assetId === taggingId}
                 tags={resolveTags(video.tagIds, tagApi.byId)}

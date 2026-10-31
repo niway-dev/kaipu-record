@@ -69,7 +69,6 @@ export default defineConfig({
           label: "Backlog",
           items: [
             "backlog/deploy-environments",
-            { slug: "backlog" },
             { slug: "backlog/technical-debt" },
             { slug: "backlog/code-quality-audit" },
             { slug: "backlog/secrets-and-dependency-audit-handoff" },
@@ -93,6 +92,7 @@ export default defineConfig({
             { slug: "backlog/record-capture-modes" },
             { slug: "backlog/recording-capture-metadata" },
             { slug: "backlog/camera-bubble-shape-and-size" },
+            { slug: "backlog/webcam-track" },
             { slug: "backlog/mic-and-system-audio-settings" },
             { slug: "backlog/tray-record-submenu" },
             { slug: "backlog/settings-updates" },
@@ -103,6 +103,7 @@ export default defineConfig({
             { slug: "backlog/video-editor-mute" },
             { slug: "backlog/gif-export" },
             { slug: "backlog/export-presets" },
+            { slug: "backlog/prepare-screen" },
             { slug: "backlog/editor-space-and-window-presets" },
             { slug: "backlog/capture-panel-latency" },
             { slug: "backlog/editor-title-input" },

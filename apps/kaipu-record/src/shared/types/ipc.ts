@@ -12,6 +12,7 @@ import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
 import type { ExportPresetId, ExportQuality } from "./export-preset";
 import type { RecordingCapture } from "../recording-capture";
+import type { WebcamTrackMeta } from "../webcam-track";
 import {
   ENABLED_CAPTURE_MODES,
   type CaptureMode,
@@ -561,6 +562,16 @@ export const IPC_CHANNELS = {
   recordingAbort: "recording:abort",
   /** NIW2-218: byte size of an open writer session's temp file (Small-file size check). */
   recordingStat: "recording:stat",
+  /**
+   * The take records no (more) webcam file (ADR 0037): its camera did not open, was turned
+   * off, unplugged, or its encoder failed. Main puts the camera bubble back in the capture.
+   */
+  recordingWebcamEnded: "recording:webcam-ended",
+  /**
+   * Whether this OS can record the webcam as its own file (ADR 0037): only where the camera
+   * bubble can leave the screen capture. False on Windows before 10 2004 (the legacy path).
+   */
+  recordingWebcamTrackSupported: "recording:webcam-track-supported",
   recordingReportTick: "recording:report-tick",
   // Mic levels for the settings meter, kept off the activity broadcast (10/s would re-render
   // every window). A window subscribes (renderer → main, counted); the recorder reports
@@ -766,6 +777,12 @@ export interface RecordingFinalizeMeta {
    * library labels. Set by the recorder only; exports leave it unset. Main sanitizes it.
    */
   capture?: RecordingCapture | null;
+  /**
+   * The take's webcam file (ADR 0037): where its time 0 sits against the screen's, its size
+   * and the bubble as recorded. Set only when the webcam session holds a usable file; absent
+   * or null, a webcam part is discarded. Main sanitizes it before the sidecar stores it.
+   */
+  webcam?: WebcamTrackMeta | null;
 }
 
 /**

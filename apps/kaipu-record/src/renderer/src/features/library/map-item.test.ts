@@ -53,9 +53,12 @@ describe("toLibraryVideo", () => {
     expect(toLibraryVideo(item).export).toBeNull();
     const exported = {
       ...item,
-      local: { ...item.local!, export: { preset: "youtube" as const, fingerprint: "whole" } },
+      local: { ...item.local!, export: { preset: "youtube-1440" as const, fingerprint: "whole" } },
     };
-    expect(toLibraryVideo(exported).export).toEqual({ preset: "youtube", fingerprint: "whole" });
+    expect(toLibraryVideo(exported).export).toEqual({
+      preset: "youtube-1440",
+      fingerprint: "whole",
+    });
   });
 
   it("keeps the local id, the asset id, both sizes and the axes", () => {
@@ -82,6 +85,18 @@ describe("toLibraryVideo", () => {
     } as const;
     expect(toLibraryVideo({ ...item, capture }).capture).toEqual(capture);
     expect(toLibraryVideo(item).capture).toBeNull();
+  });
+
+  it("carries the webcam track of the local copy, null when it has none", () => {
+    const webcam = {
+      startOffsetMs: 4,
+      offsetQuality: "exact",
+      width: 1280,
+      height: 720,
+      fps: 30,
+    } as const;
+    expect(toLibraryVideo({ ...item, local: { ...item.local!, webcam } }).webcam).toEqual(webcam);
+    expect(toLibraryVideo(item).webcam).toBeNull();
   });
 
   it("a cloud-only item has no local id, no thumbnail yet, and the cloud size as its size", () => {

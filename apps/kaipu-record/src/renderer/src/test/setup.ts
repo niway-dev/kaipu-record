@@ -217,6 +217,8 @@ window.electronAPI = {
   },
   recordingAbort: async () => {},
   recordingStat: async () => 0,
+  recordingWebcamEnded: async () => {},
+  recordingWebcamTrackSupported: async () => true,
   recordingReportTick: () => {},
   recordingReportMicLevels: () => {},
   getMicLevelsListening: async () => false,

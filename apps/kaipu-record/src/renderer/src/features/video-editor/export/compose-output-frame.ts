@@ -3,15 +3,29 @@
  * so the two can never diverge on what reaches the file — privacy redactions above all.
  *
  *   fill black → planClipFrame → direct draw, or (work canvas: frame → redactions →
- *   content-pinned overlays → camera crop) → overlays on the output for direct frames.
+ *   content-pinned overlays → camera crop) → overlays on the output for direct frames
+ *   → framing (fixed-canvas presets: the composed view onto the target canvas, Fit/Fill)
+ *   → webcam layer (ADR 0038), on the final canvas, at its size.
  *
- * Slides: fill black → contained bitmap → overlays.
+ * Slides: fill black → contained bitmap → overlays → framing (always Fit). No webcam.
+ *
+ * The webcam is drawn last and on the FINAL canvas so the zoom moves the content under it
+ * and Fill never crops it. A frame with no zoom and no region still takes the "direct"
+ * path; the webcam is one more draw on top of it.
  *
  * WORKER-BUNDLE INVARIANT: same as compose-frame.ts — no DOM, no React. OffscreenCanvas only.
  */
 import type { CameraPathMessage } from "./export-messages";
 import type { OverlayWindow } from "./export-plan";
 import type { Redaction } from "../privacy/redaction";
+import type { WebcamScene } from "../webcam/webcam-model";
+import { cameraAt } from "../zoom/camera-path";
+import {
+  drawWebcamLayer,
+  planWebcamDraw,
+  type WebcamCtx,
+  type WebcamLayerFrame,
+} from "./compose-webcam";
 import {
   applyRedactions,
   framingRect,
@@ -30,20 +44,61 @@ export interface OutputComposerOptions {
   overlayWindows: OverlayWindow[];
   /** Rasterized overlay bitmaps at output size, by overlay id. */
   overlayBitmaps: Map<string, ImageBitmap>;
+  /**
+   * Fixed-canvas presets (Vertical, Square): `ctx` draws on `view`, a source-size canvas,
+   * which is then framed onto `ctx`/`width`/`height` here. Null composes straight onto `ctx`.
+   */
+  framing?: OutputFraming | null;
+  /** The webcam layer (ADR 0038); null for a recording without a webcam track. */
+  webcam?: WebcamScene | null;
+}
+
+export interface OutputFraming {
+  /** The canvas the composer's `ctx` draws on. */
+  view: OffscreenCanvas;
+  /** The target canvas, at the preset's size. */
+  ctx: OffscreenCanvasRenderingContext2D;
+  width: number;
+  height: number;
+  /** Fit or Fill for clip frames; slides are always Fit. */
+  mode: "fit" | "fill";
+  padding: "black" | "blur";
 }
 
 export interface OutputComposer {
   /**
    * Compose a decoded clip frame (`frame` already scaled to `width × height`) whose source
-   * span is [sourceTs, sourceTs + sourceDuration), at output (timeline) time `outTs`.
+   * span is [sourceTs, sourceTs + sourceDuration), at output (timeline) time `outTs`, with
+   * the webcam frame for it (null: none there, or no webcam). The layer's layout and the
+   * camera scale it shrinks with are read at the webcam frame's own `sourceTs`.
    */
-  clip(frame: CanvasImageSource, sourceTs: number, sourceDuration: number, outTs: number): void;
+  clip(
+    frame: CanvasImageSource,
+    sourceTs: number,
+    sourceDuration: number,
+    outTs: number,
+    webcam?: WebcamLayerFrame | null,
+  ): void;
   /** Compose a slide frame at output time `outTs`; a missing bitmap renders black. */
   slide(bitmap: ImageBitmap | undefined, outTs: number): void;
 }
 
 export function createOutputComposer(opts: OutputComposerOptions): OutputComposer {
   const { ctx, width, height, camera, redactions, overlayWindows, overlayBitmaps } = opts;
+  const framing = opts.framing ?? null;
+  const webcam = opts.webcam ?? null;
+  const framer = framing
+    ? createFramer({
+        ctx: framing.ctx,
+        width: framing.width,
+        height: framing.height,
+        padding: framing.padding,
+      })
+    : null;
+  // Where the finished frame lives: the target canvas for fixed-canvas presets, else `ctx`.
+  const final = framing
+    ? { ctx: framing.ctx, width: framing.width, height: framing.height }
+    : { ctx, width, height };
   // v2 composition resources (plans/video-editor-v2/11): a source-resolution work canvas
   // for redactions + content-pinned overlays before the camera crop, and a scratch canvas
   // for mosaics. The work canvas is created lazily — a recording with no zoom and no region
@@ -64,50 +119,76 @@ export function createOutputComposer(opts: OutputComposerOptions): OutputCompose
     }
   };
 
+  // Clip frames: frame → redactions → overlays → crop, onto `ctx` (the view or the output).
+  const composeClip = (
+    frameCanvas: CanvasImageSource,
+    sourceTs: number,
+    sourceDuration: number,
+    outTs: number,
+  ): void => {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, width, height);
+    const frame = planClipFrame(camera, redactions, sourceTs, sourceDuration, width, height);
+    if (frame.mode === "direct") {
+      // Unchanged pre-v2 path: no zoom and no privacy region on this frame.
+      ctx.drawImage(frameCanvas, 0, 0);
+      stampOverlays(outTs, ctx);
+      return;
+    }
+    if (!work || !workCtx) {
+      work = new OffscreenCanvas(width, height);
+      workCtx = work.getContext("2d");
+      if (!workCtx) throw new Error("export: no 2D context on the work canvas");
+    }
+    workCtx.filter = "none";
+    workCtx.drawImage(frameCanvas, 0, 0);
+    // Source = `work` itself, NOT the decoded frame: regions may overlap, and a blur
+    // sampling the decoded frame would paint blurred original pixels over a cover drawn
+    // before it. Self-drawImage is legal in Canvas2D.
+    applyRedactions(
+      workCtx as unknown as Ctx2D,
+      work,
+      frame.redactions,
+      width,
+      height,
+      scratch as unknown as ScratchCanvas,
+      filterSupported,
+    );
+    stampOverlays(outTs, workCtx);
+    if (frame.crop) {
+      // A zoom crop upscales: high-quality resampling, as the fixed-canvas framer does.
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      const { sx, sy, sw, sh } = frame.crop;
+      ctx.drawImage(work, sx, sy, sw, sh, 0, 0, width, height);
+    } else {
+      ctx.drawImage(work, 0, 0);
+    }
+  };
+
   return {
-    clip(frameCanvas, sourceTs, sourceDuration, outTs) {
-      ctx.fillStyle = "#000";
-      ctx.fillRect(0, 0, width, height);
-      const frame = planClipFrame(camera, redactions, sourceTs, sourceDuration, width, height);
-      if (frame.mode === "direct") {
-        // Unchanged pre-v2 path: no zoom and no privacy region on this frame.
-        ctx.drawImage(frameCanvas, 0, 0);
-        stampOverlays(outTs, ctx);
-        return;
-      }
-      if (!work || !workCtx) {
-        work = new OffscreenCanvas(width, height);
-        workCtx = work.getContext("2d");
-        if (!workCtx) throw new Error("export: no 2D context on the work canvas");
-      }
-      workCtx.filter = "none";
-      workCtx.drawImage(frameCanvas, 0, 0);
-      // Source = `work` itself, NOT the decoded frame: regions may overlap, and a blur
-      // sampling the decoded frame would paint blurred original pixels over a cover drawn
-      // before it. Self-drawImage is legal in Canvas2D.
-      applyRedactions(
-        workCtx as unknown as Ctx2D,
-        work,
-        frame.redactions,
-        width,
-        height,
-        scratch as unknown as ScratchCanvas,
-        filterSupported,
+    clip(frameCanvas, sourceTs, sourceDuration, outTs, webcamFrame) {
+      composeClip(frameCanvas, sourceTs, sourceDuration, outTs);
+      if (framer && framing) framer.frame(framing.view, framing.mode);
+      // Last, on the final canvas: after the crop and after the framer (ADR 0038).
+      if (!webcamFrame) return;
+      const at = webcamFrame.sourceTs;
+      const plan = planWebcamDraw(
+        webcam,
+        at,
+        final,
+        camera ? cameraAt(camera, at).scale : 1,
+        webcamFrame.image,
       );
-      stampOverlays(outTs, workCtx);
-      if (frame.crop) {
-        ctx.imageSmoothingQuality = "high";
-        const { sx, sy, sw, sh } = frame.crop;
-        ctx.drawImage(work, sx, sy, sw, sh, 0, 0, width, height);
-      } else {
-        ctx.drawImage(work, 0, 0);
-      }
+      if (plan) drawWebcamLayer(final.ctx as unknown as WebcamCtx, webcamFrame.image.image, plan);
     },
     slide(bitmap, outTs) {
       ctx.fillStyle = "#000";
       ctx.fillRect(0, 0, width, height);
       if (bitmap) drawContained(ctx, bitmap, width, height);
       stampOverlays(outTs, ctx);
+      // Slides are always contained ("fit"), never cropped, whatever the clip framing.
+      if (framer && framing) framer.frame(framing.view, "fit");
     },
   };
 }
@@ -139,6 +220,11 @@ function canvasFilterSupported(): boolean {
 /**
  * Draw `bitmap` into `(w × h)` with letterboxing (contain), centred, on a
  * black background that was already filled by the caller.
+ *
+ * A slide bitmap is usually a different size from the frame, so this resamples — up, on a
+ * 4K YouTube export. The context default is bilinear ("low"), which softens slide text;
+ * "high" is the same resampling the framer and the zoom crop use. The state is left set:
+ * every drawImage on this context is a resample that wants it.
  */
 function drawContained(
   ctx: OffscreenCanvasRenderingContext2D,
@@ -149,6 +235,8 @@ function drawContained(
   const scale = Math.min(w / bitmap.width, h / bitmap.height);
   const dw = bitmap.width * scale;
   const dh = bitmap.height * scale;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   ctx.drawImage(bitmap, (w - dw) / 2, (h - dh) / 2, dw, dh);
 }
 

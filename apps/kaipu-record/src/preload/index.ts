@@ -205,12 +205,17 @@ const kaipuApi: KaipuElectronAPI = {
   removeLocalCopy: (id) => scopedInvoke(IPC_CHANNELS.removeLocalCopy, id),
   recordingCreate: (sessionId, kind) =>
     ipcRenderer.invoke(IPC_CHANNELS.recordingCreate, sessionId, kind),
-  recordingWrite: (sessionId, data, position) =>
-    ipcRenderer.send(IPC_CHANNELS.recordingWrite, sessionId, data, position),
+  recordingWrite: (sessionId, data, position, kind) =>
+    ipcRenderer.send(IPC_CHANNELS.recordingWrite, sessionId, data, position, kind),
   recordingFinalize: (sessionId, meta) =>
     ipcRenderer.invoke(IPC_CHANNELS.recordingFinalize, sessionId, meta),
   recordingAbort: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.recordingAbort, sessionId),
-  recordingStat: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.recordingStat, sessionId),
+  recordingStat: (sessionId, kind) =>
+    ipcRenderer.invoke(IPC_CHANNELS.recordingStat, sessionId, kind),
+  recordingWebcamEnded: (sessionId) =>
+    ipcRenderer.invoke(IPC_CHANNELS.recordingWebcamEnded, sessionId),
+  recordingWebcamTrackSupported: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.recordingWebcamTrackSupported),
   recordingReportTick: (tick) => ipcRenderer.send(IPC_CHANNELS.recordingReportTick, tick),
   recordingReportMicLevels: (levels) => ipcRenderer.send(IPC_CHANNELS.micLevelsReport, levels),
   getMicLevelsListening: () => ipcRenderer.invoke(IPC_CHANNELS.micLevelsGetListening),

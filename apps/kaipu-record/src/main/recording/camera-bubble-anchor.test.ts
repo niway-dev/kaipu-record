@@ -9,6 +9,7 @@ const created: FakeWindow[] = [];
 let lastOptions: Record<string, unknown> | null = null;
 
 class FakeWindow {
+  setContentProtection = vi.fn();
   setAlwaysOnTop = vi.fn();
   setVisibleOnAllWorkspaces = vi.fn();
   bounds = { x: 0, y: 0, width: 288, height: 288 };

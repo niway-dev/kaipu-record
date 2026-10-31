@@ -97,10 +97,10 @@ beforeEach(() => {
   window.electronAPI.acquireEditorSession = async () => SOURCE.id;
 });
 
-function renderEditor() {
+function renderEditor(source: VideoEditorSource = SOURCE) {
   const router = createMemoryRouter(
     [
-      { path: "/", element: <VideoEditorLoader source={SOURCE} /> },
+      { path: "/", element: <VideoEditorLoader source={source} /> },
       { path: "/library/:assetId", element: <div>library-detail</div> },
     ],
     { initialEntries: ["/"] },
@@ -783,4 +783,84 @@ describe("VideoEditorPage — inspector column priority (annotation follow-ups)"
   // focus-inspector.test.ts; asserting the rAF callback fired from inside this page's
   // jsdom harness would be timing-fragile without an existing fake-timers/rAF-flush
   // pattern already in this file, so it is skipped here too.
+});
+
+// The webcam layer (ADR 0038): everything it adds hangs off the sidecar's webcam track.
+describe("VideoEditorPage — webcam track", () => {
+  const WITH_WEBCAM: VideoEditorSource = {
+    ...SOURCE,
+    webcam: { startOffsetMs: 120, offsetQuality: "exact", width: 1280, height: 720, fps: 30 },
+  };
+
+  it("a recording without a webcam shows no lane, no layer, no second video and no hide action", async () => {
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    expect(footer.querySelector('[data-testid="webcam-lane"]')).toBeNull();
+    expect(screen.queryByTestId("webcam-layer")).toBeNull();
+    expect(document.querySelectorAll("video")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Hide webcam here" })).toBeNull();
+  });
+
+  it("a recording with a webcam gets the lane, the layer's own muted video and the hide action", async () => {
+    renderEditor(WITH_WEBCAM);
+    const footer = await waitForEditorLoaded();
+    expect(footer.querySelector('[data-testid="webcam-lane"]')).not.toBeNull();
+    expect(screen.getByText("WEBCAM")).toBeInTheDocument();
+    const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
+    expect(cam.getAttribute("src")).toBe("kaipu-media://webcam/rec-1");
+    expect(cam.muted).toBe(true);
+    expect(screen.getByRole("button", { name: "Hide webcam here" })).toBeInTheDocument();
+  });
+
+  it("Hide webcam here adds a selected hidden section; Delete removes it", async () => {
+    renderEditor(WITH_WEBCAM);
+    const footer = await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Hide webcam here" }));
+    const block = await waitFor(() => {
+      const found = footer.querySelector('[data-webcam-id][data-mode="hidden"]');
+      expect(found).not.toBeNull();
+      return found as HTMLElement;
+    });
+    expect(block).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByRole("heading", { name: "Webcam section 1" })).toBeInTheDocument();
+    await waitFor(() => {
+      fireEvent.keyDown(window, { key: "Delete" });
+      expect(footer.querySelector("[data-webcam-id]")).toBeNull();
+    });
+  });
+
+  it("draws the bubble once both files report their size, and hides it while holding the original", async () => {
+    stubDecodedVideoSize(1280, 720);
+    try {
+      renderEditor(WITH_WEBCAM);
+      await waitForEditorLoaded();
+      const main = Array.from(document.querySelectorAll("video")).find(
+        (v) => v.dataset.testid !== "webcam-video",
+      )!;
+      fireEvent.loadedMetadata(main);
+      const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
+      Object.defineProperty(cam, "duration", { configurable: true, get: () => 60 });
+      fireEvent.loadedMetadata(cam);
+      // Main video at 0 s, webcam started 120 ms later: no webcam frame yet.
+      expect(screen.getByTestId("webcam-layer").style.display).toBe("none");
+      main.currentTime = 1;
+      fireEvent(main, new Event("seeked"));
+      expect(screen.getByTestId("webcam-layer").style.display).toBe("");
+      const hold = screen.getByRole("button", { name: /original/i, pressed: false });
+      fireEvent.pointerDown(hold, { pointerId: 1 });
+      await waitFor(() => expect(screen.getByTestId("webcam-layer").style.display).toBe("none"));
+      fireEvent.pointerUp(hold, { pointerId: 1 });
+      await waitFor(() => expect(screen.getByTestId("webcam-layer").style.display).toBe(""));
+    } finally {
+      stubDecodedVideoSize(0, 0);
+    }
+  });
+
+  it("grabbing the bubble opens the Webcam section of the inspector", async () => {
+    renderEditor(WITH_WEBCAM);
+    await waitForEditorLoaded();
+    fireEvent.pointerDown(screen.getByTestId("webcam-layer"), { pointerId: 1 });
+    expect(await screen.findByRole("heading", { name: "Webcam" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Position" })).toBeInTheDocument();
+  });
 });

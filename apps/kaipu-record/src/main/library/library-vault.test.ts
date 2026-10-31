@@ -172,6 +172,76 @@ describe("LibraryVault", () => {
     expect(await readdir(join(directory, ".kaipu"))).not.toContain("rec.cursor.json.tmp");
   });
 
+  it("removes the webcam file with the recording (ADR 0037)", async () => {
+    await writeRecording("rec");
+    await mkdir(join(directory, ".kaipu"), { recursive: true });
+    await writeFile(vault.webcamFilePath("rec"), "webcam");
+    await vault.remove("rec");
+    expect(await readdir(join(directory, ".kaipu"))).not.toContain("rec.webcam.mp4");
+  });
+
+  describe("webcam track (ADR 0037)", () => {
+    const webcamMeta = {
+      startOffsetMs: 120.5,
+      offsetQuality: "exact",
+      width: 1280,
+      height: 720,
+      fps: 30,
+      recordedLayout: {
+        shape: "circle",
+        size: "medium",
+        mirrored: true,
+        framing: { enabled: false, zoom: 1, centerX: 0.5, centerY: 0.5 },
+      },
+    };
+
+    const writeWebcamFile = async (id: string): Promise<void> => {
+      await mkdir(join(directory, ".kaipu"), { recursive: true });
+      await writeFile(vault.webcamFilePath(id), "webcam");
+    };
+
+    it("describe exposes the sidecar's webcam when the file exists", async () => {
+      await writeRecording("rec");
+      await writeSidecar("rec", { webcam: webcamMeta });
+      await writeWebcamFile("rec");
+      const described = await vault.describe("rec");
+      expect(described?.webcam).toMatchObject({
+        startOffsetMs: 120.5,
+        offsetQuality: "exact",
+        width: 1280,
+        height: 720,
+        fps: 30,
+        recordedLayout: { shape: "circle", mirrored: true },
+      });
+    });
+
+    it("describe gives no webcam when the sidecar names one but the file is gone", async () => {
+      await writeRecording("rec");
+      await writeSidecar("rec", { webcam: webcamMeta });
+      expect((await vault.describe("rec"))?.webcam ?? null).toBeNull();
+    });
+
+    it("describe gives no webcam for a recording without the field, even with a stray file", async () => {
+      await writeRecording("rec");
+      await writeWebcamFile("rec");
+      expect((await vault.describe("rec"))?.webcam ?? null).toBeNull();
+    });
+
+    it("rename moves the webcam file with the item, still paired (ADR 0035)", async () => {
+      await writeRecording("rec");
+      await writeSidecar("rec", { assetId: "asset-rec", webcam: webcamMeta });
+      await writeWebcamFile("rec");
+      const result = await vault.renameItem({ id: "rec", assetId: "asset-rec" }, "Renamed");
+      expect(result.file).toBe("renamed");
+      const described = await vault.describe("Renamed");
+      expect(described?.title).toBe("Renamed");
+      expect(described?.webcam).toBeTruthy();
+      const meta = await readdir(join(directory, ".kaipu"));
+      expect(meta).toContain("Renamed.webcam.mp4");
+      expect(meta).not.toContain("rec.webcam.mp4");
+    });
+  });
+
   it("keeps the cursor track when only the local copy is removed", async () => {
     await writeRecording("rec");
     await vault.writeCursorTrack("rec", "{}");
@@ -266,11 +336,13 @@ describe("LibraryVault", () => {
     expect((await vault.describe("exp"))?.contentSha256).toBeNull();
   });
 
-  it('exposes an MP4 export\'s preset and fingerprint, reading the legacy "original" as maximum (NIW2-218)', async () => {
+  it('exposes an MP4 export\'s preset and fingerprint, reading the legacy "original" as maximum (NIW2-218) and "youtube" as youtube-1440', async () => {
     await writeRecording("share");
     await writeSidecar("share", { exportPreset: "balanced", exportFingerprint: "whole" });
     await writeRecording("legacy");
     await writeSidecar("legacy", { exportPreset: "original" });
+    await writeRecording("old-youtube");
+    await writeSidecar("old-youtube", { exportPreset: "youtube", exportFingerprint: "whole" });
     await writeRecording("plain");
     await writeSidecar("plain", { exportPreset: "tiktok" });
     expect((await vault.describe("share"))?.export).toEqual({
@@ -280,6 +352,11 @@ describe("LibraryVault", () => {
     expect((await vault.describe("legacy"))?.export).toEqual({
       preset: "maximum",
       fingerprint: null,
+    });
+    // The 1920×1080 YouTube export (before NIW2-564) reads as YouTube 1440p.
+    expect((await vault.describe("old-youtube"))?.export).toEqual({
+      preset: "youtube-1440",
+      fingerprint: "whole",
     });
     expect((await vault.describe("plain"))?.export).toBeNull();
   });

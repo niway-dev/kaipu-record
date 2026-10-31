@@ -146,5 +146,11 @@ export type RemoveLocalCopyResult =
   | { ok: true }
   | {
       ok: false;
-      reason: "no-cloud-copy" | "different-bytes" | "hash-unknown" | "edit-project" | "not-found";
+      reason:
+        | "no-cloud-copy"
+        | "different-bytes"
+        | "hash-unknown"
+        | "edit-project"
+        | "webcam-track"
+        | "not-found";
     };
