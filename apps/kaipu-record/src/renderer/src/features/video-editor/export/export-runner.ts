@@ -439,6 +439,8 @@ export async function startVideoExport(
               ...(args.fingerprint
                 ? { exportFingerprint: encodeFingerprint(args.fingerprint, presetId) }
                 : {}),
+              // Kept with the file: chat's and email's copies share a preset.
+              ...(args.destination ? { exportDestination: args.destination } : {}),
             });
             // Re-check again: cancel() could have run during the finalize await too.
             if (!active) return;

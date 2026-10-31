@@ -29,6 +29,22 @@ describe("copyDestinationOf", () => {
     ).toBeNull();
   });
 
+  it("reads the destination the sidecar stored, so an Email copy stays Email (Balanced is chat's too)", () => {
+    expect(
+      copyDestinationOf({
+        ...recording,
+        export: { preset: "balanced", fingerprint: "whole#q30", destination: "email" },
+      }),
+    ).toBe("email");
+    // Older copies without it fall back to the preset's destination.
+    expect(
+      copyDestinationOf({
+        ...recording,
+        export: { preset: "balanced", fingerprint: "whole#q30", destination: null },
+      }),
+    ).toBe("chat");
+  });
+
   it("prefers the export job's destination when the runner still has it", () => {
     expect(copyDestinationOf({ ...recording, export: null }, "chat")).toBe("chat");
   });

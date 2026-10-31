@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EXPORT_PRESET_IDS } from "@renderer/features/video-editor/export/export-presets";
+import { EXPORT_DESTINATION_IDS } from "@shared/types/export-preset";
 import {
   DESTINATION_GROUPS,
   DESTINATION_IDS,
@@ -10,6 +11,12 @@ import {
   presetForDestination,
   presetsOf,
 } from "./destinations";
+
+describe("DESTINATION_IDS", () => {
+  it("names the same destinations a sidecar may store", () => {
+    expect([...DESTINATION_IDS]).toEqual([...EXPORT_DESTINATION_IDS]);
+  });
+});
 
 /** A Retina-ish 16:10 screen recording: 3:02, 48 fps, with sound, 119 MB. */
 const SOURCE = { width: 1916, height: 1048, fps: 48, hasAudio: true, sampleRate: 48000 };

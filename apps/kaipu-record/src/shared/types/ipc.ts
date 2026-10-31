@@ -10,7 +10,7 @@ import type { TagColor } from "@kaipu/domain/constants";
 
 import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
-import type { ExportPresetId, ExportQuality } from "./export-preset";
+import type { ExportDestinationId, ExportPresetId, ExportQuality } from "./export-preset";
 import type { RecordingCapture } from "../recording-capture";
 import {
   ENABLED_CAPTURE_MODES,
@@ -747,6 +747,8 @@ export interface RecordingFinalizeMeta {
    * `"edit:<hash>"` = the editor's scene at export time.
    */
   exportFingerprint?: string;
+  /** Where a copy made for a destination is going (sidecar `exportDestination`). */
+  exportDestination?: ExportDestinationId;
   /**
    * How a new take was captured (mode, output size, ratio), stored in the sidecar for
    * library labels. Set by the recorder only; exports leave it unset. Main sanitizes it.

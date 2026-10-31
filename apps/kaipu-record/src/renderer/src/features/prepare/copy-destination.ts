@@ -18,7 +18,8 @@ export function copyPresetOf(video: Pick<LibraryVideo, "kind" | "export">): Expo
 
 /**
  * Where a copy is going: the export job's destination when the runner still knows it (a
- * copy that just finished), otherwise read back from the file's sidecar.
+ * copy that just finished), else the destination its sidecar stored, else the one its preset
+ * belongs to (copies made before the destination was stored; Balanced reads as chat).
  */
 export function copyDestinationOf(
   video: Pick<LibraryVideo, "kind" | "export">,
@@ -26,5 +27,6 @@ export function copyDestinationOf(
 ): DestinationId | null {
   if (jobDestination) return jobDestination;
   const preset = copyPresetOf(video);
-  return preset ? destinationOfPreset(preset) : null;
+  if (!preset) return null;
+  return video.export?.destination ?? destinationOfPreset(preset);
 }

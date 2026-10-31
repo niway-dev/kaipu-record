@@ -3,7 +3,11 @@ import { access, mkdir, open, readFile, readdir, rename, rm, stat } from "node:f
 import { randomUUID } from "node:crypto";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { sanitizeRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
-import { normalizeExportPresetId, type StoredExportPresetId } from "@shared/types/export-preset";
+import {
+  isExportDestinationId,
+  normalizeExportPresetId,
+  type StoredExportPresetId,
+} from "@shared/types/export-preset";
 import { atomicWriteFile, withLock } from "./atomic-write";
 import { sha256FileBase64 } from "./content-hash";
 
@@ -44,6 +48,8 @@ export interface Sidecar {
   exportPreset?: StoredExportPresetId;
   /** What the export encoded ("whole" or "edit:<hash>"); see RecordingFinalizeMeta. */
   exportFingerprint?: string;
+  /** Copies for a destination: where it is going. Read back only when it is a known id. */
+  exportDestination?: string;
   /** GIF exports only (NIW2-217). */
   gifWidth?: number;
   gifHeight?: number;
@@ -413,6 +419,7 @@ function describeExport(meta: Sidecar): LocalRecording["export"] {
   return {
     preset,
     fingerprint: typeof meta.exportFingerprint === "string" ? meta.exportFingerprint : null,
+    destination: isExportDestinationId(meta.exportDestination) ? meta.exportDestination : null,
   };
 }
 

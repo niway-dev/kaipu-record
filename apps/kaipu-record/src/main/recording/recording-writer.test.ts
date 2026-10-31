@@ -250,6 +250,23 @@ describe("RecordingWriter", () => {
     expect(sidecar.exportFingerprint).toBe("edit:abc123");
   });
 
+  it("persists where a copy for a destination is going, and only a known one", async () => {
+    const { writer, vaultDir } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("A").buffer, 0);
+    const rec = await writer.finalize("s1", {
+      title: "Take (for email)",
+      durationSeconds: 1,
+      durationMs: 1000,
+      exportPreset: "balanced",
+      exportFingerprint: "whole#q30",
+      exportDestination: "email",
+    });
+    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "rec-fixed.json"), "utf-8"));
+    expect(sidecar.exportDestination).toBe("email");
+    expect(rec.export?.destination).toBe("email");
+  });
+
   it("a plain recording has no provenance", async () => {
     const { writer } = await setup();
     await writer.create("s1");
