@@ -1,7 +1,7 @@
 import type { WebcamGap } from "@shared/webcam-track";
 
 /**
- * The periods of a take with the camera turned off (ADR 0032 § camera toggled mid-take), in
+ * The periods of a take with the camera turned off (ADR 0037 § camera toggled mid-take), in
  * screen ms: the webcam file holds its last frame through each, and the editor hides it there.
  * A gap opens when the camera is turned off and closes when its first frame is back in the
  * file, or when the file ends (the camera could not be opened again). One still open when the

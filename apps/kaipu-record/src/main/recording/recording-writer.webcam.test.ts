@@ -30,7 +30,6 @@ async function setup(options: { vault?: () => string } = {}) {
   const tempDir = await mkdtemp(join(tmpdir(), "rw-temp-"));
   const writer = new RecordingWriter({
     vaultDir: options.vault ?? (() => vaultDir),
-    newId: () => "rec-fixed",
     now: () => 5000,
     tempDir,
   });
@@ -47,12 +46,17 @@ const webcamMeta = {
   fps: 30,
 } as const;
 
+// The take's file name follows its title (ADR 0035): "rec-fixed" lands as `rec-fixed.mp4`.
 const meta = (over: Partial<RecordingFinalizeMeta> = {}): RecordingFinalizeMeta => ({
-  title: "T",
+  title: "rec-fixed",
   durationSeconds: 1,
   durationMs: 1000,
   ...over,
 });
+
+/** Staging names without their random tail: `kaipu-rec-s1-1a2b3c4d.mp4.part` → `kaipu-rec-s1.mp4.part`. */
+const untailed = (names: string[]): string[] =>
+  names.map((name) => name.replace(/-[0-9a-f]{8}(?=\.)/, "")).sort();
 
 /** A take with both sessions open and a byte in each. */
 async function pair(writer: RecordingWriter): Promise<void> {
@@ -66,12 +70,24 @@ const readSidecar = async (vaultDir: string): Promise<Record<string, unknown>> =
   JSON.parse(await readFile(join(vaultDir, ".kaipu", "rec-fixed.json"), "utf-8"));
 
 describe("RecordingWriter — the webcam session", () => {
-  it("stages the webcam beside the screen as kaipu-rec-<id>.webcam.mp4.part", async () => {
+  it("stages the webcam beside the screen as kaipu-rec-<id>-<tail>.webcam.mp4.part", async () => {
     const { writer, tempDir } = await setup();
     const screen = await writer.create("s1");
     const webcam = await writer.create("s1", "webcam");
-    expect(screen.tempPath).toBe(join(tempDir, "kaipu-rec-s1.mp4.part"));
-    expect(webcam.tempPath).toBe(join(tempDir, "kaipu-rec-s1.webcam.mp4.part"));
+    expect(screen.tempPath).toMatch(/kaipu-rec-s1-[0-9a-f]{8}\.mp4\.part$/);
+    expect(webcam.tempPath).toBe(screen.tempPath.replace(/\.mp4\.part$/, ".webcam.mp4.part"));
+    expect(untailed(await readdir(tempDir))).toEqual([
+      "kaipu-rec-s1.mp4.part",
+      "kaipu-rec-s1.webcam.mp4.part",
+    ]);
+  });
+
+  it("refuses a webcam session without an open screen session, and a second one", async () => {
+    const { writer } = await setup();
+    await expect(writer.create("s1", "webcam")).rejects.toThrow(/to add a webcam to/);
+    await writer.create("s1");
+    await writer.create("s1", "webcam");
+    await expect(writer.create("s1", "webcam")).rejects.toThrow(/already has a webcam/);
   });
 
   it("writes and stats each kind in its own file", async () => {
@@ -161,7 +177,7 @@ describe("RecordingWriter — the webcam session", () => {
     const { writer, tempDir } = await setup();
     await pair(writer);
     await writer.releaseAll();
-    expect((await readdir(tempDir)).sort()).toEqual([
+    expect(untailed(await readdir(tempDir))).toEqual([
       "kaipu-rec-s1.mp4.part",
       "kaipu-rec-s1.webcam.mp4.part",
     ]);
@@ -205,7 +221,7 @@ describe("RecordingWriter — the webcam session", () => {
       const { writer, tempDir } = await strandedSetup();
       await pair(writer);
       await expect(writer.finalize("s1", meta())).rejects.toBeInstanceOf(FinalizeMoveError);
-      expect(await readdir(tempDir)).toEqual(["kaipu-rec-s1.mp4.part"]);
+      expect(untailed(await readdir(tempDir))).toEqual(["kaipu-rec-s1.mp4.part"]);
       const out = await mkdtemp(join(tmpdir(), "rw-out-"));
       await writer.salvage("s1", join(out, "take.mp4"));
       expect(await readdir(out)).toEqual(["take.mp4"]);
@@ -219,7 +235,7 @@ describe("RecordingWriter — the webcam session", () => {
       await expect(writer.finalize("s1", meta({ webcam: webcamMeta }))).rejects.toBeInstanceOf(
         FinalizeMoveError,
       );
-      expect(await readdir(tempDir)).toEqual(["kaipu-rec-s1.mp4.part"]);
+      expect(untailed(await readdir(tempDir))).toEqual(["kaipu-rec-s1.mp4.part"]);
     });
   });
 
@@ -252,7 +268,7 @@ describe("RecordingWriter — the webcam session", () => {
       FinalizeMoveError,
     );
     spy.mockRestore();
-    expect((await readdir(tempDir)).sort()).toEqual([
+    expect(untailed(await readdir(tempDir))).toEqual([
       "kaipu-rec-s1.mp4.part",
       "kaipu-rec-s1.webcam.mp4.part",
     ]);

@@ -120,7 +120,7 @@ export function useShareRecording({
     setSheet({ preset });
   };
 
-  // Share composes the face where the bubble sat during the take (ADR 0033): the scene seeds
+  // Share composes the face where the bubble sat during the take (ADR 0038): the scene seeds
   // the layer from the sidecar, and the fingerprint hashes it, so a second Share reuses the
   // file while a pre-webcam one (no face) and an editor export are never mistaken for it.
   const scene = useMemo(

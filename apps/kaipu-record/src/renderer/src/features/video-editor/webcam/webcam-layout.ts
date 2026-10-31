@@ -1,5 +1,5 @@
 /**
- * Where the webcam layer sits in a frame (ADR 0033): the square the bubble occupies, in the
+ * Where the webcam layer sits in a frame (ADR 0038): the square the bubble occupies, in the
  * OUTPUT frame's pixels, for a layout and the camera path's scale at that instant. The
  * preview turns it into percentages of its stage; the export composer will draw it as is.
  *

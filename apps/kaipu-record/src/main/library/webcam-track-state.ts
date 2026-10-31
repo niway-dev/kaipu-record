@@ -1,5 +1,5 @@
 /**
- * The one rule for "this item has a webcam track" (ADR 0032), so the library's answers agree:
+ * The one rule for "this item has a webcam track" (ADR 0037), so the library's answers agree:
  * `describe()` takes `meta` (what the editor and export can use), `probeWebcam` the `state`
  * (what remove-local-copy protects, and what the editor reports as missing). Pure; the
  * callers read the file's existence and the sidecar.

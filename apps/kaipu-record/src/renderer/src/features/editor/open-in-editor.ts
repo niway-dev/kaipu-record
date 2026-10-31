@@ -59,6 +59,7 @@ export function imageSourceFor(item: EditableItem): ImageSource | null {
   return {
     kind: "local",
     id: item.id,
+    assetId: item.assetId,
     title: item.title,
     version: Number.isFinite(v) ? v : undefined,
   };

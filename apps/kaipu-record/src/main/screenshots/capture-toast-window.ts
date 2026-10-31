@@ -60,7 +60,8 @@ export interface CaptureToastDeps {
   /** Free the kept bytes if they still belong to capture `of` (`releaseLastQuietCapture`). */
   releaseQuietCapture(of: number): void;
   /** The user's Save to Library (`saveFromToast`); resolves the new item's id. */
-  saveToVault(png: Buffer, title: string): Promise<{ id: string }>;
+  /** Writes into `workspaceId` only, and only while it is active; throws otherwise. */
+  saveToVault(png: Buffer, title: string, workspaceId: string | null): Promise<{ id: string }>;
   /** Title of the saved shot (`screenshotTitle()`). */
   title(): string;
   /** Show a saved item in the main window (editor or Library page) and reveal it. */
@@ -245,7 +246,13 @@ export class CaptureToastWindow {
     if (!kept) return;
     this.savingGeneration = generation;
     try {
-      const saved = await this.deps.saveToVault(kept.capture.png, this.deps.title());
+      // The workspace the capture started in: after a switch this writes nothing (the switch
+      // also dismisses this toast and drops the bytes, so a late click finds nothing to save).
+      const saved = await this.deps.saveToVault(
+        kept.capture.png,
+        this.deps.title(),
+        kept.capture.workspaceId,
+      );
       this.deps.releaseQuietCapture(kept.sequence);
       // A newer capture replaced this toast while the write ran: its card stays.
       if (generation !== this.generation) return;
@@ -383,10 +390,14 @@ export type CaptureToastAppDeps = Pick<
  * list, and the editor never opened this shot.
  */
 export function saveFromToast(
-  save: (png: Buffer, meta: SaveScreenshotMeta) => Promise<{ id: string }>,
+  save: (
+    workspaceId: string | null,
+    png: Buffer,
+    meta: SaveScreenshotMeta,
+  ) => Promise<{ id: string }>,
 ): CaptureToastDeps["saveToVault"] {
-  return async (png, title) => {
-    const saved = await save(png, { title, manual: false });
+  return async (png, title, workspaceId) => {
+    const saved = await save(workspaceId, png, { title, manual: false });
     return { id: saved.id };
   };
 }

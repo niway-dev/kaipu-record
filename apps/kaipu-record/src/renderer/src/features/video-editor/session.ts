@@ -15,7 +15,7 @@
  * are dropped, not rejected. Older app builds ignore the new keys, so opening a v2
  * session in an old build is safe (it just shows no zooms).
  *
- * `webcam` (ADR 0033) is additive the same way: absent or null → no layer; a wrong type
+ * `webcam` (ADR 0038) is additive the same way: absent or null → no layer; a wrong type
  * drops the layer (the session loads, the sidecar re-seeds it); numbers clamp; overlapping and
  * invalid segments are dropped individually. Whether the recording HAS a webcam is the sidecar's call, not
  * this file's: see `reconcileWebcam` in scene.ts.

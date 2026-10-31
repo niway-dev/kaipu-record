@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -43,6 +43,23 @@ describe("video-edit-session", () => {
     expect(loaded!.assets).toHaveLength(1);
     expect(loaded!.assets[0].assetId).toBe("asset-a");
     expect(Buffer.from(loaded!.assets[0].bytes).toString()).toBe("png-bytes-a");
+  });
+
+  it("refuses to save over an item whose record is unreadable, before writing anything (F9)", async () => {
+    await mkdir(join(vaultDir, ".kaipu"), { recursive: true });
+    await writeFile(join(vaultDir, "rec-1.mp4"), "video");
+    await writeFile(join(vaultDir, ".kaipu", "rec-1.json"), "{corrupt");
+    await expect(
+      saveSession("rec-1", {
+        sessionJson: '{"version":1}',
+        assets: [{ assetId: "asset-a", bytes: bytesOf("png") }],
+      }),
+    ).rejects.toThrow(/vault-unreadable-record/);
+    // Nothing of the session was written. The only other file is the one copy of the corrupt
+    // record the vault keeps aside on first read (NIW2-568); the record itself is untouched.
+    const files = (await readdir(join(vaultDir, ".kaipu"))).sort();
+    expect(files.filter((f) => !f.startsWith("rec-1.json.corrupt-"))).toEqual(["rec-1.json"]);
+    expect(await readFile(join(vaultDir, ".kaipu", "rec-1.json"), "utf8")).toBe("{corrupt");
   });
 
   it("returns null when no session was ever saved", async () => {

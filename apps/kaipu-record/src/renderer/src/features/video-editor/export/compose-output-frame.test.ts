@@ -117,7 +117,7 @@ function composer(opts: {
 const draws = () => log.filter((entry) => entry.call === "drawImage");
 const webcamDraws = () => draws().filter((entry) => entry.args[0] === WEBCAM_FRAME);
 
-describe("createOutputComposer: the webcam layer (ADR 0033)", () => {
+describe("createOutputComposer: the webcam layer (ADR 0038)", () => {
   it("draws on a direct frame (no zoom, no region): the frame, then the webcam on top", () => {
     const { compose } = composer({ webcam: webcam() });
     compose.clip(FRAME, 1, 1 / 30, 1, cam(1));

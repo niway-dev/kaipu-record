@@ -11,7 +11,7 @@
  * "estimate" mode runs the same pipeline on a few sampled frame pairs and reports an
  * approximate file size (FR 6).
  *
- * Webcam (ADR 0033): the same layer as the MP4, through the same composer; the webcam frame
+ * Webcam (ADR 0038): the same layer as the MP4, through the same composer; the webcam frame
  * for each sampled time comes from a second Input opened only when the plan has a webcam.
  */
 import { ALL_FORMATS, BlobSource, CanvasSink, Input } from "mediabunny";

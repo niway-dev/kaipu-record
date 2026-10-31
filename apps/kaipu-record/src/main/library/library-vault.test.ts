@@ -2,7 +2,23 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { LibraryVault } from "./library-vault";
+import { defaultCaptureName } from "@shared/default-capture-name";
+import { parseMediaUrl } from "@shared/media-url";
+import { LibraryVault, humanizeId } from "./library-vault";
+
+/** Rename by the id a caller saw, with the identity it holds there (as the IPC does). */
+async function renameById(
+  v: LibraryVault,
+  id: string,
+  title: string,
+  options?: Parameters<LibraryVault["renameItem"]>[2],
+) {
+  return v.renameItem(
+    { id, assetId: (await v.describe(id))?.assetId ?? "missing" },
+    title,
+    options,
+  );
+}
 
 describe("LibraryVault", () => {
   let directory: string;
@@ -29,11 +45,33 @@ describe("LibraryVault", () => {
     expect(await vault.list()).toEqual([]);
   });
 
+  it("never recreates a missing root: an unplugged workspace fails to list instead of reading as empty", async () => {
+    const gone = join(directory, "unplugged");
+    await expect(new LibraryVault(gone).list()).rejects.toThrow();
+    await expect(stat(gone)).rejects.toThrow();
+  });
+
+  it("stamps the workspace id on the media URLs it hands out", async () => {
+    const scoped = new LibraryVault(directory, "ws-1");
+    await writeFile(join(directory, "shot.png"), Buffer.alloc(16));
+    await writeRecording("take");
+    await mkdir(join(directory, ".kaipu"), { recursive: true });
+    await writeFile(join(directory, ".kaipu", "take.jpg"), Buffer.alloc(8));
+
+    const byId = new Map((await scoped.list()).map((r) => [r.id, r]));
+
+    expect(byId.get("shot")?.thumbnailUrl).toMatch(
+      /^kaipu-media:\/\/screenshot\/shot\?v=\d+&w=ws-1$/,
+    );
+    expect(byId.get("take")?.thumbnailUrl).toBe("kaipu-media://thumb/take?w=ws-1");
+    expect(await scoped.countMedia()).toBe(2);
+  });
+
   it("derives a title and reads the real size from disk", async () => {
     await writeRecording("alpha-clip", 4096);
     const [recording] = await vault.list();
     expect(recording.id).toBe("alpha-clip");
-    expect(recording.title).toBe("Alpha Clip");
+    expect(recording.title).toBe("alpha-clip");
     expect(recording.sizeBytes).toBe(4096);
     expect(recording.durationSeconds).toBe(0);
   });
@@ -91,16 +129,6 @@ describe("LibraryVault", () => {
     expect((await vault.describe("bad"))?.capture).toBeNull();
   });
 
-  it("renames via the sidecar without touching the video file", async () => {
-    await writeRecording("clip");
-    await vault.rename("clip", "Renamed");
-
-    const sidecar = JSON.parse(await readFile(join(directory, ".kaipu", "clip.json"), "utf-8"));
-    expect(sidecar.title).toBe("Renamed");
-    expect((await vault.list())[0].title).toBe("Renamed");
-    expect(await readdir(directory)).toContain("clip.webm");
-  });
-
   it("stamps an item as opened in an editor, keeping its other fields", async () => {
     await writeRecording("clip");
     await writeSidecar("clip", { title: "My Demo", createdAt: 1000 });
@@ -144,7 +172,7 @@ describe("LibraryVault", () => {
     expect(await readdir(join(directory, ".kaipu"))).not.toContain("rec.cursor.json.tmp");
   });
 
-  it("removes the webcam file with the recording (ADR 0032)", async () => {
+  it("removes the webcam file with the recording (ADR 0037)", async () => {
     await writeRecording("rec");
     await mkdir(join(directory, ".kaipu"), { recursive: true });
     await writeFile(vault.webcamFilePath("rec"), "webcam");
@@ -152,7 +180,7 @@ describe("LibraryVault", () => {
     expect(await readdir(join(directory, ".kaipu"))).not.toContain("rec.webcam.mp4");
   });
 
-  describe("webcam track (ADR 0032)", () => {
+  describe("webcam track (ADR 0037)", () => {
     const webcamMeta = {
       startOffsetMs: 120.5,
       offsetQuality: "exact",
@@ -199,15 +227,18 @@ describe("LibraryVault", () => {
       expect((await vault.describe("rec"))?.webcam ?? null).toBeNull();
     });
 
-    it("rename changes the title only and keeps the webcam file paired", async () => {
+    it("rename moves the webcam file with the item, still paired (ADR 0035)", async () => {
       await writeRecording("rec");
-      await writeSidecar("rec", { webcam: webcamMeta });
+      await writeSidecar("rec", { assetId: "asset-rec", webcam: webcamMeta });
       await writeWebcamFile("rec");
-      await vault.rename("rec", "Renamed");
-      const described = await vault.describe("rec");
+      const result = await vault.renameItem({ id: "rec", assetId: "asset-rec" }, "Renamed");
+      expect(result.file).toBe("renamed");
+      const described = await vault.describe("Renamed");
       expect(described?.title).toBe("Renamed");
       expect(described?.webcam).toBeTruthy();
-      expect(await readdir(join(directory, ".kaipu"))).toContain("rec.webcam.mp4");
+      const meta = await readdir(join(directory, ".kaipu"));
+      expect(meta).toContain("Renamed.webcam.mp4");
+      expect(meta).not.toContain("rec.webcam.mp4");
     });
   });
 
@@ -220,7 +251,7 @@ describe("LibraryVault", () => {
 
   it("removes the video and its sidecar", async () => {
     await writeRecording("clip");
-    await vault.rename("clip", "X");
+    await vault.writeMeta("clip", { title: "X" });
     await vault.remove("clip");
 
     expect(await vault.list()).toHaveLength(0);
@@ -395,10 +426,16 @@ describe("LibraryVault", () => {
 
   it("does not lose the title when a rename races the identity mint", async () => {
     await writeRecording("race");
-    await Promise.all([vault.describe("race"), new LibraryVault(directory).rename("race", "Mine")]);
-    const sidecar = JSON.parse(await readFile(join(directory, ".kaipu", "race.json"), "utf-8"));
+    const [described, renamed] = await Promise.all([
+      vault.describe("race"),
+      renameById(new LibraryVault(directory), "race", "Mine"),
+    ]);
+    const sidecar = JSON.parse(await readFile(join(directory, ".kaipu", "Mine.json"), "utf-8"));
     expect(sidecar.title).toBe("Mine");
-    expect(typeof sidecar.assetId).toBe("string");
+    expect(renamed.recording.assetId).toBe(sidecar.assetId);
+    // A describe that loses the race to the move sees no item, never a second identity.
+    if (described) expect(described.assetId).toBe(sidecar.assetId);
+    expect(await readdir(join(directory, ".kaipu"))).toEqual(["Mine.json"]);
   });
 });
 
@@ -427,9 +464,33 @@ describe("LibraryVault — screenshots", () => {
     dirs.push(dir);
     const vault = new LibraryVault(dir);
     await vault.writeImage("shot", Buffer.from("one"));
-    await vault.writeImage("shot", Buffer.from("two"));
+    await vault.writeImage("shot", Buffer.from("two"), { replace: true });
     expect((await readFile(join(dir, "shot.png"))).toString()).toBe("two");
     expect((await readdir(dir)).filter((n) => n.endsWith(".part"))).toEqual([]);
+  });
+
+  it("writeImage of a new shot never replaces a file at its path", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vault-"));
+    dirs.push(dir);
+    const vault = new LibraryVault(dir);
+    await writeFile(join(dir, "shot.png"), "someone else's");
+    await expect(vault.writeImage("shot", Buffer.from("mine"))).rejects.toMatchObject({
+      code: "EEXIST",
+    });
+    expect(await readFile(join(dir, "shot.png"), "utf-8")).toBe("someone else's");
+    expect(await readdir(dir)).toEqual(["shot.png"]);
+  });
+
+  it("writeGif never replaces a file at its path", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vault-"));
+    dirs.push(dir);
+    const vault = new LibraryVault(dir);
+    await writeFile(join(dir, "loop.gif"), "someone else's");
+    await expect(vault.writeGif("loop", new Uint8Array([1, 2]))).rejects.toMatchObject({
+      code: "EEXIST",
+    });
+    expect(await readFile(join(dir, "loop.gif"), "utf-8")).toBe("someone else's");
+    expect(await readdir(dir)).toEqual(["loop.gif"]);
   });
 
   // chmod does not stop root (some CI containers), so the write would succeed there.
@@ -520,4 +581,57 @@ describe("LibraryVault — mp4 + thumbnails", () => {
 
     expect(updated).toMatchObject({ durationSeconds: 10, thumbnailUrl: null });
   });
+});
+
+describe("humanizeId", () => {
+  it("renders a legacy recording stem as the default name for its (UTC) timestamp", () => {
+    expect(humanizeId("recording-2026-10-29-13-51-00")).toBe(
+      defaultCaptureName("recording", new Date(Date.UTC(2026, 9, 29, 13, 51, 0))),
+    );
+  });
+
+  it("renders a legacy screenshot stem, milliseconds and all", () => {
+    expect(humanizeId("screenshot-2026-10-29T13-51-00-800Z")).toBe(
+      defaultCaptureName("screenshot", new Date(Date.UTC(2026, 9, 29, 13, 51, 0))),
+    );
+  });
+
+  it("keeps a recovered legacy stem readable", () => {
+    expect(humanizeId("recording-2026-10-29-13-51-00-recovered")).toMatch(/^Kaipu Recording /);
+  });
+
+  it("returns any other stem as is", () => {
+    expect(humanizeId("Kaipu Recording 2026-10-29 at 13.51.00")).toBe(
+      "Kaipu Recording 2026-10-29 at 13.51.00",
+    );
+    expect(humanizeId("my_clip-final")).toBe("my_clip-final");
+    expect(humanizeId("  padded ")).toBe("padded");
+    expect(humanizeId("")).toBe("Recording");
+  });
+});
+
+describe("LibraryVault — media URLs (NIW2-560 review)", () => {
+  let directory: string;
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), "kaipu-urls-"));
+  });
+  afterEach(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  it.each(["Demo #1", "50% done", "What? Why", "a%2Fb"])(
+    "thumbnail URLs address the item %j exactly",
+    async (id) => {
+      const vault = new LibraryVault(directory);
+      await writeFile(join(directory, `${id}.png`), "png");
+      await writeFile(join(directory, `${id} clip.mp4`), "v");
+      await mkdir(join(directory, ".kaipu"), { recursive: true });
+      await writeFile(join(directory, ".kaipu", `${id} clip.jpg`), "jpg");
+      const shot = await vault.describe(id);
+      expect(parseMediaUrl(shot!.thumbnailUrl!)).toEqual({ kind: "screenshot", id });
+      expect(new URL(shot!.thumbnailUrl!).searchParams.get("v")).toMatch(/^\d+$/);
+      const clip = await vault.describe(`${id} clip`);
+      expect(parseMediaUrl(clip!.thumbnailUrl!)).toEqual({ kind: "thumb", id: `${id} clip` });
+    },
+  );
 });
