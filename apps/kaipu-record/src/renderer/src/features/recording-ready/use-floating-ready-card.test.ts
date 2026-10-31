@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { renderHook } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
 import type { RecordingReadyPayload } from "@shared/types/recording-ready";
 import {
   __resetFloatingReadyCardForTests,
@@ -33,6 +33,21 @@ describe("useFloatingReadyCard", () => {
     // A new arrival is a new entry.
     renderHook(() => useFloatingReadyCard(request("k2")));
     expect(show).toHaveBeenCalledTimes(2);
+    show.mockRestore();
+  });
+
+  it("keeps the in-app fallback on screen when the page remounts on the same entry", async () => {
+    const show = vi
+      .spyOn(window.electronAPI, "showRecordingReady")
+      .mockImplementation(async () => false);
+
+    const first = renderHook(() => useFloatingReadyCard(request("k1")));
+    await waitFor(() => expect(first.result.current.inApp).toBe(true));
+    first.unmount();
+
+    const back = renderHook(() => useFloatingReadyCard(request("k1")));
+    expect(back.result.current.inApp).toBe(true);
+    expect(show).toHaveBeenCalledOnce();
     show.mockRestore();
   });
 });
