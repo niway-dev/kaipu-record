@@ -41,7 +41,7 @@
     "check": "bun run lint && bun run format",
     "check-workflows": "bun scripts/check-workflow-eligibility.ts && bun scripts/check-release-workflow.ts",
     "verify": "bun run check-workflows && bun run lint && oxfmt --check . && bun run build --filter='@kaipu/*' && bun run check-types && bun run test",
-    "verify:local": "bun run lint && oxfmt --check . && bun run build --filter='@kaipu/*' && bun run check-types",
+    "verify:local": "bun scripts/check-adr-numbers.ts && bun run lint && oxfmt --check . && bun run build --filter='@kaipu/*' && bun run check-types",
     "dev": "turbo run dev",
     "env:pull": "bash scripts/env-pull.sh",
     "build": "turbo run build",
