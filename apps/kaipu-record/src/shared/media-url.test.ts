@@ -11,10 +11,11 @@ describe("mediaUrl / parseMediaUrl", () => {
     "Sprint demo part 1 2",
     "名前",
   ])("round-trips the id %j", (id) => {
-    const url = mediaUrl("screenshot", id, 1234);
+    const url = mediaUrl("screenshot", id, { v: "1234", w: "ws-a" });
     expect(parseMediaUrl(url)).toEqual({ kind: "screenshot", id });
-    // The version token stays a query, never part of the id.
+    // The version and workspace stay in the query, never part of the id.
     expect(new URL(url).searchParams.get("v")).toBe("1234");
+    expect(new URL(url).searchParams.get("w")).toBe("ws-a");
   });
 
   it("builds a URL without a version", () => {

@@ -40,7 +40,7 @@ import { defaultCaptureName } from "@shared/default-capture-name";
 import { FinalizeMoveError, RecordingWriter } from "./recording-writer";
 import { createMicLevelRelay } from "./mic-level-relay";
 import { IDLE_ACTIVITY, applyTick, startedActivity, stoppedActivity } from "./recording-activity";
-import { vaultDirectory } from "../library/vault-location";
+import { notifyWorkspaceBusyChanged, requireCaptureWorkspace } from "../workspaces";
 import { endRecordTiming, markRecordTiming, receiveRecordTiming } from "./record-timing";
 import {
   applyDockPolicy,
@@ -60,6 +60,8 @@ export interface RecordingHubHandle {
   isActive(): boolean;
   /** True while a take is pending (countdown or acquiring): not active yet, but busy. */
   isPending(): boolean;
+  /** A writer session is open: a take or an editor export is writing into the workspace. */
+  hasOpenWrites(): boolean;
   /**
    * Flip one of the three input toggles, exactly as clicking it in a window
    * does (the global shortcuts use this). Mid-take the recorder picks the
@@ -185,7 +187,11 @@ export function registerRecordingHub(
   });
   const shade = new RecordingShadeWindow();
   const screenSources = new ScreenSourceCache(listScreenSources);
-  const writer = new RecordingWriter({ vaultDir: () => vaultDirectory().path });
+  const writer = new RecordingWriter({
+    // The active workspace, checked to be connected: a take in a workspace that is not
+    // connected is refused, never recorded somewhere else (ADR 0032, decision 8).
+    vaultDir: async () => (await requireCaptureWorkspace()).path,
+  });
 
   // Cursor tracks, keyed by writer session id (see plans/video-editor-v2/02).
   const cursorTracks = new CursorTrackRegistry({
@@ -236,6 +242,8 @@ export function registerRecordingHub(
   const publicActivity = (): RecordingActivity =>
     pending && !activity.active ? { ...activity, pending: true } : activity;
   const broadcastActivity = (): void => {
+    // The switcher locks while a take runs ("Finish the recording to switch").
+    notifyWorkspaceBusyChanged();
     onActivityChange?.(activity);
     const state = publicActivity();
     for (const window of BrowserWindow.getAllWindows()) {
@@ -389,6 +397,8 @@ export function registerRecordingHub(
     async (_e, sessionId: string, meta: RecordingFinalizeMeta) => {
       // The renderer never retries a finalize (it aborts), so the take ends here either way.
       markEnded(sessionId);
+      // The take's own folder, bound when it started: the cursor track goes next to it.
+      const takeDir = writer.directoryOf(sessionId);
       let recording;
       try {
         recording = await writer.finalize(sessionId, meta);
@@ -419,8 +429,8 @@ export function registerRecordingHub(
         meta.durationMs + 250,
       );
       stopHookIfIdle();
-      if (track) {
-        await new LibraryVault(vaultDirectory().path)
+      if (track && takeDir) {
+        await new LibraryVault(takeDir)
           .writeCursorTrack(recording.id, serializeCursorTrack(track))
           .catch((error) => console.error("cursor track write failed", error));
       }
@@ -790,6 +800,7 @@ export function registerRecordingHub(
   return {
     isActive: () => activity.active,
     isPending: () => pending && !activity.active,
+    hasOpenWrites: () => writer.ids().length > 0,
     toggleRecordingSetting: (key) => applySettingsPatch({ [key]: !settings[key] }),
     hideCameraBubbleForCapture: () => {
       if (!cameraBubble.isVisible()) return;

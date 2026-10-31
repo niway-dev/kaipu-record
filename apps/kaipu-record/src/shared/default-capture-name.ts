@@ -1,5 +1,5 @@
 /**
- * Default names for new captures (NIW2-560, ADR 0032). The same string is the item's
+ * Default names for new captures (NIW2-560, ADR 0035). The same string is the item's
  * title and the stem the vault derives its file name from, so the folder reads well
  * before anyone renames anything.
  *

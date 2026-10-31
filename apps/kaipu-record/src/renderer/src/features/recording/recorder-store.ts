@@ -875,7 +875,7 @@ async function stopRecording(): Promise<void> {
 
   let recording: LocalRecording | null = null;
   try {
-    // The vault names the file after this title (ADR 0032), so it is a valid file name.
+    // The vault names the file after this title (ADR 0035), so it is a valid file name.
     const title = defaultCaptureName("recording");
     // Run the real finalize and a minimum dwell together so "Saving…" is visible
     // even when the clip is tiny and the write is instant.

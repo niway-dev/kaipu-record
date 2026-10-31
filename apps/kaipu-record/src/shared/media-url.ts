@@ -10,10 +10,14 @@ export const MEDIA_SCHEME = "kaipu-media";
 
 export type MediaKind = "recording" | "screenshot" | "thumb";
 
-/** `kaipu-media://<kind>/<encoded id>[?v=<version>]`. */
-export function mediaUrl(kind: MediaKind, id: string, version?: number): string {
+/**
+ * `kaipu-media://<kind>/<encoded id>[?<query>]`. The query carries a cache-busting `v` and
+ * the workspace `w` (ADR 0032); the renderer's `mediaUrl` adds `w` for the window's workspace.
+ */
+export function mediaUrl(kind: MediaKind, id: string, params: Record<string, string> = {}): string {
   const base = `${MEDIA_SCHEME}://${kind}/${encodeURIComponent(id)}`;
-  return version === undefined ? base : `${base}?v=${version}`;
+  const query = new URLSearchParams(params).toString();
+  return query ? `${base}?${query}` : base;
 }
 
 /**

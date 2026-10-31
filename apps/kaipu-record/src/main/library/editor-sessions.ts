@@ -3,7 +3,7 @@
  *
  * The video editor holds its source id for its whole lifetime (edit-session autosave,
  * cursor track, `kaipu-media://` source URL), so a rename while it is open would send
- * its next session save to the old companion paths. ADR 0032 makes "no rename while
+ * its next session save to the old companion paths. ADR 0035 makes "no rename while
  * the item is open in the editor" an invariant; this registry is how main enforces it,
  * whatever surface (a Library toast's Retry included) asks for the rename.
  *

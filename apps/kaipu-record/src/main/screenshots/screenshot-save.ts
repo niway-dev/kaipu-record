@@ -1,5 +1,6 @@
 import type { LocalRecording } from "@shared/types/library-storage";
 import { broadcastLibraryChanged, currentVault } from "../library";
+import { activeWorkspace, requireCaptureWorkspace, workspaceGate } from "../workspaces";
 
 export interface SaveScreenshotMeta {
   title: string;
@@ -26,7 +27,7 @@ export async function saveScreenshotToVault(
   const now = Date.now();
   let id: string;
   if (meta.overwriteId === undefined) {
-    // The file name follows the title (ADR 0032); the stub sidecar reserves it, so two
+    // The file name follows the title (ADR 0035); the stub sidecar reserves it, so two
     // shots in the same second get ` (2)` instead of overwriting each other.
     id = await vault.allocateId({ kind: "screenshot", title: meta.title, createdAt: now });
     try {
@@ -63,4 +64,39 @@ export async function saveScreenshotToVault(
   // never sees the new shot, and opening it there falls back to the Editor home.
   broadcastLibraryChanged();
   return saved;
+}
+
+/**
+ * A capture's save, bound to the workspace the capture started in (ADR 0032, decision 9):
+ * it writes only while that workspace is the active one, and only if its folder is
+ * connected. Otherwise it throws and writes nothing, anywhere. `null` binds it to the
+ * active workspace now.
+ */
+export function saveCaptureToWorkspace(
+  workspaceId: string | null | undefined,
+  png: Buffer,
+  meta: SaveScreenshotMeta,
+): Promise<LocalRecording> {
+  return workspaceGate().runActive(workspaceId ?? activeWorkspace().id, async () => {
+    await requireCaptureWorkspace();
+    return saveScreenshotToVault(png, meta);
+  });
+}
+
+/**
+ * The editor's Save: stamped like every item call, and refused with a message naming the
+ * workspace when its folder is not connected.
+ *
+ * The folder is probed BEFORE the call enters the gate. The probe can make a pending
+ * workspace adopt its folder's id, which bumps the generation; inside the call, the window
+ * would then report a save that did write as stale, and saving again would duplicate the
+ * item. Probed first, the same adoption makes the call refuse before it writes anything.
+ */
+export async function saveEditedScreenshot(
+  stamp: unknown,
+  png: Buffer,
+  meta: SaveScreenshotMeta,
+): Promise<LocalRecording> {
+  await requireCaptureWorkspace();
+  return workspaceGate().run(stamp, () => saveScreenshotToVault(png, meta));
 }

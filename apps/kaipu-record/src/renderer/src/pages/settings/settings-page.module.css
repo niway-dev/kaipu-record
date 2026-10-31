@@ -93,6 +93,12 @@
   font-size: 11px;
 }
 
+.workspacesActions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: var(--space-sm);
+}
+
 .sectionNote {
   margin: calc(-1 * var(--space-xs)) 0 0;
   padding: 0 var(--space-xs);

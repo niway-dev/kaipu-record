@@ -2,7 +2,7 @@ import React, { useLayoutEffect, useRef, useState } from "react";
 import { VideoOff } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import styles from "./recording-player.module.css";
-import { mediaUrl } from "@shared/media-url";
+import { mediaUrl } from "@renderer/lib/media-url";
 
 interface RecordingPlayerProps {
   id: string;

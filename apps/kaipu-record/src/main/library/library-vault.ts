@@ -17,6 +17,7 @@ import {
   AMBIGUOUS_IDENTITY_MARKER,
   ITEM_NOT_FOUND_MARKER,
   type LocalRecording,
+  type MetadataIssue,
   type RenameResult,
 } from "@shared/types/library-storage";
 import { sanitizeRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
@@ -75,7 +76,7 @@ export interface Sidecar {
 
 /**
  * Module-level `withLock` key that serializes every operation choosing or changing an
- * item's stem (ADR 0032): `allocateId` and `renameItem`, across every `LibraryVault`
+ * item's stem (ADR 0035): `allocateId` and `renameItem`, across every `LibraryVault`
  * instance. Always taken before a sidecar lock, never inside one, so there is no
  * lock-order cycle.
  */
@@ -147,7 +148,7 @@ export interface RenameOptions {
   isBusy?: () => boolean;
   /**
    * True while the item is open in the video editor, which holds its id for its lifetime
-   * (ADR 0032): the file then keeps its name ("editing").
+   * (ADR 0035): the file then keeps its name ("editing").
    */
   isEditing?: (id: string, assetId: string) => boolean;
   retry?: RetryPolicy;
@@ -195,6 +196,39 @@ function errorCode(error: unknown): string | undefined {
 // directory (e.g. a fresh instance per IPC call) instead of re-minting on every read.
 const readOnlyIdentityMemo = new Map<string, string>();
 
+// Sidecars already copied aside this session (`quarantine`), by absolute path, so a list
+// that re-reads a corrupt sidecar every few seconds keeps one copy, not hundreds. A clean
+// read clears the path, so a sidecar that is repaired and later corrupted again gets a new copy.
+const quarantinedSidecars = new Set<string>();
+
+/**
+ * The sidecar exists but cannot be trusted: `unreadable` (a read error other than a missing
+ * file: EIO, EACCES, a cloud-synced file that is not downloaded) or `corrupt` (it read, but
+ * is not a JSON object: truncated by a crash, hand-edited). Nothing may be written for the
+ * item while this holds, or the next write would replace the unknown contents (title, tags,
+ * edit links, cloud association) with a freshly minted identity.
+ */
+export class SidecarUnavailableError extends Error {
+  constructor(
+    readonly issue: MetadataIssue,
+    readonly path: string,
+    options?: { cause?: unknown },
+  ) {
+    super(`sidecar ${issue}: ${path}`, options);
+    this.name = "SidecarUnavailableError";
+  }
+}
+
+/** File access the vault reads sidecars through; injected so tests can fail a read on demand. */
+export interface VaultReader {
+  readText(path: string): Promise<string>;
+}
+
+const fsReader: VaultReader = { readText: (path) => readFile(path, "utf-8") };
+
+/** Prefix of the stand-in `assetId` of an item whose sidecar cannot be read; never persisted. */
+export const UNREADABLE_ASSET_PREFIX = "unreadable:";
+
 async function exists(path: string): Promise<boolean> {
   try {
     await access(path);
@@ -208,11 +242,25 @@ async function exists(path: string): Promise<boolean> {
  * Local recordings vault. An item lives as `<id><ext>` (ext ∈ ALL_EXTS) with
  * optional companions under `.kaipu/` (`<id>.json` sidecar, `<id>.jpg` thumbnail,
  * cursor track, edit session, assets). The filename *is* the id, and a rename moves
- * it (ADR 0032): the id is valid until the next rename, `assetId` is the identity.
+ * it (ADR 0035): the id is valid until the next rename, `assetId` is the identity.
  * Pure: no Electron — the directory is injected so it's testable against a temp folder.
  */
 export class LibraryVault {
-  constructor(readonly directory: string) {}
+  /**
+   * `workspaceId` goes into the `kaipu-media://` URLs `describe()` hands out, so a URL cached
+   * before a switch never shows another workspace's item with the same id (ADR 0032).
+   * `reader` is how sidecars are read (a test fails a read on demand).
+   */
+  constructor(
+    readonly directory: string,
+    readonly workspaceId: string | null = null,
+    private readonly reader: VaultReader = fsReader,
+  ) {}
+
+  /** The query a media URL this vault hands out carries: the caller's, plus the workspace. */
+  private mediaParams(params: Record<string, string>): Record<string, string> {
+    return this.workspaceId ? { ...params, w: this.workspaceId } : params;
+  }
 
   /** Resolve an id to its real file; if none exists yet, default to `.mp4`. */
   async filePath(id: string): Promise<string> {
@@ -378,7 +426,7 @@ export class LibraryVault {
 
   /**
    * Save the title and move the item — media and every companion — to the stem the
-   * title derives (ADR 0032). Holds NAMES_LOCK and the old sidecar's lock throughout.
+   * title derives (ADR 0035). Holds NAMES_LOCK and the old sidecar's lock throughout.
    *
    * Order: title into the old sidecar → companions copied to the new stem → media
    * `rename` (the commit point) → old companions deleted. Every crash point leaves the
@@ -620,7 +668,8 @@ export class LibraryVault {
   }
 
   async list(): Promise<LocalRecording[]> {
-    await mkdir(this.directory, { recursive: true });
+    // The root is never created here: a missing folder is a workspace that is not
+    // connected (an unplugged drive), and recreating it would list it as empty.
     // Let a readdir failure propagate (unreadable folder, unreachable network
     // drive) instead of returning [] — an empty array is indistinguishable from
     // "vault is empty" and gets rendered as the first-run empty state, which
@@ -633,6 +682,12 @@ export class LibraryVault {
     return described
       .filter((r): r is LocalRecording => r !== null)
       .sort((a, b) => b.createdAt - a.createdAt);
+  }
+
+  /** How many media files the root holds, without describing them (the switcher's counts). */
+  async countMedia(): Promise<number> {
+    const entries = await readdir(this.directory);
+    return entries.filter((f) => ALL_EXTS.some((ext) => f.endsWith(ext))).length;
   }
 
   async describe(id: string): Promise<LocalRecording | null> {
@@ -651,6 +706,10 @@ export class LibraryVault {
     } catch (error) {
       // The file moved (a rename) between the stat above and the sidecar read.
       if (error instanceof ItemGoneError) return null;
+      // Still listed, so the user sees the file exists; read-only until the sidecar reads again.
+      if (error instanceof SidecarUnavailableError) {
+        return this.describeUnreadable(id, filePath, info, error.issue);
+      }
       throw error;
     }
     const hashIsFresh =
@@ -683,24 +742,90 @@ export class LibraryVault {
         ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
           // overwritten in place (same id/URL) — only the changed item, so the
           // rest stay cacheable.
-          mediaUrl("screenshot", id, Math.round(info.mtimeMs))
+          mediaUrl("screenshot", id, this.mediaParams({ v: String(Math.round(info.mtimeMs)) }))
         : (await exists(this.thumbnailPath(id)))
-          ? mediaUrl("thumb", id)
+          ? mediaUrl("thumb", id, this.mediaParams({}))
           : null,
     };
   }
 
-  async sidecar(id: string): Promise<Sidecar> {
-    try {
-      return JSON.parse(await readFile(this.sidecarPath(id), "utf-8")) as Sidecar;
-    } catch {
-      return {};
-    }
+  /**
+   * What the file alone can tell: the item, with the sidecar's fields unknown. It carries a
+   * stand-in assetId (derived from the file id, never written anywhere) so the Library can
+   * still key and list it; `metadataIssue` is what tells every consumer not to trust or
+   * write it.
+   */
+  private describeUnreadable(
+    id: string,
+    filePath: string,
+    info: { size: number; birthtimeMs: number },
+    issue: MetadataIssue,
+  ): LocalRecording {
+    const isImage = IMAGE_EXTS.some((ext) => filePath.endsWith(ext));
+    const isGif = GIF_EXTS.some((ext) => filePath.endsWith(ext));
+    return {
+      id,
+      assetId: `${UNREADABLE_ASSET_PREFIX}${id}`,
+      kind: isImage ? "screenshot" : isGif ? "gif" : "recording",
+      title: humanizeId(id),
+      filePath,
+      createdAt: info.birthtimeMs,
+      sizeBytes: info.size,
+      durationSeconds: 0,
+      derivedFromAssetId: null,
+      contentSha256: null,
+      tagIds: [],
+      gif: null,
+      export: null,
+      editorOpenedAt: null,
+      editorSavedAt: null,
+      capture: null,
+      thumbnailUrl: null,
+      metadataIssue: issue,
+    };
   }
 
   /**
-   * Read the sidecar and make sure it carries an assetId. A legacy (v1) item gets
-   * one minted here, on first read, and persisted best-effort: if the vault is
+   * The item's sidecar. Only a missing file (`ENOENT`) means "no sidecar yet" and reads as
+   * `{}`; any other failure throws {@link SidecarUnavailableError}, because `{}` here is
+   * indistinguishable from a legacy item and the caller would mint a new identity over it.
+   */
+  async sidecar(id: string): Promise<Sidecar> {
+    const path = this.sidecarPath(id);
+    let raw: string;
+    try {
+      raw = await this.reader.readText(path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+      throw new SidecarUnavailableError("unreadable", path, { cause: error });
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      parsed = undefined;
+    }
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      await this.quarantine(path);
+      throw new SidecarUnavailableError("corrupt", path);
+    }
+    quarantinedSidecars.delete(path);
+    return parsed as Sidecar;
+  }
+
+  /** Keep a copy of a corrupt sidecar, once per path per session. Never touches the original. */
+  private async quarantine(path: string): Promise<void> {
+    if (quarantinedSidecars.has(path)) return;
+    quarantinedSidecars.add(path);
+    await copyFile(path, `${path}.corrupt-${Date.now()}`).catch(() => undefined);
+  }
+
+  /**
+   * Read the sidecar and make sure it carries an assetId. A legacy (v1) item (no
+   * sidecar, or one without an id) gets one minted here, on first read, and persisted
+   * best-effort. A sidecar that cannot be read or parsed throws
+   * {@link SidecarUnavailableError} instead: it is not a legacy item, and minting would
+   * overwrite what is in it. Persisting is best-effort: if the vault is
    * read-only, the id is instead remembered in `readOnlyIdentityMemo` (keyed by the
    * sidecar's absolute path) so a later read for the same path reuses it instead of
    * minting a new one every time — the alternative (failing to list) reads as data
@@ -742,8 +867,9 @@ export class LibraryVault {
   /**
    * Merge fields into the sidecar (used by rename, finalize and tags). Serialized per
    * sidecar and atomic (unique temp + fsync + rename): concurrent writers never lose a
-   * field, and a crash mid-write never leaves a truncated sidecar, which would read
-   * back as `{}` and lose the item's title, identity and tags.
+   * field, and a crash mid-write never leaves a truncated sidecar. Throws
+   * {@link SidecarUnavailableError} without writing when the existing sidecar cannot be
+   * read or parsed: merging into `{}` would erase it.
    */
   async writeMeta(id: string, meta: Sidecar): Promise<void> {
     await withLock(this.sidecarPath(id), () => this.writeMetaLocked(id, meta));
@@ -905,6 +1031,9 @@ export class LibraryVault {
       if (target === null) throw new ItemGoneError(id);
       const resolved = target;
       await withLock(this.sidecarPath(resolved), async () => {
+        // A sidecar that cannot be read refuses the save before the PNG is replaced,
+        // instead of after (the metadata write would throw with the new pixels already down).
+        await this.sidecar(resolved);
         await this.writeImage(resolved, png);
         await this.writeMetaLocked(resolved, meta);
       });
@@ -943,6 +1072,9 @@ export class LibraryVault {
    * the same assetId. Not `remove()`: that one is the destructive delete.
    */
   async removeLocalCopy(id: string): Promise<void> {
+    // Before deleting anything: the marker below cannot be written over an unreadable
+    // sidecar, and the media must not go without it.
+    await this.sidecar(id);
     const target = await this.filePath(id);
     if (!(await exists(target))) throw new Error(`No local media file for "${id}"`);
     // A legacy item may have no sidecar yet; once the media is gone, writeMeta could not create one.
@@ -966,7 +1098,7 @@ const LEGACY_STEM = /^(recording|screenshot)-(\d{4})-(\d{2})-(\d{2})[-T](\d{2})-
 
 /**
  * The title an item without a sidecar title shows. New stems are already readable
- * (ADR 0032); a legacy writer stem (`recording-2026-10-29-13-51-00`,
+ * (ADR 0035); a legacy writer stem (`recording-2026-10-29-13-51-00`,
  * `screenshot-2026-10-29T13-51-00-800Z`) reads as the new default name, so untitled
  * legacy items look like new ones. Legacy stems were UTC; the default name is local time.
  */

@@ -70,6 +70,17 @@ vi.mock("electron", () => ({
   },
 }));
 
+// The hub resolves the take's folder through the workspace registry, which `app.whenReady`
+// initializes in production. Here the active workspace is the stored vault folder, as before
+// workspaces, so a test can still point it at an unreachable path.
+vi.mock("../workspaces", async () => {
+  const { vaultDirectory } = await import("../library/vault-location");
+  return {
+    requireCaptureWorkspace: async () => ({ path: vaultDirectory().path }),
+    notifyWorkspaceBusyChanged: () => {},
+  };
+});
+
 vi.mock("./camera-bubble-window", () => ({
   CameraBubbleWindow: class {
     show = mockState.bubble.show;

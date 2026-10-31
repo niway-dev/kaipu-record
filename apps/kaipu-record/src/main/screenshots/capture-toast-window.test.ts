@@ -105,7 +105,13 @@ const COPIED: CaptureToastPayload = {
 };
 const SAVED: CaptureToastPayload = { ...COPIED, saved: { id: "screenshot-1" }, copied: false };
 
-const SHOT: QuietCapture = { png: Buffer.from([1, 2, 3]), width: 1126, height: 604, mode: "frame" };
+const SHOT: QuietCapture = {
+  png: Buffer.from([1, 2, 3]),
+  width: 1126,
+  height: 604,
+  mode: "frame",
+  workspaceId: "ws-work",
+};
 const NEXT_SHOT: QuietCapture = { ...SHOT, png: Buffer.from([4, 5, 6]) };
 
 function setup(options: { kept?: QuietCapture | null; save?: () => Promise<{ id: string }> } = {}) {
@@ -181,14 +187,26 @@ function setup(options: { kept?: QuietCapture | null; save?: () => Promise<{ id:
 
 describe("saveFromToast", () => {
   it("writes like the capture's auto-save (manual: false), so the shot stays off the editor's Continue list", async () => {
-    const save = vi.fn(async (_png: Buffer, _meta: { title: string; manual?: boolean }) => ({
-      id: "screenshot-9",
-      title: "ignored",
-    }));
-    await expect(saveFromToast(save)(SHOT.png, "Kaipu Screenshot now")).resolves.toEqual({
-      id: "screenshot-9",
+    const save = vi.fn(
+      async (
+        _workspaceId: string | null,
+        _png: Buffer,
+        _meta: { title: string; manual?: boolean },
+      ) => ({
+        id: "screenshot-9",
+        title: "ignored",
+      }),
+    );
+    await expect(saveFromToast(save)(SHOT.png, "Kaipu Screenshot now", "ws-work")).resolves.toEqual(
+      {
+        id: "screenshot-9",
+      },
+    );
+    // Into the workspace the capture started in, never the one active at the click.
+    expect(save).toHaveBeenCalledWith("ws-work", SHOT.png, {
+      title: "Kaipu Screenshot now",
+      manual: false,
     });
-    expect(save).toHaveBeenCalledWith(SHOT.png, { title: "Kaipu Screenshot now", manual: false });
   });
 });
 
@@ -501,7 +519,7 @@ describe("CaptureToastWindow", () => {
       await vi.waitFor(() => expect(shown()).toHaveLength(2));
 
       expect(deps.saveToVault).toHaveBeenCalledTimes(1);
-      expect(deps.saveToVault).toHaveBeenCalledWith(SHOT.png, "Kaipu Screenshot now");
+      expect(deps.saveToVault).toHaveBeenCalledWith(SHOT.png, "Kaipu Screenshot now", "ws-work");
       expect(shown()[1]).toEqual({ ...COPIED, saved: { id: "screenshot-new" } });
       // The vault has the shot now: Annotate opens that item, the bytes are not needed.
       expect(keptNow()).toBeNull();
@@ -552,7 +570,11 @@ describe("CaptureToastWindow", () => {
       act("save");
 
       expect(deps.saveToVault).toHaveBeenCalledTimes(2);
-      expect(deps.saveToVault).toHaveBeenLastCalledWith(NEXT_SHOT.png, "Kaipu Screenshot now");
+      expect(deps.saveToVault).toHaveBeenLastCalledWith(
+        NEXT_SHOT.png,
+        "Kaipu Screenshot now",
+        "ws-work",
+      );
       finishes.forEach((finish) => finish({ id: "screenshot-x" }));
     });
 

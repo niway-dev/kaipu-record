@@ -455,11 +455,24 @@ export const IPC_CHANNELS = {
   exportActive: "export:active",
   /** NIW2-218: main → renderer, "cancel" the running export (the user confirmed quitting). */
   exportCommand: "export:command",
-  getVaultDirectory: "library:get-vault-dir",
-  chooseVaultDirectory: "library:choose-vault-dir",
-  resetVaultDirectory: "library:reset-vault-dir",
-  // Open the recordings folder itself in the OS file manager.
-  openVaultDirectory: "library:open-vault-dir",
+  // Workspaces (ADR 0032). The old vault-folder channels (get/choose/reset/open) are gone:
+  // a folder is now a workspace, added and switched through these.
+  workspacesList: "workspaces:list",
+  workspacesAdd: "workspaces:add",
+  workspacesSwitch: "workspaces:switch",
+  workspacesRemove: "workspaces:remove",
+  workspacesOpenFolder: "workspaces:open-folder",
+  workspacesDismissHint: "workspaces:dismiss-hint",
+  // Main → every window: the registry or the active workspace changed (`WorkspacesState`).
+  workspacesChanged: "workspaces:changed",
+  // Main → every window: prepare for a switch (flush, ask about unsaved work, close editors).
+  workspacesPrepare: "workspaces:prepare",
+  // Window → main: the window's answer to `workspacesPrepare`.
+  workspacesPrepareResult: "workspaces:prepare-result",
+  // Main → every window: the switch was called off after preparing.
+  workspacesPrepareAbort: "workspaces:prepare-abort",
+  // Preload → main (sync, once at load): the workspace stamp item calls carry.
+  workspacesStampSync: "workspaces:stamp-sync",
   // The signed-in account's cloud capacity (used / reserved / available).
   getStorageUsage: "cloud:get-storage-usage",
   // Main → every window: the vault folder changed, so open pages should re-list.

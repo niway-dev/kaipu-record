@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdtemp, readFile, readdir, access, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, access, rm, stat, writeFile } from "node:fs/promises";
 import { chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -364,5 +364,60 @@ describe("RecordingWriter — unreachable vault at finalize", () => {
     expect((await readFile(dest)).toString()).toBe("hello");
     await expect(stat(tempPath)).rejects.toThrow();
     await expect(writer.salvage("s1", dest)).rejects.toThrow(/No stranded/);
+  });
+});
+
+describe("RecordingWriter — a take stays in the workspace it started in", () => {
+  it("finalizes into the folder bound at create, even when the active folder changed since", async () => {
+    const first = await mkdtemp(join(tmpdir(), "rw-ws-a-"));
+    const second = await mkdtemp(join(tmpdir(), "rw-ws-b-"));
+    let active = first;
+    const writer = new RecordingWriter({ vaultDir: () => active });
+
+    await writer.create("s1");
+    expect(writer.directoryOf("s1")).toBe(first);
+    active = second;
+    await writer.write("s1", new TextEncoder().encode("abc").buffer, 0);
+    const recording = await writer.finalize("s1", {
+      title: "t",
+      durationSeconds: 1,
+      durationMs: 1000,
+    });
+
+    expect(recording.filePath.startsWith(first)).toBe(true);
+    expect(await readdir(second)).toEqual([]);
+  });
+
+  it("refuses the take when the workspace is not connected, and stages nothing", async () => {
+    const fallbackTempDir = await mkdtemp(join(tmpdir(), "rw-fallback-"));
+    const writer = new RecordingWriter({
+      vaultDir: async () => {
+        throw new Error("Work isn't connected");
+      },
+      fallbackTempDir,
+    });
+
+    await expect(writer.create("s1")).rejects.toThrow("Work isn't connected");
+    expect(await readdir(fallbackTempDir)).toEqual([]);
+    expect(writer.ids()).toEqual([]);
+  });
+
+  it("does not recreate a bound folder that vanished mid-take: the take stays salvageable", async () => {
+    const parent = await mkdtemp(join(tmpdir(), "rw-gone-"));
+    const vaultDir = join(parent, "Kaipu");
+    await mkdir(vaultDir);
+    const fallbackTempDir = await mkdtemp(join(tmpdir(), "rw-fallback-"));
+    const writer = new RecordingWriter({
+      vaultDir: () => vaultDir,
+      tempDir: fallbackTempDir,
+    });
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("hello").buffer, 0);
+    await rm(vaultDir, { recursive: true });
+
+    await expect(
+      writer.finalize("s1", { title: "t", durationSeconds: 1, durationMs: 1000 }),
+    ).rejects.toBeInstanceOf(FinalizeMoveError);
+    await expect(readdir(vaultDir)).rejects.toThrow();
   });
 });

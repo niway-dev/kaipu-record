@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import styles from "./screenshot-viewer.module.css";
-import { mediaUrl } from "@shared/media-url";
+import { mediaUrl } from "@renderer/lib/media-url";
 
 /**
  * GIF viewer for the library detail page (NIW2-217). An `<img>` plays and loops the file

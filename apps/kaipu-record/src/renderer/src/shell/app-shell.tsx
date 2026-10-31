@@ -8,6 +8,7 @@ import { useAppVersion } from "./use-app-version";
 import { useWindowPreset } from "./use-window-preset";
 import { presetForPath } from "@shared/window-size";
 import { EnvBadge } from "./env-badge";
+import { WorkspaceSwitcher } from "@renderer/features/workspaces/workspace-switcher";
 import styles from "./app-shell.module.css";
 
 /**
@@ -47,9 +48,16 @@ export function AppShell(): React.JSX.Element {
     <div className={styles.shell}>
       <div className={styles.body}>
         <Sidebar />
-        <main className={styles.content}>
-          <Outlet />
-        </main>
+        <div className={styles.column}>
+          {/* The workspace switcher's one mount point (design "Kaipu Workspaces v2": a
+              header row right of the rail). Moving it is moving this line. */}
+          <header className={styles.header}>
+            <WorkspaceSwitcher />
+          </header>
+          <main className={styles.content}>
+            <Outlet />
+          </main>
+        </div>
       </div>
       <div className={styles.statusBar}>
         <EnvBadge className={styles.statusEnv} />

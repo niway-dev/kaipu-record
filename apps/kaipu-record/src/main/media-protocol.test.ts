@@ -25,6 +25,8 @@ vi.mock("./library", () => ({
   thumbnailFilePath: (id: string) => join(state.directory, ".kaipu", `${id}.jpg`),
 }));
 
+vi.mock("./workspaces", () => ({ activeWorkspace: () => ({ id: "ws-a" }) }));
+
 import { registerMediaProtocol } from "./media-protocol";
 
 const get = (url: string): Promise<Response> => state.handler!(new Request(url));
@@ -44,7 +46,7 @@ describe("kaipu-media:// handler (NIW2-560: ids are file names derived from titl
       await writeFile(join(state.directory, `${id}.png`), `bytes of ${id}`);
       // A decoy that an unencoded URL would address ("Demo " for "Demo #1").
       await writeFile(join(state.directory, "Demo .png"), "decoy");
-      const response = await get(mediaUrl("screenshot", id, 1));
+      const response = await get(mediaUrl("screenshot", id, { v: "1", w: "ws-a" }));
       expect(response.status).toBe(200);
       expect(await response.text()).toBe(`bytes of ${id}`);
     },
@@ -55,6 +57,12 @@ describe("kaipu-media:// handler (NIW2-560: ids are file names derived from titl
     await writeFile(join(state.directory, ".kaipu", "Demo #1.jpg"), "poster");
     const response = await get(mediaUrl("thumb", "Demo #1"));
     expect(await response.text()).toBe("poster");
+  });
+
+  it("answers 404 to an encoded id stamped for another workspace", async () => {
+    await writeFile(join(state.directory, "Demo #1.png"), "bytes");
+    const response = await get(mediaUrl("screenshot", "Demo #1", { w: "ws-b" }));
+    expect(response.status).toBe(404);
   });
 
   it("answers 400 to a malformed escape instead of throwing", async () => {
