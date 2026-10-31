@@ -107,7 +107,7 @@ export function useRecordingSetup(): RecordingSetup {
   // app settings too. Read on mount, then kept current through `onSettingsChanged`, so a
   // level changed in the popover before pressing Record is the one the take starts with.
   const audioRef = useRef<AudioSettings>(DEFAULT_AUDIO_SETTINGS);
-  // The bubble's camera, size and framing decide the webcam file's camera and lines (ADR 0032).
+  // The bubble's camera, size and framing decide the webcam file's camera and lines (ADR 0037).
   const cameraBubbleRef = useRef<CameraBubbleSettings>(DEFAULT_CAMERA_BUBBLE);
   // The microphone the user picked last (AppSettings.microphone); `undefined` until read.
   const [preferredMicrophone, setPreferredMicrophone] = useState<

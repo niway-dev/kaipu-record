@@ -14,7 +14,7 @@ import {
 } from "@kaipu/domain/constants";
 import type { TagSummary } from "@shared/types";
 import { atomicWriteFile } from "./atomic-write";
-import type { LibraryVault } from "./library-vault";
+import { SidecarUnavailableError, type LibraryVault, type Sidecar } from "./library-vault";
 
 /**
  * The only way the app reads or writes tags (ADR 0020). The renderer reaches it
@@ -134,7 +134,16 @@ export class VaultTagRepository implements TagRepository {
     const bySlug = new Map<string, Tag>();
     const assignments: Array<{ id: string; ids: string[] }> = [];
     for (const item of items) {
-      const legacy = (await this.vault().sidecar(item.id)).tags;
+      let legacy: Sidecar["tags"];
+      try {
+        legacy = (await this.vault().sidecar(item.id)).tags;
+      } catch (error) {
+        // An unreadable or corrupt sidecar is left exactly as it is. Its Phase 1 tags (never
+        // released) are not imported; refusing the whole import would disable tags for the
+        // vault over one bad file.
+        if (error instanceof SidecarUnavailableError) continue;
+        throw error;
+      }
       if (!Array.isArray(legacy) || legacy.length === 0) continue;
       const ids: string[] = [];
       for (const raw of legacy) {

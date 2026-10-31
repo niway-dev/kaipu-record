@@ -55,7 +55,7 @@ describe("EditorNewPage", () => {
       bytes: fromMain.png,
       width: 50,
       height: 40,
-      title: expect.stringMatching(/^Pasted image — /),
+      title: expect.stringMatching(/^Kaipu Screenshot \d{4}-\d{2}-\d{2} at \d{2}\.\d{2}\.\d{2}$/),
     });
   });
 
