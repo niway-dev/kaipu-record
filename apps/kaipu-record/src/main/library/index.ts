@@ -33,7 +33,7 @@ import { createDragCopy } from "./drag-copies";
 import { friendlyDragName } from "./drag-name";
 import { activeWorkspace, ownsLegacyCloud, workspaceGate } from "../workspaces";
 import { registerVideoEditSessionHandlers } from "./video-edit-session";
-import { vaultActivity, type ActivityKind } from "./vault-activity";
+import { MaintenanceError, vaultActivity, type ActivityKind } from "./vault-activity";
 
 function broadcast(channel: string, ...args: unknown[]): void {
   for (const window of BrowserWindow.getAllWindows()) {
@@ -335,6 +335,9 @@ export function registerLibraryVaultHandlers(deps: {
   ipcMain.handle(
     IPC_CHANNELS.importVideos,
     async (event, stamp: unknown): Promise<ImportVideoResult> => {
+      // Refused before the dialog while "Check and fix files" runs, rather than after the
+      // user picked files.
+      if (vaultActivity.inMaintenance) throw new MaintenanceError();
       const window = BrowserWindow.fromWebContents(event.sender);
       const t = createMainTranslator(getAppSettings().locale);
       const options: Electron.OpenDialogOptions = {
