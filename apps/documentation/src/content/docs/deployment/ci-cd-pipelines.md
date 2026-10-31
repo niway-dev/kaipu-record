@@ -179,7 +179,7 @@ cheap monorepo-wide gate vs an expensive desktop-only one. See
 
 ## Claude review (advisory)
 
-`agent-review.yml` (a caller of the reusable workflow `niway-dev/wachi-reviewer`, pinned to an exact release) posts a Claude code review on a pull request when it is ready for review, and
+`agent-review.yml` (a caller of the reusable workflow `niway-dev/wachiman`, pinned to an exact release) posts a Claude code review on a pull request when it is ready for review, and
 on the owner's `/wachi review` comment. Findings arrive as inline review comments; nothing blocks
 a merge. It needs the **repository** secret `ANTHROPIC_API_KEY` (Settings → Secrets and variables
 → Actions → Repository secrets), not an environment secret. Why and how:
