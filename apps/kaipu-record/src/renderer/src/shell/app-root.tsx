@@ -9,6 +9,7 @@ import {
 import { useUpdateStatus, UpdateBanner } from "@renderer/features/updater";
 import { useScreenshotCapture } from "@renderer/features/screenshots/use-screenshot-capture";
 import { useCaptureToastHandOffs } from "@renderer/features/screenshots/toast/use-capture-toast-hand-offs";
+import { useRecordingReadyHandOffs } from "@renderer/features/recording-ready/use-recording-ready-hand-offs";
 import { StatusStackProvider } from "@renderer/features/status-cards/status-stack";
 import { cancelVideoExport } from "@renderer/features/video-editor/export/export-runner";
 import styles from "./app-root.module.css";
@@ -26,6 +27,8 @@ export function AppRoot(): React.JSX.Element {
   const { capture } = useScreenshotCapture();
   // The capture toast's Annotate / Open in Library land on the editor or the Library.
   useCaptureToastHandOffs();
+  // The floating "Your video is ready" card's chips, Edit first and Open land here.
+  useRecordingReadyHandOffs();
 
   // A global "start recording" (the hotkey or the Capture Panel) can arrive on any
   // route — the recorder lives on the Record page, so bring the user there and

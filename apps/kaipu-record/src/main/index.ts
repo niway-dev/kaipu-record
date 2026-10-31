@@ -78,6 +78,10 @@ import {
   saveFromToast,
   type CaptureToastWindow,
 } from "./screenshots/capture-toast-window";
+import {
+  createRecordingReadyWindow,
+  type RecordingReadyWindow,
+} from "./recording/recording-ready-window";
 import { createCaptureWindowHooks } from "./screenshots/capture-window-hooks";
 import {
   peekLastQuietCapture,
@@ -656,6 +660,8 @@ function triggerShortcutCapture(action: CaptureShortcut): void {
 
 /** The toast after a quiet capture; created once the app is ready. */
 let captureToast: CaptureToastWindow | null = null;
+/** "Your video is ready", floating on the desktop after a take; created once the app is ready. */
+let recordingReady: RecordingReadyWindow | null = null;
 
 /** Window orchestration handed to the screenshot IPC (hide for the shot, reveal after). */
 const captureWindowHooks = createCaptureWindowHooks({
@@ -885,6 +891,16 @@ app.whenReady().then(() => {
     openQuietCapture,
   });
   captureToast = toast;
+
+  // "Your video is ready" (the main window asks for it after a take, `recording-ready:show`):
+  // an action closes it, then shows the main window and lets its renderer navigate.
+  recordingReady = createRecordingReadyWindow({
+    recordingDisplayId: () => hub?.lastTakeDisplayId() ?? null,
+    openInMain: (handOff) => {
+      showMainWindow();
+      sendToRenderer(IPC_CHANNELS.recordingReadyOpen, handOff);
+    },
+  });
   screenshotHandlers = registerScreenshotHandlers(
     captureWindowHooks,
     (request) => toast.show(request),
@@ -1074,6 +1090,7 @@ app.whenReady().then(() => {
   appShutdown.register({ name: "recording hub", dispose: () => hub?.dispose() });
   appShutdown.register({ name: "capture overlay", dispose: disposeCaptureOverlay });
   appShutdown.register({ name: "capture toast", dispose: () => captureToast?.destroy() });
+  appShutdown.register({ name: "recording ready", dispose: () => recordingReady?.destroy() });
   appShutdown.register({ name: "capture panel", dispose: () => capturePanel?.destroy() });
   appShutdown.register({
     name: "overlay prewarm timer",

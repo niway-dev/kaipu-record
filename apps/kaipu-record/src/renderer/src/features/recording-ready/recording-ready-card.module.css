@@ -1,0 +1,10 @@
+/*
+ * The "Your video is ready" window: transparent, 452 DIP wide, the 420 px card inset by
+ * 16 px so its shadow is not clipped (main/recording/recording-ready-window.ts). Main sizes
+ * the window's height to this frame.
+ */
+.frame {
+  display: flex;
+  justify-content: flex-end;
+  width: fit-content;
+}

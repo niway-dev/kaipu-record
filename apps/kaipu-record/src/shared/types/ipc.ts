@@ -526,6 +526,20 @@ export const IPC_CHANNELS = {
   screenshotOpenSaved: "screenshot:open-saved",
   // Main → main window: `QuietCaptureHandOff`, a copy-only capture's bytes for the editor.
   screenshotOpenQuietCapture: "screenshot:open-quiet-capture",
+  // "Your video is ready" window (main/recording/recording-ready-window.ts).
+  // Main window → main (invoke): `RecordingReadyPayload`; resolves true when the floating
+  // window is up, false when it could not be created (the page shows its in-app card).
+  recordingReadyShow: "recording-ready:show",
+  // Main → card: `RecordingReadyPayload` to render.
+  recordingReadyPayload: "recording-ready:payload",
+  // Card → main (no payload): the card's listener is up; main sends the current payload.
+  recordingReadyCardReady: "recording-ready:card-ready",
+  // Card → main: `RecordingReadyAction`, a chip, Edit first, Open, ✕ or Escape.
+  recordingReadyAction: "recording-ready:action",
+  // Card → main: `{ height: number }`, the card's height in DIP, so the window fits it.
+  recordingReadyResize: "recording-ready:resize",
+  // Main → main window: `RecordingReadyHandOff`, where to navigate after an action.
+  recordingReadyOpen: "recording-ready:open",
   // Recording engine (renderer ↔ main)
   recordingCreate: "recording:create",
   recordingWrite: "recording:write",

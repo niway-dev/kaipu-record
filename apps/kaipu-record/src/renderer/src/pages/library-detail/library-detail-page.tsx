@@ -41,6 +41,7 @@ import { asPreparable, useSourceProbe } from "@renderer/features/prepare/use-pre
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import { StatusCardPortal } from "@renderer/features/status-cards/status-stack";
 import { PostRecordingCard } from "@renderer/features/status-cards/post-recording-card";
+import { useFloatingReadyCard } from "@renderer/features/recording-ready/use-floating-ready-card";
 import type { SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { RecordingTitle } from "@renderer/features/library/components/recording-title";
 import { TagEditor } from "@renderer/features/library/components/tag-editor";
@@ -120,8 +121,9 @@ export function LibraryDetailPage(): React.JSX.Element {
   // recording has a copy to make (no screenshots, no GIFs).
   const preparable = asPreparable(video);
   const heavy = preparable !== null && isHeavyToSend(preparable.fileSizeBytes);
-  // "Your video is ready" (NIW2-584): the top-right card on the page a fresh recording lands
-  // on, once per arrival, until a chip, Open or ✕ — or leaving the page, which unmounts it.
+  // "Your video is ready" (NIW2-584): once per arrival of a fresh recording, floating on the
+  // desktop in its own window; on this page's status stack only when that window could not
+  // open, until a chip, Open or ✕ — or leaving the page, which unmounts it.
   // The stored setting keeps its NIW2-218 name.
   const { settings } = useAppSettings();
   const [cardDismissedFor, setCardDismissedFor] = useState<string | null>(null);
@@ -131,7 +133,26 @@ export function LibraryDetailPage(): React.JSX.Element {
     settings?.showRecordingSavedCard === true &&
     cardDismissedFor !== location.key;
   // Read the file up front only when the banner or the card needs its numbers.
-  const probe = useSourceProbe(heavy || showCard ? (preparable?.id ?? null) : null).probe;
+  const probeState = useSourceProbe(heavy || showCard ? (preparable?.id ?? null) : null);
+  const probe = probeState.probe;
+  // The floating card is asked for once the file has been read (or could not be), so it
+  // opens with its numbers instead of repainting them.
+  const probeSettled = probeState.status === "ready" || probeState.status === "error";
+  const floatingCard = useFloatingReadyCard(
+    showCard && probeSettled && preparable
+      ? {
+          key: location.key,
+          payload: {
+            assetId: preparable.assetId,
+            durationSeconds: probe?.durationSec ?? preparable.durationSeconds,
+            dimensions: probe ? { width: probe.width, height: probe.height } : null,
+            sizeBytes: preparable.fileSizeBytes,
+            canEdit: canOpenInEditor(preparable),
+          },
+        }
+      : null,
+  );
+  const showInAppCard = showCard && floatingCard.inApp;
   // A copy finished in the background: re-list, so it shows under "Copies from this master".
   const runner = useExportRunner();
   const readyId = runner.ready?.recording.id ?? null;
@@ -239,7 +260,7 @@ export function LibraryDetailPage(): React.JSX.Element {
         {t("title")}
       </button>
 
-      {showCard && (
+      {showInAppCard && (
         <StatusCardPortal>
           <PostRecordingCard
             durationSeconds={probe?.durationSec ?? video.durationSeconds}

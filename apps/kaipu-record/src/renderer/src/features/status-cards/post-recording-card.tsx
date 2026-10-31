@@ -4,6 +4,10 @@ import { useTranslations, type Messages } from "@kaipu/i18n";
 import { formatDuration } from "@renderer/features/library/format";
 import { formatMB } from "@renderer/features/video-editor/export/export-size";
 import type { DestinationId } from "@renderer/features/prepare/destinations";
+import {
+  RECORDING_READY_DESTINATIONS,
+  type RecordingReadyDestination,
+} from "@shared/types/recording-ready";
 import { DestinationLogo } from "@renderer/features/prepare/components/destination-logo";
 import { StatusCard, StatusCardActions, StatusCardButton, StatusCardText } from "./status-card";
 import styles from "./post-recording-card.module.css";
@@ -14,9 +18,13 @@ const CHIPS = [
   { destination: "vertical", name: "chipVertical" },
   { destination: "github", name: "chipGithub" },
 ] as const satisfies ReadonlyArray<{
-  destination: DestinationId;
+  destination: RecordingReadyDestination & DestinationId;
   name: keyof Messages["postRecording"];
 }>;
+
+// The floating window's contract names the chips without importing Prepare: every one of
+// them must stay a Prepare destination.
+RECORDING_READY_DESTINATIONS satisfies ReadonlyArray<DestinationId>;
 
 export interface PostRecordingCardProps {
   durationSeconds: number;
@@ -24,16 +32,19 @@ export interface PostRecordingCardProps {
   dimensions: { width: number; height: number } | null;
   sizeBytes: number;
   /** A chip: Prepare on that destination, or with nothing preselected (null). */
-  onPick(destination: DestinationId | null): void;
+  onPick(destination: RecordingReadyDestination | null): void;
   /** "Edit first"; omitted when the recording cannot open in the editor. */
   onEditFirst?(): void;
-  /** ✕ and "Open": the card shows on the recording's own page, so opening it is closing this. */
+  /** ✕, and "Open" without `onOpen`: in-app, the card is on the recording's own page. */
   onDismiss(): void;
+  /** "Open" when it must go somewhere: the floating window opens the recording's page. */
+  onOpen?(): void;
 }
 
 /**
- * "Your video is ready" (NIW2-584): the top-right card the recording page shows right after
- * a recording. It asks where the video is going, with chips into Prepare, and stays until the
+ * "Your video is ready" (NIW2-584): the card shown right after a recording, floating on the
+ * desktop in its own window (`RecordingReadyCard`), or on the recording page's status stack
+ * when that window could not open. It asks where the video is going, with chips into Prepare, and stays until the
  * user picks something, closes it or leaves the page — there is no timer, since the question
  * is the point. Settings → Export quality turns it off.
  */
@@ -44,6 +55,7 @@ export function PostRecordingCard({
   onPick,
   onEditFirst,
   onDismiss,
+  onOpen,
 }: PostRecordingCardProps): React.JSX.Element {
   const t = useTranslations("postRecording");
   const subtitle = [
@@ -107,7 +119,10 @@ export function PostRecordingCard({
             {t("editFirst")}
           </StatusCardButton>
         )}
-        <StatusCardButton title={t("openHint")} onClick={onDismiss}>
+        <StatusCardButton
+          title={onOpen ? t("openFloatingHint") : t("openHint")}
+          onClick={onOpen ?? onDismiss}
+        >
           <Library size={14} strokeWidth={1.8} />
           {t("open")}
         </StatusCardButton>

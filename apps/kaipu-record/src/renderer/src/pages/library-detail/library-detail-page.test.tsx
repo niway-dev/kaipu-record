@@ -729,6 +729,7 @@ describe("LibraryDetailPage — your video is ready (NIW2-584)", () => {
   }
 
   beforeEach(() => {
+    window.electronAPI.showRecordingReady = vi.fn(async () => false);
     window.electronAPI.onLibraryChanged = () => () => {};
     window.electronAPI.listLibraryItems = vi.fn(async () => ({
       items: [fresh],
@@ -737,7 +738,52 @@ describe("LibraryDetailPage — your video is ready (NIW2-584)", () => {
     }));
   });
 
-  it("right after recording, the top-right card asks where it is going; a chip opens Prepare on it", async () => {
+  it("right after recording, floats the card on the desktop once, with the file's numbers, and not in-app", async () => {
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    const showRecordingReady = vi.fn(async () => true);
+    window.electronAPI.showRecordingReady = showRecordingReady;
+    renderFresh(true);
+    await waitFor(() => expect(showRecordingReady).toHaveBeenCalledTimes(1));
+    expect(showRecordingReady).toHaveBeenCalledWith({
+      assetId: "asset-b",
+      durationSeconds: 78,
+      dimensions: { width: 2560, height: 1440 },
+      sizeBytes: 4_000_000,
+      canEdit: true,
+    });
+    await act(async () => {});
+    expect(screen.queryByRole("region", CARD)).toBeNull();
+    expect(showRecordingReady).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the in-app card when the floating window cannot be asked for", async () => {
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    window.electronAPI.showRecordingReady = vi.fn(async () => {
+      throw new Error("No handler registered for 'recording-ready:show'");
+    });
+    renderFresh(true);
+    expect(await screen.findByRole("region", CARD)).toBeVisible();
+  });
+
+  it("no floating card either when Settings turned it off or the page came from the Library", async () => {
+    const showRecordingReady = vi.fn(async () => true);
+    window.electronAPI.showRecordingReady = showRecordingReady;
+    window.electronAPI.getSettings = vi
+      .fn()
+      .mockResolvedValue({ ...DEFAULT_SETTINGS, showRecordingSavedCard: false });
+    renderFresh(true);
+    await waitForLoaded();
+    await act(async () => {});
+    cleanup();
+    window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
+    renderFresh(false);
+    await waitForLoaded();
+    await act(async () => {});
+    expect(showRecordingReady).not.toHaveBeenCalled();
+  });
+
+  // The in-app card, when the floating window could not open (the test stub answers false).
+  it("in-app fallback: the top-right card asks where it is going; a chip opens Prepare on it", async () => {
     window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
     const router = renderFresh(true);
     const card = await screen.findByRole("region", CARD);

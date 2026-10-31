@@ -897,6 +897,7 @@
     "editFirst": "Editar primero",
     "open": "Abrir",
     "openHint": "Cerrar esto y quedarse en la grabación",
+    "openFloatingHint": "Abrir la grabación en Kaipu",
     "dismiss": "Cerrar",
     "footer": "Guardado en calidad completa · siempre puedes volver a esto"
   },

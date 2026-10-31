@@ -9,17 +9,19 @@ import { CameraBubble } from "./features/camera-bubble/camera-bubble";
 import { CaptureOverlay } from "./features/screenshots/overlay/capture-overlay";
 import { parseOverlayQuery } from "./features/screenshots/overlay/overlay-query";
 import { CaptureToast } from "./features/screenshots/toast/capture-toast";
+import { RecordingReadyCard } from "./features/recording-ready/recording-ready-card";
 import { RecordingShade } from "./features/recording-shade/recording-shade";
 import { installCrashForwarder } from "./features/analytics/crash-forwarder";
 import { I18nRoot } from "./app/i18n-root";
 import { StylexProbe } from "./dev/stylex-probe";
 
-// Same HTML entry, seven render targets selected by query param:
+// Same HTML entry, eight render targets selected by query param:
 //   ?mode=capture           → the menu-bar tray's compact panel
 //   ?window=control-bar     → the floating recording control bar
 //   ?window=camera-bubble   → the floating webcam bubble
 //   ?window=capture-overlay → one screenshot capture overlay per display
 //   ?window=capture-toast   → the toast after a quiet capture
+//   ?window=recording-ready → "Your video is ready", floating after a take
 //   ?window=recording-shade → the countdown and the border around what is recorded
 //   (default)               → the full app
 const root = createRoot(document.getElementById("root")!);
@@ -61,6 +63,12 @@ async function bootstrap(): Promise<void> {
     document.body.dataset.window = "capture-toast";
     installCrashForwarder("capture-toast");
     node = <CaptureToast />;
+  } else if (windowKind === "recording-ready") {
+    // Transparent window sized to the card by main (see main.css); only the card paints.
+    document.body.style.background = "transparent";
+    document.body.dataset.window = "recording-ready";
+    installCrashForwarder("recording-ready");
+    node = <RecordingReadyCard />;
   } else if (isControlBar) {
     // Transparent, fixed-size widget — only the bar pill paints, and it never
     // scrolls (see the `[data-window="control-bar"]` rule in main.css).

@@ -897,6 +897,7 @@
     "editFirst": "Edit first",
     "open": "Open",
     "openHint": "Close this and stay on the recording",
+    "openFloatingHint": "Open the recording in Kaipu",
     "dismiss": "Dismiss",
     "footer": "Saved at full quality · you can always come back to this"
   },
