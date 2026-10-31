@@ -27,7 +27,8 @@ interface VideoPickerProps {
 
 /**
  * "Change video" and "Pick from Library": the Library's recordings in a list under the button.
- * Escape or a click outside closes it.
+ * Opening it moves focus into the list (the current video, else the first); Escape closes it
+ * and returns focus to the button; a click outside closes it.
  */
 export function VideoPicker({
   videos,
@@ -40,7 +41,18 @@ export function VideoPicker({
   const [open, setOpen] = useState(false);
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const list = exportableVideos(videos);
+
+  // Focus moves into the panel when it opens, as a dialog's does.
+  useEffect(() => {
+    if (!open) return;
+    const target =
+      panel.current?.querySelector<HTMLElement>("[aria-current='true']") ??
+      panel.current?.querySelector<HTMLElement>("button") ??
+      panel.current;
+    target?.focus();
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -48,7 +60,10 @@ export function VideoPicker({
       if (!root.current?.contains(event.target as Node)) setOpen(false);
     };
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      // Back to the button that opened it (the only element here that controls the panel).
+      root.current?.querySelector<HTMLElement>("[aria-controls]")?.focus();
     };
     document.addEventListener("mousedown", onPointer);
     document.addEventListener("keydown", onKey);
@@ -68,6 +83,8 @@ export function VideoPicker({
       {open && (
         <div
           id={id}
+          ref={panel}
+          tabIndex={-1}
           role="dialog"
           aria-label={t("pickerLabel")}
           className={styles.panel}

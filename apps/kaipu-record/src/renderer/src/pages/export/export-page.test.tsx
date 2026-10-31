@@ -527,6 +527,20 @@ describe("ExportPage with no video", () => {
     expect(router.state.location.search).toBe("?to=github");
   });
 
+  it("the picker takes focus when it opens, and Escape gives it back to its button", async () => {
+    list(recording(), preparedCopy);
+    renderExport("/export");
+    const trigger = await screen.findByRole("button", { name: "Pick from Library" });
+    fireEvent.click(trigger);
+    const picker = screen.getByRole("dialog");
+    expect(within(picker).getByRole("button", { name: /Demo/ })).toHaveFocus();
+
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(trigger).toHaveFocus();
+  });
+
   it("Browse files opens the import dialog", async () => {
     window.electronAPI.importVideos = vi.fn(async () => ({
       imported: [],
