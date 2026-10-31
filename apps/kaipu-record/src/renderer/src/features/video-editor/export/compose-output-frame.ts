@@ -156,6 +156,8 @@ export function createOutputComposer(opts: OutputComposerOptions): OutputCompose
     );
     stampOverlays(outTs, workCtx);
     if (frame.crop) {
+      // A zoom crop upscales: high-quality resampling, as the fixed-canvas framer does.
+      ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
       const { sx, sy, sw, sh } = frame.crop;
       ctx.drawImage(work, sx, sy, sw, sh, 0, 0, width, height);
@@ -218,6 +220,11 @@ function canvasFilterSupported(): boolean {
 /**
  * Draw `bitmap` into `(w × h)` with letterboxing (contain), centred, on a
  * black background that was already filled by the caller.
+ *
+ * A slide bitmap is usually a different size from the frame, so this resamples — up, on a
+ * 4K YouTube export. The context default is bilinear ("low"), which softens slide text;
+ * "high" is the same resampling the framer and the zoom crop use. The state is left set:
+ * every drawImage on this context is a resample that wants it.
  */
 function drawContained(
   ctx: OffscreenCanvasRenderingContext2D,
@@ -228,6 +235,8 @@ function drawContained(
   const scale = Math.min(w / bitmap.width, h / bitmap.height);
   const dw = bitmap.width * scale;
   const dh = bitmap.height * scale;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
   ctx.drawImage(bitmap, (w - dw) / 2, (h - dh) / 2, dw, dh);
 }
 

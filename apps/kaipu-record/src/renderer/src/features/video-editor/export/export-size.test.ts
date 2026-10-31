@@ -5,13 +5,11 @@ import {
   HEAVY_TO_SEND_BYTES,
   isHeavyToSend,
   percentLighter,
-  SHARE_LIMIT_BYTES,
   sizeKindOf,
 } from "./export-size";
 
 describe("export size wording", () => {
-  it("offers a light copy over 10 MB and calls a file heavy over 25 MB", () => {
-    expect(SHARE_LIMIT_BYTES).toBe(10_000_000);
+  it("calls a file heavy over 25 MB", () => {
     expect(HEAVY_TO_SEND_BYTES).toBe(25_000_000);
     expect(isHeavyToSend(25_000_000)).toBe(false);
     expect(isHeavyToSend(25_000_001)).toBe(true);
@@ -20,7 +18,8 @@ describe("export size wording", () => {
   it("says 'up to' only for the fixed canvases, and nothing for Maximum", () => {
     expect(sizeKindOf("balanced")).toBe("about");
     expect(sizeKindOf("light")).toBe("about");
-    expect(sizeKindOf("youtube")).toBe("up-to");
+    expect(sizeKindOf("youtube-1440")).toBe("up-to");
+    expect(sizeKindOf("youtube-4k")).toBe("up-to");
     expect(sizeKindOf("vertical")).toBe("up-to");
     expect(sizeKindOf("square")).toBe("up-to");
     expect(sizeKindOf("maximum")).toBe("full");

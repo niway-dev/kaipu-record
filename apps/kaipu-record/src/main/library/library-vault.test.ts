@@ -336,11 +336,13 @@ describe("LibraryVault", () => {
     expect((await vault.describe("exp"))?.contentSha256).toBeNull();
   });
 
-  it('exposes an MP4 export\'s preset and fingerprint, reading the legacy "original" as maximum (NIW2-218)', async () => {
+  it('exposes an MP4 export\'s preset and fingerprint, reading the legacy "original" as maximum (NIW2-218) and "youtube" as youtube-1440', async () => {
     await writeRecording("share");
     await writeSidecar("share", { exportPreset: "balanced", exportFingerprint: "whole" });
     await writeRecording("legacy");
     await writeSidecar("legacy", { exportPreset: "original" });
+    await writeRecording("old-youtube");
+    await writeSidecar("old-youtube", { exportPreset: "youtube", exportFingerprint: "whole" });
     await writeRecording("plain");
     await writeSidecar("plain", { exportPreset: "tiktok" });
     expect((await vault.describe("share"))?.export).toEqual({
@@ -350,6 +352,11 @@ describe("LibraryVault", () => {
     expect((await vault.describe("legacy"))?.export).toEqual({
       preset: "maximum",
       fingerprint: null,
+    });
+    // The 1920×1080 YouTube export (before NIW2-564) reads as YouTube 1440p.
+    expect((await vault.describe("old-youtube"))?.export).toEqual({
+      preset: "youtube-1440",
+      fingerprint: "whole",
     });
     expect((await vault.describe("plain"))?.export).toBeNull();
   });
