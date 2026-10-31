@@ -1,7 +1,7 @@
 import { VAULT_MAINTENANCE_MARKER } from "@shared/types/library-storage";
 
 /**
- * Maintenance mode (NIW2-561, ADR 0033): one flag and one activity counter per process.
+ * Maintenance mode (NIW2-561, ADR 0036): one flag and one activity counter per process.
  *
  * Every operation entering the vault from outside (IPC handlers, capture starts, the
  * recording session, exports, stranded recovery, the folder change) takes a lease with

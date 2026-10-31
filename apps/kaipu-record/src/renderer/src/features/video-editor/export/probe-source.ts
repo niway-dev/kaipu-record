@@ -1,5 +1,5 @@
 import { openRecordingInput } from "@renderer/lib/open-recording-input";
-import { mediaUrl } from "@shared/media-url";
+import { mediaUrl } from "@renderer/lib/media-url";
 
 /**
  * Source facts the export presets need (NIW2-218): what the `<video>` element doesn't expose

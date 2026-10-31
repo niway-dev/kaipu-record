@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { open, mkdir, unlink, type FileHandle } from "node:fs/promises";
+import { open, mkdir, stat, unlink, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { LocalRecording } from "@shared/types/library-storage";
@@ -21,8 +21,13 @@ export { isFileExists };
 export const STAGING_DIR = join(".kaipu", "tmp");
 
 export interface RecordingWriterDeps {
-  /** Current vault directory (can change at runtime). */
-  vaultDir: () => string;
+  /**
+   * The active workspace's folder, resolved ONCE per take, at `create()`: the take, its
+   * finalize and its cursor track all use that folder, so a switch can never split a take
+   * (ADR 0032, decision 5). Throws when the workspace is not connected, which refuses the
+   * take instead of saving it anywhere else.
+   */
+  vaultDir: () => string | Promise<string>;
   /** Wall clock (ms) — injectable for tests. */
   now?: () => number;
   /** Forces every in-progress file into this directory (tests). Unset: stage inside the vault. */
@@ -34,6 +39,8 @@ export interface RecordingWriterDeps {
 interface Session {
   handle: FileHandle;
   tempPath: string;
+  /** The vault folder bound when the take started; finalize moves the take there only. */
+  vaultDir: string;
   /**
    * Tail of the serialized write chain. Chunks arrive fire-and-forget over IPC,
    * so finalize/abort await this to guarantee every positional write has hit
@@ -96,10 +103,10 @@ export class RecordingWriter {
     this.now = deps.now ?? (() => Date.now());
   }
 
-  private async stagingDir(): Promise<string> {
+  private async stagingDir(vaultDir: string): Promise<string> {
     if (this.deps.tempDir) return this.deps.tempDir;
     try {
-      const dir = join(this.deps.vaultDir(), STAGING_DIR);
+      const dir = join(vaultDir, STAGING_DIR);
       await mkdir(dir, { recursive: true });
       return dir;
     } catch {
@@ -116,7 +123,10 @@ export class RecordingWriter {
     if (this.sessions.has(sessionId)) {
       throw new Error(`Recording session "${sessionId}" is already open`);
     }
-    const dir = await this.stagingDir();
+    // Outside the staging fallback on purpose: a workspace that is not connected refuses
+    // the take here, it does not record into the temp folder.
+    const vaultDir = await this.deps.vaultDir();
+    const dir = await this.stagingDir(vaultDir);
     const tempPath = join(dir, `kaipu-rec-${sessionId}-${randomUUID().slice(0, 8)}.mp4.part`);
     const handle = await open(tempPath, "wx+");
     if (this.sessions.has(sessionId)) {
@@ -125,8 +135,13 @@ export class RecordingWriter {
       await unlink(tempPath).catch(() => {});
       throw new Error(`Recording session "${sessionId}" is already open`);
     }
-    this.sessions.set(sessionId, { handle, tempPath, queue: Promise.resolve() });
+    this.sessions.set(sessionId, { handle, tempPath, vaultDir, queue: Promise.resolve() });
     return { tempPath };
+  }
+
+  /** The folder a session is bound to (the cursor track goes next to its take). */
+  directoryOf(sessionId: string): string | null {
+    return this.sessions.get(sessionId)?.vaultDir ?? null;
   }
 
   async write(sessionId: string, data: ArrayBuffer, position: number): Promise<void> {
@@ -196,18 +211,19 @@ export class RecordingWriter {
       throw session.failed;
     }
 
-    // Resolve the destination BEFORE touching the session: a vault that vanished
-    // (unplugged drive, revoked folder) must leave the take recoverable.
-    // The id is allocated from the title (ADR 0032): its stub sidecar reserves the stem, so a
+    // The folder bound at create(), never the one active now. Checked BEFORE touching the
+    // session: a vault that vanished (unplugged drive, revoked folder) must leave the take
+    // recoverable, and is never recreated (that would hide the take in an empty folder).
+    // The id is allocated from the title (ADR 0035): its stub sidecar reserves the stem, so a
     // capture in the same second or a rename racing this one gets another name.
-    const vaultDir = this.deps.vaultDir();
+    const vaultDir = session.vaultDir;
     const vault = new LibraryVault(vaultDir);
     const createdAt = this.now();
     let reservation: Reservation;
     let id: string;
     let dest: string;
     try {
-      await mkdir(vaultDir, { recursive: true });
+      if (!(await stat(vaultDir)).isDirectory()) throw new Error(`not a folder: ${vaultDir}`);
       reservation = await vault.reserve({ kind: "recording", title: meta.title, createdAt });
       id = reservation.id;
       dest = await vault.filePath(id); // <id>.mp4 (does not exist yet)

@@ -55,7 +55,11 @@ describe("video-edit-session", () => {
         assets: [{ assetId: "asset-a", bytes: bytesOf("png") }],
       }),
     ).rejects.toThrow(/vault-unreadable-record/);
-    expect((await readdir(join(vaultDir, ".kaipu"))).sort()).toEqual(["rec-1.json"]);
+    // Nothing of the session was written. The only other file is the one copy of the corrupt
+    // record the vault keeps aside on first read (NIW2-568); the record itself is untouched.
+    const files = (await readdir(join(vaultDir, ".kaipu"))).sort();
+    expect(files.filter((f) => !f.startsWith("rec-1.json.corrupt-"))).toEqual(["rec-1.json"]);
+    expect(await readFile(join(vaultDir, ".kaipu", "rec-1.json"), "utf8")).toBe("{corrupt");
   });
 
   it("returns null when no session was ever saved", async () => {

@@ -1,9 +1,9 @@
 ---
-title: "ADR 0033: The library reconciles with its folder on demand"
+title: "ADR 0036: The library reconciles with its folder on demand"
 description: When the vault folder and the library disagree, one user-triggered "Check and fix files" pass aligns file names with titles, adopts files that have no record and moves records with no media to an orphans folder. The file name is the only link between a file and its record; nothing is deleted and no identity is guessed.
 ---
 
-# ADR 0033: The library reconciles with its folder on demand
+# ADR 0036: The library reconciles with its folder on demand
 
 ## Status
 
@@ -11,12 +11,12 @@ description: When the vault folder and the library disagree, one user-triggered 
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Status        | Proposed — implemented on branch `feature/niw2-561-reconcile-the-library-with-its-folder` (stacked on PR #435), owner QA pending                                                                                                                                                                                              |
 | Date          | 2026-10-30                                                                                                                                                                                                                                                                                                                    |
-| Relates to    | [ADR 0032](./0032-the-file-name-follows-the-title) (the file name follows the title; this ADR aligns the items that existed before it); [ADR 0020](./0020-tags-are-entities-with-stable-ids) (tags ride in the sidecar by id, so they follow the record); NIW2-561; follow-up NIW2-589 (orphans list and manual reassignment) |
+| Relates to    | [ADR 0035](./0035-the-file-name-follows-the-title) (the file name follows the title; this ADR aligns the items that existed before it); [ADR 0020](./0020-tags-are-entities-with-stable-ids) (tags ride in the sidecar by id, so they follow the record); NIW2-561; follow-up NIW2-589 (orphans list and manual reassignment) |
 | Superseded by | —                                                                                                                                                                                                                                                                                                                             |
 
 ## Context
 
-ADR 0032 made a rename move the file, but it left every existing item as it was. A read-only
+ADR 0035 made a rename move the file, but it left every existing item as it was. A read-only
 scan of the owner's vault on 2026-10-30 (561 media files) found zero items whose file name
 matched their title: 527 carried an old automatic title such as `Recording — 10/29/2026, 7:57:30 PM`
 over `recording-2026-10-30-00-57-30.mp4`, about 32 carried user-written or `Pasted image — …`
@@ -41,7 +41,7 @@ ADR links file and record by name alone.
 2. **The file name is the only link between a file and its record.** A record belongs to the
    media file with the same stem. There is no pairing by inode, hash or date.
 3. **Same item, title ≠ file name: the file takes the title.** This covers pre-existing items
-   and in-app renames that never reached the disk. The item is renamed through ADR 0032's
+   and in-app renames that never reached the disk. The item is renamed through ADR 0035's
    `renameItem`, in a planner order that handles chains and cycles by giving the item still
    waiting the first free suffix. Reconcile never reuses a "leftover" destination
    (`allowLeftover: false`).

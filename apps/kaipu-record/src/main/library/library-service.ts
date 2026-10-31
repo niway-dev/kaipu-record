@@ -36,6 +36,13 @@ export interface LibraryServiceDeps {
   cache: CatalogCache;
   account: () => { userId: string; token: string } | null;
   fetchCatalog: (token: string) => Promise<CloudCatalogEntry[]>;
+  /**
+   * The active workspace owns the account's cloud entries that carry no workspace id (spec
+   * decision 3; none carries one until desktop upload ships). Any other workspace lists only
+   * the cloud copies of its own local items, and never rewrites the account's cache.
+   * Absent: owns them (one workspace, or a caller that predates workspaces).
+   */
+  ownsLegacyCloud?: () => boolean;
   now?: () => number;
   /** Maintenance mode; the process' instance unless a test injects one. */
   activity?: VaultActivity;
@@ -144,7 +151,11 @@ export class LibraryService {
       vaultError = err instanceof Error ? err.message : String(err);
     }
     const account = this.deps.account();
-    const catalog = account ? await this.deps.cache.read(account.userId) : null;
+    const cached = account ? await this.deps.cache.read(account.userId) : null;
+    const owns = this.deps.ownsLegacyCloud?.() ?? true;
+    const localAssets = new Set((local ?? []).map((rec) => rec.assetId));
+    // Hiding is a view: the cache keeps every entry (it is rewritten only by the owner).
+    const catalog = owns || !cached ? cached : cached.filter((e) => localAssets.has(e.assetId));
 
     const editing: Record<string, EditingState> = {};
     const editSession: Record<string, EditSessionState> = {};
@@ -154,14 +165,20 @@ export class LibraryService {
     }
 
     const { items, catalogUpdates } = composeLibrary({ local, catalog, editing, editSession });
-    if (account && catalog && local && JSON.stringify(catalogUpdates) !== JSON.stringify(catalog)) {
+    if (
+      owns &&
+      account &&
+      catalog &&
+      local &&
+      JSON.stringify(catalogUpdates) !== JSON.stringify(catalog)
+    ) {
       // Best-effort: remembering which cloud items were also local is what lets an
       // unplugged drive read as "local unavailable" instead of "cloud only". Skipped
       // when nothing changed so a plain `list()` doesn't keep rewriting the cache file.
       await this.deps.cache.write(account.userId, catalogUpdates).catch(() => undefined);
     }
     const catalogVerifiedAt = account
-      ? (catalog ?? []).reduce((max, e) => Math.max(max, e.lastVerifiedAt), 0)
+      ? (cached ?? []).reduce((max, e) => Math.max(max, e.lastVerifiedAt), 0)
       : null;
     return { items, vaultError, catalogVerifiedAt };
   }

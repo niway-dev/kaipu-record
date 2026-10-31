@@ -11,6 +11,7 @@ import { useScreenshotCapture } from "@renderer/features/screenshots/use-screens
 import { useCaptureToastHandOffs } from "@renderer/features/screenshots/toast/use-capture-toast-hand-offs";
 import { StatusStackProvider } from "@renderer/features/status-cards/status-stack";
 import { cancelVideoExport } from "@renderer/features/video-editor/export/export-runner";
+import { useOptionalWorkspaces } from "@renderer/features/workspaces/workspaces-context";
 import styles from "./app-root.module.css";
 
 /**
@@ -24,6 +25,9 @@ export function AppRoot(): React.JSX.Element {
   const gate = useVersionGate();
   const update = useUpdateStatus();
   const { capture } = useScreenshotCapture();
+  // Every switch remounts the pages (ADR 0032): no editor, list or filter of the old
+  // workspace survives it. AppRoot itself stays, so the listeners below keep working.
+  const epoch = useOptionalWorkspaces()?.epoch ?? 0;
   // The capture toast's Annotate / Open in Library land on the editor or the Library.
   useCaptureToastHandOffs();
 
@@ -93,7 +97,7 @@ export function AppRoot(): React.JSX.Element {
       {/* The top-right status cards (a background export's progress, "Ready to share",
           a page's "Recording saved") live here, so they survive navigation. */}
       <StatusStackProvider>
-        <Outlet />
+        <Outlet key={epoch} />
       </StatusStackProvider>
       {gate.kind === "hard" && (
         <VersionGateOverlay message={gate.message} downloadUrl={gate.downloadUrl} />

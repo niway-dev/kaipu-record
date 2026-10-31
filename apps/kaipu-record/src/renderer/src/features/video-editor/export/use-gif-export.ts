@@ -8,7 +8,7 @@ import type { CameraPath } from "../zoom/camera-path";
 import { buildExportPlan, gifOutputSize, sliceExportPlan, type ExportPlan } from "./export-plan";
 import type { GifFps, GifStartMessage, GifWorkerMessage } from "./gif-messages";
 import { rasterizeOverlays } from "./overlay-raster";
-import { mediaUrl } from "@shared/media-url";
+import { mediaUrl } from "@renderer/lib/media-url";
 
 export interface GifJobArgs {
   scene: VideoScene;

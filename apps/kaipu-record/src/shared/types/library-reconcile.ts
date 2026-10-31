@@ -1,5 +1,5 @@
 /**
- * "Check and fix files" (NIW2-561, ADR 0033): what the scan finds and what Fix all did.
+ * "Check and fix files" (NIW2-561, ADR 0036): what the scan finds and what Fix all did.
  * Pure types — safe to import from main, preload and renderer.
  */
 

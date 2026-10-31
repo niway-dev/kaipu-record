@@ -1,6 +1,6 @@
 /**
  * From a free-text title to a file stem every common file system accepts (NIW2-560,
- * ADR 0032). The title stays in the sidecar exactly as typed; the stem is a projection.
+ * ADR 0035). The title stays in the sidecar exactly as typed; the stem is a projection.
  *
  * Budget: a 255-byte name component minus the longest companion suffix
  * (`.assets/<uuid>.png`, or an atomic write's `.json.<pid>.<uuid>.tmp`, ~53 bytes) leaves

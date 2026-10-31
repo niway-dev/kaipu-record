@@ -69,8 +69,8 @@ describe("LibraryVault — an unreadable record is never written (F9)", () => {
   it("lists the item read-only instead of failing the list or rewriting the record", async () => {
     const items = await vault.list();
     const demo = items.find((item) => item.id === "Demo")!;
-    expect(demo.readable).toBe(false);
-    expect(items.find((item) => item.id === "Shot")!.readable).toBe(false);
+    expect(demo.metadataIssue).toBeDefined();
+    expect(items.find((item) => item.id === "Shot")!.metadataIssue).toBeDefined();
     expect(await sidecarBytes("Demo")).toBe(CORRUPT);
     expect(await sidecarBytes("Shot")).toBe("[]");
   });
@@ -116,7 +116,7 @@ describe("LibraryVault — an unreadable record is never written (F9)", () => {
   it("an item without a sidecar still gets one (a missing record is not unreadable)", async () => {
     await writeFile(join(directory, "Legacy.mp4"), "video");
     const item = (await vault.list()).find((i) => i.id === "Legacy")!;
-    expect(item.readable).not.toBe(false);
+    expect(item.metadataIssue).toBeUndefined();
     expect(JSON.parse(await sidecarBytes("Legacy")).assetId).toBe(item.assetId);
   });
 });

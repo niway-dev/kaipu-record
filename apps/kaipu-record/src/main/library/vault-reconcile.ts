@@ -1,5 +1,5 @@
 /**
- * "Check and fix files" (NIW2-561, ADR 0033): the scanner, the orphans move, the rename
+ * "Check and fix files" (NIW2-561, ADR 0036): the scanner, the orphans move, the rename
  * planner and the fix pipeline. Pure Node (no Electron), tested on temp vaults.
  *
  * The file name is the only link between a file and its record: a record belongs to the
@@ -42,7 +42,7 @@ import {
 
 // ── Old automatic titles (N1) ─────────────────────────────────────────────────
 
-/** Prefixes the app used before ADR 0032 (`Captura` is the Spanish screenshot prefix). */
+/** Prefixes the app used before ADR 0035 (`Captura` is the Spanish screenshot prefix). */
 const AUTO_PREFIX = /^(?:Recording|Screenshot|Pasted image|Imagen pegada|Captura) — (.+)$/su;
 /** AM/PM words `toLocaleString()` produces, longest first. */
 const DAY_PERIODS = [
@@ -63,7 +63,7 @@ const DAY_PERIODS = [
 ];
 
 /**
- * True for a title the app generated before ADR 0032: a known prefix, ` — `, then only
+ * True for a title the app generated before ADR 0035: a known prefix, ` — `, then only
  * digits, separators and AM/PM words. Any other word makes it user-written (N12: a user
  * title that looks automatic is replaced; accepted).
  */
@@ -401,7 +401,7 @@ export async function scanVault(input: ScanInput): Promise<VaultScan> {
   }
 
   // A plain `<stem>.json` is a record; a companion-shaped one (`.edit.json`, `.cursor.json`,
-  // `.edit.meta.json`) is a companion first, since those stems are reserved (ADR 0032).
+  // `.edit.meta.json`) is a companion first, since those stems are reserved (ADR 0035).
   const isRecordName = (entry: Entry): boolean =>
     entry.found.length === 1 && entry.found[0]!.role === "sidecar";
   const records = ownerless.filter(isRecordName);
@@ -798,7 +798,7 @@ interface Planned {
 }
 
 /**
- * "Fix all" (ADR 0033). The caller holds maintenance mode. Each action is safe on its own,
+ * "Fix all" (ADR 0036). The caller holds maintenance mode. Each action is safe on its own,
  * so there is no journal: a crash leaves something the next run sees and finishes.
  *
  * 1. Pending orphan manifests are completed.

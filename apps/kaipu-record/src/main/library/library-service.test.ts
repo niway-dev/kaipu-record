@@ -101,6 +101,32 @@ describe("LibraryService", () => {
     expect(result.vaultError).toBeNull();
   });
 
+  it("a workspace that does not own the legacy cloud entries hides them and leaves the cache alone", async () => {
+    await writeFile(join(vaultDir, "a.mp4"), "");
+    const rec = (await new LibraryVault(vaultDir).describe("a"))!;
+    catalog = [cloudEntry(rec.assetId), cloudEntry("from-default", { lastSeenLocalId: "x" })];
+    await service.refreshCatalog();
+    const before = await cache.read("u1");
+    const other = new LibraryService({
+      vault: () => new LibraryVault(vaultDir),
+      vaultDir: () => vaultDir,
+      cache,
+      account: () => account,
+      fetchCatalog,
+      ownsLegacyCloud: () => false,
+      now: () => 777,
+    });
+
+    const result = await other.list();
+
+    // Its own item still shows its cloud copy; the other workspace's cloud-only item does not.
+    expect(result.items.map((i) => [i.assetId, i.availability])).toEqual([
+      [rec.assetId, "local-and-cloud"],
+    ]);
+    expect(await cache.read("u1")).toEqual(before);
+    expect(result.catalogVerifiedAt).toBe(777);
+  });
+
   it("refreshCatalog caches per account and list merges by assetId", async () => {
     await writeFile(join(vaultDir, "a.mp4"), "");
     const vault = new LibraryVault(vaultDir);

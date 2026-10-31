@@ -16,6 +16,7 @@ import { atomicWriteFile } from "./atomic-write";
 import { LibraryVault } from "./library-vault";
 import { vaultActivity } from "./vault-activity";
 import { vaultDirectory } from "./vault-location";
+import { workspaceGate } from "../workspaces";
 
 // ── Path helpers ─────────────────────────────────────────────────────────────
 
@@ -222,20 +223,26 @@ export async function deleteVideoEditSession(id: string): Promise<void> {
 // ── IPC registration ──────────────────────────────────────────────────────────
 
 export function registerVideoEditSessionHandlers(): void {
+  // Item-scoped: stamped with the workspace (ADR 0032). A save that reaches main after a
+  // switch is refused, so it can never write the session into the other workspace.
   // Entry points (maintenance mode, NIW2-561): a refused save keeps its pending state in
   // the editor, which retries on `library:maintenance-ended`.
   ipcMain.handle(
     IPC_CHANNELS.videoEditSaveSession,
     (
       _event,
+      stamp: unknown,
       id: string,
       sessionJson: string,
       assets: { assetId: string; bytes: ArrayBuffer }[],
       exported?: boolean,
-    ) => vaultActivity.run("editor", () => saveSession(id, { sessionJson, assets, exported })),
+    ) =>
+      workspaceGate().run(stamp, () =>
+        vaultActivity.run("editor", () => saveSession(id, { sessionJson, assets, exported })),
+      ),
   );
 
-  ipcMain.handle(IPC_CHANNELS.videoEditLoadSession, (_event, id: string) =>
-    vaultActivity.run("editor", () => loadSession(id)),
+  ipcMain.handle(IPC_CHANNELS.videoEditLoadSession, (_event, stamp: unknown, id: string) =>
+    workspaceGate().run(stamp, () => vaultActivity.run("editor", () => loadSession(id))),
   );
 }

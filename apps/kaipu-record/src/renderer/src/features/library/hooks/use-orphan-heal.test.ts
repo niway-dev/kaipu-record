@@ -60,6 +60,16 @@ afterEach(() => {
 });
 
 describe("useOrphanHeal", () => {
+  it("never heals an item whose sidecar cannot be read (main would refuse the write)", async () => {
+    const onHealed = vi.fn();
+    renderHook(() => useOrphanHeal([video({ id: "bad", metadataIssue: "corrupt" })], onHealed));
+
+    await Promise.resolve();
+    expect(healMock).not.toHaveBeenCalled();
+    expect(window.electronAPI.backfillLocalRecordingMeta).not.toHaveBeenCalled();
+    expect(onHealed).not.toHaveBeenCalled();
+  });
+
   it("heals a recording orphan and reports the mapped, backfilled result", async () => {
     const onHealed = vi.fn();
     renderHook(() => useOrphanHeal([video({ id: "o1" })], onHealed));
@@ -100,7 +110,7 @@ describe("useOrphanHeal", () => {
   });
 
   it("never heals an item whose record cannot be read (NIW2-561, F9)", async () => {
-    renderHook(() => useOrphanHeal([video({ id: "bad", readable: false })], vi.fn()));
+    renderHook(() => useOrphanHeal([video({ id: "bad", metadataIssue: "corrupt" })], vi.fn()));
     await Promise.resolve();
     expect(healMock).not.toHaveBeenCalled();
   });

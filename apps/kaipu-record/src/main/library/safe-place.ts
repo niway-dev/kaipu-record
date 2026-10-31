@@ -1,5 +1,5 @@
 /**
- * The one way bytes are put at a vault media path (NIW2-561, ADR 0033 "Placing a file").
+ * The one way bytes are put at a vault media path (NIW2-561, ADR 0036 "Placing a file").
  *
  * Finder, a sync tool or another process can create a file at any path at any time; nothing
  * the app holds stops them. So no placement here ever replaces a file at its destination,
@@ -8,7 +8,7 @@
  * (device + inode, read as bigints) this operation captured from its own handle or link —
  * never on an identity merely observed at a path, and never when the path cannot be read.
  *
- * Threat model (ADR 0033): no data loss against our own concurrency, a crash at any point, an
+ * Threat model (ADR 0036): no data loss against our own concurrency, a crash at any point, an
  * I/O error at any call, or a file that is at the destination before the no-replace step. Node
  * has no rename-without-replace nor unlink-by-handle, so an external process that swaps a
  * path in the instant between our identity check and the `unlink` that follows it is not
@@ -316,7 +316,7 @@ async function removeSource(path: string, identity: FileIdentity): Promise<Sourc
       return "kept";
     }
     try {
-      // Residual window (ADR 0033): a swap between the check above and this call is not seen.
+      // Residual window (ADR 0036): a swap between the check above and this call is not seen.
       await unlink(path);
       return "removed";
     } catch (error) {

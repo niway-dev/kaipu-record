@@ -19,7 +19,7 @@ import {
 } from "./export-presets";
 import { WHOLE_RECORDING_FINGERPRINT } from "./export-reuse";
 import type { VideoEncodingChoice } from "./video-encoding";
-import { mediaUrl } from "@shared/media-url";
+import { mediaUrl } from "@renderer/lib/media-url";
 import { isMaintenanceError } from "@renderer/features/library/vault-errors";
 
 export interface VideoExportState {

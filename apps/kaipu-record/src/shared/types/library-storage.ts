@@ -2,13 +2,19 @@ import type { ExportPresetId } from "./export-preset";
 import type { RecordingCapture } from "../recording-capture";
 
 /**
+ * Why an item's sidecar cannot be trusted (NIW2-568): `unreadable` = a read error other
+ * than a missing file; `corrupt` = it read but is not a JSON object.
+ */
+export type MetadataIssue = "unreadable" | "corrupt";
+
+/**
  * A recording stored in the local vault, as returned by the main process.
  * Pure type — safe to import from both main and renderer.
  */
 export interface LocalRecording {
   /**
    * The filename without extension. Local-only handle that changes when the item is
-   * renamed (ADR 0032): use it for the current render and IPC call, never persist it —
+   * renamed (ADR 0035): use it for the current render and IPC call, never persist it —
    * `assetId` is the identity for anything that outlives that.
    */
   id: string;
@@ -64,12 +70,11 @@ export interface LocalRecording {
    */
   capture?: RecordingCapture | null;
   /**
-   * false when the item's sidecar cannot be read (permission error, corrupt JSON, an
-   * invalid schema): the item is listed read-only, with a placeholder `assetId`, and every
-   * write to it is refused so the record is never overwritten (NIW2-561, F9). Absent
-   * otherwise.
+   * Set only when the sidecar could not be read or parsed. Every sidecar-backed field above
+   * is then a placeholder (title from the file name, `assetId` a stand-in), and nothing is
+   * written for the item until a later read succeeds.
    */
-  readable?: boolean;
+  metadataIssue?: MetadataIssue;
 }
 
 /** Where recordings are stored, and whether the user picked a custom folder. */

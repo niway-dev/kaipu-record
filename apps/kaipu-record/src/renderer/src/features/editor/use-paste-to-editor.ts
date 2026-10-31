@@ -50,7 +50,7 @@ export function usePasteToEditor(options: { replace?: boolean } = {}): PasteToEd
           setEmpty(true);
           return;
         }
-        // A pasted image is a screenshot to the library: same default name (ADR 0032).
+        // A pasted image is a screenshot to the library: same default name (ADR 0035).
         openCapture(pastedImageSource(image, defaultCaptureName("screenshot")), { replace });
       } catch (error) {
         reportError(t("pasteError"), error, { context: { phase: "paste" } });

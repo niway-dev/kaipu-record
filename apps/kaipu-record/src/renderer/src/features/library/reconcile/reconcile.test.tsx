@@ -36,6 +36,7 @@ const ok = (findings: ReconcileFinding[]): ReconcileScanResult => ({
 });
 
 let scanResult: ReconcileScanResult;
+let activeWorkspace: string | null;
 let progress: ((p: ReconcileProgress) => void) | null;
 let finishFix: (result: ReconcileFixResult) => void;
 
@@ -44,7 +45,11 @@ beforeEach(() => {
   localStorage.clear();
   scanResult = ok([rename, conflict]);
   progress = null;
-  window.electronAPI.getVaultDirectory = vi.fn(async () => ({ path: "/vault", isCustom: false }));
+  activeWorkspace = "ws-a";
+  window.electronAPI.workspaces = {
+    ...window.electronAPI.workspaces,
+    activeId: () => activeWorkspace,
+  };
   window.electronAPI.reconcileScan = vi.fn(async () => scanResult);
   window.electronAPI.reconcileCancel = vi.fn(async () => {});
   window.electronAPI.onReconcileProgress = (callback) => {
@@ -67,14 +72,14 @@ function mount() {
 }
 
 describe("reconcile banner", () => {
-  it("offers Check and fix when the folder disagrees, and scans once per session and folder", async () => {
+  it("offers Check and fix when the folder disagrees, and scans once per session and workspace", async () => {
     mount();
     expect(
       await screen.findByText("1 file in your folder doesn't match Kaipu."),
     ).toBeInTheDocument();
     await act(() => checkOnce());
     expect(window.electronAPI.reconcileScan).toHaveBeenCalledTimes(1);
-    window.electronAPI.getVaultDirectory = vi.fn(async () => ({ path: "/other", isCustom: true }));
+    activeWorkspace = "ws-b";
     await act(() => checkOnce());
     expect(window.electronAPI.reconcileScan).toHaveBeenCalledTimes(2);
   });

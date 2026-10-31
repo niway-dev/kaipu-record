@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import type { ReconcileFixResult, ReconcileScanResult } from "@shared/types/library-reconcile";
 
 /**
- * "Check and fix files" (NIW2-561, ADR 0033) in the renderer: the last scan, the dialog and
+ * "Check and fix files" (NIW2-561, ADR 0036) in the renderer: the last scan, the dialog and
  * the Fix all run. Main does the work; this only asks and shows. One store per window.
  */
 export type ReconcileRun =
@@ -34,7 +34,7 @@ export const LISTED_SEEN_KEY = "kaipu.reconcile.listedSeen";
 let state: ReconcileState = INITIAL;
 const listeners = new Set<() => void>();
 /** The vault folder the automatic check last ran for: at most once per session and folder. */
-let checkedPath: string | null = null;
+let checkedWorkspace: string | null = null;
 
 function set(patch: Partial<ReconcileState>): void {
   state = { ...state, ...patch };
@@ -68,19 +68,21 @@ export async function rescan(): Promise<void> {
 }
 
 /**
- * The Library and Home call this on mount: one scan per session, again after the vault
- * folder changed. Main refuses to scan during a recording or an export (`busy`).
+ * The Library and Home call this on mount: one scan per session, again after a switch to
+ * another workspace (each is its own folder). Main refuses to scan during a recording or an
+ * export (`busy`).
  */
 export async function checkOnce(): Promise<void> {
   if (isRunning()) return;
-  const { path } = await window.electronAPI.getVaultDirectory();
-  if (path === checkedPath) return;
-  checkedPath = path;
+  const workspaces = window.electronAPI.workspaces;
+  const workspace = workspaces.activeId() ?? (await workspaces.list()).activeId;
+  if (workspace === checkedWorkspace) return;
+  checkedWorkspace = workspace;
   set({ bannerHidden: false });
   await rescan();
   // Not checked after all (a recording, an export, a fix, an unreachable folder): the next
   // Library or Home visit asks again.
-  if (state.scan?.status !== "ok") checkedPath = null;
+  if (state.scan?.status !== "ok") checkedWorkspace = null;
 }
 
 export function openReconcileDialog(): void {
@@ -145,6 +147,6 @@ export function bannerContent(
 
 export function __resetReconcileForTests(): void {
   state = INITIAL;
-  checkedPath = null;
+  checkedWorkspace = null;
   listeners.clear();
 }

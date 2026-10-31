@@ -1,7 +1,7 @@
 import { ALL_FORMATS, BlobSource, Input } from "mediabunny";
 import type { RecordingBackfillMeta } from "@shared/types";
 import { generateThumbnail } from "@renderer/lib/generate-thumbnail";
-import { mediaUrl } from "@shared/media-url";
+import { mediaUrl } from "@renderer/lib/media-url";
 
 /**
  * Derives duration + poster for a vault recording whose sidecar is missing — a

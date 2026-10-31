@@ -61,12 +61,8 @@
     "alreadyRecordingTitle": "A recording is already in progress",
     "alreadyRecordingBody": "Stop it from the floating bar before starting another.",
     "captureWhileRecordingTitle": "Finish the recording first",
-    "chooseFolder": "Choose recordings folder",
     "folderUnusable": "We couldn't use that folder",
     "folderUnusableDetail": "Kaipu can't write there. Pick another folder.",
-    "changeFolder": "Change folder",
-    "changeFolderTitle": "Change the recordings folder",
-    "changeFolderDetail": "Your current recordings stay in the old folder; from now on Kaipu saves and shows the new folder's contents. You can switch back anytime.",
     "exportPdfTitle": "Export as PDF",
     "saveRecordingElsewhere": "Your recordings folder isn't available. Choose where to save this recording.",
     "pdfFileType": "PDF document",
@@ -74,7 +70,10 @@
     "closeCancelsExportDetail": "Closing the window cancels it. The original recording isn't touched.",
     "quitCancelsExportDetail": "Quitting cancels it. The original recording isn't touched.",
     "cancelExportAndClose": "Cancel export and close",
-    "cancelExportAndQuit": "Cancel export and quit"
+    "cancelExportAndQuit": "Cancel export and quit",
+    "addWorkspace": "Add a workspace: choose a folder",
+    "addWorkspaceButton": "Add workspace",
+    "workspaceUnreadableDetail": "This folder has a Kaipu workspace file that can't be read. Kaipu won't overwrite it."
   },
   "nav": {
     "record": "Record",
@@ -154,13 +153,7 @@
     "countdownOff": "Off",
     "countdownSeconds": "{seconds} s",
     "clickZoomLabel": "Zoom on clicks (Accessibility)",
-    "files": "Files",
-    "recordingsFolder": "Recordings folder",
-    "folderLoading": "Loading…",
-    "folderCustom": "Custom",
-    "folderDefault": "Default",
     "reset": "Reset",
-    "browse": "Browse",
     "app": "App",
     "showInDock": "Show in Dock & app switcher",
     "showInDockDescription": "Off keeps Kaipu in the menu bar only — no Dock icon, hidden from ⌘-Tab (macOS).",
@@ -186,7 +179,6 @@
     "exportQualityMaximumCaption": "Native size and the highest bitrate. Larger files.",
     "exportQualityNote": "Preselected in the export window. You can pick another option for a single export.",
     "recordingDescription": "How recordings are captured.",
-    "filesDescription": "Where recordings and screenshots are saved on this device.",
     "appDescription": "How the app behaves on this device.",
     "screenshots": "Screenshots",
     "brandBadge": "Show a \"Made with Kaipu\" badge",
@@ -198,7 +190,6 @@
     "screenshotCopyDescription": "Every capture is ready to paste the moment you take it.",
     "screenshotQuietNote": "When either is on, captures skip the editor and show a small notification instead.",
     "developer": "Developer",
-    "openFolder": "Open folder",
     "accountMoved": "Your account moved to Cloud",
     "accountMovedDetail": "Session, capacity and uploads live in the Cloud section of the sidebar.",
     "goToCloud": "Go to Cloud",
@@ -208,7 +199,9 @@
     "recordingSavedCardDescription": "When a recording is over 10 MB, its page shows a card to make a copy small enough for GitHub. It hides after 8 seconds.",
     "reconcileLabel": "Check and fix files",
     "reconcileDescription": "Align file names with titles, add files Kaipu doesn't know yet, and set aside records whose file is gone.",
-    "reconcileButton": "Check and fix files"
+    "reconcileButton": "Check and fix files",
+    "workspaces": "Workspaces",
+    "workspacesDescription": "Each workspace is a folder on this device or a drive. Captures save to the active one."
   },
   "cameraSettings": {
     "title": "Camera settings",
@@ -282,7 +275,6 @@
     "duckNeedsMic": "Turn on the microphone to use this"
   },
   "record": {
-    "readyToRecord": "Ready to record",
     "micAccessOff": "Microphone access is off",
     "cameraAccessOff": "Camera access is off",
     "pause": "Pause",
@@ -335,7 +327,10 @@
     "lastUsedNote": "Last used: {mode}. Switch inside the selector.",
     "shadeRecTag": "REC · BORDER NOT RECORDED",
     "shadeCountdownHint": "Recording starts… press Esc to cancel",
-    "errorStartMaintenance": "Kaipu is fixing your files. Start the recording again in a moment."
+    "errorStartMaintenance": "Kaipu is fixing your files. Start the recording again in a moment.",
+    "readyToRecord": "Ready to record",
+    "recordingTo": "Recording to {name}",
+    "switchWorkspace": "Switch"
   },
   "header": {
     "brand": "Kaipu Record",
@@ -720,6 +715,7 @@
     "availabilityLocalUnavailable": "Local location unavailable",
     "availabilityUnverified": "Location to verify",
     "comparisonLocalChanges": "Local changes · the cloud copy has not changed",
+    "metadataUnreadable": "Metadata unreadable · changes are paused until it reads again",
     "editingExportedOnly": "You can edit this video. The layers and assets of the original project are not stored in cloud.",
     "editingProjectAvailable": "Editing project available on this device",
     "editingMissingDependencies": "Project files are missing",
@@ -815,7 +811,10 @@
       "dismiss": "Dismiss",
       "footerAlsoSaved": "Auto-hides in {seconds} s · Also saved to your Library",
       "footerNotSaved": "Auto-hides in {seconds} s · Not saved yet",
-      "footer": "Auto-hides in {seconds} s"
+      "footer": "Auto-hides in {seconds} s",
+      "savedToWorkspace": "Saved to {name}",
+      "saveToWorkspace": "Save to {name}",
+      "footerAlsoSavedTo": "Auto-hides in {seconds} s · Also saved to {name}"
     },
     "overlay": {
       "captureDisplay": "Capture this display · {index}",
@@ -826,6 +825,7 @@
       "record": "Record",
       "cancel": "Cancel",
       "cancelTitle": "Cancel · Esc",
+      "startRecordingTitle": "Start recording · ↵",
       "modes": "Capture mode",
       "modeKey": "{mode} ({key})",
       "frame": "Capture frame",
@@ -1389,7 +1389,7 @@
     "eyebrow": "KAIPU / LEGAL",
     "title": "Clear ground rules.",
     "intro": "How the service works, what to expect from Cloud and how we handle your data.",
-    "updated": "Updated October 19, 2026 · Version 2026-10-19",
+    "updated": "Updated October 30, 2026 · Version 2026-10-30",
     "contents": "On this page",
     "navigation": "Legal documents",
     "contact": "Contact",
@@ -1421,7 +1421,7 @@
         },
         "license": {
           "title": "Software and intellectual property",
-          "body": "Niway grants you a personal, revocable, non-exclusive, non-transferable license to use the app and service under these terms. Kaipu, its brand, design and hosted infrastructure belong to Niway or its licensors. Components distributed under open-source licenses remain governed by those licenses, and these terms do not restrict the rights they grant. Do not reverse engineer the hosted service, access systems or data without authorization, or infringe third-party rights."
+          "body": "Niway grants you a revocable, non-exclusive, non-transferable license to use the app and service under these terms, for personal or commercial purposes. Using the desktop app for work, including inside a company, needs no paid plan. Kaipu, its brand, design and hosted infrastructure belong to Niway or its licensors. Components distributed under open-source licenses remain governed by those licenses, and these terms do not restrict the rights they grant. Do not reverse engineer the hosted service, access systems or data without authorization, or infringe third-party rights."
         },
         "evolution": {
           "title": "The app evolves",
@@ -2247,5 +2247,47 @@
     "doneCloseTab": "You can close this tab after the app opens.",
     "fallbackBodyCode": "Copy the code and paste it in the app.",
     "continueAs": "Continue as {name}"
+  },
+  "workspaces": {
+    "label": "Workspace",
+    "thisMac": "This Mac",
+    "thisPc": "This PC",
+    "notConnectedState": "Not connected · Captures paused",
+    "currentStatItems": "Items",
+    "currentStatLocation": "Location",
+    "currentStatSavingTo": "Saving to",
+    "savingToHere": "Here",
+    "savingToPaused": "Paused",
+    "showInFinder": "Finder",
+    "showInExplorer": "Explorer",
+    "openSettings": "Settings",
+    "switchTo": "Switch to",
+    "add": "Add workspace…",
+    "manage": "Manage workspaces…",
+    "rowMeta": "{count, plural, one {# item} other {# items}} · {location}",
+    "rowNotConnected": "Not connected · {location}",
+    "lockedRecording": "Finish the recording to switch",
+    "lockedExporting": "Wait for the export to finish to switch",
+    "notConnectedTitle": "{name} isn't connected",
+    "notConnectedBody": "Reconnect {location}, or switch workspace. Nothing is saved elsewhere.",
+    "notConnectedError": "{name} isn't connected. Reconnect it, or switch workspace. Nothing was saved elsewhere.",
+    "hint": "New: workspaces — keep work and personal captures apart",
+    "hintDismiss": "Got it",
+    "readOnly": "Kaipu couldn't read its preferences file, so workspaces can't change until you restart the app.",
+    "switchRefusedUnavailable": "{name} isn't connected",
+    "switchRefusedBusy": "Finish the recording or export first",
+    "active": "Active",
+    "reason_missing": "Not connected",
+    "reason_unreadable": "Its workspace file can't be read",
+    "reason_different": "Another workspace is in this folder",
+    "showFolder": "Show folder",
+    "removeFromList": "Remove from list",
+    "removeConfirmTitle": "Remove {name} from the list?",
+    "removeConfirmBody": "Nothing in the folder is deleted, and you can add it again later with everything in it.",
+    "removeConfirm": "Remove from list",
+    "removeRefusedActive": "{name} is the active workspace. Switch to another one first.",
+    "removeRefusedLast": "Kaipu keeps at least one workspace.",
+    "removeRefusedUnknown": "That workspace is no longer in the list.",
+    "addAction": "Add workspace"
   }
 }

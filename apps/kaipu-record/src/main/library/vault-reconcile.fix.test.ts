@@ -363,7 +363,7 @@ describe("an unreadable record survives everything (F9)", () => {
     await scanVault({ directory, cloud: "unknown" });
     await fix();
     const vault = new LibraryVault(directory);
-    expect((await vault.list()).find((i) => i.id === "Bad")!.readable).toBe(false);
+    expect((await vault.list()).find((i) => i.id === "Bad")!.metadataIssue).toBeDefined();
     await vault.backfill("Bad", { durationSeconds: 1, thumbnail: null }).catch(() => undefined);
     expect(await readFile(join(directory, ".kaipu", "Bad.json"))).toEqual(before);
     expect(await readdir(directory)).toContain("Other.mp4");
@@ -440,7 +440,7 @@ describe("the tag registry belongs to the vault, never to media named `tags`", (
 
     const vault = new LibraryVault(directory);
     const listed = await vault.list();
-    expect(listed.find((i) => i.id === "tags")!.readable).toBe(false);
+    expect(listed.find((i) => i.id === "tags")!.metadataIssue).toBeDefined();
     for (const mutation of [
       () => vault.renameItem({ id: "tags", assetId: "x" }, "Renamed"),
       () => vault.writeMeta("tags", { title: "x" }),

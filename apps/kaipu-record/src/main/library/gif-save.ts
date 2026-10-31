@@ -43,7 +43,7 @@ export async function saveGif(
   validateGifBytes(bytes);
   const vault = new LibraryVault(deps.vaultDir());
   const createdAt = (deps.now ?? Date.now)();
-  // The file name follows the title (ADR 0032); the stub sidecar reserves it.
+  // The file name follows the title (ADR 0035); the stub sidecar reserves it.
   const reservation = await vault.reserve({ kind: "gif", title: meta.title, createdAt });
   const { id } = reservation;
   // No half-saved item: neither a GIF without its sidecar nor a stub without its GIF. Each

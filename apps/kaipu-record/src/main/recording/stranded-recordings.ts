@@ -16,8 +16,11 @@ const MIN_AGE_MS = 2 * 60_000; // another instance may still be writing a fresh 
 
 export interface SweepDeps {
   vaultDir: string;
-  /** os.tmpdir() in production: where takes land when the vault staging folder is unavailable. */
-  fallbackTempDir: string;
+  /**
+   * os.tmpdir() in production: where takes land when the vault staging folder is unavailable.
+   * Swept once, with the active workspace; the other workspaces sweep only their own staging.
+   */
+  fallbackTempDir?: string;
   /** Title written to each recovered take's sidecar (localized by the caller). */
   title: string;
   now?: () => number;
@@ -41,7 +44,11 @@ export async function recoverStrandedRecordings(deps: SweepDeps): Promise<SweepR
   const now = (deps.now ?? Date.now)();
   const vault = new LibraryVault(deps.vaultDir);
   const result: SweepResult = { recovered: [], discarded: 0, failed: [] };
-  for (const dir of [join(deps.vaultDir, STAGING_DIR), deps.fallbackTempDir]) {
+  const dirs = [
+    join(deps.vaultDir, STAGING_DIR),
+    ...(deps.fallbackTempDir ? [deps.fallbackTempDir] : []),
+  ];
+  for (const dir of dirs) {
     let names: string[];
     try {
       names = await readdir(dir);

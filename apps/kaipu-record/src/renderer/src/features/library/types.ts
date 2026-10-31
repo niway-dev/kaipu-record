@@ -44,6 +44,6 @@ export interface LibraryVideo {
   export?: LocalRecording["export"];
   /** How the recording was captured (library label); null for older and cloud-only items. */
   capture?: RecordingCapture | null;
-  /** false when the item's record cannot be read: read-only, never healed (NIW2-561, F9). */
-  readable?: boolean;
+  /** Set when the local sidecar could not be read: the item is listed but read-only (NIW2-568). */
+  metadataIssue?: LocalRecording["metadataIssue"];
 }

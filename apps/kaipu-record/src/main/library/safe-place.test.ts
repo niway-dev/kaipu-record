@@ -534,7 +534,7 @@ describe("renameCaseOnly when the file cannot return to its old name", () => {
   });
 });
 
-// The threat model (ADR 0033 "Placing a file"): a path's observed stranger identity is never
+// The threat model (ADR 0036 "Placing a file"): a path's observed stranger identity is never
 // authority to delete, and when ownership is uncertain the bytes are kept.
 describe("a file that replaces one of our names mid-operation", () => {
   const actualFs = () => vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
