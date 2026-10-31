@@ -18,9 +18,12 @@ import {
   resolveExportTarget,
   slideFrameCount,
 } from "./export-presets";
-import { WHOLE_RECORDING_FINGERPRINT } from "./export-reuse";
+import { facelessFingerprint, isWholeFingerprint } from "./export-reuse";
 import { noteFinishedCopy } from "./ready-copies";
 import type { VideoEncodingChoice } from "./video-encoding";
+import { type ExportWebcamTrack, fetchWebcamTrack } from "./webcam-fetch";
+import { mediaUrl } from "@renderer/lib/media-url";
+import { isMaintenanceError } from "@renderer/features/library/vault-errors";
 
 export interface VideoExportState {
   status: "idle" | "exporting" | "error";
@@ -44,6 +47,11 @@ export interface StartExportArgs {
   slideAssets: SlideAssetStore;
   /** v2: the preview's camera path (useCameraPath). Sent whenever the plan has a zoom. */
   cameraPath: CameraPath | null;
+  /**
+   * The recording's webcam track (the sidecar's `webcam`), when it has one: with a webcam
+   * layer in the scene, its file is fetched and composed (ADR 0038).
+   */
+  webcamTrack?: ExportWebcamTrack | null;
   /** NIW2-218: destination preset; Balanced (the Settings default) when omitted. */
   presetId?: ExportPresetId;
   /** Fit/Fill for Vertical and Square; the preset's default when omitted. */
@@ -125,7 +133,7 @@ export function exportTitle(
     case "light":
       return t("presetTitleLight", { title });
     default:
-      return fingerprint === WHOLE_RECORDING_FINGERPRINT
+      return isWholeFingerprint(fingerprint)
         ? t("presetTitleShare", { title })
         : t("editedTitle", { title });
   }
@@ -301,7 +309,7 @@ export async function startVideoExport(
     width: target.width,
     height: target.height,
     ...(args.destination ? { destination: args.destination } : {}),
-    wholeRecording: args.fingerprint === WHOLE_RECORDING_FINGERPRINT,
+    wholeRecording: isWholeFingerprint(args.fingerprint),
   };
 
   active = true;
@@ -336,14 +344,33 @@ export async function startVideoExport(
   );
   const slideAssets = args.slideAssets.entries().filter((asset) => usedAssetIds.has(asset.assetId));
 
-  let sourceBlob: Blob;
+  // Main takes the export's vault lease before the source is read; refused while
+  // "Check and fix files" runs (NIW2-561).
   try {
-    const sourceResponse = await fetch(`kaipu-media://recording/${args.sourceId}`);
+    await window.electronAPI.beginExport?.();
+  } catch (error) {
+    if (isMaintenanceError(error)) fail(t("exportRefusedMaintenance"));
+    else fail(GENERIC_ERROR, error);
+    return true;
+  }
+
+  let sourceBlob: Blob;
+  let webcam: Awaited<ReturnType<typeof fetchWebcamTrack>>;
+  try {
+    const sourceResponse = await fetch(mediaUrl("recording", args.sourceId));
     sourceBlob = await sourceResponse.blob();
+    webcam = await fetchWebcamTrack(args.sourceId, plan.webcam, args.webcamTrack, (error) =>
+      captureException(error, { context: "video-export-webcam" }),
+    );
   } catch (error) {
     fail(GENERIC_ERROR, error);
     return true;
   }
+  /**
+   * The scene has a webcam layer the file will not carry: no webcam file to send, or (set
+   * below) the worker could not decode it. Its fingerprint must not say "with the face".
+   */
+  let faceDropped = plan.webcam !== null && webcam === null;
 
   // One worker run into one fresh writer session. Bitmaps and camera arrays are
   // TRANSFERRED to the worker, so a retry rebuilds them instead of reusing detached ones.
@@ -379,7 +406,8 @@ export async function startVideoExport(
 
     const id = `export-${crypto.randomUUID()}`;
     sessionId = id;
-    await window.electronAPI.recordingCreate(id);
+    // An export, not a take: main keeps the camera bubble's protection on the live take.
+    await window.electronAPI.recordingCreate(id, "export");
 
     if (!active) {
       teardown(id);
@@ -403,6 +431,10 @@ export async function startVideoExport(
         reportEncoderChoice(msg.choice, runTarget);
       } else if (msg.type === "progress") {
         if (snapshot.status === "exporting") set({ fraction: msg.fraction });
+      } else if (msg.type === "webcam-error") {
+        // The worker carries on without the layer; the file is still made.
+        captureException(new Error(msg.message), { context: "video-export-webcam" });
+        faceDropped = true;
       } else if (msg.type === "error") {
         if (runTarget.fastStart === "reserve" && PACKET_RESERVE_ERROR.test(msg.message)) {
           // FR9 fallback: the moov reservation was too small. Drop this attempt (its
@@ -426,6 +458,10 @@ export async function startVideoExport(
           // onSaved past that point would resurrect a cancelled export.
           await Promise.resolve();
           if (!active) return;
+          const fingerprint =
+            args.fingerprint && faceDropped
+              ? facelessFingerprint(args.fingerprint)
+              : args.fingerprint;
           try {
             const recording = await window.electronAPI.recordingFinalize(id, {
               title: exportTitle(t, presetId, args.title, args.fingerprint),
@@ -436,8 +472,9 @@ export async function startVideoExport(
               exportPreset: presetId,
               // The content plus the preset's encode revision, so "already exported" never
               // reuses a file a different encode produced (see ENCODE_REVISION).
-              ...(args.fingerprint
-                ? { exportFingerprint: encodeFingerprint(args.fingerprint, presetId) }
+              // A file that lost its face records a fingerprint that says so.
+              ...(fingerprint
+                ? { exportFingerprint: encodeFingerprint(fingerprint, presetId) }
                 : {}),
             });
             // Re-check again: cancel() could have run during the finalize await too.
@@ -491,6 +528,7 @@ export async function startVideoExport(
       source: { width: args.videoWidth, height: args.videoHeight },
       target: runTarget,
       camera,
+      webcam,
     };
     runWorker.postMessage(startMessage, [
       ...overlays.map((o) => o.bitmap),

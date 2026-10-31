@@ -8,6 +8,8 @@ import type { MutedRange } from "./audio-edits";
  */
 import { ZOOM_DEFAULTS, type ZoomSegment } from "./zoom/zoom-model";
 import type { Redaction } from "./privacy/redaction";
+import { seedWebcamScene, type WebcamScene } from "./webcam/webcam-model";
+import type { WebcamTrackMeta } from "@shared/webcam-track";
 
 export interface ClipItem {
   id: string;
@@ -101,6 +103,12 @@ export interface VideoScene {
   audioMuted: boolean;
   /** Source-anchored silenced spans; may overlap, and are never merged on input. */
   mutedRanges: MutedRange[];
+  /**
+   * The webcam layer (ADR 0038): a global layout plus source-anchored hide/override
+   * segments. `null` = this recording has no webcam track; the sidecar decides, never the
+   * session (see `reconcileWebcam`).
+   */
+  webcam: WebcamScene | null;
 }
 
 export function newId(): string {
@@ -117,7 +125,10 @@ export function newId(): string {
  * reachable from the export worker, and a VALUE import of detect-zoom-segments.ts would
  * pull the whole detector into that bundle.
  */
-export function initialScene(durationSeconds: number): VideoScene {
+export function initialScene(
+  durationSeconds: number,
+  webcam: WebcamTrackMeta | null = null,
+): VideoScene {
   return {
     items: [{ id: newId(), kind: "clip", sourceStart: 0, sourceEnd: durationSeconds }],
     overlays: [],
@@ -126,5 +137,23 @@ export function initialScene(durationSeconds: number): VideoScene {
     zoomSensitivity: ZOOM_DEFAULTS.sensitivity,
     audioMuted: false,
     mutedRanges: [],
+    webcam: seedWebcamScene(webcam, durationSeconds),
   };
+}
+
+/**
+ * A saved scene against the recording it belongs to: the sidecar has the last word on whether
+ * a webcam exists. Without a track the saved layer is dropped (its file is gone or never
+ * was); with one and no saved layer (a session from before the webcam) the layer is seeded
+ * from the recording, like a fresh scene. A saved layer on a recording that still has its
+ * track is the user's edit and stays. Returns the same scene when nothing changes.
+ * `durationSeconds` (the recording's) keeps a seeded gap inside it, as `initialScene` does.
+ */
+export function reconcileWebcam(
+  scene: VideoScene,
+  webcam: WebcamTrackMeta | null,
+  durationSeconds: number,
+): VideoScene {
+  if (!webcam) return scene.webcam === null ? scene : { ...scene, webcam: null };
+  return scene.webcam ? scene : { ...scene, webcam: seedWebcamScene(webcam, durationSeconds) };
 }

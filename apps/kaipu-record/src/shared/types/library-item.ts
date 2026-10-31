@@ -111,8 +111,11 @@ export interface LibraryItem {
  * local-only in v1 (NIW2-217); the cloud upload flow (NIW2-214) must check this both in
  * the UI and in the main-process handler.
  */
-export function isCloudUploadEligible(item: Pick<LibraryItem, "kind">): boolean {
-  return item.kind !== "gif";
+export function isCloudUploadEligible(
+  item: Pick<LibraryItem, "kind"> & { local?: Pick<LocalRecording, "metadataIssue"> | null },
+): boolean {
+  // An item whose sidecar cannot be read has no real assetId to upload under (NIW2-568).
+  return item.kind !== "gif" && !item.local?.metadataIssue;
 }
 
 export function hasLocalCopy(item: Pick<LibraryItem, "availability">): boolean {
@@ -143,5 +146,11 @@ export type RemoveLocalCopyResult =
   | { ok: true }
   | {
       ok: false;
-      reason: "no-cloud-copy" | "different-bytes" | "hash-unknown" | "edit-project" | "not-found";
+      reason:
+        | "no-cloud-copy"
+        | "different-bytes"
+        | "hash-unknown"
+        | "edit-project"
+        | "webcam-track"
+        | "not-found";
     };

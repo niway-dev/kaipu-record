@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   cameraPreviewPlacement,
   ratioBarPlacement,
-  startPillPlacement,
   widgetPlacement,
   WIDGET_HEIGHT_DIP,
   WIDGET_WIDTH_DIP,
@@ -41,16 +40,6 @@ describe("record chrome placement", () => {
   it("keeps the widget inside the work area vertically", () => {
     const low = widgetPlacement({ x: 100, y: 900, width: 300, height: 90 }, AREA);
     expect(low.top).toBe(25 + 975 - WIDGET_HEIGHT_DIP);
-  });
-
-  it("centres the Start pill under the box, inside its bottom edge when the area ends", () => {
-    expect(startPillPlacement({ x: 100, y: 200, width: 640, height: 360 }, AREA)).toEqual({
-      centerX: 420,
-      top: 574,
-    });
-    expect(startPillPlacement({ x: 100, y: 500, width: 640, height: 500 }, AREA).top).toBe(
-      1000 - 36 - 14,
-    );
   });
 
   it("puts the camera preview bottom-left inside the box, or nowhere when it cannot fit", () => {

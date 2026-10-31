@@ -12,6 +12,7 @@ import { DEFAULT_QUALITY, type RecordingQuality } from "../recording-quality";
 import type { Locale } from "@kaipu/i18n";
 import type { ExportPresetId, ExportQuality } from "./export-preset";
 import type { RecordingCapture } from "../recording-capture";
+import type { WebcamTrackMeta } from "../webcam-track";
 import {
   ENABLED_CAPTURE_MODES,
   type CaptureMode,
@@ -434,6 +435,9 @@ export const IPC_CHANNELS = {
   renameLocalRecording: "library:rename-local",
   // Editor home: stamp an item as opened in an editor (sidecar `editorOpenedAt`).
   markOpenedInEditor: "library:mark-opened-in-editor",
+  // NIW2-560: the video editor holds an item while mounted; main refuses to move its file.
+  editorSessionAcquire: "library:editor-session-acquire",
+  editorSessionClose: "library:editor-session-close",
   /** Tags as entities (ADR 0020): the registry, and which tags an item carries. */
   listTags: "tags:list",
   createTag: "tags:create",
@@ -456,11 +460,40 @@ export const IPC_CHANNELS = {
   exportActive: "export:active",
   /** NIW2-218: main → renderer, "cancel" the running export (the user confirmed quitting). */
   exportCommand: "export:command",
-  getVaultDirectory: "library:get-vault-dir",
-  chooseVaultDirectory: "library:choose-vault-dir",
-  resetVaultDirectory: "library:reset-vault-dir",
-  // Open the recordings folder itself in the OS file manager.
-  openVaultDirectory: "library:open-vault-dir",
+  /**
+   * NIW2-561: renderer → main (invoke), before an export reads its source. Takes the
+   * export's vault lease; rejects with the maintenance marker while files are being fixed.
+   * Released by `exportActive: false`, or when the renderer goes away.
+   */
+  exportBegin: "export:begin",
+  /** NIW2-561: scan the vault for drift. Read-only; resolves `ReconcileScanResult`. */
+  libraryReconcileScan: "library:reconcile-scan",
+  /** NIW2-561: "Fix all", in maintenance mode. Resolves `ReconcileFixResult`. */
+  libraryReconcileFix: "library:reconcile-fix",
+  /** NIW2-561: stop waiting for the vault to be idle (before any file is touched). */
+  libraryReconcileCancel: "library:reconcile-cancel",
+  /** NIW2-561: main → renderer, `ReconcileProgress` while Fix all waits or runs. */
+  libraryReconcileProgress: "library:reconcile-progress",
+  /** NIW2-561: main → renderer, maintenance mode ended: editors retry their pending saves. */
+  libraryMaintenanceEnded: "library:maintenance-ended",
+  // Workspaces (ADR 0032). The old vault-folder channels (get/choose/reset/open) are gone:
+  // a folder is now a workspace, added and switched through these.
+  workspacesList: "workspaces:list",
+  workspacesAdd: "workspaces:add",
+  workspacesSwitch: "workspaces:switch",
+  workspacesRemove: "workspaces:remove",
+  workspacesOpenFolder: "workspaces:open-folder",
+  workspacesDismissHint: "workspaces:dismiss-hint",
+  // Main → every window: the registry or the active workspace changed (`WorkspacesState`).
+  workspacesChanged: "workspaces:changed",
+  // Main → every window: prepare for a switch (flush, ask about unsaved work, close editors).
+  workspacesPrepare: "workspaces:prepare",
+  // Window → main: the window's answer to `workspacesPrepare`.
+  workspacesPrepareResult: "workspaces:prepare-result",
+  // Main → every window: the switch was called off after preparing.
+  workspacesPrepareAbort: "workspaces:prepare-abort",
+  // Preload → main (sync, once at load): the workspace stamp item calls carry.
+  workspacesStampSync: "workspaces:stamp-sync",
   // The signed-in account's cloud capacity (used / reserved / available).
   getStorageUsage: "cloud:get-storage-usage",
   // Main → every window: the vault folder changed, so open pages should re-list.
@@ -547,6 +580,16 @@ export const IPC_CHANNELS = {
   recordingAbort: "recording:abort",
   /** NIW2-218: byte size of an open writer session's temp file (Small-file size check). */
   recordingStat: "recording:stat",
+  /**
+   * The take records no (more) webcam file (ADR 0037): its camera did not open, was turned
+   * off, unplugged, or its encoder failed. Main puts the camera bubble back in the capture.
+   */
+  recordingWebcamEnded: "recording:webcam-ended",
+  /**
+   * Whether this OS can record the webcam as its own file (ADR 0037): only where the camera
+   * bubble can leave the screen capture. False on Windows before 10 2004 (the legacy path).
+   */
+  recordingWebcamTrackSupported: "recording:webcam-track-supported",
   recordingReportTick: "recording:report-tick",
   // Mic levels for the settings meter, kept off the activity broadcast (10/s would re-render
   // every window). A window subscribes (renderer → main, counted); the recorder reports
@@ -752,6 +795,12 @@ export interface RecordingFinalizeMeta {
    * library labels. Set by the recorder only; exports leave it unset. Main sanitizes it.
    */
   capture?: RecordingCapture | null;
+  /**
+   * The take's webcam file (ADR 0037): where its time 0 sits against the screen's, its size
+   * and the bubble as recorded. Set only when the webcam session holds a usable file; absent
+   * or null, a webcam part is discarded. Main sanitizes it before the sidecar stores it.
+   */
+  webcam?: WebcamTrackMeta | null;
 }
 
 /**

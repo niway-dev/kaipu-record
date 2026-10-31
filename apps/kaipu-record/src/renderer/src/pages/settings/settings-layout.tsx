@@ -20,7 +20,7 @@ type SettingsNavKey =
   | "recordingQuality"
   | "recording"
   | "screenshots"
-  | "files"
+  | "workspaces"
   | "app"
   | "developer";
 
@@ -30,7 +30,7 @@ const NAV: ReadonlyArray<{ to: string; labelKey: SettingsNavKey; Icon: typeof Se
   { to: "recording-quality", labelKey: "recordingQuality", Icon: SlidersHorizontal },
   { to: "recording", labelKey: "recording", Icon: Video },
   { to: "screenshots", labelKey: "screenshots", Icon: Camera },
-  { to: "files", labelKey: "files", Icon: Folder },
+  { to: "workspaces", labelKey: "workspaces", Icon: Folder },
   { to: "app", labelKey: "app", Icon: AppWindow },
   // Dev-only page; `import.meta.env.DEV` is a build-time literal, so prod strips it.
   ...(import.meta.env.DEV ? [{ to: "developer", labelKey: "developer" as const, Icon: Code }] : []),
