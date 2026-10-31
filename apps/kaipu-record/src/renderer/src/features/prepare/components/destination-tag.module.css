@@ -44,3 +44,8 @@
 .tag[data-destination="chat"] {
   background: #4a154b;
 }
+
+.tag[data-destination="email"] {
+  background: #3b5ba5;
+  border-color: transparent;
+}

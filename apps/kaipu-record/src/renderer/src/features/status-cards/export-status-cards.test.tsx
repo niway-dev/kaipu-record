@@ -86,6 +86,11 @@ describe("ExportProgressCard", () => {
     ).toBeInTheDocument();
   });
 
+  it("names an Email copy in progress", () => {
+    render(<ExportProgressCard {...props} job={{ ...JOB, destination: "email" }} />);
+    expect(screen.getByText("Exporting for email")).toBeInTheDocument();
+  });
+
   it("calls an editor export (no destination) 'your video'", () => {
     render(<ExportProgressCard {...props} />);
     expect(screen.getByText("Exporting your video")).toBeInTheDocument();
@@ -142,6 +147,15 @@ describe("ExportReadyCard", () => {
     ).toHaveTextContent("in your Library");
     // A POST copy says nothing about GitHub.
     expect(screen.queryByText(/GitHub/)).toBeNull();
+  });
+
+  it("names an Email copy as such, not as 'your export'", () => {
+    const job = { ...JOB, presetId: "balanced" as const, destination: "email" as const };
+    inRouter(<ExportReadyCard ready={{ job, recording: RECORDING }} />);
+    expect(screen.getByText("Email copy ready")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Drag .* out of Kaipu/ })).toHaveTextContent(
+      "Drag to an email",
+    );
   });
 
   it("calls an editor export 'your export', and says where a tier's copy fits on GitHub", () => {

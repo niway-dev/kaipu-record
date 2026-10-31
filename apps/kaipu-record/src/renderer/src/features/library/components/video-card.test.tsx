@@ -84,6 +84,13 @@ describe("VideoCard", () => {
     expect(screen.queryByText("For GitHub")).toBeNull();
   });
 
+  it("tags an Email copy as for email, not as an archive copy", () => {
+    const copy = { ...video, derivedFromAssetId: "src" };
+    render(<VideoCard video={copy} destination="email" onNavigate={vi.fn()} onDelete={vi.fn()} />);
+    expect(screen.getByText("For email")).toHaveAttribute("data-destination", "email");
+    expect(screen.queryByText("Archive copy")).toBeNull();
+  });
+
   it("says an imported video was imported in the metadata line, not on the poster", () => {
     render(
       <VideoCard
