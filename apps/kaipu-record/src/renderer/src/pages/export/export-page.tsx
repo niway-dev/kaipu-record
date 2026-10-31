@@ -14,6 +14,7 @@ import {
   PRESETS,
   type YoutubePresetId,
 } from "@renderer/features/video-editor/export/export-presets";
+import { useExportRunner } from "@renderer/features/video-editor/export/export-runner";
 import { formatMB } from "@renderer/features/video-editor/export/export-size";
 import {
   findReusableExports,
@@ -87,6 +88,13 @@ export function ExportPage(): React.JSX.Element {
     void navigate(exportPath(v.assetId, current() ?? undefined));
   };
 
+  // A copy finished in the background: re-list, so its card reads Ready and Enter opens it
+  // instead of encoding it again. Main sends no library:changed when an export lands.
+  const readyId = useExportRunner().ready?.recording.id ?? null;
+  useEffect(() => {
+    if (readyId) void refresh();
+  }, [readyId, refresh]);
+
   const video = videos.find((v) => v.assetId === assetId);
   const preparable = asPreparable(video);
   const probe = useSourceProbe(preparable?.id ?? null);
@@ -114,7 +122,9 @@ export function ExportPage(): React.JSX.Element {
     );
   }
 
-  if (isLoading) return <div className={styles.centered}>{tLib("loading")}</div>;
+  // Only the first load: a re-list keeps the screen, and with it the destination, the
+  // 1440p / 4K choice and Fill / Fit picked so far.
+  if (isLoading && !video) return <div className={styles.centered}>{tLib("loading")}</div>;
 
   if (!video) {
     return (

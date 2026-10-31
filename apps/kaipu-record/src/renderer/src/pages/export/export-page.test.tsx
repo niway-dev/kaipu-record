@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryItem } from "@shared/types/library-item";
@@ -22,10 +22,36 @@ vi.mock("@renderer/features/video-editor/export/use-video-export", () => ({
 }));
 
 const busy = vi.hoisted(() => vi.fn(() => false));
-vi.mock("@renderer/features/video-editor/export/export-runner", async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  isVideoExportBusy: busy,
-}));
+/** The runner's finished copy, set by a test as if a background export had just landed. */
+const readyStore = vi.hoisted(() => {
+  let value: unknown = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => value,
+    set(next: unknown) {
+      value = next;
+      for (const l of listeners) l();
+    },
+    subscribe(l: () => void) {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+  };
+});
+vi.mock("@renderer/features/video-editor/export/export-runner", async (importOriginal) => {
+  const real =
+    await importOriginal<typeof import("@renderer/features/video-editor/export/export-runner")>();
+  const { useSyncExternalStore } = await import("react");
+  return {
+    ...real,
+    isVideoExportBusy: busy,
+    useExportRunner: () => {
+      const snapshot = real.useExportRunner();
+      const ready = useSyncExternalStore(readyStore.subscribe, readyStore.get);
+      return ready ? { ...snapshot, ready } : snapshot;
+    },
+  };
+});
 
 /** 3:02 of a 1916×1048 screen at 48 fps, with sound: 1440p is the YouTube default. */
 const PROBE = {
@@ -124,6 +150,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  readyStore.set(null);
   for (const t of getToasts()) dismissToast(t.id);
 });
 
@@ -381,6 +408,28 @@ describe("ExportPage", () => {
     fireEvent.click(chat);
     expect(screen.getByRole("button", { name: "Export again" })).toBeVisible();
     expect(fireEvent.keyDown(chat, { key: "Enter" })).toBe(false);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/library/asset-2"));
+    expect(exportController.start).not.toHaveBeenCalled();
+  });
+
+  it("a copy that lands while Export is open reads Ready, and the choices on screen stay", async () => {
+    list(recording());
+    const router = renderExport("/export/asset-1?to=chat");
+    fireEvent.click(await screen.findByRole("radio", { name: /^YouTube/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /^4K/ }));
+
+    // The background export finishes: the Library now holds the Slack · Discord copy.
+    list(recording(), preparedCopy);
+    act(() => readyStore.set({ job: {}, recording: preparedCopy.local }));
+
+    const chat = screen.getByRole("radio", { name: /^Slack · Discord/ });
+    expect(await within(chat).findByText("Ready")).toBeVisible();
+    // The re-list did not reset the screen.
+    expect(card(/^YouTube/)).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: /^4K/ })).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.click(chat);
+    fireEvent.keyDown(document.body, { key: "Enter" });
     await waitFor(() => expect(router.state.location.pathname).toBe("/library/asset-2"));
     expect(exportController.start).not.toHaveBeenCalled();
   });
