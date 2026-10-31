@@ -34,7 +34,7 @@ describe("WebcamInspector", () => {
   it("sets the shape on the global layout", () => {
     const { edits } = renderGlobal();
     expect(screen.getByRole("button", { name: "Circle" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("button", { name: "Rounded" }));
+    fireEvent.click(screen.getByRole("button", { name: "Square" }));
     expect(edits.commitLayout).toHaveBeenCalledWith({ shape: "rounded" }, null);
   });
 

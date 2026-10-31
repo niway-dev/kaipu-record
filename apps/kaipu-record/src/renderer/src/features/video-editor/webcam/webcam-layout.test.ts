@@ -40,13 +40,13 @@ describe("webcamZoomFactor", () => {
 describe("webcamRect", () => {
   it("sizes the bubble as a fraction of the OUTPUT height and centres it on the position", () => {
     const rect = webcamRect(layout({ size: 0.2, position: { x: 0.5, y: 0.5 } }), FRAME);
-    expect(rect).toEqual({ x: 960 - 108, y: 540 - 108, size: 216 });
+    expect(rect).toEqual({ x: 960 - 108, y: 540 - 108, width: 216, height: 216 });
   });
 
   it("keeps the whole bubble inside the frame when the centre is at a corner", () => {
     const rect = webcamRect(layout({ size: 0.2, position: { x: 0, y: 1 } }), FRAME)!;
     expect(rect.x).toBe(0);
-    expect(rect.y + rect.size).toBe(1080);
+    expect(rect.y + rect.height).toBe(1080);
   });
 
   it("shrinks during a zoom by the camera path's scale, around the same centre", () => {
@@ -56,8 +56,8 @@ describe("webcamRect", () => {
       FRAME,
       2,
     )!;
-    expect(zoomed.size).toBeCloseTo(flat.size * 0.5);
-    expect(zoomed.x + zoomed.size / 2).toBeCloseTo(flat.x + flat.size / 2);
+    expect(zoomed.height).toBeCloseTo(flat.height * 0.5);
+    expect(zoomed.x + zoomed.width / 2).toBeCloseTo(flat.x + flat.width / 2);
   });
 
   it("is in the frame's own units: a 1×1 frame gives fractions", () => {
@@ -65,7 +65,24 @@ describe("webcamRect", () => {
       width: 1,
       height: 1,
     });
-    expect(rect).toEqual({ x: 0.25, y: 0.25, size: 0.5 });
+    expect(rect).toEqual({ x: 0.25, y: 0.25, width: 0.5, height: 0.5 });
+  });
+
+  it("draws the rectangle 3:4 portrait: size is its height, the width follows", () => {
+    const rect = webcamRect(
+      layout({ shape: "rectangle", size: 0.4, position: { x: 0.5, y: 0.5 } }),
+      FRAME,
+    );
+    expect(rect).toEqual({ x: 960 - 162, y: 540 - 216, width: 324, height: 432 });
+  });
+
+  it("keeps the rectangle's aspect when a narrow frame caps its width", () => {
+    const rect = webcamRect(
+      layout({ shape: "rectangle", size: 0.6, position: { x: 0.5, y: 0.5 } }),
+      { width: 300, height: 1000 },
+    )!;
+    expect(rect.width).toBeCloseTo(300);
+    expect(rect.height).toBeCloseTo(400);
   });
 
   it("is null for a frame whose size is not known yet", () => {
@@ -75,18 +92,35 @@ describe("webcamRect", () => {
 
 describe("clampWebcamCenter", () => {
   it("leaves a centre that already fits alone", () => {
-    expect(clampWebcamCenter({ x: 0.5, y: 0.4 }, 100, FRAME)).toEqual({ x: 0.5, y: 0.4 });
+    expect(clampWebcamCenter({ x: 0.5, y: 0.4 }, { width: 100, height: 100 }, FRAME)).toEqual({
+      x: 0.5,
+      y: 0.4,
+    });
   });
 
   it("centres a bubble wider than a narrow frame", () => {
-    expect(clampWebcamCenter({ x: 0.1, y: 0.5 }, 400, { width: 300, height: 1000 }).x).toBe(0.5);
+    const box = { width: 400, height: 400 };
+    expect(clampWebcamCenter({ x: 0.1, y: 0.5 }, box, { width: 300, height: 1000 }).x).toBe(0.5);
+  });
+
+  it("clamps each axis by the box's own side", () => {
+    const c = clampWebcamCenter({ x: 0, y: 0 }, { width: 300, height: 400 }, FRAME);
+    expect(c.x * 1920).toBeCloseTo(150);
+    expect(c.y * 1080).toBeCloseTo(200);
   });
 });
 
 describe("webcamClipPath", () => {
-  it("cuts a circle or a rounded square", () => {
-    expect(webcamClipPath("circle")).toBe("circle(50% at 50% 50%)");
-    expect(webcamClipPath("rounded")).toBe("inset(0 round 18%)");
+  it("cuts a circle, or a square with the corner a share of its side", () => {
+    expect(webcamClipPath("circle", 0.3)).toBe("circle(50% at 50% 50%)");
+    expect(webcamClipPath("rounded", 0.18)).toBe("inset(0 round 18% / 18%)");
+    expect(webcamClipPath("rounded", 0)).toBe("inset(0 round 0% / 0%)");
+  });
+
+  it("keeps the rectangle's corners circular: the vertical radius is scaled by 3/4", () => {
+    // r = 0.2 × width; as a share of the height that is 0.2 × 3/4 = 15 %.
+    expect(webcamClipPath("rectangle", 0.2)).toBe("inset(0 round 20% / 15%)");
+    expect(webcamClipPath("rectangle", 0.5)).toBe("inset(0 round 50% / 37.5%)");
   });
 });
 
@@ -105,8 +139,14 @@ describe("webcamPresetCenter", () => {
   it("stores what is drawn: the preset centre survives the clamp unchanged", () => {
     for (const preset of WEBCAM_POSITION_PRESETS) {
       const c = webcamPresetCenter(preset, 0.3, FRAME);
-      expect(clampWebcamCenter(c, 0.3 * 1080, FRAME)).toEqual(c);
+      expect(clampWebcamCenter(c, { width: 0.3 * 1080, height: 0.3 * 1080 }, FRAME)).toEqual(c);
     }
+  });
+
+  it("puts a rectangle snug by its own width", () => {
+    const c = webcamPresetCenter({ x: 0, y: 1 }, 0.4, FRAME, "rectangle");
+    expect(c.x * 1920).toBeCloseTo(162 + WEBCAM_PRESET_MARGIN * 1080);
+    expect(c.y * 1080).toBeCloseTo(1080 - 216 - WEBCAM_PRESET_MARGIN * 1080);
   });
 
   it("falls back to the raw preset before the frame size is known", () => {
@@ -185,6 +225,23 @@ describe("webcamSourceRect", () => {
       sh: 720,
     });
   });
+
+  it("covers a 3:4 box from a 16:9 image: full height, 3/4 of it wide, centred", () => {
+    expect(webcamSourceRect(IMAGE, { zoom: 1, x: 0, y: 0 }, false, 3 / 4)).toEqual({
+      sx: 370,
+      sy: 0,
+      sw: 540,
+      sh: 720,
+    });
+  });
+
+  it("pans a 3:4 window to the cover's edge on each axis by its own length", () => {
+    const r = webcamSourceRect(IMAGE, { zoom: 2, x: 1, y: 1 }, false, 3 / 4);
+    expect(r.sw).toBe(270);
+    expect(r.sh).toBe(360);
+    expect(r.sx + r.sw).toBe(910); // 370 + 540, the cover window's right edge
+    expect(r.sy + r.sh).toBe(720);
+  });
 });
 
 describe("webcamRect on a portrait output", () => {
@@ -193,8 +250,8 @@ describe("webcamRect on a portrait output", () => {
       width: 1080,
       height: 1920,
     })!;
-    expect(rect.size).toBe(1080);
+    expect(rect.width).toBe(1080);
     expect(rect.x).toBe(0);
-    expect(rect.y + rect.size).toBe(1920);
+    expect(rect.y + rect.height).toBe(1920);
   });
 });

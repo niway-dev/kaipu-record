@@ -8,14 +8,17 @@
  * camera path's scale for "shrink during zoom", and `webcamSourceRect` is the window of the
  * webcam image that the preview's `object-fit: cover` + `framingTransform` shows.
  *
- *   shadow (the shape filled, shadowed) → clip(shape) → (mirror) → drawImage(window → square)
+ *   shadow (the shape filled, shadowed) → clip(shape) → (mirror) → drawImage(window → box)
  *
  * WORKER-BUNDLE INVARIANT, like compose-frame.ts: pure and DOM-free.
  */
-import type { CameraBubbleShape } from "@shared/camera-bubble";
+import {
+  type CameraBubbleShape,
+  cameraCornerRadiusPx,
+  cameraShapeAspect,
+} from "@shared/camera-bubble";
 import {
   type FrameSize,
-  WEBCAM_ROUNDED_RADIUS,
   WEBCAM_SHADOW,
   type WebcamRect,
   webcamRect,
@@ -41,12 +44,14 @@ export interface WebcamLayerFrame {
 }
 
 export interface WebcamDrawPlan {
-  /** The bubble's square in the output frame. */
+  /** The bubble's box in the output frame. */
   rect: WebcamRect;
   /** The window of the (unmirrored) webcam image drawn into it. */
   src: { sx: number; sy: number; sw: number; sh: number };
   mirrored: boolean;
   shape: CameraBubbleShape;
+  /** The square's and the rectangle's corner, a share of the shorter side (ADR 0041). */
+  cornerRadius: number;
   shadow: boolean;
 }
 
@@ -99,28 +104,29 @@ export function planWebcamDraw(
   const layout = webcamAt({ webcam }, sourceTs);
   if (!layout) return null;
   const rect = webcamRect(layout, frame, cameraScale);
-  if (!rect || !(rect.size > 0)) return null;
+  if (!rect || !(rect.width > 0) || !(rect.height > 0)) return null;
   return {
     rect,
-    src: webcamSourceRect(image, layout.framing, layout.mirrored),
+    src: webcamSourceRect(image, layout.framing, layout.mirrored, cameraShapeAspect(layout.shape)),
     mirrored: layout.mirrored,
     shape: layout.shape,
+    cornerRadius: layout.cornerRadius,
     shadow: layout.shadow,
   };
 }
 
-function shapePath(ctx: WebcamCtx, shape: CameraBubbleShape, rect: WebcamRect): void {
-  const { x, y, size } = rect;
+function shapePath(ctx: WebcamCtx, plan: WebcamDrawPlan): void {
+  const { x, y, width, height } = plan.rect;
   ctx.beginPath();
-  if (shape === "circle") {
-    ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
+  if (plan.shape === "circle") {
+    ctx.arc(x + width / 2, y + height / 2, Math.min(width, height) / 2, 0, Math.PI * 2);
   } else {
-    const r = WEBCAM_ROUNDED_RADIUS * size;
+    const r = cameraCornerRadiusPx(plan.shape, plan.cornerRadius, width, height);
     ctx.moveTo(x + r, y);
-    ctx.arcTo(x + size, y, x + size, y + size, r);
-    ctx.arcTo(x + size, y + size, x, y + size, r);
-    ctx.arcTo(x, y + size, x, y, r);
-    ctx.arcTo(x, y, x + size, y, r);
+    ctx.arcTo(x + width, y, x + width, y + height, r);
+    ctx.arcTo(x + width, y + height, x, y + height, r);
+    ctx.arcTo(x, y + height, x, y, r);
+    ctx.arcTo(x, y, x + width, y, r);
   }
   ctx.closePath();
 }
@@ -137,25 +143,25 @@ export function drawWebcamLayer(
     // only the shadow shows, and the clip below cannot cut it off.
     ctx.save();
     ctx.shadowColor = WEBCAM_SHADOW.color;
-    ctx.shadowBlur = WEBCAM_SHADOW.blur * rect.size;
+    ctx.shadowBlur = WEBCAM_SHADOW.blur * rect.height;
     ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = WEBCAM_SHADOW.offsetY * rect.size;
+    ctx.shadowOffsetY = WEBCAM_SHADOW.offsetY * rect.height;
     ctx.fillStyle = "#000";
-    shapePath(ctx, plan.shape, rect);
+    shapePath(ctx, plan);
     ctx.fill();
     ctx.restore();
   }
   ctx.save();
-  shapePath(ctx, plan.shape, rect);
+  shapePath(ctx, plan);
   ctx.clip();
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
   if (plan.mirrored) {
-    ctx.translate(rect.x + rect.size, rect.y);
+    ctx.translate(rect.x + rect.width, rect.y);
     ctx.scale(-1, 1);
-    ctx.drawImage(image, src.sx, src.sy, src.sw, src.sh, 0, 0, rect.size, rect.size);
+    ctx.drawImage(image, src.sx, src.sy, src.sw, src.sh, 0, 0, rect.width, rect.height);
   } else {
-    ctx.drawImage(image, src.sx, src.sy, src.sw, src.sh, rect.x, rect.y, rect.size, rect.size);
+    ctx.drawImage(image, src.sx, src.sy, src.sw, src.sh, rect.x, rect.y, rect.width, rect.height);
   }
   ctx.restore();
 }

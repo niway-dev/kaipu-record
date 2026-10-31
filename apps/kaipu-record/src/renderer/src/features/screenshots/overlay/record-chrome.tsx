@@ -7,6 +7,8 @@ import {
   CAMERA_BUBBLE_WINDOW_PAD,
   DEFAULT_CAMERA_BUBBLE,
   cameraBubbleWindowInArea,
+  cameraCornerRadiusPx,
+  cameraShapeAspect,
   type CameraBubbleShape,
 } from "@shared/camera-bubble";
 import { useCameraAccess } from "@renderer/features/camera-settings/use-camera-settings";
@@ -83,21 +85,31 @@ export function widgetPlacement(
 /**
  * Where main will draw the visible camera bubble of `size` in `frame` (the same rule as
  * `bubbleBoundsInArea`): bottom-left, shrunk to what the box holds, or null when not even
- * the minimum size fits.
+ * the minimum size fits. The window is square for every shape; a rectangle is centred in it.
  */
 export function cameraPreviewPlacement(
   frame: CaptureRect,
   size: number = DEFAULT_CAMERA_BUBBLE.size,
+  shape: CameraBubbleShape = DEFAULT_CAMERA_BUBBLE.shape,
 ): CaptureRect | null {
   const window = cameraBubbleWindowInArea(frame, size);
   if (!window) return null;
   const pad = CAMERA_BUBBLE_WINDOW_PAD;
+  const height = window.height - 2 * pad;
+  const width = Math.round(height * cameraShapeAspect(shape));
   return {
-    x: window.x + pad,
+    x: window.x + pad + Math.round((height - width) / 2),
     y: window.y + pad,
-    width: window.width - 2 * pad,
-    height: window.height - 2 * pad,
+    width,
+    height,
   };
+}
+
+/** The bubble's look the overlay's placeholder needs (`AppSettings.cameraBubble`). */
+export interface OverlayCameraBubble {
+  size: number;
+  shape: CameraBubbleShape;
+  cornerRadius: number;
 }
 
 /**
@@ -121,8 +133,8 @@ export interface OverlayToggles {
    * Record page and the tray read): the Camera toggle cannot turn on, only off.
    */
   cameraBlocked: boolean;
-  /** The bubble's size and shape (`AppSettings.cameraBubble`), for the placeholder. */
-  cameraBubble: { size: number; shape: CameraBubbleShape };
+  /** The bubble's size, shape and corner (`AppSettings.cameraBubble`), for the placeholder. */
+  cameraBubble: OverlayCameraBubble;
   toggle(key: ToggleKey): void;
 }
 
@@ -139,9 +151,10 @@ export function useOverlayToggles(api: RecordingTogglesApi, enabled = true): Ove
   });
   // The same camera-access read as the Record page and the tray tile.
   const access = useCameraAccess(api, enabled);
-  const [bubble, setBubble] = useState<{ size: number; shape: CameraBubbleShape }>({
+  const [bubble, setBubble] = useState<OverlayCameraBubble>({
     size: DEFAULT_CAMERA_BUBBLE.size,
     shape: DEFAULT_CAMERA_BUBBLE.shape,
+    cornerRadius: DEFAULT_CAMERA_BUBBLE.cornerRadius,
   });
   useEffect(() => {
     // A screenshot overlay has no inputs to show: it never reads recording settings.
@@ -157,7 +170,11 @@ export function useOverlayToggles(api: RecordingTogglesApi, enabled = true): Ove
       .getSettings?.()
       .then((app) => {
         if (live && app.cameraBubble) {
-          setBubble({ size: app.cameraBubble.size, shape: app.cameraBubble.shape });
+          setBubble({
+            size: app.cameraBubble.size,
+            shape: app.cameraBubble.shape,
+            cornerRadius: app.cameraBubble.cornerRadius ?? DEFAULT_CAMERA_BUBBLE.cornerRadius,
+          });
         }
       })
       .catch(() => {});
@@ -409,17 +426,26 @@ export function RatioBar({
 export function CameraPreview({
   rect,
   shape = DEFAULT_CAMERA_BUBBLE.shape,
+  cornerRadius = DEFAULT_CAMERA_BUBBLE.cornerRadius,
 }: {
   rect: CaptureRect;
   shape?: CameraBubbleShape;
+  cornerRadius?: number;
 }): React.JSX.Element {
+  const radius = cameraCornerRadiusPx(shape, cornerRadius, rect.width, rect.height);
   return (
     <div
       className={styles.cameraPreview}
       data-testid="camera-preview"
       data-shape={shape}
       aria-hidden
-      style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}
+      style={{
+        left: rect.x,
+        top: rect.y,
+        width: rect.width,
+        height: rect.height,
+        borderRadius: Math.round(radius),
+      }}
     >
       <Camera size={28} aria-hidden />
     </div>

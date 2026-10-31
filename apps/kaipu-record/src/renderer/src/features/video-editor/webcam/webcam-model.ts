@@ -8,14 +8,25 @@
  * height, so the layer means the same thing on every preset. Drawing (the rectangle in pixels,
  * the clamp that keeps the bubble inside the frame) belongs to the preview and the composer.
  */
-import { clampCameraPan, clampCameraZoom, type CameraBubbleShape } from "@shared/camera-bubble";
+import {
+  DEFAULT_CAMERA_CORNER_RADIUS,
+  clampCameraCornerRadius,
+  clampCameraPan,
+  clampCameraZoom,
+  type CameraBubbleShape,
+} from "@shared/camera-bubble";
 import type { WebcamGap, WebcamTrackMeta } from "@shared/webcam-track";
 import { ZOOM_LIMITS } from "../zoom/zoom-model";
 
 export interface WebcamLayout {
   shape: CameraBubbleShape;
-  /** Bubble side as a fraction of the OUTPUT frame's height, {@link WEBCAM_LIMITS}. */
+  /**
+   * Bubble HEIGHT as a fraction of the OUTPUT frame's height, {@link WEBCAM_LIMITS}. The width
+   * follows the shape: the same for the circle and the square, 3/4 of it for the rectangle.
+   */
   size: number;
+  /** Corner radius of the square and the rectangle, a share of the shorter side (ADR 0041). */
+  cornerRadius: number;
   /** Normalized centre in the OUTPUT frame, 0–1. */
   position: { x: number; y: number };
   mirrored: boolean;
@@ -54,6 +65,7 @@ export const WEBCAM_LIMITS = {
 export const WEBCAM_DEFAULTS: WebcamLayout = {
   shape: "circle",
   size: 0.22,
+  cornerRadius: DEFAULT_CAMERA_CORNER_RADIUS,
   position: { x: 0.12, y: 0.82 },
   mirrored: true,
   framing: { zoom: 1, x: 0, y: 0 },
@@ -73,6 +85,9 @@ export function clampWebcamPatch(patch: Partial<WebcamLayout>): Partial<WebcamLa
   const next: Partial<WebcamLayout> = { ...patch };
   if (patch.size !== undefined) {
     next.size = clamp(patch.size, WEBCAM_LIMITS.minSize, WEBCAM_LIMITS.maxSize);
+  }
+  if (patch.cornerRadius !== undefined) {
+    next.cornerRadius = clampCameraCornerRadius(patch.cornerRadius);
   }
   if (patch.position) next.position = { x: unit(patch.position.x), y: unit(patch.position.y) };
   if (patch.scaleDuringZoom !== undefined) {
@@ -117,6 +132,8 @@ export function seedWebcamScene(
   const layout: WebcamLayout = {
     ...WEBCAM_DEFAULTS,
     shape: recorded.shape,
+    // A sidecar from before the corner slider has none: the clamp gives today's 18 %.
+    cornerRadius: clampCameraCornerRadius(recorded.cornerRadius),
     mirrored: recorded.mirrored,
     ...clampWebcamPatch({
       size: recorded.sizeFraction ?? recorded.size / NOMINAL_FRAME_DIP,

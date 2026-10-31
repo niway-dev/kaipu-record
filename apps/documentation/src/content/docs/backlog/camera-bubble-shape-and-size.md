@@ -24,11 +24,18 @@ every toggle; 1c (a camera card) because it doubled the camera's visual weight.
 `AppSettings.cameraBubble` (persisted in `settings.json`, merged over defaults field by field in
 `mergeSettings` through `sanitizeCameraBubble`, `apps/kaipu-record/src/shared/camera-bubble.ts`):
 
-| Field      | Values                      | Default  | Notes                                                    |
-| ---------- | --------------------------- | -------- | -------------------------------------------------------- |
-| `shape`    | `"circle"` \| `"rounded"`   | `circle` | An unknown value falls back alone.                       |
-| `size`     | 120–480 DIP                 | 240 (M)  | Presets S = 160, M = 240, L = 360. Clamped, not dropped. |
-| `deviceId` | a `videoinput` id or `null` | `null`   | `null` opens the OS default camera.                      |
+| Field          | Values                                     | Default  | Notes                                                                                  |
+| -------------- | ------------------------------------------ | -------- | -------------------------------------------------------------------------------------- |
+| `shape`        | `"circle"` \| `"rounded"` \| `"rectangle"` | `circle` | `rounded` is labelled "Square"; `rectangle` is 3:4 portrait. Unknown falls back alone. |
+| `size`         | 120–480 DIP                                | 240 (M)  | The bubble's **height**. Presets S = 160, M = 240, L = 360. Clamped, not dropped.      |
+| `cornerRadius` | 0–0.5 of the shorter side                  | 0.18     | Square and rectangle only. Missing (saved before NIW2-596) reads as 0.18.              |
+| `deviceId`     | a `videoinput` id or `null`                | `null`   | `null` opens the OS default camera.                                                    |
+
+Shapes and corners (NIW2-596, [ADR 0041](/architecture/decisions/0041-camera-shape-is-circle-square-or-portrait-with-a-corner-radius/)):
+Circle · Square · Rectangle chips, and a **Corners** slider under them for the square and the
+rectangle (0 % sharp, 50 % a circle or a pill). The bubble window stays square; a rectangle is
+centred in it. The recorded layout carries the shape and the corner to the editor, where the
+inspector edits both and the preview, MP4 and GIF draw the same box.
 
 Only these persist. The bubble's **position does not**: it starts at the bottom-left corner of
 the recorded area (or of the display's work area when the whole screen records), the user can

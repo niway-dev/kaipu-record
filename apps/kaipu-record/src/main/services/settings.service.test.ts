@@ -107,6 +107,7 @@ describe("mergeSettings", () => {
       diagnosticsEnabled: false,
       cameraBubble: {
         shape: "circle",
+        cornerRadius: 0.18,
         size: 240,
         deviceId: null,
         mirrored: true,
@@ -442,6 +443,7 @@ describe("mergeSettings — cameraBubble", () => {
   it("defaults to a medium circle on the OS default camera", () => {
     expect(mergeSettings(null).cameraBubble).toEqual({
       shape: "circle",
+      cornerRadius: 0.18,
       size: 240,
       deviceId: null,
       mirrored: true,
@@ -452,6 +454,7 @@ describe("mergeSettings — cameraBubble", () => {
   it("keeps a valid stored value", () => {
     const cameraBubble = {
       shape: "rounded",
+      cornerRadius: 0.18,
       size: 300,
       deviceId: "cam-1",
       mirrored: false,
@@ -467,6 +470,7 @@ describe("mergeSettings — cameraBubble", () => {
       } as never).cameraBubble,
     ).toEqual({
       shape: "circle",
+      cornerRadius: 0.18,
       size: 480,
       deviceId: null,
       mirrored: true,
@@ -474,6 +478,7 @@ describe("mergeSettings — cameraBubble", () => {
     });
     expect(mergeSettings({ cameraBubble: { size: 50.4 } } as never).cameraBubble).toEqual({
       shape: "circle",
+      cornerRadius: 0.18,
       size: 120,
       deviceId: null,
       mirrored: true,

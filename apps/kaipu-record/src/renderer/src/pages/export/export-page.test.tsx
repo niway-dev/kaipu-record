@@ -250,6 +250,7 @@ describe("ExportPage", () => {
       fps: 30,
       recordedLayout: {
         shape: "circle" as const,
+        cornerRadius: 0.18,
         mirrored: true,
         size: 200,
         framing: { enabled: false, zoom: 1, x: 0.5, y: 0.5 },

@@ -51,6 +51,7 @@ describe("CameraBubble", () => {
         ...(await original.getSettings()),
         cameraBubble: {
           shape: "rounded",
+          cornerRadius: 0.18,
           size: 240,
           deviceId: "cam-9",
           mirrored: true,
@@ -62,6 +63,36 @@ describe("CameraBubble", () => {
       expect(container.firstElementChild).toHaveAttribute("data-shape", "rounded"),
     );
     expect(mockPreview).toHaveBeenLastCalledWith(true, "cam-9", 720);
+  });
+
+  it("centres a 3:4 rectangle in the square window, with the saved corner", async () => {
+    withStream();
+    window.electronAPI.getSettings = async () =>
+      ({
+        ...(await original.getSettings()),
+        cameraBubble: {
+          shape: "rectangle",
+          cornerRadius: 0.25,
+          size: 240,
+          deviceId: null,
+          mirrored: true,
+          framing: { enabled: false, zoom: 1, x: 0, y: 0 },
+        },
+      }) as never;
+    const { container } = render(<CameraBubble />);
+    await waitFor(() =>
+      expect(container.firstElementChild).toHaveAttribute("data-shape", "rectangle"),
+    );
+    // The window's bubble is as tall as the window minus the pads; 3/4 of that wide, centred.
+    const height = Math.min(window.innerWidth, window.innerHeight) - 48;
+    const width = height * 0.75;
+    const root = container.firstElementChild as HTMLElement;
+    expect(root.style.getPropertyValue("--inset-x")).toBe(
+      `${24 + Math.round((height - width) / 2)}px`,
+    );
+    expect(screen.getByTestId("camera-bubble")).toHaveStyle({
+      borderRadius: `${Math.round(0.25 * width)}px`,
+    });
   });
 
   it("mirrors the preview by default and when the setting is on", async () => {
@@ -81,6 +112,7 @@ describe("CameraBubble", () => {
         ...base,
         cameraBubble: {
           shape: "circle",
+          cornerRadius: 0.18,
           size: 240,
           deviceId: null,
           mirrored: false,
@@ -100,6 +132,7 @@ describe("CameraBubble", () => {
         ...base,
         cameraBubble: {
           shape: "circle",
+          cornerRadius: 0.18,
           size: 240,
           deviceId: null,
           mirrored: true,
@@ -119,7 +152,14 @@ describe("CameraBubble", () => {
     window.electronAPI.getSettings = async () =>
       ({
         ...base,
-        cameraBubble: { shape: "circle", size: 240, deviceId: null, mirrored, framing },
+        cameraBubble: {
+          shape: "circle",
+          size: 240,
+          cornerRadius: 0.18,
+          deviceId: null,
+          mirrored,
+          framing,
+        },
       }) as never;
     const { container } = render(<CameraBubble />);
     await waitFor(() => expect(mockPreview).toHaveBeenCalled());
@@ -162,6 +202,7 @@ describe("CameraBubble", () => {
         ...base,
         cameraBubble: {
           shape: "circle",
+          cornerRadius: 0.18,
           size: 240,
           deviceId: null,
           mirrored: true,
@@ -190,6 +231,7 @@ describe("CameraBubble", () => {
         ...base,
         cameraBubble: {
           shape: "circle",
+          cornerRadius: 0.18,
           size: 240,
           deviceId: null,
           mirrored: true,
@@ -281,6 +323,7 @@ describe("CameraBubble", () => {
       expect(updateSettings).toHaveBeenCalledWith({
         cameraBubble: {
           shape: "circle",
+          cornerRadius: 0.18,
           size: 300,
           deviceId: null,
           mirrored: true,
@@ -404,6 +447,7 @@ describe("CameraBubble — grip release races", () => {
       expect(updateSettings).toHaveBeenCalledWith({
         cameraBubble: {
           shape: "circle",
+          cornerRadius: 0.18,
           size: 300,
           deviceId: null,
           mirrored: true,
@@ -435,6 +479,7 @@ describe("CameraBubble — grip release races", () => {
       expect(updateSettings).toHaveBeenCalledWith({
         cameraBubble: {
           shape: "circle",
+          cornerRadius: 0.18,
           size: 280,
           deviceId: null,
           mirrored: true,

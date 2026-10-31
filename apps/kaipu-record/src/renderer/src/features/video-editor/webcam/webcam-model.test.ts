@@ -30,6 +30,7 @@ describe("seedWebcamScene", () => {
     const scene = seedWebcamScene(
       track({
         shape: "rounded",
+        cornerRadius: 0.18,
         size: 240,
         mirrored: false,
         framing: { enabled: true, zoom: 1.5, x: 0.25, y: -0.5 },
@@ -40,6 +41,7 @@ describe("seedWebcamScene", () => {
     expect(scene).toEqual({
       layout: {
         shape: "rounded",
+        cornerRadius: 0.18,
         size: 0.24,
         position: { x: 0.18, y: 0.82 },
         mirrored: false,

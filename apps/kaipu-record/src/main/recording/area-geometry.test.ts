@@ -161,6 +161,7 @@ describe("withRecordedBubble", () => {
     fps: 30,
     recordedLayout: {
       shape: "circle",
+      cornerRadius: 0.18,
       size: 240,
       mirrored: true,
       framing: { enabled: false, zoom: 1, x: 0, y: 0 },

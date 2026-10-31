@@ -250,6 +250,7 @@ describe("useRecordingSetup", () => {
       lines: 1080, // 360 × 2 × 1.5
       bubble: {
         shape: cameraBubble.shape,
+        cornerRadius: cameraBubble.cornerRadius,
         size: 360,
         mirrored: cameraBubble.mirrored,
         framing: cameraBubble.framing,

@@ -228,6 +228,11 @@
   margin-top: 4px;
 }
 
+/* The corner slider, right under the Shape chips it belongs to. */
+.corners {
+  margin-top: -2px;
+}
+
 .framing {
   display: flex;
   flex-direction: column;

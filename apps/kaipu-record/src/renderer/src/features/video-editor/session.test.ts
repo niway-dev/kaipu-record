@@ -441,6 +441,7 @@ describe("audio edits", () => {
 describe("webcam layer", () => {
   const LAYOUT = {
     shape: "circle",
+    cornerRadius: 0.18,
     size: 0.25,
     position: { x: 0.12, y: 0.82 },
     mirrored: true,
@@ -465,6 +466,28 @@ describe("webcam layer", () => {
       webcam: { layout: LAYOUT as never, segments: [HIDDEN, OVERRIDE] as never },
     };
     expect(parseSession(serializeSession(scene))!.scene.webcam).toEqual(scene.webcam);
+  });
+
+  it("opens a layer saved before the corner slider with today's 18 % corner", () => {
+    const { cornerRadius: _cornerRadius, ...before } = LAYOUT as Record<string, unknown>;
+    const scene: VideoScene = {
+      ...initialScene(10),
+      webcam: { layout: before as never, segments: [] },
+    };
+    expect(parseSession(serializeSession(scene))!.scene.webcam!.layout.cornerRadius).toBe(0.18);
+  });
+
+  it("keeps a rectangle and its corner, clamped", () => {
+    const scene: VideoScene = {
+      ...initialScene(10),
+      webcam: {
+        layout: { ...LAYOUT, shape: "rectangle", cornerRadius: 0.9 } as never,
+        segments: [],
+      },
+    };
+    const layout = parseSession(serializeSession(scene))!.scene.webcam!.layout;
+    expect(layout.shape).toBe("rectangle");
+    expect(layout.cornerRadius).toBe(0.5);
   });
 
   it("opens the frozen pre-webcam session with every edit intact and no layer (W6)", () => {

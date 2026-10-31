@@ -6,7 +6,9 @@ import { useRecordingActivity } from "@renderer/features/recording/hooks/use-rec
 import {
   CAMERA_BUBBLE_WINDOW_PAD,
   DEFAULT_CAMERA_BUBBLE,
+  cameraBubbleBox,
   cameraBubblePresetFor,
+  cameraCornerRadiusPx,
   framingTransform,
   clampCameraBubbleSize,
   type CameraBubbleSettings,
@@ -14,10 +16,10 @@ import {
 import { bubblePreviewLines } from "@shared/webcam-track";
 import styles from "./camera-bubble.module.css";
 
-/** The rounded square's corner, as a share of its side. */
-const ROUNDED_RADIUS = 0.18;
-
-/** The bubble's side: the window's, minus the pad main sizes it with. */
+/**
+ * The bubble's height: the window's, minus the pad main sizes it with. The window stays a
+ * square for every shape (ADR 0041); a rectangle sits centred in it, narrower.
+ */
 function sizeFromWindow(): number {
   return Math.max(
     0,
@@ -122,8 +124,8 @@ async function settleGrip(
 
 /**
  * Root mounted in the floating camera-bubble window (`?window=camera-bubble`). Shows the
- * live webcam in a circle or a rounded square; the screen recording captures it because
- * the window sits on screen. Pressing on the bubble and dragging moves it, during a
+ * live webcam in a circle, a square or a 3:4 rectangle, with the corner radius from the
+ * settings (ADR 0041). Pressing on the bubble and dragging moves it, during a
  * recording too: the pointer's offset goes to main, which moves the window and keeps it
  * inside the recorded area. There is no OS drag region, so the grip still gets its events.
  *
@@ -233,11 +235,15 @@ export function CameraBubble(): React.JSX.Element {
   };
 
   const preset = cameraBubblePresetFor(size);
-  const radius = bubble.shape === "circle" ? "50%" : `${Math.round(size * ROUNDED_RADIUS)}px`;
+  const box = cameraBubbleBox(bubble.shape, size);
+  const radius = `${Math.round(cameraCornerRadiusPx(bubble.shape, bubble.cornerRadius, box.width, box.height))}px`;
+  // The rectangle is narrower than the square window: centre it, and its chrome with it.
+  const insetX = CAMERA_BUBBLE_WINDOW_PAD + Math.round((size - box.width) / 2);
 
   return (
     <div
       className={styles.root}
+      style={{ "--inset-x": `${insetX}px` } as React.CSSProperties}
       data-shape={bubble.shape}
       data-mirrored={bubble.mirrored || undefined}
       data-chrome={showChrome || undefined}
@@ -290,7 +296,7 @@ export function CameraBubble(): React.JSX.Element {
       {showChrome && (
         <div
           className={bubble.shape === "circle" ? styles.gripCircle : styles.gripRounded}
-          style={bubble.shape === "rounded" ? { borderTopRightRadius: radius } : undefined}
+          style={bubble.shape !== "circle" ? { borderTopRightRadius: radius } : undefined}
           data-testid="bubble-resize-grip"
           title={t("resizeGrip")}
           aria-hidden

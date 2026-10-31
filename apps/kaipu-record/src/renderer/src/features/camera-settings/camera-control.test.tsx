@@ -57,11 +57,12 @@ describe("Camera drawer (Record page, page variant)", () => {
     window.electronAPI.updateSettings = updateSettings;
     render(<PageHarness />);
     await userEvent.click(screen.getByRole("button", { name: "Camera settings" }));
-    await userEvent.click(screen.getByRole("radio", { name: "Rounded" }));
+    await userEvent.click(screen.getByRole("radio", { name: "Square" }));
     await waitFor(() =>
       expect(updateSettings).toHaveBeenCalledWith({
         cameraBubble: {
           shape: "rounded",
+          cornerRadius: 0.18,
           size: 240,
           deviceId: null,
           mirrored: true,
@@ -133,6 +134,7 @@ describe("useCameraSettings before the saved value loads", () => {
             ...saved,
             cameraBubble: {
               shape: "rounded",
+              cornerRadius: 0.18,
               size: 240,
               deviceId: "cam-9",
               mirrored: true,
@@ -153,6 +155,7 @@ describe("useCameraSettings before the saved value loads", () => {
       expect(updateSettings).toHaveBeenCalledWith({
         cameraBubble: {
           shape: "rounded",
+          cornerRadius: 0.18,
           size: 300,
           deviceId: "cam-9",
           mirrored: true,
@@ -182,6 +185,7 @@ describe("useCameraSettings throttling", () => {
       expect(updateSettings).toHaveBeenLastCalledWith({
         cameraBubble: {
           shape: "circle",
+          cornerRadius: 0.18,
           size: 280,
           deviceId: null,
           mirrored: true,
@@ -211,6 +215,7 @@ describe("useCameraSettings throttling", () => {
       expect(updateSettings).toHaveBeenLastCalledWith({
         cameraBubble: {
           shape: "circle",
+          cornerRadius: 0.18,
           size: 300,
           deviceId: null,
           mirrored: true,

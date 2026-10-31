@@ -993,14 +993,14 @@ describe("VideoEditorPage — webcam track", () => {
 
       // Drag over, the playhead's override takes the inspector — and a commit lands.
       expect(await screen.findByRole("heading", { name: "Webcam section 1" })).toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Rounded" }));
-      expect(screen.getByRole("button", { name: "Rounded" })).toHaveAttribute(
+      fireEvent.click(screen.getByRole("button", { name: "Square" }));
+      expect(screen.getByRole("button", { name: "Square" })).toHaveAttribute(
         "aria-pressed",
         "true",
       );
       fireEvent.keyDown(window, { key: "z", ctrlKey: true });
       await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Rounded" })).toHaveAttribute(
+        expect(screen.getByRole("button", { name: "Square" })).toHaveAttribute(
           "aria-pressed",
           "false",
         ),
