@@ -55,17 +55,25 @@ describe("PostRecordingCard (NIW2-584)", () => {
     expect(props.onDismiss).not.toHaveBeenCalled();
   });
 
-  it("Edit first edits; Open and ✕ both close the card", () => {
+  it("Edit first edits; ✕ closes the card; no Open in the app, which is already on the recording", () => {
     const props = renderCard();
     fireEvent.click(screen.getByRole("button", { name: "Edit first" }));
     expect(props.onEditFirst).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(screen.queryByRole("button", { name: "Open" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
-    expect(props.onDismiss).toHaveBeenCalledTimes(2);
+    expect(props.onDismiss).toHaveBeenCalledOnce();
+  });
+
+  it("Open opens the recording when the card floats outside the app", () => {
+    const onOpen = vi.fn();
+    const props = renderCard({ onOpen });
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(onOpen).toHaveBeenCalledOnce();
+    expect(props.onDismiss).not.toHaveBeenCalled();
   });
 
   it("no Edit first when the recording cannot open in the editor", () => {
-    renderCard({ onEditFirst: undefined });
+    renderCard({ onEditFirst: undefined, onOpen: vi.fn() });
     expect(screen.queryByRole("button", { name: "Edit first" })).toBeNull();
     expect(screen.getByRole("button", { name: "Open" })).toBeVisible();
   });

@@ -924,17 +924,15 @@ describe("LibraryDetailPage — your video is ready (NIW2-584)", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe("/editor/video/asset-b"));
   });
 
-  it("Open and ✕ close it and leave the user on the recording, its question still there", async () => {
+  it("✕ closes it and leaves the user on the recording, its question still there; no Open here", async () => {
     window.electronAPI.getSettings = vi.fn().mockResolvedValue(DEFAULT_SETTINGS);
-    for (const name of ["Open", "Dismiss"]) {
-      const router = renderFresh(true);
-      const card = await screen.findByRole("region", CARD);
-      fireEvent.click(within(card).getByRole("button", { name }));
-      expect(screen.queryByRole("region", CARD)).toBeNull();
-      expect(router.state.location.pathname).toBe("/library/asset-b");
-      expect(screen.getByRole("region", { name: "Where is it going?" })).toBeVisible();
-      cleanup();
-    }
+    const router = renderFresh(true);
+    const card = await screen.findByRole("region", CARD);
+    expect(within(card).queryByRole("button", { name: "Open" })).toBeNull();
+    fireEvent.click(within(card).getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("region", CARD)).toBeNull();
+    expect(router.state.location.pathname).toBe("/library/asset-b");
+    expect(screen.getByRole("region", { name: "Where is it going?" })).toBeVisible();
   });
 
   it("not when Settings turned it off", async () => {

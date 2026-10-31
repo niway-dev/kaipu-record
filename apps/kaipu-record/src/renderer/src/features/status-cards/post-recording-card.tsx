@@ -35,9 +35,12 @@ export interface PostRecordingCardProps {
   onPick(destination: RecordingReadyDestination | null): void;
   /** "Edit first"; omitted when the recording cannot open in the editor. */
   onEditFirst?(): void;
-  /** ✕, and "Open" without `onOpen`: in-app, the card is on the recording's own page. */
+  /** ✕. */
   onDismiss(): void;
-  /** "Open" when it must go somewhere: the floating window opens the recording's page. */
+  /**
+   * "Open": the floating window opens the recording's page. Omitted in the app, where the card
+   * already sits on that page and Open would only be a second ✕.
+   */
   onOpen?(): void;
 }
 
@@ -112,21 +115,22 @@ export function PostRecordingCard({
           </button>
         </li>
       </ul>
-      <StatusCardActions equal>
-        {onEditFirst && (
-          <StatusCardButton onClick={onEditFirst}>
-            <Scissors size={14} strokeWidth={1.8} />
-            {t("editFirst")}
-          </StatusCardButton>
-        )}
-        <StatusCardButton
-          title={onOpen ? t("openFloatingHint") : t("openHint")}
-          onClick={onOpen ?? onDismiss}
-        >
-          <Library size={14} strokeWidth={1.8} />
-          {t("open")}
-        </StatusCardButton>
-      </StatusCardActions>
+      {(onEditFirst || onOpen) && (
+        <StatusCardActions equal>
+          {onEditFirst && (
+            <StatusCardButton onClick={onEditFirst}>
+              <Scissors size={14} strokeWidth={1.8} />
+              {t("editFirst")}
+            </StatusCardButton>
+          )}
+          {onOpen && (
+            <StatusCardButton title={t("openFloatingHint")} onClick={onOpen}>
+              <Library size={14} strokeWidth={1.8} />
+              {t("open")}
+            </StatusCardButton>
+          )}
+        </StatusCardActions>
+      )}
     </StatusCard>
   );
 }

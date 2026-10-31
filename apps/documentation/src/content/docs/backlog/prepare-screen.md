@@ -77,8 +77,10 @@ GIFs are not preparable.
 - **Right after recording** (NIW2-584): the "Your video is ready" card, top-right in the app's
   status-card stack, over the recording page a fresh recording lands on. It shows the file's
   length, picture size and weight, a "Master · full quality" tag, chips — YouTube, TikTok,
-  GitHub, More places — and **Edit first** / **Open**. It shows after every recording (not only
-  a heavy one), has no timer, and stays until a chip, Open, ✕ or leaving the page. Settings →
+  GitHub, More places — and **Edit first**, plus **Open** only on the floating card (in the app
+  the card already sits on the recording's page, so Open would be a second ✕). It shows after
+  every recording (not only a heavy one), has no timer, and stays until a chip, ✕ or leaving
+  the page. Settings →
   Export quality → "Ask where a new recording is going" turns it off (stored as
   `showRecordingSavedCard`, its NIW2-218 name). It replaces the "Recording saved" card and the
   inline panel NIW2-578 first shipped. It lives in the app, not in a floating window, because
