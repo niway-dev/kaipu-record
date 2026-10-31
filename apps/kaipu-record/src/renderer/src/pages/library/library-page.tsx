@@ -34,6 +34,8 @@ import { copyDestinationOf } from "@renderer/features/prepare/copy-destination";
 import {
   dismissReadyCard,
   markCopySeen,
+  noteCopyActedOn,
+  noteReadyCardsShown,
   readyCards,
   type ReadyCopy,
   unseenCopyIds,
@@ -113,7 +115,8 @@ export function LibraryPage(): React.JSX.Element {
 
   // A copy that just finished leads the grid as a "Ready to upload" card, newest first, in
   // place of its regular card — until it is opened, its card is closed, or the user leaves
-  // the Library (`retireReadyCards`). Only copies the current filters show.
+  // the Library (`retireReadyCards`) after the card was on screen. Only copies the current
+  // filters show, and only in the grid: a card noted shown here is one the user could see.
   const leading = useMemo(() => {
     const visible = new Map(visibleItems.map((v) => [v.assetId, v]));
     return readyCards(readyCopies).flatMap((copy) => {
@@ -122,6 +125,10 @@ export function LibraryPage(): React.JSX.Element {
     });
   }, [readyCopies, visibleItems]);
   const leadingIds = new Set(leading.map(({ video }) => video.assetId));
+  const leadingKey = leading.map(({ video }) => video.assetId).join("\n");
+  useEffect(() => {
+    if (view === "grid" && leadingKey) noteReadyCardsShown(leadingKey.split("\n"));
+  }, [view, leadingKey]);
 
   // A 0-height marker right above the sticky bar: once it scrolls out of view the
   // bar is stuck, and gets a divider so the cards do not run into the filters.
@@ -388,6 +395,7 @@ export function LibraryPage(): React.JSX.Element {
                 navigate(`/library/${video.assetId}`);
               }}
               onDismiss={() => dismissReadyCard(video.assetId)}
+              onActed={() => noteCopyActedOn(video.assetId)}
             />
           ))}
           {visibleItems

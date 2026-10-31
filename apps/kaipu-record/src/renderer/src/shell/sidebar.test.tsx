@@ -6,6 +6,7 @@ import {
   __resetReadyCopiesForTests,
   getReadyCopies,
   noteFinishedCopy,
+  noteReadyCardsShown,
 } from "@renderer/features/video-editor/export/ready-copies";
 import { Sidebar } from "./sidebar";
 
@@ -118,8 +119,12 @@ describe("Sidebar Export entry and badge", () => {
     const router = renderAt(ROUTES.library);
     act(() => noteFinishedCopy("copy-1"));
     expect(getReadyCopies().copies[0]).toMatchObject({ card: true });
+    // The Library page had the card on screen.
+    act(() => noteReadyCardsShown(["copy-1"]));
     await act(() => router.navigate(ROUTES.screenshots));
-    expect(getReadyCopies().copies).toEqual([{ assetId: "copy-1", announced: true, card: false }]);
+    expect(getReadyCopies().copies).toEqual([
+      { assetId: "copy-1", announced: true, card: false, shown: true },
+    ]);
     // A copy that finishes while away still gets its card on the next visit.
     act(() => noteFinishedCopy("copy-2"));
     await act(() => router.navigate(ROUTES.library));

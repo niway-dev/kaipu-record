@@ -6,6 +6,8 @@ import {
   __resetReadyCopiesForTests,
   markCopySeen,
   noteFinishedCopy,
+  getReadyCopies,
+  noteReadyCardsShown,
   retireReadyCards,
 } from "@renderer/features/video-editor/export/ready-copies";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
@@ -124,7 +126,10 @@ describe("LibraryPage ready copies (NIW2-586)", () => {
     // A copy no longer in the Library (deleted) is not counted.
     noteFinishedCopy("asset-gone");
     // Past its Ready to upload card: the regular card carries the outline.
-    act(() => retireReadyCards());
+    act(() => {
+      noteReadyCardsShown(["asset-copy"]);
+      retireReadyCards();
+    });
     renderLibrary();
     expect(screen.getByRole("status")).toHaveTextContent("1 copy ready");
     expect(card("Master (YouTube)")).toHaveAttribute("data-just-ready", "true");
@@ -187,8 +192,21 @@ describe("LibraryPage Ready to upload card", () => {
     expect(dragButton).toHaveAttribute("draggable", "true");
     fireEvent.dragStart(dragButton);
     expect(drag).toHaveBeenCalledWith("y", "Master (YouTube)");
+    // Acting on it counts as seeing it, once the user leaves the Library; the card stays now.
+    expect(getReadyCopies().copies[0]).toMatchObject({ shown: true, actedOn: true, card: true });
+    act(() => retireReadyCards());
+    expect(getReadyCopies().copies).toEqual([]);
     reveal.mockRestore();
     drag.mockRestore();
+  });
+
+  it("a copy that finishes while the Library is in list view keeps its card after leaving", () => {
+    renderLibrary();
+    fireEvent.click(screen.getByRole("button", { name: "List view" }));
+    // List view has no Ready to upload cards: this one was never on screen.
+    act(() => noteFinishedCopy("asset-copy", { destination: "youtube" }));
+    act(() => retireReadyCards());
+    expect(getReadyCopies().copies[0]).toMatchObject({ card: true });
   });
 
   it("closing it brings back the regular card, still outlined as unseen", () => {

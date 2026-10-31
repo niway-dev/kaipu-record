@@ -16,6 +16,8 @@ interface ReadyCopyCardProps {
   destination: DestinationId | null;
   onOpen(): void;
   onDismiss(): void;
+  /** Show in Finder or a drag: the user acted on the copy. */
+  onActed(): void;
 }
 
 /**
@@ -30,6 +32,7 @@ export function ReadyCopyCard({
   destination,
   onOpen,
   onDismiss,
+  onActed,
 }: ReadyCopyCardProps): React.JSX.Element {
   const t = useTranslations("backgroundCopy");
   const tLibrary = useTranslations("library");
@@ -77,7 +80,10 @@ export function ReadyCopyCard({
               type="button"
               className={styles.button}
               data-variant="primary"
-              onClick={() => void window.electronAPI.revealLocalRecording(localId)}
+              onClick={() => {
+                onActed();
+                void window.electronAPI.revealLocalRecording(localId);
+              }}
             >
               <FolderOpen size={14} strokeWidth={1.8} aria-hidden />
               {tEditor(isWindowsHost() ? "exportShowInFinderWindows" : "exportShowInFinder")}
@@ -92,6 +98,7 @@ export function ReadyCopyCard({
               onDragStart={(e) => {
                 // Main runs a native drag (a real file), so the browser's own drag never starts.
                 e.preventDefault();
+                onActed();
                 window.electronAPI.startFileDrag(localId, video.title);
               }}
             >

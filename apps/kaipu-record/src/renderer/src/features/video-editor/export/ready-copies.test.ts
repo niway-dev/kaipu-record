@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   __resetReadyCopiesForTests,
   announceReadyCopies,
@@ -6,9 +6,12 @@ import {
   getReadyCopies,
   libraryBadgeCount,
   markCopySeen,
+  noteCopyActedOn,
   noteFinishedCopy,
+  noteReadyCardsShown,
   readyCards,
   retireReadyCards,
+  subscribeReadyCopies,
   unseenCopyIds,
 } from "./ready-copies";
 
@@ -72,12 +75,43 @@ describe("Ready to upload cards", () => {
     dismissReadyCard("a");
     expect(readyCards(getReadyCopies()).map((c) => c.assetId)).toEqual(["b"]);
     expect([...unseenCopyIds(getReadyCopies())]).toEqual(["a", "b"]);
+    noteReadyCardsShown(["a", "b"]);
     retireReadyCards();
     expect(readyCards(getReadyCopies())).toEqual([]);
     const after = getReadyCopies();
     retireReadyCards();
     dismissReadyCard("a");
     expect(getReadyCopies()).toBe(after);
+  });
+
+  it("a card never on screen (list view, filtered out) survives leaving the Library", () => {
+    noteFinishedCopy("a");
+    noteFinishedCopy("b");
+    noteReadyCardsShown(["b"]);
+    retireReadyCards();
+    expect(readyCards(getReadyCopies()).map((c) => c.assetId)).toEqual(["a"]);
+  });
+
+  it("noting the same cards shown again does not notify", () => {
+    noteFinishedCopy("a");
+    noteReadyCardsShown(["a"]);
+    const listener = vi.fn();
+    const unsubscribe = subscribeReadyCopies(listener);
+    noteReadyCardsShown(["a"]);
+    noteReadyCardsShown(["unknown"]);
+    expect(listener).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  it("a copy acted on from its card keeps the card until the user leaves, then is forgotten", () => {
+    noteFinishedCopy("a");
+    noteFinishedCopy("b");
+    noteReadyCardsShown(["a", "b"]);
+    noteCopyActedOn("a");
+    // Still there mid-drag.
+    expect(readyCards(getReadyCopies()).map((c) => c.assetId)).toEqual(["b", "a"]);
+    retireReadyCards();
+    expect([...unseenCopyIds(getReadyCopies())]).toEqual(["b"]);
   });
 
   it("opening the copy removes its card", () => {

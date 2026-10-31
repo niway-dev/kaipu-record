@@ -106,8 +106,8 @@ export function Sidebar(): React.JSX.Element {
  * The Export item's count: the copy being made right now, plus finished copies the user has
  * not been shown (NIW2-586) — one that finished while its ready card was hidden, or after the
  * card was closed. Opening Export or the Library clears the finished ones (both point at the
- * copies); opening a copy's page forgets that copy. Leaving the Library retires its "Ready to
- * upload" cards: they were seen there. The rail is on every page, so this is where the route
+ * copies); opening a copy's page forgets that copy. Leaving the Library retires the "Ready to
+ * upload" cards it had on screen. The rail is on every page, so this is where the route
  * is watched.
  */
 export function useExportBadge(pathname: string): number {
