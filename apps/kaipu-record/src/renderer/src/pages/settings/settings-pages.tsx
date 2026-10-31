@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { Cloud, Mic, Monitor, MousePointerClick, Video } from "lucide-react";
+import { Cloud, FolderSync, Mic, Monitor, MousePointerClick, Video } from "lucide-react";
+import { openReconcileDialog } from "@renderer/features/library/reconcile/reconcile-store";
 import { useTranslations } from "@kaipu/i18n";
 import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import { ModalActions, ModalButton, ModalOverlay, ModalText, ModalTitle, Row } from "@kaipu/ui";
@@ -268,6 +269,17 @@ export function WorkspacesSettingsPage(): React.JSX.Element {
             />
           );
         })}
+        {/* Checks the active workspace's folder (NIW2-561). */}
+        <Row
+          icon={<FolderSync size={16} />}
+          label={t("reconcileLabel")}
+          description={t("reconcileDescription")}
+          action={
+            <Button variant="outline" size="sm" onClick={openReconcileDialog}>
+              {t("reconcileButton")}
+            </Button>
+          }
+        />
       </Section>
       <div className={styles.workspacesActions}>
         <Button variant="outline" size="sm" disabled={state?.readOnly} onClick={() => void add()}>

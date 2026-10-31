@@ -7,6 +7,20 @@ import { CatalogCache } from "../cloud/catalog-cache";
 import { LibraryService } from "./library-service";
 import { LibraryVault } from "./library-vault";
 
+/** Rename by the id a caller saw, with the identity it holds there (as the IPC does). */
+async function renameById(
+  v: LibraryVault,
+  id: string,
+  title: string,
+  options?: Parameters<LibraryVault["renameItem"]>[2],
+) {
+  return v.renameItem(
+    { id, assetId: (await v.describe(id))?.assetId ?? "missing" },
+    title,
+    options,
+  );
+}
+
 const SHA_EMPTY = "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=";
 
 describe("LibraryService", () => {
@@ -62,6 +76,20 @@ describe("LibraryService", () => {
     await chmod(vaultDir, 0o700).catch(() => {});
     await rm(vaultDir, { recursive: true, force: true });
     await rm(userData, { recursive: true, force: true });
+  });
+
+  it("lists a renamed item once, under its new id and the same assetId", async () => {
+    account = null;
+    await writeFile(join(vaultDir, "old.mp4"), "");
+    const [before] = (await service.list()).items;
+    await renameById(new LibraryVault(vaultDir), "old", "Sprint demo");
+    const { items } = await service.list();
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      assetId: before!.assetId,
+      title: "Sprint demo",
+      local: { id: "Sprint demo" },
+    });
   });
 
   it("lists local items only when signed out, with catalogVerifiedAt null", async () => {

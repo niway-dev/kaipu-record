@@ -20,6 +20,7 @@ import {
 import { WHOLE_RECORDING_FINGERPRINT } from "./export-reuse";
 import type { VideoEncodingChoice } from "./video-encoding";
 import { mediaUrl } from "@renderer/lib/media-url";
+import { isMaintenanceError } from "@renderer/features/library/vault-errors";
 
 export interface VideoExportState {
   status: "idle" | "exporting" | "error";
@@ -314,6 +315,16 @@ export async function startVideoExport(
   );
   const slideAssets = args.slideAssets.entries().filter((asset) => usedAssetIds.has(asset.assetId));
 
+  // Main takes the export's vault lease before the source is read; refused while
+  // "Check and fix files" runs (NIW2-561).
+  try {
+    await window.electronAPI.beginExport?.();
+  } catch (error) {
+    if (isMaintenanceError(error)) fail(t("exportRefusedMaintenance"));
+    else fail(GENERIC_ERROR, error);
+    return true;
+  }
+
   let sourceBlob: Blob;
   try {
     const sourceResponse = await fetch(mediaUrl("recording", args.sourceId));
@@ -357,7 +368,7 @@ export async function startVideoExport(
 
     const id = `export-${crypto.randomUUID()}`;
     sessionId = id;
-    await window.electronAPI.recordingCreate(id);
+    await window.electronAPI.recordingCreate(id, "export");
 
     if (!active) {
       teardown(id);

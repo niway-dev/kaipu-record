@@ -8,7 +8,7 @@ import {
   systemPreferences,
 } from "electron";
 import { homedir, release } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createMainTranslator } from "@kaipu/i18n/main";
 import { IPC_CHANNELS } from "@shared/types";
 import { FINALIZE_ELSEWHERE_MARKER, FINALIZE_KEPT_MARKER } from "@shared/types/ipc";
@@ -27,6 +27,8 @@ import { buildRecordingStartedProperties, RECORDING_STARTED_EVENT } from "@share
 import { captureMainEvent } from "../services/analytics.service";
 import type { CaptureRect, RecordingRatio } from "@shared/types/screenshot-capture";
 import { LibraryVault } from "../library/library-vault";
+import { vaultActivity, type ActivityLease } from "../library/vault-activity";
+import type { LocalRecording } from "@shared/types/library-storage";
 import { areaCapturedDisplay, pickCapturedDisplay } from "./captured-display";
 import { ClickHook, type HookLike } from "./click-hook";
 import { CursorTrackRegistry } from "./cursor-tracker";
@@ -36,8 +38,10 @@ import { RecordingShadeWindow } from "./recording-shade-window";
 import { ScreenSourceCache, type ScreenSource } from "./screen-source-cache";
 import { areaToGlobal, fullDisplayBorderAllowed, sanitizeArea } from "./area-geometry";
 import { holdTemporaryShortcut, releaseTemporaryShortcut } from "../shortcuts/global-shortcuts";
-import { FinalizeMoveError, RecordingWriter, timestampId } from "./recording-writer";
+import { defaultCaptureName } from "@shared/default-capture-name";
+import { FinalizeMoveError, RecordingWriter } from "./recording-writer";
 import { createMicLevelRelay } from "./mic-level-relay";
+import { onPageGone, type RendererContents } from "../renderer-lifetime";
 import { IDLE_ACTIVITY, applyTick, startedActivity, stoppedActivity } from "./recording-activity";
 import { notifyWorkspaceBusyChanged, requireCaptureWorkspace } from "../workspaces";
 import { endRecordTiming, markRecordTiming, receiveRecordTiming } from "./record-timing";
@@ -190,7 +194,6 @@ export function registerRecordingHub(
     // The active workspace, checked to be connected: a take in a workspace that is not
     // connected is refused, never recorded somewhere else (ADR 0032, decision 8).
     vaultDir: async () => (await requireCaptureWorkspace()).path,
-    newId: () => timestampId(Date.now()),
   });
 
   // Cursor tracks, keyed by writer session id (see plans/video-editor-v2/02).
@@ -339,7 +342,7 @@ export function registerRecordingHub(
     // Deliberately parentless: the main window is hidden while the control bar is up.
     const result = await dialog.showSaveDialog({
       title: t("dialogs.saveRecordingElsewhere"),
-      defaultPath: join(videosDir(), `${timestampId(Date.now())}.mp4`),
+      defaultPath: join(videosDir(), `${defaultCaptureName("recording")}.mp4`),
       filters: [{ name: "MP4", extensions: ["mp4"] }],
     });
     if (result.canceled || !result.filePath) return null;
@@ -370,11 +373,141 @@ export function registerRecordingHub(
       if (oldest !== undefined) endedSessions.delete(oldest);
     }
   };
-  ipcMain.handle(IPC_CHANNELS.recordingCreate, (_e, sessionId: string) => {
-    stoppedForWriteFailure = false;
-    endedSessions.delete(sessionId);
-    return writer.create(sessionId);
-  });
+  // Maintenance mode (NIW2-561, C9): a take holds one activity lease from create through
+  // finalize, its cursor-track write and abort cleanup, so "Check and fix files" can never
+  // start in that window. A refused create starts nothing.
+  //
+  // A take (a recording, or an export's output) belongs to the page that created it. A page
+  // that goes away without ending it (a plain reload, a dead renderer, a destroyed window)
+  // never will. A recording is released (handle closed, `.part` kept for the stranded-take
+  // sweep, as a forced reset does): a reload is not a discard, and the partial may be the only
+  // copy. An export is discarded: its source is still in the library, so it can be exported
+  // again, and its partial is no recording to recover.
+  //
+  // One lifecycle per take: however many events end it (a finalize, an abort, a navigation, a
+  // crash, a destroy), it ends once, and its lease is freed only after its create, its
+  // finalize (with the cursor track) and the writer cleanup have all settled. A create still
+  // opening its file, or a finalize still placing it, therefore keeps the vault busy.
+  type TakeKind = "recording" | "export";
+  interface Take {
+    kind: TakeKind;
+    lease: ActivityLease;
+    /** The creating renderer's webContents id, when the create came with a sender. */
+    owner: number | null;
+    /** Settles (never rejects) once `writer.create()` has. */
+    created: Promise<void>;
+    /** This take's staging file, once created: binds the writer cleanup to its own session. */
+    tempPath?: string;
+    /** Settles (never rejects) once its finalize and cursor-track write have. */
+    finalizing?: Promise<void>;
+    /** Set by the first end: the writer cleanup, then the lease release. */
+    ending?: Promise<void>;
+  }
+  const recordingLeases = new Map<string, Take>();
+  /** Frees `take`'s lease, and its id while that take still holds it. */
+  const releaseTake = (sessionId: string, take: Take): void => {
+    take.lease.release(); // idempotent
+    if (recordingLeases.get(sessionId) === take) recordingLeases.delete(sessionId);
+  };
+  /**
+   * Ends `take` once: waits for its create and any finalize in flight, runs `cleanup` on its
+   * own writer session, then frees the vault.
+   */
+  const endTake = (
+    sessionId: string,
+    take: Take,
+    cleanup: (sessionId: string, tempPath: string | undefined) => Promise<void>,
+  ): Promise<void> => {
+    take.ending ??= take.created
+      .then(() => take.finalizing)
+      .then(() => cleanup(sessionId, take.tempPath))
+      .finally(() => releaseTake(sessionId, take));
+    return take.ending;
+  };
+  /**
+   * An export's partial is discarded however its take ends, a stranded one included (a finalize
+   * that failed, its save dialog cancelled): kept, the sweep would recover it as a recording.
+   */
+  const discardExport = (id: string, tempPath: string | undefined): Promise<void> =>
+    tempPath === undefined ? Promise.resolve() : writer.discardExport(id, tempPath);
+  /** What a page gone without ending its take does to it (see above). */
+  const abandonCleanup =
+    (take: Take) =>
+    (id: string, tempPath: string | undefined): Promise<void> =>
+      take.kind === "export" ? discardExport(id, tempPath) : writer.release(id, tempPath);
+  // The renderer whose `recordingStart` made the recording active: if its page goes, nobody
+  // will send the stop, so the bar and the hidden main window are restored here.
+  let activityOwner: number | null = null;
+  /** The page is gone with a take open: forget it as a forced reset would, then free the vault. */
+  const abandonTake = (sessionId: string, take: Take): void => {
+    if (take.ending) return;
+    markEnded(sessionId);
+    // A finalize in flight finishes its own cursor track; anything else is dropped.
+    if (!take.finalizing) {
+      cursorTracks.discard(sessionId);
+      clickSessions.delete(sessionId);
+      stopHookIfIdle();
+    }
+    void endTake(sessionId, take, abandonCleanup(take)).catch((error) =>
+      console.error("releasing an abandoned take failed", error),
+    );
+  };
+  const watchedPages = new Set<number>();
+  const watchPage = (contents: RendererContents): void => {
+    if (watchedPages.has(contents.id)) return;
+    watchedPages.add(contents.id);
+    onPageGone(contents, () => {
+      for (const [sessionId, take] of recordingLeases) {
+        if (take.owner === contents.id) abandonTake(sessionId, take);
+      }
+      if (activity.active && activityOwner === contents.id) applyStopWindowState();
+    });
+  };
+  ipcMain.handle(
+    IPC_CHANNELS.recordingCreate,
+    async (e, sessionId: string, requestedKind?: unknown) => {
+      // An id still held by a take (open, finalizing or ending) is refused: its file may be the
+      // only copy, and its cleanup must never land on a new session.
+      if (recordingLeases.has(sessionId)) {
+        throw new Error(`recording:create "${sessionId}": a take with this id is still open`);
+      }
+      // Anything but an explicit export is a recording: a partial of unknown kind is kept.
+      const kind: TakeKind = requestedKind === "export" ? "export" : "recording";
+      const sender = (e as { sender?: RendererContents } | undefined)?.sender;
+      const owner = sender && typeof sender.on === "function" ? sender.id : null;
+      if (sender && owner !== null) watchPage(sender);
+      const lease = vaultActivity.admit(kind);
+      const creating = writer.create(sessionId);
+      const take: Take = {
+        kind,
+        lease,
+        owner,
+        created: creating.then(
+          ({ tempPath }) => {
+            take.tempPath = tempPath;
+          },
+          () => undefined,
+        ),
+      };
+      recordingLeases.set(sessionId, take);
+      stoppedForWriteFailure = false;
+      endedSessions.delete(sessionId);
+      let created: Awaited<ReturnType<RecordingWriter["create"]>>;
+      try {
+        created = await creating;
+      } catch (error) {
+        releaseTake(sessionId, take);
+        throw error;
+      }
+      await take.created; // `tempPath` is recorded before anything can end the take
+      if (take.ending) {
+        // Ended while the file was opening (its page left, or an abort): that end owns the file.
+        await take.ending.catch(() => {});
+        throw new Error(`recording:create "${sessionId}": the take ended before its file opened`);
+      }
+      return created;
+    },
+  );
   ipcMain.on(
     IPC_CHANNELS.recordingWrite,
     (_e, sessionId: string, data: ArrayBuffer, position: number) => {
@@ -397,46 +530,70 @@ export function registerRecordingHub(
     async (_e, sessionId: string, meta: RecordingFinalizeMeta) => {
       // The renderer never retries a finalize (it aborts), so the take ends here either way.
       markEnded(sessionId);
-      // The take's own folder, bound when it started: the cursor track goes next to it.
-      const takeDir = writer.directoryOf(sessionId);
-      let recording;
-      try {
-        recording = await writer.finalize(sessionId, meta);
-      } catch (error) {
-        cursorTracks.discard(sessionId);
-        clickSessions.delete(sessionId);
-        stopHookIfIdle();
-        if (error instanceof FinalizeMoveError) {
-          const saved = await offerSaveElsewhere(sessionId);
-          throw new Error(
-            `${saved ? FINALIZE_ELSEWHERE_MARKER : FINALIZE_KEPT_MARKER} ${error.message}`,
-          );
-        }
-        throw error;
+      const take = recordingLeases.get(sessionId);
+      if (!take) return finalizeTake(sessionId, meta); // the writer refuses an unknown session
+      if (take.ending || take.finalizing) {
+        throw new Error(`recording:finalize "${sessionId}": the take already ended`);
       }
-      // Best effort: a recording is never failed by its cursor track. The tracker
-      // is still sampling here (finalize runs after the encoder stopped), so the
-      // tail past the last frame is cut with the recording's VIDEO duration at the
-      // stop request (measured from the first media sample, see recorder-store
-      // `videoClock`) — the same time base as the samples. `+ 250` (not
-      // `meta.durationMs` exactly) covers the frames `output.finalize()` flushes
-      // after the request, the last frame's own duration and clock jitter: the
-      // whole point of this cut is to drop the 0.6–2 s of "saving" samples, not
-      // to be frame-exact.
-      const track = cursorTracks.finish(
-        sessionId,
-        clickSessions.delete(sessionId),
-        meta.durationMs + 250,
+      // Finalize is part of the take: an end arriving meanwhile (a reload) waits for it, and
+      // the lease is freed only once the file is placed and its cursor track written.
+      const finalizing = take.created.then(() => finalizeTake(sessionId, meta));
+      take.finalizing = finalizing.then(
+        () => undefined,
+        () => undefined,
       );
-      stopHookIfIdle();
-      if (track && takeDir) {
-        await new LibraryVault(takeDir)
-          .writeCursorTrack(recording.id, serializeCursorTrack(track))
-          .catch((error) => console.error("cursor track write failed", error));
+      try {
+        return await finalizing;
+      } finally {
+        // A placed take is the vault's. A stranded recording is kept for recovery (the save
+        // dialog has had its chance); a stranded export is discarded.
+        const cleanup = take.kind === "export" ? discardExport : async () => {};
+        await endTake(sessionId, take, cleanup).catch(() => {});
       }
-      return recording;
     },
   );
+  const finalizeTake = async (
+    sessionId: string,
+    meta: RecordingFinalizeMeta,
+  ): Promise<LocalRecording> => {
+    let recording;
+    try {
+      recording = await writer.finalize(sessionId, meta);
+    } catch (error) {
+      cursorTracks.discard(sessionId);
+      clickSessions.delete(sessionId);
+      stopHookIfIdle();
+      if (error instanceof FinalizeMoveError) {
+        const saved = await offerSaveElsewhere(sessionId);
+        throw new Error(
+          `${saved ? FINALIZE_ELSEWHERE_MARKER : FINALIZE_KEPT_MARKER} ${error.message}`,
+        );
+      }
+      throw error;
+    }
+    // Best effort: a recording is never failed by its cursor track. The tracker
+    // is still sampling here (finalize runs after the encoder stopped), so the
+    // tail past the last frame is cut with the recording's VIDEO duration at the
+    // stop request (measured from the first media sample, see recorder-store
+    // `videoClock`) — the same time base as the samples. `+ 250` (not
+    // `meta.durationMs` exactly) covers the frames `output.finalize()` flushes
+    // after the request, the last frame's own duration and clock jitter: the
+    // whole point of this cut is to drop the 0.6–2 s of "saving" samples, not
+    // to be frame-exact.
+    const track = cursorTracks.finish(
+      sessionId,
+      clickSessions.delete(sessionId),
+      meta.durationMs + 250,
+    );
+    stopHookIfIdle();
+    if (track) {
+      // The folder the take was saved in, not the setting read again (C9).
+      await new LibraryVault(dirname(recording.filePath))
+        .writeCursorTrack(recording.id, serializeCursorTrack(track))
+        .catch((error) => console.error("cursor track write failed", error));
+    }
+    return recording;
+  };
   // NIW2-218: Small-file size check before finalize. Takes a session id only, like write.
   ipcMain.handle(IPC_CHANNELS.recordingStat, (_e, sessionId: string): Promise<number> => {
     if (typeof sessionId !== "string") throw new Error("recordingStat: invalid session id");
@@ -447,6 +604,14 @@ export function registerRecordingHub(
     cursorTracks.discard(sessionId);
     clickSessions.delete(sessionId);
     stopHookIfIdle();
+    // The user discarded it: the only end that deletes a recording's partial. A take still
+    // being created is aborted once its file exists, and keeps the vault busy until then.
+    const take = recordingLeases.get(sessionId);
+    if (take) {
+      return endTake(sessionId, take, (id, tempPath) =>
+        take.kind === "export" ? discardExport(id, tempPath) : writer.abort(id, tempPath),
+      );
+    }
     return writer.abort(sessionId);
   });
   ipcMain.handle(
@@ -645,8 +810,10 @@ export function registerRecordingHub(
   // Bumped by every start: a display lookup still running for a take that was cancelled must
   // not show the bar or change the shade of the take that started after it.
   let takeCount = 0;
-  ipcMain.on(IPC_CHANNELS.recordingStart, (_e, info: RecordingStartInfo) => {
+  ipcMain.on(IPC_CHANNELS.recordingStart, (e, info: RecordingStartInfo) => {
     activity = startedActivity();
+    const senderId = (e as { sender?: { id?: unknown } } | undefined)?.sender?.id;
+    activityOwner = typeof senderId === "number" ? senderId : null;
     const take = ++takeCount;
     // Before any tick of this take (same IPC order) and before the bar can show: the hidden
     // bar may still hold the previous take's "Saving…".
@@ -906,7 +1073,19 @@ export function registerRecordingHub(
       // Its takes will never be finalized or aborted: release their file handles. The partial
       // files stay on disk, and a cursor track still resolving for one of them must not start.
       for (const id of writer.ids()) markEnded(id);
-      void writer.releaseAll().catch((error) => console.error("releasing takes failed", error));
+      for (const [sessionId] of recordingLeases) markEnded(sessionId);
+      // A take still being created (or finalized) ends once that settles, holding the vault
+      // until then; an export's partial is discarded, a recording's kept, as for a reload.
+      for (const [sessionId, take] of recordingLeases) {
+        void endTake(sessionId, take, abandonCleanup(take)).catch((error) =>
+          console.error("releasing a take failed", error),
+        );
+      }
+      // Sessions no take holds any more (a stranded take waiting for its abort).
+      for (const id of writer.ids()) {
+        if (recordingLeases.has(id)) continue;
+        void writer.release(id).catch((error) => console.error("releasing a take failed", error));
+      }
       cursorTracks.discardAll();
       clickSessions.clear();
       clickHook.stop();

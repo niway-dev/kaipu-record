@@ -71,17 +71,40 @@ clamped to the recorded area, and answers the size actually applied; the grip sa
 
 ### Library / vault
 
-| Canal                           | Dir | En `electronAPI`              | Registrador        |
-| ------------------------------- | --- | ----------------------------- | ------------------ |
-| `library:list-local`            | r→m | `listLocalRecordings()`       | `library/index.ts` |
-| `library:rename-local`          | r→m | `renameLocalRecording(id, t)` | `library/index.ts` |
-| `library:mark-opened-in-editor` | r→m | `markOpenedInEditor(id)`      | `library/index.ts` |
-| `library:delete-local`          | r→m | `deleteLocalRecording(id)`    | `library/index.ts` |
-| `library:reveal-local`          | r→m | `revealLocalRecording(id)`    | `library/index.ts` |
-| `library:get-vault-dir`         | r→m | `getVaultDirectory()`         | `library/index.ts` |
-| `library:choose-vault-dir`      | r→m | `chooseVaultDirectory()`      | `library/index.ts` |
-| `library:reset-vault-dir`       | r→m | `resetVaultDirectory()`       | `library/index.ts` |
-| `library:changed`               | m→r | `onLibraryChanged(cb)`        | `library/index.ts` |
+| Canal                            | Dir | En `electronAPI`                                        | Registrador        |
+| -------------------------------- | --- | ------------------------------------------------------- | ------------------ |
+| `library:list-local`             | r→m | `listLocalRecordings()`                                 | `library/index.ts` |
+| `library:rename-local`           | r→m | `renameLocalRecording(id, assetId, t)` → `RenameResult` | `library/index.ts` |
+| `library:mark-opened-in-editor`  | r→m | `markOpenedInEditor(id)`                                | `library/index.ts` |
+| `library:editor-session-acquire` | r→m | `acquireEditorSession(assetId)` → current id            | `library/index.ts` |
+| `library:editor-session-close`   | r→m | `closeEditorSession(id)`                                | `library/index.ts` |
+| `library:delete-local`           | r→m | `deleteLocalRecording(id)`                              | `library/index.ts` |
+| `library:reveal-local`           | r→m | `revealLocalRecording(id)`                              | `library/index.ts` |
+| `library:get-vault-dir`          | r→m | `getVaultDirectory()`                                   | `library/index.ts` |
+| `library:choose-vault-dir`       | r→m | `chooseVaultDirectory()`                                | `library/index.ts` |
+| `library:reset-vault-dir`        | r→m | `resetVaultDirectory()`                                 | `library/index.ts` |
+| `library:changed`                | m→r | `onLibraryChanged(cb)`                                  | `library/index.ts` |
+| `library:reconcile-scan`         | r→m | `reconcileScan()` → `ReconcileScanResult`               | `library/index.ts` |
+| `library:reconcile-fix`          | r→m | `reconcileFix()` → `ReconcileFixResult`                 | `library/index.ts` |
+| `library:reconcile-cancel`       | r→m | `reconcileCancel()`                                     | `library/index.ts` |
+| `library:reconcile-progress`     | m→r | `onReconcileProgress(cb)`                               | `library/index.ts` |
+| `library:maintenance-ended`      | m→r | `onLibraryMaintenanceEnded(cb)`                         | `library/index.ts` |
+| `export:begin`                   | r→m | `beginExport()`                                         | `library/index.ts` |
+
+`library:rename-local` saves the title **and moves the file** (media + every `.kaipu/` companion) to a name derived from it ([ADR 0035](/architecture/decisions/0035-the-file-name-follows-the-title/)). It resolves `RenameResult = { recording, file, reason? }`: `recording.id` is the id to use from then on; `file` is `"renamed"` (main also broadcasts `library:changed`), `"unchanged"` (same derived name), or `"kept-old-name"` with `reason` `"locked"` (another app holds the file after three retries), `"busy"` (an export is running), `"editing"` (the item is open in the video editor, which acquires it through `library:editor-session-acquire` — serialized with renames, answering the current id — and releases it with `-close`), `"taken"` (a file appeared under the new name while the rename ran; it is never replaced) or `"io"`. `"kept-old-name"` is not an error — the title was saved. `assetId` is required: main resolves the item by identity under the names lock — the given id when it still holds that identity, otherwise wherever the item lives now — so a stale id (a toast's Retry) never renames another item that took the name. It rejects only for invalid arguments, when no item has `assetId` (the message carries `ITEM_NOT_FOUND_MARKER`), when the id is stale and more than one local item claims `assetId` (`AMBIGUOUS_IDENTITY_MARKER`; nothing changed), or when the title itself cannot be written. The editor hold and the screenshot overwrite resolve identities the same way.
+
+**Maintenance mode and strict records (NIW2-561, [ADR 0036](/architecture/decisions/0036-the-library-reconciles-with-its-folder-on-demand/)).** Every vault IPC handler is admitted through maintenance mode (the `scopedAdmitted` wrapper in `library/index.ts`, inside the workspace gate): it holds an activity lease for its whole run and, while "Check and fix files" runs, rejects with an error whose message carries `VAULT_MAINTENANCE_MARKER` (`"vault-maintenance"`). Nothing was done and nothing is queued; the renderer says "Kaipu is fixing your files", and editors retry their pending save on `library:maintenance-ended`. A write or a delete (`library:delete-local`) of an item whose sidecar is unreadable, corrupt or invalid, or whose record path the vault owns (`tags.mp4`), rejects with `UNREADABLE_RECORD_MARKER` (`"vault-unreadable-record"`) and writes or deletes nothing; `library:list-local` returns that item with `metadataIssue` set (`"unreadable"` or `"corrupt"`), the same read-only listing as a sidecar read error (NIW2-568). The scan, fix and cancel channels below are the exception to the first rule: they handle maintenance themselves and answer with a status instead of rejecting. Scan and fix are still item-scoped (workspace stamp), so a workspace switch waits for a running fix.
+
+| Canal                        | Payload | Result                                                                                                                                                                                                                                                                                                      |
+| ---------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `library:reconcile-scan`     | none    | `ReconcileScanResult`: `{ status: "ok", findings, fixableCount, listedSignature }`, `{ status: "busy", activity }` (recording or export), `{ status: "maintenance" }` or `{ status: "error", message }`. Read-only                                                                                          |
+| `library:reconcile-fix`      | none    | `ReconcileFixResult`: `{ status: "done", report }`, `{ status: "busy", activity }`, `{ status: "cancelled" }`, `{ status: "already-running" }` or `{ status: "error", message }`. Waits (cancellably) for short operations, then runs in maintenance mode; on `done` main also broadcasts `library:changed` |
+| `library:reconcile-cancel`   | none    | none. Stops the wait for the vault to be idle; once files are being fixed the run finishes                                                                                                                                                                                                                  |
+| `library:reconcile-progress` | m→r     | `ReconcileProgress`: `{ phase: "waiting", waitingFor }` while leases are still held, then `{ phase: "fixing", done, total }`                                                                                                                                                                                |
+| `library:maintenance-ended`  | m→r     | none. Broadcast when maintenance ends                                                                                                                                                                                                                                                                       |
+| `export:begin`               | none    | resolves when the export holds its vault lease; rejects with the maintenance marker while files are being fixed. Released by `export:active` with `false`, or when the renderer goes away. Call it before the export reads its source                                                                       |
+
+Types live in `shared/types/library-reconcile.ts`; see [Library Vault](/desktop/library-vault#check-and-fix-files) for the finding kinds and the orphans folder.
 
 ### Screenshots
 
@@ -217,10 +240,19 @@ source) and `RecordingSettings.area` (or `null` for a whole display) and broadca
 
 | Canal                | Dir | En `electronAPI`                | Registrador        |
 | -------------------- | --- | ------------------------------- | ------------------ |
-| `recording:create`   | r→m | `recordingCreate(sessionId)`    | `recording-hub.ts` |
+| `recording:create`   | r→m | `recordingCreate(id, kind?)`    | `recording-hub.ts` |
 | `recording:write`    | r→m | `recordingWrite(id, data, pos)` | `recording-hub.ts` |
 | `recording:finalize` | r→m | `recordingFinalize(id, meta)`   | `recording-hub.ts` |
 | `recording:abort`    | r→m | `recordingAbort(id)`            | `recording-hub.ts` |
+
+A session (and its vault lease) belongs to the page that created it. A page that goes away
+with a session open (a reload, a dead renderer, a destroyed webContents) never finalizes or
+aborts it, so main ends it by its `kind` (`"recording"` by default, `"export"` from the
+export runner): a recording's `.part` is kept for the stranded-take sweep, an export's is
+deleted. An export's partial is also deleted when its finalize failed (the take stranded, the
+save dialog cancelled or the page gone meanwhile), bound to its own staging file. A finalize in flight completes first, and the lease is released after it; a
+`recording:create` still pending then rejects. A `recording:create` whose id is still open
+or ending is refused.
 
 ### Recording — barra y estado (cross-window)
 

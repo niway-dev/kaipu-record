@@ -26,9 +26,10 @@ import {
   onSettingsChanged,
   updateAppSettings,
 } from "../infrastructure/settings-store";
-import { scoped, screenshotFilePath } from "../library";
+import { scopedAdmitted, screenshotFilePath } from "../library";
 import { activeWorkspace } from "../workspaces";
 import { saveCaptureToWorkspace, saveEditedScreenshot } from "./screenshot-save";
+import { vaultActivity } from "../library/vault-activity";
 import type { CaptureToastShowRequest } from "./capture-toast-window";
 import { deferToastUntilAfterCapture } from "./toast-after-capture";
 
@@ -181,7 +182,12 @@ export function registerScreenshotHandlers(
     onQuietCapture: toastSeam.onQuietCapture,
     onRecordTarget,
   });
-  ipcMain.handle(IPC_CHANNELS.screenshotCapture, (_event, request) => handleCapture(request));
+  // The whole capture is one admission (maintenance mode, NIW2-561): taken before the app
+  // hides or any pixel is grabbed, held through the vault write. The hotkey goes through
+  // this same channel (the renderer invokes it).
+  ipcMain.handle(IPC_CHANNELS.screenshotCapture, (_event, request) =>
+    vaultActivity.run("screenshot", () => handleCapture(request)),
+  );
   ipcMain.handle(IPC_CHANNELS.screenshotSupportedModes, () => provider.supportedModes());
 
   ipcMain.on(IPC_CHANNELS.screenshotReveal, () => windows.reveal());
@@ -192,7 +198,7 @@ export function registerScreenshotHandlers(
 
   ipcMain.handle(
     IPC_CHANNELS.screenshotCopyById,
-    scoped(async (id: string) => {
+    scopedAdmitted("library", async (id: string) => {
       const buf = await readFile(await screenshotFilePath(id));
       clipboard.writeImage(nativeImage.createFromBuffer(buf));
     }),
@@ -217,7 +223,7 @@ export function registerScreenshotHandlers(
 
   ipcMain.handle(
     IPC_CHANNELS.screenshotReadBytes,
-    scoped(async (id: string): Promise<ArrayBuffer> => {
+    scopedAdmitted("library", async (id: string): Promise<ArrayBuffer> => {
       const buf = await readFile(await screenshotFilePath(id));
       return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
     }),
@@ -230,8 +236,9 @@ export function registerScreenshotHandlers(
       _event,
       stamp: unknown,
       png: ArrayBuffer,
-      meta: { title: string; overwriteId?: string; manual?: boolean },
-    ): Promise<LocalRecording> => saveEditedScreenshot(stamp, Buffer.from(png), meta),
+      meta: { title: string; overwriteId?: string; overwriteAssetId?: string; manual?: boolean },
+    ): Promise<LocalRecording> =>
+      vaultActivity.run("screenshot", () => saveEditedScreenshot(stamp, Buffer.from(png), meta)),
   );
 
   // Exports (PDF) are files to hand to someone, not library items: they go where

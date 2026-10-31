@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { IPC_CHANNELS } from "@shared/types";
-import type { AppSettings } from "@shared/types";
+import type { AppSettings, ReconcileProgress } from "@shared/types";
 import type { AuthError, AuthStatus } from "@shared/types/auth";
 import type {
   CaptureRequestPayload,
@@ -133,8 +133,11 @@ const kaipuApi: KaipuElectronAPI = {
   beginCameraBubbleMove: () => ipcRenderer.send(IPC_CHANNELS.cameraBubbleMoveStart),
   moveCameraBubble: (dx, dy) => ipcRenderer.send(IPC_CHANNELS.cameraBubbleMove, dx, dy),
   listLocalRecordings: () => scopedInvoke(IPC_CHANNELS.listLocalRecordings),
-  renameLocalRecording: (id, title) => scopedInvoke(IPC_CHANNELS.renameLocalRecording, id, title),
+  renameLocalRecording: (id, assetId, title) =>
+    scopedInvoke(IPC_CHANNELS.renameLocalRecording, id, assetId, title),
   markOpenedInEditor: (id) => scopedInvoke(IPC_CHANNELS.markOpenedInEditor, id),
+  acquireEditorSession: (assetId) => scopedInvoke(IPC_CHANNELS.editorSessionAcquire, assetId),
+  closeEditorSession: (id) => ipcRenderer.send(IPC_CHANNELS.editorSessionClose, id),
   listTags: () => scopedInvoke(IPC_CHANNELS.listTags),
   createTag: (name, color) => scopedInvoke(IPC_CHANNELS.createTag, name, color),
   renameTag: (id, name) => scopedInvoke(IPC_CHANNELS.renameTag, id, name),
@@ -151,6 +154,7 @@ const kaipuApi: KaipuElectronAPI = {
     ipcRenderer.send(IPC_CHANNELS.startFileDrag, guard.stamp, id, name);
   },
   setExportActive: (active) => ipcRenderer.send(IPC_CHANNELS.exportActive, active),
+  beginExport: () => ipcRenderer.invoke(IPC_CHANNELS.exportBegin),
   onExportCommand: (callback) => {
     const listener = (_e: IpcRendererEvent, command: "cancel"): void => callback(command);
     ipcRenderer.on(IPC_CHANNELS.exportCommand, listener);
@@ -182,10 +186,25 @@ const kaipuApi: KaipuElectronAPI = {
     ipcRenderer.on(IPC_CHANNELS.libraryChanged, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.libraryChanged, listener);
   },
+  reconcileScan: () => scopedInvoke(IPC_CHANNELS.libraryReconcileScan),
+  reconcileFix: () => scopedInvoke(IPC_CHANNELS.libraryReconcileFix),
+  reconcileCancel: () => ipcRenderer.invoke(IPC_CHANNELS.libraryReconcileCancel),
+  onReconcileProgress: (callback) => {
+    const listener = (_e: IpcRendererEvent, progress: ReconcileProgress): void =>
+      callback(progress);
+    ipcRenderer.on(IPC_CHANNELS.libraryReconcileProgress, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.libraryReconcileProgress, listener);
+  },
+  onLibraryMaintenanceEnded: (callback) => {
+    const listener = (): void => callback();
+    ipcRenderer.on(IPC_CHANNELS.libraryMaintenanceEnded, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.libraryMaintenanceEnded, listener);
+  },
   listLibraryItems: () => scopedInvoke(IPC_CHANNELS.listLibraryItems),
   refreshCloudCatalog: () => ipcRenderer.invoke(IPC_CHANNELS.refreshCloudCatalog),
   removeLocalCopy: (id) => scopedInvoke(IPC_CHANNELS.removeLocalCopy, id),
-  recordingCreate: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.recordingCreate, sessionId),
+  recordingCreate: (sessionId, kind) =>
+    ipcRenderer.invoke(IPC_CHANNELS.recordingCreate, sessionId, kind),
   recordingWrite: (sessionId, data, position) =>
     ipcRenderer.send(IPC_CHANNELS.recordingWrite, sessionId, data, position),
   recordingFinalize: (sessionId, meta) =>

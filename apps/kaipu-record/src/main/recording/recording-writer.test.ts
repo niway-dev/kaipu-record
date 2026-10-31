@@ -1,16 +1,29 @@
-import { describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, readFile, readdir, access, rm, stat, writeFile } from "node:fs/promises";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  access,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { LibraryVault } from "../library/library-vault";
 import { FinalizeMoveError, RecordingWriter } from "./recording-writer";
+import { recoverStrandedRecordings } from "./stranded-recordings";
+
+afterEach(() => vi.restoreAllMocks());
 
 async function setup() {
   const vaultDir = await mkdtemp(join(tmpdir(), "rw-vault-"));
   const tempDir = await mkdtemp(join(tmpdir(), "rw-temp-"));
   const writer = new RecordingWriter({
     vaultDir: () => vaultDir,
-    newId: () => "rec-fixed",
     now: () => 5000,
     tempDir,
   });
@@ -26,8 +39,8 @@ describe("RecordingWriter", () => {
     const rec = await writer.finalize("s1", { title: "T", durationSeconds: 3, durationMs: 3000 });
     const bytes = await readFile(rec.filePath, "utf-8");
     expect(bytes).toBe("AABBAAAA");
-    expect(rec).toMatchObject({ id: "rec-fixed", title: "T", durationSeconds: 3 });
-    expect(rec.filePath.endsWith("rec-fixed.mp4")).toBe(true);
+    expect(rec).toMatchObject({ id: "T", title: "T", durationSeconds: 3 });
+    expect(rec.filePath.endsWith("T.mp4")).toBe(true);
     expect(rec.filePath.startsWith(vaultDir)).toBe(true);
   });
 
@@ -47,7 +60,7 @@ describe("RecordingWriter", () => {
       height: 600,
       ratio: null,
     });
-    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "rec-fixed.json"), "utf-8"));
+    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "T.json"), "utf-8"));
     expect(sidecar).toMatchObject({
       durationSeconds: 2,
       capture: { mode: "window", width: 800, height: 600, ratio: null },
@@ -64,7 +77,7 @@ describe("RecordingWriter", () => {
       durationMs: 1000,
     });
     expect(rec.capture).toBeNull();
-    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "rec-fixed.json"), "utf-8"));
+    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "T.json"), "utf-8"));
     expect(sidecar).not.toHaveProperty("capture");
   });
 
@@ -88,7 +101,7 @@ describe("RecordingWriter", () => {
       durationMs: 1000,
       thumbnail: new Uint8Array([0xff, 0xd8, 0xff]).buffer,
     });
-    await expect(access(join(vaultDir, ".kaipu", "rec-fixed.jpg"))).resolves.toBeUndefined();
+    await expect(access(join(vaultDir, ".kaipu", "T.jpg"))).resolves.toBeUndefined();
   });
 
   it("abort deletes the temp file and leaves the vault empty", async () => {
@@ -114,6 +127,30 @@ describe("RecordingWriter", () => {
     ).rejects.toThrow(/session/i);
   });
 
+  it("release closes one session but keeps its partial for the stranded-take sweep", async () => {
+    const vaultDir = await mkdtemp(join(tmpdir(), "rw-vault-"));
+    const writer = new RecordingWriter({ vaultDir: () => vaultDir });
+    const { tempPath } = await writer.create("s1");
+    await writer.create("s2");
+    await writer.write("s1", new TextEncoder().encode("partial").buffer, 0);
+
+    // Its page reloaded mid-take: that is not a discard, the bytes are the only copy.
+    await writer.release("s1");
+    expect(await readFile(tempPath, "utf-8")).toBe("partial");
+    expect(writer.ids()).toEqual(["s2"]);
+
+    const swept = await recoverStrandedRecordings({
+      vaultDir,
+      fallbackTempDir: await mkdtemp(join(tmpdir(), "rw-fallback-")),
+      title: "Recovered",
+      now: () => Date.now() + 10 * 60_000,
+    });
+    expect(swept.recovered).toHaveLength(1);
+    expect(
+      await readFile(await new LibraryVault(vaultDir).filePath(swept.recovered[0]!), "utf-8"),
+    ).toBe("partial");
+  });
+
   it("ids lists the open sessions until they end", async () => {
     const { writer } = await setup();
     await writer.create("s1");
@@ -130,7 +167,6 @@ describe("RecordingWriter", () => {
     const fallbackTempDir = await mkdtemp(join(tmpdir(), "rw-fallback-"));
     const writer = new RecordingWriter({
       vaultDir: () => vaultPath,
-      newId: () => "rec-fixed",
       fallbackTempDir,
     });
     await writer.create("s1");
@@ -146,17 +182,18 @@ describe("RecordingWriter", () => {
 
   it("a metadata failure after the move takes the media back out of the vault, still salvageable", async () => {
     const { writer, vaultDir, tempDir } = await setup();
-    await writer.create("s1");
+    const { tempPath } = await writer.create("s1");
     await writer.write("s1", new TextEncoder().encode("take").buffer, 0);
-    // The sidecar cannot be written (a folder sits where it goes): the move already happened.
-    await mkdir(join(vaultDir, ".kaipu", "rec-fixed.json"), { recursive: true });
+    // The sidecar cannot be written: the move already happened.
+    vi.spyOn(LibraryVault.prototype, "writeMeta").mockRejectedValueOnce(new Error("disk full"));
 
     await expect(
       writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
     ).rejects.toBeInstanceOf(FinalizeMoveError);
-    // No orphan .mp4 in the vault, and the take is back in staging, not lost.
+    // No orphan .mp4 (nor its reserved stub) in the vault, and the take is back in staging.
     expect((await readdir(vaultDir)).filter((f) => f.endsWith(".mp4"))).toHaveLength(0);
-    expect(await readdir(tempDir)).toContain("kaipu-rec-s1.mp4.part");
+    expect(await readdir(join(vaultDir, ".kaipu"))).toEqual([]);
+    expect(await readFile(tempPath, "utf-8")).toBe("take");
     const dest = join(tempDir, "rescued.mp4");
     await writer.salvage("s1", dest);
     expect(await readFile(dest, "utf-8")).toBe("take");
@@ -165,20 +202,16 @@ describe("RecordingWriter", () => {
   it("a metadata failure whose take-back also fails keeps the media in the vault and offers no salvage", async () => {
     const vaultDir = await mkdtemp(join(tmpdir(), "rw-vault-"));
     const tempDir = await mkdtemp(join(tmpdir(), "rw-temp-"));
-    const writer = new RecordingWriter({
-      vaultDir: () => vaultDir,
-      newId: () => "rec-fixed",
-      // Read once the media is in the vault: from then on staging refuses the move back.
-      now: () => {
-        chmodSync(tempDir, 0o500);
-        return 5000;
-      },
-      tempDir,
+    const writer = new RecordingWriter({ vaultDir: () => vaultDir, now: () => 5000, tempDir });
+    // The sidecar write runs once the media is in the vault: from then on staging refuses
+    // the move back, and the write itself fails.
+    vi.spyOn(LibraryVault.prototype, "writeMeta").mockImplementationOnce(async () => {
+      chmodSync(tempDir, 0o500);
+      throw new Error("disk full");
     });
     try {
       await writer.create("s1");
       await writer.write("s1", new TextEncoder().encode("take").buffer, 0);
-      await mkdir(join(vaultDir, ".kaipu", "rec-fixed.json"), { recursive: true });
 
       const finalized = writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 });
 
@@ -186,20 +219,100 @@ describe("RecordingWriter", () => {
       await expect(finalized).rejects.toThrow();
       await expect(finalized).rejects.not.toBeInstanceOf(FinalizeMoveError);
       // The only copy stays where it is, and the library lists it without its sidecar.
-      expect(await readFile(join(vaultDir, "rec-fixed.mp4"), "utf-8")).toBe("take");
+      expect(await readFile(join(vaultDir, "T.mp4"), "utf-8")).toBe("take");
     } finally {
       chmodSync(tempDir, 0o700);
     }
   });
 
-  it("a second create with the same id starts a clean session without the first one's bytes", async () => {
+  it("a metadata failure never moves out or removes a file that replaced the take meanwhile", async () => {
+    const { writer, vaultDir } = await setup();
+    const { tempPath } = await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("take").buffer, 0);
+    vi.spyOn(LibraryVault.prototype, "writeMeta").mockImplementationOnce(async () => {
+      await writeFile(join(vaultDir, "foreign"), "incoming");
+      await rename(join(vaultDir, "foreign"), join(vaultDir, "T.mp4"));
+      throw new Error("disk full");
+    });
+    await expect(
+      writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
+    ).rejects.toThrow();
+    expect(await readFile(join(vaultDir, "T.mp4"), "utf-8")).toBe("incoming");
+    await expect(access(tempPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("names the take after its title, and a second take with the same title ' (2)'", async () => {
+    const { writer, vaultDir } = await setup();
+    for (const session of ["s1", "s2"]) {
+      await writer.create(session);
+      await writer.write(session, new TextEncoder().encode(session).buffer, 0);
+    }
+    const title = "Kaipu Recording 2026-10-29 at 13.51.00";
+    const first = await writer.finalize("s1", { title, durationSeconds: 1, durationMs: 1000 });
+    const second = await writer.finalize("s2", { title, durationSeconds: 1, durationMs: 1000 });
+    expect([first.id, second.id]).toEqual([title, `${title} (2)`]);
+    expect(await readFile(join(vaultDir, `${title}.mp4`), "utf-8")).toBe("s1");
+    expect(await readFile(join(vaultDir, `${title} (2).mp4`), "utf-8")).toBe("s2");
+  });
+
+  it("refuses a second create under an open id and keeps the first session's bytes", async () => {
     const { writer } = await setup();
-    await writer.create("s1");
-    await writer.write("s1", new TextEncoder().encode("OLD-OLD").buffer, 0);
-    await writer.create("s1");
-    await writer.write("s1", new TextEncoder().encode("NEW").buffer, 0);
+    const { tempPath } = await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("only copy").buffer, 0);
+    await expect(writer.create("s1")).rejects.toThrow(/already open/);
+    expect(await readFile(tempPath, "utf-8")).toBe("only copy");
     const rec = await writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 });
-    expect(await readFile(rec.filePath, "utf-8")).toBe("NEW");
+    expect(await readFile(rec.filePath, "utf-8")).toBe("only copy");
+  });
+
+  it("gives every session its own staging file, so a released partial is never truncated", async () => {
+    const { writer } = await setup();
+    const first = await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("only copy").buffer, 0);
+    await writer.release("s1");
+    const second = await writer.create("s1");
+    expect(second.tempPath).not.toBe(first.tempPath);
+    expect(await readFile(first.tempPath, "utf-8")).toBe("only copy");
+    // A cleanup bound to the first session never touches the second one.
+    await writer.abort("s1", first.tempPath);
+    await writer.write("s1", new TextEncoder().encode("new").buffer, 0);
+    expect(await readFile(second.tempPath, "utf-8")).toBe("new");
+    expect(await readFile(first.tempPath, "utf-8")).toBe("only copy");
+  });
+
+  it("never replaces a file already at the destination it allocated", async () => {
+    const { writer, vaultDir } = await setup();
+    await writer.create("s1");
+    await writer.write("s1", new TextEncoder().encode("new take").buffer, 0);
+    // Something lands on the stem between the reservation and the move.
+    const reserve = LibraryVault.prototype.reserve;
+    vi.spyOn(LibraryVault.prototype, "reserve").mockImplementationOnce(
+      async function (this: LibraryVault, input) {
+        const reservation = await reserve.call(this, input);
+        await writeFile(join(vaultDir, `${reservation.id}.mp4`), "other recording");
+        return reservation;
+      },
+    );
+    await expect(
+      writer.finalize("s1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
+    ).rejects.toBeInstanceOf(FinalizeMoveError);
+    expect(await readFile(join(vaultDir, "T.mp4"), "utf-8")).toBe("other recording");
+  });
+
+  it("discardExport deletes a stranded partial, only for the session bound to its staging file", async () => {
+    const { writer, tempDir } = await setup();
+    const { tempPath } = await writer.create("e1");
+    await writer.write("e1", new TextEncoder().encode("export").buffer, 0);
+    vi.spyOn(LibraryVault.prototype, "reserve").mockRejectedValueOnce(new Error("no stem"));
+    await expect(
+      writer.finalize("e1", { title: "T", durationSeconds: 1, durationMs: 1000 }),
+    ).rejects.toBeInstanceOf(FinalizeMoveError);
+
+    await writer.discardExport("e1", join(tempDir, "another.mp4.part"));
+    expect(await readFile(tempPath, "utf-8")).toBe("export");
+    await writer.discardExport("e1", tempPath);
+    await expect(access(tempPath)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(writer.ids()).toEqual([]);
   });
 
   it("throws when writing to an unknown session", async () => {
@@ -218,7 +331,7 @@ describe("RecordingWriter", () => {
       derivedFromAssetId: "22222222-2222-4222-8222-222222222222",
     });
     expect(rec.derivedFromAssetId).toBe("22222222-2222-4222-8222-222222222222");
-    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "rec-fixed.json"), "utf-8"));
+    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "Export.json"), "utf-8"));
     expect(sidecar.derivedFromAssetId).toBe("22222222-2222-4222-8222-222222222222");
     expect(sidecar.assetId).toMatch(/^[0-9a-f-]{36}$/);
   });
@@ -245,7 +358,9 @@ describe("RecordingWriter", () => {
       exportPreset: "vertical",
       exportFingerprint: "edit:abc123",
     });
-    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "rec-fixed.json"), "utf-8"));
+    const sidecar = JSON.parse(
+      await readFile(join(vaultDir, ".kaipu", "Export (vertical).json"), "utf-8"),
+    );
     expect(sidecar.exportPreset).toBe("vertical");
     expect(sidecar.exportFingerprint).toBe("edit:abc123");
   });
@@ -270,7 +385,7 @@ describe("RecordingWriter", () => {
       exportPreset: "balanced",
       exportFingerprint: "x".repeat(65),
     });
-    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "rec-fixed.json"), "utf-8"));
+    const sidecar = JSON.parse(await readFile(join(vaultDir, ".kaipu", "Rec.json"), "utf-8"));
     expect(sidecar).not.toHaveProperty("exportFingerprint");
   });
 });
@@ -280,7 +395,6 @@ async function setupInVault() {
   const fallbackTempDir = await mkdtemp(join(tmpdir(), "rw-fallback-"));
   const writer = new RecordingWriter({
     vaultDir: () => vaultDir,
-    newId: () => "rec-fixed",
     now: () => 5000,
     fallbackTempDir,
   });
@@ -302,7 +416,7 @@ describe("RecordingWriter — staging inside the vault", () => {
     await writer.write("s1", new TextEncoder().encode("abc").buffer, 0);
     await writer.finalize("s1", { title: "t", durationSeconds: 1, durationMs: 1000 });
     expect(await readdir(join(vaultDir, ".kaipu", "tmp"))).toHaveLength(0);
-    expect(await readdir(vaultDir)).toContain("rec-fixed.mp4");
+    expect(await readdir(vaultDir)).toContain("t.mp4");
   });
 
   it("falls back to the fallback temp dir when the staging folder cannot be created", async () => {
@@ -310,7 +424,6 @@ describe("RecordingWriter — staging inside the vault", () => {
     const vaultPath = await unreachableVault();
     const writer = new RecordingWriter({
       vaultDir: () => vaultPath,
-      newId: () => "rec-fixed",
       fallbackTempDir,
     });
     const { tempPath } = await writer.create("s1");
@@ -324,7 +437,6 @@ describe("RecordingWriter — unreachable vault at finalize", () => {
     const fallbackTempDir = await mkdtemp(join(tmpdir(), "rw-fallback-"));
     return new RecordingWriter({
       vaultDir: () => vaultPath,
-      newId: () => "rec-fixed",
       fallbackTempDir,
     });
   }
@@ -361,7 +473,7 @@ describe("RecordingWriter — a take stays in the workspace it started in", () =
     const first = await mkdtemp(join(tmpdir(), "rw-ws-a-"));
     const second = await mkdtemp(join(tmpdir(), "rw-ws-b-"));
     let active = first;
-    const writer = new RecordingWriter({ vaultDir: () => active, newId: () => "rec-fixed" });
+    const writer = new RecordingWriter({ vaultDir: () => active });
 
     await writer.create("s1");
     expect(writer.directoryOf("s1")).toBe(first);
@@ -383,7 +495,6 @@ describe("RecordingWriter — a take stays in the workspace it started in", () =
       vaultDir: async () => {
         throw new Error("Work isn't connected");
       },
-      newId: () => "rec-fixed",
       fallbackTempDir,
     });
 
@@ -399,7 +510,6 @@ describe("RecordingWriter — a take stays in the workspace it started in", () =
     const fallbackTempDir = await mkdtemp(join(tmpdir(), "rw-fallback-"));
     const writer = new RecordingWriter({
       vaultDir: () => vaultDir,
-      newId: () => "rec-fixed",
       tempDir: fallbackTempDir,
     });
     await writer.create("s1");

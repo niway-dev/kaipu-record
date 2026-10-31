@@ -11,14 +11,21 @@ El modelo de datos local-first del recorder. Las grabaciones son **archivos de v
 
 ```
 <vault>/                          (default: ~/Videos/Kaipu Record)
-├── 2026-06-14 Sprint Review.mp4   ← el video ES la fuente de verdad
-├── 2026-06-13 Bug repro.mp4
-└── .kaipu/                        ← metadata de la app (oculta)
-    ├── <id>.json                   ← sidecar: title, durationSeconds, createdAt
-    └── <id>.jpg                    ← poster/thumbnail (best-effort)
+├── Sprint Review.mp4                          ← the media file IS the source of truth
+├── Kaipu Recording 2026-10-29 at 13.51.00.mp4  ← default name of a new capture
+├── Kaipu Screenshot 2026-10-29 at 13.52.10.png
+└── .kaipu/                                    ← app metadata (hidden)
+    ├── <id>.json                   ← sidecar: title, assetId, durationSeconds, createdAt, …
+    ├── <id>.jpg                    ← poster/thumbnail (best-effort)
+    ├── <id>.cursor.json            ← cursor track (recordings)
+    ├── <id>.edit.json              ← video-editor session
+    ├── <id>.edit.meta.json         ← session metadata
+    ├── <id>.assets/                ← session image assets
+    ├── orphans/<timestamp>-<uuid>/ ← records with no media, moved by "Check and fix files"
+    └── reconcile/                  ← one JSON log per "Fix all" run
 ```
 
-**El filename SIN extensión es el `id`.** `2026-06-14 Sprint Review.mp4` → id = `2026-06-14 Sprint Review`. No hay tabla de IDs; el filesystem es el índice.
+**The filename without its extension is the `id`**, and it follows the title ([ADR 0035](/architecture/decisions/0035-the-file-name-follows-the-title/)): `Sprint Review.mp4` → id = `Sprint Review`. There is no id table; the filesystem is the index. New captures are named `Kaipu <Kind> YYYY-MM-DD at HH.mm.ss` (local time; `Kind` ∈ `Recording`, `Screenshot`, `GIF`; `shared/default-capture-name.ts`), so the title and the file read the same from the start. Exports keep their derived title (`Sprint demo (YouTube)`), and the file follows it.
 
 `LibraryVault` (`library/library-vault.ts:30`) es una clase **pura**: recibe el directorio inyectado, sin tocar `electron`. Por eso es testeable contra una carpeta temporal.
 
@@ -34,16 +41,18 @@ El modelo de datos local-first del recorder. Las grabaciones son **archivos de v
 { "title": "Sprint Review", "durationSeconds": 312, "createdAt": 1749938548133 }
 ```
 
-`describe()` mergea el sidecar con `stat()` del archivo y rellena defaults: si falta `title`, humaniza el id; si falta `createdAt`, usa `birthtimeMs`; `durationSeconds` por defecto 0 (`library-vault.ts:71`). `writeMeta()` mergea (no sobrescribe) — `rename` solo toca `title`, deja el resto intacto.
+`describe()` merges the sidecar with the file's `stat()` and fills defaults: without a `title` it uses `humanizeId(id)` (the stem as is; a legacy `recording-2026-10-29-13-51-00` / `screenshot-…Z` stem reads as the new default name); without `createdAt` it uses `birthtimeMs`; `durationSeconds` defaults to 0. `writeMeta()` merges (never overwrites the other fields), and it never **creates** a sidecar for an id that has neither a sidecar nor a media file (`ItemGoneError`): a hash, tag or heal write queued behind a rename cannot resurrect the old stem.
 
 ## Operaciones
 
-| Op                  | Qué hace                                                                        | Toca el video                      |
-| ------------------- | ------------------------------------------------------------------------------- | ---------------------------------- |
-| `list()`            | readdir → filtra video exts → `describe` cada uno → ordena por `createdAt` desc | no                                 |
-| `describe(id)`      | `stat` + sidecar → `LocalRecording` (o `null` si no hay archivo)                | no                                 |
-| `rename(id, title)` | escribe `title` en el sidecar                                                   | **no** — el archivo no se renombra |
-| `remove(id)`        | borra video + sidecar + thumbnail (best-effort, `allSettled`)                   | sí                                 |
+| Op                                   | What it does                                                                                                                                           | Touches the media                     |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
+| `list()`                             | readdir → keep media exts → `describe` each → sort by `createdAt` desc                                                                                 | no                                    |
+| `describe(id)`                       | `stat` + sidecar → `LocalRecording` (or `null` when there is no file)                                                                                  | no                                    |
+| `allocateId(input)`                  | derive a stem from the title, resolve collisions (` (2)`, ` (3)` …), write a stub sidecar — under the `vault:names` lock. Every writer goes through it | no (the caller writes the media next) |
+| `renameItem({ id, assetId }, title)` | save the title, then move the media **and every companion** to the stem the title derives; returns `{ recording, file, reason? }`                      | **yes** — the file follows the title  |
+| `remove(id)`                         | delete the media + every companion (`companionPaths`: sidecar, thumbnail, cursor track, edit session, edit meta, assets)                               | yes                                   |
+| `removeLocalCopy(id)`                | delete only the media; the sidecar and companions stay (cloud-only item)                                                                               | yes                                   |
 
 `thumbnailUrl` apunta a `kaipu-media://thumb/<id>` solo si el `.jpg` existe.
 
@@ -61,7 +70,7 @@ Cada handler crea un `LibraryVault` fresco ligado al directorio **actual** (`cur
 
 El renderer no puede leer `file://` directo (CSP + seguridad). El main expone un **esquema privilegiado streamable** (`media-protocol.ts`):
 
-- `kaipu-media://recording/<id>` → el archivo de video, Range-aware (necesario para seek en el `<video>`).
+- `kaipu-media://recording/<id>` → el archivo de video, Range-aware (necesario para seek en el `<video>`). A URL is valid for the **current** id only: a rename changes it (the detail page's player reloads under the new id and keeps its position). Ids are file names derived from titles, so they can hold `#`, `?` or `%`: every URL is built with `mediaUrl(kind, id, version?)` (`shared/media-url.ts`), which percent-encodes the id; never concatenate an id into a `kaipu-media://` URL.
 - `kaipu-media://thumb/<id>` → el poster `.jpg`.
 
 `registerMediaScheme()` corre antes de `app.whenReady`; `registerMediaProtocol()` después. El handler mapea el id a su path real vía `recordingFilePath`/`thumbnailFilePath` y hace `net.fetch(file://…)`.
@@ -83,7 +92,7 @@ All fields are optional; unknown fields are ignored:
 | `hashedSizeBytes`    | number                | File size when `contentSha256` was computed. Used to detect staleness.                                                                                                                                                          |
 | `hashedMtimeMs`      | number                | File mtime when `contentSha256` was computed. Used to detect staleness.                                                                                                                                                         |
 | `localRemovedAt`     | number (ms timestamp) | Set by `removeLocalCopy()` when the media file is deleted but identity, sidecar, and cloud relation are kept. Cleared on first read after the file reappears. Signals "cloud only" to the library.                              |
-| `title`              | string                | User-facing recording name; humanized from id if omitted. Rename touches only this field, never the video file.                                                                                                                 |
+| `title`              | string                | User-facing name, exactly as typed. The file name is a sanitized projection of it (`fileStemFromTitle`); `humanizeId(id)` if omitted.                                                                                           |
 | `durationSeconds`    | number                | Video duration in seconds; default 0. Backfilled by the renderer after decode on first write.                                                                                                                                   |
 | `createdAt`          | number (ms timestamp) | Recording creation time; file `birthtimeMs` if omitted. Stable once set.                                                                                                                                                        |
 
@@ -98,16 +107,22 @@ When a v1 sidecar (or no sidecar) is read for the first time:
 
 This means **every recording eventually gets an `assetId`**, even legacy ones, by first-read on any updated client.
 
-### The filename is still the local id (gotcha)
+### The filename is the local id, and it follows the title
 
-`assetId` is a **stable cross-machine identity** for the asset in the cloud and in the sidecar. The **filename** is the **local working id** and remains the source of truth for enumerating local files:
+`assetId` is the **stable cross-machine identity** (cloud catalog, routes, tags, export provenance). The **filename** is the **local working id**: `list()` enumerates it, and every companion under `.kaipu/` is found by it. Since NIW2-560 ([ADR 0035](/architecture/decisions/0035-the-file-name-follows-the-title/)) a rename moves it:
 
-- Rename the title → sidecar updates, filename stays, `assetId` stays.
-- Rename the `.mp4` file in Finder → the filesystem id changes, the sidecar and `assetId` are "lost" from that id's perspective until the sidecar is moved with the file.
-- Export a recording → the export gets its own id (filename) and `derivedFromAssetId` points to the original.
-- Remove local download → delete the `.mp4` but keep the sidecar, setting `localRemovedAt`.
+- Rename the title → `renameItem({ id, assetId }, title)` first resolves the item **by identity** under the names lock (the id when it still holds that `assetId`, else the **one** local item that does; none → `ItemNotFoundError`; more than one, of any media kind — a Finder copy made with its sidecar — → `AmbiguousIdentityError` before anything changes, shown as a plain toast; a screenshot overwrite then also requires the resolved item to be a screenshot), so a stale id never renames another item that took the name. Then the title is saved in the sidecar, and the media file and every companion move to the stem the title derives. `assetId`, tags, hash cache and provenance move with the sidecar. `LocalRecording.id` changes: treat it as valid until the next rename and never persist it.
+- Title → stem (`main/library/file-stem.ts`): NFKC (no compatibility characters such as `ſ` or fullwidth letters in a file name; fullwidth `／` and `：` become the forbidden ASCII they stand for); `< > : " / \ | ? *` and control characters become spaces; dot runs collapse to one dot (so `isUnsafeId`'s `..` guard holds); leading dots and trailing dots/spaces are trimmed; Windows reserved names (`CON`, `nul`, `com1`, `Con.v2` …) get a `Kaipu ` prefix; capped at 100 code points and 180 UTF-8 bytes. Reserved stems (`isReservedStem`, compared through `fsFold` — NFKC then lower → upper → lower case — so `tagſ`, `Demo.curſor` and `ẞ`/`ß` count) are never used: a stem ending in `.edit`, `.cursor` or `.edit.meta` would have another stem's companion as its sidecar (`Demo.edit.json` is `Demo`'s edit session), so that last dot becomes a space (`Demo edit`); `tags` is `.kaipu/tags.json`, the tag registry, so it becomes `Kaipu tags`. A rename also skips any candidate whose paths overlap the source's (a legacy `Demo.edit` item renamed to `Demo`). Nothing left → the default capture name.
+- Collisions → ` (2)`, ` (3)` … up to 99, then a random 4-character tail. A stem is taken when **any** media file or companion exists for it (an orphan sidecar of a cloud-only item counts). A case-only rename of the same item is a real move; the same derived stem leaves the file alone (`file: "unchanged"`).
+- Order under the `vault:names` lock and the old sidecar's lock: title into the old sidecar → companions copied to the new stem → `fs.rename` of the media (the commit point) → old companions deleted. Every crash point leaves either the old item or the new item whole; a leftover is a sidecar without media whose `assetId` a live item also holds — invisible to `list()`, reused by the next rename of the same item. "Check and fix files" (see [below](#check-and-fix-files)) never reuses such a leftover.
+- The OS will not let go of the file (Windows `EPERM`/`EBUSY`/`EACCES`/`ETXTBSY`) → three retries (150/400/900 ms), then `file: "kept-old-name"`, `reason: "locked"`. An export running (`exportActive`) → `"kept-old-name"`, `"busy"`, without touching the disk. The item open in the video editor → `"kept-old-name"`, `"editing"`: the editor acquires its item with `acquireEditorSession(assetId)` before it loads or writes anything; main runs the acquisition under the same names lock as renames and answers the item's **current** id, so an editor opened mid-rename waits and loads under the new id. A null answer (the item is gone) or a failed acquisition loads nothing: the editor says the item is no longer available and never falls back to the route's id, which another item may have taken. A request that waited for the lock is refused if its window closed or reloaded meanwhile (`EditorSessions` keeps a per-window generation). It releases on unmount; a window that is closed, reloaded or whose renderer crashes (`render-process-gone`) releases everything it held (`EditorSessions.watch`) (`main/library/editor-sessions.ts`). A failed companion copy → `"kept-old-name"`, `"io"`, with the new companions removed. A file that appears under the new name between the plan and the commit (Finder, a sync tool) is never replaced: the media is committed through `safe-place` (a hard link then removal of the old name, or an exclusive copy where hard links are missing; a case-only rename through a verified temporary sibling), and a taken name → `"kept-old-name"`, `"taken"`, with the new companions removed. The title is saved in every case; the renderer shows a non-blocking toast with Retry.
+- Rename the `.mp4` in Finder → the id changes outside the app and the old sidecar has no media. "Check and fix files" moves it to the orphans folder and adopts the file under its new name ([ADR 0036](/architecture/decisions/0036-the-library-reconciles-with-its-folder-on-demand/)).
+- Export a recording → the export gets its own id (named after its title) and `derivedFromAssetId` points to the original.
+- Remove local download → delete the media but keep the sidecar, setting `localRemovedAt`.
 
-The filename is intentionally stable for path-based operations (`recordingFilePath`, media protocol, file pickers). If you want the cross-machine identity, reach for `assetId` in the sidecar.
+If you need an identity that survives a render, reach for `assetId`. The video editor keeps its source id for its lifetime; main enforces it by refusing to move the file of an item open there (`"editing"`), whatever asks for the rename (a Library toast's Retry survives navigation).
+
+A screenshot overwrite from the image editor goes through `LibraryVault.overwriteImage`: the check and the write happen under the names lock, and the `overwriteAssetId` the editor sends is required: an item renamed meanwhile is followed to its current id instead of having its PNG recreated under the old name, and a shot that took the old name is never overwritten. The image editor also reads its original bytes before a rename moves the file.
 
 ### Edit session metadata (`.edit.meta.json`)
 
@@ -155,20 +170,84 @@ A 401 or network failure **never clears** the cache. A failed refresh leaves the
 
 Two operations, two different outcomes:
 
-| Operation             | Deletes                                                                                                                                                             | Keeps                                                                                             | Use case                                                                                                                                                                                                                                                 |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `removeLocalCopy(id)` | Media file (`.mp4` / `.webm`) only                                                                                                                                  | Sidecar (identity, hash, provenance), thumbnail, edit session, edit assets folder, cloud relation | Free disk space while preserving the cloud-linked identity. Item becomes "cloud only" and can be re-downloaded under the same `assetId`. Blocked if: no cloud copy is known, cloud copy has different bytes, hash is unknown, or an edit session exists. |
-| `remove(id)`          | `LibraryVault.remove` itself: media, sidecar, thumbnail. The `library:delete-local` IPC handler that calls it additionally deletes the edit session and its assets. | Nothing                                                                                           | Delete the entire recording permanently. Severed from the cloud.                                                                                                                                                                                         |
+| Operation             | Deletes                                                                                                                 | Keeps                                                                                             | Use case                                                                                                                                                                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `removeLocalCopy(id)` | Media file (`.mp4` / `.webm`) only                                                                                      | Sidecar (identity, hash, provenance), thumbnail, edit session, edit assets folder, cloud relation | Free disk space while preserving the cloud-linked identity. Item becomes "cloud only" and can be re-downloaded under the same `assetId`. Blocked if: no cloud copy is known, cloud copy has different bytes, hash is unknown, or an edit session exists. |
+| `remove(id)`          | Media and every companion (`companionPaths`): sidecar, thumbnail, cursor track, edit session, edit meta, assets folder. | Nothing                                                                                           | Delete the entire recording permanently. Severed from the cloud.                                                                                                                                                                                         |
+
+## Check and fix files
+
+Items that existed before ADR 0035 keep their old names, and the folder can drift later (a file renamed or deleted in Finder, a restored backup, a rename that failed on a locked file). "Check and fix files" (NIW2-561, [ADR 0036](/architecture/decisions/0036-the-library-reconciles-with-its-folder-on-demand/)) catches the library up on demand. Status: implemented on the NIW2-561 branch, owner QA pending; Windows is not validated.
+
+The file name is the only link between a file and its record (the same stem). Nothing is paired by inode, hash or date, and nothing is deleted.
+
+- A banner in the Library and on Home appears when the scan finds drift; Settings → Files has the same action. A dialog lists the findings, and "Fix all" runs one pass. There is no folder watcher and no startup migration.
+- **The scan never writes.** `scanVault` (`library/vault-reconcile.ts`) only reads; it answers `busy` during a recording or export and `maintenance` while a fix runs.
+- Idempotence is the contract: a scan after a complete fix returns only the listed findings and anything that stayed locked.
+
+### Finding kinds
+
+| Kind                    | Fixable | What Fix all does                                                                                                                                                                                                   |
+| ----------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stale-auto-title`      | yes     | An old automatic title (`Recording — 10/29/2026, …`) is replaced by the default capture name built from the capture date, then renamed; an export of one (`… (edited)`) takes its source's new name plus the suffix |
+| `untitled-legacy`       | yes     | A record with no title and a legacy stem (`recording-2026-…`) gets `humanizeId(stem)` as title, then renamed                                                                                                        |
+| `name-mismatch`         | yes     | The file takes the title through `renameItem` (ADR 0035), with `allowLeftover: false` and `refuseSharedCompanions`                                                                                                  |
+| `missing-sidecar`       | yes     | A media file with no record is adopted under its disk name (`adoptMedia`: one atomic sidecar write, `createdAt` from `captureDate`)                                                                                 |
+| `missing-media`         | yes     | A record with no media moves to the orphans folder; if its `assetId` is in the cached cloud catalog it becomes cloud-only instead                                                                                   |
+| `orphan-companion`      | yes     | Companions (thumbnail, cursor track, edit session, assets) with no record and no media move to the orphans folder                                                                                                   |
+| `stem-conflict`         | no      | Two media files on one stem (`Demo.mp4` + `Demo.png`), ignored ones included (`Demo.PNG`, an empty file, a symlink)                                                                                                 |
+| `shared-companion`      | no      | An item whose companion paths overlap another present stem's (legacy `Demo` + `Demo.edit`, whatever `Demo` is), or media named after a vault-owned file (`tags.mp4`, whose record path is the tag registry)         |
+| `duplicate-identity`    | no      | Two media items claim one `assetId`; picking one would be a guess                                                                                                                                                   |
+| `unreadable-record`     | no      | The sidecar cannot be read, parsed or validated                                                                                                                                                                     |
+| `not-recognized`        | no      | A media file with an uppercase extension (`Demo.MP4`), or a symlink or empty file: ignored, never adopted, its companions protected                                                                                 |
+| `unreadable-orphan-run` | no      | An orphans run whose `manifest.json` cannot be read, parsed or validated. Fix all fails closed: it changes nothing until the run is repaired or removed                                                             |
+
+Renames run in a planner order that resolves chains and cycles by giving the item still waiting the first free suffix (` (2)` …). A fixable item the OS will not release (locked, open in the editor, an export running) is left as it was and reported in `kept`.
+
+### Orphans folder and run log
+
+Records and companions with no media move to `.kaipu/orphans/<timestamp>-<uuid>/`, created exclusively on the first move.
+
+- `manifest.json` in that folder lists each bundle (original paths, title, `assetId`). An entry is written as `pending` **before** its first file moves and marked complete only once every file has moved; a file that failed keeps it `pending`.
+- A crash or a failed move is finished by the next run: pending manifests are completed **before the next scan**, each into its own folder.
+- A file that a still-pending entry holds is kept out of the run's classification ("pending orphan move" in the report): only that entry's replay moves it, so a bundle never splits across two run folders. Every action checks the item's whole path set (its media and every companion of its stem; for a rename, of its new stem too): an adoption, a title rewrite or a rename touching a held path waits as well.
+- A manifest that exists but cannot be read (EACCES, EIO), is corrupt JSON or fails the schema stops the whole run before any replay or change: the scan lists it as `unreadable-orphan-run`, and the report names it. A run folder without a manifest (a run that crashed before its first move) is no run.
+- An orphan destination is never overwritten. Only ENOENT means a path is absent: when the source or the destination cannot be checked (EIO, EACCES), both stay where they are, the entry stays `pending` and the run reports it.
+- Each "Fix all" run also writes its report to `.kaipu/reconcile/<timestamp>-<id>.json` (best effort).
+
+The orphans folder is only readable by hand through the manifest; listing and reassigning orphans in the UI is NIW2-589.
+
+### Maintenance mode
+
+`library/vault-activity.ts` holds one flag and one activity counter per process. The admission contract:
+
+- Every entry point into the vault takes a lease with `admit(kind)` before any work and releases it when everything it spawned has finished: IPC handlers (the `admitted` wrapper in `library/index.ts`), capture starts, the recording session through the cursor-track write, exports (`export:begin`), hotkey screenshots, backfill, stranded recovery and the folder change.
+- A take (a recording, or an export's output file) belongs to the page that called `recording:create`. When that page goes away without finalizing or aborting it (a reload, a dead renderer, a destroyed webContents; `onPageGone` in `main/renderer-lifetime.ts`), main ends the take by its kind (`recording:create`'s second argument). A recording's writer session is released as a forced reset does (handle closed, `.part` kept for the stranded-take sweep: a reload is not a discard, only the user's abort deletes it); an export's partial is deleted, since it can be exported again. Main then restores the recorder's stop state if that page had started the recording, and releases the lease. A take ends once however many of those events arrive, finalize included: a create still opening its file, or a finalize still placing it and writing its cursor track, keeps the lease until it settles. A create reusing an id still open or ending is refused, each take stages to its own exclusively created `.part`, and a move into the vault never replaces an existing file. Every placement at a vault path goes through `main/library/safe-place.ts` (ADR 0036, "Placing a file"): `placeNoReplace` (a hard link, else an exclusive copy that writes every byte and is flushed; a taken destination changes nothing), `renameCaseOnly`, and `replaceConfirmed`, the one replacing move, used only after the save dialog's "Replace". Each of them removes a name only while it still holds the file this operation created or opened (bigint device + inode from its own handle), flushes the destination folder before removing a source, and keeps the bytes whenever ownership is uncertain; the threat model, including the window it does not cover, is in the ADR. A placed `.part` that can be neither removed nor set aside gets a `<name>.placed.json` marker (destination and size). The marker never authorizes deleting the `.part`: while that destination exists with the same size, the stranded sweep skips recovering it and moves it into `.kaipu/tmp/placed-parts/`, where it is kept; a marker whose `.part` is gone is removed. The export lease is released the same way.
+- **Vault methods take no gate.** Nested work runs under the outer lease, so there is no nested locking and no deadlock.
+- "Fix all" calls `enterMaintenance`. It **refuses to start during a recording or export** (`busy`), and a recording or export that starts while it waits makes it stop waiting with `busy`. Short operations are waited for, **cancellably** (`library:reconcile-cancel`, only before any file is touched). Once the count reaches zero the flag is set in the same synchronous step.
+- While the flag is set, **every entry is refused with `MaintenanceError`, never queued**: a queued request would wake up holding a stale id (`remove("B")` after B was renamed). The message carries `VAULT_MAINTENANCE_MARKER`. When maintenance ends main broadcasts `library:maintenance-ended` and editors retry their pending saves.
+- Maintenance is per process: two Kaipu processes on one vault (dev and prod) are not protected.
+
+### Strict sidecar reads
+
+`readSidecarStrict` (`library/library-vault.ts`) tells a missing sidecar from one that cannot be read, is corrupt JSON or fails the schema. **An unreadable sidecar is never written by any mutation** (reconcile, backfill, identity minting, the editors, `renameItem`, `remove`): the write throws `UnreadableRecordError` before any media or companion is touched, and the message carries `UNREADABLE_RECORD_MARKER`. `list()` shows the item read-only with `metadataIssue` set (`LocalRecording.metadataIssue`, shared with the sidecar read hardening of NIW2-568) and a placeholder `assetId` (`unreadable:<id>`), and the scan reports it as `unreadable-record`. Media named after a file the vault owns (`tags.mp4`, `isVaultOwnedStem` in `library/file-stem.ts`) is handled the same way: its record path is the tag registry, so every mutation refuses with `UnreadableRecordError` and the item lists read-only. Checks whose "absent" answer leads to a write, a copy-then-delete or a move (`isStemFree`, `hasMedia`, the companion copies in `renameItem`) treat only ENOENT as absent; any other error keeps the name taken or the old name kept.
 
 ## Gotchas
 
-- ⚠️ **El id es el filename.** Renombrar el `title` NO renombra el archivo (intencional: el path es estable, la metadata es mutable). Si el usuario renombra el `.mp4` en Finder, cambia el id y se "desconecta" del sidecar viejo.
-- ⚠️ `isUnsafeId()` (`media-protocol.ts:13`) rechaza ids con `/`, `\` o `..` — guard contra path traversal en el protocolo. No bypassear.
+- ⚠️ **The id is the filename, and a rename changes it.** Never persist `LocalRecording.id`, never key long-lived state by it, and patch renderer state from the rename result **by `assetId`**. A `kaipu-media://` URL is only valid for the current id.
+- ⚠️ **Every new item gets its id from `vault.reserve()`** (`allocateId()` when it never gives the stem back). Picking a name yourself and writing the media races other captures and renames (`fs.rename` silently replaces an existing target on POSIX and Windows). On a placement failure, `releaseReservation(reservation)` gives back the stem; after the media is placed, `discardCreated(reservation, media)` removes it only while it is still the file placed. Never `remove(id)` there: it deletes whatever file holds the media name, possibly one that took it meanwhile.
+- ⚠️ A rename "kept-old-name" is not an error: the title was saved. A rename rejects only when: no item carries the requested `assetId` (message carries `ITEM_NOT_FOUND_MARKER`; the renderer refreshes quietly); two files claim that identity (`AMBIGUOUS_IDENTITY_MARKER`; the renderer shows a plain toast and changes nothing); the arguments are invalid; or the title cannot be written (the fs error is rethrown).
+- ⚠️ If the user renames the media in Finder, the id changes outside the app and the old sidecar has no media. Nothing happens until the user runs "Check and fix files", which orphans the old record and adopts the file as a new item.
+- ⚠️ The protocol handler reads every request through `parseMediaUrl()` (`shared/media-url.ts`): it decodes the id once and answers 400 to a malformed escape or an id with `/`, `\` or `..` after decoding (`%2F` included) — the path-traversal guard. Do not bypass it.
 - ⚠️ El vault directory puede cambiar en runtime; nunca cachear un `LibraryVault` de larga vida — usar `currentVault()`.
 - ⚠️ Borrar es best-effort (`Promise.allSettled`): si el sidecar o thumb fallan, el video igual se borra. No tratar un fallo parcial como "no se borró nada".
+- ⚠️ Every new vault entry point must take an admission lease (`vaultActivity.admit`/`run`), or it can run in the middle of a fix. Never add a gate inside a `LibraryVault` method.
+- ⚠️ Windows locking behaviour (error codes under a lock, the app's own media-protocol streams not blocking a rename) is inferred from libuv and Microsoft documentation, not yet observed; the retry + `kept-old-name` path covers it either way.
 
 ## Related
 
 - [Filesystem-First Monetization](/desktop/filesystem-first-monetization) — el porqué de producto
 - [IPC Contract](/desktop/ipc-contract) — los handlers `library:*`
 - [ADR 0001: Mediabunny over FFmpeg](/architecture/decisions/0001-mediabunny-over-ffmpeg) — por qué el output es MP4
+- [ADR 0035: The vault file name follows the title](/architecture/decisions/0035-the-file-name-follows-the-title/) and the [NIW2-560 spec](/specs/2026-10-29-niw2-560-rename-renames-the-file/)
+- [ADR 0036: The library reconciles with its folder on demand](/architecture/decisions/0036-the-library-reconciles-with-its-folder-on-demand/)

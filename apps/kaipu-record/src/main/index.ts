@@ -19,10 +19,12 @@ import { ROUTES } from "@shared/routes";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
 import { broadcastLibraryChanged, currentVault, registerLibraryVaultHandlers } from "./library";
+import { vaultActivity, type ActivityLease } from "./library/vault-activity";
 import { cleanupDragCopies, cleanupLegacyDragCopies } from "./library/drag-copies";
 import { registerCloudStorageHandlers } from "./cloud";
 import { registerMediaProtocol, registerMediaScheme } from "./media-protocol";
 import { registerRecordingHub, type RecordingHubHandle } from "./recording/recording-hub";
+import { onPageGone } from "./renderer-lifetime";
 import { recoverStrandedRecordings } from "./recording/stranded-recordings";
 import { proceedWhenRecordingStops } from "./recording/stop-guard";
 import { beginRecordTiming, markRecordTiming } from "./recording/record-timing";
@@ -126,6 +128,18 @@ let closingWithRecording = false;
 let quittingWithRecording = false;
 /** Mirrors the renderer's `exportActive` message: true while a video export is writing. */
 let exportActive = false;
+/**
+ * The running export's vault lease (maintenance mode, NIW2-561), taken by the
+ * acknowledged `export:begin` before the source is read; released on completion,
+ * cancellation or the renderer going away.
+ */
+let exportLease: ActivityLease | null = null;
+function endExport(): void {
+  exportActive = false;
+  exportLease?.release();
+  exportLease = null;
+  notifyWorkspaceBusyChanged();
+}
 /** True once the user confirmed "Cancel export and close" — lets the second `close` pass. */
 let closingWithExport = false;
 /** Same, for "Cancel export and quit" on `before-quit`. */
@@ -244,7 +258,7 @@ function cancelExportThen(done: () => void): void {
     if (finished) return;
     finished = true;
     // Whatever won, the confirmed cancel is final: don't let the guards prompt a second time.
-    exportActive = false;
+    endExport();
     clearTimeout(timeout);
     ipcMain.removeListener(IPC_CHANNELS.exportActive, onActive);
     done();
@@ -266,7 +280,7 @@ function createWindow(showOnReady = true): void {
   // A fresh window's renderer hasn't registered its IPC listeners yet; block
   // sends until it signals `appReady`.
   rendererReady = false;
-  exportActive = false;
+  endExport();
   // Create the browser window.
   mainWindow = new BrowserWindow({
     title: "Kaipu Record",
@@ -298,7 +312,7 @@ function createWindow(showOnReady = true): void {
     mainWindow = null;
     closingWithRecording = false;
     closingWithExport = false;
-    exportActive = false;
+    endExport();
     // A window closed mid-countdown takes its renderer, and the take with it. Release the
     // pending take (tray, Esc, shade) here; the user closed the window, so do not reopen it.
     hub?.forceReset();
@@ -404,8 +418,12 @@ function createWindow(showOnReady = true): void {
     console.error("main renderer process gone", details.reason);
     hub?.forceReset({ revealAbandoned: true });
     // The renderer that owned the export is gone; nothing is left to cancel.
-    exportActive = false;
+    endExport();
   });
+  // A plain reload drops the page mid-export without an `exportActive: false`: free the
+  // vault as the old page goes, not only once the new one mounts (`appReady`). The export's
+  // output take is the recording hub's to abort.
+  onPageGone(mainWindow.webContents, endExport);
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url);
@@ -685,8 +703,8 @@ const captureWindowHooks = createCaptureWindowHooks({
  * comes back already on the item — the same hand-off as the capture hotkey.
  */
 function openSavedScreenshot(target: "editor" | "library", id: string): void {
-  void currentVault()
-    .describe(id)
+  void vaultActivity
+    .run("library", () => currentVault().describe(id))
     .then((item) => {
       if (!item) {
         console.warn(`[screenshot] toast: ${id} is no longer in the vault`);
@@ -771,8 +789,16 @@ app.whenReady().then(async () => {
   // The renderer reports when a video export starts and stops (NIW2-218); the close and quit
   // guards read it. Registered once, not per window.
   ipcMain.on(IPC_CHANNELS.exportActive, (_event, active: unknown) => {
-    exportActive = active === true;
-    notifyWorkspaceBusyChanged();
+    if (active === true) {
+      exportActive = true;
+      notifyWorkspaceBusyChanged();
+    } else endExport();
+  });
+  // Before an export reads its source: refused while "Check and fix files" runs.
+  ipcMain.handle(IPC_CHANNELS.exportBegin, () => {
+    const lease = vaultActivity.admit("export");
+    exportLease?.release();
+    exportLease = lease;
   });
 
   // IPC test
@@ -783,6 +809,8 @@ app.whenReady().then(async () => {
   ipcMain.on(IPC_CHANNELS.appReady, (event) => {
     if (event.sender !== mainWindow?.webContents) return;
     rendererReady = true;
+    // A reloaded renderer has no export running, whatever it last reported.
+    if (exportLease) endExport();
     const queued = pendingRendererSends;
     pendingRendererSends = [];
     for (const { channel, payload } of queued) mainWindow?.webContents.send(channel, payload);
@@ -911,7 +939,11 @@ app.whenReady().then(async () => {
   onSettingsKeysChanged(["locale", "shortcuts"], (settings) => rebuildTrayMenu(settings.locale));
 
   // Library: local recordings vault + cloud catalog.
-  registerLibraryVaultHandlers({ auth, serverUrl: authServerUrl });
+  registerLibraryVaultHandlers({
+    auth,
+    serverUrl: authServerUrl,
+    isExportActive: () => exportActive,
+  });
   registerCloudStorageHandlers({ auth, serverUrl: authServerUrl });
 
   // Screenshots: capture/copy/save IPC handlers.
@@ -1073,8 +1105,10 @@ app.whenReady().then(async () => {
 
   // Recover takes a failed finalize or a crash left behind, so the first Library list sees
   // them: in every connected workspace, each into its own folder. The OS temp fallback is
-  // swept once, into the active one.
-  void recoverStrandedEverywhere();
+  // swept once, into the active one. One lease: "Check and fix files" waits for the sweep.
+  void vaultActivity
+    .run("recovery", () => recoverStrandedEverywhere())
+    .catch((error) => console.error("stranded recording sweep failed", error));
 
   createWindow();
 

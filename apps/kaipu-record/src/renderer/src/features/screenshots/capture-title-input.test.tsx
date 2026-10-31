@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { CaptureTitleInput } from "./capture-title-input";
 import { useCaptureTitle } from "./use-capture-title";
 
-const AUTO = "Screenshot — 2026-10-07";
+const AUTO = "Kaipu Screenshot 2026-10-07 at 15.04.05";
 
 /** The input driven by the real hook, with the rename side effect injected. */
 function Harness({ onRename }: { onRename: ((title: string) => void) | null }): React.JSX.Element {

@@ -12,7 +12,11 @@ export type MetadataIssue = "unreadable" | "corrupt";
  * Pure type — safe to import from both main and renderer.
  */
 export interface LocalRecording {
-  /** The filename without extension. Local-only handle; stable while the file is not renamed. */
+  /**
+   * The filename without extension. Local-only handle that changes when the item is
+   * renamed (ADR 0035): use it for the current render and IPC call, never persist it —
+   * `assetId` is the identity for anything that outlives that.
+   */
   id: string;
   /**
    * Stable identity minted on first read and persisted in the sidecar. This is
@@ -78,3 +82,51 @@ export interface VaultDirectory {
   path: string;
   isCustom: boolean;
 }
+
+/** What a rename did to the file (NIW2-560). "kept-old-name" is not an error: the title was saved. */
+export type RenameFileOutcome = "renamed" | "unchanged" | "kept-old-name";
+/**
+ * Why the file kept its old name: another app holds it, an export is reading it, the item
+ * is open in the video editor (which holds its id for its lifetime), another file appeared
+ * under the new name while the rename ran ("taken": never replaced), or another I/O error.
+ */
+export type RenameKeptReason = "locked" | "busy" | "editing" | "taken" | "io";
+
+export interface RenameResult {
+  /** The item after the rename; `recording.id` is the id to use from now on. */
+  recording: LocalRecording;
+  file: RenameFileOutcome;
+  /** Set only when `file` is "kept-old-name". */
+  reason?: RenameKeptReason;
+}
+
+/**
+ * Marker in the message of the error a rename rejects with when no item carries the
+ * requested `assetId` any more (deleted). A stale id alone does not reject: the rename
+ * follows the identity to its current id. Electron passes only the
+ * message across IPC, so the renderer matches on this to refresh quietly instead of
+ * reporting an error.
+ */
+export const ITEM_NOT_FOUND_MARKER = "vault-item-not-found";
+
+/**
+ * Marker in the message of the error a vault operation rejects with when two local files
+ * claim the same identity (a Finder copy made with its sidecar) and the caller's id no
+ * longer settles which one it means. Nothing was changed; the renderer shows a plain toast.
+ */
+export const AMBIGUOUS_IDENTITY_MARKER = "vault-ambiguous-identity";
+
+/**
+ * Marker in the message of the error a vault write rejects with when the item's sidecar
+ * is unreadable, corrupt or invalid: nothing was written, so whatever the record still
+ * holds can be recovered by hand (NIW2-561).
+ */
+export const UNREADABLE_RECORD_MARKER = "vault-unreadable-record";
+
+/**
+ * Marker in the message of the error a vault operation is refused with while "Check and
+ * fix files" runs (NIW2-561, maintenance mode). Nothing was done and nothing is queued:
+ * the renderer says "Kaipu is fixing your files", and editors retry their pending save
+ * when `library:maintenance-ended` arrives.
+ */
+export const VAULT_MAINTENANCE_MARKER = "vault-maintenance";

@@ -371,7 +371,7 @@ describe("createCaptureHandler", () => {
       const out = await handler({ mode: "frame" });
       expect(saveToVault).toHaveBeenCalledOnce();
       expect(saveToVault.mock.calls[0]![0]).toEqual(Buffer.from([9, 8, 7]));
-      expect(saveToVault.mock.calls[0]![1]).toMatch(/^Screenshot — /);
+      expect(saveToVault.mock.calls[0]![1]).toMatch(/^Kaipu Screenshot \d{4}-\d{2}-\d{2} at /);
       expect(copyToClipboard).not.toHaveBeenCalled();
       expect(out).toMatchObject({
         kind: "captured",

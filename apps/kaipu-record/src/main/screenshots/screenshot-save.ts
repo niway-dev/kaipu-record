@@ -1,17 +1,17 @@
-import { rm } from "node:fs/promises";
-import { join } from "node:path";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { broadcastLibraryChanged, currentVault } from "../library";
+import type { NewMedia } from "../library/library-vault";
 import { activeWorkspace, requireCaptureWorkspace, workspaceGate } from "../workspaces";
-
-/** Stable, sortable id; mirrors the recording writer's timestamp scheme. */
-function screenshotId(): string {
-  return `screenshot-${new Date().toISOString().replace(/[:.]/g, "-")}`;
-}
 
 export interface SaveScreenshotMeta {
   title: string;
   overwriteId?: string;
+  /**
+   * The identity the editor expects at `overwriteId` — required with it. When a rename
+   * moved the item, the overwrite follows it to its current id; it never writes over
+   * another shot that took the old name. An overwrite without it is refused.
+   */
+  overwriteAssetId?: string;
   /** A save the user asked for (not the capture's auto-save): puts the shot on the Continue list. */
   manual?: boolean;
 }
@@ -24,26 +24,51 @@ export async function saveScreenshotToVault(
   png: Buffer,
   meta: SaveScreenshotMeta,
 ): Promise<LocalRecording> {
-  const id = meta.overwriteId ?? screenshotId();
-  const isNew = meta.overwriteId === undefined;
   const vault = currentVault();
-  // Overwriting: a sidecar that cannot be read refuses the save before the PNG is replaced,
-  // instead of after (the metadata write below would throw with the new pixels already down).
-  if (!isNew) await vault.sidecar(id);
-  await vault.writeImage(id, png);
   const now = Date.now();
-  try {
-    // Preserve the original createdAt when overwriting; stamp it for a new item.
-    await vault.writeMeta(id, {
+  let id: string;
+  if (meta.overwriteId === undefined) {
+    // The file name follows the title (ADR 0035); the stub sidecar reserves it, so two
+    // shots in the same second get ` (2)` instead of overwriting each other.
+    const reservation = await vault.reserve({
+      kind: "screenshot",
       title: meta.title,
-      ...(isNew ? { createdAt: now } : {}),
-      ...(meta.manual ? { editorSavedAt: now } : {}),
+      createdAt: now,
     });
-  } catch (error) {
-    // A new item without a sidecar would be saved again under a second id when the
-    // caller retries, leaving this PNG orphaned. Remove it so the retry starts clean.
-    if (isNew) await rm(join(vault.directory, `${id}.png`), { force: true }).catch(() => {});
-    throw error;
+    id = reservation.id;
+    // A new item without a sidecar would be saved again under a second id when the caller
+    // retries, leaving this PNG orphaned. So a failure gives back what this save made — never
+    // a file that took `<id>.png` meanwhile.
+    let media: NewMedia;
+    try {
+      media = await vault.writeImage(id, png);
+    } catch (error) {
+      await vault.releaseReservation(reservation).catch(() => {});
+      throw error;
+    }
+    try {
+      await vault.writeMeta(id, {
+        title: meta.title,
+        createdAt: now,
+        ...(meta.manual ? { editorSavedAt: now } : {}),
+      });
+    } catch (error) {
+      await vault.discardCreated(reservation, media).catch(() => {});
+      throw error;
+    }
+  } else {
+    // Checked and written under the vault's names lock, so a rename cannot slip in
+    // between and leave the PNG resurrected under the old name. The original createdAt
+    // is preserved.
+    if (!meta.overwriteAssetId) {
+      throw new Error("screenshot save: an overwrite needs overwriteAssetId");
+    }
+    id = await vault.overwriteImage(
+      meta.overwriteId,
+      png,
+      { title: meta.title, ...(meta.manual ? { editorSavedAt: now } : {}) },
+      meta.overwriteAssetId,
+    );
   }
   const saved = await vault.describe(id);
   if (!saved) throw new Error(`screenshot save: could not describe ${id} after writing`);

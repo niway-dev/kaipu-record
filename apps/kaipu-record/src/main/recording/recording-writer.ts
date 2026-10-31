@@ -1,11 +1,21 @@
-import { constants } from "node:fs";
-import { copyFile, open, mkdir, rename, stat, unlink, type FileHandle } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { open, mkdir, stat, unlink, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { LocalRecording } from "@shared/types/library-storage";
 import type { RecordingFinalizeMeta } from "@shared/types/ipc";
 import { sanitizeRecordingCapture } from "@shared/recording-capture";
-import { LibraryVault } from "../library/library-vault";
+import { LibraryVault, type Reservation } from "../library/library-vault";
+import {
+  isFileExists,
+  type PlacedFile,
+  placeNew,
+  placeNoReplace,
+  replaceConfirmed,
+  takenError,
+} from "../library/safe-place";
+
+export { isFileExists };
 
 /** Staging folder inside the vault, so the final move is a same-volume rename. Exported for the sweep. */
 export const STAGING_DIR = join(".kaipu", "tmp");
@@ -18,8 +28,6 @@ export interface RecordingWriterDeps {
    * take instead of saving it anywhere else.
    */
   vaultDir: () => string | Promise<string>;
-  /** Generates a filesystem-safe, sortable recording id. */
-  newId: () => string;
   /** Wall clock (ms) — injectable for tests. */
   now?: () => number;
   /** Forces every in-progress file into this directory (tests). Unset: stage inside the vault. */
@@ -50,6 +58,8 @@ interface Session {
   closed?: boolean;
   /** Finalize could not place the file; the .part is kept for recovery. */
   stranded?: boolean;
+  /** Finalize owns the session: a release (a page gone, a reset) must not touch it. */
+  finalizing?: boolean;
 }
 
 /** Finalize could not move the finished file into the vault. The .part still exists at `tempPath`. */
@@ -66,28 +76,14 @@ export class FinalizeMoveError extends Error {
 }
 
 /**
- * Rename, else copy (cross-volume). A failed copy removes the half-written destination, never an existing file.
- * `overwrite` is for a destination the user already confirmed replacing (the save dialog asks): rename
- * replaces on POSIX, so the copy fallback must too. Vault and sweep moves leave it off and never clobber a take.
+ * Place a staging file at a vault path, never replacing a file there (`safe-place`): EEXIST
+ * when one is, whenever it arrived. A placed staging file that cannot be removed is set aside
+ * or marked, so the sweep never recovers it as a second recording.
  */
-export async function moveFile(
-  from: string,
-  to: string,
-  options: { overwrite?: boolean } = {},
-): Promise<void> {
-  try {
-    await rename(from, to);
-    return;
-  } catch {
-    // EXDEV or any rename failure: fall through to copy.
-  }
-  try {
-    await copyFile(from, to, options.overwrite ? 0 : constants.COPYFILE_EXCL);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "EEXIST") await unlink(to).catch(() => {});
-    throw error;
-  }
-  await unlink(from).catch(() => {});
+export async function placeTake(from: string, to: string): Promise<PlacedFile> {
+  const placed = await placeNew(from, to);
+  if (placed === "taken") throw takenError(to);
+  return placed;
 }
 
 /**
@@ -118,20 +114,27 @@ export class RecordingWriter {
     }
   }
 
+  /**
+   * Open a session. An id that is already open is refused: its file may be the only copy of a
+   * take. Every session gets its own staging file, created exclusively, so a new session can
+   * never truncate a partial another one left behind.
+   */
   async create(sessionId: string): Promise<{ tempPath: string }> {
+    if (this.sessions.has(sessionId)) {
+      throw new Error(`Recording session "${sessionId}" is already open`);
+    }
     // Outside the staging fallback on purpose: a workspace that is not connected refuses
     // the take here, it does not record into the temp folder.
     const vaultDir = await this.deps.vaultDir();
-    const tempPath = join(await this.stagingDir(vaultDir), `kaipu-rec-${sessionId}.mp4.part`);
-    // A session already under this id (a renderer restarted its counter) is released first:
-    // its handle must not outlive the map entry that replaces it.
-    const previous = this.sessions.get(sessionId);
-    if (previous) {
-      this.sessions.delete(sessionId);
-      await previous.queue;
-      await this.closeHandle(previous).catch(() => {});
+    const dir = await this.stagingDir(vaultDir);
+    const tempPath = join(dir, `kaipu-rec-${sessionId}-${randomUUID().slice(0, 8)}.mp4.part`);
+    const handle = await open(tempPath, "wx+");
+    if (this.sessions.has(sessionId)) {
+      // Another create for this id won the race while this one opened its file.
+      await handle.close().catch(() => {});
+      await unlink(tempPath).catch(() => {});
+      throw new Error(`Recording session "${sessionId}" is already open`);
     }
-    const handle = await open(tempPath, "w+");
     this.sessions.set(sessionId, { handle, tempPath, vaultDir, queue: Promise.resolve() });
     return { tempPath };
   }
@@ -182,6 +185,20 @@ export class RecordingWriter {
   async finalize(sessionId: string, meta: RecordingFinalizeMeta): Promise<LocalRecording> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error(`No recording session "${sessionId}"`);
+    if (session.finalizing) throw new Error(`Recording session "${sessionId}" is finalizing`);
+    session.finalizing = true;
+    try {
+      return await this.finalizeSession(sessionId, session, meta);
+    } finally {
+      session.finalizing = false;
+    }
+  }
+
+  private async finalizeSession(
+    sessionId: string,
+    session: Session,
+    meta: RecordingFinalizeMeta,
+  ): Promise<LocalRecording> {
     await session.queue; // flush in-flight positional writes before closing
 
     // A write failed mid-recording — the .part is truncated/holed. Refuse to move
@@ -190,30 +207,48 @@ export class RecordingWriter {
     if (session.failed) {
       await session.handle.close().catch(() => {});
       await unlink(session.tempPath).catch(() => {});
-      this.sessions.delete(sessionId);
+      this.forget(sessionId, session);
       throw session.failed;
     }
 
     // The folder bound at create(), never the one active now. Checked BEFORE touching the
     // session: a vault that vanished (unplugged drive, revoked folder) must leave the take
     // recoverable, and is never recreated (that would hide the take in an empty folder).
+    // The id is allocated from the title (ADR 0035): its stub sidecar reserves the stem, so a
+    // capture in the same second or a rename racing this one gets another name.
     const vaultDir = session.vaultDir;
     const vault = new LibraryVault(vaultDir);
-    const id = this.deps.newId();
+    const createdAt = this.now();
+    let reservation: Reservation;
+    let id: string;
     let dest: string;
     try {
       if (!(await stat(vaultDir)).isDirectory()) throw new Error(`not a folder: ${vaultDir}`);
+      reservation = await vault.reserve({ kind: "recording", title: meta.title, createdAt });
+      id = reservation.id;
       dest = await vault.filePath(id); // <id>.mp4 (does not exist yet)
     } catch (cause) {
       session.stranded = true;
       await this.closeHandle(session).catch(() => {});
       throw new FinalizeMoveError(session.tempPath, cause);
     }
-    await this.closeHandle(session);
-
     try {
-      await moveFile(session.tempPath, dest);
+      await this.closeHandle(session);
     } catch (cause) {
+      // The bytes are in the staging file, which is the only copy: strand the take so the
+      // renderer's abort after a failed finalize keeps it for salvage or the sweep.
+      await vault.releaseReservation(reservation).catch(() => {});
+      session.stranded = true;
+      throw new FinalizeMoveError(session.tempPath, cause);
+    }
+
+    let placed: PlacedFile;
+    try {
+      placed = await placeTake(session.tempPath, dest);
+    } catch (cause) {
+      // Release the reserved stem (its stub sidecar): never the media path, which may hold a
+      // file that took it meanwhile.
+      await vault.releaseReservation(reservation).catch(() => {});
       session.stranded = true;
       throw new FinalizeMoveError(session.tempPath, cause);
     }
@@ -229,7 +264,7 @@ export class RecordingWriter {
         title: meta.title,
         durationSeconds: meta.durationSeconds,
         ...(capture ? { capture } : {}),
-        createdAt: this.now(),
+        createdAt,
         derivedFromAssetId: meta.derivedFromAssetId ?? null,
         ...(meta.exportPreset ? { exportPreset: meta.exportPreset } : {}),
         ...(isFingerprint(meta.exportFingerprint)
@@ -241,36 +276,55 @@ export class RecordingWriter {
       if (!described) throw new Error(`Finalized recording "${id}" not found in vault`);
       recording = described;
     } catch (cause) {
-      if (!(await this.takeBack(vault, id, dest, session))) {
+      if (!(await this.takeBack(vault, reservation, { path: dest, file: placed }, session))) {
         // The media stays in the vault (listed without its sidecar) and staging has nothing
         // left: a salvage would fail, so the error must not offer one.
-        this.sessions.delete(sessionId);
+        this.forget(sessionId, session);
         throw cause;
       }
       session.stranded = true;
       throw new FinalizeMoveError(session.tempPath, cause);
     }
-    this.sessions.delete(sessionId);
+    this.forget(sessionId, session);
     return recording;
+  }
+
+  /** Drop `session` from the map, only while it is still the one under `sessionId`. */
+  private forget(sessionId: string, session: Session): void {
+    if (this.sessions.get(sessionId) === session) this.sessions.delete(sessionId);
+  }
+
+  /** The open session under `sessionId`, if it is the one whose staging file is `tempPath`. */
+  private bound(sessionId: string, tempPath?: string): Session | undefined {
+    const session = this.sessions.get(sessionId);
+    if (!session || (tempPath !== undefined && session.tempPath !== tempPath)) return undefined;
+    return session;
   }
 
   /**
    * Move a finalized take back from the vault to its staging path and remove what was written
-   * for it. If the media cannot be moved back, the vault keeps it: removing it would lose it.
+   * for it. Only the file placement created moves: another file at `dest` stays where it is.
+   * If the media cannot be moved back, the vault keeps it: removing it would lose it.
    * Resolves whether the take is back in staging.
    */
   private async takeBack(
     vault: LibraryVault,
-    id: string,
-    dest: string,
+    reservation: Reservation,
+    media: { path: string; file: PlacedFile },
     session: Session,
   ): Promise<boolean> {
     try {
-      await moveFile(dest, session.tempPath, { overwrite: true });
+      // Back to its own staging name, never a replacing move. A vault copy that cannot be
+      // removed undoes it: the take stays in the vault rather than in two places.
+      const back = await placeNoReplace(media.path, session.tempPath, {
+        stuck: "rollback",
+        expect: media.file,
+      });
+      if (back === "taken") return false;
     } catch {
       return false;
     }
-    await vault.remove(id).catch(() => {});
+    await vault.releaseReservation(reservation).catch(() => {});
     return true;
   }
 
@@ -284,7 +338,7 @@ export class RecordingWriter {
   async salvage(sessionId: string, destPath: string): Promise<void> {
     const session = this.sessions.get(sessionId);
     if (!session?.stranded) throw new Error(`No stranded recording session "${sessionId}"`);
-    await moveFile(session.tempPath, destPath, { overwrite: true }); // the save dialog confirmed it
+    await replaceConfirmed(session.tempPath, destPath); // the save dialog confirmed replacing
     this.sessions.delete(sessionId);
   }
 
@@ -299,38 +353,56 @@ export class RecordingWriter {
    * leaked. A stranded take is kept, so the save dialog can still salvage it.
    */
   async releaseAll(): Promise<void> {
-    const released = [...this.sessions.entries()].filter(([, session]) => !session.stranded);
-    for (const [id] of released) this.sessions.delete(id);
-    await Promise.all(
-      released.map(async ([, session]) => {
-        await session.queue;
-        await this.closeHandle(session).catch(() => {});
-      }),
-    );
+    await Promise.all(this.ids().map((id) => this.release(id)));
   }
 
-  async abort(sessionId: string): Promise<void> {
-    const session = this.sessions.get(sessionId);
-    if (!session) return;
+  /**
+   * `releaseAll` for one session: a take whose page is gone (a reload) is not a discard, so
+   * its `.part` stays for the stranded-take sweep. Only `abort` (the user cancelled) deletes.
+   * With `tempPath`, only the session that owns that staging file is released, never a later
+   * one under the same id. A session being finalized belongs to its finalize.
+   */
+  async release(sessionId: string, tempPath?: string): Promise<void> {
+    const session = this.bound(sessionId, tempPath);
+    if (!session || session.stranded || session.finalizing) return;
+    this.sessions.delete(sessionId);
+    await session.queue;
+    await this.closeHandle(session).catch(() => {});
+  }
+
+  /**
+   * Discard an export's partial, a stranded one included: an export's source is still in the
+   * library, so its partial is no take to recover, and a kept one would be swept up as a
+   * recording. Bound to the session that owns `tempPath` (required), so it can never reach a
+   * recording's partial or a later session; a finalized take is no longer a session, so its
+   * vault file is never touched.
+   */
+  async discardExport(sessionId: string, tempPath: string): Promise<void> {
+    const session = this.bound(sessionId, tempPath);
+    if (!session || session.finalizing) return;
+    this.sessions.delete(sessionId);
+    await session.queue;
+    await this.closeHandle(session).catch(() => {});
+    await unlink(session.tempPath).catch(() => {});
+  }
+
+  /** Discard a session and its partial. `tempPath` binds it to one session, as in `release`. */
+  async abort(sessionId: string, tempPath?: string): Promise<void> {
+    const session = this.bound(sessionId, tempPath);
+    if (!session || session.finalizing) return;
     // A stranded take is kept on disk for recovery. The renderer aborts after every failed finalize.
     if (session.stranded) {
       this.sessions.delete(sessionId);
       return;
     }
-    await session.queue; // let in-flight writes settle before closing the handle
-    await session.handle.close().catch(() => {});
-    await unlink(session.tempPath).catch(() => {});
     this.sessions.delete(sessionId);
+    await session.queue; // let in-flight writes settle before closing the handle
+    await this.closeHandle(session).catch(() => {});
+    await unlink(session.tempPath).catch(() => {});
   }
 }
 
 /** A renderer-supplied export fingerprint: a short token ("whole" or "edit:<hash>"). */
 function isFingerprint(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 64;
-}
-
-/** Default id: sortable, filesystem-safe, second-resolution timestamp. */
-export function timestampId(now: number): string {
-  const iso = new Date(now).toISOString().replace(/[:.]/g, "-").replace("T", "-").slice(0, 19);
-  return `recording-${iso}`;
 }

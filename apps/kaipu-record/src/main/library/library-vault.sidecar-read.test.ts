@@ -47,7 +47,9 @@ describe("LibraryVault — sidecar read errors never mint an identity", () => {
       expect(item).toMatchObject({ id: "clip", metadataIssue: "unreadable", tagIds: [] });
       expect(item.assetId).toBe("unreadable:clip");
 
-      await expect(vault.rename("clip", "New")).rejects.toBeInstanceOf(SidecarUnavailableError);
+      await expect(
+        vault.renameItem({ id: "clip", assetId: "unreadable:clip" }, "New"),
+      ).rejects.toBeInstanceOf(SidecarUnavailableError);
       await expect(
         vault.backfill("clip", { durationSeconds: 9, thumbnail: null }),
       ).rejects.toThrow();
@@ -81,7 +83,9 @@ describe("LibraryVault — sidecar read errors never mint an identity", () => {
       try {
         const vault = new LibraryVault(directory);
         expect((await vault.describe("clip"))?.metadataIssue).toBe("unreadable");
-        await expect(vault.rename("clip", "New")).rejects.toThrow();
+        await expect(
+          vault.renameItem({ id: "clip", assetId: "unreadable:clip" }, "New"),
+        ).rejects.toThrow();
       } finally {
         await chmod(sidecarFile("clip"), 0o644);
       }
@@ -107,7 +111,9 @@ describe("LibraryVault — sidecar read errors never mint an identity", () => {
       });
       // Listed again and renamed: still the same single copy, and the file is untouched.
       await vault.list();
-      await expect(vault.rename("clip", "New")).rejects.toBeInstanceOf(SidecarUnavailableError);
+      await expect(
+        vault.renameItem({ id: "clip", assetId: "unreadable:clip" }, "New"),
+      ).rejects.toBeInstanceOf(SidecarUnavailableError);
 
       expect(await readFile(sidecarFile("clip"), "utf-8")).toBe(bad);
       const files = await metaFiles();

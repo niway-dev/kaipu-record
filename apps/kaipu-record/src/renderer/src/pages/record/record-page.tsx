@@ -31,6 +31,7 @@ import {
 import { exclusive } from "@renderer/features/settings-controls/use-settings-disclosure";
 import { useTranslations } from "@kaipu/i18n";
 import type { CaptureMode } from "@shared/types/screenshot-capture";
+import { ReconcileBanner } from "@renderer/features/library/reconcile/reconcile-banner";
 import { useOptionalWorkspaces } from "@renderer/features/workspaces/workspaces-context";
 import { WorkspaceNotConnectedNotice } from "@renderer/features/workspaces/not-connected-notice";
 import styles from "./record-page.module.css";
@@ -271,6 +272,7 @@ export function RecordPage(): React.JSX.Element {
           )}
         </div>
         <p className={styles.subtitle}>{t("subtitle")}</p>
+        <ReconcileBanner />
 
         <RecordModeButtons
           variant="page"
