@@ -1,53 +1,84 @@
 .panel {
   min-width: 0;
-  padding: 13px 14px;
-  border-radius: 11px;
-  border: 1px solid var(--border);
-  background: var(--bg-card);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .heading {
+  flex: 1;
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: var(--font-weight-medium);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
 
-.empty {
-  margin: 9px 0 0;
+.openExport {
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
   font-size: var(--font-size-sm);
-  color: var(--text-muted);
+  color: var(--text-secondary);
+  cursor: pointer;
 }
 
-.list {
+.openExport:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Two copies to a row. */
+.grid {
   list-style: none;
-  margin: 9px 0 0;
+  margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .row {
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 9px;
-  min-height: 34px;
-  padding: 4px 6px;
-  margin: 0 -6px;
-  border-radius: 7px;
+  gap: 10px;
+  min-height: 50px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+}
+
+/* The logo, name, facts and Ready go to the copy's page; Drag sits beside the link. */
+.link {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: -4px;
+  padding: 4px;
+  border-radius: 6px;
   color: var(--text-primary);
   text-decoration: none;
 }
 
-a.row:hover {
-  background: var(--bg-card-hover);
+.link:hover .name {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
-a.row:focus-visible {
+.link:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 1px;
 }
@@ -57,23 +88,36 @@ a.row:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   border-radius: 27%;
   background: #2a2a30;
   color: #fff;
 }
 
-.name {
+.text {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.name,
+.facts {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
 }
 
-.size {
+.name {
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.facts {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
   color: var(--text-muted);
 }
 
@@ -82,15 +126,48 @@ a.row:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: var(--font-weight-semibold);
   color: var(--tone-saving);
 }
 
-/* Amber while it encodes, as in the design: work in flight, not yet ready. */
-.progress {
+.bar {
   flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--tone-heavy);
+  width: 70px;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: var(--border);
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  background: var(--accent-primary);
+  transition: width 0.4s ease;
+}
+
+.drag {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid var(--border-light);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: var(--font-weight-semibold);
+  cursor: grab;
+}
+
+.drag:hover {
+  background: var(--bg-card-hover);
+}
+
+.drag:active {
+  cursor: grabbing;
 }

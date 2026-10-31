@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { pathForHandOff } from "./use-recording-ready-hand-offs";
 
 describe("pathForHandOff", () => {
-  it("a chip opens Prepare on its destination, More places on none", () => {
+  it("a chip opens Export on its destination, More places on none", () => {
     expect(pathForHandOff({ target: "prepare", assetId: "a 1", destination: "github" })).toBe(
-      "/prepare/a%201?to=github",
+      "/export/a%201?to=github",
     );
     expect(pathForHandOff({ target: "prepare", assetId: "a1", destination: null })).toBe(
-      "/prepare/a1",
+      "/export/a1",
     );
   });
 

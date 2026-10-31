@@ -14,9 +14,13 @@ export const ROUTES = {
   record: "/",
   library: "/library",
   libraryDetail: "/library/:assetId",
-  /** Prepare a copy of a recording for where it is going (NIW2-578); `?to=` preselects one. */
+  /** Export a copy of a recording for where it is going; `?to=` preselects a destination. */
+  export: "/export/:assetId",
+  /** Export with no recording yet: drop or pick a video, from Kaipu or from outside. */
+  exportNew: "/export",
+  /** Legacy (Prepare, NIW2-578), redirects to `export` keeping the query. */
   prepare: "/prepare/:assetId",
-  /** Prepare with no recording yet: drop or pick an outside video to prepare it (NIW2-587). */
+  /** Legacy (Prepare with no recording, NIW2-587), redirects to `exportNew` keeping the query. */
   prepareNew: "/prepare",
   screenshots: "/screenshots",
   /** The Editor workspace: recent items when nothing is open. */

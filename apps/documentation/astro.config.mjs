@@ -106,6 +106,7 @@ export default defineConfig({
             { slug: "backlog/background-copy-toasts" },
             { slug: "backlog/prepare-drop-zone" },
             { slug: "backlog/floating-ready-window" },
+            { slug: "backlog/export-screen" },
             { slug: "backlog/editor-space-and-window-presets" },
             { slug: "backlog/capture-panel-latency" },
             { slug: "backlog/editor-title-input" },

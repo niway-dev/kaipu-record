@@ -1,6 +1,6 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import type { ExportJobInfo } from "@renderer/features/video-editor/export/export-runner";
 import { MasterCopiesPanel, type RunningCopy, runningCopyOf } from "./master-copies-panel";
@@ -25,29 +25,36 @@ const copy = (overrides: Partial<LibraryVideo>): LibraryVideo => ({
   ...overrides,
 });
 
+const probe = {
+  width: 1920,
+  height: 1080,
+  durationSec: 182,
+  fps: 30,
+  hasAudio: true,
+  sampleRate: 48000,
+};
+
 function renderPanel(
   copies: LibraryVideo[],
   running: RunningCopy | null = null,
-  now = () => 100_000,
+  { now = () => 100_000, onOpenExport }: { now?: () => number; onOpenExport?: () => void } = {},
 ) {
   render(
     <MemoryRouter>
-      <MasterCopiesPanel copies={copies} running={running} now={now} />
+      <MasterCopiesPanel
+        copies={copies}
+        running={running}
+        probe={probe}
+        onOpenExport={onOpenExport}
+        now={now}
+      />
     </MemoryRouter>,
   );
-  return screen.getByRole("region", { name: "Copies from this master" });
+  return screen.getByRole("region", { name: "Copies from this original" });
 }
 
-describe("MasterCopiesPanel (NIW2-585)", () => {
-  it("says there are no copies yet in one muted line", () => {
-    const panel = renderPanel([]);
-    expect(
-      within(panel).getByText("No copies yet. Each one you make shows up here."),
-    ).toBeVisible();
-    expect(within(panel).queryByRole("list")).toBeNull();
-  });
-
-  it("names a destination copy by its destination and links a ready one to its page", () => {
+describe("MasterCopiesPanel (Export v3, NIW2-585)", () => {
+  it("names a destination copy by its destination, with its picture and file size", () => {
     const panel = renderPanel([
       copy({ assetId: "yt", export: { preset: "youtube-1440", fingerprint: "whole" } }),
       copy({
@@ -56,12 +63,15 @@ describe("MasterCopiesPanel (NIW2-585)", () => {
         export: { preset: "light", fingerprint: "whole" },
       }),
     ]);
-    const youtube = within(panel).getByRole("link", { name: /^YouTube 1440p · 22 MB/ });
+    const youtube = within(panel).getByRole("link", { name: /^YouTube 1440p/ });
     expect(youtube).toHaveAttribute("href", "/library/yt");
+    expect(within(youtube).getByText("2560 × 1440 · 22 MB")).toBeVisible();
     expect(within(youtube).getByText("Ready")).toBeVisible();
-    expect(
-      within(panel).getByRole("link", { name: /^GitHub · Jira · Linear · 9.0 MB/ }),
-    ).toHaveAttribute("href", "/library/gh");
+    expect(within(panel).getByRole("link", { name: /^GitHub · Jira · Linear/ })).toHaveAttribute(
+      "href",
+      "/library/gh",
+    );
+    expect(within(panel).getByText("9.0 MB", { exact: false })).toBeVisible();
   });
 
   it("an editor export or a GIF goes by its own title: it was not made for a destination", () => {
@@ -71,24 +81,49 @@ describe("MasterCopiesPanel (NIW2-585)", () => {
         title: "Take (edited)",
         export: { preset: "balanced", fingerprint: "abc" },
       }),
-      copy({ assetId: "gif", kind: "gif", title: "Take (GIF)", export: null }),
+      copy({
+        assetId: "gif",
+        kind: "gif",
+        title: "Take (GIF)",
+        export: null,
+        gif: { width: 800, height: 450, fps: 12 },
+      }),
     ]);
     expect(within(panel).getByRole("link", { name: /^Take \(edited\)/ })).toBeVisible();
-    expect(within(panel).getByRole("link", { name: /^Take \(GIF\)/ })).toBeVisible();
+    const gif = within(panel).getByRole("link", { name: /^Take \(GIF\)/ });
+    expect(within(gif).getByText("800 × 450 · 22 MB")).toBeVisible();
     expect(within(panel).queryByText(/Slack/)).toBeNull();
   });
 
-  it("shows the running copy with its progress and time left, above the ready ones", () => {
+  it("Drag hands the real file to main for a native drag, under the copy's title", () => {
+    const startFileDrag = vi.fn();
+    window.electronAPI.startFileDrag = startFileDrag;
+    const panel = renderPanel([copy({ id: "copy-file", title: "Take (for sharing)" })]);
+    const drag = within(panel).getByRole("button", {
+      name: "Drag Slack · Discord · Email into another app",
+    });
+    expect(drag).toHaveAttribute("draggable", "true");
+    fireEvent.dragStart(drag);
+    expect(startFileDrag).toHaveBeenCalledWith("copy-file", "Take (for sharing)");
+  });
+
+  it("a copy with no local file has nothing to drag", () => {
+    const panel = renderPanel([copy({ id: null })]);
+    expect(within(panel).queryByRole("button", { name: /^Drag/ })).toBeNull();
+  });
+
+  it("shows the running copy with its progress and time left, first", () => {
     // 38% after 70 s: about 114 s left, rounded to 2 min.
     const panel = renderPanel(
       [copy({ assetId: "chat" })],
       { presetId: "youtube-4k", wholeRecording: true, fraction: 0.38, attemptStartedAt: 30_000 },
-      () => 100_000,
+      { now: () => 100_000 },
     );
     const rows = within(panel).getAllByRole("listitem");
     expect(rows[0]).toHaveTextContent("YouTube 4K");
-    expect(within(rows[0]!).getByText("38% · 2 min")).toBeVisible();
+    expect(within(rows[0]!).getByText("Exporting · 38% · 2 min left")).toBeVisible();
     expect(within(rows[0]!).queryByRole("link")).toBeNull();
+    expect(within(rows[0]!).queryByRole("button", { name: /^Drag/ })).toBeNull();
     expect(rows[1]).toHaveTextContent("Slack · Discord · Email");
   });
 
@@ -99,8 +134,14 @@ describe("MasterCopiesPanel (NIW2-585)", () => {
       fraction: 0.01,
       attemptStartedAt: 99_000,
     });
-    expect(within(panel).getByText("1%")).toBeVisible();
-    expect(within(panel).queryByText(/No copies yet/)).toBeNull();
+    expect(within(panel).getByText("Exporting · 1%")).toBeVisible();
+  });
+
+  it("Open in Export → shows only where there is an export screen to open", () => {
+    const onOpenExport = vi.fn();
+    const panel = renderPanel([copy({})], null, { onOpenExport });
+    fireEvent.click(within(panel).getByRole("button", { name: "Open in Export →" }));
+    expect(onOpenExport).toHaveBeenCalledOnce();
   });
 });
 

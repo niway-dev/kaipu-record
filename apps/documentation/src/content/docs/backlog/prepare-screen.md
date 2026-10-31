@@ -83,14 +83,37 @@ GIFs are not preparable.
   `showRecordingSavedCard`, its NIW2-218 name). It replaces the "Recording saved" card and the
   inline panel NIW2-578 first shipped. It lives in the app, not in a floating window, because
   main already shows and focuses the app window when a recording stops.
-- **The recording page** (reworked in NIW2-585 — "Prepare for…" did not say what it does): the
-  recording is the **master**. A "MASTER · FULL QUALITY" tag sits over the player, the meta line
-  ends "This is your original. It never changes.", and **Send to…** replaces Share as the primary
-  button. Under the title, a "Where is this going?" strip (YouTube, GitHub, More) sits next to
-  **Copies from this master**: each copy with its destination, size and "✓ Ready", or
-  "38% · 2 min" while its background export runs. On a master the heavy-to-send hint lives in the
-  strip (its GitHub chip makes the light copy); a heavy copy keeps the banner with
-  "Prepare a light copy →".
+- **The recording page** (reworked in NIW2-585, then laid out after Claude Design
+  `Kaipu Export v3.dc.html`, sections 1 and 2, on `feature/recording-detail-title-and-copies` —
+  no Linear ticket, the workspace hit its issue limit): the recording is the **master**.
+  - **Title row.** The top row is "← Library", the title (rename pencil, the full width the row
+    leaves, ellipsis only at that edge) and a "MASTER · FULL QUALITY" tag. The owner's feedback:
+    the title shared its row with the actions and was truncated as buttons were added. The
+    metadata line sits under it — Local · age · duration · resolution (once the file is read) ·
+    size · N copies — and the action row under the player holds only buttons, wrapping as it
+    grows. The tag also stays over the player.
+  - **Before the first copy** (and right after recording): a dismissable green notice
+    ("Saved to your Library. This is the original — every copy you export is made from it and
+    it never changes.", only when the page was opened by a fresh recording), the player, and at
+    the bottom **Where is it going?**: one row of equal cards, one per destination — logo, name,
+    short line, and the size of its copy (amber where the platform compresses again, teal where
+    it plays as is; the archive card shows the recording's own size). A card opens Prepare on
+    that destination through `preparePath`; "Not now" hides the panel for that visit and brings
+    back **Export a copy** among the actions. On a heavy master the heavy-to-send hint sits
+    inside this panel (its GitHub card makes the light copy). It replaces the "Where is this
+    going?" strip.
+  - **With copies**: a pink **Export a copy** first among the actions (it replaces "Send to…")
+    and, at the bottom, **Copies from this original** with "Open in Export →" and the copies two
+    to a row: the destination logo and name, "2560 × 1440 · 566 MB" (the picture size follows
+    from the master's probe and the copy's preset) or "Exporting · 38% · 2 min left" with a bar,
+    ✓ Ready, and a **Drag** handle that starts a native file drag through the same IPC as the
+    ready card. A copy's name links to its page, which links back to its source.
+  - A heavy copy, or a heavy master with copies, keeps the banner with "Prepare a light copy →".
+  - The page now reads the file whenever it shows a local recording (for the resolution and the
+    estimates), not only when it is heavy.
+  - The design has seven destinations (email apart from Slack · Discord); the code has six, and
+    the panel shows what `DESTINATION_IDS` lists, so the Export screen and this panel cannot
+    disagree.
 - **The Library**: a Send to… icon button on every local recording's card and row, next to
   Edit; an original's card and row carry the master tag instead of the Recording badge.
 
@@ -155,7 +178,9 @@ recording, a recording-quality floor, and uploading to any platform.
 
 Record a short clip → the "Your video is ready" card appears top-right → YouTube → Prepare opens
 on YouTube, 1440p selected, at the default window size with no scrollbar → try 4K → press Enter →
-back on the recording: the master tag over the player, the copy under Copies from this master with
-its progress, "Preparing your YouTube copy…" top-right, then "Your YouTube copy is ready" → the copy is in the Library, and its row on Prepare reads
-✓ Ready. Then GitHub (Light) from the "Where is this going?" chip, Send to… (no `?to=`, so Prepare
-opens on YouTube), Fit / Fill on Reels, and a screenshot's page (no Prepare).
+back on the recording: the master tag by the title and over the player, the copy under Copies
+from this original with its progress, "Preparing your YouTube copy…" top-right, then "Your YouTube
+copy is ready" → the copy is in the Library, and its row on Prepare reads ✓ Ready. Drag the copy's
+row out of the page into Finder. Then GitHub from the "Where is it going?" panel on another fresh
+recording, Export a copy (no `?to=`, so Prepare opens on YouTube), Fit / Fill on Reels, and a
+screenshot's page (no Prepare). At 900 × 670 the title, tag and actions never truncate each other.

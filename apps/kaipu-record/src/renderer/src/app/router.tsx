@@ -5,7 +5,7 @@ import { RouteErrorBoundary, NotFound } from "@renderer/shell/route-error";
 import { RecordPage } from "@renderer/pages/record/record-page";
 import { LibraryPage } from "@renderer/pages/library/library-page";
 import { LibraryDetailPage } from "@renderer/pages/library-detail/library-detail-page";
-import { PreparePage } from "@renderer/pages/prepare/prepare-page";
+import { ExportPage, LegacyPrepareRedirect } from "@renderer/pages/export/export-page";
 import { SettingsLayout } from "@renderer/pages/settings/settings-layout";
 import {
   AppSettingsPage,
@@ -65,10 +65,13 @@ const router = createHashRouter([
           { index: true, element: <RecordPage /> },
           { path: ROUTES.library, element: <LibraryPage /> },
           { path: ROUTES.libraryDetail, element: <LibraryDetailPage /> },
-          // Prepare a copy for a destination (NIW2-578). Reached from a recording, not the sidebar.
-          { path: ROUTES.prepare, element: <PreparePage /> },
-          // Prepare with no recording: a drop zone for an outside video (NIW2-587).
-          { path: ROUTES.prepareNew, element: <PreparePage /> },
+          // Export a copy of a recording for where it is going; its own rail entry.
+          { path: ROUTES.export, element: <ExportPage /> },
+          // Export with no video: the door for any video, from Kaipu or from outside.
+          { path: ROUTES.exportNew, element: <ExportPage /> },
+          // Prepare was the screen's old name: its URLs land on Export, query kept.
+          { path: ROUTES.prepare, element: <LegacyPrepareRedirect /> },
+          { path: ROUTES.prepareNew, element: <LegacyPrepareRedirect /> },
           { path: ROUTES.screenshots, element: <ScreenshotsPage /> },
           // Editor workspace: every Edit lands here, addressed by URL.
           { path: ROUTES.editor, element: <EditorHomePage /> },
