@@ -6,17 +6,7 @@
  * Pure Node, no Electron: the IPC wiring and the file dialog live in `./index.ts`.
  */
 import { basename, extname, isAbsolute, join, relative } from "node:path";
-import {
-  access,
-  constants,
-  copyFile,
-  mkdir,
-  open,
-  realpath,
-  rename,
-  rm,
-  stat,
-} from "node:fs/promises";
+import { access, constants, copyFile, mkdir, open, realpath, rm, stat } from "node:fs/promises";
 import { ALL_FORMATS, FilePathSource, Input } from "mediabunny";
 import {
   importableVideoExtension,
@@ -27,7 +17,8 @@ import {
   type ImportVideoResult,
 } from "@shared/import-video";
 import type { LocalRecording } from "@shared/types/library-storage";
-import { uniqueTempPath, withLock } from "./atomic-write";
+import { uniqueTempPath } from "./atomic-write";
+import { type PlacedFile, placeNew, takenError } from "./safe-place";
 import { LibraryVault } from "./library-vault";
 
 /** What the vault stores about an imported video, read from its container. */
@@ -135,9 +126,11 @@ async function copyDurably(source: string, target: string): Promise<void> {
 }
 
 /**
- * Pick a free id and move the staged copy in under it. Under a per-vault lock so two
- * imports in the same second never pick the same id. The sidecar is written first: a
- * sidecar without media is never listed, while media without its sidecar would be.
+ * Reserve a free id through the vault and place the staged copy under it. The vault's
+ * `reserve` takes the stem under its names lock and writes a stub record (ADR 0035), so two
+ * imports — or an import and a capture — in the same second never pick the same name. The
+ * copy is placed without replacing anything, and every failure gives back only what this
+ * import made: the reservation, or the placed file and the reservation.
  */
 async function commitImport(
   vault: LibraryVault,
@@ -146,11 +139,26 @@ async function commitImport(
   stem: string,
   meta: { title: string; createdAt: number; probe: VideoProbe },
 ): Promise<string> {
-  return withLock(`import:${vault.directory}`, async () => {
-    let id = stem;
-    for (let n = 2; (await vault.hasMedia(id)) || (await exists(vault.sidecarPath(id))); n++) {
-      id = `${stem}-${n}`;
-    }
+  const reservation = await vault.reserve({
+    kind: "recording",
+    title: meta.title,
+    createdAt: meta.createdAt,
+    stem,
+  });
+  const { id } = reservation;
+  const dest = join(vault.directory, `${id}${ext}`);
+  let placed: PlacedFile | "taken";
+  try {
+    placed = await placeNew(staged, dest);
+  } catch (error) {
+    await vault.releaseReservation(reservation).catch(() => {});
+    throw error;
+  }
+  if (placed === "taken") {
+    await vault.releaseReservation(reservation).catch(() => {});
+    throw takenError(dest);
+  }
+  try {
     await vault.writeMeta(id, {
       title: meta.title,
       durationSeconds: meta.probe.durationSeconds,
@@ -163,23 +171,11 @@ async function commitImport(
         ratio: null,
       },
     });
-    try {
-      await rename(staged, join(vault.directory, `${id}${ext}`));
-    } catch (error) {
-      await rm(vault.sidecarPath(id), { force: true }).catch(() => {});
-      throw error;
-    }
-    return id;
-  });
-}
-
-async function exists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
+  } catch (error) {
+    await vault.discardCreated(reservation, { path: dest, file: placed }).catch(() => {});
+    throw error;
   }
+  return id;
 }
 
 /**

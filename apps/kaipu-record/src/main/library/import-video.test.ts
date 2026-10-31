@@ -126,13 +126,15 @@ describe("importVideoFile", () => {
     expect(await vaultFiles()).toEqual([]);
   });
 
-  it("never overwrites an existing item: a clash gets the next free id", async () => {
+  it("never overwrites an existing item: a clash gets the next free name, like every capture", async () => {
     const first = await importVideoFile(await source("a.mp4", Buffer.from("A")), deps());
     const second = await importVideoFile(await source("b.mp4", Buffer.from("B")), deps());
     expect((first as { id: string }).id).toBe("imported-2026-10-30-12-00-00");
-    expect((second as { id: string }).id).toBe("imported-2026-10-30-12-00-00-2");
+    expect((second as { id: string }).id).toBe("imported-2026-10-30-12-00-00 (2)");
     expect(await readFile(join(vaultDir, "imported-2026-10-30-12-00-00.mp4"), "utf-8")).toBe("A");
-    expect(await readFile(join(vaultDir, "imported-2026-10-30-12-00-00-2.mp4"), "utf-8")).toBe("B");
+    expect(await readFile(join(vaultDir, "imported-2026-10-30-12-00-00 (2).mp4"), "utf-8")).toBe(
+      "B",
+    );
   });
 
   it("does not reuse the id of an item whose local copy was removed (its sidecar stays)", async () => {
@@ -142,7 +144,7 @@ describe("importVideoFile", () => {
       JSON.stringify({ assetId: "cloud-only", localRemovedAt: 1 }),
     );
     const item = await importVideoFile(await source("c.webm"), deps());
-    expect((item as { id: string }).id).toBe("imported-2026-10-30-12-00-00-2");
+    expect((item as { id: string }).id).toBe("imported-2026-10-30-12-00-00 (2)");
   });
 
   it("refuses a file that is already in the vault (a card dragged back in)", async () => {
