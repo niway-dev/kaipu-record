@@ -1,0 +1,110 @@
+---
+title: "ADR 0038: The webcam is a viewport layer, composed after the zoom crop and after the output framing"
+description: In the editor the webcam is a global layout plus source-anchored hide/override segments, positioned in the output frame, drawn by the shared composer after the camera path's crop and after the fixed-canvas framing, so it stays in its corner while the zoom moves and is never cropped by Fill. The preview draws it in its own untransformed slot; Share composes it at the recorded layout and its reuse fingerprint accounts for it. The original file stays screen-only.
+---
+
+# ADR 0038: The webcam is a viewport layer, composed after the zoom crop and after the output framing
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — design approved 2026-10-30, nothing implemented — [design](/specs/2026-10-30-webcam-track-design/), Linear [NIW2-565](https://linear.app/niway/issue/NIW2-565)                                                                                                                                                                                                                                                    |
+| Date          | 2026-10-30                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Relates to    | [0037](/architecture/decisions/0037-webcam-is-its-own-track-and-the-bubble-is-excluded-from-capture/) (the track this layer reads), [0003](/architecture/decisions/0003-export-never-replaces-the-original/) (exports are new files; the original keeps no face), [plan 09](/plans/video-editor-v2/09-preview-compositing/) (the preview's layer contract), [plan 11](/plans/video-editor-v2/11-export-pass/) (the composer) |
+| Superseded by | —                                                                                                                                                                                                                                                                                                                                                                                                                            |
+
+## Context
+
+The editor composes every output frame in one order — `frame → redactions → content-pinned
+overlays → camera path crop` — in a composer shared by the MP4 and the GIF workers so the two
+can never disagree on privacy (`compose-output-frame.ts`). The preview expresses the same order
+as DOM layers: a `.content` element that receives the camera path as a CSS transform, and a
+`chrome` slot that does not (plan 09). Annotations are content-pinned and anchored to timeline
+time; zoom segments and redactions are anchored to source time.
+
+ADR 0037 gives the editor a raw webcam file beside the screen. Where it is drawn decides whether
+the face survives a zoom (the whole reason for the track), whether it follows cuts, whether a
+Vertical Fill export crops it away, and what "Share" means for a recording whose original has no
+face. Screen Studio, Cap and Tella all draw the webcam as an overlay pinned to the viewport that
+stays in its corner while the zoom moves, optionally shrinking during a zoom, with time-ranged
+layouts (Cap's style segments, Tella's layout sections, Screen Studio's layout track).
+
+## Decision
+
+1. **The webcam is a viewport layer**, not content. It is drawn in output-frame coordinates,
+   after the camera path's crop, so the zoom moves the content under it and the face stays where
+   the user put it. For fixed-canvas presets (Vertical, Square) it is drawn **after** the framer,
+   onto the output canvas, so Fill never crops it and its position is relative to the real output.
+2. **The scene stores a global layout plus source-anchored segments**:
+   `scene.webcam = { layout, segments } | null`. `layout` carries shape, size (a fraction of the
+   output height), position (a normalized centre in the output frame), mirror, framing,
+   `scaleDuringZoom` and shadow. `segments` are sorted, non-overlapping, in source seconds like
+   zoom segments, each `hidden` or an `override` of some layout fields. `null` means the recording
+   has no webcam track, decided by the sidecar, never by the session.
+3. **The layout is seeded from the recording**: the bubble's shape, size, corner, mirror and
+   framing at record time travel on the sidecar (`webcam.recordedLayout`) and become the initial
+   layout, so the first preview matches what the user saw while recording. Mirror and framing are
+   layout properties applied at composition; the file is raw.
+4. **One composer, one more step.** `createOutputComposer` draws the layer last, for the MP4 and
+   the GIF workers alike; the preview draws it in a third slot — above `.content`, below
+   `chrome`, untransformed — as a second `<video>` kept in step with the main one by the frame
+   clock. The "direct" frame path (no zoom, no region) still draws the layer when a webcam exists.
+5. **Share composes the webcam at its recorded layout.** The whole-recording export, which
+   encodes the source without edits, builds its plan from the seeded initial scene; its reuse
+   fingerprint is `whole:<hash(recordedLayout)>` for a recording with a webcam, so an older
+   "whole" export is never reused without the face. The original file stays screen-only (ADR
+   0003).
+6. **The session stays version 1.** `webcam` is additive: absent means `null`; wrong types reject
+   the session; numbers clamp; overlapping segments are dropped. Older builds ignore the key.
+
+## Alternatives rejected
+
+- **Content-pinned, drawn before the crop**, like annotations. The face would zoom with the
+  content and leave the frame — the exact failure this track exists to fix. Kept as a possible
+  variant if a user ever wants the bubble to travel with a zoom.
+- **Reuse `VideoOverlay`** (box, arrow, text) with a new kind. Overlays are content-pinned and
+  timeline-anchored; the webcam must stay in the viewport and follow cuts in source time. Two
+  anchoring rules on one list would confuse every consumer.
+- **Per-zoom-segment webcam settings.** Couples two things the user edits separately and cannot
+  express "hide the webcam here" without a zoom.
+- **Compose before the framer**, on the view canvas. Simpler, but Fill crops a corner bubble
+  away and Fit scales it with the padding; the position would mean something different per
+  preset.
+- **Share exports the raw screen file.** Honest about the original but wrong about what the user
+  recorded: they saw the bubble the whole time. Share is "what I recorded", and the raw file is
+  now one input to that, not the answer.
+- **Burn the layout into the webcam file at record time** (mirror, framing). Cheaper to compose,
+  but destructive: a mirrored text or a tight framing could not be undone in the editor.
+
+## Consequences
+
+- `scene.ts`, `session.ts`, `use-video-scene.ts` (history), `export-plan.ts`,
+  `export-messages.ts`, both workers, `compose-output-frame.ts`, `export-reuse.ts`,
+  `preview-stage.tsx` and the inspector/timeline gain the layer. A recording with
+  `webcam: null` renders exactly as today, lane and inspector section included.
+- The pure layout math (`webcam/webcam-layout.ts`) is DOM-free and worker-safe, under the same
+  bundle invariant as `compose-frame.ts`.
+- Exports decode a second file at ≤ 720p per output frame; the size estimate moves only if the
+  measured cost exceeds 5 %.
+- The preview runs two `<video>` elements; a drift rule re-seeks the webcam when it strays by
+  more than 80 ms. If that stutters on hardware, the preview falls back to the worker's lockstep
+  decoder.
+- "Hold to see original" hides the layer: the original has no face, and the chip says UNEDITED.
+- The library's detail page label ("ORIGINAL · Your edits are not shown here") now also covers
+  the webcam, which is correct and worth a word in the label.
+
+## Non-goals
+
+- Camera-only, split-screen or fullscreen-webcam scenes and animated layout transitions.
+- Snapping, magnetism or collision avoidance between the layer and annotations.
+- A layer for recordings made before the track existed (their bubble is in the pixels).
+
+## Reopen when
+
+- The owner wants a scene where the webcam is the subject (camera-only, split-screen): the
+  layer then becomes one of several scene modes and the composer order gains a branch.
+- Users ask for the bubble to follow the zoomed content: add the content-pinned variant as a
+  layout property, drawn before the crop, without changing the viewport default.
+- The preview's two-element sync fails on hardware: switch the preview to the lockstep decoder
+  and record the measurement.
