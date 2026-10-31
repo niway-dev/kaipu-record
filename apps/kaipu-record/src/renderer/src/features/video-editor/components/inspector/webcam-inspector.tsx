@@ -89,17 +89,21 @@ function WebcamControls({
   const live = (patch: Partial<WebcamLayout>): void => edits.liveLayout(patch, target);
   const shrinking = layout.scaleDuringZoom < 1;
   // A bubble snapped to a preset stays snapped when its width changes with the shape: the
-  // stored centre was placed for the old box, so it is recomputed for the new one.
-  const snappedPreset = WEBCAM_POSITION_PRESETS.find((preset) => {
+  // stored centre was placed for the old box, so it is recomputed for the new one. Only for
+  // exactly one matching preset (a big bubble on a narrow frame can sit on several at once,
+  // and picking one would move it), and only when the centre actually moves, so an override
+  // that inherits its position does not get a copy of it.
+  const snapped = WEBCAM_POSITION_PRESETS.filter((preset) => {
     const center = webcamPresetCenter(preset, layout.size, frame, layout.shape);
     return near(center.x, layout.position.x) && near(center.y, layout.position.y);
   });
-  const changeShape = (shape: CameraBubbleShape): void =>
-    commit(
-      snappedPreset
-        ? { shape, position: webcamPresetCenter(snappedPreset, layout.size, frame, shape) }
-        : { shape },
-    );
+  const changeShape = (shape: CameraBubbleShape): void => {
+    const next =
+      snapped.length === 1 ? webcamPresetCenter(snapped[0]!, layout.size, frame, shape) : null;
+    const moves =
+      next !== null && !(near(next.x, layout.position.x) && near(next.y, layout.position.y));
+    commit(moves ? { shape, position: next } : { shape });
+  };
   return (
     <>
       <p className={styles.sectionLabel}>{t("webcamShape")}</p>
