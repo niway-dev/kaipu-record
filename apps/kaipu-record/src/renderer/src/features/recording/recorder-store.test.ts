@@ -1409,6 +1409,7 @@ describe("recorder-store live settings", () => {
   describe("the webcam track (ADR 0037)", () => {
     const bubble = {
       shape: "circle" as const,
+      cornerRadius: 0.18,
       size: 240,
       mirrored: true,
       framing: { enabled: false, zoom: 1, x: 0, y: 0 },

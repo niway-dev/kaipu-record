@@ -1,0 +1,88 @@
+---
+title: "ADR 0041: The camera is a circle, a square or a 3:4 portrait rectangle, with an adjustable corner radius"
+description: The camera shape stays one list of named shapes, now circle, rounded (shown as "Square") and rectangle, plus a separate cornerRadius for the two that have corners. Size keeps meaning the bubble's height. The recorder's bubble window stays square and centres a rectangle inside it. Amends ADR 0038's square-only geometry.
+---
+
+# ADR 0041: The camera is a circle, a square or a 3:4 portrait rectangle, with an adjustable corner radius
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                       |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Accepted — implemented in [NIW2-596](https://linear.app/niway/issue/NIW2-596); owner QA pending                                                                                                                                                             |
+| Date          | 2026-10-31                                                                                                                                                                                                                                                  |
+| Amends        | [0038](/architecture/decisions/0038-webcam-is-a-viewport-layer-composed-after-the-zoom-crop/): the webcam layer's box was a square with a fixed 18 % corner; it is now a width × height box. The rest of 0038 stands.                                       |
+| Relates to    | [0039](/architecture/decisions/0039-camera-sections-with-eased-transitions/) (proposed: sections hold only position and size, so shape and corner become global-only when it lands), [camera bubble shape and size](/backlog/camera-bubble-shape-and-size/) |
+| Superseded by | —                                                                                                                                                                                                                                                           |
+
+## Context
+
+The camera offered a circle and a "rounded" square whose corner was a constant 18 % of the side,
+written twice (the recorder bubble and `webcam-layout.ts`). On 2026-10-31 the owner asked for an
+adjustable corner and a rectangle, with Freddy Vega's Platzi videos as the reference: a tall
+rounded rectangle with a soft shadow.
+
+The shape is not local to the bubble. It is saved in `settings.json`, copied onto every
+recording's sidecar (`recordedLayout`), seeds the editor's webcam layer, and is drawn by the
+preview, the MP4 composer and the GIF composer. Old settings, sidecars and sessions hold
+`"rounded"` with no radius.
+
+## Decision
+
+1. **The shape stays a list of named shapes: `circle`, `rounded`, `rectangle`.** The stored id
+   `rounded` is kept and labelled "Square" in the UI. `rectangle` is a fixed 3:4 portrait.
+2. **The corner is its own field, `cornerRadius`**, a share of the shorter side from 0 to 0.5,
+   in 0.01 steps, default 0.18. The circle ignores it. At 0.5 a square becomes a circle and the
+   rectangle a pill. It lives in `CameraBubbleSettings`, the recorded layout and
+   `WebcamLayout`, and follows the same per-section rule as `shape`: today an override segment
+   may carry either (the inspector edits a selected override with the same controls, and the
+   session keeps both); when ADR 0039's sections land, they hold only position and size, and
+   the parser drops both from overrides.
+3. **`size` keeps meaning the height**, in DIP for the bubble and as a fraction of the output's
+   height in the editor. The rectangle's width is 3/4 of it.
+4. **Missing radius reads as 0.18** in settings, sidecars and sessions, so everything saved
+   before this ADR renders exactly as it did. No migration runs.
+5. **The recorder's bubble window stays square** (height + pads on both axes). A rectangle is
+   centred in it, so main's placement maths (window centre = bubble centre, side = height) holds
+   unchanged.
+6. **One geometry for every renderer.** `shared/camera-bubble.ts` owns the aspect and the corner
+   in pixels (`cameraBubbleBox`, `cameraCornerRadiusPx`). The editor's `WebcamRect` becomes
+   `{ x, y, width, height }`, and `webcamSourceRect` takes the box's aspect, so the export draws
+   the same 3:4 window of the webcam image that `object-fit: cover` shows in the preview.
+
+## Alternatives rejected
+
+- **Two independent fields, aspect and radius, with the circle as "square at 50 %"** (the
+  Canvid and ManyCam model). Cleaner on paper, but it needs a migration of every stored
+  `shape`, it removes "Circle" as an explicit choice, and a portrait at 50 % is a pill that
+  users would read as a broken circle. It becomes the right model if a second rectangle
+  (landscape, 9:16) is added.
+- **Renaming `rounded` to `square` in storage.** It touches every settings file and sidecar for
+  a label; the UI label is enough.
+- **A window sized to the rectangle.** Main's bounds, drag, resize and placement code all assume
+  a square window; changing them doubles this change for about 12 % of the bubble's height in
+  transparent window on each side.
+- **`size` as the width.** S · M · L would then make the rectangle taller than the square at the
+  same preset and could exceed the 480 DIP maximum in height.
+
+## Consequences
+
+- At rest, a rectangle's square window covers a transparent strip on each side (30 DIP at M)
+  that takes clicks meant for the app below while the bubble is on screen. The pad already did
+  this on a smaller scale.
+- The editor's clip path uses `inset(0 round h% / v%)` so a rectangle's corners stay circular,
+  not elliptical.
+- Exports of recordings made before this change are unchanged: same shape, same 18 % corner.
+
+## Non-goals
+
+- Landscape or 9:16 rectangles; a free aspect ratio.
+- Stronger or configurable shadows.
+- Shape, corner or aspect per camera section as a designed feature. Overrides carry them today
+  only because the pre-ADR 0039 override format allows any layout field.
+
+## What would reopen this
+
+- A second rectangle (landscape, 9:16) or a free aspect is asked for: move to aspect + radius
+  fields, with a migration of the stored `shape`.
+- Users report clicks blocked beside a rectangle bubble: size the window to the bubble.

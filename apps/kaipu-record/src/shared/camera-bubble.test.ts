@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_CAMERA_FRAMING,
+  cameraBubbleBox,
   cameraCaptureLines,
+  cameraCornerRadiusPx,
+  clampCameraCornerRadius,
   framingTransform,
   cameraBubbleWindowInArea,
   cameraBubblePresetFor,
@@ -162,5 +165,37 @@ describe("cameraCaptureLines", () => {
 
   it("never asks for more than 1080 lines", () => {
     expect(cameraCaptureLines(480, { enabled: true, zoom: 3, x: 0, y: 0 })).toBe(1080);
+  });
+});
+
+describe("camera shapes and corners (ADR 0041)", () => {
+  it("keeps the circle and the square as wide as tall, the rectangle 3:4 portrait", () => {
+    expect(cameraBubbleBox("circle", 240)).toEqual({ width: 240, height: 240 });
+    expect(cameraBubbleBox("rounded", 240)).toEqual({ width: 240, height: 240 });
+    expect(cameraBubbleBox("rectangle", 240)).toEqual({ width: 180, height: 240 });
+  });
+
+  it("holds the corner in 0–50 %, snapped to whole percents", () => {
+    expect(clampCameraCornerRadius(-1)).toBe(0);
+    expect(clampCameraCornerRadius(0.9)).toBe(0.5);
+    expect(clampCameraCornerRadius(0.234)).toBe(0.23);
+    expect(clampCameraCornerRadius(0.07)).toBe(0.07);
+    expect(clampCameraCornerRadius(Number.NaN)).toBe(0.18);
+  });
+
+  it("measures the corner on the shorter side; the circle is always half of it", () => {
+    expect(cameraCornerRadiusPx("rounded", 0.25, 200, 200)).toBe(50);
+    expect(cameraCornerRadiusPx("rectangle", 0.5, 180, 240)).toBe(90);
+    expect(cameraCornerRadiusPx("circle", 0, 200, 200)).toBe(100);
+  });
+
+  it("reads settings saved before the slider as today's 18 % rounded square", () => {
+    const old = { shape: "rounded", size: 240, deviceId: null, mirrored: true };
+    expect(sanitizeCameraBubble(old)).toMatchObject({ shape: "rounded", cornerRadius: 0.18 });
+    expect(sanitizeCameraBubble({ shape: "rectangle", cornerRadius: 0.4 })).toMatchObject({
+      shape: "rectangle",
+      cornerRadius: 0.4,
+    });
+    expect(sanitizeCameraBubble({ cornerRadius: "big" }).cornerRadius).toBe(0.18);
   });
 });

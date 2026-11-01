@@ -7,13 +7,16 @@
 
 .root {
   --pad: 24px;
+  /* Left and right inset of the bubble: the pad, plus half the room a 3:4 rectangle leaves
+     in the square window (set inline from camera-bubble.tsx). */
+  --inset-x: var(--pad);
   position: fixed;
   inset: 0;
 }
 
 .bubble {
   position: absolute;
-  inset: var(--pad);
+  inset: var(--pad) var(--inset-x);
   overflow: hidden;
   background: var(--bg-card);
   /* No border: this window is part of the recorded screen, so anything painted at rest is
@@ -57,7 +60,7 @@
 .sizeLabel {
   position: absolute;
   top: 2px;
-  left: var(--pad);
+  left: var(--inset-x);
   padding: 1px 6px;
   border-radius: 999px;
   background: var(--accent-primary);
@@ -91,7 +94,7 @@
 .gripRounded {
   position: absolute;
   top: calc(var(--pad) - 5px);
-  right: calc(var(--pad) - 5px);
+  right: calc(var(--inset-x) - 5px);
   width: 30px;
   height: 30px;
   box-sizing: border-box;
@@ -140,6 +143,6 @@
 }
 
 .closeRounded {
-  left: calc(var(--pad) + 14px);
+  left: calc(var(--inset-x) + 14px);
   top: calc(var(--pad) + 14px);
 }

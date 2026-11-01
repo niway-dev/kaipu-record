@@ -34,8 +34,50 @@ describe("WebcamInspector", () => {
   it("sets the shape on the global layout", () => {
     const { edits } = renderGlobal();
     expect(screen.getByRole("button", { name: "Circle" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(screen.getByRole("button", { name: "Rounded" }));
+    fireEvent.click(screen.getByRole("button", { name: "Square" }));
     expect(edits.commitLayout).toHaveBeenCalledWith({ shape: "rounded" }, null);
+  });
+
+  it("keeps a bubble snapped to a preset snapped when the shape changes its width", () => {
+    const corner = webcamPresetCenter({ x: 0, y: 1 }, 0.22, FRAME, "circle");
+    const { edits } = renderGlobal(layout({ size: 0.22, position: corner }));
+    fireEvent.click(screen.getByRole("button", { name: "Rectangle" }));
+    expect(edits.commitLayout).toHaveBeenCalledWith(
+      {
+        shape: "rectangle",
+        position: webcamPresetCenter({ x: 0, y: 1 }, 0.22, FRAME, "rectangle"),
+      },
+      null,
+    );
+  });
+
+  it("adds no position when the shape keeps the box's width (circle to square)", () => {
+    const corner = webcamPresetCenter({ x: 0, y: 1 }, 0.22, FRAME, "circle");
+    const { edits } = renderGlobal(layout({ size: 0.22, position: corner }));
+    fireEvent.click(screen.getByRole("button", { name: "Square" }));
+    expect(edits.commitLayout).toHaveBeenCalledWith({ shape: "rounded" }, null);
+  });
+
+  it("keeps the centre when several presets share it (a big bubble on a narrow frame)", () => {
+    const narrow = { width: 1080, height: 1920 };
+    const bottom = webcamPresetCenter({ x: 0.5, y: 1 }, 0.49, narrow, "circle");
+    const edits = makeEdits();
+    render(
+      <WebcamInspector
+        layout={layout({ size: 0.49, position: bottom })}
+        edits={edits}
+        frame={narrow}
+        onHideHere={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Rectangle" }));
+    expect(edits.commitLayout).toHaveBeenCalledWith({ shape: "rectangle" }, null);
+  });
+
+  it("leaves a free position where it is when the shape changes", () => {
+    const { edits } = renderGlobal(layout({ position: { x: 0.4, y: 0.6 } }));
+    fireEvent.click(screen.getByRole("button", { name: "Rectangle" }));
+    expect(edits.commitLayout).toHaveBeenCalledWith({ shape: "rectangle" }, null);
   });
 
   it("sets the size: a keyboard step commits, a drag is one begin…end gesture", () => {

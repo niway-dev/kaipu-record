@@ -109,7 +109,9 @@ describe("WebcamLayer", () => {
       }),
     });
     const cam = loadWebcam(30);
-    expect((bubble().firstElementChild as HTMLElement).style.clipPath).toBe("inset(0 round 18%)");
+    expect((bubble().firstElementChild as HTMLElement).style.clipPath).toBe(
+      "inset(0 round 18% / 18%)",
+    );
     expect(cam.style.transform).toContain("scaleX(-1)");
   });
 

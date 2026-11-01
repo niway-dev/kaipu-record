@@ -5,17 +5,20 @@ import React, {
   type ReactNode,
   type Ref,
 } from "react";
-import { Circle, Lock, Square, ZoomIn } from "lucide-react";
+import { Circle, Lock, RectangleVertical, Square, SquareRoundCorner, ZoomIn } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import {
   CAMERA_BUBBLE_MAX_SIZE,
   CAMERA_BUBBLE_MIN_SIZE,
   CAMERA_BUBBLE_PRESETS,
   CAMERA_BUBBLE_PRESET_IDS,
+  CAMERA_CORNER_RADIUS_MAX,
+  CAMERA_CORNER_RADIUS_MIN,
   CAMERA_FRAMING_MAX_ZOOM,
   CAMERA_FRAMING_MIN_ZOOM,
   DEFAULT_CAMERA_FRAMING,
   cameraBubblePresetFor,
+  clampCameraCornerRadius,
   clampCameraPan,
   clampCameraZoom,
   stepCameraBubbleSize,
@@ -251,7 +254,8 @@ export interface CameraSettingsFieldsProps {
 
 /**
  * The camera settings themselves, shared by the Record page's drawer and the capture
- * panel's compact one. DOM order is the Tab order the design asks for: Shape → Size chips →
+ * panel's compact one. DOM order is the Tab order the design asks for: Shape → Corners
+ * (square and rectangle only) → Size chips →
  * slider → device selector (the device chip is drawn in the header, but comes last). The
  * compact variant drops Size and keeps the switch hints for screen readers only, so the
  * panel stays short.
@@ -272,7 +276,13 @@ export function CameraSettingsFields({
   const shapes: RadioOption<CameraBubbleShape>[] = [
     { value: "circle", text: t("circle"), icon: <Circle size={12} aria-hidden /> },
     { value: "rounded", text: t("rounded"), icon: <Square size={12} aria-hidden /> },
+    {
+      value: "rectangle",
+      text: t("rectangle"),
+      icon: <RectangleVertical size={12} aria-hidden />,
+    },
   ];
+  const cornerPercent = Math.round(bubble.cornerRadius * 100);
   const sizes: RadioOption<SizeChoice>[] = [
     ...CAMERA_BUBBLE_PRESET_IDS.map((id) => ({
       value: id,
@@ -323,6 +333,23 @@ export function CameraSettingsFields({
         compact={compact}
         groupRef={shapeRef}
       />
+
+      {/* The circle is round by definition; the square and the rectangle take any corner. */}
+      {bubble.shape !== "circle" && (
+        <div className={styles.corners}>
+          <LevelSlider
+            label={t("corners")}
+            icon={<SquareRoundCorner size={14} aria-hidden />}
+            value={cornerPercent}
+            min={CAMERA_CORNER_RADIUS_MIN * 100}
+            max={CAMERA_CORNER_RADIUS_MAX * 100}
+            valueText={t("cornersValue", { percent: cornerPercent })}
+            onChange={(percent) =>
+              onChange({ cornerRadius: clampCameraCornerRadius(percent / 100) })
+            }
+          />
+        </div>
+      )}
 
       {/* The panel has no room for Size: there the bubble's own resize grip sizes it. The
           Record page keeps it, and it is the keyboard's way to size the bubble. */}

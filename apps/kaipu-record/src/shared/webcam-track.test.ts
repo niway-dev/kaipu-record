@@ -107,6 +107,7 @@ describe("sanitizeWebcamTrackMeta", () => {
     });
     expect(meta?.recordedLayout).toEqual({
       shape: DEFAULT_CAMERA_BUBBLE.shape,
+      cornerRadius: DEFAULT_CAMERA_BUBBLE.cornerRadius,
       size: 480,
       mirrored: DEFAULT_CAMERA_BUBBLE.mirrored,
       framing: DEFAULT_CAMERA_BUBBLE.framing,

@@ -29,13 +29,13 @@ function fakeCtx(): { ctx: WebcamCtx; log: unknown[][] } {
 }
 
 const inside = (
-  rect: { x: number; y: number; size: number },
+  rect: { x: number; y: number; width: number; height: number },
   frame: { width: number; height: number },
 ): boolean =>
   rect.x >= -1e-9 &&
   rect.y >= -1e-9 &&
-  rect.x + rect.size <= frame.width + 1e-9 &&
-  rect.y + rect.size <= frame.height + 1e-9;
+  rect.x + rect.width <= frame.width + 1e-9 &&
+  rect.y + rect.height <= frame.height + 1e-9;
 
 describe("planWebcamDraw", () => {
   it("is null without a webcam, without a decoded frame, and inside a hidden segment", () => {
@@ -53,15 +53,24 @@ describe("planWebcamDraw", () => {
       { id: "o", start: 0, end: 5, mode: "override", layout: { size: 0.4, shape: "rounded" } },
     ]);
     const plan = planWebcamDraw(s, 1, frame, 1, IMAGE)!;
-    expect(plan.rect.size).toBeCloseTo(432);
+    expect(plan.rect.height).toBeCloseTo(432);
     expect(plan.shape).toBe("rounded");
   });
 
   it("shrinks with the camera path's scale (scaleDuringZoom), like the preview", () => {
     const frame = { width: 1920, height: 1080 };
     const s = scene({ size: 0.2, scaleDuringZoom: 0.5 });
-    expect(planWebcamDraw(s, 0, frame, 1, IMAGE)!.rect.size).toBeCloseTo(216);
-    expect(planWebcamDraw(s, 0, frame, 2, IMAGE)!.rect.size).toBeCloseTo(108);
+    expect(planWebcamDraw(s, 0, frame, 1, IMAGE)!.rect.height).toBeCloseTo(216);
+    expect(planWebcamDraw(s, 0, frame, 2, IMAGE)!.rect.height).toBeCloseTo(108);
+  });
+
+  it("plans a 3:4 rectangle with a 3:4 window of the image and its corner", () => {
+    const frame = { width: 1920, height: 1080 };
+    const s = scene({ shape: "rectangle", size: 0.4, cornerRadius: 0.25 });
+    const plan = planWebcamDraw(s, 0, frame, 1, IMAGE)!;
+    expect(plan.rect.width / plan.rect.height).toBeCloseTo(3 / 4);
+    expect(plan.src.sw / plan.src.sh).toBeCloseTo(3 / 4);
+    expect(plan.cornerRadius).toBe(0.25);
   });
 
   // Failure 10: the layer is placed in the OUTPUT canvas (after the framer), so Fill cannot
@@ -70,18 +79,22 @@ describe("planWebcamDraw", () => {
     ["Vertical (Fill)", { width: 1080, height: 1920 }],
     ["Square (Fit)", { width: 1080, height: 1080 }],
   ])("%s keeps the whole bubble inside the output", (_name, frame) => {
-    it.each(WEBCAM_POSITION_PRESETS.map((p) => [p.id, p] as const))("at %s", (_id, preset) => {
+    it.each(
+      WEBCAM_POSITION_PRESETS.flatMap((p) =>
+        (["circle", "rectangle"] as const).map((shape) => [p.id, shape, p] as const),
+      ),
+    )("at %s (%s)", (_id, shape, preset) => {
       const size = 0.6; // the largest bubble
-      const position = webcamPresetCenter(preset, size, { width: 1920, height: 1080 });
-      const plan = planWebcamDraw(scene({ size, position }), 0, frame, 1, IMAGE)!;
+      const position = webcamPresetCenter(preset, size, { width: 1920, height: 1080 }, shape);
+      const plan = planWebcamDraw(scene({ shape, size, position }), 0, frame, 1, IMAGE)!;
       expect(inside(plan.rect, frame)).toBe(true);
     });
 
     it("from a corner stored on the landscape frame, flush with the output's own corner", () => {
       const plan = planWebcamDraw(scene({ position: { x: 1, y: 1 } }), 0, frame, 1, IMAGE)!;
       expect(inside(plan.rect, frame)).toBe(true);
-      expect(plan.rect.x + plan.rect.size).toBeCloseTo(frame.width);
-      expect(plan.rect.y + plan.rect.size).toBeCloseTo(frame.height);
+      expect(plan.rect.x + plan.rect.width).toBeCloseTo(frame.width);
+      expect(plan.rect.y + plan.rect.height).toBeCloseTo(frame.height);
     });
   });
 });
@@ -104,8 +117,8 @@ describe("drawWebcamLayer", () => {
       plan.src.sh,
       plan.rect.x,
       plan.rect.y,
-      plan.rect.size,
-      plan.rect.size,
+      plan.rect.width,
+      plan.rect.height,
     ]);
     expect(calls).not.toContain("scale");
   });
@@ -115,7 +128,7 @@ describe("drawWebcamLayer", () => {
     const plan = planWebcamDraw(scene({ mirrored: true, shadow: false }), 0, frame, 1, IMAGE)!;
     drawWebcamLayer(ctx, {} as CanvasImageSource, plan);
     expect(log.filter((entry) => entry[0] === "scale")).toEqual([["scale", -1, 1]]);
-    expect(log).toContainEqual(["translate", plan.rect.x + plan.rect.size, plan.rect.y]);
+    expect(log).toContainEqual(["translate", plan.rect.x + plan.rect.width, plan.rect.y]);
     expect(log.map((entry) => entry[0])).not.toContain("fill");
   });
 
@@ -125,9 +138,9 @@ describe("drawWebcamLayer", () => {
     drawWebcamLayer(circle.ctx, {} as CanvasImageSource, c);
     expect(circle.log).toContainEqual([
       "arc",
-      c.rect.x + c.rect.size / 2,
-      c.rect.y + c.rect.size / 2,
-      c.rect.size / 2,
+      c.rect.x + c.rect.width / 2,
+      c.rect.y + c.rect.height / 2,
+      c.rect.width / 2,
       0,
       Math.PI * 2,
     ]);
@@ -135,5 +148,30 @@ describe("drawWebcamLayer", () => {
     const r = planWebcamDraw(scene({ shape: "rounded", shadow: false }), 0, frame, 1, IMAGE)!;
     drawWebcamLayer(rounded.ctx, {} as CanvasImageSource, r);
     expect(rounded.log.filter((entry) => entry[0] === "arcTo")).toHaveLength(4);
+  });
+
+  it("rounds the corners by the layout's radius times the shorter side", () => {
+    const sharp = fakeCtx();
+    const s = planWebcamDraw(
+      scene({ shape: "rectangle", cornerRadius: 0, shadow: false }),
+      0,
+      frame,
+      1,
+      IMAGE,
+    )!;
+    drawWebcamLayer(sharp.ctx, {} as CanvasImageSource, s);
+    const sharpArcs = sharp.log.filter((entry) => entry[0] === "arcTo");
+    expect(sharpArcs.every((entry) => entry[5] === 0)).toBe(true);
+    const pill = fakeCtx();
+    const p = planWebcamDraw(
+      scene({ shape: "rectangle", cornerRadius: 0.5, shadow: false }),
+      0,
+      frame,
+      1,
+      IMAGE,
+    )!;
+    drawWebcamLayer(pill.ctx, {} as CanvasImageSource, p);
+    const pillArcs = pill.log.filter((entry) => entry[0] === "arcTo");
+    expect(pillArcs[0]![5]).toBeCloseTo(p.rect.width / 2);
   });
 });

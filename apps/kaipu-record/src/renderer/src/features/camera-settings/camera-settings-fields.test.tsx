@@ -6,6 +6,7 @@ import { CameraBlockedCard, CameraSettingsFields } from "./camera-settings-field
 
 const bubble: CameraBubbleSettings = {
   shape: "circle",
+  cornerRadius: 0.18,
   size: 240,
   deviceId: null,
   mirrored: true,
@@ -37,7 +38,7 @@ describe("CameraSettingsFields — shape", () => {
     const { onChange } = renderFields();
     const group = screen.getByRole("radiogroup", { name: "Shape" });
     const circle = screen.getByRole("radio", { name: "Circle" });
-    const rounded = screen.getByRole("radio", { name: "Rounded" });
+    const rounded = screen.getByRole("radio", { name: "Square" });
     expect(group).toBeInTheDocument();
     expect(circle).toHaveAttribute("aria-checked", "true");
     expect(circle).toHaveAttribute("tabindex", "0");
@@ -50,9 +51,33 @@ describe("CameraSettingsFields — shape", () => {
     // The value is still "circle" (controlled, unchanged): ← wraps back to the last option.
     circle.focus();
     await userEvent.keyboard("{ArrowLeft}");
-    expect(onChange).toHaveBeenLastCalledWith({ shape: "rounded" });
+    expect(onChange).toHaveBeenLastCalledWith({ shape: "rectangle" });
+    expect(screen.getByRole("radio", { name: "Rectangle" })).toHaveFocus();
     expect(onChange).toHaveBeenCalledTimes(2);
   });
+});
+
+describe("CameraSettingsFields — corners", () => {
+  it("has no corner slider for the circle", () => {
+    renderFields();
+    expect(screen.queryByRole("slider", { name: "Corners" })).not.toBeInTheDocument();
+  });
+
+  it.each(["rounded", "rectangle"] as const)(
+    "offers 0–50 %% for the %s, and steps it by keyboard",
+    async (shape) => {
+      const { onChange } = renderFields({ bubble: { ...bubble, shape } });
+      const slider = screen.getByRole("slider", { name: "Corners" });
+      expect(slider).toHaveAttribute("aria-valuemin", "0");
+      expect(slider).toHaveAttribute("aria-valuemax", "50");
+      expect(slider).toHaveAttribute("aria-valuetext", "18%");
+      slider.focus();
+      await userEvent.keyboard("{End}");
+      expect(onChange).toHaveBeenLastCalledWith({ cornerRadius: 0.5 });
+      await userEvent.keyboard("{Home}");
+      expect(onChange).toHaveBeenLastCalledWith({ cornerRadius: 0 });
+    },
+  );
 });
 
 describe("CameraSettingsFields — size", () => {

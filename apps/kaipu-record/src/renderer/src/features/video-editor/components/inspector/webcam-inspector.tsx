@@ -1,5 +1,6 @@
 /**
- * The Webcam section of the inspector (ADR 0038, spec § 6): Shape, Size, nine position
+ * The Webcam section of the inspector (ADR 0038, spec § 6): Shape, Corners (square and
+ * rectangle, ADR 0041), Size, nine position
  * presets, Mirror, Shadow and Shrink during zoom, for the global layout — or, when a lane
  * block is selected, for that segment: a hidden one shows its range and Delete, an override
  * the same controls over its own fields. A recording without a webcam never renders it.
@@ -10,6 +11,13 @@
  */
 import { EyeOff, Trash2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
+import {
+  CAMERA_BUBBLE_SHAPES,
+  CAMERA_CORNER_RADIUS_MAX,
+  CAMERA_CORNER_RADIUS_MIN,
+  CAMERA_CORNER_RADIUS_STEP,
+  type CameraBubbleShape,
+} from "@shared/camera-bubble";
 import { formatPrecise } from "./format";
 import { HistorySlider } from "../history-slider";
 import type { WebcamEditing } from "../../webcam/use-webcam-editing";
@@ -51,6 +59,15 @@ const PRESET_LABEL: Record<WebcamPositionPresetId, PresetLabelKey> = {
   "bottom-right": "webcamPosBottomRight",
 };
 
+const SHAPE_LABEL: Record<
+  CameraBubbleShape,
+  "webcamShapeCircle" | "webcamShapeRounded" | "webcamShapeRectangle"
+> = {
+  circle: "webcamShapeCircle",
+  rounded: "webcamShapeRounded",
+  rectangle: "webcamShapeRectangle",
+};
+
 /** The highest shrink the slider offers while the toggle is on; 1 means "off". */
 const MAX_SHRINK_WHILE_ON = 0.95;
 
@@ -71,22 +88,52 @@ function WebcamControls({
   const commit = (patch: Partial<WebcamLayout>): void => edits.commitLayout(patch, target);
   const live = (patch: Partial<WebcamLayout>): void => edits.liveLayout(patch, target);
   const shrinking = layout.scaleDuringZoom < 1;
+  // A bubble snapped to a preset stays snapped when its width changes with the shape: the
+  // stored centre was placed for the old box, so it is recomputed for the new one. Only for
+  // exactly one matching preset (a big bubble on a narrow frame can sit on several at once,
+  // and picking one would move it), and only when the centre actually moves, so an override
+  // that inherits its position does not get a copy of it.
+  const snapped = WEBCAM_POSITION_PRESETS.filter((preset) => {
+    const center = webcamPresetCenter(preset, layout.size, frame, layout.shape);
+    return near(center.x, layout.position.x) && near(center.y, layout.position.y);
+  });
+  const changeShape = (shape: CameraBubbleShape): void => {
+    const next =
+      snapped.length === 1 ? webcamPresetCenter(snapped[0]!, layout.size, frame, shape) : null;
+    const moves =
+      next !== null && !(near(next.x, layout.position.x) && near(next.y, layout.position.y));
+    commit(moves ? { shape, position: next } : { shape });
+  };
   return (
     <>
       <p className={styles.sectionLabel}>{t("webcamShape")}</p>
       <div className={styles.segmented} role="group" aria-label={t("webcamShape")}>
-        {(["circle", "rounded"] as const).map((shape) => (
+        {CAMERA_BUBBLE_SHAPES.map((shape) => (
           <button
             key={shape}
             type="button"
             aria-pressed={layout.shape === shape}
             className={layout.shape === shape ? styles.segmentActive : styles.segment}
-            onClick={() => commit({ shape })}
+            onClick={() => changeShape(shape)}
           >
-            {shape === "circle" ? t("webcamShapeCircle") : t("webcamShapeRounded")}
+            {t(SHAPE_LABEL[shape])}
           </button>
         ))}
       </div>
+      {layout.shape !== "circle" && (
+        <HistorySlider
+          label={t("webcamCorners")}
+          value={layout.cornerRadius}
+          min={CAMERA_CORNER_RADIUS_MIN}
+          max={CAMERA_CORNER_RADIUS_MAX}
+          step={CAMERA_CORNER_RADIUS_STEP}
+          format={(v) => `${Math.round(v * 100)}%`}
+          onBegin={edits.begin}
+          onLive={(cornerRadius) => live({ cornerRadius })}
+          onEnd={edits.end}
+          onCommit={(cornerRadius) => commit({ cornerRadius })}
+        />
+      )}
       <HistorySlider
         label={t("webcamSize")}
         value={layout.size}
@@ -102,7 +149,7 @@ function WebcamControls({
       <p className={styles.sectionLabel}>{t("webcamPosition")}</p>
       <div className={webcamStyles.positions} role="group" aria-label={t("webcamPosition")}>
         {WEBCAM_POSITION_PRESETS.map((preset) => {
-          const center = webcamPresetCenter(preset, layout.size, frame);
+          const center = webcamPresetCenter(preset, layout.size, frame, layout.shape);
           const active = near(center.x, layout.position.x) && near(center.y, layout.position.y);
           return (
             <button

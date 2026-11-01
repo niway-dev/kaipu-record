@@ -1043,6 +1043,7 @@ describe("LibraryDetailPage — the recorded face over the original (NIW2-565)",
     fps: 30,
     recordedLayout: {
       shape: "rounded",
+      cornerRadius: 0.18,
       size: 200,
       mirrored: false,
       framing: { enabled: false, zoom: 1, x: 0, y: 0 },
@@ -1104,7 +1105,9 @@ describe("LibraryDetailPage — the recorded face over the original (NIW2-565)",
     expect(bubble.style.left).toBe("40%");
     expect(bubble.style.top).toBe("40%");
     expect(bubble.style.width).toBe("20%");
-    expect((bubble.firstElementChild as HTMLElement).style.clipPath).toBe("inset(0 round 18%)");
+    expect((bubble.firstElementChild as HTMLElement).style.clipPath).toBe(
+      "inset(0 round 18% / 18%)",
+    );
     // Read-only: nothing to select or drag over the player's controls.
     expect(screen.queryByRole("button", { name: /webcam/i })).toBeNull();
   });

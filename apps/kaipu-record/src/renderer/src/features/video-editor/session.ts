@@ -22,7 +22,9 @@
  */
 import { ZOOM_DEFAULTS, ZOOM_LIMITS, type ZoomSegment } from "./zoom/zoom-model";
 import { clampIntensity, REDACTION, type NormRect, type Redaction } from "./privacy/redaction";
+import { CAMERA_BUBBLE_SHAPES } from "@shared/camera-bubble";
 import {
+  WEBCAM_DEFAULTS,
   WEBCAM_MIN_SEGMENT_SECONDS,
   clampWebcamPatch,
   type WebcamLayout,
@@ -362,7 +364,7 @@ function validateZoomSegment(raw: unknown): ZoomSegment | null {
   };
 }
 
-const WEBCAM_SHAPES = ["circle", "rounded"] as const;
+const WEBCAM_SHAPES = CAMERA_BUBBLE_SHAPES;
 
 /**
  * The layout fields present in `raw`, validated by type and clamped; null when one is the
@@ -378,7 +380,7 @@ function validateWebcamLayout(raw: unknown, complete: boolean): Partial<WebcamLa
     if (!(WEBCAM_SHAPES as readonly unknown[]).includes(l["shape"])) return null;
     patch.shape = l["shape"] as WebcamLayout["shape"];
   }
-  for (const key of ["size", "scaleDuringZoom"] as const) {
+  for (const key of ["size", "scaleDuringZoom", "cornerRadius"] as const) {
     if (!has(key)) continue;
     if (!isNum(l[key])) return null;
     patch[key] = l[key];
@@ -409,6 +411,8 @@ function validateWebcamLayout(raw: unknown, complete: boolean): Partial<WebcamLa
       "shadow",
     ];
     if (keys.some((key) => patch[key] === undefined)) return null;
+    // Sessions saved before the corner slider (ADR 0041) have none: today's 18 %.
+    patch.cornerRadius ??= WEBCAM_DEFAULTS.cornerRadius;
   }
   return clampWebcamPatch(patch);
 }

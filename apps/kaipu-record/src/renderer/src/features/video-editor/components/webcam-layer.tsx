@@ -93,7 +93,7 @@ function useWebcamSync({
   const camRef = useRef<HTMLVideoElement | null>(null);
   const lastTime = useRef(0);
   // Where the bubble is drawn right now: the editor's drag starts from it.
-  const drawn = useRef<{ center: Point; side: number } | null>(null);
+  const drawn = useRef<{ center: Point; box: { width: number; height: number } } | null>(null);
   // When the webcam's seek in flight started (performance.now()), and how long the last one
   // took, in seconds: the lead the next seek during playback is given.
   const seekStartedAt = useRef<number | null>(null);
@@ -126,17 +126,18 @@ function useWebcamSync({
     box.style.display = "";
     box.style.left = `${(rect.x / frame.width) * 100}%`;
     box.style.top = `${(rect.y / frame.height) * 100}%`;
-    box.style.width = `${(rect.size / frame.width) * 100}%`;
-    box.style.height = `${(rect.size / frame.height) * 100}%`;
+    box.style.width = `${(rect.width / frame.width) * 100}%`;
+    box.style.height = `${(rect.height / frame.height) * 100}%`;
     box.dataset.shadow = String(layout.shadow);
-    if (clipRef.current) clipRef.current.style.clipPath = webcamClipPath(layout.shape);
+    if (clipRef.current)
+      clipRef.current.style.clipPath = webcamClipPath(layout.shape, layout.cornerRadius);
     cam.style.transform = framingTransform(layout.framing, layout.mirrored);
     drawn.current = {
       center: {
-        x: (rect.x + rect.size / 2) / frame.width,
-        y: (rect.y + rect.size / 2) / frame.height,
+        x: (rect.x + rect.width / 2) / frame.width,
+        y: (rect.y + rect.height / 2) / frame.height,
       },
-      side: rect.size,
+      box: { width: rect.width, height: rect.height },
     };
     // While a seek is in flight, currentTime already reads the pending target and the main
     // clock keeps moving: re-seeking on every frame would cancel each seek with the next one
@@ -359,14 +360,14 @@ export function WebcamLayer({
         }}
         onPointerMove={(event) => {
           const d = drag.current;
-          const side = drawn.current?.side;
-          if (!d || side === undefined) return;
+          const box = drawn.current?.box;
+          if (!d || box === undefined) return;
           const next = clampWebcamCenter(
             {
               x: d.from.x + (event.clientX - d.x) / d.w,
               y: d.from.y + (event.clientY - d.y) / d.h,
             },
-            side,
+            box,
             frame,
           );
           onMove(next, lastTime.current);

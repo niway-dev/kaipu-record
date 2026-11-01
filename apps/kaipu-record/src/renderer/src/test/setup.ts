@@ -79,6 +79,7 @@ const STUB_SETTINGS = {
   diagnosticsEnabled: true,
   cameraBubble: {
     shape: "circle",
+    cornerRadius: 0.18,
     size: 240,
     deviceId: null,
     mirrored: true,

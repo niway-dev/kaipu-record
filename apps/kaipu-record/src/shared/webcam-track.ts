@@ -168,13 +168,16 @@ export function sanitizeWebcamTrackMeta(value: unknown): WebcamTrackMeta | null 
     fps: safe.fps,
   };
   if (safe.recordedLayout && typeof safe.recordedLayout === "object") {
-    const { shape, size, mirrored, framing } = sanitizeCameraBubble(safe.recordedLayout);
+    const { shape, size, cornerRadius, mirrored, framing } = sanitizeCameraBubble(
+      safe.recordedLayout,
+    );
     const position = sanitizeUnitPoint((safe.recordedLayout as Record<string, unknown>).position);
     const fraction = (safe.recordedLayout as Record<string, unknown>).sizeFraction;
     const sizeFraction = isPositive(fraction) ? Math.min(1, fraction) : null;
     meta.recordedLayout = {
       shape,
       size,
+      cornerRadius,
       mirrored,
       framing,
       ...(position ? { position } : {}),

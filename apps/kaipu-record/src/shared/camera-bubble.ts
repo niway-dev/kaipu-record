@@ -8,13 +8,27 @@
  * it elsewhere for the session, and it grows up and to the right from wherever it sits.
  */
 
-export const CAMERA_BUBBLE_SHAPES = ["circle", "rounded"] as const;
+/**
+ * The shapes the camera can take (ADR 0041). `rounded` is the one the UI calls "Square": the
+ * id predates the corner slider and stays, because settings and recording sidecars store it.
+ * `rectangle` is a {@link CAMERA_RECTANGLE_ASPECT} portrait.
+ */
+export const CAMERA_BUBBLE_SHAPES = ["circle", "rounded", "rectangle"] as const;
 export type CameraBubbleShape = (typeof CAMERA_BUBBLE_SHAPES)[number];
 
 export interface CameraBubbleSettings {
   shape: CameraBubbleShape;
-  /** The bubble's side in DIP, between {@link CAMERA_BUBBLE_MIN_SIZE} and {@link CAMERA_BUBBLE_MAX_SIZE}. */
+  /**
+   * The bubble's HEIGHT in DIP, between {@link CAMERA_BUBBLE_MIN_SIZE} and
+   * {@link CAMERA_BUBBLE_MAX_SIZE}. For the circle and the square it is also the width; the
+   * rectangle is {@link CAMERA_RECTANGLE_ASPECT} times as wide.
+   */
   size: number;
+  /**
+   * The corner radius of the square and the rectangle, as a share of the shorter side,
+   * {@link CAMERA_CORNER_RADIUS_MIN}–{@link CAMERA_CORNER_RADIUS_MAX}. The circle ignores it.
+   */
+  cornerRadius: number;
   /** The `videoinput` device to open; `null` lets the OS pick its default camera. */
   deviceId: string | null;
   /**
@@ -98,9 +112,56 @@ export const CAMERA_BUBBLE_PRESET_IDS = [
   "L",
 ] as const satisfies readonly CameraBubblePreset[];
 
+/** The rectangle's width over its height: a 3:4 portrait. */
+export const CAMERA_RECTANGLE_ASPECT = 3 / 4;
+
+export const CAMERA_CORNER_RADIUS_MIN = 0;
+/** Half the shorter side: a square becomes a circle, the rectangle a pill. */
+export const CAMERA_CORNER_RADIUS_MAX = 0.5;
+export const CAMERA_CORNER_RADIUS_STEP = 0.01;
+/** The corner every rounded square had before the slider existed. */
+export const DEFAULT_CAMERA_CORNER_RADIUS = 0.18;
+
+/** A radius held in range and snapped to the 0.01 step; a non-number is the default. */
+export function clampCameraCornerRadius(radius: number): number {
+  if (!Number.isFinite(radius)) return DEFAULT_CAMERA_CORNER_RADIUS;
+  const clamped = Math.min(CAMERA_CORNER_RADIUS_MAX, Math.max(CAMERA_CORNER_RADIUS_MIN, radius));
+  const snapped = Math.round(clamped / CAMERA_CORNER_RADIUS_STEP) * CAMERA_CORNER_RADIUS_STEP;
+  // Two decimals drop the float noise of the multiplication (0.07 is 0.07000000000000001).
+  return Math.round(snapped * 100) / 100 + 0;
+}
+
+/** Width over height for a shape: 3/4 for the rectangle, 1 for the others. */
+export function cameraShapeAspect(shape: CameraBubbleShape): number {
+  return shape === "rectangle" ? CAMERA_RECTANGLE_ASPECT : 1;
+}
+
+/** The bubble's box for a shape and a height (`size`), in the same units as `size`. */
+export function cameraBubbleBox(
+  shape: CameraBubbleShape,
+  size: number,
+): { width: number; height: number } {
+  return { width: size * cameraShapeAspect(shape), height: size };
+}
+
+/**
+ * The corner radius, in the box's units, for a box of `width` × `height`: half the shorter
+ * side for the circle, `cornerRadius` times the shorter side for the others.
+ */
+export function cameraCornerRadiusPx(
+  shape: CameraBubbleShape,
+  cornerRadius: number,
+  width: number,
+  height: number,
+): number {
+  const shorter = Math.min(width, height);
+  return shape === "circle" ? shorter / 2 : clampCameraCornerRadius(cornerRadius) * shorter;
+}
+
 export const DEFAULT_CAMERA_BUBBLE: CameraBubbleSettings = {
   shape: "circle",
   size: CAMERA_BUBBLE_PRESETS.M,
+  cornerRadius: DEFAULT_CAMERA_CORNER_RADIUS,
   deviceId: null,
   mirrored: true,
   framing: DEFAULT_CAMERA_FRAMING,
@@ -123,7 +184,8 @@ export function cameraBubblePresetFor(size: number): CameraBubblePreset | null {
 /**
  * Stored (possibly partial or hand-edited) bubble settings merged over the defaults,
  * field by field: an invalid shape falls back alone, a size out of range is clamped
- * rather than dropped, a non-boolean `mirrored` falls back to on.
+ * rather than dropped, a non-boolean `mirrored` falls back to on, a missing corner radius
+ * (settings saved before the slider) is the 18 % every rounded square had.
  */
 export function sanitizeCameraBubble(value: unknown): CameraBubbleSettings {
   const safe = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
@@ -138,7 +200,17 @@ export function sanitizeCameraBubble(value: unknown): CameraBubbleSettings {
     typeof safe.deviceId === "string" && safe.deviceId.length > 0 ? safe.deviceId : null;
   const mirrored =
     typeof safe.mirrored === "boolean" ? safe.mirrored : DEFAULT_CAMERA_BUBBLE.mirrored;
-  return { shape, size, deviceId, mirrored, framing: sanitizeCameraFraming(safe.framing) };
+  const cornerRadius = clampCameraCornerRadius(
+    finiteOr(safe.cornerRadius, DEFAULT_CAMERA_BUBBLE.cornerRadius),
+  );
+  return {
+    shape,
+    size,
+    cornerRadius,
+    deviceId,
+    mirrored,
+    framing: sanitizeCameraFraming(safe.framing),
+  };
 }
 
 function finiteOr(value: unknown, fallback: number): number {
