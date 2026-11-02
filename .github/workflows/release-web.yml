@@ -10,9 +10,15 @@ on:
       - "web-v*.*.*"
   workflow_dispatch:
 
+# A release run is never cancelled by another one: it queues behind it. With
+# `cancel-in-progress: true`, a manual dispatch started while a tag's run was in flight
+# cancelled that run, and then was cancelled in turn — two runs for web-v0.9.1 on
+# 2026-10-06, zero deploys. Cancelling a deploy half-way is also the one thing a deploy
+# workflow must never do to itself. The group still serialises runs, so two deploys never
+# write to the same Worker at once; the later one simply waits.
 concurrency:
   group: ${{ github.workflow }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   # Release gate (ADR 0004): the same `bun run verify` the Lefthook pre-push runs, on the
