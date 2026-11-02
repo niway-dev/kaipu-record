@@ -27,7 +27,17 @@ vi.mock("../infrastructure/settings-store", () => ({ getAppSettings: () => ({ lo
 // what is left to refuse a call is maintenance mode.
 vi.mock("../workspaces", () => ({
   activeWorkspace: () => ({ id: "ws-test", path: join(state.dir, "vault") }),
-  ownsLegacyCloud: () => true,
+  activeEvictionProbe: () => null,
+  activeScratch: () => null,
+  cloudScopeBase: () => ({
+    activeId: "ws-test",
+    legacyOwnerId: "ws-test",
+    registered: new Set(["ws-test"]),
+    unassignedHidden: false,
+  }),
+  markCloudAssigned: async () => {},
+  registeredWorkspaces: () => [],
+  workspaceSync: () => null,
   workspaceGate: () => ({
     run: (_stamp: unknown, fn: () => unknown) => Promise.resolve().then(fn),
   }),
@@ -53,6 +63,9 @@ const STAMP = { workspaceId: "ws-test", generation: 1 };
 const EXEMPT = new Set<string>([
   IPC_CHANNELS.refreshCloudCatalog,
   IPC_CHANNELS.revealLocalRecording,
+  // The Cloud page reads the catalog cache in userData and calls the server; no vault file.
+  IPC_CHANNELS.workspacesCloudState,
+  IPC_CHANNELS.workspacesAssignCloud,
   // The reconcile channels answer for themselves ("maintenance", "already-running").
   IPC_CHANNELS.libraryReconcileScan,
   IPC_CHANNELS.libraryReconcileFix,

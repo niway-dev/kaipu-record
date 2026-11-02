@@ -9,20 +9,26 @@ export interface MovableItem {
   kind: "recording" | "screenshot" | "gif";
   derivedFromAssetId: string | null;
   metadataIssue?: unknown;
+  /** A synced workspace's provider offloaded the media ("media"): it cannot move until downloaded. */
+  evicted?: "media" | "thumbnail";
 }
 
 /** Why an item cannot be offered for a move, or null when it can. */
-export function notMovableReason(item: MovableItem): "cloud" | "record" | null {
+export function notMovableReason(item: MovableItem): "cloud" | "record" | "evicted" | null {
   if (item.id === null) return "cloud";
   if (item.metadataIssue) return "record";
+  // Copying an evicted file would download it (decision 15): "Download it first".
+  if (item.evicted === "media") return "evicted";
   return null;
 }
 
 /** What a move to `target` costs, from where the active workspace is (design: section 2). */
-export type MoveCost = "same-drive" | "other-drive" | "not-connected";
+export type MoveCost = "same-drive" | "other-drive" | "synced" | "not-connected";
 
 export function moveCost(target: WorkspaceView, active: WorkspaceView): MoveCost {
   if (target.state !== "available") return "not-connected";
+  // A synced side always copies and verifies, even on one drive (decision 15).
+  if (target.sync !== null || active.sync !== null) return "synced";
   return target.device !== null && target.device === active.device ? "same-drive" : "other-drive";
 }
 

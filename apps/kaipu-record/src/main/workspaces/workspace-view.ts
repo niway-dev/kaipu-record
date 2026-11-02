@@ -1,4 +1,4 @@
-import type { WorkspaceView } from "@shared/types/workspaces";
+import type { SyncProvider, WorkspaceView } from "@shared/types/workspaces";
 import { deriveInitials } from "./identity";
 import type { Availability, WorkspaceEntry } from "./registry";
 
@@ -13,6 +13,7 @@ export function toWorkspaceView(
   availability: Availability,
   itemCount: number | null,
   device: string | null = null,
+  sync: SyncProvider | null = null,
 ): WorkspaceView {
   return {
     id: entry.id,
@@ -25,5 +26,6 @@ export function toWorkspaceView(
     ...(availability.state === "unavailable" ? { reason: availability.reason } : {}),
     itemCount: availability.state === "available" ? itemCount : null,
     device: availability.state === "available" ? device : null,
+    sync,
   };
 }

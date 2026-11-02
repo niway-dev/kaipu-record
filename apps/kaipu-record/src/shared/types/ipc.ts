@@ -496,6 +496,10 @@ export const IPC_CHANNELS = {
   workspacesCheckLocation: "workspaces:check-location",
   workspacesOpenFolder: "workspaces:open-folder",
   workspacesDismissHint: "workspaces:dismiss-hint",
+  // The Cloud page: where the active workspace lives, its filter, the unassigned cloud items.
+  workspacesCloudState: "workspaces:cloud-state",
+  // "Assign to workspace…": PUT /assets/{assetId}/workspace for each (ADR 0032, decision 23).
+  workspacesAssignCloud: "workspaces:assign-cloud",
   // Item-scoped (stamped): move items of the active workspace to another (ADR 0033).
   workspacesMoveItems: "workspaces:move-items",
   // Stop a group move: the move in flight finishes, no further one starts.

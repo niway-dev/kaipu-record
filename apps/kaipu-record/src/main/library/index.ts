@@ -33,7 +33,22 @@ import { createDragCopy, dragRoot } from "./drag-copies";
 import { dragLedger } from "./drag-ledger";
 import { withItemLock } from "./item-lock";
 import { friendlyDragName } from "./drag-name";
-import { activeWorkspace, ownsLegacyCloud, workspaceGate } from "../workspaces";
+import {
+  activeEvictionProbe,
+  activeScratch,
+  activeWorkspace,
+  cloudScopeBase,
+  markCloudAssigned,
+  registeredWorkspaces,
+  workspaceGate,
+  workspaceSync,
+} from "../workspaces";
+import { assignAssetWorkspace } from "../cloud/assign-client";
+import { assignCloudItems } from "../cloud/assign-cloud";
+import { AssignQueue } from "../cloud/assign-queue";
+import { buildCloudState } from "../cloud/cloud-state";
+import type { CloudScope } from "../cloud/workspace-filter";
+import type { AssignCloudResult, WorkspaceCloudState } from "@shared/types/workspaces";
 import { registerVideoEditSessionHandlers } from "./video-edit-session";
 import { MaintenanceError, vaultActivity, type ActivityKind } from "./vault-activity";
 import { skipPaths } from "./vault-reconcile";
@@ -55,7 +70,19 @@ export function broadcastLibraryChanged(): void {
  */
 export function currentVault(): LibraryVault {
   const active = activeWorkspace();
-  return new LibraryVault(active.path, active.id);
+  // A synced workspace asks which files are evicted, so no URL it hands out downloads one.
+  return new LibraryVault(active.path, active.id, undefined, activeEvictionProbe());
+}
+
+/**
+ * The cloud step of a move (ADR 0033): queue `PUT /assets/{assetId}/workspace`. Set once the
+ * library handlers are registered; a move before that (none happens) changes nothing here.
+ */
+let queueCloudMove: ((assetId: string, workspaceId: string) => void) | null = null;
+
+/** A move committed: its cloud copy, if any, now belongs to `targetId`. Never throws, never waits. */
+export function cloudItemMoved(assetId: string, targetId: string): void {
+  queueCloudMove?.(assetId, targetId);
 }
 
 /** The active workspace's folder. */
@@ -112,14 +139,78 @@ export function registerLibraryVaultHandlers(deps: {
   /** True while a video export is encoding: a rename then keeps the file's name ("busy"). */
   isExportActive: () => boolean;
 }): void {
+  const cache = new CatalogCache(app.getPath("userData"));
+  const account = deps.auth.getCurrentAccount;
+  /** The cached entry takes the workspace the server now holds. */
+  const setCachedWorkspace = async (assetId: string, workspaceId: string | null) => {
+    const current = account();
+    if (!current) return;
+    await cache
+      .update(current.userId, (entries) =>
+        entries ? entries.map((e) => (e.assetId === assetId ? { ...e, workspaceId } : e)) : null,
+      )
+      .catch((error: unknown) =>
+        console.error("[cloud] could not update the catalog cache", error),
+      );
+  };
+  const assignQueue = new AssignQueue({
+    file: join(app.getPath("userData"), "cloud-assign-queue.json"),
+    account,
+    assign: (token, assetId, workspaceId) =>
+      assignAssetWorkspace({ serverUrl: deps.serverUrl }, token, assetId, workspaceId),
+    onConfirmed: async (assetId, workspaceId) => {
+      await setCachedWorkspace(assetId, workspaceId);
+      broadcastLibraryChanged();
+    },
+  });
+  void assignQueue.load().then(() => assignQueue.process());
+  queueCloudMove = (assetId, workspaceId) => {
+    void (async () => {
+      // An item the account's catalog is known not to hold has no cloud copy to assign.
+      const current = account();
+      const catalog = current ? await cache.read(current.userId) : null;
+      if (catalog && !catalog.some((e) => e.assetId === assetId)) return;
+      await assignQueue.enqueue(assetId, workspaceId);
+    })().catch((error: unknown) => console.error("[cloud] queueing a moved item failed", error));
+  };
+  const cloudScope = (): CloudScope => ({ ...cloudScopeBase(), pending: assignQueue.pending() });
+
   const service = new LibraryService({
     vault: currentVault,
     vaultDir: vaultPath,
-    ownsLegacyCloud,
-    cache: new CatalogCache(app.getPath("userData")),
-    account: deps.auth.getCurrentAccount,
+    cloudScope,
+    cache,
+    account,
     fetchCatalog: (token) => fetchCloudCatalog({ serverUrl: deps.serverUrl }, token),
   });
+
+  ipcMain.handle(IPC_CHANNELS.workspacesCloudState, async (): Promise<WorkspaceCloudState> => {
+    const active = activeWorkspace();
+    const current = account();
+    return buildCloudState({
+      active,
+      sync: workspaceSync(active),
+      signedIn: current !== null,
+      scope: cloudScope(),
+      catalog: current ? await cache.read(current.userId) : null,
+    });
+  });
+  ipcMain.handle(
+    IPC_CHANNELS.workspacesAssignCloud,
+    async (_event, assetIds: unknown, targetId: unknown): Promise<AssignCloudResult> => {
+      const result = await assignCloudItems(assetIds, targetId, {
+        registered: new Set(registeredWorkspaces().map((entry) => entry.id)),
+        account,
+        assign: (token, assetId, workspaceId) =>
+          assignAssetWorkspace({ serverUrl: deps.serverUrl }, token, assetId, workspaceId),
+        confirmed: (assetId, workspaceId) => setCachedWorkspace(assetId, workspaceId),
+        defer: (assetId, workspaceId) => assignQueue.defer(assetId, workspaceId),
+        markAssigned: markCloudAssigned,
+      });
+      if (result.assigned.length > 0 || result.queued.length > 0) broadcastLibraryChanged();
+      return result;
+    },
+  );
 
   ipcMain.handle(
     IPC_CHANNELS.listLibraryItems,
@@ -127,7 +218,11 @@ export function registerLibraryVaultHandlers(deps: {
   );
   ipcMain.handle(IPC_CHANNELS.refreshCloudCatalog, async () => {
     const result = await service.refreshCatalog();
-    if (result.ok) broadcastLibraryChanged();
+    if (result.ok) {
+      broadcastLibraryChanged();
+      // Online again: owed assignments go now, not at their next backoff.
+      void assignQueue.process();
+    }
     return result;
   });
   // One lease around describe → hash → delete.
@@ -314,16 +409,28 @@ export function registerLibraryVaultHandlers(deps: {
         if (typeof id !== "string" || /[\\/]|\.\./.test(id)) return;
         const vault = currentVault();
         const file = await vault.filePath(id);
+        // A synced workspace (decision 15): an evicted file cannot be dragged (a copy would
+        // download it), and the drag copy is a real copy in userData, never a hard link.
+        const scratch = activeScratch();
+        const probe = activeEvictionProbe();
+        if (probe && (await probe([file])).has(file)) return;
         // macOS refuses a drag without an icon; the poster is there for videos and GIFs.
         const icon = nativeImage.createFromPath(vault.thumbnailPath(id));
         if (icon.isEmpty()) return;
+        const root = scratch ? join(scratch, "drag") : dragRoot(vault.directory);
         const dragFile =
           typeof name === "string" && name.length > 0
-            ? await createDragCopy(vault.directory, file, friendlyDragName(name, extname(file)))
+            ? await createDragCopy(
+                vault.directory,
+                file,
+                friendlyDragName(name, extname(file)),
+                undefined,
+                { root, synced: scratch !== null },
+              )
             : file;
         // A move of this item waits 10 s after a drag, and removes its drag folder (ADR 0033).
         const workspaceId = activeWorkspace().id;
-        const inDragRoot = dragFile.startsWith(dragRoot(vault.directory));
+        const inDragRoot = dragFile.startsWith(root);
         dragLedger.record({ workspaceId, itemId: id, dir: inDragRoot ? dirname(dragFile) : null });
         event.sender.startDrag({ file: dragFile, icon: icon.resize({ width: 96 }) });
       })

@@ -243,6 +243,7 @@ export function WorkspacesSettingsPage(): React.JSX.Element {
   const t = useTranslations("settings");
   const tw = useTranslations("workspaces");
   const tc = useTranslations("common");
+  const tCloud = useTranslations("workspaceCloud");
   const { state, openCreateDialog, openEditDialog, remove, openFolder } = useWorkspaces();
   const [removing, setRemoving] = React.useState<WorkspaceView | null>(null);
   const count = state?.workspaces.length ?? 0;
@@ -271,7 +272,16 @@ export function WorkspacesSettingsPage(): React.JSX.Element {
               label={workspace.name}
               description={
                 <span className={styles.pathValue} title={workspace.path}>
-                  {status ? `${workspace.path} · ${status}` : workspace.path}
+                  {[
+                    workspace.path,
+                    status,
+                    // Synced folders (decision 15): the provider is named, never configured.
+                    workspace.sync
+                      ? tCloud("syncedBy", { provider: tCloud(`location_${workspace.sync}`) })
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </span>
               }
               action={

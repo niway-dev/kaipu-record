@@ -38,6 +38,13 @@ export interface LocalRecording {
   /** 0 when unknown (no sidecar metadata yet). */
   durationSeconds: number;
   thumbnailUrl?: string | null;
+  /**
+   * Synced workspaces only (spec, Synced folders): the provider offloaded this item's media
+   * ("media": "In the cloud", it cannot be opened, dragged or moved until downloaded) or only
+   * its poster ("thumbnail": the item works, it just draws a placeholder). Absent when local.
+   * Nothing reads an evicted file: that would download it.
+   */
+  evicted?: "media" | "thumbnail";
   /** The asset this file was exported from, when it is an editor export. */
   derivedFromAssetId: string | null;
   /**

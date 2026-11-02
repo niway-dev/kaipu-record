@@ -21,6 +21,12 @@ export type WorkspaceUnavailableReason =
   /** Another workspace's identity is in that folder. */
   | "different";
 
+/**
+ * The cloud provider that syncs a workspace folder (spec, Synced folders). Kaipu does not sync
+ * to it: the folder is detected by path (and Google Drive's xattr) and labelled.
+ */
+export type SyncProvider = "google-drive" | "onedrive" | "icloud" | "cloud-provider";
+
 /** What locks the switcher (and the "Move to" menus). */
 export type WorkspaceBusy = "recording" | "exporting" | "moving";
 
@@ -58,6 +64,8 @@ export interface WorkspaceView {
    * workspaces on the same one is instant, otherwise it copies. Null when not connected.
    */
   device: string | null;
+  /** The provider whose synced folder holds this workspace, or null for a plain folder. */
+  sync: SyncProvider | null;
 }
 
 /** `workspaces:list` (and the `workspaces:changed` broadcast). */
@@ -217,4 +225,51 @@ export interface MoveProgress {
   /** 1-based index of the item being moved. */
   current: number;
   total: number;
+}
+
+/** Where the active workspace's folder lives, for the Cloud page (spec, Synced folders). */
+export type WorkspaceLocation = SyncProvider | "this-mac" | "external-drive";
+
+/** A cloud item that belongs to no workspace registered on this Mac (decision 23). */
+export interface UnassignedCloudItem {
+  assetId: string;
+  title: string;
+  kind: "recording" | "screenshot";
+  createdAt: number;
+  sizeBytes: number;
+  /**
+   * The workspace the server names when it is not registered here (deleted, or another
+   * Mac's); null when the item never had one (uploaded before workspaces).
+   */
+  workspaceId: string | null;
+}
+
+/** `workspaces:cloud-state`: the Cloud page's view of the active workspace (ADR 0032). */
+export interface WorkspaceCloudState {
+  workspaceId: string;
+  location: WorkspaceLocation;
+  signedIn: boolean;
+  /**
+   * Which Kaipu Cloud items this workspace's Library lists: only its own, or (the migrated
+   * Default workspace, until the first "Assign to workspace…") its own and the unassigned.
+   */
+  filter: "own" | "own-and-unassigned";
+  /** The catalog was fetched at least once: the unassigned list is meaningful. */
+  catalogKnown: boolean;
+  unassigned: UnassignedCloudItem[];
+}
+
+export type AssignCloudFailure =
+  /** The account has no such cloud item any more. */
+  | "not-found"
+  /** The target is not a workspace registered on this Mac. */
+  | "unknown-workspace"
+  | "signed-out";
+
+/** `workspaces:assign-cloud`: per item, whether the server holds it now or it is queued. */
+export interface AssignCloudResult {
+  assigned: string[];
+  /** Offline, or a server without the endpoint yet: retried later, shown assigned meanwhile. */
+  queued: string[];
+  failed: { assetId: string; reason: AssignCloudFailure }[];
 }

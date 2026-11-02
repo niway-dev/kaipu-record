@@ -7,6 +7,7 @@ import type {
   RemoveLocalCopyResult,
 } from "@shared/types/library-item";
 import type { CatalogCache } from "../cloud/catalog-cache";
+import { catalogForWorkspace, unassignedEntries, type CloudScope } from "../cloud/workspace-filter";
 import { composeLibrary } from "./compose-library";
 import {
   hasEditSession,
@@ -38,12 +39,11 @@ export interface LibraryServiceDeps {
   account: () => { userId: string; token: string } | null;
   fetchCatalog: (token: string) => Promise<CloudCatalogEntry[]>;
   /**
-   * The active workspace owns the account's cloud entries that carry no workspace id (spec
-   * decision 3; none carries one until desktop upload ships). Any other workspace lists only
-   * the cloud copies of its own local items, and never rewrites the account's cache.
-   * Absent: owns them (one workspace, or a caller that predates workspaces).
+   * Which cloud entries the active workspace lists (`workspace-filter.ts`, decision 4). The
+   * cache keeps every entry of the account whatever is listed. Absent: every entry is listed
+   * (a caller that predates workspaces).
    */
-  ownsLegacyCloud?: () => boolean;
+  cloudScope?: () => CloudScope;
   now?: () => number;
   /** Maintenance mode; the process' instance unless a test injects one. */
   activity?: VaultActivity;
@@ -156,10 +156,10 @@ export class LibraryService {
     }
     const account = this.deps.account();
     const cached = account ? await this.deps.cache.read(account.userId) : null;
-    const owns = this.deps.ownsLegacyCloud?.() ?? true;
+    const scope = this.deps.cloudScope?.();
     const localAssets = new Set((local ?? []).map((rec) => rec.assetId));
-    // Hiding is a view: the cache keeps every entry (it is rewritten only by the owner).
-    const catalog = owns || !cached ? cached : cached.filter((e) => localAssets.has(e.assetId));
+    // Hiding is a view: the cache keeps every entry of every workspace.
+    const catalog = scope && cached ? catalogForWorkspace(cached, scope, localAssets) : cached;
 
     const editing: Record<string, EditingState> = {};
     const editSession: Record<string, EditSessionState> = {};
@@ -169,22 +169,42 @@ export class LibraryService {
     }
 
     const { items, catalogUpdates } = composeLibrary({ local, catalog, editing, editSession });
-    if (
-      owns &&
-      account &&
-      catalog &&
-      local &&
-      JSON.stringify(catalogUpdates) !== JSON.stringify(catalog)
-    ) {
+    const seen = new Map(catalogUpdates.map((e) => [e.assetId, e.lastSeenLocalId] as const));
+    const changed = (catalog ?? []).some((e) => seen.get(e.assetId) !== e.lastSeenLocalId);
+    if (account && catalog && local && changed) {
       // Best-effort: remembering which cloud items were also local is what lets an
       // unplugged drive read as "local unavailable" instead of "cloud only". Skipped
       // when nothing changed so a plain `list()` doesn't keep rewriting the cache file.
-      await this.deps.cache.write(account.userId, catalogUpdates).catch(() => undefined);
+      // Merged into the full catalog, inside the cache's write chain: an entry this view did
+      // not hold (another workspace's) is kept exactly as it was, and a refresh that ran
+      // meanwhile is not overwritten with this list's older copy.
+      await this.deps.cache
+        .update(account.userId, (current) =>
+          current
+            ? current.map((e) =>
+                seen.has(e.assetId) ? { ...e, lastSeenLocalId: seen.get(e.assetId)! } : e,
+              )
+            : null,
+        )
+        .catch(() => undefined);
     }
     const catalogVerifiedAt = account
       ? (cached ?? []).reduce((max, e) => Math.max(max, e.lastVerifiedAt), 0)
       : null;
     return { items, vaultError, catalogVerifiedAt };
+  }
+
+  /**
+   * "Unassigned cloud items" (decision 23): the account's cloud entries that belong to no
+   * workspace registered on this Mac, from the full cached catalog. Empty when signed out or
+   * never fetched.
+   */
+  async unassigned(): Promise<CloudCatalogEntry[]> {
+    const account = this.deps.account();
+    const scope = this.deps.cloudScope?.();
+    if (!account || !scope) return [];
+    const cached = await this.deps.cache.read(account.userId);
+    return cached ? unassignedEntries(cached, scope) : [];
   }
 
   refreshCatalog(): Promise<CatalogRefreshResult> {
@@ -200,17 +220,16 @@ export class LibraryService {
     if (!account) return { ok: false, reason: "signed-out" };
     try {
       const fresh = await this.deps.fetchCatalog(account.token);
-      const previous = (await this.deps.cache.read(account.userId)) ?? [];
-      const seen = new Map(previous.map((e) => [e.assetId, e.lastSeenLocalId] as const));
       const verifiedAt = this.now();
-      await this.deps.cache.write(
-        account.userId,
-        fresh.map((e) => ({
+      // `workspaceId` comes from the server (it is a server column, never client data).
+      await this.deps.cache.update(account.userId, (previous) => {
+        const seen = new Map((previous ?? []).map((e) => [e.assetId, e.lastSeenLocalId] as const));
+        return fresh.map((e) => ({
           ...e,
           lastVerifiedAt: verifiedAt,
           lastSeenLocalId: seen.get(e.assetId) ?? null,
-        })),
-      );
+        }));
+      });
       return { ok: true, verifiedAt };
     } catch (err) {
       if (

@@ -187,6 +187,9 @@ const kaipuApi: KaipuElectronAPI = {
     remove: (id) => ipcRenderer.invoke(IPC_CHANNELS.workspacesRemove, id),
     openFolder: (id) => ipcRenderer.invoke(IPC_CHANNELS.workspacesOpenFolder, id),
     dismissHint: () => ipcRenderer.invoke(IPC_CHANNELS.workspacesDismissHint),
+    cloudState: () => ipcRenderer.invoke(IPC_CHANNELS.workspacesCloudState),
+    assignCloud: (assetIds, targetId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.workspacesAssignCloud, assetIds, targetId),
     moveItems: (request) => scopedInvoke(IPC_CHANNELS.workspacesMoveItems, request),
     cancelMove: () => ipcRenderer.invoke(IPC_CHANNELS.workspacesCancelMove),
     onMoveProgress: (callback) => {

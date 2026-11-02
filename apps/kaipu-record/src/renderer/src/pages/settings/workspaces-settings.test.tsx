@@ -27,6 +27,7 @@ const view = (id: string, name: string): WorkspacesState["workspaces"][number] =
   state: "available",
   itemCount: 1,
   device: "1",
+  sync: null,
 });
 const STATE: WorkspacesState = {
   activeId: "ws-a",
@@ -210,5 +211,27 @@ describe("Settings → Workspaces → Edit and New workspace", () => {
     );
     await vi.waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(showToast.mock.calls[0]?.[0].message).toBe("Finish the recording or export first");
+  });
+});
+
+describe("Settings → Workspaces: a synced folder (decision 15)", () => {
+  it("labels a workspace inside Google Drive as synced by it", async () => {
+    window.electronAPI = {
+      ...realApi,
+      workspaces: {
+        ...realApi.workspaces,
+        list: async () => ({
+          ...STATE,
+          workspaces: [view("ws-a", "Alpha"), { ...view("ws-b", "Bravo"), sync: "google-drive" }],
+        }),
+      },
+    };
+    render(
+      <WorkspacesProvider>
+        <WorkspacesSettingsPage />
+      </WorkspacesProvider>,
+    );
+    expect(await screen.findByText(/\/Users\/me\/Bravo · Synced by Google Drive/)).toBeTruthy();
+    expect(screen.queryByText(/\/Users\/me\/Alpha.*Synced/)).toBeNull();
   });
 });

@@ -76,6 +76,7 @@ const STATE: WorkspacesState = {
       state: "available",
       itemCount: 4,
       device: "1",
+      sync: null,
     },
     {
       id: "ws-home",
@@ -87,6 +88,7 @@ const STATE: WorkspacesState = {
       state: "available",
       itemCount: 0,
       device: "1",
+      sync: null,
     },
   ],
 };

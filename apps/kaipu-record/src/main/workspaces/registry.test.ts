@@ -479,6 +479,20 @@ describe("a failed write", () => {
   });
 });
 
+describe("cloudAssignedAt (the first Assign to workspace…)", () => {
+  it("is absent after the migration, set once, persisted, and survives a reopen", async () => {
+    const registry = await WorkspaceRegistry.open(env());
+    expect(registry.state.cloudAssignedAt).toBeUndefined();
+    await registry.markCloudAssigned();
+    const first = registry.state.cloudAssignedAt;
+    expect(typeof first).toBe("number");
+    await registry.markCloudAssigned();
+    expect(registry.state.cloudAssignedAt).toBe(first);
+    const reopened = await WorkspaceRegistry.open(env());
+    expect(reopened.state.cloudAssignedAt).toBe(first);
+  });
+});
+
 describe("availability", () => {
   it("reports another workspace's identity in the folder as different", async () => {
     const registry = await WorkspaceRegistry.open(env());

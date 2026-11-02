@@ -22,6 +22,12 @@ export interface SweepDeps {
    * Swept once, with the active workspace; the other workspaces sweep only their own staging.
    */
   fallbackTempDir?: string;
+  /**
+   * A synced workspace's staging folder (its scratch folder in userData), swept instead of
+   * `.kaipu/tmp/`; its takes are placed by rename, never by a hard link (decision 15).
+   */
+  stagingDir?: string;
+  placeByRename?: boolean;
   /** Title written to each recovered take's sidecar (localized by the caller). */
   title: string;
   now?: () => number;
@@ -51,7 +57,7 @@ export async function recoverStrandedRecordings(deps: SweepDeps): Promise<SweepR
   const vault = new LibraryVault(deps.vaultDir);
   const result: SweepResult = { recovered: [], discarded: 0, failed: [] };
   const dirs = [
-    join(deps.vaultDir, STAGING_DIR),
+    deps.stagingDir ?? join(deps.vaultDir, STAGING_DIR),
     ...(deps.fallbackTempDir ? [deps.fallbackTempDir] : []),
   ];
   for (const dir of dirs) {
@@ -97,7 +103,7 @@ export async function recoverStrandedRecordings(deps: SweepDeps): Promise<SweepR
         });
         const { id } = reservation;
         try {
-          await placeTake(path, await vault.filePath(id));
+          await placeTake(path, await vault.filePath(id), deps.placeByRename);
         } catch (error) {
           // Release the reserved stem (its stub sidecar), never the media path: a file that
           // took it meanwhile is not this take's.
@@ -111,7 +117,7 @@ export async function recoverStrandedRecordings(deps: SweepDeps): Promise<SweepR
           const webcamDest = vault.webcamFilePath(id);
           await mkdir(dirname(webcamDest), { recursive: true });
           // Best-effort: the screen file is the take. A webcam left behind is lone next time.
-          await placeTake(webcamPath, webcamDest).catch((error) =>
+          await placeTake(webcamPath, webcamDest, deps.placeByRename).catch((error) =>
             console.error("recovering a webcam part failed", error),
           );
         }

@@ -44,9 +44,13 @@ export function WorkspaceTile({
 
 function useLocationLabel(): (workspace: WorkspaceView) => string {
   const t = useTranslations("workspaces");
-  // The internal drive has no volume name: name the machine by the host, like the folder
-  // shortcut does (Finder / Explorer).
-  return (workspace) => workspace.volume ?? (isWindowsHost() ? t("thisPc") : t("thisMac"));
+  const tCloud = useTranslations("workspaceCloud");
+  // A synced folder names its provider (decision 15). The internal drive has no volume name:
+  // name the machine by the host, like the folder shortcut does (Finder / Explorer).
+  return (workspace) =>
+    workspace.sync
+      ? tCloud(`location_${workspace.sync}`)
+      : (workspace.volume ?? (isWindowsHost() ? t("thisPc") : t("thisMac")));
 }
 
 /**

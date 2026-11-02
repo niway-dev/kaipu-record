@@ -16,6 +16,7 @@ import { LibraryVault, type Reservation } from "../library/library-vault";
 import {
   isFileExists,
   type PlacedFile,
+  placeByRename,
   placeNew,
   placeNoReplace,
   removeIfSame,
@@ -47,6 +48,13 @@ export interface RecordingWriterDeps {
   tempDir?: string;
   /** Used when the vault staging folder cannot be created. Default: os.tmpdir(). */
   fallbackTempDir?: string;
+  /**
+   * The staging folder of a synced workspace (spec, Synced folders): its scratch folder in
+   * userData, so a provider never uploads a take while it is written. Null for any other
+   * folder, which stages in `.kaipu/tmp/`. A take staged there is placed by rename, never by
+   * a hard link (decision 15).
+   */
+  stagingFor?: (vaultDir: string) => string | null;
 }
 
 interface Session {
@@ -57,6 +65,8 @@ interface Session {
   tempPath: string;
   /** The vault folder bound when the take started; finalize moves the take there only. */
   vaultDir: string;
+  /** The folder is synced: placed by rename, never by a hard link. */
+  byRename?: boolean;
   /** A webcam session: the staging file of the screen session it belongs to. */
   screenTempPath?: string;
   /**
@@ -98,8 +108,9 @@ export class FinalizeMoveError extends Error {
  * when one is, whenever it arrived. A placed staging file that cannot be removed is set aside
  * or marked, so the sweep never recovers it as a second recording.
  */
-export async function placeTake(from: string, to: string): Promise<PlacedFile> {
-  const placed = await placeNew(from, to);
+export async function placeTake(from: string, to: string, byRename = false): Promise<PlacedFile> {
+  // A synced folder never gets a second name for a file (decision 15).
+  const placed = byRename ? await placeByRename(from, to) : await placeNew(from, to);
   if (placed === "taken") throw takenError(to);
   return placed;
 }
@@ -125,7 +136,7 @@ export class RecordingWriter {
   private async stagingDir(vaultDir: string): Promise<string> {
     if (this.deps.tempDir) return this.deps.tempDir;
     try {
-      const dir = join(vaultDir, STAGING_DIR);
+      const dir = this.deps.stagingFor?.(vaultDir) ?? join(vaultDir, STAGING_DIR);
       await mkdir(dir, { recursive: true });
       return dir;
     } catch {
@@ -167,6 +178,7 @@ export class RecordingWriter {
       handle,
       tempPath,
       vaultDir,
+      byRename: (this.deps.stagingFor?.(vaultDir) ?? null) !== null,
       queue: Promise.resolve(),
     });
     return { tempPath };
@@ -195,6 +207,7 @@ export class RecordingWriter {
       handle,
       tempPath,
       vaultDir: screen.vaultDir,
+      byRename: screen.byRename,
       screenTempPath: screen.tempPath,
       queue: Promise.resolve(),
     });
@@ -320,7 +333,7 @@ export class RecordingWriter {
 
     let placed: PlacedFile;
     try {
-      placed = await placeTake(session.tempPath, dest);
+      placed = await placeTake(session.tempPath, dest, session.byRename);
     } catch (cause) {
       // Release the reserved stem (its stub sidecar): never the media path, which may hold a
       // file that took it meanwhile.
@@ -404,7 +417,7 @@ export class RecordingWriter {
       await this.closeHandle(webcamSession);
       const dest = vault.webcamFilePath(id);
       await mkdir(dirname(dest), { recursive: true });
-      const file = await placeTake(webcamSession.tempPath, dest);
+      const file = await placeTake(webcamSession.tempPath, dest, webcamSession.byRename);
       return { meta: webcam, path: dest, file, session: webcamSession };
     } catch (error) {
       console.error("webcam file could not be placed; the recording is saved without it", error);

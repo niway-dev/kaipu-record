@@ -18,6 +18,9 @@ type LocalLibraryVideo = LibraryVideo & { id: string };
 function isOrphan(video: LocalLibraryVideo): boolean {
   // Unreadable metadata is not "never derived": the sidecar exists, and a backfill would be refused.
   if (video.metadataIssue) return false;
+  // An evicted file is never decoded (it would download), and a placeholder is never written
+  // over an evicted poster (decision 15).
+  if (video.evicted) return false;
   return video.kind === "recording" && (video.durationSeconds === 0 || !video.thumbnailUrl);
 }
 
