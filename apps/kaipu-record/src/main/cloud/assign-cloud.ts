@@ -5,10 +5,10 @@ export interface AssignCloudDeps {
   registered: ReadonlySet<string>;
   account(): { userId: string; token: string } | null;
   assign(token: string, assetId: string, workspaceId: string): Promise<AssignOutcome>;
-  /** The server holds it: the cached entry takes the workspace. */
-  confirmed(assetId: string, workspaceId: string): Promise<void>;
+  /** The server holds it: that account's cached entry takes the workspace. */
+  confirmed(assetId: string, workspaceId: string, userId: string): Promise<void>;
   /** Not answered now: the retry queue sends it later and the Library shows it assigned meanwhile. */
-  defer(assetId: string, workspaceId: string): Promise<void>;
+  defer(assetId: string, workspaceId: string, userId: string): Promise<void>;
   /** The user assigned something: the unassigned stop showing in the legacy owner. */
   markAssigned(): Promise<void>;
 }
@@ -42,12 +42,12 @@ export async function assignCloudItems(
   for (const assetId of batch) {
     const outcome = await deps.assign(account.token, assetId, targetId);
     if (outcome === "ok") {
-      await deps.confirmed(assetId, targetId);
+      await deps.confirmed(assetId, targetId, account.userId);
       result.assigned.push(assetId);
     } else if (outcome === "not-found") {
       result.failed.push({ assetId, reason: "not-found" });
     } else {
-      await deps.defer(assetId, targetId);
+      await deps.defer(assetId, targetId, account.userId);
       result.queued.push(assetId);
     }
   }

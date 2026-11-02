@@ -1,20 +1,25 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { boundedProbe, scratchDrag, scratchTmp, SyncStates } from "./sync-state";
 
 describe("SyncStates", () => {
+  const HOME = "/Users/x";
+  const drive = `${HOME}/Library/CloudStorage/GoogleDrive-x@y.z/My Drive/K`;
+
   it("answers with the path rule before detection, then with what was detected", async () => {
-    const states = new SyncStates(async () => "google-drive");
-    const entry = { id: "w", path: "/Users/x/Documents/K" };
-    expect(states.of(entry)).toBeNull();
-    await states.refresh(entry);
-    expect(states.of(entry)).toBe("google-drive");
+    // Detection says what the path rule cannot (Drive's xattr on a folder outside CloudStorage).
+    const states = new SyncStates(async () => "google-drive", HOME);
+    expect(states.of({ id: "d", path: drive })).toBe("google-drive");
+    const elsewhere = { id: "w", path: `${HOME}/Documents/K` };
+    expect(states.of(elsewhere)).toBeNull();
+    await states.refresh(elsewhere);
+    expect(states.of(elsewhere)).toBe("google-drive");
   });
 
-  it("a relocated workspace is re-read from its new path", async () => {
-    const detect = vi.fn(async () => "google-drive" as const);
-    const states = new SyncStates(detect);
-    await states.refresh({ id: "w", path: "/Users/x/Documents/K" });
-    expect(states.of({ id: "w", path: "/Volumes/T7/K" })).toBeNull();
+  it("a relocated workspace is read from its new path, not from the old detection", async () => {
+    const states = new SyncStates(async () => null, HOME);
+    await states.refresh({ id: "w", path: `${HOME}/Movies/K` });
+    expect(states.of({ id: "w", path: `${HOME}/Movies/K` })).toBeNull();
+    expect(states.of({ id: "w", path: drive })).toBe("google-drive");
   });
 });
 

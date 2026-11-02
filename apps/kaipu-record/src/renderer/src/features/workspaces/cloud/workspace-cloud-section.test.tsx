@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { WorkspaceCloudState, WorkspacesState } from "@shared/types/workspaces";
 import { WorkspacesProvider } from "@renderer/features/workspaces/workspaces-context";
 import { WorkspaceCloudSection } from "./workspace-cloud-section";
@@ -31,7 +31,11 @@ const list: WorkspacesState = {
   workspaces: [view("ws-a", "Alpha"), view("ws-b", "Bravo")],
 };
 
-function mount(cloud: Partial<WorkspaceCloudState>) {
+function mount(
+  cloud: Partial<WorkspaceCloudState>,
+  cloudState?: () => Promise<WorkspaceCloudState>,
+  onLibraryChanged?: (callback: () => void) => () => void,
+) {
   const state: WorkspaceCloudState = {
     workspaceId: "ws-a",
     location: "this-mac",
@@ -48,10 +52,11 @@ function mount(cloud: Partial<WorkspaceCloudState>) {
   }));
   window.electronAPI = {
     ...realApi,
+    ...(onLibraryChanged ? { onLibraryChanged } : {}),
     workspaces: {
       ...realApi.workspaces,
       list: async () => list,
-      cloudState: vi.fn(async () => state),
+      cloudState: vi.fn(cloudState ?? (async () => state)),
       assignCloud,
     },
   };
@@ -143,5 +148,46 @@ describe("WorkspaceCloudSection (Cloud → This workspace)", () => {
   it("signed out, it says so and lists nothing", async () => {
     mount({ signedIn: false, catalogKnown: false });
     expect(await screen.findByText(/Sign in to Kaipu Cloud/)).toBeTruthy();
+  });
+
+  it("a failed read says so instead of loading forever", async () => {
+    mount({}, async () => {
+      throw new Error("vault-maintenance");
+    });
+    expect((await screen.findByRole("alert")).textContent).toContain("couldn't read");
+  });
+
+  it("an older answer arriving last never replaces the latest one", async () => {
+    const base: WorkspaceCloudState = {
+      workspaceId: "ws-a",
+      location: "this-mac",
+      signedIn: true,
+      filter: "own",
+      catalogKnown: true,
+      unassigned: [],
+    };
+    let resolveFirst: (value: WorkspaceCloudState) => void = () => {};
+    let calls = 0;
+    let libraryChanged: () => void = () => {};
+    mount(
+      {},
+      () => {
+        calls += 1;
+        // The first request hangs; the second (after a library broadcast) answers at once.
+        return calls === 1
+          ? new Promise((resolve) => (resolveFirst = resolve))
+          : Promise.resolve(base);
+      },
+      (callback) => {
+        libraryChanged = callback;
+        return () => {};
+      },
+    );
+    await waitFor(() => expect(calls).toBe(1));
+    act(() => libraryChanged());
+    expect((await screen.findByTestId("workspace-location")).textContent).toContain("This Mac");
+    // The stale first answer (another workspace, in Google Drive) lands last: it is dropped.
+    await act(async () => resolveFirst({ ...base, location: "google-drive" }));
+    expect(screen.getByTestId("workspace-location").textContent).toContain("This Mac");
   });
 });

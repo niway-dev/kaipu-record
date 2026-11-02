@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Cloud, CloudOff, Folder, HardDrive, Laptop } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import type {
@@ -22,12 +22,25 @@ export function WorkspaceCloudSection(): React.JSX.Element | null {
   const t = useTranslations("workspaceCloud");
   const workspaces = useOptionalWorkspaces();
   const [state, setState] = useState<WorkspaceCloudState | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [picking, setPicking] = useState<string[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string[]>([]);
+  /** Only the latest request may set the state: an older answer may be another workspace's. */
+  const requestRef = useRef(0);
 
   const load = useCallback(async () => {
-    setState(await window.electronAPI.workspaces.cloudState());
+    const request = ++requestRef.current;
+    try {
+      const next = await window.electronAPI.workspaces.cloudState();
+      if (request !== requestRef.current) return;
+      setState(next);
+      setLoadFailed(false);
+    } catch {
+      // A refused or failed read (maintenance, an unreadable cache): say so. The next library
+      // broadcast or switch asks again.
+      if (request === requestRef.current) setLoadFailed(true);
+    }
   }, []);
   useEffect(() => {
     void load();
@@ -64,7 +77,13 @@ export function WorkspaceCloudSection(): React.JSX.Element | null {
   };
 
   if (!state) {
-    return (
+    return loadFailed ? (
+      <section className={styles.group}>
+        <p className={styles.muted} role="alert">
+          {t("loadFailed")}
+        </p>
+      </section>
+    ) : (
       <section className={styles.group} aria-busy="true">
         <p className={styles.muted}>{t("loading")}</p>
       </section>

@@ -24,7 +24,6 @@ describe("syncProviderOfPath (spec, Synced folders: detection by path)", () => {
     `${HOME}/Movies/Kaipu Record`,
     "/Volumes/T7/Kaipu",
     `${HOME}/Library/CloudStorageX/GoogleDrive-a/b`,
-    // The provider's root itself is not a workspace folder inside it, but it is still synced.
   ])("%s is not synced", (path) => {
     expect(syncProviderOfPath(path, HOME)).toBeNull();
   });

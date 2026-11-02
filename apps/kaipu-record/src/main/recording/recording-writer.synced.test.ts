@@ -74,7 +74,7 @@ describe("RecordingWriter — a synced workspace", () => {
     void tempPath;
     const result = await recoverStrandedRecordings({
       vaultDir,
-      stagingDir: scratch,
+      extraStagingDirs: [scratch],
       placeByRename: true,
       title: "Recovered",
       now: () => Date.now() + 10 * 60_000,
@@ -82,5 +82,20 @@ describe("RecordingWriter — a synced workspace", () => {
     expect(result.recovered).toHaveLength(1);
     expect(hooks.links).toEqual([]);
     expect(await readdir(scratch)).toEqual([]);
+  });
+
+  it("the sweep still reads .kaipu/tmp/ of a folder that became synced", async () => {
+    const before = new RecordingWriter({ vaultDir: () => vaultDir, now: () => 5000 });
+    await before.create("s0");
+    await before.write("s0", new TextEncoder().encode("old").buffer, 0);
+    const result = await recoverStrandedRecordings({
+      vaultDir,
+      extraStagingDirs: [scratch],
+      placeByRename: true,
+      title: "Recovered",
+      now: () => Date.now() + 10 * 60_000,
+    });
+    expect(result.recovered).toHaveLength(1);
+    expect(hooks.links).toEqual([]);
   });
 });

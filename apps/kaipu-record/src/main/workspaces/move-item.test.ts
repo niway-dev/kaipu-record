@@ -277,6 +277,28 @@ describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at th
     });
   }
 
+  it("refuses an evicted source before reading a byte of it (the renderer's list may be old)", async () => {
+    const item = await seedItem(src.directory);
+    const source: MoveSide = { ...src, scratch: join(root, "scratch", "src") };
+    const read: string[] = [];
+    const outcome = await moveItem(
+      { source, target: dst, id: item.id },
+      deps({
+        fs: {
+          evicted: async (paths) => new Set(paths.filter((p) => p.endsWith("Demo.mp4"))),
+          sha256: async (path) => {
+            read.push(path);
+            return sha256FileBase64(path);
+          },
+        },
+      }),
+    );
+    expect(outcome).toEqual({ ok: false, id: "Demo", reason: "evicted" });
+    expect(read).toEqual([]);
+    expect(await filesOf(dst.directory, "Demo")).toEqual([]);
+    expect(await filesOf(src.directory, "Demo")).toHaveLength(8);
+  });
+
   it("stages a synced target's copy in its scratch folder, never inside the synced folder", async () => {
     const item = await seedItem(src.directory);
     const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };

@@ -142,11 +142,13 @@ export function registerLibraryVaultHandlers(deps: {
   const cache = new CatalogCache(app.getPath("userData"));
   const account = deps.auth.getCurrentAccount;
   /** The cached entry takes the workspace the server now holds. */
-  const setCachedWorkspace = async (assetId: string, workspaceId: string | null) => {
-    const current = account();
-    if (!current) return;
+  const setCachedWorkspace = async (
+    assetId: string,
+    workspaceId: string | null,
+    userId: string,
+  ) => {
     await cache
-      .update(current.userId, (entries) =>
+      .update(userId, (entries) =>
         entries ? entries.map((e) => (e.assetId === assetId ? { ...e, workspaceId } : e)) : null,
       )
       .catch((error: unknown) =>
@@ -158,8 +160,8 @@ export function registerLibraryVaultHandlers(deps: {
     account,
     assign: (token, assetId, workspaceId) =>
       assignAssetWorkspace({ serverUrl: deps.serverUrl }, token, assetId, workspaceId),
-    onConfirmed: async (assetId, workspaceId) => {
-      await setCachedWorkspace(assetId, workspaceId);
+    onConfirmed: async (assetId, workspaceId, userId) => {
+      await setCachedWorkspace(assetId, workspaceId, userId);
       broadcastLibraryChanged();
     },
   });
@@ -170,10 +172,13 @@ export function registerLibraryVaultHandlers(deps: {
       const current = account();
       const catalog = current ? await cache.read(current.userId) : null;
       if (catalog && !catalog.some((e) => e.assetId === assetId)) return;
-      await assignQueue.enqueue(assetId, workspaceId);
+      await assignQueue.enqueue(assetId, workspaceId, current?.userId ?? null);
     })().catch((error: unknown) => console.error("[cloud] queueing a moved item failed", error));
   };
-  const cloudScope = (): CloudScope => ({ ...cloudScopeBase(), pending: assignQueue.pending() });
+  const cloudScope = (): CloudScope => ({
+    ...cloudScopeBase(),
+    pending: assignQueue.pending(account()?.userId ?? null),
+  });
 
   const service = new LibraryService({
     vault: currentVault,
@@ -203,8 +208,9 @@ export function registerLibraryVaultHandlers(deps: {
         account,
         assign: (token, assetId, workspaceId) =>
           assignAssetWorkspace({ serverUrl: deps.serverUrl }, token, assetId, workspaceId),
-        confirmed: (assetId, workspaceId) => setCachedWorkspace(assetId, workspaceId),
-        defer: (assetId, workspaceId) => assignQueue.defer(assetId, workspaceId),
+        confirmed: (assetId, workspaceId, userId) =>
+          setCachedWorkspace(assetId, workspaceId, userId),
+        defer: (assetId, workspaceId, userId) => assignQueue.defer(assetId, workspaceId, userId),
         markAssigned: markCloudAssigned,
       });
       if (result.assigned.length > 0 || result.queued.length > 0) broadcastLibraryChanged();

@@ -15,6 +15,12 @@ import type { AssignOutcome } from "./assign-client";
 interface QueuedAssignment {
   assetId: string;
   workspaceId: string | null;
+  /**
+   * The account signed in when it was queued: only that account sends it, and only its cache
+   * learns the answer. Null when nobody was signed in: the next account that signs in sends it,
+   * and a `NOT_FOUND` from it drops the entry (the asset is not that account's).
+   */
+  userId: string | null;
   attempts: number;
   /** Epoch ms; not sent before. */
   nextAttemptAt: number;
@@ -30,8 +36,8 @@ export interface AssignQueueDeps {
   file: string;
   account(): { userId: string; token: string } | null;
   assign(token: string, assetId: string, workspaceId: string | null): Promise<AssignOutcome>;
-  /** The server holds it: the cached catalog entry takes the new workspace. */
-  onConfirmed(assetId: string, workspaceId: string | null): Promise<void>;
+  /** The server holds it: that account's cached catalog entry takes the new workspace. */
+  onConfirmed(assetId: string, workspaceId: string | null, userId: string): Promise<void>;
   now?(): number;
   /** Call `run` in `ms` (a timer in the app; nothing in a test). */
   schedule?(run: () => void, ms: number): void;
@@ -64,36 +70,46 @@ export class AssignQueue {
       const parsed = JSON.parse(await readFile(this.deps.file, "utf-8")) as QueueFile;
       this.entries =
         parsed.version === 1 && Array.isArray(parsed.entries)
-          ? parsed.entries.filter(
-              (e) =>
-                typeof e?.assetId === "string" &&
-                (typeof e.workspaceId === "string" || e.workspaceId === null),
-            )
+          ? parsed.entries
+              .filter(
+                (e) =>
+                  typeof e?.assetId === "string" &&
+                  (typeof e.workspaceId === "string" || e.workspaceId === null),
+              )
+              .map((e) => ({ ...e, userId: typeof e.userId === "string" ? e.userId : null }))
           : [];
     } catch {
       this.entries = [];
     }
   }
 
-  /** assetId → workspace, for every assignment the server has not confirmed. */
-  pending(): ReadonlyMap<string, string | null> {
-    return new Map(this.entries.map((e) => [e.assetId, e.workspaceId] as const));
+  /**
+   * assetId → workspace, for every assignment `userId`'s account (or nobody's) still owes the
+   * server. Another account's entries do not overlay this one's catalog.
+   */
+  pending(userId: string | null): ReadonlyMap<string, string | null> {
+    return new Map(
+      this.entries
+        .filter((e) => e.userId === null || e.userId === userId)
+        .map((e) => [e.assetId, e.workspaceId] as const),
+    );
   }
 
   /** Owe the server this assignment (replacing an older one of the asset) and try at once. */
-  async enqueue(assetId: string, workspaceId: string | null): Promise<void> {
+  async enqueue(assetId: string, workspaceId: string | null, userId: string | null): Promise<void> {
     this.entries = this.entries.filter((e) => e.assetId !== assetId);
-    this.entries.push({ assetId, workspaceId, attempts: 0, nextAttemptAt: 0 });
+    this.entries.push({ assetId, workspaceId, userId, attempts: 0, nextAttemptAt: 0 });
     await this.save();
     await this.process();
   }
 
   /** Owe the server this assignment, which was just tried and not answered: retried later. */
-  async defer(assetId: string, workspaceId: string | null): Promise<void> {
+  async defer(assetId: string, workspaceId: string | null, userId: string | null): Promise<void> {
     this.entries = this.entries.filter((e) => e.assetId !== assetId);
     this.entries.push({
       assetId,
       workspaceId,
+      userId,
       attempts: 1,
       nextAttemptAt: this.now() + retryDelayMs(1),
     });
@@ -118,6 +134,8 @@ export class AssignQueue {
     let changed = false;
     for (const entry of this.entries.slice()) {
       if (entry.nextAttemptAt > this.now()) continue;
+      // Another account's assignment waits for that account (its token would get NOT_FOUND).
+      if (entry.userId !== null && entry.userId !== account.userId) continue;
       const outcome = await this.deps.assign(account.token, entry.assetId, entry.workspaceId);
       // A newer enqueue of the same asset replaced this entry while it was in flight.
       const current = this.entries.find((e) => e.assetId === entry.assetId);
@@ -125,7 +143,9 @@ export class AssignQueue {
       changed = true;
       if (outcome === "ok" || outcome === "not-found") {
         this.entries = this.entries.filter((e) => e !== entry);
-        if (outcome === "ok") await this.deps.onConfirmed(entry.assetId, entry.workspaceId);
+        if (outcome === "ok") {
+          await this.deps.onConfirmed(entry.assetId, entry.workspaceId, account.userId);
+        }
         continue;
       }
       entry.attempts += 1;

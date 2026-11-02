@@ -28,6 +28,7 @@ import {
   type CompanionPaths,
   type Sidecar,
 } from "../library/library-vault";
+import { probeDataless } from "../library/dataless";
 import { copyExclusive, placeByRename, placeNoReplace } from "../library/safe-place";
 import { TagRegistryError, VaultTagRepository } from "../library/tag-repository";
 import type { SessionMeta } from "../library/video-edit-session";
@@ -114,6 +115,11 @@ export interface MoverFs {
   sha256(path: string): Promise<string>;
   /** Free bytes on the volume that holds `directory`. */
   freeBytes(directory: string): Promise<number>;
+  /**
+   * Which of these files a provider has offloaded (`SF_DATALESS`). Asked only when the source
+   * is synced, before any byte of it is read: reading an evicted file downloads it.
+   */
+  evicted(paths: string[]): Promise<ReadonlySet<string>>;
 }
 
 export interface MoverDeps {
@@ -130,6 +136,7 @@ export interface MoverDeps {
 export const MOVE_SPACE_MARGIN_BYTES = 256 * 1024 * 1024;
 
 const defaultFs: MoverFs = {
+  evicted: probeDataless,
   link,
   sha256: sha256FileBase64,
   freeBytes: async (directory) => {
@@ -267,6 +274,12 @@ async function moveLocked(request: MoveRequest, deps: MoverDeps): Promise<MoveOu
 
   const media = item.filePath;
   const ext = extname(media);
+  // The renderer refuses an evicted item too, but its list may be older than the eviction: main
+  // checks again before the hash or the copy reads the file (decision 15).
+  if (source.scratch !== undefined) {
+    const offloaded = await fs.evicted([media, from.webcamFilePath(id)]);
+    if (offloaded.size > 0) return refuse("evicted");
+  }
   const mediaInfo = await stat(media);
   const sameDevice = (await stat(source.directory)).dev === targetInfo.dev;
   // A synced side always copies: never a second name for a file a provider syncs.

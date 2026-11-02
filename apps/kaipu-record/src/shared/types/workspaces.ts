@@ -190,6 +190,8 @@ export type MoveRefusal =
   | "tags-unreadable"
   /** The copy did not match the original byte for byte; the original is untouched. */
   | "checksum-mismatch"
+  /** A synced workspace's provider offloaded the media: copying it would download it. */
+  | "evicted"
   /** "Check and fix files" is running. */
   | "maintenance"
   /** The window's workspace is no longer the active one. */

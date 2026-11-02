@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { join } from "node:path";
 import type { SyncProvider } from "@shared/types/workspaces";
 import { detectSync, syncProviderOfPath, withTimeout } from "./synced-folder";
@@ -12,6 +13,7 @@ export class SyncStates {
 
   constructor(
     private readonly detect: (path: string) => Promise<SyncProvider | null> = detectSync,
+    private readonly home: string = homedir(),
   ) {}
 
   async refresh(entry: { id: string; path: string }): Promise<SyncProvider | null> {
@@ -24,7 +26,7 @@ export class SyncStates {
   of(entry: { id: string; path: string }): SyncProvider | null {
     const hit = this.known.get(entry.id);
     if (hit && hit.path === entry.path) return hit.sync;
-    return syncProviderOfPath(entry.path);
+    return syncProviderOfPath(entry.path, this.home);
   }
 }
 

@@ -374,6 +374,17 @@ export function activeScratch(): string | null {
 }
 
 /**
+ * The scratch staging folder of the workspace registered at `vaultDir`, synced or not (the
+ * stranded-take sweep reads it whenever it exists), or null for a folder no workspace holds.
+ */
+export function scratchStagingFor(vaultDir: string): string | null {
+  const entry = requireRegistry()
+    .entries()
+    .find((candidate) => candidate.path === vaultDir);
+  return entry ? scratchTmp(app.getPath("userData"), entry.id) : null;
+}
+
+/**
  * Recording staging for a folder (`RecordingWriter.stagingFor`): the scratch folder of the
  * synced workspace that lives there, or null to stage in `.kaipu/tmp/`.
  */

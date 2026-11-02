@@ -2666,7 +2666,8 @@
     "reason_io": "no se pudo copiar un archivo; el original no se tocó",
     "closeRefused": "El editor siguió abierto, así que no se movió nada.",
     "costSynced": "Carpeta sincronizada · copia",
-    "notMovableEvicted": "En la nube: descárgalo primero"
+    "notMovableEvicted": "En la nube: descárgalo primero",
+    "reason_evicted": "está en la nube: descárgalo primero"
   },
   "settingsScope": {
     "selectorLabel": "Ajustes de",
@@ -2751,6 +2752,7 @@
     "queued": "{count, plural, one {# elemento se asignará} other {# elementos se asignarán}} a {name} cuando Kaipu llegue al servidor.",
     "failedNotFound": "{count, plural, one {# elemento ya no está} other {# elementos ya no están}} en Kaipu Cloud.",
     "failed": "Kaipu no pudo asignarlos. Inténtalo de nuevo.",
-    "loading": "Cargando…"
+    "loading": "Cargando…",
+    "loadFailed": "Kaipu no pudo leer los elementos en la nube de este workspace. Lo intenta de nuevo cuando cambia la Biblioteca."
   }
 }

@@ -42,6 +42,7 @@ import {
   attachWindowTitle,
   availableWorkspacePaths,
   initWorkspaces,
+  scratchStagingFor,
   syncedStagingFor,
   notifyWorkspaceBusyChanged,
   registerWorkspaceHandlers,
@@ -759,12 +760,14 @@ async function recoverStrandedEverywhere(): Promise<void> {
   const active = activeWorkspace().path;
   for (const vaultDir of await availableWorkspacePaths().catch(() => [])) {
     try {
-      // A synced workspace staged its takes in its scratch folder, not in `.kaipu/tmp/`.
-      const scratch = syncedStagingFor(vaultDir);
+      // A synced workspace stages its takes in its scratch folder; both it and `.kaipu/tmp/`
+      // are swept, whatever this launch's detection says.
+      const scratch = scratchStagingFor(vaultDir);
       const r = await recoverStrandedRecordings({
         vaultDir,
         ...(vaultDir === active ? { fallbackTempDir: app.getPath("temp") } : {}),
-        ...(scratch ? { stagingDir: scratch, placeByRename: true } : {}),
+        ...(scratch ? { extraStagingDirs: [scratch] } : {}),
+        placeByRename: syncedStagingFor(vaultDir) !== null,
         title,
       });
       if (r.recovered.length) console.info(`recovered ${r.recovered.length} stranded recording(s)`);

@@ -23,10 +23,12 @@ export interface SweepDeps {
    */
   fallbackTempDir?: string;
   /**
-   * A synced workspace's staging folder (its scratch folder in userData), swept instead of
-   * `.kaipu/tmp/`; its takes are placed by rename, never by a hard link (decision 15).
+   * The workspace's scratch staging folder in userData (where a synced workspace stages its
+   * takes), swept **as well as** `.kaipu/tmp/`: a folder moved into a provider still has its old
+   * parts there, and a launch whose detection did not answer must still find the scratch ones.
    */
-  stagingDir?: string;
+  extraStagingDirs?: string[];
+  /** The workspace is synced: recovered takes are placed by rename, never by a hard link. */
   placeByRename?: boolean;
   /** Title written to each recovered take's sidecar (localized by the caller). */
   title: string;
@@ -57,7 +59,8 @@ export async function recoverStrandedRecordings(deps: SweepDeps): Promise<SweepR
   const vault = new LibraryVault(deps.vaultDir);
   const result: SweepResult = { recovered: [], discarded: 0, failed: [] };
   const dirs = [
-    deps.stagingDir ?? join(deps.vaultDir, STAGING_DIR),
+    join(deps.vaultDir, STAGING_DIR),
+    ...(deps.extraStagingDirs ?? []),
     ...(deps.fallbackTempDir ? [deps.fallbackTempDir] : []),
   ];
   for (const dir of dirs) {
