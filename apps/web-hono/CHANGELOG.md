@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.11.1](https://github.com/niway-dev/kaipu-record/compare/web-v0.11.0...web-v0.11.1) (2026-11-02)
+
+
+### Bug Fixes
+
+* show Kai the fox, not the retired play-mark, on Windows icons, the watermark and link previews ([be17835](https://github.com/niway-dev/kaipu-record/commit/be178352f4318094d66e87ab97b5de1d7580dc22))
+* **web:** composite the share image losslessly and bust preview caches ([e0b6d4a](https://github.com/niway-dev/kaipu-record/commit/e0b6d4a8a397c5a2e8d4b28a2466d498dd5b72db))
+* **web:** put the fox on the share image ([a9c7738](https://github.com/niway-dev/kaipu-record/commit/a9c773883c90ccc0f606362475f641297c5bad37))
+
 ## [0.11.0](https://github.com/niway-dev/kaipu-record/compare/web-v0.10.0...web-v0.11.0) (2026-10-20)
 
 
