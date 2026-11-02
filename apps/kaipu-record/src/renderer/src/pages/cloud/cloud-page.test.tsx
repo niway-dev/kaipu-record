@@ -43,6 +43,7 @@ describe("CloudPage (the save mode is per device and per workspace)", () => {
       state: "available" as const,
       itemCount: 0,
       device: "1",
+      sync: null,
     });
     const list = {
       activeId: "ws-a",

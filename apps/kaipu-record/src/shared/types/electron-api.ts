@@ -36,7 +36,9 @@ import type {
   MoveItemsRequest,
   MoveItemsResult,
   MoveProgress,
+  AssignCloudResult,
   WorkspaceAddResult,
+  WorkspaceCloudState,
   WorkspaceCreateResult,
   WorkspaceEditRequest,
   WorkspaceEditResult,
@@ -239,6 +241,10 @@ export interface WorkspacesBridge {
   openFolder(id: string): Promise<void>;
   /** The one-time "New: workspaces" hint was dismissed. */
   dismissHint(): Promise<void>;
+  /** The Cloud page: where the active workspace lives, its cloud filter, the unassigned items. */
+  cloudState(): Promise<WorkspaceCloudState>;
+  /** "Assign to workspace…": give these cloud items to `targetId` (never automatic). */
+  assignCloud(assetIds: string[], targetId: string): Promise<AssignCloudResult>;
   /** After any registry change or switch, with the new state. */
   onChanged(callback: (state: WorkspacesState) => void): () => void;
   /**

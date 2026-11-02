@@ -39,6 +39,10 @@ describe("open-in-editor", () => {
     expect(canOpenInEditor(screenshot)).toBe(true);
     expect(canOpenInEditor({ ...recording, id: null })).toBe(false);
     expect(canOpenInEditor({ ...screenshot, id: null })).toBe(false);
+    // Synced folders: an evicted media file is not opened (it would download).
+    expect(canOpenInEditor({ ...recording, evicted: "media" })).toBe(false);
+    expect(canOpenInEditor({ ...screenshot, evicted: "media" })).toBe(false);
+    expect(canOpenInEditor({ ...recording, evicted: "thumbnail" })).toBe(true);
     expect(canOpenInEditor({ ...recording, durationSeconds: 0 })).toBe(false);
   });
 

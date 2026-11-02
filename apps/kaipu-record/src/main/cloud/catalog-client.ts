@@ -18,6 +18,8 @@ interface WireAsset {
   hasThumbnail: boolean;
   derivedFromAssetId: string | null;
   autoUploadExcluded: boolean;
+  /** Absent from a server that predates workspaces: read as null. */
+  workspaceId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -84,6 +86,7 @@ export async function fetchCloudCatalog(
         createdAt: Number.isNaN(createdAt) ? 0 : createdAt,
         lastVerifiedAt: now,
         lastSeenLocalId: null,
+        workspaceId: typeof a.workspaceId === "string" ? a.workspaceId : null,
       });
     }
     cursor = body.data.nextCursor;

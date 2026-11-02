@@ -80,4 +80,24 @@ describe("CatalogCache", () => {
       [payloadA, payloadB].some((payload) => JSON.stringify(payload) === JSON.stringify(result)),
     ).toBe(true);
   });
+
+  it("update() is a read-modify-write inside the write chain: concurrent updates both land", async () => {
+    const cache = new CatalogCache(dir);
+    await cache.write("u1", [entry("a"), entry("b")]);
+    await Promise.all([
+      cache.update("u1", (entries) =>
+        entries!.map((e) => (e.assetId === "a" ? { ...e, lastSeenLocalId: "la" } : e)),
+      ),
+      cache.update("u1", (entries) =>
+        entries!.map((e) => (e.assetId === "b" ? { ...e, lastSeenLocalId: "lb" } : e)),
+      ),
+    ]);
+    expect((await cache.read("u1"))?.map((e) => e.lastSeenLocalId)).toEqual(["la", "lb"]);
+  });
+
+  it("update() returning null writes nothing", async () => {
+    const cache = new CatalogCache(dir);
+    await cache.update("u1", () => null);
+    expect(await cache.read("u1")).toBeNull();
+  });
 });

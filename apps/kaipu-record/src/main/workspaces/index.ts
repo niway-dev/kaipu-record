@@ -18,6 +18,7 @@ import type {
   WorkspaceStamp,
   WorkspaceSwitchResult,
   WorkspaceView,
+  SyncProvider,
 } from "@shared/types/workspaces";
 import {
   getAllLevelSettings,
@@ -36,7 +37,10 @@ import { healMoves, moveItem, type MoveSide } from "./move-item";
 import { uuidv7 } from "../library/tag-repository";
 import { defaultVaultDirectory, forgetCachedPreferences } from "../library/vault-location";
 import { StaleWorkspaceError, WorkspaceGate } from "./gate";
-import { WorkspaceRegistry, type WorkspaceEntry } from "./registry";
+import { WorkspaceRegistry, type Availability, type WorkspaceEntry } from "./registry";
+import type { CloudScope } from "../cloud/workspace-filter";
+import { probeDataless, type EvictionProbe } from "../library/dataless";
+import { boundedProbe, scratchRoot, scratchTmp, SyncStates } from "./sync-state";
 import { MachineSettingsStore } from "./settings-overrides";
 import { WorkspaceSettings } from "./workspace-settings";
 import { PrepareRequests } from "./prepare-windows";
@@ -55,6 +59,13 @@ import { toWorkspaceView } from "./workspace-view";
 const PREPARE_TIMEOUT_MS = 120_000;
 
 let registry: WorkspaceRegistry | null = null;
+/** Which provider syncs each workspace's folder (spec, Synced folders). */
+const syncStates = new SyncStates();
+/**
+ * Synced workspaces whose last availability check did not answer in time: available under
+ * their registered id (an evicted `identity.json` is downloading), but not a move target.
+ */
+const unverified = new Set<string>();
 let gate: WorkspaceGate | null = null;
 let workspaceSettings: WorkspaceSettings | null = null;
 
@@ -65,6 +76,11 @@ export interface WorkspaceHost {
   dropPendingCaptures(): void;
   /** Re-list every window's library (`library:changed`). */
   broadcastLibraryChanged(): void;
+  /**
+   * A move committed: its cloud asset now belongs to `targetId`. Best effort, never awaited
+   * by the move (ADR 0033, the cloud step); the library's assignment queue retries it.
+   */
+  itemMoved?(assetId: string, targetId: string): void;
 }
 
 let host: WorkspaceHost | null = null;
@@ -95,6 +111,8 @@ export async function initWorkspaces(): Promise<void> {
     onPreferencesWritten: forgetCachedPreferences,
   });
   gate = new WorkspaceGate(registry.active().id);
+  // Re-detected on every launch (a folder may have been moved into Drive since).
+  await Promise.all(registry.entries().map((entry) => syncStates.refresh(entry)));
   await initWorkspaceSettings(registry);
   // The preload reads the stamp once, synchronously, before the page's scripts run, so it
   // is answered from here, before any window can exist.
@@ -121,7 +139,7 @@ async function initWorkspaceSettings(reg: WorkspaceRegistry): Promise<void> {
     machine,
     workspaces: () => reg.entries().map(({ id, name, path }) => ({ id, name, path })),
     activeId: () => reg.active().id,
-    isAvailable: async (id) => (await reg.availability(id)).availability.state === "available",
+    isAvailable: async (id) => (await availabilityOf(id)).availability.state === "available",
     getAll: getAllLevelSettings,
     writeAll: (patch) => {
       updateAppSettings(patch);
@@ -149,6 +167,31 @@ export async function refreshActiveWorkspaceSettings(): Promise<void> {
   await workspaceSettings?.refresh(requireRegistry().active().id);
 }
 
+/**
+ * The availability check, bounded for a synced workspace: a provider that does not answer
+ * must never hang the switcher, a capture or a move, and the check never lists the provider's
+ * root (spec, Availability and Synced folders). Unanswered, a folder that `stat` still sees is
+ * available under its registered id, unverified; one that `stat` cannot see is missing.
+ */
+async function availabilityOf(id: string): Promise<{ availability: Availability; id: string }> {
+  const reg = requireRegistry();
+  const entry = reg.get(id);
+  if (!entry || syncStates.of(entry) === null) return reg.availability(id);
+  const answered = await boundedProbe(reg.availability(id), null);
+  if (answered) {
+    unverified.delete(id);
+    return answered;
+  }
+  const seen = await boundedProbe(
+    stat(entry.path).then((info) => info.isDirectory()),
+    false,
+    1_000,
+  );
+  if (!seen) return { availability: { state: "unavailable", reason: "missing" }, id };
+  unverified.add(id);
+  return { availability: { state: "available" }, id };
+}
+
 function movesJournalDir(): string {
   return join(app.getPath("userData"), "workspace-moves");
 }
@@ -157,9 +200,18 @@ function movesJournalDir(): string {
 async function resolveMoveSide(side: MoveSide): Promise<string | null> {
   const reg = requireRegistry();
   if (!reg.get(side.workspaceId)) return null;
-  const { availability, id } = await reg.availability(side.workspaceId);
+  const { availability, id } = await availabilityOf(side.workspaceId);
   if (availability.state !== "available") return null;
+  // An identity still downloading cannot prove the folder is this workspace: no move yet.
+  if (unverified.has(id)) return null;
   return reg.get(id)?.path ?? null;
+}
+
+/** A workspace as one side of a move: a synced one stages in its scratch folder (decision 15). */
+function moveSideOf(entry: WorkspaceEntry, directory = entry.path): MoveSide {
+  return syncStates.of(entry) === null
+    ? { workspaceId: entry.id, directory }
+    : { workspaceId: entry.id, directory, scratch: scratchRoot(app.getPath("userData"), entry.id) };
 }
 
 /**
@@ -240,16 +292,21 @@ async function moveItems(
             if (directory === null) return { ok: false, reason: "target-unavailable" };
             const outcome = await moveItem(
               {
-                source: { workspaceId: source.id, directory: source.path },
-                target: { workspaceId: target, directory },
+                source: moveSideOf(source),
+                target: moveSideOf(entry, directory),
                 id: item.id,
                 expectedAssetId: item.assetId,
               },
               { journalDir: movesJournalDir(), deviceId: () => device, dragLedger },
             );
-            return outcome.ok
-              ? { ok: true, newId: outcome.newId }
-              : { ok: false, reason: outcome.reason };
+            if (!outcome.ok) return { ok: false, reason: outcome.reason };
+            // The local move is committed; the cloud follows, best effort, never blocking it.
+            try {
+              host?.itemMoved?.(item.assetId, target);
+            } catch (error) {
+              console.error("[workspaces] could not queue the cloud assignment", error);
+            }
+            return { ok: true, newId: outcome.newId };
           },
           {
             targetId: target,
@@ -278,10 +335,67 @@ export function activeWorkspace(): WorkspaceEntry {
   return requireRegistry().active();
 }
 
-/** Owns the cloud entries without a workspace id (spec decision 3): only it lists them. */
-export function ownsLegacyCloud(): boolean {
+/**
+ * What the cloud filter needs from the registry (`workspace-filter.ts`, decisions 3, 4, 23);
+ * the caller adds the pending assignments.
+ */
+export function cloudScopeBase(): Omit<CloudScope, "pending"> {
   const reg = requireRegistry();
-  return reg.active().id === reg.state.legacyCloudOwnerId;
+  return {
+    activeId: reg.active().id,
+    legacyOwnerId: reg.state.legacyCloudOwnerId,
+    registered: new Set(reg.entries().map((entry) => entry.id)),
+    unassignedHidden: reg.state.cloudAssignedAt !== undefined,
+  };
+}
+
+/** The first "Assign to workspace…": the unassigned stop showing in the legacy owner. */
+export async function markCloudAssigned(): Promise<void> {
+  await requireRegistry().markCloudAssigned();
+}
+
+/** Every registered workspace, by id, for the cloud page. */
+export function registeredWorkspaces(): readonly WorkspaceEntry[] {
+  return requireRegistry().entries();
+}
+
+/** The provider that syncs a workspace's folder, or null. */
+export function workspaceSync(entry: WorkspaceEntry): SyncProvider | null {
+  return syncStates.of(entry);
+}
+
+/** The active workspace's eviction probe, when it is synced (`LibraryVault`, the media protocol). */
+export function activeEvictionProbe(): EvictionProbe | null {
+  return syncStates.of(requireRegistry().active()) === null ? null : probeDataless;
+}
+
+/** The scratch folder of the active workspace when it is synced, else null. */
+export function activeScratch(): string | null {
+  const active = requireRegistry().active();
+  return syncStates.of(active) === null ? null : scratchRoot(app.getPath("userData"), active.id);
+}
+
+/**
+ * The scratch staging folder of the workspace registered at `vaultDir`, synced or not (the
+ * stranded-take sweep reads it whenever it exists), or null for a folder no workspace holds.
+ */
+export function scratchStagingFor(vaultDir: string): string | null {
+  const entry = requireRegistry()
+    .entries()
+    .find((candidate) => candidate.path === vaultDir);
+  return entry ? scratchTmp(app.getPath("userData"), entry.id) : null;
+}
+
+/**
+ * Recording staging for a folder (`RecordingWriter.stagingFor`): the scratch folder of the
+ * synced workspace that lives there, or null to stage in `.kaipu/tmp/`.
+ */
+export function syncedStagingFor(vaultDir: string): string | null {
+  const entry = requireRegistry()
+    .entries()
+    .find((candidate) => candidate.path === vaultDir);
+  if (!entry || syncStates.of(entry) === null) return null;
+  return scratchTmp(app.getPath("userData"), entry.id);
 }
 
 /** The workspace's name for a label, only once a second one exists (window title, tray). */
@@ -307,7 +421,7 @@ export async function requireCaptureWorkspace(): Promise<WorkspaceEntry> {
   const reg = requireRegistry();
   if (workspaceGate().switching) throw new StaleWorkspaceError();
   const active = reg.active();
-  const { availability, id } = await reg.availability(active.id);
+  const { availability, id } = await availabilityOf(active.id);
   if (workspaceGate().adopt(active.id, id, reg.active().id)) void broadcastState();
   if (availability.state !== "available") throw new WorkspaceNotConnectedError(active.name);
   await refreshActiveWorkspaceSettings();
@@ -320,7 +434,7 @@ export async function availableWorkspacePaths(): Promise<string[]> {
   const paths: string[] = [];
   // A copy: a probe may update an entry (a pending one adopting its folder's id).
   for (const entry of reg.entries().slice()) {
-    const { availability } = await reg.availability(entry.id);
+    const { availability } = await availabilityOf(entry.id);
     if (availability.state === "available") paths.push(entry.path);
   }
   return paths;
@@ -330,12 +444,17 @@ async function listState(): Promise<WorkspacesState> {
   const reg = requireRegistry();
   const views: WorkspaceView[] = [];
   for (const entry of reg.entries().slice()) {
-    const { availability, id } = await reg.availability(entry.id);
+    const { availability, id } = await availabilityOf(entry.id);
     // A pending active entry that adopted its folder's id: windows must take the new stamp.
     if (workspaceGate().adopt(entry.id, id, reg.active().id)) void broadcastState();
+    // A synced folder's count is bounded too: `readdir` never downloads, but a stuck
+    // provider must not hang the switcher.
     const count =
       availability.state === "available"
-        ? await new LibraryVault(entry.path).countMedia().catch(() => null)
+        ? await boundedProbe(
+            new LibraryVault(entry.path).countMedia().catch(() => null),
+            null,
+          )
         : null;
     // Which volume the folder is on: "Move to" says whether a move copies or is instant.
     const device =
@@ -345,7 +464,8 @@ async function listState(): Promise<WorkspacesState> {
             () => null,
           )
         : null;
-    views.push(toWorkspaceView(reg.get(id) ?? entry, availability, count, device));
+    const current = reg.get(id) ?? entry;
+    views.push(toWorkspaceView(current, availability, count, device, syncStates.of(current)));
   }
   const { activeId, hintDismissedAt } = reg.state;
   return {
@@ -419,7 +539,7 @@ async function runSwitch(id: string): Promise<WorkspaceSwitchResult> {
       activeId: () => reg.active().id,
       isKnown: (candidate) => reg.get(candidate) !== undefined,
       readOnly: () => reg.readOnly,
-      availability: (candidate) => reg.availability(candidate),
+      availability: (candidate) => availabilityOf(candidate),
       persistActive: async (target) => {
         await reg.setActive(target);
         // The target's overrides are read before the switch is certain, so the effective
@@ -455,6 +575,7 @@ async function addWorkspace(
   if (picked.canceled || !chosen) return { ok: false, reason: "cancelled" };
 
   const outcome = await reg.add(chosen);
+  if (outcome.ok) await syncStates.refresh(outcome.entry);
   if (!outcome.ok) {
     if (outcome.reason !== "read-only") {
       const message = { type: "error" as const, message: t("dialogs.folderUnusable") };
@@ -471,7 +592,7 @@ async function addWorkspace(
   }
   // Adding a workspace answers the "New: workspaces" hint too.
   await reg.dismissHint();
-  const { availability } = await reg.availability(outcome.entry.id);
+  const { availability } = await availabilityOf(outcome.entry.id);
   // An adopted folder may bring its own settings file: read it now, so it shows as pending.
   await workspaceSettings?.refresh(outcome.entry.id);
   // Then make it the active one, through the same transaction as any other switch. A
@@ -479,7 +600,16 @@ async function addWorkspace(
   // workspace…" keeps it inactive: the item goes there, the user stays here.
   if (request.activate !== false) await runSwitch(outcome.entry.id);
   await broadcastState();
-  return { ok: true, workspace: toWorkspaceView(outcome.entry, availability, null) };
+  return {
+    ok: true,
+    workspace: toWorkspaceView(
+      outcome.entry,
+      availability,
+      null,
+      null,
+      syncStates.of(outcome.entry),
+    ),
+  };
 }
 
 /**
@@ -497,15 +627,22 @@ async function createWorkspace(input: unknown): Promise<WorkspaceCreateResult> {
   if (typeof color !== "string") return { ok: false, reason: "invalid-color" };
   const outcome = await reg.create({ name, color });
   if (!outcome.ok) return outcome;
+  await syncStates.refresh(outcome.entry);
   await reg.dismissHint();
-  const { availability } = await reg.availability(outcome.entry.id);
+  const { availability } = await availabilityOf(outcome.entry.id);
   // "Move to ▸ New workspace…" creates it inactive: the item goes there, the user stays here.
   const switchResult: WorkspaceSwitchResult =
     activate === false ? { ok: true } : await runSwitch(outcome.entry.id);
   await broadcastState();
   return {
     ok: true,
-    workspace: toWorkspaceView(outcome.entry, availability, null),
+    workspace: toWorkspaceView(
+      outcome.entry,
+      availability,
+      null,
+      null,
+      syncStates.of(outcome.entry),
+    ),
     switchResult,
   };
 }
@@ -519,13 +656,19 @@ async function editWorkspace(input: unknown): Promise<WorkspaceEditResult> {
     ...(typeof color === "string" ? { color } : {}),
   });
   if (!outcome.ok) return outcome;
-  const { availability } = await reg.availability(outcome.entry.id);
+  const { availability } = await availabilityOf(outcome.entry.id);
   // The window title shows the active workspace's name, and the tiles show the initials.
   refreshTitles();
   await broadcastState();
   return {
     ok: true,
-    workspace: toWorkspaceView(outcome.entry, availability, null),
+    workspace: toWorkspaceView(
+      outcome.entry,
+      availability,
+      null,
+      null,
+      syncStates.of(outcome.entry),
+    ),
     savedToFolder: outcome.savedToFolder,
   };
 }
@@ -607,13 +750,16 @@ async function relocateFolder(
 
   const outcome = await relocateWorkspace(deps, id, chosen);
   if (!outcome.ok) return outcome;
-  const { availability } = await reg.availability(outcome.entry.id);
+  // The new folder may be a synced one (Google Drive): detect it, and probe it bounded.
+  const current = reg.get(outcome.entry.id) ?? outcome.entry;
+  await syncStates.refresh(current);
+  const { availability } = await availabilityOf(current.id);
   // The active workspace re-lists inside its transaction; any other one only needs the state.
   refreshTitles();
   await broadcastState();
   return {
     ok: true,
-    workspace: toWorkspaceView(reg.get(outcome.entry.id) ?? outcome.entry, availability, null),
+    workspace: toWorkspaceView(current, availability, null, null, syncStates.of(current)),
     ...(outcome.unchanged ? { unchanged: true as const } : {}),
   };
 }

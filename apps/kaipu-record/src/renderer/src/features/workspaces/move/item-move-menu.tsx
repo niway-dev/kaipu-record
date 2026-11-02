@@ -53,7 +53,9 @@ export function ItemMoveMenu({
       ? t("notMovableCloud")
       : blocked === "record"
         ? t("notMovableRecord")
-        : null;
+        : blocked === "evicted"
+          ? t("notMovableEvicted")
+          : null;
 
   return (
     <div className={styles.itemMenuAnchor} onClick={(event) => event.stopPropagation()}>

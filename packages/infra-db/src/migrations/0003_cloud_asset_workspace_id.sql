@@ -1,0 +1,1 @@
+ALTER TABLE "kaipu_record_cloud_asset" ADD COLUMN "workspace_id" text;

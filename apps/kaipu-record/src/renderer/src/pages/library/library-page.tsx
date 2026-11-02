@@ -157,7 +157,9 @@ export function LibraryPage(): React.JSX.Element {
           ? tMove("notMovableCloud")
           : blocked === "record"
             ? tMove("notMovableRecord")
-            : null,
+            : blocked === "evicted"
+              ? tMove("notMovableEvicted")
+              : null,
       label: tMove("selectItem", { title: video.title || t("untitled") }),
       onToggle: (range) => selection.toggle(video.assetId, range),
     };

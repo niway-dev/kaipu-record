@@ -28,6 +28,7 @@ const view = (id: string, name: string): WorkspacesState["workspaces"][number] =
   state: "available",
   itemCount: 1,
   device: "1",
+  sync: null,
 });
 const STATE: WorkspacesState = {
   activeId: "ws-a",
@@ -285,5 +286,27 @@ describe("Settings → Workspaces → Change folder…", () => {
     );
     // The folder is already changed; the dialog stays for the name and color.
     expect(screen.getByRole("alertdialog", { name: "Edit workspace" })).toBeInTheDocument();
+  });
+});
+
+describe("Settings → Workspaces: a synced folder (decision 15)", () => {
+  it("labels a workspace inside Google Drive as synced by it", async () => {
+    window.electronAPI = {
+      ...realApi,
+      workspaces: {
+        ...realApi.workspaces,
+        list: async () => ({
+          ...STATE,
+          workspaces: [view("ws-a", "Alpha"), { ...view("ws-b", "Bravo"), sync: "google-drive" }],
+        }),
+      },
+    };
+    render(
+      <WorkspacesProvider>
+        <WorkspacesSettingsPage />
+      </WorkspacesProvider>,
+    );
+    expect(await screen.findByText(/\/Users\/me\/Bravo · Synced by Google Drive/)).toBeTruthy();
+    expect(screen.queryByText(/\/Users\/me\/Alpha.*Synced/)).toBeNull();
   });
 });

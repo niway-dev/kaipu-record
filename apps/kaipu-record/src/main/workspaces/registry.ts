@@ -69,6 +69,12 @@ export interface WorkspacesKey {
   /** Set once the one-time "New: workspaces" hint is dismissed. */
   hintDismissedAt?: number;
   /**
+   * Set the first time the user assigns a cloud item to a workspace ("Assign to workspace…").
+   * Until then the legacy cloud owner keeps listing the cloud items with no workspace, so
+   * nothing disappears on upgrade; from then on they show only under "Unassigned cloud items".
+   */
+  cloudAssignedAt?: number;
+  /**
    * The one-time upgrade of a "Default workspace" migrated as rose to Kaipu's brand color has
    * run. Once set it never runs again, so a color the user picks later is never taken back.
    */
@@ -144,6 +150,9 @@ export function parseWorkspacesKey(value: unknown): WorkspacesKey | null {
     legacyCloudOwnerId: typeof owner === "string" ? owner : activeId,
     ...(typeof record["hintDismissedAt"] === "number"
       ? { hintDismissedAt: record["hintDismissedAt"] }
+      : {}),
+    ...(typeof record["cloudAssignedAt"] === "number"
+      ? { cloudAssignedAt: record["cloudAssignedAt"] }
       : {}),
     ...(record["kaipuColorApplied"] === true ? { kaipuColorApplied: true as const } : {}),
     entries: valid,
@@ -911,6 +920,14 @@ export class WorkspaceRegistry {
     if (this.readOnly || this.key.hintDismissedAt !== undefined) return;
     await this.update((key) => {
       key.hintDismissedAt = WorkspaceRegistry.now(this.env);
+    });
+  }
+
+  /** The first "Assign to workspace…": unassigned cloud items stop showing in the legacy owner. */
+  async markCloudAssigned(): Promise<void> {
+    if (this.readOnly || this.key.cloudAssignedAt !== undefined) return;
+    await this.update((key) => {
+      key.cloudAssignedAt = WorkspaceRegistry.now(this.env);
     });
   }
 

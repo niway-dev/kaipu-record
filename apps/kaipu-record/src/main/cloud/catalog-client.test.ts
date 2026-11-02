@@ -50,6 +50,18 @@ describe("fetchCloudCatalog", () => {
     expect(new Headers((init as RequestInit).headers).get("authorization")).toBe("Bearer tok");
   });
 
+  it("keeps the server's workspaceId, and reads a server without the field as null", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(page([ready("a", { workspaceId: "ws-1" }), ready("b")], null)),
+    );
+    const entries = await fetchCloudCatalog(config, "tok", 1);
+    expect(entries.map((e) => [e.assetId, e.workspaceId])).toEqual([
+      ["a", "ws-1"],
+      ["b", null],
+    ]);
+  });
+
   it("skips assets whose only revision is not ready yet", async () => {
     vi.stubGlobal(
       "fetch",

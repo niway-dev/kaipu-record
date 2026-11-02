@@ -20,6 +20,7 @@ import { getStorageUsage } from "./get-storage-usage";
 import { listCloudAssets } from "./list-cloud-assets";
 import { purgeAccountObjects } from "./purge-account-objects";
 import { retryPendingDeletes } from "./retry-pending-deletes";
+import { setAssetWorkspace } from "./set-asset-workspace";
 import { sweepExpiredReservations } from "./sweep-expired-reservations";
 import { sweepOrphanObjects } from "./sweep-orphan-objects";
 import { ticketWindowClosed, ticketWindowClosesAt, ticketWindowCutoff } from "./ticket-window";
@@ -56,6 +57,7 @@ function intent(overrides: Record<string, unknown> = {}) {
     durationSeconds: 10,
     derivedFromAssetId: null,
     thumbnail: null,
+    workspaceId: null as string | null,
     ...overrides,
   };
 }
@@ -363,6 +365,7 @@ describe("createUploadIntent", () => {
       title: input.title,
       durationSeconds: input.durationSeconds,
       derivedFromAssetId: input.derivedFromAssetId,
+      workspaceId: null,
       storageKey: `videos/u1/${input.assetId}/${winnerRevisionId}.mp4`,
       thumbnailKey: null,
       contentType: input.contentType,
@@ -422,6 +425,7 @@ describe("createUploadIntent", () => {
       title: input.title,
       durationSeconds: input.durationSeconds,
       derivedFromAssetId: input.derivedFromAssetId,
+      workspaceId: null,
       storageKey: `videos/u1/${input.assetId}/${winnerRevisionId}.mp4`,
       thumbnailKey: null,
       contentType: input.contentType,
@@ -1294,6 +1298,97 @@ describe("list / download / delete / usage", () => {
       uploadsEnabled: false,
       cloudUploads: true,
     });
+  });
+});
+
+describe("workspace of an asset (ADR 0032)", () => {
+  let assets: ReturnType<typeof makeFakeAssets>;
+  let storage: ReturnType<typeof makeFakeStorage>;
+  beforeEach(() => {
+    assets = makeFakeAssets();
+    storage = makeFakeStorage();
+  });
+
+  async function upload(input: ReturnType<typeof intent>, userId = "u1") {
+    const r = await createUploadIntent({
+      assets,
+      access: makeFakeAccess(),
+      storage,
+      userId,
+      entitlements: roomy,
+      input,
+      now: NOW,
+    });
+    storage.land(assets.revisions.get(r.revisionId)!.storageKey, {
+      sizeBytes: input.sizeBytes,
+      contentType: "video/mp4",
+      checksumSha256: SHA,
+    });
+    await confirmUpload({
+      assets,
+      storage,
+      userId,
+      assetId: input.assetId,
+      revisionId: r.revisionId,
+      now: NOW,
+    });
+    return r;
+  }
+
+  it("records the workspace an upload comes from, and lists it", async () => {
+    const input = { ...intent(), workspaceId: "ws-work" };
+    const r = await upload(input);
+    expect(r.asset.workspaceId).toBe("ws-work");
+    const page = await listCloudAssets({ assets, userId: "u1", cursor: null, limit: 10 });
+    expect(page.items[0]?.workspaceId).toBe("ws-work");
+  });
+
+  it("an upload without a workspace (an older desktop) is accepted and stays unassigned", async () => {
+    const r = await upload({ ...intent(), workspaceId: null });
+    expect(r.asset.workspaceId).toBeNull();
+  });
+
+  it("a re-upload without a workspace keeps the asset's current one", async () => {
+    const first = { ...intent(), workspaceId: "ws-work" };
+    await upload(first);
+    await upload({ ...intent(), assetId: first.assetId, workspaceId: null });
+    expect((await assets.findAsset("u1", first.assetId))?.asset.workspaceId).toBe("ws-work");
+  });
+
+  it("assigns, reassigns and unassigns, idempotently", async () => {
+    const input = { ...intent(), workspaceId: null };
+    await upload(input);
+    const assign = (workspaceId: string | null) =>
+      setAssetWorkspace({ assets, userId: "u1", assetId: input.assetId, workspaceId });
+    expect((await assign("ws-a"))?.workspaceId).toBe("ws-a");
+    expect((await assign("ws-a"))?.workspaceId).toBe("ws-a");
+    expect((await assign("ws-b"))?.workspaceId).toBe("ws-b");
+    expect((await assign(null))?.workspaceId).toBeNull();
+  });
+
+  it("never assigns another account's asset", async () => {
+    const input = { ...intent(), workspaceId: "ws-a" };
+    await upload(input, "owner");
+    expect(
+      await setAssetWorkspace({
+        assets,
+        userId: "stranger",
+        assetId: input.assetId,
+        workspaceId: "ws-x",
+      }),
+    ).toBeNull();
+    expect((await assets.findAsset("owner", input.assetId))?.asset.workspaceId).toBe("ws-a");
+  });
+
+  it("answers null for an asset the account does not have", async () => {
+    expect(
+      await setAssetWorkspace({
+        assets,
+        userId: "u1",
+        assetId: crypto.randomUUID(),
+        workspaceId: "ws-a",
+      }),
+    ).toBeNull();
   });
 });
 

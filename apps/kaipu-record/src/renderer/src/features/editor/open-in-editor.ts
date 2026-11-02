@@ -16,7 +16,7 @@ export type EditableItem = Pick<
   LibraryVideo,
   "id" | "assetId" | "kind" | "title" | "durationSeconds" | "thumbnailUrl"
 > &
-  Partial<Pick<LibraryVideo, "fileSizeBytes" | "webcam">>;
+  Partial<Pick<LibraryVideo, "fileSizeBytes" | "webcam" | "evicted">>;
 
 /**
  * Whether an item can open in an editor: it needs a local copy, and a video
@@ -25,6 +25,8 @@ export type EditableItem = Pick<
  */
 export function canOpenInEditor(item: EditableItem): boolean {
   if (item.id === null) return false;
+  // A synced workspace's offloaded media: opening it would read it, which downloads it.
+  if (item.evicted === "media") return false;
   return item.kind === "screenshot" || item.durationSeconds > 0;
 }
 

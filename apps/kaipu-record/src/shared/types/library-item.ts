@@ -65,6 +65,11 @@ export interface CloudCatalogEntry {
   lastVerifiedAt: number;
   /** The local filename id this asset was last merged with, if any — lets an unreadable vault say "local unavailable" rather than "cloud". */
   lastSeenLocalId: string | null;
+  /**
+   * The desktop workspace the asset lives in, from the server (ADR 0032). Null when no
+   * workspace has claimed it; absent in a cache written before workspaces (reads as null).
+   */
+  workspaceId?: string | null;
 }
 
 export interface LibraryItem {

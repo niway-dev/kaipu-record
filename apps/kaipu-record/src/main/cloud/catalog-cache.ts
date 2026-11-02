@@ -40,11 +40,27 @@ export class CatalogCache {
   }
 
   async write(userId: string, entries: CloudCatalogEntry[]): Promise<void> {
+    return this.chain(userId, () => this.writeNow(userId, entries));
+  }
+
+  /**
+   * Read the file, change it and write it back, inside this account's write chain, so it never
+   * interleaves with a refresh or another update (spec, Cloud: server and client). `mutate`
+   * returning null writes nothing.
+   */
+  async update(
+    userId: string,
+    mutate: (entries: CloudCatalogEntry[] | null) => CloudCatalogEntry[] | null,
+  ): Promise<void> {
+    return this.chain(userId, async () => {
+      const next = mutate(await this.read(userId));
+      if (next) await this.writeNow(userId, next);
+    });
+  }
+
+  private chain(userId: string, run: () => Promise<void>): Promise<void> {
     const previous = this.writeChains.get(userId) ?? Promise.resolve();
-    const result = previous.then(
-      () => this.writeNow(userId, entries),
-      () => this.writeNow(userId, entries),
-    );
+    const result = previous.then(run, run);
     // Store a link that never rejects, so a failed write doesn't stall the chain for
     // whatever writes this account queues next; the rejection itself still reaches
     // this call's own caller via `result`.

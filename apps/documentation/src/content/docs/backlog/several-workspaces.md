@@ -38,7 +38,16 @@ description: "Proposal: keep several workspaces (folders with Kaipu files), one 
 > confirmation of a folder's own settings file by its sha256, and the Settings UI ("Settings for",
 > the blue dot, "Set for Work" / "Same as default", Copy to all workspaces, Reset). Deviations
 > from the design mock are listed in the PR: the mock also scopes the countdown, the mic and the
-> camera; ADR 0034 keeps them app-wide. Part 4 (cloud) is still to build.
+> camera; ADR 0034 keeps them app-wide.
+>
+> **Part 4 (NIW2-602, 🟡 In progress, stacked on #482):** the cloud per workspace and synced-folder
+> safety (also NIW2-577). Server: a nullable `cloud_asset.workspace_id`, `workspaceId` in the
+> catalog and on upload intents, and `PUT /assets/{assetId}/workspace`. Desktop: the Library
+> lists only the active workspace's cloud items (the rule is in the spec, Cloud: server and
+> client), a move assigns its cloud copy through a retry queue, and the Cloud page shows where
+> the workspace lives, its filter and the unassigned cloud items with "Assign to workspace…". A
+> folder inside Google Drive, OneDrive or iCloud Drive is detected and labelled, keeps its
+> scratch files in userData, is never hard-linked, and its evicted files are never read.
 
 ## Why
 

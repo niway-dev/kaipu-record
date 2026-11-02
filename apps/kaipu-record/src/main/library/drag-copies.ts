@@ -20,6 +20,20 @@ export async function cleanupDragCopies(vaultDir: string): Promise<void> {
   await rm(dragRoot(vaultDir), { recursive: true, force: true });
 }
 
+/** Remove every synced workspace's drag copies, `userData/workspace-scratch/<id>/drag`. */
+export async function cleanupScratchDragCopies(userData: string): Promise<void> {
+  const root = join(userData, "workspace-scratch");
+  let ids: string[];
+  try {
+    ids = await readdir(root);
+  } catch {
+    return;
+  }
+  await Promise.all(
+    ids.map((id) => rm(join(root, id, "drag"), { recursive: true, force: true }).catch(() => {})),
+  );
+}
+
 /** Remove the pre-LIB-B12 folder in the OS temp dir left by older builds. */
 export async function cleanupLegacyDragCopies(tempDir: string): Promise<void> {
   await rm(join(tempDir, "kaipu-drag"), { recursive: true, force: true });
@@ -33,8 +47,8 @@ export async function pruneDragCopies(
   vaultDir: string,
   maxAgeMs: number = DRAG_COPY_MAX_AGE_MS,
   now: number = Date.now(),
+  root: string = dragRoot(vaultDir),
 ): Promise<void> {
-  const root = dragRoot(vaultDir);
   let entries: string[];
   try {
     entries = await readdir(root);
@@ -67,20 +81,38 @@ export interface DragCopyFs {
  * FAT) falls back to a copy. Earlier drag folders are only pruned when older than
  * `DRAG_COPY_MAX_AGE_MS`.
  */
+export interface DragCopyOptions {
+  /** Where the per-drag folders go; default `<vault>/.kaipu/drag`. */
+  root?: string;
+  /**
+   * The workspace is synced (Google Drive, OneDrive, iCloud): the drag copy is a real copy,
+   * never a hard link, and `root` is its scratch folder in userData (decision 15, NIW2-577). A
+   * hard link inside the folder renames the cloud item to the drag copy's name; one out of it
+   * leaves the item unsynced.
+   */
+  synced?: boolean;
+}
+
 export async function createDragCopy(
   vaultDir: string,
   vaultFile: string,
   fileName: string,
   fs: DragCopyFs = { link, copyFile },
+  options: DragCopyOptions = {},
 ): Promise<string> {
-  await pruneDragCopies(vaultDir).catch(() => {});
-  const dir = join(dragRoot(vaultDir), randomUUID());
+  const root = options.root ?? dragRoot(vaultDir);
+  await pruneDragCopies(vaultDir, DRAG_COPY_MAX_AGE_MS, Date.now(), root).catch(() => {});
+  const dir = join(root, randomUUID());
   try {
     await mkdir(dir, { recursive: true });
   } catch {
     return vaultFile; // read-only vault: drag the original rather than fail
   }
   const target = join(dir, fileName);
+  if (options.synced) {
+    await fs.copyFile(vaultFile, target);
+    return target;
+  }
   try {
     await fs.link(vaultFile, target);
   } catch (error) {

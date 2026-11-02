@@ -96,6 +96,7 @@ vi.mock("../workspaces", async () => {
   return {
     requireCaptureWorkspace: async () => ({ path: vaultDirectory().path }),
     notifyWorkspaceBusyChanged: () => {},
+    syncedStagingFor: () => null,
   };
 });
 

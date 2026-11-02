@@ -16,6 +16,16 @@ export const revisionStatusSchema = z.enum(REVISION_STATUSES);
 export type RevisionStatus = z.infer<typeof revisionStatusSchema>;
 
 const uuid = z.string().uuid();
+
+/**
+ * A desktop workspace id (ADR 0032): an opaque client id the server never interprets. The same
+ * rule as the desktop's `isSafeWorkspaceId`: letters, digits and dashes, at most 64 characters.
+ */
+export const workspaceIdSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[A-Za-z0-9-]+$/, "Expected a workspace id");
 /** Base64 of a 32-byte digest is always 44 chars ending in "=". */
 const sha256Base64 = z.string().regex(/^[A-Za-z0-9+/]{43}=$/, "Expected a base64 sha256 digest");
 
@@ -28,6 +38,8 @@ export const cloudAssetSchema = z.object({
   durationSeconds: z.number().int().nonnegative(),
   derivedFromAssetId: uuid.nullable(),
   autoUploadExcluded: z.boolean(),
+  /** The desktop workspace the item lives in; null for an asset no workspace has claimed. */
+  workspaceId: workspaceIdSchema.nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
   deletedAt: z.date().nullable(),
@@ -68,6 +80,8 @@ export const cloudAssetSummarySchema = z.object({
   hasThumbnail: z.boolean(),
   derivedFromAssetId: uuid.nullable(),
   autoUploadExcluded: z.boolean(),
+  /** The desktop workspace the item lives in (ADR 0032); null when none has claimed it. */
+  workspaceId: workspaceIdSchema.nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -89,8 +103,19 @@ export const createUploadIntentSchema = z.object({
     .object({ sizeBytes: z.number().int().positive(), contentSha256: sha256Base64 })
     .nullable()
     .default(null),
+  /**
+   * The workspace the item is uploaded from (ADR 0032). Optional: a desktop release that predates
+   * workspaces sends none, and a re-upload without it keeps the asset's current workspace.
+   */
+  workspaceId: workspaceIdSchema.nullable().default(null),
 });
 export type CreateUploadIntent = z.infer<typeof createUploadIntentSchema>;
+
+/** `PUT /assets/{assetId}/workspace`: assign the asset to a workspace, or null to unassign it. */
+export const assignAssetWorkspaceSchema = z.object({
+  workspaceId: workspaceIdSchema.nullable(),
+});
+export type AssignAssetWorkspace = z.infer<typeof assignAssetWorkspaceSchema>;
 
 export const storageUsageSchema = z.object({
   capacityBytes: z.number().int().nonnegative(),
@@ -190,6 +215,7 @@ export function toAssetSummary(
     hasThumbnail: current?.thumbnailKey !== null && current?.thumbnailKey !== undefined,
     derivedFromAssetId: asset.derivedFromAssetId,
     autoUploadExcluded: asset.autoUploadExcluded,
+    workspaceId: asset.workspaceId,
     createdAt: asset.createdAt,
     updatedAt: asset.updatedAt,
   };

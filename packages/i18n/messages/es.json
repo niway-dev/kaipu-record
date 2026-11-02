@@ -872,7 +872,9 @@
     "reconcileTileFailed": "Fallaron",
     "reconcileKept": "{count, plural, one {# elemento conservó su nombre por ahora (abierto en el editor, bloqueado por otra app o con el nuevo nombre recién ocupado). Vuelve a arreglar más tarde.} other {# elementos conservaron su nombre por ahora (abiertos en el editor, bloqueados por otra app o con el nuevo nombre recién ocupado). Vuelve a arreglar más tarde.}}",
     "reconcileFailed": "{count, plural, one {# cambio falló. Los detalles están en .kaipu/reconcile.} other {# cambios fallaron. Los detalles están en .kaipu/reconcile.}}",
-    "reconcileError": "Arreglar todo se detuvo: {message}"
+    "reconcileError": "Arreglar todo se detuvo: {message}",
+    "evictedLabel": "En la nube",
+    "evictedHint": "El proveedor de la carpeta liberó este archivo. Descárgalo en Finder para abrirlo aquí."
   },
   "prepare": {
     "pageTitle": "¿A dónde va?",
@@ -2684,7 +2686,10 @@
     "reason_maintenance": "Kaipu está reparando tus archivos",
     "reason_stale": "el espacio de trabajo cambió",
     "reason_io": "no se pudo copiar un archivo; el original no se tocó",
-    "closeRefused": "El editor siguió abierto, así que no se movió nada."
+    "closeRefused": "El editor siguió abierto, así que no se movió nada.",
+    "costSynced": "Carpeta sincronizada · copia",
+    "notMovableEvicted": "En la nube: descárgalo primero",
+    "reason_evicted": "está en la nube: descárgalo primero"
   },
   "settingsScope": {
     "selectorLabel": "Ajustes de",
@@ -2735,5 +2740,41 @@
     "valueUploadManual": "Manual",
     "valueUploadAutomatic": "Automática",
     "valueQuality": "{resolution} · {fps} fps"
+  },
+  "workspaceCloud": {
+    "title": "Este workspace",
+    "description": "Kaipu Cloud sigue siendo una por cuenta. Cada elemento guarda el workspace donde vive, y cada Biblioteca muestra solo los suyos.",
+    "locationLabel": "Dónde vive",
+    "location_this-mac": "Este Mac",
+    "location_external-drive": "Un disco externo",
+    "location_google-drive": "Google Drive",
+    "location_onedrive": "OneDrive",
+    "location_icloud": "iCloud Drive",
+    "location_cloud-provider": "Un proveedor en la nube",
+    "syncedBy": "Sincronizado por {provider}",
+    "syncedNote": "Kaipu no sincroniza con {provider}; es el proveedor quien sincroniza esta carpeta. Kaipu guarda sus archivos de trabajo fuera de ella, nunca crea nombres extra para sus archivos y muestra como “En la nube” lo que el proveedor liberó. Abrir la misma carpeta en dos Mac a la vez puede crear copias en conflicto.",
+    "localNote": "Esta carpeta no la sincroniza Google Drive, OneDrive ni iCloud Drive.",
+    "filterLabel": "Elementos de Kaipu Cloud en esta Biblioteca",
+    "filterOwn": "Solo los de este workspace",
+    "filterOwnAndUnassigned": "Los de este workspace y los sin asignar",
+    "filterOwnAndUnassignedNote": "Hasta que asignes uno, los elementos sin asignar también aparecen aquí, así nada desapareció con la actualización. Después de la primera asignación solo aparecen en la lista de abajo.",
+    "unassignedTitle": "Elementos en la nube sin asignar",
+    "unassignedCount": "{count, plural, one {# elemento en la nube no está} other {# elementos en la nube no están}} en ningún workspace de este Mac",
+    "unassignedEmpty": "Cada elemento en la nube pertenece a un workspace de este Mac.",
+    "signedOut": "Inicia sesión en Kaipu Cloud para ver tus elementos en la nube.",
+    "notFetched": "Kaipu aún no leyó tus elementos en la nube. Abre la Biblioteca para actualizarlos.",
+    "neverAssigned": "Subido antes de los workspaces",
+    "fromElsewhere": "De un workspace que no está en este Mac",
+    "assign": "Asignar a un workspace…",
+    "assignAll": "Asignar todos a un workspace…",
+    "assignTitle": "Asignar a un workspace",
+    "assignTo": "Asignar {count, plural, one {# elemento} other {# elementos}} a",
+    "cancel": "Cancelar",
+    "assigned": "{count, plural, one {# elemento asignado} other {# elementos asignados}} a {name}.",
+    "queued": "{count, plural, one {# elemento se asignará} other {# elementos se asignarán}} a {name} cuando Kaipu llegue al servidor.",
+    "failedNotFound": "{count, plural, one {# elemento ya no está} other {# elementos ya no están}} en Kaipu Cloud.",
+    "failed": "Kaipu no pudo asignarlos. Inténtalo de nuevo.",
+    "loading": "Cargando…",
+    "loadFailed": "Kaipu no pudo leer los elementos en la nube de este workspace. Lo intenta de nuevo cuando cambia la Biblioteca."
   }
 }

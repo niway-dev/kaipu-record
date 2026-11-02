@@ -44,6 +44,8 @@ export {
   cloudRevisionSchema,
   cloudAssetSummarySchema,
   createUploadIntentSchema,
+  assignAssetWorkspaceSchema,
+  workspaceIdSchema,
   storageUsageSchema,
   SUPPORTED_CONTENT_TYPES,
   isSupportedContentType,
@@ -73,4 +75,5 @@ export {
   type CreateUploadIntent,
   type StorageUsage,
   type UploadVerificationReason,
+  type AssignAssetWorkspace,
 } from "./cloud-asset";

@@ -1,5 +1,6 @@
 import {
   assetCursorSchema,
+  assignAssetWorkspaceSchema,
   cloudAssetSummarySchema,
   createUploadIntentSchema,
 } from "@kaipu/domain/schemas";
@@ -76,6 +77,15 @@ export const cloudContract = {
     .route({ method: "DELETE", path: "/assets/{assetId}/cloud" })
     .input(assetParams)
     .output(apiResponseSchema(z.object({ deleted: z.boolean() }))),
+
+  /**
+   * Assign the asset to a desktop workspace, or unassign it with `workspaceId: null` (ADR 0032).
+   * Owner-only and idempotent: a move between workspaces and "Assign to workspace…" call it.
+   */
+  setWorkspace: oc
+    .route({ method: "PUT", path: "/assets/{assetId}/workspace" })
+    .input(assetParams.extend(assignAssetWorkspaceSchema.shape))
+    .output(apiResponseSchema(cloudAssetSummarySchema)),
 
   setAutoUploadExclusion: oc
     .route({ method: "POST", path: "/assets/{assetId}/auto-upload-exclusion" })

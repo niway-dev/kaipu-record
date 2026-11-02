@@ -1,4 +1,4 @@
-import { Film, PenLine, Send, Tag, Trash2, Play } from "lucide-react";
+import { CloudDownload, Film, PenLine, Send, Tag, Trash2, Play } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatDuration, formatSize } from "@renderer/features/library/format";
 import type { TagSummary } from "@shared/types";
@@ -98,6 +98,13 @@ export function VideoCard({
         )}
         {video.thumbnailUrl ? (
           <img src={video.thumbnailUrl} alt="" className={styles.posterImage} />
+        ) : video.evicted === "media" ? (
+          // Synced folders (decision 15): the provider offloaded the file. Nothing is fetched to
+          // draw it; reading it would download it.
+          <div className={styles.posterFallback} title={t("evictedHint")}>
+            <CloudDownload size={22} strokeWidth={1.5} aria-hidden />
+            <span className={styles.evictedLabel}>{t("evictedLabel")}</span>
+          </div>
         ) : (
           <div className={styles.posterFallback} aria-hidden>
             <Film size={26} strokeWidth={1.5} />

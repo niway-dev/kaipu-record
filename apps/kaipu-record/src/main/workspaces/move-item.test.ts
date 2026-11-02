@@ -238,6 +238,132 @@ describe("moveItem — across volumes (EXDEV)", () => {
   });
 });
 
+describe("moveItem — a synced side (decision 15; NIW2-577): copy, verify at the final path, delete", () => {
+  const noLink = (calls: string[]) => async (_from: string, to: string) => {
+    calls.push(to);
+    throw new Error("a synced workspace must never be hard-linked");
+  };
+
+  for (const synced of ["source", "target", "both"] as const) {
+    it(`never hard-links when the ${synced} is synced, though both are on one device`, async () => {
+      const item = await seedItem(src.directory);
+      const source: MoveSide =
+        synced !== "target" ? { ...src, scratch: join(root, "scratch", "src") } : src;
+      const target: MoveSide =
+        synced !== "source" ? { ...dst, scratch: join(root, "scratch", "dst") } : dst;
+      const links: string[] = [];
+      const hashed: string[] = [];
+      const outcome = await moveItem(
+        { source, target, id: item.id },
+        deps({
+          fs: {
+            link: noLink(links),
+            sha256: async (path) => {
+              hashed.push(path);
+              return sha256FileBase64(path);
+            },
+          },
+        }),
+      );
+      expect(outcome).toMatchObject({ ok: true, newId: "Demo", mode: "copied" });
+      expect(links).toEqual([]);
+      // Verified where it now lives, not only in staging.
+      expect(hashed).toContain(join(dst.directory, "Demo.mp4"));
+      expect((await stat(join(dst.directory, "Demo.mp4"))).nlink).toBe(1);
+      expect((await stat(join(dst.directory, ".kaipu", "Demo.webcam.mp4"))).nlink).toBe(1);
+      expect(await readFile(join(dst.directory, "Demo.mp4"))).toEqual(item.media);
+      expect(await filesOf(src.directory, "Demo")).toEqual([]);
+      expect(await readdir(journalDir)).toEqual([]);
+    });
+  }
+
+  it("refuses an evicted source before reading a byte of it (the renderer's list may be old)", async () => {
+    const item = await seedItem(src.directory);
+    const source: MoveSide = { ...src, scratch: join(root, "scratch", "src") };
+    const read: string[] = [];
+    const outcome = await moveItem(
+      { source, target: dst, id: item.id },
+      deps({
+        fs: {
+          evicted: async (paths) => new Set(paths.filter((p) => p.endsWith("Demo.mp4"))),
+          sha256: async (path) => {
+            read.push(path);
+            return sha256FileBase64(path);
+          },
+        },
+      }),
+    );
+    expect(outcome).toEqual({ ok: false, id: "Demo", reason: "evicted" });
+    expect(read).toEqual([]);
+    expect(await filesOf(dst.directory, "Demo")).toEqual([]);
+    expect(await filesOf(src.directory, "Demo")).toHaveLength(8);
+  });
+
+  it("stages a synced target's copy in its scratch folder, never inside the synced folder", async () => {
+    const item = await seedItem(src.directory);
+    const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };
+    const stagedIn: string[] = [];
+    await moveItem(
+      { source: src, target, id: item.id },
+      deps({
+        hooks: {
+          after: async (step) => {
+            if (step === "media-copied") {
+              stagedIn.push(...(await readdir(join(root, "scratch", "dst", "tmp"))));
+              expect(await readdir(join(dst.directory, ".kaipu", "tmp")).catch(() => [])).toEqual(
+                [],
+              );
+            }
+          },
+        },
+      }),
+    );
+    expect(stagedIn).toHaveLength(1);
+    expect(await readdir(join(dst.directory, ".kaipu", "tmp")).catch(() => [])).toEqual([]);
+  });
+
+  it("a mismatch at the final path rolls the target back and leaves the source intact", async () => {
+    const item = await seedItem(src.directory);
+    const before = await filesOf(src.directory, "Demo");
+    const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };
+    const outcome = await moveItem(
+      { source: src, target, id: item.id },
+      deps({
+        fs: {
+          sha256: async (path) =>
+            path === join(dst.directory, "Demo.mp4") ? "corrupt" : sha256FileBase64(path),
+        },
+      }),
+    );
+    expect(outcome).toEqual({ ok: false, id: "Demo", reason: "checksum-mismatch" });
+    expect(await filesOf(src.directory, "Demo")).toEqual(before);
+    expect(await filesOf(dst.directory, "Demo")).toEqual([]);
+    expect(await readdir(journalDir)).toEqual([]);
+  });
+
+  it("a crash after the staged copy is verified heals from the scratch folder", async () => {
+    const item = await seedItem(src.directory);
+    const target: MoveSide = { ...dst, scratch: join(root, "scratch", "dst") };
+    await expect(
+      moveItem(
+        { source: src, target, id: item.id },
+        deps({
+          hooks: {
+            after: (at) => {
+              if (at === "media-verified") throw new SimulatedCrash(at);
+            },
+          },
+        }),
+      ),
+    ).rejects.toBeInstanceOf(SimulatedCrash);
+    await rm(join(src.directory, "Demo.mp4"));
+    await heal();
+    expect(await copiesOf(item.assetId)).toEqual([{ dir: dst.directory, id: "Demo" }]);
+    expect(await readFile(join(dst.directory, "Demo.mp4"))).toEqual(item.media);
+    expect(await readdir(join(root, "scratch", "dst", "tmp")).catch(() => [])).toEqual([]);
+  });
+});
+
 describe("moveItem — refusals that touch nothing", () => {
   it("refuses an item whose sidecar cannot be read (metadataIssue)", async () => {
     await seedItem(src.directory);

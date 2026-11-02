@@ -28,5 +28,6 @@ export function toLibraryVideo(item: LibraryItem): LibraryVideo {
     capture: item.capture ?? null,
     webcam: item.local?.webcam ?? null,
     metadataIssue: item.local?.metadataIssue,
+    ...(item.local?.evicted ? { evicted: item.local.evicted } : {}),
   };
 }

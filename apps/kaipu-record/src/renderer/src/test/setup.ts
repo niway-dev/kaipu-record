@@ -210,6 +210,7 @@ window.electronAPI = {
           state: "available",
           itemCount: 0,
           device: "1",
+          sync: null,
         },
       ],
     }),
@@ -222,6 +223,15 @@ window.electronAPI = {
     remove: async () => ({ ok: true }),
     openFolder: async () => {},
     dismissHint: async () => {},
+    cloudState: async () => ({
+      workspaceId: "ws-default",
+      location: "this-mac",
+      signedIn: false,
+      filter: "own-and-unassigned",
+      catalogKnown: false,
+      unassigned: [],
+    }),
+    assignCloud: async () => ({ assigned: [], queued: [], failed: [] }),
     moveItems: async (request) => ({
       targetId: request.targetId,
       moved: [],

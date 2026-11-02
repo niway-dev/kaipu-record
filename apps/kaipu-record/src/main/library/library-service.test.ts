@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CloudCatalogEntry } from "@shared/types/library-item";
 import { CatalogCache } from "../cloud/catalog-cache";
+import type { CloudScope } from "../cloud/workspace-filter";
 import { LibraryService } from "./library-service";
 import { LibraryVault } from "./library-vault";
 
@@ -101,30 +102,111 @@ describe("LibraryService", () => {
     expect(result.vaultError).toBeNull();
   });
 
-  it("a workspace that does not own the legacy cloud entries hides them and leaves the cache alone", async () => {
-    await writeFile(join(vaultDir, "a.mp4"), "");
-    const rec = (await new LibraryVault(vaultDir).describe("a"))!;
-    catalog = [cloudEntry(rec.assetId), cloudEntry("from-default", { lastSeenLocalId: "x" })];
-    await service.refreshCatalog();
-    const before = await cache.read("u1");
-    const other = new LibraryService({
-      vault: () => new LibraryVault(vaultDir),
-      vaultDir: () => vaultDir,
-      cache,
-      account: () => account,
-      fetchCatalog,
-      ownsLegacyCloud: () => false,
-      now: () => 777,
+  describe("cloud entries per workspace (decision 4, the rule in the spec)", () => {
+    const scoped = (scope: CloudScope) =>
+      new LibraryService({
+        vault: () => new LibraryVault(vaultDir),
+        vaultDir: () => vaultDir,
+        cache,
+        account: () => account,
+        fetchCatalog,
+        cloudScope: () => scope,
+        now: () => 777,
+      });
+    const scopeOf = (activeId: string, overrides: Partial<CloudScope> = {}): CloudScope => ({
+      activeId,
+      legacyOwnerId: "ws-a",
+      registered: new Set(["ws-a", "ws-b"]),
+      unassignedHidden: false,
+      pending: new Map(),
+      ...overrides,
     });
 
-    const result = await other.list();
+    it("B lists its own cloud-only entries and its local items' copies, never A's or the unassigned", async () => {
+      await writeFile(join(vaultDir, "a.mp4"), "");
+      const rec = (await new LibraryVault(vaultDir).describe("a"))!;
+      catalog = [
+        cloudEntry(rec.assetId, { workspaceId: null }),
+        cloudEntry("of-a", { workspaceId: "ws-a" }),
+        cloudEntry("of-b", { workspaceId: "ws-b" }),
+        cloudEntry("unassigned", { workspaceId: null }),
+      ];
+      await service.refreshCatalog();
 
-    // Its own item still shows its cloud copy; the other workspace's cloud-only item does not.
-    expect(result.items.map((i) => [i.assetId, i.availability])).toEqual([
-      [rec.assetId, "local-and-cloud"],
-    ]);
-    expect(await cache.read("u1")).toEqual(before);
-    expect(result.catalogVerifiedAt).toBe(777);
+      const result = await scoped(scopeOf("ws-b")).list();
+
+      expect(result.items.map((i) => [i.assetId, i.availability]).sort()).toEqual(
+        [
+          [rec.assetId, "local-and-cloud"],
+          ["of-b", "cloud"],
+        ].sort(),
+      );
+      expect(result.catalogVerifiedAt).toBe(777);
+    });
+
+    it("listing a workspace keeps every other workspace's entry in the cache file", async () => {
+      await writeFile(join(vaultDir, "a.mp4"), "");
+      const rec = (await new LibraryVault(vaultDir).describe("a"))!;
+      await cache.write("u1", [
+        cloudEntry(rec.assetId, { workspaceId: "ws-a" }),
+        cloudEntry("of-b", { workspaceId: "ws-b", lastSeenLocalId: "kept-in-b" }),
+      ]);
+
+      await scoped(scopeOf("ws-a")).list();
+
+      const stored = await cache.read("u1");
+      expect(stored?.map((e) => [e.assetId, e.lastSeenLocalId]).sort()).toEqual(
+        [
+          [rec.assetId, "a"],
+          ["of-b", "kept-in-b"],
+        ].sort(),
+      );
+    });
+
+    it("offline, switching to B without a refresh still shows B's cloud-only items", async () => {
+      catalog = [
+        cloudEntry("of-a", { workspaceId: "ws-a" }),
+        cloudEntry("of-b", { workspaceId: "ws-b" }),
+      ];
+      await service.refreshCatalog();
+      await scoped(scopeOf("ws-a")).list();
+      fetchCatalog = vi.fn(async () => {
+        throw new Error("offline");
+      });
+
+      const result = await scoped(scopeOf("ws-b")).list();
+
+      expect(result.items.map((i) => i.assetId)).toEqual(["of-b"]);
+    });
+
+    it("the legacy owner lists the unassigned only until the first assignment", async () => {
+      catalog = [cloudEntry("unassigned", { workspaceId: null })];
+      await service.refreshCatalog();
+      expect((await scoped(scopeOf("ws-a")).list()).items.map((i) => i.assetId)).toEqual([
+        "unassigned",
+      ]);
+      expect((await scoped(scopeOf("ws-a", { unassignedHidden: true })).list()).items).toHaveLength(
+        0,
+      );
+    });
+
+    it("unassigned() reads the full catalog, and listing does not change it", async () => {
+      catalog = [
+        cloudEntry("of-a", { workspaceId: "ws-a" }),
+        cloudEntry("unassigned", { workspaceId: null }),
+        cloudEntry("of-deleted", { workspaceId: "ws-gone" }),
+      ];
+      await service.refreshCatalog();
+      const svc = scoped(scopeOf("ws-b"));
+      const before = (await svc.unassigned()).map((e) => e.assetId).sort();
+      await svc.list();
+      expect((await svc.unassigned()).map((e) => e.assetId).sort()).toEqual(before);
+      expect(before).toEqual(["of-deleted", "unassigned"]);
+    });
+
+    it("unassigned() is empty when signed out or never fetched", async () => {
+      expect(await scoped(scopeOf("ws-a")).unassigned()).toEqual([]);
+    });
   });
 
   it("refreshCatalog caches per account and list merges by assetId", async () => {

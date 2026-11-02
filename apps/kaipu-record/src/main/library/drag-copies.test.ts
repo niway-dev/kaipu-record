@@ -16,6 +16,7 @@ import {
   DRAG_COPY_MAX_AGE_MS,
   cleanupDragCopies,
   cleanupLegacyDragCopies,
+  cleanupScratchDragCopies,
   createDragCopy,
   dragRoot,
   pruneDragCopies,
@@ -108,5 +109,49 @@ describe("drag copies", () => {
     await cleanupLegacyDragCopies(temp);
     await expect(stat(join(temp, "kaipu-drag"))).rejects.toThrow();
     await rm(temp, { recursive: true, force: true });
+  });
+
+  describe("a synced workspace (decision 15; NIW2-577)", () => {
+    let scratch: string;
+    beforeEach(async () => {
+      scratch = await mkdtemp(join(tmpdir(), "kaipu-drag-scratch-"));
+    });
+    afterEach(async () => {
+      await rm(scratch, { recursive: true, force: true });
+    });
+
+    it("copies into the scratch folder, never links, and writes nothing inside the workspace", async () => {
+      const link = vi.fn(async () => {});
+      const result = await createDragCopy(
+        vault,
+        file,
+        "My demo.mp4",
+        { link, copyFile },
+        { root: scratch, synced: true },
+      );
+      expect(link).not.toHaveBeenCalled();
+      expect(result.startsWith(scratch)).toBe(true);
+      expect(await readFile(result, "utf-8")).toBe("video");
+      // The item keeps one name: the provider never sees a second one.
+      expect((await stat(file)).nlink).toBe(1);
+      expect(await readdir(join(vault, ".kaipu")).catch(() => [])).toEqual([]);
+    });
+
+    it("prunes old drag folders in the scratch root, not in the workspace", async () => {
+      await mkdir(join(scratch, "old"), { recursive: true });
+      const past = new Date(Date.now() - DRAG_COPY_MAX_AGE_MS - 60_000);
+      await utimes(join(scratch, "old"), past, past);
+      await createDragCopy(vault, file, "x.mp4", undefined, { root: scratch, synced: true });
+      expect(await readdir(scratch)).not.toContain("old");
+    });
+  });
+
+  it("cleanupScratchDragCopies removes every synced workspace's drag folder, and only that", async () => {
+    const userData = await mkdtemp(join(tmpdir(), "kaipu-drag-ud-"));
+    await mkdir(join(userData, "workspace-scratch", "ws-1", "drag", "x"), { recursive: true });
+    await mkdir(join(userData, "workspace-scratch", "ws-1", "tmp"), { recursive: true });
+    await cleanupScratchDragCopies(userData);
+    expect(await readdir(join(userData, "workspace-scratch", "ws-1"))).toEqual(["tmp"]);
+    await rm(userData, { recursive: true, force: true });
   });
 });

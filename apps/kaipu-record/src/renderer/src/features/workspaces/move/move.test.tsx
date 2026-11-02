@@ -26,6 +26,7 @@ const DEFAULT: WorkspaceView = {
   state: "available",
   itemCount: 3,
   device: "1",
+  sync: null,
 };
 const PERSONAL: WorkspaceView = { ...DEFAULT, id: "ws-personal", name: "Personal", device: "1" };
 const USB: WorkspaceView = {
@@ -35,6 +36,7 @@ const USB: WorkspaceView = {
   path: "/Volumes/USB/Client",
   volume: "USB",
   device: "2",
+  sync: null,
 };
 const ARCHIVE: WorkspaceView = {
   ...DEFAULT,
@@ -43,6 +45,7 @@ const ARCHIVE: WorkspaceView = {
   state: "unavailable",
   reason: "missing",
   device: null,
+  sync: null,
 };
 
 function state(overrides: Partial<WorkspacesState> = {}): WorkspacesState {

@@ -60,6 +60,19 @@ afterEach(() => {
 });
 
 describe("useOrphanHeal", () => {
+  it.each(["media", "thumbnail"] as const)(
+    "never decodes an item of a synced workspace whose %s is evicted (it would download)",
+    async (evicted) => {
+      const onHealed = vi.fn();
+      renderHook(() =>
+        useOrphanHeal([video({ id: "far", thumbnailUrl: null, evicted })], onHealed),
+      );
+      await Promise.resolve();
+      expect(healMock).not.toHaveBeenCalled();
+      expect(window.electronAPI.backfillLocalRecordingMeta).not.toHaveBeenCalled();
+    },
+  );
+
   it("never heals an item whose sidecar cannot be read (main would refuse the write)", async () => {
     const onHealed = vi.fn();
     renderHook(() => useOrphanHeal([video({ id: "bad", metadataIssue: "corrupt" })], onHealed));

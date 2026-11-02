@@ -872,7 +872,9 @@
     "reconcileTileFailed": "Failed",
     "reconcileKept": "{count, plural, one {# item kept its name for now (open in the editor, locked by another app, or its new name just taken). Fix all again later.} other {# items kept their names for now (open in the editor, locked by another app, or their new name just taken). Fix all again later.}}",
     "reconcileFailed": "{count, plural, one {# change failed. Details are in .kaipu/reconcile.} other {# changes failed. Details are in .kaipu/reconcile.}}",
-    "reconcileError": "Fix all stopped: {message}"
+    "reconcileError": "Fix all stopped: {message}",
+    "evictedLabel": "In the cloud",
+    "evictedHint": "The folder's provider offloaded this file. Download it in Finder to open it here."
   },
   "prepare": {
     "pageTitle": "Where is it going?",
@@ -2684,7 +2686,10 @@
     "reason_maintenance": "Kaipu is fixing your files",
     "reason_stale": "the workspace changed",
     "reason_io": "a file couldn't be copied; the original is untouched",
-    "closeRefused": "The editor stayed open, so nothing moved."
+    "closeRefused": "The editor stayed open, so nothing moved.",
+    "costSynced": "Synced folder · copies",
+    "notMovableEvicted": "In the cloud: download it first",
+    "reason_evicted": "it's in the cloud: download it first"
   },
   "settingsScope": {
     "selectorLabel": "Settings for",
@@ -2735,5 +2740,41 @@
     "valueUploadManual": "Manual",
     "valueUploadAutomatic": "Automatic",
     "valueQuality": "{resolution} · {fps} fps"
+  },
+  "workspaceCloud": {
+    "title": "This workspace",
+    "description": "Kaipu Cloud stays one per account. Each item records the workspace it lives in, and a Library shows only its own.",
+    "locationLabel": "Where it lives",
+    "location_this-mac": "This Mac",
+    "location_external-drive": "An external drive",
+    "location_google-drive": "Google Drive",
+    "location_onedrive": "OneDrive",
+    "location_icloud": "iCloud Drive",
+    "location_cloud-provider": "A cloud provider",
+    "syncedBy": "Synced by {provider}",
+    "syncedNote": "Kaipu doesn't sync to {provider}; the provider syncs this folder. Kaipu keeps its working files outside it, never makes extra names for its files, and shows items the provider has offloaded as “In the cloud”. Opening the same folder on two Macs at once can create conflict copies.",
+    "localNote": "This folder is not synced by Google Drive, OneDrive or iCloud Drive.",
+    "filterLabel": "Kaipu Cloud items in this Library",
+    "filterOwn": "Only this workspace's",
+    "filterOwnAndUnassigned": "This workspace's, plus the unassigned ones",
+    "filterOwnAndUnassignedNote": "Until you assign one, the unassigned cloud items also show here, so nothing disappeared with the upgrade. After the first assignment they show only in the list below.",
+    "unassignedTitle": "Unassigned cloud items",
+    "unassignedCount": "{count, plural, one {# cloud item is} other {# cloud items are}} not in any workspace on this Mac",
+    "unassignedEmpty": "Every cloud item belongs to a workspace on this Mac.",
+    "signedOut": "Sign in to Kaipu Cloud to see your cloud items.",
+    "notFetched": "Kaipu hasn't read your cloud items yet. Open the Library to refresh them.",
+    "neverAssigned": "Uploaded before workspaces",
+    "fromElsewhere": "From a workspace that isn't on this Mac",
+    "assign": "Assign to workspace…",
+    "assignAll": "Assign all to workspace…",
+    "assignTitle": "Assign to workspace",
+    "assignTo": "Assign {count, plural, one {# item} other {# items}} to",
+    "cancel": "Cancel",
+    "assigned": "{count, plural, one {# item} other {# items}} assigned to {name}.",
+    "queued": "{count, plural, one {# item} other {# items}} will be assigned to {name} when Kaipu reaches the server.",
+    "failedNotFound": "{count, plural, one {# item is} other {# items are}} no longer in Kaipu Cloud.",
+    "failed": "Kaipu couldn't assign them. Try again.",
+    "loading": "Loading…",
+    "loadFailed": "Kaipu couldn't read this workspace's cloud items. It tries again when the Library changes."
   }
 }

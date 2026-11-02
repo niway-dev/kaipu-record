@@ -7,7 +7,7 @@ import type {
 } from "@kaipu/domain/repositories";
 import type { CloudAsset, CloudRevision } from "@kaipu/domain/schemas";
 import { AssetConflictError, decodeAssetCursor, encodeAssetCursor } from "@kaipu/domain/schemas";
-import { and, desc, eq, gt, inArray, lt, lte, or, type SQL, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, lte, or, type SQL, sql } from "drizzle-orm";
 import type { DatabaseClient } from "../client";
 import { mapCloudAssetToDomain, mapCloudRevisionToDomain } from "../mappers/cloud.mapper";
 import { cloudAssetTable, cloudRevisionTable, cloudStorageAccountTable } from "../schema/cloud";
@@ -40,6 +40,7 @@ function assetFromJson(j: JsonRow): AssetRow {
     durationSeconds: Number(j.duration_seconds),
     derivedFromAssetId: (j.derived_from_asset_id as string | null) ?? null,
     autoUploadExcluded: Boolean(j.auto_upload_excluded),
+    workspaceId: (j.workspace_id as string | null) ?? null,
     createdAt: fromTimestamp(j.created_at),
     updatedAt: fromTimestamp(j.updated_at),
     deletedAt: nullableTimestamp(j.deleted_at),
@@ -129,13 +130,16 @@ export class CloudAssetRepository implements ICloudAssetRepository {
         ),
         up as (
           insert into ${cloudAssetTable}
-            (user_id, asset_id, kind, title, duration_seconds, derived_from_asset_id)
+            (user_id, asset_id, kind, title, duration_seconds, derived_from_asset_id, workspace_id)
           select ${data.userId}, ${data.assetId}, ${data.kind}, ${data.title},
-                 ${data.durationSeconds}, ${data.derivedFromAssetId}
+                 ${data.durationSeconds}, ${data.derivedFromAssetId}, ${data.workspaceId}
           from acct
           on conflict (user_id, asset_id) do update
             set title = excluded.title,
                 duration_seconds = excluded.duration_seconds,
+                -- A re-upload names where the item lives now; one without a workspace (an
+                -- older desktop) keeps the asset's current one.
+                workspace_id = coalesce(excluded.workspace_id, ${cloudAssetTable}.workspace_id),
                 updated_at = now()
             where ${cloudAssetTable}.deleted_at is null
           returning *
@@ -408,6 +412,27 @@ export class CloudAssetRepository implements ICloudAssetRepository {
       .update(cloudAssetTable)
       .set({ autoUploadExcluded: excluded })
       .where(and(eq(cloudAssetTable.userId, userId), eq(cloudAssetTable.assetId, assetId)))
+      .returning();
+    return row ? mapCloudAssetToDomain(row) : null;
+  }
+
+  async setWorkspace(
+    userId: string,
+    assetId: string,
+    workspaceId: string | null,
+  ): Promise<CloudAsset | null> {
+    // Owner-scoped by the key itself: another account's asset id matches no row. A tombstoned
+    // asset is not listed anywhere, so it is not assigned either.
+    const [row] = await this.db
+      .update(cloudAssetTable)
+      .set({ workspaceId })
+      .where(
+        and(
+          eq(cloudAssetTable.userId, userId),
+          eq(cloudAssetTable.assetId, assetId),
+          isNull(cloudAssetTable.deletedAt),
+        ),
+      )
       .returning();
     return row ? mapCloudAssetToDomain(row) : null;
   }

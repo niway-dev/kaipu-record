@@ -38,6 +38,7 @@ const view = (id: string, name: string, state: "available" | "unavailable" = "av
   state,
   itemCount: 1,
   device: "1",
+  sync: null,
 });
 
 function stateOf(activeId: string, ...names: Array<[string, string]>): WorkspacesState {

@@ -88,6 +88,7 @@ export async function createUploadIntent(params: {
       title: input.title,
       durationSeconds: input.durationSeconds,
       derivedFromAssetId: input.derivedFromAssetId,
+      workspaceId: input.workspaceId,
       storageKey,
       thumbnailKey,
       contentType: input.contentType,

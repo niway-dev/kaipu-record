@@ -82,6 +82,7 @@ export function makeFakeAssets(): ICloudAssetRepository & {
             ...existing,
             title: data.title,
             durationSeconds: data.durationSeconds,
+            workspaceId: data.workspaceId ?? existing.workspaceId,
             deletedAt: null,
             updatedAt: now,
           }
@@ -94,6 +95,7 @@ export function makeFakeAssets(): ICloudAssetRepository & {
             durationSeconds: data.durationSeconds,
             derivedFromAssetId: data.derivedFromAssetId,
             autoUploadExcluded: false,
+            workspaceId: data.workspaceId,
             createdAt: now,
             updatedAt: now,
             deletedAt: null,
@@ -201,6 +203,13 @@ export function makeFakeAssets(): ICloudAssetRepository & {
       const asset = assets.get(key(userId, assetId));
       if (!asset) return null;
       const next = { ...asset, autoUploadExcluded: excluded };
+      assets.set(key(userId, assetId), next);
+      return next;
+    },
+    async setWorkspace(userId, assetId, workspaceId) {
+      const asset = assets.get(key(userId, assetId));
+      if (!asset || asset.deletedAt) return null;
+      const next = { ...asset, workspaceId };
       assets.set(key(userId, assetId), next);
       return next;
     },

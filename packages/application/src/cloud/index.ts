@@ -6,6 +6,7 @@ export { getAssetDownloadUrl } from "./get-asset-download-url";
 export { deleteCloudCopy, type DeleteCloudCopyResult } from "./delete-cloud-copy";
 export { getStorageUsage } from "./get-storage-usage";
 export { setAutoUploadExclusion } from "./set-auto-upload-exclusion";
+export { setAssetWorkspace } from "./set-asset-workspace";
 export { sweepExpiredReservations } from "./sweep-expired-reservations";
 export { retryPendingDeletes } from "./retry-pending-deletes";
 export { purgeAccountObjects } from "./purge-account-objects";
