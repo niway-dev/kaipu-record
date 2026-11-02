@@ -39,7 +39,11 @@ export function WorkspaceCloudSection(): React.JSX.Element | null {
     } catch {
       // A refused or failed read (maintenance, an unreadable cache): say so. The next library
       // broadcast or switch asks again.
-      if (request === requestRef.current) setLoadFailed(true);
+      // The last answer may be another workspace's (a switch): it is not shown under this one.
+      if (request === requestRef.current) {
+        setState(null);
+        setLoadFailed(true);
+      }
     }
   }, []);
   useEffect(() => {

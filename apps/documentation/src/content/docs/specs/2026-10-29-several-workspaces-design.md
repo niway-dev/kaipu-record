@@ -1325,9 +1325,12 @@ rename-without-replace, so the window between the two calls is open; the name is
 has just reserved with a stub sidecar. A move with a synced side stages in the scratch folder,
 places by rename into a synced target, and checks the sha256 again at the final path before the
 source goes; a mismatch rolls the target back. Evicted files are read by
-`main/library/dataless.ts`, one `stat` call per listing, only for synced workspaces. The
-`kaipu-media://` gate (with a 2 s per-path cache) also runs only while the active workspace is
-synced. The availability check of a synced workspace is bounded at 5 s; a check that does not
+`main/library/dataless.ts`, one `stat` call per listing, only for synced workspaces, bounded at
+10 s for the whole listing (a path not answered by then is treated as evicted: it draws a
+placeholder rather than risk a download). The `kaipu-media://` gate also runs only while the
+active workspace is synced. It never reuses a "local" answer, so every read is checked for
+itself; requests within 15 ms share one `stat` call, and only an "evicted" answer is remembered
+(2 s). A recovered take from a scratch folder is always placed by rename. The availability check of a synced workspace is bounded at 5 s; a check that does not
 answer while `stat` still sees the folder leaves it available and **unverified** (no move into
 it until a later check answers). A workspace's provider shows on the Cloud page, in the
 switcher and on its Settings → Workspaces row.

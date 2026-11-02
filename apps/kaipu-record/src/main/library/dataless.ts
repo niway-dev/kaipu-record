@@ -56,14 +56,31 @@ export const defaultDatalessDeps: DatalessDeps = {
   },
 };
 
-/** Which of `paths` are evicted. A missing path is not. Never reads a file's data; never throws. */
+/** The longest a whole probe (a Library listing) may take: a stalled provider never hangs it. */
+export const PROBE_DEADLINE_MS = 10_000;
+
+/**
+ * Which of `paths` are evicted. A missing path is not. Never reads a file's data; never throws.
+ *
+ * Bounded as a whole by `deadlineMs`: once it passes, every path not yet answered is reported
+ * evicted. That is the safe side: an item that is in fact local only draws a placeholder for
+ * this listing, while the other answer could hand out a URL that downloads a file.
+ */
 export async function datalessPaths(
   paths: readonly string[],
   deps: DatalessDeps = defaultDatalessDeps,
+  options: { deadlineMs?: number; now?: () => number } = {},
 ): Promise<Set<string>> {
+  const now = options.now ?? Date.now;
+  const deadline = now() + (options.deadlineMs ?? PROBE_DEADLINE_MS);
   const evicted = new Set<string>();
   for (let start = 0; start < paths.length; start += BATCH) {
     const batch = paths.slice(start, start + BATCH);
+    if (now() >= deadline) {
+      console.warn(`[dataless] probe deadline passed; ${paths.length - start} path(s) unanswered`);
+      for (const path of paths.slice(start)) evicted.add(path);
+      break;
+    }
     const { stdout } = await deps.runStat(batch).catch(() => ({ stdout: "", failed: true }));
     const flags = parseStatFlags(stdout);
     if (flags.size > 0) {
@@ -88,29 +105,52 @@ export type EvictionProbe = (paths: string[]) => Promise<ReadonlySet<string>>;
 export const probeDataless: EvictionProbe = (paths) => datalessPaths(paths);
 
 /**
- * A short per-path memory of the probe, for the `kaipu-media://` protocol: a grid of
- * thumbnails costs a few `stat` calls, not one per request, and a URL a renderer cached before
- * the file was evicted is still refused once the window has passed.
+ * The `kaipu-media://` protocol's gate. A "local" answer is never reused: every read is
+ * authorized by a check made for it, so a file the provider offloaded a moment ago is never
+ * opened. To keep a grid of thumbnails to a few `stat` calls, the requests that arrive within
+ * `windowMs` share one batched probe. An "evicted" answer is remembered for `ttlMs` (refusing
+ * reads nothing); `forget()` drops it once a download ends.
  */
 export class EvictionCache {
-  private readonly known = new Map<string, { evicted: boolean; at: number }>();
+  private readonly evictedAt = new Map<string, number>();
+  private pending: { paths: Set<string>; result: Promise<ReadonlySet<string>> } | null = null;
 
   constructor(
     private readonly probe: EvictionProbe,
     private readonly ttlMs: number = 2_000,
     private readonly now: () => number = Date.now,
+    private readonly windowMs: number = 15,
   ) {}
 
   async isEvicted(path: string): Promise<boolean> {
-    const hit = this.known.get(path);
-    if (hit && this.now() - hit.at < this.ttlMs) return hit.evicted;
-    const evicted = (await this.probe([path])).has(path);
-    this.known.set(path, { evicted, at: this.now() });
-    if (this.known.size > 2_000) this.known.delete(this.known.keys().next().value!);
+    const at = this.evictedAt.get(path);
+    if (at !== undefined && this.now() - at < this.ttlMs) return true;
+    const evicted = (await this.batch(path)).has(path);
+    if (evicted) {
+      this.evictedAt.set(path, this.now());
+      if (this.evictedAt.size > 2_000) this.evictedAt.delete(this.evictedAt.keys().next().value!);
+    } else {
+      this.evictedAt.delete(path);
+    }
     return evicted;
   }
 
   forget(path: string): void {
-    this.known.delete(path);
+    this.evictedAt.delete(path);
+  }
+
+  /** One probe for every path asked within the window. */
+  private batch(path: string): Promise<ReadonlySet<string>> {
+    if (this.pending) {
+      this.pending.paths.add(path);
+      return this.pending.result;
+    }
+    const paths = new Set([path]);
+    const result = new Promise<void>((resolve) => setTimeout(resolve, this.windowMs)).then(() => {
+      this.pending = null;
+      return this.probe([...paths]);
+    });
+    this.pending = { paths, result };
+    return result;
   }
 }

@@ -98,4 +98,19 @@ describe("RecordingWriter — a synced workspace", () => {
     expect(result.recovered).toHaveLength(1);
     expect(hooks.links).toEqual([]);
   });
+
+  it("a scratch take is placed by rename even when this launch did not detect the folder as synced", async () => {
+    const w = writer();
+    await w.create("s1");
+    await w.write("s1", new TextEncoder().encode("bytes").buffer, 0);
+    const result = await recoverStrandedRecordings({
+      vaultDir,
+      extraStagingDirs: [scratch],
+      placeByRename: false,
+      title: "Recovered",
+      now: () => Date.now() + 10 * 60_000,
+    });
+    expect(result.recovered).toHaveLength(1);
+    expect(hooks.links).toEqual([]);
+  });
 });

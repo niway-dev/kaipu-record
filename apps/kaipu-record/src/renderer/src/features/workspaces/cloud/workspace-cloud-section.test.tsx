@@ -190,4 +190,32 @@ describe("WorkspaceCloudSection (Cloud → This workspace)", () => {
     await act(async () => resolveFirst({ ...base, location: "google-drive" }));
     expect(screen.getByTestId("workspace-location").textContent).toContain("This Mac");
   });
+
+  it("a failed read after a good one drops the old state instead of showing it", async () => {
+    let fail = false;
+    let libraryChanged: () => void = () => {};
+    mount(
+      { location: "google-drive" },
+      async () => {
+        if (fail) throw new Error("vault-maintenance");
+        return {
+          workspaceId: "ws-a",
+          location: "google-drive",
+          signedIn: true,
+          filter: "own",
+          catalogKnown: true,
+          unassigned: [],
+        };
+      },
+      (callback) => {
+        libraryChanged = callback;
+        return () => {};
+      },
+    );
+    expect(await screen.findByTestId("workspace-location")).toBeTruthy();
+    fail = true;
+    act(() => libraryChanged());
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.queryByTestId("workspace-location")).toBeNull();
+  });
 });

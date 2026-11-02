@@ -20,7 +20,8 @@ export type PreparableVideo = LibraryVideo & { id: string };
 
 /** The library item as a preparable recording, or null (cloud-only, a screenshot, a GIF). */
 export function asPreparable(video: LibraryVideo | undefined): PreparableVideo | null {
-  return video && video.id !== null && video.kind === "recording"
+  // An evicted recording (synced folders) is not read: the probe would download it.
+  return video && video.id !== null && video.kind === "recording" && video.evicted !== "media"
     ? { ...video, id: video.id }
     : null;
 }

@@ -91,25 +91,66 @@ describe("datalessPaths (SF_DATALESS via /usr/bin/stat, one call per batch)", ()
 });
 
 describe("EvictionCache (the media protocol's gate)", () => {
-  it("asks once per path within the window, then again after it", async () => {
-    let now = 0;
-    const probe = vi.fn(async (paths: string[]) => new Set(paths.filter((p) => p.endsWith(".a"))));
-    const cache = new EvictionCache(probe, 2_000, () => now);
-    expect(await cache.isEvicted("/x.a")).toBe(true);
-    expect(await cache.isEvicted("/x.a")).toBe(true);
-    expect(probe).toHaveBeenCalledTimes(1);
-    now = 2_500;
-    expect(await cache.isEvicted("/x.a")).toBe(true);
+  it("never reuses a local answer: every read is checked again", async () => {
+    const probe = vi.fn(async () => new Set<string>());
+    const cache = new EvictionCache(probe, 2_000, Date.now, 0);
+    expect(await cache.isEvicted("/x")).toBe(false);
+    expect(await cache.isEvicted("/x")).toBe(false);
     expect(probe).toHaveBeenCalledTimes(2);
-    expect(await cache.isEvicted("/y.b")).toBe(false);
   });
 
-  it("forget() drops a path, so a download that just finished is served at once", async () => {
-    let evicted = true;
-    const cache = new EvictionCache(async (paths) => new Set(evicted ? paths : []), 60_000);
+  it("a file evicted right after a local answer is refused on the next read", async () => {
+    let evicted = false;
+    const cache = new EvictionCache(
+      async (paths) => new Set(evicted ? paths : []),
+      2_000,
+      Date.now,
+      0,
+    );
+    expect(await cache.isEvicted("/x")).toBe(false);
+    evicted = true;
     expect(await cache.isEvicted("/x")).toBe(true);
+  });
+
+  it("requests within the window share one probe (a grid of thumbnails)", async () => {
+    const probe = vi.fn(async (paths: string[]) => new Set(paths.filter((p) => p.endsWith(".a"))));
+    const cache = new EvictionCache(probe, 2_000, Date.now, 5);
+    const answers = await Promise.all(["/1.a", "/2.b", "/3.a"].map((p) => cache.isEvicted(p)));
+    expect(answers).toEqual([true, false, true]);
+    expect(probe).toHaveBeenCalledTimes(1);
+  });
+
+  it("remembers an evicted answer for the window, and forget() drops it after a download", async () => {
+    let now = 0;
+    let evicted = true;
+    const probe = vi.fn(async (paths: string[]) => new Set(evicted ? paths : []));
+    const cache = new EvictionCache(probe, 2_000, () => now, 0);
+    expect(await cache.isEvicted("/x")).toBe(true);
+    expect(await cache.isEvicted("/x")).toBe(true);
+    expect(probe).toHaveBeenCalledTimes(1);
     evicted = false;
     cache.forget("/x");
     expect(await cache.isEvicted("/x")).toBe(false);
+    now = 5_000;
+    expect(probe).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("datalessPaths deadline (a stalled provider)", () => {
+  it("reports every path not answered by the deadline as evicted, and stops asking", async () => {
+    let now = 0;
+    const paths = Array.from({ length: 450 }, (_, i) => `/w/${i}.mp4`);
+    const runStat = vi.fn(async (batch: string[]) => {
+      now += 6_000; // each batch answers only after the per-call timeout
+      return { stdout: batch.map((p) => `0 ${p}`).join("\n"), failed: false };
+    });
+    const result = await datalessPaths(paths, deps({ runStat }), {
+      deadlineMs: 10_000,
+      now: () => now,
+    });
+    expect(runStat).toHaveBeenCalledTimes(2);
+    expect(result.size).toBe(50);
+    expect(result.has("/w/449.mp4")).toBe(true);
+    expect(result.has("/w/0.mp4")).toBe(false);
   });
 });
