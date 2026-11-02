@@ -59,12 +59,29 @@ export const defaultDatalessDeps: DatalessDeps = {
 /** The longest a whole probe (a Library listing) may take: a stalled provider never hangs it. */
 export const PROBE_DEADLINE_MS = 10_000;
 
+/** What a step that ran out of time resolves to. */
+const TIMED_OUT = Symbol("timed-out");
+
+/** `step`, or `TIMED_OUT` once `ms` pass (a rejection reads as `failed`). */
+async function within<T>(step: Promise<T>, ms: number, failed: T): Promise<T | typeof TIMED_OUT> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(TIMED_OUT), Math.max(0, ms));
+  });
+  try {
+    return await Promise.race([step.catch(() => failed), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Which of `paths` are evicted. A missing path is not. Never reads a file's data; never throws.
  *
- * Bounded as a whole by `deadlineMs`: once it passes, every path not yet answered is reported
- * evicted. That is the safe side: an item that is in fact local only draws a placeholder for
- * this listing, while the other answer could hand out a URL that downloads a file.
+ * Bounded as a whole by `deadlineMs`, a hard bound: every `stat` call and every fallback
+ * `lstat` waits at most for what is left of it. Once it passes, every path not yet answered is
+ * reported evicted. That is the safe side: an item that is in fact local only draws a
+ * placeholder for this listing, while the other answer could hand out a URL that downloads it.
  */
 export async function datalessPaths(
   paths: readonly string[],
@@ -73,16 +90,19 @@ export async function datalessPaths(
 ): Promise<Set<string>> {
   const now = options.now ?? Date.now;
   const deadline = now() + (options.deadlineMs ?? PROBE_DEADLINE_MS);
+  const left = (): number => deadline - now();
   const evicted = new Set<string>();
+  const giveUp = (from: number): Set<string> => {
+    console.warn(`[dataless] probe deadline passed; ${paths.length - from} path(s) unanswered`);
+    for (const path of paths.slice(from)) evicted.add(path);
+    return evicted;
+  };
   for (let start = 0; start < paths.length; start += BATCH) {
     const batch = paths.slice(start, start + BATCH);
-    if (now() >= deadline) {
-      console.warn(`[dataless] probe deadline passed; ${paths.length - start} path(s) unanswered`);
-      for (const path of paths.slice(start)) evicted.add(path);
-      break;
-    }
-    const { stdout } = await deps.runStat(batch).catch(() => ({ stdout: "", failed: true }));
-    const flags = parseStatFlags(stdout);
+    if (left() <= 0) return giveUp(start);
+    const answer = await within(deps.runStat(batch), left(), { stdout: "", failed: true });
+    if (answer === TIMED_OUT) return giveUp(start);
+    const flags = parseStatFlags(answer.stdout);
     if (flags.size > 0) {
       // stat answered: its flags are the truth, and a path it did not print is missing.
       for (const [path, value] of flags) {
@@ -90,9 +110,11 @@ export async function datalessPaths(
       }
       continue;
     }
-    // stat gave nothing at all (not there, killed by the timeout): the block count is a guess.
-    for (const path of batch) {
-      const info = await deps.lstat(path).catch(() => null);
+    // stat gave nothing at all (not there, killed by its timeout): the block count is a guess.
+    for (let index = 0; index < batch.length; index++) {
+      const path = batch[index]!;
+      const info = left() <= 0 ? TIMED_OUT : await within(deps.lstat(path), left(), null);
+      if (info === TIMED_OUT) return giveUp(start + index);
       if (info && info.blocks === 0 && info.size > 0) evicted.add(path);
     }
   }

@@ -120,7 +120,7 @@ describe("EvictionCache (the media protocol's gate)", () => {
     expect(probe).toHaveBeenCalledTimes(1);
   });
 
-  it("remembers an evicted answer for the window, and forget() drops it after a download", async () => {
+  it("remembers an evicted answer for the TTL only, and forget() drops it after a download", async () => {
     let now = 0;
     let evicted = true;
     const probe = vi.fn(async (paths: string[]) => new Set(evicted ? paths : []));
@@ -128,11 +128,15 @@ describe("EvictionCache (the media protocol's gate)", () => {
     expect(await cache.isEvicted("/x")).toBe(true);
     expect(await cache.isEvicted("/x")).toBe(true);
     expect(probe).toHaveBeenCalledTimes(1);
+    // Past the TTL, an evicted answer is asked again (no forget()).
+    now = 5_000;
+    expect(await cache.isEvicted("/x")).toBe(true);
+    expect(probe).toHaveBeenCalledTimes(2);
+    // Within the TTL again, forget() makes the next read ask at once.
     evicted = false;
     cache.forget("/x");
     expect(await cache.isEvicted("/x")).toBe(false);
-    now = 5_000;
-    expect(probe).toHaveBeenCalledTimes(2);
+    expect(probe).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -152,5 +156,34 @@ describe("datalessPaths deadline (a stalled provider)", () => {
     expect(result.size).toBe(50);
     expect(result.has("/w/449.mp4")).toBe(true);
     expect(result.has("/w/0.mp4")).toBe(false);
+  });
+
+  it("a stat call that hangs is cut at the deadline: every path reads as evicted", async () => {
+    const started = Date.now();
+    const result = await datalessPaths(
+      ["/w/a.mp4", "/w/b.mp4"],
+      deps({ runStat: () => new Promise(() => {}) }),
+      { deadlineMs: 50 },
+    );
+    expect([...result].sort()).toEqual(["/w/a.mp4", "/w/b.mp4"]);
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
+  it("a stalled lstat in the fallback is cut at the deadline too", async () => {
+    const started = Date.now();
+    const result = await datalessPaths(
+      ["/w/a.mp4", "/w/stuck.mp4", "/w/c.mp4"],
+      deps({
+        runStat: async () => ({ stdout: "", failed: true }),
+        lstat: (path) =>
+          path.endsWith("stuck.mp4")
+            ? new Promise(() => {})
+            : Promise.resolve({ size: 9, blocks: 8 }),
+      }),
+      { deadlineMs: 50 },
+    );
+    // a.mp4 was answered (local); the stuck one and everything after it are unanswered.
+    expect([...result].sort()).toEqual(["/w/c.mp4", "/w/stuck.mp4"]);
+    expect(Date.now() - started).toBeLessThan(1_000);
   });
 });
