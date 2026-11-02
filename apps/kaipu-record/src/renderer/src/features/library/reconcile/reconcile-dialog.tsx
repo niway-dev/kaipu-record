@@ -247,7 +247,9 @@ function Findings({
   const byGroup = new Map<GroupId, ReconcileFinding[]>();
   for (const finding of findings) {
     const id = GROUP_OF[finding.kind];
-    byGroup.set(id, [...(byGroup.get(id) ?? []), finding]);
+    const bucket = byGroup.get(id);
+    if (bucket) bucket.push(finding);
+    else byGroup.set(id, [finding]);
   }
   const present = GROUPS.filter((group) => byGroup.has(group.id));
   return (
@@ -296,10 +298,18 @@ function ScanBody({
     case "error":
       return <ModalText>{t("reconcileScanError", { message: scan.message })}</ModalText>;
     case "ok":
-      return scan.findings.length === 0 ? (
-        <ModalText>{t("reconcileEverythingMatches")}</ModalText>
-      ) : (
-        <Findings findings={scan.findings} t={t} />
+      if (scan.findings.length === 0) {
+        return <ModalText>{t("reconcileEverythingMatches")}</ModalText>;
+      }
+      // The intro describes a finished scan, so it only sits above an actual list.
+      return (
+        <>
+          <ModalText>
+            {t(scan.fixableCount > 0 ? "reconcileIntro" : "reconcileIntroListedOnly")}
+          </ModalText>
+          <SafetyNote t={t} />
+          <Findings findings={scan.findings} t={t} />
+        </>
       );
   }
 }
@@ -427,11 +437,7 @@ export function ReconcileDialogHost(): React.JSX.Element | null {
         </ModalIcon>
         <ModalTitle id="reconcile-dialog-title">{t("reconcileTitle")}</ModalTitle>
         {run.phase === "idle" ? (
-          <>
-            <ModalText>{t("reconcileIntro")}</ModalText>
-            <SafetyNote t={t} />
-            <ScanBody scan={scanning ? null : scan} t={t} />
-          </>
+          <ScanBody scan={scanning ? null : scan} t={t} />
         ) : (
           <RunBody run={run} t={t} />
         )}

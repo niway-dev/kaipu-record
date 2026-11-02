@@ -209,7 +209,7 @@ describe("reconcile dialog", () => {
 });
 
 describe("finding groups", () => {
-  it("every finding kind lands in a group with its own row text", async () => {
+  it("every finding kind lands in a group, and each row says what happens to it", async () => {
     const kinds: ReconcileFindingKind[] = [
       "stale-auto-title",
       "untitled-legacy",
@@ -243,5 +243,36 @@ describe("finding groups", () => {
       "listed",
     ]);
     expect(groups.map((g) => g.querySelectorAll("li").length)).toEqual([3, 1, 2, 6]);
+    const rowText = (g: Element) => [...g.querySelectorAll("li")].map((li) => li.textContent);
+    expect(rowText(groups[0]!)).toEqual(["item-0Item 0", "item-1Item 1", "item-2Item 2"]);
+    expect(rowText(groups[1]!)).toEqual(["item-3Added to the library"]);
+    expect(rowText(groups[2]!)).toEqual([
+      "item-4.mp4No file. Its record moves to the orphans folder",
+      "item-5.mp4Belongs to no item. Moves to the orphans folder",
+    ]);
+    expect(rowText(groups[3]!).every((text) => (text ?? "").length > "item-0.mp4".length)).toBe(
+      true,
+    );
+  });
+});
+
+describe("intro", () => {
+  it("only describes a Fix all plan above an actual list", async () => {
+    scanResult = ok([]);
+    mount();
+    await waitFor(() => expect(getReconcileState().scan).not.toBeNull());
+    const { openReconcileDialog } = await import("./reconcile-store");
+    act(() => openReconcileDialog());
+    expect(await screen.findByText("Everything matches.")).toBeInTheDocument();
+    expect(screen.queryByText(/Kaipu compared this folder/)).toBeNull();
+    expect(screen.queryByText("Nothing is deleted.")).toBeNull();
+  });
+
+  it("with only listed findings, does not promise a Fix all", async () => {
+    scanResult = ok([conflict]);
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Review" }));
+    expect(await screen.findByText(/Nothing here can be fixed automatically/)).toBeInTheDocument();
+    expect(screen.queryByText(/what Fix all would do/)).toBeNull();
   });
 });
