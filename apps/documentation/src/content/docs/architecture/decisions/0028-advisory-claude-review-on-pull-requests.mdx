@@ -7,13 +7,13 @@ description: Claude Sonnet 5.5 reviews each pull request once when it is ready, 
 
 ## Status
 
-| Field         | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | Accepted — now consumed through the reusable workflow `niway-dev/wachi-reviewer` (`.github/workflows/agent-review.yml`); first ran here on PR #394 (2026-10-27). Amended 2026-10-27: the script and its tests left this repository ([amendment](#amendment-the-review-script-and-its-tests-left-this-repository)); the engine was renamed and is pinned to an exact release ([amendment](#amendment-the-engine-is-now-niway-devwachi-reviewer-pinned-to-v120)) |
-| Date          | 2026-10-20                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Supersedes    | —                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Amends        | —                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Superseded by | —                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Field         | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Accepted — now consumed through the reusable workflow `niway-dev/wachi-reviewer` (`.github/workflows/agent-review.yml`); first ran here on PR #394 (2026-10-27). Amended 2026-10-27: the script and its tests left this repository ([amendment](#amendment-the-review-script-and-its-tests-left-this-repository)); the engine was renamed and is pinned to an exact release ([amendment](#amendment-the-engine-is-now-niway-devwachi-reviewer-pinned-to-v120)). Amended 2026-11-01: reviews also run on every push ([amendment](#amendment-reviews-also-run-on-every-push)) |
+| Date          | 2026-10-20                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Supersedes    | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Amends        | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Superseded by | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ## Context
 
@@ -57,6 +57,7 @@ keeps ordinary pull requests fast: they get an immediate pass, not a verificatio
 - **Pullfrog or CodeRabbit.** The owner wants control of the prompt, the cost rules and the
   output; they stay the comparison (niway-dev/pr-review-engine ADR 0001).
 - **Reviewing on every push.** It spends on every push; `@claude review` covers a second pass.
+  (Reversed on 2026-11-01, see the last amendment.)
 
 ## Consequences
 
@@ -99,3 +100,25 @@ the exact tag `v1.2.0` instead of the floating `v1`, following the engine's ADR 
 2026-10-26: a moved floating tag would run a new release with this repository's key before
 anyone read it. A new release now runs here only after the tag is edited. The on-demand command
 is `/wachi review`; `@agent-review` and `@claude` still work.
+
+## Amendment: reviews also run on every push
+
+**2026-11-01.** `.github/workflows/agent-review.yml` adds `synchronize` to its `pull_request`
+types, so every push to an open, ready pull request starts a review. The engine already reviews
+only the changes since the last reviewed commit (its incremental marker), so a push costs a
+review of its delta, not of the whole pull request.
+
+Why the rejected alternative is reversed: on PR #475, three of the six valid review findings were
+on fix commits pushed after the first review, and two of them were regressions introduced by the
+fix itself. Wachiman reviewed only the first commit, and nobody remembered to comment
+`/wachi review`; the reviewers that ran on every push found all three. The "What would reopen
+this" conditions are not met; this is new evidence, recorded in niway-dev/wachiman's
+`docs/benchmark/2026-10-31/pr-475.md`.
+
+Known costs until the engine catches up (niway-dev/wachiman, design in progress):
+
+- A rebase or force-push rewrites the history the marker points at, and the engine then reviews
+  the whole pull request again, up to the $3 cap.
+- There is no per-pull-request limit yet; each push is bounded only by the per-review caps.
+- The concurrency group cancels a running review when a newer push arrives, so a burst of pushes
+  pays for the last one (plus whatever the cancelled runs spent before they stopped).

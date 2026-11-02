@@ -11,7 +11,9 @@ name: Agent review
 # Opus 5.5 instead of the Sonnet 5.5 default: about twice the per-token price for a deeper review.
 # The default caps still bound each run ($0.75 per batch, $3 per review).
 on:
-  pull_request: { types: [opened, ready_for_review] }
+  # `synchronize`: every push to a ready pull request gets an incremental review of what changed
+  # since the last reviewed commit (ADR 0028, amendment of 2026-11-01).
+  pull_request: { types: [opened, ready_for_review, synchronize] }
   issue_comment: { types: [created] }
 permissions: { contents: read, pull-requests: write, issues: read }
 jobs:
