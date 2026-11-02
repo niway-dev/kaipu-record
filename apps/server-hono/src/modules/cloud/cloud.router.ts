@@ -6,6 +6,7 @@ import {
   getAssetDownloadUrl,
   getEntitlements,
   listCloudAssets,
+  setAssetWorkspace,
   setAutoUploadExclusion,
 } from "@kaipu/application";
 import { createDatabaseClient } from "@kaipu/infra-db/client";
@@ -179,6 +180,17 @@ export const cloudRouter = impl.router({
       });
       throw err;
     }
+  }),
+
+  setWorkspace: impl.setWorkspace.use(authMiddleware).handler(async ({ input, context }) => {
+    const data = await setAssetWorkspace({
+      assets,
+      userId: context.user.id,
+      assetId: input.assetId,
+      workspaceId: input.workspaceId,
+    });
+    if (!data) return notFound();
+    return { data, error: null };
   }),
 
   setAutoUploadExclusion: impl.setAutoUploadExclusion

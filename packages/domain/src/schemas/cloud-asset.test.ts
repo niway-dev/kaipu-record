@@ -3,6 +3,7 @@ import { MAX_SCREENSHOT_BYTES, MAX_VIDEO_BYTES } from "../constants/cloud-limits
 import {
   accountPrefixes,
   assetCursorSchema,
+  assignAssetWorkspaceSchema,
   decodeAssetCursor,
   encodeAssetCursor,
   buildRevisionStorageKey,
@@ -37,6 +38,18 @@ describe("createUploadIntentSchema", () => {
     expect(parsed.durationSeconds).toBe(12);
     expect(parsed.derivedFromAssetId).toBeNull();
     expect(parsed.thumbnail).toBeNull();
+  });
+
+  it("takes an optional workspace id: absent (an older desktop) reads as null", () => {
+    expect(createUploadIntentSchema.parse(valid).workspaceId).toBeNull();
+    const ws = "0192f1c2-7a3b-7c4d-8e5f-001122334455";
+    expect(createUploadIntentSchema.parse({ ...valid, workspaceId: ws }).workspaceId).toBe(ws);
+  });
+
+  it("rejects a workspace id that is not a plain id", () => {
+    for (const workspaceId of ["", "a/b", "../x", "x".repeat(65), "has space"]) {
+      expect(() => createUploadIntentSchema.parse({ ...valid, workspaceId })).toThrow();
+    }
   });
 
   it("rejects non-uuid ids, empty hashes and non-positive sizes", () => {
@@ -115,6 +128,7 @@ describe("pure rules", () => {
       durationSeconds: 12,
       derivedFromAssetId: null,
       autoUploadExcluded: false,
+      workspaceId: "ws-1",
       createdAt: new Date(1),
       updatedAt: new Date(2),
       deletedAt: null,
@@ -143,6 +157,7 @@ describe("pure rules", () => {
       currentRevisionId: "r1",
       sizeBytes: 1000,
       hasThumbnail: true,
+      workspaceId: "ws-1",
     });
     expect(JSON.stringify(summary)).not.toContain("videos/u1");
     expect(toAssetSummary({ ...asset, currentRevisionId: null }, null)).toMatchObject({
@@ -151,6 +166,18 @@ describe("pure rules", () => {
       contentSha256: null,
       hasThumbnail: false,
     });
+  });
+});
+
+describe("assignAssetWorkspaceSchema", () => {
+  it("accepts a workspace id or null, and nothing else", () => {
+    expect(assignAssetWorkspaceSchema.parse({ workspaceId: "ws-1" })).toEqual({
+      workspaceId: "ws-1",
+    });
+    expect(assignAssetWorkspaceSchema.parse({ workspaceId: null })).toEqual({ workspaceId: null });
+    expect(() => assignAssetWorkspaceSchema.parse({})).toThrow();
+    expect(() => assignAssetWorkspaceSchema.parse({ workspaceId: "a/b" })).toThrow();
+    expect(() => assignAssetWorkspaceSchema.parse({ workspaceId: 7 })).toThrow();
   });
 });
 

@@ -44,6 +44,7 @@ describe("CloudAssetRepository (real database)", () => {
       title: "it",
       durationSeconds: 1,
       derivedFromAssetId: null,
+      workspaceId: null as string | null,
       storageKey: `videos/${USER}/x/${revisionId}.mp4`,
       thumbnailKey: null,
       contentType: "video/mp4",
@@ -312,6 +313,22 @@ describe("CloudAssetRepository (real database)", () => {
     expect(byThumb.map((x) => x.revisionId)).toEqual([revisionId]);
     expect(await repo.findRevisionsByStorageKeys("someone-else", [thumb])).toEqual([]);
     expect(await repo.findRevisionsByStorageKeys(USER, [])).toEqual([]);
+  });
+
+  it("stores the upload's workspace; a re-upload without one keeps it; setWorkspace assigns and clears", async () => {
+    const assetId = crypto.randomUUID();
+    const first = await repo.reserve(reserveData({ assetId, workspaceId: "ws-work" }));
+    if (first.kind !== "reserved") throw new Error(first.kind);
+    expect(first.asset.workspaceId).toBe("ws-work");
+    const again = await repo.reserve(
+      reserveData({ assetId, workspaceId: null, capacityBytes: 10_000 }),
+    );
+    if (again.kind !== "reserved") throw new Error(again.kind);
+    expect(again.asset.workspaceId).toBe("ws-work");
+    expect((await repo.setWorkspace(USER, assetId, "ws-home"))?.workspaceId).toBe("ws-home");
+    expect((await repo.setWorkspace(USER, assetId, null))?.workspaceId).toBeNull();
+    expect(await repo.setWorkspace("someone-else", assetId, "ws-x")).toBeNull();
+    expect(await repo.setWorkspace(USER, crypto.randomUUID(), "ws-x")).toBeNull();
   });
 
   it("a well-formed cursor naming another user's asset still lists only the caller's assets", async () => {

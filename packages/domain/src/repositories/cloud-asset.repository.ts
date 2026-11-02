@@ -11,6 +11,8 @@ export interface ReserveRevisionData {
   title: string;
   durationSeconds: number;
   derivedFromAssetId: string | null;
+  /** The workspace the upload comes from; null keeps an existing asset's own (ADR 0032). */
+  workspaceId: string | null;
   storageKey: string;
   thumbnailKey: string | null;
   contentType: string;
@@ -87,6 +89,15 @@ export interface ICloudAssetRepository {
     userId: string,
     assetId: string,
     excluded: boolean,
+  ): Promise<CloudAsset | null>;
+  /**
+   * Assign the asset to a desktop workspace, or unassign it with null (ADR 0032). Scoped to the
+   * owner; null when the account has no such live asset. Idempotent.
+   */
+  setWorkspace(
+    userId: string,
+    assetId: string,
+    workspaceId: string | null,
   ): Promise<CloudAsset | null>;
   /** Assets with a current ready revision, newest first, keyset-paginated. */
   listAssets(userId: string, params: { cursor: string | null; limit: number }): Promise<AssetPage>;

@@ -33,6 +33,12 @@ export const cloudAssetTable = createTable(
     derivedFromAssetId: text("derived_from_asset_id"),
     /** Set when the user deletes the cloud copy; automatic upload must skip it until re-upload. */
     autoUploadExcluded: boolean("auto_upload_excluded").default(false).notNull(),
+    /**
+     * The desktop workspace the item lives in (ADR 0032): an opaque client id, no foreign key,
+     * the server never learns its name. Null for an asset no workspace has claimed (uploaded
+     * before workspaces, or unassigned).
+     */
+    workspaceId: text("workspace_id"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

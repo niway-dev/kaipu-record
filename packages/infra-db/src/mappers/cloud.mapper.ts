@@ -14,6 +14,7 @@ export function mapCloudAssetToDomain(row: AssetRow): CloudAsset {
     durationSeconds: row.durationSeconds,
     derivedFromAssetId: row.derivedFromAssetId,
     autoUploadExcluded: row.autoUploadExcluded,
+    workspaceId: row.workspaceId,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     deletedAt: row.deletedAt,
