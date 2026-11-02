@@ -249,4 +249,39 @@ describe("MachineSettingsStore (userData/workspace-settings.json)", () => {
     const again = await MachineSettingsStore.open(file());
     for (const id of ["a", "b", "c", "d"]) expect(again.get(id)).toEqual({ uploadMode: "manual" });
   });
+
+  it("does not treat an unreadable file as absent: it rejects updates and leaves the file alone", async () => {
+    // A directory in its place: reading it fails with something other than "no such file".
+    await mkdir(file(), { recursive: true });
+    await writeFile(join(file(), "keep.txt"), "x");
+    const store = await MachineSettingsStore.open(file());
+    expect(store.get("w1")).toEqual({});
+    await expect(store.update("w1", () => ({ uploadMode: "manual" }))).rejects.toThrow();
+    expect(await readFile(join(file(), "keep.txt"), "utf-8")).toBe("x");
+    // Nothing was kept in memory for the write that failed.
+    expect(store.get("w1")).toEqual({});
+  });
+
+  it("reads the file again on the next update, so a temporary failure heals", async () => {
+    await writeFile(
+      file(),
+      JSON.stringify({ version: 1, workspaces: { w2: { uploadMode: "automatic" } } }),
+    );
+    const store = await MachineSettingsStore.open(file());
+    expect(store.get("w2")).toEqual({ uploadMode: "automatic" });
+    // Simulate a store that first failed to read: swap the file for a directory, reopen, restore.
+    await rm(file());
+    await mkdir(file());
+    const failed = await MachineSettingsStore.open(file());
+    await rm(file(), { recursive: true });
+    await writeFile(
+      file(),
+      JSON.stringify({ version: 1, workspaces: { w2: { uploadMode: "automatic" } } }),
+    );
+    await failed.update("w1", () => ({ uploadMode: "manual" }));
+    expect(failed.get("w2")).toEqual({ uploadMode: "automatic" });
+    expect(JSON.parse(await readFile(file(), "utf-8"))).toMatchObject({
+      workspaces: { w1: { uploadMode: "manual" }, w2: { uploadMode: "automatic" } },
+    });
+  });
 });

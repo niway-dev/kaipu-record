@@ -95,6 +95,9 @@ export type ResolvePendingResult =
 /** Result of copying values to every workspace. */
 export type CopyToAllResult =
   | { ok: true; settings: AppSettings; keptOwn: string[] }
-  | { ok: false; reason: "unknown-workspace" | "not-overridable" | "unavailable" | "failed" };
+  | {
+      ok: false;
+      reason: "unknown-workspace" | "not-overridable" | "unavailable" | "unreadable" | "failed";
+    };
 
 export type ResetOverridesResult = SetOverrideResult;

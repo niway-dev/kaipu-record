@@ -63,6 +63,43 @@ export class WorkspaceSettings {
 
   constructor(private readonly deps: WorkspaceSettingsDeps) {}
 
+  /**
+   * Bumped before and after every write of a workspace's folder file, so a read that began before
+   * the write ended may hold the old bytes. Together with `writing` (a write in flight) and
+   * `refreshTickets` (the refresh that started last wins) it keeps a slow or overlapping refresh
+   * from putting an older read, with the old sha256, over what this Mac just recorded.
+   */
+  private readonly writeEpochs = new Map<string, number>();
+  private readonly writing = new Map<string, number>();
+  private readonly refreshTickets = new Map<string, number>();
+  private readonly refreshApplied = new Map<string, number>();
+  /**
+   * The overrides as they were when a write began. While the write runs the new hash is already
+   * recorded and the file still holds the old bytes; reading the cache against that record would
+   * switch this Mac's own overrides off for a moment, so the answer is held until it ends.
+   */
+  private readonly frozen = new Map<string, SettingsOverrides>();
+
+  /**
+   * A fresh read taken on the write path (an answer, or the read an edit starts from) is newer
+   * than any refresh already in flight: bumping the epoch makes those drop what they read.
+   */
+  private fence(id: string): void {
+    this.writeEpochs.set(id, (this.writeEpochs.get(id) ?? 0) + 1);
+  }
+
+  private beginWrite(id: string): void {
+    this.frozen.set(id, this.computeOverrides(id));
+    this.writing.set(id, (this.writing.get(id) ?? 0) + 1);
+    this.writeEpochs.set(id, (this.writeEpochs.get(id) ?? 0) + 1);
+  }
+
+  private endWrite(id: string): void {
+    this.frozen.delete(id);
+    this.writing.set(id, Math.max(0, (this.writing.get(id) ?? 1) - 1));
+    this.writeEpochs.set(id, (this.writeEpochs.get(id) ?? 0) + 1);
+  }
+
   private remember(id: string, read: FolderRead): void {
     this.reads.set(id, read);
     if (read.kind !== "unreadable") this.lastSeen.set(id, read);
@@ -109,7 +146,15 @@ export class WorkspaceSettings {
     const ws = this.known(id);
     if (!ws) return;
     const before = JSON.stringify(this.overridesOf(id));
+    const epoch = this.writeEpochs.get(id) ?? 0;
+    const ticket = (this.refreshTickets.get(id) ?? 0) + 1;
+    this.refreshTickets.set(id, ticket);
     const read = await this.probe(id, ws.path);
+    // A write is under way, or ended while this file was read: the read may predate it, and the
+    // write has the newer say. A refresh that started after this one has too.
+    if ((this.writing.get(id) ?? 0) > 0 || (this.writeEpochs.get(id) ?? 0) !== epoch) return;
+    if (ticket < (this.refreshApplied.get(id) ?? 0)) return;
+    this.refreshApplied.set(id, ticket);
     this.remember(id, read);
     if (id === this.deps.activeId() && before !== JSON.stringify(this.overridesOf(id))) {
       this.deps.changed();
@@ -146,6 +191,12 @@ export class WorkspaceSettings {
 
   /** The overrides that apply in a workspace: its confirmed folder file plus its machine-bound mode. */
   private overridesOf(id: string): SettingsOverrides {
+    const held = this.frozen.get(id);
+    if (held) return held;
+    return this.computeOverrides(id);
+  }
+
+  private computeOverrides(id: string): SettingsOverrides {
     const overrides: SettingsOverrides = {};
     const read = this.reads.get(id);
     if (this.stateOf(id) === "active" && read?.kind === "ok")
@@ -274,6 +325,7 @@ export class WorkspaceSettings {
     // Always from the disk: the cache may predate a sync.
     const read = await this.read(ws.path);
     this.remember(ws.id, read);
+    this.fence(ws.id);
     const state = folderState(read, this.deps.machine.get(ws.id).folderOverrides);
     if (state === "unreadable") return "unreadable";
     // The user has not seen these values: writing now would activate them by the back door.
@@ -291,6 +343,7 @@ export class WorkspaceSettings {
     if (unchanged) return null;
     const previous = this.deps.machine.get(ws.id).folderOverrides;
     let sha256: string;
+    this.beginWrite(ws.id);
     try {
       // The new hash is recorded BEFORE the file changes (see `writeFolderOverrides`), so this
       // Mac's own edit is never mistaken for a change made by a sync.
@@ -308,9 +361,11 @@ export class WorkspaceSettings {
           return previous ? { ...rest, folderOverrides: previous } : rest;
         })
         .catch(() => undefined);
+      this.endWrite(ws.id);
       throw error;
     }
     this.remember(ws.id, { kind: "ok", overrides: next as FolderOverrides, sha256 });
+    this.endWrite(ws.id);
     return null;
   }
 
@@ -347,6 +402,7 @@ export class WorkspaceSettings {
     if (!(await this.deps.isAvailable(id))) return { ok: false, reason: "nothing-pending" };
     const read = await this.read(ws.path);
     this.remember(id, read);
+    this.fence(id);
     const state = folderState(read, this.deps.machine.get(id).folderOverrides);
     if (read.kind !== "ok" || state === "none" || state === "unreadable") {
       this.deps.changed();
@@ -397,6 +453,11 @@ export class WorkspaceSettings {
     if (!(await this.deps.isAvailable(id))) return { ok: false, reason: "unavailable" };
     const wanted = [...new Set(keys)];
     await this.refresh(id);
+    // A file that cannot be read cannot say what the workspace shows: refuse before any write.
+    // (`uploadMode` is machine-bound, so an unreadable folder file does not stop it.)
+    if (wanted.some((key) => key !== "uploadMode") && this.reads.get(id)?.kind === "unreadable") {
+      return { ok: false, reason: "unreadable" };
+    }
     const shown = resolveEffective(this.deps.getAll(), this.overridesOf(id));
     const patch: Record<string, unknown> = {};
     for (const key of wanted) patch[key] = shown[key];

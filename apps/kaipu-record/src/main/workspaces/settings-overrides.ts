@@ -217,31 +217,44 @@ export class MachineSettingsStore {
   private entries = new Map<string, MachineEntry>();
   private tail: Promise<unknown> = Promise.resolve();
   private corrupt = false;
+  /** The file exists and could not be read (not "absent"): it must not be written over. */
+  private unreadable = false;
 
   private constructor(private readonly file: string) {}
 
   static async open(file: string): Promise<MachineSettingsStore> {
     const store = new MachineSettingsStore(file);
+    await store.load();
+    return store;
+  }
+
+  /** Read the file into memory. Only a missing file is "empty"; any other failure keeps it untouched. */
+  private async load(): Promise<void> {
     let text: string;
     try {
-      text = await readFile(file, "utf-8");
-    } catch {
-      return store;
+      text = await readFile(this.file, "utf-8");
+    } catch (error) {
+      this.entries = new Map();
+      this.corrupt = false;
+      this.unreadable = (error as NodeJS.ErrnoException).code !== "ENOENT";
+      return;
     }
+    this.unreadable = false;
+    this.corrupt = false;
+    this.entries = new Map();
     try {
       const parsed = JSON.parse(text) as { workspaces?: unknown };
       const workspaces = parsed?.workspaces;
       if (workspaces && typeof workspaces === "object") {
         for (const [id, value] of Object.entries(workspaces)) {
           const entry = sanitizeEntry(value);
-          if (Object.keys(entry).length > 0) store.entries.set(id, entry);
+          if (Object.keys(entry).length > 0) this.entries.set(id, entry);
         }
       }
     } catch {
       // Unusable: start empty, and keep the file aside before the first write over it.
-      store.corrupt = true;
+      this.corrupt = true;
     }
-    return store;
   }
 
   get(id: string): MachineEntry {
@@ -251,6 +264,13 @@ export class MachineSettingsStore {
   /** Apply `change` to one workspace's entry and write the file. Updates run one at a time. */
   update(id: string, change: (entry: MachineEntry) => MachineEntry): Promise<void> {
     const run = this.tail.then(async () => {
+      // A file that could not be read last time is tried again: the failure may have passed. If
+      // it still cannot be read, nothing is written, so the other workspaces' records survive.
+      if (this.unreadable) {
+        await this.load();
+        if (this.unreadable)
+          throw new Error(`cannot update unreadable settings file: ${this.file}`);
+      }
       const next = change({ ...this.get(id) });
       const previous = this.entries.get(id);
       if (Object.keys(next).length === 0) this.entries.delete(id);

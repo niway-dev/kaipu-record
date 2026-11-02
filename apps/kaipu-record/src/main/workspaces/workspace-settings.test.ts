@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AppSettings } from "@shared/types";
 import { mergeSettings } from "../services/settings.service";
+import * as overridesModule from "./settings-overrides";
 import { MachineSettingsStore, SETTINGS_FILE, resolveEffective } from "./settings-overrides";
 import { WorkspaceSettings } from "./workspace-settings";
 
@@ -579,5 +580,114 @@ describe("review fixes", () => {
     await fast.refresh("work");
     expect(Date.now() - started).toBeLessThan(1000);
     expect(fast.activeOverrides()).toEqual({});
+  });
+});
+
+describe("a refresh racing a write", () => {
+  it("never puts an older read over the write that finished first", async () => {
+    await settings.setOverride("work", "screenshotCopy", "manual");
+    const realRead = overridesModule.readFolderOverrides;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let oldReadDone!: () => void;
+    const oldRead = new Promise<void>((resolve) => (oldReadDone = resolve));
+    const spy = vi
+      .spyOn(overridesModule, "readFolderOverrides")
+      .mockImplementationOnce(async (path) => {
+        const old = await realRead(path); // the old bytes, read before the write below
+        oldReadDone();
+        await held;
+        return old;
+      });
+    const refreshing = settings.refresh("work");
+    // Only once the old bytes are in hand does the write start, so the stale read is real.
+    await oldRead;
+    await settings.setOverride("work", "showBrandBadge", false);
+    release();
+    await refreshing;
+    spy.mockRestore();
+    // The cache, as captures and snapshots read it (no fresh read to mask the race).
+    expect(settings.activeOverrides()).toEqual({ screenshotCopy: "manual", showBrandBadge: false });
+  });
+
+  it("a refresh that starts in the middle of a write is dropped, so the overrides never flicker off", async () => {
+    await settings.setOverride("work", "screenshotCopy", "manual");
+    const realUpdate = machineStore.update.bind(machineStore);
+    let seenMidWrite: unknown = null;
+    vi.spyOn(machineStore, "update").mockImplementationOnce(async (id, change) => {
+      // The new hash is recorded; the file still holds the old bytes. A capture starts now.
+      await realUpdate(id, change);
+      await settings.refresh("work");
+      seenMidWrite = settings.activeOverrides();
+    });
+    await settings.setOverride("work", "showBrandBadge", false);
+    expect(seenMidWrite).toEqual({ screenshotCopy: "manual" });
+    expect(settings.activeOverrides()).toEqual({ screenshotCopy: "manual", showBrandBadge: false });
+  });
+
+  it("of two overlapping refreshes the one that started last wins, whichever finishes first", async () => {
+    await putFolderFile(work, { screenshotCopy: "auto" });
+    const current = await overridesModule.readFolderOverrides(work.path);
+    if (current.kind !== "ok") throw new Error("fixture file unreadable");
+    await machineStore.update("work", (entry) => ({
+      ...entry,
+      folderOverrides: { sha256: current.sha256, decision: "use", at: 1 },
+    }));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const spy = vi
+      .spyOn(overridesModule, "readFolderOverrides")
+      .mockImplementationOnce(async () => {
+        await gate; // the first refresh read the file before a sync rewrote it
+        return { kind: "ok", overrides: { screenshotCopy: "manual" }, sha256: "0".repeat(64) };
+      });
+    const first = settings.refresh("work");
+    await settings.refresh("work"); // started later, finishes first
+    release();
+    await first;
+    spy.mockRestore();
+    expect(settings.activeOverrides()).toEqual({ screenshotCopy: "auto" });
+  });
+
+  it("refuses to copy from a workspace whose file cannot be read, and writes nothing anywhere", async () => {
+    await settings.setOverride("personal", "screenshotCopy", "auto");
+    const before = await readFile(folderFile(personal), "utf-8");
+    const allBefore = { ...all };
+    await mkdir(join(work.path, ".kaipu", "workspace"), { recursive: true });
+    await writeFile(folderFile(work), "{broken");
+    await expect(settings.copyToAll("work", ["screenshotCopy"])).resolves.toEqual({
+      ok: false,
+      reason: "unreadable",
+    });
+    expect(all).toEqual(allBefore);
+    expect(await readFile(folderFile(personal), "utf-8")).toBe(before);
+  });
+
+  it("a refresh in flight cannot undo the answer the user just gave to a changed file", async () => {
+    await putFolderFile(work, { screenshotCopy: "manual" });
+    const current = await overridesModule.readFolderOverrides(work.path);
+    if (current.kind !== "ok") throw new Error("fixture file unreadable");
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const spy = vi
+      .spyOn(overridesModule, "readFolderOverrides")
+      .mockImplementationOnce(async () => {
+        await gate; // read before a sync replaced the file
+        return { kind: "ok", overrides: { screenshotCopy: "auto" }, sha256: "0".repeat(64) };
+      });
+    const slow = settings.refresh("work");
+    await settings.resolvePending("work", "use", current.sha256);
+    release();
+    await slow;
+    spy.mockRestore();
+    expect(settings.activeOverrides()).toEqual({ screenshotCopy: "manual" });
+  });
+
+  it("copies uploadMode even when the folder file cannot be read (it is machine-bound)", async () => {
+    await mkdir(join(work.path, ".kaipu", "workspace"), { recursive: true });
+    await writeFile(folderFile(work), "{broken");
+    await settings.setOverride("work", "uploadMode", "automatic");
+    await expect(settings.copyToAll("work", ["uploadMode"])).resolves.toMatchObject({ ok: true });
+    expect(all.uploadMode).toBe("automatic");
   });
 });
