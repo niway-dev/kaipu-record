@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ReconcileFinding,
   ReconcileFixResult,
+  ReconcileFindingKind,
   ReconcileProgress,
   ReconcileScanResult,
 } from "@shared/types/library-reconcile";
@@ -118,23 +119,29 @@ describe("reconcile banner", () => {
 });
 
 describe("reconcile dialog", () => {
-  it("tables current → new names, runs Fix all with progress, and reports the result", async () => {
+  it("groups findings by what happens to them, runs Fix all with progress, and reports the result", async () => {
     mount();
     fireEvent.click(await screen.findByRole("button", { name: "Check and fix" }));
-    const [changes, listed] = await screen.findAllByRole("table");
-    const renameRow = within(changes!).getAllByRole("row")[1]!;
-    expect(within(changes!).getByRole("columnheader", { name: "Now" })).toBeInTheDocument();
+    expect(await screen.findByText("Nothing is deleted.")).toBeInTheDocument();
+    const groups = document.querySelectorAll("details[data-group]");
+    expect([...groups].map((g) => g.getAttribute("data-group"))).toEqual(["rename", "listed"]);
+    // The first group opens, so the most common change is visible without a click.
+    expect((groups[0] as HTMLDetailsElement).open).toBe(true);
+    expect((groups[1] as HTMLDetailsElement).open).toBe(false);
+    const renames = groups[0] as HTMLElement;
+    expect(within(renames).getByText("Names that don't match their title")).toBeInTheDocument();
+    expect(within(renames).getByText("1 file")).toBeInTheDocument();
+    const renameRow = within(renames).getAllByRole("listitem")[0]!;
+    expect(within(renameRow).getByText("recording-2026-10-30-00-57-30")).toBeInTheDocument();
+    expect(within(renameRow).getByLabelText("renamed to")).toBeInTheDocument();
     expect(
-      within(changes!).getByRole("columnheader", { name: "After Fix all" }),
+      within(renameRow).getByText("Kaipu Recording 2026-10-29 at 19.57.30"),
     ).toBeInTheDocument();
-    expect(
-      within(renameRow)
-        .getAllByRole("cell")
-        .map((cell) => cell.textContent),
-    ).toEqual(["recording-2026-10-30-00-57-30", "Kaipu Recording 2026-10-29 at 19.57.30"]);
-    const conflictRow = within(listed!).getAllByRole("row")[1]!;
-    expect(within(conflictRow).getByText("Pair.png")).toBeInTheDocument();
-    expect(within(conflictRow).getByText(/Another file has the same name/)).toBeInTheDocument();
+    const listed = groups[1] as HTMLElement;
+    expect(within(listed).getByText("Left as they are")).toBeInTheDocument();
+    expect(within(listed).getByText("Pair.png")).toBeInTheDocument();
+    expect(within(listed).getByText(/Another file has the same name/)).toBeInTheDocument();
+    expect(screen.getByText("1 change · 1 left as it is")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Fix all" }));
     act(() => progress!({ phase: "waiting", waitingFor: ["screenshot"] }));
@@ -198,5 +205,43 @@ describe("reconcile dialog", () => {
     expect(window.electronAPI.reconcileCancel).toHaveBeenCalled();
     await act(async () => finishFix({ status: "cancelled" }));
     expect(screen.getByRole("button", { name: "Fix all" })).toBeInTheDocument();
+  });
+});
+
+describe("finding groups", () => {
+  it("every finding kind lands in a group with its own row text", async () => {
+    const kinds: ReconcileFindingKind[] = [
+      "stale-auto-title",
+      "untitled-legacy",
+      "name-mismatch",
+      "missing-sidecar",
+      "missing-media",
+      "orphan-companion",
+      "stem-conflict",
+      "shared-companion",
+      "duplicate-identity",
+      "unreadable-record",
+      "not-recognized",
+      "unreadable-orphan-run",
+    ];
+    scanResult = ok(
+      kinds.map((kind, i) => ({
+        kind,
+        fixable: i < 6,
+        path: `item-${i}.mp4`,
+        newName: `Item ${i}.mp4`,
+      })),
+    );
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Check and fix" }));
+    await screen.findByText("Left as they are");
+    const groups = [...document.querySelectorAll("details[data-group]")];
+    expect(groups.map((g) => g.getAttribute("data-group"))).toEqual([
+      "rename",
+      "adopt",
+      "gone",
+      "listed",
+    ]);
+    expect(groups.map((g) => g.querySelectorAll("li").length)).toEqual([3, 1, 2, 6]);
   });
 });

@@ -1,4 +1,17 @@
-import { FileText, Film, FolderSync, Image as ImageIcon } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronDown,
+  CircleAlert,
+  FilePlus2,
+  FileText,
+  Film,
+  FolderSync,
+  Image as ImageIcon,
+  Info,
+  PenLine,
+  ShieldCheck,
+  Unlink,
+} from "lucide-react";
 import { useTranslations, type Translator } from "@kaipu/i18n";
 import {
   ModalActions,
@@ -89,58 +102,138 @@ export function describeFinding(finding: ReconcileFinding, t: LibraryT): Finding
 
 const ICONS = { video: Film, image: ImageIcon, record: FileText } as const;
 
-function FindingTable({
-  heading,
-  columns,
+/**
+ * The dialog groups findings by what happens to them, so each group can say why once
+ * instead of repeating a note on every row. Every kind belongs to exactly one group.
+ */
+type GroupId = "rename" | "adopt" | "gone" | "listed";
+
+const GROUP_OF: Record<ReconcileFinding["kind"], GroupId> = {
+  "stale-auto-title": "rename",
+  "untitled-legacy": "rename",
+  "name-mismatch": "rename",
+  "missing-sidecar": "adopt",
+  "missing-media": "gone",
+  "orphan-companion": "gone",
+  "stem-conflict": "listed",
+  "shared-companion": "listed",
+  "duplicate-identity": "listed",
+  "unreadable-record": "listed",
+  "not-recognized": "listed",
+  "unreadable-orphan-run": "listed",
+};
+
+const GROUPS = [
+  {
+    id: "rename",
+    icon: PenLine,
+    title: "reconcileGroupRenameTitle",
+    action: "reconcileGroupRenameAction",
+    what: "reconcileGroupRenameWhat",
+  },
+  {
+    id: "adopt",
+    icon: FilePlus2,
+    title: "reconcileGroupAdoptTitle",
+    action: "reconcileGroupAdoptAction",
+    what: "reconcileGroupAdoptWhat",
+  },
+  {
+    id: "gone",
+    icon: Unlink,
+    title: "reconcileGroupGoneTitle",
+    action: "reconcileGroupGoneAction",
+    what: "reconcileGroupGoneWhat",
+  },
+  {
+    id: "listed",
+    icon: CircleAlert,
+    title: "reconcileGroupListedTitle",
+    action: "reconcileGroupListedAction",
+    what: "reconcileGroupListedWhat",
+  },
+] as const;
+
+const TONE_CLASS: Record<GroupId, string | undefined> = {
+  rename: styles.toneRename,
+  adopt: styles.toneAdopt,
+  gone: styles.toneGone,
+  listed: styles.toneListed,
+};
+
+function FindingItem({ finding, t }: { finding: ReconcileFinding; t: LibraryT }) {
+  const row = describeFinding(finding, t);
+  const Icon = ICONS[row.icon];
+  const renamed = row.renamedTo !== undefined;
+  return (
+    <li className={styles.row}>
+      <Icon size={13} strokeWidth={1.8} aria-hidden className={styles.rowIcon} />
+      <span className={styles.rowNow}>{row.now}</span>
+      {renamed ? (
+        <>
+          <ArrowRight
+            size={12}
+            strokeWidth={2}
+            aria-label={t("reconcileRenamedTo")}
+            className={styles.rowArrow}
+          />
+          <span className={styles.rowAfter}>{row.renamedTo}</span>
+        </>
+      ) : (
+        <span className={styles.rowNote}>{row.note}</span>
+      )}
+    </li>
+  );
+}
+
+function FindingGroup({
+  group,
   findings,
+  defaultOpen,
   t,
 }: {
-  heading: string;
-  columns: [string, string];
+  group: (typeof GROUPS)[number];
   findings: ReconcileFinding[];
+  defaultOpen: boolean;
   t: LibraryT;
-}): React.JSX.Element | null {
-  if (findings.length === 0) return null;
+}): React.JSX.Element {
+  const Icon = group.icon;
   return (
-    <section className={styles.group}>
-      <h3 className={styles.groupHeading}>{heading}</h3>
-      <table className={styles.table}>
-        <thead>
-          <tr>
-            <th scope="col" className={styles.nowCell}>
-              {columns[0]}
-            </th>
-            <th scope="col" aria-hidden className={styles.arrowCell} />
-            <th scope="col">{columns[1]}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {findings.slice(0, MAX_ROWS).map((finding) => {
-            const row = describeFinding(finding, t);
-            const Icon = ICONS[row.icon];
-            return (
-              <tr key={`${finding.kind}:${finding.path}`}>
-                <td className={styles.nowCell}>
-                  <span className={styles.name}>
-                    <Icon size={13} strokeWidth={1.8} aria-hidden className={styles.icon} />
-                    {row.now}
-                  </span>
-                </td>
-                <td aria-hidden className={styles.arrowCell}>
-                  {row.renamedTo !== undefined && "→"}
-                </td>
-                <td className={row.renamedTo !== undefined ? styles.afterCell : styles.noteCell}>
-                  {row.renamedTo ?? row.note}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      {findings.length > MAX_ROWS && (
-        <p className={styles.more}>{t("reconcileMore", { count: findings.length - MAX_ROWS })}</p>
-      )}
-    </section>
+    <details
+      className={`${styles.group} ${TONE_CLASS[group.id] ?? ""}`}
+      open={defaultOpen}
+      data-group={group.id}
+    >
+      <summary className={styles.groupHeader}>
+        <span className={styles.groupIcon} aria-hidden>
+          <Icon size={16} strokeWidth={1.8} />
+        </span>
+        <span className={styles.groupText}>
+          <span className={styles.groupTitleLine}>
+            <span className={styles.groupTitle}>{t(group.title)}</span>
+            <span className={styles.groupCount}>
+              {t("reconcileGroupCount", { count: findings.length })}
+            </span>
+          </span>
+          <span className={styles.groupAction}>{t(group.action)}</span>
+        </span>
+        <ChevronDown size={14} strokeWidth={2} aria-hidden className={styles.chevron} />
+      </summary>
+      <div className={styles.groupBody}>
+        <p className={styles.groupWhat}>
+          <Info size={13} strokeWidth={2} aria-hidden className={styles.groupWhatIcon} />
+          {t(group.what)}
+        </p>
+        <ul className={styles.rows}>
+          {findings.slice(0, MAX_ROWS).map((finding) => (
+            <FindingItem key={`${finding.kind}:${finding.path}`} finding={finding} t={t} />
+          ))}
+        </ul>
+        {findings.length > MAX_ROWS && (
+          <p className={styles.more}>{t("reconcileMore", { count: findings.length - MAX_ROWS })}</p>
+        )}
+      </div>
+    </details>
   );
 }
 
@@ -151,23 +244,35 @@ function Findings({
   findings: ReconcileFinding[];
   t: LibraryT;
 }): React.JSX.Element {
-  const fixable = findings.filter((f) => f.fixable);
-  const listed = findings.filter((f) => !f.fixable);
+  const byGroup = new Map<GroupId, ReconcileFinding[]>();
+  for (const finding of findings) {
+    const id = GROUP_OF[finding.kind];
+    byGroup.set(id, [...(byGroup.get(id) ?? []), finding]);
+  }
+  const present = GROUPS.filter((group) => byGroup.has(group.id));
   return (
     <div className={styles.findings}>
-      <FindingTable
-        heading={t("reconcileFixableHeading", { count: fixable.length })}
-        columns={[t("reconcileColumnNow"), t("reconcileColumnAfter")]}
-        findings={fixable}
-        t={t}
-      />
-      <FindingTable
-        heading={t("reconcileListedHeading", { count: listed.length })}
-        columns={[t("reconcileColumnFile"), t("reconcileColumnWhy")]}
-        findings={listed}
-        t={t}
-      />
+      {present.map((group, index) => (
+        <FindingGroup
+          key={group.id}
+          group={group}
+          findings={byGroup.get(group.id)!}
+          defaultOpen={index === 0}
+          t={t}
+        />
+      ))}
     </div>
+  );
+}
+
+function SafetyNote({ t }: { t: LibraryT }): React.JSX.Element {
+  return (
+    <p className={styles.safety}>
+      <ShieldCheck size={15} strokeWidth={1.9} aria-hidden className={styles.safetyIcon} />
+      <span>
+        <strong>{t("reconcileSafeTitle")}</strong> {t("reconcileSafeBody")}
+      </span>
+    </p>
   );
 }
 
@@ -224,7 +329,12 @@ function RunBody({ run, t }: { run: Exclude<ReconcileRun, { phase: "idle" }>; t:
   if (run.phase === "fixing") {
     return (
       <div className={styles.progress}>
-        <ModalText>{t("reconcileFixing", { done: run.done, total: run.total })}</ModalText>
+        <div className={styles.progressLine}>
+          <span>{t("reconcileFixing", { done: run.done, total: run.total })}</span>
+          <span className={styles.progressPercent} aria-hidden>
+            {Math.round((run.done / Math.max(run.total, 1)) * 100)}%
+          </span>
+        </div>
         <progress max={Math.max(run.total, 1)} value={run.done} className={styles.bar} />
       </div>
     );
@@ -245,11 +355,45 @@ function RunBody({ run, t }: { run: Exclude<ReconcileRun, { phase: "idle" }>; t:
       return null;
     case "done": {
       const { report } = result;
+      const tiles = [
+        {
+          key: "fixed",
+          label: t("reconcileTileFixed"),
+          value: report.fixed,
+          tone: styles.toneAdopt,
+        },
+        {
+          key: "moved",
+          label: t("reconcileTileMoved"),
+          value: report.movedToOrphans,
+          tone: styles.toneGone,
+        },
+        {
+          key: "kept",
+          label: t("reconcileTileKept"),
+          value: report.kept.length,
+          tone: styles.toneListed,
+        },
+        {
+          key: "failed",
+          label: t("reconcileTileFailed"),
+          value: report.failed.length,
+          tone: styles.toneFailed,
+        },
+      ].filter((tile) => tile.key === "fixed" || tile.key === "moved" || tile.value > 0);
       return (
-        <div className={styles.findings}>
+        <div className={styles.report}>
           <ModalText>
             {t("reconcileDone", { fixed: report.fixed, moved: report.movedToOrphans })}
           </ModalText>
+          <ul className={styles.tiles} aria-hidden>
+            {tiles.map((tile) => (
+              <li key={tile.key} className={`${styles.tile} ${tile.tone ?? ""}`}>
+                <span className={styles.tileValue}>{tile.value}</span>
+                <span className={styles.tileLabel}>{tile.label}</span>
+              </li>
+            ))}
+          </ul>
           {report.kept.length > 0 && (
             <ModalText>{t("reconcileKept", { count: report.kept.length })}</ModalText>
           )}
@@ -285,10 +429,19 @@ export function ReconcileDialogHost(): React.JSX.Element | null {
         {run.phase === "idle" ? (
           <>
             <ModalText>{t("reconcileIntro")}</ModalText>
+            <SafetyNote t={t} />
             <ScanBody scan={scanning ? null : scan} t={t} />
           </>
         ) : (
           <RunBody run={run} t={t} />
+        )}
+        {canFix && (
+          <p className={styles.summary}>
+            {t("reconcileSummary", {
+              fixable: scan.fixableCount,
+              listed: scan.findings.length - scan.fixableCount,
+            })}
+          </p>
         )}
         <ModalActions>
           {run.phase === "waiting" && (

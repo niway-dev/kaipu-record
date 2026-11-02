@@ -26,13 +26,24 @@ export function ReconcileBanner(): React.JSX.Element | null {
   if (!content) return null;
   return (
     <div className={styles.banner} role="status" aria-live="polite">
-      <AlertTriangle size={14} strokeWidth={2} />
+      <AlertTriangle size={17} strokeWidth={2} aria-hidden className={styles.bannerIcon} />
       <span className={styles.bannerText}>
-        {content.kind === "fixable"
-          ? t("reconcileBannerFixable", { count: content.count })
-          : t("reconcileBannerAttention", { count: content.count })}
+        <span className={styles.bannerTitle}>
+          {content.kind === "fixable"
+            ? t("reconcileBannerFixable", { count: content.count })
+            : t("reconcileBannerAttention", { count: content.count })}
+        </span>
+        <span className={styles.bannerHint}>
+          {content.kind === "fixable"
+            ? t("reconcileBannerFixableHint")
+            : t("reconcileBannerAttentionHint")}
+        </span>
       </span>
-      <Button variant="outline" size="sm" onClick={openReconcileDialog}>
+      <Button
+        variant={content.kind === "fixable" ? "primary" : "outline"}
+        size="sm"
+        onClick={openReconcileDialog}
+      >
         {content.kind === "fixable" ? t("reconcileCheck") : t("reconcileReview")}
       </Button>
       <Button variant="ghost" size="sm" onClick={hideBanner}>
