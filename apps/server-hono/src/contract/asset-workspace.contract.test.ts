@@ -108,7 +108,10 @@ describe("PUT /assets/{assetId}/workspace", () => {
   it("answers 404 for an asset of another account, and changes nothing", async () => {
     const assetId = seed();
     await put(assetId, { workspaceId: "ws-a" });
-    expect((await put(assetId, { workspaceId: "ws-x" }, "stranger")).status).toBe(404);
+    const refused = await put(assetId, { workspaceId: "ws-x" }, "stranger");
+    expect(refused.status).toBe(404);
+    // The desktop tells "no such asset" from "a server without this route" by this code.
+    expect(refused.json).toMatchObject({ code: "NOT_FOUND" });
     expect(rows.get(keyOf("owner", assetId))?.workspaceId).toBe("ws-a");
   });
 });
