@@ -183,6 +183,7 @@ const kaipuApi: KaipuElectronAPI = {
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.workspacesCreate, input),
     checkLocation: (name) => ipcRenderer.invoke(IPC_CHANNELS.workspacesCheckLocation, name),
     edit: (input) => ipcRenderer.invoke(IPC_CHANNELS.workspacesEdit, input),
+    relocate: (id) => ipcRenderer.invoke(IPC_CHANNELS.workspacesRelocate, id),
     switch: (id) => ipcRenderer.invoke(IPC_CHANNELS.workspacesSwitch, id),
     remove: (id) => ipcRenderer.invoke(IPC_CHANNELS.workspacesRemove, id),
     openFolder: (id) => ipcRenderer.invoke(IPC_CHANNELS.workspacesOpenFolder, id),

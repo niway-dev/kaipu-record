@@ -244,7 +244,8 @@ export function WorkspacesSettingsPage(): React.JSX.Element {
   const tw = useTranslations("workspaces");
   const tc = useTranslations("common");
   const tCloud = useTranslations("workspaceCloud");
-  const { state, openCreateDialog, openEditDialog, remove, openFolder } = useWorkspaces();
+  const { state, openCreateDialog, openEditDialog, remove, openFolder, changeFolder } =
+    useWorkspaces();
   const [removing, setRemoving] = React.useState<WorkspaceView | null>(null);
   const count = state?.workspaces.length ?? 0;
   return (
@@ -286,6 +287,17 @@ export function WorkspacesSettingsPage(): React.JSX.Element {
               }
               action={
                 <>
+                  {workspace.state === "unavailable" && (
+                    // The main fix when a drive letter or mount path changed.
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={state.readOnly}
+                      onClick={() => void changeFolder(workspace.id)}
+                    >
+                      {tw("changeFolder")}
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"

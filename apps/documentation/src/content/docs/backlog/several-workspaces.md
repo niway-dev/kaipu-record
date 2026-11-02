@@ -18,7 +18,13 @@ description: "Proposal: keep several workspaces (folders with Kaipu files), one 
 > **Part 1b (NIW2-599, 🟢 Ready to validate):** "New workspace…" dialog (name, color, a new folder
 > `Kaipu Record — <name>` next to the Default workspace's, or "Use an existing folder…"), editing a
 > workspace's name and color from Settings → Workspaces, and the Default workspace in Kaipu's
-> brand color `#F6055C`.
+> brand color `#F6055C`. The folder is only ever shown as text; it changes through **Change
+> folder…**, which opens the native folder picker and _relocates_ the workspace: it points it at
+> the folder where it now lives (moved in Finder, put in a Google Drive folder, a drive that
+> mounts elsewhere) and never moves or copies files. It is refused for a folder that is not this
+> workspace's (another identity, Kaipu items with no identity, an empty or plain folder, a folder
+> already registered), and while a recording or export runs; the active workspace goes through the
+> switch transaction.
 >
 > **Part 2 (NIW2-600, 🟡 In progress, stacked on #478):** "Move to" for local folders. The
 > mover (same drive: a hard link; another drive: copy, sha256, then delete; a journal that

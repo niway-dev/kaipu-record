@@ -236,6 +236,23 @@ describe("WorkspaceSwitcher with several workspaces", () => {
     );
   });
 
+  it("NOT CONNECTED: the notice offers Change folder… for the drive that moved", async () => {
+    setup(state({ activeId: ARCHIVE.id, workspaces: [ARCHIVE, DEFAULT] }));
+    const relocate = vi.fn(async () => ({ ok: false as const, reason: "cancelled" as const }));
+    window.electronAPI = { ...realApi, workspaces: { ...bridge, relocate } };
+    renderSwitcher();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Change folder…" }));
+
+    expect(relocate).toHaveBeenCalledWith("ws-archive");
+  });
+
+  it("a connected active workspace's notice does not exist, so neither does the button", async () => {
+    renderSwitcher();
+    await screen.findByRole("button", { name: /^Workspace:/ });
+    expect(screen.queryByRole("button", { name: "Change folder…" })).toBeNull();
+  });
+
   it("NOT CONNECTED: the menu does not claim captures are saved here, and Finder is disabled", async () => {
     setup(state({ activeId: ARCHIVE.id, workspaces: [ARCHIVE, DEFAULT] }));
     renderSwitcher();

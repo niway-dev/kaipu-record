@@ -78,21 +78,23 @@
   color: var(--accent-red, #ef4444);
 }
 
-.path {
-  display: block;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-input);
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  color: var(--text-primary);
-  overflow-wrap: anywhere;
-  user-select: text;
+/* The folder row: the path as text on the left, its buttons beside it. */
+.folderRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
 }
 
-.path[data-bad] {
-  border-color: color-mix(in srgb, var(--accent-red, #ef4444) 55%, transparent);
+.folderActions {
+  display: flex;
+  flex-shrink: 0;
+  gap: var(--space-sm);
+}
+
+/* Keeps the buttons where they are while the name is still empty. */
+.folderPlaceholder {
+  flex: 1;
 }
 
 .swatches {
@@ -131,22 +133,6 @@
 
 .spacer {
   flex: 1;
-}
-
-.link {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  font: inherit;
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.link:hover {
-  color: var(--text-primary);
 }
 
 .actions {

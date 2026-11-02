@@ -160,7 +160,11 @@ describe("the Default workspace's brand color", () => {
     const registry = await WorkspaceRegistry.open(env());
 
     expect(registry.active().color).toBe("kaipu");
-    expect((await readPrefs())["workspaces"].entries[0].pendingIdentity).toBe(true);
+    // Its own marker, not `pendingIdentity`: an edit would be written over the folder's file,
+    // a deferred upgrade only when the folder still holds the old Default and rose.
+    const pending = (await readPrefs())["workspaces"].entries[0];
+    expect(pending.pendingColorUpgrade).toBe(true);
+    expect(pending.pendingIdentity).toBeUndefined();
 
     await rename(unplugged, defaultDir);
     const { availability } = await registry.availability(registry.active().id);
@@ -168,7 +172,55 @@ describe("the Default workspace's brand color", () => {
     expect(availability.state).toBe("available");
     expect(registry.active().color).toBe("kaipu");
     expect(await readIdentity(defaultDir)).toMatchObject({ identity: { color: "kaipu" } });
-    expect((await readPrefs())["workspaces"].entries[0].pendingIdentity).toBeUndefined();
+    expect((await readPrefs())["workspaces"].entries[0].pendingColorUpgrade).toBeUndefined();
+  });
+
+  it.each([
+    ["renamed", { name: "Studio", color: "rose" as const }],
+    ["recoloured", { name: "Default workspace", color: "sky" as const }],
+  ])(
+    "keeps a Default that another Mac %s while this folder was away: the deferred upgrade yields",
+    async (_label, changed) => {
+      const id = await ownerMachineWithRose();
+      const unplugged = `${defaultDir}-away`;
+      const { rename } = await import("node:fs/promises");
+      await mkdir(moviesDir, { recursive: true });
+      await rename(defaultDir, unplugged);
+      const registry = await WorkspaceRegistry.open(env());
+      expect(registry.active().color).toBe("kaipu");
+
+      // Another Mac changes the folder's identity while it is away from this one.
+      await writeIdentity(unplugged, { version: 1, id, ...changed, createdAt: 1 });
+      await rename(unplugged, defaultDir);
+      await registry.availability(id);
+
+      expect(await readIdentity(defaultDir)).toMatchObject({ identity: changed });
+      expect(registry.active()).toMatchObject(changed);
+      const stored = (await readPrefs())["workspaces"].entries[0];
+      expect(stored).toMatchObject(changed);
+      expect(stored.pendingIdentity).toBeUndefined();
+      expect(stored.pendingColorUpgrade).toBeUndefined();
+    },
+  );
+
+  it("lets an edit made while the folder is away win over the deferred upgrade", async () => {
+    const id = await ownerMachineWithRose();
+    const unplugged = `${defaultDir}-away`;
+    const { rename } = await import("node:fs/promises");
+    await mkdir(moviesDir, { recursive: true });
+    await rename(defaultDir, unplugged);
+    const registry = await WorkspaceRegistry.open(env());
+    await registry.edit(id, { name: "Studio" });
+
+    await rename(unplugged, defaultDir);
+    await registry.availability(id);
+
+    expect(await readIdentity(defaultDir)).toMatchObject({
+      identity: { name: "Studio", color: "kaipu" },
+    });
+    const stored = (await readPrefs())["workspaces"].entries[0];
+    expect(stored.pendingIdentity).toBeUndefined();
+    expect(stored.pendingColorUpgrade).toBeUndefined();
   });
 });
 

@@ -150,6 +150,50 @@ export type WorkspaceEditResult =
     }
   | { ok: false; reason: WorkspaceEditRefusal };
 
+/**
+ * Why "Change folder…" (relocate) did not point a workspace at the picked folder. Relocating
+ * never moves or copies files: it only says where the workspace now lives.
+ */
+export type WorkspaceRelocateRefusal =
+  | "read-only"
+  | "unknown"
+  /** The user closed the folder picker, or a window answered Cancel to an unsaved editor. */
+  | "cancelled"
+  /** A recording or an export is writing into the active workspace (the LOCKED state). */
+  | "recording"
+  | "exporting"
+  /** A group move is running (part 2): a folder cannot change under it. */
+  | "moving"
+  /** The picked path is not a folder. */
+  | "not-a-folder"
+  /** The folder's `identity.json` exists but cannot be read; it is never overwritten. */
+  | "unreadable"
+  /** Another workspace's identity is in that folder; `workspaceName` names it. */
+  | "different"
+  /** The folder is already registered as another workspace; `workspaceName` names it. */
+  | "already-registered"
+  /** `.kaipu/` is there (items' sidecars) but no workspace identity: not this workspace's folder. */
+  | "has-items-no-identity"
+  /** No `.kaipu` at all: an empty or plain folder. Never adopted silently. */
+  | "not-a-workspace"
+  /** The registry could not store the new path. */
+  | "not-writable";
+
+/** `workspaces:relocate`: the folder picker, then the workspace is pointed at the folder. */
+export type WorkspaceRelocateResult =
+  | {
+      ok: true;
+      workspace: WorkspaceView;
+      /** The picked folder is the one it already points at: nothing changed, so no "now points" toast. */
+      unchanged?: true;
+    }
+  | {
+      ok: false;
+      reason: WorkspaceRelocateRefusal;
+      /** The other workspace, for `different` and `already-registered`. */
+      workspaceName?: string;
+    };
+
 export type WorkspaceRemoveResult =
   | { ok: true }
   | { ok: false; reason: "active" | "last" | "unknown" | "read-only" };

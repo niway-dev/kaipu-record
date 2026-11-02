@@ -274,10 +274,18 @@
   background: var(--bg-card-hover);
 }
 
-/* Names are cut to one line; a hover shows them (title), and so does keyboard focus. */
-.row:focus-within .rowNow,
-.row:focus-within .rowAfter,
-.row:focus-within .rowNote {
+.rowSelectable {
+  cursor: pointer;
+}
+
+/*
+ * Names are cut to one line; a hover shows them (title), and so does KEYBOARD focus. Never
+ * plain :focus-within: a mousedown focuses the checkbox, the row reflowed taller, the box
+ * moved out from under the cursor, the mouseup missed it and nothing toggled (NIW2-604).
+ */
+.row:has(:focus-visible) .rowNow,
+.row:has(:focus-visible) .rowAfter,
+.row:has(:focus-visible) .rowNote {
   overflow: visible;
   white-space: normal;
   overflow-wrap: anywhere;

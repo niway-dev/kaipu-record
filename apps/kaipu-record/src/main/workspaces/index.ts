@@ -1,5 +1,5 @@
 import { stat } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { createMainTranslator } from "@kaipu/i18n/main";
 import { IPC_CHANNELS } from "@shared/types";
@@ -11,6 +11,7 @@ import type {
   WorkspaceAddResult,
   WorkspaceCreateResult,
   WorkspaceEditResult,
+  WorkspaceRelocateResult,
   WorkspacePrepareResult,
   WorkspaceRemoveResult,
   WorkspacesState,
@@ -43,7 +44,8 @@ import { boundedProbe, scratchRoot, scratchTmp, SyncStates } from "./sync-state"
 import { MachineSettingsStore } from "./settings-overrides";
 import { WorkspaceSettings } from "./workspace-settings";
 import { PrepareRequests } from "./prepare-windows";
-import { switchWorkspace } from "./switch-transaction";
+import { relocateRefusal, relocateWorkspace } from "./relocate";
+import { switchWorkspace, type ActiveTransactionDeps } from "./switch-transaction";
 import { APP_TITLE, composeWindowTitle } from "./window-title";
 import { toWorkspaceView } from "./workspace-view";
 
@@ -510,31 +512,39 @@ function refreshTitles(): void {
 
 const prepareRequests = new PrepareRequests(IPC_CHANNELS.workspacesPrepare, PREPARE_TIMEOUT_MS);
 
+/** What every change to the active workspace shares: the lock, the windows, the commit. */
+function activeTransactionDeps(): ActiveTransactionDeps {
+  return {
+    gate: workspaceGate(),
+    // The group move holds this lock too: a folder cannot change under it.
+    busy: busyNow,
+    prepareWindows: () => prepareRequests.prepare(BrowserWindow.getAllWindows()),
+    abortWindows: () => sendToAll(IPC_CHANNELS.workspacesPrepareAbort),
+    dropPendingCaptures: () => host?.dropPendingCaptures(),
+    afterCommit: () => {
+      // The new workspace's effective settings reach every window and every main listener.
+      notifyOverridesChanged();
+      refreshTitles();
+      void broadcastState();
+      host?.broadcastLibraryChanged();
+    },
+  };
+}
+
 async function runSwitch(id: string): Promise<WorkspaceSwitchResult> {
   const reg = requireRegistry();
   const result = await switchWorkspace(
     {
-      gate: workspaceGate(),
+      ...activeTransactionDeps(),
       activeId: () => reg.active().id,
       isKnown: (candidate) => reg.get(candidate) !== undefined,
       readOnly: () => reg.readOnly,
       availability: (candidate) => availabilityOf(candidate),
-      busy: busyNow,
-      prepareWindows: () => prepareRequests.prepare(BrowserWindow.getAllWindows()),
-      abortWindows: () => sendToAll(IPC_CHANNELS.workspacesPrepareAbort),
-      dropPendingCaptures: () => host?.dropPendingCaptures(),
       persistActive: async (target) => {
         await reg.setActive(target);
         // The target's overrides are read before the switch is certain, so the effective
         // settings are ready the moment it commits. A read that fails leaves them inactive.
         await workspaceSettings?.refresh(target);
-      },
-      afterCommit: () => {
-        // The new workspace's effective settings reach every window and every main listener.
-        notifyOverridesChanged();
-        refreshTitles();
-        void broadcastState();
-        host?.broadcastLibraryChanged();
       },
     },
     id,
@@ -706,6 +716,54 @@ function registerSettingsScopeHandlers(): void {
   );
 }
 
+/**
+ * "Change folder…": the native folder picker, then the workspace is pointed at that folder.
+ * Relocating never moves or copies files; the rules are in `relocate.ts` and the registry.
+ */
+async function relocateFolder(
+  sender: Electron.WebContents,
+  id: unknown,
+): Promise<WorkspaceRelocateResult> {
+  const reg = requireRegistry();
+  const deps = { ...activeTransactionDeps(), registry: reg };
+  if (typeof id !== "string") return { ok: false, reason: "unknown" };
+  // Locked or read-only: say so now, instead of after the user picked a folder.
+  const refused = relocateRefusal(deps, id);
+  if (refused) return refused;
+  const entry = reg.get(id);
+  if (!entry) return { ok: false, reason: "unknown" };
+
+  const window = BrowserWindow.fromWebContents(sender);
+  const t = createMainTranslator(getAppSettings().locale);
+  const options: Electron.OpenDialogOptions = {
+    title: t("dialogs.relocateWorkspace", { name: entry.name }),
+    buttonLabel: t("dialogs.relocateWorkspaceButton"),
+    // Where it was: a moved folder is usually next to where it used to be.
+    defaultPath: dirname(entry.path),
+    properties: ["openDirectory", "createDirectory"],
+  };
+  const picked = window
+    ? await dialog.showOpenDialog(window, options)
+    : await dialog.showOpenDialog(options);
+  const chosen = picked.filePaths[0];
+  if (picked.canceled || !chosen) return { ok: false, reason: "cancelled" };
+
+  const outcome = await relocateWorkspace(deps, id, chosen);
+  if (!outcome.ok) return outcome;
+  // The new folder may be a synced one (Google Drive): detect it, and probe it bounded.
+  const current = reg.get(outcome.entry.id) ?? outcome.entry;
+  await syncStates.refresh(current);
+  const { availability } = await availabilityOf(current.id);
+  // The active workspace re-lists inside its transaction; any other one only needs the state.
+  refreshTitles();
+  await broadcastState();
+  return {
+    ok: true,
+    workspace: toWorkspaceView(current, availability, null, null, syncStates.of(current)),
+    ...(outcome.unchanged ? { unchanged: true as const } : {}),
+  };
+}
+
 export function registerWorkspaceHandlers(deps: WorkspaceHost): void {
   host = deps;
   registerSettingsScopeHandlers();
@@ -724,6 +782,9 @@ export function registerWorkspaceHandlers(deps: WorkspaceHost): void {
   });
   ipcMain.handle(IPC_CHANNELS.workspacesCreate, (_event, input: unknown) => createWorkspace(input));
   ipcMain.handle(IPC_CHANNELS.workspacesEdit, (_event, input: unknown) => editWorkspace(input));
+  ipcMain.handle(IPC_CHANNELS.workspacesRelocate, (event, id: unknown) =>
+    relocateFolder(event.sender, id),
+  );
   ipcMain.handle(
     IPC_CHANNELS.workspacesCheckLocation,
     (_event, name: unknown): Promise<LocationCheck> =>

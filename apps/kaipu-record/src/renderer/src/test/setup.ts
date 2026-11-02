@@ -218,6 +218,7 @@ window.electronAPI = {
     create: async () => ({ ok: false, reason: "not-writable" }),
     checkLocation: async () => ({ path: null, state: "parent-missing" }),
     edit: async () => ({ ok: false, reason: "unknown" }),
+    relocate: async () => ({ ok: false, reason: "cancelled" }),
     switch: async () => ({ ok: true }),
     remove: async () => ({ ok: true }),
     openFolder: async () => {},

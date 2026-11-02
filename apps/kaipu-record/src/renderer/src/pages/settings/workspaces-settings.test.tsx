@@ -5,6 +5,7 @@ import type {
   WorkspaceCreateResult,
   WorkspaceEditRequest,
   WorkspaceEditResult,
+  WorkspaceRelocateResult,
   WorkspaceRemoveResult,
   WorkspacesState,
 } from "@shared/types/workspaces";
@@ -211,6 +212,80 @@ describe("Settings → Workspaces → Edit and New workspace", () => {
     );
     await vi.waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(showToast.mock.calls[0]?.[0].message).toBe("Finish the recording or export first");
+  });
+});
+
+describe("Settings → Workspaces → Change folder…", () => {
+  const away: WorkspacesState["workspaces"][number] = {
+    ...view("ws-b", "Bravo"),
+    state: "unavailable",
+    reason: "missing",
+    path: "/Volumes/Old drive/Bravo",
+  };
+  let relocate: ReturnType<typeof vi.fn<(id: string) => Promise<WorkspaceRelocateResult>>>;
+
+  function renderPageWith(result: WorkspaceRelocateResult, bravo = away): void {
+    relocate = vi.fn(async () => result);
+    window.electronAPI = {
+      ...realApi,
+      workspaces: {
+        ...realApi.workspaces,
+        list: async () => ({ ...STATE, workspaces: [view("ws-a", "Alpha"), bravo] }),
+        relocate,
+      },
+    };
+    render(
+      <WorkspacesProvider>
+        <WorkspacesSettingsPage />
+      </WorkspacesProvider>,
+    );
+  }
+
+  it("a disconnected workspace's row offers Change folder… as the fix", async () => {
+    renderPageWith({ ok: false, reason: "cancelled" });
+    fireEvent.click(await screen.findByRole("button", { name: "Change folder…" }));
+
+    await vi.waitFor(() => expect(relocate).toHaveBeenCalledWith("ws-b"));
+    // Closing the picker is the user's own answer: no toast.
+    expect(showToast).not.toHaveBeenCalled();
+  });
+
+  it("a connected workspace's row does not (it is in its Edit dialog)", async () => {
+    renderPageWith({ ok: false, reason: "cancelled" }, view("ws-b", "Bravo"));
+    await screen.findByText("Bravo");
+    expect(screen.queryByRole("button", { name: "Change folder…" })).toBeNull();
+  });
+
+  it("says when the workspace points at the new folder", async () => {
+    renderPageWith({ ok: true, workspace: view("ws-b", "Bravo") });
+    fireEvent.click(await screen.findByRole("button", { name: "Change folder…" }));
+
+    await vi.waitFor(() => expect(showToast).toHaveBeenCalledOnce());
+    expect(showToast.mock.calls[0]?.[0].message).toBe("Done. Bravo now points to the new folder.");
+  });
+
+  it("explains a refused folder in a toast, naming the other workspace", async () => {
+    renderPageWith({ ok: false, reason: "different", workspaceName: "Personal" });
+    fireEvent.click(await screen.findByRole("button", { name: "Change folder…" }));
+
+    await vi.waitFor(() => expect(showToast).toHaveBeenCalledOnce());
+    expect(showToast.mock.calls[0]?.[0].message).toContain("“Personal”");
+  });
+
+  it("says a changed folder in the Edit dialog the same way", async () => {
+    renderPageWith({ ok: true, workspace: view("ws-b", "Bravo") }, view("ws-b", "Bravo"));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Bravo" }));
+    await screen.findByRole("alertdialog", { name: "Edit workspace" });
+    fireEvent.click(screen.getByRole("button", { name: "Change folder…" }));
+
+    await vi.waitFor(() => expect(relocate).toHaveBeenCalledWith("ws-b"));
+    await vi.waitFor(() =>
+      expect(showToast.mock.calls[0]?.[0].message).toBe(
+        "Done. Bravo now points to the new folder.",
+      ),
+    );
+    // The folder is already changed; the dialog stays for the name and color.
+    expect(screen.getByRole("alertdialog", { name: "Edit workspace" })).toBeInTheDocument();
   });
 });
 

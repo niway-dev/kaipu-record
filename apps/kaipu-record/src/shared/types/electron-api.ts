@@ -42,6 +42,7 @@ import type {
   WorkspaceCreateResult,
   WorkspaceEditRequest,
   WorkspaceEditResult,
+  WorkspaceRelocateResult,
   WorkspaceRemoveResult,
   WorkspacesState,
   WorkspaceSwitchResult,
@@ -227,6 +228,12 @@ export interface WorkspacesBridge {
   checkLocation(name: string): Promise<LocationCheck>;
   /** Rename and/or recolor; written to the registry and to the folder's identity. */
   edit(input: WorkspaceEditRequest): Promise<WorkspaceEditResult>;
+  /**
+   * "Change folder…": the native folder picker, then point this workspace at the folder where
+   * it now lives (moved in Finder, put in a Google Drive folder). Never moves or copies files;
+   * refuses a folder that is not this workspace's, and while a recording or export runs.
+   */
+  relocate(id: string): Promise<WorkspaceRelocateResult>;
   switch(id: string): Promise<WorkspaceSwitchResult>;
   /** Unregister; nothing on disk changes. Refused for the active and the last one. */
   remove(id: string): Promise<WorkspaceRemoveResult>;

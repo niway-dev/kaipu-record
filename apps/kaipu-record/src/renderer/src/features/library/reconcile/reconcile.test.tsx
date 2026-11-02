@@ -350,6 +350,33 @@ describe("choosing what to fix", () => {
     expect(window.electronAPI.reconcileFix).toHaveBeenCalledWith(["recording-249.mp4"]);
   });
 
+  it("a click anywhere on a selectable row toggles it, not only on the 16 px box", async () => {
+    scanResult = ok([rename, { ...rename, path: "other.mp4" }]);
+    mount();
+    fireEvent.click(await screen.findByRole("button", { name: "Check and fix" }));
+    const renames = (await screen.findByText("Names that don't match their title")).closest(
+      "section",
+    )!;
+    const [first] = within(renames).getAllByRole("listitem");
+    const box = within(first!).getByRole("checkbox");
+    expect(box).toBeChecked();
+    // A near miss lands on the row's padding or its text, not on the input.
+    fireEvent.click(first!);
+    expect(box).not.toBeChecked();
+    fireEvent.click(within(first!).getByLabelText("renamed to"));
+    expect(box).toBeChecked();
+    // Selecting a name to copy it ends in a click on the row: that is not a toggle.
+    const selection = vi.spyOn(window, "getSelection").mockReturnValue({
+      toString: () => "Kaipu Recording",
+    } as Selection);
+    fireEvent.click(within(first!).getByLabelText("renamed to"));
+    expect(box).toBeChecked();
+    selection.mockRestore();
+    // The box itself still toggles once, not twice.
+    fireEvent.click(box);
+    expect(box).not.toBeChecked();
+  });
+
   it("a new scan forgets what was unticked", async () => {
     scanResult = ok([rename, adopt]);
     mount();

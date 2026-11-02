@@ -6,7 +6,13 @@
   border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent);
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--warning) 10%, transparent);
+  align-items: center;
   text-align: left;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
 }
 
 .icon {

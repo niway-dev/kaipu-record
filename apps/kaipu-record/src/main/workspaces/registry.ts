@@ -5,6 +5,7 @@ import type {
   LocationCheck,
   WorkspaceCreateRefusal,
   WorkspaceEditRefusal,
+  WorkspaceRelocateRefusal,
   WorkspaceUnavailableReason,
 } from "@shared/types/workspaces";
 import { newWorkspaceFolderName, validateWorkspaceName } from "@shared/workspace-name";
@@ -51,6 +52,13 @@ export interface WorkspaceEntry {
    * next time it is reached, instead of the folder's older file overwriting it.
    */
   pendingIdentity?: true;
+  /**
+   * The one-time brand-color upgrade is cached here but not yet in the folder (it was not
+   * connected). Unlike `pendingIdentity` it does not own the folder: when the folder is back
+   * it is written only if the folder still holds the old Default and rose; a folder that
+   * changed meanwhile (on another Mac) is adopted and the upgrade is dropped.
+   */
+  pendingColorUpgrade?: true;
 }
 
 export interface WorkspacesKey {
@@ -120,6 +128,7 @@ function parseEntry(value: unknown): WorkspaceEntry | null {
     addedAt: typeof record["addedAt"] === "number" ? record["addedAt"] : 0,
     ...(record["pendingInit"] === true ? { pendingInit: true as const } : {}),
     ...(record["pendingIdentity"] === true ? { pendingIdentity: true as const } : {}),
+    ...(record["pendingColorUpgrade"] === true ? { pendingColorUpgrade: true as const } : {}),
   };
 }
 
@@ -176,6 +185,20 @@ export type EditOutcome =
   | { ok: true; entry: WorkspaceEntry; savedToFolder: boolean }
   | { ok: false; reason: WorkspaceEditRefusal };
 
+/** Whether a folder may become a workspace's new location; `workspaceName` names the other one. */
+export type RelocateCheck =
+  | { ok: true }
+  | { ok: false; reason: WorkspaceRelocateRefusal; workspaceName?: string };
+
+export type RelocateOutcome =
+  | {
+      ok: true;
+      entry: WorkspaceEntry;
+      /** The picked folder is the one the workspace already points at: nothing changed. */
+      unchanged?: true;
+    }
+  | { ok: false; reason: WorkspaceRelocateRefusal; workspaceName?: string };
+
 export type RemoveOutcome =
   | { ok: true }
   | { ok: false; reason: "active" | "last" | "unknown" | "read-only" };
@@ -188,6 +211,11 @@ class NameTakenError extends Error {}
 const LOCK = "workspaces:registry";
 /** Serializes `update`, so one update's rollback never discards another's change. */
 const UPDATE_LOCK = "workspaces:registry:update";
+
+/** The identity the one-time brand-color upgrade starts from: the migrated Default, in rose. */
+function isOldDefault(identity: WorkspaceIdentity): boolean {
+  return identity.name === DEFAULT_WORKSPACE_NAME && identity.color === "rose";
+}
 
 function samePath(a: string, b: string): boolean {
   return resolve(a) === resolve(b);
@@ -407,9 +435,10 @@ export class WorkspaceRegistry {
   /**
    * The one-time upgrade (part 1b): a "Default workspace" that part 1 migrated as rose takes
    * Kaipu's brand color. The marker is stored first, in the same write, so it runs once; the
-   * folder's identity.json follows through the `pendingIdentity` path, which also covers a
-   * folder that is not connected right now. A name or color the user already changed, here or
-   * on another Mac, is left as it is.
+   * folder's identity.json follows through `pendingColorUpgrade`, which also covers a folder
+   * that is not connected right now: when it is back, the file is written only if it still
+   * holds the old Default and rose. A name or color the user already changed, here or on
+   * another Mac, is left as it is.
    */
   private async upgradeDefaultColor(): Promise<void> {
     const owner = this.get(this.key.legacyCloudOwnerId);
@@ -431,7 +460,7 @@ export class WorkspaceRegistry {
         key.kaipuColorApplied = true;
         if (owner && upgrade) {
           owner.color = DEFAULT_WORKSPACE_COLOR;
-          owner.pendingIdentity = true;
+          owner.pendingColorUpgrade = true;
         }
       });
     } catch (error) {
@@ -567,7 +596,8 @@ export class WorkspaceRegistry {
       return {
         ok: true,
         entry: before,
-        savedToFolder: !before.pendingIdentity && !before.pendingInit,
+        savedToFolder:
+          !before.pendingIdentity && !before.pendingColorUpgrade && !before.pendingInit,
       };
     }
 
@@ -608,7 +638,11 @@ export class WorkspaceRegistry {
         target.name = name;
         target.color = color;
         if (initials) target.initials = initials;
-        delete target.pendingInit;
+        // Still no identity.json in the folder when it was not written: the init stays pending,
+        // or "Change folder…" would refuse the folder the workspace is later moved to.
+        if (savedToFolder) delete target.pendingInit;
+        // An edit owns the folder's identity from here, so a deferred upgrade has nothing left to decide.
+        delete target.pendingColorUpgrade;
         if (savedToFolder) delete target.pendingIdentity;
         else target.pendingIdentity = true;
       });
@@ -651,23 +685,39 @@ export class WorkspaceRegistry {
               color: entry.color,
               ...(entry.initials ? { initials: entry.initials } : {}),
             });
-            await this.refresh(() => void delete entry.pendingIdentity);
+            await this.refresh(() => {
+              delete entry.pendingIdentity;
+              delete entry.pendingColorUpgrade;
+            });
           } catch {
             // stays pending; the next probe tries again
           }
           return { availability: { state: "available" }, id };
         }
-        // The folder's file wins: the entry only caches it (renamed on another Mac).
+        if (entry.pendingColorUpgrade && !this.readOnly && isOldDefault(identity.identity)) {
+          // Nobody touched the folder since the upgrade was cached: the file takes the new color.
+          try {
+            await writeIdentity(entry.path, { ...identity.identity, color: entry.color });
+            await this.refresh(() => void delete entry.pendingColorUpgrade);
+          } catch {
+            // stays pending; the next probe tries again
+          }
+          return { availability: { state: "available" }, id };
+        }
+        // The folder's file wins: the entry only caches it (renamed on another Mac). That also
+        // drops a deferred color upgrade when the folder changed while it was away.
         const fresh = entryFromIdentity(identity.identity, entry.path, entry.addedAt);
         const stale =
           entry.pendingInit ||
           fresh.name !== entry.name ||
           fresh.color !== entry.color ||
-          fresh.initials !== entry.initials;
+          fresh.initials !== entry.initials ||
+          entry.pendingColorUpgrade;
         if (stale) {
           await this.refresh(() => {
             delete entry.pendingInit;
             delete entry.pendingIdentity;
+            delete entry.pendingColorUpgrade;
             delete entry.initials;
             Object.assign(entry, fresh);
           });
@@ -699,10 +749,11 @@ export class WorkspaceRegistry {
           ...(entry.initials ? { initials: entry.initials } : {}),
           createdAt: entry.addedAt,
         });
-        if (entry.pendingInit || entry.pendingIdentity) {
+        if (entry.pendingInit || entry.pendingIdentity || entry.pendingColorUpgrade) {
           await this.refresh(() => {
             delete entry.pendingInit;
             delete entry.pendingIdentity;
+            delete entry.pendingColorUpgrade;
           });
         }
       } catch {
@@ -779,6 +830,64 @@ export class WorkspaceRegistry {
     const entry = entryFromIdentity(minted, path, now);
     await this.update((key) => void key.entries.push(entry));
     return { ok: true, entry, created: true };
+  }
+
+  /**
+   * May `id` be pointed at `path`? Read-only: nothing is written, not even an identity file.
+   * Only a folder whose `.kaipu/workspace/identity.json` carries this workspace's id qualifies.
+   * An empty or plain folder is refused, never adopted: the workspace's items are not in it,
+   * so every one of them would disappear from the library.
+   */
+  async checkRelocate(id: string, path: string): Promise<RelocateCheck> {
+    if (this.readOnly) return { ok: false, reason: "read-only" };
+    const entry = this.get(id);
+    if (!entry) return { ok: false, reason: "unknown" };
+    if (!(await isDirectory(path))) return { ok: false, reason: "not-a-folder" };
+    const other = this.key.entries.find((e) => e.id !== id && samePath(e.path, path));
+    if (other) return { ok: false, reason: "already-registered", workspaceName: other.name };
+
+    const identity = await readIdentity(path);
+    if (identity.kind === "unreadable") return { ok: false, reason: "unreadable" };
+    if (identity.kind === "ok") {
+      return identity.identity.id === id
+        ? { ok: true }
+        : { ok: false, reason: "different", workspaceName: identity.identity.name };
+    }
+    // The folder it already points at, whose identity file was deleted by hand: a probe
+    // rewrites it, so this is not a move.
+    if (samePath(entry.path, path)) return { ok: true };
+    if (await isDirectory(join(path, ".kaipu"))) {
+      // A workspace registered while its folder was away never got an identity.json, so a
+      // folder with Kaipu items and none is exactly where it can now be: the probe after the
+      // move writes the file under the registered id. Any other workspace has an identity to
+      // match, so a folder without one is not its own.
+      return entry.pendingInit ? { ok: true } : { ok: false, reason: "has-items-no-identity" };
+    }
+    return { ok: false, reason: "not-a-workspace" };
+  }
+
+  /**
+   * "Change folder…": point `id` at the folder where it now lives (moved in Finder, put in a
+   * Google Drive folder, a drive mounted elsewhere). Only the registry changes: no file is
+   * moved, copied or written. Name, color and id stay. The active workspace's path is mirrored
+   * into `vaultDirectory`; the caller runs that one inside the switch transaction.
+   */
+  async relocate(id: string, path: string): Promise<RelocateOutcome> {
+    const checked = await this.checkRelocate(id, path);
+    if (!checked.ok) return checked;
+    try {
+      await this.update(
+        (key) => {
+          const target = key.entries.find((e) => e.id === id);
+          if (target) target.path = path;
+        },
+        { mirrorVault: id === this.key.activeId },
+      );
+    } catch {
+      return { ok: false, reason: "not-writable" };
+    }
+    const entry = this.get(id);
+    return entry ? { ok: true, entry } : { ok: false, reason: "unknown" };
   }
 
   /** Remove from list: unregister only. Nothing on disk changes, so re-adding restores it. */
