@@ -28,6 +28,7 @@ import {
   type CameraBubbleShape,
 } from "@shared/camera-bubble";
 import { LevelSlider, SwitchRow } from "@renderer/features/audio-settings/audio-settings-fields";
+import { hostPlatform } from "@renderer/features/shortcuts/host-platform";
 import type { CameraDevice } from "./use-camera-settings";
 import styles from "./camera-settings-fields.module.css";
 
@@ -250,6 +251,8 @@ export interface CameraSettingsFieldsProps {
   compact?: boolean;
   /** The Shape group, which takes focus when the settings open. */
   shapeRef?: Ref<HTMLDivElement>;
+  /** Host OS, `process.platform` style; read from the preload bridge when omitted. */
+  platform?: string;
 }
 
 /**
@@ -268,6 +271,7 @@ export function CameraSettingsFields({
   isRecording,
   compact = false,
   shapeRef,
+  platform = hostPlatform(),
 }: CameraSettingsFieldsProps): React.JSX.Element {
   const t = useTranslations("cameraSettings");
   const preset = cameraBubblePresetFor(bubble.size);
@@ -421,6 +425,13 @@ export function CameraSettingsFields({
       </div>
       {bubble.framing.enabled && (
         <FramingControls framing={bubble.framing} onChange={(framing) => onChange({ framing })} />
+      )}
+
+      {/* macOS Center Stage crops onto the face per app, outside Kaipu's reach, and its
+          switch only shows in the menu bar while a camera is in use. Without this line it
+          reads as a Kaipu bug. The panel drawer has no room for it. */}
+      {platform === "darwin" && cameraOn && !compact && (
+        <p className={styles.note}>{t("centerStageHint")}</p>
       )}
 
       {/* Present from the start and filled later, so it is announced once when it changes. */}
