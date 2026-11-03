@@ -45,7 +45,7 @@ function setup(platform: NodeJS.Platform = "darwin") {
 }
 
 describe("main window app activation", () => {
-  it.each(["Copy", "Save"])("Cmd+Tab reveals the window left hidden after quiet %s", () => {
+  it("Cmd+Tab reveals the window left hidden after a quiet capture (Copy or Save)", () => {
     const s = setup();
     s.hooks.beforeCapture();
     s.activate(); // Overlay focus must not put the main window in the shot.
