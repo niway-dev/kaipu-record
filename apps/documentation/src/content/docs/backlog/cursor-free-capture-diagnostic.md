@@ -433,3 +433,82 @@ bounds matched preview within one pixel. This closes the editor-layer/control ga
 in the lifecycle record, with the limitations and reproducible proof recorded in
 [editable cursor implementation](/backlog/cursor-sprite-capture/). Recorded pointer shapes,
 Prepare-copy cursor replay is now connected with missing-track refusal and distinct reuse fingerprints; native exclusion/motion pixels and signed/TCC validation remain open. Default capture remains Chromium; no new native capture/signing claim is made here.
+
+## Window capture spike (NIW2-643, 2026-11-05)
+
+Plan unit W0 of
+[native cursor for every source](/plans/2026-11-05-native-cursor-all-sources/), the seven rows
+of spec section 3.1. It decides whether a `window:` source can go through the native helper
+(N1). No product code is merged: the helper variant lives on a local, never-pushed branch
+`spike/niw2-643-window-capture` (commit `c48db603`). It adds `--window ID W H FPS SECONDS`
+to `native/encoded-capture/main.swift`, builds `SCContentFilter(desktopIndependentWindow:)`
+with `showsCursor = false`, `scalesToFit = true`, `ignoreShadowsSingleWindow = true`, and logs
+to stderr per frame: `SCWindow.frame`, `contentRect`, `contentScale`, `scaleFactor`,
+`screenRect`, `status`, and every delegate error.
+
+**Rig.** Mac mini (macOS 27.0.1, one 1920x1080 display at scale 1, owner logged in).
+Everything ran as a `launchctl submit` job with mise's `node` as the responsible process. A
+Swift binary spawned by that node with `child_process` inherits Screen Recording
+(`CGPreflightScreenCaptureAccess()` true, frames delivered), so no extra grant was needed.
+Windows were moved, resized, minimized and closed through the Accessibility API (the `osascript`
+route blocks on an Automation prompt on the owner's screen, so it was dropped).
+Capture size was fixed at 580x384. Timestamps below are seconds since the matching operation.
+
+### Results
+
+| Row | Check                                     | Observation                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Result                  |
+| --- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| 1   | Electron `window:<n>:0` equals CGWindowID | `desktopCapturer` returned Safari `window:7132:0`, Terminal `window:7123:0`, Finder `window:702:0` and `window:48:0`, TextEdit `window:7114:0`. `CGWindowListCopyWindowInfo` listed the same numbers for the same on-screen windows, and `SCShareableContent` found them by `windowID`.                                                                                                                                                                                 | **Pass** (4 apps)       |
+| 2   | Capture works, frames arrive              | `SCShareableContent.windows.first { $0.windowID == n }` then the window filter: frames of exactly 580x384, status `complete`. No pointer pixels with the real pointer parked inside the window (one dumped frame). An Electron always-on-top red 120x120 window over the target was not in the dumped frame (0 red pixels). Idle window: 2 frames in 6 s, because SCK only delivers on change. A later 23 s run delivered about 6 fps. The cadence was never explained. | **Pass**                |
+| 3   | Move mid-capture                          | Frames kept coming, same stream, no restart. The `screenRect` attachment followed on the first frame after the move (+0.04 s). `SCWindow.frame` re-read through `SCShareableContent` (200 ms poll) changed 0.3 s later. A held `SCWindow` object never updates.                                                                                                                                                                                                         | **Pass**                |
+| 4   | Resize with fixed output                  | Output stayed 580x384. `contentRect` and `contentScale` changed with the window: 797x497 gave `contentRect` 579.99x361.68, scale 0.72. 398x301 gave 507.74x384.00, scale 1.27. The dumped pixels agree.                                                                                                                                                                                                                                                                 | **Pass**                |
+| 5   | Close the window                          | Last complete frame arrived 0.05 s before the close. At +0.00 s a frame with status 3 (`suspended`, no attachments). At +0.27 s a status 5 (`stopped`) frame. At +0.30 s `didStopWithError`: `SCStreamErrorDomain` code **-3815**, "Failed to find any displays or windows to capture". A later `stopCapture()` fails with -3808, "already stopped or does not exist".                                                                                                  | **Pass** (recorded)     |
+| 6a  | Minimize, then restore                    | Minimize: one status 3 frame at +0.03 s, then no frames for 8.7 s. No error and the stream stays alive. `SCWindow.frame` keeps the old frame with `isOnScreen = false`, apart from nonsense values during the genie animation. On restore, frames resumed 0.5 s after the request, with unchanged `contentRect`.                                                                                                                                                        | **Pass** (recorded)     |
+| 6b  | Move to another Space                     | **Not measured.** Two Spaces exist on the mini. The private `CGSMoveWindowsToManagedSpace` and `CGSAddWindowsToSpaces`/`CGSRemoveWindowsFromSpaces` calls were no-ops from this process. Switching the owner's Space was not done.                                                                                                                                                                                                                                      | Not measured            |
+| 7   | Coordinate origin and formula             | Electron `screen.getCursorScreenPoint()` returned the pixel the pointer had been warped to, in the same space as `CGWindowList` bounds and `screenRect`: global points, origin top-left of the primary display. Two displays were not measured (the mini has one).                                                                                                                                                                                                      | **Pass on one display** |
+
+Row 7 measured example (one display, scale 1): `screenRect` = (100, 100, 580, 385), output
+580x384, `contentRect` = (0, 0, 578.49, 384.00). Pointer at (245, 196) read from Electron gives
+`x = (0 + (245 - 100) / 580 * 578.49) / 580 = 0.2493` and
+`y = (0 + (196 - 100) / 385 * 384) / 384 = 0.2494`. That checks the arithmetic of the spec
+formula. Only the extent of the content was verified against pixels (below), not the pointer
+position inside it.
+
+### What the spike showed that the spec does not say
+
+- **Use the `screenRect` frame attachment for `frame`.** It is per frame and current. The
+  spec's "refresh through `SCShareableContent` on a timer" is slower and not needed.
+- **`contentRect` is top-left aligned, not centered.** With `scalesToFit` the content sits at
+  (0, 0) of the output and the rest is transparent (alpha 0), checked on two dumped frames:
+  opaque columns 0..578 and 0..507. `contentScale` equals `contentRect.width / screenRect.width`
+  and is uniform. The spec formula already uses `content.x`, so it holds; N1 must not assume
+  centering.
+- **Window close is an error, not a clean end.** The current helper exits 1 on any
+  `didStopWithError`. N1 must map -3815 to "emit `stop` at the last delivered frame" and
+  treat status 3 and 5 frames (no attachments, no image buffer) as non-frames. The existing
+  `status == complete` guard already skips them.
+- **Terminal snaps its size to the character grid.** 800x500 became 797x497, so the formula
+  must use the reported frame, never the requested size.
+- **A plain CLI aborts without CoreGraphics initialised.** `CGS_REQUIRE_INIT` assertion
+  (SIGABRT) right after the `SCWindow` was found, until `CGMainDisplayID()` was called. The
+  display path in the shipped helper does not hit it.
+- **Idle windows deliver almost no frames.** The retained-surface timer already in the helper
+  covers it, and it is also what holds the last frame while minimized.
+
+### What blocks N1
+
+Nothing blocks it. The must-pass rows 1, 2 and 4 pass, and rows 3, 5 and 6a gave usable
+behavior for decisions 11 and 12 (close ends and saves the take, minimize holds the last
+frame). Open before N3 is accepted:
+
+1. **Row 7 on two displays** and a Retina display: not measured. The formula is in points, so
+   scale should cancel, but a window on a secondary display (negative or offset origin) is
+   unproven.
+2. **Row 6b, off-Space:** unmeasured. Decision 12 ("off-Space holds the last frame") is
+   inferred from minimize, not observed. N3's QA step "move it to another Space" is the first
+   real test.
+3. **Frame cadence of a mostly idle window** was not explained; N1's live test should assert
+   the held-frame path, not a frame rate.
+
+Raw logs and the tools used are local only, under `.evidence/niw2-643/` in the owner's
+checkout.
