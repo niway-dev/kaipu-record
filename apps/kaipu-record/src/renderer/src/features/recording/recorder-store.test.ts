@@ -90,6 +90,7 @@ function fakeEngine(over: Partial<EngineHandle> = {}): EngineHandle {
     firstMediaTimestamp: Promise.resolve({ rendererMs: 0, quality: "estimated" as const }),
     hasSystemAudio: true,
     setMicrophoneEnabled: vi.fn(async () => "ok" as const),
+    microphoneError: vi.fn(() => null),
     setSystemAudioEnabled: vi.fn(() => "ok" as const),
     setMicLevel: vi.fn(),
     setNoiseSuppression: vi.fn(async () => "ok" as const),
@@ -1078,6 +1079,40 @@ describe("recorder-store live settings", () => {
     expect(engine.setMicrophoneEnabled).toHaveBeenCalledWith(true, "mic-1");
     expect(updateSettings).toHaveBeenCalledWith({ isMicrophoneEnabled: false });
 
+    await stopAndSettle();
+  });
+
+  it("tells the user, with the engine's reason, when a mid-take mic cannot be opened", async () => {
+    const denied = new Error("NotAllowedError");
+    const engine = fakeEngine({
+      setMicrophoneEnabled: vi.fn(async () => "unavailable" as const),
+      microphoneError: vi.fn(() => denied),
+    });
+    await startWith(engine, { microphoneDeviceId: null });
+
+    broadcast({ isMicrophoneEnabled: true });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(reportErrorMock).toHaveBeenCalledWith(
+      messages.record.micUnavailable,
+      denied,
+      expect.objectContaining({ context: { phase: "mic-late" } }),
+    );
+    await stopAndSettle();
+  });
+
+  it("stays quiet when turning the mic off is the request, or the mic opens", async () => {
+    const engine = fakeEngine();
+    await startWith(engine, { microphoneDeviceId: null });
+
+    broadcast({ isMicrophoneEnabled: true });
+    await vi.advanceTimersByTimeAsync(0);
+    broadcast({ isMicrophoneEnabled: false });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(engine.setMicrophoneEnabled).toHaveBeenNthCalledWith(1, true, "mic-1");
+    expect(engine.setMicrophoneEnabled).toHaveBeenNthCalledWith(2, false, "mic-1");
+    expect(reportErrorMock).not.toHaveBeenCalled();
     await stopAndSettle();
   });
 

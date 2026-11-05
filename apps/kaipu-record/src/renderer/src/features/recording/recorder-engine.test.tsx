@@ -583,6 +583,32 @@ describe("live controls", () => {
     expect(lastOutput().finalize).not.toHaveBeenCalled();
   });
 
+  it("keeps the reason a late mic could not be opened, and clears it once one opens", async () => {
+    const handle = await startEngine(baseOptions({ microphoneDeviceId: null }));
+    expect(handle.microphoneError()).toBeNull();
+    const denied = new Error("NotAllowedError");
+    getUserMedia.mockRejectedValueOnce(denied);
+
+    expect(await handle.setMicrophoneEnabled(true, "mic-1")).toBe("unavailable");
+    expect(handle.microphoneError()).toBe(denied);
+
+    expect(await handle.setMicrophoneEnabled(true, "mic-1")).toBe("ok");
+    expect(handle.microphoneError()).toBeNull();
+  });
+
+  it("after a late mic opens, off and on only mute it: the device is not opened again", async () => {
+    const handle = await startEngine(baseOptions({ microphoneDeviceId: null }));
+    expect(await handle.setMicrophoneEnabled(true, "mic-2")).toBe("ok");
+    const mute = gains.at(-1)!;
+
+    expect(await handle.setMicrophoneEnabled(false, "mic-2")).toBe("ok");
+    expect(await handle.setMicrophoneEnabled(true, "mic-2")).toBe("ok");
+
+    expect(rampTargets(mute)).toEqual([0, 1]);
+    expect(getUserMedia).toHaveBeenCalledTimes(2); // screen + the one late mic
+    expect(micTrack.stop).not.toHaveBeenCalled();
+  });
+
   it("muting a mic that was never opened is a no-op", async () => {
     const handle = await startEngine(baseOptions({ microphoneDeviceId: null }));
     expect(await handle.setMicrophoneEnabled(false, "mic-1")).toBe("ok");
