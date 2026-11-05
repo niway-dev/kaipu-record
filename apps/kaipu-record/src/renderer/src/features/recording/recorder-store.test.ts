@@ -118,6 +118,7 @@ function fakePrepared(handle: EngineHandle = fakeEngine()): FakePrepared {
   return {
     hasSystemAudio: handle.hasSystemAudio,
     setMicrophoneEnabled: handle.setMicrophoneEnabled,
+    microphoneError: handle.microphoneError,
     setSystemAudioEnabled: handle.setSystemAudioEnabled,
     setMicLevel: handle.setMicLevel,
     setNoiseSuppression: handle.setNoiseSuppression,
@@ -1102,6 +1103,7 @@ describe("recorder-store live settings", () => {
   });
 
   it("stays quiet when turning the mic off is the request, or the mic opens", async () => {
+    reportErrorMock.mockClear();
     const engine = fakeEngine();
     await startWith(engine, { microphoneDeviceId: null });
 

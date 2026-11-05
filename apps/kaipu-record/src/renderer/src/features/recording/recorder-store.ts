@@ -924,6 +924,11 @@ function forwardLiveSettings(
         if (result === "unavailable" && on) {
           micOn = false;
           writeBack({ isMicrophoneEnabled: false });
+          // The toggle flipping back is the only other sign: say why, with the browser's reason.
+          if (active)
+            reportError(runtimeT()("record.micUnavailable"), handle.microphoneError(), {
+              context: { phase: "mic-late" },
+            });
         }
       });
     }

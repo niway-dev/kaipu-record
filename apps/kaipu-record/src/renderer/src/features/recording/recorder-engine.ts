@@ -55,6 +55,11 @@ export interface LiveAudioControls {
    * "unavailable" and the take keeps running.
    */
   setMicrophoneEnabled(on: boolean, deviceId: string | null): Promise<LiveToggleResult>;
+  /**
+   * Why the last late mic acquisition failed (the browser's error, e.g. `NotAllowedError`), or
+   * `null` when none has failed or the last one succeeded. Read after "unavailable".
+   */
+  microphoneError(): unknown;
   /** Ramp the system-audio gain. "unavailable" when no loopback track exists. */
   setSystemAudioEnabled(on: boolean): LiveToggleResult;
   /**
@@ -586,9 +591,14 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
       micLevelGain.connect(micMuteGain);
       micMuteGain.connect(destination);
     };
+    /** Why the last late open failed; kept for the store to report. */
+    let micOpenError: unknown = null;
     const acquireMicrophone = async (deviceId: string): Promise<MediaStream | null> => {
       micNoise = noiseSuppression;
-      const mic = await openMicrophone(deviceId, noiseSuppression);
+      micOpenError = null;
+      const mic = await openMicrophone(deviceId, noiseSuppression, (error) => {
+        micOpenError = error;
+      });
       if (mic) inputStreams.push(mic);
       return mic;
     };
@@ -969,6 +979,7 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
 
     const controls: LiveAudioControls = {
       hasSystemAudio: sysMuteGain !== null,
+      microphoneError: () => micOpenError,
       async setMicrophoneEnabled(on, deviceId) {
         if (stopped) return "unavailable";
         if (micMuteGain) {
@@ -1257,12 +1268,14 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
 async function openMicrophone(
   deviceId: string,
   noiseSuppression: boolean,
+  onError?: (error: unknown) => void,
 ): Promise<MediaStream | null> {
   try {
     return await navigator.mediaDevices.getUserMedia({
       audio: { deviceId: { ideal: deviceId }, noiseSuppression },
     });
-  } catch {
+  } catch (error) {
+    onError?.(error);
     return null; // mic unavailable — continue without it
   }
 }

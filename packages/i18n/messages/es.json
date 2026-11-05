@@ -326,6 +326,7 @@
     "webcamUnavailable": "La cámara no estaba disponible, así que tu cara se grabó dentro de la pantalla.",
     "webcamStoppedNative": "La cámara se detuvo: el resto del video no tiene cámara",
     "webcamNotSaved": "No pudimos guardar la grabación de la cámara, así que es posible que tu cara no aparezca en este video. La grabación de pantalla se conservó.",
+    "micUnavailable": "No pudimos activar el micrófono, así que el resto de esta grabación no tendrá voz.",
     "errorStart": "No pudimos iniciar la grabación. Vuelve a intentarlo.",
     "errorSave": "No pudimos guardar la grabación.",
     "errorSaveKept": "No pudimos acceder a tu carpeta de grabaciones. La grabación se conservó y Kaipu la recuperará la próxima vez que se abra.",
