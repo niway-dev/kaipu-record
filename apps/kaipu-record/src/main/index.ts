@@ -916,7 +916,10 @@ app.whenReady().then(async () => {
   initMainAnalytics(getDeviceId(), getAppSettings().diagnosticsEnabled);
   onSettingsChanged((settings) => setMainAnalyticsEnabled(settings.diagnosticsEnabled));
   registerAnalyticsIpc();
-  registerNativeCaptureTransport(() => mainWindow?.webContents);
+  registerNativeCaptureTransport(
+    () => mainWindow?.webContents,
+    () => hub?.currentArea(),
+  );
 
   // Capture Panel → show the main window (the panel's "Open ↗" button).
   ipcMain.on("capture-panel:open-main", () => {

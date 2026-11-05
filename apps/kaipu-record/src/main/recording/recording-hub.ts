@@ -70,6 +70,8 @@ export type LiveRecordingToggle =
 export interface RecordingHubHandle {
   /** True while a recording is active or paused. */
   isActive(): boolean;
+  /** The area chosen in settings (main's own copy), or null. */
+  currentArea(): RecordingArea | null;
   /** True while a take is pending (countdown or acquiring): not active yet, but busy. */
   isPending(): boolean;
   /** A writer session is open: a take or an editor export is writing into the workspace. */
@@ -1153,6 +1155,7 @@ export function registerRecordingHub(
 
   return {
     isActive: () => activity.active,
+    currentArea: () => settings.area,
     isPending: () => pending && !activity.active,
     lastTakeDisplayId: () => lastTakeDisplayId,
     hasOpenWrites: () => writer.ids().length > 0,

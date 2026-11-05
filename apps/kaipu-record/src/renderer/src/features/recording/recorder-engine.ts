@@ -432,7 +432,7 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
             .offset;
           await bridge.open({
             sourceId: options.sourceId,
-            displayId: 1,
+            area: options.area ?? null,
             ...target,
             frameRate,
             videoBitrate,
@@ -1207,7 +1207,7 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
       // Taken here, not while preparing: during a countdown the screen still shows the app.
       // In the background: the take starts without it, and stop waits for it before the
       // tracks end.
-      const thumbnail = captureThumbnail(screenStream, target).then((image) => {
+      const thumbnail = captureThumbnail(screenStream, target, areaPlan?.source).then((image) => {
         markRecordTiming("captureThumbnail resolved");
         return image;
       });
@@ -1328,9 +1328,16 @@ function deadlineIn(ms: number): { expired: Promise<"timeout">; clear(): void } 
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function captureThumbnail(
+/**
+ * `source` (physical pixels of the stream) is set when the take records an area. The stream
+ * passed here is always the whole display: Chromium's compositor crops only the encoded
+ * track, and a native take's duplicate stream is uncropped too, so the poster draws just
+ * the area (decision 14).
+ */
+export async function captureThumbnail(
   stream: MediaStream,
   target: { width: number; height: number },
+  source?: { x: number; y: number; width: number; height: number },
 ): Promise<ArrayBuffer | null> {
   try {
     const video = document.createElement("video");
@@ -1342,7 +1349,20 @@ async function captureThumbnail(
     // Draw at the real output size — uniform scale (target keeps the source AR).
     canvas.width = target.width || video.videoWidth || 1280;
     canvas.height = target.height || video.videoHeight || 720;
-    canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const context = canvas.getContext("2d");
+    if (source)
+      context?.drawImage(
+        video,
+        source.x,
+        source.y,
+        source.width,
+        source.height,
+        0,
+        0,
+        canvas.width,
+        canvas.height,
+      );
+    else context?.drawImage(video, 0, 0, canvas.width, canvas.height);
     video.pause();
     const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", 0.7));
     return blob ? await blob.arrayBuffer() : null;
@@ -1356,7 +1376,6 @@ export function nativeEligibility(
   options: Pick<EngineOptions, "sourceId" | "area" | "watermark" | "webcam">,
 ): string | null {
   if (!options.sourceId.startsWith("screen:")) return "only whole-display sources are supported";
-  if (options.area) return "area capture requires Chromium";
   if (options.watermark) return "watermark requires Chromium";
   if (options.webcam) return "webcam fallback bubble exclusion requires Chromium";
   return null;

@@ -1,3 +1,5 @@
+import type { RecordingArea } from "./types/ipc";
+
 /** Experimental live transport v1. Integers are host-clock microseconds; no B frames. */
 export const NATIVE_CAPTURE_VERSION = 1;
 export const MAX_NATIVE_HEADER = 16 * 1024;
@@ -47,6 +49,16 @@ export interface NativeVideoRequest {
   /** Crop at the source, in display points (origin top-left). Absent: the whole display. */
   sourceRect?: { x: number; y: number; width: number; height: number };
 }
+/**
+ * What the renderer asks main to open: the encode parameters plus the source it picked.
+ * Main resolves `displayId` from `sourceId` and, with an `area`, the helper's `sourceRect`
+ * (display points) after validating the area against that display.
+ */
+export type NativeOpenRequest = Omit<NativeVideoRequest, "displayId" | "sourceRect"> & {
+  displayId?: number;
+  sourceId?: string;
+  area?: RecordingArea | null;
+};
 export interface NativeCaptureBridge {
   /** `requested`: the renderer's `native-cursor-capture` flag. The main process also
    *  honours `--experimental-native-recording` on its own command line. */
@@ -56,7 +68,7 @@ export interface NativeCaptureBridge {
     reason: string;
     experimentalRequested?: boolean;
   }>;
-  open(request: NativeVideoRequest & { sourceId?: string }): Promise<void>;
+  open(request: NativeOpenRequest): Promise<void>;
   begin(atMainMs: number): Promise<void>;
   pause(atMainMs: number): Promise<void>;
   resume(atMainMs: number): Promise<void>;
