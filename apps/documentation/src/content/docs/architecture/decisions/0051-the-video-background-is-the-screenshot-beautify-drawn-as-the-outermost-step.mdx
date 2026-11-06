@@ -1,0 +1,101 @@
+---
+title: "ADR 0051: The video background reuses the screenshot editor's beautify model and is drawn as the outermost composition step inside a fixed output size"
+description: A recording gets a background (the screenshot editor's presets), padding, corner radius and shadow, stored additively in the scene. It is composed last — after redactions, annotations, the zoom crop, the framing and the webcam — onto the preset's canvas, so the picture shrinks inside the padding and the output size never changes. One pure geometry feeds the preview's CSS and the export's canvas; the export fingerprint carries bg1.
+---
+
+# ADR 0051: The video background reuses the screenshot editor's beautify model and is drawn as the outermost composition step inside a fixed output size
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                                                                                                   |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — owner decisions 2026-11-06, nothing implemented. [NIW2-663](https://linear.app/niway/issue/NIW2-663/video-editor-transport-bar-with-cutdeletemutespeed-tracks-popover). Spec: [editor transport bar, Tracks popover, speed, timeline zoom and backgrounds](/specs/2026-11-06-editor-transport-tracks-backgrounds-design/), PR 5 of the stack |
+| Date          | 2026-11-06                                                                                                                                                                                                                                                                                                                                              |
+| Relates to    | [0038](/architecture/decisions/0038-webcam-is-a-viewport-layer-composed-after-the-zoom-crop/) (the webcam stays inside the picture), [0003](/architecture/decisions/0003-export-never-replaces-the-original/) (a background is an edit; the export is a new file), [0001](/architecture/decisions/0001-mediabunny-over-ffmpeg/) (drawn in the composer) |
+| Superseded by | —                                                                                                                                                                                                                                                                                                                                                       |
+
+## Context
+
+The screenshot editor has "beautify": nine background presets (`none`, `dark`, `carbon`,
+`magenta`, `purple`, `ocean`, `sunset`, `forest`, `graphite`), a padding, a corner radius and a
+shadow, with one model (`beautify/backgrounds.ts`) that gives both a CSS value for the live
+preview and a canvas paint for the export, and a compositor that draws `bg + padding + shot`.
+The owner wants the same on recordings: "que sean los mismos para hacerlo bonito".
+
+The video editor composes every output frame in one place, `createOutputComposer`
+(`frame → redactions → annotations → zoom crop → framing → webcam`), shared by the MP4 worker, the
+GIF worker and, through the same layer contract, the preview. Fixed-canvas presets (Vertical,
+Square) already frame the picture onto a target canvas with a black or blurred letterbox.
+Exports are reused by a fingerprint of the scene tagged with composer revisions (`cursor3`,
+`wc2`). Screen Studio and CANVID both frame the recording on a wallpaper with a padding that
+insets the picture inside the output.
+
+## Decision
+
+1. **Same presets, same three numbers.** `scene.background: { bg: BackgroundId; padding;
+radius; shadow }` uses the screenshot editor's `BackgroundId` and its slider constants
+   (`PADDING_RANGE` 0–96, `RADIUS_RANGE` 0–28, `SHADOW_RANGE` 0–100), read at a 1080 px-high
+   reference. The `BACKGROUNDS` table and the three ranges are shared, not copied: if the export worker's bundle cannot import it from the
+   screenshots feature without dragging React in, the table moves to `shared/` and both editors
+   import it there. The ids never diverge between the two editors.
+2. **It is part of the edit.** Stored additively in session version 1 (absent → the default,
+   `none / 0 / 0 / 0`, which draws exactly today's picture); unknown ids fall back to `none`,
+   numbers clamp. Undo covers it. The export draws it; the original on disk is untouched (0003).
+3. **Drawn last, inside a fixed output size.** The composer finishes the picture as today, then
+   fills the output canvas with the background paint and draws the picture inset by the padding,
+   clipped to the radius, with the shadow. The preset's output size is unchanged; the picture
+   shrinks. For fixed-canvas presets the background replaces the letterbox when `bg ≠ none`.
+   The webcam is composed before this step, so it stays inside the picture.
+4. **One geometry for preview and export.** `backgroundFrame(background, w, h)` returns the
+   picture rectangle, the scaled radius and shadow; the preview applies them as CSS on the stage
+   at its displayed size, the composer as canvas calls at the output size. The three numbers are
+   expressed at a 1080 px-high reference and scaled by `h / 1080`, so every preset shows the
+   same proportions.
+5. **Export reuse.** `BACKGROUND_COMPOSE_REVISION = "bg1"` is added to the edit fingerprint only
+   when `bg ≠ none`. With `none`, padding, radius and shadow are stored but not drawn and the
+   sliders are disabled, so a plain scene's fingerprint does not change and its old exports
+   keep matching.
+
+## Alternatives rejected
+
+- **A separate background model for video** (its own ids, its own ranges). Two lists drift; the
+  owner asked for the same look, and the screenshot model already has a preview form and a
+  canvas form.
+- **Growing the output canvas by the padding.** It breaks every preset's size (YouTube 1440p is
+  1440 px tall, Square is square) and the size meter, and a 16:9 recording would stop being
+  16:9. CANVID's rule — padding insets the picture — keeps the preset's promise.
+- **Drawing the background before the zoom crop** (as a layer under the frame). The zoom would
+  magnify the padding and a Fill framing would crop it. Everything earlier in the pipeline is
+  the picture; the background is a frame around it.
+- **A view-only background in the preview** (not exported). The owner's reason is the exported
+  video looking good; a preview-only frame is a lie about the output.
+- **Composing the background in a post-pass with FFmpeg.** 0001 keeps the pipeline in the
+  mediabunny worker, which already draws every other layer.
+
+## Consequences
+
+- `features/video-editor/background.ts` (pure, worker-safe): the type, defaults, parser and
+  `backgroundFrame`; tests on the geometry at 1920×1080, 1080×1920 and 1080×1080.
+- `compose-output-frame.ts` gains `background?`; a picture canvas is allocated only when a
+  background is set, so a plain scene costs nothing new. The GIF worker passes the same option.
+- `compose-frame.ts`'s framer skips its black/blur padding when the background paints.
+- `preview-stage.tsx` wraps `.content` in a `.frame`; the ambient glow stays behind it.
+- `session.ts` parses the field; `export-reuse.ts` adds `bg1`; the inspector shows the
+  screenshot editor's `BeautifyPanel` with a `VideoBackground` state when nothing is selected.
+- `ui-map.ts` declares `editorVideo.background { default, set }`.
+- A quality test samples the padding pixels under a 2× zoom and on a Vertical export.
+
+## Non-goals
+
+- Custom colours, image wallpapers, blurred-video backgrounds, animation, per-clip backgrounds.
+- A background that changes the output size or aspect.
+- The webcam outside the padding (open question 3 of the spec).
+
+## What would reopen this
+
+- The owner wants the camera bubble over the background edge: the webcam step moves after the
+  background and `clampWebcamCenter` learns the padding; amend decision 3.
+- Users want wallpapers or custom colours: extend `BACKGROUNDS` (and `BackgroundPaint`) in the
+  shared table so both editors get them; decision 1 holds.
+- A preset needs the padding to grow the canvas (a "device frame" export): that is a new preset
+  kind, designed on its own, not a change to this rule.

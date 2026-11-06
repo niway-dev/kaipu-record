@@ -1,0 +1,94 @@
+---
+title: "ADR 0050: Track visibility is per-user view state; a hidden lane keeps its edits in the preview and the export"
+description: The video editor's Tracks popover shows or hides timeline lanes. Hiding is view state saved per user in the settings store, never in the scene; the preview and the export are unchanged by it. Clips cannot be hidden, Audio can, and Cursor activity is a child of Zooms drawn inside its lane. Amends ADR 0040's "Audio always shown" and parks its removedTracks model.
+---
+
+# ADR 0050: Track visibility is per-user view state; a hidden lane keeps its edits in the preview and the export
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — owner decisions 2026-11-06, nothing implemented. [NIW2-663](https://linear.app/niway/issue/NIW2-663/video-editor-transport-bar-with-cutdeletemutespeed-tracks-popover). Spec: [editor transport bar, Tracks popover, speed, timeline zoom and backgrounds](/specs/2026-11-06-editor-transport-tracks-backgrounds-design/), PR 2 of the stack                                  |
+| Date          | 2026-11-06                                                                                                                                                                                                                                                                                                                                                                               |
+| Amends        | [0040](/architecture/decisions/0040-typed-tracks-on-demand-and-stackable-media-lanes/) decision 1: "Clips and the recording's Audio are always shown" becomes "Clips is always shown"; its `removedTracks` (edits hidden from the export) is parked with the timeline v2 spec and is not the hide model. 0040's decision 2 (Activity is marks inside Zooms) is adopted here as it stands |
+| Relates to    | [0046](/architecture/decisions/0046-a-typed-ui-map-declares-every-screen-area-and-state/) (the popover is a declared area)                                                                                                                                                                                                                                                               |
+| Superseded by | —                                                                                                                                                                                                                                                                                                                                                                                        |
+
+## Context
+
+The timeline shows every lane the recording can have: Clips, Activity (with a cursor track),
+Zooms, Webcam (with a camera), Privacy, Audio, plus the Annotations lane above Clips. Each row
+takes height from the video. The owner's request of 2026-11-06 is a Tracks popover that lists
+the lanes with checkboxes, because "tendremos varios niveles a futuro así que no queremos quitar
+espacio al video". The mock's own footer says what hiding means: "Hidden tracks keep their edits.
+The preview grows into the space."
+
+Two earlier records say different things about the same control. NIW2-612 (2026-11) asked for
+exactly this: hide from the timeline only, per user. The timeline v2 design (2026-10-31, ADR 0040) designed "remove track" as `scene.removedTracks`: the edits stay in the session but are
+**not drawn and not exported**, with a confirmation for Privacy. The owner parked that spec on
+2026-11-06 ("por ahora ignora el anterior") and chose the mock's meaning.
+
+## Decision
+
+1. **Hiding a lane is view state.** It changes what the timeline draws and nothing else: the
+   preview, the export plan, the GIF plan and the session never read it. A hidden Zooms lane
+   still zooms; a hidden Privacy lane still blurs; a hidden Audio lane still mutes where a range
+   says so.
+2. **Saved per user**, in the app settings store as `editor.hiddenTracks: TrackKey[]`, like
+   `exportQuality`. Not in the scene, not per recording. The parser drops `clips` and unknown
+   keys and keeps `activity` as stored: Zooms shown with the marks off is a valid choice.
+3. **Clips is the only lane that cannot be hidden.** Audio can. Webcam appears in the list only
+   when the take recorded a camera; Cursor activity only when the take has a cursor track.
+4. **Cursor activity is a child of Zooms**: its marks draw inside the Zooms lane, under the
+   blocks; the Activity row is removed. Hiding Zooms hides the marks too; the child checkbox is
+   disabled, not changed, while the parent is off, so its stored value survives.
+5. **The trigger counts what this recording can show**: `Tracks n/m` is visible rows over
+   `availableTracks({ hasCursorTrack, hasWebcam })`. A lane the user turns on stays on, empty or
+   not.
+6. **A selection is never invisible.** Selecting an item on a hidden lane (a zoom clicked on the
+   preview, a mute reached through a shortcut) shows the lane first.
+7. **New lanes register in `availableTracks` and default to hidden** unless their PR argues
+   otherwise, so a lane added later never costs the video height by default.
+
+## Alternatives rejected
+
+- **`removedTracks` as designed in 0040** (hidden from the export). It makes a checkbox in a
+  popover a destructive edit: unchecking Privacy would export what was meant to be blurred, which
+  is why that design needed a confirmation and an export-dialog warning. A view toggle must be
+  safe to flip without reading anything. If "remove from the export" is wanted later, it is a
+  separate, undoable edit, not this checkbox.
+- **Per-recording persistence in the session.** The owner's reason is screen space, which is a
+  property of the user's window, not of the recording. NIW2-612 asked for per user.
+- **Audio always shown** (0040). The owner asked for Audio in the list; mute is a separate
+  control on the transport bar, so hiding the lane loses nothing the user cannot still do.
+- **Collapsing lanes to a thin bar instead of hiding.** It keeps a row per lane, so it does not
+  return the height; it can be added later as a third state.
+
+## Consequences
+
+- `features/video-editor/tracks.ts` holds the keys, `availableTracks`, `parseHiddenTracks` and
+  `visibleCount`, all pure and tested.
+- `video-editor-page.tsx` filters `extraLanes` by key; `TimelineStrip` gains `showOverlays`;
+  `ZoomLane` gains `marks`; `ActivityLane` is deleted.
+- `export-plan.ts`, the GIF plan and the preview take no new input; a test asserts the plan is
+  identical with every lane hidden.
+- `ui-map.ts` declares `editorVideo.tracksPopover { open }` and the catalog gets a state.
+- The timeline v2 spec, if resumed, must reopen this ADR before reintroducing `removedTracks`
+  (see its section 8 note in the 2026-11-06 spec).
+
+## Non-goals
+
+- Hiding edits from the export, or deleting a lane's edits, from this control.
+- Reordering lanes, lane heights, collapsed lanes.
+- Per-recording visibility.
+
+## What would reopen this
+
+- The timeline v2 spec is resumed and the owner still wants "remove = not exported": then this
+  ADR is amended to add a second, destructive action beside hiding, never to change what the
+  checkbox does.
+- Users ask for per-recording lane sets (for example a tutorial that always hides Privacy):
+  move the key to the session as view data the export ignores.
+- A lane that is hidden by default under decision 7 turns out to be the one everybody opens
+  first: flip that lane's default, not the rule.
