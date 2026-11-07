@@ -1,7 +1,8 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toLayout } from "../timeline";
 import { availableTracks } from "../tracks";
+import { createTimelineViewStore } from "../use-timeline-view";
 import { TransportBar, type TransportBarProps } from "./transport-bar";
 
 // The shared test setup pins the i18n hooks to English. The speed label is a number the
@@ -28,6 +29,14 @@ vi.mock("@kaipu/i18n", async (importOriginal) => {
   };
 });
 
+/** A 100 s timeline in a 1000 px lane: the zoom control needs a view store to render. */
+function zoomStore() {
+  const store = createTimelineViewStore();
+  store.setDuration(100);
+  store.setLaneWidth(1000);
+  return store;
+}
+
 function renderBar(speed: number): TransportBarProps {
   const props: TransportBarProps = {
     layout: toLayout([{ id: "a", kind: "clip", sourceStart: 0, sourceEnd: 10 }]),
@@ -53,6 +62,7 @@ function renderBar(speed: number): TransportBarProps {
     onDeleteSelected: vi.fn(),
     deleteDisabled: false,
     onToggleFullscreen: vi.fn(),
+    timelineView: zoomStore(),
   };
   render(<TransportBar {...props} />);
   return props;
@@ -107,5 +117,41 @@ describe("TransportBar — the speed label follows the locale's number format", 
     const props = renderBar(1.5);
     fireEvent.click(screen.getByRole("button", { name: /^Velocidad de reproducción/ }));
     expect(props.onSpeedChange).toHaveBeenCalledExactlyOnceWith(2);
+  });
+});
+
+describe("TransportBar — the zoom readout follows the locale's number format", () => {
+  beforeEach(() => {
+    locale.current = "en";
+  });
+
+  it("writes the zoom with a dot in English: 1.0× at fit, 1.4× after one step", () => {
+    const props = renderBar(1);
+    const slider = screen.getByRole("slider", { name: "Timeline zoom" });
+    expect(slider).toHaveAttribute("aria-valuetext", "Zoom 1.0×");
+    fireEvent.keyDown(slider, { key: "ArrowRight" });
+    expect(props.timelineView.getState().zoom).toBeCloseTo(Math.SQRT2, 9);
+    expect(slider).toHaveAttribute("aria-valuetext", "Zoom 1.4×");
+  });
+
+  it("writes the zoom with a comma in Spanish: 1,0× at fit, 1,4× then 2,0× on the keyboard", () => {
+    locale.current = "es";
+    renderBar(1);
+    const slider = screen.getByRole("slider", { name: "Zoom de la línea de tiempo" });
+    expect(slider).toHaveAttribute("aria-valuetext", "Zoom 1,0×");
+    fireEvent.keyDown(slider, { key: "ArrowRight" });
+    expect(slider).toHaveAttribute("aria-valuetext", "Zoom 1,4×");
+    fireEvent.keyDown(slider, { key: "ArrowRight" });
+    expect(slider).toHaveAttribute("aria-valuetext", "Zoom 2,0×");
+  });
+
+  it("keeps one decimal even for a whole zoom: 4,0× not 4×", () => {
+    locale.current = "es";
+    const props = renderBar(1);
+    act(() => props.timelineView.zoomTo(4));
+    expect(screen.getByRole("slider", { name: "Zoom de la línea de tiempo" })).toHaveAttribute(
+      "aria-valuetext",
+      "Zoom 4,0×",
+    );
   });
 });

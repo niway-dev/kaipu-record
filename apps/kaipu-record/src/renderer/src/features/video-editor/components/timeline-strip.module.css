@@ -10,28 +10,76 @@
   padding: var(--space-sm) var(--space-lg) var(--space-md);
 }
 
-/* Shared stacking context for ruler, overlay lane, and track so the playhead
-   can span all three rows as one continuous vertical line. */
+/* The ONE horizontal scroll container (NIW2-667): the ruler and every lane row scroll
+   together, the label column stays put (sticky, below). Also the shared stacking context
+   for ruler, overlay lane and track, so the playhead can span all rows as one line. */
 .timelineBody {
   position: relative;
   display: grid;
-  /* Label column (UI spec § 6) + the lanes column. Every lane lives in column 2, so all
-     lanes share one horizontal extent. The width is declared ONCE, here: the grid
-     template and .playheadLayer's offset both read it and must never drift apart. */
+  /* Label column (UI spec § 6), a gap, and the lanes column. Every lane lives in the last
+     column, so all lanes share one horizontal extent. The numbers are declared ONCE, here:
+     the grid template, .playheadLayer and TimelineStrip's pixel conversions (it reads
+     --lane-gap and --lane-end back) must never drift apart. */
   --lane-label-w: 112px;
-  grid-template-columns: var(--lane-label-w) 1fr;
+  --lane-gap: var(--space-sm);
+  /* Room after the lanes for the last clip's end handle, which sits half outside its block
+     (the scroll container would cut it to 4 px of an 8 px target). The strip's own right
+     padding is where that room used to come from; this takes it from there again with the
+     negative margin below, so a timeline at fit is laid out exactly as before zoom existed. */
+  --lane-end: 8px;
+  /* The strip under the last lane that the horizontal scrollbar gets (see padding-bottom
+     below). .playheadLayer stops above it, so the playhead and the hover line end at the
+     last lane instead of crossing the scrollbar. */
+  --lane-bottom: 8px;
+  /* The lanes column is `--zoom` lane widths wide (set by TimelineStrip; 1 = fit, the
+     whole recording in the visible width, which is what 1fr was). `100%` is this
+     container's content box, so the same expression sizes the grid and .playheadLayer. */
+  grid-template-columns: var(--lane-label-w) calc(
+      (100% - var(--lane-label-w) - var(--lane-gap)) * var(--zoom, 1)
+    );
   align-items: center;
-  column-gap: var(--space-sm);
+  column-gap: var(--lane-gap);
   /* 3 px between lanes (Kaipu Black, NIW2-619). */
   row-gap: 3px;
   flex: 1;
   min-height: 0;
+  overflow-x: auto;
+  /* Next to a scrolling x, `overflow-y` would compute to `auto` and a classic vertical
+     scrollbar (Windows, Linux, macOS set to "always show") would take width from the
+     content box while TimelineStrip measures the lane from the border box, so every pointer
+     conversion would be off by the scrollbar's width. With `clip` there is no scrollbar in
+     y (Chrome keeps it `clip` next to a scrolling x and the box takes no programmatic
+     scrollTop either; an engine that computes it to `hidden` still draws no scrollbar).
+     This region is as tall as its lanes (.timeline is content-sized), so there is no
+     vertical scroll to lose. */
+  overflow-y: clip;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+  padding-right: var(--lane-end);
+  margin-right: calc(-1 * var(--lane-end));
+  /* A scrollbar that overlays content (macOS with a trackpad) would sit on the last lane.
+     This padding gives it a strip of its own, and the negative margin gives the height
+     back, so a timeline at fit is exactly as tall as before zoom existed. */
+  padding-bottom: var(--lane-bottom);
+  margin-bottom: calc(-1 * var(--lane-bottom));
 }
 
+/* Sticky, not outside the scroller: the label rows must line up with the lane rows, and
+   one grid does that for free. The background is opaque so lanes (and the playhead) scroll
+   UNDER the labels instead of through them: the label fills its whole row (stretch, its
+   text centred) and the shadow carries the fill across the 3 px between rows, or the
+   playhead would show through there. A shadow and not padding or a pseudo-element, because
+   `overflow: hidden` (for the text) clips those but not the element's own shadow. */
 .laneLabel {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  align-self: stretch;
   display: flex;
   align-items: center;
   gap: 6px;
+  background: var(--bg-panel);
+  box-shadow: 0 3px 0 0 var(--bg-panel);
   white-space: nowrap;
   overflow: hidden;
   font-family: var(--font-family);
@@ -40,6 +88,21 @@
   line-height: var(--line-height-label);
   letter-spacing: 0;
   color: var(--text-4);
+}
+
+/* Once the content is SCROLLED the lanes slide under the label and past the lane's left
+   edge, so the fill also has to carry across what lies between the label and the lanes (the
+   column gap, and the corner where it meets the row gap), or whatever scrolled past would
+   show through there. Not before: at scroll 0 that gap holds things that belong in it (the
+   start handle of a clip at t=0 sits 4 px into it, the playhead's head at t=0 5 px) and the
+   label is above both, so a fill there would cut them in half. `data-scrolled` is set by
+   TimelineStrip (scroll > 0). The list repeats the row-gap fill: a declaration replaces the
+   whole value. */
+.timelineBody[data-scrolled="true"] .laneLabel {
+  box-shadow:
+    0 3px 0 0 var(--bg-panel),
+    var(--lane-gap) 0 0 0 var(--bg-panel),
+    var(--lane-gap) 3px 0 0 var(--bg-panel);
 }
 
 .laneIcon {
@@ -53,14 +116,18 @@
 }
 
 /* Covers the lanes column across every row; the playhead's left % is relative to it,
-   i.e. to the lanes' width, exactly like each lane's own blocks. --lane-label-w is
-   inherited from .timelineBody, so the 112 px lives in exactly one place. */
+   i.e. to the CONTENT's width (zoom included), exactly like each lane's own blocks, and it
+   scrolls with them. --lane-label-w, --lane-gap and --lane-end are inherited from
+   .timelineBody, so they live in exactly one place. Its `100%` is the padding box (the
+   grid's is the content box), hence the extra `--lane-end`. Below the labels (z-index 4), so
+   a playhead scrolled off the left edge disappears under them instead of drawing over their
+   text. */
 .playheadLayer {
   position: absolute;
   top: 0;
-  bottom: 0;
-  left: calc(var(--lane-label-w) + var(--space-sm));
-  right: 0;
+  bottom: var(--lane-bottom);
+  left: calc(var(--lane-label-w) + var(--lane-gap));
+  width: calc((100% - var(--lane-label-w) - var(--lane-gap) - var(--lane-end)) * var(--zoom, 1));
   pointer-events: none;
   z-index: 3;
 }
@@ -146,11 +213,13 @@
   z-index: 1;
 }
 
+/* Placed by TimelineStrip (left/width as % of the block): only the tiles in view exist,
+   so a block thousands of pixels wide at high zoom is a dozen images, not hundreds. */
 .tile {
+  position: absolute;
+  top: 0;
   height: 100%;
-  flex: 1 1 0;
   object-fit: cover;
-  min-width: 0;
   pointer-events: none;
 }
 

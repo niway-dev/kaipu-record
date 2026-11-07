@@ -48,7 +48,7 @@ in the session, and part of the export fingerprint.
 | 5   | **"Cursor activity" is a child of Zooms** and means the activity marks. Unchecking it hides the marks; unchecking Zooms hides both. The Activity lane row disappears: the marks draw inside the Zooms lane, under the blocks.                                                                                                                                                                                                                                                      | Owner gap 4 ("supongo") and the mock. The marks explain where auto-zooms come from and mean nothing without the zooms. Folding the row in is the one thing taken from timeline v2's decision 9, because the mock already shows it.                       | 0050        |
 | 6   | **A lane a user turns on stays on, even when empty.** The trigger's `n/m` counts visible lanes over the lanes this recording has (Webcam only with a camera, Zooms always, Activity only with a cursor track).                                                                                                                                                                                                                                                                     | Owner gap 5. View state has no reason to second-guess the user; the count is honest about what can be shown.                                                                                                                                             | 0050        |
 | 7   | **Playback speed is preview-only**: 0.5×, 1×, 1.5×, 2× on a cycling button next to mute, applied as `video.playbackRate` and as a multiplier on the slide clock. Not saved in the session; resets to 1× on open.                                                                                                                                                                                                                                                                   | Owner: "un botón de velocidad para tener un x2 … para que pase rápido o más lento el video con el timeline". The export has no speed; the file plays at 1× and nothing in the request says otherwise. A saved speed would surprise the next open.        | —           |
-| 8   | **Timeline zoom is a pixels-per-second scale plus a scroll offset**, kept in one `TimelineView` object every lane reads. 1× = fit; max = 1 s ≥ 240 px. `−`, slider, `FIT`, `+` on the transport bar; ⌘/Ctrl + scroll zooms around the pointer; plain horizontal scroll pans; playback follows.                                                                                                                                                                                     | NIW2-610 verbatim. One conversion in one place is what keeps a drag at 4× landing on the time under the pointer; every lane already receives a shared `layout`, so a shared view is the same shape.                                                      | —           |
+| 8   | **Timeline zoom is a zoom factor relative to fit plus a scroll offset**, kept in one `TimelineView` every lane reads. 1× = fit; the deepest zoom makes 1 s ≥ 240 px wide (never below 1×). `−`, slider, `FIT`, `+` on the transport bar; ⌘/Ctrl + scroll zooms around the pointer; plain horizontal scroll pans; playback follows. A factor, not a pixel scale: it survives a cut (deleting a clip at 4× leaves 4× and re-fits what is left).                                      | NIW2-610 verbatim. One conversion in one place is what keeps a drag at 4× landing on the time under the pointer; every lane already receives a shared `layout`, so a shared view is the same shape.                                                      | —           |
 | 9   | **The background is a scene field** `scene.background: VideoBackground` with the screenshot editor's `BackgroundId`, `padding`, `radius` and `shadow`, default `none / 0 / 0 / 0` (today's picture). Saved in the session additively (version 1 stays).                                                                                                                                                                                                                            | Owner gap 6: "que sean los mismos para hacerlo bonito". It is content, not view: the export draws it, so it is part of the edit like a zoom. Additive like `webcam` and `cursor`.                                                                        | 0051 (new)  |
 | 10  | **The background is drawn as the outermost step**: `frame → redactions → annotations → zoom crop → framing → webcam → background`. The composed picture is inset by the padding, clipped to the radius, given the shadow, and the background fills the rest of the output canvas.                                                                                                                                                                                                  | Owner gap 7: the order stays. Everything the editor already draws is a picture; the background is a frame around that picture, as the screenshot compositor does it (`bg + padding + shot`). Putting it anywhere earlier would zoom or crop the padding. | 0051        |
 | 11  | **The padding keeps the output size and shrinks the picture.** A 1920×1080 preset stays 1920×1080; with padding the picture inside is smaller. Fixed-canvas presets (Vertical, Square) apply the background on their target canvas, replacing the black or blurred letterbox when `bg ≠ none`.                                                                                                                                                                                     | The output size is the preset's promise (YouTube 1440p, Square). Growing the canvas would break every preset's size and the size meter. The letterbox is already a background; the user's choice wins over the default one.                              | 0051        |
@@ -286,10 +286,19 @@ handlers only change the button they hang from. `uiArea("editorVideo.transport")
 component's root. The header keeps `editorVideo.toolbar` with undo/redo, Add image, status and
 Export.
 
-Width: at the editor's 1180 px floor, the right cluster is ~9 icon buttons plus the slider
-(~380 px) and the left ~160 px; the centre needs ~220 px. It fits without compaction; if PR 4's
-slider makes it tight, `useCompactRow` (the screenshot toolbar's hook) hides the slider and keeps
-`−`/`+`.
+Width, measured in the real app with PR 4 (the 10:05 recording, both counts, English and
+Spanish; the numbers and the queries are in `transport-bar.module.css`): the zoom control does
+**not** fit in full at the editor's 1180 px floor. The time label hangs off the centre column into
+the right column, so that column (318 px at 1180, 448 px at 1440) must hold the label (128 px with
+its gap) and the cluster (176 px, 281 px with `− FIT +`, 355 px with the slider). The bar therefore
+drops things in order as it narrows, using container queries on the bar's own width: the slider
+first (below a ~1160 px content box, a window under about 1570 px), then the time's total (the
+label shows the current time alone, from ~1010 px, a window under about 1420 px), then `FIT` (from
+~865 px, a window under about 1280 px); at the 1180 px floor only `−` and `+` remain. This is a
+change from the earlier text of this section, which expected `useCompactRow` to hide the slider
+alone; the arithmetic above is why that was not enough. Follow-up if the owner wants `FIT` at the
+floor: it needs a layout decision (the time label's place, or counts moved out of the left
+column), not a tweak.
 
 ## 3. Tracks popover (PR 2)
 
@@ -358,41 +367,72 @@ open question 1.
 ### 5.1 Model
 
 ```ts
-// components/timeline-view.ts — pure
+// components/timeline-view.ts — pure, imports nothing
 export interface TimelineView {
-  /** Pixels per timeline second. 1× = laneWidth / duration. */
-  scale: number;
-  /** Pixels scrolled from the start. 0 at 1×. */
+  /** Zoom relative to fit: 1 shows the whole timeline in the lane. Within [1, maxZoom]. */
+  zoom: number;
+  /** Pixels scrolled from the start. 0 at fit; within [0, contentWidth - laneWidth]. */
   scroll: number;
   laneWidth: number;
   duration: number;
 }
 export const MAX_PX_PER_SECOND = 240;
 export function fitView(laneWidth: number, duration: number): TimelineView;
-export function timeAt(view: TimelineView, clientX: number, laneLeft: number): number;
+export function scaleOf(view: TimelineView): number; // px per timeline second
+export function timeAt(view: TimelineView, clientX: number, laneLeft: number, clampToTimeline?: boolean): number;
+export function timeDelta(view: TimelineView, fromClientX: number, toClientX: number): number;
 export function xOf(view: TimelineView, t: number): number;
 export function zoomAt(view: TimelineView, factor: number, anchorClientX: number, laneLeft: number): TimelineView;
 export function panBy(view: TimelineView, dx: number): TimelineView;
 export function followPlayhead(view: TimelineView, t: number): TimelineView;
+export function revealTime(view: TimelineView, t: number): TimelineView;
 export function visibleRange(view: TimelineView): { start: number; end: number };
 ```
 
-`timeToFraction` / `fractionToTime` stay for callers that mean "fraction of the whole"; every
-pointer conversion in `timeline-strip.tsx`, the lanes' edge drags, `onWindowChange` and the ruler
-seek move to `timeAt` (failure 9). Blocks are positioned with `xOf`, so a lane's content is wider
-than its cell and the cell scrolls (`overflow-x: auto` on the lanes column only; labels stay in
-column 1). The ruler's ticks come from `visibleRange`.
+What differs from the first draft of this section, and why:
+
+- **`zoom` is a factor, not a pixel `scale`.** With a pixel scale a cut would either jump the
+  apparent zoom or leave a scroll past the end; with a factor the content stays N lanes wide,
+  what is left re-fits, and `clampView` re-clamps the scroll (and the zoom, when the remaining
+  footage cannot zoom that deep).
+- **`timeAt` clamps to the timeline by default; `clampToTimeline = false` and `timeDelta` do not.**
+  A trimmed clip's end handle must be able to travel past the end of the visible timeline to win
+  footage back, as it can at 1×; clamping would stick it.
+- **The conversion reaches the lanes through a context, not an import.** The strip owns the zoom,
+  the scroll and where the lane is on screen (read live at every pointer event), and hands every
+  lane one `timeAtPointer(clientX)` (`components/timeline-pointer.tsx`); the ruler, the track,
+  the trim and slide handles, and the annotations, zooms, webcam, privacy and audio lanes all ask
+  it, so none of them divides by a width of its own. A lane rendered alone falls back to its own
+  box, which is exact because it is as wide as the content.
+- **The view lives in an external store, not in page state** (`use-timeline-view.ts`). A scroll
+  fires every frame and playback can ask the view to follow every frame; in `useState` that would
+  re-render the whole editor at that rate. The page creates the store; the strip subscribes to the
+  whole state, the zoom control to the zoom factor alone.
+- **One scroll container, sticky labels.** `.timelineBody` is a grid that scrolls horizontally; the
+  lanes column is `--zoom` lane widths wide (CSS, so the first paint is right), the label column is
+  `position: sticky`, and the playhead layer sits inside the container so it scrolls with the lanes.
+  At fit the layout is exactly the old one (lane edges and footer height are the same pixels).
 
 ### 5.2 Controls
 
-`−` / `+` step the scale by √2 around the centre of the visible window; the slider maps
-`[fit, MAX]` logarithmically; `FIT` resets. ⌘/Ctrl + wheel calls `zoomAt` around the pointer;
-a horizontal wheel or a trackpad pan calls `panBy`. While playing, `followPlayhead` scrolls when
-the playhead passes 80 % of the visible width, and stops following after the user pans until the
-next play. The view lives in page state (not saved).
+`−` / `+` step the zoom by √2 around the centre of the visible window; the slider maps
+`[1, maxZoom]` logarithmically; `FIT` resets. ⌘/Ctrl + wheel (and a trackpad pinch, which Chromium
+delivers as a wheel with `ctrlKey`) calls `zoomAt` around the pointer, one event moving the zoom by
+at most e^0.4. A plain horizontal swipe pans the scroll container natively. While playing,
+`followPlayhead` turns the page when the playhead passes 80 % of the visible width, putting it back
+at 20 %; the view stops following after the user pans by hand (scrollbar, swipe, drag), until the
+next play, and never moves under a pointer that is scrubbing. A zoom made while playing keeps
+following: it keeps the anchor the user chose and the next tick turns the page if the playhead
+ended up outside the lane. While paused, a seek that lands off screen (a
+keyboard step, rewind/forward) scrolls it into view (`revealTime`); a click on the ruler never does.
 
-`thumbnailsForRange` takes the visible range and the scale, and the thumbnail hook requests tiles
-for the visible blocks at the current width (failure 12).
+`thumbnailTiles` takes the block, the scale and the visible range and returns only the tiles in
+view (plus one each side), one roughly every 72 px of block width, so a block thousands of pixels
+wide at 16× is a dozen images and no visible stretch is blank. The frame behind a tile is the
+nearest decoded one: the hook still decodes 24 evenly spaced frames per recording, so at depth
+tiles repeat a frame, stretched but never missing. Decoding more frames on demand is a follow-up.
+The ruler takes the visible range too (`rulerTicks(duration, zoom, window)`), and below a second
+per label it labels tenths.
 
 ## 6. Backgrounds (PR 5)
 
@@ -509,5 +549,5 @@ External: [Screen Studio — Look & Feel](https://screen.studio/guide/background
 
 Not verified: whether the export worker's bundle stays free of React when it imports
 `backgrounds.ts` (section 6.1 names the fallback); whether `playbackRate` above 1 keeps audio
-pitch-corrected in Chromium on macOS (expected yes, `preservesPitch` defaults to true); the
-width budget of the transport bar at 1180 px with the slider (section 2 names the fallback).
+pitch-corrected in Chromium on macOS (expected yes, `preservesPitch` defaults to true). The width
+budget of the transport bar at 1180 px was measured with PR 4 and does not hold (section 2).

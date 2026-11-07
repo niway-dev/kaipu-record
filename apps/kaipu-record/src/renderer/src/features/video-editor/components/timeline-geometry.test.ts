@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { SourceThumbnail } from "../use-source-thumbnails";
 import {
   fractionToTime,
   formatScrubTime,
   rulerMinorTicks,
   rulerTicks,
-  thumbnailsForRange,
-  thumbnailsForRangeWithin,
+  thumbnailAt,
+  thumbnailTiles,
   timeToFraction,
 } from "./timeline-geometry";
 
@@ -70,42 +69,198 @@ describe("formatScrubTime", () => {
   });
 });
 
-describe("thumbnailsForRange", () => {
-  const thumbs = Array.from({ length: 10 }, (_, i) => ({
-    sourceTime: i * 10 + 5, // 5, 15, ... 95
-    url: `u${i}`,
-  }));
-
-  it("picks nearest thumbnails evenly across the source range", () => {
-    const picked = thumbnailsForRange(thumbs, 20, 60, 4);
-    expect(picked).toHaveLength(4);
-    expect(picked[0].sourceTime).toBeGreaterThanOrEqual(15);
-    expect(picked.at(-1)!.sourceTime).toBeLessThanOrEqual(65);
+describe("rulerTicks while zoomed", () => {
+  it("labels about as many ticks per VISIBLE lane as it does at fit, so labels never crowd", () => {
+    // 100 s at 4x: the lane shows 25 s, so the step is the one a 25 s timeline would pick.
+    const fitStep = rulerTicks(25)[1].time;
+    const zoomedStep = rulerTicks(100, 4)[1].time;
+    expect(zoomedStep).toBe(fitStep);
   });
 
-  it("returns [] when there are no thumbnails", () => {
-    expect(thumbnailsForRange([], 0, 10, 4)).toEqual([]);
+  it("only returns the ticks in the window (plus one step each side), not 1800 for a long take", () => {
+    const all = rulerTicks(600, 24);
+    const windowed = rulerTicks(600, 24, { start: 300, end: 325 });
+    expect(windowed.length).toBeLessThan(all.length / 4);
+    expect(windowed.some((tick) => tick.time >= 300 && tick.time <= 325)).toBe(true);
+    expect(windowed.every((tick) => tick.time >= 295 && tick.time <= 330)).toBe(true);
+  });
+
+  it("goes below one second at depth, labelling tenths so neighbours stay distinct", () => {
+    // 8 s can zoom 1.92x at most in a 1000 px lane: one second is then 240 px wide.
+    const ticks = rulerTicks(8, 1.9);
+    const step = ticks[1].time - ticks[0].time;
+    expect(step).toBeLessThan(1);
+    expect(new Set(ticks.map((tick) => tick.label)).size).toBe(ticks.length);
+    expect(ticks[1].label).toMatch(/^0:00\.\d$/);
+  });
+
+  it("keeps the fit ruler exactly as it was, down to a 4 s clip", () => {
+    expect(rulerTicks(4).map((tick) => tick.time)).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it("minor ticks never land on a labelled tick at any zoom, windowed or not", () => {
+    for (const [duration, zoom] of [
+      [90, 1],
+      [100, 4],
+      [8, 1.9],
+    ] as const) {
+      const labelled = new Set(rulerTicks(duration, zoom).map((tick) => tick.time));
+      for (const time of rulerMinorTicks(duration, zoom)) expect(labelled.has(time)).toBe(false);
+    }
+    const windowed = rulerMinorTicks(600, 24, { start: 300, end: 325 });
+    expect(windowed.length).toBeLessThan(rulerMinorTicks(600, 24).length / 4);
   });
 });
 
-describe("thumbnailsForRangeWithin", () => {
-  // A long recording (240 s) has one thumbnail every 10 s of source: 5, 15, ... 235.
-  const thumbs = Array.from({ length: 24 }, (_, i) => ({ sourceTime: 5 + i * 10, url: `c${i}` }));
-  const urls = (picked: (SourceThumbnail | null)[]) => picked.map((t) => t?.url ?? null);
+describe("thumbnailTiles", () => {
+  const TILE_PX = 72;
 
-  it("leaves a tile empty before a late start shorter than one thumbnail spacing", () => {
-    // The webcam starts 3 s in: the tile at source 1 s has a frame 4 s away, but no footage.
-    const picked = thumbnailsForRangeWithin(thumbs, 0, 10, 5, { start: 3, end: 240 });
-    expect(urls(picked)).toEqual([null, "c0", "c0", "c0", "c0"]);
+  // A 240 s clip occupying the whole 240 s timeline.
+  const block = { timelineStart: 0, timelineEnd: 240, sourceStart: 0, sourceEnd: 240 };
+
+  it("at fit, tiles the whole block one every ~72 px, as the strip always did", () => {
+    // 800 px for 240 s: scale 800/240.
+    const { count, tiles } = thumbnailTiles({
+      ...block,
+      scale: 800 / 240,
+      visible: { start: 0, end: 240 },
+    });
+    expect(count).toBe(Math.round(800 / TILE_PX));
+    expect(tiles).toHaveLength(count);
+    expect(tiles[0].left).toBe(0);
+    expect(tiles.at(-1)!.left + tiles.at(-1)!.width).toBeCloseTo(1, 9);
   });
 
-  it("leaves a tile empty after an early end shorter than one thumbnail spacing", () => {
-    // The webcam ends 4 s before the screen: the tile at 239 s must not show the last face.
-    const picked = thumbnailsForRangeWithin(thumbs, 230, 240, 5, { start: 0, end: 236 });
-    expect(urls(picked)).toEqual(["c23", "c23", "c23", null, null]);
+  it("at 16x asks only for the tiles in view, not for thousands", () => {
+    // 16x of an 800 px lane: 12 800 px of block, about 178 tiles in all.
+    const scale = (800 / 240) * 16;
+    const { count, tiles } = thumbnailTiles({
+      ...block,
+      scale,
+      visible: { start: 100, end: 115 },
+    });
+    expect(count).toBeGreaterThan(150);
+    expect(tiles.length).toBeLessThan(20);
   });
 
-  it("returns [] when there are no thumbnails", () => {
-    expect(thumbnailsForRangeWithin([], 0, 10, 4, { start: 0, end: 10 })).toEqual([]);
+  it("leaves no gap wider than a tile in the visible window at 16x, at any scroll", () => {
+    const scale = (800 / 240) * 16;
+    const windowSeconds = 800 / scale;
+    for (const start of [0, 13.7, 100, 200.3, 240 - windowSeconds]) {
+      const visible = { start, end: start + windowSeconds };
+      const { tiles } = thumbnailTiles({ ...block, scale, visible });
+      const px = (fraction: number): number => fraction * 240 * scale;
+      // Cover [visible.start, visible.end] in px; no uncovered stretch may exceed a tile.
+      const spans = tiles
+        .map((tile) => ({ from: px(tile.left), to: px(tile.left + tile.width) }))
+        .sort((a, b) => a.from - b.from);
+      let covered = visible.start * scale;
+      for (const span of spans) {
+        expect(span.from - covered).toBeLessThanOrEqual(0.5); // contiguous
+        covered = Math.max(covered, span.to);
+      }
+      expect(covered).toBeGreaterThanOrEqual(visible.end * scale - 0.5);
+    }
+  });
+
+  it("tiles are never wider than 1.5 tiles, so a stretched frame stays recognisable", () => {
+    for (const scale of [0.3, 3.3, 20, 53]) {
+      const { tiles } = thumbnailTiles({ ...block, scale, visible: { start: 0, end: 240 } });
+      for (const tile of tiles)
+        expect(tile.width * 240 * scale).toBeLessThanOrEqual(TILE_PX * 1.5 + 1);
+    }
+  });
+
+  it("maps each tile to the source time of its centre, through a cut", () => {
+    // The second half of the source, placed at timeline 0..60 after a cut: tile centres
+    // are in SOURCE time.
+    const { tiles } = thumbnailTiles({
+      timelineStart: 0,
+      timelineEnd: 60,
+      sourceStart: 120,
+      sourceEnd: 180,
+      scale: 720 / 60,
+      visible: { start: 0, end: 60 },
+    });
+    expect(tiles[0].sourceTime).toBeGreaterThan(120);
+    expect(tiles.at(-1)!.sourceTime).toBeLessThan(180);
+  });
+
+  it("only the part of the block inside the window is returned for a block starting mid-timeline", () => {
+    const { tiles } = thumbnailTiles({
+      timelineStart: 100,
+      timelineEnd: 140,
+      sourceStart: 0,
+      sourceEnd: 40,
+      scale: 40,
+      visible: { start: 0, end: 50 }, // the block is out of view entirely
+    });
+    expect(tiles).toEqual([]);
+  });
+
+  it("returns a single full tile for a block narrower than a tile", () => {
+    const { count, tiles } = thumbnailTiles({
+      timelineStart: 0,
+      timelineEnd: 1,
+      sourceStart: 0,
+      sourceEnd: 1,
+      scale: 30,
+      visible: { start: 0, end: 1 },
+    });
+    expect(count).toBe(1);
+    expect(tiles).toHaveLength(1);
+    expect(tiles[0].width).toBe(1);
+  });
+
+  it("an unmeasured scale (0) still tiles the block once, so nothing renders blank before layout", () => {
+    const { tiles } = thumbnailTiles({ ...block, scale: 0, visible: { start: 0, end: 240 } });
+    expect(tiles.length).toBeGreaterThan(0);
+  });
+});
+
+describe("thumbnailAt", () => {
+  const thumbs = [
+    { sourceTime: 5, url: "a" },
+    { sourceTime: 15, url: "b" },
+  ];
+
+  it("picks the nearest frame", () => {
+    expect(thumbnailAt(thumbs, 4)?.url).toBe("a");
+    expect(thumbnailAt(thumbs, 11)?.url).toBe("b");
+  });
+
+  it("is null when there are no frames", () => {
+    expect(thumbnailAt([], 4)).toBeNull();
+  });
+
+  describe("with a covered range (the webcam file may not span the whole source)", () => {
+    // A long recording (240 s) has one thumbnail every 10 s of source: 5, 15, ... 235.
+    const long = Array.from({ length: 24 }, (_, i) => ({ sourceTime: 5 + i * 10, url: `c${i}` }));
+    const row = (
+      sourceStart: number,
+      sourceEnd: number,
+      covered: { start: number; end: number },
+    ): (string | null)[] => {
+      // Five tiles over a 10 s clip: 360 px at 36 px/s.
+      const { tiles } = thumbnailTiles({
+        timelineStart: 0,
+        timelineEnd: 10,
+        sourceStart,
+        sourceEnd,
+        scale: 36,
+        visible: { start: 0, end: 10 },
+      });
+      return tiles.map((tile) => thumbnailAt(long, tile.sourceTime, covered)?.url ?? null);
+    };
+
+    it("leaves a tile empty before a late start shorter than one thumbnail spacing", () => {
+      // The webcam starts 3 s in: the tile at source 1 s has a frame 4 s away, but no footage.
+      expect(row(0, 10, { start: 3, end: 240 })).toEqual([null, "c0", "c0", "c0", "c0"]);
+    });
+
+    it("leaves a tile empty after an early end shorter than one thumbnail spacing", () => {
+      // The webcam ends 4 s before the screen: the tile at 239 s must not show the last face.
+      expect(row(230, 240, { start: 0, end: 236 })).toEqual(["c23", "c23", "c23", null, null]);
+    });
   });
 });

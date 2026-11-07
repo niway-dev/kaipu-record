@@ -1,6 +1,6 @@
 import { fireEvent, render } from "@testing-library/react";
 import { ZoomIn } from "lucide-react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { VideoOverlay } from "../scene";
 import type { LayoutEntry } from "../timeline";
 import type { PreviewPlayback } from "../use-preview-playback";
@@ -30,6 +30,44 @@ function makePlayback(overrides: Partial<PreviewPlayback> = {}): PreviewPlayback
     ...overrides,
   };
 }
+
+function rectOf(left: number, width: number): DOMRect {
+  return {
+    left,
+    right: left + width,
+    width,
+    top: 0,
+    bottom: 20,
+    height: 20,
+    x: left,
+    y: 0,
+    toJSON: () => ({}),
+  };
+}
+
+/**
+ * jsdom lays nothing out. Give the strip's scroll container a place on screen: its left
+ * edge, a label column, and the lane's width. The strip reads these live at every pointer
+ * event, so what a test drives is the real conversion. Pair with `afterEach(restore)`.
+ */
+function stubLaneGeometry({
+  left = 0,
+  labels = 0,
+  laneWidth = 1000,
+}: { left?: number; labels?: number; laneWidth?: number } = {}): void {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    function (this: HTMLElement) {
+      const id = this.dataset.testid;
+      if (id === "timeline-scroller") return rectOf(left, labels + laneWidth);
+      if (id === "lane-corner") return rectOf(left, labels);
+      return rectOf(0, 0);
+    },
+  );
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 // Two contiguous clips — mirrors how toLayout() lays out real timeline entries.
 const twoClipLayout: LayoutEntry[] = [
@@ -201,21 +239,8 @@ describe("TimelineStrip slide blocks", () => {
 });
 
 describe("TimelineStrip ruler scrubber", () => {
-  // Helper: mock a rect on an element so jsdom (which has no layout engine) returns
-  // a known pixel grid. clientX=500 on a 1000px-wide ruler with duration=10 → 5s.
-  function mockRect(el: HTMLElement): void {
-    el.getBoundingClientRect = vi.fn(() => ({
-      left: 0,
-      right: 1000,
-      width: 1000,
-      top: 0,
-      bottom: 20,
-      height: 20,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    }));
-  }
+  // clientX=500 on a 1000px-wide lane with duration=10 → 5s.
+  beforeEach(() => stubLaneGeometry());
 
   it("ruler pointerDown calls seek with the mapped time and does NOT call pause", () => {
     // Ruler scrubbing keeps playback running — the user chose to reposition without
@@ -237,7 +262,6 @@ describe("TimelineStrip ruler scrubber", () => {
     );
 
     const ruler = getByTestId("ruler");
-    mockRect(ruler);
     ruler.setPointerCapture = vi.fn();
 
     fireEvent.pointerDown(ruler, { pointerId: 1, clientX: 500 });
@@ -264,7 +288,6 @@ describe("TimelineStrip ruler scrubber", () => {
     );
 
     const ruler = getByTestId("ruler");
-    mockRect(ruler);
     ruler.setPointerCapture = vi.fn();
     ruler.hasPointerCapture = vi.fn(() => true);
 
@@ -293,7 +316,6 @@ describe("TimelineStrip ruler scrubber", () => {
     );
 
     const ruler = getByTestId("ruler");
-    mockRect(ruler);
     // hasPointerCapture returns false → move must be a no-op
     ruler.hasPointerCapture = vi.fn(() => false);
 
@@ -330,6 +352,9 @@ describe("TimelineStrip ruler scrubber", () => {
 });
 
 describe("TimelineStrip trim drag baseline and abort", () => {
+  // The lane is 1000 px wide: 10 s of timeline is 0.01 s/px.
+  beforeEach(() => stubLaneGeometry());
+
   // Same shape as twoClipLayout, but clip "a" has had its start trimmed to 1s (what the
   // page produces after the first move) and the rest of the track has shifted up.
   function withSourceStart(layout: LayoutEntry[], id: string, value: number): LayoutEntry[] {
@@ -368,24 +393,12 @@ describe("TimelineStrip trim drag baseline and abort", () => {
     };
   }
 
-  // jsdom has no layout or pointer capture: stub the capture APIs and give the track
-  // (the handle's parent) a 1000px width, so 10s of timeline is 0.01 s/px.
+  // jsdom has no pointer capture: stub the capture APIs.
   function stubHandle(container: HTMLElement, selector: string): HTMLElement {
     const handle = container.querySelector(selector) as HTMLElement;
     handle.setPointerCapture = vi.fn();
     handle.hasPointerCapture = vi.fn(() => true);
     handle.releasePointerCapture = vi.fn();
-    (handle.parentElement as HTMLElement).getBoundingClientRect = vi.fn(() => ({
-      left: 0,
-      right: 1000,
-      width: 1000,
-      top: 0,
-      bottom: 20,
-      height: 20,
-      x: 0,
-      y: 0,
-      toJSON: () => ({}),
-    }));
     return handle;
   }
 
@@ -503,6 +516,8 @@ describe("TimelineStrip lanes", () => {
 });
 
 describe("TimelineStrip ruler hover", () => {
+  beforeEach(() => stubLaneGeometry());
+
   it("shows the time under the pointer without seeking, and hides it on leave", () => {
     const playback = makePlayback();
     const { getByTestId, container } = render(
@@ -518,7 +533,6 @@ describe("TimelineStrip ruler hover", () => {
       />,
     );
     const ruler = getByTestId("ruler");
-    ruler.getBoundingClientRect = vi.fn(() => ({ left: 0, width: 1000 }) as DOMRect);
     ruler.hasPointerCapture = vi.fn(() => false);
 
     fireEvent.pointerMove(ruler, { pointerId: 1, clientX: 746 });
@@ -545,7 +559,6 @@ describe("TimelineStrip ruler hover", () => {
       />,
     );
     const ruler = getByTestId("ruler");
-    ruler.getBoundingClientRect = vi.fn(() => ({ left: 0, width: 1000 }) as DOMRect);
     ruler.hasPointerCapture = vi.fn(() => false);
 
     fireEvent.pointerMove(ruler, { pointerId: 1, clientX: 980 });

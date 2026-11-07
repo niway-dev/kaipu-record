@@ -19,7 +19,8 @@ import { type LayoutEntry, layoutDuration } from "../timeline";
 import type { ActivityMark } from "../zoom/detect-zoom-segments";
 import type { ZoomSegment } from "../zoom/zoom-model";
 import { ActivityMarks } from "./activity-marks";
-import { fractionToTime, timeToFraction } from "./timeline-geometry";
+import { timeToFraction } from "./timeline-geometry";
+import { useTimelinePointer } from "./timeline-pointer";
 import styles from "./zoom-lane.module.css";
 import { uiArea } from "@renderer/lib/ui-area";
 
@@ -62,13 +63,12 @@ export const ZoomLane = memo(function ZoomLane({
   const dragEdge = useRef<{ id: string; edge: "start" | "end" } | null>(null);
   const duration = layoutDuration(layout);
 
+  // The pointer's SOURCE time, through the strip's one pixel-to-time conversion (it knows
+  // the zoom and the scroll; this lane does not). Null over a slide or while unmeasured.
+  const timeAtPointer = useTimelinePointer(laneRef, duration);
   const sourceFromPointer = (clientX: number): number | null => {
-    const rect = laneRef.current?.getBoundingClientRect();
-    if (!rect || rect.width === 0) return null;
-    return sourceTimeAtTimeline(
-      layout,
-      fractionToTime((clientX - rect.left) / rect.width, duration),
-    );
+    const at = timeAtPointer(clientX);
+    return at === null ? null : sourceTimeAtTimeline(layout, at);
   };
 
   const handle = (segment: ZoomSegment, edge: "start" | "end", timelineAt: number) => {

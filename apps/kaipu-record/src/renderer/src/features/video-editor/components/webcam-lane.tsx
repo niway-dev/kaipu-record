@@ -16,13 +16,13 @@ import { sourceRangeToTimelineBlocks, sourceTimeAtTimeline } from "../source-tim
 import { type LayoutEntry, layoutDuration } from "../timeline";
 import type { CoveredRange, SourceThumbnail } from "../use-source-thumbnails";
 import type { WebcamSegment } from "../webcam/webcam-model";
-import { fractionToTime, thumbnailsForRangeWithin, timeToFraction } from "./timeline-geometry";
+import { thumbnailAt, thumbnailTiles, timeToFraction } from "./timeline-geometry";
+import { useTimelinePointer, useTimelineViewContext } from "./timeline-pointer";
+import { scaleOf, visibleRange } from "./timeline-view";
 import type { EdgePhase } from "./zoom-lane";
 import styles from "./webcam-lane.module.css";
 import { uiArea } from "@renderer/lib/ui-area";
 
-/** Same density as the clips lane: one tile roughly every 72px of clip width. */
-const THUMBS_PER_BLOCK_PX = 72;
 /** No known range: every tile gets its nearest frame. */
 const ALL_SOURCE: CoveredRange = { start: -Infinity, end: Infinity };
 
@@ -53,13 +53,12 @@ export const WebcamLane = memo(function WebcamLane({
   const dragEdge = useRef<{ id: string; edge: "start" | "end" } | null>(null);
   const duration = layoutDuration(layout);
 
+  // The pointer's SOURCE time, through the strip's one pixel-to-time conversion (it knows
+  // the zoom and the scroll; this lane does not). Null over a slide or while unmeasured.
+  const timeAtPointer = useTimelinePointer(laneRef, duration);
   const sourceFromPointer = (clientX: number): number | null => {
-    const rect = laneRef.current?.getBoundingClientRect();
-    if (!rect || rect.width === 0) return null;
-    return sourceTimeAtTimeline(
-      layout,
-      fractionToTime((clientX - rect.left) / rect.width, duration),
-    );
+    const at = timeAtPointer(clientX);
+    return at === null ? null : sourceTimeAtTimeline(layout, at);
   };
 
   const handle = (segment: WebcamSegment, edge: "start" | "end", timelineAt: number) => {
@@ -99,7 +98,16 @@ export const WebcamLane = memo(function WebcamLane({
     );
   };
 
-  const laneWidthPx = laneRef.current?.clientWidth ?? 800;
+  // The filmstrip is windowed like the clips lane's: only the tiles on screen exist. Under
+  // a strip the scale and the window come from its view; alone (a test) from this box.
+  const view = useTimelineViewContext();
+  const scale = view
+    ? scaleOf(view)
+    : duration > 0
+      ? (laneRef.current?.clientWidth ?? 800) / duration
+      : 0;
+  const shown = view && scale > 0 ? visibleRange(view) : { start: 0, end: duration };
+  const range = covered ?? ALL_SOURCE;
   const filmstrip =
     thumbnails.length > 0 ? (
       // Decoration only: the segments above carry every interaction and accessible name.
@@ -107,13 +115,14 @@ export const WebcamLane = memo(function WebcamLane({
         {layout.map((entry) => {
           if (entry.kind !== "clip") return null; // a slide has no webcam
           const width = timeToFraction(entry.timelineEnd - entry.timelineStart, duration);
-          const tiles = thumbnailsForRangeWithin(
-            thumbnails,
-            entry.sourceStart,
-            entry.sourceEnd,
-            Math.max(1, Math.round((width * laneWidthPx) / THUMBS_PER_BLOCK_PX)),
-            covered ?? ALL_SOURCE,
-          );
+          const { tiles } = thumbnailTiles({
+            timelineStart: entry.timelineStart,
+            timelineEnd: entry.timelineEnd,
+            sourceStart: entry.sourceStart,
+            sourceEnd: entry.sourceEnd,
+            scale,
+            visible: shown,
+          });
           return (
             <div
               key={entry.itemId}
@@ -123,13 +132,20 @@ export const WebcamLane = memo(function WebcamLane({
                 width: `${width * 100}%`,
               }}
             >
-              {tiles.map((tile, i) =>
-                tile ? (
-                  <img key={i} src={tile.url} alt="" className={styles.tile} draggable={false} />
-                ) : (
-                  <span key={i} className={styles.tile} />
-                ),
-              )}
+              {tiles.map((tile) => {
+                // A tile outside the file's footage stays empty: it must not borrow a frame.
+                const thumb = thumbnailAt(thumbnails, tile.sourceTime, range);
+                return thumb ? (
+                  <img
+                    key={tile.index}
+                    src={thumb.url}
+                    alt=""
+                    className={styles.tile}
+                    style={{ left: `${tile.left * 100}%`, width: `${tile.width * 100}%` }}
+                    draggable={false}
+                  />
+                ) : null;
+              })}
             </div>
           );
         })}

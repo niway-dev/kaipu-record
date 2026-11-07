@@ -8,7 +8,8 @@
 import { memo, useRef } from "react";
 import { ArrowUpRight, Square, Type } from "lucide-react";
 import type { VideoOverlay } from "../scene";
-import { fractionToTime, timeToFraction } from "./timeline-geometry";
+import { timeToFraction } from "./timeline-geometry";
+import { useTimelinePointer } from "./timeline-pointer";
 import styles from "./overlay-lane.module.css";
 
 const KIND_ICON: Record<VideoOverlay["kind"], typeof Square> = {
@@ -43,11 +44,10 @@ export const OverlayLane = memo(function OverlayLane({
 }: OverlayLaneProps): React.JSX.Element {
   const laneRef = useRef<HTMLDivElement | null>(null);
 
-  const timeFromPointer = (event: { clientX: number }): number => {
-    const rect = laneRef.current?.getBoundingClientRect();
-    if (!rect || rect.width === 0) return 0;
-    return fractionToTime((event.clientX - rect.left) / rect.width, duration);
-  };
+  // The strip's one pixel-to-time conversion: it knows the zoom and the scroll, this lane
+  // does not (a pill dragged at 4x must move by the time under the pointer).
+  const timeAtPointer = useTimelinePointer(laneRef, duration);
+  const timeFromPointer = (event: { clientX: number }): number => timeAtPointer(event.clientX) ?? 0;
 
   return (
     <div ref={laneRef} className={styles.lane}>

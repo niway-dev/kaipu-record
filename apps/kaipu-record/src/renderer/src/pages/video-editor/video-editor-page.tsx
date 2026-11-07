@@ -146,6 +146,7 @@ import { ExportDialog } from "@renderer/features/video-editor/components/export-
 import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import { TransportBar } from "@renderer/features/video-editor/components/transport-bar";
+import { useTimelineViewStore } from "@renderer/features/video-editor/use-timeline-view";
 import { showToast } from "@renderer/ui/toast-store";
 import { isAmbiguousIdentityError } from "@renderer/features/library/rename-outcome";
 import { registerSwitchFlush } from "@renderer/features/workspaces/prepare-switch";
@@ -538,6 +539,10 @@ function VideoEditor({
     [scene.audioMuted, scene.mutedRanges],
   );
   const playback = usePreviewPlayback(layout, audioEdits);
+  // The timeline's zoom and scroll: view state, never saved, reset to fit on open. Held
+  // in a store the transport bar and the strip subscribe to, not in this component's state,
+  // so a scroll (a frame at a time) does not re-render the editor.
+  const timelineView = useTimelineViewStore(playback.duration);
   const { setSpeed: setPreviewSpeed } = playback;
   // The speed is preview-only (NIW2-666): it lives in the playback hook and goes nowhere
   // else, not the scene, the session or the export. The one thing it leaves is the event.
@@ -1745,6 +1750,7 @@ function VideoEditor({
             onDeleteSelected={handleDeleteSelected}
             deleteDisabled={deleteDisabled}
             onToggleFullscreen={handleFullscreen}
+            timelineView={timelineView}
           />
         </main>
         {/* NIW2-611: the video takes the left edge and the tools sit on its right, so the
@@ -1918,6 +1924,7 @@ function VideoEditor({
           selectedOverlayId={selectedOverlayId}
           onSelectOverlay={setSelectedOverlayId}
           onWindowChange={handleWindowChange}
+          timelineView={timelineView}
           extraLanes={extraLanes}
         />
       </footer>

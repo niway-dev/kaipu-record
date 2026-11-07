@@ -125,6 +125,87 @@
   color: var(--text-primary);
 }
 
+/* The timeline zoom (NIW2-667): `−`, slider, FIT, `+`, set off from the actions beside it
+   by a rule on each side (the mock's separators; borders, so they add no elements). */
+.zoomGroup {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+}
+
+/* Logarithmic, so every step feels the same size: a thin rule with an accent dot, like
+   the mock. Native range for keyboard, a11y and drag; only the paint is ours. */
+.zoomSlider {
+  appearance: none;
+  box-sizing: border-box;
+  width: 72px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.zoomSlider::-webkit-slider-runnable-track {
+  height: 2px;
+  border-radius: 1px;
+  background: var(--line-strong);
+}
+
+.zoomSlider::-webkit-slider-thumb {
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  margin-top: -4px;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent-primary);
+}
+
+.zoomSlider:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.zoomSlider:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* FIT: text, not an icon, in the mono face of the other values (the speed button). */
+.fitButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 4px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.fitButton:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.fitButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* Added on top of .iconButton. */
 .skipButton {
   border-color: transparent;
@@ -174,15 +255,13 @@
 }
 
 /* Out of flow, so it takes no layout width: it overlaps the right cluster once the
-   right `1fr` falls under the label's width plus the cluster's. Measured in the real app
-   (NIW2-666, with the speed button): the cluster is 176 px (five buttons: 4 x 28 + 40,
-   with 6 px gaps), the label 108 px ("0:09.0 / 0:29.0") or ~122 px for 10+ minutes, so the
-   label overlaps under ~284 px (~298 px for 10+ minutes). At the editor's 1180 px floor
-   the right column is ~318 px (bar 792 px), leaving ~34 px (~20 px for 10+ minutes); at
-   1440 px it is ~448 px. The speed button is a fixed 40 px so its label ("1x" to
-   "1.5x") never moves this number. A wider centre column (it narrows both sides) or one
-   more right-hand button must re-check it: one more would leave no margin
-   at 1180. */
+   right `1fr` falls under the label's width plus the cluster's. At the editor's 1180 px
+   floor the right column is ~318 px (bar 792 px) and at 1440 px ~448 px; the label is 108 px
+   ("0:09.0 / 0:29.0") or 116 px for 10+ minutes and hangs 12 px off the centre. What that
+   leaves for the cluster, and what the narrow bar therefore drops (the slider, the total,
+   FIT), is worked out at the end of this file. The speed button is a fixed 40 px so its
+   label ("1x" to "1.5x") never moves the numbers. A wider centre column (it narrows both
+   sides) or one more right-hand button must re-check them. */
 .timeDisplay {
   position: absolute;
   top: 50%;
@@ -210,6 +289,12 @@
   display: none;
 }
 
+/* The time's short form (the current time alone) is only for a bar too narrow for the full
+   label; see the container queries at the end of this file. */
+.timeShort {
+  display: none;
+}
+
 /* Measured at the editor's 1180 px floor (stage 827 px, side columns ~336 px): the
    Spanish sentences need ~344 px (more with 2-digit counts), so both counts were cut
    to "4 zooms detectad…". Below 880 px of bar the short form ("4 zooms") shows instead,
@@ -226,5 +311,53 @@
 
   .countShort {
     display: inline;
+  }
+}
+
+/*
+ * The right cluster (split, delete, mute, speed, the timeline zoom, fullscreen) and the time
+ * label share the right column: the label hangs off the centre column's right edge into it
+ * (see .timeDisplay), so the column must hold the label AND the cluster. Measured in the
+ * real app (NIW2-667, `verify/timeline-zoom.verify.ts`: the 10:05 recording, so the widest
+ * label, both counts, English and Spanish). The bar is the window minus 388 px; a container
+ * query reads its CONTENT box (the bar minus its 24 px of padding), and each side column is
+ * (that - 132) / 2. The label is 116 px (108 under 10 minutes) and hangs 12 px off the centre
+ * column, 128 px in all; its short form (the current time) is 43 px, 55 px with the gap. The
+ * cluster is 176 px without the zoom control and, with it, 281 px (en) / 309 px (es) as
+ * `− FIT +`, 355 px (en) / 383 px (es) with the 72 px slider, and 250 px as `− +`.
+ *
+ * So the cluster plus the full label fits from a content box of about 1006 px (Spanish, the
+ * longer FIT), the slider as well from about 1154 px, `− FIT +` beside the short time from
+ * about 860 px, and at the editor's 1180 px floor (content 768, side columns 318) only `− +`
+ * does, with 25 px to spare. Clear space measured between the label and the first button:
+ * 51 px (en) / 23 px (es) at 1440, 25 px at 1180, 43 / 15 px at 1280. Each query below drops one thing, cheapest first: the slider
+ * (the wheel and the buttons do the same), the time's total (the ruler ends on it), then FIT
+ * (`−` steps back to it). The thresholds sit 2 to 6 px over the measured need. Re-measure whenever a
+ * control joins the right cluster or the label grows, and `bun run verify -- timeline-zoom`
+ * on the Mac mini prints the numbers.
+ */
+@container transport (max-width: 1160px) {
+  .zoomSlider {
+    display: none;
+  }
+}
+
+@container transport (max-width: 1012px) {
+  .timeFull {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .timeShort {
+    display: inline;
+  }
+}
+
+@container transport (max-width: 866px) {
+  .fitButton {
+    display: none;
   }
 }

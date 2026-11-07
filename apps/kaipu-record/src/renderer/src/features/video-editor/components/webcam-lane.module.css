@@ -21,15 +21,15 @@
   position: absolute;
   top: 0;
   height: 100%;
-  display: flex;
   overflow: hidden;
   border-radius: var(--radius-sm);
 }
 
+/* Placed by the lane (left/width as % of the clip's strip): only the tiles in view exist. */
 .tile {
+  position: absolute;
+  top: 0;
   height: 100%;
-  flex: 1 1 0;
-  min-width: 0;
   object-fit: cover;
 }
 

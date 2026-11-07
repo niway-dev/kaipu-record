@@ -9,7 +9,8 @@ import { useTranslations } from "@kaipu/i18n";
 import type { Redaction } from "../privacy/redaction";
 import { sourceRangeToTimelineBlocks, sourceTimeAtTimeline } from "../source-time";
 import { type LayoutEntry, layoutDuration } from "../timeline";
-import { fractionToTime, timeToFraction } from "./timeline-geometry";
+import { timeToFraction } from "./timeline-geometry";
+import { useTimelinePointer } from "./timeline-pointer";
 import type { EdgePhase } from "./zoom-lane";
 import styles from "./privacy-lane.module.css";
 import { uiArea } from "@renderer/lib/ui-area";
@@ -40,13 +41,12 @@ export const PrivacyLane = memo(function PrivacyLane({
     width: `${timeToFraction(end - start, duration) * 100}%`,
   });
 
+  // The pointer's SOURCE time, through the strip's one pixel-to-time conversion (it knows
+  // the zoom and the scroll; this lane does not). Null over a slide or while unmeasured.
+  const timeAtPointer = useTimelinePointer(laneRef, duration);
   const sourceFromPointer = (clientX: number): number | null => {
-    const rect = laneRef.current?.getBoundingClientRect();
-    if (!rect || rect.width === 0) return null;
-    return sourceTimeAtTimeline(
-      layout,
-      fractionToTime((clientX - rect.left) / rect.width, duration),
-    );
+    const at = timeAtPointer(clientX);
+    return at === null ? null : sourceTimeAtTimeline(layout, at);
   };
 
   const handle = (r: Redaction, edge: "start" | "end", timelineAt: number) => {
