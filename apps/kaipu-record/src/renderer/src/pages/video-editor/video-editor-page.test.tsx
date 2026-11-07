@@ -311,16 +311,20 @@ describe("VideoEditorLoader — an identity two files claim (NIW2-560)", () => {
 });
 
 describe("VideoEditorPage — actions in the title bar (NIW2-619)", () => {
-  it("renders undo, redo, split, delete, the status and Export into the title bar, not the side column", async () => {
+  it("renders undo, redo, add image, the status and Export into the title bar, not the side column", async () => {
     renderEditor();
     await waitForEditorLoaded();
 
     const inspector = document.querySelector('[data-testid="editor-inspector"]')!;
     const side = inspector.parentElement!;
-    for (const name of ["Undo", "Redo", "Add image", "Split here", "Delete segment", "Export"]) {
+    for (const name of ["Undo", "Redo", "Add image", "Export"]) {
       const button = screen.getByRole("button", { name });
       expect(headerActions.contains(button)).toBe(true);
       expect(side.contains(button)).toBe(false);
+    }
+    // Split and delete act on the timeline, so they live on the transport bar (NIW2-664).
+    for (const name of ["Split here", "Delete segment"]) {
+      expect(within(headerActions).queryByRole("button", { name })).toBeNull();
     }
     const badge = within(headerActions).getByText("ORIGINAL UNTOUCHED", { exact: false });
     // The badge is the first thing a crowded title bar hides; Export stays, last.
@@ -394,6 +398,69 @@ describe("VideoEditorPage — transport bar", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Mute" })).not.toBeNull();
     });
+  });
+
+  it("holds split, delete, mute and fullscreen, with play and the time between them", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    const transport = document.querySelector<HTMLElement>(
+      "[data-ui-area='editorVideo.transport']",
+    )!;
+    for (const name of ["Split here", "Delete segment", "Mute", "Fullscreen", "Play"]) {
+      expect(within(transport).getByRole("button", { name })).toBeInTheDocument();
+    }
+    expect(within(transport).getByText("0:00.0 / 0:30.0")).toBeInTheDocument();
+  });
+
+  it("Forward skips five seconds through the playback seek, and Rewind comes back", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+    await waitFor(() => expect(screen.getByText("0:05.0 / 0:30.0")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Rewind" }));
+    await waitFor(() => expect(screen.getByText("0:00.0 / 0:30.0")).toBeInTheDocument());
+  });
+
+  it("Split here cuts the clip under the playhead in two", async () => {
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    // One clip covers the recording: one block on the timeline.
+    expect(footer.querySelectorAll("button")).toHaveLength(1);
+
+    // Step off t=0 so the cut lands inside the clip (a cut on the boundary is a no-op).
+    fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+    await waitFor(() => expect(screen.getByText("0:05.0 / 0:30.0")).toBeInTheDocument());
+    const split = screen.getByRole("button", { name: "Split here" });
+    expect(split).toBeEnabled();
+    fireEvent.click(split);
+
+    await waitFor(() => expect(footer.querySelectorAll("button")).toHaveLength(2));
+  });
+
+  it("Delete segment is disabled until a segment is selected, then removes it", async () => {
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    // Two segments, so the only thing keeping Delete disabled is the missing selection
+    // (with one item left it is disabled regardless).
+    fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+    await waitFor(() => expect(screen.getByText("0:05.0 / 0:30.0")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Split here" }));
+    await waitFor(() => expect(footer.querySelectorAll("button")).toHaveLength(2));
+
+    expect(screen.getByRole("button", { name: "Delete segment" })).toBeDisabled();
+
+    fireEvent.click(footer.querySelectorAll("button")[0]);
+    const remove = await waitFor(() => {
+      const button = screen.getByRole("button", { name: "Delete segment" });
+      expect(button).toBeEnabled();
+      return button;
+    });
+    fireEvent.click(remove);
+
+    await waitFor(() => expect(footer.querySelectorAll("button")).toHaveLength(1));
+    expect(screen.getByRole("button", { name: "Delete segment" })).toBeDisabled();
   });
 
   it("renders the fullscreen button with aria-label 'Fullscreen' by default", async () => {

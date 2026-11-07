@@ -19,10 +19,6 @@ function renderToolbar(overrides: Partial<EditorToolbarProps> = {}): EditorToolb
     canRedo: true,
     onUndo: vi.fn(),
     onRedo: vi.fn(),
-    onSplit: vi.fn(),
-    splitDisabled: false,
-    onDeleteSelected: vi.fn(),
-    deleteDisabled: false,
     onAddImage: vi.fn(),
     onExport: vi.fn(),
     exportDisabled: false,
@@ -51,11 +47,17 @@ function renderRail(overrides: Partial<EditorToolRailProps> = {}): EditorToolRai
 let rerenderRail: (next: Partial<EditorToolRailProps>) => void = () => {};
 
 describe("EditorToolbar", () => {
-  it("renders the six actions", () => {
+  it("renders the four actions that stay in the title bar", () => {
     renderToolbar();
-    for (const name of ["Undo", "Redo", "Add image", "Split here", "Delete segment", "Export"]) {
+    for (const name of ["Undo", "Redo", "Add image", "Export"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
+  });
+
+  it("no longer holds split and delete: they moved to the transport bar (NIW2-664)", () => {
+    renderToolbar();
+    expect(screen.queryByRole("button", { name: "Split here" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete segment" })).toBeNull();
   });
 
   it("fires onExport on click, and is disabled per exportDisabled", () => {
@@ -131,10 +133,6 @@ describe("EditorToolbar", () => {
     expect(props.onUndo).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "Redo" }));
     expect(props.onRedo).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole("button", { name: "Split here" }));
-    expect(props.onSplit).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole("button", { name: "Delete segment" }));
-    expect(props.onDeleteSelected).toHaveBeenCalledOnce();
   });
 
   it("clicking Add image opens the hidden file input, and picking a file fires onAddImage", () => {
@@ -155,27 +153,17 @@ describe("EditorToolbar", () => {
     const props = renderToolbar({
       canUndo: false,
       canRedo: false,
-      splitDisabled: true,
-      deleteDisabled: true,
     });
     const undoBtn = screen.getByRole("button", { name: "Undo" });
     const redoBtn = screen.getByRole("button", { name: "Redo" });
-    const splitBtn = screen.getByRole("button", { name: "Split here" });
-    const deleteBtn = screen.getByRole("button", { name: "Delete segment" });
 
     expect(undoBtn).toBeDisabled();
     expect(redoBtn).toBeDisabled();
-    expect(splitBtn).toBeDisabled();
-    expect(deleteBtn).toBeDisabled();
 
     fireEvent.click(undoBtn);
     fireEvent.click(redoBtn);
-    fireEvent.click(splitBtn);
-    fireEvent.click(deleteBtn);
     expect(props.onUndo).not.toHaveBeenCalled();
     expect(props.onRedo).not.toHaveBeenCalled();
-    expect(props.onSplit).not.toHaveBeenCalled();
-    expect(props.onDeleteSelected).not.toHaveBeenCalled();
   });
 });
 
@@ -206,14 +194,6 @@ describe("EditorToolbar — v2 tooltip shortcuts (PR 10 polish)", () => {
     );
     expect(screen.getByRole("button", { name: "Undo" })).toHaveAttribute("title", "Undo (⌘Z)");
     expect(screen.getByRole("button", { name: "Redo" })).toHaveAttribute("title", "Redo (⇧⌘Z)");
-    expect(screen.getByRole("button", { name: "Split here" })).toHaveAttribute(
-      "title",
-      "Split here (S)",
-    );
-    expect(screen.getByRole("button", { name: "Delete segment" })).toHaveAttribute(
-      "title",
-      "Delete segment (⌫)",
-    );
   });
 
   it("prints Windows key names, never macOS glyphs, when the bridge reports win32", () => {
@@ -229,10 +209,6 @@ describe("EditorToolbar — v2 tooltip shortcuts (PR 10 polish)", () => {
       expect(screen.getByRole("button", { name: "Redo" })).toHaveAttribute(
         "title",
         "Redo (Ctrl+Shift+Z)",
-      );
-      expect(screen.getByRole("button", { name: "Delete segment" })).toHaveAttribute(
-        "title",
-        "Delete segment (Del)",
       );
     } finally {
       api.platform = original;

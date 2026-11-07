@@ -1,0 +1,181 @@
+/*
+ * The editor's transport bar (NIW2-664): everything that acts on the timeline, in one
+ * short row under the video. Three columns, `1fr auto 1fr`, so the play button stays
+ * optically centred however wide the side clusters get: the left holds the Tracks
+ * trigger and the counts, the centre rewind / play / forward and the time, the right
+ * the actions (split, delete, mute) and fullscreen.
+ */
+.transport {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-md);
+  /* Short on purpose (NIW2-611): one compact row of 28 px controls. */
+  padding: 4px var(--space-md);
+  border-top: 1px solid var(--line);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+  /* The counts pick their wording from this bar's own width (see .countShort), not the
+     window's: the inspector column takes 288 px of it. Only the inline size is
+     contained, and it comes from the parent, never from the content. */
+  container: transport / inline-size;
+}
+
+.side {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.right {
+  justify-content: flex-end;
+  /* Icon buttons sit closer to each other than a count sits to a button. */
+  gap: 6px;
+}
+
+/* Rewind / play / forward are the whole centre column, so play sits on the bar's
+   centre line. The time hangs off the column's right edge instead of widening it: in
+   flow it would push play left by half its own width (measured in the real app: 60 px). */
+.centre {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+/* Play/pause: the primary transport action, a small accent square (NIW2-611). */
+.playButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--accent-primary);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.playButton:hover {
+  background: var(--accent-primary-hover);
+}
+
+.playButton:active {
+  transform: scale(0.96);
+}
+
+/* Secondary controls: subtle so they do not compete with play. Rewind and forward are
+   borderless (they flank play); the right-hand actions carry the editor's outline. */
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.iconButton:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.iconButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Added on top of .iconButton. */
+.skipButton {
+  border-color: transparent;
+}
+
+/* The Tracks trigger: a labelled button, not an icon. Disabled until PR 2 gives it a
+   popover. */
+.tracksButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.tracksButton:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.tracksButton:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Out of flow, so it takes no layout width: it overlaps the right cluster once the
+   right `1fr` falls under ~240 px (~255 px for a 10-minute-plus time). At the editor's
+   1180 px floor that column is ~336 px (measured, NIW2-664), so there is room today.
+   A wider centre column (it narrows both sides) or a new right-hand button must
+   re-check this. */
+.timeDisplay {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + var(--space-md));
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* "4 zooms detected" · "2 private regions" (UI spec § 5). */
+.counts {
+  position: relative;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.countShort {
+  display: none;
+}
+
+/* Measured at the editor's 1180 px floor (stage 827 px, side columns ~336 px): the
+   Spanish sentences need ~344 px (more with 2-digit counts), so both counts were cut
+   to "4 zooms detectad…". Below 880 px of bar the short form ("4 zooms") shows instead,
+   and the full sentence stays for screen readers and the tooltip. At 880 px the side
+   columns are ~374 px, enough for the longest full pair we measured (~357 px). */
+@container transport (max-width: 880px) {
+  .countFull {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .countShort {
+    display: inline;
+  }
+}
