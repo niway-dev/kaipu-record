@@ -64,6 +64,15 @@ per SHA for a before/after. Electron starts only on the mini (`ssh macmini`), ne
 The state ids are in `apps/kaipu-record/ui-catalog/catalog/README.md`. The catalog publishes
 nothing unless `ui-catalog:publish` is run, so this is safe on a branch.
 
+Run it for the screens a UI change touches as soon as the change compiles, before any review, and
+open every PNG. Unit tests run in jsdom, which has no layout, so collapsed columns, truncated copy
+and overlapping badges show up only in these pictures.
+
+`.evidence/` is relative to the checkout the command runs in. When that checkout is a worktree
+(`git rev-parse --git-dir` differs from `git rev-parse --git-common-dir`), its `.evidence/` is
+deleted with the worktree, and a hook removes the worktree right after `gh pr create`. Copy the
+PNGs the PR needs to the main checkout's `.evidence/` (or `/tmp`) before opening the PR.
+
 ### Renderer component in a harness (fallback only)
 
 Label every shot from here as a harness shot: it proves what a component renders, never main's
@@ -173,6 +182,9 @@ all there is, the proof row says so.
 - Verifying a stale build: rebuild after every code change; check `out/` is newer than your last edit.
 - Skipping `finish()`: no video is written, and the app process may linger.
 - Running from the main checkout instead of the PR's worktree.
+- `git worktree add <path> <branch>` fails with "already used by worktree" when the owner has the
+  PR branch checked out (to test it). Work detached instead: `git worktree add --detach <path>
+origin/<branch>`, commit there, `git push origin HEAD:<branch>`. Never switch the owner's checkout.
 - Committing `test-results/`, or pasting artifact paths as evidence: a local path is not a link a reviewer can open.
 - Treating a seeded fixture (`sample.mp4`) as a real recording: say so in the proof row.
 
