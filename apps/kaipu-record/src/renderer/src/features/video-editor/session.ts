@@ -19,6 +19,10 @@
  * drops the layer (the session loads, the sidecar re-seeds it); numbers clamp; overlapping and
  * invalid segments are dropped individually. Whether the recording HAS a webcam is the sidecar's call, not
  * this file's: see `reconcileWebcam` in scene.ts.
+ *
+ * `background` (ADR 0051) is additive too: absent or damaged → the default (none, 0, 0, 0), an
+ * unknown preset → none, numbers clamp to the screenshot editor's PADDING/RADIUS/SHADOW ranges.
+ * Older builds ignore the key, so a session with a background opens there without one.
  */
 import { ZOOM_DEFAULTS, ZOOM_LIMITS, type ZoomSegment } from "./zoom/zoom-model";
 import { clampIntensity, REDACTION, type NormRect, type Redaction } from "./privacy/redaction";
@@ -60,6 +64,7 @@ export interface VideoEditSession {
 }
 
 import { parseCursorSettings } from "./cursor/cursor-model";
+import { parseBackground } from "./background";
 
 export function serializeSession(scene: VideoScene): string {
   return JSON.stringify({ version: 1, scene });
@@ -183,6 +188,9 @@ export function parseSession(json: string): VideoEditSession | null {
       audioMuted,
       mutedRanges,
       webcam,
+      // Additive like `webcam`: absent, a wrong shape or an unknown preset is the default,
+      // never a rejected session; the numbers clamp to the screenshot editor's ranges.
+      background: parseBackground(sceneRaw["background"]),
     },
     hasZoomData,
   };

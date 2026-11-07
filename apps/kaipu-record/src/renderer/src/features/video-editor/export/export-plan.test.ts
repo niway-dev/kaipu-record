@@ -148,3 +148,29 @@ describe("buildExportPlan: the webcam layer", () => {
     expect(buildExportPlan({ ...initialScene(10), items: [clip("a", 0, 10)] }).webcam).toBeNull();
   });
 });
+
+describe("the background in the plan (NIW2-668)", () => {
+  const scene = { ...initialScene(10), items: [clip("a", 0, 10)] };
+
+  it("carries the scene's background, the default for a plain scene", () => {
+    expect(buildExportPlan(scene).background).toEqual({
+      bg: "none",
+      padding: 0,
+      radius: 0,
+      shadow: 0,
+    });
+    const magenta = { bg: "magenta", padding: 48, radius: 16, shadow: 24 } as const;
+    expect(buildExportPlan({ ...scene, background: magenta }).background).toEqual(magenta);
+  });
+
+  it("falls back to the default for a scene without the field", () => {
+    const { background: _background, ...legacy } = scene;
+    expect(buildExportPlan(legacy).background.bg).toBe("none");
+  });
+
+  it("keeps it through a GIF range slice", () => {
+    const magenta = { bg: "magenta", padding: 48, radius: 16, shadow: 24 } as const;
+    const plan = buildExportPlan({ ...scene, background: magenta });
+    expect(sliceExportPlan(plan, 2, 4).background).toEqual(magenta);
+  });
+});

@@ -237,6 +237,9 @@ export const UI_MAP = {
       tracksPopover: { states: ["open"] },
       toolbar: { states: ["default", "saving", "saved"] },
       inspector: { states: ["detection", "zoom", "mute", "webcam", "annotation", "privacy"] },
+      // The Background section at the top of the inspector with nothing selected (ADR 0051):
+      // `default` is none with the sliders disabled, `set` is a preset with padding, corners, shadow.
+      background: { states: ["default", "set"] },
       timeline: { states: ["default", "zoomed"] },
       zoomLane: { states: ["empty", "segments"] },
       webcamLane: { states: ["segments"] },

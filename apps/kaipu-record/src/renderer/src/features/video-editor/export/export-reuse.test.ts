@@ -75,6 +75,98 @@ describe("editFingerprint — webcam", () => {
   });
 });
 
+describe("editFingerprint — background (NIW2-668)", () => {
+  const track = {
+    startOffsetMs: 0,
+    offsetQuality: "exact",
+    width: 1280,
+    height: 720,
+    fps: 30,
+  } as const;
+  const fixed = (webcam: typeof track | null): VideoScene => {
+    const scene = initialScene(10, webcam);
+    return { ...scene, items: [{ ...scene.items[0]!, id: "clip" }] };
+  };
+  const MAGENTA = { bg: "magenta", padding: 48, radius: 16, shadow: 24 } as const;
+
+  it("fingerprints a plain scene exactly as before the background existed (pinned)", () => {
+    // Taken from the code before this change: every export already made from a plain scene
+    // must still match.
+    expect(editFingerprint(fixed(null))).toBe("edit:2bdufz02r20");
+    expect(editFingerprint(fixed(null), true)).toBe("edit:cursor3:czrk19yfc6");
+    expect(editFingerprint(fixed(track))).toBe("edit:wc2:3sdivqr4ok");
+    expect(editFingerprint(fixed(track), true)).toBe("edit:cursor3:3sdivqr4ok");
+  });
+
+  it("is unchanged by a none background, even with stored padding, radius and shadow", () => {
+    // With none the three numbers are kept but never drawn, so they are not part of the edit.
+    const stored = { bg: "none", padding: 48, radius: 16, shadow: 24 } as const;
+    for (const [webcam, cursor] of [
+      [null, false],
+      [null, true],
+      [track, false],
+      [track, true],
+    ] as const) {
+      const plain = fixed(webcam);
+      expect(editFingerprint({ ...plain, background: stored }, cursor)).toBe(
+        editFingerprint(plain, cursor),
+      );
+    }
+    // And through a session round trip, which re-parses the stored numbers.
+    const reloaded = parseSession(serializeSession({ ...fixed(null), background: stored }))!.scene;
+    expect(editFingerprint(reloaded)).toBe("edit:2bdufz02r20");
+  });
+
+  it("is tagged bg1 only when a background is set", () => {
+    const withBg = (webcam: typeof track | null) => ({ ...fixed(webcam), background: MAGENTA });
+    expect(editFingerprint(withBg(null))).toMatch(/^edit:bg1:[0-9a-z]+$/);
+    expect(editFingerprint(withBg(track))).toMatch(/^edit:wc2:bg1:[0-9a-z]+$/);
+    expect(editFingerprint(withBg(null), true)).toMatch(/^edit:cursor3:bg1:[0-9a-z]+$/);
+    expect(editFingerprint(withBg(track), true)).toMatch(/^edit:cursor3:bg1:[0-9a-z]+$/);
+    expect(editFingerprint(fixed(null))).not.toMatch(/bg1/);
+  });
+
+  it("changes with the preset and with each number once a background is set", () => {
+    const base = { ...fixed(null), background: MAGENTA };
+    const keys = new Set([
+      editFingerprint(base),
+      editFingerprint({ ...base, background: { ...MAGENTA, bg: "ocean" } }),
+      editFingerprint({ ...base, background: { ...MAGENTA, padding: 49 } }),
+      editFingerprint({ ...base, background: { ...MAGENTA, radius: 17 } }),
+      editFingerprint({ ...base, background: { ...MAGENTA, shadow: 25 } }),
+      editFingerprint(fixed(null)),
+    ]);
+    expect(keys.size).toBe(6);
+  });
+
+  it("is the same after a session save and reload", () => {
+    const scene = { ...fixed(null), background: MAGENTA };
+    const reloaded = parseSession(serializeSession(scene))!.scene;
+    expect(editFingerprint(reloaded)).toBe(editFingerprint(scene));
+  });
+
+  it("offers an old export for a plain scene but never for one with a background", () => {
+    const enc = (fingerprint: string) => encodeFingerprint(fingerprint, "balanced");
+    const plain = fixed(null);
+    const oldExport = exported("old", 1, {
+      preset: "balanced",
+      // The fingerprint a build without backgrounds stamped on this edit.
+      fingerprint: enc("edit:2bdufz02r20"),
+    });
+    expect(findReusableExports([oldExport], editFingerprint(plain)).balanced?.assetId).toBe("old");
+    expect(
+      findReusableExports([oldExport], editFingerprint({ ...plain, background: MAGENTA })),
+    ).toEqual({});
+  });
+
+  it("leaves Share's whole-recording fingerprint alone: it takes no scene at all", () => {
+    // Share composes `initialScene` (use-prepare-copy.ts), so a background set in the editor
+    // never reaches it; the fingerprint has no input that could carry one.
+    expect(wholeFingerprint(null)).toBe(WHOLE_RECORDING_FINGERPRINT);
+    expect(wholeFingerprint.length).toBe(1);
+  });
+});
+
 describe("editFingerprint", () => {
   it("is stable for the same scene and changes with any edit", () => {
     const scene = initialScene(10);

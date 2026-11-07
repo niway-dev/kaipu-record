@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { initialScene, type VideoScene } from "./scene";
 import { parseSession, serializeSession } from "./session";
+import { PADDING_RANGE, RADIUS_RANGE, SHADOW_RANGE } from "../screenshots/beautify/backgrounds";
+import { DEFAULT_BACKGROUND } from "./background";
 import { SESSION_BEFORE_WEBCAM } from "./session-before-webcam.fixture";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
@@ -609,4 +611,87 @@ describe("webcam layer", () => {
     });
     expect(parseSession(json)?.scene.zoomSegments).toHaveLength(1);
   });
+});
+
+// ── Background (NIW2-668, ADR 0051) ─────────────────────────────────────────────
+
+describe("background", () => {
+  const MAGENTA = { bg: "magenta", padding: 48, radius: 16, shadow: 24 } as const;
+  const withBackground = (background: unknown) =>
+    parseSession(
+      JSON.stringify({
+        version: 1,
+        scene: { items: [CLIP_ITEM], overlays: [], background },
+      }),
+    );
+
+  it("starts a fresh scene with no background", () => {
+    expect(initialScene(10).background).toEqual(DEFAULT_BACKGROUND);
+  });
+
+  it("round-trips a background", () => {
+    const scene: VideoScene = { ...initialScene(10), items: [CLIP_ITEM], background: MAGENTA };
+    expect(parseSession(serializeSession(scene))!.scene.background).toEqual(MAGENTA);
+  });
+
+  it("keeps the numbers stored under none, so choosing a preset again restores them", () => {
+    const stored = { bg: "none", padding: 48, radius: 16, shadow: 24 } as const;
+    expect(withBackground(stored)!.scene.background).toEqual(stored);
+  });
+
+  it("opens a session saved before backgrounds with the default, edits intact", () => {
+    // `withWebcam`-style: no `background` key at all, as every session written until now.
+    const old = JSON.stringify({ version: 1, scene: { items: [CLIP_ITEM], overlays: [] } });
+    const parsed = parseSession(old)!;
+    expect(parsed.scene.background).toEqual(DEFAULT_BACKGROUND);
+    expect(parsed.scene.items).toEqual([CLIP_ITEM]);
+    // And the frozen pre-webcam session, the oldest shape the parser still reads.
+    expect(parseSession(SESSION_BEFORE_WEBCAM)!.scene.background).toEqual(DEFAULT_BACKGROUND);
+  });
+
+  it("is additive: the file stays version 1 and every key an older build reads is unchanged", () => {
+    // An older build reads `version`, `scene.items`, `scene.overlays` and the keys of the
+    // earlier features by name and ignores any other, so a new key cannot make it reject
+    // the file; this pins that the new key is the ONLY difference.
+    const scene: VideoScene = { ...initialScene(10), items: [CLIP_ITEM], background: MAGENTA };
+    const written = JSON.parse(serializeSession(scene)) as {
+      version: number;
+      scene: Record<string, unknown>;
+    };
+    expect(written.version).toBe(1);
+    const { background, ...earlier } = written.scene;
+    expect(background).toEqual(MAGENTA);
+    const without = JSON.parse(serializeSession({ ...scene, background: undefined })) as {
+      scene: Record<string, unknown>;
+    };
+    expect(earlier).toEqual(without.scene);
+  });
+
+  it("clamps each number to the screenshot editor's range", () => {
+    const parsed = withBackground({ bg: "ocean", padding: 999, radius: 999, shadow: 999 })!;
+    expect(parsed.scene.background).toEqual({
+      bg: "ocean",
+      padding: PADDING_RANGE.max,
+      radius: RADIUS_RANGE.max,
+      shadow: SHADOW_RANGE.max,
+    });
+    expect(
+      withBackground({ bg: "ocean", padding: -5, radius: -5, shadow: -5 })!.scene.background,
+    ).toEqual({ bg: "ocean", padding: 0, radius: 0, shadow: 0 });
+  });
+
+  it("turns an unknown preset into none and a non-finite number into 0", () => {
+    const parsed = withBackground({ bg: "wallpaper", padding: null, radius: "16", shadow: 24 })!;
+    expect(parsed.scene.background).toEqual({ bg: "none", padding: 0, radius: 0, shadow: 24 });
+  });
+
+  it.each([["red"], [42], [[MAGENTA]], [true]])(
+    "loads the session with the default when the key is %j, instead of rejecting it",
+    (background: unknown) => {
+      const parsed = withBackground(background);
+      expect(parsed).not.toBeNull();
+      expect(parsed!.scene.background).toEqual(DEFAULT_BACKGROUND);
+      expect(parsed!.scene.items).toEqual([CLIP_ITEM]);
+    },
+  );
 });

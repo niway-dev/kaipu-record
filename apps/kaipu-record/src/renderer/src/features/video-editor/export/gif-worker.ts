@@ -113,6 +113,8 @@ function createFrameRenderer(
     overlayWindows: plan.overlayWindows,
     overlayBitmaps: new Map(msg.overlays.map((o) => [o.overlayId, o.bitmap])),
     webcam: plan.webcam,
+    // ADR 0051: composed on `full` (source size) like the rest, then downscaled by `grab()`.
+    background: plan.background,
   });
   const slides = new Map(msg.slides.map((s) => [s.assetId, s.bitmap]));
   const sink = track

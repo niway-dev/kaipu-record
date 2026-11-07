@@ -10,6 +10,7 @@ import type { AudioEdits } from "../audio-edits";
 import type { Redaction } from "../privacy/redaction";
 import { isSourceRangeVisible } from "../source-time";
 import type { WebcamScene } from "../webcam/webcam-model";
+import { DEFAULT_BACKGROUND, type VideoBackground } from "../background";
 
 export interface RenderClipSegment {
   kind: "clip";
@@ -60,6 +61,11 @@ export interface ExportPlan {
    * cheap, and the layer is decided per frame by `webcamAt`.
    */
   webcam: WebcamScene | null;
+  /**
+   * The picture's background (ADR 0051), drawn last by the composer; the worker reads
+   * `hasBackground` — with `none` the padding, radius and shadow are never drawn.
+   */
+  background: VideoBackground;
 }
 
 export function buildExportPlan(scene: VideoScene): ExportPlan {
@@ -108,6 +114,7 @@ export function buildExportPlan(scene: VideoScene): ExportPlan {
     // an undo of the cut.
     audio: { audioMuted: scene.audioMuted, mutedRanges: scene.mutedRanges },
     webcam: scene.webcam,
+    background: scene.background ?? DEFAULT_BACKGROUND,
   };
 }
 

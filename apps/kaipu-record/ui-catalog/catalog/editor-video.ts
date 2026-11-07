@@ -97,6 +97,7 @@ export const editorVideo = catalog(
         "editorVideo.toolRail:default",
         "editorVideo.toolbar:default",
         "editorVideo.inspector:detection",
+        "editorVideo.background:default",
         "editorVideo.timeline:default",
         "editorVideo.zoomLane:empty",
         "editorVideo.privacyLane:empty",
@@ -168,6 +169,39 @@ export const editorVideo = catalog(
         { click: { area: "editorVideo.timeline", part: { css: 'button[class*="pill"]' } } },
       ],
       demonstrates: ["editorVideo.preview:overlaySelected", "editorVideo.inspector:annotation"],
+    },
+    "background-set": {
+      profile: "default",
+      how: "Open “Walkthrough 1”, choose the Magenta background and set padding 48, corners 16 and shadow 24: the picture sits inset on the gradient.",
+      steps: [
+        open(ASSETS.walkthrough),
+        loaded,
+        {
+          click: {
+            area: "editorVideo.background",
+            part: { role: "button", name: "Magenta", exact: true },
+          },
+        },
+        ...(
+          [
+            ["Padding", "48"],
+            ["Corners", "16"],
+            ["Shadow", "24"],
+          ] as const
+        ).map(
+          ([name, value]): Step => ({
+            fill: { area: "editorVideo.background", part: { role: "slider", name, exact: true } },
+            value,
+          }),
+        ),
+        saved,
+      ],
+      demonstrates: ["editorVideo.background:set"],
+      ready: { video: true },
+      // The background saved into the vault (autosave, then a flush on unmount): without this the
+      // later states that open “Walkthrough 1” find the magenta frame, and the shot can race the
+      // “Saving…” chip.
+      after: [{ action: "restoreVault" }],
     },
     "tool-box": {
       profile: "default",

@@ -7,12 +7,12 @@ description: A recording gets a background (the screenshot editor's presets), pa
 
 ## Status
 
-| Field         | Value                                                                                                                                                                                                                                                                                                                                                   |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Status        | Proposed — owner decisions 2026-11-06, nothing implemented. [NIW2-663](https://linear.app/niway/issue/NIW2-663/video-editor-transport-bar-with-cutdeletemutespeed-tracks-popover). Spec: [editor transport bar, Tracks popover, speed, timeline zoom and backgrounds](/specs/2026-11-06-editor-transport-tracks-backgrounds-design/), PR 5 of the stack |
-| Date          | 2026-11-06                                                                                                                                                                                                                                                                                                                                              |
-| Relates to    | [0038](/architecture/decisions/0038-webcam-is-a-viewport-layer-composed-after-the-zoom-crop/) (the webcam stays inside the picture), [0003](/architecture/decisions/0003-export-never-replaces-the-original/) (a background is an edit; the export is a new file), [0001](/architecture/decisions/0001-mediabunny-over-ffmpeg/) (drawn in the composer) |
-| Superseded by | —                                                                                                                                                                                                                                                                                                                                                       |
+| Field         | Value                                                                                                                                                                                                                                                                                                                                                      |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Accepted, 2026-11-07 — built by [NIW2-668](https://linear.app/niway/issue/NIW2-668/editor-stack-55-backgrounds-padding-radius-shadow-in-preview-mp4-and), PR 5 of the stack. Owner decisions 2026-11-06. Spec: [editor transport bar, Tracks popover, speed, timeline zoom and backgrounds](/specs/2026-11-06-editor-transport-tracks-backgrounds-design/) |
+| Date          | 2026-11-06                                                                                                                                                                                                                                                                                                                                                 |
+| Relates to    | [0038](/architecture/decisions/0038-webcam-is-a-viewport-layer-composed-after-the-zoom-crop/) (the webcam stays inside the picture), [0003](/architecture/decisions/0003-export-never-replaces-the-original/) (a background is an edit; the export is a new file), [0001](/architecture/decisions/0001-mediabunny-over-ffmpeg/) (drawn in the composer)    |
+| Superseded by | —                                                                                                                                                                                                                                                                                                                                                          |
 
 ## Context
 
@@ -46,15 +46,41 @@ radius; shadow }` uses the screenshot editor's `BackgroundId` and its slider con
    clipped to the radius, with the shadow. The preset's output size is unchanged; the picture
    shrinks. For fixed-canvas presets the background replaces the letterbox when `bg ≠ none`.
    The webcam is composed before this step, so it stays inside the picture.
+
+   _Built as:_ for a fixed-canvas preset the picture is the framed recording, not the whole
+   target canvas. The view is framed Fit or Fill into the box the padding leaves, onto a card
+   canvas of that size, and the card gets the radius and the shadow; the cursor and the webcam are
+   drawn on the card. Rounding the whole target would round a transparent letterbox and leave a
+   Fit picture with square corners.
+
 4. **One geometry for preview and export.** `backgroundFrame(background, w, h)` returns the
    picture rectangle, the scaled radius and shadow; the preview applies them as CSS on the stage
    at its displayed size, the composer as canvas calls at the output size. The three numbers are
    expressed at a 1080 px-high reference and scaled by `h / 1080`, so every preset shows the
    same proportions.
+
+   _Built as:_ it returns `{ box, picture, radius, shadow }`. The padding insets `box` on every
+   side and the picture keeps the output's aspect inside it, so the margin is `padding` on the
+   shorter axis and wider on the other: a uniform inset would squash a 16:9 picture by about 4 %
+   at padding 48. The shadow is `{ offsetY, blur, alpha }`: its offset and blur scale with the
+   output, its darkness does not.
+
+   Each side's padding is capped at 25 % of the output's smaller dimension and the radius at half of
+   the picture's smaller side, so a tall, narrow output (128×2160 scales the padding by 2) keeps its
+   picture inside the canvas and at least half of it; the cap binds only above a 1 : 2.8 aspect, so
+   no preset moves.
+
+   The preview's frame paints the preset's **paint** (`previewFrameBackground`: a hex, or the
+   same 135° gradient string), never the screenshot editor's `css`, whose Dark and Carbon are theme
+   tokens: with the token the preview of a Dark background was near-white in the light theme while
+   the file is near-black. The screenshot editor keeps its tokens; the video preview is literal.
+
 5. **Export reuse.** `BACKGROUND_COMPOSE_REVISION = "bg1"` is added to the edit fingerprint only
    when `bg ≠ none`. With `none`, padding, radius and shadow are stored but not drawn and the
    sliders are disabled, so a plain scene's fingerprint does not change and its old exports
-   keep matching.
+   keep matching. `editFingerprint` enforces it by removing `background` from the normalised scene
+   when `bg = none` (as it does a default `cursor`), because `parseSession` fills the default and
+   would otherwise change the hash of every plain scene.
 
 ## Alternatives rejected
 
@@ -78,10 +104,15 @@ radius; shadow }` uses the screenshot editor's `BackgroundId` and its slider con
   `backgroundFrame`; tests on the geometry at 1920×1080, 1080×1920 and 1080×1080.
 - `compose-output-frame.ts` gains `background?`; a picture canvas is allocated only when a
   background is set, so a plain scene costs nothing new. The GIF worker passes the same option.
+- The paint and the shadow are identical in every frame, so the composer renders them once into a
+  cached, output-sized canvas per (size, preset, picture rect) and each frame blits it: without a GPU
+  the per-frame fill and blur cost 15 ms at 1080p and 27 ms at 1440p, over a 60 fps frame's 16.7 ms;
+  cached, 7 and 13 ms, with identical pixels. A plain scene never builds it.
 - `compose-frame.ts`'s framer skips its black/blur padding when the background paints.
 - `preview-stage.tsx` wraps `.content` in a `.frame`; the ambient glow stays behind it.
-- `session.ts` parses the field; `export-reuse.ts` adds `bg1`; the inspector shows the
-  screenshot editor's `BeautifyPanel` with a `VideoBackground` state when nothing is selected.
+- `session.ts` parses the field; `export-reuse.ts` adds `bg1`; the inspector reuses the
+  screenshot panel's shared swatch grid and the video inspector's `HistorySlider` for the three
+  sliders (`disabled` while `bg = none`) when nothing is selected.
 - `ui-map.ts` declares `editorVideo.background { default, set }`.
 - A quality test samples the padding pixels under a 2× zoom and on a Vertical export.
 

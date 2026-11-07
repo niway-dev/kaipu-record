@@ -40,24 +40,26 @@ function rule(css: string, selector: string): string {
   return match[1]!.replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
-describe("the preview picture box", () => {
-  const content = rule(stageCss, ".content");
+describe("the preview frame box", () => {
+  // NIW2-668: the sizing rules moved from `.content` to `.frame`, the box that IS the output;
+  // the picture inside it is the whole frame with no background and an inset rect with one.
+  const frame = rule(stageCss, ".frame");
 
   it("is sized from its container, never from the viewport", () => {
     // A viewport unit here is the bug: the stage row is shorter than the viewport
     // whenever the timeline lanes grow or the window is short.
-    expect(content).not.toMatch(/\d+vh/);
-    expect(content).not.toMatch(/\d+vw/);
+    expect(frame).not.toMatch(/\d+vh/);
+    expect(frame).not.toMatch(/\d+vw/);
   });
 
   it("derives its width from the container height and the frame ratio", () => {
     // Both axes must bind against the SAME box for the result to keep the ratio.
-    expect(content).toMatch(/cqh\s*\*\s*var\(--frame-ratio\)/);
-    expect(content).toMatch(/cqw/);
+    expect(frame).toMatch(/cqh\s*\*\s*var\(--frame-ratio\)/);
+    expect(frame).toMatch(/cqw/);
   });
 
   it("caps its height on the container, so the picture always fits", () => {
-    expect(content).toMatch(/max-height:[^;]*cqh/);
+    expect(frame).toMatch(/max-height:[^;]*cqh/);
   });
 
   it("has a container to measure: the video region establishes one", () => {
@@ -68,6 +70,38 @@ describe("the preview picture box", () => {
   });
 
   it("keeps viewport units for fullscreen, where the viewport IS the container", () => {
-    expect(rule(stageCss, ".contentExpanded")).toMatch(/vh|vw/);
+    expect(rule(stageCss, ".frameExpanded")).toMatch(/vh|vw/);
+  });
+
+  it("paints its background from the preset's own CSS, and none when no preset is set", () => {
+    expect(frame).toMatch(/background:\s*var\(--frame-bg,\s*none\)/);
+  });
+});
+
+describe("the preview picture inside the frame (NIW2-668)", () => {
+  const picture = rule(stageCss, ".picture");
+  const content = rule(stageCss, ".content");
+
+  it("fills the frame by default, so a scene with no background looks exactly as before", () => {
+    expect(picture).toMatch(/position:\s*absolute/);
+    expect(picture).toMatch(/top:\s*0/);
+    expect(picture).toMatch(/left:\s*0/);
+    expect(picture).toMatch(/width:\s*100%/);
+    expect(picture).toMatch(/height:\s*100%/);
+  });
+
+  it("clips what is zoomed inside it, so a zoom never reaches the padding", () => {
+    expect(picture).toMatch(/overflow:\s*hidden/);
+  });
+
+  it("holds the content layer at exactly the picture's size, with no sizing of its own", () => {
+    expect(content).toMatch(/width:\s*100%/);
+    expect(content).toMatch(/height:\s*100%/);
+    expect(content).not.toMatch(/cqh|cqw|vh|vw|aspect-ratio/);
+  });
+
+  it("leaves the ambient glow on the video region, behind the frame", () => {
+    expect(rule(pageCss, ".videoRegion")).toMatch(/radial-gradient/);
+    expect(stageCss).not.toMatch(/radial-gradient/);
   });
 });

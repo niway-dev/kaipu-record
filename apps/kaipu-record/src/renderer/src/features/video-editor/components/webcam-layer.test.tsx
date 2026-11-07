@@ -444,8 +444,11 @@ describe("PreviewStage — webcam slot", () => {
     );
     const webcam = screen.getByTestId("slot-webcam");
     expect(contentRef.current!.contains(webcam)).toBe(false);
-    const stage = container.firstElementChild!;
-    const children = Array.from(stage.children);
+    // The layers are siblings inside the picture (NIW2-668): the content layer carries the
+    // camera transform, the webcam and the chrome sit beside it, untransformed.
+    const picture = contentRef.current!.parentElement!;
+    expect(container.contains(picture)).toBe(true);
+    const children = Array.from(picture.children);
     expect(children.indexOf(webcam)).toBe(children.indexOf(contentRef.current!) + 1);
     expect(children.indexOf(screen.getByTestId("slot-chrome"))).toBe(children.indexOf(webcam) + 1);
   });

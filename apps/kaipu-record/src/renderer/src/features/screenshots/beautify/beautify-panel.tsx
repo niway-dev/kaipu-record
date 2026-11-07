@@ -1,12 +1,7 @@
 import React from "react";
 import { useTranslations } from "@kaipu/i18n";
-import {
-  BACKGROUNDS,
-  backgroundCss,
-  PADDING_RANGE,
-  RADIUS_RANGE,
-  SHADOW_RANGE,
-} from "./backgrounds";
+import { PADDING_RANGE, RADIUS_RANGE, SHADOW_RANGE } from "./backgrounds";
+import { BackgroundSwatches } from "./background-swatches";
 import type { BeautifyController } from "./use-beautify";
 import styles from "./beautify-panel.module.css";
 import { uiArea } from "@renderer/lib/ui-area";
@@ -21,19 +16,11 @@ export function BeautifyPanel({ beautify }: { beautify: BeautifyController }): R
       <p className={styles.heading}>{t("beautifyHeading")}</p>
 
       <p className={styles.label}>{t("background")}</p>
-      <div className={styles.swatches}>
-        {BACKGROUNDS.map((bg) => (
-          <button
-            key={bg.id}
-            type="button"
-            title={t(bg.nameKey)}
-            aria-label={t(bg.nameKey)}
-            className={`${styles.swatch} ${state.bg === bg.id ? styles.selected : ""}`}
-            style={{ background: backgroundCss(bg.id) }}
-            onClick={() => commit({ bg: bg.id })}
-          />
-        ))}
-      </div>
+      <BackgroundSwatches
+        value={state.bg}
+        onSelect={(bg) => commit({ bg })}
+        className={styles.swatchesSpacing}
+      />
 
       <Slider
         label={t("padding")}

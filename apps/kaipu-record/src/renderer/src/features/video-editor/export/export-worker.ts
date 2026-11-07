@@ -273,6 +273,8 @@ async function runExportWithInput(
     overlayWindows: plan.overlayWindows,
     overlayBitmaps: new Map(msg.overlays.map((o) => [o.overlayId, o.bitmap])),
     webcam: plan.webcam,
+    // ADR 0051: the preset's background around the picture, drawn last; `none` draws nothing.
+    background: plan.background,
     framing: view
       ? {
           view,

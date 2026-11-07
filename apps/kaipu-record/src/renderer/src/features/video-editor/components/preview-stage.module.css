@@ -11,46 +11,65 @@
   border-radius: 4px;
 }
 
-/* v2: everything that belongs to the FOOTAGE (video, slide, privacy regions,
-   annotations) lives here and receives the camera transform.
+/* The FRAME (NIW2-668): the output, ratio-exact. With a background set it is painted with the
+   preset's paint (`--frame-bg`: a hex or the 135° gradient the export draws) and the picture inside is
+   inset; with `none` the picture fills it and nothing differs from before the background.
 
-   It also takes over the contained-player caps that used to sit on .video, plus an
-   explicit aspect-ratio fed from the decoded frame size (--frame-ratio, set inline on
-   loadedmetadata). Shrink-wrapping the <video> is not enough: when the HEIGHT cap binds,
-   a max-content wrapper keeps its full width while the video letterboxes inside it, and
-   the camera box — positioned, sized and drag-converted in percentages of THIS element —
-   would frame a rectangle that is not the picture. `width: min(capW, capH × ratio)` lets
-   both caps bind while keeping the ratio exact, so this box IS the picture. */
-.content {
+   It takes over the sizing rules the content layer used to carry, word for word, because the
+   invariant moved with them: THE FRAME IS THE OUTPUT, EXACTLY. Both axes bind against the
+   SAME box, and that box is the container, not the viewport. `d491b7d` capped only the height
+   row-relative (`min(46vh, 100%)`) and left the width deriving from `46vh`; below roughly an
+   850 px window the stage row is shorter than 46vh, so the height clamped while the width kept
+   its larger viewport figure. The box stopped matching the ratio and, with a zoom applied, the
+   bottom of the recorded screen was cut off — the exact failure this rule makes
+   unexpressible.
+
+   Container query units say what a viewport unit cannot: "the height of the row I am
+   actually in". .videoRegion carries `container-type: size` for them to resolve against.
+   `width: min(capW, capH × ratio)` lets both caps bind while keeping the ratio exact. */
+.frame {
   position: relative;
-  transform-origin: 0 0;
   aspect-ratio: var(--frame-ratio);
-  /* THE INVARIANT: this box is the picture, exactly. Every geometry in the editor — the
-     camera box, its scrim, the zoom transform, privacy regions, annotations — is stored
-     and dragged as a percentage of this element, so the moment it is wider or taller than
-     the picture, all of it frames a rectangle the user is not looking at, and .stage's
-     `overflow: hidden` clips the difference.
-
-     Both axes therefore bind against the SAME box, and that box is the container, not the
-     viewport. `d491b7d` capped only the height row-relative (`min(46vh, 100%)`) and left
-     the width deriving from `46vh`; below roughly an 850 px window the stage row is
-     shorter than 46vh, so the height clamped while the width kept its larger viewport
-     figure. The box stopped matching the ratio and, with a zoom applied, the bottom of the
-     recorded screen was cut off — the exact failure this rule now makes unexpressible.
-
-     Container query units say what a viewport unit cannot: "the height of the row I am
-     actually in". .videoRegion carries `container-type: size` for them to resolve
-     against. */
   width: min(100cqw, calc(100cqh * var(--frame-ratio)));
   max-width: 100cqw;
   max-height: 100cqh;
+  background: var(--frame-bg, none);
 }
 
 /* Fullscreen: lift the compact caps, keep the ratio. */
-.contentExpanded {
+.frameExpanded {
   width: min(100vw, calc(100vh * var(--frame-ratio)));
   max-width: 100vw;
   max-height: 100vh;
+}
+
+/* The PICTURE: the output's picture, which is the whole frame with `none` and, with a
+   background, a ratio-exact rect inset by the padding (left/top/width/height inline, in
+   display px, from the same `backgroundFrame` the export draws with), rounded and shadowed.
+
+   THE INVARIANT, now here: this box is the picture, exactly. Every geometry in the editor —
+   the camera box, its scrim, the zoom transform, privacy regions, annotations, the cursor and
+   the webcam — is stored and dragged as a percentage of it, so it must be neither wider nor
+   taller than the picture. `overflow: hidden` clips a zoom to the picture (and to its rounded
+   corners): a zoom never reaches the padding. The shadow is outside this box, so it is not
+   clipped by it; the stage clips it at the frame, as the export's canvas does. */
+.picture {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* v2: everything that belongs to the FOOTAGE (video, slide, privacy regions, annotations)
+   lives here and receives the camera transform. It fills the picture, which already has the
+   exact aspect ratio, so there is nothing to size. */
+.content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-origin: 0 0;
 }
 
 /* The video fills a box that already has its exact aspect ratio, so there is nothing to

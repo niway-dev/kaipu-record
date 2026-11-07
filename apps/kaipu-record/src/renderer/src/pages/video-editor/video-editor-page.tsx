@@ -74,6 +74,7 @@ import {
   EditorInspector,
   InspectorEmptyState,
 } from "@renderer/features/video-editor/components/inspector/editor-inspector";
+import { BackgroundPanel } from "@renderer/features/video-editor/components/inspector/background-panel";
 import { DetectionPanel } from "@renderer/features/video-editor/components/inspector/detection-panel";
 import { ZoomInspector } from "@renderer/features/video-editor/components/inspector/zoom-inspector";
 import {
@@ -167,6 +168,7 @@ const sxEditor = stylex.create({
     textTransform: "uppercase",
   },
 });
+import { useBackgroundEditing } from "@renderer/features/video-editor/use-background-editing";
 import { useMuteEditing } from "@renderer/features/video-editor/use-mute-editing";
 import { AudioLane } from "@renderer/features/video-editor/components/audio-lane";
 import { MuteInspector } from "@renderer/features/video-editor/components/inspector/mute-inspector";
@@ -537,6 +539,9 @@ function VideoEditor({
     cursorTrack,
   });
   const mutes = useMuteEditing(controller, layout, source.durationSeconds);
+  // The picture's background, padding, corners and shadow (ADR 0051): a scene field like a
+  // zoom, so the undo history, the session and the export fingerprint all carry it.
+  const backgroundEdits = useBackgroundEditing(controller);
   const webcamEdits = useWebcamEditing({
     controller,
     layout,
@@ -1417,6 +1422,7 @@ function VideoEditor({
               slideUrl={slideUrl}
               expanded={isFullscreen}
               contentRef={contentRef}
+              background={backgroundEdits.background}
               onFrameSize={(size) => {
                 setSourceHeight(size.height);
                 setFrameSize(size);
@@ -1731,6 +1737,7 @@ function VideoEditor({
               // drawing tool is armed, or the Detection panel.
               <>
                 <InspectorEmptyState tool={videoTools.tool} />
+                <BackgroundPanel edits={backgroundEdits} />
                 {videoTools.tool === "box" ||
                 videoTools.tool === "arrow" ||
                 videoTools.tool === "text" ? (

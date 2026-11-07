@@ -13,6 +13,7 @@ import type { LibraryVideo } from "@renderer/features/library/types";
 import type { VideoScene } from "../scene";
 import { DEFAULT_CURSOR } from "../cursor/cursor-model";
 import type { WebcamScene } from "../webcam/webcam-model";
+import { hasBackground } from "../background";
 import { parseSession, serializeSession } from "../session";
 import { encodeFingerprint, type ExportPresetId } from "./export-presets";
 
@@ -57,6 +58,11 @@ function hash53(text: string): string {
 
 /** The composer revision that draws the webcam layer; bump it when that drawing changes. */
 export const WEBCAM_COMPOSE_REVISION = "wc2";
+/**
+ * The composer revision that draws the background (ADR 0051); bump it when that drawing
+ * changes. Tagged only when a background is set: with `none` the scene is the plain picture.
+ */
+export const BACKGROUND_COMPOSE_REVISION = "bg1";
 
 /**
  * The editor's fingerprint: the scene as the export burns it in. Hashed in its saved form
@@ -64,7 +70,22 @@ export const WEBCAM_COMPOSE_REVISION = "wc2";
  * `parseSession` — gives the same fingerprint as the in-memory scene that was exported.
  */
 export function editFingerprint(scene: VideoScene, editableCursor = false): string {
-  const saved = parseSession(serializeSession(scene))?.scene ?? scene;
+  // The background is part of the edit only when one is drawn (ADR 0051): with `none` its
+  // stored padding, radius and shadow are never drawn, so a plain scene hashes exactly as it
+  // did before the key existed and its old exports stay reusable. With one, the field is
+  // hashed and the fingerprint carries the composer revision that first drew it, so an
+  // export made before then (which has no frame around the picture) is never offered.
+  const { background, ...saved } = parseSession(serializeSession(scene))?.scene ?? scene;
+  const drawn = background && hasBackground(background) ? background : null;
+  const fingerprint = (revision: string | null, body: object): string =>
+    [
+      "edit",
+      revision,
+      drawn ? BACKGROUND_COMPOSE_REVISION : null,
+      hash53(stableStringify(drawn ? { ...body, background: drawn } : body)),
+    ]
+      .filter(Boolean)
+      .join(":");
   // A recording without a webcam hashes as it did before the layer existed, so the exports
   // already made from it stay reusable. With one, the layer is hashed (a layout change is a
   // new export) and the fingerprint is tagged with the composer revision that first drew it
@@ -74,12 +95,11 @@ export function editFingerprint(scene: VideoScene, editableCursor = false): stri
   // so a pre-overlay export can never be reused as an export containing the pointer.
   const { cursor, ...rest } = saved;
   const normalized = stableStringify(cursor) === stableStringify(DEFAULT_CURSOR) ? rest : saved;
-  if (editableCursor)
-    return `edit:${CURSOR_COMPOSE_REVISION}:${hash53(stableStringify(normalized))}`;
+  if (editableCursor) return fingerprint(CURSOR_COMPOSE_REVISION, normalized);
   const { webcam, ...withoutWebcam } = normalized;
   return webcam
-    ? `edit:${WEBCAM_COMPOSE_REVISION}:${hash53(stableStringify(normalized))}`
-    : `edit:${hash53(stableStringify(withoutWebcam))}`;
+    ? fingerprint(WEBCAM_COMPOSE_REVISION, normalized)
+    : fingerprint(null, withoutWebcam);
 }
 
 /**

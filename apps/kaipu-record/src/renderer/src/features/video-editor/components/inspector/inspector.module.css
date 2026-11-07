@@ -10,6 +10,16 @@
   padding: var(--space-lg);
 }
 
+/* A section above the selection panels, shown with nothing selected (the Background section,
+   NIW2-668). It does not grow: `.panel` below it takes the leftover height. */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  border-bottom: 1px solid var(--line);
+}
+
 .header {
   display: flex;
   align-items: center;

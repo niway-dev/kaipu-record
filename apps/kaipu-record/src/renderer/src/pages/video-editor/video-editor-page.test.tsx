@@ -1885,3 +1885,182 @@ describe("VideoEditorPage — timeline zoom (NIW2-667)", () => {
     expect(zoomed).toEqual(atFit);
   });
 });
+
+describe("VideoEditorPage — background (NIW2-668)", () => {
+  const MAGENTA = { bg: "magenta", padding: 48, radius: 16, shadow: 24 } as const;
+
+  // The saved-session fake is shared; start each test from none, and put it back after.
+  let loadSession: typeof window.electronAPI.loadVideoEditSession;
+  const savedSession = (json: string | null): void => {
+    window.electronAPI.loadVideoEditSession = vi.fn(async () =>
+      json === null ? null : { sessionJson: json, assets: [] },
+    );
+  };
+  beforeEach(() => {
+    loadSession = window.electronAPI.loadVideoEditSession;
+    savedSession(null);
+    startExport.mockClear();
+    stubDecodedVideoSize(1280, 720);
+    // The preview frame measures itself; jsdom lays nothing out.
+    vi.spyOn(Element.prototype, "clientWidth", "get").mockReturnValue(960);
+    vi.spyOn(Element.prototype, "clientHeight", "get").mockReturnValue(540);
+  });
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    window.electronAPI.loadVideoEditSession = loadSession;
+    stubDecodedVideoSize(0, 0);
+  });
+
+  const picture = (): HTMLElement => screen.getByTestId("preview-picture");
+  const swatch = (name: string): HTMLElement => screen.getByRole("button", { name });
+  const slider = (name: string): HTMLInputElement =>
+    screen.getByRole("slider", { name }) as HTMLInputElement;
+  const exportedArgs = async (): Promise<{
+    scene: { background?: unknown };
+    fingerprint: string;
+  }> => {
+    startExport.mockClear();
+    clickExportVideo();
+    await waitFor(() => expect(startExport).toHaveBeenCalledOnce());
+    return (startExport.mock.calls[0] as unknown[])[0] as never;
+  };
+
+  it("shows the Background section above Detection with nothing selected: none, sliders disabled, picture fills the frame", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    const section = await screen.findByRole("region", { name: "Background" });
+    const inspector = document.querySelector('[data-testid="editor-inspector"]')!;
+    expect(inspector.contains(section)).toBe(true);
+    const detection = screen.getByRole("heading", { name: "Detection" });
+    expect(
+      section.compareDocumentPosition(detection) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(within(section).getAllByRole("button")).toHaveLength(9);
+    expect(swatch("None")).toHaveAttribute("aria-pressed", "true");
+    for (const name of ["Padding", "Corners", "Shadow"]) expect(slider(name)).toBeDisabled();
+    expect(slider("Padding")).toHaveValue("0");
+    expect(picture().style.left).toBe("");
+    expect(screen.getByTestId("preview-frame").style.getPropertyValue("--frame-bg")).toBe("");
+  });
+
+  it("choosing Magenta enables the sliders; padding 48, corners 16, shadow 24 insets the picture on the gradient", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    await screen.findByRole("region", { name: "Background" });
+    fireEvent.click(swatch("Magenta"));
+    for (const name of ["Padding", "Corners", "Shadow"]) expect(slider(name)).toBeEnabled();
+    fireEvent.change(slider("Padding"), { target: { value: "48" } });
+    fireEvent.change(slider("Corners"), { target: { value: "16" } });
+    fireEvent.change(slider("Shadow"), { target: { value: "24" } });
+    expect(screen.getByTestId("preview-frame").style.getPropertyValue("--frame-bg")).toBe(
+      "linear-gradient(135deg, #ff2d6e, #a3044a)",
+    );
+    // 960×540 stage: 48 px at 1080 is 24 px, the radius 8 px, the picture keeps 16:9.
+    expect(parseFloat(picture().style.top)).toBeCloseTo(24, 6);
+    expect(parseFloat(picture().style.borderRadius)).toBeCloseTo(8, 6);
+    expect(parseFloat(picture().style.height)).toBeCloseTo(492, 6);
+    expect(picture().style.boxShadow).toMatch(/^0 \d/);
+  });
+
+  it("hands the export the background in the scene, and bg1 in the fingerprint; a plain scene has neither", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    await screen.findByRole("region", { name: "Background" });
+    const plain = await exportedArgs();
+    expect(plain.fingerprint).not.toMatch(/bg1/);
+    cleanup();
+
+    savedSession(serializeSession({ ...initialScene(30), background: MAGENTA }));
+    renderEditor();
+    await waitForEditorLoaded();
+    const withBackground = await exportedArgs();
+    expect(withBackground.scene.background).toEqual(MAGENTA);
+    expect(withBackground.fingerprint).toMatch(/^edit:bg1:[0-9a-z]+$/);
+    expect(withBackground.fingerprint).not.toBe(plain.fingerprint);
+  });
+
+  it("keeps the old fingerprint for none, even with stored numbers", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    const plain = await exportedArgs();
+    cleanup();
+    savedSession(
+      serializeSession({
+        ...initialScene(30),
+        background: { bg: "none", padding: 48, radius: 16, shadow: 24 },
+      }),
+    );
+    renderEditor();
+    await waitForEditorLoaded();
+    const stored = await exportedArgs();
+    // The scene's items carry fresh ids per open, so compare what the fingerprint keys on: the
+    // tag, which is absent for none.
+    expect(stored.fingerprint).not.toMatch(/bg1/);
+    expect(stored.fingerprint.split(":")).toHaveLength(plain.fingerprint.split(":").length);
+  });
+
+  it("restores the background when the editor is opened again", async () => {
+    savedSession(serializeSession({ ...initialScene(30), background: MAGENTA }));
+    renderEditor();
+    await waitForEditorLoaded();
+    await screen.findByRole("region", { name: "Background" });
+    expect(getToasts().map((toast) => toast.message)).toContain("Restored your previous edit");
+    expect(swatch("Magenta")).toHaveAttribute("aria-pressed", "true");
+    expect(slider("Padding")).toHaveValue("48");
+    expect(slider("Corners")).toHaveValue("16");
+    expect(slider("Shadow")).toHaveValue("24");
+    expect(parseFloat(picture().style.top)).toBeCloseTo(24, 6);
+    expect(screen.getByTestId("preview-frame").style.getPropertyValue("--frame-bg")).toContain(
+      "#ff2d6e",
+    );
+  });
+
+  it("saves the background with the session", async () => {
+    const save = vi.spyOn(window.electronAPI, "saveVideoEditSession");
+    renderEditor();
+    await waitForEditorLoaded();
+    await screen.findByRole("region", { name: "Background" });
+    fireEvent.click(swatch("Ocean"));
+    clickExportVideo();
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    const json = (save.mock.calls[0] as unknown[])[1] as string;
+    expect(JSON.parse(json).scene.background).toMatchObject({ bg: "ocean" });
+    expect(JSON.parse(json).version).toBe(1);
+  });
+
+  it("opens a session saved before backgrounds as none, edits intact", async () => {
+    savedSession(SESSION_BEFORE_WEBCAM);
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    await screen.findByRole("region", { name: "Background" });
+    expect(footer.querySelector('[data-zoom-id="zoom-1"]')).not.toBeNull();
+    expect(swatch("None")).toHaveAttribute("aria-pressed", "true");
+    expect(slider("Padding")).toBeDisabled();
+  });
+
+  it("undo takes the background back, one step per click", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    await screen.findByRole("region", { name: "Background" });
+    fireEvent.click(swatch("Magenta"));
+    fireEvent.click(swatch("Ocean"));
+    expect(swatch("Ocean")).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(swatch("Magenta")).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(swatch("None")).toHaveAttribute("aria-pressed", "true");
+    expect(slider("Padding")).toBeDisabled();
+  });
+
+  it("keeps the camera-transformed content layer inside the picture, so a zoom never reaches the padding", async () => {
+    savedSession(serializeSession({ ...initialScene(30), background: MAGENTA }));
+    renderEditor();
+    await waitForEditorLoaded();
+    await screen.findByRole("region", { name: "Background" });
+    // The camera transform is written to the content layer, which lives inside the picture.
+    expect(picture().contains(screen.getByTestId("preview-content"))).toBe(true);
+    expect(screen.getByTestId("preview-frame").contains(picture())).toBe(true);
+    // That the picture clips (`overflow: hidden`) is a stylesheet fact: preview-stage-sizing.test.ts.
+  });
+});

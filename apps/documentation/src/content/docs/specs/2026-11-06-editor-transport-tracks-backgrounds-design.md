@@ -5,8 +5,9 @@ description: The video editor's chrome is reorganised around the transport bar. 
 
 # Editor transport bar, Tracks popover, speed, timeline zoom and backgrounds — design
 
-**Status: 🔵 Proposed · 2026-11-06.** Owner decisions taken on 2026-11-06 over three mocks (below);
-nothing is implemented. Ticket:
+**Status: 🟡 In progress · 2026-11-07.** Owner decisions taken on 2026-11-06 over three mocks
+(below). The stack is built PR by PR: each of sections 2–6 says what its PR built and measured, and
+section 6 (backgrounds) was built by PR 5 of the stack. Ticket:
 [NIW2-663](https://linear.app/niway/issue/NIW2-663/video-editor-transport-bar-with-cutdeletemutespeed-tracks-popover),
 which absorbs [NIW2-610](https://linear.app/niway/issue/NIW2-610/video-editor-zoom-the-timeline-with-horizontal-scroll)
 (timeline zoom) and [NIW2-612](https://linear.app/niway/issue/NIW2-612/video-editor-choose-which-timeline-lanes-are-visible)
@@ -52,7 +53,7 @@ in the session, and part of the export fingerprint.
 | 9   | **The background is a scene field** `scene.background: VideoBackground` with the screenshot editor's `BackgroundId`, `padding`, `radius` and `shadow`, default `none / 0 / 0 / 0` (today's picture). Saved in the session additively (version 1 stays).                                                                                                                                                                                                                            | Owner gap 6: "que sean los mismos para hacerlo bonito". It is content, not view: the export draws it, so it is part of the edit like a zoom. Additive like `webcam` and `cursor`.                                                                        | 0051 (new)  |
 | 10  | **The background is drawn as the outermost step**: `frame → redactions → annotations → zoom crop → framing → webcam → background`. The composed picture is inset by the padding, clipped to the radius, given the shadow, and the background fills the rest of the output canvas.                                                                                                                                                                                                  | Owner gap 7: the order stays. Everything the editor already draws is a picture; the background is a frame around that picture, as the screenshot compositor does it (`bg + padding + shot`). Putting it anywhere earlier would zoom or crop the padding. | 0051        |
 | 11  | **The padding keeps the output size and shrinks the picture.** A 1920×1080 preset stays 1920×1080; with padding the picture inside is smaller. Fixed-canvas presets (Vertical, Square) apply the background on their target canvas, replacing the black or blurred letterbox when `bg ≠ none`.                                                                                                                                                                                     | The output size is the preset's promise (YouTube 1440p, Square). Growing the canvas would break every preset's size and the size meter. The letterbox is already a background; the user's choice wins over the default one.                              | 0051        |
-| 12  | **Preview and export share one pure geometry** `backgroundFrame(bg, outputW, outputH) → { pictureRect, radius, shadow }`; the preview draws it with CSS on the stage, the composer with canvas, both from the same numbers, scaled like the screenshot compositor scales display px to natural.                                                                                                                                                                                    | The screenshot editor already keeps a preview and a compositor in step with one model (`backgrounds.ts`, `compositor.ts`); the video editor reuses the model and the rule.                                                                               | 0051        |
+| 12  | **Preview and export share one pure geometry** `backgroundFrame(bg, outputW, outputH) → { box, picture, radius, shadow }`; the preview draws it with CSS on the stage, the composer with canvas, both from the same numbers, scaled like the screenshot compositor scales display px to natural.                                                                                                                                                                                   | The screenshot editor already keeps a preview and a compositor in step with one model (`backgrounds.ts`, `compositor.ts`); the video editor reuses the model and the rule.                                                                               | 0051        |
 | 13  | **Export reuse**: `BACKGROUND_COMPOSE_REVISION = "bg1"` is added to the edit fingerprint when `bg ≠ none`. With `bg = none` the three numbers are kept but not drawn, the sliders are disabled, and the scene fingerprints exactly as today.                                                                                                                                                                                                                                       | Same rule as `wc2` and `cursor3`: an export made before the background existed must not be reused for a scene that has one, and a plain scene must keep matching its old exports.                                                                        | reuses 0003 |
 | 14  | **The Tracks popover and the background panel are the two new UI areas**, declared in `ui-map.ts` (`editorVideo.tracksPopover`, `editorVideo.background`) with catalog states, per ADR 0046. Transport gains `speed` and `zoomed` states.                                                                                                                                                                                                                                          | Every desktop UI PR declares its areas and states; the catalog is how the owner QAs without a build.                                                                                                                                                     | reuses 0046 |
 
@@ -132,7 +133,8 @@ hasWebcam })`, tested for a take without camera and without cursor track.
     `padding: "black" | "blur"` is bypassed and the background paints; `bg = none` keeps today's
     letterbox byte for byte.
 16. An old export is reused for a scene with a background → `bg1` in the fingerprint; a plain
-    scene's fingerprint is unchanged (snapshot test on both).
+    scene's fingerprint is unchanged, and so is a `none` scene with non-zero numbers (snapshot test
+    on both).
 17. A session with a wrong background shape crashes the parser → unknown `bg` → `none`; numbers
     clamped to `PADDING_RANGE`, `RADIUS_RANGE` and `SHADOW_RANGE` (the screenshot editor's
     constants, reused, not copied); non-finite → 0; absent → the default.
@@ -454,9 +456,21 @@ export function parseBackground(raw: unknown): VideoBackground;
 /** `bg !== "none"`. With `none`, padding, radius and shadow are stored but never drawn (preview
  *  or export): the MP4 has no alpha, so there is nothing honest to paint around the picture. */
 export function hasBackground(b: VideoBackground): boolean;
-/** The picture's rectangle inside an output of w×h, plus the scaled radius and shadow. */
-export function backgroundFrame(b: VideoBackground, w: number, h: number): { picture: Rect; radius: number; shadow: number };
+/** Where the picture sits inside an output of w×h, plus its radius and shadow in that output's px.
+ *  `box` is the output inset by the padding; `picture` is the output's aspect, as large as fits in
+ *  `box`, centred (a uniform inset would squash a 16:9 picture by ~4 % at padding 48).
+ *  `shadow` is `{ offsetY, blur, alpha }` in px (the screenshot's formula, no spread) or null. */
+export function backgroundFrame(b: VideoBackground, w: number, h: number): BackgroundFrame;
 ```
+
+**Built as:** `backgroundFrame` returns `{ box, picture, radius, shadow }` rather than
+`{ picture, radius, shadow: number }`, and the picture keeps its aspect inside the padding instead of
+being a uniform inset. Reality contradicted the sketch twice. A uniform inset of 48 px on a
+1920×1080 output draws the 1920×1080 picture into 1824×984, a 4.4 % vertical squash and the circles of
+a recording become ellipses; keeping the aspect means the margin is `padding` on the shorter axis and
+wider on the other (85 px at the sides of a 16:9 output). And the shadow is not one number: its offset
+and blur scale with the output but its darkness does not, so it carries all three. With `none` the
+frame is the whole output, no radius and no shadow, so no caller branches.
 
 `scene.background` is additive in session version 1; absent → the default (section 6.4). The
 `BACKGROUNDS` table and `BackgroundPaint` are imported from the screenshot editor's
@@ -468,43 +482,143 @@ editors import it; the ids and paints do not change.
 `h / 1080` for any output, so a preset at 1440p shows the same proportions as the preview
 (decision 12).
 
+Two caps keep an extreme output sane: each side's padding is at most 25 % of the output's smaller
+dimension (so the picture is always inside the canvas, centred and at least half of it on each axis;
+a 128×2160 recording scales 96 px to 192 px and used to lose the whole picture), and the radius is at
+most half of the picture's smaller side; the cap is a `min`, so it is continuous, and it binds only
+above a 1 : 2.8 aspect, so no preset or source-shaped output changes.
+
 ### 6.2 Composer
 
 `createOutputComposer` gains `background?: VideoBackground`. When `hasBackground`:
 
 1. The existing pipeline composes the picture exactly as today onto a **picture canvas** of the
-   output size (for framed presets, the framer's target; otherwise `ctx`'s canvas).
-2. The final canvas is filled with the background paint (solid, or the 135° gradient the
-   screenshot compositor uses; `none` never reaches this step, see `hasBackground`).
-3. The picture canvas is drawn into `backgroundFrame().picture` with a rounded-rect clip of
-   `radius` and a drop shadow of `shadow` (`ctx.shadowBlur`, the screenshot's shadow colour).
+   output size (for framed presets, see below; otherwise `ctx`'s canvas).
+2. The final canvas is filled with the background paint (solid, or the CSS `linear-gradient(135deg)`
+   the preview shows, which is the screenshot compositor's gradient on a square and exact corner to
+   corner on any aspect; `none` never reaches this step, see `hasBackground`).
+3. The picture canvas is drawn into `backgroundFrame().picture`, snapped to whole pixels, with a
+   rounded-rect clip of `radius` and a drop shadow of `shadow`. A canvas shadow follows the clip,
+   so it is drawn first: the caster is a rounded rect drawn one canvas-width off to the left with
+   `shadowOffsetX` bringing the shadow back, which leaves the shadow alone on the canvas and
+   nothing painted under the picture.
+
+Steps 2 and the shadow of 3 are the same in every frame, so they are rendered once into a cached
+backdrop canvas (output-sized, opaque) per (output size, preset, picture rect) and each frame blits it
+before drawing the clipped picture (section 6.5 has the numbers); a composer's inputs are fixed, so a
+changed size or background is a new composer with a new cache, and a plain scene never builds one.
 
 For framed presets the framer's `padding: "black" | "blur"` is skipped and the background paints
 the letterbox too (decision 11). The GIF worker passes the same option.
+
+**Built as, for framed presets.** The picture is the framed _recording_, not the whole target
+canvas: the view (frame → redactions → overlays → zoom crop, source size) is framed Fit or Fill into
+`backgroundFrame().box` onto a "card" canvas of exactly that rect's size, and the card is what gets
+the radius and the shadow. Rounding the whole target canvas would round the letterbox, which is
+transparent, and Fit would show square video corners. The cursor and the webcam are drawn on the
+card, so they are laid out against the picture and never over the background; the webcam of a plain
+Vertical export keeps laying out against the target canvas, as before. Slides frame Fit onto a card
+of their own.
 
 The webcam is composed in step 1, so it stays inside the picture (open question 3). The cursor,
 redactions, annotations and zoom all happen in step 1 and never see the padding (failure 14).
 
 ### 6.3 Preview
 
-`PreviewStage` gets a `background` prop. The stage wraps `.content` in a `.frame` element whose
-`background` is `BACKGROUNDS[bg].css`, and `.content` gets `inset`, `border-radius` and
-`box-shadow` from `backgroundFrame()` computed at the stage's displayed size — the same numbers
-the composer uses, in display px. The webcam layer and the annotation layer are inside
-`.content` and move with it. The ambient glow (NIW2-616) stays behind `.frame`.
+`PreviewStage` gets a `background` prop. The stage wraps the footage in a `.frame` element whose
+`background` is the preset's **paint** (a hex, or `linear-gradient(135deg, from, to)`), not the
+screenshot editor's `css`: that one is a theme token (`var(--bg-app)` for Dark, `var(--bg-card)` for Carbon), so it
+follows the app's theme while the MP4 and the GIF hold the fixed paint. And a `.picture` inside it gets `left`, `top`, `width`,
+`height`, `border-radius` and `box-shadow` from `backgroundFrame()` computed at the stage's displayed
+size — the same numbers the composer uses, in display px (`previewBackgroundStyle`, pure, tested
+against `backgroundFrame`). The ambient glow (NIW2-616) stays behind `.frame`, on the video region.
+
+**Built as:** `.frame` took over the container-query sizing rules `.content` carried (the frame is
+the output, ratio-exact), and `.picture` is a new box between them: with `none` it fills the frame,
+so a plain scene lays out as it did. `.content` fills the picture (width and height 100 %) and still
+receives the camera transform. The cursor, the webcam layer and the stage chrome are siblings of
+`.content` inside the picture — not inside `.content`, which would zoom them (ADR 0038) — so every
+percentage geometry in the editor (camera box, webcam, annotations, privacy regions) is relative to
+the picture, and `overflow: hidden` on `.picture` clips a zoom to it. The frame's size is read with
+a `ResizeObserver` before paint. The `<video>` is never remounted when the background changes.
 
 ### 6.4 Session, fingerprint, inspector
 
 - `session.ts`: `background` parsed by `parseBackground`; unknown `bg` → `none`; numbers clamped
   to the ranges above; absent → default. Older builds ignore the key.
 - `export-reuse.ts`: `BACKGROUND_COMPOSE_REVISION = "bg1"` joins the fingerprint tag when
-  `hasBackground`; the normalised scene already hashes the field.
-- Inspector: a "Background" section when nothing is selected, built from the screenshot editor's
-  `BeautifyPanel` with the `VideoBackground` state (same swatches, same sliders, same i18n keys
-  under `screenshots` reused through the panel). The three sliders are disabled while
-  `bg = none`, so a user never moves a slider and sees nothing change. Undo covers it (one history step per committed
-  slider change, like the zoom inspector).
+  `hasBackground`. `editFingerprint` removes `background` from the normalised scene when
+  `!hasBackground` (as it does a default `cursor`), because `parseSession` fills the default and
+  would otherwise change the hash of every plain scene.
+- Inspector: a "Background" section when nothing is selected, above Detection, built from the
+  screenshot editor's `BeautifyPanel` pieces (the swatch grid is now one shared component, used by
+  both panels; the names come from the `screenshots` namespace). The three sliders are the video
+  inspector's `HistorySlider`, which already carries the scene-history contract and a `disabled`
+  state, rather than the screenshot panel's private slider. They are disabled while `bg = none`, so
+  a user never moves a slider and sees nothing change. Undo covers it: one history step per
+  committed gesture, like the zoom inspector.
 - `ui-map.ts`: `editorVideo.background { default, set }`; catalog states for both.
+
+### 6.5 What PR 5 built and measured
+
+Measured on 2026-11-07 in the real Electron app on the Mac mini (default launch window, 900×720)
+with a generated recording — a flat green 1280×720 frame, 3 s, with a red 160×90 square in its
+top-left corner, so a sample says which part of the picture it landed on. "Before" is PR 4's head
+(`ef6ccabb`), "after" is this branch. `verify/background.verify.ts` drives the app and keeps every
+file; the numbers below come from decoding those files with ffmpeg to rgb24.
+
+| What                                      | Measured                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A plain scene exports as before           | Balanced (1280×720, 72 frames) and Vertical (1080×1920, 90 frames): every decoded frame has the same md5 before and after; the files have the same size. The plain GIF is byte-identical (same sha256).                                                                                                                                                                          |
+| `magenta`, 48, 16, 24, MP4 Balanced       | Output corners `(255,46,110)`, `(198,18,85)`, `(224,31,96)`, `(166,5,74)` against the preset's gradient `(255,45,110)` → `(163,4,74)` (±3: H.264). The picture spans x 57–1222, y 32–687, the rect `backgroundFrame` gives. Its top-left pixel is background `(246,42,110)`, so the corner is rounded; the shadow darkens the 4 px under it `(163,14,73)` against `(194,18,86)`. |
+| `magenta`, 48, 16, 24, MP4 Vertical (Fit) | Corners are the gradient, not the blurred letterbox of a plain Vertical `(0,109,0)`; the letterbox above the picture reads `(226,32,97)` against `(229,34,100)`; the picture spans x 85–993, y 704–1215 and is rounded and shadowed on its own, not the canvas.                                                                                                                  |
+| `magenta`, 48, 16, 24, GIF (640×360)      | Corners `(250,43,108)`, `(199,20,88)`, `(224,31,98)`, `(159,8,72)` (±6: the 256-colour palette); the picture spans x 29–610, y 16–343 against 28–611 predicted.                                                                                                                                                                                                                  |
+| The preview shows the same numbers        | Frame 488×274.5 px: the picture is inset 12.2 px, radius 4.07 px, shadow `0 2.75px 7.54px rgba(0,0,0,0.24)`; `backgroundFrame` at that size gives 12.22, 4.07, 2.75 and 7.54.                                                                                                                                                                                                    |
+| Export reuse                              | After a plain Balanced export the sheet offers "Open the existing Balanced file"; with a background set it does not.                                                                                                                                                                                                                                                             |
+
+The composer was also run, as it is, on a real Chrome 156 `OffscreenCanvas` (the module bundled
+alone: 15 modules, 36 KB, no `react` in it): the same numbers, plus a 2× zoom that leaves all four
+corners identical. The unit tests run it on a small software canvas (`test/soft-canvas.ts`), which
+checks where and in what order things are drawn, not Skia's rendering.
+
+**Per-frame cost (review S2, 2026-11-07).** The composer was bundled alone and run in a Web Worker in
+headless Chrome 156 (Apple M5), 200 frames per cell after warm-up, each frame forced to finish with a
+1×1 readback (`new VideoFrame(canvas)` alone only times the recording of the draw calls: 0.1 ms). "Plain"
+is no background; the background is `magenta`, padding 96, radius 28, shadow 100. Median ms/frame (p95):
+
+| GPU (ANGLE Metal), no zoom |     Plain | Background, per-frame paint | Background, cached |
+| -------------------------- | --------: | --------------------------: | -----------------: |
+| 1280×720                   | 0.3 (1.0) |                   0.5 (1.2) |          0.4 (0.5) |
+| 1920×1080                  | 0.3 (0.4) |                   0.8 (0.9) |          0.6 (0.7) |
+| 2560×1440                  | 0.5 (0.6) |                   1.1 (1.3) |          1.0 (1.1) |
+
+| Software raster (`--disable-gpu`), no zoom |     Plain | Background, per-frame paint | Background, cached |
+| ------------------------------------------ | --------: | --------------------------: | -----------------: |
+| 1280×720                                   | 0.3 (0.4) |                   6.5 (6.8) |          3.2 (3.4) |
+| 1920×1080                                  | 0.6 (0.7) |                 15.0 (15.9) |          7.1 (7.6) |
+| 2560×1440                                  | 1.0 (1.1) |                 26.7 (39.0) |        12.6 (14.3) |
+
+With a GPU the per-frame fill and shadow were never a problem (at most 0.7 ms over plain; the timer
+is 0.1 ms). Without one they were: 15 ms at 1080p and 27 ms at 1440p, over the 16.7 ms a 60 fps
+frame has, so the fill and the shadow are cached; that roughly halves the frame time and leaves every
+size under the budget. What remains is the picture's high-quality downscale into the padding, which the design
+asks for. With a 2× zoom the picture goes through the work canvas and costs 21 ms plain at 1080p on
+software raster (37 ms at 1440p) before any background; the cache brings the background's share of
+that from +68 % to +32 %. The cached frames are byte-identical to the per-frame paint: 56 scenes (four
+backgrounds, direct and zoomed, plain output and Fit/Fill fixed-canvas, plus 128×2160, clips then a
+slide) compared 164 M pixels in a real canvas, on GPU and on software raster, and no channel
+differed. An end-to-end export time was not measured: the encoder is not in this harness.
+
+Two facts the build did not match the plan on. **The GIF cannot be exported from the product today:**
+`GIF_EXPORT_ENABLED` is `false` (owner, 2026-10-13), so the sheet has no format choice; the GIF row
+was measured on a Mac mini build with that one constant flipped locally, which is not part of this
+PR. And **the annotation scale needed no fix.** The export rasterises at `videoWidth / previewWidth`
+and the page hands `video.clientWidth`, which with a background is the inset picture's width; the
+preview picture and the export's picture then share one magnification (`outputWidth / stageWidth`),
+so an annotation drawn at a screen size exports at the thickness previewed, with padding and without
+(`background-annotation-scale.test.ts`). Relative to the picture it is thicker on a smaller picture,
+in the preview and in the export alike. NIW2-670 (the scale follows the live preview width) stays as
+it was.
 
 ## 7. PR stack, order and difficulty
 

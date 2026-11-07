@@ -10,6 +10,7 @@ import type { MutedRange } from "./audio-edits";
 import { ZOOM_DEFAULTS, type ZoomSegment } from "./zoom/zoom-model";
 import type { Redaction } from "./privacy/redaction";
 import { seedWebcamScene, type WebcamScene } from "./webcam/webcam-model";
+import { DEFAULT_BACKGROUND, type VideoBackground } from "./background";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
 
 export interface ClipItem {
@@ -111,6 +112,12 @@ export interface VideoScene {
    * session (see `reconcileWebcam`).
    */
   webcam: WebcamScene | null;
+  /**
+   * The picture's background, padding, corner radius and shadow (ADR 0051): drawn around
+   * the composed picture as the outermost step of the preview, the MP4 and the GIF. Absent
+   * (a scene or a session from before backgrounds) = `DEFAULT_BACKGROUND`, today's picture.
+   */
+  background?: VideoBackground;
 }
 
 export function newId(): string {
@@ -141,7 +148,13 @@ export function initialScene(
     audioMuted: false,
     mutedRanges: [],
     webcam: seedWebcamScene(webcam, durationSeconds),
+    background: { ...DEFAULT_BACKGROUND },
   };
+}
+
+/** The scene's background, or the default for a scene that never set one. */
+export function backgroundOf(scene: Pick<VideoScene, "background">): VideoBackground {
+  return scene.background ?? DEFAULT_BACKGROUND;
 }
 
 /**
