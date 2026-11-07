@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.12.0](https://github.com/niway-dev/kaipu-record/compare/web-v0.11.0...web-v0.12.0) (2026-11-07)
+
+
+### Features
+
+* **web:** Kaipu Black on the landing's own palette (NIW2-617) ([2fc77b6](https://github.com/niway-dev/kaipu-record/commit/2fc77b695f07a285206dad10ca0ffaef8580b8b6))
+* **web:** Kaipu Black on the landing's own palette (NIW2-617) ([66e6f93](https://github.com/niway-dev/kaipu-record/commit/66e6f93ee9ce91c44a6f121471a981feb65b104d))
+
+
+### Bug Fixes
+
+* **web:** theme-color and token comments follow Kaipu Black (NIW2-617) ([28197bf](https://github.com/niway-dev/kaipu-record/commit/28197bf8d3c7db9541c38c1193c91e567a8e3a83))
+
 ## [0.11.0](https://github.com/niway-dev/kaipu-record/compare/web-v0.10.0...web-v0.11.0) (2026-10-20)
 
 
