@@ -5,7 +5,7 @@ description: Design for the video editor's second timeline. Typed tracks appear 
 
 # Editor timeline v2 — design
 
-**Status: 🔵 Proposed · 2026-10-31.** Owner decisions taken on 2026-10-31 in the design
+**Status: ⏸ Parked · 2026-11-06** (owner decision; the [editor transport, Tracks popover, speed, zoom and backgrounds design](/specs/2026-11-06-editor-transport-tracks-backgrounds-design/) and [ADR 0050](/architecture/decisions/0050-track-visibility-is-view-state-hidden-lanes-keep-their-edits/) take lane visibility and Activity-inside-Zooms; resuming this spec reopens 0050 before `removedTracks` returns). Originally: **🔵 Proposed · 2026-10-31.** Owner decisions taken on 2026-10-31 in the design
 conversation over the "Kaipu Timeline v2" Claude Design mock; nothing is implemented. No Linear
 ticket (the workspace is at its free issue limit). ADRs:
 [0039](/architecture/decisions/0039-camera-sections-with-eased-transitions/) (camera sections
