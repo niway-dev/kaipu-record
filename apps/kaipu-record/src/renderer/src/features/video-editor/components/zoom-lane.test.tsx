@@ -195,3 +195,64 @@ describe("ZoomLane", () => {
     ]);
   });
 });
+
+describe("ZoomLane — Cursor activity marks (ADR 0050 decision 4)", () => {
+  const renderMarks = (props: Partial<React.ComponentProps<typeof ZoomLane>>) =>
+    render(
+      <ZoomLane
+        layout={layout}
+        segments={[]}
+        selectedId={null}
+        onSelect={vi.fn()}
+        onEdgeDrag={vi.fn()}
+        {...props}
+      />,
+    );
+  const marksOf = (container: HTMLElement): HTMLElement[] => [
+    ...container.querySelectorAll<HTMLElement>("[data-activity-mark]"),
+  ];
+
+  it("places clicks on the timeline and hides clicks in deleted footage", () => {
+    const { container } = renderMarks({
+      marks: [
+        { kind: "click", t: 1.5 },
+        { kind: "click", t: 7 },
+        { kind: "click", t: 12 },
+      ],
+      showMarks: true,
+    });
+    const clicks = marksOf(container).filter((m) => m.dataset.activityMark === "click");
+    expect(clicks.map((c) => c.style.left)).toEqual(["10%", `${(7 / 15) * 100}%`]);
+  });
+
+  it("splits a dwell across a cut and sizes it by strength", () => {
+    const { container } = renderMarks({
+      marks: [{ kind: "dwell", start: 4, end: 11, strength: 1 }],
+      showMarks: true,
+    });
+    const bars = marksOf(container);
+    expect(bars).toHaveLength(2);
+    expect(bars.every((b) => b.dataset.activityMark === "dwell" && b.style.height === "8px")).toBe(
+      true,
+    );
+  });
+
+  it("draws nothing while showMarks is off, and by default", () => {
+    const marks = [{ kind: "click" as const, t: 1.5 }];
+    expect(marksOf(renderMarks({ marks, showMarks: false }).container)).toHaveLength(0);
+    expect(marksOf(renderMarks({ marks }).container)).toHaveLength(0);
+  });
+
+  it("keeps the marks out of the way of the zoom blocks (they never take a click)", () => {
+    const { container } = renderMarks({
+      segments: [zoom({ id: "z1", start: 1, end: 3 })],
+      marks: [{ kind: "click", t: 2 }],
+      showMarks: true,
+    });
+    const layer = container.querySelector<HTMLElement>("[data-activity-marks]");
+    expect(layer).not.toBeNull();
+    expect(layer?.getAttribute("aria-hidden")).toBe("true");
+    // The blocks are still the lane's buttons.
+    expect(container.querySelectorAll("[data-zoom-id]").length).toBeGreaterThan(0);
+  });
+});

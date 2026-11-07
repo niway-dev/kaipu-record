@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Layers,
   Maximize2,
@@ -14,7 +15,9 @@ import {
 import { useTranslations } from "@kaipu/i18n";
 import { uiArea } from "@renderer/lib/ui-area";
 import { skipTarget, type LayoutEntry } from "../timeline";
+import { visibleCount, type TrackKey } from "../tracks";
 import { editShortcuts, SPLIT_SHORTCUT } from "./editor-toolbar";
+import { TracksPopover } from "./tracks-popover";
 import styles from "./transport-bar.module.css";
 
 export interface TransportBarProps {
@@ -29,6 +32,13 @@ export interface TransportBarProps {
    *  track and none hand-made): the count is then not shown at all. */
   zoomCount: number | null;
   privacyCount: number;
+  /** The Tracks popover (NIW2-665): the lanes this recording can show, the ones the user
+   *  hid, and the toggle. View state only; nothing here reaches the preview or the export. */
+  tracks: {
+    available: readonly TrackKey[];
+    hidden: readonly TrackKey[];
+    onToggle(key: TrackKey): void;
+  };
   onTogglePlay(): void;
   onToggleMute(): void;
   onSeek(t: number): void;
@@ -67,7 +77,7 @@ function Count({ full, short }: { full: string; short: string }): React.JSX.Elem
 
 /**
  * Everything that acts on the timeline, in one row under the video (NIW2-664):
- * left, the Tracks trigger and the counts; centre, rewind / play / forward and the
+ * left, the Tracks trigger (it opens the lane popover) and the counts; centre, rewind / play / forward and the
  * time; right, split, delete, mute and fullscreen. The page keeps the handlers (and the
  * keyboard shortcuts that share them); this component only owns where the buttons sit.
  */
@@ -80,6 +90,7 @@ export function TransportBar({
   isFullscreen,
   zoomCount,
   privacyCount,
+  tracks,
   onTogglePlay,
   onToggleMute,
   onSeek,
@@ -91,15 +102,45 @@ export function TransportBar({
 }: TransportBarProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const shortcuts = editShortcuts();
+  const tracksButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [tracksOpen, setTracksOpen] = useState(false);
+  const closeTracks = useCallback(() => setTracksOpen(false), []);
+  // Only the stage goes fullscreen and the panel is portaled to <body>, so in fullscreen
+  // it would be invisible while focus sat inside it. The trigger is disabled there (the
+  // timeline footer is not drawn either), and a panel open when fullscreen starts closes.
+  useEffect(() => {
+    if (isFullscreen) setTracksOpen(false);
+  }, [isFullscreen]);
+  const { shown, total } = visibleCount(tracks.available, tracks.hidden);
 
   return (
     <div {...uiArea("editorVideo.transport")} className={styles.transport}>
       <div className={styles.side}>
-        {/* A placeholder: the Tracks popover arrives in the next PR of the stack. */}
-        <button type="button" className={styles.tracksButton} disabled aria-label={t("tracks")}>
-          <Layers size={14} />
-          {t("tracks")}
+        <button
+          ref={tracksButtonRef}
+          type="button"
+          className={`${styles.tracksButton} ${tracksOpen ? styles.tracksButtonOpen : ""}`}
+          aria-label={t("tracksLabel", { shown, total })}
+          aria-haspopup="menu"
+          aria-expanded={tracksOpen}
+          disabled={isFullscreen}
+          onClick={() => setTracksOpen((open) => !open)}
+        >
+          <Layers size={14} aria-hidden />
+          {t("tracks")}{" "}
+          <span className={styles.tracksCount}>
+            {shown}/{total}
+          </span>
         </button>
+        {tracksOpen && tracksButtonRef.current && (
+          <TracksPopover
+            anchor={tracksButtonRef.current}
+            available={tracks.available}
+            hidden={tracks.hidden}
+            onToggle={tracks.onToggle}
+            onClose={closeTracks}
+          />
+        )}
         {/* Shown whenever there is something to count: a pre-v2 recording has no
             cursor track but can still carry hand-made zooms. */}
         {zoomCount !== null && (

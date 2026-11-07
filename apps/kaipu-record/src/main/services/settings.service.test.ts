@@ -121,6 +121,7 @@ describe("mergeSettings", () => {
         duckSystemAudioWhileTalking: false,
       },
       microphone: { deviceId: "yeti", label: "Yeti Nano" },
+      editor: { hiddenTracks: [] },
     });
   });
 
@@ -537,5 +538,27 @@ describe("screenshotAfterCapture", () => {
     expect(
       mergeSettings({ screenshotAfterCapture: "unknown" as never }).screenshotAfterCapture,
     ).toBe("preview");
+  });
+});
+
+describe("mergeSettings — editor", () => {
+  it("shows every lane by default", () => {
+    expect(mergeSettings(null).editor).toEqual({ hiddenTracks: [] });
+    expect(mergeSettings({}).editor).toEqual({ hiddenTracks: [] });
+  });
+
+  it("keeps the stored hidden lanes, activity included, and drops clips and unknown keys", () => {
+    expect(
+      mergeSettings({
+        editor: { hiddenTracks: ["zooms", "activity", "clips", "overlay"] },
+      } as never).editor,
+    ).toEqual({ hiddenTracks: ["zooms", "activity"] });
+  });
+
+  it("survives a wrong shape", () => {
+    expect(mergeSettings({ editor: 3 } as never).editor).toEqual({ hiddenTracks: [] });
+    expect(mergeSettings({ editor: { hiddenTracks: "zooms" } } as never).editor).toEqual({
+      hiddenTracks: [],
+    });
   });
 });

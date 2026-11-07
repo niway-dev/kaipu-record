@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import { SESSION_BEFORE_WEBCAM } from "@renderer/features/video-editor/session-before-webcam.fixture";
+import { serializeSession } from "@renderer/features/video-editor/session";
+import { initialScene } from "@renderer/features/video-editor/scene";
+import { TRACK_KEYS } from "@renderer/features/video-editor/tracks";
 import { WEBCAM_DEFAULTS } from "@renderer/features/video-editor/webcam/webcam-model";
 import { setHeaderActionsElement } from "@renderer/features/workspaces/header-slot";
 import {
@@ -1263,5 +1266,306 @@ describe("VideoEditorPage — webcam track", () => {
     fireEvent.pointerDown(screen.getByTestId("webcam-layer"), { pointerId: 1 });
     expect(await screen.findByRole("heading", { name: "Webcam" })).toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Position" })).toBeInTheDocument();
+  });
+});
+
+describe("VideoEditorPage — Tracks popover (NIW2-665)", () => {
+  type Settings = Awaited<ReturnType<typeof window.electronAPI.getSettings>>;
+  type Patch = Parameters<typeof window.electronAPI.updateSettings>[0];
+  let writes: Patch[];
+  let original: Pick<
+    typeof window.electronAPI,
+    "getSettings" | "updateSettings" | "onSettingsChanged"
+  >;
+
+  /** A settings store that remembers what the page writes and tells its subscribers. */
+  function fakeSettings(hiddenTracks: string[]): void {
+    const base = original.getSettings();
+    const listeners = new Set<(s: Settings) => void>();
+    let current: Settings | null = null;
+    const read = async (): Promise<Settings> => {
+      current ??= { ...(await base), editor: { hiddenTracks } } as unknown as Settings;
+      return current;
+    };
+    window.electronAPI.getSettings = read;
+    window.electronAPI.updateSettings = async (patch: Patch) => {
+      writes.push(patch);
+      current = { ...(await read()), ...patch } as Settings;
+      listeners.forEach((listener) => listener(current!));
+      return current;
+    };
+    window.electronAPI.onSettingsChanged = (cb) => {
+      listeners.add(cb as (s: Settings) => void);
+      return () => listeners.delete(cb as (s: Settings) => void);
+    };
+  }
+
+  beforeEach(() => {
+    writes = [];
+    original = {
+      getSettings: window.electronAPI.getSettings,
+      updateSettings: window.electronAPI.updateSettings,
+      onSettingsChanged: window.electronAPI.onSettingsChanged,
+    };
+    stubDecodedVideoSize(1280, 720);
+  });
+  afterEach(() => {
+    Object.assign(window.electronAPI, original);
+    stubDecodedVideoSize(0, 0);
+  });
+
+  const laneLabels = (): string[] =>
+    [...document.querySelectorAll("footer span")]
+      .filter((el) => el.querySelector("svg") && el.textContent)
+      .map((el) => el.textContent ?? "");
+  const tracksTrigger = (): HTMLElement => screen.getByRole("button", { name: /^Tracks/ });
+
+  const EDITED = {
+    ...initialScene(30),
+    items: [{ id: "clip-1", kind: "clip" as const, sourceStart: 0, sourceEnd: 30 }],
+    overlays: [
+      {
+        id: "o1",
+        kind: "text" as const,
+        x: 0.4,
+        y: 0.4,
+        text: "still here",
+        size: 19,
+        color: "#000000",
+        start: 0,
+        end: 30,
+      },
+    ],
+    redactions: [
+      {
+        id: "r1",
+        kind: "cover" as const,
+        start: 0,
+        end: 30,
+        rect: { x: 0.1, y: 0.1, w: 0.2, h: 0.2 },
+        fill: "#18181b",
+        label: "",
+      },
+    ],
+    mutedRanges: [{ id: "m1", sourceStart: 3, sourceEnd: 5 }],
+    zoomSegments: [
+      {
+        id: "z1",
+        start: 1,
+        end: 10,
+        scale: 2,
+        mode: "fixed" as const,
+        anchor: { x: 0.25, y: 0.25 },
+        smoothing: 0,
+        origin: "manual" as const,
+        trigger: null,
+      },
+    ],
+  };
+
+  it("counts the lanes this take can show: 5/5 without a cursor track or a camera", async () => {
+    fakeSettings([]);
+    renderEditor();
+    await waitForEditorLoaded();
+    expect(tracksTrigger()).toHaveTextContent("Tracks 5/5");
+    expect(laneLabels()).toEqual(["Clips", "Zooms", "Privacy", "Audio"]);
+  });
+
+  it("has no Activity row any more", async () => {
+    fakeSettings([]);
+    renderEditor();
+    await waitForEditorLoaded();
+    expect(laneLabels()).not.toContain("Activity");
+    expect(document.querySelector("[data-testid='activity-lane']")).toBeNull();
+  });
+
+  it("draws the stored choice: a hidden lane is not on the timeline and the trigger counts it", async () => {
+    fakeSettings(["zooms", "privacy"]);
+    renderEditor();
+    await waitForEditorLoaded();
+    await waitFor(() => expect(tracksTrigger()).toHaveTextContent("Tracks 3/5"));
+    expect(laneLabels()).toEqual(["Clips", "Audio"]);
+  });
+
+  it("unchecking Zooms in the popover hides the lane and saves editor.hiddenTracks", async () => {
+    fakeSettings([]);
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(tracksTrigger());
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Zooms" }));
+    await waitFor(() => expect(laneLabels()).toEqual(["Clips", "Privacy", "Audio"]));
+    expect(writes).toEqual([{ editor: { hiddenTracks: ["zooms"] } }]);
+    expect(tracksTrigger()).toHaveTextContent("Tracks 4/5");
+  });
+
+  it("selecting a zoom while Zooms is hidden shows the lane again, with the zoom selected", async () => {
+    fakeSettings(["zooms"]);
+    renderEditor();
+    await waitForEditorLoaded();
+    await waitFor(() => expect(laneLabels()).toEqual(["Clips", "Privacy", "Audio"]));
+
+    // The Zoom tool adds a manual zoom at the playhead and selects it.
+    fireEvent.click(screen.getByRole("button", { name: "Zoom" }));
+    await screen.findByRole("heading", { name: "Zoom 1" });
+
+    await waitFor(() => expect(laneLabels()).toContain("Zooms"));
+    expect(writes).toEqual([{ editor: { hiddenTracks: [] } }]);
+    expect(document.querySelector("[data-zoom-id]")).not.toBeNull();
+  });
+
+  it("adding a mute while Audio is hidden shows the Audio lane again", async () => {
+    fakeSettings(["audio"]);
+    renderEditor();
+    await waitForEditorLoaded();
+    await waitFor(() => expect(laneLabels()).not.toContain("Audio"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Audio" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Mute a section/ }));
+
+    await waitFor(() => expect(laneLabels()).toContain("Audio"));
+    expect(writes).toEqual([{ editor: { hiddenTracks: [] } }]);
+  });
+
+  it("selecting something on a lane that is shown writes nothing", async () => {
+    fakeSettings(["privacy"]);
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Zoom" }));
+    await screen.findByRole("heading", { name: "Zoom 1" });
+    expect(writes).toEqual([]);
+  });
+
+  describe("hiding a lane clears a selection that lives on it", () => {
+    const kinds: { lane: string; heading: string; select(footer: HTMLElement): void }[] = [
+      {
+        lane: "Privacy",
+        heading: "Cover region",
+        select: (footer) => fireEvent.click(footer.querySelector('[data-redaction-block="r1"]')!),
+      },
+      {
+        lane: "Zooms",
+        heading: "Zoom 1",
+        select: (footer) => fireEvent.click(footer.querySelector('[data-zoom-id="z1"]')!),
+      },
+      {
+        lane: "Audio",
+        heading: "Muted section 1",
+        select: (footer) => fireEvent.click(footer.querySelector('[data-mute-id="m1"]')!),
+      },
+      {
+        lane: "Annotations",
+        heading: "Text",
+        // The annotation's pill in its lane: a button with an icon and no text.
+        select: (footer) => fireEvent.pointerDown(footer.querySelector('button[class*="_pill_"]')!),
+      },
+    ];
+
+    it.each(kinds)(
+      "$lane: hiding it deselects the item on it, so Delete cannot remove it unseen",
+      async ({ lane, heading, select }) => {
+        window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
+          sessionJson: serializeSession(EDITED),
+          assets: [],
+        }));
+        fakeSettings([]);
+        renderEditor();
+        const footer = await waitForEditorLoaded();
+        await waitFor(() => expect(laneLabels()).toContain(lane));
+        select(footer);
+        await screen.findByRole("heading", { name: heading });
+
+        fireEvent.click(tracksTrigger());
+        fireEvent.click(screen.getByRole("menuitemcheckbox", { name: lane }));
+        await waitFor(() => expect(laneLabels()).not.toContain(lane));
+        expect(screen.queryByRole("heading", { name: heading })).toBeNull();
+
+        // The page's Delete handler now has nothing selected: everything still exports.
+        fireEvent.keyDown(window, { key: "Delete" });
+        startExport.mockClear();
+        clickExportVideo();
+        await waitFor(() => expect(startExport).toHaveBeenCalledOnce());
+        const handed = (startExport.mock.calls[0] as unknown[])[0] as { scene: typeof EDITED };
+        expect(handed.scene.overlays).toHaveLength(1);
+        expect(handed.scene.redactions).toHaveLength(1);
+        expect(handed.scene.zoomSegments).toHaveLength(1);
+        expect(handed.scene.mutedRanges).toHaveLength(1);
+      },
+    );
+
+    it("leaves a selection on another lane alone", async () => {
+      window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
+        sessionJson: serializeSession(EDITED),
+        assets: [],
+      }));
+      fakeSettings([]);
+      renderEditor();
+      const footer = await waitForEditorLoaded();
+      await waitFor(() => expect(laneLabels()).toContain("Privacy"));
+      fireEvent.click(footer.querySelector('[data-zoom-id="z1"]')!);
+      await screen.findByRole("heading", { name: "Zoom 1" });
+      fireEvent.click(tracksTrigger());
+      fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Privacy" }));
+      await waitFor(() => expect(laneLabels()).not.toContain("Privacy"));
+      expect(screen.getByRole("heading", { name: "Zoom 1" })).toBeInTheDocument();
+    });
+  });
+
+  describe("hiding every lane changes no scene handed to the export (ADR 0050 decision 1)", () => {
+    const HIDEABLE = TRACK_KEYS.filter((key) => key !== "clips");
+
+    /** Open the saved edit with these lanes hidden, seek into the zoom, and export. */
+    async function openAndExport(hidden: string[]) {
+      window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
+        sessionJson: serializeSession(EDITED),
+        assets: [],
+      }));
+      fakeSettings(hidden);
+      startExport.mockClear();
+      renderEditor();
+      await waitForEditorLoaded();
+      await waitFor(() =>
+        expect(tracksTrigger()).toHaveTextContent(hidden.length ? /Tracks [1-9]\/5/ : "Tracks 5/5"),
+      );
+      const video = document.querySelector("video") as HTMLVideoElement;
+      video.currentTime = 4;
+      fireEvent(video, new Event("seeked"));
+      const preview = {
+        overlay: screen.queryByText("still here") !== null,
+        redaction: document.querySelector('[data-redaction-id="r1"]') !== null,
+        // The zoomed frame is the redaction layer's parent. A missing parent must fail the
+        // test, not read back as `undefined` on both sides and compare equal.
+        zoom: (
+          document.querySelector('[data-testid="redaction-layer"]')?.parentElement as
+            | HTMLElement
+            | undefined
+        )?.style.transform,
+      };
+      clickExportVideo();
+      await waitFor(() => expect(startExport).toHaveBeenCalledOnce());
+      const handed = (startExport.mock.calls[0] as unknown[])[0] as { scene: unknown };
+      return { preview, scene: structuredClone(handed.scene) };
+    }
+
+    it("keeps the annotation, the redaction and the zoom in the preview, and hands the export the same scene", async () => {
+      const shown = await openAndExport([]);
+      cleanup();
+      const hidden = await openAndExport(HIDEABLE);
+      expect(laneLabels()).toEqual(["Clips"]);
+      // Drawn in the preview whatever the timeline shows.
+      expect(shown.preview.overlay).toBe(true);
+      expect(shown.preview.redaction).toBe(true);
+      expect(shown.preview.zoom).toEqual(expect.stringMatching(/scale\(/));
+      expect(hidden.preview.zoom).toBe(shown.preview.zoom);
+      expect(hidden.preview).toEqual(shown.preview);
+      // And the export is handed the same scene: nothing dropped with its lane. (Annotation
+      // stroke scale follows the live preview width, which this test does not pin.)
+      expect(hidden.scene).toEqual(shown.scene);
+      expect(hidden.scene).toMatchObject({
+        overlays: [{ id: "o1" }],
+        redactions: [{ id: "r1" }],
+        zoomSegments: [{ id: "z1" }],
+        mutedRanges: [{ id: "m1" }],
+      });
+    });
   });
 });

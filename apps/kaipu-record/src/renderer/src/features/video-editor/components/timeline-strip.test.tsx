@@ -468,7 +468,7 @@ describe("TimelineStrip lanes", () => {
       .map((el) => el.textContent ?? "");
   }
 
-  function renderStrip(overlays: VideoOverlay[]): HTMLElement {
+  function renderStrip(overlays: VideoOverlay[], showOverlays?: boolean): HTMLElement {
     return render(
       <TimelineStrip
         layout={twoClipLayout}
@@ -477,6 +477,7 @@ describe("TimelineStrip lanes", () => {
         selectedItemId={null}
         onSelectItem={vi.fn()}
         overlays={overlays}
+        showOverlays={showOverlays}
         selectedOverlayId={null}
         onSelectOverlay={vi.fn()}
         extraLanes={[{ key: "zooms", label: "Zooms", icon: ZoomIn, node: <div /> }]}
@@ -490,6 +491,11 @@ describe("TimelineStrip lanes", () => {
 
   it("shows Annotations right under Clips once there is one", () => {
     expect(laneNames(renderStrip([box]))).toEqual(["Clips", "Annotations", "Zooms"]);
+  });
+
+  it("leaves the Annotations lane out while it is hidden in the Tracks popover", () => {
+    expect(laneNames(renderStrip([box], false))).toEqual(["Clips", "Zooms"]);
+    expect(laneNames(renderStrip([box], true))).toEqual(["Clips", "Annotations", "Zooms"]);
   });
 });
 

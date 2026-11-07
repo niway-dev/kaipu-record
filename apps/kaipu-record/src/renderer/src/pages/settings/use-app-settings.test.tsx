@@ -42,6 +42,7 @@ const SETTINGS: AppSettings = {
     duckSystemAudioWhileTalking: false,
   },
   microphone: null,
+  editor: { hiddenTracks: [] },
 };
 
 describe("useAppSettings", () => {

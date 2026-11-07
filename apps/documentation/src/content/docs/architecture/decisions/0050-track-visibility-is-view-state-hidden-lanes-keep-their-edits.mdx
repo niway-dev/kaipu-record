@@ -1,6 +1,6 @@
 ---
 title: "ADR 0050: Track visibility is per-user view state; a hidden lane keeps its edits in the preview and the export"
-description: The video editor's Tracks popover shows or hides timeline lanes. Hiding is view state saved per user in the settings store, never in the scene; the preview and the export are unchanged by it. Clips cannot be hidden, Audio can, and Cursor activity is a child of Zooms drawn inside its lane. Amends ADR 0040's "Audio always shown" and parks its removedTracks model.
+description: The video editor's Tracks popover shows or hides timeline lanes. Hiding is view state saved per user in the settings store, never in the scene; the scene, the preview's content and the export plan are unchanged by it. Clips cannot be hidden, Audio can, and Cursor activity is a child of Zooms drawn inside its lane. Amends ADR 0040's "Audio always shown" and parks its removedTracks model.
 ---
 
 # ADR 0050: Track visibility is per-user view state; a hidden lane keeps its edits in the preview and the export
@@ -31,10 +31,15 @@ exactly this: hide from the timeline only, per user. The timeline v2 design (202
 
 ## Decision
 
-1. **Hiding a lane is view state.** It changes what the timeline draws and nothing else: the
-   preview, the export plan, the GIF plan and the session never read it. A hidden Zooms lane
-   still zooms; a hidden Privacy lane still blurs; a hidden Audio lane still mutes where a range
-   says so.
+1. **Hiding a lane is view state.** It never changes the scene, the export plan or what the preview draws: the preview, the export plan, the GIF plan and the session never read it. The one export input it can change is `previewWidth` (below). A hidden Zooms lane still zooms; a hidden Privacy lane still blurs; a hidden
+   Audio lane still mutes where a range says so. What it does change is the timeline's height,
+   so a height-bound preview can grow and show a larger picture. The export scales annotation
+   stroke width, jitter, arrow heads and text by the video width over the preview's live width
+   (`previewWidth` in the page, `scale` in `export/overlay-raster.ts`; the same on `main`), so
+   those strokes follow the preview's size, as they do when the window is resized. The export
+   still matches what the user sees. Making that scale independent of the preview is a separate
+   follow-up (Linear: "Video editor: exported annotation stroke scale follows the live preview
+   width").
 2. **Saved per user**, in the app settings store as `editor.hiddenTracks: TrackKey[]`, like
    `exportQuality`. Not in the scene, not per recording. The parser drops `clips` and unknown
    keys and keeps `activity` as stored: Zooms shown with the marks off is a valid choice.
@@ -43,13 +48,19 @@ exactly this: hide from the timeline only, per user. The timeline v2 design (202
 4. **Cursor activity is a child of Zooms**: its marks draw inside the Zooms lane, under the
    blocks; the Activity row is removed. Hiding Zooms hides the marks too; the child checkbox is
    disabled, not changed, while the parent is off, so its stored value survives.
-5. **The trigger counts what this recording can show**: `Tracks n/m` is visible rows over
-   `availableTracks({ hasCursorTrack, hasWebcam })`. A lane the user turns on stays on, empty or
-   not.
+5. **The trigger counts what this recording can show**: `Tracks n/m` is the rows the timeline
+   draws over `availableTracks({ hasCursorTrack, hasWebcam })`. Cursor activity is not drawn while
+   Zooms is hidden, so it is not counted then (a take with a cursor track and Zooms hidden reads
+   `4/6`), although its stored value and its disabled checkbox stay as they were. A lane the
+   user turns on stays on, empty or not.
 6. **A selection is never invisible.** Selecting an item on a hidden lane (a zoom clicked on the
    preview, a mute reached through a shortcut) shows the lane first.
-7. **New lanes register in `availableTracks` and default to hidden** unless their PR argues
-   otherwise, so a lane added later never costs the video height by default.
+7. **A new lane registers its key in `TRACK_KEYS` and in `availableTracks`.** With the stored
+   shape (a list of hidden keys) a new lane is shown by default for every existing user, because
+   nobody has hidden it. Defaulting a future lane to hidden needs a stored map of the lanes the
+   user has already seen, so "never seen" can be told apart from "shown"; that map is built when
+   the first lane that wants to start hidden arrives, not now. A key this build does not know is
+   drawn, never hidden: a lane with no popover row could not be turned back on.
 
 ## Alternatives rejected
 
@@ -71,8 +82,9 @@ exactly this: hide from the timeline only, per user. The timeline v2 design (202
   `visibleCount`, all pure and tested.
 - `video-editor-page.tsx` filters `extraLanes` by key; `TimelineStrip` gains `showOverlays`;
   `ZoomLane` gains `marks`; `ActivityLane` is deleted.
-- `export-plan.ts`, the GIF plan and the preview take no new input; a test asserts the plan is
-  identical with every lane hidden.
+- `export-plan.ts`, the GIF plan and the preview take no new input; a page test asserts the scene handed to the export is identical with every lane hidden, and a separate test pins that nothing under `export/` or the preview imports the setting. The exported annotation stroke scale still
+  follows the live preview width (decision 1), so it can differ when hiding lanes resizes a
+  height-bound preview.
 - `ui-map.ts` declares `editorVideo.tracksPopover { open }` and the catalog gets a state.
 - The timeline v2 spec, if resumed, must reopen this ADR before reintroducing `removedTracks`
   (see its section 8 note in the 2026-11-06 spec).
@@ -90,5 +102,6 @@ exactly this: hide from the timeline only, per user. The timeline v2 design (202
   checkbox does.
 - Users ask for per-recording lane sets (for example a tutorial that always hides Privacy):
   move the key to the session as view data the export ignores.
-- A lane that is hidden by default under decision 7 turns out to be the one everybody opens
-  first: flip that lane's default, not the rule.
+- A new lane argues to start hidden (for example an Overlay or media-audio lane that would cost
+  the video height by default): add the stored map of known lanes from decision 7 and amend this
+  ADR then.

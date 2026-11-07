@@ -234,6 +234,7 @@ export const UI_MAP = {
       transport: { states: ["paused", "playing", "withCounts"] },
       toolRail: { states: ["default", "annotate", "privacy"] },
       toolFlyout: { states: ["audio"] },
+      tracksPopover: { states: ["open"] },
       toolbar: { states: ["default", "saving", "saved"] },
       inspector: { states: ["detection", "zoom", "mute", "webcam", "annotation", "privacy"] },
       timeline: { states: ["default"] },

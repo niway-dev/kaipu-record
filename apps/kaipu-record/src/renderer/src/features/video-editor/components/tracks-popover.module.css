@@ -1,0 +1,112 @@
+/* The Tracks popover (NIW2-665): a dark panel above the transport bar's Tracks trigger.
+   Portalled to the body with fixed coordinates, like the tool flyout, so the editor's
+   overflow-clipped regions cannot cut it. */
+.popover {
+  position: fixed;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  min-width: 264px;
+  padding: 12px 8px 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  box-shadow: var(--shadow-popover);
+}
+
+.title {
+  margin: 0 8px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-size-md, 14px);
+  text-align: left;
+  cursor: pointer;
+}
+
+.row:hover,
+.row:focus-visible {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  outline: none;
+}
+
+/* Cursor activity hangs under Zooms. */
+.nested {
+  padding-left: 26px;
+}
+
+/* Clips ("always") and Cursor activity while Zooms is hidden: present but not toggleable. */
+.row[aria-disabled="true"] {
+  cursor: default;
+}
+
+.row[aria-disabled="true"]:not(.always) {
+  opacity: 0.45;
+}
+
+.box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  color: transparent;
+}
+
+.box[data-checked="true"] {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+/* Clips: checked, grey. */
+.always .box[data-checked="true"] {
+  background: var(--bg-raised);
+  border-color: var(--line-strong);
+  color: var(--text-secondary);
+}
+
+.icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+}
+
+.alwaysTag {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.hint {
+  margin: 8px 0 0;
+  padding: 10px 8px 2px;
+  border-top: 1px solid var(--line);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  color: var(--text-muted);
+}

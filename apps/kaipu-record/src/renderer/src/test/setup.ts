@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, vi } from "vitest";
 import { cleanup, configure } from "@testing-library/react";
+import type { TrackKey } from "@shared/editor-settings";
 
 // Testing Library's default `findBy*` timeout is 1000 ms, which is this suite's
 // own CPU budget rather than a property of the product: under `turbo run test`
@@ -93,6 +94,7 @@ const STUB_SETTINGS = {
     duckSystemAudioWhileTalking: false,
   },
   microphone: null,
+  editor: { hiddenTracks: [] as TrackKey[] },
 } as const;
 
 // Vitest does not expose `afterEach` as a global (globals: false), so

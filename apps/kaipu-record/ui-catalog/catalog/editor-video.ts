@@ -210,6 +210,17 @@ export const editorVideo = catalog(
       steps: [open(ASSETS.bugReport), loaded, rail("Audio")],
       demonstrates: ["editorVideo.toolFlyout:audio"],
     },
+    "tracks-popover": {
+      profile: "default",
+      how: "Open “Team notes” and press Tracks in the transport bar: a panel lists the lanes with a checkbox each, Clips always on.",
+      steps: [
+        open(ASSETS.teamNotes),
+        loaded,
+        // The trigger's name carries the count ("Tracks, 5 of 5 shown"), so match the start.
+        { click: { area: "editorVideo.transport", part: { role: "button", name: "Tracks" } } },
+      ],
+      demonstrates: ["editorVideo.tracksPopover:open"],
+    },
     "mute-all": {
       profile: "default",
       how: "Open “Bug report” and press Mute the whole recording: the audio lane reads muted and the edit saves.",

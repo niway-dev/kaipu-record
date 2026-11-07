@@ -27,7 +27,7 @@ const HOVER_FLIP_FRACTION = 0.9;
 // would otherwise hang past the end of the ruler.
 const LAST_LABEL_FRACTION = 0.96;
 
-/** A lane stacked under the main track (Activity, Zooms, Privacy — video-editor v2). */
+/** A lane stacked under the main track (Zooms, Webcam, Privacy, Audio — video-editor v2). */
 export interface ExtraLane {
   key: string;
   /** Lane name for the label column. */
@@ -51,6 +51,7 @@ export function TimelineStrip({
   slideUrlFor,
   onSlideDuration,
   overlays,
+  showOverlays = true,
   selectedOverlayId,
   onSelectOverlay,
   onWindowChange,
@@ -76,6 +77,9 @@ export function TimelineStrip({
   onSlideDuration?: (itemId: string, duration: number, phase: "start" | "move" | "end") => void;
   /** Annotation overlays shown as pills on the lane above the main track. */
   overlays: VideoOverlay[];
+  /** False while Annotations is hidden in the Tracks popover (view state only: the
+   *  annotations still draw on the preview and in the export). Defaults to shown. */
+  showOverlays?: boolean;
   selectedOverlayId: string | null;
   onSelectOverlay: (id: string | null) => void;
   onWindowChange?: (id: string, start: number, end: number, phase: WindowChangePhase) => void;
@@ -244,7 +248,7 @@ export function TimelineStrip({
         </div>
         {/* Annotations are made with the drawing tools on the preview, never on this lane,
             so an empty lane would only be a blank row: it appears with the first one. */}
-        {overlays.length > 0 && (
+        {showOverlays && overlays.length > 0 && (
           <LaneRow icon={PenLine} label={t("laneAnnotations")}>
             <OverlayLane
               overlays={overlays}

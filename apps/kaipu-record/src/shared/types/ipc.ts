@@ -21,6 +21,7 @@ import {
   type RememberedArea,
 } from "./screenshot-capture";
 import { DEFAULT_AUDIO_SETTINGS, type AudioSettings } from "../audio-settings";
+import { DEFAULT_EDITOR_SETTINGS, type EditorSettings } from "../editor-settings";
 import { DEFAULT_CAMERA_BUBBLE, type CameraBubbleSettings } from "../camera-bubble";
 
 /**
@@ -354,6 +355,11 @@ export interface AppSettings {
    * input the system lists first. `null` until one is picked.
    */
   microphone: { deviceId: string; label: string } | null;
+  /**
+   * The video editor's per-user view settings: which timeline lanes the Tracks popover
+   * hid (ADR 0050). View state only; the preview and the export never read it.
+   */
+  editor: EditorSettings;
 }
 
 /**
@@ -389,6 +395,7 @@ export const DEFAULT_SETTINGS: Omit<AppSettings, "shortcuts"> = {
   cameraBubble: DEFAULT_CAMERA_BUBBLE,
   audio: DEFAULT_AUDIO_SETTINGS,
   microphone: null,
+  editor: DEFAULT_EDITOR_SETTINGS,
 };
 
 /** Prefixes on the `recording:finalize` rejection message; the renderer picks the toast from them. */

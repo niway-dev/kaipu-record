@@ -15,7 +15,8 @@ import { useRef } from "react";
 import { Lock } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { sourceRangeToTimelineBlocks, sourceTimeAtTimeline } from "../source-time";
-import { type LayoutEntry, layoutDuration } from "../timeline";
+import { type LayoutEntry, layoutDuration, sourceToTimeline } from "../timeline";
+import type { ActivityMark } from "../zoom/detect-zoom-segments";
 import type { ZoomSegment } from "../zoom/zoom-model";
 import { fractionToTime, timeToFraction } from "./timeline-geometry";
 import styles from "./zoom-lane.module.css";
@@ -36,6 +37,60 @@ export interface ZoomLaneProps {
    *  silent for it instead of doubling up. Defaults to false for callers that don't pass
    *  it (e.g. existing tests with a fixed set of segments). */
   hasTrack?: boolean;
+  /** The cursor's evidence for the zooms (Cursor activity): a thin tick per click and a short
+   *  bar per pointer pause, drawn under the blocks. In SOURCE seconds, so a cut hides the
+   *  evidence of deleted footage exactly like it hides the footage. */
+  marks?: ActivityMark[];
+  /** Draw `marks`. Off while the user hides Cursor activity (the Zooms lane itself being
+   *  hidden is the page's concern: this component is then not rendered at all). */
+  showMarks?: boolean;
+}
+
+// Pointer-pause bars grow with how long the pause lasted.
+const DWELL_MIN_PX = 3;
+const DWELL_MAX_PX = 8;
+
+/** The marks layer: read-only, behind the blocks, never takes a pointer event. */
+function ActivityMarks({
+  marks,
+  layout,
+  duration,
+}: {
+  marks: ActivityMark[];
+  layout: LayoutEntry[];
+  duration: number;
+}): React.JSX.Element {
+  return (
+    <div className={styles.marks} data-activity-marks aria-hidden="true">
+      {marks.flatMap((mark, i) => {
+        if (mark.kind === "click") {
+          const at = sourceToTimeline(layout, mark.t);
+          if (at === null) return [];
+          return [
+            <span
+              key={`c${i}`}
+              className={styles.click}
+              data-activity-mark="click"
+              style={{ left: `${timeToFraction(at, duration) * 100}%` }}
+            />,
+          ];
+        }
+        const height = DWELL_MIN_PX + (DWELL_MAX_PX - DWELL_MIN_PX) * mark.strength;
+        return sourceRangeToTimelineBlocks(layout, mark.start, mark.end).map((block, j) => (
+          <span
+            key={`d${i}-${j}`}
+            className={styles.dwell}
+            data-activity-mark="dwell"
+            style={{
+              left: `${timeToFraction(block.timelineStart, duration) * 100}%`,
+              width: `${timeToFraction(block.timelineEnd - block.timelineStart, duration) * 100}%`,
+              height: `${height}px`,
+            }}
+          />
+        ));
+      })}
+    </div>
+  );
 }
 
 export function ZoomLane({
@@ -45,6 +100,8 @@ export function ZoomLane({
   onSelect,
   onEdgeDrag,
   hasTrack = false,
+  marks = [],
+  showMarks = false,
 }: ZoomLaneProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const laneRef = useRef<HTMLDivElement | null>(null);
@@ -109,6 +166,9 @@ export function ZoomLane({
       className={styles.lane}
       data-testid="zoom-lane"
     >
+      {showMarks && marks.length > 0 && (
+        <ActivityMarks marks={marks} layout={layout} duration={duration} />
+      )}
       {segments.length === 0 && hasTrack && <p className={styles.empty}>{t("zoomEmptyState")}</p>}
       {segments.flatMap((segment, index) => {
         const blocks = sourceRangeToTimelineBlocks(layout, segment.start, segment.end);

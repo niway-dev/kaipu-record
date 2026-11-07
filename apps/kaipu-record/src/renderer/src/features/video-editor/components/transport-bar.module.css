@@ -2,7 +2,7 @@
  * The editor's transport bar (NIW2-664): everything that acts on the timeline, in one
  * short row under the video. Three columns, `1fr auto 1fr`, so the play button stays
  * optically centred however wide the side clusters get: the left holds the Tracks
- * trigger and the counts, the centre rewind / play / forward and the time, the right
+ * trigger (it opens the lane popover) and the counts, the centre rewind / play / forward and the time, the right
  * the actions (split, delete, mute) and fullscreen.
  */
 .transport {
@@ -100,8 +100,8 @@
   border-color: transparent;
 }
 
-/* The Tracks trigger: a labelled button, not an icon. Disabled until PR 2 gives it a
-   popover. */
+/* The Tracks trigger: a labelled button, not an icon. It opens the lane popover and
+   stays lit (accent outline) while the popover is open. */
 .tracksButton {
   display: inline-flex;
   align-items: center;
@@ -114,6 +114,7 @@
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
   cursor: pointer;
+  white-space: nowrap;
   transition:
     background var(--transition),
     color var(--transition);
@@ -124,9 +125,22 @@
   color: var(--text-primary);
 }
 
+/* Fullscreen: the timeline footer is not drawn, so there is nothing to choose. */
 .tracksButton:disabled {
-  opacity: 0.55;
+  opacity: 0.4;
   cursor: default;
+}
+
+.tracksButtonOpen,
+.tracksButtonOpen:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.tracksCount {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
 }
 
 /* Out of flow, so it takes no layout width: it overlaps the right cluster once the
