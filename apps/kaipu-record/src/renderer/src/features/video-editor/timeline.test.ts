@@ -9,6 +9,8 @@ import {
   MIN_ITEM_DURATION,
   removeItem,
   setSlideDuration,
+  skipTarget,
+  SKIP_SECONDS,
   sourceToTimeline,
   splitClipAt,
   timelineToSource,
@@ -232,5 +234,44 @@ describe("clampOverlays", () => {
     );
     expect(result.map((o) => o.id)).toEqual(["keep", "clip"]);
     expect(result[1]).toMatchObject({ start: 8, end: 10 });
+  });
+});
+
+describe("skipTarget", () => {
+  // ITEMS lays out as: slide 0–3, clip 3–13, clip 13–18 (total 18 s).
+  const layout = toLayout(ITEMS);
+
+  it("skips SKIP_SECONDS (5 s) in either direction", () => {
+    expect(SKIP_SECONDS).toBe(5);
+    expect(skipTarget(layout, 8, 1, false)).toBe(13);
+    expect(skipTarget(layout, 8, -1, false)).toBe(3);
+  });
+
+  it("clamps to the start and the end of the timeline", () => {
+    expect(skipTarget(layout, 2, -1, false)).toBe(0);
+    expect(skipTarget(layout, 16, 1, false)).toBe(18);
+  });
+
+  it("with shift, jumps to the next cut boundary after the playhead", () => {
+    expect(skipTarget(layout, 0, 1, true)).toBe(3);
+    expect(skipTarget(layout, 5, 1, true)).toBe(13);
+    expect(skipTarget(layout, 13, 1, true)).toBe(18);
+  });
+
+  it("with shift, jumps to the previous cut boundary before the playhead", () => {
+    expect(skipTarget(layout, 5, -1, true)).toBe(3);
+    expect(skipTarget(layout, 13.5, -1, true)).toBe(13);
+    // Standing on a cut goes to the one before it, not to itself.
+    expect(skipTarget(layout, 13, -1, true)).toBe(3);
+  });
+
+  it("with shift, falls back to the ends when there is no cut left in that direction", () => {
+    expect(skipTarget(layout, 17, 1, true)).toBe(18);
+    expect(skipTarget(layout, 1, -1, true)).toBe(0);
+  });
+
+  it("returns the playhead unchanged on an empty timeline", () => {
+    expect(skipTarget([], 0, 1, false)).toBe(0);
+    expect(skipTarget([], 0, -1, true)).toBe(0);
   });
 });

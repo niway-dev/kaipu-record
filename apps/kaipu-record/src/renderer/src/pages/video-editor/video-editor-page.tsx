@@ -3,16 +3,10 @@ import { generatePath, Navigate, useBlocker, useLocation, useNavigate } from "re
 import { ROUTES } from "@shared/routes";
 import {
   AudioLines,
-  Maximize2,
-  Minimize2,
   MousePointerClick,
-  Pause,
-  Play,
   Shield,
   Trash2,
   TriangleAlert,
-  Volume2,
-  VolumeX,
   Webcam,
   ZoomIn,
 } from "lucide-react";
@@ -151,6 +145,7 @@ import {
 import { ExportDialog } from "@renderer/features/video-editor/components/export-dialog";
 import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
+import { TransportBar } from "@renderer/features/video-editor/components/transport-bar";
 import { showToast } from "@renderer/ui/toast-store";
 import { isAmbiguousIdentityError } from "@renderer/features/library/rename-outcome";
 import { registerSwitchFlush } from "@renderer/features/workspaces/prepare-switch";
@@ -272,13 +267,6 @@ function isEditingTarget(target: EventTarget | null): boolean {
     target.tagName === "SELECT" ||
     target.isContentEditable
   );
-}
-
-function formatTime(seconds: number): string {
-  const total = Math.max(0, Math.floor(seconds));
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
 }
 
 /** Replace the overlay with the same id, or append it if none exists yet — used to
@@ -1534,54 +1522,27 @@ function VideoEditor({
             />
           </div>
           {/* Transport bar lives outside the overflow:hidden video region so it is always
-              visible even when the video fills the full available height. Three columns
-              (see .transport): the play button stays optically centred however wide the
-              side clusters get — v2 puts the zoom count on the right. */}
-          <div {...uiArea("editorVideo.transport")} className={styles.transport}>
-            <div className={styles.transportSide}>
-              <button
-                type="button"
-                className={styles.muteButton}
-                aria-label={playback.muted ? t("unmute") : t("mute")}
-                onClick={playback.toggleMute}
-              >
-                {playback.muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
-              </button>
-            </div>
-            <button
-              type="button"
-              className={styles.playButton}
-              aria-label={playback.playing ? t("pause") : t("play")}
-              onClick={playback.toggle}
-            >
-              {playback.playing ? <Pause size={15} /> : <Play size={15} />}
-            </button>
-            <div className={`${styles.transportSide} ${styles.transportRight}`}>
-              <span className={styles.timeDisplay}>
-                {formatTime(playback.timelineTime)} / {formatTime(playback.duration)}
-              </span>
-              {/* Shown whenever there is something to count: a pre-v2 recording has no
-                  cursor track but can still carry hand-made zooms. */}
-              {(cursorTrack || zooms.visibleZooms.length > 0) && (
-                <span className={styles.counts}>
-                  {t("zoomCount", { count: zooms.visibleZooms.length })}
-                </span>
-              )}
-              {redactionEdits.visibleRedactions.length > 0 && (
-                <span className={styles.counts}>
-                  {t("privacyCount", { count: redactionEdits.visibleRedactions.length })}
-                </span>
-              )}
-              <button
-                type="button"
-                className={styles.fullscreenButton}
-                aria-label={isFullscreen ? t("exitFullscreen") : t("fullscreen")}
-                onClick={handleFullscreen}
-              >
-                {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-              </button>
-            </div>
-          </div>
+              visible even when the video fills the full available height. */}
+          <TransportBar
+            layout={layout}
+            playing={playback.playing}
+            muted={playback.muted}
+            timelineTime={playback.timelineTime}
+            duration={playback.duration}
+            isFullscreen={isFullscreen}
+            zoomCount={
+              cursorTrack || zooms.visibleZooms.length > 0 ? zooms.visibleZooms.length : null
+            }
+            privacyCount={redactionEdits.visibleRedactions.length}
+            onTogglePlay={playback.toggle}
+            onToggleMute={playback.toggleMute}
+            onSeek={playback.seek}
+            onSplit={handleSplit}
+            splitDisabled={splitDisabled}
+            onDeleteSelected={handleDeleteSelected}
+            deleteDisabled={deleteDisabled}
+            onToggleFullscreen={handleFullscreen}
+          />
         </main>
         {/* NIW2-611: the video takes the left edge and the tools sit on its right, so the
             picture gets the width and the height the top bar used. */}
@@ -1609,10 +1570,6 @@ function VideoEditor({
             canRedo={controller.canRedo}
             onUndo={controller.undo}
             onRedo={controller.redo}
-            onSplit={handleSplit}
-            splitDisabled={splitDisabled}
-            onDeleteSelected={handleDeleteSelected}
-            deleteDisabled={deleteDisabled}
             onAddImage={handleAddImage}
             onExport={handleExport}
             exportDisabled={gifExport.status === "exporting" || scene.items.length === 0}

@@ -76,111 +76,6 @@
   max-height: 100%;
 }
 
-/* Transport bar: always-visible auto row below the video region. */
-.transport {
-  /* v2: three columns instead of one centred flex row. `justify-content: center` over a
-     flat row meant the play button drifted left as soon as the zoom count was inserted
-     on its right; with 1fr auto 1fr the centre column stays centred whatever the sides
-     weigh, and the count stays right-aligned next to the fullscreen toggle. */
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: var(--space-md);
-  /* Short on purpose (NIW2-611): the bar will take more tools, so it stays one
-     compact row of 28 px controls. */
-  padding: 4px var(--space-md);
-  border-top: 1px solid var(--line);
-  background: var(--bg-panel);
-  flex-shrink: 0;
-}
-
-.transportSide {
-  display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  min-width: 0;
-}
-
-.transportRight {
-  justify-content: flex-end;
-}
-
-/* Play/pause: the primary transport action, a small accent square (NIW2-611) so the
-   bar stays short and other tools can sit beside it at the same height. */
-.playButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: var(--accent-primary);
-  border: none;
-  border-radius: 6px;
-  color: #fff;
-  cursor: pointer;
-  transition: background var(--transition);
-}
-
-.playButton:hover {
-  background: var(--accent-primary-hover);
-}
-
-.playButton:active {
-  transform: scale(0.96);
-}
-
-/* Secondary transport action — subtle to not compete with the play button. */
-.muteButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    background var(--transition),
-    color var(--transition);
-}
-
-.muteButton:hover {
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
-}
-
-/* Fullscreen toggle — secondary transport action matching the mute button style,
-   placed at the right of the transport bar to match common player conventions. */
-.fullscreenButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    background var(--transition),
-    color var(--transition);
-}
-
-.fullscreenButton:hover {
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
-}
-
-.timeDisplay {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-secondary);
-}
-
 .timeline {
   /* v2: grows with the lanes (ruler, annotations, clips, activity, zooms, privacy):
      ≈196 px with PR 6's five rows, ≈238 px once PR 8 adds the 38 px Privacy lane. */
@@ -214,13 +109,6 @@
   flex-shrink: 0;
   border-left: 1px solid var(--line);
   background: var(--bg-panel);
-}
-
-/* "4 zooms detected" · "2 private regions" (UI spec § 5). */
-.counts {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
 }
 
 /* NIW2-560: the item the route named is gone; nothing is loaded under its old id. */

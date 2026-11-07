@@ -10,10 +10,8 @@ import {
   Mouse,
   MousePointer2,
   Redo2,
-  Scissors,
   Square,
   RectangleHorizontal,
-  Trash2,
   Type,
   Undo2,
   Volume2,
@@ -70,7 +68,8 @@ const TOOL_SHORTCUT: Record<EditorTool, string> = {
   cover: "C",
 };
 const ZOOM_SHORTCUT = "Z";
-const SPLIT_SHORTCUT = "S";
+/** The split shortcut; the transport bar prints it on the split button. */
+export const SPLIT_SHORTCUT = "S";
 
 /**
  * The drawing modes that share one rail button (Kaipu Black, NIW2-619). The button
@@ -270,7 +269,7 @@ function ToolFlyout({
  * "Ctrl+Z" / "Ctrl+Shift+Z" / "Del" on Windows. These match the page's key handler
  * (Cmd-or-Ctrl+Z, plus Shift for redo; Delete or Backspace), which binds no Ctrl+Y.
  */
-function editShortcuts(): { undo: string; redo: string; remove: string } {
+export function editShortcuts(): { undo: string; redo: string; remove: string } {
   return {
     undo: formatAccelerator("CommandOrControl+Z"),
     redo: formatAccelerator("CommandOrControl+Shift+Z"),
@@ -283,12 +282,6 @@ export interface EditorToolbarProps {
   canRedo: boolean;
   onUndo(): void;
   onRedo(): void;
-  /** Split the clip under the playhead. Disabled when the playhead isn't inside a clip. */
-  onSplit(): void;
-  splitDisabled: boolean;
-  /** Delete the selected segment. Disabled when nothing is selected. */
-  onDeleteSelected(): void;
-  deleteDisabled: boolean;
   /** Insert an image slide at the playhead's nearest item boundary. */
   onAddImage(file: File): void;
   /** Run the export pipeline. Disabled while exporting or when the timeline is empty. */
@@ -599,19 +592,16 @@ export function EditorToolRail({
 }
 
 /**
- * Undo/redo, image, split and delete, the status chips and Export: the editor's
- * actions, in one row. The page renders it into the title bar's right side (Kaipu
- * Black, NIW2-619); it used to be a card above the inspector (NIW2-611).
+ * Undo/redo, image, the status chips and Export: the editor's global actions, in one
+ * row. The page renders it into the title bar's right side (Kaipu Black, NIW2-619); it
+ * used to be a card above the inspector (NIW2-611). Split and delete act on the
+ * playhead and the selection, so they sit on the transport bar (NIW2-664).
  */
 export function EditorToolbar({
   canUndo,
   canRedo,
   onUndo,
   onRedo,
-  onSplit,
-  splitDisabled,
-  onDeleteSelected,
-  deleteDisabled,
   onAddImage,
   onExport,
   children,
@@ -666,26 +656,6 @@ export function EditorToolbar({
           onClick={() => fileInputRef.current?.click()}
         >
           <ImagePlus size={18} />
-        </button>
-        <button
-          type="button"
-          className={styles.iconBtn}
-          title={`${t("splitHere")} (${SPLIT_SHORTCUT})`}
-          aria-label={t("splitHere")}
-          disabled={splitDisabled}
-          onClick={onSplit}
-        >
-          <Scissors size={18} />
-        </button>
-        <button
-          type="button"
-          className={styles.iconBtn}
-          title={`${t("deleteSegment")} (${shortcuts.remove})`}
-          aria-label={t("deleteSegment")}
-          disabled={deleteDisabled}
-          onClick={onDeleteSelected}
-        >
-          <Trash2 size={18} />
         </button>
       </div>
       {children && <div className={styles.status}>{children}</div>}

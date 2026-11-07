@@ -178,3 +178,32 @@ export function clampOverlays(overlays: VideoOverlay[], duration: number): Video
     .filter((o) => o.start < duration - 0.01)
     .map((o) => (o.end > duration ? { ...o, end: duration } : o));
 }
+
+/** What the transport's rewind/forward buttons skip without Shift. */
+export const SKIP_SECONDS = 5;
+
+/** A playhead this close to a cut counts as standing on it. */
+const CUT_EPSILON = 0.05;
+
+/**
+ * Where the transport's rewind (`direction` -1) and forward (+1) buttons send the
+ * playhead: `SKIP_SECONDS` away, or with `byCut` (Shift) the previous/next cut — the
+ * edge between two layout entries. Both clamp to the timeline's ends, which also act as
+ * the last cut in each direction.
+ */
+export function skipTarget(
+  layout: LayoutEntry[],
+  t: number,
+  direction: -1 | 1,
+  byCut: boolean,
+): number {
+  const duration = layoutDuration(layout);
+  if (!byCut) return Math.max(0, Math.min(t + direction * SKIP_SECONDS, duration));
+  if (direction === 1) {
+    const next = layout.find((entry) => entry.timelineEnd > t + CUT_EPSILON);
+    return next ? next.timelineEnd : duration;
+  }
+  // The latest edge strictly before the playhead: an entry's start (0 for the first).
+  const starts = layout.map((entry) => entry.timelineStart).filter((s) => s < t - CUT_EPSILON);
+  return starts.length > 0 ? Math.max(...starts) : 0;
+}

@@ -231,7 +231,7 @@ export const UI_MAP = {
       cursor: { states: ["visible"], gatedBy: [{ flag: "native-cursor-capture" }] },
       cursorInspector: { states: ["open"], gatedBy: [{ flag: "native-cursor-capture" }] },
       webcam: { states: ["visible"] },
-      transport: { states: ["paused", "playing"] },
+      transport: { states: ["paused", "playing", "withCounts"] },
       toolRail: { states: ["default", "annotate", "privacy"] },
       toolFlyout: { states: ["audio"] },
       toolbar: { states: ["default", "saving", "saved"] },

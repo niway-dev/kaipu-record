@@ -112,6 +112,7 @@ export const editorVideo = catalog(
       how: "Open “Team notes”: a zoom, a muted range, a blur and a box are on the timeline.",
       steps: [open(ASSETS.teamNotes)],
       demonstrates: [
+        "editorVideo.transport:withCounts",
         "editorVideo.zoomLane:segments",
         "editorVideo.privacyLane:regions",
         "editorVideo.audioLane:mutedRanges",
