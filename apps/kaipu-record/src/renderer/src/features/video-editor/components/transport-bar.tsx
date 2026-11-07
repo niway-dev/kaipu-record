@@ -12,8 +12,9 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { useTranslations } from "@kaipu/i18n";
+import { useLocale, useTranslations } from "@kaipu/i18n";
 import { uiArea } from "@renderer/lib/ui-area";
+import { formatSpeed, nextSpeed } from "../playback-speed";
 import { skipTarget, type LayoutEntry } from "../timeline";
 import { visibleCount, type TrackKey } from "../tracks";
 import { editShortcuts, SPLIT_SHORTCUT } from "./editor-toolbar";
@@ -25,6 +26,8 @@ export interface TransportBarProps {
   layout: LayoutEntry[];
   playing: boolean;
   muted: boolean;
+  /** Preview playback rate (0.5, 1, 1.5, 2): view state, never saved or exported. */
+  speed: number;
   timelineTime: number;
   duration: number;
   isFullscreen: boolean;
@@ -41,6 +44,8 @@ export interface TransportBarProps {
   };
   onTogglePlay(): void;
   onToggleMute(): void;
+  /** The next rate in the cycle 1× → 1.5× → 2× → 0.5× → 1×; the page applies it. */
+  onSpeedChange(speed: number): void;
   onSeek(t: number): void;
   /** Split the clip under the playhead. Disabled when the playhead isn't inside a clip. */
   onSplit(): void;
@@ -78,13 +83,14 @@ function Count({ full, short }: { full: string; short: string }): React.JSX.Elem
 /**
  * Everything that acts on the timeline, in one row under the video (NIW2-664):
  * left, the Tracks trigger (it opens the lane popover) and the counts; centre, rewind / play / forward and the
- * time; right, split, delete, mute and fullscreen. The page keeps the handlers (and the
+ * time; right, split, delete, mute, playback speed and fullscreen. The page keeps the handlers (and the
  * keyboard shortcuts that share them); this component only owns where the buttons sit.
  */
 export function TransportBar({
   layout,
   playing,
   muted,
+  speed,
   timelineTime,
   duration,
   isFullscreen,
@@ -93,6 +99,7 @@ export function TransportBar({
   tracks,
   onTogglePlay,
   onToggleMute,
+  onSpeedChange,
   onSeek,
   onSplit,
   splitDisabled,
@@ -101,6 +108,9 @@ export function TransportBar({
   onToggleFullscreen,
 }: TransportBarProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
+  const locale = useLocale();
+  const speedText = formatSpeed(speed, locale);
+  const nextSpeedText = formatSpeed(nextSpeed(speed), locale);
   const shortcuts = editShortcuts();
   const tracksButtonRef = useRef<HTMLButtonElement | null>(null);
   const [tracksOpen, setTracksOpen] = useState(false);
@@ -215,6 +225,15 @@ export function TransportBar({
           onClick={onToggleMute}
         >
           {muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
+        </button>
+        <button
+          type="button"
+          className={styles.speedButton}
+          title={t("playbackSpeedTitle", { next: nextSpeedText })}
+          aria-label={t("playbackSpeedLabel", { speed: speedText })}
+          onClick={() => onSpeedChange(nextSpeed(speed))}
+        >
+          {speedText}×
         </button>
         <button
           type="button"

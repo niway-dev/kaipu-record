@@ -1273,6 +1273,8 @@
     "sourceUnavailable": "Esta grabación ya no está en tu biblioteca, así que no se puede editar.",
     "mute": "Silenciar",
     "unmute": "Activar sonido",
+    "playbackSpeedLabel": "Velocidad de reproducción {speed}×",
+    "playbackSpeedTitle": "Velocidad de reproducción: clic para {next}×",
     "pause": "Pausar",
     "play": "Reproducir",
     "exitFullscreen": "Salir de pantalla completa",

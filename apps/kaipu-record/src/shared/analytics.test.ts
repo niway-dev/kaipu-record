@@ -4,7 +4,9 @@ import {
   DEFAULT_SURFACE,
   FLAG_DEFAULTS,
   FLAG_NAMES,
+  EDITOR_SPEED_CHANGED_EVENT,
   SCREENSHOT_CAPTURED_EVENT,
+  buildEditorSpeedChangedProperties,
   buildRecordingStartedProperties,
   buildScreenshotCapturedProperties,
   serializeError,
@@ -132,5 +134,18 @@ describe("buildRecordingStartedProperties", () => {
     expect(
       buildRecordingStartedProperties({ ...base, area: false, areaSize: { width: 1, height: 1 } }),
     ).toEqual({ mode: "screen", platform: "darwin", displays: 1 });
+  });
+});
+
+describe("editor_speed_changed", () => {
+  it("keeps a stable event name", () => {
+    expect(EDITOR_SPEED_CHANGED_EVENT).toBe("editor_speed_changed");
+  });
+
+  it("carries exactly the speed, nothing else", () => {
+    expect(buildEditorSpeedChangedProperties({ speed: 1.5 })).toEqual({ speed: 1.5 });
+    // A caller cannot smuggle an extra field through (a title, a time, a path).
+    const sneaky = { speed: 2, title: "Q3 board call", timelineTime: 41 } as never;
+    expect(Object.keys(buildEditorSpeedChangedProperties(sneaky))).toEqual(["speed"]);
   });
 });

@@ -5,7 +5,8 @@ import { AudioLines, Shield, Trash2, TriangleAlert, Webcam, ZoomIn } from "lucid
 import { useTranslations } from "@kaipu/i18n";
 import { parseCursorTrack, type CursorTrack } from "@shared/cursor-track";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
-import { captureException } from "@renderer/features/analytics";
+import { captureEvent, captureException } from "@renderer/features/analytics";
+import { buildEditorSpeedChangedProperties, EDITOR_SPEED_CHANGED_EVENT } from "@shared/analytics";
 import {
   initialScene,
   reconcileWebcam,
@@ -537,6 +538,16 @@ function VideoEditor({
     [scene.audioMuted, scene.mutedRanges],
   );
   const playback = usePreviewPlayback(layout, audioEdits);
+  const { setSpeed: setPreviewSpeed } = playback;
+  // The speed is preview-only (NIW2-666): it lives in the playback hook and goes nowhere
+  // else, not the scene, the session or the export. The one thing it leaves is the event.
+  const handleSpeedChange = useCallback(
+    (speed: number) => {
+      setPreviewSpeed(speed);
+      captureEvent(EDITOR_SPEED_CHANGED_EVENT, buildEditorSpeedChangedProperties({ speed }));
+    },
+    [setPreviewSpeed],
+  );
   // Lane handlers read the current scene, layout and playback through these refs, so they keep
   // one identity across slider moves and the memoised lanes below do not re-render (NIW2-662).
   const controllerRef = useLatest(controller);
@@ -1712,6 +1723,7 @@ function VideoEditor({
             layout={layout}
             playing={playback.playing}
             muted={playback.muted}
+            speed={playback.speed}
             timelineTime={playback.timelineTime}
             duration={playback.duration}
             isFullscreen={isFullscreen}
@@ -1726,6 +1738,7 @@ function VideoEditor({
             }}
             onTogglePlay={playback.toggle}
             onToggleMute={playback.toggleMute}
+            onSpeedChange={handleSpeedChange}
             onSeek={playback.seek}
             onSplit={handleSplit}
             splitDisabled={splitDisabled}

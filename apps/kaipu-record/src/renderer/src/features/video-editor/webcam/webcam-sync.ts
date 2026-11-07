@@ -51,8 +51,13 @@ export const WEBCAM_MAX_SEEK_LEAD_SECONDS = 1;
  * the screen, and the catch-up seek would lag the same way. Aiming ahead by the last
  * measured seek lands it on time. Nothing while paused, and nothing for seeks short enough
  * that the drift rule already absorbs them.
+ *
+ * `lastSeekSeconds` is wall time, but the lead is added to a MEDIA time: while the seek ran
+ * the main video advanced `lastSeekSeconds × rate`, so the lead is scaled by the main
+ * element's `playbackRate` (1 when omitted). The result is in media seconds.
  */
-export function webcamSeekLead(mainPlaying: boolean, lastSeekSeconds: number): number {
-  if (!mainPlaying || !(lastSeekSeconds > WEBCAM_DRIFT_SECONDS)) return 0;
-  return Math.min(lastSeekSeconds, WEBCAM_MAX_SEEK_LEAD_SECONDS);
+export function webcamSeekLead(mainPlaying: boolean, lastSeekSeconds: number, rate = 1): number {
+  const lead = lastSeekSeconds * rate;
+  if (!mainPlaying || !(lead > WEBCAM_DRIFT_SECONDS)) return 0;
+  return Math.min(lead, WEBCAM_MAX_SEEK_LEAD_SECONDS);
 }

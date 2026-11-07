@@ -3,7 +3,7 @@
  * short row under the video. Three columns, `1fr auto 1fr`, so the play button stays
  * optically centred however wide the side clusters get: the left holds the Tracks
  * trigger (it opens the lane popover) and the counts, the centre rewind / play / forward and the time, the right
- * the actions (split, delete, mute) and fullscreen.
+ * the actions (split, delete, mute, playback speed) and fullscreen.
  */
 .transport {
   display: grid;
@@ -95,6 +95,36 @@
   cursor: default;
 }
 
+/* The playback-speed button (NIW2-666): outlined like the icon buttons beside it, but
+   it shows a value ("1×", "1.5×"), so it is wider and uses the mono face. The width is
+   fixed at 40 px so the right cluster, and the .timeDisplay threshold below, do not
+   change when the label does ("1×" and "0.5×" take the same room). */
+.speedButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 40px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.speedButton:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
 /* Added on top of .iconButton. */
 .skipButton {
   border-color: transparent;
@@ -144,10 +174,15 @@
 }
 
 /* Out of flow, so it takes no layout width: it overlaps the right cluster once the
-   right `1fr` falls under ~240 px (~255 px for a 10-minute-plus time). At the editor's
-   1180 px floor that column is ~336 px (measured, NIW2-664), so there is room today.
-   A wider centre column (it narrows both sides) or a new right-hand button must
-   re-check this. */
+   right `1fr` falls under the label's width plus the cluster's. Measured in the real app
+   (NIW2-666, with the speed button): the cluster is 176 px (five buttons: 4 x 28 + 40,
+   with 6 px gaps), the label 108 px ("0:09.0 / 0:29.0") or ~122 px for 10+ minutes, so the
+   label overlaps under ~284 px (~298 px for 10+ minutes). At the editor's 1180 px floor
+   the right column is ~318 px (bar 792 px), leaving ~34 px (~20 px for 10+ minutes); at
+   1440 px it is ~448 px. The speed button is a fixed 40 px so its label ("1x" to
+   "1.5x") never moves this number. A wider centre column (it narrows both sides) or one
+   more right-hand button must re-check it: one more would leave no margin
+   at 1180. */
 .timeDisplay {
   position: absolute;
   top: 50%;

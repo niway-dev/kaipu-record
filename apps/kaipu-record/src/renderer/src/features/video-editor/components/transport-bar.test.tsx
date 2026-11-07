@@ -18,6 +18,7 @@ function barProps(overrides: Partial<TransportBarProps> = {}): TransportBarProps
     layout: toLayout(ITEMS),
     playing: false,
     muted: false,
+    speed: 1,
     timelineTime: 9,
     duration: 29,
     isFullscreen: false,
@@ -30,6 +31,7 @@ function barProps(overrides: Partial<TransportBarProps> = {}): TransportBarProps
     },
     onTogglePlay: vi.fn(),
     onToggleMute: vi.fn(),
+    onSpeedChange: vi.fn(),
     onSeek: vi.fn(),
     onSplit: vi.fn(),
     splitDisabled: false,
@@ -52,7 +54,7 @@ function controlNames(): string[] {
 }
 
 describe("TransportBar — layout", () => {
-  it("lists the controls left to right: Tracks, rewind, play, forward, split, delete, mute, fullscreen", () => {
+  it("lists the controls left to right: Tracks, rewind, play, forward, split, delete, mute, speed, fullscreen", () => {
     renderBar();
     expect(controlNames()).toEqual([
       "Tracks, 6 of 6 shown",
@@ -62,6 +64,7 @@ describe("TransportBar — layout", () => {
       "Split here",
       "Delete segment",
       "Mute",
+      "Playback speed 1×",
       "Fullscreen",
     ]);
   });
@@ -233,6 +236,49 @@ describe("TransportBar — play, mute, fullscreen", () => {
     const props = renderBar({ isFullscreen: true });
     fireEvent.click(screen.getByRole("button", { name: "Exit fullscreen" }));
     expect(props.onToggleFullscreen).toHaveBeenCalledOnce();
+  });
+});
+
+describe("TransportBar — playback speed", () => {
+  const speedButton = (): HTMLElement => screen.getByRole("button", { name: /^Playback speed/ });
+
+  it("sits right after mute, in the right cluster", () => {
+    renderBar();
+    const mute = screen.getByRole("button", { name: "Mute" });
+    expect(mute.nextElementSibling).toBe(speedButton());
+    expect(speedButton().parentElement).toBe(mute.parentElement);
+  });
+
+  it.each([
+    [1, "1×"],
+    [1.5, "1.5×"],
+    [2, "2×"],
+    [0.5, "0.5×"],
+  ])("shows %s as %s", (speed, label) => {
+    renderBar({ speed });
+    expect(speedButton()).toHaveTextContent(label);
+    expect(speedButton()).toHaveAccessibleName(`Playback speed ${label}`);
+  });
+
+  it.each([
+    [1, 1.5],
+    [1.5, 2],
+    [2, 0.5],
+    [0.5, 1],
+  ])("from %s a click asks for %s", (speed, next) => {
+    const props = renderBar({ speed });
+    fireEvent.click(speedButton());
+    expect(props.onSpeedChange).toHaveBeenCalledExactlyOnceWith(next);
+  });
+
+  it("names the next speed in its tooltip", () => {
+    renderBar({ speed: 2 });
+    expect(speedButton()).toHaveAttribute("title", "Playback speed: click for 0.5×");
+  });
+
+  it("stays enabled while the playhead is on a slide or the bar is playing", () => {
+    renderBar({ playing: true, splitDisabled: true });
+    expect(speedButton()).toBeEnabled();
   });
 });
 

@@ -221,6 +221,28 @@ export const editorVideo = catalog(
       ],
       demonstrates: ["editorVideo.tracksPopover:open"],
     },
+    "playback-speed": {
+      profile: "default",
+      how: "Open “Team notes” and press the speed button next to mute twice: it reads 2× and the preview plays at double speed.",
+      steps: [
+        open(ASSETS.teamNotes),
+        loaded,
+        // The button's name carries the speed ("Playback speed 1×"), so match the start.
+        {
+          click: {
+            area: "editorVideo.transport",
+            part: { role: "button", name: "Playback speed" },
+          },
+        },
+        {
+          click: {
+            area: "editorVideo.transport",
+            part: { role: "button", name: "Playback speed" },
+          },
+        },
+      ],
+      demonstrates: ["editorVideo.transport:speedChanged"],
+    },
     "mute-all": {
       profile: "default",
       how: "Open “Bug report” and press Mute the whole recording: the audio lane reads muted and the edit saves.",

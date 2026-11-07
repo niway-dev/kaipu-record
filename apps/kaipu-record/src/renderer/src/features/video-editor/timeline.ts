@@ -72,14 +72,18 @@ export function timelineToSource(
   return { entry, sourceTime: entry.sourceStart + offset };
 }
 
+/** The first clip whose source range holds `sourceTime` (bounds included), else
+ *  undefined — a source time inside deleted footage belongs to no clip. */
+export function clipAtSource(layout: LayoutEntry[], sourceTime: number): LayoutEntry | undefined {
+  return layout.find(
+    (entry) =>
+      entry.kind === "clip" && sourceTime >= entry.sourceStart && sourceTime <= entry.sourceEnd,
+  );
+}
+
 export function sourceToTimeline(layout: LayoutEntry[], sourceTime: number): number | null {
-  for (const entry of layout) {
-    if (entry.kind !== "clip") continue;
-    if (sourceTime >= entry.sourceStart && sourceTime <= entry.sourceEnd) {
-      return entry.timelineStart + (sourceTime - entry.sourceStart);
-    }
-  }
-  return null;
+  const entry = clipAtSource(layout, sourceTime);
+  return entry ? entry.timelineStart + (sourceTime - entry.sourceStart) : null;
 }
 
 /**

@@ -66,6 +66,9 @@ export function PreviewStage({
           onTimeUpdate={playback.onVideoTimeUpdate}
           onEnded={playback.onVideoEnded}
           onLoadedMetadata={(event) => {
+            // A new `src` resets the element's rate: put the chosen speed back first,
+            // whatever the decoded size says.
+            playback.onVideoLoadedMetadata();
             const { videoWidth, videoHeight } = event.currentTarget;
             if (videoWidth > 0 && videoHeight > 0) {
               setRatio(videoWidth / videoHeight);

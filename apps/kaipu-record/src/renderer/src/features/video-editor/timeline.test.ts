@@ -3,6 +3,7 @@ import type { TrackItem, VideoOverlay } from "./scene";
 import {
   boundaryIndexAt,
   clampOverlays,
+  clipAtSource,
   entryAt,
   insertItemAt,
   layoutDuration,
@@ -103,6 +104,26 @@ describe("timelineToSource", () => {
     const hit = timelineToSource(layout, 1.5);
     expect(hit?.entry.itemId).toBe("s1");
     expect(hit?.sourceTime).toBe(1.5);
+  });
+});
+
+describe("clipAtSource", () => {
+  const layout = toLayout(ITEMS);
+
+  it("finds the clip whose source range holds the time, bounds included", () => {
+    expect(clipAtSource(layout, 1)?.itemId).toBe("a");
+    expect(clipAtSource(layout, 10)?.itemId).toBe("a");
+    expect(clipAtSource(layout, 20)?.itemId).toBe("b");
+  });
+
+  it("finds nothing in deleted footage, and never a slide", () => {
+    expect(clipAtSource(layout, 15)).toBeUndefined();
+    expect(clipAtSource(toLayout([slide("s1", 3)]), 1)).toBeUndefined();
+  });
+
+  it("prefers the earlier entry on a shared boundary (clips contiguous in source)", () => {
+    const contiguous = toLayout([clip("x", 0, 5), clip("y", 5, 10)]);
+    expect(clipAtSource(contiguous, 5)?.itemId).toBe("x");
   });
 });
 

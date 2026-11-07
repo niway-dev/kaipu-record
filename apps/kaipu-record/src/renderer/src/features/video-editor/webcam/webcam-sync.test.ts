@@ -79,6 +79,17 @@ describe("webcamSeekLead", () => {
     expect(webcamSeekLead(true, 0.4)).toBeCloseTo(0.4);
   });
 
+  it("measures the lead in media seconds: the main video advances rate × the seek's wall time", () => {
+    expect(webcamSeekLead(true, 0.4, 2)).toBeCloseTo(0.8);
+    expect(webcamSeekLead(true, 0.4, 0.5)).toBeCloseTo(0.2);
+    // 0.1 s of wall time at 0.5x is 0.05 s of media: below the drift threshold.
+    expect(webcamSeekLead(true, 0.1, 0.5)).toBe(0);
+    // The cap applies to the media lead.
+    expect(webcamSeekLead(true, 0.8, 2)).toBe(1);
+    // No rate means 1x.
+    expect(webcamSeekLead(true, 0.4)).toBeCloseTo(webcamSeekLead(true, 0.4, 1));
+  });
+
   it("does not lead while paused: the main clock is not moving", () => {
     expect(webcamSeekLead(false, 0.4)).toBe(0);
   });

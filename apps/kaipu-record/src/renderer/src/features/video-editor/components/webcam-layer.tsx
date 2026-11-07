@@ -148,7 +148,7 @@ function useWebcamSync({
       if (seekTo !== null) {
         // The lead is for a moving clock: a waiting main video is not paused but holds still.
         const moving = !!main && !main.paused && !mainWaiting.current;
-        const lead = webcamSeekLead(moving, lastSeekSeconds.current);
+        const lead = webcamSeekLead(moving, lastSeekSeconds.current, main?.playbackRate ?? 1);
         const end = Number.isFinite(cam.duration) && cam.duration > 0 ? cam.duration : Infinity;
         seekStartedAt.current = performance.now();
         cam.currentTime = Math.min(seekTo + lead, end);

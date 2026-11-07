@@ -11,6 +11,7 @@ function stubPlayback(): PreviewPlayback {
     onVideoEnded: vi.fn(),
     onVideoPlay: vi.fn(),
     onVideoPause: vi.fn(),
+    onVideoLoadedMetadata: vi.fn(),
     toggle: vi.fn(),
   } as unknown as PreviewPlayback;
 }
@@ -44,5 +45,15 @@ describe("PreviewStage — onFrameSize", () => {
   it("does not require the callback", () => {
     const { container } = render(<PreviewStage playback={stubPlayback()} mediaUrl="blob:x" />);
     expect(() => fireEvent.loadedMetadata(container.querySelector("video")!)).not.toThrow();
+  });
+});
+
+describe("PreviewStage — playback speed", () => {
+  it("tells the playback hook when metadata lands, so a new src gets the chosen rate again", () => {
+    const playback = stubPlayback();
+    const { container } = render(<PreviewStage playback={playback} mediaUrl="blob:x" />);
+    // The decoded size is still 0 here: the rate must be re-applied regardless of it.
+    fireEvent.loadedMetadata(container.querySelector("video")!);
+    expect(playback.onVideoLoadedMetadata).toHaveBeenCalledOnce();
   });
 });

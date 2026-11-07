@@ -64,6 +64,14 @@ vi.mock("@renderer/features/video-editor/export/use-video-export", () => ({
   }),
 }));
 
+// The page reports one product event for the speed button. The real client is a no-op
+// without PostHog; spying on it lets the tests pin the name and the payload.
+const captureEventSpy = vi.hoisted(() => vi.fn());
+vi.mock("@renderer/features/analytics", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@renderer/features/analytics")>()),
+  captureEvent: captureEventSpy,
+}));
+
 // Thumbnails never decode in jsdom (no WebCodecs); spying on the hook lets the webcam tests
 // pin which file and offset the webcam lane's filmstrip is decoded from.
 const thumbnailCalls = vi.hoisted(() => [] as unknown[][]);
@@ -1629,5 +1637,94 @@ describe("VideoEditorPage — Tracks popover (NIW2-665)", () => {
         mutedRanges: [{ id: "m1" }],
       });
     });
+  });
+});
+
+describe("VideoEditorPage — preview playback speed (NIW2-666)", () => {
+  const speedButton = (): HTMLElement => screen.getByRole("button", { name: /^Playback speed/ });
+  const videoEl = (): HTMLVideoElement => document.querySelector("video") as HTMLVideoElement;
+
+  beforeEach(() => {
+    captureEventSpy.mockClear();
+    startExport.mockClear();
+    stubDecodedVideoSize(1280, 720);
+  });
+  afterEach(() => {
+    cleanup();
+    stubDecodedVideoSize(0, 0);
+  });
+
+  it("cycles 1x, 1.5x, 2x, 0.5x, 1x and the <video> follows each rate", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    expect(speedButton()).toHaveTextContent("1×");
+    expect(videoEl().playbackRate).toBe(1);
+
+    const seen: Array<[string | null, number]> = [];
+    for (let i = 0; i < 4; i++) {
+      fireEvent.click(speedButton());
+      seen.push([speedButton().textContent, videoEl().playbackRate]);
+    }
+    expect(seen).toEqual([
+      ["1.5×", 1.5],
+      ["2×", 2],
+      ["0.5×", 0.5],
+      ["1×", 1],
+    ]);
+  });
+
+  it("keeps the rate when the element loads a new source", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(speedButton());
+    fireEvent.click(speedButton()); // 2x
+    videoEl().playbackRate = 1; // what a src change does to a real element
+    fireEvent.loadedMetadata(videoEl());
+    expect(videoEl().playbackRate).toBe(2);
+  });
+
+  it("reports one editor_speed_changed per change, with the speed and nothing else", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(speedButton());
+    fireEvent.click(speedButton());
+    expect(captureEventSpy.mock.calls).toEqual([
+      ["editor_speed_changed", { speed: 1.5 }],
+      ["editor_speed_changed", { speed: 2 }],
+    ]);
+  });
+
+  it("starts at 1x again when the editor is reopened", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(speedButton());
+    fireEvent.click(speedButton());
+    expect(speedButton()).toHaveTextContent("2×");
+    cleanup();
+
+    renderEditor();
+    await waitForEditorLoaded();
+    expect(speedButton()).toHaveTextContent("1×");
+    expect(videoEl().playbackRate).toBe(1);
+    expect(captureEventSpy).toHaveBeenCalledTimes(2); // opening reports nothing
+  });
+
+  it("hands the export the same scene at 1x and at 2x", async () => {
+    const exportedScene = async (clicks: number): Promise<unknown> => {
+      renderEditor();
+      await waitForEditorLoaded();
+      for (let i = 0; i < clicks; i++) fireEvent.click(speedButton());
+      startExport.mockClear();
+      clickExportVideo();
+      await waitFor(() => expect(startExport).toHaveBeenCalledOnce());
+      const handed = (startExport.mock.calls[0] as unknown[])[0] as { scene: unknown };
+      const scene = structuredClone(handed.scene);
+      cleanup();
+      return scene;
+    };
+    const at1x = await exportedScene(0);
+    const at2x = await exportedScene(2);
+    expect(at2x).toEqual(at1x);
+    expect(JSON.stringify(at2x)).not.toMatch(/speed|playbackRate/i);
   });
 });

@@ -262,6 +262,43 @@ describe("WebcamLayer", () => {
     expect(writes[1]).toBeCloseTo(3.8);
   });
 
+  it.each([
+    [2, 4.2],
+    [0.5, 3.6],
+  ])(
+    "measures the lead in media time at playbackRate %s (the webcam follows the main's rate)",
+    (rate, expected) => {
+      const { ref, el } = mainVideo(1);
+      renderLayer({ videoRef: ref });
+      const cam = loadWebcam(30);
+      let camTime = 1;
+      let seeking = false;
+      const writes: number[] = [];
+      Object.defineProperty(cam, "currentTime", {
+        configurable: true,
+        get: () => camTime,
+        set: (v: number) => {
+          writes.push(v);
+          camTime = v;
+          seeking = true;
+        },
+      });
+      Object.defineProperty(cam, "seeking", { configurable: true, get: () => seeking });
+      Object.defineProperty(el, "paused", { configurable: true, get: () => false });
+      el.playbackRate = rate;
+      const now = vi.spyOn(performance, "now").mockReturnValue(1_000);
+      act(() => setTime(el, 3)); // the first seek has no measured duration yet
+      expect(writes).toEqual([3]);
+      expect(cam.playbackRate).toBe(rate);
+      // That seek takes 400 ms of wall time; the main video advances 400 ms × rate.
+      now.mockReturnValue(1_400);
+      el.currentTime = 3.4;
+      seeking = false;
+      act(() => void fireEvent(cam, new Event("seeked")));
+      expect(writes[1]).toBeCloseTo(expected);
+    },
+  );
+
   it("gives no lead while the main video waits for data: its clock is not moving", () => {
     const { ref, el } = mainVideo(1);
     renderLayer({ videoRef: ref });

@@ -1273,6 +1273,8 @@
     "sourceUnavailable": "This recording is no longer in your library, so it cannot be edited.",
     "mute": "Mute",
     "unmute": "Unmute",
+    "playbackSpeedLabel": "Playback speed {speed}×",
+    "playbackSpeedTitle": "Playback speed: click for {next}×",
     "pause": "Pause",
     "play": "Play",
     "exitFullscreen": "Exit fullscreen",
