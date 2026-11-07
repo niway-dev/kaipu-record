@@ -68,8 +68,9 @@ Run it for the screens a UI change touches as soon as the change compiles, befor
 open every PNG. Unit tests run in jsdom, which has no layout, so collapsed columns, truncated copy
 and overlapping badges show up only in these pictures.
 
-`.evidence/` is relative to the checkout the command runs in. When that checkout is a worktree
-(`git rev-parse --git-dir` differs from `git rev-parse --git-common-dir`), its `.evidence/` is
+`.evidence/` is relative to the checkout the command runs in. When that checkout is a worktree (the two lines of
+`git rev-parse --path-format=absolute --git-dir --git-common-dir` differ; without the flag one path
+is relative and they differ in every subdirectory), its `.evidence/` is
 deleted with the worktree, and a hook removes the worktree right after `gh pr create`. Copy the
 PNGs the PR needs to the main checkout's `.evidence/` (or `/tmp`) before opening the PR.
 
