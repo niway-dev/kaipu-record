@@ -1522,6 +1522,39 @@ describe("recorder-store live settings", () => {
       await stopAndSettle();
     });
 
+    it("keeps a camera started off available for a later on, creating its writer once", async () => {
+      const engine = fakeEngine({
+        turnWebcamOn: vi.fn(async () => "ok" as const),
+        turnWebcamOff: vi.fn(() => true),
+      });
+      await startWith(engine, { webcam: null, webcamWhenEnabled: webcam });
+      const options = prepareEngineMock.mock.calls.at(-1)![0];
+      expect(createCalls()).toHaveLength(1);
+      expect(options.webcamWhenEnabled).toEqual(webcam);
+      broadcast({ isCameraEnabled: true });
+      await vi.waitFor(() => expect(engine.turnWebcamOn).toHaveBeenCalledOnce());
+      await expect(options.onWebcamStart!()).resolves.toBe(true);
+      await expect(options.onWebcamStart!()).resolves.toBe(true);
+      expect(createCalls()).toHaveLength(2);
+      expect(createCalls()[1]).toEqual([createCalls()[0]![0], "webcam"]);
+      broadcast({ isCameraEnabled: false });
+      broadcast({ isCameraEnabled: true });
+      await vi.waitFor(() => expect(engine.turnWebcamOn).toHaveBeenCalledTimes(2));
+      await stopAndSettle();
+    });
+
+    it("writes a failed late camera activation back to off", async () => {
+      const engine = fakeEngine();
+      await startWith(engine, { webcam: null, webcamWhenEnabled: webcam });
+      broadcast({ isCameraEnabled: true });
+      await vi.waitFor(() =>
+        expect(window.electronAPI.updateRecordingSettings).toHaveBeenCalledWith({
+          isCameraEnabled: false,
+        }),
+      );
+      await stopAndSettle();
+    });
+
     it("writes the webcam's chunks to its own session once the take has begun", async () => {
       await startWith(fakeEngine(), { webcam });
       const id = createCalls()[0]![0];

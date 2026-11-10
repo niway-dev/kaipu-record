@@ -1728,6 +1728,82 @@ describe("webcam: the camera turned off and on mid-take", () => {
     expect(prepared.turnWebcamOff()).toBe(false);
   });
 
+  it("starts a separate camera file when a take began with the camera off", async () => {
+    const onWebcamStart = vi.fn(async () => true);
+    const handle = await startEngine(
+      baseOptions({ webcam: null, webcamWhenEnabled: webcam, onWebcamStart }),
+    );
+    expect(handle.webcam).toBeNull();
+    expect(webcamRequests()).toHaveLength(0);
+    await expect(handle.turnWebcamOn()).resolves.toBe("ok");
+    expect(onWebcamStart).toHaveBeenCalledOnce();
+    expect(handle.webcam).not.toBeNull();
+    expect(relayed.at(-1)).toEqual(expect.objectContaining({ from: webcamTrack }));
+    handle.turnWebcamOff();
+    await expect(handle.turnWebcamOn()).resolves.toBe("ok");
+    expect(onWebcamStart).toHaveBeenCalledOnce();
+    expect(vi.mocked(Output)).toHaveBeenCalledTimes(2);
+    await handle.stop();
+    expect(reopened.stop).toHaveBeenCalled();
+  });
+
+  it("subtracts earlier pauses from a late camera's offset and keeps a paused activation paused", async () => {
+    let now = 1000;
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    const handle = await startEngine(
+      baseOptions({ webcam: null, webcamWhenEnabled: webcam, onWebcamStart: async () => true }),
+    );
+    now = 2000;
+    handle.pause(now);
+    now = 3000;
+    handle.resume(now);
+    now = 4000;
+    handle.pause(now);
+    now = 5000;
+    await expect(handle.turnWebcamOn()).resolves.toBe("ok");
+    const stamps = await handle.webcam!.startTimesAfterStop();
+    // Camera wall time 5000 minus the two seconds paused, against screen time 1000.
+    expect(stamps.webcam.rendererMs - stamps.screen.rendererMs).toBe(2000);
+    expect(webcamSourceCall().source.pause).toHaveBeenCalled();
+    now = 6000;
+    handle.resume(now);
+    expect(webcamSourceCall().source.resume).toHaveBeenCalled();
+    await handle.stop();
+    vi.mocked(performance.now).mockRestore();
+  });
+
+  it("a refused late webcam writer releases the camera and leaves the screen recording", async () => {
+    const handle = await startEngine(
+      baseOptions({ webcam: null, webcamWhenEnabled: webcam, onWebcamStart: async () => false }),
+    );
+    await expect(handle.turnWebcamOn()).resolves.toBe("unavailable");
+    expect(handle.webcam).toBeNull();
+    expect(webcamTrack.stop).toHaveBeenCalled();
+    expect(vi.mocked(Output)).toHaveBeenCalledTimes(1);
+    await handle.stop();
+  });
+
+  it("turning off while the first webcam writer opens cannot leave the camera recording", async () => {
+    let ready!: (value: boolean) => void;
+    const onWebcamStart = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          ready = resolve;
+        }),
+    );
+    const handle = await startEngine(
+      baseOptions({ webcam: null, webcamWhenEnabled: webcam, onWebcamStart }),
+    );
+    const opening = handle.turnWebcamOn();
+    await vi.waitFor(() => expect(onWebcamStart).toHaveBeenCalledOnce());
+    expect(handle.turnWebcamOff()).toBe(true);
+    ready(true);
+    await expect(opening).resolves.toBe("ok");
+    expect(webcamTrack.stop).toHaveBeenCalled();
+    expect(handle.webcam).toBeNull();
+    await handle.stop();
+  });
+
   it("off releases the camera and keeps the file running; pause still reaches it", async () => {
     const onWebcamEnded = vi.fn();
     const handle = await startEngine(baseOptions({ webcam, onWebcamEnded }));

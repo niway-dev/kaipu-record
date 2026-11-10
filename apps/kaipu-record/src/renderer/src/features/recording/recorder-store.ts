@@ -71,6 +71,12 @@ export interface StartInput {
    * bubble as it looks now (stored on the sidecar). Absent or null with the camera off.
    */
   webcam?: { deviceId: string | null; lines: number; bubble: WebcamRecordedLayout } | null;
+  /** Keep the selected camera's configuration without acquiring it until it is enabled. */
+  webcamWhenEnabled?: {
+    deviceId: string | null;
+    lines: number;
+    bubble: WebcamRecordedLayout;
+  } | null;
 }
 
 export interface RecorderSnapshot {
@@ -501,6 +507,7 @@ function acquireStart(input: StartInput): PendingStart {
             : false,
         )
     : Promise.resolve(false);
+  let lateWebcamCreated: Promise<boolean> | null = null;
   // Reads `start` only after its first await, once `start` exists.
   const acquire = async (): Promise<[CursorTrackSession, PreparedEngine]> => {
     await created;
@@ -536,6 +543,22 @@ function acquireStart(input: StartInput): PendingStart {
         withWebcam && input.webcam
           ? { deviceId: input.webcam.deviceId, lines: input.webcam.lines }
           : null,
+      webcamWhenEnabled: input.webcamWhenEnabled,
+      onWebcamStart: () => {
+        lateWebcamCreated ??= (async () => {
+          if (sessionId !== id || !(await window.electronAPI.recordingWebcamTrackSupported()))
+            return false;
+          if (sessionId !== id) return false;
+          try {
+            await window.electronAPI.recordingCreate(id, "webcam");
+            return sessionId === id;
+          } catch (error) {
+            console.warn("webcam writer could not be created mid-take", error);
+            return false;
+          }
+        })();
+        return lateWebcamCreated;
+      },
       // Chunks only flow once the take has begun; a discarded take's go nowhere.
       onChunk: (data, position) => {
         if (sessionId === id) window.electronAPI.recordingWrite(id, data, position);
@@ -676,7 +699,7 @@ async function beginTake(
       output: handle.outputSize,
     });
     if (capture && handle.cursorPixels) capture.cursorPixels = handle.cursorPixels;
-    webcamBubble = input.webcam?.bubble ?? null;
+    webcamBubble = input.webcam?.bubble ?? input.webcamWhenEnabled?.bubble ?? null;
     webcamUnavailable = start.webcamUnavailable === true;
     webcamEnded = start.webcamEnded === true;
     // The forwarder attached when the take was acquired keeps running for the take.
@@ -871,7 +894,7 @@ function forwardLiveSettings(
   let webcamOn = Boolean(input.webcam);
   let webcamEnded = false;
   /** The camera is off mid-take and the webcam file goes on: turning it on resumes it. */
-  let webcamParked = false;
+  let webcamParked = !input.webcam && Boolean(input.webcamWhenEnabled);
   let webcamReopenFailed = false;
   /** Bumped by each camera turned on mid-take: only the newest closes the gap. */
   let webcamOnRequest = 0;
@@ -959,6 +982,10 @@ function forwardLiveSettings(
       settings.selectedMicrophone?.deviceId ?? null,
       settings.isSystemAudioEnabled,
     );
+    if (webcamEnded && settings.isCameraEnabled) {
+      writeBack({ isCameraEnabled: false });
+      return;
+    }
     if (webcamOn && !settings.isCameraEnabled) {
       webcamOn = false;
       // A webcam file already ended (here or by the engine) has nothing left to end or keep.
@@ -977,6 +1004,7 @@ function forwardLiveSettings(
       // On the queue, after any earlier on. An off is not queued: it reaches the engine at
       // once, and the engine drops a camera still opening when it is turned off again.
       queue = queue.then(async () => {
+        if (!active) return;
         const result = await handle.turnWebcamOn();
         if (result === "ok") {
           // Turned off again meanwhile (the engine answers "ok" for a camera it dropped), or
@@ -991,6 +1019,11 @@ function forwardLiveSettings(
         webcamParked = false;
         webcamEnded = true;
         webcamReopenFailed = true;
+        // Every window must show that the camera did not start recording.
+        if (webcamOn && request === webcamOnRequest) {
+          webcamOn = false;
+          writeBack({ isCameraEnabled: false });
+        }
       });
     }
   });

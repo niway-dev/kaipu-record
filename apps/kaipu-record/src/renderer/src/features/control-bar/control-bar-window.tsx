@@ -26,9 +26,23 @@ export function ControlBarWindowRoot(): React.JSX.Element {
       onStop={() => window.electronAPI.controlCommand("stop")}
       stopShortcut={shortcuts?.stopRecording}
       modeChip={modeChip}
-      onCameraOff={
-        recording.isCameraEnabled ? () => recording.update({ isCameraEnabled: false }) : undefined
+      inputs={{
+        microphone: recording.isMicrophoneEnabled,
+        systemAudio: recording.isSystemAudioEnabled,
+        camera: recording.isCameraEnabled,
+        loaded: recording.loaded,
+        onMicrophoneToggle: () =>
+          recording.update({ isMicrophoneEnabled: !recording.isMicrophoneEnabled }),
+        onSystemAudioToggle: () =>
+          recording.update({ isSystemAudioEnabled: !recording.isSystemAudioEnabled }),
+        onCameraToggle: () => recording.update({ isCameraEnabled: !recording.isCameraEnabled }),
+      }}
+      onScreenshot={
+        tick.screenshotAvailable
+          ? () => window.electronAPI.requestCaptureScreenshot("frame")
+          : undefined
       }
+      screenshotShortcut={shortcuts?.captureScreenshot}
     />
   );
 }

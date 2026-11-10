@@ -250,6 +250,10 @@ export interface EngineOptions {
    * opened never fails the take; it records without a webcam.
    */
   webcam?: { deviceId: string | null; lines: number } | null;
+  /** Camera configuration kept without opening it, for a take that starts with it off. */
+  webcamWhenEnabled?: { deviceId: string | null; lines: number } | null;
+  /** Create the webcam writer before a camera first enabled mid-take emits any chunks. */
+  onWebcamStart?(): Promise<boolean>;
   /** Receives each StreamTarget chunk to forward to the main-process writer. */
   onChunk(data: ArrayBuffer, position: number): void;
   /** Same, for the webcam file's chunks (its own writer session). */
@@ -774,7 +778,8 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
     // The encoder reads a relay track the camera feeds, so a camera turned off and on again
     // mid-take (a new camera track) still writes into the same file on the same clock. Without
     // a relay (no track processor or generator) it reads the camera track, as before.
-    const webcamRelay = webcamTrack && options.webcam ? createWebcamRelay() : null;
+    const webcamConfig = options.webcam ?? options.webcamWhenEnabled;
+    let webcamRelay = webcamTrack && webcamConfig ? createWebcamRelay() : null;
     /** The camera track recording now: null while the camera is turned off mid-take. */
     let webcamCamera: MediaStreamTrack | null = webcamTrack;
     releaseWebcam = () => {
@@ -794,9 +799,10 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
     let webcamEncodedSize: { width: number; height: number } | null = null;
     /** Output started; the camera ended or was turned off; its encoder failed. */
     let webcamStarted = false;
+    let webcamStarting: Promise<void> | null = null;
     let webcamClosed = false;
     let webcamFailed = false;
-    if (webcamTrack && options.webcam) {
+    const createWebcamOutput = (camera: MediaStreamTrack): void => {
       const webcamWritable = new WritableStream<StreamTargetChunk>({
         write(chunk) {
           options.onWebcamChunk?.(chunk.data.slice().buffer, chunk.position);
@@ -807,7 +813,7 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
         target: new StreamTarget(webcamWritable),
       });
       const webcamSource = new MediaStreamVideoTrackSource(
-        (webcamRelay?.track ?? webcamTrack) as MediaStreamVideoTrack,
+        (webcamRelay?.track ?? camera) as MediaStreamVideoTrack,
         {
           codec: "avc",
           bitrate: WEBCAM_BITRATE_BPS,
@@ -824,11 +830,11 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
         // The camera's own rate, as mediabunny reads it from a camera track: the relay track
         // reports none. With a rate mediabunny writes frames on the clock and repeats the last
         // one while none arrives, which keeps the file running through a camera-off gap.
-        webcamRelay ? { frameRate: webcamTrack.getSettings().frameRate ?? WEBCAM_FPS } : {},
+        webcamRelay ? { frameRate: camera.getSettings().frameRate ?? WEBCAM_FPS } : {},
       );
       webcamOutput.addVideoTrack(webcamSource, { frameRate: WEBCAM_FPS });
-      const { width, height } = webcamTrack.getSettings();
-      const lines = options.webcam.lines;
+      const { width, height } = camera.getSettings();
+      const lines = webcamConfig!.lines;
       webcam = {
         output: webcamOutput,
         source: webcamSource,
@@ -843,8 +849,50 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
         console.warn("webcam encoder failed — the take goes on without it", error);
         reportWebcamEnded();
       });
-    }
+    };
+    if (webcamTrack && webcamConfig) createWebcamOutput(webcamTrack);
+    let webcamHandle: WebcamHandle | null = null;
+    let screenTimestamp: Promise<FirstMediaTimestamp> | null = null;
+    let pausedAt: number | null = null;
+    let pausedMs = 0;
+    let lateWebcamPauseMs = 0;
+    const pausedTime = (): number =>
+      pausedMs + (pausedAt === null ? 0 : performance.now() - pausedAt);
+    const startWebcamOutput = async (): Promise<void> => {
+      if (!webcam || !screenTimestamp) return;
+      webcamStarting = webcam.output.start();
+      await webcamStarting;
+      webcamStarted = true;
+      const reportedSize = webcam.reportedSize;
+      const webcamOutput = webcam.output;
+      const webcamFirstMediaTimestamp = waitForFirstMediaTimestamp(webcamOutput, performance.now());
+      const screenFirstMediaTimestamp = screenTimestamp;
+      webcamHandle = {
+        firstMediaTimestamp: webcamFirstMediaTimestamp.then((stamp) => ({
+          ...stamp,
+          rendererMs: stamp.rendererMs - lateWebcamPauseMs,
+        })),
+        startTimesAfterStop: async () => {
+          const [screenStart, webcamStart] = await Promise.all([
+            screenFirstMediaTimestamp,
+            webcamFirstMediaTimestamp,
+          ]);
+          const finalWebcam = rereadFirstMediaTimestamp(webcamOutput, webcamStart);
+          return {
+            screen: rereadFirstMediaTimestamp(output, screenStart),
+            webcam: { ...finalWebcam, rendererMs: finalWebcam.rendererMs - lateWebcamPauseMs },
+          };
+        },
+        get size() {
+          return webcamEncodedSize ?? reportedSize;
+        },
+        isUsable: () => !webcamFailed,
+      };
+    };
     /** The webcam source still takes frames. */
+    const pauseWebcam = (): void => {
+      webcam?.source.pause();
+    };
     const webcamLive = (): boolean => webcamStarted && !webcamClosed && !webcamFailed;
     /** Set by stop() and release(); a live toggle arriving after it is answered "unavailable". */
     let stopped = false;
@@ -894,18 +942,18 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
       webcamRelay && webcamTrack ? feedWebcam(webcamRelay, webcamTrack) : null;
 
     /** The camera is wanted on; bumped by each toggle so a late camera knows it was superseded. */
-    let cameraWanted = true;
+    let cameraWanted = Boolean(webcamTrack);
     let cameraRequest = 0;
     /** The device the take opened (it may be the fallback), so turning it on again opens it. */
-    const openedDeviceId = webcamTrack?.getSettings().deviceId ?? options.webcam?.deviceId ?? null;
+    let openedDeviceId = webcamTrack?.getSettings().deviceId ?? webcamConfig?.deviceId ?? null;
     /** `turnWebcamOn` past its checks: open the camera again and feed it, by `expired`. */
     const reopen = async (
       request: number,
       expired: Promise<"timeout">,
     ): Promise<LiveToggleResult> => {
-      if (!webcamRelay || !options.webcam) return "unavailable";
+      if (!webcamRelay || !webcamConfig) return "unavailable";
       const stream = await openWebcamBy(
-        { deviceId: openedDeviceId, lines: options.webcam.lines },
+        { deviceId: openedDeviceId, lines: webcamConfig.lines },
         expired,
         WEBCAM_OPEN_TIMEOUT_MS,
       );
@@ -936,17 +984,73 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
     };
     const webcamControls: LiveWebcamControls = {
       turnWebcamOff() {
-        if (!webcamRelay || !webcamLive()) return false;
         cameraWanted = false;
         cameraRequest++;
-        webcamRelay.cut();
+        // A first activation may still be opening the device or the writer.
+        const canKeep =
+          webcamLive() || (begun && !webcamClosed && !webcamFailed && Boolean(webcamConfig));
+        webcamRelay?.cut();
         const camera = webcamCamera;
         webcamCamera = null;
         camera?.stop(); // the light goes off; the file holds its last frame on the clock
-        return true;
+        return canKeep && Boolean(webcamRelay || !webcam);
       },
       async turnWebcamOn() {
-        if (!webcamRelay || !webcamLive() || !options.webcam) return "unavailable";
+        if (stopped || !begun || webcamClosed || webcamFailed || !webcamConfig)
+          return "unavailable";
+        if (!webcam) {
+          cameraWanted = true;
+          const request = ++cameraRequest;
+          const deadline = deadlineIn(WEBCAM_OPEN_TIMEOUT_MS);
+          let stream: MediaStream | null = null;
+          try {
+            stream = await openWebcamBy(webcamConfig, deadline.expired, WEBCAM_OPEN_TIMEOUT_MS);
+            const camera = stream?.getVideoTracks()[0];
+            if (stopped || request !== cameraRequest) {
+              stream?.getTracks().forEach((track) => track.stop());
+              return stopped ? "unavailable" : "ok";
+            }
+            if (!camera) return "unavailable";
+            webcamRelay = createWebcamRelay();
+            if (!webcamRelay) {
+              stream?.getTracks().forEach((track) => track.stop());
+              return "unavailable";
+            }
+            webcamCamera = camera;
+            openedDeviceId = camera.getSettings().deviceId ?? webcamConfig.deviceId;
+            const writerReady = await Promise.race([
+              options.onWebcamStart?.() ?? Promise.resolve(false),
+              deadline.expired.then(() => false),
+            ]);
+            if (!writerReady || stopped || request !== cameraRequest) {
+              stream?.getTracks().forEach((track) => track.stop());
+              webcamRelay.stop();
+              return !stopped && request !== cameraRequest ? "ok" : "unavailable";
+            }
+            createWebcamOutput(camera);
+            endWhenUnplugged(camera);
+            lateWebcamPauseMs = pausedTime();
+            const fed = feedWebcam(webcamRelay, camera);
+            await startWebcamOutput();
+            const firstFrame = await Promise.race([fed, deadline.expired.then(() => false)]);
+            if (request !== cameraRequest) return stopped ? "unavailable" : "ok";
+            if (!firstFrame || stopped) {
+              endWebcam();
+              return "unavailable";
+            }
+            if (pausedAt !== null) pauseWebcam();
+            return "ok";
+          } catch (error) {
+            console.warn("camera could not start mid-take", error);
+            stream?.getTracks().forEach((track) => track.stop());
+            endWebcam();
+            releaseWebcam?.();
+            return "unavailable";
+          } finally {
+            deadline.clear();
+          }
+        }
+        if (!webcamRelay || !webcamLive()) return "unavailable";
         if (cameraWanted) return "ok";
         cameraWanted = true;
         const request = ++cameraRequest;
@@ -1053,7 +1157,6 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
     const handle = (
       thumbnail: Promise<ArrayBuffer | null>,
       firstMediaTimestamp: Promise<FirstMediaTimestamp>,
-      webcamHandle: WebcamHandle | null,
     ): EngineHandle => ({
       ...controls,
       // Screen first, then the webcam, in the same call: both drop the same paused time.
@@ -1064,12 +1167,17 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
         return native ? ("native" as const) : ("chromium" as const);
       },
       pause: (at = performance.now()) => {
+        pausedAt ??= at;
         void native?.pause(at + nativeOffset).catch(notifyError);
         videoSource?.pause();
         audioSource?.pause();
         if (webcamLive()) webcam?.source.pause();
       },
       resume: (at = performance.now()) => {
+        if (pausedAt !== null) {
+          pausedMs += at - pausedAt;
+          pausedAt = null;
+        }
         void native?.resume(at + nativeOffset).catch(notifyError);
         videoSource?.resume();
         audioSource?.resume();
@@ -1087,7 +1195,9 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
       thumbnail,
       outputSize: nativeSize ?? { width: target.width, height: target.height },
       firstMediaTimestamp,
-      webcam: webcamHandle,
+      get webcam() {
+        return webcamHandle;
+      },
       endWebcam,
       ...webcamControls,
       async stop(atRendererMs = performance.now()) {
@@ -1121,6 +1231,7 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
           }
           // The webcam after the screen, before the tracks stop. Its failure never fails the
           // take: the file is reported unusable and finalize drops it.
+          await webcamStarting?.catch(() => undefined);
           if (webcam && webcamStarted) {
             if (webcamFailed) await webcam.output.cancel().catch(() => undefined);
             else {
@@ -1190,12 +1301,11 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
         ? nativeStart
         : waitForFirstMediaTimestamp(output, startedAt);
 
+      screenTimestamp = firstMediaTimestamp;
       // The webcam right after the screen. One that cannot start drops the webcam, not the take.
-      let webcamHandle: WebcamHandle | null = null;
       if (webcam && !webcamClosed) {
         try {
-          await webcam.output.start();
-          webcamStarted = true;
+          await startWebcamOutput();
           markRecordTiming("webcam output.start resolved");
           if (firstWebcamFeed) {
             // A camera that sends no frame (or none the relay can pass on) would leave a file
@@ -1208,29 +1318,6 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
               endWebcam();
             });
           }
-          const reportedSize = webcam.reportedSize;
-          const webcamOutput = webcam.output;
-          const webcamFirstMediaTimestamp = waitForFirstMediaTimestamp(
-            webcamOutput,
-            performance.now(),
-          );
-          webcamHandle = {
-            firstMediaTimestamp: webcamFirstMediaTimestamp,
-            startTimesAfterStop: async () => {
-              const [screenStart, webcamStart] = await Promise.all([
-                firstMediaTimestamp,
-                webcamFirstMediaTimestamp,
-              ]);
-              return {
-                screen: rereadFirstMediaTimestamp(output, screenStart),
-                webcam: rereadFirstMediaTimestamp(webcamOutput, webcamStart),
-              };
-            },
-            get size() {
-              return webcamEncodedSize ?? reportedSize;
-            },
-            isUsable: () => !webcamFailed,
-          };
         } catch (error) {
           console.warn("webcam output could not start — recording without it", error);
           webcamClosed = true;
@@ -1247,7 +1334,7 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
         markRecordTiming("captureThumbnail resolved");
         return image;
       });
-      return handle(thumbnail, firstMediaTimestamp, webcamHandle);
+      return handle(thumbnail, firstMediaTimestamp);
     };
 
     let beginning: Promise<EngineHandle> | null = null;

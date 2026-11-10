@@ -92,6 +92,7 @@ export const PROFILES = {
     stateTimeoutMs: 30_000,
     // A take's countdown is shorter with the minimum the setting allows.
     settings: { recordingCountdownSeconds: 3 },
+    flags: { "capture-while-recording": true },
   },
 } as const satisfies Record<string, Profile>;
 

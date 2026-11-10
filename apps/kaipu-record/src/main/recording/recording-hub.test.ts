@@ -965,7 +965,32 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
 
     mockState.ipcOn.get(IPC_CHANNELS.recordingReportTick)!({}, tick);
 
-    expect(mockState.bar.sendTick).toHaveBeenCalledWith(tick);
+    expect(mockState.bar.sendTick).toHaveBeenCalledWith({ ...tick, screenshotAvailable: false });
+  });
+
+  it("resolves screenshot availability in main for the widget", async () => {
+    const { registerSettings } = await import("../infrastructure/settings-store");
+    const { registerRecordingHub } = await import("./recording-hub");
+    const { setReportedCaptureWhileRecording } =
+      await import("../screenshots/capture-while-recording");
+    registerSettings();
+    registerRecordingHub(() => fakeMainWindow() as never);
+    try {
+      setReportedCaptureWhileRecording(true);
+      const tick = {
+        elapsedSeconds: 3,
+        levels: [],
+        status: "recording",
+        screenshotAvailable: false,
+      };
+      mockState.ipcOn.get(IPC_CHANNELS.recordingReportTick)!({}, tick);
+      expect(mockState.bar.sendTick).toHaveBeenCalledWith({
+        ...tick,
+        screenshotAvailable: process.platform === "darwin",
+      });
+    } finally {
+      setReportedCaptureWhileRecording(false);
+    }
   });
 
   it("a source lookup left over from a cancelled take never acts on the next take", async () => {

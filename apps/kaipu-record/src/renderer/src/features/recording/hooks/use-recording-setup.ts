@@ -195,6 +195,7 @@ export function useRecordingSetup(): RecordingSetup {
         frameRate: engineQuality.frameRate,
         videoBitrate: engineQuality.videoBitrate,
         watermark: wm.enabled ? wm.config : null,
+        webcamWhenEnabled: { deviceId, lines: webcamCaptureLines(bubble), bubble },
         webcam: cameraEnabledRef.current
           ? { deviceId, lines: webcamCaptureLines(bubble), bubble }
           : null,

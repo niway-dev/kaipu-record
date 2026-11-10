@@ -18,6 +18,20 @@ const set = (patch: Record<string, string>): Step => ({
 export const captureToast = catalog(
   "captureToast",
   {
+    taken: {
+      profile: "recording",
+      steps: [
+        { action: "selectFirstScreen" },
+        { action: "startTake" },
+        { waitFor: { window: "control-bar" } },
+        { waitFor: { area: "controlBar.screenshot" }, on: "control-bar" },
+        { click: { area: "controlBar.screenshot" }, on: "control-bar" },
+        { waitFor: { window: "capture-toast" } },
+      ],
+      demonstrates: ["captureToast.card:taken"],
+      gates: [{ flag: "capture-while-recording", side: "on" }],
+      after: [dismiss, { action: "stopTake" }],
+    },
     saved: {
       profile: "recording",
       embedsScreen: true,
@@ -77,10 +91,6 @@ export const captureToast = catalog(
   {
     notCapturable: {
       "captureToast.root:notSaved": nc("inducedFailure", "needs a capture whose save fails"),
-      "captureToast.card:taken": nc(
-        "needsSetup",
-        "needs a take in progress and the capture-while-recording flag; the runner cannot hold one while it drives the toast (macOS only)",
-      ),
     },
     oneSided: {
       "captureToast.card":

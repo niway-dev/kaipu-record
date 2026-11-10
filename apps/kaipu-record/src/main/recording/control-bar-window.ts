@@ -7,9 +7,8 @@ import { CONTROL_BAR_STARTING_TICK, type RecordingTick } from "@shared/types/ipc
 import type { Rect } from "./area-geometry";
 import { controlBarBounds } from "./control-bar-placement";
 
-// 480 since the bar carries the recording's mode chip ("16:9", "SCREEN"); 528 since it also
-// carries "Turn camera off" while the camera is on (a 36 px button and its 12 px gap).
-const BAR_WIDTH = 528;
+// Room for the target, screenshot and three input toggles, including the paused label.
+const BAR_WIDTH = 688;
 const BAR_HEIGHT = 82;
 
 /**

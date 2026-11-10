@@ -436,6 +436,8 @@ export const UI_MAP = {
     areas: {
       bar: { states: ["starting", "recording", "paused", "saving"] },
       mode: { states: ["screen", "window", "frame"] },
+      screenshot: { states: ["available"], gatedBy: [{ flag: "capture-while-recording" }] },
+      inputs: { states: ["on", "off", "audioUnavailable"] },
     },
   },
   cameraBubble: {

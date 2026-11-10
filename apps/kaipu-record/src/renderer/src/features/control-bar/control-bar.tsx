@@ -1,5 +1,20 @@
 import React from "react";
-import { AppWindow, CameraOff, Frame, Loader2, Monitor, Pause, Play, Square } from "lucide-react";
+import {
+  AppWindow,
+  Camera,
+  CameraOff,
+  Frame,
+  Loader2,
+  Mic,
+  MicOff,
+  Monitor,
+  Pause,
+  Play,
+  ScanLine,
+  Square,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { formatElapsed } from "@renderer/features/recording/elapsed";
 import { cx } from "@renderer/ui/cx";
@@ -17,18 +32,24 @@ interface ControlBarProps {
   stopShortcut?: string;
   /** What is recorded: the mode and, for an area drawn with one, its ratio ("16:9"). */
   modeChip?: { mode: CaptureMode; ratio: string | null };
-  /**
-   * Turn the camera off mid-take. Given only while the camera is on: the bubble hides its
-   * own close button during a recording (it would be in the video), and this bar is not.
-   */
-  onCameraOff?(): void;
+  inputs?: {
+    microphone: boolean;
+    systemAudio: boolean;
+    camera: boolean;
+    loaded: boolean;
+    onMicrophoneToggle(): void;
+    onSystemAudioToggle(): void;
+    onCameraToggle(): void;
+  };
+  onScreenshot?(): void;
+  screenshotShortcut?: string;
 }
 
 const MODE_ICON = { frame: Frame, window: AppWindow, screen: Monitor } as const;
 
 /**
- * Floating recording HUD: dot · timer · separator · live mic level · mode · camera off (while
- * the camera is on) · pause/resume · stop · shortcut.
+ * Floating recording HUD: timer, live levels, recorded target, screenshot, input toggles,
+ * pause/resume and stop. Controls stay out of the captured video by default.
  */
 export function ControlBar({
   tick,
@@ -37,11 +58,13 @@ export function ControlBar({
   onStop,
   stopShortcut,
   modeChip,
-  onCameraOff,
+  inputs,
+  onScreenshot,
+  screenshotShortcut,
 }: ControlBarProps): React.JSX.Element {
   const t = useTranslations("panel");
   const tModes = useTranslations("screenshots");
-  const tCamera = useTranslations("cameraSettings");
+  const tRecord = useTranslations("record");
   if (tick.status === "saving") {
     return (
       <div {...uiArea("controlBar.bar")} className={styles.bar}>
@@ -59,7 +82,13 @@ export function ControlBar({
         <span className={styles.dot} data-starting />
         <span className={styles.savingLabel}>{t("starting")}</span>
         {modeChip && <ModeChip chip={modeChip} label={modeName(modeChip.mode, tModes)} />}
-        <button className={styles.stop} type="button" aria-label={t("stop")} onClick={onStop}>
+        <button
+          className={styles.stop}
+          type="button"
+          aria-label={t("stop")}
+          title={[t("stop"), stopShortcut].filter(Boolean).join(" · ")}
+          onClick={onStop}
+        >
           <Square size={14} fill="currentColor" />
         </button>
       </div>
@@ -82,16 +111,43 @@ export function ControlBar({
 
       {modeChip && <ModeChip chip={modeChip} label={modeName(modeChip.mode, tModes)} />}
 
-      {onCameraOff && (
+      {onScreenshot && (
         <button
+          {...uiArea("controlBar.screenshot")}
           className={styles.control}
           type="button"
-          aria-label={tCamera("turnCameraOff")}
-          title={tCamera("turnCameraOff")}
-          onClick={onCameraOff}
+          aria-label={t("screenshot")}
+          title={[t("screenshot"), screenshotShortcut].filter(Boolean).join(" · ")}
+          onClick={onScreenshot}
         >
-          <CameraOff size={17} />
+          <ScanLine size={17} aria-hidden />
         </button>
+      )}
+      {inputs && (
+        <div {...uiArea("controlBar.inputs")} className={styles.inputs}>
+          <InputToggle
+            label={tRecord("micLabel")}
+            enabled={inputs.microphone}
+            disabled={!inputs.loaded}
+            onClick={inputs.onMicrophoneToggle}
+            icon={inputs.microphone ? Mic : MicOff}
+          />
+          <InputToggle
+            label={tRecord("audioLabel")}
+            enabled={inputs.systemAudio}
+            disabled={!inputs.loaded || tick.systemAudioAvailable === false}
+            title={tick.systemAudioAvailable === false ? tRecord("audioUnavailable") : undefined}
+            onClick={inputs.onSystemAudioToggle}
+            icon={inputs.systemAudio ? Volume2 : VolumeX}
+          />
+          <InputToggle
+            label={tRecord("cameraLabel")}
+            enabled={inputs.camera}
+            disabled={!inputs.loaded}
+            onClick={inputs.onCameraToggle}
+            icon={inputs.camera ? Camera : CameraOff}
+          />
+        </div>
       )}
 
       {paused ? (
@@ -108,11 +164,15 @@ export function ControlBar({
           <Pause size={17} />
         </button>
       )}
-      <button className={styles.stop} type="button" aria-label={t("stop")} onClick={onStop}>
+      <button
+        className={styles.stop}
+        type="button"
+        aria-label={t("stop")}
+        title={[t("stop"), stopShortcut].filter(Boolean).join(" · ")}
+        onClick={onStop}
+      >
         <Square size={14} fill="currentColor" />
       </button>
-
-      {!paused && stopShortcut && <kbd className={styles.shortcut}>{stopShortcut}</kbd>}
     </div>
   );
 }
@@ -145,5 +205,35 @@ function MicLevel({ levels }: { levels: number[] }): React.JSX.Element {
         <span key={i} className={cx(styles.meterBar)} style={{ ["--level" as string]: value }} />
       ))}
     </div>
+  );
+}
+
+function InputToggle({
+  label,
+  enabled,
+  disabled,
+  title,
+  onClick,
+  icon: Icon,
+}: {
+  label: string;
+  enabled: boolean;
+  disabled: boolean;
+  title?: string;
+  onClick(): void;
+  icon: typeof Mic;
+}): React.JSX.Element {
+  return (
+    <button
+      className={cx(styles.control, styles.input)}
+      type="button"
+      aria-label={label}
+      aria-pressed={enabled}
+      disabled={disabled}
+      title={title ?? label}
+      onClick={onClick}
+    >
+      <Icon size={17} aria-hidden />
+    </button>
   );
 }

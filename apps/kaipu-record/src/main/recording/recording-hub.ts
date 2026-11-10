@@ -1,3 +1,4 @@
+import { captureWhileRecordingEnabled } from "../screenshots/capture-while-recording";
 import type { RecordingCaptureTarget } from "../screenshots/screenshot-capture";
 import {
   app,
@@ -1237,7 +1238,7 @@ export function registerRecordingHub(
   });
   ipcMain.handle(IPC_CHANNELS.micLevelsGetListening, () => micLevels.listening());
   ipcMain.on(IPC_CHANNELS.recordingReportTick, (_e, tick: RecordingTick) => {
-    bar.sendTick(tick);
+    bar.sendTick({ ...tick, screenshotAvailable: captureWhileRecordingEnabled() });
     const next = applyTick(activity, tick);
     activity = next.activity;
     if (next.changed) broadcastActivity();

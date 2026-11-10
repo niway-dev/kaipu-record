@@ -761,6 +761,8 @@ export interface RecordingTick {
    * mid-take when turning it on could not work.
    */
   systemAudioAvailable?: boolean;
+  /** Main resolves the platform and capture-while-recording flag for the floating widget. */
+  screenshotAvailable?: boolean;
 }
 
 /** The bar between a take's start and its first tick: no timer, no level, Stop only. */

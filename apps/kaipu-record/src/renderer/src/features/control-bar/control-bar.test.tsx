@@ -94,22 +94,79 @@ describe("ControlBar", () => {
     expect(onStop).toHaveBeenCalledOnce();
   });
 
-  it("offers Turn camera off only while the camera is on", () => {
-    const onCameraOff = vi.fn();
+  it("keeps all three toggles visible and reports their actual state", () => {
+    const inputs = {
+      microphone: true,
+      systemAudio: false,
+      camera: false,
+      loaded: true,
+      onMicrophoneToggle: vi.fn(),
+      onSystemAudioToggle: vi.fn(),
+      onCameraToggle: vi.fn(),
+    };
     const { rerender } = render(
-      <ControlBar tick={baseTick} onPause={vi.fn()} onResume={vi.fn()} onStop={vi.fn()} />,
-    );
-    expect(screen.queryByRole("button", { name: "Turn camera off" })).not.toBeInTheDocument();
-    rerender(
       <ControlBar
         tick={baseTick}
         onPause={vi.fn()}
         onResume={vi.fn()}
         onStop={vi.fn()}
-        onCameraOff={onCameraOff}
+        inputs={inputs}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Turn camera off" }));
-    expect(onCameraOff).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Mic" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Audio" })).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(screen.getByRole("button", { name: "Camera" }));
+    expect(inputs.onCameraToggle).toHaveBeenCalledOnce();
+    rerender(
+      <ControlBar
+        tick={{ ...baseTick, status: "paused" }}
+        onPause={vi.fn()}
+        onResume={vi.fn()}
+        onStop={vi.fn()}
+        inputs={{ ...inputs, camera: true }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Camera" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Mic" }));
+    fireEvent.click(screen.getByRole("button", { name: "Audio" }));
+    expect(inputs.onMicrophoneToggle).toHaveBeenCalledOnce();
+    expect(inputs.onSystemAudioToggle).toHaveBeenCalledOnce();
+  });
+
+  it("disables unavailable loopback instead of promising audio it cannot record", () => {
+    const onSystemAudioToggle = vi.fn();
+    render(
+      <ControlBar
+        tick={{ ...baseTick, systemAudioAvailable: false }}
+        onPause={vi.fn()}
+        onResume={vi.fn()}
+        onStop={vi.fn()}
+        inputs={{
+          microphone: true,
+          systemAudio: false,
+          camera: false,
+          loaded: true,
+          onMicrophoneToggle: vi.fn(),
+          onSystemAudioToggle,
+          onCameraToggle: vi.fn(),
+        }}
+      />,
+    );
+    const audio = screen.getByRole("button", { name: "Audio" });
+    expect(audio).toBeDisabled();
+    fireEvent.click(audio);
+    expect(onSystemAudioToggle).not.toHaveBeenCalled();
+  });
+
+  it("captures only when offered, and removes capture during saving or starting", () => {
+    const onScreenshot = vi.fn();
+    const props = { onPause: vi.fn(), onResume: vi.fn(), onStop: vi.fn(), onScreenshot };
+    const { rerender } = render(<ControlBar tick={baseTick} {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Take screenshot" }));
+    expect(onScreenshot).toHaveBeenCalledOnce();
+    for (const status of ["starting", "saving"] as const) {
+      rerender(<ControlBar tick={{ ...baseTick, status }} {...props} />);
+      expect(screen.queryByRole("button", { name: "Take screenshot" })).not.toBeInTheDocument();
+    }
   });
 });

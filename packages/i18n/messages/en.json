@@ -1656,6 +1656,7 @@
     "guideWebcamHow3": "remove the selected stretch"
   },
   "panel": {
+    "screenshot": "Take screenshot",
     "saving": "Saving…",
     "starting": "Starting…",
     "paused": "Paused",
