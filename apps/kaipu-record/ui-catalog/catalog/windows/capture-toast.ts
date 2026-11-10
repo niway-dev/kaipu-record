@@ -23,7 +23,7 @@ export const captureToast = catalog(
       steps: [
         { action: "selectFirstScreen" },
         { action: "startTake" },
-        { waitFor: { window: "control-bar" } },
+        { waitFor: { window: "control-bar" }, on: "main" },
         { waitFor: { area: "controlBar.screenshot" }, on: "control-bar" },
         { click: { area: "controlBar.screenshot" }, on: "control-bar" },
         { waitFor: { window: "capture-toast" } },
