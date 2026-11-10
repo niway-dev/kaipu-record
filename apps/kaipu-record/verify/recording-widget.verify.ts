@@ -11,7 +11,7 @@ test("recording widget captures the recorded region and starts the camera mid-ta
   await mkdir(out, { recursive: true });
   const { app, page, vaultDir, teardown } = await launchApp({
     disableScreenCapture: false,
-    settings: { recordingCountdownSeconds: 0 },
+    settings: { recordingCountdownSeconds: 3 },
     env: { KAIPU_FLAG_OVERRIDES: JSON.stringify({ "capture-while-recording": true }) },
     extraArgs: [
       "--use-fake-device-for-media-stream",
@@ -38,29 +38,39 @@ test("recording widget captures the recorded region and starts the camera mid-ta
         scale: d.scaleFactor,
       };
     });
-    await page.evaluate(async (d) => {
-      const sources = await window.electronAPI.getScreenSources({ withThumbnails: false });
-      const source =
-        sources.find((s) => s.id.startsWith(`screen:${d.id}:`)) ??
-        sources.find((s) => s.id.startsWith("screen:"));
-      if (!source) throw new Error("No screen source on the recording runner");
+    await page.evaluate(() => {
       window.electronAPI.updateRecordingSettings({
-        selectedSource: { id: source.id, name: source.name, type: "screen" },
-        area: {
-          displayId: d.id,
-          displaySize: d.size,
-          rect: { x: 40, y: 40, width: 320, height: 200 },
-        },
         isMicrophoneEnabled: false,
         isSystemAudioEnabled: false,
         isCameraEnabled: false,
       });
-      window.electronAPI.requestStartRecording();
-    }, display);
+      window.electronAPI.requestRecordSelector("frame");
+    });
+    await expect
+      .poll(() =>
+        app.windows().some((p) => p.url().includes(`window=capture-overlay&display=${display.id}`)),
+      )
+      .toBe(true);
+    const overlay = app
+      .windows()
+      .find((p) => p.url().includes(`window=capture-overlay&display=${display.id}`))!;
+    await expect(overlay.locator('[data-ui-area="captureOverlay.frameBox"]')).toBeVisible();
+    await overlay.evaluate(
+      (d) =>
+        window.electronAPI.captureOverlay.answer({
+          kind: "rect",
+          mode: "frame",
+          action: "record",
+          displayId: d.id,
+          rect: { x: 40, y: 40, width: 320, height: 200 },
+        }),
+      display,
+    );
     await expect.poll(async () => (await activity()).active).toBe(true);
     const bar = await control();
     const shot = bar.getByRole("button", { name: "Take screenshot" });
     await expect(shot).toBeVisible();
+    await expect(bar.locator('[data-testid="control-bar-mode"]')).toHaveText(/Frame/);
     await bar.screenshot({ path: path.join(out, "01-recording.png") });
     await shot.click();
     await expect

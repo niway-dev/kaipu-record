@@ -169,7 +169,8 @@ export interface LiveWebcamControls {
    */
   turnWebcamOff(): boolean;
   /**
-   * Open the camera again (the one the take opened, else the default) and feed the same file.
+   * Open the camera (the one the take opened, else the configured default) and feed its file.
+   * A take that started with it off creates that file on demand through `onWebcamStart`.
    * "ok" once its first frame reached the file, or when the camera was turned off again
    * meanwhile; "unavailable" when it could not (busy, denied, unplugged, or no frame within
    * `WEBCAM_OPEN_TIMEOUT_MS`), in which case the webcam file ends where it is (`onWebcamEnded`).
