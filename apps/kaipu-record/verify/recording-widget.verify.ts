@@ -27,6 +27,7 @@ test("recording widget captures the recorded region and starts the camera mid-ta
       .toBe(true);
     return app.windows().find((p) => p.url().includes("window=control-bar"))!;
   };
+  let failed = false;
   try {
     await dismissOnboarding(page);
     const display = await app.evaluate(({ screen }) => {
@@ -78,7 +79,13 @@ test("recording widget captures the recorded region and starts the camera mid-ta
       320 * display.scale,
       200 * display.scale,
     ]);
-    expect(app.windows().some((p) => p.url().includes("window=capture-overlay"))).toBe(false);
+    expect(
+      await app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows().some(
+          (w) => w.isVisible() && w.webContents.getURL().includes("window=capture-overlay"),
+        ),
+      ),
+    ).toBe(false);
 
     // Activate the camera for the first time while paused, then off/on while recording.
     await bar.getByRole("button", { name: "Pause", exact: true }).click();
@@ -133,10 +140,21 @@ test("recording widget captures the recorded region and starts the camera mid-ta
         2,
       ),
     );
+  } catch (error) {
+    failed = true;
+    console.error("[recording-widget proof]", error);
+    throw error;
   } finally {
     if ((await activity().catch(() => null))?.active) {
       await page.evaluate(() => window.electronAPI.controlCommand("stop")).catch(() => {});
     }
-    await teardown();
+    await expect
+      .poll(async () => (await activity().catch(() => null))?.active ?? false, { timeout: 30_000 })
+      .toBe(false)
+      .catch(() => {});
+    await teardown().catch((error) => {
+      if (!failed) throw error;
+      console.error("[recording-widget teardown]", error);
+    });
   }
 });

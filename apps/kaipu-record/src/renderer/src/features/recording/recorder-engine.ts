@@ -854,10 +854,18 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
     let webcamHandle: WebcamHandle | null = null;
     let screenTimestamp: Promise<FirstMediaTimestamp> | null = null;
     let pausedAt: number | null = null;
-    let pausedMs = 0;
-    let lateWebcamPauseMs = 0;
-    const pausedTime = (): number =>
-      pausedMs + (pausedAt === null ? 0 : performance.now() - pausedAt);
+    const pauses: Array<{ startMs: number; endMs: number | null }> = [];
+    let lateWebcam = false;
+    // A late camera's time zero must land on the screen timeline, with earlier pauses removed.
+    const pausedBefore = (at: number): number =>
+      pauses.reduce(
+        (total, pause) => total + Math.max(0, Math.min(pause.endMs ?? at, at) - pause.startMs),
+        0,
+      );
+    const webcamOnScreenClock = (stamp: FirstMediaTimestamp): FirstMediaTimestamp => ({
+      ...stamp,
+      rendererMs: stamp.rendererMs - (lateWebcam ? pausedBefore(stamp.rendererMs) : 0),
+    });
     const startWebcamOutput = async (): Promise<void> => {
       if (!webcam || !screenTimestamp) return;
       webcamStarting = webcam.output.start();
@@ -868,10 +876,7 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
       const webcamFirstMediaTimestamp = waitForFirstMediaTimestamp(webcamOutput, performance.now());
       const screenFirstMediaTimestamp = screenTimestamp;
       webcamHandle = {
-        firstMediaTimestamp: webcamFirstMediaTimestamp.then((stamp) => ({
-          ...stamp,
-          rendererMs: stamp.rendererMs - lateWebcamPauseMs,
-        })),
+        firstMediaTimestamp: webcamFirstMediaTimestamp.then(webcamOnScreenClock),
         startTimesAfterStop: async () => {
           const [screenStart, webcamStart] = await Promise.all([
             screenFirstMediaTimestamp,
@@ -880,7 +885,7 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
           const finalWebcam = rereadFirstMediaTimestamp(webcamOutput, webcamStart);
           return {
             screen: rereadFirstMediaTimestamp(output, screenStart),
-            webcam: { ...finalWebcam, rendererMs: finalWebcam.rendererMs - lateWebcamPauseMs },
+            webcam: webcamOnScreenClock(finalWebcam),
           };
         },
         get size() {
@@ -1029,7 +1034,7 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
             }
             createWebcamOutput(camera);
             endWhenUnplugged(camera);
-            lateWebcamPauseMs = pausedTime();
+            lateWebcam = true;
             const fed = feedWebcam(webcamRelay, camera);
             await startWebcamOutput();
             const firstFrame = await Promise.race([fed, deadline.expired.then(() => false)]);
@@ -1038,7 +1043,12 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
               endWebcam();
               return "unavailable";
             }
-            if (pausedAt !== null) pauseWebcam();
+            if (pausedAt !== null) {
+              // The relay accepting a frame does not mean mediabunny accepted it yet. Pausing
+              // before that first sample would leave the source without its time base.
+              await Promise.race([webcamHandle?.firstMediaTimestamp, deadline.expired]);
+              if (pausedAt !== null && webcamLive()) pauseWebcam();
+            }
             return "ok";
           } catch (error) {
             console.warn("camera could not start mid-take", error);
@@ -1167,7 +1177,10 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
         return native ? ("native" as const) : ("chromium" as const);
       },
       pause: (at = performance.now()) => {
-        pausedAt ??= at;
+        if (pausedAt === null) {
+          pausedAt = at;
+          pauses.push({ startMs: at, endMs: null });
+        }
         void native?.pause(at + nativeOffset).catch(notifyError);
         videoSource?.pause();
         audioSource?.pause();
@@ -1175,7 +1188,7 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
       },
       resume: (at = performance.now()) => {
         if (pausedAt !== null) {
-          pausedMs += at - pausedAt;
+          pauses[pauses.length - 1]!.endMs = at;
           pausedAt = null;
         }
         void native?.resume(at + nativeOffset).catch(notifyError);
