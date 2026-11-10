@@ -83,6 +83,10 @@ export const controlBar = catalog(
     },
   },
   {
+    oneSided: {
+      "controlBar.screenshot":
+        "the screenshot button is absent when capture-while-recording is off or the platform is unsupported",
+    },
     notCapturable: {
       "controlBar.inputs:audioUnavailable": nc(
         "platform",
