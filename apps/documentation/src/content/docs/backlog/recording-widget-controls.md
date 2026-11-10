@@ -9,6 +9,8 @@ description: Take a screenshot of the current recording target and toggle microp
 
 ## Behaviour
 
+- The screenshot button reuses Kai with four capture corners from the small-size tray mark,
+  in the current foreground colour. The camera keeps its existing camera icon.
 - The screenshot button uses the same request as Command + Control + X. During a take,
   the existing direct-capture flow captures the recorded display, region or window.
   It never opens a selector or changes the take's target. The content-protected confirmation

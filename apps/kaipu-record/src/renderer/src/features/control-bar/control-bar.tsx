@@ -10,7 +10,6 @@ import {
   Monitor,
   Pause,
   Play,
-  ScanLine,
   Square,
   Volume2,
   VolumeX,
@@ -120,7 +119,7 @@ export function ControlBar({
           title={[t("screenshot"), screenshotShortcut].filter(Boolean).join(" · ")}
           onClick={onScreenshot}
         >
-          <ScanLine size={17} aria-hidden />
+          <span className={styles.screenshotIcon} aria-hidden="true" />
         </button>
       )}
       {inputs && (

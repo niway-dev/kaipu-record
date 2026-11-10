@@ -187,3 +187,12 @@
     opacity: 0.4;
   }
 }
+
+/* Reuse the tray's small-size capture mark: Kai framed by four capture corners.
+   An alpha mask follows the button's foreground in both light and dark themes. */
+.screenshotIcon {
+  width: 22px;
+  height: 22px;
+  background: currentColor;
+  mask: url("../../../../../resources/tray-screenshot@2x.png") center / contain no-repeat;
+}
