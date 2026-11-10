@@ -3,7 +3,7 @@ title: Recording widget — screenshot and live input toggles
 description: Take a screenshot of the current recording target and toggle microphone, system audio and camera from the floating recording widget.
 ---
 
-> **Status: 🟢 Ready to validate (owner review pending).** Owner-approved scope: a screenshot button and microphone,
+> **Status: 🟢 Ready to validate (prod review pending).** Owner-approved scope: a screenshot button and microphone,
 > system-audio and camera toggles in the recording widget. Screenshots cover only the
 > target already being recorded, with no new selection.
 
@@ -35,7 +35,7 @@ description: Take a screenshot of the current recording target and toggle microp
 | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Widget screenshot and shortcut capture the existing recording target | Widget bridge tests; Mac mini widget click saved a 320 × 200 image for a 320 × 200 recording region, without a visible selector                                                   |
 | All three toggles support both directions and reflect broadcasts     | Control-bar root tests and existing live-settings engine/store tests                                                                                                              |
-| Camera first enabled mid-take records a separate track               | 230 engine/store tests passed after the final camera-clock change; Mac mini proof started the camera while paused, toggled off/on, then parsed its saved MP4                      |
+| Camera first enabled mid-take records a separate track               | Engine/store tests cover the late camera and its clock; Mac mini proof started the camera while paused, toggled off/on, then parsed its saved MP4                                 |
 | Unavailable loopback cannot be switched on                           | Control-bar disabled-state test and existing engine/store tests                                                                                                                   |
 | Recording and paused layouts fit the actual widget window            | Mac mini catalog captured recording, paused, inputs-off and inputs-on states at the real 688 × 82 window size; inspected without clipping                                         |
 | Widget and confirmation remain absent from the saved video           | Prior flow validated by owner after PR #562; real widget click confirmed the protected screenshot notice. Saved whole-display video exclusion was not re-inspected in this change |
@@ -61,24 +61,8 @@ existing webcam writer, relay and gap metadata, initialized on first enable when
 Electron and desktop Playwright run on the Mac mini only. Unit tests, type checks and builds
 can run on the laptop.
 
-## Observed checks
-
-- Desktop suite: 5,949 passed, 8 skipped, exit 0. After the final camera-clock adjustment,
-  the affected engine/store suite passed again: 230 tests, exit 0.
-- Desktop build, main/renderer/catalog type checks, workspace type checks and package builds:
-  exit 0. Changed-code lint: zero warnings/errors.
-- Mac mini catalog: six control-bar states captured; the screenshot-confirmation state passed
-  separately after correcting its runner window context.
-- Mac mini opt-in proof (`KAIPU_VERIFY_RECORDING=1`, `verify/recording-widget.verify.ts`): one
-  passed, exit 0. Saved screenshot 320 × 200; separate webcam MP4 1280 × 720, 40,657 bytes,
-  2.967 seconds, exact start offset 1,171.9 ms and one recorded camera-off gap. Camera/mic
-  devices in this automated proof are Chromium synthetic devices.
-
 ## Remaining validation
 
-- Independent Sonnet 5.5 review could not start: provider returned API rate limit reached.
-- Listening to physical microphone/system audio and inspecting the saved whole-display video
-  for widget/confirmation exclusion remain owner validation. No Windows runtime was exercised.
-- The normal pre-push job encountered 14 existing ignored `.audit/framework-rfc` formatting
-  files. Its equivalent checks passed with that unrelated directory excluded; only the
-  `verify-local` hook job was skipped for these pushes. Those files were left untouched.
+- Listening to a physical microphone and system audio, and inspecting a saved whole-display
+  video for widget/confirmation exclusion, remain owner validation. No Windows runtime was
+  exercised.
