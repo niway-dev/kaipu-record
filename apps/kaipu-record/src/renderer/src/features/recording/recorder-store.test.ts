@@ -79,7 +79,7 @@ const input = {
 };
 
 function fakeEngine(over: Partial<EngineHandle> = {}): EngineHandle {
-  return {
+  const engine: EngineHandle = {
     pause: vi.fn(),
     resume: vi.fn(),
     stop: vi.fn(async () => {}),
@@ -101,8 +101,10 @@ function fakeEngine(over: Partial<EngineHandle> = {}): EngineHandle {
     // The engine's default without a relay: off is refused, the store ends the file instead.
     turnWebcamOff: vi.fn(() => false),
     turnWebcamOn: vi.fn(async () => "unavailable" as const),
+    hasWebcamFile: vi.fn(() => engine.webcam !== null),
     ...over,
   };
+  return engine;
 }
 
 /**
@@ -125,6 +127,7 @@ function fakePrepared(handle: EngineHandle = fakeEngine()): FakePrepared {
     endWebcam: handle.endWebcam,
     turnWebcamOff: handle.turnWebcamOff,
     turnWebcamOn: handle.turnWebcamOn,
+    hasWebcamFile: handle.hasWebcamFile,
     begin: vi.fn(async () => {
       callOrder.push("begin");
       return handle;
@@ -1552,6 +1555,51 @@ describe("recorder-store live settings", () => {
           isCameraEnabled: false,
         }),
       );
+      await stopAndSettle();
+    });
+
+    it("lets the camera be enabled again when the failed activation created no webcam file", async () => {
+      const answers: Array<"ok" | "unavailable"> = ["unavailable", "ok"];
+      const engine = fakeEngine({
+        turnWebcamOn: vi.fn(async () => answers.shift() ?? "unavailable"),
+      });
+      await startWith(engine, { webcam: null, webcamWhenEnabled: webcam });
+      broadcast({ isCameraEnabled: true });
+      await vi.waitFor(() => expect(engine.turnWebcamOn).toHaveBeenCalledOnce());
+      // No file was created, so the single-file rule does not apply: a later on may record.
+      broadcast({ isCameraEnabled: true });
+      await vi.waitFor(() => expect(engine.turnWebcamOn).toHaveBeenCalledTimes(2));
+      expect(engine.hasWebcamFile()).toBe(false);
+      await stopAndSettle();
+    });
+
+    it("retries the webcam writer after a failed late activation", async () => {
+      const engine = fakeEngine({ turnWebcamOn: vi.fn(async () => "ok" as const) });
+      await startWith(engine, { webcam: null, webcamWhenEnabled: webcam });
+      const options = prepareEngineMock.mock.calls.at(-1)![0];
+      recordingCreateMock
+        .mockRejectedValueOnce(new Error("writer busy"))
+        .mockResolvedValueOnce({ tempPath: "/tmp/s" });
+      await expect(options.onWebcamStart!()).resolves.toBe(false);
+      // The failure is not cached: a later camera-on creates the writer.
+      await expect(options.onWebcamStart!()).resolves.toBe(true);
+      expect(createCalls().filter((call) => call[1] === "webcam")).toHaveLength(2);
+      await stopAndSettle();
+    });
+
+    it("does not turn the camera off during the countdown when it is toggled off and on", async () => {
+      const engine = fakeEngine({ webcam: webcamHandle() });
+      prepareEngineMock.mockResolvedValue(fakePrepared(engine));
+      store.requestStartRecording(() => ({ ...input, webcam }));
+      await vi.advanceTimersByTimeAsync(1000);
+      broadcast({ isCameraEnabled: false });
+      broadcast({ isCameraEnabled: true });
+      // The take reacquires with the camera on; nothing forced the setting off.
+      expect(window.electronAPI.updateRecordingSettings).not.toHaveBeenCalledWith({
+        isCameraEnabled: false,
+      });
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(store.getRecorderSnapshot().status).toBe("recording");
       await stopAndSettle();
     });
 

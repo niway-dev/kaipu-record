@@ -557,7 +557,13 @@ function acquireStart(input: StartInput): PendingStart {
             return false;
           }
         })();
-        return lateWebcamCreated;
+        const attempt = lateWebcamCreated;
+        // A failed attempt must not poison the rest of the take: no webcam file was created,
+        // so a later camera-on may still try (a device that was busy for a moment).
+        void attempt.then((created) => {
+          if (!created && lateWebcamCreated === attempt) lateWebcamCreated = null;
+        });
+        return attempt;
       },
       // Chunks only flow once the take has begun; a discarded take's go nowhere.
       onChunk: (data, position) => {
@@ -902,6 +908,11 @@ function forwardLiveSettings(
   let sysOn = input.systemAudio;
   let queue: Promise<void> = Promise.resolve();
   let active = true;
+  /**
+   * The take is encoding. Before that (the countdown) a webcam file ended here can still be
+   * replaced by the acquisition that starts the take, so the camera must not be forced off.
+   */
+  let begun = false;
   const writeBack = (patch: Partial<RecordingSettings>): void => {
     if (active) window.electronAPI.updateRecordingSettings(patch);
   };
@@ -982,7 +993,7 @@ function forwardLiveSettings(
       settings.selectedMicrophone?.deviceId ?? null,
       settings.isSystemAudioEnabled,
     );
-    if (webcamEnded && settings.isCameraEnabled) {
+    if (begun && webcamEnded && settings.isCameraEnabled) {
       writeBack({ isCameraEnabled: false });
       return;
     }
@@ -1010,26 +1021,37 @@ function forwardLiveSettings(
           // Turned off again meanwhile (the engine answers "ok" for a camera it dropped), or
           // turned on again after that, by an on still to come: the gap goes on, and only the
           // newest on closes it, once its own camera's frames are back.
-          if (webcamOn && request === webcamOnRequest) gaps.close(takeTimeMs());
+          if (webcamOn && request === webcamOnRequest) {
+            webcamReopenFailed = false;
+            gaps.close(takeTimeMs());
+          }
           return;
         }
+        // An older on answering after a newer one was requested must not touch the newest.
+        if (request !== webcamOnRequest) return;
         // The file ended here (the engine reported it, main put the bubble back in the
         // capture): the gap ends with it, and the user is told once the take is saved.
         gaps.close(takeTimeMs());
         webcamParked = false;
-        webcamEnded = true;
         webcamReopenFailed = true;
-        // Every window must show that the camera did not start recording.
-        if (webcamOn && request === webcamOnRequest) {
-          webcamOn = false;
-          writeBack({ isCameraEnabled: false });
+        // A file that exists is the take's only webcam file, so the camera cannot record
+        // again. A late activation that failed before creating one leaves the camera free
+        // for a later try, so the toggle stays available.
+        if (handle.hasWebcamFile()) {
+          webcamEnded = true;
+        } else {
+          webcamParked = true;
         }
+        // Every window must show that the camera did not start recording.
+        webcamOn = false;
+        writeBack({ isCameraEnabled: false });
       });
     }
   });
   return {
     sync(next) {
       if (!active) return;
+      begun = true;
       applyToggles(next.microphoneDeviceId !== null, next.microphoneDeviceId, next.systemAudio);
     },
     webcamEnded: () => webcamEnded,

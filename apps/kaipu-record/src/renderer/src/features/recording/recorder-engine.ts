@@ -169,11 +169,18 @@ export interface LiveWebcamControls {
    */
   turnWebcamOff(): boolean;
   /**
+   * Whether this take has a webcam file, created with the take or by a late activation. Once
+   * one exists it is the take's only webcam file, ended or not; a failed activation that never
+   * created it leaves the camera free to be tried again.
+   */
+  hasWebcamFile(): boolean;
+  /**
    * Open the camera (the one the take opened, else the configured default) and feed its file.
    * A take that started with it off creates that file on demand through `onWebcamStart`.
    * "ok" once its first frame reached the file, or when the camera was turned off again
    * meanwhile; "unavailable" when it could not (busy, denied, unplugged, or no frame within
-   * `WEBCAM_OPEN_TIMEOUT_MS`), in which case the webcam file ends where it is (`onWebcamEnded`).
+   * `WEBCAM_OPEN_TIMEOUT_MS`). The webcam file ends where it is (`onWebcamEnded`) only when
+   * one was already created; a failure before that leaves no file behind.
    */
   turnWebcamOn(): Promise<LiveToggleResult>;
 }
@@ -989,6 +996,7 @@ export async function prepareEngine(options: EngineOptions): Promise<PreparedEng
       return "ok";
     };
     const webcamControls: LiveWebcamControls = {
+      hasWebcamFile: () => webcam !== null,
       turnWebcamOff() {
         cameraWanted = false;
         cameraRequest++;
