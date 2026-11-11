@@ -9,7 +9,7 @@ import {
   worldToFrame,
   type TextMeasure,
 } from "./canvas-geometry";
-import { STROKE_WIDTHS, TEXT_LINE_HEIGHT, TEXT_PX } from "./tools";
+import { STEP_PX, STROKE_WIDTHS, TEXT_LINE_HEIGHT, TEXT_PX, stepRingPx } from "./tools";
 import type { Annotation } from "./scene";
 
 const W = 1000;
@@ -268,6 +268,39 @@ describe("layout and frame converters", () => {
       top: 10,
       right: 15,
       bottom: 20,
+    });
+  });
+});
+
+describe("step badge bounds", () => {
+  const step = (x: number, y: number): Annotation => ({
+    id: "s",
+    kind: "step",
+    x,
+    y,
+    color: "#fff",
+    size: 1,
+  });
+  const half = (scale: number): number => ((STEP_PX[1] + stepRingPx(STEP_PX[1])) / 2) * scale;
+
+  it("is centered on the point and scales with `scale`", () => {
+    const b1 = annotationBounds(step(0.5, 0.5), W, H, 1, measure)!;
+    expect((b1.x1 + b1.x2) / 2).toBeCloseTo(500);
+    expect((b1.y1 + b1.y2) / 2).toBeCloseTo(300);
+    expect(b1.x2 - b1.x1).toBeCloseTo(2 * half(1));
+    const b2 = annotationBounds(step(0.5, 0.5), W, H, 2, measure)!;
+    expect(b2.x2 - b2.x1).toBeCloseTo(2 * half(2));
+  });
+
+  it("grows the content box when the badge sits outside the image", () => {
+    const e = contentExtents([step(-0.1, 0.5)], W, H, 1, measure);
+    expect(e.left).toBe(Math.ceil(100 + half(1)));
+    expect(e.right).toBe(0);
+    expect(contentExtents([step(0.5, 0.5)], W, H, 1, measure)).toEqual({
+      left: 0,
+      top: 0,
+      right: 0,
+      bottom: 0,
     });
   });
 });

@@ -5,7 +5,16 @@
  * accent colours intentionally mirror the brand accents).
  */
 
-export const ANNOTATION_TOOLS = ["select", "pen", "box", "arrow", "text", "blur", "crop"] as const;
+export const ANNOTATION_TOOLS = [
+  "select",
+  "pen",
+  "box",
+  "arrow",
+  "text",
+  "step",
+  "blur",
+  "crop",
+] as const;
 export type AnnotationTool = (typeof ANNOTATION_TOOLS)[number];
 
 /**
@@ -57,6 +66,50 @@ export const TEXT_SIZES = ["XS", "S", "M", "L"] as const;
  * because a fresh label defaulting to a large size felt oversized.
  */
 export const TEXT_PX = [14, 19, 27, 37] as const;
+
+/** Step badge DIAMETER in display px per size index; lines up with TEXT_SIZES labels. */
+export const STEP_PX = [22, 28, 36, 46] as const;
+
+/** Diameter in display px of a badge at size index `size` — the single lookup for the preview,
+ * hit test, handle box, canvas bounds and export, so they cannot disagree. */
+export function stepDiameterPx(size: number): number {
+  return STEP_PX[size] ?? STEP_PX[1]!;
+}
+
+/** Font stack of the number in a step badge — a clean sans, unlike the hand font. */
+export const STEP_FONT =
+  "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif";
+
+/** Ink (number + ring) for a badge filled with `color`: dark on light fills, white otherwise.
+ * Threshold 0.3: green (#22c55e, luminance 0.41) gives white only 2.3:1 but dark 7.6:1, and
+ * yellow and white are lighter still. Pink, red and purple (about 0.21) keep white at ~4:1. */
+export function stepInk(color: string): string {
+  const hex = color.trim().replace(/^#/, "");
+  const full =
+    hex.length === 3
+      ? hex
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : hex;
+  if (!/^[0-9a-fA-F]{6}$/.test(full)) return "#ffffff";
+  const lin = (i: number): number => {
+    const v = parseInt(full.slice(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const lum = 0.2126 * lin(0) + 0.7152 * lin(2) + 0.0722 * lin(4);
+  return lum > 0.3 ? "#1a1a1a" : "#ffffff";
+}
+
+/** Ring stroke width of a badge of diameter `d`. */
+export function stepRingPx(d: number): number {
+  return Math.max(1.5, d * 0.07);
+}
+
+/** Font size of the number in a badge of diameter `d` showing `n` (two digits shrink). */
+export function stepFontPx(d: number, n: number): number {
+  return d * (n < 10 ? 0.55 : 0.42);
+}
 
 /**
  * The hand-drawn font stack for text annotations — single source for the live

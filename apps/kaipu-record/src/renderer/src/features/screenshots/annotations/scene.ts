@@ -78,13 +78,41 @@ export interface MeasureAnnotation {
   imageH: number;
   color: string;
 }
+
+/** A numbered step badge. Its number is NOT stored: it is the badge's 1-based position
+ * among the scene's `step` annotations, so deleting one renumbers the rest. Plain
+ * serializable data, like every other kind, so the canvas document (NIW2-700) can persist it. */
+export interface StepAnnotation {
+  id: string;
+  kind: "step";
+  /** CENTER of the badge, normalized like the other kinds (may exceed 0–1 in canvas mode). */
+  x: number;
+  y: number;
+  color: string;
+  /** Index into STEP_PX. */
+  size: number;
+}
 export type Annotation =
   | BoxAnnotation
   | ArrowAnnotation
   | TextAnnotation
   | PathAnnotation
   | BlurAnnotation
-  | MeasureAnnotation;
+  | MeasureAnnotation
+  | StepAnnotation;
+
+/**
+ * The number each step badge shows: its 1-based position among the `step` annotations,
+ * in array order. The single source for numbering — the live layer and the compositor
+ * both read it, so deleting a badge renumbers the rest in the preview and the export.
+ */
+export function stepNumbers(annotations: readonly Annotation[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const a of annotations) {
+    if (a.kind === "step") out.set(a.id, out.size + 1);
+  }
+  return out;
+}
 
 /**
  * A crop window over the beautified **frame** (background + padding + shot), normalized

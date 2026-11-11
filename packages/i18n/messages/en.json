@@ -1230,6 +1230,7 @@
     "toolBox": "Box",
     "toolArrow": "Arrow",
     "toolText": "Text",
+    "toolStep": "Step",
     "toolBlur": "Blur",
     "toolCrop": "Crop",
     "inspectTitle": "Inspect (I)",

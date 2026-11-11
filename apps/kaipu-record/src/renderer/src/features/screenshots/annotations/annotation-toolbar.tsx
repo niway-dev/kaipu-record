@@ -1,5 +1,14 @@
 import React from "react";
-import { ArrowUpRight, Crop, Droplet, MousePointer2, Pencil, Square, Type } from "lucide-react";
+import {
+  ArrowUpRight,
+  Crop,
+  Droplet,
+  ListOrdered,
+  MousePointer2,
+  Pencil,
+  Square,
+  Type,
+} from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { ANNOTATION_TOOLS, type AnnotationTool } from "./tools";
 import type { AnnotationToolsController } from "./use-annotation-tools";
@@ -12,6 +21,7 @@ type ToolLabelKey =
   | "toolBox"
   | "toolArrow"
   | "toolText"
+  | "toolStep"
   | "toolBlur"
   | "toolCrop";
 
@@ -21,6 +31,7 @@ const TOOL_META: Record<AnnotationTool, { labelKey: ToolLabelKey; Icon: typeof S
   box: { labelKey: "toolBox", Icon: Square },
   arrow: { labelKey: "toolArrow", Icon: ArrowUpRight },
   text: { labelKey: "toolText", Icon: Type },
+  step: { labelKey: "toolStep", Icon: ListOrdered },
   blur: { labelKey: "toolBlur", Icon: Droplet },
   crop: { labelKey: "toolCrop", Icon: Crop },
 };

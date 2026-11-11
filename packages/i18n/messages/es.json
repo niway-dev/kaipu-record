@@ -1230,6 +1230,7 @@
     "toolBox": "Caja",
     "toolArrow": "Flecha",
     "toolText": "Texto",
+    "toolStep": "Paso",
     "toolBlur": "Difuminar",
     "toolCrop": "Recortar",
     "inspectTitle": "Inspeccionar (I)",

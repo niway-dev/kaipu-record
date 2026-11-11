@@ -1,7 +1,9 @@
 import {
   HAND_FONT,
+  stepDiameterPx,
   STROKE_WIDTHS,
   TEXT_LINE_HEIGHT,
+  stepRingPx,
   resolveFontPx,
   textBoxPx,
   textLines,
@@ -189,6 +191,14 @@ export function annotationBounds(
       x2: s.pill.x + s.pill.w,
       y2: s.pill.y + s.pill.h,
     });
+  }
+  if (a.kind === "step") {
+    const d = stepDiameterPx(a.size);
+    const r = ((d + stepRingPx(d)) / 2) * scale;
+    return grow(
+      { x1: a.x * naturalW, y1: a.y * naturalH, x2: a.x * naturalW, y2: a.y * naturalH },
+      r,
+    );
   }
   // text: y is the TOP (dominant-baseline hanging); a width wraps to width × naturalW.
   const fs = resolveFontPx(a.size, a.fontPx) * scale;

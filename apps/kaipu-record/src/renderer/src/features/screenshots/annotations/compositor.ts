@@ -5,9 +5,14 @@ import { MEASURE_FONT, measureLabel, measureShape, measureTextColor } from "./me
 import {
   BLUR_STD,
   HAND_FONT,
+  STEP_FONT,
+  stepDiameterPx,
   STROKE_WIDTHS,
   TEXT_LINE_HEIGHT,
   resolveFontPx,
+  stepFontPx,
+  stepInk,
+  stepRingPx,
   textLines,
 } from "./tools";
 import {
@@ -18,7 +23,7 @@ import {
   worldToFrame,
   type Extents,
 } from "./canvas-geometry";
-import type { Annotation, Scene } from "./scene";
+import { stepNumbers, type Annotation, type Scene } from "./scene";
 
 /**
  * Longest canvas side the compositor will rasterize to. Chromium caps a canvas
@@ -264,8 +269,9 @@ export function buildSvg(scene: Scene, g: Geom): string {
   // beautify padding is shown there — clipping to the shot truncated it in the
   // export only. The output viewBox (the crop window, or the whole frame) is the
   // natural bound, so they render exactly as previewed.
+  const steps = stepNumbers(scene.annotations);
   const anno = `<g transform="translate(${ox},${oy})">${scene.annotations
-    .map((a) => annotationSvg(a, g.naturalW, g.naturalH, g.scale))
+    .map((a) => annotationSvg(a, g.naturalW, g.naturalH, g.scale, steps))
     .join("")}</g>`;
 
   // The output SVG selects the crop sub-rectangle via viewBox; width/height are the
@@ -273,7 +279,24 @@ export function buildSvg(scene: Scene, g: Geom): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${outW}" height="${outH}" viewBox="${vbX} ${vbY} ${outW} ${outH}"><defs>${defs.join("")}</defs>${bg}${boxFill}${shadow}${image}${anno}</svg>`;
 }
 
-function annotationSvg(a: Annotation, W: number, H: number, scale: number): string {
+function annotationSvg(
+  a: Annotation,
+  W: number,
+  H: number,
+  scale: number,
+  steps: Map<string, number>,
+): string {
+  if (a.kind === "step") {
+    const d = stepDiameterPx(a.size);
+    const n = steps.get(a.id) ?? 1;
+    const ink = stepInk(a.color);
+    const cx = a.x * W;
+    const cy = a.y * H;
+    return (
+      `<circle cx="${cx}" cy="${cy}" r="${(d / 2) * scale}" fill="${a.color}" stroke="${ink}" stroke-width="${stepRingPx(d) * scale}"/>` +
+      `<text x="${cx}" y="${cy}" fill="${ink}" font-family="${STEP_FONT}" font-size="${stepFontPx(d, n) * scale}" font-weight="700" text-anchor="middle" dominant-baseline="central">${n}</text>`
+    );
+  }
   if (a.kind === "blur") {
     // Bake the redaction: a blurred, clipped copy of the shared #shot image over the
     // rect. The filter region is the rect + margin, so it only processes those pixels

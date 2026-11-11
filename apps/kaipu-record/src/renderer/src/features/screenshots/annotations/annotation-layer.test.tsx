@@ -1,3 +1,4 @@
+import React, { useState } from "react";
 import { act, render, screen, fireEvent } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AnnotationLayer } from "./annotation-layer";
@@ -17,6 +18,8 @@ function makeTools(overrides: Partial<AnnotationToolsController> = {}): Annotati
     setStroke: vi.fn(),
     textSize: 1,
     setTextSize: vi.fn(),
+    stepSize: 1,
+    setStepSize: vi.fn(),
     ...overrides,
   };
 }
@@ -469,6 +472,90 @@ describe("AnnotationLayer — canvas mode (NIW2-698)", () => {
     fireEvent.pointerMove(surface, { clientX: -10, clientY: -5 });
     fireEvent.pointerUp(surface);
     expect(scene.addAnnotation).not.toHaveBeenCalled();
+  });
+});
+
+describe("AnnotationLayer — step badges", () => {
+  // A stateful scene and tool: the layer reads annotations back from it, so numbering is
+  // exercised end to end (click -> addAnnotation -> stepNumbers -> rendered text).
+  function StepHarness(): React.JSX.Element {
+    const [annotations, setAnnotations] = useState<Annotation[]>([]);
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [tool, setTool] = useState<AnnotationToolsController["tool"]>("step");
+    const scene = {
+      ...makeScene(annotations, selectedId),
+      addAnnotation: (a: Annotation) => setAnnotations((prev) => [...prev, a]),
+      select: (id: string | null) => setSelectedId(id),
+      removeSelected: () => {
+        setAnnotations((prev) => prev.filter((a) => a.id !== selectedId));
+        setSelectedId(null);
+      },
+    };
+    return (
+      <>
+        <span data-testid="tool">{tool}</span>
+        <button type="button" onClick={() => setTool("select")}>
+          to-select
+        </button>
+        <AnnotationLayer scene={scene} tools={makeTools({ tool, setTool })} src="" />
+      </>
+    );
+  }
+
+  const numbers = (container: HTMLElement): string[] =>
+    Array.from(container.querySelectorAll("g[data-annotation] text")).map(
+      (el) => el.textContent ?? "",
+    );
+
+  it("numbers clicks 1, 2, 3, keeps the step tool, and renumbers after deleting the middle", () => {
+    for (const prop of ["clientWidth", "clientHeight"]) {
+      Object.defineProperty(HTMLElement.prototype, prop, { configurable: true, get: () => 100 });
+    }
+    const { container } = render(<StepHarness />);
+    const layer = container.querySelector("svg")!.parentElement as HTMLElement;
+    layer.setPointerCapture = vi.fn();
+    layer.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        width: 100,
+        height: 100,
+        right: 100,
+        bottom: 100,
+        x: 0,
+        y: 0,
+      }) as DOMRect;
+
+    // A right-click and a middle-button press (canvas pan) place nothing.
+    fireEvent.pointerDown(layer, { clientX: 30, clientY: 30, button: 2 });
+    fireEvent.pointerDown(layer, { clientX: 30, clientY: 30, button: 1 });
+    expect(numbers(container)).toEqual([]);
+
+    fireEvent.pointerDown(layer, { clientX: 20, clientY: 20 });
+    fireEvent.pointerDown(layer, { clientX: 50, clientY: 50 });
+    fireEvent.pointerDown(layer, { clientX: 80, clientY: 80 });
+    expect(numbers(container)).toEqual(["1", "2", "3"]);
+    expect(screen.getByTestId("tool").textContent).toBe("step"); // never auto-switches
+    // Placing does not select: the options panel would otherwise repaint the badge just
+    // placed when the user picks a colour for the next one. One circle each, no outline.
+    for (const g of container.querySelectorAll("g[data-annotation]")) {
+      expect(g.querySelectorAll("circle")).toHaveLength(1);
+    }
+
+    // Select the middle badge with the select tool, then delete it.
+    fireEvent.click(screen.getByText("to-select"));
+    fireEvent.pointerDown(layer, { clientX: 50, clientY: 50 });
+    fireEvent.keyDown(window, { key: "Delete" });
+    expect(numbers(container)).toEqual(["1", "2"]);
+    // The survivors are the first and the last badge, now numbered 1 and 2.
+    const centers = Array.from(container.querySelectorAll("g[data-annotation] text")).map((el) => [
+      el.getAttribute("x"),
+      el.textContent,
+    ]);
+    expect(centers).toEqual([
+      ["20", "1"],
+      ["80", "2"],
+    ]);
   });
 });
 

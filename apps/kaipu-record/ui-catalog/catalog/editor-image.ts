@@ -43,6 +43,12 @@ export const editorImage = catalog(
       steps: [open(ASSETS.settingsShot), tool("Box")],
       demonstrates: ["editorImage.tools:annotate", "editorImage.canvas:annotate"],
     },
+    "tool-step": {
+      profile: "default",
+      how: "Open “Settings page”, pick Step and click the canvas: a badge numbered 1 appears.",
+      steps: [open(ASSETS.settingsShot), tool("Step"), { click: { area: "editorImage.canvas" } }],
+      demonstrates: ["editorImage.tools:step", "editorImage.canvas:step"],
+    },
     "tool-crop": {
       profile: "default",
       steps: [open(ASSETS.settingsShot), tool("Crop")],

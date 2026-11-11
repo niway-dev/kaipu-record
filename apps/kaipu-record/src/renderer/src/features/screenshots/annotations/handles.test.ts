@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { annotationBox, handlesFor, hitHandle, resizeAnnotation } from "./handles";
-import { TEXT_PX, resolveFontPx, textBoxPx } from "./tools";
+import { STEP_PX, TEXT_PX, resolveFontPx, textBoxPx } from "./tools";
 import type { Annotation } from "./scene";
 
 const size = { w: 1000, h: 1000 };
@@ -347,6 +347,23 @@ describe("resizeAnnotation — canvas mode (NIW2-698)", () => {
       x2: -0.3,
       y2: 1.5,
     });
+  });
+});
+
+describe("step badge", () => {
+  const step: Annotation = { id: "s", kind: "step", x: 0.5, y: 0.5, color: "#fff", size: 1 };
+  it("has no resize handles", () => {
+    expect(handlesFor(step, size)).toEqual([]);
+  });
+  it("has a box centered on the badge, equal to the diameter in px", () => {
+    const b = annotationBox(step, { w: 1000, h: 500 })!;
+    expect(b.x + b.w / 2).toBeCloseTo(0.5);
+    expect(b.y + b.h / 2).toBeCloseTo(0.5);
+    expect(b.w * 1000).toBeCloseTo(STEP_PX[1]);
+    expect(b.h * 500).toBeCloseTo(STEP_PX[1]);
+  });
+  it("resizeAnnotation never patches a step", () => {
+    expect(resizeAnnotation(step, "se", { x: 0.9, y: 0.9 }, size)).toEqual({});
   });
 });
 

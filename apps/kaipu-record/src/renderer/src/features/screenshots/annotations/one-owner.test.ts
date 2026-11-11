@@ -37,7 +37,7 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
 }
 
 describe("text geometry has one owner", () => {
-  it("nothing outside tools.ts indexes the preset table", () => {
+  it("nothing outside tools.ts indexes the preset tables", () => {
     const offenders = sourceFiles(ROOT)
       .filter((file) => file !== OWNER)
       .filter((file) => {
@@ -45,7 +45,8 @@ describe("text geometry has one owner", () => {
           // Comments may name it while explaining exactly this rule.
           .replace(/\/\*[\s\S]*?\*\//g, "")
           .replace(/\/\/.*$/gm, "");
-        return /TEXT_PX\s*\[/.test(code);
+        // STEP_PX (step badge diameters) follows the same rule: read it through stepDiameterPx.
+        return /\b(TEXT_PX|STEP_PX)\s*\[/.test(code);
       })
       .map((file) => path.relative(ROOT, file));
 
