@@ -1,0 +1,59 @@
+import { describe, expect, it } from "vitest";
+import { dragMeasureEnd, measureEndpoints, measureLabel, moveMeasure } from "./measure";
+import type { MeasureAnnotation } from "./scene";
+
+const H: MeasureAnnotation = {
+  id: "m1",
+  kind: "measure",
+  axis: "x",
+  from: 20,
+  to: 60,
+  at: 9,
+  imageW: 200,
+  imageH: 100,
+  color: "#f6055c",
+};
+const V: MeasureAnnotation = { ...H, axis: "y", from: 10, to: 30, at: 49 };
+
+describe("measureLabel", () => {
+  it("is the length in image pixels", () => {
+    expect(measureLabel(H)).toBe("40 px");
+  });
+});
+
+describe("measureEndpoints", () => {
+  it("runs a horizontal line through the middle of its row", () => {
+    expect(measureEndpoints(H)).toEqual({ p1: { x: 0.1, y: 0.095 }, p2: { x: 0.3, y: 0.095 } });
+  });
+  it("runs a vertical line through the middle of its column", () => {
+    expect(measureEndpoints(V)).toEqual({ p1: { x: 0.2475, y: 0.1 }, p2: { x: 0.2475, y: 0.3 } });
+  });
+});
+
+describe("dragMeasureEnd", () => {
+  it("moves one end along the axis and snaps it to a pixel edge", () => {
+    expect(dragMeasureEnd(H, "to", { x: 0.4012, y: 0.9 })).toEqual({ from: 20, to: 80 });
+    expect(dragMeasureEnd(V, "from", { x: 0.9, y: 0.051 })).toEqual({ from: 5, to: 30 });
+  });
+  it("stays inside the image", () => {
+    expect(dragMeasureEnd(H, "from", { x: -1, y: 0 })).toEqual({ from: 0, to: 60 });
+    expect(dragMeasureEnd(H, "to", { x: 3, y: 0 })).toEqual({ from: 20, to: 200 });
+  });
+  it("never crosses the other end", () => {
+    expect(dragMeasureEnd(H, "from", { x: 0.9, y: 0 })).toEqual({ from: 59, to: 60 });
+    expect(dragMeasureEnd(H, "to", { x: 0, y: 0 })).toEqual({ from: 20, to: 21 });
+  });
+});
+
+describe("moveMeasure", () => {
+  it("moves by whole pixels and keeps the length", () => {
+    expect(moveMeasure(H, 0.051, 0.1)).toEqual({ from: 30, to: 70, at: 19 });
+  });
+  it("stops at the image's edges", () => {
+    expect(moveMeasure(H, 5, 5)).toEqual({ from: 160, to: 200, at: 99 });
+    expect(moveMeasure(H, -5, -5)).toEqual({ from: 0, to: 40, at: 0 });
+  });
+  it("swaps the roles of dx and dy for a vertical measurement", () => {
+    expect(moveMeasure(V, 0.01, 0.1)).toEqual({ from: 20, to: 40, at: 51 });
+  });
+});

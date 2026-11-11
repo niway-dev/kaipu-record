@@ -58,12 +58,33 @@ export interface BlurAnnotation {
   w: number;
   h: number;
 }
+/**
+ * A pinned ruler measurement (NIW2-702). Unlike the other kinds it is stored in the image's
+ * SOURCE pixels, not normalized units, so the label is exact and never depends on zoom: the
+ * label is always `to - from`. `from`/`to` are pixel edges along `axis` (the run covers
+ * pixels `from` … `to - 1`), `at` is the pixel row (axis x) or column (axis y).
+ * `imageW`/`imageH` are the pixel size of the image it was measured on, which turns those
+ * pixels into the layer's normalized space; with one image per editor they also anchor it:
+ * the measurement moves with the image. A multi-image canvas adds the image's id here.
+ */
+export interface MeasureAnnotation {
+  id: string;
+  kind: "measure";
+  axis: "x" | "y";
+  from: number;
+  to: number;
+  at: number;
+  imageW: number;
+  imageH: number;
+  color: string;
+}
 export type Annotation =
   | BoxAnnotation
   | ArrowAnnotation
   | TextAnnotation
   | PathAnnotation
-  | BlurAnnotation;
+  | BlurAnnotation
+  | MeasureAnnotation;
 
 /**
  * A crop window over the beautified **frame** (background + padding + shot), normalized
