@@ -1,5 +1,5 @@
 /** Which Inspect action a key press means, if any. Pure, so the guard is testable alone. */
-export type InspectKeyAction = "toggle" | "exit" | "copy";
+export type InspectKeyAction = "toggle" | "exit" | "copy" | "rulerX" | "rulerY";
 
 /** True when the event came from somewhere the user is typing. */
 export function isEditingTarget(target: EventTarget | null): boolean {
@@ -15,6 +15,8 @@ export function isEditingTarget(target: EventTarget | null): boolean {
 export function inspectKeyAction(
   e: {
     key: string;
+    /** The physical key: with Shift held (the outer-size modifier) `1` arrives as `!`. */
+    code?: string;
     metaKey: boolean;
     ctrlKey: boolean;
     altKey: boolean;
@@ -29,5 +31,7 @@ export function inspectKeyAction(
   if (e.key === "i" || e.key === "I") return "toggle";
   if (e.key === "Escape") return active ? "exit" : null;
   if (e.key === "c" || e.key === "C") return active ? "copy" : null;
+  if (e.key === "1" || e.code === "Digit1" || e.code === "Numpad1") return active ? "rulerX" : null;
+  if (e.key === "2" || e.code === "Digit2" || e.code === "Numpad2") return active ? "rulerY" : null;
   return null;
 }

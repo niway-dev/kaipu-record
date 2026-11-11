@@ -37,6 +37,25 @@ describe("inspectKeyAction", () => {
     }
   });
 
+  it("picks the ruler axis on 1 and 2 only while active", () => {
+    expect(inspectKeyAction(key("1"), true, false)).toBe("rulerX");
+    expect(inspectKeyAction(key("2"), true, false)).toBe("rulerY");
+    expect(inspectKeyAction(key("1"), false, false)).toBeNull();
+    expect(inspectKeyAction(key("2"), false, false)).toBeNull();
+  });
+
+  it("reads the physical key, so Shift+1 (outer size) still picks the axis", () => {
+    expect(inspectKeyAction(key("!", { code: "Digit1" }), true, false)).toBe("rulerX");
+    expect(inspectKeyAction(key("@", { code: "Digit2" }), true, false)).toBe("rulerY");
+    expect(inspectKeyAction(key("1", { code: "Numpad1" }), true, false)).toBe("rulerX");
+  });
+
+  it("ignores 1 and 2 typed into a text field", () => {
+    const input = document.createElement("input");
+    expect(inspectKeyAction(key("1", { target: input }), true, false)).toBeNull();
+    expect(inspectKeyAction(key("2", { target: input }), true, true)).toBeNull();
+  });
+
   it("ignores other keys", () => {
     expect(inspectKeyAction(key("x"), true, false)).toBeNull();
     expect(inspectKeyAction(key("Enter"), true, false)).toBeNull();

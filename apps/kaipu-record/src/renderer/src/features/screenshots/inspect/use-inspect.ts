@@ -15,6 +15,15 @@ import {
   type PixelBuffer,
   type ProbeTile,
 } from "./pixel-buffer";
+import {
+  clampTolerance,
+  DEFAULT_TOLERANCE,
+  runLength,
+  scanRun,
+  wheelSteps,
+  type PixelRun,
+  type RulerAxis,
+} from "./pixel-run";
 
 /** Half-width of the loupe in image pixels: 15 x 15 pixels are shown. */
 export const LOUPE_RADIUS = 7;
@@ -37,6 +46,23 @@ export interface InspectHover {
   clientY: number;
 }
 
+/** The run the ruler shows under the cursor, with where to draw it. */
+export interface InspectRun {
+  run: PixelRun;
+  /** `to - from`, in image pixels. */
+  length: number;
+  /** Whether it is the outer size (Shift or the bar's Outer toggle). */
+  outer: boolean;
+  /** The line in client coordinates, from the first pixel's outer edge to the last one's. */
+  line: { x1: number; y1: number; x2: number; y2: number };
+}
+
+/** A run being pinned: the pixels plus the size of the image they were measured on. */
+export interface PinnedRun extends PixelRun {
+  imageW: number;
+  imageH: number;
+}
+
 export interface InspectController {
   enabled: boolean;
   active: boolean;
@@ -51,7 +77,7 @@ export interface InspectController {
    * The bar's Copy writes the same, but falls back to the last pixel after the pointer left. */
   readout: string | null;
   loupe: Uint8ClampedArray | null;
-  onPointerMove(e: { clientX: number; clientY: number }): void;
+  onPointerMove(e: { clientX: number; clientY: number; shiftKey?: boolean }): void;
   onPointerLeave(): void;
   copy(): Promise<boolean>;
   /** True for a moment after a successful copy. */
@@ -59,6 +85,28 @@ export interface InspectController {
   status: InspectStatus;
   /** The second decode behind "as captured" and the out-of-sRGB mark failed for this image. */
   capturedUnavailable: boolean;
+  /** The ruler's axis: `1` picks x, `2` picks y, the same key again hides it. */
+  ruler: RulerAxis | null;
+  setRuler(axis: RulerAxis | null): void;
+  /** Per-channel tolerance of the run scan, 0–255. The wheel changes it while a run is shown. */
+  tolerance: number;
+  setTolerance(value: number): void;
+  /** The bar's Outer toggle; holding Shift has the same effect while held. */
+  outerLocked: boolean;
+  setOuterLocked(on: boolean): void;
+  /** Shift held, or the toggle on. */
+  outer: boolean;
+  run: InspectRun | null;
+  /** Wheel over the canvas. True when it changed the tolerance (the caller then cancels it). */
+  onWheel(e: {
+    deltaX: number;
+    deltaY: number;
+    deltaMode: number;
+    ctrlKey: boolean;
+    metaKey: boolean;
+  }): boolean;
+  /** Pin the run under the cursor. False when no run is shown. */
+  pin(): boolean;
 }
 
 interface Options {
@@ -68,6 +116,8 @@ interface Options {
   imgRef: RefObject<HTMLImageElement | null>;
   /** Called when Inspect turns on (the page selects the Select tool). */
   onEnter?: () => void;
+  /** A click while a run is shown: the page adds it as a `measure` annotation. */
+  onPin?: (run: PinnedRun) => void;
 }
 
 /** The string Inspect shows for a hovered pixel, or null while "as captured" is still loading. */
@@ -81,7 +131,23 @@ export function readoutFor(
   return formatColor(hover.color, format);
 }
 
-export function useInspect({ enabled, image, imgRef, onEnter }: Options): InspectController {
+/** The ruler's line in client coordinates for a run on an image shown at `rect`. */
+export function runLine(
+  run: PixelRun,
+  rect: { left: number; top: number; width: number; height: number },
+  buf: { width: number; height: number },
+): InspectRun["line"] {
+  const sx = rect.width / buf.width;
+  const sy = rect.height / buf.height;
+  if (run.axis === "x") {
+    const y = rect.top + (run.at + 0.5) * sy;
+    return { x1: rect.left + run.from * sx, y1: y, x2: rect.left + run.to * sx, y2: y };
+  }
+  const x = rect.left + (run.at + 0.5) * sx;
+  return { x1: x, y1: rect.top + run.from * sy, x2: x, y2: rect.top + run.to * sy };
+}
+
+export function useInspect({ enabled, image, imgRef, onEnter, onPin }: Options): InspectController {
   const t = useTranslations("screenshots");
   const [active, setActiveState] = useState(false);
   const [format, setFormat] = useState<ColorFormat>("hex");
@@ -91,6 +157,19 @@ export function useInspect({ enabled, image, imgRef, onEnter }: Options): Inspec
   const [loupe, setLoupe] = useState<Uint8ClampedArray | null>(null);
   const [copied, setCopied] = useState(false);
   const [capturedUnavailable, setCapturedUnavailable] = useState(false);
+  const [ruler, setRulerState] = useState<RulerAxis | null>(null);
+  const [tolerance, setToleranceState] = useState(DEFAULT_TOLERANCE);
+  const [outerLocked, setOuterLockedState] = useState(false);
+  const [shiftHeld, setShiftHeld] = useState(false);
+  const [run, setRun] = useState<InspectRun | null>(null);
+  const rulerRef = useRef<RulerAxis | null>(null);
+  const toleranceRef = useRef(DEFAULT_TOLERANCE);
+  const outerLockedRef = useRef(false);
+  const shiftRef = useRef(false);
+  const runRef = useRef<InspectRun | null>(null);
+  const wheelRest = useRef(0);
+  const onPinRef = useRef(onPin);
+  onPinRef.current = onPin;
 
   const activeRef = useRef(false);
   const alive = useRef(true);
@@ -125,11 +204,20 @@ export function useInspect({ enabled, image, imgRef, onEnter }: Options): Inspec
   const asCapturedRef = useRef(asCaptured);
   asCapturedRef.current = asCaptured;
 
-  const publish = useCallback((next: InspectHover | null) => {
-    hoverRef.current = next;
-    if (next) lastHoverRef.current = next;
-    setHover(next);
+  const publishRun = useCallback((next: InspectRun | null) => {
+    runRef.current = next;
+    setRun(next);
   }, []);
+
+  const publish = useCallback(
+    (next: InspectHover | null) => {
+      hoverRef.current = next;
+      if (next) lastHoverRef.current = next;
+      else publishRun(null);
+      setHover(next);
+    },
+    [publishRun],
+  );
 
   const scheduleFlush = useCallback(() => {
     if (frame.current !== null) return;
@@ -224,8 +312,9 @@ export function useInspect({ enabled, image, imgRef, onEnter }: Options): Inspec
       setLoupe(null);
       return;
     }
+    const rect = img.getBoundingClientRect();
     const px = isPointVisible(img, pointer.clientX, pointer.clientY)
-      ? clientToImagePixel(pointer.clientX, pointer.clientY, img.getBoundingClientRect(), buf)
+      ? clientToImagePixel(pointer.clientX, pointer.clientY, rect, buf)
       : null;
     const color = px && sampleAt(buf, px.x, px.y);
     if (!px || !color) {
@@ -244,8 +333,18 @@ export function useInspect({ enabled, image, imgRef, onEnter }: Options): Inspec
       clientY: pointer.clientY,
     });
     setLoupe(loupePixels(buf, px.x, px.y, LOUPE_RADIUS));
+    // The run is scanned on the decoded pixels, so zoom and pan never change its length:
+    // they only move where the line is drawn.
+    const axis = rulerRef.current;
+    const outer = outerLockedRef.current || shiftRef.current;
+    const found = axis ? scanRun(buf, px.x, px.y, axis, toleranceRef.current, outer) : null;
+    publishRun(
+      found
+        ? { run: found, length: runLength(found), outer, line: runLine(found, rect, buf) }
+        : null,
+    );
     if (!known) scheduleProbe();
-  }, [imgRef, publish, scheduleProbe]);
+  }, [imgRef, publish, publishRun, scheduleProbe]);
   flushRef.current = flush;
 
   /** Decode once, the first time Inspect is entered; kept while the editor is mounted. */
@@ -309,6 +408,64 @@ export function useInspect({ enabled, image, imgRef, onEnter }: Options): Inspec
 
   const toggle = useCallback(() => setActive(!activeRef.current), [setActive]);
 
+  const setRuler = useCallback(
+    (axis: RulerAxis | null): void => {
+      rulerRef.current = axis;
+      setRulerState(axis);
+      scheduleFlush();
+    },
+    [scheduleFlush],
+  );
+
+  const setTolerance = useCallback(
+    (value: number): void => {
+      const next = clampTolerance(value);
+      toleranceRef.current = next;
+      setToleranceState(next);
+      scheduleFlush();
+    },
+    [scheduleFlush],
+  );
+
+  const setOuterLocked = useCallback(
+    (on: boolean): void => {
+      outerLockedRef.current = on;
+      setOuterLockedState(on);
+      scheduleFlush();
+    },
+    [scheduleFlush],
+  );
+
+  const setShift = useCallback(
+    (held: boolean): void => {
+      if (shiftRef.current === held) return;
+      shiftRef.current = held;
+      setShiftHeld(held);
+      scheduleFlush();
+    },
+    [scheduleFlush],
+  );
+
+  const onWheel = useCallback<InspectController["onWheel"]>(
+    (e) => {
+      // Cmd/Ctrl + wheel keeps zooming, so the length can be checked at any zoom.
+      if (!activeRef.current || !runRef.current || e.ctrlKey || e.metaKey) return false;
+      const { steps, rest } = wheelSteps(wheelRest.current, e);
+      wheelRest.current = rest;
+      if (steps !== 0) setTolerance(toleranceRef.current + steps);
+      return true;
+    },
+    [setTolerance],
+  );
+
+  const pin = useCallback((): boolean => {
+    const current = runRef.current;
+    const buf = bufferRef.current;
+    if (!activeRef.current || !current || !buf) return false;
+    onPinRef.current?.({ ...current.run, imageW: buf.width, imageH: buf.height });
+    return true;
+  }, []);
+
   const copyText = useCallback(async (text: string | null): Promise<boolean> => {
     if (!text) return false;
     try {
@@ -340,13 +497,14 @@ export function useInspect({ enabled, image, imgRef, onEnter }: Options): Inspec
   copyKeyRef.current = () => copyText(readoutRef.current);
 
   const onPointerMove = useCallback(
-    (e: { clientX: number; clientY: number }): void => {
+    (e: { clientX: number; clientY: number; shiftKey?: boolean }): void => {
       if (!activeRef.current) return;
+      if (e.shiftKey !== undefined) setShift(e.shiftKey);
       lastPointer.current = { clientX: e.clientX, clientY: e.clientY };
       startWatch();
       scheduleFlush();
     },
-    [scheduleFlush, startWatch],
+    [scheduleFlush, setShift, startWatch],
   );
 
   const onPointerLeave = useCallback((): void => {
@@ -365,15 +523,29 @@ export function useInspect({ enabled, image, imgRef, onEnter }: Options): Inspec
         activeRef.current,
         document.querySelector('[aria-modal="true"]') !== null,
       );
+      if (e.key === "Shift" && activeRef.current) setShift(true);
       if (!action) return;
       e.preventDefault();
       if (action === "toggle") setActive(!activeRef.current);
       else if (action === "exit") setActive(false);
+      else if (action === "rulerX") setRuler(rulerRef.current === "x" ? null : "x");
+      else if (action === "rulerY") setRuler(rulerRef.current === "y" ? null : "y");
       else void copyKeyRef.current();
     };
+    const onKeyUp = (e: KeyboardEvent): void => {
+      if (e.key === "Shift") setShift(false);
+    };
+    // Shift released in another window never sends keyup here.
+    const onBlur = (): void => setShift(false);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [enabled, setActive]);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [enabled, setActive, setRuler, setShift]);
 
   // A different image invalidates everything decoded from the old one.
   const displayUrl = image?.displayUrl;
@@ -421,5 +593,15 @@ export function useInspect({ enabled, image, imgRef, onEnter }: Options): Inspec
     copied,
     status,
     capturedUnavailable,
+    ruler,
+    setRuler,
+    tolerance,
+    setTolerance,
+    outerLocked,
+    setOuterLocked,
+    outer: outerLocked || shiftHeld,
+    run,
+    onWheel,
+    pin,
   };
 }

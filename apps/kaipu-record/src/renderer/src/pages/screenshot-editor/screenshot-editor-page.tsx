@@ -54,6 +54,7 @@ import {
   extentsToDisplay,
   frameToWorld,
   intersectFrame,
+  nextAnnotationId,
   useAnnotationTools,
   useEditorScene,
   worldToFrame,
@@ -159,6 +160,22 @@ export function ScreenshotEditor({
     onEnter: () => {
       tools.setTool("select");
       scene.select(null);
+    },
+    // A click while the ruler shows a run pins it (NIW2-702). It stays in image pixels, so it
+    // moves with the image and its label is the same at any zoom; Inspect stays on, so the
+    // next run can be measured straight away. Esc + Select edits it like any annotation.
+    onPin: (run) => {
+      scene.addAnnotation({
+        id: nextAnnotationId().id,
+        kind: "measure",
+        axis: run.axis,
+        from: run.from,
+        to: run.to,
+        at: run.at,
+        imageW: run.imageW,
+        imageH: run.imageH,
+        color: tools.color,
+      });
     },
   });
   const [zoom, setZoom] = useState(1);

@@ -435,3 +435,179 @@ describe.each([
     if (canvas) await waitFor(() => expect(canvasEl().dataset.panned).toBe("true"));
   });
 });
+
+/**
+ * 8x8 image, every row the same: white, white, a 1 px black border, a 4 px blue fill, the
+ * other border. Shown at 200x200, so one image pixel is 25 CSS px.
+ */
+function buttonImage() {
+  const row = [
+    [255, 255, 255, 255],
+    [255, 255, 255, 255],
+    [0, 0, 0, 255],
+    [40, 90, 200, 255],
+    [40, 90, 200, 255],
+    [40, 90, 200, 255],
+    [40, 90, 200, 255],
+    [0, 0, 0, 255],
+  ];
+  const data = new Uint8ClampedArray(8 * 8 * 4);
+  for (let y = 0; y < 8; y++) row.forEach((px, x) => data.set(px, (y * 8 + x) * 4));
+  return { width: 8, height: 8, data };
+}
+// Over pixel (4, 2): inside the blue fill.
+const FILL = { clientX: 4 * 25 + 12, clientY: 2 * 25 + 12 };
+const rulerLength = () => screen.queryByTestId("inspect-ruler-length");
+
+describe.each([
+  ["image-canvas off", false],
+  ["image-canvas on", true],
+])("ScreenshotEditorPage — Inspect ruler (%s)", (_label, canvas) => {
+  beforeEach(() => {
+    flags["image-inspect"] = true;
+    flags["image-canvas"] = canvas;
+    decodeSrgbBuffer.mockImplementation(async () => buttonImage());
+  });
+
+  async function enterOverFill(): Promise<void> {
+    mount(PASTE);
+    await loadImage();
+    press("i");
+    await screen.findByTestId("inspect-layer");
+    fireEvent.pointerMove(layer(), FILL);
+    await screen.findByText("4, 2");
+  }
+
+  it("1 shows the horizontal run, 2 the vertical one, and the same key again hides it", async () => {
+    await enterOverFill();
+    expect(rulerLength()).toBeNull();
+    press("1");
+    await waitFor(() => expect(rulerLength()).toHaveTextContent("4 px"));
+    expect(rulerLength()).toHaveAttribute("data-axis", "x");
+    press("2");
+    await waitFor(() => expect(rulerLength()).toHaveTextContent("8 px"));
+    expect(rulerLength()).toHaveAttribute("data-axis", "y");
+    press("2");
+    await waitFor(() => expect(rulerLength()).toBeNull());
+  });
+
+  it("the bar's Horizontal and Vertical buttons do what 1 and 2 do", async () => {
+    await enterOverFill();
+    fireEvent.click(screen.getByRole("button", { name: "Horizontal" }));
+    await waitFor(() => expect(rulerLength()).toHaveTextContent("4 px"));
+    fireEvent.click(screen.getByRole("button", { name: "Vertical" }));
+    await waitFor(() => expect(rulerLength()).toHaveTextContent("8 px"));
+  });
+
+  it("keeps the length in image pixels when the view is zoomed", async () => {
+    await enterOverFill();
+    press("1");
+    await waitFor(() => expect(rulerLength()).toHaveTextContent("4 px"));
+    // Twice as large on screen: the same pixel is now under (225, 112).
+    Element.prototype.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        width: 400,
+        height: 400,
+        right: 400,
+        bottom: 400,
+        x: 0,
+        y: 0,
+      }) as DOMRect;
+    fireEvent.pointerMove(layer(), { clientX: 4 * 50 + 25, clientY: 2 * 50 + 25 });
+    await screen.findByText("4, 2");
+    expect(rulerLength()).toHaveTextContent("4 px");
+  });
+
+  it("Shift and the Outer toggle measure past the border", async () => {
+    await enterOverFill();
+    press("1");
+    await waitFor(() => expect(rulerLength()).toHaveTextContent("4 px"));
+    press("Shift");
+    await waitFor(() => expect(rulerLength()).toHaveTextContent("6 px"));
+    expect(rulerLength()).toHaveAttribute("data-outer", "true");
+    fireEvent.keyUp(window, { key: "Shift" });
+    await waitFor(() => expect(rulerLength()).toHaveTextContent("4 px"));
+    fireEvent.click(screen.getByRole("button", { name: "Outer" }));
+    await waitFor(() => expect(rulerLength()).toHaveTextContent("6 px"));
+  });
+
+  it("the wheel changes the tolerance while a run is shown, and does not pan", async () => {
+    await enterOverFill();
+    press("1");
+    await waitFor(() => expect(rulerLength()).toBeInTheDocument());
+    const wheel = vi.fn();
+    canvasEl().addEventListener("wheel", wheel);
+    fireEvent.wheel(layer(), { deltaY: -25 });
+    await waitFor(() => expect(screen.getByTestId("inspect-tolerance")).toHaveTextContent("11"));
+    fireEvent.wheel(layer(), { deltaY: 50 });
+    await waitFor(() => expect(screen.getByTestId("inspect-tolerance")).toHaveTextContent("9"));
+    expect(wheel).not.toHaveBeenCalled();
+    if (canvas) expect(canvasEl().dataset.panned).toBe("false");
+    // Cmd + wheel keeps zooming.
+    fireEvent.wheel(layer(), { deltaY: -25, metaKey: true });
+    expect(wheel).toHaveBeenCalledTimes(1);
+  });
+
+  it("a high tolerance joins the fill and the border", async () => {
+    await enterOverFill();
+    press("1");
+    await waitFor(() => expect(rulerLength()).toHaveTextContent("4 px"));
+    const up = screen.getByRole("button", { name: "Raise the tolerance" });
+    for (let i = 0; i < 190; i++) fireEvent.click(up);
+    await waitFor(() => expect(rulerLength()).toHaveTextContent("6 px"));
+  });
+
+  it("shows no run over padding or empty canvas", async () => {
+    await enterOverFill();
+    press("1");
+    await waitFor(() => expect(rulerLength()).toBeInTheDocument());
+    fireEvent.pointerMove(layer(), { clientX: 260, clientY: 50 });
+    await waitFor(() => expect(rulerLength()).toBeNull());
+  });
+
+  it("ignores 1 and 2 typed in the title field", async () => {
+    await enterOverFill();
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "1" });
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "2" });
+    expect(layer()).toHaveAttribute("data-ruler", "off");
+  });
+
+  it("a click pins the run as a measure annotation in image pixels", async () => {
+    await enterOverFill();
+    press("1");
+    await waitFor(() => expect(rulerLength()).toHaveTextContent("4 px"));
+    fireEvent.pointerDown(layer(), { ...FILL, button: 0, pointerId: 1 });
+    fireEvent.pointerUp(layer(), { ...FILL, button: 0, pointerId: 1 });
+    const pinned = await waitFor(() => {
+      const el = document.querySelector('[data-kind="measure"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    expect(pinned).toHaveAttribute("data-measure-length", "4");
+    // Inspect stays on, so the next run can be measured.
+    expect(canvasEl()).toHaveAttribute("data-inspect", "true");
+  });
+
+  it("a drag is not a click and pins nothing", async () => {
+    await enterOverFill();
+    press("1");
+    await waitFor(() => expect(rulerLength()).toBeInTheDocument());
+    fireEvent.pointerDown(layer(), { ...FILL, button: 0, pointerId: 1 });
+    fireEvent.pointerUp(layer(), {
+      clientX: FILL.clientX + 30,
+      clientY: FILL.clientY,
+      button: 0,
+      pointerId: 1,
+    });
+    expect(document.querySelector('[data-kind="measure"]')).toBeNull();
+  });
+
+  it("a click with no run shown pins nothing", async () => {
+    await enterOverFill();
+    fireEvent.pointerDown(layer(), { ...FILL, button: 0, pointerId: 1 });
+    fireEvent.pointerUp(layer(), { ...FILL, button: 0, pointerId: 1 });
+    expect(document.querySelector('[data-kind="measure"]')).toBeNull();
+  });
+});
