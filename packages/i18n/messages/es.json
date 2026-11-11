@@ -1258,6 +1258,7 @@
     "inspectReading": "Leyendo píxeles…",
     "inspectUnavailable": "Lectura de píxeles no disponible",
     "inspectCapturedUnavailable": "\"Como se capturó\" no está disponible para esta imagen",
+    "inspectCopyError": "No se pudo copiar el color al portapapeles.",
     "inspectOutOfSrgb": "Fuera de sRGB",
     "beautifyHeading": "Embellecer",
     "background": "Fondo",

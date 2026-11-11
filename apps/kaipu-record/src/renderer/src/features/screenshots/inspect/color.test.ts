@@ -127,7 +127,7 @@ describe("formatColor", () => {
     expect(formatColor(emerald, "oklch")).toBe("oklch(0.696 0.149 162.5)");
   });
 
-  it("adds alpha to each format, trimming trailing zeros", () => {
+  it("adds alpha to each format", () => {
     const half = { ...emerald, a: 128 };
     expect(formatColor(half, "hex")).toBe("#10b98180");
     expect(formatColor(half, "rgb")).toBe("rgba(16, 185, 129, 0.5)");
@@ -135,6 +135,17 @@ describe("formatColor", () => {
     expect(formatColor(half, "oklch")).toBe("oklch(0.696 0.149 162.5 / 0.5)");
     expect(formatColor({ ...emerald, a: 64 }, "rgb")).toBe("rgba(16, 185, 129, 0.25)");
     expect(formatColor({ ...emerald, a: 0 }, "rgb")).toBe("rgba(16, 185, 129, 0)");
+  });
+
+  it("prints alpha with enough decimals to round-trip every 8-bit value", () => {
+    expect(formatColor({ ...emerald, a: 1 }, "rgb")).toBe("rgba(16, 185, 129, 0.004)");
+    expect(formatColor({ ...emerald, a: 254 }, "rgb")).toBe("rgba(16, 185, 129, 0.996)");
+    expect(formatColor({ ...emerald, a: 254 }, "oklch")).toBe("oklch(0.696 0.149 162.5 / 0.996)");
+    for (let a = 0; a < 255; a++) {
+      const text = formatColor({ ...emerald, a }, "rgb");
+      const printed = Number(text.slice(text.lastIndexOf(",") + 1, -1));
+      expect(Math.round(printed * 255), `alpha ${a} printed as ${printed}`).toBe(a);
+    }
   });
 });
 

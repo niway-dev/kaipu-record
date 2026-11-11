@@ -164,17 +164,16 @@ async function pixelPoint(img: Locator, px: number, py: number): Promise<{ x: nu
 
 const markLocator = (s: Scenario): Locator => s.page.locator(`${HUD} > span`).nth(1);
 
-/** Whether the "Out of sRGB" mark appears for the hovered pixel; waits longer when it is expected. */
-async function readMark(s: Scenario, expected: boolean): Promise<boolean> {
-  if (expected) {
-    try {
-      await expect(markLocator(s)).toBeVisible({ timeout: 2_000 });
-      return true;
-    } catch {
-      return false;
-    }
+/**
+ * Whether the "Out of sRGB" mark shows for the hovered pixel, read once the HUD says the
+ * captured tile is in (`data-probed`). null when the probe never finished.
+ */
+async function readMark(s: Scenario): Promise<boolean | null> {
+  try {
+    await expect(s.page.locator(`${HUD}[data-probed="true"]`)).toBeVisible({ timeout: 5_000 });
+  } catch {
+    return null;
   }
-  await s.page.waitForTimeout(600);
   return markLocator(s).isVisible();
 }
 
@@ -223,12 +222,12 @@ async function inspectRun(
     for (const sw of swatches) {
       const readText = await hoverPixel(s, img, sw.x, sw.y);
       const read = parseHex(readText);
-      // Out-of-sRGB mark: shown only after the pointer rests and a tile decodes. Out-of-gamut
-      // swatches must show it (wait up to 2 s); every other swatch must not (wait 600 ms first).
-      const mark = await readMark(s, sw.outOfGamut);
+      // Out-of-sRGB mark: final once the pointer rests and the tile is read (data-probed).
+      // Out-of-gamut swatches must show it; every other swatch must not.
+      const mark = await readMark(s);
       if (fixture.id !== "monitor" && mark !== sw.outOfGamut)
         failures.push(
-          `${run} ${sw.name}: out-of-sRGB mark ${mark ? "shown" : "missing"} (outOfGamut=${sw.outOfGamut}, pixel ${sw.x}, ${sw.y}, source ${JSON.stringify(sw.source)})`,
+          `${run} ${sw.name}: out-of-sRGB mark ${mark === null ? "never settled (probe did not finish)" : mark ? "shown" : "missing"} (outOfGamut=${sw.outOfGamut}, pixel ${sw.x}, ${sw.y}, source ${JSON.stringify(sw.source)})`,
         );
       const delta = read ? (read.map((v, i) => v - sw.expected[i]!) as Triple) : null;
       const maxDelta = delta ? Math.max(...delta.map(Math.abs)) : null;
@@ -318,7 +317,7 @@ async function inspectRun(
     // Out-of-sRGB mark on a wide-gamut swatch (screenshot; asserted per swatch above).
     if (oog) {
       await hoverPixel(s, img, oog.x, oog.y);
-      const markVisible = await readMark(s, true);
+      const markVisible = (await readMark(s)) === true;
       extra.outOfGamutProbe = {
         swatch: oog.name,
         markVisible,

@@ -193,6 +193,7 @@ export function useInspect({ enabled, image, imgRef, onEnter, onPin }: Options):
   onEnterRef.current = onEnter;
   const flushRef = useRef<() => void>(() => {});
   const runProbeRef = useRef<() => Promise<void>>(async () => {});
+  const scheduleProbeRef = useRef<() => void>(() => {});
   // A probe that failed once is not retried on every move: "as captured" just stays unknown.
   const probeBroken = useRef(false);
 
@@ -289,7 +290,8 @@ export function useInspect({ enabled, image, imgRef, onEnter, onPin }: Options):
     }
     const after = hoverRef.current;
     const covered = after && tileRef.current && readProbe(tileRef.current, after.x, after.y);
-    if (alive.current && activeRef.current && after && !covered) void runProbeRef.current();
+    // Wait for the pointer to rest again rather than decoding on every tile it crosses.
+    if (alive.current && activeRef.current && after && !covered) scheduleProbeRef.current();
   }, [scheduleFlush, t]);
   runProbeRef.current = runProbe;
 
@@ -300,6 +302,7 @@ export function useInspect({ enabled, image, imgRef, onEnter, onPin }: Options):
       void runProbeRef.current();
     }, PROBE_REST_MS);
   }, []);
+  scheduleProbeRef.current = scheduleProbe;
 
   /** Map the last pointer position to a pixel and publish it (one per animation frame). */
   const flush = useCallback(() => {
@@ -466,19 +469,24 @@ export function useInspect({ enabled, image, imgRef, onEnter, onPin }: Options):
     return true;
   }, []);
 
-  const copyText = useCallback(async (text: string | null): Promise<boolean> => {
-    if (!text) return false;
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      return false;
-    }
-    if (!alive.current) return true;
-    setCopied(true);
-    if (copiedTimer.current !== null) clearTimeout(copiedTimer.current);
-    copiedTimer.current = setTimeout(() => setCopied(false), COPIED_MS);
-    return true;
-  }, []);
+  const copyText = useCallback(
+    async (text: string | null): Promise<boolean> => {
+      if (!text) return false;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (error) {
+        // Otherwise "Copied" just never shows and the user cannot tell the copy failed.
+        reportError(t("inspectCopyError"), error, { context: { phase: "inspect-copy" } });
+        return false;
+      }
+      if (!alive.current) return true;
+      setCopied(true);
+      if (copiedTimer.current !== null) clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setCopied(false), COPIED_MS);
+      return true;
+    },
+    [t],
+  );
 
   /** The bar's Copy: the pixel under the pointer, or the last one if the pointer moved to the bar. */
   const copy = useCallback(
@@ -554,10 +562,13 @@ export function useInspect({ enabled, image, imgRef, onEnter, onPin }: Options):
     bytesRef.current = null;
     tileRef.current = null;
     lastHoverRef.current = null;
+    // The readout still shows the old image's pixel: drop it until the new buffer is read.
+    publish(null);
+    setLoupe(null);
     probeBroken.current = false;
     setCapturedUnavailable(false);
     if (activeRef.current) void ensureDecodedRef.current();
-  }, [displayUrl]);
+  }, [displayUrl, publish]);
 
   // Unmount: drop the buffer (about 81 MiB at 6K) and every timer.
   useEffect(() => {

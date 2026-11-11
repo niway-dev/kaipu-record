@@ -9,6 +9,11 @@ import { ScreenshotEditor, ScreenshotEditorPage } from "./screenshot-editor-page
 // Inspect mode (NIW2-699) is behind `image-inspect`; image-canvas is the other latch it must
 // work with. Each test picks its sides.
 const flags = { "image-inspect": false, "image-canvas": false };
+const reportError = vi.hoisted(() => vi.fn());
+vi.mock("@renderer/features/analytics", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@renderer/features/analytics")>()),
+  reportError,
+}));
 vi.mock("@renderer/features/analytics/use-flag", () => ({
   useFlag: (name: keyof typeof flags) => flags[name] ?? false,
 }));
@@ -57,6 +62,7 @@ const fakeContext = {
 };
 
 beforeEach(async () => {
+  reportError.mockClear();
   const base = await window.electronAPI.getSettings();
   window.electronAPI.getSettings = vi.fn(async () => ({
     ...base,
@@ -217,6 +223,8 @@ describe.each([
     expect(loupe).toHaveAttribute("data-smoothing", "off");
     expect(loupe).toHaveAttribute("width", "15");
     // Drawn unsmoothed, 15 x 15 pixels, the pixel under the pointer in the middle.
+    // The loupe canvas is painted in an effect after the readout renders: wait for it.
+    await waitFor(() => expect(drawn.length).toBeGreaterThan(0));
     expect(fakeContext.imageSmoothingEnabled).toBe(false);
     const last = drawn[drawn.length - 1];
     expect(last).toHaveLength(15 * 15 * 4);
@@ -327,6 +335,7 @@ describe.each([
     fireEvent.pointerMove(layer(), POINTER);
     await screen.findByText(PIXEL_HEX);
     expect(screen.queryByText("Pixel reading unavailable")).toBeNull();
+    expect(reportError).not.toHaveBeenCalled();
   });
 
   it("does not carry a failed As captured probe over to the next image", async () => {
@@ -419,6 +428,36 @@ describe.each([
     fireEvent.click(screen.getByRole("button", { name: /^(Copy color|Copied)$/ }));
     await waitFor(() => expect(writeText).toHaveBeenLastCalledWith("rgb(150, 50, 100)"));
     // C keeps meaning "what the chip shows": nothing, with the pointer off the image.
+    writeText.mockClear();
+    press("c");
+    expect(writeText).not.toHaveBeenCalled();
+  });
+
+  it("reports a colour copy the clipboard refuses", async () => {
+    await enterAndHover();
+    writeText.mockRejectedValueOnce(new Error("clipboard denied"));
+    press("c");
+    await waitFor(() =>
+      expect(reportError).toHaveBeenCalledWith(
+        "Couldn't copy the color to the clipboard.",
+        expect.any(Error),
+        expect.anything(),
+      ),
+    );
+    expect(screen.queryByRole("button", { name: "Copied" })).toBeNull();
+  });
+
+  it("drops the old image's readout as soon as the image changes", async () => {
+    mountSwappable();
+    await loadImage();
+    press("i");
+    await screen.findByTestId("inspect-layer");
+    fireEvent.pointerMove(layer(), POINTER);
+    await screen.findByText(PIXEL_HEX);
+    // Hold the new image's decode so only the reset can clear the chip.
+    decodeSrgbBuffer.mockImplementationOnce(() => new Promise(() => {}));
+    swapImage();
+    await waitFor(() => expect(screen.queryByText(PIXEL_HEX)).toBeNull());
     writeText.mockClear();
     press("c");
     expect(writeText).not.toHaveBeenCalled();

@@ -118,7 +118,11 @@ export interface ProbeTile {
   sy: number;
   sw: number;
   sh: number;
-  /** The display-profile bytes, untouched ("as captured"). RGBA. */
+  /**
+   * The display-profile values ("as captured"), read through a 2D canvas without colour
+   * conversion. RGBA. Exact for opaque pixels; the canvas stores premultiplied alpha, so a fully
+   * transparent pixel loses its RGB and partial alpha can round.
+   */
   raw: Uint8ClampedArray;
   /** The same tile read as Display P3 bytes. RGBA. */
   p3: Uint8ClampedArray;

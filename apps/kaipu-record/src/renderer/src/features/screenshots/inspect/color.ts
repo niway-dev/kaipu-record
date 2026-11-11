@@ -124,9 +124,13 @@ export function srgbToOklch([r, g, b]: Rgb): { l: number; c: number; h: number }
 export const COLOR_FORMATS = ["hex", "rgb", "hsl", "oklch"] as const;
 export type ColorFormat = (typeof COLOR_FORMATS)[number];
 
-/** Alpha as CSS prints it: up to 2 decimals, trailing zeros trimmed. */
+/**
+ * Alpha as CSS prints it: two decimals when they round-trip to the same 8-bit value (128 → 0.5),
+ * three otherwise (1 → 0.004, 254 → 0.996), trailing zeros trimmed.
+ */
 function alphaText(a: number): string {
-  return String(Number((a / 255).toFixed(2)));
+  const two = Number((a / 255).toFixed(2));
+  return String(Math.round(two * 255) === a ? two : Number((a / 255).toFixed(3)));
 }
 const hex2 = (n: number): string => n.toString(16).padStart(2, "0");
 
