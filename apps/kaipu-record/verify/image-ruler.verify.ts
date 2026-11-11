@@ -243,6 +243,8 @@ async function rulerRun(canvas: boolean): Promise<void> {
     await s.page.mouse.wheel(0, 50);
     await s.page.waitForTimeout(300);
     r.toleranceAfterWheelDown50 = (await tol.innerText()).trim();
+    check("tolerance-wheel-up", r.toleranceAfterWheelUp50, "12");
+    check("tolerance-wheel-down", r.toleranceAfterWheelDown50, "10");
 
     // Pin the horizontal run with a click.
     await ensureAxis(s, "x");
@@ -260,10 +262,8 @@ async function rulerRun(canvas: boolean): Promise<void> {
     await expect(toggle).toHaveAttribute("aria-pressed", "false");
     await measure.first().click({ force: true });
     await s.page.waitForTimeout(300);
-    r.measureAfterSelect = await measure.first().evaluate((el) => ({
-      attrs: Object.fromEntries(Array.from(el.attributes).map((a) => [a.name, a.value])),
-      handles: el.parentElement?.querySelectorAll("circle, rect").length ?? 0,
-    }));
+    // Selected = its two endpoint handles are drawn (nothing was selected before the click).
+    check("measure-selected-handles", await s.page.getByTestId("resize-handle").count(), 2);
     await png(s, `${run}-c-pinned-selected`);
 
     // Zoom in and measure the same fill again: still image pixels.
