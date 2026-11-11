@@ -998,30 +998,20 @@ for (const [
   wantCode,
   label,
 ] of decideCases) {
-  let code = 0;
-  let out = "";
-  try {
-    out = execFileSync("bash", ["-c", decide], {
-      env: {
-        ...process.env,
-        IS_DRAFT: isDraft,
-        VERIFY: verify,
-        E2E: e2e,
-        CHANGES: changes,
-        DOCS_ONLY: docsOnly,
-        E2E_REQUIRED: e2eRequired,
-        RELEASE: release,
-        SCOPE: release === "true" ? (e2eRequired === "true" ? "desktop" : "web") : "none",
-        SHA: "1bd8b2a",
-      },
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-  } catch (e) {
-    const err = e as { status?: number; stdout?: string };
-    code = err.status ?? -1;
-    out = err.stdout ?? "";
-  }
+  // Every candidate row is a desktop candidate except the ones labelled web/api; the
+  // docs-only rows are desktop candidates whose E2E was skipped for being docs-only.
+  const scope = release !== "true" ? "none" : label.startsWith("web/api") ? "web" : "desktop";
+  const { code, out } = runScript(decide, {
+    IS_DRAFT: isDraft,
+    VERIFY: verify,
+    E2E: e2e,
+    CHANGES: changes,
+    DOCS_ONLY: docsOnly,
+    E2E_REQUIRED: e2eRequired,
+    RELEASE: release,
+    SCOPE: scope,
+    SHA: "1bd8b2a",
+  });
   console.log(
     `  draft=${isDraft.padEnd(5)} verify=${verify.padEnd(9)} e2e=${e2e.padEnd(9)} changes=${changes.padEnd(8)} docs=${docsOnly.padEnd(5)} exit=${code}  ${label}`,
   );
