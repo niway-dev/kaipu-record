@@ -118,7 +118,9 @@ export function measureShape(a: MeasureAnnotation, W: number, H: number, scale =
   const my = (p1.y + p2.y) / 2;
   const gap = PILL_GAP * scale;
   // Above a horizontal line, to the right of a vertical one. Near the image's edge the pill
-  // flips to the other side and slides along the line, so the export never crops the length.
+  // flips to the other side and slides along the line; on an image too small for either side
+  // it is clamped inside (it may then cover the line). Only a label larger than the image itself
+  // can still be cropped.
   const inside = (c: number, half: number, max: number): number =>
     Math.min(Math.max(c, half), Math.max(half, max - half));
   let cx: number;
@@ -126,11 +128,11 @@ export function measureShape(a: MeasureAnnotation, W: number, H: number, scale =
   if (a.axis === "x") {
     cx = inside(mx, w / 2, W);
     cy = my - t - gap - h / 2;
-    if (cy - h / 2 < 0) cy = my + t + gap + h / 2;
+    if (cy - h / 2 < 0) cy = inside(my + t + gap + h / 2, h / 2, H);
   } else {
     cy = inside(my, h / 2, H);
     cx = mx + t + gap + w / 2;
-    if (cx + w / 2 > W) cx = mx - t - gap - w / 2;
+    if (cx + w / 2 > W) cx = inside(mx - t - gap - w / 2, w / 2, W);
   }
   return {
     p1,

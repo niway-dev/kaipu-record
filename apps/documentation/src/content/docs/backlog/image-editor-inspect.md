@@ -77,8 +77,9 @@ NIW2-708 can restyle it.
   KAIPU_FLAG_OVERRIDES='{"image-inspect":true}' bun run dev
   ```
 
-  The UI catalog's `image-inspect` profile does the same. The real-app check is
-  `apps/kaipu-record/verify/image-inspect.verify.ts`.
+  The UI catalog's `image-inspect` profile does the same. The real-app checks are
+  `apps/kaipu-record/verify/image-inspect.verify.ts` (loupe and readout) and
+  `apps/kaipu-record/verify/image-ruler.verify.ts` (ruler and pinned measurements).
 
 ## Not in it yet
 

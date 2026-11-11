@@ -81,6 +81,14 @@ describe("measureShape label placement", () => {
     expect(right.pill.x + right.pill.w).toBeLessThan(right.p1.x);
     expect(inside(right.pill, 200, 100)).toBe(true);
   });
+  it("keeps the pill inside an image too small for either side of the line", () => {
+    expect(
+      inside(measureShape({ ...H, from: 0, to: 40, at: 10, imageH: 30 }, 200, 30).pill, 200, 30),
+    ).toBe(true);
+    expect(
+      inside(measureShape({ ...V, from: 0, to: 20, at: 10, imageW: 60 }, 60, 100).pill, 60, 100),
+    ).toBe(true);
+  });
   it("slides the pill along a short line at the image's corner so it stays inside", () => {
     const corner = measureShape({ ...H, from: 0, to: 2, at: 0 }, 200, 100);
     expect(inside(corner.pill, 200, 100)).toBe(true);

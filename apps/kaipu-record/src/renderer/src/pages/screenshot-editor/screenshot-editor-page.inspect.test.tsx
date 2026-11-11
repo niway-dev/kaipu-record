@@ -587,9 +587,11 @@ describe.each([
     await waitFor(() => expect(screen.getByTestId("inspect-tolerance")).toHaveTextContent("9"));
     expect(wheel).not.toHaveBeenCalled();
     if (canvas) expect(canvasEl().dataset.panned).toBe("false");
-    // Cmd + wheel keeps zooming.
+    // Cmd + wheel keeps zooming: it reaches the canvas and the view actually zooms in.
+    expect(canvasEl()).toHaveAttribute("data-zoomed", "false");
     fireEvent.wheel(layer(), { deltaY: -25, metaKey: true });
     expect(wheel).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(canvasEl()).toHaveAttribute("data-zoomed", "true"));
   });
 
   it("a high tolerance joins the fill and the border", async () => {
