@@ -3,6 +3,7 @@
  * and the export compositor so all three draw the same line. Pure.
  */
 import type { MeasureAnnotation } from "./scene";
+import { stepInk } from "./tools";
 
 export interface NormPt {
   x: number;
@@ -143,11 +144,8 @@ export function measureShape(a: MeasureAnnotation, W: number, H: number, scale =
   };
 }
 
-/** The pill's text colour: dark on a light fill, white on a dark one. */
+/** The pill's text colour: the step badge's ink, so green and yellow pills get dark text
+ *  (white on #22c55e is only 2.3:1) and both kinds read the same on every swatch. */
 export function measureTextColor(fill: string): string {
-  const m = /^#([0-9a-f]{6})/i.exec(fill);
-  if (!m) return "#ffffff";
-  const n = parseInt(m[1], 16);
-  const lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
-  return lum > 0.6 ? "#111111" : "#ffffff";
+  return stepInk(fill);
 }

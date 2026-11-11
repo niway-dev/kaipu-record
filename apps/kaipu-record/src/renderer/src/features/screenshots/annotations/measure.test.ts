@@ -4,6 +4,7 @@ import {
   measureEndpoints,
   measureLabel,
   measureShape,
+  measureTextColor,
   moveMeasure,
 } from "./measure";
 import type { MeasureAnnotation } from "./scene";
@@ -92,5 +93,12 @@ describe("measureShape label placement", () => {
   it("slides the pill along a short line at the image's corner so it stays inside", () => {
     const corner = measureShape({ ...H, from: 0, to: 2, at: 0 }, 200, 100);
     expect(inside(corner.pill, 200, 100)).toBe(true);
+  });
+});
+
+describe("measureTextColor", () => {
+  it("uses dark text on the light swatches and white on the dark ones", () => {
+    expect(measureTextColor("#22c55e")).toBe("#1a1a1a");
+    expect(measureTextColor("#f6055c")).toBe("#ffffff");
   });
 });

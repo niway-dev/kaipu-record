@@ -113,7 +113,8 @@ export const WHEEL_PX_PER_STEP = 25;
 /**
  * Turn a wheel event into tolerance steps. A trackpad sends many small deltas, a mouse wheel a
  * few large ones, so deltas accumulate in `rest` and a step is taken per `WHEEL_PX_PER_STEP`.
- * Line- and page-mode deltas (`deltaMode` 1, 2) are one step per line. Scrolling up (negative
+ * A line- or page-mode event (`deltaMode` 1, 2) is one wheel notch and takes one step, whatever
+ * its line count (a notch is often 3 lines): one notch, one unit of tolerance. Scrolling up (negative
  * delta) raises the tolerance. `Shift` turns a vertical wheel into a horizontal one on macOS,
  * so the larger of the two deltas is used.
  */
