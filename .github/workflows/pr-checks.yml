@@ -856,10 +856,13 @@ jobs:
             exit 0
           fi
 
+          # The local command that reproduces this scope; `verify:release` takes only a component.
+          if [ "$SCOPE" = "all" ]; then local_cmd="bun run verify"; else local_cmd="bun run verify:release $SCOPE"; fi
+
           case "$VERIFY" in
             success) ;;
             failure)
-              echo "::error title=Verification failed::Verification of the $SCOPE scope (\`bun run verify:release $SCOPE\` locally) or an app bundle build failed on $SHA. Fix it and push; the new revision is verified automatically."
+              echo "::error title=Verification failed::Verification of the $SCOPE scope (\`$local_cmd\` locally) or an app bundle build failed on $SHA. Fix it and push; the new revision is verified automatically."
               exit 1
               ;;
             cancelled)
