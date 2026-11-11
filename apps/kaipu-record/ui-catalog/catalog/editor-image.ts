@@ -150,6 +150,20 @@ export const editorImage = catalog(
       keepPointer: true,
       demonstrates: ["editorImage.inspectRuler:horizontal", "editorImage.inspectRun:horizontal"],
     },
+    "inspect-ruler-vertical": {
+      profile: "image-inspect",
+      how: "With the flag forced on, open “Settings page”, press Inspect, rest the pointer on the image and press 2: the vertical pixel run under the cursor is drawn with its length beside it, and Vertical is on in the bar.",
+      steps: [
+        open(ASSETS.settingsShot),
+        inspectToggle,
+        { hover: { area: "editorImage.canvas" } },
+        { waitFor: { area: "editorImage.inspectHud" } },
+        { press: "2" },
+        { waitFor: { area: "editorImage.inspectRun" } },
+      ],
+      keepPointer: true,
+      demonstrates: ["editorImage.inspectRuler:vertical", "editorImage.inspectRun:vertical"],
+    },
     "inspect-measure-pinned": {
       profile: "image-inspect",
       how: "With the flag forced on, open “Settings page”, press Inspect, rest the pointer on the image, press 1 and click: the run stays on the image as a measurement with its length.",

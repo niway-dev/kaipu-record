@@ -250,8 +250,8 @@ export function resizeAnnotation(
   return { x: nb.x, y: nb.y, w: nb.w, h: nb.h };
 }
 
-/** The handle under point `p` (within `tol` normalized units), or null. Handles are
- *  tested in order, so corners/endpoints (listed first) win ties over edges. */
+/** The handle under point `p` (within `tol` normalized units), or null. The nearest one
+ *  in reach wins, for every kind; list order (corners/endpoints first) only breaks exact ties. */
 export function hitHandle(handles: Handle[], p: Pt, tol: Pt): HandleId | null {
   // The nearest handle wins: on a short measure or arrow both ends fall inside the
   // tolerance, and taking the first one dragged the end the user did not press.

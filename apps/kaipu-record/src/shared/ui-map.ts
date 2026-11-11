@@ -279,8 +279,11 @@ export const UI_MAP = {
       inspectHud: { states: ["reading"], gatedBy: [{ flag: "image-inspect" }] },
       // The ruler (NIW2-702): its row in the Inspect bar, the run drawn under the cursor, and
       // a run pinned as a `measure` annotation.
-      inspectRuler: { states: ["off", "horizontal"], gatedBy: [{ flag: "image-inspect" }] },
-      inspectRun: { states: ["horizontal"], gatedBy: [{ flag: "image-inspect" }] },
+      inspectRuler: {
+        states: ["off", "horizontal", "vertical"],
+        gatedBy: [{ flag: "image-inspect" }],
+      },
+      inspectRun: { states: ["horizontal", "vertical"], gatedBy: [{ flag: "image-inspect" }] },
       measure: { states: ["pinned"], gatedBy: [{ flag: "image-inspect" }] },
       beautify: { states: ["default"] },
     },
