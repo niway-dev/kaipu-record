@@ -80,6 +80,10 @@ know, is scope `all` and verifies everything, so a wrong rule runs more, never l
   faster.
 - The release pull request and its tag verify the same scope, so a tag cannot fail on a part the
   pull request skipped.
+- A workspace member that no released component depends on is verified by no automatic check.
+  Today that is `apps/console`: it is not a release-please component and has no release workflow,
+  so its types and tests run only on a manual dispatch of `PR checks` (scope `all`) and its
+  types in the pre-push hook. It gets its own scope when it gets its own release.
 
 ## Non-goals
 
