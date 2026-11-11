@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createCaptureWindowHooks } from "./capture-window-hooks";
 
-function setup(options: { visible?: boolean; window?: boolean } = {}) {
+function setup(options: { visible?: boolean; window?: boolean; platform?: NodeJS.Platform } = {}) {
   const calls: string[] = [];
   let visible = options.visible ?? true;
   const window = {
@@ -15,9 +15,11 @@ function setup(options: { visible?: boolean; window?: boolean } = {}) {
       visible = true;
       calls.push("show-inactive");
     }),
+    minimize: vi.fn(() => calls.push("minimize")),
     focus: vi.fn(() => calls.push("focus")),
   };
   const deps = {
+    platform: options.platform ?? "darwin",
     mainWindow: () => (options.window === false ? null : window),
     hideCapturePanel: vi.fn(() => calls.push("hide-panel")),
     dismissToast: vi.fn(() => calls.push("dismiss-toast")),
@@ -76,6 +78,25 @@ describe("createCaptureWindowHooks", () => {
     expect(deps.showMainWindow).not.toHaveBeenCalled();
     expect(deps.bringAppToFront).not.toHaveBeenCalled();
     expect(deps.restoreCameraBubble).toHaveBeenCalledOnce();
+  });
+
+  it("brings a previously visible Windows window back minimized after a quiet capture", () => {
+    const { hooks, window, deps, calls } = setup({ platform: "win32" });
+    hooks.beforeCapture();
+    hooks.afterCapture("quiet");
+    expect(calls.slice(-2)).toEqual(["minimize", "restore-bubble"]);
+    expect(window.showInactive).not.toHaveBeenCalled();
+    expect(window.focus).not.toHaveBeenCalled();
+    expect(deps.showMainWindow).not.toHaveBeenCalled();
+    expect(deps.bringAppToFront).not.toHaveBeenCalled();
+  });
+
+  it("does not restore a Windows window that was already hidden", () => {
+    const { hooks, window } = setup({ platform: "win32", visible: false });
+    hooks.beforeCapture();
+    hooks.afterCapture("quiet");
+    expect(window.showInactive).not.toHaveBeenCalled();
+    expect(window.minimize).not.toHaveBeenCalled();
   });
 
   it("failure 7: a window that was hidden stays hidden after a quiet capture or a cancel", () => {

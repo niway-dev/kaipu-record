@@ -17,6 +17,7 @@ function setup(platform: NodeJS.Platform = "darwin") {
         visible = false;
       },
       showInactive: vi.fn(),
+      minimize: vi.fn(),
     }),
     hideCapturePanel: vi.fn(),
     dismissToast: vi.fn(),

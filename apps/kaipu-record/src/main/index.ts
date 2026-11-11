@@ -741,6 +741,7 @@ let recordingReady: RecordingReadyWindow | null = null;
 
 /** Window orchestration handed to the screenshot IPC (hide for the shot, reveal after). */
 const captureWindowHooks = createCaptureWindowHooks({
+  platform: process.platform,
   mainWindow: () => mainWindow,
   hideCapturePanel: () => capturePanel?.hide(),
   dismissToast: () => captureToast?.dismiss(),

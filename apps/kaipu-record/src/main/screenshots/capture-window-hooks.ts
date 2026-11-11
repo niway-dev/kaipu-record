@@ -6,9 +6,11 @@ export interface CaptureMainWindow {
   isVisible(): boolean;
   hide(): void;
   showInactive(): void;
+  minimize(): void;
 }
 
 export interface CaptureWindowHooksDeps {
+  platform?: NodeJS.Platform;
   /** The main window, or null when it was closed (macOS keeps the app alive in the tray). */
   mainWindow(): CaptureMainWindow | null;
   hideCapturePanel(): void;
@@ -38,8 +40,10 @@ export interface CaptureWindowHooksDeps {
  *
  * - `editor`: the renderer reveals the window itself once the editor shows.
  * - `cancelled`: a window that was up comes back, focused, as before the capture.
- * - `quiet`: the main window stays hidden. `showInactive` would raise it in the window
- *   stack even without focus, covering the app where the user wants to paste.
+ * - `quiet`: the main window stays off screen. `showInactive` would raise it in the window
+ *   stack even without focus, covering the app where the user wants to paste. On macOS it
+ *   stays hidden (the Dock icon keeps the app reachable); on Windows a window that was up
+ *   comes back minimized, because a hidden window has no taskbar button.
  * - `recording`: the overlay started a take; the window stays hidden (the countdown is drawn
  *   on the chosen region) and comes back when the take stops, like any recording.
  *
@@ -76,6 +80,12 @@ export function createCaptureWindowHooks(
       capturing = false;
       deps.resumeTakeEscape?.();
       if (wasVisible && ending === "cancelled") deps.showMainWindow();
+      if (wasVisible && ending === "quiet" && deps.platform === "win32") {
+        // A hidden Windows window has no taskbar button, so the app looks closed.
+        // Electron shows a hidden window straight into the minimized state, so the
+        // taskbar button comes back without the window covering the paste target.
+        liveWindow()?.minimize();
+      }
       deps.restoreCameraBubble();
     },
     reveal: () => deps.bringAppToFront(),
