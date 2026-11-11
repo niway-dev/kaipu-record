@@ -110,8 +110,24 @@ devDependency shadowed the pinned version and `api-v0.5.0` failed on 2026-10-20 
 `apps/web-hono` has no local wrangler.
 
 The release-candidate PR check (`Web and API - Workers bundle`) runs the same script with
-`--dry-run` for both apps after building them, with an empty secrets file. A deploy
-command that cannot run now fails on the release pull request instead of on the tag.
+`--dry-run` after building the app, with an empty secrets file: for the Worker the candidate
+ships (both on a manual dispatch, neither on a desktop candidate). A deploy command that
+cannot run now fails on the release pull request instead of on the tag.
+
+### What a release verifies
+
+A release pull request and its tag workflow verify the component they ship plus that
+component's workspace dependencies, nothing else
+([ADR 0052](/architecture/decisions/0052-release-candidates-verify-only-the-component-they-ship/)).
+The component comes from the release-please branch name; a manual dispatch of `pr-checks.yml`
+verifies everything.
+
+- **Release pull request** (`pr-checks.yml`): lint and the docs build always run; type-check
+  and workspace tests are scoped to the component; the desktop unit shards and the macOS E2E
+  run only for a desktop candidate; the Workers bundle runs only for web and API.
+- **Tag workflow**: `bun run verify:release <web|api|desktop>` (`scripts/verify-release.sh`)
+  runs the same lint, format, build, type-check and test scope on the exact tagged SHA. Root
+  `bun run verify` still checks the whole workspace and is what the pre-push hook uses.
 
 ## First-deploy order (one-time)
 

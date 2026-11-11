@@ -15,10 +15,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Release gate (ADR 0004): the same `bun run verify` the Lefthook pre-push runs, on the
-  # exact SHA being released, in a clean Linux environment. Nothing below starts until it
-  # passes, so a red gate publishes nothing. If it fails after the tag exists, fix forward
-  # and cut a patch release; do not delete tags.
+  # Release gate (ADR 0004): lint, format, types and unit tests of the web component and
+  # its workspace dependencies only (`bun run verify:release web`, ADR 0052), on the exact
+  # SHA being released, in a clean Linux environment. It is the scope the release pull
+  # request verified, not the whole workspace, so an unrelated component's flaky test cannot
+  # block this tag. Nothing below starts until it passes, so a red gate publishes nothing.
+  # If it fails after the tag exists, fix forward and cut a patch release; do not delete tags.
   verify:
     name: Verify (lint, types, tests)
     runs-on: ubuntu-latest
@@ -58,7 +60,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Verify
-        run: bun run verify
+        run: bun run verify:release web
 
   release-web:
     name: Build & deploy web

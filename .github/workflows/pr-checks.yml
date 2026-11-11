@@ -10,7 +10,8 @@ name: PR checks
 # types) is its check. Merges stay fast; a regression surfaces on the release pull request.
 #
 # 1. `Classify the change` — runs first on every non-draft revision. It outputs `release`
-#    (is this a candidate?), `docs_only` and `e2e`. Everything below waits on it.
+#    (is this a candidate?), `scope` (which component it ships), `docs_only`, `e2e` and the
+#    turbo filters the jobs below use. Everything below waits on it.
 # 2. `Merge requirements` — the REQUIRED check. It reports exactly once per commit: an
 #    immediate pass for an ordinary pull request, or the verdict of the run that verified a
 #    candidate. The rule and the evidence are on the job itself.
@@ -18,10 +19,29 @@ name: PR checks
 #    build and type-check, unit tests, the web and API Workers bundle, the docs site build),
 #    on Linux. Job names carry no prefix when they cover the whole workspace, and
 #    `<scope> - <what>` when they cover one part of it (`Desktop - unit tests (1/3)`).
-# 4. `Desktop - E2E tests (macOS)` — candidates that change more than documentation, and a
-#    manual dispatch. Playwright drives the real Electron build on the platform that ships;
-#    it is the only thing that exercises the export path, the library actions and settings
-#    persistence against a real build (ADR 0006).
+# 4. `Desktop - E2E tests (macOS)` — desktop candidates that change more than documentation,
+#    and a manual dispatch. Playwright drives the real Electron build on the platform that
+#    ships; it is the only thing that exercises the export path, the library actions and
+#    settings persistence against a real build (ADR 0006).
+#
+# SCOPE (ADR 0052, which amends ADR 0027's "the verifying jobs run on every candidate"): a
+# candidate verifies the component it ships and that component's workspace dependencies,
+# nothing else. A flaky desktop perf test blocked the web 0.12.0 release PR (#429) although
+# no desktop code was in it. The scope comes from the release-please branch name
+# (`...--components--<web|api|desktop>`); a manual dispatch, or a component this workflow
+# does not know, is `all`, so a wrong rule runs more, never less.
+#
+#   job                      web     api     desktop   all
+#   lint, docs               runs    runs    runs      runs
+#   types                    web...  api...  desktop...  whole workspace
+#   workspace unit tests     web...  api...  desktop^... workspace minus desktop
+#   desktop unit shards      -       -       runs      runs
+#   Workers bundles          web     api     -         both
+#   desktop E2E (macOS)      -       -       runs      runs
+#
+# (`<app>...` is the app plus its workspace dependencies; `desktop^...` is the dependencies
+# only, because the app's own tests run in the shards. `-` is skipped, never failed.) The
+# desktop E2E also skips a docs-only candidate (ADR 0027).
 #
 # READINESS POLICY — draft means "still accumulating", ready means "verify this". A draft
 # starts no runner at all, and the required check waits until the pull request is ready.
@@ -96,6 +116,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [changes]
     # Release candidates only (ADR 0027): an ordinary pull request starts no runner here.
+    # Repo-wide for every scope (ADR 0052): it is seconds, and it guards shared config.
     if: >-
       ${{ needs.changes.result == 'success' && needs.changes.outputs.release == 'true' }}
     concurrency:
@@ -135,6 +156,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [changes]
     # Release candidates only (ADR 0027): an ordinary pull request starts no runner here.
+    # The candidate's own app and its dependencies; the whole workspace for `all` (ADR 0052).
     if: >-
       ${{ needs.changes.result == 'success' && needs.changes.outputs.release == 'true' }}
     concurrency:
@@ -172,31 +194,29 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-turbo-
 
+      # The filters are computed by `Classify the change`: the app's dependencies only to
+      # build (the app itself is built where it is shipped), the app plus them to type-check.
       - name: Build the workspace packages
-        run: bun run build --filter='@kaipu/*'
+        env:
+          BUILD_FILTER: ${{ needs.changes.outputs.build_filter }}
+        run: bun run build --filter="$BUILD_FILTER"
 
-      - name: Type-check every package and app
-        run: bun run check-types
+      - name: Type-check the candidate
+        env:
+          TYPES_FILTER: ${{ needs.changes.outputs.types_filter }}
+        run: bun run check-types --filter="$TYPES_FILTER"
 
-  # The desktop renderer suite is most of the test time, so it is split three ways with
-  # Vitest's own sharding; the rest of the workspace runs as one more part.
+  # The workspace's unit tests, except the desktop app's own: its renderer suite is most of
+  # the test time and runs sharded in `tests_desktop`. Scoped like `types` (ADR 0052).
   tests:
-    name: ${{ matrix.name }}
+    name: Workspace - unit tests
     runs-on: ubuntu-latest
     needs: [changes]
     # Release candidates only (ADR 0027): an ordinary pull request starts no runner here.
     if: >-
       ${{ needs.changes.result == 'success' && needs.changes.outputs.release == 'true' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { part: packages, name: "Packages, web and API - unit tests" }
-          - { part: desktop 1/3, name: "Desktop - unit tests (1/3)" }
-          - { part: desktop 2/3, name: "Desktop - unit tests (2/3)" }
-          - { part: desktop 3/3, name: "Desktop - unit tests (3/3)" }
     concurrency:
-      group: tests-${{ matrix.part }}-pr-${{ github.event.pull_request.number || github.ref }}
+      group: tests-packages-pr-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: true
     steps:
       - name: Check out candidate code
@@ -231,27 +251,93 @@ jobs:
             ${{ runner.os }}-turbo-
 
       - name: Build the workspace packages
-        run: bun run build --filter='@kaipu/*'
+        env:
+          BUILD_FILTER: ${{ needs.changes.outputs.build_filter }}
+        run: bun run build --filter="$BUILD_FILTER"
 
-      - name: Test the workspace except the desktop app
-        if: ${{ matrix.part == 'packages' }}
-        run: bunx turbo run test --filter='!kaipu-record'
+      - name: Test the candidate's workspace
+        env:
+          TEST_FILTER: ${{ needs.changes.outputs.test_filter }}
+        run: bunx turbo run test --filter="$TEST_FILTER"
+
+  # The desktop app's own unit tests, split three ways with Vitest's own sharding. Only a
+  # desktop candidate (or `all`) runs them: a web or API release never waits on this suite
+  # (ADR 0052). A separate job, not a matrix leg, because a job-level `if:` cannot read
+  # `matrix`.
+  tests_desktop:
+    name: Desktop - unit tests (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    needs: [changes]
+    if: >-
+      ${{
+        needs.changes.result == 'success' &&
+        needs.changes.outputs.release == 'true' &&
+        needs.changes.outputs.desktop == 'true'
+      }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/3", "2/3", "3/3"]
+    concurrency:
+      group: tests-desktop-${{ matrix.shard }}-pr-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Check out candidate code
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - name: Restore Bun dependency cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      # Turbo's local cache. Keyed on the lockfile + turbo config, NOT on the SHA: entries
+      # are immutable, so a per-SHA key mints a fresh entry on every push of an open PR and
+      # eats the repository's 10 GB budget. Turbo validates each task's own input hash, so
+      # an entry that predates the current code is partially reused, never wrongly reused.
+      - name: Restore Turbo task cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ hashFiles('bun.lock', 'turbo.json') }}
+          restore-keys: |
+            ${{ runner.os }}-turbo-
+
+      - name: Build the workspace packages
+        env:
+          BUILD_FILTER: ${{ needs.changes.outputs.build_filter }}
+        run: bun run build --filter="$BUILD_FILTER"
 
       - name: Test one shard of the desktop app
-        if: ${{ matrix.part != 'packages' }}
         working-directory: apps/kaipu-record
         env:
-          PART: ${{ matrix.part }}
-        run: bun run test -- --shard="${PART#desktop }"
+          SHARD: ${{ matrix.shard }}
+        run: bun run test -- --shard="$SHARD"
 
-  # The two app bundles are otherwise built only inside release-web / release-api.
+  # The two app bundles are otherwise built only inside release-web / release-api. Each
+  # candidate bundles the Worker it ships; a desktop candidate ships none, so the job is
+  # skipped (ADR 0052).
   bundles:
     name: Web and API - Workers bundle
     runs-on: ubuntu-latest
     needs: [changes]
     # Release candidates only (ADR 0027): an ordinary pull request starts no runner here.
     if: >-
-      ${{ needs.changes.result == 'success' && needs.changes.outputs.release == 'true' }}
+      ${{
+        needs.changes.result == 'success' &&
+        needs.changes.outputs.release == 'true' &&
+        needs.changes.outputs.workers == 'true'
+      }}
     concurrency:
       group: bundles-pr-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: true
@@ -288,9 +374,12 @@ jobs:
             ${{ runner.os }}-turbo-
 
       - name: Build the workspace packages
-        run: bun run build --filter='@kaipu/*'
+        env:
+          BUILD_FILTER: ${{ needs.changes.outputs.build_filter }}
+        run: bun run build --filter="$BUILD_FILTER"
 
       - name: Build web app
+        if: ${{ needs.changes.outputs.scope == 'web' || needs.changes.outputs.scope == 'all' }}
         working-directory: apps/web-hono
         env:
           VITE_SERVER_URL: https://placeholder.example.com
@@ -298,23 +387,30 @@ jobs:
         run: bun run build
 
       - name: Build API
+        if: ${{ needs.changes.outputs.scope == 'api' || needs.changes.outputs.scope == 'all' }}
         working-directory: apps/server-hono
         run: bun run build
 
       # The exact deploy command of release-api.yml / release-web.yml, with --dry-run:
       # same script, same pinned wrangler, same --secrets-file. api-v0.5.0 failed on the
       # tag with "Unknown arguments: secrets-file" because nothing ran it before.
-      - name: Dry-run the Worker deploys
+      - name: Dry-run the API Worker deploy
+        if: ${{ needs.changes.outputs.scope == 'api' || needs.changes.outputs.scope == 'all' }}
         run: |
           echo '{}' > apps/server-hono/worker-secrets.json
-          echo '{}' > apps/web-hono/worker-secrets.json
           bash scripts/deploy-worker.sh apps/server-hono --dry-run
+
+      - name: Dry-run the web Worker deploy
+        if: ${{ needs.changes.outputs.scope == 'web' || needs.changes.outputs.scope == 'all' }}
+        run: |
+          echo '{}' > apps/web-hono/worker-secrets.json
           bash scripts/deploy-worker.sh apps/web-hono --dry-run
 
   # The docs site (`apps/documentation`, Astro Starlight) was built nowhere in CI: a broken
   # frontmatter or a page that fails to compile reached `main` unnoticed, and two of every
   # three pull requests change documentation. `astro build` needs no secret and no workspace
-  # package, so this is the one job a docs-only pull request cannot do without.
+  # package, so this is the one job a docs-only pull request cannot do without, and it is
+  # the same for every scope (ADR 0052).
   docs:
     name: Documentation - build
     runs-on: ubuntu-latest
@@ -347,6 +443,11 @@ jobs:
 
   # Collects the parts above into the one result `Merge requirements` reads.
   #
+  # A part the scope does not cover is `skipped`, and that counts as passed only where the
+  # classification says it was never needed: `tests_desktop` when the candidate is not
+  # desktop, `bundles` when it ships no Worker (ADR 0052). Anywhere else a skip is a part
+  # that failed to start, and fails the verification.
+  #
   # `always()` so a failed part still produces a verdict (failure) instead of a skip. A
   # CANCELLED part means a newer revision superseded this run; then this job is skipped
   # rather than run, because a run that knows nothing about the commit must report nothing
@@ -355,7 +456,7 @@ jobs:
   verify:
     name: All checks passed
     runs-on: ubuntu-latest
-    needs: [changes, lint, types, tests, bundles, docs]
+    needs: [changes, lint, types, tests, tests_desktop, bundles, docs]
     if: >-
       ${{
         always() &&
@@ -364,6 +465,7 @@ jobs:
         needs.lint.result != 'cancelled' &&
         needs.types.result != 'cancelled' &&
         needs.tests.result != 'cancelled' &&
+        needs.tests_desktop.result != 'cancelled' &&
         needs.bundles.result != 'cancelled' &&
         needs.docs.result != 'cancelled'
       }}
@@ -376,12 +478,23 @@ jobs:
           LINT: ${{ needs.lint.result }}
           TYPES: ${{ needs.types.result }}
           TESTS: ${{ needs.tests.result }}
+          TESTS_DESKTOP: ${{ needs.tests_desktop.result }}
           BUNDLES: ${{ needs.bundles.result }}
           DOCS: ${{ needs.docs.result }}
+          DESKTOP: ${{ needs.changes.outputs.desktop }}
+          WORKERS: ${{ needs.changes.outputs.workers }}
         run: |
           set -euo pipefail
-          echo "lint=$LINT types=$TYPES tests=$TESTS bundles=$BUNDLES docs=$DOCS"
-          [ "$LINT" = success ] && [ "$TYPES" = success ] && [ "$TESTS" = success ] && [ "$BUNDLES" = success ] && [ "$DOCS" = success ]
+          echo "lint=$LINT types=$TYPES tests=$TESTS tests_desktop=$TESTS_DESKTOP bundles=$BUNDLES docs=$DOCS (desktop=$DESKTOP workers=$WORKERS)"
+          fail=0
+          [ "$LINT" = success ] || fail=1
+          [ "$TYPES" = success ] || fail=1
+          [ "$TESTS" = success ] || fail=1
+          [ "$DOCS" = success ] || fail=1
+          # The scoped parts: a pass, or a skip only where the scope does not cover them.
+          [ "$TESTS_DESKTOP" = success ] || { [ "$DESKTOP" = false ] && [ "$TESTS_DESKTOP" = skipped ]; } || fail=1
+          [ "$BUNDLES" = success ] || { [ "$WORKERS" = false ] && [ "$BUNDLES" = skipped ]; } || fail=1
+          exit "$fail"
 
   # Decides whether this pull request changes documentation only, so `e2e_desktop` can skip.
   #
@@ -398,6 +511,10 @@ jobs:
   # in `.md`/`.mdx`. Anything else, an empty list, a list at the API's 3000-file cap, or a
   # manual dispatch counts as code. A wrong rule therefore runs the E2E too often, never too
   # rarely.
+  #
+  # The same step decides the SCOPE of a candidate (ADR 0052): which component it ships,
+  # read from the release-please branch name, and with it which parts of the verification
+  # apply. Same rule of thumb: an unknown component is `all`.
   changes:
     name: Classify the change
     runs-on: ubuntu-latest
@@ -413,9 +530,15 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
+      build_filter: ${{ steps.classify.outputs.build_filter }}
+      desktop: ${{ steps.classify.outputs.desktop }}
       docs_only: ${{ steps.classify.outputs.docs_only }}
       e2e: ${{ steps.classify.outputs.e2e }}
       release: ${{ steps.classify.outputs.release }}
+      scope: ${{ steps.classify.outputs.scope }}
+      test_filter: ${{ steps.classify.outputs.test_filter }}
+      types_filter: ${{ steps.classify.outputs.types_filter }}
+      workers: ${{ steps.classify.outputs.workers }}
     steps:
       - name: List changed files
         if: ${{ github.event_name == 'pull_request' }}
@@ -446,24 +569,85 @@ jobs:
 
           # Verification runs only on release candidates (release-please branches) and on a
           # manual dispatch (ADR 0027). Every other pull request gets an immediate verdict
-          # from the gate. The macOS E2E additionally skips a docs-only candidate.
+          # from the gate.
           release=false
+          scope=none
           case "$EVENT:$HEAD_REF" in
-            workflow_dispatch:* | pull_request:release-please--branches--*) release=true ;;
+            workflow_dispatch:*)
+              release=true
+              scope=all
+              ;;
+            pull_request:release-please--branches--*)
+              release=true
+              # The component is the branch suffix (release-please-config.json). One this
+              # file does not know is `all`: verify more, never less.
+              case "$HEAD_REF" in
+                *--components--web) scope=web ;;
+                *--components--api) scope=api ;;
+                *--components--desktop) scope=desktop ;;
+                *) scope=all ;;
+              esac
+              ;;
           esac
+
+          # What the scope covers (ADR 0052). `build_filter` is the packages the candidate
+          # needs built; `types_filter` adds the app itself; `test_filter` is the workspace
+          # tests that run in the `tests` job (the desktop app's own run in `tests_desktop`).
+          # `all` is today's whole-workspace behaviour.
+          desktop=false
+          workers=false
+          case "$scope" in
+            desktop | all) desktop=true ;;
+          esac
+          case "$scope" in
+            web | api | all) workers=true ;;
+          esac
+          case "$scope" in
+            web)
+              build_filter='web-hono^...'
+              types_filter='web-hono...'
+              test_filter='web-hono...'
+              ;;
+            api)
+              build_filter='server-hono^...'
+              types_filter='server-hono...'
+              test_filter='server-hono...'
+              ;;
+            desktop)
+              build_filter='kaipu-record^...'
+              types_filter='kaipu-record...'
+              test_filter='kaipu-record^...'
+              ;;
+            *)
+              build_filter='@kaipu/*'
+              types_filter='*'
+              test_filter='!kaipu-record'
+              ;;
+          esac
+
+          # The macOS E2E exercises the desktop build, so it runs for a desktop candidate
+          # and never for a docs-only one.
           e2e=false
-          if [ "$release" = "true" ] && [ "$docs_only" = "false" ]; then
+          if [ "$release" = "true" ] && [ "$docs_only" = "false" ] && [ "$desktop" = "true" ]; then
             e2e=true
           fi
 
           {
             echo "docs_only=$docs_only"
             echo "release=$release"
+            echo "scope=$scope"
+            echo "desktop=$desktop"
+            echo "workers=$workers"
             echo "e2e=$e2e"
+            echo "build_filter=$build_filter"
+            echo "types_filter=$types_filter"
+            echo "test_filter=$test_filter"
           } | tee -a "$GITHUB_OUTPUT"
 
-  # The desktop end-to-end suite, on release candidates that are not docs-only (ADR 0006;
-  # ADR 0010 widened it to every pull request; ADR 0027 narrowed it back).
+  # The desktop end-to-end suite, on desktop release candidates that are not docs-only
+  # (ADR 0006; ADR 0010 widened it to every pull request; ADR 0027 narrowed it back to
+  # release candidates; ADR 0052 to the desktop ones, because a web or API release ships
+  # nothing this suite exercises).
   #
   # A faithful copy of the E2E step in release-desktop.yml, native rebuild included, because
   # a candidate that does not exercise what ships is not a candidate. This is the only place
@@ -482,9 +666,10 @@ jobs:
     timeout-minutes: 30
     environment: testing
     needs: [changes]
-    # Same eligibility as `verify`, minus docs-only pull requests. It used to be gated to
-    # desktop release candidates because a macOS minute billed at ten; on a public
-    # repository it bills at nothing. The docs-only skip is about wall-clock, not money.
+    # Same eligibility as `verify`, minus docs-only pull requests and minus candidates that
+    # ship no desktop build (`e2e` is false for them). The scope skip is about coupling, not
+    # money: a macOS minute used to bill at ten, on a public repository it bills at nothing,
+    # but a web release must not wait on a desktop suite. The docs-only skip is wall-clock.
     # A failed or missing classification runs nothing here; the gate reports it as a failure.
     if: >-
       ${{
@@ -616,8 +801,9 @@ jobs:
     # scripts/check-workflow-eligibility.ts enforces that distinction.
     #
     # The E2E counts as decided in two more cases, both read off `needs.changes`: it was
-    # skipped because this run classified the change as docs-only, or the classification
-    # itself failed (a real verdict about this commit — the script below fails it).
+    # skipped because this run classified the change as not needing it (docs-only, or a
+    # candidate that is not the desktop one), or the classification itself failed (a real
+    # verdict about this commit — the script below fails it).
     if: >-
       ${{
         always() && github.event_name == 'pull_request' &&
@@ -642,6 +828,7 @@ jobs:
           CHANGES: ${{ needs.changes.result }}
           DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
           E2E_REQUIRED: ${{ needs.changes.outputs.e2e }}
+          SCOPE: ${{ needs.changes.outputs.scope }}
           RELEASE: ${{ needs.changes.outputs.release }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
@@ -690,10 +877,12 @@ jobs:
             skipped)
               if [ "$E2E_REQUIRED" = "false" ] && [ "$DOCS_ONLY" = "true" ]; then
                 echo "Docs-only change: the desktop end-to-end suite is not required."
+              elif [ "$E2E_REQUIRED" = "false" ] && [ "$RELEASE" = "true" ]; then
+                echo "Not a desktop release: the desktop end-to-end suite is not required."
               elif [ "$E2E_REQUIRED" = "false" ]; then
                 echo "Not a release candidate: the desktop end-to-end suite runs on the release-please pull request."
               else
-                echo "::error title=Desktop E2E did not run::A release candidate that changes more than documentation must pass the macOS end-to-end suite. Return the pull request to draft and mark it ready for review again."
+                echo "::error title=Desktop E2E did not run::A desktop release candidate that changes more than documentation must pass the macOS end-to-end suite. Return the pull request to draft and mark it ready for review again."
                 exit 1
               fi
               ;;
@@ -706,7 +895,7 @@ jobs:
               exit 1
               ;;
             *)
-              echo "::error title=Desktop E2E did not run::A release candidate that changes more than documentation must pass the macOS end-to-end suite (e2e_desktop job: $E2E). Return the pull request to draft and mark it ready for review again."
+              echo "::error title=Desktop E2E did not run::A desktop release candidate that changes more than documentation must pass the macOS end-to-end suite (e2e_desktop job: $E2E). Return the pull request to draft and mark it ready for review again."
               exit 1
               ;;
           esac
@@ -714,7 +903,7 @@ jobs:
           if [ "$E2E" = "success" ]; then
             echo "Verified on $SHA: checks, builds and the desktop end-to-end suite passed."
           else
-            echo "Verified on $SHA: checks and builds passed; docs-only, so no desktop end-to-end suite."
+            echo "Verified on $SHA ($SCOPE scope): checks and builds passed; no desktop end-to-end suite required."
           fi
 
   # TRANSITIONAL — delete once the `main release` ruleset requires `Merge requirements`.

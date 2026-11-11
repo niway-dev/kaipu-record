@@ -246,7 +246,7 @@ function evaluate(expr: string, ctx: Record<string, unknown>): boolean {
 // ── Scenarios ──────────────────────────────────────────────────────────────────
 
 const RELEASE_BRANCH = "release-please--branches--main--components--desktop";
-/** A release candidate that must NOT pay for a macOS runner. */
+/** A release candidate that ships no desktop build: no shards, no macOS (ADR 0052). */
 const WEB_RELEASE_BRANCH = "release-please--branches--main--components--web";
 
 interface EventOptions {
@@ -306,53 +306,59 @@ interface Expectation {
 type JobResult = "success" | "failure" | "cancelled" | "skipped";
 
 /**
- * Mirrors the `release` rule in the classify step: a release-please branch or a manual
- * dispatch. Derived from the scenario's event, never from its expectation, so the check
- * cannot agree with itself.
+ * The outputs of `Classify the change` for a scenario, by running the REAL step. It used to
+ * be mirrored here; with scoping (ADR 0052) the outputs drive which parts run, so a mirror
+ * would agree with itself while the workflow's rule was wrong.
  */
-function isReleaseCandidate(ctx: Record<string, unknown>): boolean {
+function classifyFor(ctx: Record<string, unknown>, docsOnly: boolean): Record<string, string> {
   const github = ctx.github as { event_name: string; head_ref: string };
-  return (
-    github.event_name === "workflow_dispatch" ||
-    github.head_ref.startsWith("release-please--branches--")
-  );
+  const files =
+    github.event_name === "workflow_dispatch"
+      ? null
+      : docsOnly
+        ? ["apps/documentation/src/content/docs/a.md"]
+        : ["apps/kaipu-record/src/a.ts"];
+  return runClassify(github.event_name, github.head_ref, files);
 }
 
 function needsContext(
+  ctx: Record<string, unknown>,
   expect: Expectation,
   override: Partial<Record<string, JobResult>> = {},
   docsOnly = false,
-  releaseCandidate = false,
-  changesEligible = false,
 ) {
   // `changes` runs on every non-draft revision; everything else waits on its verdict.
   // Whether it ran comes from evaluating its own condition, not from the expectation.
-  const changes: JobResult = override.changes ?? (changesEligible ? "success" : "skipped");
+  const changes: JobResult =
+    override.changes ?? (evaluate(exprs.changes, ctx) ? "success" : "skipped");
   const verify: JobResult = override.verify ?? (expect.verify ? "success" : "skipped");
   const e2e: JobResult = override.e2e_desktop ?? (expect.e2e ? "success" : "skipped");
   const gate: JobResult = override.gate ?? (expect.gate ? "success" : "skipped");
-  // The parallel parts `verify` collects. They share its eligibility, so by default they
-  // ran exactly when it did.
+  const changesNeed = {
+    result: changes,
+    // A job output is the empty string unless the job succeeded and set it.
+    outputs:
+      changes === "success"
+        ? classifyFor(ctx, docsOnly)
+        : Object.fromEntries(OUTPUT_KEYS.map((k) => [k, ""])),
+  };
+  // The parallel parts `verify` collects. Each one ran exactly when its OWN condition says
+  // so, given the classification — that is how a scope skips `tests_desktop` or `bundles`.
   const part = (id: string): { result: JobResult } => ({
-    result: override[id] ?? (expect.verify ? "success" : "skipped"),
+    result:
+      override[id] ??
+      (evaluate(exprs[id as keyof typeof exprs], { ...ctx, needs: { changes: changesNeed } })
+        ? "success"
+        : "skipped"),
   });
   return {
-    changes: {
-      result: changes,
-      // A job output is the empty string unless the job succeeded and set it.
-      outputs:
-        changes === "success"
-          ? {
-              docs_only: String(docsOnly),
-              release: String(releaseCandidate),
-              e2e: String(!docsOnly && releaseCandidate),
-            }
-          : { docs_only: "", release: "", e2e: "" },
-    },
+    changes: changesNeed,
     lint: part("lint"),
     types: part("types"),
     tests: part("tests"),
+    tests_desktop: part("tests_desktop"),
     bundles: part("bundles"),
+    docs: part("docs"),
     verify: { result: verify },
     e2e_desktop: { result: e2e },
     gate: { result: gate },
@@ -369,6 +375,8 @@ const scenarios: Array<{
   results?: Partial<Record<string, JobResult>>;
   /** What `changes` classified the pull request as. Default: code. */
   docsOnly?: boolean;
+  /** Which scoped parts must run (ADR 0052), checked against their real conditions. */
+  parts?: { tests_desktop: boolean; bundles: boolean };
 }> = [
   {
     n: 1,
@@ -413,12 +421,80 @@ const scenarios: Array<{
   },
   {
     n: 13,
-    // It used to skip macOS to save minutes billed at ten; on a public repository they are
-    // free, so every candidate runs the desktop suite (ADR 0010).
-    title: "Ready WEB release candidate (now runs macOS too)",
+    // ADR 0010 made every candidate run macOS; ADR 0052 takes it away from the ones that
+    // ship no desktop build. A web release no longer waits on the desktop suite (#429).
+    title: "Ready WEB release candidate (no desktop parts)",
     ctx: pullRequestEvent({ action: "ready_for_review", headRef: WEB_RELEASE_BRANCH }),
     eventType: "ready_for_review",
+    expect: { verify: true, e2e: false, gate: true, legacy: true, cancel: false },
+    parts: { tests_desktop: false, bundles: true },
+  },
+  {
+    n: 31,
+    title: "Ready API release candidate (no desktop parts)",
+    ctx: pullRequestEvent({
+      action: "ready_for_review",
+      headRef: "release-please--branches--main--components--api",
+    }),
+    eventType: "ready_for_review",
+    expect: { verify: true, e2e: false, gate: true, legacy: true, cancel: false },
+    parts: { tests_desktop: false, bundles: true },
+  },
+  {
+    n: 32,
+    title: "Ready desktop candidate (no Workers bundle)",
+    ctx: pullRequestEvent({ action: "ready_for_review", headRef: RELEASE_BRANCH }),
+    eventType: "ready_for_review",
     expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
+    parts: { tests_desktop: true, bundles: false },
+  },
+  {
+    n: 33,
+    title: "Ready release candidate of an unknown component (verifies all)",
+    ctx: pullRequestEvent({
+      action: "ready_for_review",
+      headRef: "release-please--branches--main--components--cli",
+    }),
+    eventType: "ready_for_review",
+    expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
+    parts: { tests_desktop: true, bundles: true },
+  },
+  {
+    n: 34,
+    title: "Ready web candidate whose workspace tests failed",
+    ctx: pullRequestEvent({ action: "synchronize", headRef: WEB_RELEASE_BRANCH }),
+    eventType: "synchronize",
+    results: { tests: "failure", verify: "failure" },
+    // A real verdict: no E2E is expected for a web candidate, and the gate still reports.
+    expect: { verify: true, e2e: false, gate: true, legacy: true, cancel: false },
+    parts: { tests_desktop: false, bundles: true },
+  },
+  {
+    n: 35,
+    title: "Ready desktop candidate whose shard failed",
+    ctx: pullRequestEvent({ action: "synchronize", headRef: RELEASE_BRANCH }),
+    eventType: "synchronize",
+    results: { tests_desktop: "failure", verify: "failure" },
+    expect: { verify: true, e2e: true, gate: true, legacy: true, cancel: false },
+    parts: { tests_desktop: true, bundles: false },
+  },
+  {
+    n: 36,
+    title: "Ready web candidate superseded while its tests ran",
+    ctx: pullRequestEvent({ action: "synchronize", headRef: WEB_RELEASE_BRANCH }),
+    eventType: "synchronize",
+    // Cancelled by a newer revision: `verify` stays silent and so does the gate, even though
+    // this candidate has no E2E to wait for.
+    results: { tests: "cancelled" },
+    expect: { verify: false, e2e: false, gate: false, legacy: false, cancel: false },
+  },
+  {
+    n: 37,
+    title: "Ready desktop candidate superseded while a shard ran",
+    ctx: pullRequestEvent({ action: "synchronize", headRef: RELEASE_BRANCH }),
+    eventType: "synchronize",
+    results: { tests_desktop: "cancelled" },
+    expect: { verify: false, e2e: true, gate: false, legacy: false, cancel: false },
   },
   {
     n: 9,
@@ -595,12 +671,74 @@ const ok = (cond: boolean, msg: string): void => {
 const exprs = {
   changes: ifExpression("changes"),
   lint: ifExpression("lint"),
+  types: ifExpression("types"),
+  tests: ifExpression("tests"),
+  tests_desktop: ifExpression("tests_desktop"),
+  bundles: ifExpression("bundles"),
+  docs: ifExpression("docs"),
   verify: ifExpression("verify"),
   e2e: ifExpression("e2e_desktop"),
   gate: ifExpression("gate"),
   legacy: ifExpression("legacy-gate"),
   cancel: ifExpression("cancel-superseded"),
 };
+
+const classify = stepScript("changes", "Classify the change");
+const scratch = mkdtempSync(join(tmpdir(), "kaipu-classify-"));
+const OUTPUT_KEYS = [
+  "docs_only",
+  "release",
+  "scope",
+  "desktop",
+  "workers",
+  "e2e",
+  "build_filter",
+  "types_filter",
+  "test_filter",
+];
+
+/** Runs the real classify step and returns every output it wrote. */
+function runClassify(
+  event: string,
+  headRef: string,
+  files: string[] | null,
+): Record<string, string> {
+  const listPath = join(scratch, "changed-files.txt");
+  const outPath = join(scratch, "output.txt");
+  writeFileSync(outPath, "");
+  writeFileSync(listPath, files && files.length ? `${files.join("\n")}\n` : "");
+  execFileSync("bash", ["-c", classify], {
+    env: {
+      ...process.env,
+      FILES: files === null ? join(scratch, "missing.txt") : listPath,
+      GITHUB_OUTPUT: outPath,
+      EVENT: event,
+      HEAD_REF: headRef,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const out: Record<string, string> = {};
+  for (const line of readFileSync(outPath, "utf8").split("\n")) {
+    const at = line.indexOf("=");
+    if (at > 0) out[line.slice(0, at)] = line.slice(at + 1);
+  }
+  return out;
+}
+
+/** Runs a real workflow script under bash with the given env; returns its exit code and stdout. */
+function runScript(script: string, env: Record<string, string>): { code: number; out: string } {
+  try {
+    const out = execFileSync("bash", ["-c", script], {
+      env: { ...process.env, ...env },
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    return { code: 0, out };
+  } catch (e) {
+    const err = e as { status?: number; stdout?: string };
+    return { code: err.status ?? -1, out: err.stdout ?? "" };
+  }
+}
 
 console.log(`Workflow: ${WORKFLOW}`);
 console.log(`Trigger types: ${triggerTypes().join(", ")}\n`);
@@ -613,13 +751,7 @@ console.log(
 
 /** The `needs` context a scenario's run would produce, `changes` included. */
 const scenarioNeeds = (s: (typeof scenarios)[number]) =>
-  needsContext(
-    s.expect,
-    s.results,
-    s.docsOnly,
-    isReleaseCandidate(s.ctx),
-    evaluate(exprs.changes, s.ctx),
-  );
+  needsContext(s.ctx, s.expect, s.results, s.docsOnly);
 
 for (const s of scenarios) {
   const ctx = { ...s.ctx, needs: scenarioNeeds(s) };
@@ -630,6 +762,14 @@ for (const s of scenarios) {
       (ctx.needs.changes.result === "success" && ctx.needs.changes.outputs.release === "true"),
     `scenario ${s.n} (${s.title}): the verifying parts must run only on a classified release candidate`,
   );
+  if (s.parts) {
+    for (const id of ["tests_desktop", "bundles"] as const) {
+      ok(
+        evaluate(exprs[id], ctx) === s.parts[id],
+        `scenario ${s.n} (${s.title}): part '${id}' expected to ${s.parts[id] ? "run" : "be skipped"}`,
+      );
+    }
+  }
   const got = {
     verify: evaluate(exprs.verify, ctx),
     e2e: evaluate(exprs.e2e, ctx),
@@ -841,6 +981,11 @@ const decideCases: DecideCase[] = [
     "docs-only candidate, E2E failed",
   ],
   ["false", "skipped", "skipped", "failure", "", "", "", 1, "change detection failed"],
+  // ADR 0052: a candidate that ships no desktop build does not need the desktop E2E.
+  ["false", "success", "skipped", "success", "false", "true", "false", 0, "web/api candidate"],
+  ["false", "failure", "skipped", "success", "false", "true", "false", 1, "web/api, verify failed"],
+  ["false", "cancelled", "skipped", "success", "false", "true", "false", 1, "web/api, superseded"],
+  ["false", "skipped", "skipped", "success", "false", "true", "false", 1, "web/api, nothing ran"],
 ];
 for (const [
   isDraft,
@@ -866,6 +1011,7 @@ for (const [
         DOCS_ONLY: docsOnly,
         E2E_REQUIRED: e2eRequired,
         RELEASE: release,
+        SCOPE: release === "true" ? (e2eRequired === "true" ? "desktop" : "web") : "none",
         SHA: "1bd8b2a",
       },
       encoding: "utf8",
@@ -892,8 +1038,6 @@ for (const [
 // The docs-only classifier, by running the real step against file lists. Every row that
 // is not plainly documentation must come out as code: a wrong answer here skips the E2E.
 console.log("\nDocs-only classifier — the real step, by its output");
-const classify = stepScript("changes", "Classify the change");
-const scratch = mkdtempSync(join(tmpdir(), "kaipu-classify-"));
 const classifyCases: Array<[string[] | null, boolean, string]> = [
   [["apps/documentation/src/content/docs/marketing/index.md"], true, "docs site page"],
   [
@@ -920,52 +1064,22 @@ const classifyCases: Array<[string[] | null, boolean, string]> = [
   [Array.from({ length: 3000 }, (_, i) => `apps/documentation/p${i}.md`), false, "API cap reached"],
 ];
 for (const [files, want, label] of classifyCases) {
-  const listPath = join(scratch, "changed-files.txt");
-  const outPath = join(scratch, "output.txt");
-  writeFileSync(outPath, "");
-  if (files === null) writeFileSync(listPath, "", { flag: "w" });
-  else writeFileSync(listPath, files.length ? `${files.join("\n")}\n` : "");
-  execFileSync("bash", ["-c", classify], {
-    env: {
-      ...process.env,
-      FILES: files === null ? join(scratch, "missing.txt") : listPath,
-      GITHUB_OUTPUT: outPath,
-      EVENT: "pull_request",
-      HEAD_REF: "feat/ordinary",
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const got = /docs_only=true/.test(readFileSync(outPath, "utf8"));
+  const got = runClassify("pull_request", "feat/ordinary", files).docs_only === "true";
   console.log(`  docs_only=${String(got).padEnd(5)} ${label}`);
   ok(got === want, `classifier on '${label}' expected docs_only=${want}, got ${got}`);
 }
 
-// The E2E rule, by running the same real step: release candidates and manual dispatches
-// only, never docs-only. A wrong answer here either skips the release E2E or puts macOS
-// back on every pull request.
+// The E2E rule, by running the same real step: DESKTOP release candidates and manual
+// dispatches only, never docs-only (ADR 0052). A wrong answer here either skips the release
+// E2E of the desktop app or puts macOS back on a web or API release.
 console.log("\nE2E rule — the real step, by its output");
+const DESKTOP_BRANCH = "release-please--branches--main--components--desktop";
+const API_BRANCH = "release-please--branches--main--components--api";
 const e2eCases: Array<[string, string, string[] | null, boolean, string]> = [
-  [
-    "pull_request",
-    "release-please--branches--main--components--desktop",
-    ["apps/kaipu-record/src/a.ts"],
-    true,
-    "desktop release, code",
-  ],
-  [
-    "pull_request",
-    "release-please--branches--main--components--web",
-    ["apps/web-hono/src/a.ts"],
-    true,
-    "web release, code",
-  ],
-  [
-    "pull_request",
-    "release-please--branches--main--components--desktop",
-    ["CHANGELOG.md"],
-    false,
-    "release, docs only",
-  ],
+  ["pull_request", DESKTOP_BRANCH, ["apps/kaipu-record/src/a.ts"], true, "desktop release, code"],
+  ["pull_request", WEB_RELEASE_BRANCH, ["apps/web-hono/src/a.ts"], false, "web release, code"],
+  ["pull_request", API_BRANCH, ["apps/server-hono/src/a.ts"], false, "api release, code"],
+  ["pull_request", DESKTOP_BRANCH, ["CHANGELOG.md"], false, "desktop release, docs only"],
   ["pull_request", "feat/ordinary", ["apps/kaipu-record/src/a.ts"], false, "ordinary PR, code"],
   [
     "pull_request",
@@ -977,24 +1091,571 @@ const e2eCases: Array<[string, string, string[] | null, boolean, string]> = [
   ["workflow_dispatch", "", null, true, "manual dispatch"],
 ];
 for (const [event, headRef, files, want, label] of e2eCases) {
-  const listPath = join(scratch, "changed-files.txt");
-  const outPath = join(scratch, "output.txt");
-  writeFileSync(outPath, "");
-  writeFileSync(listPath, files ? `${files.join("\n")}\n` : "");
-  execFileSync("bash", ["-c", classify], {
-    env: {
-      ...process.env,
-      FILES: files === null ? join(scratch, "missing.txt") : listPath,
-      GITHUB_OUTPUT: outPath,
-      EVENT: event,
-      HEAD_REF: headRef,
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const got = /^e2e=true$/m.test(readFileSync(outPath, "utf8"));
+  const got = runClassify(event, headRef, files).e2e === "true";
   console.log(`  e2e=${String(got).padEnd(5)} ${label}`);
   ok(got === want, `E2E rule on '${label}' expected e2e=${want}, got ${got}`);
 }
+
+// The scope rule (ADR 0052): the component comes from the branch name, and an unknown one
+// is `all`. Every output the jobs read is pinned, filters included, because a wrong filter
+// silently verifies the wrong packages.
+console.log("\nScope rule — the real step, by its outputs");
+const CODE = ["apps/kaipu-record/src/a.ts"];
+const ALL_FILTERS = { build_filter: "@kaipu/*", types_filter: "*", test_filter: "!kaipu-record" };
+const scopeCases: Array<[string, string, string[] | null, Record<string, string>, string]> = [
+  [
+    "pull_request",
+    WEB_RELEASE_BRANCH,
+    CODE,
+    {
+      release: "true",
+      scope: "web",
+      desktop: "false",
+      workers: "true",
+      e2e: "false",
+      build_filter: "web-hono^...",
+      types_filter: "web-hono...",
+      test_filter: "web-hono...",
+    },
+    "web candidate",
+  ],
+  [
+    "pull_request",
+    API_BRANCH,
+    CODE,
+    {
+      release: "true",
+      scope: "api",
+      desktop: "false",
+      workers: "true",
+      e2e: "false",
+      build_filter: "server-hono^...",
+      types_filter: "server-hono...",
+      test_filter: "server-hono...",
+    },
+    "api candidate",
+  ],
+  [
+    "pull_request",
+    DESKTOP_BRANCH,
+    CODE,
+    {
+      release: "true",
+      scope: "desktop",
+      desktop: "true",
+      workers: "false",
+      e2e: "true",
+      build_filter: "kaipu-record^...",
+      types_filter: "kaipu-record...",
+      test_filter: "kaipu-record^...",
+    },
+    "desktop candidate",
+  ],
+  [
+    "pull_request",
+    DESKTOP_BRANCH,
+    ["CHANGELOG.md"],
+    { release: "true", scope: "desktop", desktop: "true", workers: "false", e2e: "false" },
+    "desktop candidate, docs only",
+  ],
+  [
+    "workflow_dispatch",
+    "",
+    null,
+    {
+      release: "true",
+      scope: "all",
+      desktop: "true",
+      workers: "true",
+      e2e: "true",
+      ...ALL_FILTERS,
+    },
+    "manual dispatch",
+  ],
+  [
+    "pull_request",
+    "release-please--branches--main--components--cli",
+    CODE,
+    {
+      release: "true",
+      scope: "all",
+      desktop: "true",
+      workers: "true",
+      e2e: "true",
+      ...ALL_FILTERS,
+    },
+    "unknown component on a release-please branch",
+  ],
+  [
+    "pull_request",
+    "release-please--branches--main",
+    CODE,
+    {
+      release: "true",
+      scope: "all",
+      desktop: "true",
+      workers: "true",
+      e2e: "true",
+      ...ALL_FILTERS,
+    },
+    "release-please branch without a component",
+  ],
+  [
+    "pull_request",
+    "feat/web",
+    CODE,
+    { release: "false", scope: "none", desktop: "false", workers: "false", e2e: "false" },
+    "ordinary PR is not a candidate, so it has no scope",
+  ],
+];
+for (const [event, headRef, files, want, label] of scopeCases) {
+  const got = runClassify(event, headRef, files);
+  console.log(
+    `  ${label.padEnd(48)} scope=${(got.scope ?? "?").padEnd(8)} desktop=${got.desktop} workers=${got.workers} e2e=${got.e2e}`,
+  );
+  for (const [key, value] of Object.entries(want)) {
+    ok(
+      got[key] === value,
+      `scope rule on '${label}': ${key} expected '${value}', got '${got[key]}'`,
+    );
+  }
+}
+
+// The collector, by running its real script: a scoped part may be skipped only where the
+// scope does not cover it. A skip anywhere else is a part that failed to start, and counts
+// as a failure.
+console.log("\nCollector — the real `All checks passed` script, by exit code");
+const collect = stepScript("verify", "Require every part to have passed");
+// [lint, types, tests, tests_desktop, bundles, docs, desktop, workers, expected exit, label]
+type CollectCase = [string, string, string, string, string, string, string, string, number, string];
+const collectCases: CollectCase[] = [
+  ["success", "success", "success", "success", "success", "success", "true", "true", 0, "all"],
+  [
+    "success",
+    "success",
+    "success",
+    "skipped",
+    "success",
+    "success",
+    "false",
+    "true",
+    0,
+    "web or api",
+  ],
+  ["success", "success", "success", "success", "skipped", "success", "true", "false", 0, "desktop"],
+  [
+    "success",
+    "success",
+    "failure",
+    "skipped",
+    "success",
+    "success",
+    "false",
+    "true",
+    1,
+    "workspace tests failed",
+  ],
+  [
+    "success",
+    "success",
+    "success",
+    "failure",
+    "skipped",
+    "success",
+    "true",
+    "false",
+    1,
+    "a desktop shard failed",
+  ],
+  [
+    "success",
+    "success",
+    "success",
+    "skipped",
+    "success",
+    "success",
+    "true",
+    "true",
+    1,
+    "shards skipped but required",
+  ],
+  [
+    "success",
+    "success",
+    "success",
+    "success",
+    "skipped",
+    "success",
+    "true",
+    "true",
+    1,
+    "bundles skipped but required",
+  ],
+  [
+    "failure",
+    "success",
+    "success",
+    "skipped",
+    "success",
+    "success",
+    "false",
+    "true",
+    1,
+    "lint failed",
+  ],
+  [
+    "success",
+    "failure",
+    "success",
+    "skipped",
+    "success",
+    "success",
+    "false",
+    "true",
+    1,
+    "types failed",
+  ],
+  [
+    "success",
+    "success",
+    "success",
+    "skipped",
+    "failure",
+    "success",
+    "false",
+    "true",
+    1,
+    "bundles failed",
+  ],
+  [
+    "success",
+    "success",
+    "success",
+    "skipped",
+    "success",
+    "failure",
+    "false",
+    "true",
+    1,
+    "docs failed",
+  ],
+  [
+    "success",
+    "success",
+    "skipped",
+    "skipped",
+    "success",
+    "success",
+    "false",
+    "true",
+    1,
+    "tests never ran",
+  ],
+];
+for (const [
+  lint,
+  types,
+  tests,
+  testsDesktop,
+  bundles,
+  docs,
+  desktop,
+  workers,
+  wantCode,
+  label,
+] of collectCases) {
+  const code = runScript(collect, {
+    LINT: lint,
+    TYPES: types,
+    TESTS: tests,
+    TESTS_DESKTOP: testsDesktop,
+    BUNDLES: bundles,
+    DOCS: docs,
+    DESKTOP: desktop,
+    WORKERS: workers,
+  }).code;
+  console.log(`  exit=${code}  ${label}`);
+  ok(code === wantCode, `collector '${label}' expected exit ${wantCode}, got ${code}`);
+}
+
+// Scoped candidates end to end, every link REAL: classify the change, decide which parts
+// run from their own conditions, collect them with the real script, evaluate the gate's
+// condition and run its script. This is the check that a web release no longer waits on the
+// desktop suite, and that the desktop one still does.
+console.log("\nScoped candidates — classify, parts, collector and gate chained");
+interface Chain {
+  label: string;
+  event: "pull_request" | "workflow_dispatch";
+  headRef: string;
+  docsOnly?: boolean;
+  failing?: Partial<Record<string, JobResult>>;
+  want: {
+    scope: string;
+    testsDesktop: JobResult;
+    bundles: JobResult;
+    e2e: JobResult;
+    verify: JobResult;
+    /** The gate's exit code, or null when it stays silent (a dispatch has no PR). */
+    gate: number | null;
+  };
+}
+const chains: Chain[] = [
+  {
+    label: "web candidate",
+    event: "pull_request",
+    headRef: WEB_RELEASE_BRANCH,
+    want: {
+      scope: "web",
+      testsDesktop: "skipped",
+      bundles: "success",
+      e2e: "skipped",
+      verify: "success",
+      gate: 0,
+    },
+  },
+  {
+    label: "api candidate",
+    event: "pull_request",
+    headRef: API_BRANCH,
+    want: {
+      scope: "api",
+      testsDesktop: "skipped",
+      bundles: "success",
+      e2e: "skipped",
+      verify: "success",
+      gate: 0,
+    },
+  },
+  {
+    label: "desktop candidate",
+    event: "pull_request",
+    headRef: DESKTOP_BRANCH,
+    want: {
+      scope: "desktop",
+      testsDesktop: "success",
+      bundles: "skipped",
+      e2e: "success",
+      verify: "success",
+      gate: 0,
+    },
+  },
+  {
+    label: "desktop candidate, docs only",
+    event: "pull_request",
+    headRef: DESKTOP_BRANCH,
+    docsOnly: true,
+    want: {
+      scope: "desktop",
+      testsDesktop: "success",
+      bundles: "skipped",
+      e2e: "skipped",
+      verify: "success",
+      gate: 0,
+    },
+  },
+  {
+    label: "web candidate, docs only",
+    event: "pull_request",
+    headRef: WEB_RELEASE_BRANCH,
+    docsOnly: true,
+    want: {
+      scope: "web",
+      testsDesktop: "skipped",
+      bundles: "success",
+      e2e: "skipped",
+      verify: "success",
+      gate: 0,
+    },
+  },
+  {
+    label: "manual dispatch",
+    event: "workflow_dispatch",
+    headRef: "",
+    want: {
+      scope: "all",
+      testsDesktop: "success",
+      bundles: "success",
+      e2e: "success",
+      verify: "success",
+      gate: null,
+    },
+  },
+  {
+    label: "unknown component on a release-please branch",
+    event: "pull_request",
+    headRef: "release-please--branches--main--components--cli",
+    want: {
+      scope: "all",
+      testsDesktop: "success",
+      bundles: "success",
+      e2e: "success",
+      verify: "success",
+      gate: 0,
+    },
+  },
+  {
+    label: "web candidate whose workspace tests fail",
+    event: "pull_request",
+    headRef: WEB_RELEASE_BRANCH,
+    failing: { tests: "failure" },
+    want: {
+      scope: "web",
+      testsDesktop: "skipped",
+      bundles: "success",
+      e2e: "skipped",
+      verify: "failure",
+      gate: 1,
+    },
+  },
+  {
+    label: "api candidate whose bundle fails",
+    event: "pull_request",
+    headRef: API_BRANCH,
+    failing: { bundles: "failure" },
+    want: {
+      scope: "api",
+      testsDesktop: "skipped",
+      bundles: "failure",
+      e2e: "skipped",
+      verify: "failure",
+      gate: 1,
+    },
+  },
+  {
+    label: "desktop candidate whose shard fails",
+    event: "pull_request",
+    headRef: DESKTOP_BRANCH,
+    failing: { tests_desktop: "failure" },
+    want: {
+      scope: "desktop",
+      testsDesktop: "failure",
+      bundles: "skipped",
+      e2e: "success",
+      verify: "failure",
+      gate: 1,
+    },
+  },
+  {
+    label: "desktop candidate whose E2E fails",
+    event: "pull_request",
+    headRef: DESKTOP_BRANCH,
+    failing: { e2e_desktop: "failure" },
+    want: {
+      scope: "desktop",
+      testsDesktop: "success",
+      bundles: "skipped",
+      e2e: "failure",
+      verify: "success",
+      gate: 1,
+    },
+  },
+];
+for (const c of chains) {
+  const ctx =
+    c.event === "workflow_dispatch"
+      ? { ...dispatchEvent }
+      : pullRequestEvent({ action: "ready_for_review", headRef: c.headRef });
+  const outputs = classifyFor(ctx, c.docsOnly ?? false);
+  const changes = { result: "success" as JobResult, outputs };
+  const partResult = (id: keyof typeof exprs): JobResult =>
+    c.failing?.[id] ??
+    (evaluate(exprs[id], { ...ctx, needs: { changes } }) ? "success" : "skipped");
+  const parts = {
+    lint: partResult("lint"),
+    types: partResult("types"),
+    tests: partResult("tests"),
+    tests_desktop: partResult("tests_desktop"),
+    bundles: partResult("bundles"),
+    docs: partResult("docs"),
+  };
+  const verifyRuns = evaluate(exprs.verify, {
+    ...ctx,
+    needs: {
+      changes,
+      lint: { result: parts.lint },
+      types: { result: parts.types },
+      tests: { result: parts.tests },
+      tests_desktop: { result: parts.tests_desktop },
+      bundles: { result: parts.bundles },
+      docs: { result: parts.docs },
+    },
+  });
+  let verify: JobResult = "skipped";
+  if (verifyRuns) {
+    verify =
+      runScript(collect, {
+        LINT: parts.lint,
+        TYPES: parts.types,
+        TESTS: parts.tests,
+        TESTS_DESKTOP: parts.tests_desktop,
+        BUNDLES: parts.bundles,
+        DOCS: parts.docs,
+        DESKTOP: outputs.desktop!,
+        WORKERS: outputs.workers!,
+      }).code === 0
+        ? "success"
+        : "failure";
+  }
+  const e2eEligible = evaluate(exprs.e2e, { ...ctx, needs: { changes } });
+  const e2e: JobResult = e2eEligible ? (c.failing?.e2e_desktop ?? "success") : "skipped";
+  const gateNeeds = { changes, verify: { result: verify }, e2e_desktop: { result: e2e } };
+  const gateReports = evaluate(exprs.gate, { ...ctx, needs: gateNeeds });
+  let gateCode: number | null = null;
+  if (gateReports) {
+    gateCode = runScript(decide, {
+      IS_DRAFT: "false",
+      VERIFY: verify,
+      E2E: e2e,
+      CHANGES: "success",
+      DOCS_ONLY: outputs.docs_only!,
+      E2E_REQUIRED: outputs.e2e!,
+      RELEASE: outputs.release!,
+      SCOPE: outputs.scope!,
+      SHA: "1bd8b2a",
+    }).code;
+  }
+  console.log(
+    `  ${c.label.padEnd(48)} scope=${outputs.scope!.padEnd(8)} shards=${parts.tests_desktop.padEnd(8)} bundles=${parts.bundles.padEnd(8)} e2e=${e2e.padEnd(8)} verify=${verify.padEnd(8)} gate=${gateCode === null ? "silent" : `exit ${gateCode}`}`,
+  );
+  const got = {
+    scope: outputs.scope,
+    testsDesktop: parts.tests_desktop,
+    bundles: parts.bundles,
+    e2e,
+    verify,
+    gate: gateCode,
+  };
+  for (const key of Object.keys(c.want) as Array<keyof Chain["want"]>) {
+    ok(
+      got[key] === c.want[key],
+      `chain '${c.label}': ${key} expected ${c.want[key]}, got ${got[key]}`,
+    );
+  }
+  // A failing part is never lost on the way: if one failed, the gate must not pass.
+  if (Object.values(c.failing ?? {}).includes("failure")) {
+    ok(gateCode !== 0, `chain '${c.label}': a failing part must never let the gate pass`);
+  }
+}
+// The scope's own message, for the one case a reader will see: not a desktop release.
+{
+  const r = runScript(decide, {
+    IS_DRAFT: "false",
+    VERIFY: "success",
+    E2E: "skipped",
+    CHANGES: "success",
+    DOCS_ONLY: "false",
+    E2E_REQUIRED: "false",
+    RELEASE: "true",
+    SCOPE: "web",
+    SHA: "1bd8b2a",
+  });
+  ok(
+    r.code === 0 &&
+      /Not a desktop release: the desktop end-to-end suite is not required\./.test(r.out),
+    "the gate must say 'Not a desktop release' when a non-desktop candidate skips the E2E",
+  );
+}
+
 ok(
   /previous_filename/.test(jobBlock("changes")),
   "the changed-file list must include the old path of a rename, or moving code into a .md reads as docs-only",

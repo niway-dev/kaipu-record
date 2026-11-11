@@ -15,7 +15,8 @@ name: Release Desktop
 # keeps the artifacts for 3 days; `publish` is skipped because there is no tag.
 #
 # Release gate (ADR 0004, /architecture/decisions/0004-local-first-release-verification):
-# a Linux `verify` job (lint, types, unit tests) must pass on this exact SHA, then the
+# a Linux `verify` job (lint, types, unit tests of the desktop app and its dependencies,
+# ADR 0052) must pass on this exact SHA, then the
 # macOS job builds and runs the Playwright E2E against that build, and only then signs
 # and notarizes. Windows has no E2E (ADR 0023, ADR 0006): it is verified by the build
 # plus a manual QA checklist. PR-time cloud checks were retired; this is where the
@@ -49,10 +50,12 @@ permissions:
   contents: read # least privilege; only `publish` gets write
 
 jobs:
-  # Release gate (ADR 0004): the same `bun run verify` the Lefthook pre-push runs, on the
-  # exact SHA being released, in a clean Linux environment. Nothing below starts until it
-  # passes, so a red gate publishes nothing. If it fails after the tag exists, fix forward
-  # and cut a patch release; do not delete tags.
+  # Release gate (ADR 0004): lint, format, types and unit tests of the desktop component and
+  # its workspace dependencies only (`bun run verify:release desktop`, ADR 0052), on the exact
+  # SHA being released, in a clean Linux environment. It is the scope the release pull
+  # request verified, not the whole workspace, so an unrelated component's flaky test cannot
+  # block this tag. Nothing below starts until it passes, so a red gate publishes nothing.
+  # If it fails after the tag exists, fix forward and cut a patch release; do not delete tags.
   verify:
     name: Verify (lint, types, tests)
     runs-on: ubuntu-latest
@@ -92,7 +95,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Verify
-        run: bun run verify
+        run: bun run verify:release desktop
 
   build-mac:
     name: Build, sign & notarize (macOS)

@@ -1,0 +1,95 @@
+---
+title: "ADR 0052: Release candidates verify only the component they ship"
+description: A release pull request and its tag workflow verify the component being released plus its workspace dependencies, not the whole monorepo. A web release no longer waits on the desktop suite. A manual dispatch still verifies everything. Amends ADR 0027.
+---
+
+# ADR 0052: Release candidates verify only the component they ship
+
+## Status
+
+| Field         | Value                                                                                                                                     |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Accepted — implemented in `pr-checks.yml`, the release workflows, `scripts/verify-release.sh` and `scripts/check-workflow-eligibility.ts` |
+| Date          | 2026-11-11                                                                                                                                |
+| Supersedes    | —                                                                                                                                         |
+| Amends        | [ADR 0027](./0027-verify-release-candidates-only), decision 2 and its non-goal "Changing the release workflows' own gates"                |
+| Superseded by | —                                                                                                                                         |
+
+## Context
+
+ADR 0027 verifies release candidates only, but it verifies the **whole monorepo** on each one.
+Release-please opens one pull request per component (`web`, `api`, `desktop`; see
+`release-please-config.json`), so a web release ran the desktop unit shards, the macOS E2E and
+the API bundle even though none of that code was in the release.
+
+That coupling blocked a release. The web 0.12.0 release pull request
+([#429](https://github.com/niway-dev/kaipu-record/pull/429)) was held back by a flaky desktop
+performance test, in a release that contained no desktop change. The tag workflows
+(`release-web.yml`, `release-api.yml`, `release-desktop.yml`) had the same coupling: each ran
+`bun run verify`, which checks the whole workspace, so an unrelated component could stop a tag.
+
+## Decision
+
+**A release candidate verifies the component it ships plus that component's workspace
+dependencies, nothing else.** The component is read from the release-please branch name
+(`...--components--<web|api|desktop>`); a manual dispatch, or a component the workflow does not
+know, is scope `all` and verifies everything, so a wrong rule runs more, never less.
+
+| Part                              | web               | api                  | desktop                                    | all (dispatch)        |
+| --------------------------------- | ----------------- | -------------------- | ------------------------------------------ | --------------------- |
+| Lint, format, workflow rules      | runs, repo-wide   | runs, repo-wide      | runs, repo-wide                            | runs                  |
+| Docs site build                   | runs              | runs                 | runs                                       | runs                  |
+| Build and type-check              | `web-hono` + deps | `server-hono` + deps | `kaipu-record` + deps                      | whole workspace       |
+| Workspace unit tests              | `web-hono` + deps | `server-hono` + deps | dependencies only (the app runs in shards) | all except desktop    |
+| Desktop unit test shards          | skipped           | skipped              | runs                                       | runs                  |
+| Workers bundle and deploy dry-run | web only          | api only             | skipped                                    | both                  |
+| Desktop E2E (macOS)               | skipped           | skipped              | runs unless docs-only                      | runs unless docs-only |
+
+1. **`Classify the change` outputs the scope** and the turbo filters the jobs use (`scope`,
+   `desktop`, `workers`, `build_filter`, `types_filter`, `test_filter`). A skipped part is
+   `skipped`, never failed.
+2. **`All checks passed` accepts a skip only where the scope allows it**: the desktop shards
+   when the candidate is not desktop, the bundle when it ships no Worker. A skip anywhere else
+   fails the verification.
+3. **`Merge requirements` does not require the desktop E2E** of a candidate that is not
+   desktop, and says so.
+4. **The tag workflows run the same scope**: `bun run verify:release <web|api|desktop>`
+   (`scripts/verify-release.sh`) replaces `bun run verify` in each. The desktop run is
+   unsharded. Root `bun run verify` and `verify:local` are unchanged.
+5. **`scripts/check-workflow-eligibility.ts` runs the real classify step, collector and gate
+   script** against web, api, desktop, docs-only, dispatch, unknown-component and failing
+   scenarios.
+
+## Alternatives rejected
+
+- **Keep whole-repo verification.** It couples unrelated releases to the slowest and flakiest
+  suite: one component's flaky test blocks every other component's release.
+- **Scope by changed files instead of by component.** A release pull request's diff is only the
+  version bump and the changelog; it says nothing about what code ships. The component is the
+  correct unit, and release-please already names it in the branch.
+- **Make the flaky tests non-blocking.** It hides real regressions behind a retry habit and
+  does not remove the coupling, only its most visible symptom.
+
+## Consequences
+
+- A desktop regression is found only on the desktop release pull request (and its tag), not on
+  the web or API one.
+- Shared packages are tested by every release that depends on them, so a break in `@kaipu/domain`
+  still shows on all three.
+- Web and API releases no longer wait for the macOS runner or the desktop shards, and are
+  faster.
+- The release pull request and its tag verify the same scope, so a tag cannot fail on a part the
+  pull request skipped.
+
+## Non-goals
+
+- Ordinary pull request checks are unchanged (ADR 0027): an immediate pass, with the pre-push
+  hook as the check.
+- Fixing the flaky desktop performance test itself.
+
+## What would reopen this
+
+- A regression in a shared package ships in one component because only another component's tests
+  cover it.
+- Release-please starts grouping several components into one pull request, so the branch name no
+  longer names one component.
