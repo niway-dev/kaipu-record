@@ -531,8 +531,9 @@ describe("AnnotationLayer — measure (NIW2-702)", () => {
   it("a press on the label pill, off the line, grabs the measure", () => {
     const scene = makeScene([ruler], null);
     const { layer } = renderMeasureLayer(scene);
-    // The pill is centred about 19 px above the line (y = 25): well past the line's own slop.
-    fireEvent.pointerDown(layer, { clientX: 30, clientY: 6 });
+    // The line is at y = 25, too close to the top for the pill, so it sits about 19 px below:
+    // well past the line's own slop.
+    fireEvent.pointerDown(layer, { clientX: 30, clientY: 44 });
     expect(scene.select).toHaveBeenCalledWith("m1");
   });
 

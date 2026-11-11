@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { dragMeasureEnd, measureEndpoints, measureLabel, moveMeasure } from "./measure";
+import {
+  dragMeasureEnd,
+  measureEndpoints,
+  measureLabel,
+  measureShape,
+  moveMeasure,
+} from "./measure";
 import type { MeasureAnnotation } from "./scene";
 
 const H: MeasureAnnotation = {
@@ -55,5 +61,26 @@ describe("moveMeasure", () => {
   });
   it("swaps the roles of dx and dy for a vertical measurement", () => {
     expect(moveMeasure(V, 0.01, 0.1)).toEqual({ from: 20, to: 40, at: 51 });
+  });
+});
+
+describe("measureShape label placement", () => {
+  const inside = (p: { x: number; y: number; w: number; h: number }, W: number, H: number) =>
+    p.x >= 0 && p.y >= 0 && p.x + p.w <= W && p.y + p.h <= H;
+  it("puts the pill above a horizontal line, and below it on the top row", () => {
+    const mid = measureShape({ ...H, at: 50 }, 200, 100);
+    expect(mid.pill.y + mid.pill.h).toBeLessThan(mid.p1.y);
+    const top = measureShape({ ...H, at: 0 }, 200, 100);
+    expect(top.pill.y).toBeGreaterThan(top.p1.y);
+    expect(inside(top.pill, 200, 100)).toBe(true);
+  });
+  it("puts the pill right of a vertical line, and left of it on the last column", () => {
+    const right = measureShape({ ...V, at: 199 }, 200, 100);
+    expect(right.pill.x + right.pill.w).toBeLessThan(right.p1.x);
+    expect(inside(right.pill, 200, 100)).toBe(true);
+  });
+  it("slides the pill along a short line at the image's corner so it stays inside", () => {
+    const corner = measureShape({ ...H, from: 0, to: 2, at: 0 }, 200, 100);
+    expect(inside(corner.pill, 200, 100)).toBe(true);
   });
 });

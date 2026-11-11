@@ -268,6 +268,24 @@ describe("hitHandle", () => {
     // se corner is at (0.6, 0.5).
     expect(hitHandle(handles, { x: 0.605, y: 0.495 }, tol)).toBe("se");
   });
+  it("picks the nearest handle when both ends of a short measure are in reach", () => {
+    // 100 -> 105 on a 1000 px image: both ends sit within a 12 px tolerance.
+    const m = {
+      id: "m",
+      kind: "measure" as const,
+      axis: "x" as const,
+      from: 100,
+      to: 105,
+      at: 50,
+      imageW: 1000,
+      imageH: 100,
+      color: "#f6055c",
+    };
+    const handles = handlesFor(m, { w: 1000, h: 100 });
+    const tol = { x: 0.012, y: 0.12 };
+    expect(hitHandle(handles, { x: 0.105, y: 0.505 }, tol)).toBe("p2");
+    expect(hitHandle(handles, { x: 0.1, y: 0.505 }, tol)).toBe("p1");
+  });
   it("returns null when no handle is close", () => {
     const handles = handlesFor(box, size);
     expect(hitHandle(handles, { x: 0.4, y: 0.35 }, { x: 0.02, y: 0.02 })).toBeNull();

@@ -117,9 +117,21 @@ export function measureShape(a: MeasureAnnotation, W: number, H: number, scale =
   const mx = (p1.x + p2.x) / 2;
   const my = (p1.y + p2.y) / 2;
   const gap = PILL_GAP * scale;
-  // Above a horizontal line, to the right of a vertical one.
-  const cx = a.axis === "x" ? mx : mx + t + gap + w / 2;
-  const cy = a.axis === "x" ? my - t - gap - h / 2 : my;
+  // Above a horizontal line, to the right of a vertical one. Near the image's edge the pill
+  // flips to the other side and slides along the line, so the export never crops the length.
+  const inside = (c: number, half: number, max: number): number =>
+    Math.min(Math.max(c, half), Math.max(half, max - half));
+  let cx: number;
+  let cy: number;
+  if (a.axis === "x") {
+    cx = inside(mx, w / 2, W);
+    cy = my - t - gap - h / 2;
+    if (cy - h / 2 < 0) cy = my + t + gap + h / 2;
+  } else {
+    cy = inside(my, h / 2, H);
+    cx = mx + t + gap + w / 2;
+    if (cx + w / 2 > W) cx = mx - t - gap - w / 2;
+  }
   return {
     p1,
     p2,

@@ -240,8 +240,19 @@ export function resizeAnnotation(
 /** The handle under point `p` (within `tol` normalized units), or null. Handles are
  *  tested in order, so corners/endpoints (listed first) win ties over edges. */
 export function hitHandle(handles: Handle[], p: Pt, tol: Pt): HandleId | null {
+  // The nearest handle wins: on a short measure or arrow both ends fall inside the
+  // tolerance, and taking the first one dragged the end the user did not press.
+  let best: HandleId | null = null;
+  let bestD = Infinity;
   for (const h of handles) {
-    if (Math.abs(p.x - h.x) <= tol.x && Math.abs(p.y - h.y) <= tol.y) return h.id;
+    const dx = Math.abs(p.x - h.x) / (tol.x || 1);
+    const dy = Math.abs(p.y - h.y) / (tol.y || 1);
+    if (dx > 1 || dy > 1) continue;
+    const d = dx * dx + dy * dy;
+    if (d < bestD) {
+      bestD = d;
+      best = h.id;
+    }
   }
-  return null;
+  return best;
 }
