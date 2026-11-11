@@ -12,8 +12,8 @@ the matching GitHub Actions workflow runs.
 | Component                 | Tag pattern      | Workflow                                | Target                                                  |
 | ------------------------- | ---------------- | --------------------------------------- | ------------------------------------------------------- |
 | **Desktop** (Electron)    | `desktop-v*.*.*` | `.github/workflows/release-desktop.yml` | Signed macOS DMG/zip → Cloudflare R2 + a GitHub Release |
-| **Web** (landing + proxy) | `web-v*.*.*`     | `.github/workflows/deploy-web.yml`      | Cloudflare Worker (`kaipu-web`) → `kaipu.app`           |
-| **API** (backend)         | `api-v*.*.*`     | `.github/workflows/deploy-api.yml`      | Cloudflare Worker (`kaipu-api`)                         |
+| **Web** (landing + proxy) | `web-v*.*.*`     | `.github/workflows/release-web.yml`     | Cloudflare Worker (`kaipu-web`) → `kaipu.app`           |
+| **API** (backend)         | `api-v*.*.*`     | `.github/workflows/release-api.yml`     | Cloudflare Worker (`kaipu-api`)                         |
 
 Each also has a `workflow_dispatch` trigger, so you can run any of them manually from the **Actions**
 tab without cutting a tag.
@@ -67,9 +67,10 @@ The version is parsed from the tag: `desktop-v0.1.0` → `0.1.0` (used for the D
 [auto-update](/backlog/auto-update) and [version-gate](/backlog/version-gate) for how installed apps
 consume the R2 feed.
 
-### Web — `deploy-web.yml`
+### Web — `release-web.yml`
 
-1. Installs deps, builds the `@kaipu/*` packages, then builds the web app (`apps/web-hono`).
+1. Installs deps, builds the packages `apps/web-hono` depends on (`web-hono^...`), then builds
+   the web app.
 2. Deploys the Worker with `scripts/deploy-worker.sh apps/web-hono`. The Worker is attached to `kaipu.app` +
    `www.kaipu.app` (custom domains in `apps/web-hono/wrangler.jsonc`), so DNS + SSL are provisioned
    automatically on deploy.
@@ -77,9 +78,9 @@ consume the R2 feed.
 `VITE_PUBLIC_DOWNLOAD_URL` is set to `https://updates.kaipu.app` at build so the landing's download
 buttons point at the R2 installers.
 
-### API — `deploy-api.yml`
+### API — `release-api.yml`
 
-1. Installs deps, builds the `@kaipu/*` packages.
+1. Installs deps, builds the packages `apps/server-hono` depends on (`server-hono^...`).
 2. Deploys the Worker with `scripts/deploy-worker.sh apps/server-hono`.
 
 ### Worker secrets travel with the deploy
