@@ -503,7 +503,10 @@ describe.each([
     await enterOverFill();
     press("1");
     await waitFor(() => expect(rulerLength()).toHaveTextContent("4 px"));
-    // Twice as large on screen: the same pixel is now under (225, 112).
+    // Off the image first, so the run on screen afterwards can only come from a new scan.
+    fireEvent.pointerMove(layer(), { clientX: 260, clientY: 50 });
+    await waitFor(() => expect(rulerLength()).toBeNull());
+    // Twice as large on screen: the same pixel (4, 2) is now under (225, 125).
     Element.prototype.getBoundingClientRect = () =>
       ({
         left: 0,
@@ -516,8 +519,8 @@ describe.each([
         y: 0,
       }) as DOMRect;
     fireEvent.pointerMove(layer(), { clientX: 4 * 50 + 25, clientY: 2 * 50 + 25 });
-    await screen.findByText("4, 2");
-    expect(rulerLength()).toHaveTextContent("4 px");
+    await waitFor(() => expect(rulerLength()).toHaveTextContent("4 px"));
+    expect(screen.getByText("4, 2")).toBeInTheDocument();
   });
 
   it("Shift and the Outer toggle measure past the border", async () => {

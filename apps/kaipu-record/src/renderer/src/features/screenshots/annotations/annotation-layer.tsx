@@ -805,6 +805,13 @@ function hitTest(annotations: Annotation[], p: Pt, size: Size): Annotation | nul
     } else if (a.kind === "measure") {
       const { p1, p2 } = measureEndpoints(a);
       if (distToSegment(p, p1, p2) < 0.02) return a;
+      // The label pill sits off the line and is what the eye goes to: it grabs the measure too.
+      const { pill } = measureShape(a, size.w, size.h);
+      const px = p.x * size.w;
+      const py = p.y * size.h;
+      if (px >= pill.x && px <= pill.x + pill.w && py >= pill.y && py <= pill.y + pill.h) {
+        return a;
+      }
     } else if (distToSegment(p, { x: a.x1, y: a.y1 }, { x: a.x2, y: a.y2 }) < 0.02) {
       return a;
     }

@@ -528,6 +528,14 @@ describe("AnnotationLayer — measure (NIW2-702)", () => {
     expect(scene.commitAnnotation).toHaveBeenCalledWith("m1", { from: 40, to: 120 });
   });
 
+  it("a press on the label pill, off the line, grabs the measure", () => {
+    const scene = makeScene([ruler], null);
+    const { layer } = renderMeasureLayer(scene);
+    // The pill is centred about 19 px above the line (y = 25): well past the line's own slop.
+    fireEvent.pointerDown(layer, { clientX: 30, clientY: 6 });
+    expect(scene.select).toHaveBeenCalledWith("m1");
+  });
+
   it("moving the body keeps the length and shifts from, to and at", () => {
     const scene = makeScene([ruler], null);
     const { layer } = renderMeasureLayer(scene);
