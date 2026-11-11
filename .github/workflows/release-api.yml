@@ -81,7 +81,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Build packages only
-        run: bun run build --filter='@kaipu/*'
+        run: bun run build --filter='server-hono^...'
 
       # Secrets ship inside the deployed version, in one `wrangler deploy` — see the
       # note in release-web.yml for why the action's `secrets:` input is not used:
