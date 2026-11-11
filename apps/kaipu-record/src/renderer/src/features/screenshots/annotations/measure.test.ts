@@ -75,6 +75,8 @@ describe("measureShape label placement", () => {
     expect(inside(top.pill, 200, 100)).toBe(true);
   });
   it("puts the pill right of a vertical line, and left of it on the last column", () => {
+    const mid = measureShape(V, 200, 100);
+    expect(mid.pill.x).toBeGreaterThan(mid.p1.x);
     const right = measureShape({ ...V, at: 199 }, 200, 100);
     expect(right.pill.x + right.pill.w).toBeLessThan(right.p1.x);
     expect(inside(right.pill, 200, 100)).toBe(true);
