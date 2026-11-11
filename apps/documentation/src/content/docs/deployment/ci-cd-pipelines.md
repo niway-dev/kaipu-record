@@ -127,7 +127,8 @@ verifies everything.
   run only for a desktop candidate; the Workers bundle runs only for web and API.
 - **Tag workflow**: `bun run verify:release <web|api|desktop>` (`scripts/verify-release.sh`)
   runs the same lint, format, build, type-check and test scope on the exact tagged SHA. Root
-  `bun run verify` still checks the whole workspace and is what the pre-push hook uses.
+  `bun run verify` still checks the whole workspace when you run it; the pre-push hook runs
+  `bun run verify:local` (lint, format, builds, types).
 
 ## First-deploy order (one-time)
 
@@ -198,11 +199,13 @@ Rules that follow from the table:
 
 ## PR checks
 
-Two workflows run on PRs into `main` (neither deploys): `pr-validation.yml` (lint, format
-check, typecheck, build the packages/web/api, desktop unit suite) and `e2e-desktop.yml` (the
-Playwright + Electron E2E suite for the desktop app). They are kept **separate on purpose** — a
-cheap monorepo-wide gate vs an expensive desktop-only one. See
-[PR checks — validation & E2E](/deployment/pr-checks) for what each does and why the split.
+One workflow, `pr-checks.yml`, runs on every pull request and deploys nothing. An ordinary pull
+request gets an immediate pass from the required check; only release candidates (release-please
+pull requests and a manual dispatch) are verified
+([ADR 0027](/architecture/decisions/0027-verify-release-candidates-only/)), and each candidate
+verifies only the component it ships ([What a release verifies](#what-a-release-verifies),
+[ADR 0052](/architecture/decisions/0052-release-candidates-verify-only-the-component-they-ship/)).
+The macOS E2E is a job in the same workflow, run for desktop candidates.
 
 ## Claude review (advisory)
 
