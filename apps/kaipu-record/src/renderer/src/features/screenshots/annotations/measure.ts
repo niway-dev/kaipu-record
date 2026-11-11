@@ -72,3 +72,68 @@ export function moveMeasure(
     at: clamp(a.at + dAcross, 0, across - 1),
   };
 }
+
+/** Base label font and tick geometry, in display px; the export multiplies them by its scale. */
+export const MEASURE_FONT_PX = 12;
+export const MEASURE_FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+export const MEASURE_TICK_PX = 6;
+const PILL_PAD_X = 6;
+const PILL_PAD_Y = 3;
+const PILL_GAP = 4;
+
+export interface MeasureShape {
+  p1: NormPt;
+  p2: NormPt;
+  /** Perpendicular end ticks as [x1, y1, x2, y2] segments. */
+  ticks: [number, number, number, number][];
+  /** Label pill rectangle and the text's centre, in the same space as the endpoints. */
+  pill: { x: number; y: number; w: number; h: number; rx: number };
+  text: { x: number; y: number; fontSize: number };
+}
+
+/**
+ * Everything needed to draw a measure, in a pixel space `W`×`H` wide (the layer's size, or the
+ * export's natural size) with sizes multiplied by `scale`. One source for the live layer and
+ * the export so both draw the same line.
+ */
+export function measureShape(a: MeasureAnnotation, W: number, H: number, scale = 1): MeasureShape {
+  const { p1: n1, p2: n2 } = measureEndpoints(a);
+  const p1 = { x: n1.x * W, y: n1.y * H };
+  const p2 = { x: n2.x * W, y: n2.y * H };
+  const t = MEASURE_TICK_PX * scale;
+  const ticks: MeasureShape["ticks"] =
+    a.axis === "x"
+      ? [
+          [p1.x, p1.y - t, p1.x, p1.y + t],
+          [p2.x, p2.y - t, p2.x, p2.y + t],
+        ]
+      : [
+          [p1.x - t, p1.y, p1.x + t, p1.y],
+          [p2.x - t, p2.y, p2.x + t, p2.y],
+        ];
+  const fontSize = MEASURE_FONT_PX * scale;
+  const w = measureLabel(a).length * fontSize * 0.6 + 2 * PILL_PAD_X * scale;
+  const h = fontSize + 2 * PILL_PAD_Y * scale;
+  const mx = (p1.x + p2.x) / 2;
+  const my = (p1.y + p2.y) / 2;
+  const gap = PILL_GAP * scale;
+  // Above a horizontal line, to the right of a vertical one.
+  const cx = a.axis === "x" ? mx : mx + t + gap + w / 2;
+  const cy = a.axis === "x" ? my - t - gap - h / 2 : my;
+  return {
+    p1,
+    p2,
+    ticks,
+    pill: { x: cx - w / 2, y: cy - h / 2, w, h, rx: h / 2 },
+    text: { x: cx, y: cy, fontSize },
+  };
+}
+
+/** The pill's text colour: dark on a light fill, white on a dark one. */
+export function measureTextColor(fill: string): string {
+  const m = /^#([0-9a-f]{6})/i.exec(fill);
+  if (!m) return "#ffffff";
+  const n = parseInt(m[1], 16);
+  const lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  return lum > 0.6 ? "#111111" : "#ffffff";
+}

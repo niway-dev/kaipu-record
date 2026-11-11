@@ -273,3 +273,31 @@ describe("compositor canvas mode", () => {
     expect(svg).toContain(`viewBox="0 0 1080 680"`);
   });
 });
+
+describe("compositor buildSvg - measure (NIW2-702)", () => {
+  it("draws the line, end ticks and the escaped length label, scaled", () => {
+    const svg = buildSvg(
+      scene([
+        {
+          id: "m",
+          kind: "measure",
+          axis: "x",
+          from: 100,
+          to: 140,
+          at: 299,
+          imageW: 1000,
+          imageH: 600,
+          color: "#ff0000",
+        },
+      ]),
+      geom,
+    );
+    expect(svg).not.toContain("NaN");
+    expect(svg).toContain('data-kind="measure"');
+    // Line from x=100 to x=140 on the middle of row 299 (y = 299.5).
+    expect(svg).toContain('x1="100" y1="299.5" x2="140" y2="299.5"');
+    expect(svg).toContain(">40 px</text>");
+    // Font 12 px scaled by geom.scale (2).
+    expect(svg).toMatch(/font-size="24"/);
+  });
+});

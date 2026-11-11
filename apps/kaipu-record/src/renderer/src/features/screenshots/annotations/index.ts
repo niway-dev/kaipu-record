@@ -11,7 +11,9 @@ export {
   type CompositeOptions,
   type CompositeResult,
 } from "./compositor";
-export type { Scene, Annotation, CropRect } from "./scene";
+export type { Scene, Annotation, CropRect, MeasureAnnotation } from "./scene";
+export { nextAnnotationId } from "./scene";
+export { measureLabel, measureLength } from "./measure";
 export {
   annotationBounds,
   contentExtents,

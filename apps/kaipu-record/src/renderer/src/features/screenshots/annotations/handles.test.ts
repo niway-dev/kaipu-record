@@ -331,3 +331,40 @@ describe("resizeAnnotation — canvas mode (NIW2-698)", () => {
     });
   });
 });
+
+describe("measure handles (NIW2-702)", () => {
+  const ruler: Annotation = {
+    id: "m",
+    kind: "measure",
+    axis: "y",
+    from: 100,
+    to: 300,
+    at: 99,
+    imageW: 200,
+    imageH: 400,
+    color: "#fff",
+  };
+
+  it("has two handles at the line ends and no box handles", () => {
+    expect(handlesFor(ruler, size)).toEqual([
+      { id: "p1", x: 0.4975, y: 0.25 },
+      { id: "p2", x: 0.4975, y: 0.75 },
+    ]);
+  });
+
+  it("dragging p2 moves only the to end, snapped to a pixel edge", () => {
+    expect(resizeAnnotation(ruler, "p2", { x: 0.9, y: 0.5 }, size)).toEqual({ from: 100, to: 200 });
+  });
+
+  it("dragging p1 moves only the from end and never crosses the other end", () => {
+    expect(resizeAnnotation(ruler, "p1", { x: 0.1, y: 0.2 }, size)).toEqual({ from: 80, to: 300 });
+    expect(resizeAnnotation(ruler, "p1", { x: 0.1, y: 0.99 }, size)).toEqual({
+      from: 299,
+      to: 300,
+    });
+  });
+
+  it("its box is the segment", () => {
+    expect(annotationBox(ruler, size)).toEqual({ x: 0.4975, y: 0.25, w: 0, h: 0.5 });
+  });
+});

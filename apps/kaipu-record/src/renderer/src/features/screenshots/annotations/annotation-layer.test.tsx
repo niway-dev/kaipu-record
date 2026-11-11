@@ -471,3 +471,70 @@ describe("AnnotationLayer — canvas mode (NIW2-698)", () => {
     expect(scene.addAnnotation).not.toHaveBeenCalled();
   });
 });
+
+describe("AnnotationLayer — measure (NIW2-702)", () => {
+  // Image 200×200 px shown in a 100×100 layer. The line runs from x=40 to x=80 on row 49,
+  // so it spans 20–40 display px horizontally at y = 25.
+  const ruler: Annotation = {
+    id: "m1",
+    kind: "measure",
+    axis: "x",
+    from: 40,
+    to: 80,
+    at: 49,
+    imageW: 200,
+    imageH: 200,
+    color: ANNOTATION_COLORS[0].value,
+  };
+
+  function renderMeasureLayer(scene: EditorScene) {
+    for (const prop of ["clientWidth", "clientHeight"]) {
+      Object.defineProperty(HTMLElement.prototype, prop, { configurable: true, get: () => 100 });
+    }
+    const utils = render(<AnnotationLayer scene={scene} tools={makeTools()} src="" />);
+    const layer = utils.container.firstChild as HTMLElement;
+    layer.setPointerCapture = vi.fn();
+    layer.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        width: 100,
+        height: 100,
+        right: 100,
+        bottom: 100,
+        x: 0,
+        y: 0,
+      }) as DOMRect;
+    return { ...utils, layer };
+  }
+
+  it("renders the line with its length label and a readable data-measure-length", () => {
+    const { container } = renderMeasureLayer(makeScene([ruler], null));
+    const g = container.querySelector('[data-kind="measure"]');
+    expect(g?.getAttribute("data-annotation")).toBe("m1");
+    expect(g?.getAttribute("data-measure-length")).toBe("40");
+    expect(g?.textContent).toBe("40 px");
+  });
+
+  it("dragging an end handle commits one patch that changes only that end", () => {
+    const scene = makeScene([ruler], "m1");
+    const { layer } = renderMeasureLayer(scene);
+    expect(screen.getAllByTestId("resize-handle")).toHaveLength(2);
+    fireEvent.pointerDown(layer, { clientX: 40, clientY: 25 }); // the "to" end
+    fireEvent.pointerMove(layer, { clientX: 50, clientY: 25 });
+    fireEvent.pointerMove(layer, { clientX: 60, clientY: 25 });
+    fireEvent.pointerUp(layer);
+    expect(scene.commitAnnotation).toHaveBeenCalledTimes(1);
+    expect(scene.commitAnnotation).toHaveBeenCalledWith("m1", { from: 40, to: 120 });
+  });
+
+  it("moving the body keeps the length and shifts from, to and at", () => {
+    const scene = makeScene([ruler], null);
+    const { layer } = renderMeasureLayer(scene);
+    fireEvent.pointerDown(layer, { clientX: 30, clientY: 25 }); // middle of the line
+    fireEvent.pointerMove(layer, { clientX: 40, clientY: 35 });
+    fireEvent.pointerUp(layer);
+    expect(scene.commitAnnotation).toHaveBeenCalledTimes(1);
+    expect(scene.commitAnnotation).toHaveBeenCalledWith("m1", { from: 60, to: 100, at: 69 });
+  });
+});

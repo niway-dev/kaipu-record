@@ -271,3 +271,28 @@ describe("layout and frame converters", () => {
     });
   });
 });
+
+describe("annotationBounds - measure (NIW2-702)", () => {
+  it("covers the segment, its ticks and the label pill", () => {
+    const b = annotationBounds(
+      {
+        id: "m",
+        kind: "measure",
+        axis: "x",
+        from: 100,
+        to: 300,
+        at: 199,
+        imageW: W,
+        imageH: H,
+        color: "#f00",
+      },
+      W,
+      H,
+      1,
+    )!;
+    expect(b.x1).toBeLessThanOrEqual(100);
+    expect(b.x2).toBeGreaterThanOrEqual(300);
+    expect(b.y1).toBeLessThan(199.5); // the pill sits above the line
+    expect(b.y2).toBeGreaterThan(199.5);
+  });
+});

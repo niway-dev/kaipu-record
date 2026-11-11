@@ -180,3 +180,29 @@ describe("a label sized by dragging a corner", () => {
     }
   });
 });
+
+describe("AnnotationOptions - measure (NIW2-702)", () => {
+  const ruler: Annotation = {
+    id: "m1",
+    kind: "measure",
+    axis: "x",
+    from: 0,
+    to: 10,
+    at: 0,
+    imageW: 100,
+    imageH: 100,
+    color: ANNOTATION_COLORS[0].value,
+  };
+
+  it("offers colour swatches only, and recolours the selection", () => {
+    const scene = makeScene([ruler], "m1");
+    render(<AnnotationOptions tools={makeTools()} scene={scene} />);
+    expect(screen.getByText("Color")).toBeInTheDocument();
+    expect(screen.queryByText("Stroke")).toBeNull();
+    expect(screen.queryByText("Size")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "White" }));
+    expect(scene.commitAnnotation).toHaveBeenCalledWith("m1", {
+      color: ANNOTATION_COLORS[2].value,
+    });
+  });
+});

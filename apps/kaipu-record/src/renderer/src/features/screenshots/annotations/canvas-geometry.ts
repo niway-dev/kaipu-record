@@ -7,6 +7,7 @@ import {
   textLines,
 } from "./tools";
 import { pathControlPoints } from "./smooth";
+import { measureShape } from "./measure";
 import type { Annotation, CropRect } from "./scene";
 
 /**
@@ -154,6 +155,40 @@ export function annotationBounds(
       b = b ? union(b, pb) : pb;
     }
     return b ? grow(b, m) : null;
+  }
+  if (a.kind === "measure") {
+    // The segment, its end ticks and the label pill, in natural px.
+    const s = measureShape(a, naturalW, naturalH, scale);
+    const sw = (STROKE_WIDTHS[1] * scale) / 2;
+    let b: Bounds = grow(
+      {
+        x1: Math.min(s.p1.x, s.p2.x),
+        y1: Math.min(s.p1.y, s.p2.y),
+        x2: Math.max(s.p1.x, s.p2.x),
+        y2: Math.max(s.p1.y, s.p2.y),
+      },
+      sw,
+    );
+    for (const t of s.ticks) {
+      b = union(
+        b,
+        grow(
+          {
+            x1: Math.min(t[0], t[2]),
+            y1: Math.min(t[1], t[3]),
+            x2: Math.max(t[0], t[2]),
+            y2: Math.max(t[1], t[3]),
+          },
+          sw,
+        ),
+      );
+    }
+    return union(b, {
+      x1: s.pill.x,
+      y1: s.pill.y,
+      x2: s.pill.x + s.pill.w,
+      y2: s.pill.y + s.pill.h,
+    });
   }
   // text: y is the TOP (dominant-baseline hanging); a width wraps to width × naturalW.
   const fs = resolveFontPx(a.size, a.fontPx) * scale;

@@ -14,7 +14,7 @@ import styles from "./annotation-options.module.css";
  */
 interface ContextualControls {
   /** "size" for text, "stroke" for box/arrow. */
-  mode: "stroke" | "size";
+  mode: "stroke" | "size" | "color";
   color: string;
   setColor(color: string): void;
   /** Index into STROKE_WIDTHS or TEXT_SIZES. */
@@ -35,6 +35,19 @@ function resolveControls(
   // (change colour on a selection → keep drawing in that colour, across tools).
   if (selected) {
     if (selected.kind === "blur") return null;
+    if (selected.kind === "measure") {
+      // Colour only: a measure has one fixed stroke and its label is not text you size.
+      return {
+        mode: "color",
+        color: selected.color,
+        setColor: (color) => {
+          scene.commitAnnotation(selected.id, { color });
+          tools.setColor(color);
+        },
+        level: -1,
+        setLevel: () => {},
+      };
+    }
     return selected.kind === "text"
       ? {
           mode: "size",
@@ -141,7 +154,7 @@ export function AnnotationOptions({
             ))}
           </div>
 
-          {controls.mode === "size" ? (
+          {controls.mode === "color" ? null : controls.mode === "size" ? (
             <>
               <span className={styles.label}>{t("sizeLabel")}</span>
               <div className={styles.picker}>

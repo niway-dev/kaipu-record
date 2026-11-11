@@ -1,6 +1,7 @@
 import { backgroundPaint, frameRadius } from "../beautify/backgrounds";
 import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
+import { MEASURE_FONT, measureLabel, measureShape, measureTextColor } from "./measure";
 import {
   BLUR_STD,
   HAND_FONT,
@@ -318,6 +319,24 @@ function annotationSvg(a: Annotation, W: number, H: number, scale: number): stri
     const sw = STROKE_WIDTHS[a.stroke] * scale;
     const d = smoothPath(a.points.map((pt) => ({ x: pt.x * W, y: pt.y * H })));
     return `<path d="${d}" fill="none" stroke="${a.color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }
+  if (a.kind === "measure") {
+    const s = measureShape(a, W, H, scale);
+    const sw = STROKE_WIDTHS[1] * scale;
+    const ticks = s.ticks
+      .map(
+        (t) =>
+          `<line x1="${t[0]}" y1="${t[1]}" x2="${t[2]}" y2="${t[3]}" stroke="${a.color}" stroke-width="${sw}" stroke-linecap="round"/>`,
+      )
+      .join("");
+    return (
+      `<g data-kind="measure">` +
+      `<line x1="${s.p1.x}" y1="${s.p1.y}" x2="${s.p2.x}" y2="${s.p2.y}" stroke="${a.color}" stroke-width="${sw}" stroke-linecap="round"/>` +
+      ticks +
+      `<rect x="${s.pill.x}" y="${s.pill.y}" width="${s.pill.w}" height="${s.pill.h}" rx="${s.pill.rx}" fill="${a.color}"/>` +
+      `<text x="${s.text.x}" y="${s.text.y}" fill="${measureTextColor(a.color)}" font-family="${MEASURE_FONT}" font-size="${s.text.fontSize}" font-weight="600" text-anchor="middle" dominant-baseline="central">${escapeXml(measureLabel(a))}</text>` +
+      `</g>`
+    );
   }
   // Through the resolver: a label sized by dragging a corner must export at the
   // size it was drawn at, not at the preset it started from.

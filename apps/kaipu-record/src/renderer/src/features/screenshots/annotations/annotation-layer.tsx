@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
+import { uiArea } from "@renderer/lib/ui-area";
 import {
   BLUR_STD,
   HAND_FONT,
@@ -11,6 +12,14 @@ import {
 } from "./tools";
 import { roughArrow, roughRect } from "./rough";
 import { smoothPath } from "./smooth";
+import {
+  MEASURE_FONT,
+  measureEndpoints,
+  measureLabel,
+  measureShape,
+  measureTextColor,
+  moveMeasure,
+} from "./measure";
 import { nextAnnotationId, type Annotation } from "./scene";
 import { handleCursor, handlesFor, hitHandle, resizeAnnotation, type HandleId } from "./handles";
 import type { EditorScene } from "./use-editor-scene";
@@ -629,6 +638,50 @@ const Shape = React.memo(function Shape({
     );
   }
 
+  if (a.kind === "measure") {
+    const s = measureShape(a, W, H);
+    const sw = STROKE_WIDTHS[1];
+    return (
+      <g
+        {...uiArea("editorImage.measure")}
+        data-annotation={a.id}
+        data-kind="measure"
+        data-measure-length={a.to - a.from}
+      >
+        <g stroke={a.color} strokeWidth={sw} strokeLinecap="round">
+          <line x1={s.p1.x} y1={s.p1.y} x2={s.p2.x} y2={s.p2.y} />
+          {s.ticks.map((t, i) => (
+            <line key={i} x1={t[0]} y1={t[1]} x2={t[2]} y2={t[3]} />
+          ))}
+        </g>
+        <rect
+          x={s.pill.x}
+          y={s.pill.y}
+          width={s.pill.w}
+          height={s.pill.h}
+          rx={s.pill.rx}
+          fill={a.color}
+        />
+        <text
+          x={s.text.x}
+          y={s.text.y}
+          fill={measureTextColor(a.color)}
+          fontFamily={MEASURE_FONT}
+          fontSize={s.text.fontSize}
+          fontWeight={600}
+          textAnchor="middle"
+          dominantBaseline="central"
+          style={{ userSelect: "none" }}
+        >
+          {measureLabel(a)}
+        </text>
+        {selected && (
+          <line className={styles.selOutline} x1={s.p1.x} y1={s.p1.y} x2={s.p2.x} y2={s.p2.y} />
+        )}
+      </g>
+    );
+  }
+
   if (a.kind === "path") {
     const sw = STROKE_WIDTHS[a.stroke];
     const d = smoothPath(a.points.map((pt) => ({ x: pt.x * W, y: pt.y * H })));
@@ -696,6 +749,7 @@ function isBigEnough(a: Annotation): boolean {
   if (a.kind === "box" || a.kind === "blur") return a.w > 0.01 && a.h > 0.01;
   if (a.kind === "arrow") return Math.hypot(a.x2 - a.x1, a.y2 - a.y1) > 0.02;
   if (a.kind === "path") return a.points.length >= 1;
+  if (a.kind === "measure") return a.to - a.from >= 1;
   return true;
 }
 
@@ -708,6 +762,7 @@ function moveBy(a: Annotation, dx: number, dy: number): Partial<Annotation> {
       points: a.points.map((pt) => ({ x: pt.x + dx, y: pt.y + dy })),
     } as Partial<Annotation>;
   }
+  if (a.kind === "measure") return moveMeasure(a, dx, dy);
   return { x: a.x + dx, y: a.y + dy } as Partial<Annotation>;
 }
 
@@ -747,6 +802,9 @@ function hitTest(annotations: Annotation[], p: Pt, size: Size): Annotation | nul
       for (let j = 0; j < a.points.length - 1; j += 1) {
         if (distToSegment(p, a.points[j], a.points[j + 1]) < 0.02) return a;
       }
+    } else if (a.kind === "measure") {
+      const { p1, p2 } = measureEndpoints(a);
+      if (distToSegment(p, p1, p2) < 0.02) return a;
     } else if (distToSegment(p, { x: a.x1, y: a.y1 }, { x: a.x2, y: a.y2 }) < 0.02) {
       return a;
     }
