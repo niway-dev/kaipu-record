@@ -1089,13 +1089,18 @@ function VideoEditor({
         manual: false,
         source: { videoAssetId: source.assetId, timeSeconds: frame.sourceSeconds },
       });
+      // The panel takes the inspector's place, so the selection goes too (as the cursor
+      // inspector does): Delete must never remove an item whose inspector is not on screen.
+      clearSelection();
       setCursorInspectorOpen(false);
       setCapturesOpen(true);
       await refreshCaptures();
     } catch (error) {
       reportError(t("captureError"), error, {
         context: { phase: "capture-frame", assetId: source.assetId },
-        retry: () => void handleCaptureFrame(),
+        // The latest handler: a retry captures what is on screen now, with any redaction
+        // added since the failed attempt, never the scene of that attempt.
+        retry: () => void captureFrameRef.current(),
       });
     }
   }, [
@@ -1107,15 +1112,20 @@ function VideoEditor({
     cameraPath,
     cursorData,
     refreshCaptures,
+    clearSelection,
     t,
   ]);
+  const captureFrameRef = useLatest(handleCaptureFrame);
 
   const toggleCaptures = useCallback(() => {
-    setCapturesOpen((open) => {
-      if (!open) setCursorInspectorOpen(false);
-      return !open;
-    });
-  }, []);
+    if (capturesOpen) {
+      setCapturesOpen(false);
+      return;
+    }
+    clearSelection();
+    setCursorInspectorOpen(false);
+    setCapturesOpen(true);
+  }, [capturesOpen, clearSelection]);
 
   /** A capture's image: move the playhead to its moment, if that moment is still on the timeline. */
   const seekToCapture = useCallback(

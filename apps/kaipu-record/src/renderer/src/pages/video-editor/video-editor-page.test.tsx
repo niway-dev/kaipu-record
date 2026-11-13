@@ -2241,6 +2241,55 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     for (const t of getToasts()) dismissToast(t.id);
   });
 
+  it.each(["Captures", "Capture frame"])(
+    "%s clears the selection, so Delete cannot remove an item whose inspector is hidden",
+    async (button) => {
+      renderEditor();
+      const footer = await waitForEditorLoaded();
+      // Counted, not fixed: other lanes may hold items an earlier test saved, and Split cuts
+      // those too. The test only needs Delete to remove nothing.
+      const before = footer.querySelectorAll(BLOCK_BUTTONS).length;
+      fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+      await waitFor(() => expect(screen.getByText("0:05.0 / 0:30.0")).toBeInTheDocument());
+      fireEvent.click(screen.getByRole("button", { name: "Split here" }));
+      await waitFor(() =>
+        expect(footer.querySelectorAll(BLOCK_BUTTONS).length).toBeGreaterThan(before),
+      );
+      const afterSplit = footer.querySelectorAll(BLOCK_BUTTONS).length;
+      fireEvent.click(footer.querySelectorAll(BLOCK_BUTTONS)[0]);
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Delete segment" })).toBeEnabled(),
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: button }));
+
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Delete segment" })).toBeDisabled(),
+      );
+      fireEvent.keyDown(document.body, { key: "Delete" });
+      expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(afterSplit);
+    },
+  );
+
+  it("Retry after a failed capture captures the frame on screen now, not the failed attempt's", async () => {
+    stillCapture.capture.mockRejectedValueOnce(new Error("no decodable frame"));
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    const toast = await waitFor(() => {
+      const found = getToasts().find((t) => t.action);
+      expect(found).toBeDefined();
+      return found!;
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+    await waitFor(() => expect(screen.getByText("0:05.0 / 0:30.0")).toBeInTheDocument());
+    act(() => toast.action!.onClick());
+
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(stillCapture.capture).toHaveBeenLastCalledWith(expect.objectContaining({ playhead: 5 }));
+  });
+
   it("captures the frame at the playhead, saves it linked to the video, and opens the panel on it", async () => {
     renderEditor();
     await waitForEditorLoaded();
