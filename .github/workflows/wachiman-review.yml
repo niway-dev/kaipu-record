@@ -12,8 +12,10 @@ name: Wachiman review
 # secrets), and only the operator's comment starts an on-demand run.
 # The review focus for this repository is in `.github/agent-review.md`.
 # Sonnet 5.5 high reviews directly; the optional second-pass verifier is disabled.
-# The default caps still bound each run ($0.75 per batch, $3 per review), and all automatic runs
-# on one pull request share $6 (`auto_budget_usd`, v1.5.0). On a subscription those dollars are an
+# Each batch keeps the default cap ($0.75). One review may spend $5 instead of the default $3: a
+# 58-file pull request (#616) split into 7 batches ran out at $3 and left 11 files unreviewed. All
+# automatic runs on one pull request share $8 (default $6), so a push after a $5 first review still
+# has $3 for its incremental review (`auto_budget_usd`, v1.5.0). On a subscription those dollars are an
 # estimate at API prices, not a charge.
 # When the subscription refuses the call (a usage limit, a rejected token, a persistent rate limit),
 # the pull request gets a "Not reviewed" notice and the check passes (`on_provider_unavailable: warn`,
@@ -32,5 +34,7 @@ jobs:
       model: claude-sonnet-5-5
       effort: high
       verify: false
+      budget_usd: 5
+      auto_budget_usd: 8
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
