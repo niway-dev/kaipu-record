@@ -109,4 +109,31 @@ describe("useWidgetDevices", () => {
       expect(result.current.microphoneId).toBe("mic-a");
     });
   });
+
+  describe("the camera across displays", () => {
+    afterEach(cleanup);
+    it("follows a camera chosen in another overlay window", async () => {
+      let broadcast: (settings: unknown) => void = () => {};
+      const unsubscribe = vi.fn();
+      const api = {
+        getRecordingSettings: vi.fn(() => new Promise(() => {})),
+        getSettings: vi.fn(async () => ({ cameraBubble: { deviceId: "cam-1" } })),
+        updateRecordingSettings: vi.fn(),
+        onRecordingSettingsChanged: vi.fn(() => () => {}),
+        onSettingsChanged: vi.fn((callback: (settings: unknown) => void) => {
+          broadcast = callback;
+          return unsubscribe;
+        }),
+      } as unknown as Parameters<typeof useWidgetDevices>[0];
+      const { result, unmount } = renderHook(() => useWidgetDevices(api, true));
+      await waitFor(() => expect(result.current.cameraId).toBe("cam-1"));
+
+      // Display B chose another camera: this window's widget must show it too.
+      act(() => broadcast({ cameraBubble: { deviceId: "cam-2" } }));
+      expect(result.current.cameraId).toBe("cam-2");
+
+      unmount();
+      expect(unsubscribe).toHaveBeenCalled();
+    });
+  });
 });

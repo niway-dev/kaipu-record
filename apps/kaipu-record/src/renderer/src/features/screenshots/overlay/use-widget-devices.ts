@@ -27,7 +27,8 @@ export interface WidgetDevices {
  * Enumerating devices opens nothing, and a screenshot overlay (`enabled` false) reads nothing.
  */
 export function useWidgetDevices(
-  api: RecordingTogglesApi & Partial<Pick<KaipuElectronAPI, "updateSettings">>,
+  api: RecordingTogglesApi &
+    Partial<Pick<KaipuElectronAPI, "updateSettings" | "onSettingsChanged">>,
   enabled: boolean,
 ): WidgetDevices {
   const microphones = useMicrophones(enabled);
@@ -61,9 +62,15 @@ export function useWidgetDevices(
       microphoneRevision.current += 1;
       setSelectedMicrophone(current.selectedMicrophone);
     });
+    // One overlay window per display mounts this hook: a camera picked in another window
+    // arrives as an app-settings broadcast, and this window's widget must follow it.
+    const unsubscribeSettings = api.onSettingsChanged?.((app) =>
+      setCameraId(app.cameraBubble?.deviceId ?? null),
+    );
     return () => {
       live = false;
       unsubscribe();
+      unsubscribeSettings?.();
     };
   }, [api, enabled]);
 
