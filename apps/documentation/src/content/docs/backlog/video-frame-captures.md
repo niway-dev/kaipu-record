@@ -42,12 +42,12 @@ taken with a system screenshot ends up outside the library, with no tie back to 
 
 ## Decisions
 
-| Decision | Why |
-| --- | --- |
-| A new button; Add image stays | Turning Add image into a capture button would remove image slides. |
+| Decision                                                                         | Why                                                                                                                                                    |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A new button; Add image stays                                                    | Turning Add image into a capture button would remove image slides.                                                                                     |
 | The capture is the composed frame (background, zoom, webcam, privacy redactions) | It is what the preview shows, and a raw frame would leak what Privacy covers. Built with the export composer, so a capture and an export never differ. |
-| A new sidecar field, not `derivedFromAssetId` | `derivedFromAssetId` means "an export of"; reusing it would make captures count as exports of the video in the export-reuse check. |
-| Frames at the video's own resolution | A cover needs full resolution; the preview size depends on the window. |
+| A new sidecar field, not `derivedFromAssetId`                                    | `derivedFromAssetId` means "an export of"; reusing it would make captures count as exports of the video in the export-reuse check.                     |
+| Frames at the video's own resolution                                             | A cover needs full resolution; the preview size depends on the window.                                                                                 |
 
 ## Out of scope
 
