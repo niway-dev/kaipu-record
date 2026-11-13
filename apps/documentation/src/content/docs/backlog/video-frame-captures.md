@@ -25,7 +25,7 @@ taken with a system screenshot ends up outside the library, with no tie back to 
 3. The button also opens a **Captures** panel in the editor's right column: this video's
    captures, newest first, each with its time in the video and a Copy button that puts the
    image on the clipboard. Clicking a capture moves the playhead to its moment. A
-   **Captures** toggle next to the button opens and closes the panel without capturing.
+   **Captures** button in the tool column (right of the preview) opens and closes the panel without capturing.
    The panel takes the inspector's place, so opening it clears the selection.
 4. The video's detail page in the Library lists the same captures in a **Captures (n)** tab,
    shown only when the video has captures, so covers can be found from there too. Clicking

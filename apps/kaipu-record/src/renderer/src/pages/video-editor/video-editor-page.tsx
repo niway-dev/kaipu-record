@@ -1901,6 +1901,8 @@ function VideoEditor({
               : undefined
           }
           cursorSelected={cursorInspectorOpen && cursorData !== null}
+          onToggleCaptures={toggleCaptures}
+          capturesOpen={capturesOpen}
         />
         {/* The editor's actions live in the title bar's right side (Kaipu Black,
             NIW2-619), mounted and unmounted with this page. */}
@@ -1916,8 +1918,6 @@ function VideoEditor({
             onOpenGuide={openGuideFirstTab}
             onCaptureFrame={() => void handleCaptureFrame()}
             captureBusy={stillCapture.busy}
-            onToggleCaptures={toggleCaptures}
-            capturesOpen={capturesOpen}
           >
             {/* Not interactive — a reminder, not a control (plans/video-editor-v2/08 § PR 10
                 polish, W12's "ORIGINAL UNTOUCHED" pill). The original recording on disk and

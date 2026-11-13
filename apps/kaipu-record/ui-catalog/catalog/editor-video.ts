@@ -29,7 +29,7 @@ const zoomIn: Step = {
     part: { role: "button", name: "Zoom in the timeline", exact: true },
   },
 };
-/** The Capture frame and Captures buttons, beside Add image in the header. */
+/** Capture frame, beside Add image in the header. */
 const toolbarButton = (name: string): Step => ({
   click: { area: "editorVideo.toolbar", part: { role: "button", name, exact: true } },
 });
@@ -363,11 +363,11 @@ export const editorVideo = catalog(
     },
     "captures-empty": {
       profile: "default",
-      how: "Open “Walkthrough 1”, which has no captures, and press Captures in the header: the right column shows the empty panel with its Capture frame button.",
+      how: "Open “Walkthrough 1”, which has no captures, and press Captures in the tool column: the right column shows the empty panel with its Capture frame button.",
       steps: [
         open(ASSETS.walkthrough),
         loaded,
-        toolbarButton("Captures"),
+        rail("Captures"),
         // The panel is drawn before its first read lands; the empty state is what follows.
         {
           waitFor: {
