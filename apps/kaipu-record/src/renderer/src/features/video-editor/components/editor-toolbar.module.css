@@ -215,12 +215,6 @@
   color: var(--text-primary);
 }
 
-/* The Captures toggle while its panel is open: a quiet raised state, not the accent (that is Export's). */
-.iconBtn[aria-pressed="true"] {
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
-}
-
 .iconBtn:disabled {
   opacity: 0.4;
   cursor: default;
