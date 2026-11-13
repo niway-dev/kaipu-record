@@ -57,8 +57,6 @@ function startArgs(
     sourceId: "rec-1",
     title: "My recording",
     derivedFromAssetId: null,
-    sourceVideoAssetId: null,
-    sourceTimeSeconds: null,
     videoWidth: 1280,
     videoHeight: 720,
     previewWidth: 640,
@@ -276,8 +274,6 @@ describe("useVideoExport", () => {
       durationMs: 10_000,
       thumbnail: FAKE_THUMB,
       derivedFromAssetId: null,
-      sourceVideoAssetId: null,
-      sourceTimeSeconds: null,
       exportPreset: "balanced",
     });
     expect(onSaved).toHaveBeenCalledWith(

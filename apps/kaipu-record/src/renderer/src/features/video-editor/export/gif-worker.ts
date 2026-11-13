@@ -8,6 +8,11 @@
  * into `GifStreamWriter` (gif-encode.ts). Nothing is written to disk here: the finished
  * file is transferred to the renderer, which saves it through the `gifSave` IPC.
  *
+ * "still" mode (NIW2-764) runs the same renderer for ONE timeline time and returns the
+ * composed SOURCE-size frame as a PNG: no palette, no GIF downscale, nothing encoded here
+ * but the PNG, so a captured frame is what an export shows at that time (redactions
+ * included).
+ *
  * "estimate" mode runs the same pipeline on a few sampled frame pairs and reports an
  * approximate file size (FR 6).
  *
@@ -72,6 +77,7 @@ async function run(msg: GifStartMessage): Promise<void> {
     }
     const renderer = createFrameRenderer(msg, videoTrack, webcam);
     if (msg.mode === "estimate") await runEstimate(msg, renderer);
+    else if (msg.mode === "still") await runStill(msg, renderer);
     else await runExport(msg, renderer);
   } finally {
     webcam?.dispose();
@@ -80,10 +86,19 @@ async function run(msg: GifStartMessage): Promise<void> {
 }
 
 interface FrameRenderer {
-  /** Composed RGBA at the GIF size for each timeline time, in the given order. */
-  render(times: number[]): AsyncGenerator<{ i: number; rgba: Uint8ClampedArray }>;
+  /**
+   * Composed RGBA at the GIF size for each timeline time, in the given order. With `still`
+   * nothing is downsampled or read back (`rgba` is empty, the frame stays on `full`), and a
+   * time with no decodable frame throws instead of repeating the previous composition.
+   */
+  render(
+    times: number[],
+    options?: { still?: boolean },
+  ): AsyncGenerator<{ i: number; rgba: Uint8ClampedArray }>;
   /** The GIF-size canvas holding the last rendered frame (for the poster). */
-  canvas: OffscreenCanvas;
+  canvas: OffscreenCanvas | null;
+  /** The source-size canvas the frames are composed on. */
+  full: OffscreenCanvas;
 }
 
 function createFrameRenderer(
@@ -94,14 +109,17 @@ function createFrameRenderer(
   const { source, output, plan } = msg;
   const full = new OffscreenCanvas(source.width, source.height);
   const fullCtx = full.getContext("2d");
-  const small = new OffscreenCanvas(output.width, output.height);
-  const smallCtx = small.getContext("2d", { willReadFrequently: true });
-  if (!fullCtx || !smallCtx) throw new Error("gif-worker: no 2D context");
+  // A still is the full frame as it is: no GIF-size canvas.
+  const small = msg.mode === "still" ? null : new OffscreenCanvas(output.width, output.height);
+  const smallCtx = small?.getContext("2d", { willReadFrequently: true }) ?? null;
+  if (!fullCtx || (small && !smallCtx)) throw new Error("gif-worker: no 2D context");
   // Start black, so a range whose first decode fails never shows stale pixels.
   fullCtx.fillStyle = "#000";
   fullCtx.fillRect(0, 0, source.width, source.height);
-  smallCtx.imageSmoothingEnabled = true;
-  smallCtx.imageSmoothingQuality = "high";
+  if (smallCtx) {
+    smallCtx.imageSmoothingEnabled = true;
+    smallCtx.imageSmoothingQuality = "high";
+  }
 
   const compose = createOutputComposer({
     ctx: fullCtx,
@@ -121,12 +139,17 @@ function createFrameRenderer(
     ? new CanvasSink(track, exportCanvasSinkOptions(source.width, source.height))
     : null;
 
-  const grab = (): Uint8ClampedArray => {
+  const grab = (still: boolean): Uint8ClampedArray => {
+    if (still || !smallCtx) return new Uint8ClampedArray(0);
     smallCtx.drawImage(full, 0, 0, output.width, output.height);
     return smallCtx.getImageData(0, 0, output.width, output.height).data;
   };
 
-  async function* render(times: number[]): AsyncGenerator<{ i: number; rgba: Uint8ClampedArray }> {
+  async function* render(
+    times: number[],
+    options: { still?: boolean } = {},
+  ): AsyncGenerator<{ i: number; rgba: Uint8ClampedArray }> {
+    const still = options.still === true;
     // Group consecutive times that land in the same clip segment into one decode batch.
     let i = 0;
     while (i < times.length) {
@@ -135,7 +158,7 @@ function createFrameRenderer(
       const { segment } = located;
       if (segment.kind === "slide") {
         compose.slide(slides.get(segment.assetId), times[i]);
-        yield { i, rgba: grab() };
+        yield { i, rgba: grab(still) };
         i++;
         continue;
       }
@@ -163,6 +186,9 @@ function createFrameRenderer(
           // then still holds the previous, already-redacted composition, which is repeated.
           // Over a still screen the decoded frame is an earlier one: its own span keeps its
           // redactions, the zoom crop follows the camera at the slot's time (E9, as the MP4).
+          if (!wrapped && still) {
+            throw new Error(`gif-worker: no decodable frame at source ${slot.sourceTime}s`);
+          }
           if (wrapped) {
             compose.clip(
               wrapped.canvas,
@@ -173,7 +199,7 @@ function createFrameRenderer(
               slot.sourceTime,
             );
           }
-          yield { i: slot.i, rgba: grab() };
+          yield { i: slot.i, rgba: grab(still) };
         }
       } finally {
         await webcamFrames?.return();
@@ -181,7 +207,7 @@ function createFrameRenderer(
     }
   }
 
-  return { render, canvas: small };
+  return { render, canvas: small, full };
 }
 
 async function collect(renderer: FrameRenderer, times: number[]): Promise<Uint8ClampedArray[]> {
@@ -219,6 +245,19 @@ async function runEstimate(msg: GifStartMessage, renderer: FrameRenderer): Promi
   post({ type: "estimate", bytes, frameCount: schedule.length });
 }
 
+async function runStill(msg: GifStartMessage, renderer: FrameRenderer): Promise<void> {
+  if (msg.stillTime === undefined) throw new Error("gif-worker: still mode without a time");
+  // One time, one frame: once it yields, the composed result is on `full`; `return()` then
+  // runs the generator's cleanup (the webcam frame reader).
+  const frames = renderer.render([msg.stillTime], { still: true });
+  const first = await frames.next();
+  await frames.return(undefined);
+  if (first.done) throw new Error("gif-worker: no frame composed");
+  const blob = await renderer.full.convertToBlob({ type: "image/png" });
+  const data = await blob.arrayBuffer();
+  post({ type: "still", data, width: msg.source.width, height: msg.source.height }, [data]);
+}
+
 async function runExport(msg: GifStartMessage, renderer: FrameRenderer): Promise<void> {
   const schedule = gifFrameSchedule(msg.plan.totalDuration, msg.fps);
   const { width, height } = msg.output;
@@ -240,7 +279,7 @@ async function runExport(msg: GifStartMessage, renderer: FrameRenderer): Promise
     writer.addFrame(rgba, schedule[i].delayCs);
     if (!posterSent) {
       posterSent = true;
-      const poster = await encodePoster(renderer.canvas);
+      const poster = renderer.canvas ? await encodePoster(renderer.canvas) : null;
       if (poster) post({ type: "poster", data: poster }, [poster]);
     }
     if (writer.byteLength > GIF_HARD_CAP_BYTES) throw new TooLargeError("gif over the size cap");
