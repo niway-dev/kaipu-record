@@ -1277,7 +1277,7 @@ describe("CaptureOverlayWindows: Escape handled by main", () => {
       expect(event.preventDefault).toHaveBeenCalled();
     });
 
-    it("clears the flag on destroyAll, so the next pick cancels on Escape", async () => {
+    it("clears the countdown flag at session start, so the next pick cancels on Escape", async () => {
       const port = overlays();
       void port.pick("frame", [left]);
       created[0].window.send(IPC_CHANNELS.screenshotOverlayCounting, { active: true });
