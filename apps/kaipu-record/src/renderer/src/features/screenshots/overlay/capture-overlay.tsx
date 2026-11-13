@@ -249,21 +249,38 @@ export function CaptureOverlay({
   const toggles = useOverlayToggles(api, recording);
   const devices = useWidgetDevices(api, recording);
 
-  // The configured countdown, read when the overlay is (or becomes) a recording one.
+  // The configured countdown, read when the overlay is (or becomes) a recording one. Until
+  // that read settles (a value or the fallback after a failure) the length is unknown, so a
+  // Record pressed in that window is held and replayed once it is known; counting the
+  // fallback then would hand `countdownDone: true` to a recorder that owes a longer count.
   const [countdownSeconds, setCountdownSeconds] = useState<number>(() =>
     sanitizeCountdownSeconds(undefined),
   );
+  // The same length for `request`, which must see it the moment the read settles.
+  const countdownLength = useRef(countdownSeconds);
+  const countdownRead = useRef(false);
+  const heldRequest = useRef<Parameters<SendAnswer> | null>(null);
+  const requestRef = useRef<SendAnswer | null>(null);
   useEffect(() => {
     if (!recording) return;
     let live = true;
+    const settle = (seconds: number | undefined): void => {
+      if (!live) return;
+      const length = sanitizeCountdownSeconds(seconds);
+      countdownLength.current = length;
+      countdownRead.current = true;
+      setCountdownSeconds(length);
+      const held = heldRequest.current;
+      heldRequest.current = null;
+      if (held) requestRef.current?.(...held);
+    };
     api
       .getSettings()
-      .then((settings) => {
-        if (live) setCountdownSeconds(sanitizeCountdownSeconds(settings.recordingCountdownSeconds));
-      })
-      .catch(() => {});
+      .then((settings) => settle(settings.recordingCountdownSeconds))
+      .catch(() => settle(undefined));
     return () => {
       live = false;
+      heldRequest.current = null;
     };
   }, [api, recording]);
 
@@ -287,14 +304,19 @@ export function CaptureOverlay({
     (answer, beforeSend) => {
       const records =
         (answer.kind === "rect" || answer.kind === "display") && isRecordAction(answer.action);
-      if (!records || countdownSeconds <= 0) {
+      if (records && !countdownRead.current) {
+        // The length is not known yet: hold the latest Record and replay it when it is.
+        if (!answered.current && !persisting.current) heldRequest.current = [answer, beforeSend];
+        return;
+      }
+      if (!records || countdownLength.current <= 0) {
         send(answer, beforeSend);
         return;
       }
       // A second confirm during the count, or after the answer, does nothing.
       if (counting.current || answered.current || persisting.current) return;
       counting.current = true;
-      let remaining = countdownSeconds;
+      let remaining = countdownLength.current;
       setCountdown(remaining);
       bridge.setCounting(true);
       countdownTimer.current = setInterval(() => {
@@ -307,8 +329,9 @@ export function CaptureOverlay({
         send({ ...answer, countdownDone: true }, beforeSend);
       }, 1000);
     },
-    [bridge, countdownSeconds, endCountdown, send],
+    [bridge, endCountdown, send],
   );
+  requestRef.current = request;
 
   // Esc and the Cancel button end the countdown first; a second one cancels the overlay.
   const cancelOrStopCount = useCallback(() => {

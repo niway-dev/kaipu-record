@@ -2382,6 +2382,72 @@ describe("CaptureOverlay — the countdown runs on the widget (ADR 0056)", () =>
     expect(answer).toHaveBeenCalledOnce();
   });
 
+  it("a Record pressed before the settings read finishes waits for it, then counts the saved 5 s", async () => {
+    const fake = fakeApi({}, SCREEN, { "42": area }, { recordingCountdownSeconds: 5 });
+    const saved = await fake.api.getSettings();
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fake.api.getSettings.mockImplementation(async () => {
+      await gate;
+      return saved;
+    });
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("screen", { intent: "record" })}
+        api={fake.api}
+        platform="mac"
+      />,
+    );
+    await screen.findByTestId("screen-card");
+    vi.useFakeTimers();
+
+    press("Enter");
+    // The length is unknown, so nothing starts yet and nothing is answered.
+    expect(fake.setCounting).not.toHaveBeenCalled();
+    expect(fake.answer).not.toHaveBeenCalled();
+
+    release();
+    await flush();
+    expect(fake.setCounting).toHaveBeenCalledExactlyOnceWith(true);
+    expect(disc()).toHaveTextContent("5");
+    await tick(4000);
+    expect(fake.answer).not.toHaveBeenCalled();
+    await tick(1000);
+    expect(fake.answer).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ kind: "display", action: "record", countdownDone: true }),
+    );
+  });
+
+  it("a Record pressed while the settings read fails counts the fallback 3 s", async () => {
+    const fake = fakeApi({}, SCREEN, { "42": area });
+    let fail: (error: Error) => void = () => {};
+    const gate = new Promise<never>((_, reject) => {
+      fail = reject;
+    });
+    fake.api.getSettings.mockImplementation(() => gate);
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("screen", { intent: "record" })}
+        api={fake.api}
+        platform="mac"
+      />,
+    );
+    await screen.findByTestId("screen-card");
+    vi.useFakeTimers();
+
+    press("Enter");
+    expect(fake.setCounting).not.toHaveBeenCalled();
+    fail(new Error("settings unavailable"));
+    await flush();
+    expect(disc()).toHaveTextContent("3");
+    await tick(3000);
+    expect(fake.answer).toHaveBeenCalledOnce();
+  });
+
   it("counts the configured 5 s, not a fixed 3", async () => {
     const { answer } = await renderCounting(5);
     press("Enter");
