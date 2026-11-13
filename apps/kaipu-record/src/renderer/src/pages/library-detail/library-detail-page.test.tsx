@@ -1774,7 +1774,12 @@ describe("LibraryDetailPage — frame captures of a video (NIW2-764)", () => {
     for (const t of getToasts()) dismissToast(t.id);
   });
 
-  it("lists the video's captures newest first, with their time and a Copy button", async () => {
+  /** The Captures tab: where the list lives, named with its count. */
+  const openCapturesTab = (count: number): void => {
+    fireEvent.click(screen.getByRole("tab", { name: `Captures (${count})` }));
+  };
+
+  it("lists the video's captures newest first in a Captures tab, with their time and a Copy button", async () => {
     list(
       exportedOnlyItem,
       capture("old", 12.3, 1),
@@ -1783,6 +1788,7 @@ describe("LibraryDetailPage — frame captures of a video (NIW2-764)", () => {
     );
     renderDetail("asset-b");
     await waitForLoaded();
+    openCapturesTab(2);
 
     const section = document.querySelector('[data-ui-area="libraryDetail.captures"]');
     expect(section).not.toBeNull();
@@ -1791,20 +1797,24 @@ describe("LibraryDetailPage — frame captures of a video (NIW2-764)", () => {
       expect.stringContaining("1:23.4"),
       expect.stringContaining("0:12.3"),
     ]);
-    expect(within(section as HTMLElement).getByRole("heading", { name: "Captures" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Captures (2)" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
-  it("shows no section for a video without captures", async () => {
+  it("shows no Captures tab for a video without captures", async () => {
     list(exportedOnlyItem, capture("other", 5, 3, "some-other-video"));
     renderDetail("asset-b");
     await waitForLoaded();
-    expect(document.querySelector('[data-ui-area="libraryDetail.captures"]')).toBeNull();
+    expect(screen.queryByRole("tab", { name: /^Captures/ })).toBeNull();
   });
 
   it("copies a capture by its library id", async () => {
     list(exportedOnlyItem, capture("one", 7, 1));
     renderDetail("asset-b");
     await waitForLoaded();
+    openCapturesTab(1);
     fireEvent.click(screen.getByRole("button", { name: "Copy image" }));
     await waitFor(() =>
       expect(window.electronAPI.copyScreenshotById).toHaveBeenCalledWith("cap-one"),
@@ -1815,6 +1825,7 @@ describe("LibraryDetailPage — frame captures of a video (NIW2-764)", () => {
     list(exportedOnlyItem, capture("one", 7, 1));
     const router = renderDetail("asset-b");
     await waitForLoaded();
+    openCapturesTab(1);
     fireEvent.click(screen.getByRole("button", { name: "Open the capture from 0:07.0" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/library/cap-one"));
   });
@@ -1823,6 +1834,6 @@ describe("LibraryDetailPage — frame captures of a video (NIW2-764)", () => {
     list(exportedOnlyItem, capture("one", 7, 1));
     renderDetail("cap-one");
     await waitForLoaded();
-    expect(document.querySelector('[data-ui-area="libraryDetail.captures"]')).toBeNull();
+    expect(screen.queryByRole("tab", { name: /^Captures/ })).toBeNull();
   });
 });

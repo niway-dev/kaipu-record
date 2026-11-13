@@ -63,7 +63,7 @@ import { uiArea } from "@renderer/lib/ui-area";
 
 type LibraryMessageKey = keyof Messages["library"];
 
-type PanelTab = "versions" | "details" | "destinations";
+type PanelTab = "versions" | "details" | "destinations" | "captures";
 
 /** The editing-state line under the metadata. "project-available" has no line on purpose:
  *  the owner asked for it to go; the other states say something the user has to act on. */
@@ -282,9 +282,15 @@ export function LibraryDetailPage(): React.JSX.Element {
       ? { width: gifInfo.width, height: gifInfo.height }
       : screenshotDimensions;
 
-  const tabs: PanelTab[] = preparable
-    ? ["versions", "details", "destinations"]
-    : ["versions", "details"];
+  // Frame captures get a tab of their own, shown only when there are some: the tab bar is
+  // where the owner sees they exist (a section under a long tab was out of view).
+  const hasCaptures = !isScreenshot && captures.length > 0;
+  const tabs: PanelTab[] = [
+    "versions",
+    "details",
+    ...(preparable ? (["destinations"] as const) : []),
+    ...(hasCaptures ? (["captures"] as const) : []),
+  ];
   const defaultTab: PanelTab =
     master && preparable !== null && !hasCopies ? "destinations" : "versions";
   const tab: PanelTab = pickedTab && tabs.includes(pickedTab) ? pickedTab : defaultTab;
@@ -292,6 +298,7 @@ export function LibraryDetailPage(): React.JSX.Element {
     versions: t("tabVersions"),
     details: t("tabDetails"),
     destinations: t("destinationsTitle"),
+    captures: t("tabCaptures", { count: captures.length }),
   };
   const onTabKey = (event: React.KeyboardEvent, current: PanelTab): void => {
     const at = tabs.indexOf(current);
@@ -732,7 +739,22 @@ export function LibraryDetailPage(): React.JSX.Element {
             id={`library-tabpanel-${tab}`}
             aria-labelledby={`library-tab-${tab}`}
           >
-            {tab === "destinations" && preparable ? (
+            {tab === "captures" ? (
+              <ul {...uiArea("libraryDetail.captures")} className={styles.capturesList}>
+                {captures.map((capture) => (
+                  <CaptureItem
+                    key={capture.assetId}
+                    capture={capture}
+                    imageLabel={
+                      capture.sourceTimeSeconds === null
+                        ? capture.title
+                        : t("captureOpen", { time: formatClock(capture.sourceTimeSeconds) })
+                    }
+                    onImageClick={() => navigate(`/library/${capture.assetId}`)}
+                  />
+                ))}
+              </ul>
+            ) : tab === "destinations" && preparable ? (
               <DestinationsList
                 sizeBytes={video.fileSizeBytes}
                 probe={probe}
@@ -757,25 +779,6 @@ export function LibraryDetailPage(): React.JSX.Element {
                 order={order}
                 canExport={preparable !== null}
               />
-            )}
-            {!isScreenshot && captures.length > 0 && (
-              <section {...uiArea("libraryDetail.captures")} className={styles.captures}>
-                <h3 className={styles.capturesTitle}>{t("capturesTitle")}</h3>
-                <ul className={styles.capturesList}>
-                  {captures.map((capture) => (
-                    <CaptureItem
-                      key={capture.assetId}
-                      capture={capture}
-                      imageLabel={
-                        capture.sourceTimeSeconds === null
-                          ? capture.title
-                          : t("captureOpen", { time: formatClock(capture.sourceTimeSeconds) })
-                      }
-                      onImageClick={() => navigate(`/library/${capture.assetId}`)}
-                    />
-                  ))}
-                </ul>
-              </section>
             )}
           </div>
         </aside>

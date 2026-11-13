@@ -110,7 +110,7 @@ export const libraryDetail = catalog(
     },
     captures: {
       profile: "default",
-      how: "Open “Weekly sync” in the editor, press Capture frame, then open the recording's page: a Captures section under the tab lists the frame with its time and a Copy button.",
+      how: "Open “Weekly sync” in the editor, press Capture frame, then open the recording's page and its Captures (1) tab: it lists the frame with its time and a Copy button.",
       steps: [
         { navigate: `/editor/video/${ASSETS.weeklySync}` },
         { waitFor: { video: true } },
@@ -122,11 +122,12 @@ export const libraryDetail = catalog(
         },
         { waitFor: { area: "editorVideo.capturesPanel", part: { role: "button", name: "Go to" } } },
         detail(ASSETS.weeklySync),
+        tab("Captures (1)"),
         { waitFor: { area: "libraryDetail.captures" } },
         // The image decodes after the section is drawn.
         { waitMs: 400 },
       ],
-      demonstrates: ["libraryDetail.captures:list"],
+      demonstrates: ["libraryDetail.captures:list", "libraryDetail.tabs:captures"],
       ready: { video: "paused-at-start" },
       // The capture is a new file in the workspace: put the vault back for the next state.
       after: [{ action: "restoreVault" }],

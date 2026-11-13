@@ -160,7 +160,7 @@ export const UI_MAP = {
       savedNotice: { states: ["shown"] },
       preview: { states: ["video", "image", "gif", "unavailable"] },
       actions: { states: ["recording", "screenshot", "gif", "cloudOnly"] },
-      tabs: { states: ["destinations", "versions", "details"] },
+      tabs: { states: ["destinations", "versions", "details", "captures"] },
       // VersionsList: the original alone; with its edited project; with the copies made from
       // it; a copy viewed on its own page (the Viewing pill sits on that row); a copy being
       // made; a copy whose original was deleted.

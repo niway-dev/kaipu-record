@@ -27,8 +27,9 @@ taken with a system screenshot ends up outside the library, with no tie back to 
    image on the clipboard. Clicking a capture moves the playhead to its moment. A
    **Captures** toggle next to the button opens and closes the panel without capturing.
    The panel takes the inspector's place, so opening it clears the selection.
-4. The video's detail page in the Library lists the same captures, so covers can be found
-   from there too.
+4. The video's detail page in the Library lists the same captures in a **Captures (n)** tab,
+   shown only when the video has captures, so covers can be found from there too. Clicking
+   a capture opens its own page.
 
 ## Acceptance criteria
 
