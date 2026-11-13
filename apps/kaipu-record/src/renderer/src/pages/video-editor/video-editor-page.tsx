@@ -5,7 +5,7 @@ import { AudioLines, Shield, Trash2, TriangleAlert, Webcam, ZoomIn } from "lucid
 import { useTranslations } from "@kaipu/i18n";
 import { parseCursorTrack, type CursorTrack } from "@shared/cursor-track";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
-import { captureEvent, captureException } from "@renderer/features/analytics";
+import { captureEvent, captureException, reportError } from "@renderer/features/analytics";
 import { buildEditorSpeedChangedProperties, EDITOR_SPEED_CHANGED_EVENT } from "@shared/analytics";
 import {
   initialScene,
@@ -52,6 +52,7 @@ import {
 import {
   sourceRangeToTimelineBlocks,
   sourceTimeAtTimeline,
+  timelineTimeAtSource,
 } from "@renderer/features/video-editor/source-time";
 import { activityMarks } from "@renderer/features/video-editor/zoom/detect-zoom-segments";
 import { useZoomEditing } from "@renderer/features/video-editor/zoom/use-zoom-editing";
@@ -128,6 +129,10 @@ import {
   findReusableExports,
 } from "@renderer/features/video-editor/export/export-reuse";
 import { useSourceExports } from "@renderer/features/video-editor/export/use-source-exports";
+import { useStillCapture } from "@renderer/features/video-editor/export/use-still-capture";
+import { useSourceCaptures } from "@renderer/features/video-editor/use-source-captures";
+import { captureTitleTime } from "@renderer/features/video-editor/capture-time";
+import { CapturesPanel } from "@renderer/features/video-editor/components/captures-panel";
 import { probeSource, type SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import { useHiddenTracks } from "@renderer/features/video-editor/use-hidden-tracks";
@@ -510,6 +515,9 @@ function VideoEditor({
     [source.capture, cursorTrack, scene.cursor],
   );
   const [cursorInspectorOpen, setCursorInspectorOpen] = useState(false);
+  // The Captures panel (NIW2-764) takes the right column like the cursor settings do: one
+  // of the two at a time, and anything that opens another inspector closes it.
+  const [capturesOpen, setCapturesOpen] = useState(false);
   const layout = useMemo(() => toLayout(scene.items), [scene.items]);
   // Writes the session ~800 ms after every commit/endInteract, and flushes on unmount
   // and beforeunload. See plans/video-editor-v2/07: before this, closing the window
@@ -626,6 +634,9 @@ function VideoEditor({
     const lane = id === null ? null : trackForSelection(kind);
     if (lane) showTrack(lane);
     setCursorInspectorOpen(false);
+    // Selecting something opens its inspector, which replaces the captures; a deselect
+    // (null id) opens nothing, so the panel stays.
+    if (id !== null) setCapturesOpen(false);
     selectSelection(...args);
   }, [selectSelection, showTrack]);
   // Hiding a lane clears a selection that lives on it: the item would stay selected on a
@@ -1042,6 +1053,79 @@ function VideoEditor({
     [gifJobArgs, gifExport, source, autosave, scene, assetStoreRef, controller, navigate, t],
   );
 
+  // Frame captures (NIW2-764): the composed frame at the playhead, saved into the library
+  // with the video and second it came from, then listed in the Captures panel.
+  const stillCapture = useStillCapture();
+  const sourceCaptures = useSourceCaptures(source.assetId, capturesOpen);
+  const refreshCaptures = sourceCaptures.refresh;
+  const captureFrame = stillCapture.capture;
+  const handleCaptureFrame = useCallback(async () => {
+    const video = playback.videoRef.current;
+    if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
+      showToast({ message: t("videoStillLoading") });
+      return;
+    }
+    try {
+      const frame = await captureFrame({
+        scene,
+        sourceId: source.id,
+        videoWidth: video.videoWidth,
+        videoHeight: video.videoHeight,
+        previewWidth: video.clientWidth,
+        slideAssets: assetStoreRef.current,
+        cameraPath,
+        cursor: cursorData,
+        webcamTrack: source.webcam ?? null,
+        // Timeline seconds: the clock the transport and the scene share, never source time.
+        playhead: playback.timelineTime,
+      });
+      // The link stores the SOURCE second (what the library page and the sidecar show). A
+      // slide has no source footage: its link has no time (seeking to it does nothing), and
+      // only the title uses the timeline second.
+      const titleSeconds = frame.sourceSeconds ?? frame.timelineSeconds;
+      await window.electronAPI.saveScreenshot(frame.png, {
+        // The title becomes the file name (ADR 0035): compact time, nothing a name refuses.
+        title: t("captureTitle", { title: source.title, time: captureTitleTime(titleSeconds) }),
+        manual: false,
+        source: { videoAssetId: source.assetId, timeSeconds: frame.sourceSeconds },
+      });
+      setCursorInspectorOpen(false);
+      setCapturesOpen(true);
+      await refreshCaptures();
+    } catch (error) {
+      reportError(t("captureError"), error, {
+        context: { phase: "capture-frame", assetId: source.assetId },
+        retry: () => void handleCaptureFrame(),
+      });
+    }
+  }, [
+    playback,
+    captureFrame,
+    scene,
+    source,
+    assetStoreRef,
+    cameraPath,
+    cursorData,
+    refreshCaptures,
+    t,
+  ]);
+
+  const toggleCaptures = useCallback(() => {
+    setCapturesOpen((open) => {
+      if (!open) setCursorInspectorOpen(false);
+      return !open;
+    });
+  }, []);
+
+  /** A capture's image: move the playhead to its moment, if that moment is still on the timeline. */
+  const seekToCapture = useCallback(
+    (sourceSeconds: number) => {
+      const at = timelineTimeAtSource(layout, sourceSeconds);
+      if (at !== null) playback.seek(at);
+    },
+    [layout, playback],
+  );
+
   const handleDeleteOverlay = useCallback(() => {
     // Same rationale as handleDeleteSelected: don't touch scene/selection while a
     // move/resize drag owns it via begin/updateLive/endInteract.
@@ -1283,6 +1367,7 @@ function VideoEditor({
   const openCursorInspector = useCallback(() => {
     clearSelection();
     setVideoTool("select");
+    setCapturesOpen(false);
     setCursorInspectorOpen(true);
   }, [clearSelection, setVideoTool]);
   /** Timeline range covered by a source range's visible pieces (inspector + draw badge). */
@@ -1304,6 +1389,7 @@ function VideoEditor({
       // Drawing a region starts from a clean slate: no zoom/region box competing with it.
       if (isPrivacyTool(tool)) clearSelection();
       setCursorInspectorOpen(false);
+      setCapturesOpen(false);
       videoTools.setTool(tool);
     },
     [clearSelection, videoTools],
@@ -1425,6 +1511,7 @@ function VideoEditor({
       if (e.key === "Escape" && !document.fullscreenElement) {
         clearSelection();
         setCursorInspectorOpen(false);
+        setCapturesOpen(false);
         return;
       }
       // Annotation selection takes precedence over segment deletion when both exist —
@@ -1816,6 +1903,10 @@ function VideoEditor({
             onExport={handleExport}
             exportDisabled={gifExport.status === "exporting" || scene.items.length === 0}
             onOpenGuide={openGuideFirstTab}
+            onCaptureFrame={() => void handleCaptureFrame()}
+            captureBusy={stillCapture.busy}
+            onToggleCaptures={toggleCaptures}
+            capturesOpen={capturesOpen}
           >
             {/* Not interactive — a reminder, not a control (plans/video-editor-v2/08 § PR 10
                 polish, W12's "ORIGINAL UNTOUCHED" pill). The original recording on disk and
@@ -1844,104 +1935,115 @@ function VideoEditor({
           </EditorToolbar>
         </HeaderActions>
         <div className={styles.side}>
-          <EditorInspector>
-            {cursorInspectorOpen && cursorData ? (
-              <CursorInspector
-                controller={controller}
-                clicksAvailable={cursorData.track.clicksAvailable}
-              />
-            ) : selectedRedaction?.kind === "blur" ? (
-              <BlurInspector
-                redaction={selectedRedaction}
-                range={timelineRangeOf(selectedRedaction.start, selectedRedaction.end)}
-                edits={redactionEdits}
-                onRemoved={() => selectKind("redaction", null)}
-              />
-            ) : selectedRedaction?.kind === "cover" ? (
-              <CoverInspector
-                redaction={selectedRedaction}
-                range={timelineRangeOf(selectedRedaction.start, selectedRedaction.end)}
-                edits={redactionEdits}
-                onRemoved={() => selectKind("redaction", null)}
-              />
-            ) : selectedMute ? (
-              <MuteInspector
-                range={selectedMute}
-                index={scene.mutedRanges.indexOf(selectedMute) + 1}
-                layout={layout}
-                mutes={mutes}
-                onRemoved={() => selectKind("mute", null)}
-              />
-            ) : selectedZoom ? (
-              <ZoomInspector
-                segment={selectedZoom}
-                index={zooms.visibleZooms.indexOf(selectedZoom) + 1}
-                layout={layout}
-                zooms={zooms}
-                sourceHeight={sourceHeight}
-                anchorNow={() =>
-                  boxCenterAt(
-                    selectedZoom,
-                    cameraPath,
-                    sourceTimeAtTimeline(layout, playback.timelineTime) ?? selectedZoom.start,
-                  )
-                }
-                onRemoved={() => selectKind("zoom", null)}
-              />
-            ) : scene.webcam && webcamTarget?.kind === "layer" ? (
-              <WebcamInspector
-                layout={scene.webcam.layout}
-                edits={webcamEdits}
-                frame={frameSize}
-                onHideHere={handleHideWebcam}
-              />
-            ) : selectedWebcamSegment ? (
-              <WebcamSegmentInspector
-                segment={selectedWebcamSegment}
-                index={webcamEdits.visibleSegments.indexOf(selectedWebcamSegment) + 1}
-                range={timelineRangeOf(selectedWebcamSegment.start, selectedWebcamSegment.end)}
-                layout={webcamAt(scene, selectedWebcamSegment.start) ?? scene.webcam!.layout}
-                edits={webcamEdits}
-                frame={frameSize}
-                onRemoved={() => selectKind("webcam", null)}
-              />
-            ) : selectedOverlay ? (
-              <AnnotationInspector
-                overlay={selectedOverlay}
-                tools={videoTools}
-                // Unlike the redaction/zoom `start`/`end` above (source time, converted via
-                // timelineRangeOf), an overlay's `start`/`end` are ALREADY timeline time
-                // (scene.ts's OverlayBase docs) — so the inspector's range is the overlay's
-                // own window verbatim, no block conversion needed.
-                range={{ start: selectedOverlay.start, end: selectedOverlay.end }}
-                onCommitOverlay={handleCommitOverlay}
-                // handleDeleteOverlay reads `selectedOverlayId` itself rather than taking an
-                // id argument, but the inspector only ever renders (and can only call
-                // onRemove) for that same selected overlay, so the ids always match — one
-                // undoable commit, no wrapper needed.
-                onRemove={handleDeleteOverlay}
-                onRemoved={() => setSelectedOverlayId(null)}
-              />
-            ) : (
-              // Nothing selected: the empty state, then the drawing defaults while a
-              // drawing tool is armed, or the Detection panel.
-              <>
-                <InspectorEmptyState tool={videoTools.tool} />
-                <BackgroundPanel edits={backgroundEdits} />
-                {videoTools.tool === "box" ||
-                videoTools.tool === "arrow" ||
-                videoTools.tool === "text" ? (
-                  <AnnotationDefaultsPanel tools={videoTools} />
-                ) : (
-                  <DetectionPanel
-                    zooms={zooms}
-                    sensitivity={scene.zoomSensitivity}
-                    clicksAvailable={cursorTrack?.clicksAvailable ?? false}
-                  />
-                )}
-              </>
-            )}
-          </EditorInspector>
+          {capturesOpen ? (
+            <CapturesPanel
+              captures={sourceCaptures.captures}
+              loaded={sourceCaptures.loaded}
+              onSeek={seekToCapture}
+              onCaptureFrame={() => void handleCaptureFrame()}
+              captureBusy={stillCapture.busy}
+              onClose={() => setCapturesOpen(false)}
+            />
+          ) : (
+            <EditorInspector>
+              {cursorInspectorOpen && cursorData ? (
+                <CursorInspector
+                  controller={controller}
+                  clicksAvailable={cursorData.track.clicksAvailable}
+                />
+              ) : selectedRedaction?.kind === "blur" ? (
+                <BlurInspector
+                  redaction={selectedRedaction}
+                  range={timelineRangeOf(selectedRedaction.start, selectedRedaction.end)}
+                  edits={redactionEdits}
+                  onRemoved={() => selectKind("redaction", null)}
+                />
+              ) : selectedRedaction?.kind === "cover" ? (
+                <CoverInspector
+                  redaction={selectedRedaction}
+                  range={timelineRangeOf(selectedRedaction.start, selectedRedaction.end)}
+                  edits={redactionEdits}
+                  onRemoved={() => selectKind("redaction", null)}
+                />
+              ) : selectedMute ? (
+                <MuteInspector
+                  range={selectedMute}
+                  index={scene.mutedRanges.indexOf(selectedMute) + 1}
+                  layout={layout}
+                  mutes={mutes}
+                  onRemoved={() => selectKind("mute", null)}
+                />
+              ) : selectedZoom ? (
+                <ZoomInspector
+                  segment={selectedZoom}
+                  index={zooms.visibleZooms.indexOf(selectedZoom) + 1}
+                  layout={layout}
+                  zooms={zooms}
+                  sourceHeight={sourceHeight}
+                  anchorNow={() =>
+                    boxCenterAt(
+                      selectedZoom,
+                      cameraPath,
+                      sourceTimeAtTimeline(layout, playback.timelineTime) ?? selectedZoom.start,
+                    )
+                  }
+                  onRemoved={() => selectKind("zoom", null)}
+                />
+              ) : scene.webcam && webcamTarget?.kind === "layer" ? (
+                <WebcamInspector
+                  layout={scene.webcam.layout}
+                  edits={webcamEdits}
+                  frame={frameSize}
+                  onHideHere={handleHideWebcam}
+                />
+              ) : selectedWebcamSegment ? (
+                <WebcamSegmentInspector
+                  segment={selectedWebcamSegment}
+                  index={webcamEdits.visibleSegments.indexOf(selectedWebcamSegment) + 1}
+                  range={timelineRangeOf(selectedWebcamSegment.start, selectedWebcamSegment.end)}
+                  layout={webcamAt(scene, selectedWebcamSegment.start) ?? scene.webcam!.layout}
+                  edits={webcamEdits}
+                  frame={frameSize}
+                  onRemoved={() => selectKind("webcam", null)}
+                />
+              ) : selectedOverlay ? (
+                <AnnotationInspector
+                  overlay={selectedOverlay}
+                  tools={videoTools}
+                  // Unlike the redaction/zoom `start`/`end` above (source time, converted via
+                  // timelineRangeOf), an overlay's `start`/`end` are ALREADY timeline time
+                  // (scene.ts's OverlayBase docs) — so the inspector's range is the overlay's
+                  // own window verbatim, no block conversion needed.
+                  range={{ start: selectedOverlay.start, end: selectedOverlay.end }}
+                  onCommitOverlay={handleCommitOverlay}
+                  // handleDeleteOverlay reads `selectedOverlayId` itself rather than taking an
+                  // id argument, but the inspector only ever renders (and can only call
+                  // onRemove) for that same selected overlay, so the ids always match — one
+                  // undoable commit, no wrapper needed.
+                  onRemove={handleDeleteOverlay}
+                  onRemoved={() => setSelectedOverlayId(null)}
+                />
+              ) : (
+                // Nothing selected: the empty state, then the drawing defaults while a
+                // drawing tool is armed, or the Detection panel.
+                <>
+                  <InspectorEmptyState tool={videoTools.tool} />
+                  <BackgroundPanel edits={backgroundEdits} />
+                  {videoTools.tool === "box" ||
+                  videoTools.tool === "arrow" ||
+                  videoTools.tool === "text" ? (
+                    <AnnotationDefaultsPanel tools={videoTools} />
+                  ) : (
+                    <DetectionPanel
+                      zooms={zooms}
+                      sensitivity={scene.zoomSensitivity}
+                      clicksAvailable={cursorTrack?.clicksAvailable ?? false}
+                    />
+                  )}
+                </>
+              )}
+            </EditorInspector>
+          )}
         </div>
       </div>
       <footer {...uiArea("editorVideo.timeline")} className={styles.timeline}>

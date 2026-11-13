@@ -54,6 +54,43 @@ describe("EditorToolbar", () => {
     }
   });
 
+  it("Capture frame sits right after Add image and fires onCaptureFrame", () => {
+    const props = renderToolbar({ onCaptureFrame: vi.fn(), onToggleCaptures: vi.fn() });
+    const names = screen.getAllByRole("button").map((b) => b.getAttribute("aria-label"));
+    const at = names.indexOf("Add image");
+    expect(names.slice(at, at + 3)).toEqual(["Add image", "Capture frame", "Captures"]);
+    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    expect(props.onCaptureFrame).toHaveBeenCalledOnce();
+    // Add image is untouched: it still opens the file picker.
+    expect(screen.getByTestId("slide-image-input")).toBeInTheDocument();
+  });
+
+  it("disables Capture frame while a capture runs, and marks Captures as pressed while open", () => {
+    renderToolbar({
+      onCaptureFrame: vi.fn(),
+      onToggleCaptures: vi.fn(),
+      captureBusy: true,
+      capturesOpen: true,
+    });
+    expect(screen.getByRole("button", { name: "Capture frame" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Captures" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("toggles the Captures panel from its button", () => {
+    const props = renderToolbar({ onCaptureFrame: vi.fn(), onToggleCaptures: vi.fn() });
+    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+    expect(props.onToggleCaptures).toHaveBeenCalledOnce();
+  });
+
+  it("shows neither capture button without the handlers", () => {
+    renderToolbar();
+    expect(screen.queryByRole("button", { name: "Capture frame" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Captures" })).toBeNull();
+  });
+
   it("no longer holds split and delete: they moved to the transport bar (NIW2-664)", () => {
     renderToolbar();
     expect(screen.queryByRole("button", { name: "Split here" })).toBeNull();

@@ -168,6 +168,9 @@ export const UI_MAP = {
         states: ["original", "edited", "withCopies", "copy", "running", "sourceDeleted"],
       },
       itemDetails: { states: ["recording", "screenshot", "gif"] },
+      // The frame captures taken from this video in the editor (NIW2-764), under the tab's
+      // content; only a video with at least one capture has it.
+      captures: { states: ["list"] },
       // DestinationsList: "heavy" adds the heavy-to-send line under the rows (over 25 MB).
       destinations: { states: ["ready", "heavy"] },
       // The ••• menu floats below its button, outside the actions box, so it is its own area.
@@ -241,6 +244,9 @@ export const UI_MAP = {
       preview: { states: ["frame", "zoomSelected", "overlaySelected"] },
       cursor: { states: ["visible"], gatedBy: [{ flag: "native-cursor-capture" }] },
       cursorInspector: { states: ["open"], gatedBy: [{ flag: "native-cursor-capture" }] },
+      // The Captures panel (NIW2-764): this video's frame captures, in the right column in
+      // place of the inspector. `empty` has none yet; `list` shows them, newest first.
+      capturesPanel: { states: ["empty", "list"] },
       webcam: { states: ["visible"] },
       transport: { states: ["paused", "playing", "withCounts", "speedChanged", "zoomed"] },
       toolRail: { states: ["default", "annotate", "privacy"] },

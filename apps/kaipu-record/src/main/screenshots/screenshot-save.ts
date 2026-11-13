@@ -37,7 +37,8 @@ export interface SaveScreenshotMeta {
 
 export interface ScreenshotSource {
   videoAssetId: string;
-  timeSeconds: number;
+  /** The second in the source video; null for a frame of an image slide, which has none. */
+  timeSeconds: number | null;
 }
 
 /** The source from an IPC payload, or undefined when it is not a valid one (the save goes on without it). */
@@ -45,6 +46,7 @@ export function parseScreenshotSource(raw: unknown): ScreenshotSource | undefine
   if (typeof raw !== "object" || raw === null) return undefined;
   const { videoAssetId, timeSeconds } = raw as Record<string, unknown>;
   if (typeof videoAssetId !== "string" || videoAssetId.trim() === "") return undefined;
+  if (timeSeconds === null) return { videoAssetId, timeSeconds: null };
   if (typeof timeSeconds !== "number" || !Number.isFinite(timeSeconds) || timeSeconds < 0) {
     return undefined;
   }

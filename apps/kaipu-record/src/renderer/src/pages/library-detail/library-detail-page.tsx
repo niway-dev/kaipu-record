@@ -30,6 +30,8 @@ import { ItemActionsMenu } from "@renderer/features/library/components/item-acti
 import { notMovableReason } from "@renderer/features/workspaces/move/move-flow";
 import { ItemDetails } from "@renderer/features/library/components/item-details";
 import { VersionsList } from "@renderer/features/library/components/versions-list";
+import { CaptureItem } from "@renderer/features/video-editor/components/capture-item";
+import { formatClock } from "@renderer/features/video-editor/capture-time";
 import {
   githubFit,
   resolveExportTarget,
@@ -127,6 +129,15 @@ export function LibraryDetailPage(): React.JSX.Element {
   // and buildLineage works fine on an empty/loading `videos` list.
   const { openItem } = useOpenInEditor();
   const lineage = useMemo(() => buildLineage(videos), [videos]);
+  // Frame captures taken from this video in the editor (NIW2-764), newest first. They are
+  // library screenshots that name this video in their sidecar, so the list is already here.
+  const captures = useMemo(
+    () =>
+      videos
+        .filter((v) => v.kind === "screenshot" && v.sourceVideoAssetId === assetId)
+        .sort((a, b) => b.createdAt - a.createdAt),
+    [videos, assetId],
+  );
 
   // The Library passes the list as it shows it (filter and sort applied); opened from
   // anywhere else, the whole library in its own order is the list. Ids that left the library
@@ -746,6 +757,25 @@ export function LibraryDetailPage(): React.JSX.Element {
                 order={order}
                 canExport={preparable !== null}
               />
+            )}
+            {!isScreenshot && captures.length > 0 && (
+              <section {...uiArea("libraryDetail.captures")} className={styles.captures}>
+                <h3 className={styles.capturesTitle}>{t("capturesTitle")}</h3>
+                <ul className={styles.capturesList}>
+                  {captures.map((capture) => (
+                    <CaptureItem
+                      key={capture.assetId}
+                      capture={capture}
+                      imageLabel={
+                        capture.sourceTimeSeconds === null
+                          ? capture.title
+                          : t("captureOpen", { time: formatClock(capture.sourceTimeSeconds) })
+                      }
+                      onImageClick={() => navigate(`/library/${capture.assetId}`)}
+                    />
+                  ))}
+                </ul>
+              </section>
             )}
           </div>
         </aside>

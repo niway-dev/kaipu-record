@@ -324,6 +324,13 @@ describe("parseScreenshotSource (the IPC validation)", () => {
     });
   });
 
+  it("accepts a null time (a frame of an image slide has no source second)", () => {
+    expect(parseScreenshotSource({ videoAssetId: "v", timeSeconds: null })).toEqual({
+      videoAssetId: "v",
+      timeSeconds: null,
+    });
+  });
+
   it.each([
     ["undefined", undefined],
     ["a string", "v"],

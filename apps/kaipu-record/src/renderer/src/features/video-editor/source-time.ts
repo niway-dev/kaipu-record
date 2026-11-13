@@ -59,6 +59,24 @@ export function sourceTimeAtTimeline(layout: LayoutEntry[], t: number): number |
   return null;
 }
 
+/**
+ * Timeline time of source time `t`, or null when that moment is not on the timeline (it
+ * was cut out). The inverse of `sourceTimeAtTimeline`, for clips only; when a reorder
+ * shows the same source second twice, the first one wins.
+ */
+export function timelineTimeAtSource(layout: LayoutEntry[], t: number): number | null {
+  for (const entry of layout) {
+    if (entry.kind !== "clip") continue;
+    if (t < entry.sourceStart - 1e-6 || t > entry.sourceEnd + 1e-6) continue;
+    return (
+      entry.timelineStart +
+      Math.min(Math.max(t, entry.sourceStart), entry.sourceEnd) -
+      entry.sourceStart
+    );
+  }
+  return null;
+}
+
 export interface SourceRange {
   id: string;
   start: number;
