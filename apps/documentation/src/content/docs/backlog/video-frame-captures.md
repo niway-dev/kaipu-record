@@ -24,14 +24,18 @@ taken with a system screenshot ends up outside the library, with no tie back to 
    video (`sourceTimeSeconds`), in its sidecar.
 3. The button also opens a **Captures** panel in the editor's right column: this video's
    captures, newest first, each with its time in the video and a Copy button that puts the
-   image on the clipboard.
+   image on the clipboard. Clicking a capture moves the playhead to its moment. A
+   **Captures** toggle next to the button opens and closes the panel without capturing.
+   The panel takes the inspector's place, so opening it clears the selection.
 4. The video's detail page in the Library lists the same captures, so covers can be found
    from there too.
 
 ## Acceptance criteria
 
 - Clicking Capture frame writes a PNG into the library and never shows a save dialog.
-- The new item's sidecar has the source video's asset id and the frame's time.
+- The new item's sidecar has the source video's asset id and the frame's time in the source
+  video. A frame of an image slide has no source time: it is linked with no time, and
+  clicking it in the panel does nothing.
 - The Captures panel lists only this video's captures and shows a new one right after it is taken.
 - Each capture can be copied to the clipboard as an image.
 - Add image, the ⌘⇧1 screenshot flow, and the video's edit, export and files are unchanged.
