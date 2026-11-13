@@ -1077,7 +1077,8 @@ function VideoEditor({
         cursor: cursorData,
         webcamTrack: source.webcam ?? null,
         // Timeline seconds: the clock the transport and the scene share, never source time.
-        playhead: playback.timelineTime,
+        // Read now, not from state: while playing, state lags the frame on screen.
+        playhead: playback.readTimelineTime(),
       });
       // The link stores the SOURCE second (what the library page and the sidecar show). A
       // slide has no source footage: its link has no time (seeking to it does nothing), and

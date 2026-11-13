@@ -19,6 +19,12 @@ export interface PreviewPlayback {
   speed: number;
   duration: number;
   timelineTime: number;
+  /**
+   * The playhead this instant. While playing, `timelineTime` follows `timeupdate` (a few
+   * times a second) and lags the frame on screen; a reader that must match that frame,
+   * such as a frame capture, reads the clock the moving playhead reads.
+   */
+  readTimelineTime(): number;
   /** Slide entry under the playhead, else null — the page maps this to the image URL. */
   activeSlideId: string | null;
   play(): void;
@@ -539,6 +545,20 @@ export function usePreviewPlayback(layout: LayoutEntry[], audio?: AudioEdits): P
     setPlaying(false);
   }, []);
 
+  const readTimelineTime = useCallback((): number => {
+    if (!playingRef.current) return timelineTimeRef.current;
+    const slide = slideRef.current;
+    if (slide) {
+      return Math.min(
+        slide.timelineStart + slideElapsed(slide, speedRef.current),
+        slide.timelineEnd,
+      );
+    }
+    const video = videoRef.current;
+    const mapped = video ? sourceToTimeline(layoutRef.current, video.currentTime) : null;
+    return mapped ?? timelineTimeRef.current;
+  }, []);
+
   const subscribeTime = useCallback((listener: (t: number) => void) => {
     listenersRef.current.add(listener);
     return () => listenersRef.current.delete(listener);
@@ -552,6 +572,7 @@ export function usePreviewPlayback(layout: LayoutEntry[], audio?: AudioEdits): P
       speed,
       duration,
       timelineTime,
+      readTimelineTime,
       activeSlideId,
       play,
       pause,
@@ -573,6 +594,7 @@ export function usePreviewPlayback(layout: LayoutEntry[], audio?: AudioEdits): P
       speed,
       duration,
       timelineTime,
+      readTimelineTime,
       activeSlideId,
       play,
       pause,
