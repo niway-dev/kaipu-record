@@ -326,16 +326,25 @@ div.stage > div:not(.player) {
   overflow: hidden;
 }
 
+/* Four tabs (Captures, NIW2-764) overflow the narrow 280 px panel: the row scrolls on its
+   own, without a bar, so the panel never shifts sideways and its content keeps its width. */
 .tabList {
   flex-shrink: 0;
   display: flex;
   gap: var(--space-md);
   padding: 0 var(--space-md);
   border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabList::-webkit-scrollbar {
+  display: none;
 }
 
 .tabButton {
   position: relative;
+  flex-shrink: 0;
   padding: 11px 0;
   border: 0;
   background: none;
