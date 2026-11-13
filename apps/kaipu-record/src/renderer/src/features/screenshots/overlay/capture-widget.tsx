@@ -181,6 +181,13 @@ export function CaptureWidget({
         className={styles.widget}
         style={{ left: placement.left, top: placement.top, width: placement.width }}
         {...keepPointer}
+        // Enter on a focused widget control activates that control (Cancel cancels, a toggle
+        // toggles). The overlay's window-level Enter would start a capture or a recording and
+        // preventDefault the control's own activation, so it stops at this boundary. Enter
+        // anywhere else still reaches it, and the Capture and Record buttons act on click.
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.stopPropagation();
+        }}
       >
         {toastInput && chrome.toast && !counting && (
           <div

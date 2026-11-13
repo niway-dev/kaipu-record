@@ -2914,6 +2914,48 @@ describe("CaptureOverlay — the device menus", () => {
     expect(answer).not.toHaveBeenCalled();
   });
 
+  it("Enter on a focused widget control is left to that control: no capture, no recording, not prevented", async () => {
+    const { answer, setCounting } = await renderRecording();
+    const cancel = screen.getByRole("button", { name: /^Cancel/ });
+    cancel.focus();
+
+    // `fireEvent` returns false when a listener called preventDefault.
+    const notPrevented = fireEvent.keyDown(cancel, { key: "Enter" });
+    await flush();
+
+    expect(notPrevented).toBe(true);
+    expect(setCounting).not.toHaveBeenCalled();
+    expect(answer).not.toHaveBeenCalled();
+  });
+
+  it("Enter on a focused control of the screenshot widget does not capture, and Enter off the widget still does", async () => {
+    const { api, answer } = fakeApi({ "42": area });
+    render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
+    await screen.findByTestId("capture-frame");
+    await flush();
+    const cancel = screen.getByRole("button", { name: /^Cancel/ });
+    cancel.focus();
+
+    expect(fireEvent.keyDown(cancel, { key: "Enter" })).toBe(true);
+    await flush();
+    expect(answer).not.toHaveBeenCalled();
+
+    // The window path keeps working for every other target, and the Capture button
+    // still activates through its own click.
+    press("Enter");
+    await flush();
+    expect(answer).toHaveBeenCalledOnce();
+  });
+
+  it("the Record button still starts a recording through the widget", async () => {
+    const { answer } = await renderRecording();
+    fireEvent.click(screen.getByTestId("start-recording"));
+    await flush();
+    expect(answer).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ kind: "rect", action: "record" }),
+    );
+  });
+
   it("the Microphone name opens a menu of radio items; choosing one writes the shared recording settings", async () => {
     devices.microphones = [
       { deviceId: "built-in", label: "Built-in mic" },
