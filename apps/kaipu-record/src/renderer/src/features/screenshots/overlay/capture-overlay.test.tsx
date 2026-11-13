@@ -2914,10 +2914,25 @@ describe("CaptureOverlay — the device menus", () => {
     expect(answer).not.toHaveBeenCalled();
   });
 
-  it("Enter on a focused widget control is left to that control: no capture, no recording, not prevented", async () => {
+  /**
+   * jsdom answers `false` for `:focus-visible` even after a keyboard-style focus, so it cannot
+   * tell the two cases apart. This stub plays Chromium: `matches(":focus-visible")` is `visible`.
+   */
+  function stubFocusVisible(visible: boolean): void {
+    const real = Element.prototype.matches;
+    vi.spyOn(Element.prototype, "matches").mockImplementation(function (
+      this: Element,
+      selector: string,
+    ) {
+      return selector === ":focus-visible" ? visible : real.call(this, selector);
+    });
+  }
+
+  it("Enter on a keyboard-focused widget control is left to that control: no recording, not prevented", async () => {
     const { answer, setCounting } = await renderRecording();
     const cancel = screen.getByRole("button", { name: /^Cancel/ });
     cancel.focus();
+    stubFocusVisible(true);
 
     // `fireEvent` returns false when a listener called preventDefault.
     const notPrevented = fireEvent.keyDown(cancel, { key: "Enter" });
@@ -2928,23 +2943,65 @@ describe("CaptureOverlay — the device menus", () => {
     expect(answer).not.toHaveBeenCalled();
   });
 
-  it("Enter on a focused control of the screenshot widget does not capture, and Enter off the widget still does", async () => {
+  it("Enter on a keyboard-focused control of the screenshot widget does not capture, and Enter off the widget still does", async () => {
     const { api, answer } = fakeApi({ "42": area });
     render(<CaptureOverlay enabledModes={CAPTURE_MODES} query={query("frame")} api={api} />);
     await screen.findByTestId("capture-frame");
     await flush();
     const cancel = screen.getByRole("button", { name: /^Cancel/ });
     cancel.focus();
+    stubFocusVisible(true);
 
     expect(fireEvent.keyDown(cancel, { key: "Enter" })).toBe(true);
     await flush();
     expect(answer).not.toHaveBeenCalled();
 
-    // The window path keeps working for every other target, and the Capture button
-    // still activates through its own click.
     press("Enter");
     await flush();
     expect(answer).toHaveBeenCalledOnce();
+  });
+
+  it("a toggle clicked with the mouse keeps focus, yet Enter still starts the recording", async () => {
+    const { answer } = await renderRecording();
+    const toggle = screen.getByRole("button", { name: "Microphone" });
+    // A mouse focus does not match :focus-visible (jsdom's own answer is false too).
+    stubFocusVisible(false);
+    fireEvent.pointerDown(toggle);
+    toggle.focus();
+    fireEvent.click(toggle);
+
+    fireEvent.keyDown(toggle, { key: "Enter" });
+    await flush();
+    expect(answer).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ kind: "rect", action: "record" }),
+    );
+  });
+
+  it("a mouse click keeps Enter on the overlay even when the engine reports focus-visible for the key press", async () => {
+    const { answer } = await renderRecording();
+    const toggle = screen.getByRole("button", { name: "Microphone" });
+    fireEvent.pointerDown(toggle);
+    toggle.focus();
+    fireEvent.click(toggle);
+    // Chromium may flip a mouse-focused control to :focus-visible once a key is pressed.
+    stubFocusVisible(true);
+
+    fireEvent.keyDown(toggle, { key: "Enter" });
+    await flush();
+    expect(answer).toHaveBeenCalledOnce();
+  });
+
+  it("Tab after a mouse click hands Enter back to the focused control", async () => {
+    const { answer } = await renderRecording();
+    const toggle = screen.getByRole("button", { name: "Microphone" });
+    fireEvent.pointerDown(toggle);
+    fireEvent.click(toggle);
+    fireEvent.keyDown(toggle, { key: "Tab" });
+    stubFocusVisible(true);
+
+    expect(fireEvent.keyDown(toggle, { key: "Enter" })).toBe(true);
+    await flush();
+    expect(answer).not.toHaveBeenCalled();
   });
 
   it("the Record button still starts a recording through the widget", async () => {

@@ -125,6 +125,8 @@ export function CaptureWidget({
   const t = useTranslations("screenshots");
   const tCamera = useTranslations("cameraSettings");
   const root = useRef<HTMLDivElement | null>(null);
+  // True from a mouse press on the widget until the next Tab: focus then came from the pointer.
+  const pointerFocus = useRef(false);
   const [height, setHeight] = useState(FIRST_HEIGHT_DIP);
   useLayoutEffect(() => {
     const element = root.current;
@@ -181,12 +183,22 @@ export function CaptureWidget({
         className={styles.widget}
         style={{ left: placement.left, top: placement.top, width: placement.width }}
         {...keepPointer}
-        // Enter on a focused widget control activates that control (Cancel cancels, a toggle
-        // toggles). The overlay's window-level Enter would start a capture or a recording and
-        // preventDefault the control's own activation, so it stops at this boundary. Enter
-        // anywhere else still reaches it, and the Capture and Record buttons act on click.
+        onPointerDown={(event) => {
+          pointerFocus.current = true;
+          keepPointer.onPointerDown(event);
+        }}
+        // Enter on a control focused through the keyboard (Tab) activates that control: Cancel
+        // cancels, a toggle toggles. The overlay's window-level Enter would start a capture or a
+        // recording and preventDefault that activation, so it stops at this boundary. A control
+        // focused by a mouse click keeps focus in Chromium, and there Enter is still the
+        // overlay's primary key, so it passes. `:focus-visible` tells the two apart, and the
+        // pointer flag covers an engine that reports it once any key is pressed; Tab clears it.
         onKeyDown={(event) => {
-          if (event.key === "Enter") event.stopPropagation();
+          if (event.key === "Tab") pointerFocus.current = false;
+          if (event.key !== "Enter" || pointerFocus.current) return;
+          if (event.target instanceof Element && event.target.matches(":focus-visible")) {
+            event.stopPropagation();
+          }
         }}
       >
         {toastInput && chrome.toast && !counting && (
