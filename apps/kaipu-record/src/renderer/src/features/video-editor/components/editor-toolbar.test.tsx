@@ -75,11 +75,6 @@ describe("EditorToolbar", () => {
     expect(screen.queryByRole("button", { name: "Capture frame" })).toBeNull();
   });
 
-  it("keeps the Captures toggle out of the title bar, which is already full (NIW2-764)", () => {
-    renderToolbar({ onCaptureFrame: vi.fn() });
-    expect(screen.queryByRole("button", { name: "Captures" })).toBeNull();
-  });
-
   it("no longer holds split and delete: they moved to the transport bar (NIW2-664)", () => {
     renderToolbar();
     expect(screen.queryByRole("button", { name: "Split here" })).toBeNull();

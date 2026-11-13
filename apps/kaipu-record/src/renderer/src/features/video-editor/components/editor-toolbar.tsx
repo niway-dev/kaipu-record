@@ -310,7 +310,7 @@ export interface EditorToolbarProps {
  *
  * A group's button shows its current variant's icon and a corner mark that it has
  * more. The webcam and cursor buttons follow, below a rule, only for a recording that
- * has a webcam or a redrawable cursor.
+ * has a webcam or a redrawable cursor. Captures (NIW2-764) comes last, below its own rule.
  */
 export interface EditorToolRailProps {
   /** Silence a stretch of audio at the playhead. */
