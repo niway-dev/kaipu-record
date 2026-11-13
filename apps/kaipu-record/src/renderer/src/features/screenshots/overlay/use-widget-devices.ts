@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
 import type { RecordingSettings } from "@shared/types/ipc";
 import { useCameras } from "@renderer/features/camera-settings/use-camera-settings";
@@ -35,14 +35,20 @@ export function useWidgetDevices(
   const [selectedMicrophone, setSelectedMicrophone] =
     useState<RecordingSettings["selectedMicrophone"]>(null);
   const [cameraId, setCameraId] = useState<string | null>(null);
+  // Counts every microphone change after mount (a choice or a broadcast), so a late first
+  // read can tell it is older than what the window already shows.
+  const microphoneRevision = useRef(0);
 
   useEffect(() => {
     if (!enabled) return;
     let live = true;
+    const revisionAtRequest = microphoneRevision.current;
     api
       .getRecordingSettings()
       .then((current) => {
-        if (live) setSelectedMicrophone(current.selectedMicrophone);
+        if (live && microphoneRevision.current === revisionAtRequest) {
+          setSelectedMicrophone(current.selectedMicrophone);
+        }
       })
       .catch(() => {});
     api
@@ -51,9 +57,10 @@ export function useWidgetDevices(
         if (live) setCameraId(app.cameraBubble?.deviceId ?? null);
       })
       .catch(() => {});
-    const unsubscribe = api.onRecordingSettingsChanged((current) =>
-      setSelectedMicrophone(current.selectedMicrophone),
-    );
+    const unsubscribe = api.onRecordingSettingsChanged((current) => {
+      microphoneRevision.current += 1;
+      setSelectedMicrophone(current.selectedMicrophone);
+    });
     return () => {
       live = false;
       unsubscribe();
@@ -64,6 +71,7 @@ export function useWidgetDevices(
     (id: string): void => {
       const microphone = microphones.find((candidate) => candidate.deviceId === id);
       if (!microphone) return;
+      microphoneRevision.current += 1;
       setSelectedMicrophone(microphone);
       api.updateRecordingSettings({ selectedMicrophone: microphone });
     },

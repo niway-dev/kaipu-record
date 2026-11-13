@@ -1,5 +1,6 @@
-import { renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { RecordingSettings } from "@shared/types/ipc";
 import { useWidgetDevices } from "./use-widget-devices";
 
 const noSettings = {
@@ -40,5 +41,72 @@ describe("useWidgetDevices", () => {
     const { unmount } = renderHook(() => useWidgetDevices(noSettings, true));
     unmount();
     expect(enumerateDevices).toHaveBeenCalled();
+  });
+
+  // Unmount while `navigator.mediaDevices` still exists: the outer afterEach removes it.
+  describe("the first read racing a change", () => {
+    afterEach(cleanup);
+    const micA = { deviceId: "mic-a", label: "Mic A" };
+    const micB = { deviceId: "mic-b", label: "Mic B" };
+    const inputs = [micA, micB].map((mic) => ({
+      ...mic,
+      kind: "audioinput",
+      groupId: mic.deviceId,
+    }));
+
+    function pendingRead() {
+      let resolveRead: (settings: RecordingSettings) => void = () => {};
+      let broadcast: (settings: RecordingSettings) => void = () => {};
+      const api = {
+        getRecordingSettings: vi.fn(
+          () => new Promise<RecordingSettings>((resolve) => (resolveRead = resolve)),
+        ),
+        getSettings: vi.fn(() => new Promise(() => {})),
+        updateRecordingSettings: vi.fn(),
+        onRecordingSettingsChanged: vi.fn((callback: (settings: RecordingSettings) => void) => {
+          broadcast = callback;
+          return () => {};
+        }),
+      } as unknown as Parameters<typeof useWidgetDevices>[0];
+      return {
+        api,
+        settle: (settings: Partial<RecordingSettings>) =>
+          resolveRead(settings as RecordingSettings),
+        broadcast: (settings: Partial<RecordingSettings>) =>
+          broadcast(settings as RecordingSettings),
+      };
+    }
+
+    it("keeps a microphone chosen before the first read answered", async () => {
+      enumerateDevices.mockResolvedValue(inputs as never);
+      const bridge = pendingRead();
+      const { result } = renderHook(() => useWidgetDevices(bridge.api, true));
+      await waitFor(() => expect(result.current.microphones).toHaveLength(2));
+
+      act(() => result.current.selectMicrophone("mic-b"));
+      expect(result.current.microphoneId).toBe("mic-b");
+
+      await act(async () => bridge.settle({ selectedMicrophone: micA }));
+      expect(result.current.microphoneId).toBe("mic-b");
+    });
+
+    it("keeps a broadcast that landed before the first read answered", async () => {
+      const bridge = pendingRead();
+      const { result } = renderHook(() => useWidgetDevices(bridge.api, true));
+
+      act(() => bridge.broadcast({ selectedMicrophone: micB }));
+      await act(async () => bridge.settle({ selectedMicrophone: micA }));
+
+      expect(result.current.microphoneId).toBe("mic-b");
+    });
+
+    it("applies the first read when nothing changed meanwhile", async () => {
+      const bridge = pendingRead();
+      const { result } = renderHook(() => useWidgetDevices(bridge.api, true));
+
+      await act(async () => bridge.settle({ selectedMicrophone: micA }));
+
+      expect(result.current.microphoneId).toBe("mic-a");
+    });
   });
 });

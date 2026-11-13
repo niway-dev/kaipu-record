@@ -53,6 +53,8 @@ export function useOverlayToggles(api: RecordingTogglesApi, enabled = true): Ove
   });
   // The same camera-access read as the Record page and the tray tile.
   const access = useCameraAccess(api, enabled);
+  // Counts every change after mount (a press or a broadcast), so a late first read can tell.
+  const revision = useRef(0);
   const [bubble, setBubble] = useState<OverlayCameraBubble>({
     size: DEFAULT_CAMERA_BUBBLE.size,
     shape: DEFAULT_CAMERA_BUBBLE.shape,
@@ -62,10 +64,13 @@ export function useOverlayToggles(api: RecordingTogglesApi, enabled = true): Ove
     // A screenshot overlay has no inputs to show: it never reads recording settings.
     if (!enabled) return;
     let live = true;
+    // The first read can answer after a press or a broadcast: that reply is older than what
+    // the window already shows, so it only applies when nothing changed since the request.
+    const revisionAtRequest = revision.current;
     api
       .getRecordingSettings()
       .then((current) => {
-        if (live) setSettings(current);
+        if (live && revision.current === revisionAtRequest) setSettings(current);
       })
       .catch(() => {});
     api
@@ -80,7 +85,10 @@ export function useOverlayToggles(api: RecordingTogglesApi, enabled = true): Ove
         }
       })
       .catch(() => {});
-    const unsubscribe = api.onRecordingSettingsChanged((current) => setSettings(current));
+    const unsubscribe = api.onRecordingSettingsChanged((current) => {
+      revision.current += 1;
+      setSettings(current);
+    });
     return () => {
       live = false;
       unsubscribe();
@@ -98,6 +106,7 @@ export function useOverlayToggles(api: RecordingTogglesApi, enabled = true): Ove
       // A blocked camera cannot be turned on from here either; one that is on can go off.
       if (key === "isCameraEnabled" && next && blockedRef.current) return null;
       latest.current = { ...latest.current, [key]: next };
+      revision.current += 1;
       setSettings(latest.current);
       api.updateRecordingSettings({ [key]: next });
       return next;
