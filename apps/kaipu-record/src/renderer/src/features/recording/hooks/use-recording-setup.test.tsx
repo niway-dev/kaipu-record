@@ -311,6 +311,21 @@ describe("useRecordingSetup", () => {
         restore();
       }
     });
+
+    it("a Stop while the start waits drops that start", async () => {
+      const { resolveAll, restore } = pendingReads();
+      try {
+        mockSettings = SETTINGS({ selectedSource: SCREEN });
+        const { result } = renderHook(() => useRecordingSetup());
+        act(() => result.current.startRecording());
+        act(() => result.current.stopRecording());
+        expect(recorderStopOrCancel).toHaveBeenCalledOnce();
+        await resolveAll();
+        expect(recorderRequestStart).not.toHaveBeenCalled();
+      } finally {
+        restore();
+      }
+    });
   });
 
   it("a slow initial settings read never overwrites a newer audio change", async () => {

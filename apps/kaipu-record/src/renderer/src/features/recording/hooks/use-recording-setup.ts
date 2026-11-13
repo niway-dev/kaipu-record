@@ -235,7 +235,12 @@ export function useRecordingSetup(): RecordingSetup {
     [recorder],
   );
 
-  const stopRecording = useCallback(() => recorder.stopOrCancel(), [recorder]);
+  const stopRecording = useCallback(() => {
+    // A start still waiting for settings is cancelled too: the recorder is idle, so it would
+    // accept the queued request once the settings land and record after the Stop.
+    startsWaitingRef.current.length = 0;
+    recorder.stopOrCancel();
+  }, [recorder]);
 
   const toggleRecording = useCallback(() => {
     if (isRecording) recorder.stopOrCancel();
