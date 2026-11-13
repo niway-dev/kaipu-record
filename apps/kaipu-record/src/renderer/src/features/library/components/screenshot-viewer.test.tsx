@@ -5,14 +5,8 @@ import { ScreenshotViewer } from "./screenshot-viewer";
 afterEach(cleanup);
 
 function loadImage(img: HTMLElement, width = 1440, height = 900) {
-  Object.defineProperty(img, "naturalWidth", {
-    value: width,
-    configurable: true,
-  });
-  Object.defineProperty(img, "naturalHeight", {
-    value: height,
-    configurable: true,
-  });
+  Object.defineProperty(img, "naturalWidth", { value: width, configurable: true });
+  Object.defineProperty(img, "naturalHeight", { value: height, configurable: true });
   fireEvent.load(img);
 }
 
@@ -104,9 +98,7 @@ describe("ScreenshotViewer", () => {
 
   it("stops at the ends of the zoom range", () => {
     render(<ScreenshotViewer src="kaipu-media://screenshot/a" />);
-    const zoomIn = screen.getByRole("button", {
-      name: "Zoom in",
-    }) as HTMLButtonElement;
+    const zoomIn = screen.getByRole("button", { name: "Zoom in" }) as HTMLButtonElement;
     for (let i = 0; i < 6; i++) fireEvent.click(zoomIn);
     expect(zoomIn.disabled).toBe(true);
   });

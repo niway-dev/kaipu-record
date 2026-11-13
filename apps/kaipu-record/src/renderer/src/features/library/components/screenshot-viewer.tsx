@@ -32,10 +32,7 @@ export function ScreenshotViewer({
   const tLibrary = useTranslations("library");
   const [failed, setFailed] = useState(false);
   const [zoomIndex, setZoomIndex] = useState(FIT_INDEX);
-  const [natural, setNatural] = useState<{
-    width: number;
-    height: number;
-  } | null>(null);
+  const [natural, setNatural] = useState<{ width: number; height: number } | null>(null);
   const [frame, setFrame] = useState<{ width: number; height: number } | null>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const zoom = ZOOM_STEPS[zoomIndex]!;
@@ -44,10 +41,7 @@ export function ScreenshotViewer({
     natural && frame && natural.width > 0 && natural.height > 0
       ? (() => {
           const scale = Math.min(1, frame.width / natural.width, frame.height / natural.height);
-          return {
-            width: natural.width * scale,
-            height: natural.height * scale,
-          };
+          return { width: natural.width * scale, height: natural.height * scale };
         })()
       : null;
   const shown = Boolean(src) && !failed;
@@ -99,15 +93,8 @@ export function ScreenshotViewer({
                         // too and a tall one never passes the Fit box.
                         { width: `${zoom * fitSize.width}px` }
                       : // Frame or image size not known yet: scale the frame-bound max size.
-                        {
-                          maxWidth: `${zoom * 100}%`,
-                          maxHeight: `${zoom * 100}%`,
-                        }
-                    : {
-                        width: `${zoom * 100}%`,
-                        maxWidth: "none",
-                        maxHeight: "none",
-                      }
+                        { maxWidth: `${zoom * 100}%`, maxHeight: `${zoom * 100}%` }
+                    : { width: `${zoom * 100}%`, maxWidth: "none", maxHeight: "none" }
               }
               onLoad={(e) => {
                 const { naturalWidth, naturalHeight } = e.currentTarget;
