@@ -129,7 +129,11 @@ export function useStillCapture(): StillCaptureController {
 
   const sourceBlob = useCallback((id: string): Promise<Blob> => {
     if (sourceRef.current?.id !== id) {
-      const blob = fetch(mediaUrl("recording", id)).then((r) => r.blob());
+      const blob = fetch(mediaUrl("recording", id)).then((r) => {
+        // An error page is not the recording: fail, so it is not cached as one.
+        if (!r.ok) throw new Error(`still capture: source fetch failed (${r.status})`);
+        return r.blob();
+      });
       // A failed fetch must not be cached for the next attempt.
       blob.catch(() => {
         if (sourceRef.current?.blob === blob) sourceRef.current = null;

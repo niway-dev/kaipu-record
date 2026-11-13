@@ -216,6 +216,31 @@ describe("useStillCapture", () => {
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   });
 
+  it("does not cache a source fetch that answered with an error: the next capture fetches again", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        blob: async () => new Blob(["nope"]),
+      } as Response)
+      .mockResolvedValueOnce({ ok: true, blob: async () => new Blob(["bytes"]) } as Response);
+    const { result } = renderHook(() => useStillCapture());
+    await expect(result.current.capture(args())).rejects.toThrow("source fetch failed (404)");
+    // No worker was started for an error page.
+    expect(createdWorkers).toHaveLength(0);
+    await waitFor(() => expect(result.current.busy).toBe(false));
+    let promise!: ReturnType<typeof result.current.capture>;
+    act(() => {
+      promise = result.current.capture(args());
+    });
+    await waitFor(() => expect(createdWorkers).toHaveLength(1));
+    act(() =>
+      createdWorkers[0].emit({ type: "still", data: new ArrayBuffer(1), width: 1, height: 1 }),
+    );
+    await promise;
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+  });
+
   it("terminates a running worker on unmount", async () => {
     const { result, unmount } = renderHook(() => useStillCapture());
     act(() => {
