@@ -33,6 +33,8 @@ const cloudOnlyItem: LibraryItem = {
   createdAt: 1000,
   durationSeconds: 0,
   derivedFromAssetId: null,
+  sourceVideoAssetId: null,
+  sourceTimeSeconds: null,
   editSavedAt: null,
   editExportedSavedAt: null,
   local: null,
@@ -70,6 +72,8 @@ const exportedOnlyItem: LibraryItem = {
   createdAt: 2000,
   durationSeconds: 45,
   derivedFromAssetId: null,
+  sourceVideoAssetId: null,
+  sourceTimeSeconds: null,
   editSavedAt: null,
   editExportedSavedAt: null,
   local: {
@@ -83,6 +87,8 @@ const exportedOnlyItem: LibraryItem = {
     durationSeconds: 45,
     thumbnailUrl: null,
     derivedFromAssetId: null,
+    sourceVideoAssetId: null,
+    sourceTimeSeconds: null,
     contentSha256: "abc",
   },
   cloud: {
@@ -512,6 +518,8 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     sharing: "private" as const,
     capture: null,
     derivedFromAssetId: null,
+    sourceVideoAssetId: null,
+    sourceTimeSeconds: null,
     editSavedAt: null,
     editExportedSavedAt: null,
   };
@@ -525,6 +533,8 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     sizeBytes: 1,
     durationSeconds: 10,
     derivedFromAssetId: null,
+    sourceVideoAssetId: null,
+    sourceTimeSeconds: null,
     contentSha256: null,
   });
 

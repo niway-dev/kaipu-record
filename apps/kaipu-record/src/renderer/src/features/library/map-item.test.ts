@@ -9,6 +9,8 @@ const item: LibraryItem = {
   createdAt: 5,
   durationSeconds: 9,
   derivedFromAssetId: null,
+  sourceVideoAssetId: null,
+  sourceTimeSeconds: null,
   editSavedAt: 123,
   editExportedSavedAt: null,
   local: {
@@ -22,6 +24,8 @@ const item: LibraryItem = {
     durationSeconds: 9,
     thumbnailUrl: "kaipu-media://thumb/f",
     derivedFromAssetId: null,
+    sourceVideoAssetId: null,
+    sourceTimeSeconds: null,
     contentSha256: null,
   },
   cloud: {

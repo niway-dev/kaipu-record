@@ -18,6 +18,8 @@ const video = (overrides: Partial<LibraryVideo> = {}): LibraryVideo => ({
   editing: "exported-only",
   transfer: { state: "idle" },
   derivedFromAssetId: null,
+  sourceVideoAssetId: null,
+  sourceTimeSeconds: null,
   editSavedAt: null,
   editExportedSavedAt: null,
   ...overrides,

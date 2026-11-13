@@ -27,6 +27,8 @@ function video(
     editing: "project-available",
     transfer: { state: "idle" },
     derivedFromAssetId: null,
+    sourceVideoAssetId: null,
+    sourceTimeSeconds: null,
     editSavedAt: null,
     editExportedSavedAt: null,
     ...over,
@@ -45,6 +47,8 @@ function healedRecording(id: string): LocalRecording {
     durationSeconds: 54,
     thumbnailUrl: `kaipu-media://thumb/${id}`,
     derivedFromAssetId: null,
+    sourceVideoAssetId: null,
+    sourceTimeSeconds: null,
     contentSha256: null,
   };
 }

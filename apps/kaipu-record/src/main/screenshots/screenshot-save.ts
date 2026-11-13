@@ -31,6 +31,24 @@ export interface SaveScreenshotMeta {
    * (or without a stored canvas) deletes the file, so a hidden word never survives.
    */
   text?: TextCacheSavePayload;
+  /** A frame capture: the video it was taken from and the second on screen. New items only. */
+  source?: ScreenshotSource;
+}
+
+export interface ScreenshotSource {
+  videoAssetId: string;
+  timeSeconds: number;
+}
+
+/** The source from an IPC payload, or undefined when it is not a valid one (the save goes on without it). */
+export function parseScreenshotSource(raw: unknown): ScreenshotSource | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const { videoAssetId, timeSeconds } = raw as Record<string, unknown>;
+  if (typeof videoAssetId !== "string" || videoAssetId.trim() === "") return undefined;
+  if (typeof timeSeconds !== "number" || !Number.isFinite(timeSeconds) || timeSeconds < 0) {
+    return undefined;
+  }
+  return { videoAssetId, timeSeconds };
 }
 
 /**
@@ -68,6 +86,12 @@ export async function saveScreenshotToVault(
         title: meta.title,
         createdAt: now,
         ...(meta.manual ? { editorSavedAt: now } : {}),
+        ...(meta.source
+          ? {
+              sourceVideoAssetId: meta.source.videoAssetId,
+              sourceTimeSeconds: meta.source.timeSeconds,
+            }
+          : {}),
       });
     } catch (error) {
       await vault.discardCreated(reservation, media).catch(() => {});

@@ -18,6 +18,8 @@ export function toLibraryVideo(item: LibraryItem): LibraryVideo {
     editing: item.editing,
     transfer: item.transfer,
     derivedFromAssetId: item.derivedFromAssetId,
+    sourceVideoAssetId: item.sourceVideoAssetId,
+    sourceTimeSeconds: item.sourceTimeSeconds,
     editSavedAt: item.editSavedAt,
     editExportedSavedAt: item.editExportedSavedAt,
     tagIds: item.local?.tagIds ?? [],

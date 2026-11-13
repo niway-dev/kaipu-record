@@ -75,6 +75,9 @@ export interface LibraryItem {
   createdAt: number;
   durationSeconds: number;
   derivedFromAssetId: string | null;
+  /** Frame captures (local sidecar only, never in the cloud catalog): the source video. */
+  sourceVideoAssetId: string | null;
+  sourceTimeSeconds: number | null;
   /**
    * Epoch ms of the last video-edit-session save on this device, or null when there is
    * no session (or no local copy). Compared against the item's exports to say

@@ -57,6 +57,8 @@ function startArgs(
     sourceId: "rec-1",
     title: "My recording",
     derivedFromAssetId: null,
+    sourceVideoAssetId: null,
+    sourceTimeSeconds: null,
     videoWidth: 1280,
     videoHeight: 720,
     previewWidth: 640,
@@ -90,6 +92,8 @@ beforeEach(() => {
       durationSeconds: 10,
       thumbnailUrl: null,
       derivedFromAssetId: null,
+      sourceVideoAssetId: null,
+      sourceTimeSeconds: null,
       contentSha256: null,
     }),
   );
@@ -241,6 +245,8 @@ describe("useVideoExport", () => {
         durationSeconds: 10,
         thumbnailUrl: null,
         derivedFromAssetId: null,
+        sourceVideoAssetId: null,
+        sourceTimeSeconds: null,
         contentSha256: null,
       });
     });
@@ -270,6 +276,8 @@ describe("useVideoExport", () => {
       durationMs: 10_000,
       thumbnail: FAKE_THUMB,
       derivedFromAssetId: null,
+      sourceVideoAssetId: null,
+      sourceTimeSeconds: null,
       exportPreset: "balanced",
     });
     expect(onSaved).toHaveBeenCalledWith(

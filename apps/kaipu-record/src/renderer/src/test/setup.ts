@@ -160,6 +160,8 @@ window.electronAPI = {
       sizeBytes: 0,
       durationSeconds: 0,
       derivedFromAssetId: null,
+      sourceVideoAssetId: null,
+      sourceTimeSeconds: null,
       contentSha256: null,
     },
   }),

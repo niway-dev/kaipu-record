@@ -55,6 +55,8 @@ const RECORDING: LocalRecording = {
   thumbnailUrl: null,
   kind: "recording",
   derivedFromAssetId: null,
+  sourceVideoAssetId: null,
+  sourceTimeSeconds: null,
   contentSha256: null,
 };
 

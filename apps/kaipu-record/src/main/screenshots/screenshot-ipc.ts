@@ -42,7 +42,11 @@ import {
   captureWhileRecordingEnabled,
   setReportedCaptureWhileRecording,
 } from "./capture-while-recording";
-import { saveCaptureToWorkspace, saveEditedScreenshot } from "./screenshot-save";
+import {
+  parseScreenshotSource,
+  saveCaptureToWorkspace,
+  saveEditedScreenshot,
+} from "./screenshot-save";
 import { isPlainItemId } from "../library/library-vault";
 import { vaultActivity } from "../library/vault-activity";
 import type { CaptureToastShowRequest } from "./capture-toast-window";
@@ -373,11 +377,14 @@ export function registerScreenshotHandlers(
         manual?: boolean;
         canvas?: CanvasSavePayload;
         text?: TextCacheSavePayload;
+        source?: unknown;
       },
     ): Promise<LocalRecording> =>
       vaultActivity.run("screenshot", () =>
         saveEditedScreenshot(stamp, Buffer.from(png), {
           ...meta,
+          // Validated here: an invalid source is dropped, the save still happens without a link.
+          source: parseScreenshotSource(meta.source),
           // Binary arrives as ArrayBuffer or Uint8Array depending on the IPC path.
           ...(meta.canvas
             ? {

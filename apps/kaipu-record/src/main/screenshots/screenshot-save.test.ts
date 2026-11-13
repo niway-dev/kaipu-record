@@ -21,7 +21,11 @@ vi.mock("../workspaces", () => ({
   requireCaptureWorkspace: async () => probe(),
 }));
 
-import { saveEditedScreenshot, saveScreenshotToVault } from "./screenshot-save";
+import {
+  parseScreenshotSource,
+  saveEditedScreenshot,
+  saveScreenshotToVault,
+} from "./screenshot-save";
 
 describe("saveScreenshotToVault", () => {
   let directory: string;
@@ -265,5 +269,71 @@ describe("saveScreenshotToVault — recognized-text cache", () => {
       canvas,
     });
     await expect(cacheOf(first.id)).rejects.toThrow();
+  });
+});
+
+describe("frame capture source link", () => {
+  let directory: string;
+
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), "kaipu-shot-src-"));
+    vault = new LibraryVault(directory);
+  });
+  afterEach(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  it("writes the source into the sidecar and reads it back", async () => {
+    const saved = await saveScreenshotToVault(Buffer.from("png"), {
+      title: "Frame",
+      source: { videoAssetId: "video-1", timeSeconds: 12.5 },
+    });
+    expect(saved).toMatchObject({ sourceVideoAssetId: "video-1", sourceTimeSeconds: 12.5 });
+    const sidecar = JSON.parse(await readFile(join(directory, ".kaipu", "Frame.json"), "utf-8"));
+    expect(sidecar).toMatchObject({ sourceVideoAssetId: "video-1", sourceTimeSeconds: 12.5 });
+    expect(await vault.describe(saved.id)).toMatchObject({
+      sourceVideoAssetId: "video-1",
+      sourceTimeSeconds: 12.5,
+    });
+  });
+
+  it("reads nulls when saved without a source", async () => {
+    const saved = await saveScreenshotToVault(Buffer.from("png"), { title: "Plain" });
+    expect(saved).toMatchObject({ sourceVideoAssetId: null, sourceTimeSeconds: null });
+  });
+
+  it("reads nulls from an old sidecar without the fields", async () => {
+    const saved = await saveScreenshotToVault(Buffer.from("png"), { title: "Old" });
+    const path = join(directory, ".kaipu", "Old.json");
+    const sidecar = JSON.parse(await readFile(path, "utf-8"));
+    delete sidecar.sourceVideoAssetId;
+    delete sidecar.sourceTimeSeconds;
+    await writeFile(path, JSON.stringify(sidecar));
+    expect(await vault.describe(saved.id)).toMatchObject({
+      sourceVideoAssetId: null,
+      sourceTimeSeconds: null,
+    });
+  });
+});
+
+describe("parseScreenshotSource (the IPC validation)", () => {
+  it("accepts a video id with a finite non-negative time", () => {
+    expect(parseScreenshotSource({ videoAssetId: "v", timeSeconds: 0 })).toEqual({
+      videoAssetId: "v",
+      timeSeconds: 0,
+    });
+  });
+
+  it.each([
+    ["undefined", undefined],
+    ["a string", "v"],
+    ["empty id", { videoAssetId: " ", timeSeconds: 1 }],
+    ["numeric id", { videoAssetId: 3, timeSeconds: 1 }],
+    ["negative time", { videoAssetId: "v", timeSeconds: -1 }],
+    ["NaN time", { videoAssetId: "v", timeSeconds: Number.NaN }],
+    ["Infinity time", { videoAssetId: "v", timeSeconds: Number.POSITIVE_INFINITY }],
+    ["string time", { videoAssetId: "v", timeSeconds: "3" }],
+  ])("drops %s", (_label, raw) => {
+    expect(parseScreenshotSource(raw)).toBeUndefined();
   });
 });

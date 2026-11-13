@@ -28,6 +28,8 @@ const base: LibraryVideo = {
   editing: "project-available",
   transfer: { state: "idle" },
   derivedFromAssetId: null,
+  sourceVideoAssetId: null,
+  sourceTimeSeconds: null,
   editSavedAt: null,
   editExportedSavedAt: null,
 };

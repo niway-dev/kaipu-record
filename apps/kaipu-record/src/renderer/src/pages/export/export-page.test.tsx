@@ -73,6 +73,8 @@ const recording = (overrides: Partial<LibraryItem> = {}): LibraryItem => ({
   createdAt: 1000,
   durationSeconds: 182,
   derivedFromAssetId: null,
+  sourceVideoAssetId: null,
+  sourceTimeSeconds: null,
   editSavedAt: null,
   editExportedSavedAt: null,
   local: {
@@ -86,6 +88,8 @@ const recording = (overrides: Partial<LibraryItem> = {}): LibraryItem => ({
     durationSeconds: 182,
     thumbnailUrl: null,
     derivedFromAssetId: null,
+    sourceVideoAssetId: null,
+    sourceTimeSeconds: null,
     contentSha256: "abc",
   },
   cloud: null,

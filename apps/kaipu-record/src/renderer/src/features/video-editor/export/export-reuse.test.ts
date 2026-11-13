@@ -33,6 +33,8 @@ function exported(
     editing: "exported-only",
     transfer: { state: "idle" },
     derivedFromAssetId: "source",
+    sourceVideoAssetId: null,
+    sourceTimeSeconds: null,
     editSavedAt: null,
     editExportedSavedAt: null,
     export: exp,

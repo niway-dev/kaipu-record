@@ -30,6 +30,9 @@ export interface LibraryVideo {
   editing: EditingState;
   transfer: { state: TransferState; progress?: { sentBytes: number; totalBytes: number } };
   derivedFromAssetId: string | null;
+  /** Frame captures: the video this shot was taken from and the second on screen. */
+  sourceVideoAssetId: string | null;
+  sourceTimeSeconds: number | null;
   /** Epoch ms of the last edit-session save, null without a session (see LibraryItem). */
   editSavedAt: number | null;
   editExportedSavedAt: number | null;

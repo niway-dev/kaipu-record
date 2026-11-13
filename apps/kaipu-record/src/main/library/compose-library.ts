@@ -82,6 +82,8 @@ export function composeLibrary(input: ComposeInput): ComposeResult {
       // cloud value is the better answer.
       durationSeconds: healthy?.durationSeconds || entry.durationSeconds,
       derivedFromAssetId: healthy?.derivedFromAssetId ?? entry.derivedFromAssetId,
+      sourceVideoAssetId: healthy?.sourceVideoAssetId ?? null,
+      sourceTimeSeconds: healthy?.sourceTimeSeconds ?? null,
       editSavedAt: local ? (input.editSession[local.id]?.savedAt ?? null) : null,
       editExportedSavedAt: local ? (input.editSession[local.id]?.exportedSavedAt ?? null) : null,
       capture: healthy?.capture ?? null,
@@ -104,6 +106,8 @@ export function composeLibrary(input: ComposeInput): ComposeResult {
       createdAt: rec.createdAt,
       durationSeconds: rec.durationSeconds,
       derivedFromAssetId: rec.derivedFromAssetId,
+      sourceVideoAssetId: rec.sourceVideoAssetId,
+      sourceTimeSeconds: rec.sourceTimeSeconds,
       editSavedAt: input.editSession[rec.id]?.savedAt ?? null,
       editExportedSavedAt: input.editSession[rec.id]?.exportedSavedAt ?? null,
       capture: rec.capture ?? null,

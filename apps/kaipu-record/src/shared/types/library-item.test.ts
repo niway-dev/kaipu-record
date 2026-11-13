@@ -14,6 +14,8 @@ const base: LibraryItem = {
   createdAt: 1,
   durationSeconds: 10,
   derivedFromAssetId: null,
+  sourceVideoAssetId: null,
+  sourceTimeSeconds: null,
   editSavedAt: null,
   editExportedSavedAt: null,
   capture: null,

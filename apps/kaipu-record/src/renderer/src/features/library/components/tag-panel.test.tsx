@@ -20,6 +20,8 @@ const video: LibraryVideo = {
   editing: "project-available",
   transfer: { state: "idle" },
   derivedFromAssetId: null,
+  sourceVideoAssetId: null,
+  sourceTimeSeconds: null,
   editSavedAt: null,
   editExportedSavedAt: null,
   tagIds: ["t-cricut"],

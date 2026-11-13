@@ -40,6 +40,9 @@ export interface LocalRecording {
   thumbnailUrl?: string | null;
   /** The asset this file was exported from, when it is an editor export. */
   derivedFromAssetId: string | null;
+  /** Frame captures: the video this shot was taken from, and the second on screen. */
+  sourceVideoAssetId: string | null;
+  sourceTimeSeconds: number | null;
   /**
    * base64 sha256 of the file, only when the cached hash still matches the file's
    * current size + mtime. null = not computed yet or stale (never "unknown bytes").

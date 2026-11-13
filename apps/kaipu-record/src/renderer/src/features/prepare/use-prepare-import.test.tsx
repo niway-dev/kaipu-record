@@ -22,6 +22,8 @@ const recording = (title: string, assetId: string): LocalRecording => ({
   sizeBytes: 10,
   durationSeconds: 3,
   derivedFromAssetId: null,
+  sourceVideoAssetId: null,
+  sourceTimeSeconds: null,
   contentSha256: null,
   capture: { mode: "import", width: 1080, height: 1920, ratio: null },
 });
