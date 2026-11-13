@@ -56,6 +56,15 @@ describe("timelineTimeAtSource", () => {
   it("is the same moment when the clip is the whole recording", () => {
     expect(timelineTimeAtSource(toLayout([items[0]]), 10)).toBe(10);
   });
+  it("puts a split point in the piece that starts there, not on the slide before it", () => {
+    // Split at source 10 with a slide between the pieces: timeline 10–13 is the slide.
+    const split = toLayout([
+      { id: "a", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+      items[1],
+      { id: "b", kind: "clip", sourceStart: 10, sourceEnd: 20 },
+    ]);
+    expect(timelineTimeAtSource(split, 10)).toBe(13);
+  });
 });
 
 describe("dragRangeEdge", () => {
