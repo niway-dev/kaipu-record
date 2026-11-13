@@ -28,11 +28,11 @@ function makeScene(crop?: CropRect): EditorScene {
 
 // The overlay measures itself from clientWidth/clientHeight on mount (jsdom: 0×0), and
 // maps pointer coords through getBoundingClientRect. Give it a 100×100 box for both.
-function renderSizedOverlay(scene: EditorScene) {
+function renderSizedOverlay(scene: EditorScene, onLeave?: () => void) {
   for (const prop of ["clientWidth", "clientHeight"]) {
     Object.defineProperty(HTMLElement.prototype, prop, { configurable: true, get: () => 100 });
   }
-  const utils = render(<CropOverlay scene={scene} />);
+  const utils = render(<CropOverlay scene={scene} {...(onLeave ? { onLeave } : {})} />);
   const overlay = utils.container.firstChild as HTMLElement;
   overlay.setPointerCapture = vi.fn();
   overlay.getBoundingClientRect = () =>
@@ -94,5 +94,122 @@ describe("CropOverlay", () => {
     fireEvent.pointerMove(overlay, { clientX: 60, clientY: 60 });
     expect(outline()).not.toBe(before);
     expect(scene.setCrop).not.toHaveBeenCalled();
+  });
+
+  it("Esc leaves the tool and keeps the crop", () => {
+    const crop = { x: 0.2, y: 0.2, w: 0.5, h: 0.5 };
+    const scene = makeScene(crop);
+    const onLeave = vi.fn();
+    renderSizedOverlay(scene, onLeave);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onLeave).toHaveBeenCalledTimes(1);
+    expect(scene.setCrop).not.toHaveBeenCalled();
+  });
+
+  it("Esc with no crop set leaves the tool too", () => {
+    const scene = makeScene();
+    const onLeave = vi.fn();
+    renderSizedOverlay(scene, onLeave);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onLeave).toHaveBeenCalledTimes(1);
+    expect(scene.setCrop).not.toHaveBeenCalled();
+  });
+
+  it("Esc during a drag aborts the drag: nothing is committed, the tool is left", () => {
+    const scene = makeScene({ x: 0.2, y: 0.2, w: 0.5, h: 0.5 });
+    const onLeave = vi.fn();
+    const { overlay } = renderSizedOverlay(scene, onLeave);
+    fireEvent.pointerDown(overlay, { clientX: 5, clientY: 5 });
+    fireEvent.pointerMove(overlay, { clientX: 15, clientY: 15 });
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.pointerUp(overlay);
+    expect(onLeave).toHaveBeenCalledTimes(1);
+    expect(scene.setCrop).not.toHaveBeenCalled();
+  });
+
+  it("Enter leaves the tool and keeps the crop", () => {
+    const scene = makeScene({ x: 0.2, y: 0.2, w: 0.5, h: 0.5 });
+    const onLeave = vi.fn();
+    renderSizedOverlay(scene, onLeave);
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(onLeave).toHaveBeenCalledTimes(1);
+    expect(scene.setCrop).not.toHaveBeenCalled();
+  });
+
+  it("Enter typed in a text field does not leave", () => {
+    const scene = makeScene({ x: 0.2, y: 0.2, w: 0.5, h: 0.5 });
+    const onLeave = vi.fn();
+    renderSizedOverlay(scene, onLeave);
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    fireEvent.keyDown(input, { key: "Enter" });
+    input.remove();
+    expect(onLeave).not.toHaveBeenCalled();
+  });
+
+  it("Enter on a focused button presses the button and does not leave", () => {
+    const scene = makeScene({ x: 0.2, y: 0.2, w: 0.5, h: 0.5 });
+    const onLeave = vi.fn();
+    renderSizedOverlay(scene, onLeave);
+    const button = document.createElement("button");
+    document.body.appendChild(button);
+    fireEvent.keyDown(button, { key: "Enter" });
+    button.remove();
+    expect(onLeave).not.toHaveBeenCalled();
+  });
+
+  it("a click outside an existing crop leaves the tool without changing the crop", () => {
+    const scene = makeScene({ x: 0.2, y: 0.2, w: 0.5, h: 0.5 });
+    const onLeave = vi.fn();
+    const { overlay } = renderSizedOverlay(scene, onLeave);
+    fireEvent.pointerDown(overlay, { clientX: 90, clientY: 90 });
+    fireEvent.pointerUp(overlay);
+    expect(onLeave).toHaveBeenCalledTimes(1);
+    expect(scene.setCrop).not.toHaveBeenCalled();
+  });
+
+  it("a click with no crop yet still draws nothing and stays in the tool", () => {
+    const scene = makeScene();
+    const onLeave = vi.fn();
+    const { overlay } = renderSizedOverlay(scene, onLeave);
+    fireEvent.pointerDown(overlay, { clientX: 90, clientY: 90 });
+    fireEvent.pointerUp(overlay);
+    expect(onLeave).not.toHaveBeenCalled();
+  });
+
+  it("a click inside the crop does not leave", () => {
+    const scene = makeScene({ x: 0.2, y: 0.2, w: 0.5, h: 0.5 });
+    const onLeave = vi.fn();
+    const { overlay } = renderSizedOverlay(scene, onLeave);
+    fireEvent.pointerDown(overlay, { clientX: 40, clientY: 40 });
+    fireEvent.pointerUp(overlay);
+    expect(onLeave).not.toHaveBeenCalled();
+  });
+
+  it("a drag outside an existing crop draws a new one and stays in the tool", () => {
+    const scene = makeScene({ x: 0.2, y: 0.2, w: 0.3, h: 0.3 });
+    const onLeave = vi.fn();
+    const { overlay } = renderSizedOverlay(scene, onLeave);
+    fireEvent.pointerDown(overlay, { clientX: 60, clientY: 60 });
+    fireEvent.pointerMove(overlay, { clientX: 90, clientY: 90 });
+    fireEvent.pointerUp(overlay);
+    expect(scene.setCrop).toHaveBeenCalledTimes(1);
+    expect(onLeave).not.toHaveBeenCalled();
+  });
+
+  it("ending a drag of a handle or of the frame keeps the tool", () => {
+    const scene = makeScene({ x: 0.2, y: 0.2, w: 0.5, h: 0.5 });
+    const onLeave = vi.fn();
+    const { overlay } = renderSizedOverlay(scene, onLeave);
+    // The frame: press inside, move, release.
+    fireEvent.pointerDown(overlay, { clientX: 40, clientY: 40 });
+    fireEvent.pointerMove(overlay, { clientX: 45, clientY: 45 });
+    fireEvent.pointerUp(overlay);
+    // A handle: the bottom-right corner is at (70, 70).
+    fireEvent.pointerDown(overlay, { clientX: 70, clientY: 70 });
+    fireEvent.pointerMove(overlay, { clientX: 80, clientY: 80 });
+    fireEvent.pointerUp(overlay);
+    expect(scene.setCrop).toHaveBeenCalledTimes(2);
+    expect(onLeave).not.toHaveBeenCalled();
   });
 });

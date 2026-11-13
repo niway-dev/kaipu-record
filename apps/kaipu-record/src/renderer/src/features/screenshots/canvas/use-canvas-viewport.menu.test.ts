@@ -72,3 +72,48 @@ describe("useCanvasViewport Shift+1 with an overlay open", () => {
     expect(result.current.view).toEqual(IDENTITY_VIEW);
   });
 });
+
+describe("useCanvasViewport pan click", () => {
+  const press = (type: "keydown" | "keyup"): void => {
+    window.dispatchEvent(new KeyboardEvent(type, { code: "Space", key: " ", bubbles: true }));
+  };
+  const pointer = (button: number): React.PointerEvent<HTMLDivElement> =>
+    ({
+      button,
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
+      preventDefault: () => {},
+      stopPropagation: () => {},
+      currentTarget: { setPointerCapture: () => {} },
+    }) as unknown as React.PointerEvent<HTMLDivElement>;
+
+  it("reports the click that ends a pan even when Space was released first (NIW2-759)", () => {
+    const ref = { current: makeCanvas() } as RefObject<HTMLDivElement>;
+    const { result } = renderHook(() => useCanvasViewport(ref, true, true));
+
+    act(() => press("keydown"));
+    act(() => result.current.bindings.onPointerDownCapture(pointer(0)));
+    act(() => press("keyup"));
+    act(() => result.current.bindings.onPointerUp(pointer(0)));
+
+    // By the time the click arrives the pan is over and Space is up: panMode alone says idle.
+    expect(result.current.panMode).toBe("idle");
+    expect(result.current.consumePanClick()).toBe(true);
+    expect(result.current.consumePanClick()).toBe(false);
+  });
+
+  it("does not report a click when no pan happened, or after a later press", () => {
+    const ref = { current: makeCanvas() } as RefObject<HTMLDivElement>;
+    const { result } = renderHook(() => useCanvasViewport(ref, true, true));
+    expect(result.current.consumePanClick()).toBe(false);
+
+    act(() => press("keydown"));
+    act(() => result.current.bindings.onPointerDownCapture(pointer(0)));
+    act(() => result.current.bindings.onPointerUp(pointer(0)));
+    act(() => press("keyup"));
+    // The click never came; the next press must not inherit the stale pan.
+    act(() => result.current.bindings.onPointerDownCapture(pointer(0)));
+    expect(result.current.consumePanClick()).toBe(false);
+  });
+});

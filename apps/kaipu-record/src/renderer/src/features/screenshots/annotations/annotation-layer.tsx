@@ -298,6 +298,9 @@ function AnnotationLayerImpl({
   const onDoubleClick = (e: React.MouseEvent): void => {
     if (tools.tool !== "select") return;
     const hit = hitTest(scene.annotations, toNorm(e), size, canvasMode);
+    // A double-click on an annotation is the annotation's (a label reopens); only one on the
+    // bare image reaches the frame's "double-click to edit the crop" (NIW2-759).
+    if (hit) e.stopPropagation();
     if (hit?.kind !== "text") return;
     scene.select(hit.id);
     editDone.current = false;

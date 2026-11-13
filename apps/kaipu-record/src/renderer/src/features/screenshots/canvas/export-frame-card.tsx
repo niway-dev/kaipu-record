@@ -13,6 +13,7 @@ export function ExportFrameCard({
   hasFrame,
   onFit,
   onRemove,
+  onDone,
 }: {
   /** An export frame is set: only then is there something to remove. */
   hasFrame: boolean;
@@ -20,6 +21,8 @@ export function ExportFrameCard({
   onFit: () => void;
   /** Clear the frame: the export is the whole content box again. */
   onRemove: () => void;
+  /** Leave the tool, keeping the frame (NIW2-759): the stage then shows only what it exports. */
+  onDone: () => void;
 }): React.JSX.Element {
   const t = useTranslations("screenshots");
   return (
@@ -32,6 +35,14 @@ export function ExportFrameCard({
         </button>
         <button type="button" className={styles.button} disabled={!hasFrame} onClick={onRemove}>
           {t("exportFrameRemove")}
+        </button>
+        <button
+          type="button"
+          title={t("cropDoneTitle")}
+          className={`${styles.button} ${styles.done}`}
+          onClick={onDone}
+        >
+          {t("cropDone")}
         </button>
       </div>
     </div>

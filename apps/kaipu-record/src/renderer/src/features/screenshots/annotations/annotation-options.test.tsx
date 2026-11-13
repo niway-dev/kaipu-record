@@ -147,6 +147,23 @@ describe("AnnotationOptions", () => {
     expect(scene.setCrop).toHaveBeenCalledWith(undefined);
   });
 
+  it("shows a Done button next to Reset that leaves the crop tool for Select and keeps the crop", () => {
+    const scene = makeScene([], null);
+    scene.crop = { x: 0.1, y: 0.1, w: 0.5, h: 0.5 };
+    scene.setCrop = vi.fn();
+    const tools = makeTools({ tool: "crop" });
+    render(<AnnotationOptions tools={tools} scene={scene} />);
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(tools.setTool).toHaveBeenCalledWith("select");
+    expect(scene.setCrop).not.toHaveBeenCalled();
+  });
+
+  it("Done stays enabled with no crop set", () => {
+    const scene = makeScene([], null);
+    render(<AnnotationOptions tools={makeTools({ tool: "crop" })} scene={scene} />);
+    expect(screen.getByRole("button", { name: "Done" })).toBeEnabled();
+  });
+
   it("disables the reset control when there is no crop to reset", () => {
     const scene = makeScene([], null); // crop is undefined
     render(<AnnotationOptions tools={makeTools({ tool: "crop" })} scene={scene} />);

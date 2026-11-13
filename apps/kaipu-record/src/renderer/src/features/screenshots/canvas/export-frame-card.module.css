@@ -18,6 +18,7 @@
 
 .actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -44,4 +45,17 @@
 .button:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* Done: the card's one primary action, in the accent like the page's Save. */
+.done {
+  background: var(--ie-accent);
+  border-color: var(--ie-accent);
+  color: #fff; /* text on --ie-accent, as the page's .save does */
+}
+
+.done:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+  border-color: var(--accent-primary-hover);
+  color: #fff;
 }

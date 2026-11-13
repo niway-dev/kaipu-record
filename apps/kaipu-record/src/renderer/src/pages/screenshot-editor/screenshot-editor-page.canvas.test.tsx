@@ -482,7 +482,7 @@ describe("ScreenshotEditorPage — Crop is the export frame (image-canvas)", () 
     await waitFor(() => expect(canvasEl().dataset.exportFrame).toBe("false"));
   });
 
-  it("flag on: Esc clears the export frame", async () => {
+  it("flag on: Esc leaves the tool and keeps the export frame (NIW2-759)", async () => {
     imageCanvas = true;
     sizeTheCanvas();
     mount(PASTE);
@@ -490,7 +490,8 @@ describe("ScreenshotEditorPage — Crop is the export frame (image-canvas)", () 
     await drawCrop();
     await waitFor(() => expect(canvasEl().dataset.exportFrame).toBe("true"));
     fireEvent.keyDown(window, { key: "Escape" });
-    await waitFor(() => expect(canvasEl().dataset.exportFrame).toBe("false"));
+    await waitFor(() => expect(document.querySelector('[class*="overlay"]')).toBeNull());
+    expect(canvasEl().dataset.exportFrame).toBe("true");
   });
 
   it("flag on: a frame left fully outside the content box can still be reset", async () => {

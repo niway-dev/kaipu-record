@@ -290,6 +290,8 @@ export const UI_MAP = {
           "stepSelected",
           "stepSizes",
           "redacted",
+          // The crop applied (NIW2-759): the crop tool left, the stage showing only the cropped part.
+          "cropped",
         ],
       },
       canvasView: {
@@ -303,9 +305,15 @@ export const UI_MAP = {
           "justAdded",
           "beautified",
           "offContent",
+          // The export frame applied (NIW2-759): the tool left, the stage showing only the frame.
+          "exportFrameApplied",
         ],
         gatedBy: [{ flag: "image-canvas" }],
       },
+      // The "Cropped" chip (NIW2-759): above the top-left corner of a cropped image (the crop,
+      // or the export frame in canvas mode) while the crop tool is not active, shown while the
+      // pointer is over the image. Click it, double-click the image or press X to edit the crop.
+      cropChip: { states: ["shown"] },
       // The canvas chrome (NIW2-711): the box Copy and Save export, the card the export frame
       // tool opens, and the notice that says where the content went when it is off stage.
       exportBox: { states: ["labeled", "quiet"], gatedBy: [{ flag: "image-canvas" }] },

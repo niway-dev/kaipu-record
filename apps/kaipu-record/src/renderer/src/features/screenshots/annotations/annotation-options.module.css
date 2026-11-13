@@ -144,6 +144,16 @@
 
 /* ── Reset (crop) ────────────────────────────── */
 
+/* Reset (secondary) and Done (primary) side by side. */
+.cropActions {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.cropActions > button {
+  flex: 1;
+}
+
 .reset {
   height: 30px;
   padding: 0 var(--space-sm);
@@ -162,6 +172,23 @@
 .reset:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* Done: the crop panel's one primary action, in the accent like the page's Save. */
+.done {
+  height: 30px;
+  padding: 0 var(--space-sm);
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--ie-accent);
+  color: #fff; /* text on --ie-accent, as the page's .save does */
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+}
+
+.done:hover {
+  background: var(--accent-primary-hover);
 }
 
 /* ── Redaction style (canvas mode) ───────────── */

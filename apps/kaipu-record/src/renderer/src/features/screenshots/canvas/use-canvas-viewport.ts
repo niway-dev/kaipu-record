@@ -62,6 +62,12 @@ const isSpace = (e: KeyboardEvent): boolean => e.code === "Space" || e.key === "
 export interface CanvasViewport {
   view: View;
   panMode: PanMode;
+  /**
+   * True once, for the click that ends a pan. `panMode` is already `idle` by then when Space
+   * was released before the button, so a click guard cannot rely on it alone. Any later press
+   * clears it, so a pan whose click never came cannot swallow the next real click.
+   */
+  consumePanClick(): boolean;
   /** Back to zoom 100% and no pan. */
   reset(): void;
   /**
@@ -114,6 +120,7 @@ export function useCanvasViewport(
   const spaceRef = useRef(false);
   const [panning, setPanning] = useState(false);
   const drag = useRef<{ x: number; y: number } | null>(null);
+  const panEnded = useRef(false);
 
   const apply = useCallback(
     (change: (v: View, bounds: PanBounds | null) => View): void => {
@@ -184,7 +191,14 @@ export function useCanvasViewport(
   const endDrag = useCallback((): void => {
     if (!drag.current) return;
     drag.current = null;
+    panEnded.current = true;
     setPanning(false);
+  }, []);
+
+  const consumePanClick = useCallback((): boolean => {
+    const ended = panEnded.current;
+    panEnded.current = false;
+    return ended;
   }, []);
 
   const bindings: CanvasViewport["bindings"] = {
@@ -192,6 +206,7 @@ export function useCanvasViewport(
     // (Space + drag must not also draw a box).
     onPointerDownCapture(e) {
       if (!enabled) return;
+      panEnded.current = false;
       const middle = e.button === 1;
       if (!middle && !(e.button === 0 && spaceRef.current)) return;
       e.preventDefault();
@@ -268,5 +283,5 @@ export function useCanvasViewport(
   );
 
   const panMode: PanMode = panning ? "active" : spaceHeld ? "ready" : "idle";
-  return { view, panMode, reset, compensate, fit, zoomStep, bindings };
+  return { view, panMode, consumePanClick, reset, compensate, fit, zoomStep, bindings };
 }

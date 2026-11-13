@@ -69,6 +69,7 @@ export function ToolPanel({
               hasFrame={exportFrame.hasFrame}
               onFit={exportFrame.onFit}
               onRemove={exportFrame.onRemove}
+              onDone={() => tools.setTool("select")}
             />
           )}
           <AnnotationOptions

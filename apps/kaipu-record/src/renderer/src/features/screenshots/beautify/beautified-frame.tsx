@@ -19,6 +19,8 @@ export function BeautifiedFrame({
   pan,
   extents,
   crop,
+  windowChip,
+  onWindowDoubleClick,
   onImageLoad,
 }: {
   src: string;
@@ -57,6 +59,13 @@ export function BeautifiedFrame({
   extents?: Extents;
   /** Applied crop window, normalized 0–1 of the whole frame. Undefined = full frame. */
   crop?: CropRect;
+  /**
+   * The "Cropped" chip (NIW2-759): drawn above the cropped window's top-left corner, visible
+   * while the pointer is over it. Only rendered while `crop` windows the frame.
+   */
+  windowChip?: React.ReactNode;
+  /** A double-click on the cropped window (not on the chip). Only while `crop` windows the frame. */
+  onWindowDoubleClick?: () => void;
   /** Fires once the shot has loaded and laid out (export needs its displayed size). */
   onImageLoad?: () => void;
 }): React.JSX.Element {
@@ -173,30 +182,30 @@ export function BeautifiedFrame({
     const winH = crop.h * frameH;
     return (
       <div
-        className={styles.viewport}
-        style={{
-          width: `${winW}px`,
-          height: `${winH}px`,
-          transform,
-        }}
+        className={styles.windowRoot}
+        style={{ width: `${winW}px`, height: `${winH}px`, transform }}
+        onDoubleClick={onWindowDoubleClick}
       >
-        <div
-          ref={frameRef}
-          className={styles.frame}
-          style={{
-            ...frameStyle,
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: `${frameW}px`,
-            height: `${frameH}px`,
-            maxWidth: "none",
-            maxHeight: "none",
-            transform: `translate(${-crop.x * frameW}px, ${-crop.y * frameH}px)`,
-          }}
-        >
-          {inner}
+        <div className={styles.viewport} style={{ width: `${winW}px`, height: `${winH}px` }}>
+          <div
+            ref={frameRef}
+            className={styles.frame}
+            style={{
+              ...frameStyle,
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: `${frameW}px`,
+              height: `${frameH}px`,
+              maxWidth: "none",
+              maxHeight: "none",
+              transform: `translate(${-crop.x * frameW}px, ${-crop.y * frameH}px)`,
+            }}
+          >
+            {inner}
+          </div>
         </div>
+        {windowChip && <div className={styles.chipSlot}>{windowChip}</div>}
       </div>
     );
   }

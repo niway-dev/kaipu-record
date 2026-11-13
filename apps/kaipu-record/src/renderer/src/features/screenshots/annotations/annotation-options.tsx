@@ -233,15 +233,25 @@ export function AnnotationOptions({
       {isCrop && (
         <>
           <span className={styles.label}>{t("cropLabel")}</span>
-          <button
-            type="button"
-            title={t("cropResetTitle")}
-            className={styles.reset}
-            disabled={!scene.crop}
-            onClick={() => scene.setCrop(undefined)}
-          >
-            {t("reset")}
-          </button>
+          <div className={styles.cropActions}>
+            <button
+              type="button"
+              title={t("cropResetTitle")}
+              className={styles.reset}
+              disabled={!scene.crop}
+              onClick={() => scene.setCrop(undefined)}
+            >
+              {t("reset")}
+            </button>
+            <button
+              type="button"
+              title={t("cropDoneTitle")}
+              className={styles.done}
+              onClick={() => tools.setTool("select")}
+            >
+              {t("cropDone")}
+            </button>
+          </div>
         </>
       )}
 

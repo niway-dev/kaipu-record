@@ -23,9 +23,19 @@ export function useShotMetrics(
 ): ShotMetrics | null {
   const [metrics, setMetrics] = useState<ShotMetrics | null>(null);
   useEffect(() => {
-    const el = imgRef.current;
-    if (!enabled || !ready || !el) return;
+    const first = imgRef.current;
+    if (!enabled || !ready || !first) return;
+    let el: HTMLImageElement = first;
     const measure = (): void => {
+      // The frame re-renders into another tree when a crop windows it, and React then mounts
+      // a new <img>. The old one reports a 0x0 size on its way out: following it would zero
+      // the metrics (and so the export frame's crop), so look at the current one instead.
+      const current = imgRef.current;
+      if (current && current !== el) {
+        obs.unobserve(el);
+        el = current;
+        obs.observe(el);
+      }
       const next: ShotMetrics = {
         w: el.clientWidth,
         h: el.clientHeight,
@@ -43,7 +53,7 @@ export function useShotMetrics(
       );
     };
     const obs = new ResizeObserver(measure);
-    obs.observe(el);
+    obs.observe(first);
     measure();
     return () => obs.disconnect();
   }, [imgRef, enabled, ready]);

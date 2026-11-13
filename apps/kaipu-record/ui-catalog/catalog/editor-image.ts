@@ -116,6 +116,43 @@ const placeFourBadges: readonly Step[] = [
   badgeDrawn,
 ];
 
+/**
+ * A crop drawn with the crop tool (NIW2-759): the frame is committed on release, the tool stays
+ * active, and the panel offers Done. The shot is saved to the document, so the state that uses
+ * this leaves the editor (the leave guard saves) and restores the vault in `after`.
+ */
+const drawCrop = (toolName: "Crop" | "Export frame"): readonly Step[] => [
+  open(ASSETS.settingsShot),
+  tool(toolName),
+  {
+    drag: { area: "editorImage.canvas" },
+    from: { x: 0.35, y: 0.3 },
+    to: { x: 0.65, y: 0.65 },
+  },
+  {
+    waitFor: {
+      area: "editorImage.toolPanel",
+      part: { role: "button", name: "Done", exact: true },
+    },
+  },
+];
+const cropDone: Step = {
+  click: { area: "editorImage.toolPanel", part: { role: "button", name: "Done", exact: true } },
+};
+/** The cropped stage, with the chip in the page (it fades in under the pointer). */
+const chipInPage: Step = { waitFor: { area: "editorImage.cropChip" } };
+/**
+ * The chip is in the page on the first windowed render, but the stage remounts the shot's
+ * <img> then, and it measures itself again once decoded: a shot taken at once can catch the
+ * window mid-measure (a wide strip). Nothing in the page marks that end, so give it a beat.
+ */
+const windowSettled: Step = { waitMs: 400 };
+const afterCrop: readonly Step[] = [
+  { navigate: "/library" },
+  { waitFor: { area: "editorImage.canvas", state: "hidden" } },
+  { action: "restoreVault" },
+];
+
 /** Inspect states from the mocks (C1-C12): the pointer rests on the canvas and the HUD shows. */
 const hoverCanvas: Step = { hover: { area: "editorImage.canvas" } };
 const hudShown: Step = { waitFor: { area: "editorImage.inspectHud" } };
@@ -229,6 +266,28 @@ export const editorImage = catalog(
       profile: "default",
       steps: [open(ASSETS.settingsShot), tool("Crop")],
       demonstrates: ["editorImage.tools:crop", "editorImage.canvas:crop"],
+    },
+    "crop-tool-done": {
+      profile: "default",
+      how: "Open “Settings page”, pick Crop and drag a frame: the stage still shows the whole image with the frame, and the Tool tab offers Reset and the primary Done.",
+      steps: drawCrop("Crop"),
+      demonstrates: ["editorImage.toolPanel:crop"],
+      after: afterCrop,
+    },
+    "crop-applied": {
+      profile: "default",
+      how: "Open “Settings page”, pick Crop, drag a frame and press Done: the crop tool is left, the crop is kept and the stage shows only the cropped part.",
+      steps: [...drawCrop("Crop"), cropDone, chipInPage, windowSettled],
+      demonstrates: ["editorImage.canvas:cropped"],
+      after: afterCrop,
+    },
+    "crop-applied-chip": {
+      profile: "default",
+      how: "As “Crop applied”, then rest the pointer on the cropped image: the “Cropped” chip appears above its top-left corner.",
+      steps: [...drawCrop("Crop"), cropDone, chipInPage, windowSettled, hoverCanvas],
+      keepPointer: true,
+      demonstrates: ["editorImage.cropChip:shown"],
+      after: afterCrop,
     },
     toolbar: {
       profile: "image-toolbar",
@@ -500,6 +559,23 @@ export const editorImage = catalog(
         "editorImage.exportFrameCard:open",
         "editorImage.toolPanel:crop",
       ],
+    },
+    "canvas-export-frame-applied": {
+      profile: "image-canvas",
+      how: "With the flag forced on, open “Settings page”, pick the Export frame tool, drag a rectangle and press Done: the tool is left, the frame is kept and the stage shows only what it exports.",
+      steps: [...drawCrop("Export frame"), cropDone, chipInPage, windowSettled],
+      demonstrates: ["editorImage.canvasView:exportFrameApplied"],
+      gates: [{ flag: "image-canvas", side: "on" }],
+      after: afterCrop,
+    },
+    "canvas-export-frame-chip": {
+      profile: "image-canvas",
+      how: "As “Canvas export frame applied”, then rest the pointer on the framed image: the “Cropped” chip appears above the frame's top-left corner.",
+      steps: [...drawCrop("Export frame"), cropDone, chipInPage, windowSettled, hoverCanvas],
+      keepPointer: true,
+      demonstrates: ["editorImage.cropChip:shown"],
+      gates: [{ flag: "image-canvas", side: "on" }],
+      after: afterCrop,
     },
     "canvas-zoomed-out": {
       profile: "image-canvas",

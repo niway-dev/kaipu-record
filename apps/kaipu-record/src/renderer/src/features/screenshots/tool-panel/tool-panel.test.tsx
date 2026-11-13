@@ -162,6 +162,22 @@ describe("ToolPanel", () => {
       expect(screen.queryByRole("button", { name: "Reset" })).toBeNull();
     });
 
+    it("Export frame in canvas mode: Done leaves the tool for Select and keeps the frame", () => {
+      const tools = makeTools({ tool: "crop" });
+      const onRemove = vi.fn();
+      render(
+        <ToolPanel
+          tools={tools}
+          scene={makeScene()}
+          canvasMode
+          exportFrame={{ hasFrame: true, onFit: vi.fn(), onRemove }}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Done" }));
+      expect(tools.setTool).toHaveBeenCalledWith("select");
+      expect(onRemove).not.toHaveBeenCalled();
+    });
+
     it("Select text: the recognition status, Select all and Copy text", () => {
       const textTool: TextToolStatus = {
         status: "ready",

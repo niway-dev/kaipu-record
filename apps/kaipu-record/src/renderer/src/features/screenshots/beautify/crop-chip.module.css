@@ -1,0 +1,29 @@
+/*
+ * The "Cropped" chip's look. Where it sits and when it shows (over the image, while the pointer
+ * is on the image or on the chip) is the frame's: `chipSlot` in beautified-frame.module.css.
+ */
+.anchor {
+  transform-origin: bottom left;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--ie-sep);
+  border-radius: 4px;
+  background: var(--ie-card);
+  color: var(--ie-mut);
+  font-family: var(--font-family);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.1s ease;
+}
+
+.chip:hover {
+  color: var(--ie-tx);
+}

@@ -56,6 +56,32 @@
   transform-origin: top left;
 }
 
+/* The windowed frame's root: it carries the view transform and the size; the viewport inside
+ * clips, so the "Cropped" chip can sit above the corner without being clipped. */
+.windowRoot {
+  position: relative;
+  transform-origin: top left;
+}
+
+/* Where the "Cropped" chip sits: just above the window's top-left corner. Visible while the
+ * pointer is over the image; the chip is a descendant, so the hover also holds on the chip and
+ * the user can move up to it. Hidden, it takes no clicks. */
+.chipSlot {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  padding-bottom: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.windowRoot:hover .chipSlot,
+.chipSlot:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 /* Canvas mode: the view's pan moves with the pointer, so the transform must not ease.
    Padding does not ease either: the page re-pans in the same instant the extents change
    (to keep the shot still), and an eased padding would slide the shot back after that. */

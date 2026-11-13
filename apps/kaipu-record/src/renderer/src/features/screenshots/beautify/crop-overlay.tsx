@@ -43,8 +43,14 @@ const CROP_DRAW_MIN = 0.01;
 export function CropOverlay({
   scene,
   chrome,
+  onLeave,
 }: {
   scene: EditorScene;
+  /**
+   * Leaves the crop tool (NIW2-759), keeping the crop: Esc, Enter, and a click outside an
+   * existing crop. Dragging a handle or the frame never calls it.
+   */
+  onLeave?: () => void;
   /**
    * Canvas mode (mock A5): draws the export frame's chrome, undoing the view's zoom so rules,
    * handles and the label keep their screen size. `pixelSize` is the exact size an export of
@@ -56,10 +62,10 @@ export function CropOverlay({
   const ref = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const drag = useRef<Drag | null>(null);
-  // Latest scene for the window keydown handler, so it reads fresh state without
-  // re-subscribing on every render (scene is a new object each render).
-  const sceneRef = useRef(scene);
-  sceneRef.current = scene;
+  // Latest `onLeave` for the window keydown handler, so it reads fresh state without
+  // re-subscribing on every render.
+  const onLeaveRef = useRef(onLeave);
+  onLeaveRef.current = onLeave;
 
   // The rect being dragged lives here, not in the scene: the scene is touched once, on
   // release, so a crop drag is one undo entry and never re-renders the editor page. The
@@ -88,14 +94,16 @@ export function CropOverlay({
     const onKey = (e: KeyboardEvent): void => {
       // Don't hijack keys while typing in a field or a modal is open.
       if (isEditingText(e.target) || document.querySelector('[aria-modal="true"]')) return;
-      const scn = sceneRef.current;
-      // Esc resets the crop to the full frame. Abort any in-progress drag first so the
-      // trailing pointerup can't commit a second history entry.
-      if (e.key === "Escape" && (scn.crop || liveCropRef.current)) {
+      // Esc and Enter leave the tool and keep the crop (Reset and Undo remove it). Abort any
+      // in-progress drag first so the trailing pointerup can't commit another history entry.
+      // Enter on a focused control (Reset, a toolbar button) is that control's own press.
+      const onControl =
+        e.target instanceof Element && e.target.closest('button, a, [role="button"]') != null;
+      if (e.key === "Escape" || (e.key === "Enter" && !onControl)) {
         e.preventDefault();
         if (drag.current) drag.current = null;
         setLive(undefined);
-        if (scn.crop) scn.setCrop(undefined);
+        onLeaveRef.current?.();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -173,6 +181,12 @@ export function CropOverlay({
     const d = drag.current;
     drag.current = null;
     if (!d) return;
+    // A click (no drag drew anything) outside an EXISTING crop leaves the tool, keeping the
+    // crop. With no crop yet there is nothing to keep: the press just did not draw.
+    if (d.mode === "draw" && !liveCropRef.current && scene.crop != null) {
+      onLeave?.();
+      return;
+    }
     commitLive();
   };
 
