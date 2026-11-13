@@ -33,7 +33,7 @@ export function useMicrophones(enabled = true): Microphone[] {
       // Every label blank means the OS has not granted the microphone yet (a granted
       // device keeps its name without a live stream). Opening one briefly is the only
       // way to ask, so it stays — as a fallback, not as the default path.
-      if (inputs.length > 0 && inputs.every((device) => device.label === "")) {
+      if (!cancelled && inputs.length > 0 && inputs.every((device) => device.label === "")) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           stream.getTracks().forEach((track) => track.stop());
