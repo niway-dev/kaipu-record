@@ -5,7 +5,7 @@ description: One toolbar, docked to the bottom of the display's work area, repla
 
 # Capture widget: one toolbar docked to the work area
 
-Status: 🟡 In progress. Tracker: [NIW2-751](https://linear.app/niway/issue/NIW2-751/capture-widget-one-toolbar-docked-to-the-bottom-of-the-work-area-for).
+Status: 🟢 Ready to validate. Tracker: [NIW2-751](https://linear.app/niway/issue/NIW2-751/capture-widget-one-toolbar-docked-to-the-bottom-of-the-work-area-for).
 Decision record: [ADR 0056](/architecture/decisions/0056-the-capture-widget-docks-to-the-work-area-not-to-the-selection/).
 The owner chose direction A ("Dock fijo") of the commissioned mock on 2026-11-13.
 
@@ -53,7 +53,7 @@ shows no live entry in the widget.
   the image or video.
 - The widget appears on the display that holds the selection. In Screen mode every display shows
   its own widget, as every display showed its own card before.
-- The widget is at most 1120 px wide and shrinks to fit a 1280 px work area (32 px margin).
+- The widget is at most 1120 px wide. When the work area is narrower than 1152 px, it shrinks to keep a 16 px margin on each side.
 
 ## Layout
 
