@@ -110,6 +110,67 @@ describe("useWidgetDevices", () => {
     });
   });
 
+  describe("the camera's first read racing a change", () => {
+    afterEach(cleanup);
+
+    function pendingCameraRead() {
+      // Only the mount read is held back: `selectCamera` reads settings too, and a pick's own
+      // read-then-write must not stand in for the first reply.
+      let resolveRead: (settings: unknown) => void = () => {};
+      let reads = 0;
+      let broadcast: (settings: unknown) => void = () => {};
+      const api = {
+        getRecordingSettings: vi.fn(() => new Promise(() => {})),
+        getSettings: vi.fn(() =>
+          reads++ === 0 ? new Promise((resolve) => (resolveRead = resolve)) : new Promise(() => {}),
+        ),
+        updateSettings: vi.fn(),
+        updateRecordingSettings: vi.fn(),
+        onRecordingSettingsChanged: vi.fn(() => () => {}),
+        onSettingsChanged: vi.fn((callback: (settings: unknown) => void) => {
+          broadcast = callback;
+          return () => {};
+        }),
+      } as unknown as Parameters<typeof useWidgetDevices>[0];
+      return {
+        api,
+        settle: (deviceId: string) => resolveRead({ cameraBubble: { deviceId } }),
+        broadcast: (deviceId: string) => broadcast({ cameraBubble: { deviceId } }),
+      };
+    }
+
+    it("keeps a camera chosen before the first read answered", async () => {
+      const bridge = pendingCameraRead();
+      const { result } = renderHook(() => useWidgetDevices(bridge.api, true));
+
+      act(() => result.current.selectCamera("cam-2"));
+      expect(result.current.cameraId).toBe("cam-2");
+
+      // The reply was computed before the choice: it must not undo it.
+      await act(async () => bridge.settle("cam-1"));
+      expect(result.current.cameraId).toBe("cam-2");
+    });
+
+    it("keeps a broadcast that landed before the first read answered", async () => {
+      const bridge = pendingCameraRead();
+      const { result } = renderHook(() => useWidgetDevices(bridge.api, true));
+
+      act(() => bridge.broadcast("cam-2"));
+      await act(async () => bridge.settle("cam-1"));
+
+      expect(result.current.cameraId).toBe("cam-2");
+    });
+
+    it("applies the first read when nothing changed meanwhile", async () => {
+      const bridge = pendingCameraRead();
+      const { result } = renderHook(() => useWidgetDevices(bridge.api, true));
+
+      await act(async () => bridge.settle("cam-1"));
+
+      expect(result.current.cameraId).toBe("cam-1");
+    });
+  });
+
   describe("the camera across displays", () => {
     afterEach(cleanup);
     it("follows a camera chosen in another overlay window", async () => {

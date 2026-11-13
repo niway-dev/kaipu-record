@@ -43,6 +43,8 @@ export function useWidgetDevices(
   // Counts every microphone change after mount (a choice or a broadcast), so a late first
   // read can tell it is older than what the window already shows.
   const microphoneRevision = useRef(0);
+  // The same for the camera: a pick here or an app-settings broadcast outdates the first read.
+  const cameraRevision = useRef(0);
 
   useEffect(() => {
     if (!enabled) return;
@@ -56,10 +58,13 @@ export function useWidgetDevices(
         }
       })
       .catch(() => {});
+    const cameraRevisionAtRequest = cameraRevision.current;
     api
       .getSettings?.()
       .then((app) => {
-        if (live) setCameraId(app.cameraBubble?.deviceId ?? null);
+        if (live && cameraRevision.current === cameraRevisionAtRequest) {
+          setCameraId(app.cameraBubble?.deviceId ?? null);
+        }
       })
       .catch(() => {});
     const unsubscribe = api.onRecordingSettingsChanged((current) => {
@@ -68,9 +73,10 @@ export function useWidgetDevices(
     });
     // One overlay window per display mounts this hook: a camera picked in another window
     // arrives as an app-settings broadcast, and this window's widget must follow it.
-    const unsubscribeSettings = api.onSettingsChanged?.((app) =>
-      setCameraId(app.cameraBubble?.deviceId ?? null),
-    );
+    const unsubscribeSettings = api.onSettingsChanged?.((app) => {
+      cameraRevision.current += 1;
+      setCameraId(app.cameraBubble?.deviceId ?? null);
+    });
     return () => {
       live = false;
       unsubscribe();
@@ -91,6 +97,7 @@ export function useWidgetDevices(
 
   const selectCamera = useCallback(
     (id: string): void => {
+      cameraRevision.current += 1;
       setCameraId(id);
       // The whole bubble is written back, as the camera settings do: a partial would drop it.
       void api
