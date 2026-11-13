@@ -2425,6 +2425,71 @@ describe("CaptureOverlay — the countdown runs on the widget (ADR 0056)", () =>
     );
   });
 
+  it("a held Record is dropped when the mode changes before the settings read finishes", async () => {
+    const fake = fakeApi({}, SCREEN, { "42": area }, { recordingCountdownSeconds: 5 });
+    const saved = await fake.api.getSettings();
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fake.api.getSettings.mockImplementation(async () => {
+      await gate;
+      return saved;
+    });
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("screen", { intent: "record" })}
+        api={fake.api}
+        platform="mac"
+      />,
+    );
+    await screen.findByTestId("screen-card");
+    vi.useFakeTimers();
+
+    press("Enter"); // held: the length is unknown
+    press("2"); // Window: the held Screen answer no longer matches what is on screen
+    expect(fake.setMode).toHaveBeenCalledExactlyOnceWith("window");
+
+    release();
+    await flush();
+    await tick(6000);
+    expect(fake.setCounting).not.toHaveBeenCalled();
+    expect(fake.answer).not.toHaveBeenCalled();
+  });
+
+  it("a held Record is dropped when main's broadcast changes the mode before the read finishes", async () => {
+    const fake = fakeApi({}, SCREEN, { "42": area }, { recordingCountdownSeconds: 5 });
+    const saved = await fake.api.getSettings();
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    fake.api.getSettings.mockImplementation(async () => {
+      await gate;
+      return saved;
+    });
+    render(
+      <CaptureOverlay
+        enabledModes={CAPTURE_MODES}
+        query={query("screen", { intent: "record" })}
+        api={fake.api}
+        platform="mac"
+      />,
+    );
+    await screen.findByTestId("screen-card");
+    vi.useFakeTimers();
+
+    press("Enter"); // held
+    fake.pushState({ mode: "window" }); // another overlay switched the mode
+
+    release();
+    await flush();
+    await tick(6000);
+    expect(fake.setCounting).not.toHaveBeenCalled();
+    expect(fake.answer).not.toHaveBeenCalled();
+  });
+
   it("a Record pressed while the settings read fails counts the fallback 3 s", async () => {
     const fake = fakeApi({}, SCREEN, { "42": area });
     let fail: (error: Error) => void = () => {};

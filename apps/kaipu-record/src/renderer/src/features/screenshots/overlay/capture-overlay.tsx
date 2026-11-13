@@ -162,6 +162,8 @@ export function CaptureOverlay({
       const requested = requestedMode.current;
       if (requested === null || incoming.mode === requested) {
         requestedMode.current = null;
+        // Another overlay changed the mode: a held Record answers for the old one.
+        if (incoming.mode !== modeRef.current) heldRequest.current = null;
         setState(incoming);
         return;
       }
@@ -211,6 +213,9 @@ export function CaptureOverlay({
       if (answered.current || persisting.current || next === modeRef.current) return;
       modeRef.current = next;
       requestedMode.current = next;
+      // A Record held for the settings read answers for the old mode; replayed, it would
+      // record what is no longer on screen.
+      heldRequest.current = null;
       setState((current) => ({
         ...current,
         mode: next,
