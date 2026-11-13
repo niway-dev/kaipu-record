@@ -2228,9 +2228,12 @@ describe("CaptureOverlay — a box under the minimum", () => {
 describe("CaptureOverlay — the countdown runs on the widget (ADR 0056)", () => {
   const area = { x: 100, y: 120, width: 640, height: 360 };
 
-  /** A recording overlay whose settings say `seconds`; fake timers are on once it is ready. */
+  /**
+   * A recording overlay whose settings say `seconds`, or carry no countdown at all for `null`
+   * (not `undefined`: a default parameter would swallow it). Fake timers are on once it is ready.
+   */
   async function renderCounting(
-    seconds: number | undefined = 3,
+    seconds: number | null = 3,
     ui: "frame" | "screen" = "frame",
     overrides: Partial<OverlayQuery> = {},
   ) {
@@ -2238,7 +2241,8 @@ describe("CaptureOverlay — the countdown runs on the widget (ADR 0056)", () =>
       {},
       ui === "frame" ? FRAME_ON_42 : SCREEN,
       { "42": area },
-      { recordingCountdownSeconds: seconds as 0 | 3 | 5 },
+      // `fakeApi` seeds 0 before `extra`, so the absent case sets the key to undefined.
+      { recordingCountdownSeconds: seconds === null ? undefined : (seconds as 0 | 3 | 5) },
     );
     render(
       <CaptureOverlay
@@ -2372,7 +2376,7 @@ describe("CaptureOverlay — the countdown runs on the widget (ADR 0056)", () =>
   });
 
   it("counts 3 s when the settings carry no countdown", async () => {
-    const { setCounting, answer } = await renderCounting(undefined);
+    const { setCounting, answer } = await renderCounting(null);
     press("Enter");
     expect(setCounting).toHaveBeenCalledExactlyOnceWith(true);
     expect(disc()).toHaveTextContent("3");
