@@ -97,17 +97,6 @@ export function useRecordingSetup(): RecordingSetup {
   // start callback never goes stale; the take reads it when it is requested, so a later change
   // (a switch in another window, an edit) never reaches a take already running.
   const qualityRef = useRef<RecordingQuality>(DEFAULT_QUALITY);
-  useEffect(() => {
-    // A broadcast is newer than the initial read, which may resolve after it.
-    let heardChange = false;
-    void window.electronAPI.getSettings().then((appSettings) => {
-      if (!heardChange) qualityRef.current = sanitizeQuality(appSettings.recordingQuality);
-    });
-    return window.electronAPI.onSettingsChanged((appSettings) => {
-      heardChange = true;
-      qualityRef.current = sanitizeQuality(appSettings.recordingQuality);
-    });
-  }, []);
 
   // The audio settings (mic level, noise reduction, system volume, ducking) are persisted
   // app settings too. Read on mount, then kept current through `onSettingsChanged`, so a
@@ -119,22 +108,43 @@ export function useRecordingSetup(): RecordingSetup {
   const [preferredMicrophone, setPreferredMicrophone] = useState<
     AppSettings["microphone"] | undefined
   >(undefined);
+  // Until main's app settings have arrived (the first read or a broadcast) the refs above hold
+  // defaults. A start asked before that waits here, so a take never records with default
+  // quality and audio: the countdown gave the read time to land, a start without one does not.
+  const appSettingsReadyRef = useRef(false);
+  const startsWaitingRef = useRef<Array<() => void>>([]);
   useEffect(() => {
+    const ready = (): void => {
+      appSettingsReadyRef.current = true;
+      const waiting = startsWaitingRef.current.splice(0);
+      for (const start of waiting) start();
+    };
+    const apply = (appSettings: AppSettings): void => {
+      qualityRef.current = sanitizeQuality(appSettings.recordingQuality);
+      audioRef.current = sanitizeAudioSettings(appSettings.audio);
+      cameraBubbleRef.current = sanitizeCameraBubble(appSettings.cameraBubble);
+      setPreferredMicrophone(appSettings.microphone ?? null);
+    };
     // A broadcast is newer than the initial read, which may resolve after it: once one has
     // arrived, the read must not overwrite it.
     let heardChange = false;
-    void window.electronAPI.getSettings().then((appSettings) => {
-      if (heardChange) return;
-      audioRef.current = sanitizeAudioSettings(appSettings.audio);
-      cameraBubbleRef.current = sanitizeCameraBubble(appSettings.cameraBubble);
-      setPreferredMicrophone(appSettings.microphone ?? null);
-    });
-    return window.electronAPI.onSettingsChanged((appSettings) => {
+    void window.electronAPI.getSettings().then(
+      (appSettings) => {
+        if (!heardChange) apply(appSettings);
+        ready();
+      },
+      // A failed read leaves the defaults, as before; the start must not wait forever.
+      ready,
+    );
+    const unsubscribe = window.electronAPI.onSettingsChanged((appSettings) => {
       heardChange = true;
-      audioRef.current = sanitizeAudioSettings(appSettings.audio);
-      cameraBubbleRef.current = sanitizeCameraBubble(appSettings.cameraBubble);
-      setPreferredMicrophone(appSettings.microphone ?? null);
+      apply(appSettings);
+      ready();
     });
+    return () => {
+      unsubscribe();
+      startsWaitingRef.current = [];
+    };
   }, []);
 
   // Watermark decision (free → on, paid/forced → off) — the single seam. Kept in a
@@ -203,9 +213,13 @@ export function useRecordingSetup(): RecordingSetup {
         };
       };
       // Only an explicit skip adds the second argument; every other start is called as before.
-      if (options?.skipCountdown === true)
-        recorder.requestStart(resolveInput, { skipCountdown: true });
-      else recorder.requestStart(resolveInput);
+      const request = (): void => {
+        if (options?.skipCountdown === true)
+          recorder.requestStart(resolveInput, { skipCountdown: true });
+        else recorder.requestStart(resolveInput);
+      };
+      if (appSettingsReadyRef.current) request();
+      else startsWaitingRef.current.push(() => sourceRef.current && request());
     },
     [recorder],
   );

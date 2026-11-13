@@ -184,9 +184,10 @@ describe("useRecordingSetup", () => {
     expect(recorderResume).toHaveBeenCalledTimes(1);
   });
 
-  it("startRecording asks the recorder to start, resolving input from the shared source/mic", () => {
+  it("startRecording asks the recorder to start, resolving input from the shared source/mic", async () => {
     mockSettings = SETTINGS({ selectedSource: SCREEN });
     const { result } = renderHook(() => useRecordingSetup());
+    await flushSettings();
 
     act(() => result.current.startRecording());
 
@@ -197,9 +198,10 @@ describe("useRecordingSetup", () => {
     );
   });
 
-  it("startRecording({ skipCountdown }) forwards the option; a plain start passes none", () => {
+  it("startRecording({ skipCountdown }) forwards the option; a plain start passes none", async () => {
     mockSettings = SETTINGS({ selectedSource: SCREEN });
     const { result } = renderHook(() => useRecordingSetup());
+    await flushSettings();
 
     act(() => result.current.startRecording({ skipCountdown: true }));
     expect(recorderRequestStart).toHaveBeenLastCalledWith(expect.any(Function), {
@@ -209,6 +211,44 @@ describe("useRecordingSetup", () => {
     recorderRequestStart.mockClear();
     act(() => result.current.startRecording());
     expect(recorderRequestStart.mock.calls[0]).toHaveLength(1);
+  });
+
+  it("a start before main's settings arrive waits for them, so the take uses the saved quality and audio", async () => {
+    const original = { ...window.electronAPI };
+    const stored = await window.electronAPI.getSettings();
+    const reads: Array<(settings: AppSettings) => void> = [];
+    window.electronAPI.getSettings = () =>
+      new Promise<AppSettings>((resolve) => reads.push(resolve));
+    try {
+      mockSettings = SETTINGS({ selectedSource: SCREEN });
+      const { result } = renderHook(() => useRecordingSetup());
+
+      // The overlay already ran the countdown, so the start is immediate and the read is pending.
+      act(() => result.current.startRecording({ skipCountdown: true }));
+      expect(recorderRequestStart).not.toHaveBeenCalled();
+
+      await act(async () => {
+        for (const read of reads) {
+          read({
+            ...stored,
+            recordingQuality: { resolution: 720, fps: 24, bitrate: "light" } as never,
+            audio: { ...DEFAULT_AUDIO_SETTINGS, micLevel: 90 },
+          });
+        }
+      });
+
+      expect(recorderRequestStart).toHaveBeenCalledOnce();
+      expect(recorderRequestStart).toHaveBeenCalledWith(expect.any(Function), {
+        skipCountdown: true,
+      });
+      const resolveInput = recorderRequestStart.mock.calls[0][0] as () => {
+        frameRate: number;
+        audio: { micLevel: number };
+      };
+      expect(resolveInput()).toMatchObject({ frameRate: 24, audio: { micLevel: 90 } });
+    } finally {
+      Object.assign(window.electronAPI, original);
+    }
   });
 
   it("a slow initial settings read never overwrites a newer audio change", async () => {
@@ -350,7 +390,7 @@ describe("useRecordingSetup", () => {
     expect(resolveOff().webcam).toBeNull();
   });
 
-  it("startRecording carries the shared recording area into the start input", () => {
+  it("startRecording carries the shared recording area into the start input", async () => {
     const area = {
       displayId: 1,
       rect: { x: 100, y: 50, width: 640, height: 360 },
@@ -358,6 +398,7 @@ describe("useRecordingSetup", () => {
     };
     mockSettings = SETTINGS({ selectedSource: SCREEN, area });
     const { result } = renderHook(() => useRecordingSetup());
+    await flushSettings();
 
     act(() => result.current.startRecording());
 
