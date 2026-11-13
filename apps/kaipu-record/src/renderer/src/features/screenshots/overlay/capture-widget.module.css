@@ -5,10 +5,26 @@
  */
 
 .widget {
-  --widget-surface: color-mix(in srgb, var(--bg-sidebar) 97%, transparent);
-  --widget-line: color-mix(in srgb, var(--text-primary) 20%, transparent);
-  --widget-fill: color-mix(in srgb, var(--text-primary) 5%, transparent);
-  --widget-fill-hover: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  /* Literals, not theme tokens: the overlay window runs `applyTheme`, and the light theme would
+     turn these tokens light under the white selected-state text. The dark token values, by hand
+     (the capture toast does the same). */
+  /* --bg-sidebar #0b0b0d */
+  --widget-surface: color-mix(in srgb, #0b0b0d 97%, transparent);
+  /* --text-primary #e8e8ed, at 20 / 5 / 10 % */
+  --widget-line: color-mix(in srgb, #e8e8ed 20%, transparent);
+  --widget-fill: color-mix(in srgb, #e8e8ed 5%, transparent);
+  --widget-fill-hover: color-mix(in srgb, #e8e8ed 10%, transparent);
+  /* --text-primary, --text-2, --text-3, --text-4 */
+  --widget-text: #e8e8ed;
+  --widget-text-2: #c8c8d0;
+  --widget-text-3: #a1a1aa;
+  --widget-text-4: #92929c;
+  /* --bg-active, --border */
+  --widget-active: #202024;
+  --widget-divider: rgba(255, 255, 255, 0.08);
+  /* --accent-primary-soft and --accent-primary-ring, dark values (the light theme lowers them) */
+  --widget-accent-soft: rgba(246, 5, 92, 0.14);
+  --widget-accent-ring: rgba(246, 5, 92, 0.5);
 
   position: absolute;
   box-sizing: border-box;
@@ -22,7 +38,7 @@
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.65),
     0 24px 50px -20px rgba(0, 0, 0, 0.8);
-  color: var(--text-primary);
+  color: var(--widget-text);
   font-family: var(--font-family);
   font-size: 13px;
   cursor: default;
@@ -47,7 +63,7 @@
   font-size: 9px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--text-4);
+  color: var(--widget-text-4);
 }
 
 .segments {
@@ -70,7 +86,7 @@
   border: 1px solid transparent;
   border-radius: 8px;
   background: var(--widget-fill);
-  color: var(--text-primary);
+  color: var(--widget-text);
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -93,7 +109,7 @@
 /* One "selected" style everywhere: soft pink fill, pink border, white text. */
 .segment[aria-pressed="true"],
 .chip[aria-pressed="true"] {
-  background: var(--accent-primary-soft);
+  background: var(--widget-accent-soft);
   border-color: var(--accent-primary);
   color: #fff;
 }
@@ -115,7 +131,7 @@
   font-size: 8px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--text-4);
+  color: var(--widget-text-4);
 }
 
 .readout {
@@ -134,7 +150,7 @@
 
 .unit {
   margin-left: 4px;
-  color: var(--text-4);
+  color: var(--widget-text-4);
   font-size: 9px;
 }
 
@@ -148,7 +164,7 @@
   border: 1px solid var(--widget-line);
   border-radius: 4px;
   background: var(--widget-fill);
-  color: var(--text-2);
+  color: var(--widget-text-2);
   font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 500;
@@ -177,12 +193,12 @@
 
 .input[data-on="true"] {
   border-color: var(--accent-primary);
-  background: var(--accent-primary-soft);
+  background: var(--widget-accent-soft);
 }
 
 /* The halo after a key toggle, for as long as the toast shows. */
 .input[data-halo="true"] {
-  box-shadow: 0 0 0 4px var(--accent-primary-ring);
+  box-shadow: 0 0 0 4px var(--widget-accent-ring);
 }
 
 .inputName {
@@ -211,7 +227,7 @@ span.inputName {
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-3);
+  color: var(--widget-text-3);
 }
 
 .input[data-on="true"] .stateWord {
@@ -223,7 +239,7 @@ span.inputName {
   width: 26px;
   height: 15px;
   border-radius: 999px;
-  background: var(--bg-active);
+  background: var(--widget-active);
   transition: background var(--transition);
 }
 
@@ -235,7 +251,7 @@ span.inputName {
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  background: var(--text-3);
+  background: var(--widget-text-3);
   transition:
     transform var(--transition),
     background var(--transition);
@@ -281,7 +297,7 @@ span.inputName {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--widget-text);
   font: inherit;
   font-size: 12px;
   text-align: left;
@@ -299,12 +315,12 @@ span.inputName {
 }
 
 .menuItem[aria-checked="true"] {
-  background: var(--accent-primary-soft);
+  background: var(--widget-accent-soft);
   color: #fff;
 }
 
 .menuEmpty {
-  color: var(--text-3);
+  color: var(--widget-text-3);
 }
 
 /* ── Row 2: actions ───────────────────────────────────────────── */
@@ -339,7 +355,7 @@ span.inputName {
   border: 1px solid var(--accent-primary);
   border-radius: 10px;
   background: var(--accent-primary);
-  box-shadow: 0 10px 24px -10px var(--accent-primary-ring);
+  box-shadow: 0 10px 24px -10px var(--widget-accent-ring);
   color: #fff;
   font: inherit;
   font-size: 15px;
@@ -385,8 +401,8 @@ span.inputName {
   justify-content: center;
   gap: 22px;
   padding-top: 8px;
-  border-top: 1px solid var(--border);
-  color: var(--text-3);
+  border-top: 1px solid var(--widget-divider);
+  color: var(--widget-text-3);
   font-size: 11.5px;
 }
 
@@ -401,7 +417,7 @@ span.inputName {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--text-2);
+  color: var(--widget-text-2);
   font: inherit;
   font-size: 11.5px;
   text-decoration: underline;
@@ -420,7 +436,7 @@ span.inputName {
   border: 1px solid var(--widget-line);
   border-radius: 999px;
   background: var(--widget-surface);
-  color: var(--text-primary);
+  color: var(--widget-text);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -457,7 +473,8 @@ span.inputName {
   width: 120px;
   height: 120px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--bg-app) 82%, transparent);
+  /* --bg-app #060607. The disc sits outside .widget, so it cannot read the --widget-* values. */
+  background: color-mix(in srgb, #060607 82%, transparent);
   border: 2px solid var(--accent-primary);
   color: #fff;
   font-size: 64px;
