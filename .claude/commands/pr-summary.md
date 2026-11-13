@@ -1,6 +1,6 @@
 ---
 description: Generate a structured pull request description from the current branch changes
-allowed-tools: Read, Write, Bash(git log:*), Bash(git diff:*), Bash(git branch:*), Bash(git remote:*), Bash(git show:*), Bash(date:*)
+allowed-tools: Read, Write, Bash(git log:*), Bash(git diff:*), Bash(git branch:*), Bash(git remote:*), Bash(git show:*), Bash(date:*), Bash(python3:*)
 argument-hint: [ticket-url]
 ---
 
@@ -26,6 +26,7 @@ Read each changed file to understand what was modified and why.
 
 ## Step 3: Write the description from the template
 
-Fill `.github/pull_request_template.md` in its order, keeping its headings. Put what the reviewer should
-decide, each anchored to `file:line`, in `## What`, and anything only the owner can do in `## Needs you`.
+Fill `.github/pull_request_template.md` in its order, keeping its headings. Put what changed and the
+result someone can observe in `## What` (no file list), where to look in the Changes table's
+`Where to look` column, and anything only the owner can do in `## Needs you`.
 Then run `pr_body.py check --pr <n>` (from cs-tack's `cs-write-handoff`) and fix until it passes.
