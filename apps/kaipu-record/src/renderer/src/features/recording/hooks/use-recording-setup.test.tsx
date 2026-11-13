@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { StrictMode, useEffect, useRef } from "react";
 import { act, renderHook } from "@testing-library/react";
 import type { AppSettings, RecordingSettings } from "@shared/types";
 import { DEFAULT_AUDIO_SETTINGS } from "@shared/audio-settings";
@@ -249,6 +250,67 @@ describe("useRecordingSetup", () => {
     } finally {
       Object.assign(window.electronAPI, original);
     }
+  });
+
+  describe("a start queued before main's settings arrive", () => {
+    function pendingReads() {
+      const original = { ...window.electronAPI };
+      const reads: Array<(settings: AppSettings) => void> = [];
+      window.electronAPI.getSettings = () =>
+        new Promise<AppSettings>((resolve) => reads.push(resolve));
+      return {
+        resolveAll: () =>
+          act(async () => {
+            const stored = await original.getSettings();
+            for (const read of reads) read(stored);
+          }),
+        restore: () => Object.assign(window.electronAPI, original),
+      };
+    }
+
+    it("survives the StrictMode effect replay and is requested exactly once", async () => {
+      const { resolveAll, restore } = pendingReads();
+      try {
+        mockSettings = SETTINGS({ selectedSource: SCREEN });
+        // Like the Record page's auto-start: an effect that asks once (a ref guards it), in the
+        // first pass, so the replay cannot ask again. The queue has to outlive the settings
+        // effect's cleanup.
+        renderHook(
+          () => {
+            const { startRecording } = useRecordingSetup();
+            const askedRef = useRef(false);
+            useEffect(() => {
+              if (askedRef.current) return;
+              askedRef.current = true;
+              startRecording({ skipCountdown: true });
+            }, [startRecording]);
+          },
+          { wrapper: StrictMode },
+        );
+        expect(recorderRequestStart).not.toHaveBeenCalled();
+        await resolveAll();
+        expect(recorderRequestStart).toHaveBeenCalledOnce();
+        expect(recorderRequestStart).toHaveBeenCalledWith(expect.any(Function), {
+          skipCountdown: true,
+        });
+      } finally {
+        restore();
+      }
+    });
+
+    it("does not fire after the hook really unmounted", async () => {
+      const { resolveAll, restore } = pendingReads();
+      try {
+        mockSettings = SETTINGS({ selectedSource: SCREEN });
+        const { result, unmount } = renderHook(() => useRecordingSetup());
+        act(() => result.current.startRecording());
+        unmount();
+        await resolveAll();
+        expect(recorderRequestStart).not.toHaveBeenCalled();
+      } finally {
+        restore();
+      }
+    });
   });
 
   it("a slow initial settings read never overwrites a newer audio change", async () => {

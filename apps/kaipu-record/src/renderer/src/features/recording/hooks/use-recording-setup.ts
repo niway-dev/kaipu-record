@@ -113,6 +113,16 @@ export function useRecordingSetup(): RecordingSetup {
   // quality and audio: the countdown gave the read time to land, a start without one does not.
   const appSettingsReadyRef = useRef(false);
   const startsWaitingRef = useRef<Array<() => void>>([]);
+  // The queue must outlive the settings effect's cleanup: under StrictMode (dev) effects mount,
+  // clean up and mount again, and the Record page asks only once. A queued start is dropped only
+  // when the hook really unmounted; true -> false -> true is replay-safe.
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
   useEffect(() => {
     const ready = (): void => {
       appSettingsReadyRef.current = true;
@@ -141,10 +151,7 @@ export function useRecordingSetup(): RecordingSetup {
       apply(appSettings);
       ready();
     });
-    return () => {
-      unsubscribe();
-      startsWaitingRef.current = [];
-    };
+    return unsubscribe;
   }, []);
 
   // Watermark decision (free → on, paid/forced → off) — the single seam. Kept in a
@@ -219,7 +226,11 @@ export function useRecordingSetup(): RecordingSetup {
         else recorder.requestStart(resolveInput);
       };
       if (appSettingsReadyRef.current) request();
-      else startsWaitingRef.current.push(() => sourceRef.current && request());
+      else {
+        startsWaitingRef.current.push(() => {
+          if (mountedRef.current && sourceRef.current) request();
+        });
+      }
     },
     [recorder],
   );
