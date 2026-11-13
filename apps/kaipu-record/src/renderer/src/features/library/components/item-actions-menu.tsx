@@ -11,26 +11,22 @@ import { closeItemPage } from "@renderer/features/workspaces/prepare-switch";
 import styles from "./item-actions-menu.module.css";
 
 /**
- * The "•••" menu of the item page (NIW2-669): Copy image, Copy path, Move to workspace…,
+ * The "•••" menu of the item page (NIW2-669): Copy path, Move to workspace…,
  * Remove local download, and Delete…. It floats over the content (absolute), so opening it
  * never moves the layout. Escape and a click outside close it; the arrow keys walk the items.
  */
 export function ItemActionsMenu({
   assetId,
-  isScreenshot,
   canRemoveLocalCopy,
   movable,
-  onCopyImage,
   onCopyPath,
   onRemoveLocalCopy,
   onDelete,
 }: {
   assetId: string;
-  isScreenshot: boolean;
   canRemoveLocalCopy: boolean;
   /** The item can be moved (see `notMovableReason`); a broken record is not offered. */
   movable: boolean;
-  onCopyImage(): void;
   onCopyPath(): void;
   onRemoveLocalCopy(): void;
   onDelete(): void;
@@ -137,17 +133,6 @@ export function ItemActionsMenu({
         >
           {view === "menu" ? (
             <>
-              {isScreenshot && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={styles.item}
-                  onClick={() => run(onCopyImage)}
-                >
-                  <Copy size={14} strokeWidth={1.8} />
-                  {t("copyImage")}
-                </button>
-              )}
               <button
                 type="button"
                 role="menuitem"

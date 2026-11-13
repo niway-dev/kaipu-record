@@ -108,7 +108,10 @@ export function LibraryDetailPage(): React.JSX.Element {
   // A recording can momentarily lag the navigation into its own detail page right
   // after it finalizes; recover (re-list once, then fall back to the Library +
   // log) instead of dead-ending on "File not found".
-  const navState = location.state as { fromRecording?: boolean; order?: string[] } | null;
+  const navState = location.state as {
+    fromRecording?: boolean;
+    order?: string[];
+  } | null;
   const fromRecording = navState?.fromRecording;
   const { recovering } = useMissingRecordingRecovery({
     id: assetId,
@@ -222,7 +225,10 @@ export function LibraryDetailPage(): React.JSX.Element {
   // item starts over.
   // The pick is stored with the item it was made on, so another item ignores it at once
   // (an effect that cleared it would paint the old tab for one frame).
-  const [picked, setPicked] = useState<{ assetId: string | undefined; tab: PanelTab } | null>(null);
+  const [picked, setPicked] = useState<{
+    assetId: string | undefined;
+    tab: PanelTab;
+  } | null>(null);
   const pickedTab = picked && picked.assetId === assetId ? picked.tab : null;
   const setPickedTab = (next: PanelTab): void => setPicked({ assetId, tab: next });
   const tabRefs = useRef<Partial<Record<PanelTab, HTMLButtonElement | null>>>({});
@@ -326,16 +332,19 @@ export function LibraryDetailPage(): React.JSX.Element {
 
   // Copy a saved screenshot to the clipboard — main reads the vault file by id
   // (fetch on the kaipu-media:// scheme doesn't return bytes in the renderer).
-  const copyScreenshot = async (): Promise<void> => {
-    if (!localId) return;
+  // Resolves true when the image reached the clipboard (the preview's copy button marks it).
+  const copyScreenshot = async (): Promise<boolean> => {
+    if (!localId) return false;
     try {
       await window.electronAPI.copyScreenshotById(localId);
       showToast({ message: t("copyImageDone") });
+      return true;
     } catch (error) {
       reportError(t("copyError"), error, {
         context: { id: localId, phase: "copy-by-id" },
         retry: () => void copyScreenshot(),
       });
+      return false;
     }
   };
 
@@ -404,7 +413,10 @@ export function LibraryDetailPage(): React.JSX.Element {
           {position >= 0 && (
             <div className={styles.pager}>
               <span className={styles.counter} data-testid="position-counter">
-                {t("positionOf", { position: position + 1, total: order.length })}
+                {t("positionOf", {
+                  position: position + 1,
+                  total: order.length,
+                })}
               </span>
               <button
                 type="button"
@@ -518,10 +530,8 @@ export function LibraryDetailPage(): React.JSX.Element {
                 <ItemActionsMenu
                   key={video.assetId}
                   assetId={video.assetId}
-                  isScreenshot={isScreenshot}
                   canRemoveLocalCopy={canRemoveLocalCopy}
                   movable={notMovableReason(video) === null}
-                  onCopyImage={() => void copyScreenshot()}
                   onCopyPath={() => void copyPath()}
                   onRemoveLocalCopy={() => void doRemoveLocalCopy()}
                   onDelete={() => setConfirmingDelete(true)}
@@ -651,6 +661,7 @@ export function LibraryDetailPage(): React.JSX.Element {
               <ScreenshotViewer
                 key={video.assetId}
                 src={video.thumbnailUrl}
+                onCopy={localId ? copyScreenshot : undefined}
                 onNaturalSize={(width, height) =>
                   setShotSize({ assetId: video.assetId, width, height })
                 }
@@ -812,7 +823,9 @@ function HeavyToSendText({
           ? t("heavyBannerBodyNoEstimate")
           : githubFit(lightEstimateBytes) === "fits"
             ? t("heavyBannerBody", { estimate: formatMB(lightEstimateBytes) })
-            : t("heavyBannerBodyNoGithub", { estimate: formatMB(lightEstimateBytes) })}
+            : t("heavyBannerBodyNoGithub", {
+                estimate: formatMB(lightEstimateBytes),
+              })}
       </span>
     </p>
   );

@@ -70,6 +70,13 @@ export const libraryDetail = catalog(
         "libraryDetail.actions:screenshot",
       ],
     },
+    "screenshot-hover": {
+      profile: "default",
+      how: "Open “Settings page” and rest the pointer on the image: the copy button shows in its top-right corner.",
+      steps: [detail(ASSETS.settingsShot), { hover: { area: "libraryDetail.preview" } }],
+      demonstrates: ["libraryDetail.preview:imageHover"],
+      keepPointer: true,
+    },
     "details-screenshot": {
       profile: "default",
       how: "Open “Settings page” and click the Details tab.",

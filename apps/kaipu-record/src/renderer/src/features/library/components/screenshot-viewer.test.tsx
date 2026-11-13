@@ -1,12 +1,18 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ScreenshotViewer } from "./screenshot-viewer";
 
 afterEach(cleanup);
 
 function loadImage(img: HTMLElement, width = 1440, height = 900) {
-  Object.defineProperty(img, "naturalWidth", { value: width, configurable: true });
-  Object.defineProperty(img, "naturalHeight", { value: height, configurable: true });
+  Object.defineProperty(img, "naturalWidth", {
+    value: width,
+    configurable: true,
+  });
+  Object.defineProperty(img, "naturalHeight", {
+    value: height,
+    configurable: true,
+  });
   fireEvent.load(img);
 }
 
@@ -98,7 +104,9 @@ describe("ScreenshotViewer", () => {
 
   it("stops at the ends of the zoom range", () => {
     render(<ScreenshotViewer src="kaipu-media://screenshot/a" />);
-    const zoomIn = screen.getByRole("button", { name: "Zoom in" }) as HTMLButtonElement;
+    const zoomIn = screen.getByRole("button", {
+      name: "Zoom in",
+    }) as HTMLButtonElement;
     for (let i = 0; i < 6; i++) fireEvent.click(zoomIn);
     expect(zoomIn.disabled).toBe(true);
   });
@@ -107,5 +115,33 @@ describe("ScreenshotViewer", () => {
     render(<ScreenshotViewer src={null} />);
     expect(screen.getByText("Image unavailable")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Fit" })).toBeNull();
+  });
+
+  it("copies the image from a button over it, and marks it copied", async () => {
+    const onCopy = vi.fn(async () => true);
+    render(<ScreenshotViewer src="kaipu-media://screenshot/a" onCopy={onCopy} />);
+    const copy = screen.getByRole("button", { name: "Copy image" });
+    await act(async () => {
+      fireEvent.click(copy);
+    });
+    expect(onCopy).toHaveBeenCalledTimes(1);
+    expect(copy.dataset.copied).toBe("true");
+  });
+
+  it("does not mark the button copied when the copy failed", async () => {
+    render(<ScreenshotViewer src="kaipu-media://screenshot/a" onCopy={async () => false} />);
+    const copy = screen.getByRole("button", { name: "Copy image" });
+    await act(async () => {
+      fireEvent.click(copy);
+    });
+    expect(copy.dataset.copied).toBe("false");
+  });
+
+  it("offers no copy button without onCopy, or when the image is unavailable", () => {
+    const { unmount } = render(<ScreenshotViewer src="kaipu-media://screenshot/a" />);
+    expect(screen.queryByRole("button", { name: "Copy image" })).toBeNull();
+    unmount();
+    render(<ScreenshotViewer src={null} onCopy={async () => true} />);
+    expect(screen.queryByRole("button", { name: "Copy image" })).toBeNull();
   });
 });

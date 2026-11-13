@@ -7,6 +7,15 @@
   min-height: 0;
 }
 
+/* Holds the frame and the copy button over its top-right corner. */
+.stage {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
 .viewer {
   position: relative;
   display: flex;
@@ -98,6 +107,44 @@
 
 .zoomButton:focus-visible,
 .fit:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+/* Hidden until the pointer is over the image (or focus is on the button), so the shot reads
+   clean at rest. Dark glass so it stays legible over light and dark screenshots alike. */
+.copyButton {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(10, 10, 12, 0.72);
+  backdrop-filter: blur(6px);
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    background-color 120ms ease;
+}
+
+.stage:hover .copyButton,
+.copyButton:focus-visible,
+.copyButton[data-copied="true"] {
+  opacity: 1;
+}
+
+.copyButton:hover {
+  background: rgba(10, 10, 12, 0.88);
+}
+
+.copyButton:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 1px;
 }
