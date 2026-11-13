@@ -42,7 +42,13 @@ export function CaptureItem({
   };
 
   const image = capture.thumbnailUrl ? (
-    <img className={styles.image} src={capture.thumbnailUrl} alt="" draggable={false} />
+    <img
+      className={styles.image}
+      src={capture.thumbnailUrl}
+      // Inside the labeled button the button names it; on its own the image names itself.
+      alt={onImageClick ? "" : imageLabel}
+      draggable={false}
+    />
   ) : (
     <span className={styles.missing} aria-hidden />
   );

@@ -85,6 +85,20 @@ describe("CapturesPanel", () => {
     );
   });
 
+  it("names the image of a capture that has no click action (a slide frame)", () => {
+    renderPanel({
+      captures: [capture({ sourceTimeSeconds: null, title: "Demo slide frame" })],
+    });
+    expect(screen.queryByRole("button", { name: /Go to/ })).toBeNull();
+    expect(screen.getByRole("img", { name: "Demo slide frame" })).toBeInTheDocument();
+  });
+
+  it("leaves the image alt empty inside the seek button, which already names it", () => {
+    renderPanel({ captures: [capture({ sourceTimeSeconds: 83.4 })] });
+    const button = screen.getByRole("button", { name: "Go to 1:23.4" });
+    expect(button.querySelector("img")).toHaveAttribute("alt", "");
+  });
+
   it("seeks to the capture's source time when its image is clicked", () => {
     const props = renderPanel({ captures: [capture({ sourceTimeSeconds: 83.4 })] });
     fireEvent.click(screen.getByRole("button", { name: "Go to 1:23.4" }));
