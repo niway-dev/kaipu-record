@@ -12,8 +12,9 @@ import type { Microphone } from "@renderer/features/recording/types";
  * to ask. Once permission has been granted, `enumerateDevices` returns real labels on its
  * own and the probe never runs again.
  *
- * `enabled` false reads nothing: the capture overlay opened to take a screenshot never
- * enumerates devices, so it can never reach the probe above.
+ * `enabled` false reads nothing and never reaches the probe above. The screenshot overlay
+ * passes false while it is on capture intent. Switching it to Record passes true, which
+ * enables the enumeration and, if every label is blank, the probe.
  */
 export function useMicrophones(enabled = true): Microphone[] {
   const [microphones, setMicrophones] = useState<Microphone[]>([]);

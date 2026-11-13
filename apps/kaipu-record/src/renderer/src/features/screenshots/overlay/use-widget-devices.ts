@@ -24,7 +24,11 @@ export interface WidgetDevices {
 /**
  * The same choices as Home and the capture panel, written to the same places: the microphone
  * through the shared `RecordingSettings`, the camera through `AppSettings.cameraBubble.deviceId`.
- * Enumerating devices opens nothing, and a screenshot overlay (`enabled` false) reads nothing.
+ * Enumerating devices opens nothing by itself. But when every microphone label is blank,
+ * `useMicrophones` falls back to a `getUserMedia` probe, which can briefly open the microphone
+ * and show the OS permission prompt or indicator. While the overlay is on capture intent
+ * (`enabled` false) it reads nothing and never probes. On record intent it may, including
+ * after a switch from capture, because `enabled` follows the intent.
  */
 export function useWidgetDevices(
   api: RecordingTogglesApi &
