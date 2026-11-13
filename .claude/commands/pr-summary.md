@@ -6,6 +6,11 @@ argument-hint: [ticket-url]
 
 # Generate PR Summary
 
+> **The PR description format is `.github/pull_request_template.md`** (the shared template, checked by
+> `pr_body.py check` from cs-tack's `cs-write-handoff`). Where this command's sections below differ from
+> that template, the template wins: use its headings and order, and put the "What to review" guidance
+> below into `## What` and `## Needs you`. This command is kept only for its Step 1 to Step 3 gathering.
+
 ## Step 1: Gather branch context
 
 ```bash
