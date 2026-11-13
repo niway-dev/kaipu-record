@@ -137,7 +137,7 @@ describe("toggleForKey", () => {
     editable.remove();
   });
 
-  it("does not touch the other keys: Enter, R, P, V, 1 and 2", () => {
+  it("does not touch the other keys: Enter, R, P, V, C, 1 and 2", () => {
     for (const name of ["Enter", "r", "p", "v", "1", "2", "c"]) {
       expect(toggleForKey(key({ key: name }), "record")).toBeNull();
     }
