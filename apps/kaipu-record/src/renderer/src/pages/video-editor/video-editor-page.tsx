@@ -824,6 +824,12 @@ function VideoEditor({
   const videoTools = useVideoTools();
   const videoExport = useVideoExport();
   const gifExport = useGifExport();
+  // A joined recording that finishes loading re-asks an estimate refused for it: the export
+  // sheet re-requests only when a GIF setting changes.
+  const { retryRefusedEstimate } = gifExport;
+  useEffect(() => {
+    retryRefusedEstimate(exportJoined);
+  }, [exportJoined, retryRefusedEstimate]);
   const sourceUrl = mediaUrl("recording", source.id);
   const thumbnails = useSourceThumbnails(sourceUrl, source.durationSeconds);
   // Which recording each clip is (null without joins: the timeline then draws as before), and

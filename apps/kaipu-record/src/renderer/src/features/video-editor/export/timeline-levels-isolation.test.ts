@@ -85,7 +85,7 @@ describe("the timeline-levels flag does not reach the export", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("exports a scene that already has two recordings, whatever the flag says", () => {
+  it("plans a scene with a joined recording from the scene alone", () => {
     const scene = {
       ...initialScene(100),
       sources: [joinedSource("b", 3600, 40)],
@@ -94,7 +94,7 @@ describe("the timeline-levels flag does not reach the export", () => {
         { id: "b", kind: "clip" as const, sourceStart: 3600, sourceEnd: 3610 },
       ],
     };
-    // buildExportPlan takes the scene alone (arity pinned), so there is no way to pass a flag in.
+    // This checks the plan from the scene only. The source scan above keeps the flag out of export/.
     expect(buildExportPlan.length).toBe(1);
     const plan = buildExportPlan(scene);
     expect(plan.segments[1]).toMatchObject({ kind: "clip", sourceId: "b", sourceStart: 3600 });
