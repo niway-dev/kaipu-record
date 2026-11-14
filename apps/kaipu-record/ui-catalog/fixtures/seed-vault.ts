@@ -1,6 +1,11 @@
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { FIXTURE_FILES, FIXTURES_DIR, type RecordingCut } from "./make-fixtures";
+import {
+  FIXTURE_FILES,
+  FIXTURES_DIR,
+  JOINED_CUT_SECONDS,
+  type RecordingCut,
+} from "./make-fixtures";
 import { REDACTION_SOLID_RGB } from "../../src/renderer/src/features/screenshots/annotations/redaction";
 import { paintPng, redactionPng, stepSizesPng } from "./mock-shots";
 
@@ -169,6 +174,8 @@ interface RecordingFixture {
   floating?: boolean;
   /** A saved version 2 edit that joined another recording (ADR 0058): `joinedScene`. */
   joined?: JoinedKind;
+  /** The media is `FIXTURE_FILES.joinedCut` (blue, a "B"), not a cut of the opened countdown. */
+  joinedVideo?: boolean;
   /** An export: the asset it was made from. */
   derivedFrom?: string;
   /** An export: the preset it was made with (the sidecar's `exportPreset`). */
@@ -287,7 +294,8 @@ const JOINED_SECOND: RecordingFixture = {
   stem: "Checkout bug",
   assetId: ASSETS.joinedSecond,
   title: "Checkout bug",
-  cut: 7,
+  cut: JOINED_CUT_SECONDS,
+  joinedVideo: true,
   ago: 15 * 60_000,
 };
 
@@ -575,7 +583,8 @@ async function seedRecording(
   item: RecordingFixture,
 ): Promise<void> {
   const media = path.join(vaultDir, `${item.stem}.mp4`);
-  await copyFile(path.join(fixtures, FIXTURE_FILES.cut(item.cut)), media);
+  const video = item.joinedVideo ? FIXTURE_FILES.joinedCut : FIXTURE_FILES.cut(item.cut);
+  await copyFile(path.join(fixtures, video), media);
   await copyFile(path.join(fixtures, FIXTURE_FILES.thumbnail), path.join(meta, `${item.stem}.jpg`));
   const createdAt = now - item.ago;
   await writeJson(path.join(meta, `${item.stem}.json`), {

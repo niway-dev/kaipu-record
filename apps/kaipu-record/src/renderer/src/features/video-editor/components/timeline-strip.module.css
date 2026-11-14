@@ -251,10 +251,19 @@
   z-index: 1;
 }
 
-/* Hovering a clip of a joined recording outlines its siblings (NIW2-780): an inset ring, so it
-   never changes the block's box. Subtle on purpose; the selected border stays the loud one. */
-.blockSameRecording {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 55%, transparent);
+/* Hovering a clip of a joined recording outlines its siblings (NIW2-780): a ring drawn by a
+   pseudo-element over the thumbnails (an inset box-shadow paints under them, so it never
+   showed), inside the block so it never changes the box. It comes last in the block, so it paints
+   above the thumbnails and the name chip; it only rings the edge, and the chip sits 3px in, so
+   they do not overlap. The selected border stays the louder one: it is accent-coloured and
+   sits on the block's own edge, outside this ring. */
+.blockSameRecording::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid color-mix(in srgb, var(--text-primary) 70%, transparent);
+  border-radius: inherit;
+  pointer-events: none;
 }
 
 /* A clip whose recording file is gone: no thumbnails, a hatched dim ground instead. */

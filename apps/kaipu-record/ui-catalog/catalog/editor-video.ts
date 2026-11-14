@@ -274,6 +274,14 @@ export const editorVideo = catalog(
         // The thumbnails decode after the editor opens; the labels are there from the start.
         { waitMs: 800 },
         { hover: { area: "editorVideo.timeline", part: { css: '[data-item-id="clip-a1"]' } } },
+        // The other clip of the hovered recording is outlined only once the hover landed, so a
+        // missed hover fails here instead of shooting the un-hovered timeline.
+        {
+          waitFor: {
+            area: "editorVideo.timeline",
+            part: { css: '[data-item-id="clip-a2"][data-same-recording="true"]' },
+          },
+        },
       ],
       keepPointer: true,
       demonstrates: ["editorVideo.timeline:recordingHover"],
