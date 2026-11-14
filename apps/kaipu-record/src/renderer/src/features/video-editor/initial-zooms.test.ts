@@ -67,6 +67,16 @@ describe("withJoinedZooms", () => {
     }
   });
 
+  it("skips a detected zoom that would overlap an existing segment in the joined range", () => {
+    const detected = withJoinedZooms(initialScene(20), SOURCE_B, TRACK).zoomSegments;
+    expect(detected).toHaveLength(1);
+    const blocking = { ...manualZoom, start: 3609, end: 3611 };
+    expect(detected[0].start).toBeLessThan(blocking.end);
+    expect(blocking.start).toBeLessThan(detected[0].end);
+    const scene = { ...initialScene(20), zoomSegments: [blocking] };
+    expect(withJoinedZooms(scene, SOURCE_B, TRACK)).toBe(scene);
+  });
+
   it("returns the same scene without a track", () => {
     const scene = initialScene(20);
     expect(withJoinedZooms(scene, SOURCE_B, null)).toBe(scene);
