@@ -93,7 +93,7 @@
   padding: 0;
 }
 
-/* A row is one button: the whole thing adds the recording, and (commit 2) is a drag handle. */
+/* A row is one button: the whole thing adds the recording and is also a drag handle onto the Clips row. */
 .row {
   display: flex;
   align-items: center;
