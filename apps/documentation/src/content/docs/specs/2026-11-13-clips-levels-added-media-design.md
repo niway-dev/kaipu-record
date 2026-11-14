@@ -207,6 +207,6 @@ multi-source work is its own; nothing in stage 1 does it in advance.
 Kept from the [timeline v2 design](/specs/2026-10-31-editor-timeline-v2-design/) and ADR 0040:
 the draw order, viewport-layer placement, per-source audio, the two-videos limit, Library-only
 sources. Replaced: separate Overlay lanes, timeline anchoring, "a drop that overlaps goes to a new
-lane" as stored state, one 5 s image default for every image (now 10 s floating, 5 s in the sequence), and transitions
-as a non-goal. Still parked and
-untouched: camera sections (ADR 0039) and `removedTracks` (see ADR 0050).
+lane" as stored state, one 5 s image default for every image (now 10 s floating, 5 s in the
+sequence), and transitions as a non-goal. Still parked and untouched: camera sections (ADR 0039)
+and `removedTracks` (see ADR 0050).
