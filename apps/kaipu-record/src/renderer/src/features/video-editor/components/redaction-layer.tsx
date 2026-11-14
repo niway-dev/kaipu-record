@@ -23,6 +23,7 @@ import {
   rectToPx,
   type Redaction,
 } from "../privacy/redaction";
+import { frameRectToPictureRect, isInsidePicture } from "../privacy/letterbox";
 import styles from "./redaction-layer.module.css";
 
 const PREVIEW_PAD_SECONDS = 0.05;
@@ -40,7 +41,12 @@ export function rectStyle(rect: Redaction["rect"]): React.CSSProperties {
  * Downscale the region of the current video frame into `canvas` (cells, sized in SOURCE px
  * so the grid matches the export's mosaic exactly); CSS upscales it `pixelated`.
  */
-function drawPixelated(canvas: HTMLCanvasElement | null, media: PreviewMedia, r: Redaction): void {
+function drawPixelated(
+  canvas: HTMLCanvasElement | null,
+  media: PreviewMedia,
+  r: Redaction,
+  frame: { width: number; height: number },
+): void {
   if (!canvas || r.kind !== "blur") return;
   // Over two recordings the pixels live in the element on screen, not in the switch; a
   // recording with no element (a missing one) has nothing to sample.
@@ -49,17 +55,54 @@ function drawPixelated(canvas: HTMLCanvasElement | null, media: PreviewMedia, r:
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   if (vw === 0 || vh === 0) return;
-  const px = rectToPx(r.rect, vw, vh);
-  if (px.w === 0 || px.h === 0) return;
+  // The rect is normalized to the FRAME; a joined recording of another aspect is letterboxed
+  // inside it, so the rect is first mapped onto the picture the element actually shows.
+  const rect = frameRectToPictureRect(
+    r.rect,
+    frame.height > 0 ? frame.width / frame.height : 0,
+    vw / vh,
+  );
+  if (rect === r.rect || isInsidePicture(rect)) {
+    const px = rectToPx(rect, vw, vh);
+    if (px.w === 0 || px.h === 0) return;
+    const cell = pixelBlockPx(r.intensity, vh);
+    const cols = Math.max(1, Math.ceil(px.w / cell));
+    const rows = Math.max(1, Math.ceil(px.h / cell));
+    if (canvas.width !== cols) canvas.width = cols;
+    if (canvas.height !== rows) canvas.height = rows;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.imageSmoothingEnabled = true; // averaging on the way down = the mosaic colors
+    ctx.drawImage(video, px.x, px.y, px.w, px.h, 0, 0, cols, rows);
+    return;
+  }
+  // Part of the rect lies over a bar, where there is no picture to sample: the canvas still
+  // spans the whole rect (so CSS keeps the mosaic aligned) and only the part over the picture
+  // is drawn into it; the rest stays transparent. A rect wholly over a bar draws nothing.
   const cell = pixelBlockPx(r.intensity, vh);
-  const cols = Math.max(1, Math.ceil(px.w / cell));
-  const rows = Math.max(1, Math.ceil(px.h / cell));
+  const fullW = rect.w * vw;
+  const fullH = rect.h * vh;
+  const cols = Math.max(1, Math.ceil(fullW / cell));
+  const rows = Math.max(1, Math.ceil(fullH / cell));
   if (canvas.width !== cols) canvas.width = cols;
   if (canvas.height !== rows) canvas.height = rows;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
-  ctx.imageSmoothingEnabled = true; // averaging on the way down = the mosaic colors
-  ctx.drawImage(video, px.x, px.y, px.w, px.h, 0, 0, cols, rows);
+  ctx.clearRect(0, 0, cols, rows);
+  const px = rectToPx(rect, vw, vh); // clipped to the picture
+  if (px.w === 0 || px.h === 0) return;
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(
+    video,
+    px.x,
+    px.y,
+    px.w,
+    px.h,
+    ((px.x - rect.x * vw) / fullW) * cols,
+    ((px.y - rect.y * vh) / fullH) * rows,
+    (px.w / fullW) * cols,
+    (px.h / fullH) * rows,
+  );
 }
 
 export function RedactionView({
@@ -149,7 +192,10 @@ export function RedactionLayer({
           !hidden && t >= r.start - PREVIEW_PAD_SECONDS && t <= r.end + PREVIEW_PAD_SECONDS;
         el.style.display = on ? "" : "none";
         if (on && r.kind === "blur" && r.style === "pixelate") {
-          drawPixelated(el.querySelector("canvas"), video, r);
+          drawPixelated(el.querySelector("canvas"), video, r, {
+            width: layer.clientWidth,
+            height: layer.clientHeight,
+          });
         }
       }
     },
