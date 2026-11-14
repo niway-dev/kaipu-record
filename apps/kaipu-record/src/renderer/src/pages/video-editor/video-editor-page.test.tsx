@@ -2461,6 +2461,27 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     await waitFor(() => expect(screen.queryAllByTestId("capture-item")).toHaveLength(0));
   });
 
+  it("keeps the editor's keys quiet behind the delete confirmation", async () => {
+    libraryItems = [savedItem("mine", 7)];
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete capture" }));
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockImplementation(() => Promise.resolve());
+    // Space would toggle playback and Escape would close the whole panel behind the dialog.
+    fireEvent.keyDown(window, { key: " " });
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(play).not.toHaveBeenCalled();
+    expect(screen.getByTestId("captures-panel")).toBeInTheDocument();
+    // The control: with the dialog closed, the same Space starts playback.
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.keyDown(window, { key: " " });
+    await waitFor(() => expect(play).toHaveBeenCalled());
+    play.mockRestore();
+  });
+
   it("opens from the Captures button with nothing captured, in place of the inspector", async () => {
     renderEditor();
     await waitForEditorLoaded();

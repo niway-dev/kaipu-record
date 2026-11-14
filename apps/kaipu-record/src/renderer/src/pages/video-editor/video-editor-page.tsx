@@ -1064,7 +1064,7 @@ function VideoEditor({
   const stillCapture = useStillCapture();
   const sourceCaptures = useSourceCaptures(source.assetId, capturesOpen);
   const refreshCaptures = sourceCaptures.refresh;
-  const existingCaptures = sourceCaptures.captures;
+  const latestCaptures = sourceCaptures.latest;
   // The capture a repeated press found already saved: outlined for ~2 s in the panel.
   const [highlightedCaptureId, setHighlightedCaptureId] = useState<string | null>(null);
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1092,7 +1092,7 @@ function VideoEditor({
     const playhead = playback.readTimelineTime();
     try {
       // The same frame twice is a duplicate: point at the saved one instead of composing.
-      const existing = findCaptureAt(existingCaptures, planStill(scene, playhead).sourceSeconds);
+      const existing = findCaptureAt(latestCaptures(), planStill(scene, playhead).sourceSeconds);
       if (existing) {
         clearSelection();
         setCursorInspectorOpen(false);
@@ -1148,7 +1148,7 @@ function VideoEditor({
   }, [
     playback,
     captureFrame,
-    existingCaptures,
+    latestCaptures,
     scene,
     source,
     assetStoreRef,
@@ -1520,6 +1520,8 @@ function VideoEditor({
       if (blocker.state === "blocked" || gifExport.status !== "idle" || exportSheetOpen) return;
       // The Timeline guide is a modal: its own Esc closes it, and nothing behind it reacts.
       if (guideTab !== null) return;
+      // Any other modal (a capture's delete confirmation) owns the keys while it is open.
+      if (document.querySelector('[aria-modal="true"]')) return;
       if (!e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "h") {
         // In fullscreen only the stage is drawn: a guide portaled to <body> would be invisible.
         if (!document.fullscreenElement) openGuideFirstTab();
