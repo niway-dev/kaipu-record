@@ -1044,7 +1044,7 @@ export class LibraryVault {
           ? meta.sourceTimeSeconds
           : null,
       ...(meta.sourceSceneSourceId === null ||
-      (typeof meta.sourceSceneSourceId === "string" && meta.sourceSceneSourceId)
+      (typeof meta.sourceSceneSourceId === "string" && meta.sourceSceneSourceId.trim() !== "")
         ? { sourceSceneSourceId: meta.sourceSceneSourceId }
         : {}),
       contentSha256: hashIsFresh ? (meta.contentSha256 ?? null) : null,

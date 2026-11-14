@@ -335,6 +335,20 @@ describe("frame capture source link", () => {
     expect(read).not.toHaveProperty("sourceSceneSourceId");
   });
 
+  it("reads a whitespace-only scene source from a sidecar as absent, as the save path does", async () => {
+    const saved = await saveScreenshotToVault(Buffer.from("png"), {
+      title: "Blank",
+      source: { videoAssetId: "video-1", timeSeconds: 9, sceneSourceId: "b2" },
+    });
+    const path = join(directory, ".kaipu", "Blank.json");
+    const sidecar = JSON.parse(await readFile(path, "utf-8"));
+    sidecar.sourceSceneSourceId = " ";
+    await writeFile(path, JSON.stringify(sidecar));
+    const read = await vault.describe(saved.id);
+    expect(read).toMatchObject({ sourceVideoAssetId: "video-1", sourceTimeSeconds: 9 });
+    expect(read).not.toHaveProperty("sourceSceneSourceId");
+  });
+
   it("reads nulls when saved without a source", async () => {
     const saved = await saveScreenshotToVault(Buffer.from("png"), { title: "Plain" });
     expect(saved).toMatchObject({ sourceVideoAssetId: null, sourceTimeSeconds: null });
