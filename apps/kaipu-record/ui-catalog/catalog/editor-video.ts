@@ -161,8 +161,8 @@ export const editorVideo = catalog(
       demonstrates: ["editorVideo.preview:zoomSelected", "editorVideo.inspector:zoom"],
       ready: { area: "editorVideo.inspector" },
     },
-    // The seeded recordings carry a silent stereo track (fixtures/make-fixtures.ts), so the
-    // bars are the quiet stubs; a take with speech draws taller ones.
+    // The seeded recordings carry a speech-like stereo track (fixtures/make-fixtures.ts), so
+    // the lane shows tall bars, quiet stubs and the pauses between phrases.
     waveform: {
       profile: "audio-waveform",
       how: "With the audio-waveform flag forced on, open “Walkthrough 1”: the Audio lane draws the recording's loudness as bars instead of the empty-state text.",

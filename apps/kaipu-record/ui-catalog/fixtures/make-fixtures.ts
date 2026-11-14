@@ -19,7 +19,7 @@ import path from "node:path";
 export const FIXTURES_DIR = path.join(__dirname, "out");
 
 /** Bump when anything below changes the generated files. */
-const RECIPE_VERSION = "2";
+const RECIPE_VERSION = "3";
 
 /** Seconds of the countdown; every recording fixture is a cut of it. */
 export const COUNTDOWN_SECONDS = 12;
@@ -154,7 +154,19 @@ function ffmpeg(args: string[]): void {
   });
 }
 
-/** H.264 + silent stereo AAC, one keyframe per second so every cut lands on a keyframe. */
+/**
+ * A quiet, speech-like stereo track: a low hum cut into syllables (about three a second) that
+ * swell and fade, with pauses between phrases. It gives the editor's audio waveform
+ * (NIW2-775) something to draw: tall bars, short stubs and gaps. Peaks stay under -8 dBFS so
+ * a catalog state that plays the video is not loud.
+ */
+const SPEECH_LIKE_AUDIO =
+  "aevalsrc='0.25*(sin(2*PI*180*t)+0.5*sin(2*PI*360*t))" +
+  "*pow(max(0,sin(2*PI*3.1*t)),2)" +
+  "*(0.35+0.65*abs(sin(2*PI*0.17*t)))" +
+  "*gt(sin(2*PI*0.21*t+1),-0.4)':s=48000:c=stereo";
+
+/** H.264 + speech-like stereo AAC, one keyframe per second so every cut lands on a keyframe. */
 function renderCountdown(out: string, width: number, height: number): void {
   ffmpeg([
     "-filter_complex",
@@ -162,7 +174,7 @@ function renderCountdown(out: string, width: number, height: number): void {
     "-f",
     "lavfi",
     "-i",
-    `anullsrc=r=48000:cl=stereo`,
+    SPEECH_LIKE_AUDIO,
     "-map",
     "[v]",
     "-map",
