@@ -187,9 +187,14 @@ export class MediaSwitch implements PreviewMedia {
     return this.active;
   }
 
-  /** The element whose pixels are on screen, or null for a recording without one. */
+  /**
+   * The element whose pixels are on screen, or null for a recording without one. While a switch
+   * is pending this is the OLD element (the one `presentedTime` reads), not the active one: a
+   * canvas that samples the picture must draw what the viewer sees, and the new element has no
+   * frame of its own yet.
+   */
   activeElement(): HTMLVideoElement | null {
-    return (this.elements.get(this.active) as unknown as HTMLVideoElement | undefined) ?? null;
+    return (this.shown as unknown as HTMLVideoElement | null) ?? null;
   }
 
   isActive(element: unknown): boolean {
