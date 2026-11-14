@@ -112,6 +112,7 @@ import {
   mapChannels,
   needsResampling,
   overlapsSilence,
+  placeFlushed,
   type Resampler,
   type AudioReference,
   type RecordingAudio,
@@ -518,6 +519,8 @@ async function runExportWithInput(
         // rate never creates one.
         let resampler: Resampler | null = null;
         let lastEnd = src.localStart;
+        // Frames the resampler has produced for this run, so its flush stays inside the clip.
+        let resampledFrames = 0;
         const emitConverted = async (
           converted: AudioSample,
           start: number,
@@ -549,6 +552,7 @@ async function runExportWithInput(
             }
             const converted = toReferenceFormat(trimmed, audioReference, resampler);
             if (converted) {
+              if (resampler) resampledFrames += converted.numberOfFrames;
               await emitConverted(converted, start, end);
               if (converted !== trimmed) converted.close();
             }
@@ -558,9 +562,18 @@ async function runExportWithInput(
         }
         // The frames the resampler still owes, so the clip's audio ends where its video does.
         const owed = resampler?.flush();
-        if (owed && (owed[0]?.length ?? 0) > 0) {
-          const tail = planesToSample(owed, audioReference, lastEnd);
-          await emitConverted(tail, lastEnd, lastEnd + tail.duration);
+        const placed =
+          owed &&
+          placeFlushed(owed, {
+            emittedFrames: resampledFrames,
+            lastEnd,
+            localStart: src.localStart,
+            localEnd: src.localEnd,
+            toRate: audioReference.sampleRate,
+          });
+        if (placed) {
+          const tail = planesToSample(placed.planes, audioReference, placed.start);
+          await emitConverted(tail, placed.start, placed.end);
           tail.close();
         }
       }

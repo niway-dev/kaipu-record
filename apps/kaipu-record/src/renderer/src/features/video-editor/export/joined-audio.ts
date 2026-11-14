@@ -163,6 +163,37 @@ export function createResampler(fromRate: number, toRate: number, channels: numb
   };
 }
 
+/** Where a clip run stands when its resampler is flushed; times are LOCAL seconds. */
+export interface FlushedRun {
+  /** Output frames the run has emitted so far, at the reference rate. */
+  emittedFrames: number;
+  /** End of the last trimmed input sample. */
+  lastEnd: number;
+  /** The clip's own local range. */
+  localStart: number;
+  localEnd: number;
+  /** The reference sample rate. */
+  toRate: number;
+}
+
+/**
+ * The frames a resampler still owes when its clip run ends, placed inside the clip: cut to the
+ * clip's length in output frames (a stray input frame must not push the audio past its video,
+ * or every later clip drifts), and checked for muting over the clip's last moments, which is
+ * where they belong, never past its end. Null when nothing is left to emit.
+ */
+export function placeFlushed(
+  owed: Float32Array[],
+  run: FlushedRun,
+): { planes: Float32Array[]; start: number; end: number } | null {
+  const clipFrames = Math.round((run.localEnd - run.localStart) * run.toRate);
+  const frames = Math.min(owed[0]?.length ?? 0, Math.max(0, clipFrames - run.emittedFrames));
+  if (frames === 0) return null;
+  const end = Math.min(Math.max(run.lastEnd, run.localStart), run.localEnd);
+  const start = Math.max(run.localStart, end - frames / run.toRate);
+  return { planes: owed.map((plane) => plane.slice(0, frames)), start, end };
+}
+
 /** The weight the centre and the surround channels get when folded into the front pair. */
 const FOLD_WEIGHT = Math.SQRT1_2;
 

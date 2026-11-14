@@ -8,6 +8,7 @@ import {
   mapChannels,
   needsResampling,
   overlapsSilence,
+  placeFlushed,
   type RecordingAudio,
 } from "./joined-audio";
 import { clipSource } from "./joined-media";
@@ -257,6 +258,64 @@ describe("mapChannels", () => {
     expect(out).toHaveLength(3);
     expect(out[0]![0]).toBeCloseTo((1 + 2 * Math.SQRT1_2 * 0.5) / norm, 6);
     expect(out[1]![0]).toBeCloseTo((0 + 2 * Math.SQRT1_2 * 0.5) / norm, 6);
+  });
+});
+
+describe("placeFlushed", () => {
+  const ramp = (frames: number) => Float32Array.from({ length: frames }, (_, i) => i / frames);
+
+  it("keeps what the clip still has room for and cuts the rest", () => {
+    const run = { emittedFrames: 47999, lastEnd: 1, localStart: 0, localEnd: 1, toRate: 48000 };
+    const placed = placeFlushed([new Float32Array([0.1, 0.2, 0.3])], run);
+    expect(placed!.planes).toHaveLength(1);
+    expect(placed!.planes[0]!.length).toBe(1);
+    expect(placed!.planes[0]![0]).toBeCloseTo(0.1, 6);
+  });
+
+  it("emits nothing once the clip's length is already reached", () => {
+    const run = { emittedFrames: 48000, lastEnd: 1, localStart: 0, localEnd: 1, toRate: 48000 };
+    expect(placeFlushed([new Float32Array([0.5, 0.5])], run)).toBeNull();
+  });
+
+  it("checks the flushed frames at the clip's last moments, so a mute that reaches the end covers them", () => {
+    // B sits at axis 3600; its clip is local [0, 1] and is muted from 3600.5 to its end.
+    const run = { emittedFrames: 47998, lastEnd: 1, localStart: 0, localEnd: 1, toRate: 48000 };
+    const placed = placeFlushed([new Float32Array([0.1, 0.2])], run)!;
+    expect(placed.end).toBeLessThanOrEqual(1);
+    expect(placed.start).toBeGreaterThanOrEqual(0);
+    expect(overlapsSilence(placed.start, placed.end, 3600, [{ start: 3600.5, end: 3601 }])).toBe(
+      true,
+    );
+    // And a mute that ended before the clip's last frames does not reach them.
+    expect(overlapsSilence(placed.start, placed.end, 3600, [{ start: 3600.1, end: 3600.9 }])).toBe(
+      false,
+    );
+  });
+
+  it("keeps the interval inside the clip when the audio ended after, or the frames outnumber it", () => {
+    const run = { emittedFrames: 0, lastEnd: 5, localStart: 2, localEnd: 2.001, toRate: 48000 };
+    const placed = placeFlushed([new Float32Array(1000)], run)!;
+    expect(placed.planes[0]!.length).toBe(48);
+    expect(placed.start).toBeGreaterThanOrEqual(2);
+    expect(placed.end).toBeLessThanOrEqual(2.001);
+  });
+
+  it("with the real resampler, keeps every frame a whole clip owes and no more", () => {
+    // One second at 24 kHz into a 48 kHz reference: exactly 48000 frames, flush included.
+    const resampler = createResampler(24000, 48000, 1);
+    const emittedFrames = resampler.push([ramp(24000)])[0]!.length;
+    const owed = resampler.flush();
+    expect(owed[0]!.length).toBeGreaterThan(0);
+    const placed = placeFlushed(owed, {
+      emittedFrames,
+      lastEnd: 1,
+      localStart: 0,
+      localEnd: 1,
+      toRate: 48000,
+    });
+    expect(placed!.planes[0]!.length).toBe(owed[0]!.length);
+    expect(emittedFrames + placed!.planes[0]!.length).toBe(48000);
+    expect(placed!.end).toBe(1);
   });
 });
 
