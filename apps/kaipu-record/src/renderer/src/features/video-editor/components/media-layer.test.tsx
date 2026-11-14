@@ -279,4 +279,30 @@ describe("MediaLayer", () => {
     expect(items()).toHaveLength(0);
     expect(onEnd).toHaveBeenCalledOnce();
   });
+
+  it("ends a corner drag when a drawing tool is armed in the middle of it", () => {
+    const item = img("m", 0, 0);
+    const { onEnd, onBegin, rerender } = renderLayer({ media: [item], time: 1, selectedId: "m" });
+    const handle = screen.getByTestId("media-handle-se");
+    fireEvent.pointerDown(handle, { clientX: 500, clientY: 300, pointerId: 1 });
+    fireEvent.pointerMove(handle, { clientX: 580, clientY: 300, pointerId: 1 });
+    expect(onBegin).toHaveBeenCalledOnce();
+    rerender(
+      <MediaLayer
+        media={[item]}
+        layout={layout}
+        time={1}
+        picture={picture}
+        selectedId="m"
+        interactive={false}
+        imageUrl={(assetId) => `blob:${assetId}`}
+        onSelect={vi.fn()}
+        onBegin={vi.fn()}
+        onBoxChange={vi.fn()}
+        onEnd={onEnd}
+      />,
+    );
+    expect(screen.queryAllByTestId(/^media-handle-/)).toHaveLength(0);
+    expect(onEnd).toHaveBeenCalledOnce();
+  });
 });

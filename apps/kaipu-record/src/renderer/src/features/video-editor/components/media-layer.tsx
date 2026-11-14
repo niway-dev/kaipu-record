@@ -121,10 +121,12 @@ export function MediaLayer({
     if (d.began) onEnd();
   };
 
-  // The dragged image is no longer drawn (the playhead left its span, or it was deleted) while
-  // the layer stays: its element took the pointer capture with it, so end the drag here.
+  // The dragged image or its handle is gone while the layer stays (the playhead left its span,
+  // it was deleted, a drawing tool was armed mid-drag): the element took the pointer capture
+  // with it, so end the drag here.
   const draggedId = drag.current?.id;
-  const draggedStillDrawn = draggedId === undefined || list.some((v) => v.item.id === draggedId);
+  const draggedStillDrawn =
+    draggedId === undefined || (interactive && list.some((v) => v.item.id === draggedId));
   useEffect(() => {
     if (!draggedStillDrawn) finish();
     // `finish` only reads refs and the latest `onEnd` through the render that scheduled it.

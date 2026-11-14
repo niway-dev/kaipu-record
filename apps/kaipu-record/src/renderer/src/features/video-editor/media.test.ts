@@ -264,13 +264,11 @@ describe("edits", () => {
     expect(placed.end - placed.start).toBeGreaterThanOrEqual(MEDIA_MIN_DURATION);
   });
 
-  it("ends inside the sequence and leaves the sequence length alone", () => {
-    // Floating items live beside the track items: a scene with one is the same length, and the
-    // image, added 5 s from the end, is cut at the end instead of extending it.
-    const scene = { items, media: add(undefined, 55) };
-    expect(layoutDuration(toLayout(scene.items))).toBe(layoutDuration(layout));
-    const [placed] = placeMedia(scene.media, toLayout(scene.items));
-    expect(placed.end).toBeLessThanOrEqual(layoutDuration(layout));
+  it("ends inside the sequence: an image added 5 s from the end is cut there", () => {
+    // Floating items are not track items, so the sequence length cannot change by construction
+    // (`toLayout` takes the items only); what can go wrong is the item running past the end.
+    const [placed] = placeMedia(add(undefined, 55), layout);
+    expect(placed.end).toBe(layoutDuration(layout));
   });
 
   it("moves an item to a timeline time, keeping its duration and rewriting the anchor", () => {

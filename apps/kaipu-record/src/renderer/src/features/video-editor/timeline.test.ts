@@ -345,7 +345,11 @@ describe("floating-item anchors", () => {
 
   it("resolves the very end of the footage to the clip that ends there", () => {
     expect(resolveAnchor(layout, { kind: "source", time: 30 })).toBe(layoutDuration(layout));
-    expect(resolveAnchor(layout, { kind: "source", time: 10 })).toBe(10 - 0);
+  });
+
+  it("falls back to the clip that ends on the time when no clip contains it", () => {
+    // Source 10 is the end of clip a, before the deleted 10-20 s gap.
+    expect(resolveAnchor(layout, { kind: "source", time: 10 })).toBe(10);
   });
 
   it("clamps a time past the end onto the last entry", () => {
