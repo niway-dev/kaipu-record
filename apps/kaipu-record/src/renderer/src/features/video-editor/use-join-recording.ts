@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import type { RecordingCapture } from "@shared/recording-capture";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
 import { composeJoin } from "./compose-join";
@@ -34,6 +34,10 @@ export type JoinRecordingResult = "joined" | "missing" | "busy";
  * frame. The rename hold taken to resolve the recording's current id is released again here: once
  * the scene lists the new source, `useJoinedRecordings` takes its own and keeps it for as long as
  * the source is in the scene.
+ *
+ * Calls run one after another: each one reads the scene after the awaits, and the previous join's
+ * commit only reaches `controller.scene` once React has rendered it. The next join therefore waits
+ * for that render, otherwise it would compose from the old scene and replace the first join.
  */
 export function useJoinRecording(
   controller: VideoSceneController,
@@ -41,8 +45,22 @@ export function useJoinRecording(
   frameAspect: number,
 ): (recording: JoinableRecording, t: number) => Promise<JoinRecordingResult> {
   const controllerRef = useLatest(controller);
-  return useCallback(
-    async (recording, t) => {
+  // End of the joins queued so far, and what the running one waits for after its commit.
+  const tailRef = useRef<Promise<unknown>>(Promise.resolve());
+  const afterCommitRef = useRef<Promise<void> | null>(null);
+  const renderWaitersRef = useRef<Array<() => void>>([]);
+  // Declared after useLatest: its layout effect has already refreshed controllerRef when ours runs.
+  useLayoutEffect(() => {
+    for (const resolve of renderWaitersRef.current.splice(0)) resolve();
+  });
+  useLayoutEffect(
+    () => () => {
+      for (const resolve of renderWaitersRef.current.splice(0)) resolve();
+    },
+    [],
+  );
+  const joinNow = useCallback(
+    async (recording: JoinableRecording, t: number): Promise<JoinRecordingResult> => {
       if (recording.id === null) return "missing";
       let heldId: string | null;
       try {
@@ -67,24 +85,43 @@ export function useJoinRecording(
       // Read now, not before the awaits: the scene may have been edited while they ran.
       const current = controllerRef.current;
       if (current.interacting) return "busy";
-      current.commit(
-        composeJoin(
-          current.scene,
-          primaryDuration,
-          {
-            assetId: recording.assetId,
-            title: recording.title,
-            durationSeconds: recording.durationSeconds,
-            width,
-            height,
-          },
-          t,
-          frameTrack,
-          recording.webcam ?? null,
-        ),
+      const next = composeJoin(
+        current.scene,
+        primaryDuration,
+        {
+          assetId: recording.assetId,
+          title: recording.title,
+          durationSeconds: recording.durationSeconds,
+          width,
+          height,
+        },
+        t,
+        frameTrack,
+        recording.webcam ?? null,
       );
+      current.commit(next);
+      if (next !== current.scene) {
+        afterCommitRef.current = new Promise<void>((resolve) => {
+          renderWaitersRef.current.push(resolve);
+        });
+      }
       return "joined";
     },
     [controllerRef, primaryDuration, frameAspect],
+  );
+  return useCallback(
+    (recording, t) => {
+      const run = tailRef.current.then(() => {
+        afterCommitRef.current = null;
+        return joinNow(recording, t);
+      });
+      // The caller gets its result right away; only the next join waits for the render.
+      tailRef.current = run.then(
+        () => afterCommitRef.current,
+        () => undefined,
+      );
+      return run;
+    },
+    [joinNow],
   );
 }

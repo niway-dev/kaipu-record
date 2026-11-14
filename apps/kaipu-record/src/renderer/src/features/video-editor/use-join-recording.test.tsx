@@ -1,4 +1,4 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CursorTrack } from "@shared/cursor-track";
 import { initialScene } from "./scene";
@@ -130,6 +130,40 @@ describe("useJoinRecording", () => {
     });
     expect(outcome).toBe("busy");
     expect(result.current.controller.scene.sources).toBeUndefined();
+  });
+
+  it("keeps both joins when a second one is called before the first has rendered", async () => {
+    const C: JoinableRecording = { ...B, id: "c-file", assetId: "asset-c", title: "C" };
+    let openGate!: () => void;
+    const gate = new Promise<void>((resolve) => (openGate = resolve));
+    acquire.mockImplementation(async (assetId: string) => {
+      await gate;
+      return `${assetId}-held`;
+    });
+    const { result } = setup();
+
+    // Called outside act so React renders between tasks as it does in the app. Both IPC answers
+    // arrive in the same tick: without a guard the second join resumes before the first rendered.
+    const first = result.current.join(B, 20);
+    const second = result.current.join(C, 20);
+    openGate();
+    const outcomes = await Promise.all([first, second]);
+
+    expect(outcomes).toEqual(["joined", "joined"]);
+    await waitFor(() =>
+      expect(result.current.controller.scene.sources?.map((source) => source.assetId)).toEqual([
+        "asset-b",
+        "asset-c",
+      ]),
+    );
+    expect(result.current.controller.scene.items).toHaveLength(3);
+
+    // Each join is its own undo step, and undoing both lands on the scene before the first.
+    act(() => result.current.controller.undo());
+    expect(result.current.controller.scene.sources).toHaveLength(1);
+    act(() => result.current.controller.undo());
+    expect(result.current.controller.scene.sources).toBeUndefined();
+    expect(result.current.controller.canUndo).toBe(false);
   });
 
   describe("the track the join-time zooms are detected on", () => {

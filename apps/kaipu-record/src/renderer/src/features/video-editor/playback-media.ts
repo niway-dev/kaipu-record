@@ -50,7 +50,9 @@ export type PreviewMedia = PlaybackMedia &
   Pick<HTMLVideoElement, "readyState" | "videoWidth" | "videoHeight"> & {
     /**
      * The element whose pixels are on screen, or null when the recording has no element (a
-     * missing one). A canvas that samples the picture draws from this, never from the switch.
+     * missing one). While a switch is pending it is the previous recording's element, the
+     * one still shown, not the target. A canvas that samples the picture draws from this,
+     * never from the switch.
      */
     activeElement?(): HTMLVideoElement | null;
   };

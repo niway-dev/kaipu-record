@@ -404,6 +404,21 @@ describe("MediaSwitch — attach and detach", () => {
     expect(b.style.visibility).toBe("hidden");
   });
 
+  it("keeps a recording without an element on its silent clock when a ref clears a key it never held", () => {
+    const { sw, a, advanceWall } = setup();
+    sw.setAxis(sourceAxis(100, [joined("M", 7200, 30)]));
+    sw.currentTime = 7205; // M has no element: the silent clock is active
+    const changed = vi.fn();
+    sw.onActiveChange(changed);
+    sw.attach("M", null);
+    expect(sw.activeKey).toBe("M");
+    expect(changed).not.toHaveBeenCalled();
+    expect(a.style.visibility).toBe("hidden");
+    void sw.play();
+    advanceWall(2000);
+    expect(sw.currentTime).toBeCloseTo(7207, 6);
+  });
+
   it("stops listening to an element that is detached", () => {
     const { sw, b } = setup();
     const heard = vi.fn();
@@ -419,6 +434,18 @@ describe("MediaSwitch — attach and detach", () => {
 });
 
 describe("MediaSwitch — presentedTime while a switch is pending", () => {
+  it("exposes the element on screen, not the pending one, so a canvas never samples a frame the viewer does not see", () => {
+    const { sw, a, b } = setup();
+    a.currentTime = 10;
+    b.readyState = 1; // not decoded yet
+    sw.currentTime = 3605; // B is active, A's picture is still on screen
+    expect(sw.activeKey).toBe("B");
+    expect(sw.activeElement()).toBe(a);
+    b.readyState = 4;
+    b.emit("seeked");
+    expect(sw.activeElement()).toBe(b);
+  });
+
   it("keeps the shown frame's axis time until the unprimed recording has a frame", () => {
     const { sw, a, b } = setup();
     a.currentTime = 10;

@@ -280,10 +280,12 @@ describe("PreviewStage — joined recordings (ADR 0058)", () => {
     act(() => {
       playback.videoRef.current!.currentTime = 3605;
     });
-    expect(playback.videoRef.current!.activeElement?.()).toBe(b);
-    // The old frame stays up until the new recording has one to show, so a seek never flashes.
+    // The old frame stays up until the new recording has one to show, so a seek never flashes,
+    // and a canvas sampling "the element on screen" keeps reading that old picture.
+    expect(playback.videoRef.current!.activeElement?.()).toBe(a);
     expect(a!.style.visibility).toBe("visible");
     fireEvent(b!, new Event("seeked"));
+    expect(playback.videoRef.current!.activeElement?.()).toBe(b);
     expect(b!.style.visibility).toBe("visible");
     expect(a!.style.visibility).toBe("hidden");
     act(() => {
