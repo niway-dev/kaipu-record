@@ -27,7 +27,11 @@ import * as stylex from "@stylexjs/stylex";
 import { tokens } from "@kaipu/tokens/kaipu.stylex";
 import { Badge, Button } from "@kaipu/ui";
 import { clipBounds, sourceAxis } from "@renderer/features/video-editor/source-axis";
-import { axisCursorTrack } from "@renderer/features/video-editor/cursor/axis-cursor-track";
+import {
+  axisCursorTrack,
+  axisOverlayTrack,
+  frameCursorTrack,
+} from "@renderer/features/video-editor/cursor/axis-cursor-track";
 import { anyJoinedHasWebcam } from "@renderer/features/video-editor/joined-library";
 import { useJoinedRecordings } from "@renderer/features/video-editor/use-joined-recordings";
 import {
@@ -227,8 +231,9 @@ import { mediaUrl } from "@renderer/lib/media-url";
 import type { RecordingCapture } from "@shared/recording-capture";
 import {
   DEFAULT_CURSOR,
-  cursorLayerData,
+  overlayLayerData,
 } from "@renderer/features/video-editor/cursor/cursor-model";
+import { canOverlayRecordedCursor } from "@shared/native-capture";
 import { CursorLayer } from "@renderer/features/video-editor/cursor/cursor-layer";
 import { CursorInspector } from "@renderer/features/video-editor/components/inspector/cursor-inspector";
 import { uiArea } from "@renderer/lib/ui-area";
@@ -572,6 +577,15 @@ function VideoEditor({
   // that reads the pointer, so the camera path, the activity marks and the cursor layer follow a
   // joined clip. A loading or missing recording simply adds nothing.
   const joinedRecordings = useJoinedRecordings(scene.sources);
+
+  // The decoded frame as one state object: the webcam layer places itself against it (the
+  // preview's output frame is the source frame), and a stable object keeps its trigger quiet.
+  // Floating images use it as the picture's size (only its aspect matters), 16:9 until it lands.
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+  const pictureSize = useMemo(
+    () => (frameSize.width > 0 && frameSize.height > 0 ? frameSize : { width: 1920, height: 1080 }),
+    [frameSize],
+  );
   const axis = useMemo(
     () => sourceAxis(source.durationSeconds, scene.sources),
     [source.durationSeconds, scene.sources],
@@ -580,32 +594,72 @@ function VideoEditor({
     () => Math.max(...axis.recordings.map((r) => r.offset + r.duration)),
     [axis],
   );
+  // Every joined track is mapped once into frame coordinates (the opened recording's aspect, the
+  // letterbox of a recording of another one), before the camera path, the activity marks, the
+  // auto-zoom detection and the cursor layer read it.
+  const frameAspect =
+    frameSize.width > 0 && frameSize.height > 0 ? frameSize.width / frameSize.height : 0;
+  const joinedFrameTracks = useMemo(
+    () =>
+      joinedRecordings.map((j) =>
+        frameCursorTrack(
+          j.cursorTrack,
+          frameAspect,
+          j.source.width > 0 && j.source.height > 0 ? j.source.width / j.source.height : 0,
+        ),
+      ),
+    [joinedRecordings, frameAspect],
+  );
   const axisTrack = useMemo(
     () =>
       axisCursorTrack(
         cursorTrack,
-        joinedRecordings.map((j) => ({ offset: j.source.offset, track: j.cursorTrack })),
+        joinedRecordings.map((j, i) => ({ offset: j.source.offset, track: joinedFrameTracks[i] })),
       ),
-    [cursorTrack, joinedRecordings],
+    [cursorTrack, joinedRecordings, joinedFrameTracks],
+  );
+  // The pointer is drawn only inside the range of a recording that has a track AND whose own
+  // pixels exclude it; the camera, the marks and the zooms above use every track.
+  const overlayTrack = useMemo(
+    () =>
+      axisOverlayTrack(
+        {
+          offset: 0,
+          duration: source.durationSeconds,
+          track: cursorTrack,
+          canOverlay: canOverlayRecordedCursor(source.capture),
+        },
+        joinedRecordings.map((j, i) => ({
+          offset: j.source.offset,
+          duration: j.source.durationSeconds,
+          track: joinedFrameTracks[i],
+          canOverlay: canOverlayRecordedCursor(j.capture),
+        })),
+      ),
+    [source.durationSeconds, source.capture, cursorTrack, joinedRecordings, joinedFrameTracks],
   );
   // Sensitivity and Re-analyse run per recording on its own track and range: the opened one
   // and every joined recording that is READY (ADR 0058).
   const zoomRecordings = useMemo(
     () => [
       { offset: 0, duration: source.durationSeconds, track: cursorTrack },
-      ...joinedRecordings
-        .filter((j) => j.status === "ready")
-        .map((j) => ({
-          offset: j.source.offset,
-          duration: j.source.durationSeconds,
-          track: j.cursorTrack,
-        })),
+      ...joinedRecordings.flatMap((j, i) =>
+        j.status === "ready"
+          ? [
+              {
+                offset: j.source.offset,
+                duration: j.source.durationSeconds,
+                track: joinedFrameTracks[i],
+              },
+            ]
+          : [],
+      ),
     ],
-    [source.durationSeconds, cursorTrack, joinedRecordings],
+    [source.durationSeconds, cursorTrack, joinedRecordings, joinedFrameTracks],
   );
   const cursorData = useMemo(
-    () => cursorLayerData(source.capture, axisTrack, scene.cursor ?? DEFAULT_CURSOR),
-    [source.capture, axisTrack, scene.cursor],
+    () => overlayLayerData(overlayTrack, scene.cursor ?? DEFAULT_CURSOR),
+    [overlayTrack, scene.cursor],
   );
   const [cursorInspectorOpen, setCursorInspectorOpen] = useState(false);
   // The Captures panel (NIW2-764) takes the right column like the cursor settings do: one
@@ -617,14 +671,6 @@ function VideoEditor({
   // images keeps showing them, so a preview never hides what the export draws.
   const levelsOn = useFlag("timeline-levels");
   const showMedia = levelsOn || (scene.media?.length ?? 0) > 0;
-  // The decoded frame as one state object: the webcam layer places itself against it (the
-  // preview's output frame is the source frame), and a stable object keeps its trigger quiet.
-  // Floating images use it as the picture's size (only its aspect matters), 16:9 until it lands.
-  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
-  const pictureSize = useMemo(
-    () => (frameSize.width > 0 && frameSize.height > 0 ? frameSize : { width: 1920, height: 1080 }),
-    [frameSize],
-  );
   // Writes the session ~800 ms after every commit/endInteract, and flushes on unmount
   // and beforeunload. See plans/video-editor-v2/07: before this, closing the window
   // threw away every cut, zoom and redaction, because useBlocker below only ever sees

@@ -71,7 +71,14 @@ export function cursorLayerData(
   track: CursorTrack | null,
   settings: CursorSettings = DEFAULT_CURSOR,
 ): CursorLayerData | null {
-  return canOverlayRecordedCursor(capture) && track?.t.length ? { track, settings } : null;
+  return canOverlayRecordedCursor(capture) ? overlayLayerData(track, settings) : null;
+}
+/** For a track whose eligibility was already decided per recording (`axisOverlayTrack`). */
+export function overlayLayerData(
+  track: CursorTrack | null,
+  settings: CursorSettings = DEFAULT_CURSOR,
+): CursorLayerData | null {
+  return track?.t.length ? { track, settings } : null;
 }
 export interface CursorFrame {
   x: number;

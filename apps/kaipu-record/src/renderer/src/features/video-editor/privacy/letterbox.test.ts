@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { frameRectToPictureRect, isInsidePicture } from "./letterbox";
+import { frameRectToPictureRect, isInsidePicture, picturePointToFramePoint } from "./letterbox";
 
 const RECT = { x: 0.25, y: 0.2, w: 0.5, h: 0.4 };
 const WIDE = 16 / 9;
@@ -54,5 +54,33 @@ describe("isInsidePicture", () => {
     expect(isInsidePicture({ x: 0, y: 0, w: 1, h: 1 })).toBe(true);
     expect(isInsidePicture({ x: -0.1, y: 0, w: 0.5, h: 1 })).toBe(false);
     expect(isInsidePicture({ x: 0.5, y: 0, w: 0.6, h: 1 })).toBe(false);
+  });
+});
+
+describe("picturePointToFramePoint", () => {
+  it("is the identity at the same aspect or an unknown one, and returns the point itself", () => {
+    const p = { x: 0.1, y: 0.4 };
+    expect(picturePointToFramePoint(p, 16 / 9, 16 / 9)).toBe(p);
+    expect(picturePointToFramePoint(p, 0, 1)).toBe(p);
+    expect(picturePointToFramePoint(p, 16 / 9, 0)).toBe(p);
+  });
+
+  it("a square picture in a 16:9 frame has bars left and right", () => {
+    const p = picturePointToFramePoint({ x: 0.1, y: 0.4 }, 16 / 9, 1);
+    expect(p.x).toBeCloseTo(0.275, 3);
+    expect(p.y).toBe(0.4);
+    expect(picturePointToFramePoint({ x: 0, y: 0 }, 16 / 9, 1).x).toBeCloseTo(0.21875);
+    expect(picturePointToFramePoint({ x: 1, y: 1 }, 16 / 9, 1).x).toBeCloseTo(0.78125);
+  });
+
+  it("a wide picture in a 4:3 frame has bars above and below", () => {
+    const p = picturePointToFramePoint({ x: 0.3, y: 0.1 }, 4 / 3, 16 / 9);
+    expect(p.x).toBe(0.3);
+    expect(p.y).toBeCloseTo(0.125 + 0.1 * 0.75);
+  });
+
+  it("is the inverse of frameRectToPictureRect for a point", () => {
+    const picture = frameRectToPictureRect({ x: 0.275, y: 0.4, w: 0, h: 0 }, 16 / 9, 1);
+    expect(picture.x).toBeCloseTo(0.1, 3);
   });
 });
