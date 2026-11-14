@@ -3,7 +3,7 @@ title: Onboarding v2 — four steps with animated feature demos
 description: The first-run onboarding as the owner's v2 design. Welcome shows what the app does, through short animated demos, and only the permissions step blocks.
 ---
 
-> 🟡 In progress: [NIW2-769](https://linear.app/niway/issue/NIW2-769). Built from the owner's
+> 🟢 Ready to validate: [NIW2-769](https://linear.app/niway/issue/NIW2-769). Built from the owner's
 > HTML mock "Kaipu Onboarding v2", without a design round: the owner asked for the finished
 > product and will refine it after review.
 
