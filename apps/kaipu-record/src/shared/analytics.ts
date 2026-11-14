@@ -16,6 +16,7 @@ export const FLAG_NAMES = [
   "image-canvas",
   "image-inspect",
   "image-text",
+  "timeline-levels",
 ] as const;
 export type FlagName = (typeof FLAG_NAMES)[number];
 
@@ -38,6 +39,10 @@ export const FLAG_DEFAULTS: Record<FlagName, boolean> = {
   "image-inspect": false,
   // Text recognition in the image editor, macOS only for now (NIW2-705): off until owner QA.
   "image-text": false,
+  // Clips levels (NIW2-770): Add to timeline adds a floating image above the sequence. Off until
+  // the owner accepts stage 1; a scene that already has floating items still shows and exports
+  // them with the flag off.
+  "timeline-levels": false,
 };
 
 /** Identity super-properties attached to every event/error for multi-surface filtering. */

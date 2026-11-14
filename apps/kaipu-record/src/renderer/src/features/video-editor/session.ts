@@ -39,6 +39,8 @@ import type {
   ArrowOverlay,
   BoxOverlay,
   ClipItem,
+  ImageMediaItem,
+  MediaAnchor,
   MutedRange,
   SlideItem,
   TextOverlay,
@@ -176,6 +178,8 @@ export function parseSession(json: string): VideoEditSession | null {
     webcam = validateWebcam(sceneRaw["webcam"]);
   }
 
+  const media = parseMedia(sceneRaw["media"]);
+
   return {
     version: 1,
     scene: {
@@ -191,6 +195,9 @@ export function parseSession(json: string): VideoEditSession | null {
       // Additive like `webcam`: absent, a wrong shape or an unknown preset is the default,
       // never a rejected session; the numbers clamp to the screenshot editor's ranges.
       background: parseBackground(sceneRaw["background"]),
+      // Additive too, and only present when the session had some: a session from before
+      // floating images has no key, so it opens exactly as it did.
+      ...(media ? { media } : {}),
     },
     hasZoomData,
   };
@@ -256,6 +263,76 @@ function validateItem(raw: unknown): TrackItem | null {
 
   // Unknown item kind — reject to avoid the worker receiving a shape it can't render.
   return null;
+}
+
+const MEDIA_FADE_MAX_MS = 2000;
+
+function clampUnit(n: number): number {
+  return Math.min(1, Math.max(0, n));
+}
+
+function validateMediaItem(raw: unknown): ImageMediaItem | null {
+  const m = obj(raw);
+  if (!m || m["kind"] !== "image") return null;
+  if (!isStr(m["id"]) || !isStr(m["assetId"])) return null;
+  if (!isNum(m["naturalWidth"]) || !isNum(m["naturalHeight"]) || !isNum(m["duration"])) {
+    return null;
+  }
+  if (m["naturalWidth"] <= 0 || m["naturalHeight"] <= 0 || m["duration"] <= 0) return null;
+  const a = obj(m["anchor"]);
+  let anchor: MediaAnchor;
+  if (a && a["kind"] === "source" && isNum(a["time"])) {
+    anchor = { kind: "source", time: a["time"] };
+  } else if (a && a["kind"] === "item" && isStr(a["itemId"]) && isNum(a["offset"])) {
+    anchor = { kind: "item", itemId: a["itemId"], offset: Math.max(0, a["offset"]) };
+  } else {
+    return null;
+  }
+  const b = obj(m["box"]);
+  if (!b || !isNum(b["x"]) || !isNum(b["y"]) || !isNum(b["width"])) return null;
+  const fade = (v: unknown): number =>
+    isNum(v) ? Math.min(MEDIA_FADE_MAX_MS, Math.max(0, Math.round(v))) : 0;
+  return {
+    id: m["id"],
+    kind: "image",
+    assetId: m["assetId"],
+    naturalWidth: m["naturalWidth"],
+    naturalHeight: m["naturalHeight"],
+    anchor,
+    duration: m["duration"],
+    box: {
+      x: clampUnit(b["x"]),
+      y: clampUnit(b["y"]),
+      // Same floor as `setMediaBox`: a hand-edited zero would leave nothing to grab.
+      width: Math.min(1, Math.max(0.05, b["width"])),
+    },
+    z: isNum(m["z"]) ? m["z"] : 0,
+    fadeInMs: fade(m["fadeInMs"]),
+    fadeOutMs: fade(m["fadeOutMs"]),
+  };
+}
+
+/**
+ * Floating images are additive, like `webcam` and `background`: a missing or wrongly-shaped
+ * list is "none", and one bad item is dropped without costing the user's cuts and zooms. `z`
+ * comes back unique (the saved front-to-back order, ties by position) because stacking and the
+ * timeline rows rely on it.
+ */
+function parseMedia(raw: unknown): ImageMediaItem[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const seen = new Set<string>();
+  const items: ImageMediaItem[] = [];
+  for (const entry of raw as unknown[]) {
+    const item = validateMediaItem(entry);
+    if (!item || seen.has(item.id)) continue;
+    seen.add(item.id);
+    items.push(item);
+  }
+  const byZ = items
+    .map((item, position) => ({ item, position }))
+    .sort((a, b) => a.item.z - b.item.z || a.position - b.position);
+  const zById = new Map(byZ.map(({ item }, z) => [item.id, z]));
+  return items.map((item) => ({ ...item, z: zById.get(item.id)! }));
 }
 
 function validateOverlay(raw: unknown): VideoOverlay | null {

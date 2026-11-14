@@ -695,3 +695,86 @@ describe("background", () => {
     },
   );
 });
+
+describe("floating images (media)", () => {
+  const IMAGE = {
+    id: "m1",
+    kind: "image" as const,
+    assetId: "asset-uuid-2",
+    naturalWidth: 1600,
+    naturalHeight: 900,
+    anchor: { kind: "source" as const, time: 4 },
+    duration: 10,
+    box: { x: 0.5, y: 0.5, width: 1 },
+    z: 0,
+    fadeInMs: 200,
+    fadeOutMs: 200,
+  };
+  const withMedia = (media: unknown) =>
+    parseSession(
+      JSON.stringify({
+        version: 1,
+        scene: { items: [CLIP_ITEM], overlays: [], media },
+      }),
+    );
+
+  it("round-trips floating images, anchors and all", () => {
+    const onSlide = {
+      ...IMAGE,
+      id: "m2",
+      z: 1,
+      anchor: { kind: "item" as const, itemId: "slide-1", offset: 1.5 },
+    };
+    const scene: VideoScene = { ...initialScene(10), items: [CLIP_ITEM], media: [IMAGE, onSlide] };
+    expect(parseSession(serializeSession(scene))!.scene.media).toEqual([IMAGE, onSlide]);
+  });
+
+  it("opens a session saved before floating images with no media key", () => {
+    const parsed = parseSession(SESSION_BEFORE_WEBCAM)!;
+    expect(parsed.scene.media).toBeUndefined();
+    expect(Object.keys(parsed.scene)).not.toContain("media");
+  });
+
+  it("drops one malformed item and keeps the session and the rest", () => {
+    const parsed = withMedia([IMAGE, { ...IMAGE, id: "bad", assetId: 7 }, "nope"])!;
+    expect(parsed.scene.media!.map((m) => m.id)).toEqual(["m1"]);
+  });
+
+  it("ignores a media field that is not a list", () => {
+    expect(withMedia("nope")!.scene.media).toBeUndefined();
+  });
+
+  it("drops items with an unknown anchor kind or a non-positive duration", () => {
+    const parsed = withMedia([
+      { ...IMAGE, id: "a", anchor: { kind: "elsewhere" } },
+      { ...IMAGE, id: "b", duration: 0 },
+      { ...IMAGE, id: "c", naturalWidth: 0 },
+    ])!;
+    expect(parsed.scene.media).toEqual([]);
+  });
+
+  it("clamps the box and the fades into their ranges", () => {
+    const parsed = withMedia([
+      { ...IMAGE, box: { x: 4, y: -1, width: 9 }, fadeInMs: 99999, fadeOutMs: -5 },
+    ])!;
+    const [item] = parsed.scene.media!;
+    expect(item.box).toEqual({ x: 1, y: 0, width: 1 });
+    expect([item.fadeInMs, item.fadeOutMs]).toEqual([2000, 0]);
+  });
+
+  it("makes z unique, keeping the saved front-to-back order", () => {
+    const parsed = withMedia([
+      { ...IMAGE, id: "a", z: 5 },
+      { ...IMAGE, id: "b", z: 5 },
+      { ...IMAGE, id: "c", z: 2 },
+    ])!;
+    const media = parsed.scene.media!;
+    expect(new Set(media.map((m) => m.z)).size).toBe(3);
+    const byZ = [...media].sort((x, y) => x.z - y.z).map((m) => m.id);
+    expect(byZ).toEqual(["c", "a", "b"]);
+  });
+
+  it("drops a repeated id", () => {
+    expect(withMedia([IMAGE, { ...IMAGE, z: 3 }])!.scene.media).toHaveLength(1);
+  });
+});
