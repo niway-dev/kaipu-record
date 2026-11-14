@@ -98,13 +98,14 @@ time`, or the first upper row when it overlaps none. An item goes to a higher ro
   not only on a mid-timeline delete. Moving them to the same anchor is a follow-up, listed in the
   spec; it needs a migration of saved scenes.
 - A cut that removes the second a floating item starts on hides the whole item, even when the
-  rest of the footage it covered survives. Accepted for the first stage and listed as an open
-  question in the spec; the alternative is to move its start to the next surviving second.
+  rest of the footage it covered survives. Approved by the owner on 2026-11-14 for the first
+  stage, and kept as open question 4 in the spec to judge in the real app; the alternative is to move its start to the next surviving second.
 - A floating item longer than what remains of the video is cut at the video's end; it never
   extends the video.
 - The owner's sketch 3 (an item on the upper level from 0, the recording starting later and
   overlapping its end) is not representable as drawn. It reads either as the crossfade of
-  decision 6 or as empty background before the recording; the owner has not chosen.
+  decision 6 or as empty background before the recording; the owner approved the crossfade on
+  2026-11-14.
 - Preview and export must compute floating items from one pure function of the scene, the layout
   and the time, or they will disagree.
 
