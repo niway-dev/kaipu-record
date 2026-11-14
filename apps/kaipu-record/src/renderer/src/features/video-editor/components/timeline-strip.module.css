@@ -228,6 +228,46 @@
   cursor: pointer;
 }
 
+/* Where a dragged Library recording would land (NIW2-782): a bar on the clip boundary and a pill
+   above it. Above the blocks and their handles; never a hit target. */
+.insertIndicator {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  z-index: 4;
+  width: 3px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--accent-primary);
+  pointer-events: none;
+}
+
+.insertPill {
+  position: absolute;
+  bottom: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-primary);
+  color: #fff;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.insertIndicator[data-edge="start"] .insertPill {
+  left: 0;
+  transform: none;
+}
+
+.insertIndicator[data-edge="end"] .insertPill {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
 .block {
   position: absolute;
   top: 0;

@@ -1,5 +1,5 @@
 import type { LibraryVideo } from "@renderer/features/library/types";
-import { MIN_ITEM_DURATION } from "./timeline";
+import { boundaryIndexAt, MIN_ITEM_DURATION, type LayoutEntry } from "./timeline";
 
 /**
  * The recordings the Add recording panel offers (NIW2-782): the Library's own recordings, other
@@ -34,4 +34,24 @@ export function resolutionLabel(video: Pick<LibraryVideo, "capture">): string | 
   const width = video.capture?.width ?? 0;
   const height = video.capture?.height ?? 0;
   return width > 0 && height > 0 ? `${width} × ${height}` : null;
+}
+
+/**
+ * The type a dragged Library row carries in `dataTransfer` (its value is the recording's
+ * asset id). A drag of anything else, a file from Finder or text, never lights the timeline up.
+ */
+export const RECORDING_DRAG_MIME = "application/x-kaipu-recording";
+
+/**
+ * Where a recording dropped at timeline time `t` would land: `index` in the scene's items and
+ * `time`, that boundary's second on the timeline, which is where the indicator is drawn. The
+ * index is `boundaryIndexAt`'s, the rule the join itself applies to the time it is handed, so
+ * dropping at `time` inserts exactly where the indicator was.
+ */
+export function insertBoundaryAt(
+  layout: LayoutEntry[],
+  t: number,
+): { index: number; time: number } {
+  const index = boundaryIndexAt(layout, t);
+  return { index, time: index === 0 ? 0 : layout[index - 1].timelineEnd };
 }

@@ -1568,6 +1568,17 @@ function VideoEditor({
     },
     [joinRecordingAt, t],
   );
+  // The row being dragged onto the sequence. A drag's contents are hidden until the drop, so
+  // the panel hands the video over here when the drag starts and the Clips row reads it on drop.
+  const draggedRecordingRef = useRef<LibraryVideo | null>(null);
+  const dropRecording = useCallback(
+    (boundaryTime: number) => {
+      const video = draggedRecordingRef.current;
+      draggedRecordingRef.current = null;
+      if (video) void addRecording(video, boundaryTime);
+    },
+    [addRecording],
+  );
 
   /** A capture's image: move the playhead to its moment, if that moment is still on the timeline. */
   const seekToCapture = useCallback(
@@ -2528,6 +2539,12 @@ function VideoEditor({
               openedAssetId={source.assetId}
               loaded={libraryRecordings.loaded}
               onAdd={(video) => void addRecording(video, playback.timelineTime)}
+              onDragStart={(video) => {
+                draggedRecordingRef.current = video;
+              }}
+              onDragEnd={() => {
+                draggedRecordingRef.current = null;
+              }}
               onClose={() => setAddRecordingOpen(false)}
             />
           ) : (
@@ -2695,6 +2712,7 @@ function VideoEditor({
           extraLanes={extraLanes}
           media={timelineMedia}
           onOpenGuide={openGuide}
+          onDropRecording={levelsOn ? dropRecording : undefined}
         />
       </footer>
       {blocker.state === "blocked" && (

@@ -11,6 +11,7 @@ import {
 } from "react";
 import { Film, ImagePlus, Info, PenLine, type LucideIcon } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
+import { insertBoundaryAt, RECORDING_DRAG_MIME } from "../add-from-library";
 import { isGuideTab, type GuideTab } from "../track-guide";
 import type { PreviewPlayback } from "../use-preview-playback";
 import type { LayoutEntry } from "../timeline";
@@ -102,6 +103,7 @@ export const TimelineStrip = memo(function TimelineStrip({
   extraLanes = [],
   timelineView,
   onOpenGuide,
+  onDropRecording,
 }: {
   layout: LayoutEntry[];
   playback: PreviewPlayback;
@@ -146,6 +148,10 @@ export const TimelineStrip = memo(function TimelineStrip({
   /** The page's zoom and scroll (the transport bar's zoom control drives the same store).
    *  Omitted, the strip keeps its own, at fit. */
   timelineView?: TimelineViewStore;
+  /** A Library recording was dropped on the Clips row (NIW2-782): `time` is the timeline second
+   *  of the clip boundary the Insert here indicator showed. While a recording is dragged over the
+   *  row the strip draws that indicator. Omitted, the row accepts no drag and draws nothing. */
+  onDropRecording?: (time: number) => void;
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
   // Hovering a clip outlines every clip of the same recording; only a scene with joins has any.
@@ -395,6 +401,49 @@ export const TimelineStrip = memo(function TimelineStrip({
     if (hoverRef.current) delete hoverRef.current.dataset.visible;
   }, []);
 
+  // Dragging a Library recording over the Clips row: the clip would land on the boundary nearest
+  // the pointer (`insertBoundaryAt`, the join's own rule), so that boundary is drawn. Only a drag
+  // that carries the recording type counts; files and text pass through untouched.
+  const [insertAt, setInsertAt] = useState<number | null>(null);
+  const isRecordingDrag = (event: React.DragEvent): boolean =>
+    Array.from(event.dataTransfer.types).includes(RECORDING_DRAG_MIME);
+  const boundaryUnder = useCallback(
+    (clientX: number): number | null => {
+      const time = timeAtPointer(clientX);
+      return time === null ? null : insertBoundaryAt(layout, time).time;
+    },
+    [layout, timeAtPointer],
+  );
+  const onTrackDragOver = (event: React.DragEvent<HTMLDivElement>): void => {
+    if (!isRecordingDrag(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setInsertAt(boundaryUnder(event.clientX));
+  };
+  const onTrackDragLeave = (event: React.DragEvent<HTMLDivElement>): void => {
+    // Crossing from the row into one of its clips also fires dragleave; only leaving the row hides.
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setInsertAt(null);
+  };
+  const onTrackDrop = (event: React.DragEvent<HTMLDivElement>): void => {
+    if (!isRecordingDrag(event)) return;
+    event.preventDefault();
+    setInsertAt(null);
+    const time = boundaryUnder(event.clientX);
+    if (time !== null) onDropRecording?.(time);
+  };
+  // A cancelled drag (Escape) or a drop elsewhere ends on the dragged row, not on this one.
+  useEffect(() => {
+    if (insertAt === null) return;
+    const hide = (): void => setInsertAt(null);
+    window.addEventListener("dragend", hide);
+    window.addEventListener("drop", hide);
+    return () => {
+      window.removeEventListener("dragend", hide);
+      window.removeEventListener("drop", hide);
+    };
+  }, [insertAt]);
+
   const onRulerPointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       const time = timeAtPointer(event.clientX) ?? 0;
@@ -513,7 +562,13 @@ export const TimelineStrip = memo(function TimelineStrip({
               onPointerUp={endScrub}
               onPointerCancel={endScrub}
               onLostPointerCapture={endScrub}
+              onDragOver={onDropRecording ? onTrackDragOver : undefined}
+              onDragLeave={onDropRecording ? onTrackDragLeave : undefined}
+              onDrop={onDropRecording ? onTrackDrop : undefined}
             >
+              {insertAt !== null && (
+                <InsertIndicator time={insertAt} fraction={timeToFraction(insertAt, duration)} />
+              )}
               {layout.map((entry) => {
                 const recording = clipRecordings?.get(entry.itemId);
                 return (
@@ -593,6 +648,33 @@ export const TimelineStrip = memo(function TimelineStrip({
     </div>
   );
 });
+
+/**
+ * Where a dragged Library recording would land (NIW2-782): a pink bar on the clip boundary and a
+ * pill above it, "Insert here · 0:22.0". Inside the Clips row, so it follows the lanes' zoom and
+ * scroll; never a drop target of its own. Near either end the pill grows inward instead of
+ * hanging past the lane.
+ */
+function InsertIndicator({
+  time,
+  fraction,
+}: {
+  time: number;
+  fraction: number;
+}): React.JSX.Element {
+  const t = useTranslations("videoEditor");
+  const edge = fraction < 0.05 ? "start" : fraction > 0.95 ? "end" : undefined;
+  return (
+    <div
+      className={styles.insertIndicator}
+      data-testid="insert-indicator"
+      data-edge={edge}
+      style={{ left: `${fraction * 100}%` }}
+    >
+      <span className={styles.insertPill}>{t("insertHere", { time: formatScrubTime(time) })}</span>
+    </div>
+  );
+}
 
 function LaneLabel({
   icon: Icon,

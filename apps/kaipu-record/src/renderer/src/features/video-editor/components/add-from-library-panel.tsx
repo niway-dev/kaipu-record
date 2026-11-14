@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "@kaipu/i18n";
 import { absoluteDate, formatDuration } from "@renderer/features/library/format";
 import type { LibraryVideo } from "@renderer/features/library/types";
-import { joinableRecordings, resolutionLabel } from "../add-from-library";
+import { joinableRecordings, RECORDING_DRAG_MIME, resolutionLabel } from "../add-from-library";
 import styles from "./add-from-library-panel.module.css";
 
 export interface AddFromLibraryPanelProps {
@@ -15,6 +15,11 @@ export interface AddFromLibraryPanelProps {
   loaded: boolean;
   /** Add this recording to the sequence (a click on its row). */
   onAdd(video: LibraryVideo): void;
+  /** A row started to be dragged: the browser hides a drag's contents until the drop, so the
+   *  page keeps which recording it is for the timeline's drop to read. */
+  onDragStart?(video: LibraryVideo): void;
+  /** The drag ended, dropped on the sequence or cancelled. */
+  onDragEnd?(): void;
   onClose(): void;
 }
 
@@ -28,6 +33,8 @@ export function AddFromLibraryPanel({
   openedAssetId,
   loaded,
   onAdd,
+  onDragStart,
+  onDragEnd,
   onClose,
 }: AddFromLibraryPanelProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
@@ -88,6 +95,20 @@ export function AddFromLibraryPanel({
                   aria-label={t("addFromLibraryRow", { title: video.title })}
                   title={t("addFromLibraryRow", { title: video.title })}
                   onClick={() => onAdd(video)}
+                  draggable
+                  onDragStart={(event) => {
+                    event.dataTransfer.setData(RECORDING_DRAG_MIME, video.assetId);
+                    event.dataTransfer.effectAllowed = "copy";
+                    // The row itself is the drag image, held where the user grabbed it.
+                    const box = event.currentTarget.getBoundingClientRect();
+                    event.dataTransfer.setDragImage(
+                      event.currentTarget,
+                      event.clientX - box.left,
+                      event.clientY - box.top,
+                    );
+                    onDragStart?.(video);
+                  }}
+                  onDragEnd={() => onDragEnd?.()}
                 >
                   <span className={styles.thumb}>
                     {video.thumbnailUrl ? (

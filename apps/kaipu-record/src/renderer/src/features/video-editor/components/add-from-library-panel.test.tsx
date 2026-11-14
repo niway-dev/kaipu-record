@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LibraryVideo } from "@renderer/features/library/types";
+import { RECORDING_DRAG_MIME } from "../add-from-library";
 import { AddFromLibraryPanel, type AddFromLibraryPanelProps } from "./add-from-library-panel";
 
 function video(over: Partial<LibraryVideo> & { assetId: string }): LibraryVideo {
@@ -117,5 +118,47 @@ describe("AddFromLibraryPanel", () => {
     const props = renderPanel();
     fireEvent.click(screen.getByRole("button", { name: "Close Add from Library" }));
     expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  describe("dragging a row onto the sequence", () => {
+    function fakeDataTransfer() {
+      return {
+        setData: vi.fn(),
+        setDragImage: vi.fn(),
+        effectAllowed: "none",
+        types: [] as string[],
+      };
+    }
+
+    it("makes every row draggable", () => {
+      renderPanel({ videos: [video({ assetId: "a" }), video({ assetId: "b" })] });
+      for (const row of screen.getAllByTestId("add-from-library-row")) {
+        expect(row).toHaveAttribute("draggable", "true");
+      }
+    });
+
+    it("starting a drag puts the asset id under the recording type and says which video it is", () => {
+      const dragged = video({ assetId: "asset-b", title: "Checkout bug" });
+      const props = renderPanel({ videos: [dragged], onDragStart: vi.fn() });
+      const dataTransfer = fakeDataTransfer();
+
+      fireEvent.dragStart(screen.getByRole("button", { name: "Add Checkout bug" }), {
+        dataTransfer,
+      });
+
+      expect(dataTransfer.setData).toHaveBeenCalledWith(RECORDING_DRAG_MIME, "asset-b");
+      expect(dataTransfer.effectAllowed).toBe("copy");
+      expect(dataTransfer.setDragImage).toHaveBeenCalledTimes(1);
+      // The browser hides dataTransfer's contents during dragover: the page keeps the video.
+      expect(props.onDragStart).toHaveBeenCalledWith(dragged);
+    });
+
+    it("ending the drag, dropped or cancelled, calls onDragEnd", () => {
+      const props = renderPanel({ videos: [video({ assetId: "a" })], onDragEnd: vi.fn() });
+
+      fireEvent.dragEnd(screen.getByTestId("add-from-library-row"));
+
+      expect(props.onDragEnd).toHaveBeenCalledTimes(1);
+    });
   });
 });

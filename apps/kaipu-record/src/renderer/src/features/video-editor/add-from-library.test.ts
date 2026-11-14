@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LibraryVideo } from "@renderer/features/library/types";
-import { joinableRecordings, resolutionLabel } from "./add-from-library";
+import { boundaryIndexAt, type LayoutEntry } from "./timeline";
+import { joinableRecordings, resolutionLabel, insertBoundaryAt } from "./add-from-library";
 
 function video(over: Partial<LibraryVideo> & { assetId: string }): LibraryVideo {
   return {
@@ -103,5 +104,48 @@ describe("resolutionLabel", () => {
     expect(
       resolutionLabel(video({ assetId: "a", capture: { width: 0, height: 0 } as never })),
     ).toBeNull();
+  });
+});
+
+function clip(itemId: string, timelineStart: number, timelineEnd: number): LayoutEntry {
+  return { itemId, kind: "clip", timelineStart, timelineEnd, sourceStart: 0, sourceEnd: 0 };
+}
+
+describe("insertBoundaryAt", () => {
+  const two = [clip("a", 0, 10), clip("b", 10, 25)];
+
+  it("before the first clip, snaps to the start", () => {
+    expect(insertBoundaryAt(two, 1)).toEqual({ index: 0, time: 0 });
+    expect(insertBoundaryAt(two, -3)).toEqual({ index: 0, time: 0 });
+  });
+
+  it("between two clips, snaps to the nearer edge: the seam when the pointer is close to it", () => {
+    expect(insertBoundaryAt(two, 9)).toEqual({ index: 1, time: 10 });
+    expect(insertBoundaryAt(two, 12)).toEqual({ index: 1, time: 10 });
+  });
+
+  it("after the last clip, snaps to the end", () => {
+    expect(insertBoundaryAt(two, 24)).toEqual({ index: 2, time: 25 });
+    expect(insertBoundaryAt(two, 99)).toEqual({ index: 2, time: 25 });
+  });
+
+  it("with a single clip, offers its start or its end", () => {
+    const one = [clip("a", 0, 30)];
+    expect(insertBoundaryAt(one, 5)).toEqual({ index: 0, time: 0 });
+    expect(insertBoundaryAt(one, 20)).toEqual({ index: 1, time: 30 });
+  });
+
+  it("is the same boundary the join picks for that time, so the indicator shows where the clip lands", () => {
+    const layout = [clip("a", 0, 4), clip("b", 4, 9), clip("c", 9, 20)];
+    for (const t of [0, 1.9, 2.1, 6, 6.6, 7, 14, 14.6, 30]) {
+      const at = insertBoundaryAt(layout, t);
+      expect(at.index).toBe(boundaryIndexAt(layout, t));
+      // Handing the join the boundary's own time lands on the same boundary.
+      expect(boundaryIndexAt(layout, at.time)).toBe(at.index);
+    }
+  });
+
+  it("says the start for an empty layout", () => {
+    expect(insertBoundaryAt([], 5)).toEqual({ index: 0, time: 0 });
   });
 });

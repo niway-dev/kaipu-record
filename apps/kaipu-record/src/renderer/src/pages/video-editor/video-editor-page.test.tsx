@@ -1,10 +1,20 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  createEvent,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import { SESSION_BEFORE_WEBCAM } from "@renderer/features/video-editor/session-before-webcam.fixture";
 import { serializeSession } from "@renderer/features/video-editor/session";
+import { RECORDING_DRAG_MIME } from "@renderer/features/video-editor/add-from-library";
 import { initialScene } from "@renderer/features/video-editor/scene";
 import { TRACK_KEYS } from "@renderer/features/video-editor/tracks";
 import { WEBCAM_DEFAULTS } from "@renderer/features/video-editor/webcam/webcam-model";
@@ -2949,5 +2959,128 @@ describe("VideoEditorPage — Add recording (NIW2-782)", () => {
 
     expect(screen.queryByRole("button", { name: "Add recording" })).toBeNull();
     expect(screen.queryByTestId("add-from-library-panel")).toBeNull();
+  });
+
+  describe("dragging a recording onto the sequence", () => {
+    /** jsdom has no DragEvent, so testing-library's event drops `clientX`: set it by hand. */
+    function dragOnto(
+      type: "dragOver" | "drop",
+      target: Element,
+      clientX: number,
+      dataTransfer: unknown,
+    ): void {
+      const event = createEvent[type](target, { dataTransfer: dataTransfer as never });
+      Object.defineProperty(event, "clientX", { value: clientX });
+      fireEvent(target, event);
+    }
+
+    /** jsdom lays nothing out: the timeline's scroller is at x = 0 with a 1000 px lane. */
+    function stubLane(): void {
+      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+        function (this: HTMLElement) {
+          const width = this.dataset.testid === "timeline-scroller" ? 1000 : 0;
+          return {
+            left: 0,
+            right: width,
+            width,
+            top: 0,
+            bottom: 0,
+            height: 0,
+            x: 0,
+            y: 0,
+          } as DOMRect;
+        },
+      );
+    }
+
+    function startDrag(title: string): { types: string[] } {
+      const dataTransfer = {
+        setData: vi.fn(),
+        setDragImage: vi.fn(),
+        effectAllowed: "none",
+        types: [RECORDING_DRAG_MIME],
+        dropEffect: "none",
+      };
+      fireEvent.dragStart(screen.getByRole("button", { name: `Add ${title}` }), { dataTransfer });
+      return dataTransfer;
+    }
+
+    afterEach(() => vi.restoreAllMocks());
+
+    it("shows Insert here at the nearest clip boundary and a drop inserts the recording there, as one undo step", async () => {
+      stubLane();
+      renderEditor();
+      const footer = await waitForEditorLoaded();
+      fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+      await screen.findByRole("button", { name: "Add Checkout bug" });
+      const track = footer.querySelector(BLOCK_BUTTONS)!.parentElement!;
+      const dataTransfer = startDrag("Checkout bug");
+
+      // 900 px of 1000 = 27 s of a 30 s clip: its end is the nearest boundary.
+      dragOnto("dragOver", track, 900, dataTransfer);
+      expect(screen.getByText("Insert here · 0:30.0")).toBeInTheDocument();
+      dragOnto("drop", track, 900, dataTransfer);
+
+      await waitFor(() => expect(screen.getByText(/\/ 0:40\.0$/)).toBeInTheDocument());
+      const labels = within(footer)
+        .getAllByTestId("clip-label")
+        .map((label) => label.textContent);
+      expect(labels[0]).toContain(SOURCE.title);
+      expect(labels[1]).toContain("Checkout bug");
+      expect(screen.queryByTestId("insert-indicator")).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+      await waitFor(() => expect(screen.getByText(/\/ 0:30\.0$/)).toBeInTheDocument());
+      expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
+    });
+
+    it("dropping near the start inserts the recording before the opened one", async () => {
+      stubLane();
+      renderEditor();
+      const footer = await waitForEditorLoaded();
+      fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+      await screen.findByRole("button", { name: "Add Checkout bug" });
+      const track = footer.querySelector(BLOCK_BUTTONS)!.parentElement!;
+      const dataTransfer = startDrag("Checkout bug");
+
+      dragOnto("drop", track, 60, dataTransfer);
+
+      await waitFor(() => expect(screen.getByText(/\/ 0:40\.0$/)).toBeInTheDocument());
+      const labels = within(footer)
+        .getAllByTestId("clip-label")
+        .map((label) => label.textContent);
+      expect(labels[0]).toContain("Checkout bug");
+      expect(labels[1]).toContain(SOURCE.title);
+    });
+
+    it("a drag that is not a Library recording inserts nothing", async () => {
+      stubLane();
+      renderEditor();
+      const footer = await waitForEditorLoaded();
+      const track = footer.querySelector(BLOCK_BUTTONS)!.parentElement!;
+
+      dragOnto("drop", track, 900, { types: ["Files"], getData: () => "" });
+
+      expect(screen.getByText(/\/ 0:30\.0$/)).toBeInTheDocument();
+    });
+
+    it("with timeline-levels off the Clips row accepts no drop", async () => {
+      levelsFlag.on = false;
+      stubLane();
+      renderEditor();
+      const footer = await waitForEditorLoaded();
+      const track = footer.querySelector(BLOCK_BUTTONS)!.parentElement!;
+      const dataTransfer = { types: [RECORDING_DRAG_MIME], getData: () => "asset-b" };
+      const over = createEvent.dragOver(track, { dataTransfer: dataTransfer as never });
+      Object.defineProperty(over, "clientX", { value: 900 });
+
+      const notPrevented = fireEvent(track, over);
+      dragOnto("drop", track, 900, dataTransfer);
+
+      expect(notPrevented).toBe(true);
+      expect(screen.queryByTestId("insert-indicator")).toBeNull();
+      expect(screen.getByText(/\/ 0:30\.0$/)).toBeInTheDocument();
+    });
   });
 });
