@@ -79,6 +79,9 @@ const overlayWarmup: OverlayWarmup = {
   canWarm: () => !overlayBusy(),
 };
 
+/** Shows the main window on the Record settings page; main wires it in. */
+let showRecordSettings: () => void = () => {};
+
 /** `disposeCaptureOverlay()` ran: an instance created afterwards is disposed on the spot. */
 let overlayDisposed = false;
 
@@ -90,6 +93,7 @@ function overlayWindowsInstance(): CaptureOverlayWindows {
     warmup: overlayWarmup,
     // A selection made over a take must stay out of the video (NIW2-688).
     protectContent: () => duringTakeCapture(),
+    openRecordSettings: () => showRecordSettings(),
   });
   if (overlayDisposed) overlayWindows.dispose();
   return overlayWindows;
@@ -197,8 +201,11 @@ export function registerScreenshotHandlers(
   /** Whether a take is active or pending, so a capture over it can be handled (NIW2-688). */
   isTakeInProgress?: () => boolean,
   recordingTarget?: () => Promise<RecordingCaptureTarget | null>,
+  /** The overlay's "More settings": show the main window on the Record settings page. */
+  openRecordSettings?: () => void,
 ): ScreenshotHandlers {
   if (isTakeInProgress) takeInProgress = isTakeInProgress;
+  if (openRecordSettings) showRecordSettings = openRecordSettings;
   const provider = createScreenshotProvider(process.platform);
   const toastSeam = deferToastUntilAfterCapture(
     appWindows,

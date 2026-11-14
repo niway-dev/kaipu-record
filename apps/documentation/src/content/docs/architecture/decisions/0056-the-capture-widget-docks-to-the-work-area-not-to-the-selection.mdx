@@ -1,0 +1,68 @@
+---
+title: "ADR 0056: The capture widget docks to the work area, not to the selection"
+description: One toolbar, in both screenshot and recording intents, sits at the bottom of the display's work area and jumps to the top when the selection reaches it. It replaces the action bar, the record panel, the ratio bar and the pinned hint line that followed the selection box.
+---
+
+# ADR 0056: The capture widget docks to the work area, not to the selection
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                                       |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Accepted, 2026-11-13, by the owner's decision on [NIW2-751](https://linear.app/niway/issue/NIW2-751/capture-widget-one-toolbar-docked-to-the-bottom-of-the-work-area-for). Built in the same PR. Spec: [capture widget, one toolbar](/specs/2026-11-13-capture-widget-one-toolbar-design/). |
+| Date          | 2026-11-13                                                                                                                                                                                                                                                                                  |
+| Relates to    | 0022 (the overlay never captures itself), 0030 (record from the overlay), 0043 (an explicit Copy is quiet), 0046 (the typed UI map)                                                                                                                                                         |
+| Supersedes    | The placement in the record-capture-modes spec (2026-10-26), which put the record widget on the selection's right edge                                                                                                                                                                      |
+| Superseded by | —                                                                                                                                                                                                                                                                                           |
+
+## Context
+
+The capture overlay was four pieces that follow the selection box: an action bar under the box
+(screenshot), a vertical panel on the box's right edge and a ratio bar above it (recording), and a
+hint line pinned to the screen bottom, far from the controls and drawn over other apps' text.
+They spread out, overlapped the content and each other, and the control that matters, the start
+button, was a dot with no text. The owner tested that version and rejected it.
+
+## Decision
+
+1. **One toolbar for both intents**, with the same structure: capture-as, area and ratio on the
+   first row; the intent's inputs and the confirm button on the second; key hints inside it on the
+   third.
+2. **It docks to the display's work area**, centred, 16 px above the bottom edge. The work area
+   already excludes the Dock, the taskbar and the menu bar.
+3. **Jump rule.** If the selection reaches the band the widget would occupy, the widget moves to
+   the top of the work area, 16 px below its top edge. It returns when the box leaves the band.
+4. **No free edge.** In Screen mode, or with a Frame box that spans the full height, the widget
+   stays at the bottom and covers that strip. The widget is hidden before capture (0022), so the
+   strip is in the image or video. This is accepted.
+5. **The countdown runs inside the widget**, which stays visible and dims; the overlay starts
+   the take at zero.
+6. **The old pieces are deleted:** the selection toolbar, the record widget, the ratio bar and
+   the pinned hint pill.
+
+## Alternatives rejected
+
+- **Direction B, a side panel,** and **direction C, a compact bar,** of the commissioned mock: the
+  owner chose A.
+- **Restyling the existing pieces in place:** the problem is that there are several pieces that
+  follow the box, not how each looks.
+- **A translucent or collapsed widget for full-screen selections:** a second state to learn for a
+  case the owner accepts as covering a strip.
+
+## Consequences
+
+- The widget's position depends on the display's work area and the box, not on a measured
+  selection edge, so the placement is a pure function a test pins.
+- In Screen mode every display shows its own widget.
+- The record-capture-modes placement (right edge) no longer exists; ratios now show in the
+  screenshot intent too.
+
+## Non-goals
+
+Window mode (stays disabled, "soon"), editable W × H and size presets, a compact or collapsed
+widget.
+
+## Reopen when
+
+The owner finds that the bottom position covers what they need to see in common captures, or a
+compact mode is requested.

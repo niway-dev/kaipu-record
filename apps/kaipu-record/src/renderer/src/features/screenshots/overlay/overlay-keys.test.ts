@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { actionForKey, copyKeyLabel, detectKeyPlatform, recordKeyLabel } from "./overlay-keys";
+import {
+  actionForKey,
+  copyKeyLabel,
+  detectKeyPlatform,
+  recordKeyLabel,
+  toggleForKey,
+} from "./overlay-keys";
 
 const api = window.electronAPI as { platform: string };
 const original = api.platform;
@@ -78,5 +84,62 @@ describe("actionForKey", () => {
   it("prints the record key per platform", () => {
     expect(recordKeyLabel("mac")).toBe("R");
     expect(recordKeyLabel("other")).toBe("R");
+  });
+});
+
+describe("toggleForKey", () => {
+  const key = (init: KeyboardEventInit) => new KeyboardEvent("keydown", init);
+
+  it("M, A and W toggle the microphone, system audio and camera while recording", () => {
+    expect(toggleForKey(key({ key: "m" }), "record")).toBe("isMicrophoneEnabled");
+    expect(toggleForKey(key({ key: "A" }), "record")).toBe("isSystemAudioEnabled");
+    expect(toggleForKey(key({ key: "w" }), "record")).toBe("isCameraEnabled");
+  });
+
+  it("does nothing in the screenshot intent", () => {
+    for (const name of ["m", "a", "w"]) {
+      expect(toggleForKey(key({ key: name }), "capture")).toBeNull();
+    }
+  });
+
+  it("ignores key repeat, so a held key flips an input once", () => {
+    expect(toggleForKey(key({ key: "m", repeat: true }), "record")).toBeNull();
+  });
+
+  it("ignores any press with a modifier, so ⌘M, Ctrl+A and Shift+W do not toggle", () => {
+    for (const init of [
+      { metaKey: true },
+      { ctrlKey: true },
+      { altKey: true },
+      { shiftKey: true },
+    ]) {
+      expect(toggleForKey(key({ key: "m", ...init }), "record")).toBeNull();
+      expect(toggleForKey(key({ key: "a", ...init }), "record")).toBeNull();
+      expect(toggleForKey(key({ key: "w", ...init }), "record")).toBeNull();
+    }
+  });
+
+  it("ignores events from editable controls", () => {
+    for (const tag of ["input", "textarea", "select"]) {
+      const field = document.createElement(tag);
+      document.body.append(field);
+      const event = new KeyboardEvent("keydown", { key: "m", bubbles: true });
+      field.dispatchEvent(event);
+      expect(toggleForKey(event, "record")).toBeNull();
+      field.remove();
+    }
+    const editable = document.createElement("div");
+    editable.contentEditable = "true";
+    document.body.append(editable);
+    const event = new KeyboardEvent("keydown", { key: "w", bubbles: true });
+    editable.dispatchEvent(event);
+    expect(toggleForKey(event, "record")).toBeNull();
+    editable.remove();
+  });
+
+  it("does not touch the other keys: Enter, R, P, V, C, 1 and 2", () => {
+    for (const name of ["Enter", "r", "p", "v", "1", "2", "c"]) {
+      expect(toggleForKey(key({ key: name }), "record")).toBeNull();
+    }
   });
 });

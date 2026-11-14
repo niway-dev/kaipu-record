@@ -264,6 +264,40 @@ describe("MacProvider", () => {
       expect(runCli).not.toHaveBeenCalled();
     });
 
+    it("carries countdownDone from a rect record answer to the record result", async () => {
+      displays = [main, left];
+      const rect = { x: 100, y: 50, width: 640, height: 360 };
+      answer = {
+        kind: "rect",
+        mode: "frame",
+        action: "record",
+        displayId: 2,
+        rect,
+        countdownDone: true,
+      };
+      const out = await macProvider().capture({ mode: "frame", overlay: fake, intent: "record" });
+      expect(out).toEqual({ kind: "record", start: true, displayId: 2, rect, countdownDone: true });
+    });
+
+    it("carries countdownDone from a display record answer to the record result", async () => {
+      displays = [main, left];
+      answer = {
+        kind: "display",
+        mode: "screen",
+        action: "record",
+        displayId: 2,
+        countdownDone: true,
+      };
+      const out = await macProvider().capture({ mode: "screen", overlay: fake });
+      expect(out).toEqual({
+        kind: "record",
+        start: true,
+        displayId: 2,
+        rect: null,
+        countdownDone: true,
+      });
+    });
+
     it("screen with one display in the record intent opens the overlay and records what it answers", async () => {
       // Every entry opens the widget: nothing records until the user confirms in it.
       answer = { kind: "display", mode: "screen", action: "record", displayId: 1 };

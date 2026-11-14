@@ -54,8 +54,14 @@ export function AppRoot(): React.JSX.Element {
   // flag an auto-start. The Record page reads the flag and starts.
   useEffect(
     () =>
-      window.electronAPI.onRequestStartRecording(() => {
-        navigate("/", { state: { startAt: Date.now() } });
+      window.electronAPI.onRequestStartRecording((payload) => {
+        // The overlay already counted down: carry it to the Record page, which starts at once.
+        navigate(
+          "/",
+          payload?.countdownDone === true
+            ? { state: { startAt: Date.now(), skipCountdown: true } }
+            : { state: { startAt: Date.now() } },
+        );
       }),
     [navigate],
   );

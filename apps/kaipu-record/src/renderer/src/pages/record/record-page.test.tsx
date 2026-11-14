@@ -131,6 +131,33 @@ describe("RecordPage auto-start", () => {
     expect(startRecording).toHaveBeenCalledTimes(1);
   });
 
+  it("passes skipCountdown when main says the overlay already counted down", () => {
+    renderAt({ startAt: 100, skipCountdown: true });
+    expect(startRecording).toHaveBeenCalledExactlyOnceWith({ skipCountdown: true });
+  });
+
+  it("a plain startAt starts with no options", () => {
+    renderAt({ startAt: 100 });
+    expect(startRecording).toHaveBeenCalledExactlyOnceWith();
+  });
+
+  it("does not start again when the page remounts on the same history entry (Back from the new take)", () => {
+    // The router keeps `state` on the history entry, so Back to "/" remounts the page with the
+    // old `startAt`. The first start consumes it: a remount must not begin another take.
+    const ui = (show: boolean): React.JSX.Element => (
+      <MemoryRouter
+        initialEntries={[{ pathname: "/", state: { startAt: 100, skipCountdown: true } }]}
+      >
+        <WorkspacesProvider>{show ? <RecordPage /> : null}</WorkspacesProvider>
+      </MemoryRouter>
+    );
+    const view = render(ui(true));
+    expect(startRecording).toHaveBeenCalledExactlyOnceWith({ skipCountdown: true });
+    view.rerender(ui(false));
+    view.rerender(ui(true));
+    expect(startRecording).toHaveBeenCalledTimes(1);
+  });
+
   it("does not auto-start when there is no selected source", () => {
     setupState.selectedSource = null;
     renderAt({ startAt: 100 });

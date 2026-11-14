@@ -5,7 +5,9 @@ import type { CaptureAction, CaptureRect, ListedWindow } from "@shared/types/scr
 import type { SendAnswer } from "./capture-overlay";
 import { actionForKey } from "./overlay-keys";
 import { workAreaInWindow, type OverlayQuery } from "./overlay-query";
-import { CHROME_GAP_DIP, SelectionToolbar, type OverlayChrome } from "./selection-chrome";
+import { CaptureWidget } from "./capture-widget";
+import type { OverlayChrome } from "./overlay-chrome";
+import { devicePixelSize } from "./ratio-geometry";
 import styles from "./capture-overlay.module.css";
 import { uiArea } from "@renderer/lib/ui-area";
 
@@ -56,7 +58,7 @@ interface WindowPickerProps {
 
 /**
  * Window mode: the window under the pointer is highlighted (accent fill, 2 px accent border,
- * its title above it) with the mode pill and the action bar attached. A click captures the
+ * its title above it) with the capture widget docked to the work area (ADR 0056). A click captures the
  * window under the click; a click where there is no window answers nothing. Enter and
  * ⌘C / Ctrl+C capture or copy the highlighted one.
  *
@@ -148,20 +150,6 @@ export function WindowPicker({
     const { clientX: x, clientY: y } = event;
     const next = windowAt(onDisplay, query.displayId, x, y);
     if (next?.id === hovered?.id) return;
-    // The toolbar sits 10 DIP outside the highlight: crossing that gap on the way
-    // to them must not hand the highlight to the window behind (the chrome itself keeps
-    // its pointer moves to itself).
-    if (hovered) {
-      const { rect } = hovered;
-      const gap = CHROME_GAP_DIP;
-      const bridged = {
-        x: rect.x - gap,
-        y: rect.y - gap,
-        width: rect.width + 2 * gap,
-        height: rect.height + 2 * gap,
-      };
-      if (!contains(rect, x, y) && contains(bridged, x, y)) return;
-    }
     setHovered(next);
   };
 
@@ -219,16 +207,21 @@ export function WindowPicker({
           >
             {windowLabel(hovered)}
           </div>
-          <SelectionToolbar
-            chrome={chrome}
-            selection={hovered.rect}
-            area={area}
-            onAction={(action) => answer(hovered, action)}
-            // A window is captured, not recorded, from here (ADR 0030 non-goal).
-            canRecord={false}
-          />
         </>
       )}
+      <CaptureWidget
+        chrome={chrome}
+        selection={hovered?.rect ?? null}
+        area={area}
+        ratio="free"
+        size={devicePixelSize(hovered?.rect ?? { width: 0, height: 0 }, query.scaleFactor ?? 1)}
+        // A window is captured, not recorded, from here (ADR 0030 non-goal).
+        canRecord={false}
+        onAction={(action) => {
+          if (hovered) answer(hovered, action);
+        }}
+        devices={chrome.devices}
+      />
     </div>
   );
 }
