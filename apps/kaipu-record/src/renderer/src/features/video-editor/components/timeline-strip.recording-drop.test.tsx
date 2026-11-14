@@ -50,7 +50,6 @@ function stubLaneGeometry(): void {
     function (this: HTMLElement) {
       const id = this.dataset.testid;
       if (id === "timeline-scroller") return rectOf(0, 1000);
-      if (id === "lane-corner") return rectOf(0, 0);
       return rectOf(0, 0);
     },
   );
