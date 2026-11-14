@@ -599,8 +599,11 @@ export interface KaipuElectronAPI {
    * a source also starts the countdown.
    */
   onRequestChooseSource(callback: (request: { startOnPick: boolean }) => void): () => void;
-  /** Capture Panel → main: run the interactive screenshot capture (same as ⌘⇧1). */
-  requestCaptureScreenshot(mode: CaptureMode): void;
+  /**
+   * Capture Panel → main: run the interactive screenshot capture (same as ⌘⇧1). No mode = the
+   * same mode the ⌘⇧1 shortcut would use.
+   */
+  requestCaptureScreenshot(mode?: CaptureMode): void;
   /**
    * Record page / Capture Panel → main: open the recording selector, in `mode` (a mode
    * chip, which also makes it the last used one) or in the last used mode (Start).
@@ -625,6 +628,8 @@ export interface KaipuElectronAPI {
   suspendShortcuts(): void;
   /** Resume (re-register) global shortcuts after rebinding. */
   resumeShortcuts(): void;
+  /** Subscribe to every global shortcut press (its action), after main ran it. */
+  onShortcutFired(callback: (action: ShortcutAction) => void): () => void;
 
   // ── Screenshots ───────────────────────────────────────────────────────
   /** Run a capture in `mode`; always answers captured, cancelled or unsupported. */

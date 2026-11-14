@@ -1,0 +1,114 @@
+.step {
+  max-width: 620px;
+}
+
+.subtitle {
+  max-width: 460px;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  width: 100%;
+}
+
+.card {
+  padding: 15px 16px;
+  transition: border-color var(--transition);
+}
+
+.cardTried {
+  border-color: rgba(34, 197, 94, 0.32);
+}
+
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.keys {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.key,
+.keyOn {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+  color: var(--text);
+  background: var(--bg-hover);
+  border: 1px solid var(--line-strong);
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.5);
+  transition:
+    background var(--transition),
+    border-color var(--transition);
+}
+
+.keyOn {
+  color: #fff;
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  box-shadow: none;
+}
+
+.tried {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  color: var(--accent-green);
+}
+
+.cardIcon {
+  display: flex;
+  color: var(--text-4);
+}
+
+.cardTitle {
+  font-size: 14.5px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text);
+  margin-top: 13px;
+}
+
+.cardDesc {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+  margin-top: 4px;
+}
+
+.count,
+.countAll {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  color: var(--text-4);
+  margin-top: 14px;
+}
+
+.countAll {
+  color: var(--accent-green);
+}
+
+.change {
+  margin-top: 6px;
+}

@@ -4,7 +4,7 @@ import { copyFile, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os";
 import path from "node:path";
 import { test, expect, type Page } from "@playwright/test";
-import { launchApp } from "../e2e/helpers/launch";
+import { dismissOnboarding, launchApp } from "../e2e/helpers/launch";
 
 /*
  * Backgrounds (NIW2-668), in the real app: the editor with `none` (today's picture), then with
@@ -76,16 +76,7 @@ async function seedVault(vaultDir: string): Promise<void> {
 }
 
 async function skipOnboarding(page: Page): Promise<void> {
-  const skip = page.getByRole("button", { name: /Skip setup/ });
-  if (
-    await skip.waitFor({ state: "visible", timeout: 10_000 }).then(
-      () => true,
-      () => false,
-    )
-  ) {
-    await skip.click();
-    await page.getByRole("dialog", { name: /Onboarding/ }).waitFor({ state: "detached" });
-  }
+  await dismissOnboarding(page);
   const gotIt = page.getByRole("button", { name: /Got it/ });
   if (await gotIt.isVisible().catch(() => false)) await gotIt.click();
 }

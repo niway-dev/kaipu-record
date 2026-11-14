@@ -24,6 +24,11 @@ interface GlobalShortcutDeps {
   handlers: ShortcutHandlers;
   /** Modes the user can reach; defaults to `ENABLED_CAPTURE_MODES`. */
   enabledModes?: readonly CaptureMode[];
+  /**
+   * Told after an action's handler runs. Onboarding's Shortcuts step listens: the press
+   * reaches main, never the window, so main has to say which one fired.
+   */
+  onFired?: (action: ShortcutAction) => void;
 }
 
 let deps: GlobalShortcutDeps | null = null;
@@ -79,7 +84,11 @@ export function applyGlobalShortcuts(): void {
       status[action] = false;
       continue;
     }
-    status[action] = tryRegister(shortcuts[action], deps.handlers[action]);
+    const { handlers, onFired } = deps;
+    status[action] = tryRegister(shortcuts[action], () => {
+      handlers[action]();
+      onFired?.(action);
+    });
   }
 }
 
