@@ -1728,6 +1728,8 @@
     "laneWebcam": "Cámara",
     "webcamTitle": "Cámara web",
     "recordingMissing": "Grabación no disponible: {title}",
+    "clipDuration": "{seconds} s",
+    "noCameraInRecording": "Sin cámara en esta grabación",
     "captureJoinedNotYet": "Capturar un fotograma todavía no funciona sobre una grabación unida.",
     "webcamLayerAria": "Cámara web: arrástrala para moverla",
     "mediaItemAria": "Imagen flotante: arrástrala para moverla",

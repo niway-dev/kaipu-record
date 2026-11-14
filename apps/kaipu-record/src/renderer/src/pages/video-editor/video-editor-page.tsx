@@ -127,8 +127,15 @@ import { useSessionAutosave } from "@renderer/features/video-editor/use-session-
 import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-playback";
 import {
   useCompanionThumbnails,
+  useRecordingThumbnails,
   useSourceThumbnails,
 } from "@renderer/features/video-editor/use-source-thumbnails";
+import {
+  clipRecordings,
+  noCameraItemIds,
+  recordingsNeedingThumbnails,
+  type RecordingInfo,
+} from "@renderer/features/video-editor/clip-recordings";
 import { useLatest } from "@renderer/features/video-editor/use-latest";
 import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
 import { useVideoTools } from "@renderer/features/video-editor/annotations/video-tools";
@@ -742,6 +749,45 @@ function VideoEditor({
   const gifExport = useGifExport();
   const sourceUrl = mediaUrl("recording", source.id);
   const thumbnails = useSourceThumbnails(sourceUrl, source.durationSeconds);
+  // Which recording each clip is (null without joins: the timeline then draws as before), and
+  // each joined recording's own filmstrip, decoded only while it still has a clip (NIW2-780).
+  const recordingInfos = useMemo<RecordingInfo[]>(
+    () => [
+      { sourceId: null, title: source.title, status: "ready", hasWebcam: webcamTrack !== null },
+      ...joinedRecordings.map((j) => ({
+        sourceId: j.source.id,
+        title: j.source.title,
+        status: j.status,
+        hasWebcam: j.webcam !== null,
+      })),
+    ],
+    [source.title, webcamTrack, joinedRecordings],
+  );
+  const clipRecordingMap = useMemo(
+    () => clipRecordings(layout, axis, recordingInfos),
+    [layout, axis, recordingInfos],
+  );
+  const noCameraClips = useMemo(
+    () =>
+      noCameraItemIds(
+        clipRecordingMap,
+        recordingInfos.some((r) => r.hasWebcam),
+      ),
+    [clipRecordingMap, recordingInfos],
+  );
+  const recordingStripRequests = useMemo(() => {
+    const byId = new Map(joinedRecordings.map((j) => [j.source.id, j]));
+    return recordingsNeedingThumbnails(
+      clipRecordingMap,
+      new Map(joinedRecordings.map((j) => [j.source.id, j.source.durationSeconds])),
+    ).flatMap(({ sourceId, durationSeconds }) => {
+      const joined = byId.get(sourceId);
+      return joined?.id
+        ? [{ key: sourceId, mediaUrl: mediaUrl("recording", joined.id), durationSeconds }]
+        : [];
+    });
+  }, [clipRecordingMap, joinedRecordings]);
+  const recordingThumbnails = useRecordingThumbnails(recordingStripRequests);
   // The webcam lane's filmstrip: the webcam file's frames, reported at SOURCE time, and the
   // source range it has footage for.
   const webcamStrip = useCompanionThumbnails(
@@ -1977,6 +2023,7 @@ function VideoEditor({
                     layout={layout}
                     thumbnails={webcamStrip.thumbnails}
                     covered={webcamStrip.covered}
+                    noCameraItemIds={noCameraClips}
                     selectedId={webcamSelectedId}
                     onSelect={handleSelectWebcam}
                     onEdgeDrag={webcamEdits.edgeDrag}
@@ -2031,6 +2078,7 @@ function VideoEditor({
       webcamEdits.edgeDrag,
       webcamStrip.thumbnails,
       webcamStrip.covered,
+      noCameraClips,
       webcamSelectedId,
       handleSelectWebcam,
       redactionEdits.visibleRedactions,
@@ -2484,6 +2532,8 @@ function VideoEditor({
           layout={layout}
           playback={playback}
           thumbnails={thumbnails}
+          clipRecordings={clipRecordingMap}
+          recordingThumbnails={recordingThumbnails}
           selectedItemId={selectedItemId}
           onSelectItem={setSelectedItemId}
           onTrim={handleTrim}

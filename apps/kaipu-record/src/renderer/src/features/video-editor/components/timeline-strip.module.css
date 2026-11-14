@@ -251,6 +251,67 @@
   z-index: 1;
 }
 
+/* Hovering a clip of a joined recording outlines its siblings (NIW2-780): an inset ring, so it
+   never changes the block's box. Subtle on purpose; the selected border stays the loud one. */
+.blockSameRecording {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 55%, transparent);
+}
+
+/* A clip whose recording file is gone: no thumbnails, a hatched dim ground instead. */
+.blockMissing {
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      color-mix(in srgb, var(--text-muted) 22%, transparent) 0 4px,
+      transparent 4px 8px
+    ),
+    var(--bg-raised);
+  opacity: 0.8;
+}
+
+/* The recording's name and the clip's length, top-left on a dark translucent chip over the
+   thumbnails. It ellipsizes on a narrow clip and never takes a click. */
+.clipLabel {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  max-width: calc(100% - 6px);
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, black 62%, transparent);
+  color: var(--text-primary);
+  font-size: var(--font-size-xs);
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.clipName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.clipDuration {
+  flex: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* Where one recording hands over to the next, across every lane. Inside .playheadLayer, so
+   it follows the lanes' zoom and scroll; never a hit target. */
+.recordingDivider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--text-primary) 22%, transparent);
+}
+
 /* Placed by TimelineStrip (left/width as % of the block): only the tiles in view exist,
    so a block thousands of pixels wide at high zoom is a dozen images, not hundreds. */
 .tile {

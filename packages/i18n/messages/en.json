@@ -1728,6 +1728,8 @@
     "laneWebcam": "Webcam",
     "webcamTitle": "Webcam",
     "recordingMissing": "Recording missing: {title}",
+    "clipDuration": "{seconds} s",
+    "noCameraInRecording": "No camera in this recording",
     "captureJoinedNotYet": "Frame capture does not work over a joined recording yet.",
     "webcamLayerAria": "Webcam: drag to move it",
     "mediaItemAria": "Floating image: drag to move it",

@@ -197,3 +197,36 @@ describe("WebcamLane", () => {
     });
   });
 });
+
+describe("WebcamLane across recordings", () => {
+  it("covers the clips without a camera with a labelled span", () => {
+    const { container } = render(
+      <WebcamLane
+        layout={layout}
+        segments={[]}
+        noCameraItemIds={new Set(["b"])}
+        selectedId={null}
+        onSelect={vi.fn()}
+        onEdgeDrag={vi.fn()}
+      />,
+    );
+    const spans = container.querySelectorAll<HTMLElement>('[data-testid="no-camera-span"]');
+    expect(spans).toHaveLength(1);
+    expect(spans[0]).toHaveTextContent("No camera in this recording");
+    // Clip b runs 5 s to 15 s of the 15 s timeline.
+    expect(spans[0].style.left).toBe(`${(5 / 15) * 100}%`);
+  });
+
+  it("draws no span without clips to cover", () => {
+    const { container } = render(
+      <WebcamLane
+        layout={layout}
+        segments={[]}
+        selectedId={null}
+        onSelect={vi.fn()}
+        onEdgeDrag={vi.fn()}
+      />,
+    );
+    expect(container.querySelector('[data-testid="no-camera-span"]')).toBeNull();
+  });
+});

@@ -98,3 +98,36 @@
   touch-action: none;
   z-index: 2;
 }
+
+/* A recording with no camera, between clips of recordings that have one: a hatched, dim span
+   so the gap reads as "nothing was recorded here", not as a hidden segment. Never a hit target. */
+.noCamera {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 3px;
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--text-muted) 18%, transparent) 0 4px,
+    transparent 4px 8px
+  );
+  pointer-events: none;
+}
+
+.noCameraLabel {
+  max-width: 100%;
+  padding: 0 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--bg-raised) 80%, transparent);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
