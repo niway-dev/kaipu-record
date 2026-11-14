@@ -4,7 +4,10 @@
 .sheet {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  /* Basis auto, not 0: the dialog's height is indefinite, so a 0 basis made the sheet as tall
+     as its content and an empty search collapsed it to the header. It may still shrink to the
+     dialog's max-height on a short window. */
+  flex: 0 1 auto;
   min-height: 0;
   height: min(600px, calc(100vh - 64px));
   background: var(--bg-modal);
