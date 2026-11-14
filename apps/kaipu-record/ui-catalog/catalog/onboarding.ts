@@ -19,7 +19,11 @@ const toShortcuts: Step[] = [
   { waitFor: { area: "onboarding.shortcutsStep" } },
 ];
 
-/** One state per demo: its card on Welcome, then the demo frozen by reduced motion. */
+/**
+ * One state per demo: its card on Welcome, then the demo frozen by reduced motion. The runner
+ * emulates `prefers-reduced-motion: reduce` for it (`reducedMotion`) and shoots it with
+ * animations allowed, because "disabled" would cancel the paused animation that holds the frame.
+ */
 const demo = (
   id: "record" | "capture" | "share" | "editor" | "workspaces",
   title: string,
@@ -27,6 +31,7 @@ const demo = (
   profile: "onboarding",
   how: `Welcome, click the "${title}" card.`,
   steps: [openDemo(title)],
+  reducedMotion: true,
   demonstrates: [`onboarding.demo:${id}`],
   ready: { area: "onboarding.demo" },
 });
@@ -34,7 +39,8 @@ const demo = (
 /**
  * The first-run takeover over the Record page. Each state starts from a reload, which puts
  * the takeover back at Welcome (it is only stored as done when it is finished or skipped).
- * The catalog runs with animations disabled, so each demo shows its reduced-motion frame.
+ * Only the demo states run in reduced motion; the others keep the catalog's default of
+ * animations disabled in the shot.
  */
 export const onboarding = catalog("onboarding", {
   welcome: {

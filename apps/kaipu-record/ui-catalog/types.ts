@@ -261,6 +261,14 @@ export interface CatalogState<S extends ScreenId> {
    */
   readonly keepToasts?: boolean;
   /**
+   * Emulate `prefers-reduced-motion: reduce` on the main window for this state (the media
+   * query is reset for every other state), and shoot it with animations allowed. A demo that
+   * holds a frame under reduced motion does it with a paused, negative-delay animation, and
+   * Playwright's `animations: "disabled"` cancels even a paused infinite animation back to
+   * its un-keyframed styles, so the frozen frame would never be captured.
+   */
+  readonly reducedMotion?: true;
+  /**
    * The image shows what was on the runner's screen (a source thumbnail, a capture's preview,
    * a take's first frame). It cannot be scanned as text, so `ui-catalog:lint` lists it for a
    * look by eye before publishing (spec failure 7).
