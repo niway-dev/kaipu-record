@@ -223,6 +223,41 @@ export const editorVideo = catalog(
       // “Saving…” chip.
       after: [{ action: "restoreVault" }],
     },
+    "levels-off": {
+      profile: "default",
+      how: "Open “Walkthrough 1” with the `timeline-levels` flag off: no floating images, no rows above the sequence, and Add to timeline still inserts a slide.",
+      steps: [open(ASSETS.walkthrough)],
+      demonstrates: ["editorVideo.page:loaded"],
+      ready: { video: true },
+      gates: [{ flag: "timeline-levels", side: "off" }],
+    },
+    "media-rows": {
+      profile: "timeline-levels",
+      how: "With the `timeline-levels` flag forced on, open “Floating images”: its two overlapping floating images sit on two rows above the sequence, the one in front above.",
+      steps: [open(ASSETS.floatingDemo)],
+      demonstrates: ["editorVideo.timelineMediaRows:twoImages"],
+      ready: { video: true },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "media-selected": {
+      profile: "timeline-levels",
+      how: "With the flag forced on, open “Floating images” and select the front image on the preview (Enter on it, as from the keyboard): it gets an outline with four corner handles and the right column shows its panel.",
+      steps: [
+        open(ASSETS.floatingDemo),
+        loaded,
+        {
+          press: "Enter",
+          target: {
+            area: "editorVideo.mediaLayer",
+            part: { css: '[data-media-id="float-front"]' },
+          },
+        },
+        { waitFor: { area: "editorVideo.mediaPanel" } },
+      ],
+      demonstrates: ["editorVideo.mediaLayer:selected", "editorVideo.mediaPanel:overlapping"],
+      ready: { area: "editorVideo.mediaPanel" },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
     "tool-box": {
       profile: "default",
       steps: [open(ASSETS.walkthrough), loaded, rail("Box")],

@@ -16,7 +16,8 @@ export const MEDIA_MAX_FADE_MS = 2000;
 export const MEDIA_CORNER_WIDTH = 0.4;
 /** Gap between the Box preset and the picture's edges, as a share of the picture width. */
 const CORNER_MARGIN = 0.03;
-const MIN_BOX_WIDTH = 0.05;
+/** Smallest a box can be resized to, as a share of the picture width. */
+export const MEDIA_MIN_BOX_WIDTH = 0.05;
 
 export interface PlacedMedia {
   item: ImageMediaItem;
@@ -173,7 +174,7 @@ function clampBox(box: MediaBox): MediaBox {
   return {
     x: Math.max(0, Math.min(1, box.x)),
     y: Math.max(0, Math.min(1, box.y)),
-    width: Math.max(MIN_BOX_WIDTH, Math.min(1, box.width)),
+    width: Math.max(MEDIA_MIN_BOX_WIDTH, Math.min(1, box.width)),
   };
 }
 

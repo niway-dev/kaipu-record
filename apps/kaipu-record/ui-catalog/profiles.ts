@@ -18,6 +18,8 @@ export interface Profile {
   readonly seed: "demo" | "empty" | "missing";
   /** Add the recording that carries a native cursor track (a take made with the flag on). */
   readonly cursorRecording?: boolean;
+  /** Add the recording with two overlapping floating images (`seed-vault.ts`). */
+  readonly floatingImages?: boolean;
   /** Add the screenshot that draws real text (`fixtures/text/`), for the Select text states. */
   readonly textScreenshot?: boolean;
   /** Add the screenshots the Colors panel states open (`fixtures/make-fixtures.ts`). */
@@ -88,6 +90,13 @@ export const PROFILES = {
     seed: "demo",
     cursorRecording: true,
     flags: { "native-cursor-capture": true },
+  },
+  "timeline-levels": {
+    description:
+      "Flag timeline-levels forced on, and the vault adds “Floating images”, a recording whose saved edit holds two overlapping floating images: the Clips rows, the preview layer and the image panel.",
+    seed: "demo",
+    flags: { "timeline-levels": true },
+    floatingImages: true,
   },
   "image-canvas": {
     description:

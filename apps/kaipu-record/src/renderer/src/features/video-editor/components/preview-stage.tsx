@@ -11,6 +11,7 @@ export function PreviewStage({
   overlay,
   underlay,
   webcam,
+  media,
   cursor,
   chrome,
   contentRef,
@@ -35,6 +36,9 @@ export function PreviewStage({
    *  chrome, and like the chrome never transformed by the camera path — so with a zoom
    *  active the face stays in its corner instead of being cropped away with the frame. */
   webcam?: React.ReactNode;
+  /** Floating images (ADR 0057): above the footage and the cursor, below the webcam, and like the
+   *  webcam OUTSIDE the zoomed content layer, so a zoom neither moves nor crops them. */
+  media?: React.ReactNode;
   cursor?: React.ReactNode;
   /** Stage-level UI that must NOT zoom: camera box, hold-to-compare button and chip. */
   chrome?: React.ReactNode;
@@ -125,6 +129,7 @@ export function PreviewStage({
             {overlay}
           </div>
           {cursor}
+          {media}
           {webcam}
           {chrome}
         </div>

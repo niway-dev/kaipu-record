@@ -44,6 +44,25 @@ import {
   type SlideAssetStore,
 } from "@renderer/features/video-editor/slide-assets";
 import { parseSession, serializeSession } from "@renderer/features/video-editor/session";
+import { useFlag } from "@renderer/features/analytics/use-flag";
+import { mediaRows, placeMedia } from "@renderer/features/video-editor/media";
+import {
+  addFloatingImage,
+  deleteMediaItem,
+  dropMediaWithoutAsset,
+  fillPicture,
+  isMediaPlaced,
+  moveMediaTo,
+  putInCorner,
+  reorderMediaItem,
+  resizeMediaEdgeTo,
+  setMediaBoxOf,
+  setMediaDurationSeconds,
+  setMediaFadesOf,
+} from "@renderer/features/video-editor/media-page-edits";
+import { MediaLayer } from "@renderer/features/video-editor/components/media-layer";
+import { MediaInspector } from "@renderer/features/video-editor/components/inspector/media-inspector";
+import type { TimelineMedia } from "@renderer/features/video-editor/components/media-lane-contract";
 import { withInitialZooms } from "@renderer/features/video-editor/initial-zooms";
 import {
   useEditorSelection,
@@ -440,13 +459,18 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
             if (cancelled) return;
             // Drop slide items whose asset wasn't returned (e.g. file was deleted on
             // disk) rather than leaving broken references that the worker can't render.
-            const filteredScene: VideoScene = {
-              // The sidecar decides whether the recording has a webcam, not the session.
-              ...reconcileWebcam(session.scene, source.webcam ?? null, source.durationSeconds),
-              items: session.scene.items.filter(
-                (item) => item.kind !== "slide" || loadedIds.has(item.assetId),
-              ),
-            };
+            // Floating images (ADR 0057) go the same way: one whose asset is gone is dropped,
+            // and a scene that had none keeps no `media` key.
+            const filteredScene: VideoScene = dropMediaWithoutAsset(
+              {
+                // The sidecar decides whether the recording has a webcam, not the session.
+                ...reconcileWebcam(session.scene, source.webcam ?? null, source.durationSeconds),
+                items: session.scene.items.filter(
+                  (item) => item.kind !== "slide" || loadedIds.has(item.assetId),
+                ),
+              },
+              loadedIds,
+            );
             showToast({ message: t("restored") });
             open(filteredScene, session.hasZoomData);
           } else {
@@ -525,6 +549,19 @@ function VideoEditor({
   // of the two at a time, and anything that opens another inspector closes it.
   const [capturesOpen, setCapturesOpen] = useState(false);
   const layout = useMemo(() => toLayout(scene.items), [scene.items]);
+  // Floating images over the Clips sequence (ADR 0057). The flag gates ADDING one (Add to
+  // timeline inserts a slide while it is off); an edit that already carries images keeps showing
+  // them, so a preview never hides what the export draws.
+  const levelsOn = useFlag("timeline-levels");
+  const showMedia = levelsOn || (scene.media?.length ?? 0) > 0;
+  // The decoded frame as one state object: the webcam layer places itself against it (the
+  // preview's output frame is the source frame), and a stable object keeps its trigger quiet.
+  // Floating images use it as the picture's size (only its aspect matters), 16:9 until it lands.
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+  const pictureSize = useMemo(
+    () => (frameSize.width > 0 && frameSize.height > 0 ? frameSize : { width: 1920, height: 1080 }),
+    [frameSize],
+  );
   // Writes the session ~800 ms after every commit/endInteract, and flushes on unmount
   // and beforeunload. See plans/video-editor-v2/07: before this, closing the window
   // threw away every cut, zoom and redaction, because useBlocker below only ever sees
@@ -662,6 +699,7 @@ function VideoEditor({
   );
   const selectedItemId = selection.itemId;
   const selectedOverlayId = selection.overlayId;
+  const selectedMediaId = selection.mediaId;
   const setSelectedItemId = useCallback(
     (id: string | null) => selectKind("item", id),
     [selectKind],
@@ -697,6 +735,12 @@ function VideoEditor({
       setSelectedOverlayId(null);
     }
   }, [scene.overlays, selectedOverlayId]);
+
+  // Deleting the footage under a floating image's start unplaces it (it leaves the timeline, the
+  // preview and the export together; undo brings it back): its selection goes with it.
+  useEffect(() => {
+    if (selectedMediaId && !isMediaPlaced(scene, selectedMediaId)) selectKind("media", null);
+  }, [scene, selectedMediaId, selectKind]);
 
   const selectedZoomId = selection.zoomId;
   const selectedRedactionId = selection.redactionId;
@@ -827,8 +871,40 @@ function VideoEditor({
     [scene, controller, playback.timelineTime],
   );
 
+  // Add to timeline with `timeline-levels` on: the image is stored exactly as a slide's is, then
+  // floats over the sequence at the playhead (10 s, fitted, in front) and is selected. The
+  // sequence is untouched. Reads the scene and the playhead after the decode, not from the
+  // click: they may have moved while the image was being decoded.
+  const insertFloatingImage = useCallback(
+    async (bytes: ArrayBuffer, mime: string) => {
+      if (controller.interacting) return;
+      let asset: SlideAsset;
+      try {
+        asset = await assetStoreRef.current.put(bytes, mime);
+      } catch {
+        showToast({ message: t("imageLoadError") });
+        return;
+      }
+      const current = controllerRef.current;
+      if (current.interacting) return;
+      const id = newId();
+      const next = addFloatingImage(current.scene, {
+        id,
+        assetId: asset.assetId,
+        naturalWidth: asset.naturalWidth,
+        naturalHeight: asset.naturalHeight,
+        playhead: playbackRef.current.timelineTime,
+        picture: pictureSize,
+      });
+      if (next === current.scene) return;
+      current.commit(next);
+      selectKind("media", id);
+    },
+    [controller, controllerRef, playbackRef, pictureSize, selectKind, t],
+  );
+
   // A capture's Add to timeline: main reads the vault PNG by id (fetch on the media scheme
-  // returns no bytes here), then it goes in as any image slide.
+  // returns no bytes here), then it goes in as a floating image (flag on) or as any image slide.
   const addCaptureToTimeline = useCallback(
     async (capture: LibraryVideo) => {
       const id = capture.id;
@@ -840,9 +916,10 @@ function VideoEditor({
         showToast({ message: t("imageLoadError") });
         return;
       }
-      await insertImageSlide(bytes, "image/png");
+      if (levelsOn) await insertFloatingImage(bytes, "image/png");
+      else await insertImageSlide(bytes, "image/png");
     },
-    [insertImageSlide, t],
+    [insertImageSlide, insertFloatingImage, levelsOn, t],
   );
 
   // Reads the live preview <video>'s native/displayed size at click time (not
@@ -1217,6 +1294,52 @@ function VideoEditor({
     setSelectedOverlayId(null);
   }, [scene, controller, selectedOverlayId]);
 
+  // Floating images (ADR 0057). Gestures (the preview's drag, the timeline's drag) go through
+  // begin/updateLive/endInteract, so a drag is one undo step; the panel's buttons and fields are
+  // each one commit. Every edit reads the CURRENT scene from the controller and goes through
+  // media-page-edits.ts, which composes the model in media.ts.
+  const handleSelectMedia = useCallback(
+    (id: string | null) => selectKind("media", id),
+    [selectKind],
+  );
+  const handleMediaBox = useCallback(
+    (id: string, box: { x: number; y: number; width: number }) => {
+      const current = controllerRef.current;
+      current.updateLive(setMediaBoxOf(current.scene, id, box));
+    },
+    [controllerRef],
+  );
+  const handleMediaMove = useCallback(
+    (id: string, startTime: number) => {
+      const current = controllerRef.current;
+      current.updateLive(moveMediaTo(current.scene, id, startTime));
+    },
+    [controllerRef],
+  );
+  const handleMediaResizeEdge = useCallback(
+    (id: string, edge: "start" | "end", time: number) => {
+      const current = controllerRef.current;
+      current.updateLive(resizeMediaEdgeTo(current.scene, id, edge, time));
+    },
+    [controllerRef],
+  );
+  // One panel action = one commit. `commit` already ignores a call mid-drag and a scene that
+  // came back unchanged, but the guard keeps the selection side effects out of a drag too.
+  const commitMediaEdit = useCallback(
+    (edit: (scene: VideoScene) => VideoScene) => {
+      const current = controllerRef.current;
+      if (current.interacting) return;
+      current.commit(edit(current.scene));
+    },
+    [controllerRef],
+  );
+  const handleDeleteMedia = useCallback(() => {
+    if (!selectedMediaId) return;
+    if (controllerRef.current.interacting) return;
+    commitMediaEdit((current) => deleteMediaItem(current, selectedMediaId));
+    selectKind("media", null);
+  }, [selectedMediaId, controllerRef, commitMediaEdit, selectKind]);
+
   // Options-panel edits (colour/stroke/text-size) on the selected overlay — one
   // undoable commit per change, same contract as the screenshot editor's
   // scene.commitAnnotation.
@@ -1519,9 +1642,6 @@ function VideoEditor({
   // lands and changing it never re-renders, so the hint would appear or not depending on
   // whether some unrelated render happened to arrive after the metadata did.
   const [sourceHeight, setSourceHeight] = useState(0);
-  // The decoded frame as one state object: the webcam layer places itself against it (the
-  // preview's output frame is the source frame), and a stable object keeps its trigger quiet.
-  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
   const cameraApplied =
     !holdingOriginal &&
     selectedZoom === null &&
@@ -1609,6 +1729,7 @@ function VideoEditor({
         } else if (selectedZoomId) handleRemoveZoom(selectedZoomId);
         else if (selectedWebcamId && selectedWebcamId !== WEBCAM_LAYER_SELECTION)
           handleRemoveWebcamSegment(selectedWebcamId);
+        else if (selectedMediaId) handleDeleteMedia();
         else if (selectedOverlayId) handleDeleteOverlay();
         else if (!deleteDisabled) handleDeleteSelected();
       }
@@ -1627,6 +1748,8 @@ function VideoEditor({
     handleDeleteSelected,
     selectedOverlayId,
     handleDeleteOverlay,
+    selectedMediaId,
+    handleDeleteMedia,
     clearSelection,
     selectedZoomId,
     selectedMuteId,
@@ -1653,6 +1776,37 @@ function VideoEditor({
     (assetId: string) => assetStoreRef.current.get(assetId)?.url ?? null,
     [assetStoreRef],
   );
+  // What the Clips section draws above the sequence (contract: media-lane-contract.ts). The
+  // lane only reports gestures; the anchors are rewritten by the model through the handlers above.
+  const placedMedia = useMemo(() => placeMedia(scene.media, layout), [scene.media, layout]);
+  const timelineMedia = useMemo<TimelineMedia | undefined>(
+    () =>
+      showMedia
+        ? {
+            placed: placedMedia,
+            rows: mediaRows(placedMedia),
+            selectedId: selectedMediaId,
+            imageUrl: slideUrlFor,
+            onSelect: handleSelectMedia,
+            onMove: handleMediaMove,
+            onResizeEdge: handleMediaResizeEdge,
+            onInteractionStart: controller.beginInteract,
+            onInteractionEnd: controller.endInteract,
+          }
+        : undefined,
+    [
+      showMedia,
+      placedMedia,
+      selectedMediaId,
+      slideUrlFor,
+      handleSelectMedia,
+      handleMediaMove,
+      handleMediaResizeEdge,
+      controller.beginInteract,
+      controller.endInteract,
+    ],
+  );
+  const selectedMedia = placedMedia.find((p) => p.item.id === selectedMediaId) ?? null;
   const ghostKind = draftRegion && privacyTool && drawWindow ? privacyTool : null;
   const ghostStart = drawWindow?.start ?? 0;
   const ghostEnd = drawWindow?.end ?? 0;
@@ -1829,6 +1983,25 @@ function VideoEditor({
                       webcamEdits.liveLayout({ position }, sourceTime)
                     }
                     onEnd={webcamEdits.end}
+                  />
+                )
+              }
+              media={
+                showMedia &&
+                !holdingOriginal && (
+                  <MediaLayer
+                    media={scene.media}
+                    layout={layout}
+                    time={playback.timelineTime}
+                    picture={pictureSize}
+                    selectedId={selectedMediaId}
+                    // A drawing tool armed: a stroke can start over an image.
+                    interactive={videoTools.tool === "select"}
+                    imageUrl={slideUrlFor}
+                    onSelect={handleSelectMedia}
+                    onBegin={controller.beginInteract}
+                    onBoxChange={handleMediaBox}
+                    onEnd={controller.endInteract}
                   />
                 )
               }
@@ -2035,6 +2208,48 @@ function VideoEditor({
                   controller={controller}
                   clicksAvailable={cursorData.track.clicksAvailable}
                 />
+              ) : selectedMedia ? (
+                <MediaInspector
+                  item={selectedMedia.item}
+                  seconds={selectedMedia.end - selectedMedia.start}
+                  canBringForward={
+                    reorderMediaItem(scene, selectedMedia.item.id, "forward") !== scene
+                  }
+                  canSendBackward={
+                    reorderMediaItem(scene, selectedMedia.item.id, "backward") !== scene
+                  }
+                  onDuration={(seconds) =>
+                    commitMediaEdit((current) =>
+                      setMediaDurationSeconds(current, selectedMedia.item.id, seconds),
+                    )
+                  }
+                  onFull={() =>
+                    commitMediaEdit((current) =>
+                      fillPicture(current, selectedMedia.item.id, pictureSize),
+                    )
+                  }
+                  onBox={() =>
+                    commitMediaEdit((current) =>
+                      putInCorner(current, selectedMedia.item.id, pictureSize),
+                    )
+                  }
+                  onBringForward={() =>
+                    commitMediaEdit((current) =>
+                      reorderMediaItem(current, selectedMedia.item.id, "forward"),
+                    )
+                  }
+                  onSendBackward={() =>
+                    commitMediaEdit((current) =>
+                      reorderMediaItem(current, selectedMedia.item.id, "backward"),
+                    )
+                  }
+                  onFades={(fades) =>
+                    commitMediaEdit((current) =>
+                      setMediaFadesOf(current, selectedMedia.item.id, fades),
+                    )
+                  }
+                  onDelete={handleDeleteMedia}
+                />
               ) : selectedRedaction?.kind === "blur" ? (
                 <BlurInspector
                   redaction={selectedRedaction}
@@ -2147,6 +2362,7 @@ function VideoEditor({
           onWindowChange={handleWindowChange}
           timelineView={timelineView}
           extraLanes={extraLanes}
+          media={timelineMedia}
           onOpenGuide={openGuide}
         />
       </footer>

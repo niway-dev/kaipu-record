@@ -21,6 +21,8 @@ import {
   useTimelineViewStore,
   type TimelineViewStore,
 } from "../use-timeline-view";
+import { MediaLane } from "./media-lane";
+import type { TimelineMedia } from "./media-lane-contract";
 import { OverlayLane, type WindowChangePhase } from "./overlay-lane";
 import {
   formatScrubTime,
@@ -87,6 +89,7 @@ export const TimelineStrip = memo(function TimelineStrip({
   selectedOverlayId,
   onSelectOverlay,
   onWindowChange,
+  media,
   extraLanes = [],
   timelineView,
   onOpenGuide,
@@ -117,6 +120,9 @@ export const TimelineStrip = memo(function TimelineStrip({
   selectedOverlayId: string | null;
   onSelectOverlay: (id: string | null) => void;
   onWindowChange?: (id: string, start: number, end: number, phase: WindowChangePhase) => void;
+  /** Floating images, drawn on rows above the sequence inside the Clips section (NIW2-771).
+   *  Omitted or empty, the strip renders exactly as it does without them. */
+  media?: TimelineMedia;
   /** Opens the Timeline guide on a lane: each lane label gets an info button that calls it
    *  (NIW2-679). Without it the labels stay plain text. */
   onOpenGuide?: (tab: GuideTab) => void;
@@ -457,6 +463,17 @@ export const TimelineStrip = memo(function TimelineStrip({
             >
               {rulerMarks}
             </div>
+            {/* The Clips section opens with the floating images, on rows above the sequence
+                (row 1 nearest it). One label cell and one lane cell, so the label/lane pairing
+                of every row below is untouched; the lane stacks its own rows. */}
+            {media && media.placed.length > 0 && (
+              <>
+                <span className={styles.laneLabel} aria-hidden />
+                <div className={styles.laneCell}>
+                  <MediaLane media={media} duration={duration} />
+                </div>
+              </>
+            )}
             {/* Clips lead: the recording is what every other lane edits. */}
             <LaneLabel
               icon={Film}

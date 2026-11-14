@@ -1,9 +1,11 @@
 import { fireEvent, render } from "@testing-library/react";
 import { ZoomIn } from "lucide-react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { VideoOverlay } from "../scene";
+import { mediaRows, type PlacedMedia } from "../media";
+import type { ImageMediaItem, VideoOverlay } from "../scene";
 import type { LayoutEntry } from "../timeline";
 import type { PreviewPlayback } from "../use-preview-playback";
+import type { TimelineMedia } from "./media-lane-contract";
 import { TimelineStrip } from "./timeline-strip";
 
 function makePlayback(overrides: Partial<PreviewPlayback> = {}): PreviewPlayback {
@@ -567,5 +569,135 @@ describe("TimelineStrip ruler hover", () => {
 
     fireEvent.pointerMove(ruler, { pointerId: 1, clientX: 500 });
     expect(container.querySelector("[data-visible]")).not.toHaveAttribute("data-flip");
+  });
+});
+
+describe("TimelineStrip floating images", () => {
+  beforeEach(() => stubLaneGeometry());
+
+  function placed(id: string, start: number, end: number, z: number): PlacedMedia {
+    const item: ImageMediaItem = {
+      id,
+      kind: "image",
+      assetId: `asset-${id}`,
+      naturalWidth: 100,
+      naturalHeight: 50,
+      anchor: { kind: "source", time: start },
+      duration: end - start,
+      box: { x: 0.5, y: 0.5, width: 0.4 },
+      z,
+      fadeInMs: 200,
+      fadeOutMs: 200,
+    };
+    return { item, start, end };
+  }
+
+  function makeMedia(items: PlacedMedia[]): TimelineMedia {
+    return {
+      placed: items,
+      rows: mediaRows(items),
+      selectedId: null,
+      imageUrl: (assetId) => `blob:${assetId}`,
+      onSelect: vi.fn(),
+      onMove: vi.fn(),
+      onResizeEdge: vi.fn(),
+      onInteractionStart: vi.fn(),
+      onInteractionEnd: vi.fn(),
+    };
+  }
+
+  function renderStrip(media?: TimelineMedia): HTMLElement {
+    return render(
+      <TimelineStrip
+        layout={twoClipLayout}
+        playback={makePlayback()}
+        thumbnails={[]}
+        selectedItemId={null}
+        onSelectItem={vi.fn()}
+        overlays={[]}
+        selectedOverlayId={null}
+        onSelectOverlay={vi.fn()}
+        media={media}
+      />,
+    ).container;
+  }
+
+  it("renders exactly as before without media, and with an empty media list", () => {
+    const without = renderStrip();
+    const withoutHtml = without.innerHTML;
+    expect(without.querySelector("[data-testid='media-lane']")).toBeNull();
+    const empty = renderStrip(makeMedia([]));
+    expect(empty.querySelector("[data-testid='media-lane']")).toBeNull();
+    expect(empty.innerHTML).toBe(withoutHtml);
+  });
+
+  it("draws the rows inside the Clips section, above the clip blocks", () => {
+    const container = renderStrip(makeMedia([placed("m1", 1, 4, 1), placed("m2", 2, 6, 2)]));
+    const lane = container.querySelector("[data-testid='media-lane']")!;
+    expect(container.querySelectorAll("[data-testid^='media-row-']")).toHaveLength(2);
+    const firstClipBlock = container.querySelector("button[class*='block']:not([data-testid])")!;
+    // DOM order is grid order: the media lane comes after the ruler and before the clips track.
+    expect(
+      lane.compareDocumentPosition(firstClipBlock) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      container.querySelector("[data-testid='ruler']")!.compareDocumentPosition(lane) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("keeps the lane label pairing: the media lane adds one label cell and one lane cell", () => {
+    const without = renderStrip();
+    const withMedia = renderStrip(makeMedia([placed("m1", 1, 4, 1)]));
+    const body = (el: HTMLElement): number =>
+      el.querySelector("[data-testid='timeline-scroller']")!.children.length;
+    expect(body(withMedia) - body(without)).toBe(2);
+  });
+
+  it("converts a body drag with the strip's own time mapping", () => {
+    const media = makeMedia([placed("m1", 2, 5, 1)]);
+    const container = renderStrip(media);
+    const block = container.querySelector<HTMLElement>("[data-testid='media-block-m1']")!;
+    // 1000 px lane, 10 s: 100 px per second. Grab at 3 s, drag to 4 s: the item starts at 3 s.
+    fireEvent.pointerDown(block, { pointerId: 1, button: 0, clientX: 300 });
+    fireEvent.pointerMove(block, { pointerId: 1, clientX: 400 });
+    fireEvent.pointerUp(block, { pointerId: 1, clientX: 400 });
+    expect(media.onInteractionStart).toHaveBeenCalledTimes(1);
+    expect(media.onMove).toHaveBeenLastCalledWith("m1", 3);
+    expect(media.onInteractionEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it("an edge drag reports the edge and the time under the pointer", () => {
+    const media = makeMedia([placed("m1", 2, 5, 1)]);
+    const container = renderStrip(media);
+    const handle = container.querySelector<HTMLElement>("[data-testid='media-handle-m1-end']")!;
+    fireEvent.pointerDown(handle, { pointerId: 1, button: 0, clientX: 500 });
+    fireEvent.pointerMove(handle, { pointerId: 1, clientX: 700 });
+    fireEvent.pointerUp(handle, { pointerId: 1, clientX: 700 });
+    expect(media.onResizeEdge).toHaveBeenLastCalledWith("m1", "end", 7);
+  });
+
+  it("a click on a block does not scrub the timeline", () => {
+    const playback = makePlayback();
+    const media = makeMedia([placed("m1", 2, 5, 1)]);
+    const container = render(
+      <TimelineStrip
+        layout={twoClipLayout}
+        playback={playback}
+        thumbnails={[]}
+        selectedItemId={null}
+        onSelectItem={vi.fn()}
+        overlays={[]}
+        selectedOverlayId={null}
+        onSelectOverlay={vi.fn()}
+        media={media}
+      />,
+    ).container;
+    const block = container.querySelector<HTMLElement>("[data-testid='media-block-m1']")!;
+    fireEvent.pointerDown(block, { pointerId: 1, button: 0, clientX: 300 });
+    fireEvent.pointerUp(block, { pointerId: 1, clientX: 300 });
+    fireEvent.click(block);
+    expect(playback.seek).not.toHaveBeenCalled();
+    expect(media.onSelect).toHaveBeenCalledWith("m1");
   });
 });
