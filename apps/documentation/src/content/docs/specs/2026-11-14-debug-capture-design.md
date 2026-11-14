@@ -12,7 +12,7 @@ When something odd happens in Kaipu, the owner presses **⌃⌥⌘D**. Kaipu sav
 one image of every visible Kaipu window in its real place, each window alone, one full-screen
 image per display, a `state.json` with what the app knows at that moment (version, OS, displays,
 windows, route and UI-map areas, flags, settings, recording state), and the last console lines
-of the main process and of every window. Finder then reveals the folder. The owner pastes its
+of the main process and of every window. The file manager (Finder on macOS) then reveals the folder. The owner pastes its
 path into a Claude session, and the agent debugs from the images and the JSON without
 reproducing the bug.
 
@@ -20,16 +20,16 @@ It is a developer tool: on by default in `bun run dev`, and in signed builds onl
 owner's machines, through a PostHog flag matched by device id like the release flags. Nothing
 is uploaded.
 
-| #   | Decision                                                                                                          | Why                                                                                                                                                                                          | ADR         |
-| --- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| 1   | A bundle (images + `state.json` + `console.log`), not screenshots alone                                           | A picture shows that a button is grey, not why; the state and the console lines usually do                                                                                                   | —           |
-| 2   | One composite image of every visible Kaipu window at its screen position, plus each window alone                  | The owner's request: see every widget in one picture. The composite shows how windows sit relative to each other; the singles keep full detail                                               | —           |
-| 3   | Window images come from `webContents.capturePage()`, composited in pure JS from `nativeImage` bitmaps             | Works on macOS and Windows, needs no permission and no native dependency (no `postinstall`, see `CLAUDE.md`)                                                                                 | —           |
-| 4   | Plus one full-screen image per display through `desktopCapturer`                                                  | Shows the native parts `capturePage` cannot see (menus, system dialogs, other apps around the widget). Uses the Screen Recording permission Kaipu already holds                              | —           |
-| 5   | Console lines come from a ring buffer in main: main's own `console.*` plus every window's `console-message` event | No renderer change and no file logger; the bundle still carries the recent past                                                                                                              | —           |
-| 6   | Gate: `is.dev` OR the new `debug-capture` flag; the renderer reports the flag to main                             | Main has no PostHog client; this is the existing `reportCaptureWhileRecording` / `reportImageText` pattern. The flag stays off by default and in PostHog matches only the owner's device ids | reuses 0049 |
-| 7   | The folder stays on the Mac and holds settings and paths as they are                                              | Only the owner uses it now. Uploading or redacting belongs to a later user-facing bug report                                                                                                 | —           |
-| 8   | ⌃⌥⌘D, hard-coded, not in Settings → Shortcuts                                                                     | A debug key is not a user feature. No Kaipu shortcut uses it (checked `shared/types/ipc.ts`)                                                                                                 | —           |
+| #   | Decision                                                                                                                        | Why                                                                                                                                                                                                                                                                                      | ADR         |
+| --- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| 1   | A bundle (images + `state.json` + `console.log`), not screenshots alone                                                         | A picture shows that a button is grey, not why; the state and the console lines usually do                                                                                                                                                                                               | —           |
+| 2   | One composite image of every visible Kaipu window at its screen position, plus each window alone                                | The owner's request: see every widget in one picture. The composite shows how windows sit relative to each other; the singles keep full detail                                                                                                                                           | —           |
+| 3   | Window images come from `webContents.capturePage()`, composited in pure JS from `nativeImage` bitmaps                           | Electron API on both platforms, needs no permission and no native dependency (no `postinstall`, see `CLAUDE.md`)                                                                                                                                                                         | —           |
+| 4   | Plus one full-screen image per display through `desktopCapturer`                                                                | Shows the native parts `capturePage` cannot see (menus, system dialogs, other apps around the widget). Uses the Screen Recording permission Kaipu already holds                                                                                                                          | —           |
+| 5   | Console lines come from a ring buffer in main: main's own `console.*` plus every window's `console-message` event               | No renderer change and no file logger; the bundle still carries the recent past                                                                                                                                                                                                          | —           |
+| 6   | Gate: `is.dev` OR the new `debug-capture` flag; the renderer reports the flag to main                                           | Main has no PostHog client; this is the existing `reportCaptureWhileRecording` / `reportImageText` pattern. The flag stays off by default and in PostHog matches only the owner's device ids                                                                                             | reuses 0049 |
+| 7   | The folder stays on the Mac and holds settings and paths as they are                                                            | Only the owner uses it now. Uploading or redacting belongs to a later user-facing bug report                                                                                                                                                                                             | —           |
+| 8   | ⌃⌥⌘D on macOS (`Control+Alt+Shift+D` on Windows), hard-coded, not in Settings → Shortcuts, held through `holdTemporaryShortcut` | A debug key is not a user feature. No Kaipu shortcut uses it (checked `shared/types/ipc.ts`). `applyGlobalShortcuts` calls `unregisterAll` on every settings write and re-registers only the user shortcuts and the held ones, so a bare `globalShortcut.register` would vanish silently | —           |
 
 No new ADR: every decision above is reversible by editing one module, and none changes how the
 app's parts fit together. Flags follow
@@ -46,6 +46,8 @@ app's parts fit together. Flags follow
 
 ### Out of scope
 
+- Proof on Windows. The code paths are cross-platform and Windows gets its own accelerator,
+  but the owner's machines are Macs: Windows stays unverified until someone runs it there.
 - Uploading the bundle, or any "Report a bug" flow for users.
 - Redacting settings or paths.
 - Video of the seconds before the shortcut.
@@ -68,6 +70,9 @@ app's parts fit together. Flags follow
   their native pixels.
 - **Shipping it to users by mistake.** In a packaged build with the flag off or unresolved
   (offline, Send diagnostics off), the shortcut is not registered at all.
+- **The shortcut silently stops working.** Every settings write unregisters all global
+  shortcuts. The debug key is held with `holdTemporaryShortcut` (re-applied after
+  `unregisterAll`), and released with `releaseTemporaryShortcut` when the reported flag turns off.
 - **The console buffer grows without bound.** Fixed size (500 lines per source), oldest first out.
 - **A secret in the console lands in the folder.** Accepted for now (decision 7): the folder
   never leaves the Mac. Reopen before any upload exists.
@@ -89,9 +94,12 @@ app's parts fit together. Flags follow
 - [ ] A hidden window is listed in `state.json` with `"captured": false` and is absent from the
       composite.
 - [ ] In a packaged build without the flag, ⌃⌥⌘D does nothing (the shortcut is not registered).
+- [ ] ⌃⌥⌘D still captures after a settings write (change any setting, press it again).
+- [ ] Turning the flag off at runtime releases the shortcut; turning it on holds it again.
 - [ ] With the `debug-capture` flag on for the owner's device id, the signed build captures.
 - [ ] Unit tests cover: the composite placement and scaling (pure function over bitmaps and
-      bounds), the ring buffer bound, the gate (dev / flag / neither), and a failing window
+      bounds), the ring buffer bound, the gate (dev / flag / neither), the shortcut surviving
+      `applyGlobalShortcuts`, and a failing window
       not aborting the bundle.
 - [ ] Real-app proof on the Mac mini: one bundle from the built app, its `composite.png` in the
       PR.
