@@ -123,7 +123,7 @@ const joinedAt = (track: CursorTrack | null, canOverlay: boolean) => ({
   canOverlay,
 });
 
-describe("axisOverlayTrack (finding A: provenance is per recording)", () => {
+describe("axisOverlayTrack: provenance is per recording", () => {
   it("opened embeds the pointer, joined excludes it and has a track: drawn only in the joined range", () => {
     const overlay = axisOverlayTrack(opened(trackAt(0.2), false), [joinedAt(trackAt(0.7), true)]);
     expect(drawnAt(overlay, 5)).toBeNull();
@@ -153,7 +153,7 @@ describe("axisOverlayTrack (finding A: provenance is per recording)", () => {
   });
 });
 
-describe("axisOverlayTrack (finding C: no pointer in a recording without a track)", () => {
+describe("axisOverlayTrack: no pointer in a recording without a track", () => {
   it("the primary has a track, the joined one has none, idle hiding off: nothing in the joined range", () => {
     const overlay = axisOverlayTrack(opened(trackAt(0.2), true), [joinedAt(null, true)]);
     expect(drawnAt(overlay, 5)).toBeCloseTo(0.2);
@@ -181,7 +181,7 @@ describe("axisOverlayTrack (finding C: no pointer in a recording without a track
   });
 });
 
-describe("frameCursorTrack (finding B: joined coordinates are frame-relative)", () => {
+describe("frameCursorTrack: joined coordinates are frame-relative", () => {
   const FRAME = 16 / 9;
   const square = {
     ...trackAt(0.1),
