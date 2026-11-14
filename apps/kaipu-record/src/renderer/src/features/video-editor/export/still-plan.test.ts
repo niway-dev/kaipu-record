@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { joinedSource } from "../media-switch.fixture";
 import { initialScene, type ImageMediaItem, type TrackItem } from "../scene";
 import { planStill, STILL_END_MARGIN_S } from "./still-plan";
 
@@ -99,5 +100,24 @@ describe("planStill", () => {
     expect(planStill(withMedia, 5).plan.floating?.items.map((i) => i.id)).toEqual(["early"]);
     expect(planStill(withMedia, 10).plan.floating?.items.map((i) => i.id)).toEqual(["late"]);
     expect(planStill(withMedia, 7.5).plan.floating).toBeUndefined();
+  });
+});
+
+describe("planStill with two recordings", () => {
+  const two = {
+    ...initialScene(100),
+    sources: [joinedSource("b", 3600, 40)],
+    items: [clip("a1", 0, 10), clip("b", 3600, 3610), clip("a2", 50, 60)],
+  };
+
+  it("returns the recording under the playhead next to the axis second", () => {
+    const p = planStill(two, 14);
+    expect(p.sourceId).toBe("b");
+    expect(p.sourceSeconds).toBe(3604);
+  });
+
+  it("returns null for the opened recording and for a slide", () => {
+    expect(planStill(two, 5).sourceId).toBeNull();
+    expect(planStill(scene, 1).sourceId).toBeNull();
   });
 });

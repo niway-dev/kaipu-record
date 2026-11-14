@@ -109,8 +109,22 @@ describe("useGifExport", () => {
     // 8–12 s spans the cut: 2 s of clip a, then 2 s of clip b.
     expect(msg.plan.totalDuration).toBe(4);
     expect(msg.plan.segments).toEqual([
-      { kind: "clip", timelineStart: 0, duration: 2, sourceStart: 8, sourceEnd: 10 },
-      { kind: "clip", timelineStart: 2, duration: 2, sourceStart: 20, sourceEnd: 22 },
+      {
+        kind: "clip",
+        timelineStart: 0,
+        duration: 2,
+        sourceStart: 8,
+        sourceEnd: 10,
+        sourceId: null,
+      },
+      {
+        kind: "clip",
+        timelineStart: 2,
+        duration: 2,
+        sourceStart: 20,
+        sourceEnd: 22,
+        sourceId: null,
+      },
     ]);
   });
 

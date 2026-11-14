@@ -22,6 +22,8 @@ export interface StillPlan {
   timelineSeconds: number;
   /** Source video time of that frame; null on a slide. */
   sourceSeconds: number | null;
+  /** The recording under the playhead: null = the opened one (and on a slide). */
+  sourceId: string | null;
   kind: "clip" | "slide";
 }
 
@@ -48,6 +50,7 @@ export function planStill(scene: VideoScene, playheadSeconds: number): StillPlan
     plan,
     timelineSeconds,
     sourceSeconds: isClip ? located.sourceTime : null,
+    sourceId: located.segment.kind === "clip" ? located.segment.sourceId : null,
     kind: isClip ? "clip" : "slide",
   };
 }
