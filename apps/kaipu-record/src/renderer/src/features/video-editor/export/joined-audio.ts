@@ -163,10 +163,43 @@ export function createResampler(fromRate: number, toRate: number, channels: numb
   };
 }
 
+/** The weight the centre and the surround channels get when folded into the front pair. */
+const FOLD_WEIGHT = Math.SQRT1_2;
+
+/** One output channel as `[input channel, weight]` pairs; the weights sum to the divisor. */
+type Mix = ReadonlyArray<readonly [number, number]>;
+
+/**
+ * How `from` input channels (more than `to`, and `to` at least 2) fold into `to` outputs. 5.1 in
+ * the usual order (FL, FR, C, LFE, SL, SR) into stereo is the standard down-mix: the centre
+ * and the surround on each side at 0.7071 and the LFE dropped. Any other layout keeps channel
+ * c in output c and spreads every channel beyond `to` into all outputs at the same weight.
+ */
+function foldMixes(from: number, to: number): Mix[] {
+  if (from === 6 && to === 2) {
+    return [
+      [
+        [0, 1],
+        [2, FOLD_WEIGHT],
+        [4, FOLD_WEIGHT],
+      ],
+      [
+        [1, 1],
+        [2, FOLD_WEIGHT],
+        [5, FOLD_WEIGHT],
+      ],
+    ];
+  }
+  const surplus = Array.from({ length: from - to }, (_, i) => [to + i, FOLD_WEIGHT] as const);
+  return Array.from({ length: to }, (_, c) => [[c, 1] as const, ...surplus]);
+}
+
 /**
  * Planar channels mapped to `toChannels`. Mono is duplicated up; more channels than wanted are
- * averaged into mono, or cut to the first `toChannels` when the target is not mono. The same
- * count returns the input unchanged.
+ * folded down, never cut: all of them averaged into mono, or mixed by {@link foldMixes} when
+ * the target keeps two or more. Each output is divided by the sum of its weights, so full
+ * scale in every input stays at full scale and the mix cannot clip. The same count returns
+ * the input unchanged.
  */
 export function mapChannels(planes: Float32Array[], toChannels: number): Float32Array[] {
   if (planes.length === toChannels) return planes;
@@ -178,7 +211,20 @@ export function mapChannels(planes: Float32Array[], toChannels: number): Float32
     return [mono];
   }
   if (planes.length === 1) return Array.from({ length: toChannels }, () => planes[0]!);
-  return Array.from({ length: toChannels }, (_, c) => planes[Math.min(c, planes.length - 1)]!);
+  if (planes.length < toChannels) {
+    return Array.from({ length: toChannels }, (_, c) => planes[Math.min(c, planes.length - 1)]!);
+  }
+  const frames = planes[0]?.length ?? 0;
+  return foldMixes(planes.length, toChannels).map((mix) => {
+    const divisor = mix.reduce((sum, [, weight]) => sum + weight, 0);
+    const out = new Float32Array(frames);
+    for (const [channel, weight] of mix) {
+      const plane = planes[channel]!;
+      for (let i = 0; i < frames; i++) out[i] += plane[i]! * weight;
+    }
+    for (let i = 0; i < frames; i++) out[i] /= divisor;
+    return out;
+  });
 }
 
 /** Planar channels as one interleaved array (frame 0 of each channel, then frame 1, ...). */

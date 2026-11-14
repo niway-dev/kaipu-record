@@ -183,6 +183,81 @@ describe("mapChannels", () => {
     const planes = [new Float32Array([1, 2])];
     expect(mapChannels(planes, 1)).toBe(planes);
   });
+
+  describe("5.1 (FL, FR, C, LFE, SL, SR) into stereo", () => {
+    const C = Math.SQRT1_2;
+    const norm = 1 + C + C;
+    const frame = (...values: number[]) => values.map((v) => new Float32Array([v]));
+
+    it("mixes the centre and the surrounds into both sides and drops the LFE", () => {
+      const out = mapChannels(frame(1, 0.5, 0.4, 1, 0.2, 0.1), 2);
+      expect(out).toHaveLength(2);
+      expect(out[0]![0]).toBeCloseTo((1 + C * 0.4 + C * 0.2) / norm, 6);
+      expect(out[1]![0]).toBeCloseTo((0.5 + C * 0.4 + C * 0.1) / norm, 6);
+    });
+
+    it("keeps dialogue that lives only in the centre channel audible on both sides", () => {
+      const out = mapChannels(frame(0, 0, 1, 0, 0, 0), 2);
+      expect(out[0]![0]).toBeCloseTo(C / norm, 6);
+      expect(out[1]![0]).toBeCloseTo(C / norm, 6);
+      expect(out[0]![0]).toBeGreaterThan(0);
+    });
+
+    it("cannot clip: full-scale in every channel stays at full scale", () => {
+      const out = mapChannels(frame(1, 1, 1, 1, 1, 1), 2);
+      expect(out[0]![0]).toBeCloseTo(1, 6);
+      expect(out[1]![0]).toBeCloseTo(1, 6);
+      const loud = mapChannels(frame(-1, -1, -1, 1, -1, -1), 2);
+      expect(Math.abs(loud[0]![0]!)).toBeLessThanOrEqual(1 + 1e-6);
+    });
+
+    it("maps every frame, not only the first", () => {
+      const out = mapChannels(
+        [
+          new Float32Array([1, 0]),
+          new Float32Array([0, 1]),
+          new Float32Array([0, 0]),
+          new Float32Array([0, 0]),
+          new Float32Array([0, 0]),
+          new Float32Array([0, 0]),
+        ],
+        2,
+      );
+      expect([...out[0]!].map((v) => Math.round(v * 1e4) / 1e4)).toEqual([0.4142, 0]);
+      expect([...out[1]!].map((v) => Math.round(v * 1e4) / 1e4)).toEqual([0, 0.4142]);
+    });
+  });
+
+  it("spreads the channels beyond the first two of any other layout into both sides, normalised", () => {
+    // Three channels (L, R, C): the third reaches both sides at 0.7071, divided by 1 + 0.7071.
+    const out = mapChannels(
+      [new Float32Array([0.2]), new Float32Array([0.4]), new Float32Array([0.6])],
+      2,
+    );
+    const norm = 1 + Math.SQRT1_2;
+    expect(out[0]![0]).toBeCloseTo((0.2 + Math.SQRT1_2 * 0.6) / norm, 6);
+    expect(out[1]![0]).toBeCloseTo((0.4 + Math.SQRT1_2 * 0.6) / norm, 6);
+  });
+
+  it("averages every channel of a surround layout into mono", () => {
+    const out = mapChannels(
+      [1, 2, 3, 4, 5, 6].map((v) => new Float32Array([v])),
+      1,
+    );
+    expect(out[0]![0]).toBeCloseTo(3.5, 6);
+  });
+
+  it("folds the surplus channels into a target that is not stereo too, instead of cutting them", () => {
+    // Five channels into three: the last two are spread into all three, divided by 1 + 2 * 0.7071.
+    const out = mapChannels(
+      [1, 0, 0, 0.5, 0.5].map((v) => new Float32Array([v])),
+      3,
+    );
+    const norm = 1 + 2 * Math.SQRT1_2;
+    expect(out).toHaveLength(3);
+    expect(out[0]![0]).toBeCloseTo((1 + 2 * Math.SQRT1_2 * 0.5) / norm, 6);
+    expect(out[1]![0]).toBeCloseTo((0 + 2 * Math.SQRT1_2 * 0.5) / norm, 6);
+  });
 });
 
 describe("interleave", () => {
