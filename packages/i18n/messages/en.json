@@ -1820,7 +1820,7 @@
     "guidePrivacyHow1": "draw a Blur or a Cover on the preview",
     "guidePrivacyHow2": "set when the region starts and ends",
     "guidePrivacyHow3": "remove the selected region",
-    "guideAudioIntro": "The sound of the recording, with the parts you silence.",
+    "guideAudioIntro": "The sound of the recording, with the parts you silence. The bars show how loud it is.",
     "guideAudioWhy": "Silence a cough or a private remark without cutting the video. Every muted range is a block you can move or resize later.",
     "guideAudioLegend1": "A silenced section. The video keeps playing, only the sound goes.",
     "guideAudioLegend2": "When the whole recording is muted, the track says so across its full width. Your ranges are kept and come back when you unmute.",

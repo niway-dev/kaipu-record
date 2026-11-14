@@ -7,6 +7,10 @@
  * instead of drawing the ranges: they still exist and come back when the
  * whole-video mute is turned off, but nothing in that state is editable, and
  * showing editable-looking blocks that do nothing would be a lie.
+ *
+ * With a waveform, the bars sit under everything else: under the hatched blocks, which
+ * dim the bars they cover, and under the whole-recording-muted overlay, which dims all of
+ * them.
  */
 import { memo, useRef } from "react";
 import { VolumeX } from "lucide-react";
@@ -15,6 +19,8 @@ import { useTranslations } from "@kaipu/i18n";
 import { sourceRangeToTimelineBlocks, sourceTimeAtTimeline } from "../source-time";
 import { type LayoutEntry, layoutDuration } from "../timeline";
 import type { MutedRange } from "../audio-edits";
+import type { AudioPeaks } from "../use-audio-peaks";
+import { AudioWaveform } from "./audio-waveform";
 import { timeToFraction } from "./timeline-geometry";
 import { useTimelinePointer } from "./timeline-pointer";
 import styles from "./audio-lane.module.css";
@@ -25,6 +31,12 @@ export interface AudioLaneProps {
   layout: LayoutEntry[];
   /** The whole recording is silent; the ranges are kept but not shown. */
   audioMuted: boolean;
+  /**
+   * The recording's loudness peaks, drawn as bars behind the blocks (NIW2-775). Null when
+   * the recording has no audio, or decoding failed: the lane then draws no bars, only its
+   * muted blocks or the whole-recording-muted overlay, or the empty-state text when neither.
+   */
+  waveform?: AudioPeaks | null;
   selectedId: string | null;
   onSelect(id: string): void;
   onEdgeDrag(
@@ -39,6 +51,7 @@ export const AudioLane = memo(function AudioLane({
   ranges,
   layout,
   audioMuted,
+  waveform,
   selectedId,
   onSelect,
   onEdgeDrag,
@@ -101,6 +114,16 @@ export const AudioLane = memo(function AudioLane({
     );
   };
 
+  const wave =
+    waveform && waveform.filled > 0 ? (
+      <AudioWaveform
+        waveform={waveform}
+        layout={layout}
+        mutedRanges={ranges}
+        audioMuted={audioMuted}
+      />
+    ) : null;
+
   if (audioMuted) {
     return (
       <div
@@ -109,6 +132,7 @@ export const AudioLane = memo(function AudioLane({
         className={styles.lane}
         data-testid="audio-lane"
       >
+        {wave}
         <p className={styles.allMuted}>
           <VolumeX size={12} /> {t("audioAllMuted")}
         </p>
@@ -123,7 +147,8 @@ export const AudioLane = memo(function AudioLane({
       className={styles.lane}
       data-testid="audio-lane"
     >
-      {ranges.length === 0 && <p className={styles.empty}>{t("audioEmptyState")}</p>}
+      {wave}
+      {ranges.length === 0 && !wave && <p className={styles.empty}>{t("audioEmptyState")}</p>}
       {ranges.flatMap((range, index) => {
         const blocks = sourceRangeToTimelineBlocks(layout, range.sourceStart, range.sourceEnd);
         const selected = range.id === selectedId;

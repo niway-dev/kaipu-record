@@ -1820,7 +1820,7 @@
     "guidePrivacyHow1": "dibuja un desenfoque o una tapa en la vista previa",
     "guidePrivacyHow2": "define cuándo empieza y termina la región",
     "guidePrivacyHow3": "elimina la región seleccionada",
-    "guideAudioIntro": "El sonido de la grabación, con las partes que silencias.",
+    "guideAudioIntro": "El sonido de la grabación, con las partes que silencias. Las barras muestran qué tan fuerte suena.",
     "guideAudioWhy": "Silencia una tos o un comentario privado sin cortar el video. Cada rango silenciado es un bloque que puedes mover o redimensionar después.",
     "guideAudioLegend1": "Una sección silenciada. El video sigue, solo se va el sonido.",
     "guideAudioLegend2": "Cuando toda la grabación está en silencio, la pista lo dice a todo su ancho. Tus rangos se conservan y vuelven al quitar el silencio.",
