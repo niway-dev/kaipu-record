@@ -47,7 +47,7 @@ an app-wide status bar.
 - Divider, then **Recording setup** with "Set once. In the selector you only turn these on or
   off." and the Microphone, System audio and Camera split tiles; a chevron opens one settings
   panel at a time under the row (unchanged behaviour).
-- A footer line with the shortcuts (Capture, Record, Instant, Show app) and the version.
+- No footer of its own: the app shell's status strip already shows the shortcuts on every page.
 - While a take runs, the page keeps today's recording layout (indicator, Pause/Resume, Stop).
 
 ## Tray popover

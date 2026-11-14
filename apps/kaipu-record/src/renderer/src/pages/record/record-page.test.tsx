@@ -255,16 +255,6 @@ describe("RecordPage idle layout (design Kaipu Capture Home)", () => {
     expect(startRecording).not.toHaveBeenCalled();
   });
 
-  it("ends with the shortcuts line and the app version", async () => {
-    renderAt(undefined);
-    const footer = await screen.findByText("V1.0.0");
-    const line = footer.parentElement!;
-    expect(line).toHaveTextContent("⇧⌘1 Capture");
-    expect(line).toHaveTextContent("⇧⌘2 Record");
-    expect(line).toHaveTextContent("⌃⌘X Instant");
-    expect(line).toHaveTextContent("⌃⌘O Show app");
-  });
-
   it("Switch beside the heading opens the workspace list, with Add workspace when there is one", async () => {
     renderAt(undefined);
     fireEvent.click(await screen.findByRole("button", { name: "Switch" }));

@@ -25,7 +25,6 @@ export const record = catalog(
         "record.recordingCard:screen",
         "record.instantLine:default",
         "record.setup:default",
-        "record.footer:default",
         "record.mic:on",
         "record.audio:off",
         "record.camera:off",

@@ -96,7 +96,6 @@ export const UI_MAP = {
       instantLine: { states: ["default"] },
       // Recording setup: the heading, its hint, and the Mic, Audio and Camera tiles below it.
       setup: { states: ["default"] },
-      footer: { states: ["default"] },
       mic: {
         states: ["on", "off"],
         gatedBy: [{ recordingSetting: "isMicrophoneEnabled" }, { permission: "microphone" }],

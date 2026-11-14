@@ -156,32 +156,3 @@
   font-size: var(--font-size-sm);
   color: var(--text-muted);
 }
-
-/* The shortcuts line and the version, at the bottom of the page. */
-.footer {
-  position: relative;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 4px 14px;
-  margin-top: auto;
-  padding: var(--space-xl) 64px 0;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-4);
-}
-
-.footerItem + .footerItem::before {
-  content: "·";
-  margin-right: 14px;
-}
-
-.footerVersion {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  letter-spacing: 0;
-}

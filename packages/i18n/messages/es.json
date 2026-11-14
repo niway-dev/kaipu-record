@@ -351,12 +351,7 @@
     "instantHint": "captura al instante la pantalla bajo el cursor, sin pasar por el selector.",
     "instantShort": "Instantánea, pantalla completa",
     "setupTitle": "Configuración de grabación",
-    "setupHint": "Se configura una vez. En el selector solo los activas o desactivas.",
-    "footerCapture": "Captura",
-    "footerRecord": "Grabar",
-    "footerInstant": "Instantánea",
-    "footerShowApp": "Mostrar app",
-    "footerVersion": "V{version}"
+    "setupHint": "Se configura una vez. En el selector solo los activas o desactivas."
   },
   "header": {
     "brand": "Kaipu Record",

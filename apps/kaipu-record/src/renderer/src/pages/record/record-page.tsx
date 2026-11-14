@@ -28,7 +28,6 @@ import {
 import { exclusive } from "@renderer/features/settings-controls/use-settings-disclosure";
 import { useTranslations } from "@kaipu/i18n";
 import { CaptureEntries, useCaptureEntryActions } from "@renderer/features/capture-entries";
-import { useAppVersion } from "@renderer/shell/use-app-version";
 import { ReconcileBanner } from "@renderer/features/library/reconcile/reconcile-banner";
 import { useOptionalWorkspaces } from "@renderer/features/workspaces/workspaces-context";
 import { WorkspaceNotConnectedNotice } from "@renderer/features/workspaces/not-connected-notice";
@@ -58,7 +57,6 @@ export function RecordPage(): React.JSX.Element {
   // One audio store for the Mic and Audio tiles: each write sends the whole `audio` object.
   const audioStore = useAudioSettings();
   const entries = useCaptureEntryActions();
-  const version = useAppVersion();
   const { sources, isLoading: isLoadingSources, error: sourcesError } = useSourceSelection(setup);
   const {
     status: permissionStatus,
@@ -263,14 +261,6 @@ export function RecordPage(): React.JSX.Element {
     // Design "Kaipu Capture Home": two entries that open the selector (the capture widget),
     // then what is set once: the sound and camera inputs. What to capture is picked in the
     // selector, so the page has no Start button and no source card.
-    const footerShortcuts = shortcuts
-      ? [
-          [shortcuts.captureScreenshot, t("footerCapture")],
-          [shortcuts.startRecording, t("footerRecord")],
-          [shortcuts.captureInstant, t("footerInstant")],
-          [shortcuts.bringToFront, t("footerShowApp")],
-        ].filter(([keys]) => keys)
-      : [];
     return (
       <div {...uiArea("record.page")} className={styles.idlePage}>
         <WorkspaceNotConnectedNotice ui={uiArea("record.workspaceNotice")} />
@@ -313,17 +303,6 @@ export function RecordPage(): React.JSX.Element {
             {inputNotices}
           </div>
         </section>
-
-        <footer {...uiArea("record.footer")} className={styles.footer}>
-          {footerShortcuts.map(([keys, label]) => (
-            <span key={label} className={styles.footerItem}>
-              {keys} {label}
-            </span>
-          ))}
-          {version && (
-            <span className={styles.footerVersion}>{t("footerVersion", { version })}</span>
-          )}
-        </footer>
 
         {pickerAndCountdown}
       </div>
