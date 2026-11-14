@@ -168,7 +168,9 @@ export class MediaSwitch implements PreviewMedia {
       this.elements.delete(key);
       if (previous === this.shown) this.shown = null;
       if (previous === this.pendingShow) this.pendingShow = null;
-      if (key === this.active) this.fallBack(wasPlaying);
+      // Only a key that held an element can have left the screen; a key that never had one is
+      // a silent clock and keeps running.
+      if (previous && key === this.active) this.fallBack(wasPlaying);
       return;
     }
     if (previous === element) return;
