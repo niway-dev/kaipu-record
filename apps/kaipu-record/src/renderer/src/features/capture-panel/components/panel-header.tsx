@@ -2,6 +2,7 @@ import React from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { KaipuLogo } from "@kaipu/brand";
 import styles from "./panel-header.module.css";
+import { uiArea } from "@renderer/lib/ui-area";
 
 interface PanelHeaderProps {
   onOpenMainWindow: () => void;
@@ -11,7 +12,7 @@ interface PanelHeaderProps {
 export function PanelHeader({ onOpenMainWindow }: PanelHeaderProps): React.JSX.Element {
   const t = useTranslations("panel");
   return (
-    <div className={styles.header}>
+    <div {...uiArea("capturePanel.header")} className={styles.header}>
       <div className={styles.brand}>
         <span className={styles.mark}>
           <KaipuLogo use="micro" size={16} />

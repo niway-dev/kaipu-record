@@ -123,14 +123,14 @@ export const KNOWN_VARIABLE: readonly KnownVariable[] = [
     reason: "the picker draws live thumbnails of the runner's screens and windows",
   },
   {
-    areas: [
-      "record.page",
-      "record.recordingIndicator",
-      "capturePanel.root",
-      "capturePanel.recordingIndicator",
-    ],
-    states: ["record/paused", "capturePanel/paused"],
+    areas: ["record.page", "record.recordingIndicator"],
+    states: ["record/paused"],
     reason: "the pause timer reads however long the take ran before the pause landed",
+  },
+  {
+    areas: ["capturePanel.root", "capturePanel.recordingStatus"],
+    states: ["capturePanel/recording", "capturePanel/paused"],
+    reason: "the clock reads however long the take had run when the shot landed",
   },
   {
     areas: ["library.page", "library.grid"],

@@ -1856,9 +1856,11 @@
     "pause": "Pausar",
     "stop": "Detener",
     "open": "Abrir ↗",
-    "tabRecord": "Grabar",
-    "tabCapture": "Captura",
-    "panelMode": "Modo del panel"
+    "recordWith": "Grabar con",
+    "recordingWith": "Grabando con",
+    "recordingMode": "Grabando · {mode}",
+    "lockedNote": "Termina la grabación para cambiarlos.",
+    "setup": "Configuración"
   },
   "onboarding": {
     "ctaGetStarted": "Empezar",

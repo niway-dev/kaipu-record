@@ -143,6 +143,7 @@ const kaipuApi: KaipuElectronAPI = {
     ipcRenderer.invoke("recording:get-screen-sources", options),
   resizeCapturePanel: (height) => ipcRenderer.send("capture-panel:resize", height),
   openMainWindow: () => ipcRenderer.send("capture-panel:open-main"),
+  openCaptureSetup: () => ipcRenderer.send(IPC_CHANNELS.capturePanelOpenSetup),
   checkPermissions: () => ipcRenderer.invoke(IPC_CHANNELS.checkPermissions),
   requestPermission: (kind) => ipcRenderer.invoke(IPC_CHANNELS.requestPermission, kind),
   getAccessibilityStatus: () => ipcRenderer.invoke(IPC_CHANNELS.accessibilityStatus),
@@ -440,7 +441,6 @@ const kaipuApi: KaipuElectronAPI = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.screenshotOpenQuietCapture, listener);
   },
   applyWindowPreset: (preset) => ipcRenderer.send(IPC_CHANNELS.windowApplyPreset, preset),
-  setTrayMode: (mode) => ipcRenderer.send(IPC_CHANNELS.traySetMode, mode),
   setOnboardingWindowMode: (active) =>
     ipcRenderer.send(IPC_CHANNELS.windowSetOnboardingMode, active),
   copyImageToClipboard: (png) => ipcRenderer.invoke(IPC_CHANNELS.screenshotCopy, png),

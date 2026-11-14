@@ -14,6 +14,8 @@ const MODE_LABEL = {
 export interface CaptureEntryActions {
   /** The last used screenshot mode as a label ("Frame"). */
   screenshotLastUsed: string;
+  /** The last used recording mode, by name only ("Frame"): what the tray's status box shows. */
+  recordingModeName: string;
   /** The last used recording mode ("Screen"), with the Frame aspect ("Frame · 16:9") when set. */
   recordingLastUsed: string;
   /** Open the selector with the capture intent, in the last used screenshot mode. */
@@ -53,6 +55,7 @@ export function useCaptureEntryActions(): CaptureEntryActions {
 
   return {
     screenshotLastUsed: modeName(screenshotMode),
+    recordingModeName: modeName(recording.mode),
     recordingLastUsed,
     openScreenshot,
     openRecording,

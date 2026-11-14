@@ -545,32 +545,22 @@ export const UI_MAP = {
     window: "capture-panel",
     query: "mode=capture",
     areas: {
-      root: { states: ["record", "recording", "capture"] },
-      tabs: { states: ["record", "capture", "locked"] },
-      startButton: { states: ["idle"] },
-      modePicker: {
-        states: ["frame", "window", "screen"],
-        gatedBy: [{ setting: "recordingMode" }],
+      root: { states: ["idle", "recording"] },
+      header: { states: ["default"] },
+      // Idle only: a take replaces the two rows and the Instant line with the status box.
+      entries: { states: ["default"] },
+      // The three input tiles: toggles while idle, read-only mid-take.
+      switches: {
+        states: ["idle", "locked"],
+        gatedBy: [
+          { recordingSetting: "isMicrophoneEnabled" },
+          { recordingSetting: "isSystemAudioEnabled" },
+          { recordingSetting: "isCameraEnabled" },
+        ],
       },
-      mic: {
-        states: ["on", "off"],
-        gatedBy: [{ recordingSetting: "isMicrophoneEnabled" }, { permission: "microphone" }],
-      },
-      micSettings: { states: ["open"], gatedBy: [{ recordingSetting: "isMicrophoneEnabled" }] },
-      audio: { states: ["on", "off"], gatedBy: [{ recordingSetting: "isSystemAudioEnabled" }] },
-      audioSettings: {
-        states: ["open"],
-        gatedBy: [{ recordingSetting: "isSystemAudioEnabled" }],
-      },
-      camera: {
-        states: ["on", "off", "blocked"],
-        gatedBy: [{ recordingSetting: "isCameraEnabled" }, { permission: "camera" }],
-      },
-      cameraSettings: { states: ["open"], gatedBy: [{ recordingSetting: "isCameraEnabled" }] },
-      recordingIndicator: { states: ["recording", "paused"] },
-      // No "busy": a take locks the panel on its Record tab, so the capture buttons are never
-      // drawn mid-take (capture-panel.tsx keeps the prop for the day the lock lifts).
-      captureButtons: { states: ["idle"], gatedBy: [{ setting: "screenshotMode" }] },
+      recordingStatus: { states: ["recording", "paused", "starting"] },
+      stopButton: { states: ["recording"] },
+      footer: { states: ["default"] },
     },
   },
   controlBar: {
