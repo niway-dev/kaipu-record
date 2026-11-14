@@ -5,11 +5,13 @@ description: "The Audio lane draws the recording's loudness as bars, behind a fl
 
 # Video editor — audio waveform
 
-> **Status: 🟡 In progress —
+> **Status: 🟢 Ready to validate —
 > [NIW2-775](https://linear.app/niway/issue/NIW2-775/audio-waveform-in-the-video-editors-audio-lane).**
-> The owner asked for it on 2026-11-14 and approved the look with a mock: blue bars of the
-> recording's loudness across the lane, muted ranges as hatched blocks over a dimmed
-> waveform. Behind the `audio-waveform` flag until the owner has tried it on long takes.
+> Built behind the `audio-waveform` flag (default off) and seen in the real app on the UI
+> catalog's seeded recordings. Pending: the owner's run on a long real take (decode time,
+> smoothness while it decodes) before the flag goes on. The owner asked for it on 2026-11-14
+> and approved the look with a mock: blue bars of the recording's loudness across the lane,
+> muted ranges as hatched blocks over a dimmed waveform.
 
 ## Why
 
@@ -36,3 +38,5 @@ listed it as a non-goal ("Useful, separate"); this is that separate piece.
 - Volume per range (the "-18 dB" block in the mock). A separate feature.
 - Separate mic and system-audio waveforms. The recording has one mixed track.
 - Persisting peaks across app restarts.
+- Pausing the decode while the Audio lane is hidden: a decode cancelled halfway would start
+  over from 0 when the lane comes back, so it keeps running while the flag is on.
