@@ -202,10 +202,14 @@ a preview, because the preview cannot show the preset.
 1. **Floating images** (NIW2-771). Sections 1 and 2, the Clips rows, the preview handles, the
    small panel (duration, Full, Box, fades, forward, backward, delete), **Add to timeline** adding
    a floating image. Behind `timeline-levels`.
-2. **A second video in the sequence.** Clips and source anchors get a source id; the preview and
-   the export open more than one recording; zooms, privacy, mutes, cursor and webcam are scoped
-   to their source; an image dropped on the sequence is a 5 s slide; fade through the background
-   between sequence items. Depends on the compose design's import path for files from disk.
+2. **A second video in the sequence.** Each joined recording gets its own range on the scene's
+   source axis, so clips and source anchors need no source id
+   ([ADR 0058](/architecture/decisions/0058-joined-recordings-share-one-source-axis-each-on-its-own-range/));
+   the preview and the export open more than one recording; zooms, privacy, mutes, cursor and
+   webcam are scoped to their source; an image dropped on the sequence is a 5 s slide; fade through
+   the background between sequence items. The second recording comes from the Library only (owner,
+   2026-11-14); a file from disk is later. Milestone 1 (joining a Library recording, cuts only) is
+   [NIW2-778](https://linear.app/niway/issue/NIW2-778).
 3. **Floating videos and the crossfade.** A second decoder in the same window, per-item mute,
    audio mixed at export, the two-videos limit measured first; the crossfade overlaps two sequence
    items and shortens the video by its length.

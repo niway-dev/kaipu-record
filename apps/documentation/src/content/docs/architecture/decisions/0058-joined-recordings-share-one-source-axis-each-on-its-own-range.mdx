@@ -1,0 +1,101 @@
+---
+title: "ADR 0058: Joined recordings share one source axis, each on its own fixed range"
+description: When a second Library recording is joined into the Clips sequence, it gets its own range of source seconds on the scene's one source axis, far from the opened recording's. Clips, zooms, privacy, mutes, webcam segments and floating-image anchors stay plain numbers on that axis; only media readers translate an axis time into a recording and a local time, through one pure function. A recording id on every span is rejected.
+---
+
+# ADR 0058: Joined recordings share one source axis, each on its own fixed range
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed — taken while building stage 2, milestone 1 of [ADR 0057](/architecture/decisions/0057-clips-is-one-section-with-levels-a-sequence-below-floating-items-above/) ([NIW2-778](https://linear.app/niway/issue/NIW2-778)); the model ships in [NIW2-779](https://linear.app/niway/issue/NIW2-779). Accepted once that stack merges                                                                                                             |
+| Date          | 2026-11-14                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Relates to    | [0057](/architecture/decisions/0057-clips-is-one-section-with-levels-a-sequence-below-floating-items-above/) (the sequence and the source anchor), [0038](/architecture/decisions/0038-webcam-is-a-viewport-layer-composed-after-the-zoom-crop/) (the webcam layer), [0051](/architecture/decisions/0051-the-video-background-is-the-screenshot-beautify-drawn-as-the-outermost-step/) (a smaller picture is fitted, with the background around it) |
+| Superseded by | —                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+
+## Context
+
+Until now a video scene belonged to one recording. Every per-recording edit is stored in seconds
+of that recording, the **source time**: clips (`sourceStart`, `sourceEnd`), zoom segments, privacy
+regions, muted spans, the webcam's hide and override segments, and, since stage 1, the anchor of
+a floating image. Because they share one axis, they follow the footage through any trim, split or
+reorder with no code, and a set of rules leans on it: source ranges of clips never overlap
+(`trimClip`), exactly one zoom is active at a source time, `clipAtSource` finds the clip that owns a
+second, and the preview skips the seek when the next clip starts where the last one ended.
+
+Stage 2 joins a second recording into the same sequence. Its seconds start at 0 too, so the second
+5 of recording B and the second 5 of recording A would be the same number. Every rule above would
+mix them up: a zoom on B would play over A, and a cut from A at 5 s to B at 5 s would be taken for
+continuous footage.
+
+The spec ([Clips levels](/specs/2026-11-13-clips-levels-added-media-design/), section 3) says
+"clips and source anchors get a source id". That is one way to tell the seconds apart; this ADR
+picks another.
+
+## Decision
+
+1. **One source axis per scene, one fixed range per recording.** The opened recording keeps
+   `[0, duration]`. A joined recording gets `[offset, offset + duration]`, with `offset` stored in
+   `VideoScene.sources` and never changed once assigned. Ranges never touch: there is always a gap
+   between them, so an axis time belongs to at most one recording, ends included.
+2. **Everything per-recording stays a plain number on that axis.** Clips, zooms, privacy, mutes,
+   webcam segments and source anchors need no new field. Each rule in the context keeps working
+   unchanged, because two recordings can no longer share a number.
+3. **Only media readers translate.** The `<video>` element, the export decoder, the cursor and
+   click data and the webcam file ask one pure function, next to `timeline.ts`, which recording an
+   axis time falls in and the local second inside it. Preview and export share it.
+4. **The new offset is the next whole hour after the last range ends plus one minute.** A recording
+   under an hour, joined to one under an hour, starts at 3600 s. The rule only picks new offsets;
+   stored ones never move, so changing the rule later is safe.
+5. **Each join is its own range.** Adding the same Library recording twice gives two independent
+   ranges with their own zooms and privacy. A range whose clips are all deleted stays in
+   `sources`, like any deleted footage: nothing on it plays or exports.
+6. **The session format says when it holds a join.** A scene with joined recordings is written as
+   session version 2; older builds reject version 2 and open the recording fresh instead of
+   playing B's seconds against A's file. A scene without one is still version 1, byte for byte.
+7. **A joined recording is referenced by its Library `assetId`**, which survives renames, plus a
+   title kept for the clip label and for the message when its file is missing.
+
+## Alternatives rejected
+
+- **A recording id on every clip, zoom, privacy region, muted span, webcam segment and anchor**
+  (the spec's line). Every rule in the context would need the id threaded through it, and each
+  editing hook, lane and export step would have to filter by it. A single missed filter puts a
+  zoom on the wrong recording with nothing to catch it. The shared axis gives the same separation
+  with no change to those rules.
+- **One scene per recording, stitched at playback.** It would duplicate the global settings
+  (background, cursor look, annotations in timeline time) and the sequence order would live in two
+  places.
+- **Offsets packed end to end (B starts where A ends).** A cut from A's last second to B's first
+  would look like continuous footage, which is the confusion this decision removes.
+
+## Consequences
+
+- Scenes saved before this change are already valid: the opened recording is at offset 0, and
+  `sources` is absent.
+- Any code that turns an axis time into a frame, a sample or a pointer position must go through
+  the resolver. Code that only compares axis times (layouts, lanes, edit rules) needs no change.
+- Clamps that used "0 to the recording's duration" become "the range of the recording under this
+  clip": trimming a clip, dragging a zoom or privacy edge.
+- Auto-zoom detection runs once per recording, on its own click data, and its result is shifted
+  into that recording's range.
+- The webcam layout (shape, size, position) stays one per scene, so a joined recording's camera
+  uses the opened recording's layout (owner decision, 2026-11-14). Its segments live in its range.
+- Axis times in a session file are no longer seconds into the opened recording's file once a join
+  exists; reading one by hand needs the `sources` table.
+
+## Non-goals
+
+- Mixing two recordings' audio at the same moment: the sequence plays one recording at a time
+  (stage 3).
+- Importing a file from disk as a joined recording (later; Library only for now).
+- Protecting a joined recording from rename, move or delete in the Library. Its file being missing
+  is handled when the editor opens and when it exports.
+
+## What would reopen this
+
+- A feature that needs one span to cover two recordings at once (for example a zoom that carries
+  across a cut between them).
+- Session files read by tools other than the editor that must stay in local seconds.
+- More than a handful of joins per scene making the hour grid awkward to read.
