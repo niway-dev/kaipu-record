@@ -120,7 +120,7 @@ Types live in `shared/types/library-reconcile.ts`; see [Library Vault](/desktop/
 | `clipboard:peek-image`             | r→m      | `peekClipboardImage()`                                                | `screenshots/` |
 | `screenshot:reveal`                | r→m      | `revealAfterCapture()`                                                | `screenshots/` |
 | `screenshot:hotkey`                | m→r      | `onCaptureScreenshotHotkey(cb)`                                       | `index.ts`     |
-| `screenshot:request-capture`       | r→m      | `requestCaptureScreenshot(mode)`                                      | `index.ts`     |
+| `screenshot:request-capture`       | r→m      | `requestCaptureScreenshot(mode?)`                                     | `index.ts`     |
 | `screenshot:overlay-answer`        | o→m      | `captureOverlay.answer(answer)`                                       | `screenshots/` |
 | `screenshot:overlay-hover`         | o→m      | `captureOverlay.hover(id)`                                            | `screenshots/` |
 | `screenshot:overlay-state`         | m→o      | `captureOverlay.onState(cb)`                                          | `screenshots/` |
@@ -230,10 +230,10 @@ shortcut writes `screenshotMode` by itself: the `screenshot:capture` handler wri
 `updateAppSettings` (which broadcasts `settings:changed`), from the `mode` of a `captured`
 result, the mode the user ended in on the overlay. A cancelled, unsupported or failed capture
 leaves it untouched, so a mode switched on the overlay and then cancelled with Esc is not
-remembered. The Screenshots page and the tray panel never write it either: their Capture button
-sends the current mode and each mode chip (Frame, Screen; Window while enabled) sends its own, through
-`screenshot:capture` (page) or `screenshot:request-capture` (tray), and main remembers whichever mode
-the capture ends in. Analytics: the handler of
+remembered. The Capture page cards and the tray popover rows send no mode: they call
+`screenshot:request-capture` without one, so main runs the capture in the stored mode, as ⌘⇧1 does.
+The control bar's screenshot button sends `frame` instead. Either way, the mode a capture ends in is
+remembered as described above. Analytics: the handler of
 `screenshot:capture` emits one `screenshot_captured` event per answered request with
 `{ mode, platform, displays, outcome }` and nothing else. `outcome` is `captured`,
 `cancelled`, `unsupported` or `failed`; `failed` is a provider throw, which the renderer still
@@ -328,6 +328,7 @@ with `{ mode: "screen" | "area" | "window", platform, displays }`, plus, for an 
 | `recording:request-start`         | r→m / m→r | `requestStartRecording()` / `onRequestStartRecording(cb)` | `index.ts`         |
 | `recording:request-source-picker` | r→m / m→r | `requestChooseSource()` / `onRequestChooseSource(cb)`     | `index.ts`         |
 | `recording:request-selector`      | r→m       | `requestRecordSelector(mode?)`                            | `index.ts`         |
+| `capture-panel:open-setup`        | r→m       | `openCaptureSetup()`                                      | `index.ts`         |
 | `recording:recorder-phase`        | r→m       | `reportRecorderPhase(report)`                             | `recording-hub.ts` |
 | `recording-shade:state`           | m→r       | `onRecordingShadeState(cb)`                               | `recording-hub.ts` |
 
