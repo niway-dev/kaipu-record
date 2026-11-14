@@ -164,7 +164,9 @@ interface VideoScene {
   second belongs to a clip when it is in `[sourceStart, sourceEnd)`; the resolution uses that
   half-open range even where `sourceToTimeline` accepts a clip's end.
 - **End.** `min(start + duration, end of the timeline)`.
-- **Moving it** to timeline time `t` rewrites the anchor from the sequence entry at `t`. Dragging
+- **Moving it** to timeline time `t` rewrites the anchor from the sequence entry at `t`. `t` is
+  clamped below the end of the timeline: at the very end `entryAt` returns the last entry and
+  the anchor would be that clip's `sourceEnd`, which the half-open rule rejects. Dragging
   the left edge rewrites the anchor and the duration together; the right edge only the duration.
 - **Box.** The same coordinate space as the webcam layer (ADR 0038, 0051): the picture, not the
   padded output. Height is `width × naturalHeight / naturalWidth` in picture pixels. "Fitted"
