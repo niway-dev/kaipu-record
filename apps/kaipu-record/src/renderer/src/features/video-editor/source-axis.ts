@@ -11,6 +11,7 @@
  */
 import { newId, type SceneSource, type TrackItem, type VideoScene } from "./scene";
 import {
+  MIN_ITEM_DURATION,
   boundaryIndexAt,
   insertItemAt,
   timelineToSource,
@@ -128,6 +129,10 @@ export function joinRecording(
   recording: JoinedRecordingInput,
   t: number,
 ): { scene: VideoScene; source: SceneSource } {
+  // The session loader rejects a shorter range (it could not hold its clip): callers filter first.
+  if (!(recording.durationSeconds >= MIN_ITEM_DURATION)) {
+    throw new RangeError(`joinRecording: ${recording.durationSeconds}s is shorter than a clip`);
+  }
   const axis = sourceAxis(primaryDuration, scene.sources);
   const source: SceneSource = {
     id: newId(),

@@ -11,6 +11,7 @@ description: When a second Library recording is joined into the Clips sequence, 
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Status        | Proposed — taken while building stage 2, milestone 1 of [ADR 0057](/architecture/decisions/0057-clips-is-one-section-with-levels-a-sequence-below-floating-items-above/) ([NIW2-778](https://linear.app/niway/issue/NIW2-778)); the model ships in [NIW2-779](https://linear.app/niway/issue/NIW2-779). Accepted once that stack merges                                                                                                             |
 | Date          | 2026-11-14                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Supersedes    | [0057](/architecture/decisions/0057-clips-is-one-section-with-levels-a-sequence-below-floating-items-above/) in part: its consequence that stage 2 gives clips and source anchors a source id                                                                                                                                                                                                                                                       |
 | Relates to    | [0057](/architecture/decisions/0057-clips-is-one-section-with-levels-a-sequence-below-floating-items-above/) (the sequence and the source anchor), [0038](/architecture/decisions/0038-webcam-is-a-viewport-layer-composed-after-the-zoom-crop/) (the webcam layer), [0051](/architecture/decisions/0051-the-video-background-is-the-screenshot-beautify-drawn-as-the-outermost-step/) (a smaller picture is fitted, with the background around it) |
 | Superseded by | —                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
@@ -45,8 +46,9 @@ picks another.
 3. **Only media readers translate.** The `<video>` element, the export decoder, the cursor and
    click data and the webcam file ask one pure function, next to `timeline.ts`, which recording an
    axis time falls in and the local second inside it. Preview and export share it.
-4. **The new offset is the next whole hour after the last range ends plus one minute.** A recording
-   under an hour, joined to one under an hour, starts at 3600 s. The rule only picks new offsets;
+4. **The new offset is the first multiple of 3600 s that is at least 60 s after the last range
+   ends.** An opened recording of up to 59 minutes puts the first join at 3600 s; one of over 59 and up to 119
+   minutes puts it at 7200 s. The rule only picks new offsets;
    stored ones never move, so changing the rule later is safe.
 5. **Each join is its own range.** Adding the same Library recording twice gives two independent
    ranges with their own zooms and privacy. A range whose clips are all deleted stays in
