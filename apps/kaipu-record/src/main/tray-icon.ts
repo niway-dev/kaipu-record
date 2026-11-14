@@ -8,7 +8,7 @@
  *    .ico files with a light glyph (16/24/32 px, see generate-app-icons.sh).
  */
 
-export type TrayIconFile = "tray-recording.png" | "tray-windows-recording.ico";
+export type TrayIconFile = "tray-screenshot.png" | "tray-windows-screenshot.ico";
 
 export interface TrayIcon {
   file: TrayIconFile;
@@ -17,6 +17,6 @@ export interface TrayIcon {
 }
 
 export function trayIconFor(platform: NodeJS.Platform): TrayIcon {
-  if (platform === "win32") return { file: "tray-windows-recording.ico", template: false };
-  return { file: "tray-recording.png", template: true };
+  if (platform === "win32") return { file: "tray-windows-screenshot.ico", template: false };
+  return { file: "tray-screenshot.png", template: true };
 }

@@ -8,20 +8,20 @@ const RESOURCES = resolve(__dirname, "../../resources");
 describe("trayIconFor", () => {
   it("uses the black template PNGs on macOS, recoloured by the menu bar", () => {
     expect(trayIconFor("darwin")).toEqual({
-      file: "tray-recording.png",
+      file: "tray-screenshot.png",
       template: true,
     });
   });
 
   it("uses the light .ico files on Windows, never as a template", () => {
     expect(trayIconFor("win32")).toEqual({
-      file: "tray-windows-recording.ico",
+      file: "tray-windows-screenshot.ico",
       template: false,
     });
   });
 
   it("keeps Linux on the template PNGs it used before", () => {
-    expect(trayIconFor("linux").file).toBe("tray-recording.png");
+    expect(trayIconFor("linux").file).toBe("tray-screenshot.png");
   });
 });
 
@@ -31,7 +31,7 @@ describe("trayIconFor", () => {
  * area asks for, each a PNG.
  */
 describe("Windows tray .ico files", () => {
-  const icoFiles: TrayIconFile[] = ["tray-windows-recording.ico"];
+  const icoFiles: TrayIconFile[] = ["tray-windows-screenshot.ico"];
 
   for (const file of icoFiles) {
     it(`${file} carries 16, 24 and 32 px PNG entries`, () => {

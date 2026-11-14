@@ -1,6 +1,6 @@
 import { app, Menu, nativeImage, type NativeImage, Tray } from "electron";
-import trayRecordingPath from "../../resources/tray-recording.png?asset";
-import trayWindowsRecordingPath from "../../resources/tray-windows-recording.ico?asset";
+import trayIconPath from "../../resources/tray-screenshot.png?asset";
+import trayWindowsIconPath from "../../resources/tray-windows-screenshot.ico?asset";
 import { createMainTranslator } from "@kaipu/i18n/main";
 import type { Locale } from "@kaipu/i18n";
 import type { CapturePanelWindow } from "./capture-panel-window";
@@ -19,8 +19,9 @@ import { trayIconFor, type TrayIconFile } from "./tray-icon";
  * automatically. Windows does not recolor tray icons, so it gets light-glyph
  * .ico files instead (see `tray-icon.ts`).
  *
- * The icon is always the record glyph (the fox with its record dot): the Capture
- * page covers screenshots too, so the tray no longer switches by mode.
+ * The icon is always the viewfinder glyph (the fox inside capture corners): it
+ * stands for every capture, video or screenshot, so the tray no longer switches
+ * by mode. The record glyph's small dot read as a notification badge at 16 px.
  *
  * The context menu is rebuilt on locale change (see `rebuildTrayMenu`) — native
  * menu labels can't be mutated in place.
@@ -30,8 +31,8 @@ let showMain: (() => void) | null = null;
 let contextMenu: Menu | null = null;
 
 const TRAY_ICON_PATHS: Record<TrayIconFile, string> = {
-  "tray-recording.png": trayRecordingPath,
-  "tray-windows-recording.ico": trayWindowsRecordingPath,
+  "tray-screenshot.png": trayIconPath,
+  "tray-windows-screenshot.ico": trayWindowsIconPath,
 };
 
 /** The tray image for this platform, marked as a template where macOS wants one. */
