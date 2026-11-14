@@ -882,6 +882,7 @@ function TrackBlock({
           .filter(Boolean)
           .join(" ")}
         style={{ left: `${left}%`, width: `${width}%` }}
+        data-item-id={entry.itemId}
         data-recording-missing={missing ? "true" : undefined}
         data-same-recording={sameRecording ? "true" : undefined}
         onPointerEnter={onHover && recording ? () => onHover(entry.itemId) : undefined}

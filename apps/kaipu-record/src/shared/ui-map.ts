@@ -278,9 +278,16 @@ export const UI_MAP = {
       // The Background section at the top of the inspector with nothing selected (ADR 0051):
       // `default` is none with the sliders disabled, `set` is a preset with padding, corners, shadow.
       background: { states: ["default", "set"] },
-      timeline: { states: ["default", "zoomed"] },
+      // A scene with recordings joined into it (ADR 0058, NIW2-780): twoRecordings labels each clip
+      // with its recording's name and length and draws a joined clip from its own file;
+      // recordingHover outlines every clip of the hovered clip's recording; recordingMissing is a
+      // clip whose joined recording is gone (hatched, "Recording missing: <title>").
+      timeline: {
+        states: ["default", "zoomed", "twoRecordings", "recordingHover", "recordingMissing"],
+      },
       zoomLane: { states: ["empty", "segments"] },
-      webcamLane: { states: ["segments"] },
+      // noCamera: the span over a clip whose recording has no webcam while another one has.
+      webcamLane: { states: ["segments", "noCamera"] },
       privacyLane: { states: ["empty", "regions"] },
       audioLane: { states: ["empty", "mutedRanges", "allMuted"] },
       exportSheet: { states: ["open"], gatedBy: [{ setting: "exportQuality" }] },

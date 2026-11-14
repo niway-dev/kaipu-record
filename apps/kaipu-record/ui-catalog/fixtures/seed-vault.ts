@@ -34,6 +34,14 @@ export const ASSETS = {
   lightCopy: "c0a1a10c-0000-4000-8000-000000000008",
   /** Seeded only where `floatingImages` is on: a saved edit with two overlapping floating images. */
   floatingDemo: "c0a1a10c-0000-4000-8000-000000000009",
+  /**
+   * Seeded only where `joinedRecordings` is on (ADR 0058): `joinedDemo` is a recording whose saved
+   * edit joined `joinedSecond` (clips A, B, A); `joinedMissingDemo` joined a recording that is not
+   * in the vault (`JOINED_MISSING_ASSET`).
+   */
+  joinedDemo: "c0a1a10c-0000-4000-8000-00000000000a",
+  joinedSecond: "c0a1a10c-0000-4000-8000-00000000000b",
+  joinedMissingDemo: "c0a1a10c-0000-4000-8000-00000000000c",
   settingsShot: "c0a1a10c-0000-4000-8000-000000000101",
   dashboardShot: "c0a1a10c-0000-4000-8000-000000000102",
   dialogShot: "c0a1a10c-0000-4000-8000-000000000103",
@@ -159,6 +167,8 @@ interface RecordingFixture {
   cursorTrack?: boolean;
   /** A saved edit with two overlapping floating images (ADR 0057): `FLOATING_IMAGES`. */
   floating?: boolean;
+  /** A saved version 2 edit that joined another recording (ADR 0058): `joinedScene`. */
+  joined?: JoinedKind;
   /** An export: the asset it was made from. */
   derivedFrom?: string;
   /** An export: the preset it was made with (the sidecar's `exportPreset`). */
@@ -222,6 +232,90 @@ const CURSOR_RECORDING: RecordingFixture = {
   ago: 30 * 60_000,
   cursorTrack: true,
 };
+
+/** What a joined recording's saved edit points at: a recording in the vault, or one that is gone. */
+export type JoinedKind = "present" | "missing";
+
+/** The Library asset id `joinedMissingDemo` joined: nothing in the vault has it. */
+export const JOINED_MISSING_ASSET = "c0a1a10c-0000-4000-8000-0000000000ff";
+
+/** Where a joined recording sits on the source axis (`nextOffset` after a 12 s opened one). */
+export const JOINED_OFFSET = 3600;
+
+/**
+ * The saved scene of a recording that joined a second one (ADR 0058): its clips alternate A (the
+ * opened recording, seconds 0 to 5), B (the whole joined recording, on its own range from
+ * `JOINED_OFFSET`) and A again (from 5 s to the end). `present` joins “Checkout bug” (7 s);
+ * `missing` joins a recording that is not in the vault. Saved as version 2 by the caller.
+ */
+export function joinedScene(kind: JoinedKind, openedSeconds: number): unknown {
+  const joinedSeconds = kind === "present" ? JOINED_SECOND.cut : 6;
+  const source = {
+    id: kind === "present" ? "join-b" : "join-gone",
+    assetId: kind === "present" ? ASSETS.joinedSecond : JOINED_MISSING_ASSET,
+    title: kind === "present" ? JOINED_SECOND.title : "Old standup",
+    offset: JOINED_OFFSET,
+    durationSeconds: joinedSeconds,
+    width: 1920,
+    height: 1080,
+  };
+  const cutAt = Math.min(5, openedSeconds - 1);
+  return {
+    items: [
+      { id: "clip-a1", kind: "clip", sourceStart: 0, sourceEnd: cutAt },
+      {
+        id: "clip-b",
+        kind: "clip",
+        sourceStart: source.offset,
+        sourceEnd: source.offset + joinedSeconds,
+      },
+      { id: "clip-a2", kind: "clip", sourceStart: cutAt, sourceEnd: openedSeconds },
+    ],
+    overlays: [],
+    zoomSegments: [],
+    redactions: [],
+    zoomSensitivity: 55,
+    audioMuted: false,
+    mutedRanges: [],
+    webcam: null,
+    sources: [source],
+  };
+}
+
+/** Seeded with `JOINED_RECORDINGS`: the recording the first one joins (no webcam). */
+const JOINED_SECOND: RecordingFixture = {
+  stem: "Checkout bug",
+  assetId: ASSETS.joinedSecond,
+  title: "Checkout bug",
+  cut: 7,
+  ago: 15 * 60_000,
+};
+
+/**
+ * Seeded only where `joinedRecordings` is on. Both open with a webcam, so the Webcam track
+ * exists and a recording without one reads “No camera in this recording”.
+ */
+const JOINED_RECORDINGS: readonly RecordingFixture[] = [
+  {
+    stem: "Two recordings",
+    assetId: ASSETS.joinedDemo,
+    title: "Two recordings",
+    cut: 12,
+    ago: 18 * 60_000,
+    webcam: true,
+    joined: "present",
+  },
+  {
+    stem: "Missing recording",
+    assetId: ASSETS.joinedMissingDemo,
+    title: "Missing recording",
+    cut: 9,
+    ago: 17 * 60_000,
+    webcam: true,
+    joined: "missing",
+  },
+  JOINED_SECOND,
+];
 
 /** Seeded only where `floatingImages` is on: a recording whose saved edit floats two images. */
 const FLOATING_RECORDING: RecordingFixture = {
@@ -333,6 +427,8 @@ export interface SeedOptions {
   cursorRecording?: boolean;
   /** Add the recording with two overlapping floating images (profiles with `timeline-levels`). */
   floatingImages?: boolean;
+  /** Add the recordings whose saved edits joined another one (`JOINED_RECORDINGS`). */
+  joinedRecordings?: boolean;
   /** Add the screenshot that draws real text (profiles that exercise text recognition). */
   textScreenshot?: boolean;
   /** Add the two screenshots the Colors panel states open (profiles that exercise it). */
@@ -561,6 +657,20 @@ async function seedRecording(
       exportedSavedAt: null,
     });
   }
+  if (item.joined) {
+    await writeJson(path.join(meta, `${item.stem}.edit.json`), {
+      version: 2,
+      scene: joinedScene(item.joined, item.cut),
+    });
+    const source = await stat(media);
+    await writeJson(path.join(meta, `${item.stem}.edit.meta.json`), {
+      sourceSizeBytes: source.size,
+      sourceMtimeMs: source.mtimeMs,
+      assetIds: [],
+      savedAt: createdAt + HOUR,
+      exportedSavedAt: null,
+    });
+  }
   if (item.edited) {
     const savedAt = createdAt + HOUR;
     await writeJson(path.join(meta, `${item.stem}.edit.json`), {
@@ -664,6 +774,7 @@ export async function seedCatalogVault(vaultDir: string, options: SeedOptions): 
 
   const recordings = [
     ...(options.floatingImages ? [FLOATING_RECORDING] : []),
+    ...(options.joinedRecordings ? JOINED_RECORDINGS : []),
     ...(options.cursorRecording ? [CURSOR_RECORDING] : []),
     ...RECORDINGS,
   ];

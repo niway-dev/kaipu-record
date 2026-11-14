@@ -1228,6 +1228,7 @@ async function runProfile(name: ProfileName, entries: CatalogEntry[]): Promise<v
           content: profile.seed,
           cursorRecording: profile.cursorRecording,
           floatingImages: profile.floatingImages,
+          joinedRecordings: profile.joinedRecordings,
           textScreenshot: profile.textScreenshot,
           colorsScreenshots: profile.colorsScreenshots,
           lockedRedaction: profile.lockedRedaction,

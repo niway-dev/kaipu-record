@@ -258,6 +258,34 @@ export const editorVideo = catalog(
       ready: { area: "editorVideo.mediaPanel" },
       gates: [{ flag: "timeline-levels", side: "on" }],
     },
+    "two-recordings": {
+      profile: "two-recordings",
+      how: "Open “Two recordings”, whose edit joined “Checkout bug”: the clips alternate the two recordings, each labelled with its name and length over its own thumbnails, and the Webcam track says “No camera in this recording” under the joined clip.",
+      steps: [open(ASSETS.joinedDemo)],
+      demonstrates: ["editorVideo.timeline:twoRecordings", "editorVideo.webcamLane:noCamera"],
+      ready: { video: true },
+    },
+    "two-recordings-hover": {
+      profile: "two-recordings",
+      how: "Open “Two recordings” and rest the pointer on its first clip: both clips of that recording get a subtle outline, the joined clip between them does not.",
+      steps: [
+        open(ASSETS.joinedDemo),
+        loaded,
+        // The thumbnails decode after the editor opens; the labels are there from the start.
+        { waitMs: 800 },
+        { hover: { area: "editorVideo.timeline", part: { css: '[data-item-id="clip-a1"]' } } },
+      ],
+      keepPointer: true,
+      demonstrates: ["editorVideo.timeline:recordingHover"],
+      ready: { video: true },
+    },
+    "recording-missing": {
+      profile: "two-recordings",
+      how: "Open “Missing recording”, whose joined recording is not in the vault: its clip is hatched and reads “Recording missing: Old standup”, and the editor goes on working.",
+      steps: [open(ASSETS.joinedMissingDemo)],
+      demonstrates: ["editorVideo.timeline:recordingMissing"],
+      ready: { video: true },
+    },
     "tool-box": {
       profile: "default",
       steps: [open(ASSETS.walkthrough), loaded, rail("Box")],
