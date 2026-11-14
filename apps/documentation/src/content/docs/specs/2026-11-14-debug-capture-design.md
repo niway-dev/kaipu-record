@@ -86,6 +86,9 @@ gets its registry entry and pin test like every other.
   looks the same as an unregistered key. Main logs the error with `console.error` and shows a
   native `dialog.showErrorBox` with the cause; a native dialog is not a Kaipu window, so it never
   ends up in a later capture.
+- **The capture stalls a recording.** Pixel work on main's event loop would delay the recording
+  hub. The composite blend runs in a worker thread and the canvas is capped (see "The
+  composite").
 - **Holding the shortcut twice, or never.** The hold is idempotent: a flag report that is
   already applied does nothing. When `holdTemporaryShortcut` returns `false` (another app owns
   the key), main logs it once and tries again on the next flag report.
@@ -124,7 +127,9 @@ gets its registry entry and pin test like every other.
 - [ ] Unit tests cover: the composite placement and scaling (pure function over bitmaps and
       bounds), the ring buffer bound, the gate (dev / flag / neither), the shortcut surviving
       `applyGlobalShortcuts`, a failing window not aborting the bundle, a hidden window left out
-      of the composite, and a second press during a capture being ignored.
+      of the composite, a second press during a capture being ignored, a flag report from a
+      window other than the main one being ignored, the no-permission path skipping `screens/`,
+      and the canvas cap lowering the factor.
 - [ ] Real-app proof on the Mac mini: one bundle from the built app, its `composite.png` in the
       PR.
 
@@ -175,7 +180,12 @@ window is still captured, as `window-<id>`.
 For each captured window, main runs `webContents.executeJavaScript` to read `location.hash` and
 the visible elements carrying the UI-map area attribute (`uiArea()`, see the
 [UI map ADR](/architecture/decisions/0046-a-typed-ui-map-declares-every-screen-area-and-state/)).
-Reading routes needs no new IPC channel (the flag report of decision 6 is the only new one); a window that does not answer within 1 s gets `"route": null`.
+Reading routes needs no new IPC channel (the flag report of decision 6 is the only new one).
+
+Order, so the images and the state describe the same moment: all `capturePage()` calls start
+first, in parallel; then the route reads run in parallel under one shared 1 s deadline, and a
+window that has not answered by then gets `"route": null`. Hidden windows are not read. The
+screen images and `state.json` follow.
 
 ### Flags main knows
 
@@ -197,7 +207,12 @@ them into this map is a later clean-up, not part of this work.
 4. Background is a neutral dark grey, so transparent corners stay visible as such.
 5. `nativeImage.createFromBitmap` → PNG.
 
-Windows on two displays far apart give a large, mostly empty canvas. Acceptable for a debug tool.
+The blend runs in a `worker_threads` worker, not on main's event loop: main also runs the
+recording hub and the shortcuts, and a take in progress is a likely moment to press the key.
+Main sends the bitmaps and bounds, the worker returns the BGRA canvas. The canvas is capped at
+33 megapixels (8K): when the union × factor exceeds it, the factor is lowered until it fits, and
+`state.json` records the factor used. Windows on two displays far apart still give a large,
+mostly empty canvas, which is acceptable for a debug tool.
 
 ### Prior art in the repo
 
