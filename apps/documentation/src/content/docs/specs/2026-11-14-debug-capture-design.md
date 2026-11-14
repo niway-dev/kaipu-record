@@ -17,8 +17,8 @@ path into a Claude session, and the agent debugs from the images and the JSON wi
 reproducing the bug.
 
 It is a developer tool: on by default in `bun run dev`, and in signed builds only on the
-owner's machines, through a PostHog flag matched by device id like the release flags. Nothing
-is uploaded.
+owner's machines, through a PostHog flag matched by device id like the release flags. The app
+uploads nothing; what leaves the Mac is what the owner chooses to share.
 
 | #   | Decision                                                                                                                        | Why                                                                                                                                                                                                                                                                                      | ADR         |
 | --- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
@@ -26,9 +26,9 @@ is uploaded.
 | 2   | One composite image of every visible Kaipu window at its screen position, plus each window alone                                | The owner's request: see every widget in one picture. The composite shows how windows sit relative to each other; the singles keep full detail                                                                                                                                           | —           |
 | 3   | Window images come from `webContents.capturePage()`, composited in pure JS from `nativeImage` bitmaps                           | Electron API on both platforms, needs no permission and no native dependency (no `postinstall`, see `CLAUDE.md`)                                                                                                                                                                         | —           |
 | 4   | Plus one full-screen image per display through `desktopCapturer`                                                                | Shows the native parts `capturePage` cannot see (menus, system dialogs, other apps around the widget). Uses the Screen Recording permission Kaipu already holds                                                                                                                          | —           |
-| 5   | Console lines come from a ring buffer in main: main's own `console.*` plus every window's `console-message` event               | No renderer change and no file logger; the bundle still carries the recent past                                                                                                                                                                                                          | —           |
+| 5   | Console lines come from a ring buffer in main: main's own `console.*` plus every window's `console-message` event               | No renderer change for the logs, and no file logger; the bundle still carries the recent past                                                                                                                                                                                            | —           |
 | 6   | Gate: `is.dev` OR the new `debug-capture` flag (added to `FLAG_NAMES`, `FLAG_DEFAULTS` false); the renderer reports it to main  | Main has no PostHog client; this is the existing `reportCaptureWhileRecording` / `reportImageText` pattern. The flag stays off by default and in PostHog matches only the owner's device ids                                                                                             | reuses 0049 |
-| 7   | The folder stays on the Mac and holds settings and paths as they are                                                            | Only the owner uses it now. Uploading or redacting belongs to a later user-facing bug report                                                                                                                                                                                             | —           |
+| 7   | The app never uploads the folder, and it holds settings and paths as they are                                                   | Only the owner uses it now. Uploading or redacting belongs to a later user-facing bug report                                                                                                                                                                                             | —           |
 | 8   | ⌃⌥⌘D on macOS (`Control+Alt+Shift+D` on Windows), hard-coded, not in Settings → Shortcuts, held through `holdTemporaryShortcut` | A debug key is not a user feature. No Kaipu shortcut uses it (checked `shared/types/ipc.ts`). `applyGlobalShortcuts` calls `unregisterAll` on every settings write and re-registers only the user shortcuts and the held ones, so a bare `globalShortcut.register` would vanish silently | —           |
 
 No new ADR: every decision above is reversible by editing one module, and none changes how the
@@ -81,8 +81,11 @@ app's parts fit together. Flags follow
   shortcuts. The debug key is held with `holdTemporaryShortcut` (re-applied after
   `unregisterAll`), and released with `releaseTemporaryShortcut` when the reported flag turns off.
 - **The console buffer grows without bound.** Fixed size (500 lines per source), oldest first out.
-- **A secret in the console lands in the folder.** Accepted for now (decision 7): the folder
-  never leaves the Mac. Reopen before any upload exists.
+- **A secret in the console lands in the folder.** Accepted for now (decision 7): the app never
+  uploads it. Pasting the folder into an agent session does send its images and text to that
+  model's provider; that is the owner's choice per capture. Reopen before any upload exists.
+- **Two presses in a row.** A capture already running ignores the next press, and a folder name
+  that already exists gets a `-2` suffix, so a quick double press never mixes two bundles.
 
 ## Acceptance criteria
 
@@ -106,8 +109,8 @@ app's parts fit together. Flags follow
 - [ ] With the `debug-capture` flag on for the owner's device id, the signed build captures.
 - [ ] Unit tests cover: the composite placement and scaling (pure function over bitmaps and
       bounds), the ring buffer bound, the gate (dev / flag / neither), the shortcut surviving
-      `applyGlobalShortcuts`, and a failing window
-      not aborting the bundle.
+      `applyGlobalShortcuts`, a failing window not aborting the bundle, a hidden window left out
+      of the composite, and a second press during a capture being ignored.
 - [ ] Real-app proof on the Mac mini: one bundle from the built app, its `composite.png` in the
       PR.
 
@@ -158,7 +161,7 @@ window is still captured, as `window-<id>`.
 For each captured window, main runs `webContents.executeJavaScript` to read `location.hash` and
 the visible elements carrying the UI-map area attribute (`uiArea()`, see the
 [UI map ADR](/architecture/decisions/0046-a-typed-ui-map-declares-every-screen-area-and-state/)).
-This needs no new IPC channel; a window that does not answer within 1 s gets `"route": null`.
+Reading routes needs no new IPC channel (the flag report of decision 6 is the only new one); a window that does not answer within 1 s gets `"route": null`.
 
 ### The composite
 
