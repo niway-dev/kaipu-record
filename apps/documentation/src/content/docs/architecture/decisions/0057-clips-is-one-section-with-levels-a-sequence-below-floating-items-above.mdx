@@ -51,10 +51,14 @@ under every timeline-anchored item.
    under it. A new floating image starts fitted to the whole frame.
 4. **Anchored to the footage under its start.** A floating item stores where it starts as a
    position in the footage, not in the timeline: a second of the recording when it starts over a
-   clip, or an offset into a sequence item when it starts over a slide. Its timeline start is
-   derived through `sourceToTimeline`. It plays continuously from there across later cuts. An
-   item whose anchor is in deleted footage is not placed, not drawn and not exported, and comes
-   back when the footage does — the same rule zoom segments follow.
+   clip, or an offset into a sequence item when it starts over a slide. Its timeline start comes
+   from the clip whose half-open source range `[sourceStart, sourceEnd)` holds the anchor second,
+   so at a split point it lands at the start of the later clip. `sourceToTimeline` cannot be used
+   as is: it accepts a clip's end and returns the first match. The item plays continuously from
+   there across later cuts. An item whose anchor is in deleted footage is not placed, not drawn
+   and not exported, and comes back when the footage does. Zoom segments also come back with
+   their footage, but unlike them a cut under the start hides the whole item, even when the rest
+   of the footage it covered survives.
 5. **Rows are computed, stacking is stored.** The level an item is drawn on in the timeline is
    derived on every layout: `row = 1 + the highest row among the lower-z items it overlaps in
 time`, or the first upper row when it overlaps none. An item goes to a higher row
