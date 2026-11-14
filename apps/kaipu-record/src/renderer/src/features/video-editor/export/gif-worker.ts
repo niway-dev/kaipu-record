@@ -22,8 +22,10 @@
 import { ALL_FORMATS, BlobSource, CanvasSink, Input } from "mediabunny";
 import type { InputVideoTrack } from "mediabunny";
 import { exportCanvasSinkOptions } from "./canvas-sink-options";
+import type { WebcamTrackMessage } from "./export-messages";
 import { createOutputComposer } from "./compose-output-frame";
 import { gifFrameSchedule, locateTimelineTime } from "./export-plan";
+import { recordingsUsed } from "./export-recordings";
 import {
   buildGlobalPalette,
   estimateGifBytes,
@@ -31,6 +33,7 @@ import {
   measureFramePair,
 } from "./gif-encode";
 import { GIF_HARD_CAP_BYTES, type GifStartMessage, type GifWorkerMessage } from "./gif-messages";
+import { clipSource } from "./joined-media";
 import { openWebcamSourceOrNone, type WebcamSource } from "./webcam-source";
 
 type WorkerSelf = typeof self & {
@@ -60,28 +63,43 @@ workerSelf.onmessage = (event: MessageEvent<GifStartMessage>) => {
 };
 
 async function run(msg: GifStartMessage): Promise<void> {
-  const input = new Input({ source: new BlobSource(msg.sourceBlob), formats: ALL_FORMATS });
-  let webcam: WebcamSource | null = null;
+  // One Input, sink and webcam per recording the plan's clips read, keyed by
+  // `SceneSource.id` (null = the opened recording), like the MP4 worker (ADR 0058).
+  const joined = msg.joined ?? [];
+  const inputs: Input[] = [];
+  const webcams = new Map<string | null, WebcamSource>();
+  const tracks = new Map<string | null, InputVideoTrack>();
   try {
     // A broken webcam file never fails the GIF: it goes on without the layer.
-    webcam = await openWebcamSourceOrNone(msg.webcam, msg.plan.webcam, (error) =>
+    const onWebcamError = (error: unknown): void =>
       post({
         type: "webcam-error",
         message: error instanceof Error ? error.message : String(error),
-      }),
-    );
-    const videoTrack = await input.getPrimaryVideoTrack();
-    // A plan of only slides needs no track; anything with a clip does.
-    if (!videoTrack && msg.plan.segments.some((s) => s.kind === "clip")) {
-      throw new Error("source has no video track");
+      });
+    // The opened recording is absent (null blob) when no frame reads it: a still over a joined
+    // recording. Only the files given are opened.
+    const files: Array<{ key: string | null; blob: Blob; webcam: WebcamTrackMessage | null }> = [
+      ...(msg.sourceBlob ? [{ key: null, blob: msg.sourceBlob, webcam: msg.webcam }] : []),
+      ...joined.map((j) => ({ key: j.sourceId as string | null, blob: j.blob, webcam: j.webcam })),
+    ];
+    // A plan of only slides needs no track; a clip needs its own recording's.
+    const used = new Set(recordingsUsed(msg.plan).map((id) => id ?? null));
+    for (const file of files) {
+      const input = new Input({ source: new BlobSource(file.blob), formats: ALL_FORMATS });
+      inputs.push(input);
+      const webcam = await openWebcamSourceOrNone(file.webcam, msg.plan.webcam, onWebcamError);
+      if (webcam) webcams.set(file.key, webcam);
+      const track = await input.getPrimaryVideoTrack();
+      if (track) tracks.set(file.key, track);
+      else if (used.has(file.key)) throw new Error("source has no video track");
     }
-    const renderer = createFrameRenderer(msg, videoTrack, webcam);
+    const renderer = createFrameRenderer(msg, tracks, webcams);
     if (msg.mode === "estimate") await runEstimate(msg, renderer);
     else if (msg.mode === "still") await runStill(msg, renderer);
     else await runExport(msg, renderer);
   } finally {
-    webcam?.dispose();
-    input.dispose();
+    for (const webcam of webcams.values()) webcam.dispose();
+    for (const input of inputs) input.dispose();
   }
 }
 
@@ -103,10 +121,11 @@ interface FrameRenderer {
 
 function createFrameRenderer(
   msg: GifStartMessage,
-  track: InputVideoTrack | null,
-  webcam: WebcamSource | null,
+  tracks: ReadonlyMap<string | null, InputVideoTrack>,
+  webcams: ReadonlyMap<string | null, WebcamSource>,
 ): FrameRenderer {
   const { source, output, plan } = msg;
+  const joinedRefs = (msg.joined ?? []).map((j) => ({ sourceId: j.sourceId, offset: j.offset }));
   const full = new OffscreenCanvas(source.width, source.height);
   const fullCtx = full.getContext("2d");
   // A still is the full frame as it is: no GIF-size canvas.
@@ -142,9 +161,13 @@ function createFrameRenderer(
     background: plan.background,
   });
   const slides = new Map(msg.slides.map((s) => [s.assetId, s.bitmap]));
-  const sink = track
-    ? new CanvasSink(track, exportCanvasSinkOptions(source.width, source.height))
-    : null;
+  // One sink per recording, each letterboxed to the one output size (ADR 0051).
+  const sinks = new Map<string | null, CanvasSink>(
+    [...tracks].map(([key, track]) => [
+      key,
+      new CanvasSink(track, exportCanvasSinkOptions(source.width, source.height)),
+    ]),
+  );
 
   const grab = (still: boolean): Uint8ClampedArray => {
     if (still || !smallCtx) return new Uint8ClampedArray(0);
@@ -169,6 +192,8 @@ function createFrameRenderer(
         i++;
         continue;
       }
+      // The clip's recording: decode at its own (local) seconds, compose at AXIS seconds.
+      const recording = clipSource({ ...segment, sourceId: segment.sourceId ?? null }, joinedRefs);
       const batch: { i: number; t: number; sourceTime: number }[] = [];
       while (i < times.length) {
         const next = locateTimelineTime(plan, times[i]);
@@ -176,12 +201,18 @@ function createFrameRenderer(
         batch.push({ i, t: times[i], sourceTime: next.sourceTime });
         i++;
       }
+      const sink = sinks.get(recording.key);
       if (!sink) throw new Error("source has no video track");
       let k = 0;
+      const localTimes = batch.map((b) => b.sourceTime - recording.offset);
       // The webcam frame on screen at each sampled time, read in step with the screen's.
-      const webcamFrames = webcam?.framesAt(batch.map((b) => b.sourceTime)) ?? null;
+      const webcamFrames = webcams.get(recording.key)?.framesAt(localTimes) ?? null;
       try {
-        for await (const wrapped of sink.canvasesAtTimestamps(batch.map((b) => b.sourceTime))) {
+        for await (const decoded of sink.canvasesAtTimestamps(localTimes)) {
+          // The frame's own timestamp is local to its file: moved to the axis for the composer.
+          const wrapped = decoded
+            ? { ...decoded, timestamp: decoded.timestamp + recording.offset }
+            : null;
           const slot = batch[k++];
           const webcamImage = webcamFrames ? ((await webcamFrames.next()).value ?? null) : null;
           // The slot's own source time picks the webcam frame, its layout and the camera

@@ -164,6 +164,7 @@ import {
   findReusableExports,
 } from "@renderer/features/video-editor/export/export-reuse";
 import { useSourceExports } from "@renderer/features/video-editor/export/use-source-exports";
+import { RecordingUnavailableError } from "@renderer/features/video-editor/export/joined-files";
 import { useStillCapture } from "@renderer/features/video-editor/export/use-still-capture";
 import { planStill } from "@renderer/features/video-editor/export/still-plan";
 import type { LibraryVideo } from "@renderer/features/library/types";
@@ -577,6 +578,27 @@ function VideoEditor({
   // that reads the pointer, so the camera path, the activity marks and the cursor layer follow a
   // joined clip. A loading or missing recording simply adds nothing.
   const joinedRecordings = useJoinedRecordings(scene.sources);
+  // The joined recordings as the MP4 export, the GIF export and the frame capture take them:
+  // `id` is the CURRENT vault id, so a renamed recording is still fetched.
+  const exportJoined = useMemo(
+    () =>
+      joinedRecordings.map((j) => ({
+        sourceId: j.source.id,
+        id: j.id,
+        title: j.source.title,
+        status: j.status,
+        webcam: j.webcam,
+      })),
+    [joinedRecordings],
+  );
+  // What the MP4 export reads at each start, Retry included: a recording still loading when an
+  // export was refused may be ready when the user retries, and a closure over this render's
+  // list would refuse for ever. The ref follows the list only while this editor is mounted: a
+  // Retry from another page reads the list as the editor left it.
+  const exportJoinedRef = useRef(exportJoined);
+  useEffect(() => {
+    exportJoinedRef.current = exportJoined;
+  }, [exportJoined]);
 
   // The decoded frame as one state object: the webcam layer places itself against it (the
   // preview's output frame is the source frame), and a stable object keeps its trigger quiet.
@@ -793,6 +815,12 @@ function VideoEditor({
   const videoTools = useVideoTools();
   const videoExport = useVideoExport();
   const gifExport = useGifExport();
+  // A joined recording that finishes loading re-asks an estimate refused for it: the export
+  // sheet re-requests only when a GIF setting changes.
+  const { retryRefusedEstimate } = gifExport;
+  useEffect(() => {
+    retryRefusedEstimate(exportJoined);
+  }, [exportJoined, retryRefusedEstimate]);
   const sourceUrl = mediaUrl("recording", source.id);
   const thumbnails = useSourceThumbnails(sourceUrl, source.durationSeconds);
   // Which recording each clip is (null without joins: the timeline then draws as before), and
@@ -1167,6 +1195,7 @@ function VideoEditor({
         cursor: cursorData,
         // The sidecar's webcam track: with a webcam layer in the scene, the export composes it.
         webcamTrack: source.webcam ?? null,
+        joined: () => exportJoinedRef.current,
         presetId: choice.presetId,
         framing: choice.framing,
         sourceInfo: sourceProbe,
@@ -1282,12 +1311,22 @@ function VideoEditor({
         cameraPath,
         cursor: cursorData,
         webcamTrack: source.webcam ?? null,
+        joined: exportJoined,
         range: settings.range,
         width: settings.width,
         fps: settings.fps,
       };
     },
-    [frameSize, scene, source.id, source.webcam, assetStoreRef, cameraPath, cursorData],
+    [
+      frameSize,
+      scene,
+      source.id,
+      source.webcam,
+      exportJoined,
+      assetStoreRef,
+      cameraPath,
+      cursorData,
+    ],
   );
 
   const handleGifSettingsChange = useCallback(
@@ -1346,7 +1385,13 @@ function VideoEditor({
   const stillCapture = useStillCapture();
   // Read from the first render, panel open or not: the top-bar Capture frame needs the real
   // list for its duplicate check, so it stays disabled until this read lands.
-  const sourceCaptures = useSourceCaptures(source.assetId, true);
+  // The opened recording's captures and those of every recording the scene joins: a frame
+  // taken over a joined clip is listed here too, and counts for the duplicate check.
+  const captureAssetIds = useMemo(
+    () => [source.assetId, ...(scene.sources ?? []).map((s) => s.assetId)],
+    [source.assetId, scene.sources],
+  );
+  const sourceCaptures = useSourceCaptures(captureAssetIds, true);
   const refreshCaptures = sourceCaptures.refresh;
   const latestCaptures = sourceCaptures.latest;
   // The capture a repeated press found already saved: outlined for ~2 s in the panel.
@@ -1378,17 +1423,16 @@ function VideoEditor({
       // The same frame twice is a duplicate: point at the saved one instead of composing.
       // The recording under the playhead and the second INSIDE ITS OWN file: a frame of a joined
       // recording links to that recording's asset, not to the opened one. The captures read here
-      // are the opened recording's, so a joined frame is never a duplicate of them.
+      // hold every recording the scene joins, so the check is by asset, second and copy.
       const origin = captureOriginAt(
         axis,
         scene.sources,
         source.assetId,
         planStill(scene, playhead).sourceSeconds,
       );
-      const existing =
-        origin && origin.assetId === source.assetId
-          ? findCaptureAt(latestCaptures(), origin.localSeconds)
-          : undefined;
+      const existing = origin
+        ? findCaptureAt(latestCaptures(), origin.localSeconds, origin.sourceId, origin.assetId)
+        : undefined;
       if (existing) {
         clearSelection();
         setCursorInspectorOpen(false);
@@ -1403,14 +1447,6 @@ function VideoEditor({
       }
       if (highlightTimer.current) clearTimeout(highlightTimer.current);
       setHighlightedCaptureId(null);
-      // The still composer decodes the OPENED recording's file (the export layer of ADR 0058 is
-      // not built yet), so a frame over a joined recording would be the wrong picture. Say so
-      // rather than save it; the link below is already the joined recording's, so this guard is
-      // the only line to remove when the composer learns recordings.
-      if (origin && origin.sourceId !== null) {
-        showToast({ message: t("captureJoinedNotYet") });
-        return;
-      }
       const frame = await captureFrame({
         scene,
         sourceId: source.id,
@@ -1421,6 +1457,7 @@ function VideoEditor({
         cameraPath,
         cursor: cursorData,
         webcamTrack: source.webcam ?? null,
+        joined: exportJoined,
         playhead,
       });
       // The link stores the SOURCE second (what the library page and the sidecar show). A
@@ -1436,6 +1473,7 @@ function VideoEditor({
         source: {
           videoAssetId: saved?.assetId ?? source.assetId,
           timeSeconds: saved ? saved.localSeconds : frame.sourceSeconds,
+          sceneSourceId: saved?.sourceId ?? null,
         },
       });
       // The panel takes the inspector's place, so the selection goes too (as the cursor
@@ -1445,12 +1483,17 @@ function VideoEditor({
       setCapturesOpen(true);
       await refreshCaptures();
     } catch (error) {
-      reportError(t("captureError"), error, {
-        context: { phase: "capture-frame", assetId: source.assetId },
-        // The latest handler: a retry captures what is on screen now, with any redaction
-        // added since the failed attempt, never the scene of that attempt.
-        retry: () => void captureFrameRef.current(),
-      });
+      // A recording that cannot be read is named; anything else is the generic message.
+      reportError(
+        error instanceof RecordingUnavailableError ? error.message : t("captureError"),
+        error,
+        {
+          context: { phase: "capture-frame", assetId: source.assetId },
+          // The latest handler: a retry captures what is on screen now, with any redaction
+          // added since the failed attempt, never the scene of that attempt.
+          retry: () => void captureFrameRef.current(),
+        },
+      );
     } finally {
       captureInFlight.current = false;
     }
@@ -1465,6 +1508,7 @@ function VideoEditor({
     assetStoreRef,
     cameraPath,
     cursorData,
+    exportJoined,
     refreshCaptures,
     clearSelection,
     t,
@@ -1492,9 +1536,17 @@ function VideoEditor({
 
   /** A capture's image: move the playhead to its moment, if that moment is still on the timeline. */
   const seekToCapture = useCallback(
-    (seconds: number, assetId: string = source.assetId) => {
+    (seconds: number, sceneSourceId?: string | null, assetId?: string | null) => {
       // The link keeps seconds inside ITS recording's file; the timeline speaks axis seconds.
-      const axisSeconds = axisSecondsOfCapture(scene.sources, source.assetId, assetId, seconds);
+      // The capture's own asset: a joined recording's capture made in its own editor carries no
+      // copy id, and must land in that recording's range, not at the same second of this one.
+      const axisSeconds = axisSecondsOfCapture(
+        scene.sources,
+        source.assetId,
+        assetId ?? source.assetId,
+        seconds,
+        sceneSourceId,
+      );
       if (axisSeconds === null) return;
       const at = timelineTimeAtSource(layout, axisSeconds);
       if (at !== null) playback.seek(at);

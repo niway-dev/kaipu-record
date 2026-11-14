@@ -770,7 +770,12 @@ export interface KaipuElectronAPI {
       /** Recognized words for the assets in `canvas`, minus words under baked redactions. */
       text?: TextCacheSavePayload;
       /** A frame capture of a video: its asset id and the second on screen. New items only. */
-      source?: { videoAssetId: string; timeSeconds: number | null };
+      source?: {
+        videoAssetId: string;
+        timeSeconds: number | null;
+        /** The joined copy it came from (`SceneSource.id`); null = the opened recording. */
+        sceneSourceId?: string | null;
+      };
     },
   ): Promise<LocalRecording>;
   /**

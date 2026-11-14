@@ -151,6 +151,8 @@ export function usePrepareCopy(): { start(input: PrepareCopyInput): boolean } {
           previewWidth: probe.width,
           slideAssets: createSlideAssetStore(),
           cameraPath: null,
+          // A whole-recording copy: nothing is joined to it.
+          joined: () => [],
           presetId: choice.presetId,
           framing: choice.framing,
           sourceInfo: probe,

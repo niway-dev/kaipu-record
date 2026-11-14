@@ -297,6 +297,58 @@ describe("frame capture source link", () => {
     });
   });
 
+  it("writes the scene source of a joined recording into the sidecar and reads it back", async () => {
+    const saved = await saveScreenshotToVault(Buffer.from("png"), {
+      title: "Joined",
+      source: { videoAssetId: "video-1", timeSeconds: 4, sceneSourceId: "b2" },
+    });
+    expect(saved).toMatchObject({ sourceSceneSourceId: "b2" });
+    const sidecar = JSON.parse(await readFile(join(directory, ".kaipu", "Joined.json"), "utf-8"));
+    expect(sidecar).toMatchObject({ sourceSceneSourceId: "b2" });
+    expect(await vault.describe(saved.id)).toMatchObject({ sourceSceneSourceId: "b2" });
+  });
+
+  it("keeps an explicit null scene source (the opened recording) apart from an absent one", async () => {
+    const opened = await saveScreenshotToVault(Buffer.from("png"), {
+      title: "Opened",
+      source: { videoAssetId: "video-1", timeSeconds: 4, sceneSourceId: null },
+    });
+    expect(await vault.describe(opened.id)).toMatchObject({ sourceSceneSourceId: null });
+    const legacy = await saveScreenshotToVault(Buffer.from("png"), {
+      title: "Legacy",
+      source: { videoAssetId: "video-1", timeSeconds: 4 },
+    });
+    expect(await vault.describe(legacy.id)).not.toHaveProperty("sourceSceneSourceId");
+  });
+
+  it("parses an old sidecar without the scene source and leaves the field absent", async () => {
+    const saved = await saveScreenshotToVault(Buffer.from("png"), {
+      title: "Before",
+      source: { videoAssetId: "video-1", timeSeconds: 9, sceneSourceId: "b2" },
+    });
+    const path = join(directory, ".kaipu", "Before.json");
+    const sidecar = JSON.parse(await readFile(path, "utf-8"));
+    delete sidecar.sourceSceneSourceId;
+    await writeFile(path, JSON.stringify(sidecar));
+    const read = await vault.describe(saved.id);
+    expect(read).toMatchObject({ sourceVideoAssetId: "video-1", sourceTimeSeconds: 9 });
+    expect(read).not.toHaveProperty("sourceSceneSourceId");
+  });
+
+  it("reads a whitespace-only scene source from a sidecar as absent, as the save path does", async () => {
+    const saved = await saveScreenshotToVault(Buffer.from("png"), {
+      title: "Blank",
+      source: { videoAssetId: "video-1", timeSeconds: 9, sceneSourceId: "b2" },
+    });
+    const path = join(directory, ".kaipu", "Blank.json");
+    const sidecar = JSON.parse(await readFile(path, "utf-8"));
+    sidecar.sourceSceneSourceId = " ";
+    await writeFile(path, JSON.stringify(sidecar));
+    const read = await vault.describe(saved.id);
+    expect(read).toMatchObject({ sourceVideoAssetId: "video-1", sourceTimeSeconds: 9 });
+    expect(read).not.toHaveProperty("sourceSceneSourceId");
+  });
+
   it("reads nulls when saved without a source", async () => {
     const saved = await saveScreenshotToVault(Buffer.from("png"), { title: "Plain" });
     expect(saved).toMatchObject({ sourceVideoAssetId: null, sourceTimeSeconds: null });
@@ -328,6 +380,32 @@ describe("parseScreenshotSource (the IPC validation)", () => {
     expect(parseScreenshotSource({ videoAssetId: "v", timeSeconds: null })).toEqual({
       videoAssetId: "v",
       timeSeconds: null,
+    });
+  });
+
+  it("keeps a scene source id, and a null one (the opened recording)", () => {
+    expect(
+      parseScreenshotSource({ videoAssetId: "v", timeSeconds: 2, sceneSourceId: "b2" }),
+    ).toEqual({ videoAssetId: "v", timeSeconds: 2, sceneSourceId: "b2" });
+    expect(
+      parseScreenshotSource({ videoAssetId: "v", timeSeconds: 2, sceneSourceId: null }),
+    ).toEqual({ videoAssetId: "v", timeSeconds: 2, sceneSourceId: null });
+  });
+
+  it("leaves the scene source absent when the payload has none or a malformed one", () => {
+    expect(parseScreenshotSource({ videoAssetId: "v", timeSeconds: 2 })).toEqual({
+      videoAssetId: "v",
+      timeSeconds: 2,
+    });
+    expect(parseScreenshotSource({ videoAssetId: "v", timeSeconds: 2, sceneSourceId: 5 })).toEqual({
+      videoAssetId: "v",
+      timeSeconds: 2,
+    });
+    expect(
+      parseScreenshotSource({ videoAssetId: "v", timeSeconds: 2, sceneSourceId: " " }),
+    ).toEqual({
+      videoAssetId: "v",
+      timeSeconds: 2,
     });
   });
 

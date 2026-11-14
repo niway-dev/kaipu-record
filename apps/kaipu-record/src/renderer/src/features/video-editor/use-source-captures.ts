@@ -17,7 +17,8 @@ export interface SourceCaptures {
 }
 
 /**
- * The screenshots taken from `videoAssetId` with the editor's Capture frame button
+ * The screenshots taken from `videoAssetId` (one asset, or the opened recording plus every
+ * recording the scene joins) with the editor's Capture frame button
  * (NIW2-764: `sourceVideoAssetId` in the sidecar), newest first. Read when `enabled` turns
  * on (the editor passes true from its first render: the top-bar Capture frame needs the
  * list for its duplicate check, panel open or not) and again whenever main broadcasts `library:changed`,
@@ -25,7 +26,17 @@ export interface SourceCaptures {
  * list of its own, so this reads `listLibraryItems` like `useSourceExports`. A failed read
  * keeps what was on screen.
  */
-export function useSourceCaptures(videoAssetId: string | null, enabled: boolean): SourceCaptures {
+export function useSourceCaptures(
+  videoAssetId: string | readonly string[] | null,
+  enabled: boolean,
+): SourceCaptures {
+  // A stable key: callers build the array on every render, the effect must not re-run for it.
+  const assetKey =
+    videoAssetId === null
+      ? ""
+      : typeof videoAssetId === "string"
+        ? videoAssetId
+        : videoAssetId.join("\n");
   const [captures, setCaptures] = useState<LibraryVideo[]>([]);
   const [loaded, setLoaded] = useState(false);
   // Only the latest read may write: an older one resolving last would show a stale list.
@@ -43,7 +54,8 @@ export function useSourceCaptures(videoAssetId: string | null, enabled: boolean)
   }, []);
 
   const refresh = useCallback((): Promise<void> => {
-    if (!videoAssetId) return Promise.resolve();
+    if (!assetKey) return Promise.resolve();
+    const assetIds = new Set(assetKey.split("\n"));
     const seq = ++latestSeq.current;
     const read = (async (): Promise<void> => {
       try {
@@ -52,7 +64,12 @@ export function useSourceCaptures(videoAssetId: string | null, enabled: boolean)
         // A newer read started meanwhile: resolve when it lands, never with this older list.
         if (seq !== latestSeq.current) return await newest.current;
         current.current = result.items
-          .filter((item) => item.kind === "screenshot" && item.sourceVideoAssetId === videoAssetId)
+          .filter(
+            (item) =>
+              item.kind === "screenshot" &&
+              !!item.sourceVideoAssetId &&
+              assetIds.has(item.sourceVideoAssetId),
+          )
           .map(toLibraryVideo)
           .sort((a, b) => b.createdAt - a.createdAt);
         setCaptures(current.current);
@@ -63,7 +80,7 @@ export function useSourceCaptures(videoAssetId: string | null, enabled: boolean)
     })();
     newest.current = read;
     return read;
-  }, [videoAssetId]);
+  }, [assetKey]);
   const latest = useCallback((): LibraryVideo[] => current.current, []);
 
   useEffect(() => {

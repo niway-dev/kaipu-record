@@ -39,18 +39,25 @@ export interface ScreenshotSource {
   videoAssetId: string;
   /** The second in the source video; null for a frame of an image slide, which has none. */
   timeSeconds: number | null;
+  /** The `SceneSource.id` of the joined copy it came from; null = the opened recording; absent = unknown. */
+  sceneSourceId?: string | null;
 }
 
 /** The source from an IPC payload, or undefined when it is not a valid one (the save goes on without it). */
 export function parseScreenshotSource(raw: unknown): ScreenshotSource | undefined {
   if (typeof raw !== "object" || raw === null) return undefined;
-  const { videoAssetId, timeSeconds } = raw as Record<string, unknown>;
+  const { videoAssetId, timeSeconds, sceneSourceId } = raw as Record<string, unknown>;
   if (typeof videoAssetId !== "string" || videoAssetId.trim() === "") return undefined;
-  if (timeSeconds === null) return { videoAssetId, timeSeconds: null };
+  // A malformed scene source only loses itself: the link still points at the right asset.
+  const scene =
+    sceneSourceId === null || (typeof sceneSourceId === "string" && sceneSourceId.trim() !== "")
+      ? { sceneSourceId }
+      : {};
+  if (timeSeconds === null) return { videoAssetId, timeSeconds: null, ...scene };
   if (typeof timeSeconds !== "number" || !Number.isFinite(timeSeconds) || timeSeconds < 0) {
     return undefined;
   }
-  return { videoAssetId, timeSeconds };
+  return { videoAssetId, timeSeconds, ...scene };
 }
 
 /**
@@ -92,6 +99,9 @@ export async function saveScreenshotToVault(
           ? {
               sourceVideoAssetId: meta.source.videoAssetId,
               sourceTimeSeconds: meta.source.timeSeconds,
+              ...(meta.source.sceneSourceId !== undefined
+                ? { sourceSceneSourceId: meta.source.sceneSourceId }
+                : {}),
             }
           : {}),
       });

@@ -75,6 +75,7 @@ const SEGMENT: RenderClipSegment = {
   duration: 2,
   sourceStart: 4,
   sourceEnd: 6,
+  sourceId: null,
 };
 
 describe("exportClipFrames", () => {

@@ -47,6 +47,58 @@ describe("findCaptureAt", () => {
   it("never matches a slide frame (null source second)", () => {
     expect(findCaptureAt(captures, null)).toBeUndefined();
   });
+
+  describe("the same asset joined twice", () => {
+    const copies = [
+      { id: "opened", sourceTimeSeconds: 5 },
+      { id: "legacy", sourceTimeSeconds: 6, sourceSceneSourceId: undefined },
+      { id: "explicit-null", sourceTimeSeconds: 7, sourceSceneSourceId: null },
+      { id: "second-copy", sourceTimeSeconds: 8, sourceSceneSourceId: "b2" },
+    ];
+    it("does not take a capture of another copy for a duplicate", () => {
+      expect(findCaptureAt(copies, 8, "b1")).toBeUndefined();
+      expect(findCaptureAt(copies, 8, null)).toBeUndefined();
+      expect(findCaptureAt(copies, 5, "b2")).toBeUndefined();
+    });
+    it("matches the copy it names", () => {
+      expect(findCaptureAt(copies, 8, "b2")?.id).toBe("second-copy");
+    });
+    it("treats an absent or null link as the opened recording", () => {
+      expect(findCaptureAt(copies, 5, null)?.id).toBe("opened");
+      expect(findCaptureAt(copies, 6, null)?.id).toBe("legacy");
+      expect(findCaptureAt(copies, 7, null)?.id).toBe("explicit-null");
+      expect(findCaptureAt(copies, 5)?.id).toBe("opened");
+    });
+  });
+});
+
+describe("findCaptureAt with an asset", () => {
+  const captures = [
+    { id: "opened", sourceVideoAssetId: "a", sourceTimeSeconds: 5 },
+    { id: "legacy-b", sourceVideoAssetId: "b", sourceTimeSeconds: 5 },
+    { id: "scene-b", sourceVideoAssetId: "b", sourceTimeSeconds: 5, sourceSceneSourceId: "sb" },
+    {
+      id: "scene-b-later",
+      sourceVideoAssetId: "b",
+      sourceTimeSeconds: 9,
+      sourceSceneSourceId: "sb",
+    },
+  ];
+  it("a joined frame is a duplicate of a capture of the same asset, second and copy", () => {
+    expect(findCaptureAt(captures, 5, "sb", "b")?.id).toBe("scene-b");
+    expect(findCaptureAt(captures, 9, "sb", "b")?.id).toBe("scene-b-later");
+  });
+  it("a capture of the joined asset made from its own editor is not a duplicate of a joined frame", () => {
+    expect(findCaptureAt([captures[1]], 5, "sb", "b")).toBeUndefined();
+  });
+  it("a capture of another asset at the same second is not a duplicate", () => {
+    expect(findCaptureAt(captures, 5, null, "a")?.id).toBe("opened");
+    expect(findCaptureAt(captures, 5, "sb", "a")).toBeUndefined();
+    expect(findCaptureAt([captures[0]], 5, null, "b")).toBeUndefined();
+  });
+  it("the opened recording still treats an absent copy as the opened one", () => {
+    expect(findCaptureAt([captures[1]], 5, null, "b")?.id).toBe("legacy-b");
+  });
 });
 
 describe("capture origin over joined recordings (ADR 0058)", () => {
@@ -90,6 +142,33 @@ describe("capture origin over joined recordings (ADR 0058)", () => {
   it("keeps an opened capture's seconds as they are, and wins over a joined copy of the same asset", () => {
     const twice = [...sources, source("D", "asset-a", 9000)];
     expect(axisSecondsOfCapture(twice, "asset-a", "asset-a", 5)).toBe(5);
+  });
+
+  describe("the same asset joined twice", () => {
+    const twice = [source("b1", "asset-b", 100), source("b2", "asset-b", 500)];
+
+    it("places a capture on the copy its link names", () => {
+      expect(axisSecondsOfCapture(twice, "asset-a", "asset-b", 7, "b2")).toBe(507);
+      expect(axisSecondsOfCapture(twice, "asset-a", "asset-b", 7, "b1")).toBe(107);
+    });
+    it("keeps today's first-copy placement when the link names no copy", () => {
+      expect(axisSecondsOfCapture(twice, "asset-a", "asset-b", 7)).toBe(107);
+      expect(axisSecondsOfCapture(twice, "asset-a", "asset-b", 7, undefined)).toBe(107);
+    });
+    it("keeps today's placement for an id that is not in this scene", () => {
+      expect(axisSecondsOfCapture(twice, "asset-a", "asset-b", 7, "gone")).toBe(107);
+    });
+    it("keeps today's placement for an id whose asset does not match the link", () => {
+      expect(axisSecondsOfCapture(twice, "asset-a", "asset-c", 7, "b2")).toBeNull();
+    });
+    it("keeps the opened recording for a null link", () => {
+      expect(axisSecondsOfCapture(twice, "asset-a", "asset-a", 7, null)).toBe(7);
+    });
+    it("places a capture of a joined copy of the opened asset on that copy", () => {
+      const sameAsOpened = [source("b2", "asset-a", 500)];
+      expect(axisSecondsOfCapture(sameAsOpened, "asset-a", "asset-a", 7, "b2")).toBe(507);
+      expect(axisSecondsOfCapture(sameAsOpened, "asset-a", "asset-a", 7, null)).toBe(7);
+    });
   });
 
   it("has no axis second for an asset the scene does not hold", () => {

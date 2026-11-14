@@ -10,6 +10,7 @@ import type { FloatingMediaPlan } from "./floating-frame";
 import type { VideoScene } from "../scene";
 import type { AudioEdits } from "../audio-edits";
 import type { Redaction } from "../privacy/redaction";
+import { recordingOfClip } from "./export-recordings";
 import { isSourceRangeVisible } from "../source-time";
 import type { WebcamScene } from "../webcam/webcam-model";
 import { DEFAULT_BACKGROUND, type VideoBackground } from "../background";
@@ -18,8 +19,11 @@ export interface RenderClipSegment {
   kind: "clip";
   timelineStart: number;
   duration: number;
+  /** AXIS seconds (ADR 0058): the decoder wants `localRange`, not these. */
   sourceStart: number;
   sourceEnd: number;
+  /** The recording the clip reads: null = the opened one, else the `SceneSource.id`. */
+  sourceId: string | null;
 }
 
 export interface RenderSlideSegment {
@@ -76,11 +80,19 @@ export interface ExportPlan {
   floating?: FloatingMediaPlan;
 }
 
+/** The scene has nothing to encode: the one failure `buildExportPlan` expects (a user can cause it). */
+export class EmptyTimelineError extends Error {
+  constructor() {
+    super("empty timeline");
+    this.name = "EmptyTimelineError";
+  }
+}
+
 export function buildExportPlan(scene: VideoScene): ExportPlan {
   const layout = toLayout(scene.items);
   // The UI disables the Exportar action when the timeline is empty; this throw is
   // just a backstop so the worker never starts an export with nothing to encode.
-  if (layout.length === 0) throw new Error("empty timeline");
+  if (layout.length === 0) throw new EmptyTimelineError();
 
   const segments: RenderSegment[] = layout.map((entry) =>
     entry.kind === "clip"
@@ -90,6 +102,12 @@ export function buildExportPlan(scene: VideoScene): ExportPlan {
           duration: entry.timelineEnd - entry.timelineStart,
           sourceStart: entry.sourceStart,
           sourceEnd: entry.sourceEnd,
+          sourceId: recordingOfClip(
+            scene.sources,
+            entry.sourceStart,
+            entry.sourceEnd,
+            `clip ${entry.itemId}`,
+          ),
         }
       : {
           kind: "slide",
@@ -159,6 +177,7 @@ export function sliceExportPlan(plan: ExportPlan, start: number, end: number): E
         duration,
         sourceStart,
         sourceEnd: sourceStart + duration,
+        sourceId: segment.sourceId,
       });
     } else {
       segments.push({ kind: "slide", timelineStart, duration, assetId: segment.assetId });

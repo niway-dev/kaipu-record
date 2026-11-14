@@ -8,7 +8,7 @@ import type { GifStartMessage } from "./gif-messages";
 // exercised is the worker's wiring for one frame: the right segment and source time reach
 // the composer, the answer is the full-size canvas as a PNG, and nothing is downscaled.
 
-const { clip, slide, createOutputComposer, sinkState, canvases } = vi.hoisted(() => {
+const { clip, slide, createOutputComposer, sinkState, canvases, decodes } = vi.hoisted(() => {
   const clip = vi.fn();
   const slide = vi.fn();
   return {
@@ -17,19 +17,29 @@ const { clip, slide, createOutputComposer, sinkState, canvases } = vi.hoisted(()
     createOutputComposer: vi.fn(() => ({ clip, slide })),
     sinkState: { nothingDecodable: false },
     canvases: [] as Array<{ width: number; height: number; blobType?: string }>,
+    // Every `canvasesAtTimestamps` call: the file whose sink decoded, and the times asked.
+    decodes: [] as Array<{ blob: unknown; times: number[] }>,
   };
 });
 
 vi.mock("./compose-output-frame", () => ({ createOutputComposer }));
 vi.mock("mediabunny", () => ({
   ALL_FORMATS: [],
-  BlobSource: class {},
+  BlobSource: class {
+    constructor(public blob: unknown) {}
+  },
   Input: class {
-    getPrimaryVideoTrack = async () => ({});
+    blob: unknown;
+    constructor(options: { source: { blob: unknown } }) {
+      this.blob = options.source.blob;
+    }
+    getPrimaryVideoTrack = async () => ({ blob: this.blob });
     dispose(): void {}
   },
   CanvasSink: class {
+    constructor(public track: { blob: unknown }) {}
     async *canvasesAtTimestamps(times: number[]) {
+      decodes.push({ blob: this.track.blob, times });
       for (const t of times) {
         yield sinkState.nothingDecodable
           ? null
@@ -98,6 +108,7 @@ function message(stillTime: number, plan: ExportPlan = PLAN): GifStartMessage {
     fps: 10,
     camera: null,
     webcam: plan.webcam ? { blob: new Blob(["cam"]), startOffsetMs: 0 } : null,
+    joined: [],
   } as GifStartMessage;
 }
 
@@ -114,6 +125,7 @@ async function runWorker(msg: GifStartMessage, until: string[] = ["still", "erro
 beforeEach(() => {
   posted = [];
   canvases.length = 0;
+  decodes.length = 0;
   sinkState.nothingDecodable = false;
   clip.mockClear();
   slide.mockClear();
@@ -177,5 +189,63 @@ describe("gif-worker still mode", () => {
     await runWorker(message(4));
     expect(posted.find((m) => m.type === "error")?.message).toMatch(/no decodable frame/);
     expect(posted.some((m) => m.type === "still")).toBe(false);
+  });
+});
+
+// ADR 0058: a still decodes the recording under the playhead at that file's own seconds and
+// composes at axis seconds. Opened clips 0-10 and 50-60; joined "b" at axis 3600 (clip 3600-3610).
+describe("gif-worker still mode over a joined recording", () => {
+  const OPENED = new Blob(["opened"]);
+  const JOINED_B = new Blob(["b"]);
+  const TWO = {
+    segments: [
+      {
+        kind: "clip",
+        timelineStart: 0,
+        duration: 10,
+        sourceStart: 0,
+        sourceEnd: 10,
+        sourceId: null,
+      },
+      {
+        kind: "clip",
+        timelineStart: 10,
+        duration: 10,
+        sourceStart: 3600,
+        sourceEnd: 3610,
+        sourceId: "b",
+      },
+    ],
+    totalDuration: 20,
+    redactions: [],
+    overlayWindows: [],
+    webcam: null,
+  } as unknown as ExportPlan;
+
+  it("decodes B's file at its local second and composes at the axis second", async () => {
+    const msg = {
+      ...message(15, TWO),
+      // No frame reads the opened recording: its file is not sent.
+      sourceBlob: null,
+      joined: [{ sourceId: "b", offset: 3600, blob: JOINED_B, webcam: null }],
+    } as GifStartMessage;
+    await runWorker(msg);
+    expect(decodes).toEqual([{ blob: JOINED_B, times: [5] }]);
+    const [screenCanvas, sourceTs, , outTs] = clip.mock.calls[0];
+    expect(screenCanvas).toBe("screen@5");
+    expect(sourceTs).toBe(3605);
+    expect(outTs).toBe(15);
+    expect(posted.some((m) => m.type === "still")).toBe(true);
+  });
+
+  it("decodes the opened recording at the axis second when the playhead is in it", async () => {
+    const msg = {
+      ...message(4, TWO),
+      sourceBlob: OPENED,
+      joined: [{ sourceId: "b", offset: 3600, blob: JOINED_B, webcam: null }],
+    } as GifStartMessage;
+    await runWorker(msg);
+    expect(decodes).toEqual([{ blob: OPENED, times: [4] }]);
+    expect(clip.mock.calls[0][1]).toBe(4);
   });
 });

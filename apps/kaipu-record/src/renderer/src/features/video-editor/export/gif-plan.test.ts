@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { initialScene, type TrackItem } from "../scene";
 import {
   buildExportPlan,
+  type ExportPlan,
   gifFrameSchedule,
   gifOutputSize,
   gifRangeProblem,
@@ -40,9 +41,23 @@ describe("sliceExportPlan", () => {
     const sliced = sliceExportPlan(plan, 11, 15);
     expect(sliced.totalDuration).toBe(4);
     expect(sliced.segments).toEqual([
-      { kind: "clip", timelineStart: 0, duration: 2, sourceStart: 8, sourceEnd: 10 },
+      {
+        kind: "clip",
+        timelineStart: 0,
+        duration: 2,
+        sourceStart: 8,
+        sourceEnd: 10,
+        sourceId: null,
+      },
       // Content AFTER the cut is included, from its own source window.
-      { kind: "clip", timelineStart: 2, duration: 2, sourceStart: 20, sourceEnd: 22 },
+      {
+        kind: "clip",
+        timelineStart: 2,
+        duration: 2,
+        sourceStart: 20,
+        sourceEnd: 22,
+        sourceId: null,
+      },
     ]);
   });
 
@@ -50,7 +65,36 @@ describe("sliceExportPlan", () => {
     const sliced = sliceExportPlan(plan, 2, 4);
     expect(sliced.segments).toEqual([
       { kind: "slide", timelineStart: 0, duration: 1, assetId: "asset-s1" },
-      { kind: "clip", timelineStart: 1, duration: 1, sourceStart: 0, sourceEnd: 1 },
+      { kind: "clip", timelineStart: 1, duration: 1, sourceStart: 0, sourceEnd: 1, sourceId: null },
+    ]);
+  });
+
+  it("keeps the recording id of a clip from a joined recording", () => {
+    // One clip reading joined recording "b" (source 20–25) over timeline 0–5.
+    const joined: ExportPlan = {
+      ...plan,
+      segments: [
+        {
+          kind: "clip",
+          timelineStart: 0,
+          duration: 5,
+          sourceStart: 20,
+          sourceEnd: 25,
+          sourceId: "b",
+        },
+      ],
+      overlayWindows: [],
+      totalDuration: 5,
+    };
+    expect(sliceExportPlan(joined, 1, 3).segments).toEqual([
+      {
+        kind: "clip",
+        timelineStart: 0,
+        duration: 2,
+        sourceStart: 21,
+        sourceEnd: 23,
+        sourceId: "b",
+      },
     ]);
   });
 

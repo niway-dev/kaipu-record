@@ -150,7 +150,15 @@ describe("CapturesPanel", () => {
   it("seeks to the capture's source time from its Go to button", () => {
     const props = renderPanel({ captures: [capture({ sourceTimeSeconds: 83.4 })] });
     fireEvent.click(screen.getByRole("button", { name: "Go to 1:23.4" }));
-    expect(props.onSeek).toHaveBeenCalledWith(83.4);
+    expect(props.onSeek).toHaveBeenCalledWith(83.4, undefined, "video-1");
+  });
+
+  it("tells the Go to handler which copy of the recording the capture came from", () => {
+    const props = renderPanel({
+      captures: [capture({ sourceTimeSeconds: 83.4, sourceSceneSourceId: "b2" })],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Go to 1:23.4" }));
+    expect(props.onSeek).toHaveBeenCalledWith(83.4, "b2", "video-1");
   });
 
   it("marks the highlighted capture", () => {
