@@ -874,7 +874,9 @@ function VideoEditor({
   // Add to timeline with `timeline-levels` on: the image is stored exactly as a slide's is, then
   // floats over the sequence at the playhead (10 s, fitted, in front) and is selected. The
   // sequence is untouched. Reads the scene and the playhead after the decode, not from the
-  // click: they may have moved while the image was being decoded.
+  // click: they may have moved while the image was being decoded. The playhead comes from
+  // `readTimelineTime`, not the `timelineTime` state: while playing, the state lags the frame
+  // on screen (as in Capture frame).
   const insertFloatingImage = useCallback(
     async (bytes: ArrayBuffer, mime: string) => {
       if (controller.interacting) return;
@@ -893,7 +895,7 @@ function VideoEditor({
         assetId: asset.assetId,
         naturalWidth: asset.naturalWidth,
         naturalHeight: asset.naturalHeight,
-        playhead: playbackRef.current.timelineTime,
+        playhead: playbackRef.current.readTimelineTime(),
         picture: pictureSize,
       });
       if (next === current.scene) return;
