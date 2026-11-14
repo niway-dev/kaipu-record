@@ -1,106 +1,190 @@
 .step {
-  max-width: 640px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  animation: pop 0.35s ease;
+  max-width: 680px;
 }
 
-.mark {
-  margin-bottom: 22px;
-}
-
-.title {
-  font-size: 28px;
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: -0.02em;
-  margin-bottom: 10px;
-}
-
-.subtitle {
-  font-size: var(--font-size-md);
-  line-height: 1.5;
-  color: var(--text-secondary);
-  max-width: 440px;
-  margin-bottom: 28px;
-}
-
-.features {
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.feature {
-  width: 104px;
-  height: 92px;
-  border-radius: 12px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 11px;
-  /* Static: no hover, nothing to click — these only say what the app records. */
-  cursor: default;
-}
-
-.featureIcon {
+.tagline {
+  font-size: 14.5px;
+  font-weight: var(--font-weight-medium);
   color: var(--accent-primary);
+  margin-top: 5px;
 }
 
-.featureLabel {
+/* Six columns: the first row holds three cards of two, the second two cards of three. */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 22px;
+  width: 100%;
+}
+
+.featureCard {
+  grid-column: span 2;
+  padding: 13px 14px;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    border-color var(--transition);
+}
+
+.featureCard:nth-child(n + 4) {
+  grid-column: span 3;
+}
+
+.featureCard:hover {
+  background: var(--bg-hover);
+  border-color: var(--line-strong);
+}
+
+.featureCard:focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 2px;
+}
+
+/* The video editor is the card the design points at. */
+.featured {
+  border-color: rgba(246, 5, 92, 0.45);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.cardIcon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cardTitle {
+  font-size: 14px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text);
+  flex: 1;
+}
+
+.watch {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.12em;
-  color: var(--text-secondary);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--demo-cursor);
 }
 
-/* Segmented pill, deliberately quiet: it must be findable by someone who cannot read
-   the rest of the screen, without competing with the CTA. */
+.cardDesc {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+  margin-top: 9px;
+}
+
+/* ── Language ─────────────────────────── */
+
 .language {
   display: inline-flex;
-  margin-top: 26px;
+  gap: 2px;
+  margin-top: 16px;
   padding: 3px;
-  border-radius: 999px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg-raised);
 }
 
 .languageOption,
 .languageActive {
   font-family: var(--font-family);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  padding: 5px 14px;
-  border-radius: 999px;
+  font-size: 12px;
   border: none;
-  background: none;
-  color: var(--text-secondary);
+  border-radius: 6px;
+  padding: 4px 11px;
   cursor: pointer;
-  transition:
-    background var(--transition),
-    color var(--transition);
-}
-
-.languageOption:hover {
-  color: var(--text-primary);
+  background: transparent;
+  color: var(--text-3);
 }
 
 .languageActive {
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
-@keyframes pop {
-  0% {
-    transform: scale(0.7);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
+/* ── Demo view ────────────────────────── */
+
+.demoView {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 700px;
+  max-width: 100%;
+}
+
+.demoHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 660px;
+  max-width: 100%;
+  margin-bottom: 12px;
+}
+
+.switcher {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+}
+
+.switch,
+.switchActive {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 9px;
+  border: none;
+  border-radius: 6px;
+  font-family: var(--font-family);
+  font-size: 12.5px;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-3);
+}
+
+.switch:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.switchActive {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.demoDesc {
+  flex: 1;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-3);
+  text-align: right;
+  max-width: 300px;
+  margin-left: auto;
+}
+
+.title {
+  font-size: 26px;
+  margin-top: 14px;
 }

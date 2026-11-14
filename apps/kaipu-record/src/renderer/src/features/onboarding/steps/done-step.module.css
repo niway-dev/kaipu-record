@@ -1,0 +1,92 @@
+.step {
+  max-width: 560px;
+}
+
+.places {
+  display: flex;
+  gap: 10px;
+  margin-top: 24px;
+  width: 100%;
+}
+
+.place {
+  flex: 1;
+  display: flex;
+  gap: 11px;
+  padding: 13px 14px;
+}
+
+.placeIcon {
+  display: flex;
+  color: var(--text-2);
+  margin-top: 1px;
+}
+
+.placeTitle {
+  font-size: 13.5px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text);
+}
+
+.placeDesc {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+  margin-top: 3px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.record,
+.screenshot {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 46px;
+  padding: 0 20px;
+  border-radius: 8px;
+  font-family: var(--font-family);
+  font-size: 15px;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.record {
+  background: var(--accent-primary);
+  color: #fff;
+  border: none;
+  box-shadow: 0 14px 30px -12px rgba(246, 5, 92, 0.95);
+}
+
+.record:hover {
+  background: var(--accent-primary-hover);
+}
+
+.screenshot {
+  padding: 0 18px;
+  background: transparent;
+  color: var(--text-2);
+  border: 1px solid var(--line-strong);
+}
+
+.screenshot:hover {
+  background: var(--bg-hover);
+}
+
+.hint,
+.hintMuted {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: var(--font-weight-regular, 400);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.hintMuted {
+  color: var(--text-4);
+}
