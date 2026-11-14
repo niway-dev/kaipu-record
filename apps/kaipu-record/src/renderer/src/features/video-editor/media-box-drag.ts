@@ -44,15 +44,16 @@ export function dragBoxCorner(
   const aspect = start.naturalWidth / start.naturalHeight;
   const east = corner === "ne" || corner === "se";
   const south = corner === "sw" || corner === "se";
-  // The corner that stays put, and the dragged corner's start position.
+  // The corner that stays put: the box grows or shrinks away from it.
   const anchorX = east ? rect.x : rect.x + rect.width;
   const anchorY = south ? rect.y : rect.y + rect.height;
-  const cornerX = east ? rect.x + rect.width : rect.x;
-  const cornerY = south ? rect.y + rect.height : rect.y;
-  // How far the dragged corner is from the fixed one now, along each axis, outwards positive.
-  const reachX = (east ? 1 : -1) * (cornerX + deltaX - anchorX);
-  const reachY = (south ? 1 : -1) * (cornerY + deltaY - anchorY);
-  const wanted = Math.max(reachX, reachY * aspect);
+  // How far the pointer moved outwards along each axis, as a change of width: a vertical move is
+  // turned into width with the aspect. Positive grows the box, negative shrinks it.
+  const outX = (east ? 1 : -1) * deltaX;
+  const outY = (south ? 1 : -1) * deltaY * aspect;
+  // The axis the pointer moved further along decides, with its sign, so an inward move along one
+  // axis shrinks the box even while the other axis stays where it was.
+  const wanted = rect.width + (Math.abs(outX) >= Math.abs(outY) ? outX : outY);
   const width = Math.max(MIN_RESIZE_WIDTH * picture.width, Math.min(picture.width, wanted));
   const height = width / aspect;
   const left = east ? anchorX : anchorX - width;

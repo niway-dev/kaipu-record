@@ -53,6 +53,18 @@ describe("dragBoxCorner", () => {
     expect(rect.x + rect.width).toBeCloseTo(700);
   });
 
+  it("shrinks when the corner moves inwards along one axis only", () => {
+    // 100 px inwards horizontally: 400 px wide becomes 300 px, the height follows the aspect.
+    const horizontal = after("se", -100, 0).rect;
+    expect(horizontal.width).toBeCloseTo(300);
+    expect(horizontal.x).toBeCloseTo(300);
+    // 50 px inwards vertically is 100 px of width at a 2:1 aspect: 400 px becomes 300 px.
+    const vertical = after("se", 0, -50).rect;
+    expect(vertical.width).toBeCloseTo(300);
+    expect(vertical.y).toBeCloseTo(150);
+    expect(after("nw", 0, 50).rect.width).toBeCloseTo(300);
+  });
+
   it("follows the axis the pointer moved further along", () => {
     // Vertical reach 100 px at a 2:1 aspect is 200 px of width: wider than the horizontal 10 px.
     const { rect } = after("se", 10, 100);
