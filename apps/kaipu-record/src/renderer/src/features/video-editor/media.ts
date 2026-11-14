@@ -171,10 +171,13 @@ export function boxInCorner(
 }
 
 function clampBox(box: MediaBox): MediaBox {
+  // A valid width is kept as it is: a fitted tall image can be narrower than the drag minimum,
+  // and its height depends on that width. Only a zero or NaN width falls back to the minimum.
+  const width = Number.isNaN(box.width) || box.width <= 0 ? MEDIA_MIN_BOX_WIDTH : box.width;
   return {
     x: Math.max(0, Math.min(1, box.x)),
     y: Math.max(0, Math.min(1, box.y)),
-    width: Math.max(MEDIA_MIN_BOX_WIDTH, Math.min(1, box.width)),
+    width: Math.min(1, width),
   };
 }
 

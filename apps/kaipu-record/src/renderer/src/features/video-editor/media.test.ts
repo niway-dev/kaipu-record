@@ -343,6 +343,19 @@ describe("edits", () => {
     expect(setMediaBox([img("m", 0, 5, 0)], "m", { ...box, width: 9 })[0].box.width).toBe(1);
   });
 
+  it("keeps a fitted width below the drag minimum, so the image still fits the picture", () => {
+    // A 400 x 6000 image fitted to a 1600 x 900 picture is 0.0375 of its width: 900 px tall.
+    const picture = { width: 1600, height: 900 };
+    const fitted = boxFitted(400, 6000, picture);
+    const kept = setMediaBox([img("m", 0, 5, 0)], "m", fitted)[0].box;
+    expect(kept.width).toBeCloseTo(fitted.width);
+    const px = mediaBoxPx(
+      { ...img("m", 0, 1, 0), naturalWidth: 400, naturalHeight: 6000, box: kept },
+      picture,
+    );
+    expect(px.height).toBeCloseTo(900);
+  });
+
   it("clamps each fade to 0–2000 ms independently", () => {
     const faded = setMediaFades([img("m", 0, 5, 0)], "m", { fadeInMs: 5000, fadeOutMs: -3 })[0];
     expect([faded.fadeInMs, faded.fadeOutMs]).toEqual([2000, 0]);
