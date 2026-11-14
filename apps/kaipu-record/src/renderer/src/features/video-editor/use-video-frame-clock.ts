@@ -21,7 +21,8 @@ import type { FrameSource } from "./playback-media";
 
 export function useVideoFrameClock(
   /** A `<video>`, or the preview's `MediaSwitch`: either way `currentTime` and `mediaTime` are
-   *  AXIS seconds (ADR 0058), and the switch drops frames of a recording that is not on screen. */
+   *  AXIS seconds (ADR 0058), and the switch drops frames of a recording that is not on screen.
+   *  The switch also reports `presentedTime`, the frame on screen while a switch is pending. */
   videoRef: React.RefObject<FrameSource | null>,
   onTime: (sourceSeconds: number) => void,
   /** Re-run the callback immediately when this value changes (e.g. a new camera path). */
@@ -33,7 +34,9 @@ export function useVideoFrameClock(
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    callback.current(video.currentTime);
+    // The frame on screen, which a switch with a pending recording keeps apart from `currentTime`.
+    const shownTime = (): number => video.presentedTime ?? video.currentTime;
+    callback.current(shownTime());
     let stopped = false;
     let handle = 0;
     const request = video.requestVideoFrameCallback?.bind(video);
@@ -44,7 +47,7 @@ export function useVideoFrameClock(
       handle = request!(onFrame);
     };
     if (request) handle = request(onFrame);
-    const onSeek = (): void => callback.current(video.currentTime);
+    const onSeek = (): void => callback.current(shownTime());
     video.addEventListener("seeked", onSeek);
     video.addEventListener("timeupdate", onSeek);
     // A switch of recording moves the picture, the cursor and the webcam to other data with
@@ -62,6 +65,6 @@ export function useVideoFrameClock(
   // Live updates land here, not in the subscription above: same loop, fresh callback.
   useEffect(() => {
     const video = videoRef.current;
-    if (video) callback.current(video.currentTime);
+    if (video) callback.current(video.presentedTime ?? video.currentTime);
   }, [videoRef, trigger]);
 }

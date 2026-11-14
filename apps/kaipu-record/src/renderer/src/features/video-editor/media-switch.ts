@@ -208,6 +208,21 @@ export class MediaSwitch implements PreviewMedia {
     else this.activate(key, local);
   }
 
+  /**
+   * The axis second of the frame ON SCREEN. It is `currentTime` except while a switch is pending
+   * (the new element has no frame yet and the old picture is still shown): then it is the shown
+   * element's own time, so privacy layers and the cursor keep following the picture the viewer
+   * sees, not the position that was requested.
+   */
+  get presentedTime(): number {
+    if (this.shown) {
+      for (const [key, element] of this.elements) {
+        if (element === this.shown) return element.currentTime + this.offsetOf(key);
+      }
+    }
+    return this.currentTime;
+  }
+
   get paused(): boolean {
     return this.medium(this.active).paused;
   }
@@ -273,7 +288,10 @@ export class MediaSwitch implements PreviewMedia {
 
   // ---- subscriptions -----------------------------------------------------------------
 
-  /** Called once per switch of the recording on screen, with the new time already readable. */
+  /**
+   * Called once per switch of the recording, with the new time already readable in `currentTime`,
+   * and again when a pending switch gets its first frame and `presentedTime` catches up.
+   */
   onActiveChange(listener: () => void): () => void {
     this.changeListeners.add(listener);
     return () => this.changeListeners.delete(listener);
@@ -415,6 +433,14 @@ export class MediaSwitch implements PreviewMedia {
     this.pendingShow = null;
   }
 
+  /** The pending element has its frame: it takes the screen, and the layers move to its time. */
+  private showPending(element: SwitchElement): void {
+    this.shown = element;
+    this.pendingShow = null;
+    this.applyVisibility();
+    for (const listener of [...this.changeListeners]) listener();
+  }
+
   private applyVisibility(): void {
     for (const element of this.elements.values()) {
       element.style.visibility = element === this.shown ? "visible" : "hidden";
@@ -443,9 +469,7 @@ export class MediaSwitch implements PreviewMedia {
     const handler = (): void => {
       if (type === "loadedmetadata") this.applyRate(element);
       if ((type === "seeked" || type === "loadeddata") && element === this.pendingShow) {
-        this.shown = element;
-        this.pendingShow = null;
-        this.applyVisibility();
+        this.showPending(element);
       }
       if (element !== this.elements.get(this.active)) return;
       for (const listener of [...(this.eventListeners.get(type) ?? [])]) listener();
@@ -480,6 +504,14 @@ export class MediaSwitch implements PreviewMedia {
         // Not on screen: this copy is spent, the request lives on in the others.
         request.registrations.delete(element);
         return;
+      }
+      // A frame of the switch's target before its seeked/loadeddata event: it is on screen now.
+      if (
+        element === this.pendingShow &&
+        element.readyState >= HAVE_CURRENT_DATA &&
+        !element.seeking
+      ) {
+        this.showPending(element);
       }
       this.frameRequests.delete(handle);
       for (const [other, { id: otherId }] of request.registrations) {

@@ -417,3 +417,76 @@ describe("MediaSwitch — attach and detach", () => {
     expect(heard).not.toHaveBeenCalled();
   });
 });
+
+describe("MediaSwitch — presentedTime while a switch is pending", () => {
+  it("keeps the shown frame's axis time until the unprimed recording has a frame", () => {
+    const { sw, a, b } = setup();
+    a.currentTime = 10;
+    expect(sw.presentedTime).toBe(10);
+    const seen: number[] = [];
+    sw.onActiveChange(() => seen.push(sw.presentedTime));
+    b.readyState = 1; // not decoded yet
+    sw.currentTime = 3605; // paused on A's frame, seek into B
+    expect(sw.currentTime).toBeCloseTo(3605, 9); // the requested position is unchanged
+    expect(sw.presentedTime).toBe(10);
+    expect(a.style.visibility).toBe("visible");
+    expect(seen.every((t) => t === 10)).toBe(true);
+    seen.length = 0;
+    b.readyState = 4;
+    b.emit("seeked");
+    expect(sw.presentedTime).toBeCloseTo(3605, 9);
+    expect(b.style.visibility).toBe("visible");
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBeCloseTo(3605, 9);
+  });
+
+  it("catches up on loadeddata too", () => {
+    const { sw, a, b } = setup();
+    a.currentTime = 10;
+    b.readyState = 0;
+    sw.currentTime = 3601;
+    expect(sw.presentedTime).toBe(10);
+    b.readyState = 2;
+    b.emit("loadeddata");
+    expect(sw.presentedTime).toBeCloseTo(3601, 9);
+  });
+
+  it("reports the new time at once when the recording is primed", () => {
+    const { sw, a, b } = setup();
+    a.currentTime = 10;
+    sw.prime(3605);
+    const seen: number[] = [];
+    sw.onActiveChange(() => seen.push(sw.presentedTime));
+    sw.currentTime = 3605; // b is ready (readyState 4) and sits on the spot
+    expect(sw.presentedTime).toBeCloseTo(3605, 9);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBeCloseTo(3605, 9);
+    expect(b.style.visibility).toBe("visible");
+  });
+
+  it("returns to the shown frame when the pending switch is cancelled by a seek back", () => {
+    const { sw, a, b } = setup();
+    a.currentTime = 10;
+    b.readyState = 1;
+    sw.currentTime = 3605;
+    sw.currentTime = 12; // back into A, whose frame is ready
+    expect(sw.presentedTime).toBe(12);
+    b.readyState = 4;
+    b.emit("seeked"); // a late B event must not take the screen
+    expect(sw.presentedTime).toBe(12);
+    expect(a.style.visibility).toBe("visible");
+  });
+
+  it("takes the screen for a frame the pending element presents before its seeked event", () => {
+    const { sw, a, b } = setup();
+    a.currentTime = 10;
+    sw.requestVideoFrameCallback(() => {});
+    b.readyState = 1;
+    sw.currentTime = 3605;
+    expect(sw.presentedTime).toBe(10);
+    b.readyState = 4;
+    b.presentFrame(5);
+    expect(sw.presentedTime).toBeCloseTo(3605, 9);
+    expect(b.style.visibility).toBe("visible");
+  });
+});

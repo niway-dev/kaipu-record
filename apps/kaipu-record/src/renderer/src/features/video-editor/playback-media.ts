@@ -33,6 +33,13 @@ export type FrameSource = Pick<HTMLVideoElement, "currentTime"> & {
   removeEventListener(type: string, listener: () => void): void;
   requestVideoFrameCallback?(callback: VideoFrameRequestCallback): number;
   cancelVideoFrameCallback?(handle: number): void;
+  /**
+   * The axis second of the frame on screen (the switch only). It differs from `currentTime`
+   * while a switch is pending: the requested position is already the new recording's, but the
+   * old picture stays up until the new one has a frame. A bare element has none and the frame
+   * clock reads `currentTime`.
+   */
+  readonly presentedTime?: number;
   /** The recording on screen changed (the switch only); the clock re-applies at once. */
   onActiveChange?(listener: () => void): () => void;
 };

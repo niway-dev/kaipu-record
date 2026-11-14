@@ -123,3 +123,45 @@ describe("useVideoFrameClock over a MediaSwitch (two recordings, ADR 0058)", () 
     expect(b.pendingFrames).toBe(0);
   });
 });
+
+describe("useVideoFrameClock while a switch of recording is pending", () => {
+  function pending() {
+    const sw = new MediaSwitch({ now: () => 0 });
+    sw.setAxis(sourceAxis(100, [joinedSource("B", 3600, 40)]));
+    const a = new FakeVideo();
+    const b = new FakeVideo();
+    sw.attach(null, asElement(a));
+    sw.attach("B", asElement(b));
+    a.currentTime = 10;
+    b.readyState = 1;
+    return { sw, a, b };
+  }
+
+  it("reports the frame on screen, not the requested time, until the new frame arrives", () => {
+    const { sw, b } = pending();
+    const onTime = vi.fn();
+    renderHook(() => useVideoFrameClock({ current: sw }, onTime));
+    onTime.mockClear();
+    sw.currentTime = 3605; // paused on a redacted frame of A, seek into unprimed B
+    expect(onTime).toHaveBeenCalled();
+    expect(onTime.mock.calls.every(([t]) => t === 10)).toBe(true);
+    onTime.mockClear();
+    b.readyState = 4;
+    b.emit("seeked");
+    expect(onTime).toHaveBeenCalled();
+    expect(onTime.mock.calls.at(-1)![0]).toBeCloseTo(3605, 9);
+  });
+
+  it("applies the presented time on a trigger change too", () => {
+    const { sw } = pending();
+    const onTime = vi.fn();
+    const videoRef = { current: sw };
+    const { rerender } = renderHook(({ t }) => useVideoFrameClock(videoRef, onTime, t), {
+      initialProps: { t: {} },
+    });
+    sw.currentTime = 3605;
+    onTime.mockClear();
+    rerender({ t: {} });
+    expect(onTime).toHaveBeenLastCalledWith(10);
+  });
+});
