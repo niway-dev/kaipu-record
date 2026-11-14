@@ -254,6 +254,8 @@ export const UI_MAP = {
       // dialog a capture's Delete button opens.
       capturesPanel: {
         states: ["empty", "list", "hover", "duplicate", "confirmDelete", "addToTimeline"],
+        // addToTimeline: the row's Add to timeline button, which exists only with the flag on.
+        gatedBy: [{ flag: "timeline-levels" }],
       },
       webcam: { states: ["visible"] },
       transport: { states: ["paused", "playing", "withCounts", "speedChanged", "zoomed"] },

@@ -1,6 +1,6 @@
 ---
 title: "Video frame captures linked to their video"
-description: "The camera button in the video editor's top bar saves the frame on screen into the library, linked to the video, skips a duplicate of the same moment, and the Captures panel lists that video's captures to add to the timeline, go to, copy and delete."
+description: "The camera button in the video editor's top bar saves the frame on screen into the library, linked to the video, skips a duplicate of the same moment, and the Captures panel lists that video's captures to go to, copy and delete (and to add to the timeline, behind the timeline-levels flag)."
 ---
 
 # Video frame captures linked to their video
@@ -29,11 +29,12 @@ taken with a system screenshot ends up outside the library, with no tie back to 
    video (`sourceTimeSeconds`), in its sidecar.
 3. The **Captures** panel, in the editor's right column, lists this video's captures, newest
    first. Its header holds only the title and the close button. Each capture shows its image
-   and, below it, its time in the video and three buttons (**Add to timeline** only with the
-   `timeline-levels` flag on, see below): **Add to timeline** inserts that
-   image into the timeline as an image slide at the playhead's nearest item boundary (what
-   Add image did), **Copy** puts the image on the clipboard, **Delete** removes it from the
-   library after the same confirmation the Library asks for. **Go to** is on the image:
+   and, below it, its time in the video and its buttons: **Copy** puts the image on the
+   clipboard and **Delete** removes it from the
+   library after the same confirmation the Library asks for. With the `timeline-levels` flag
+   on (off by default, NIW2-772), a third button, **Add to timeline**, inserts that image into the
+   timeline as an image slide at the playhead's nearest item boundary (what Add image did).
+   **Go to** is on the image:
    hovering it shows a subtle dark veil with a round Go to button centered on it, and
    clicking that button moves the playhead to the capture's moment. A frame of an image slide
    has no time, so it has no Go to. The **Captures** button in the tool column (right of the
@@ -55,7 +56,8 @@ taken with a system screenshot ends up outside the library, with no tie back to 
 - The new item's sidecar has the source video's asset id and the frame's time in the source
   video. A frame of an image slide has no source time: it is linked with no time, and has no
   Go to in the panel.
-- Add to timeline on a capture inserts its image as an image slide, undoable like any edit.
+- With the `timeline-levels` flag on, Add to timeline on a capture inserts its image as an image
+  slide, undoable like any edit. With it off (the default) the button is not rendered.
 - The Captures panel lists only this video's captures and shows a new one right after it is taken.
 - Each capture can be copied to the clipboard as an image.
 - Pressing Capture frame twice at the same moment leaves one capture. Captures of slides
