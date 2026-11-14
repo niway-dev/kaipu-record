@@ -93,7 +93,7 @@ export const PROFILES = {
   },
   "timeline-levels": {
     description:
-      "Flag timeline-levels forced on, and the vault adds “Floating images”, a recording whose saved edit holds two overlapping floating images: the Clips rows, the preview layer and the image panel.",
+      "Flag timeline-levels forced on, and the vault adds “Floating images”, a recording whose saved edit holds two overlapping floating images: the Clips rows, the preview layer, the image panel, and Add to timeline on each capture in the Captures panel.",
     seed: "demo",
     flags: { "timeline-levels": true },
     floatingImages: true,
@@ -117,12 +117,6 @@ export const PROFILES = {
     seed: "demo",
     flags: { "image-canvas": true },
     corruptCanvas: true,
-  },
-  "timeline-levels": {
-    description:
-      "Flag timeline-levels forced on: the video editor's Captures panel shows Add to timeline on each capture.",
-    seed: "demo",
-    flags: { "timeline-levels": true },
   },
   "image-inspect": {
     description:

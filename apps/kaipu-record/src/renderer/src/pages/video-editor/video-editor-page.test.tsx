@@ -2476,7 +2476,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     expect(within(panel).queryByRole("button", { name: "Capture frame" })).toBeNull();
   });
 
-  it("Add to timeline reads the capture's bytes by id and inserts a slide", async () => {
+  it("Add to timeline reads the capture's bytes by id and adds a block to the timeline", async () => {
     libraryItems = [savedItem("mine", 7), savedItem("other", 9)];
     const read = vi.fn(async () => PNG);
     window.electronAPI.readScreenshotBytes = read as never;

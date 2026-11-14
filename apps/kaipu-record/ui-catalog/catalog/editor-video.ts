@@ -225,7 +225,7 @@ export const editorVideo = catalog(
     },
     "levels-off": {
       profile: "default",
-      how: "Open “Walkthrough 1” with the `timeline-levels` flag off: no floating images, no rows above the sequence, and Add to timeline still inserts a slide.",
+      how: "Open “Walkthrough 1” with the `timeline-levels` flag off: no floating images, no rows above the sequence, and no Add to timeline in the Captures panel.",
       steps: [open(ASSETS.walkthrough)],
       demonstrates: ["editorVideo.page:loaded"],
       ready: { video: true },

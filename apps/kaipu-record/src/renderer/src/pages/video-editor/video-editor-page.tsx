@@ -549,9 +549,9 @@ function VideoEditor({
   // of the two at a time, and anything that opens another inspector closes it.
   const [capturesOpen, setCapturesOpen] = useState(false);
   const layout = useMemo(() => toLayout(scene.items), [scene.items]);
-  // Floating images over the Clips sequence (ADR 0057). The flag gates ADDING one (Add to
-  // timeline inserts a slide while it is off); an edit that already carries images keeps showing
-  // them, so a preview never hides what the export draws.
+  // Floating images over the Clips sequence (ADR 0057). The flag gates ADDING one (while it is
+  // off the Captures panel shows no Add to timeline, NIW2-772); an edit that already carries
+  // images keeps showing them, so a preview never hides what the export draws.
   const levelsOn = useFlag("timeline-levels");
   const showMedia = levelsOn || (scene.media?.length ?? 0) > 0;
   // The decoded frame as one state object: the webcam layer places itself against it (the
