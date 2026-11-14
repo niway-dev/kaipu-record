@@ -103,7 +103,7 @@ export function CaptureItem({
           {onSeek && (
             <button
               type="button"
-              className={styles.copy}
+              className={styles.actionButton}
               aria-label={seekLabel}
               title={seekLabel}
               onClick={onSeek}
@@ -113,7 +113,7 @@ export function CaptureItem({
           )}
           <button
             type="button"
-            className={styles.copy}
+            className={styles.actionButton}
             aria-label={t("copyImage")}
             title={t("copyImage")}
             disabled={!localId}
@@ -124,7 +124,7 @@ export function CaptureItem({
           {onDelete && (
             <button
               type="button"
-              className={styles.copy}
+              className={styles.actionButton}
               aria-label={deleteLabel}
               title={deleteLabel}
               disabled={!localId}

@@ -71,7 +71,7 @@
   gap: var(--space-xs);
 }
 
-.copy {
+.actionButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -88,12 +88,12 @@
     color var(--transition);
 }
 
-.copy:hover:not(:disabled) {
+.actionButton:hover:not(:disabled) {
   background: var(--bg-card-hover);
   color: var(--text-primary);
 }
 
-.copy:disabled {
+.actionButton:disabled {
   opacity: 0.4;
   cursor: default;
 }
