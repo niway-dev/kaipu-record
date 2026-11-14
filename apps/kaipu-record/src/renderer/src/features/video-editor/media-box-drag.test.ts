@@ -78,7 +78,8 @@ describe("dragBoxCorner", () => {
 });
 
 describe("dragBoxCorner on a fitted tall image narrower than the drag minimum", () => {
-  // 400 x 6000 fitted to a 1000 x 500 picture: width 0.0375 of the picture, below the 0.05 minimum.
+  // A very tall image fits to a box narrower than the 0.05 drag minimum; 0.0375 stands for any
+  // such width (not the exact value `fitBox` computes for this aspect).
   const narrow = { box: { x: 0.5, y: 0.5, width: 0.0375 }, naturalWidth: 400, naturalHeight: 6000 };
 
   it("a first move that does not grow it keeps its width", () => {
