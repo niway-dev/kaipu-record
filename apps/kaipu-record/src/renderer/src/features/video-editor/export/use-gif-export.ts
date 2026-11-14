@@ -136,6 +136,11 @@ export function useGifExport(): GifExportController {
   // does not re-run when that recording finishes loading, so the parent re-asks through
   // `retryRefusedEstimate`. Cleared by every new request and by `cancelEstimate`.
   const refusedEstimateRef = useRef<GifJobArgs | null>(null);
+  // The newest joined list the parent handed over. An estimate asked over an older list can be
+  // refused after the list changed (the refusal lands after the debounce and the awaits), when
+  // the parent's effect has already run and found nothing refused yet.
+  const latestJoinedRef = useRef<GifJobArgs["joined"] | null>(null);
+  const requestEstimateRef = useRef<((args: GifJobArgs) => void) | null>(null);
   // Every recording (the opened one and each joined one) is fetched once per vault id and
   // reused by every estimate and the export; a failed fetch is not cached.
   const recordingsRef = useRef(createRecordingCache("gif export"));
@@ -228,6 +233,11 @@ export function useGifExport(): GifExportController {
             const joined = await joinedFiles(args);
             if ("refusal" in joined) {
               if (seq !== estimateSeqRef.current) return;
+              const latest = latestJoinedRef.current;
+              if (latest !== null && latest !== args.joined) {
+                requestEstimateRef.current?.({ ...args, joined: latest });
+                return;
+              }
               refusedEstimateRef.current = args;
               setEstimate({ status: "error", bytes: null, frameCount: null });
               return;
@@ -268,9 +278,11 @@ export function useGifExport(): GifExportController {
     },
     [sourceBlob, webcamTrack, joinedFiles],
   );
+  requestEstimateRef.current = requestEstimate;
 
   const retryRefusedEstimate = useCallback(
     (joined: GifJobArgs["joined"]) => {
+      latestJoinedRef.current = joined;
       const refused = refusedEstimateRef.current;
       if (refused) requestEstimate({ ...refused, joined });
     },

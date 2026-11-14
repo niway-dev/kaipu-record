@@ -402,19 +402,42 @@ describe("useGifExport", () => {
       expect(result.current.estimate.status).toBe("ready");
     });
 
-    it("does not ask again when the last estimate was not refused or was cancelled", async () => {
+    it("asks again when the joined list changed while the refused estimate was still pending", async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       const { result } = renderHook(() => useGifExport());
-      // Nothing requested yet.
-      act(() => result.current.retryRefusedEstimate(joined()));
-      expect(result.current.estimate.status).toBe("idle");
-
-      // Refused, then the sheet closes (cancelEstimate): a later list change stays quiet.
       act(() =>
         result.current.requestEstimate(
           args({ scene: JOINED_SCENE, joined: joined({ status: "loading" }) }),
         ),
       );
+      // The recording finishes loading before the first estimate has even left the debounce:
+      // the parent hands over the new list while nothing is refused yet.
+      act(() => result.current.retryRefusedEstimate(joined({ status: "ready" })));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ESTIMATE_DEBOUNCE_MS + 10);
+      });
+      // The first estimate is refused over the old list; it asks again over the new one.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ESTIMATE_DEBOUNCE_MS + 10);
+      });
+      await waitFor(() => expect(createdWorkers).toHaveLength(1));
+      const msg = createdWorkers[0].postMessage.mock.calls[0][0] as GifStartMessage;
+      expect(msg.mode).toBe("estimate");
+      expect(msg.joined).toHaveLength(1);
+      act(() => createdWorkers[0].emit({ type: "estimate", bytes: 1000, frameCount: 5 }));
+      expect(result.current.estimate.status).toBe("ready");
+    });
+
+    it("does not ask again when the last estimate was not refused or was cancelled", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const { result } = renderHook(() => useGifExport());
+      // Nothing requested yet.
+      const loading = joined({ status: "loading" });
+      act(() => result.current.retryRefusedEstimate(loading));
+      expect(result.current.estimate.status).toBe("idle");
+
+      // Refused, then the sheet closes (cancelEstimate): a later list change stays quiet.
+      act(() => result.current.requestEstimate(args({ scene: JOINED_SCENE, joined: loading })));
       await act(async () => {
         await vi.advanceTimersByTimeAsync(ESTIMATE_DEBOUNCE_MS + 10);
       });
