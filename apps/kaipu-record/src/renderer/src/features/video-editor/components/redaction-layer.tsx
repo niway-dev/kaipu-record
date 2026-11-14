@@ -13,6 +13,7 @@
  * identical to the export's mosaic, and CSS upscales it to whatever the preview's size is.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { PreviewMedia } from "../playback-media";
 import { useVideoFrameClock } from "../use-video-frame-clock";
 import {
   blurSigmaPx,
@@ -39,12 +40,12 @@ export function rectStyle(rect: Redaction["rect"]): React.CSSProperties {
  * Downscale the region of the current video frame into `canvas` (cells, sized in SOURCE px
  * so the grid matches the export's mosaic exactly); CSS upscales it `pixelated`.
  */
-function drawPixelated(
-  canvas: HTMLCanvasElement | null,
-  video: HTMLVideoElement,
-  r: Redaction,
-): void {
+function drawPixelated(canvas: HTMLCanvasElement | null, media: PreviewMedia, r: Redaction): void {
   if (!canvas || r.kind !== "blur") return;
+  // Over two recordings the pixels live in the element on screen, not in the switch; a
+  // recording with no element (a missing one) has nothing to sample.
+  const video = media.activeElement ? media.activeElement() : (media as HTMLVideoElement);
+  if (!video) return;
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   if (vw === 0 || vh === 0) return;
@@ -117,7 +118,7 @@ export function RedactionLayer({
 }: {
   /** Only regions visible on the timeline (use-redaction-editing's visibleRedactions). */
   redactions: Redaction[];
-  videoRef: React.RefObject<HTMLVideoElement | null>;
+  videoRef: React.RefObject<PreviewMedia | null>;
   /** Hold-to-compare or a slide: render nothing. */
   hidden: boolean;
 }): React.JSX.Element {

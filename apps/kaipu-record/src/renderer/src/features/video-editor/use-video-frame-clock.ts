@@ -17,9 +17,12 @@
  * new path reaches the DOM without waiting for the next frame.
  */
 import { useEffect, useRef } from "react";
+import type { FrameSource } from "./playback-media";
 
 export function useVideoFrameClock(
-  videoRef: React.RefObject<HTMLVideoElement | null>,
+  /** A `<video>`, or the preview's `MediaSwitch`: either way `currentTime` and `mediaTime` are
+   *  AXIS seconds (ADR 0058), and the switch drops frames of a recording that is not on screen. */
+  videoRef: React.RefObject<FrameSource | null>,
   onTime: (sourceSeconds: number) => void,
   /** Re-run the callback immediately when this value changes (e.g. a new camera path). */
   trigger?: unknown,
@@ -33,21 +36,26 @@ export function useVideoFrameClock(
     callback.current(video.currentTime);
     let stopped = false;
     let handle = 0;
-    const hasFrameCallback = typeof video.requestVideoFrameCallback === "function";
+    const request = video.requestVideoFrameCallback?.bind(video);
+    const cancel = video.cancelVideoFrameCallback?.bind(video);
     const onFrame: VideoFrameRequestCallback = (_now, metadata) => {
       if (stopped) return;
       callback.current(metadata.mediaTime);
-      handle = video.requestVideoFrameCallback(onFrame);
+      handle = request!(onFrame);
     };
-    if (hasFrameCallback) handle = video.requestVideoFrameCallback(onFrame);
+    if (request) handle = request(onFrame);
     const onSeek = (): void => callback.current(video.currentTime);
     video.addEventListener("seeked", onSeek);
     video.addEventListener("timeupdate", onSeek);
+    // A switch of recording moves the picture, the cursor and the webcam to other data with
+    // no seek on a paused preview (a primed element only starts showing): apply at once.
+    const stopWatching = video.onActiveChange?.(onSeek);
     return () => {
       stopped = true;
-      if (hasFrameCallback) video.cancelVideoFrameCallback(handle);
+      if (cancel) cancel(handle);
       video.removeEventListener("seeked", onSeek);
       video.removeEventListener("timeupdate", onSeek);
+      stopWatching?.();
     };
   }, [videoRef]);
 

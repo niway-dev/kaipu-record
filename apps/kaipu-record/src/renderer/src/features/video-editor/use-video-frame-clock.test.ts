@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
+import { MediaSwitch } from "./media-switch";
+import { asElement, FakeVideo, joinedSource } from "./media-switch.fixture";
+import { sourceAxis } from "./source-axis";
 import { useVideoFrameClock } from "./use-video-frame-clock";
 
 describe("useVideoFrameClock (no rVFC, like jsdom)", () => {
@@ -61,5 +64,62 @@ describe("useVideoFrameClock (no rVFC, like jsdom)", () => {
     // then exactly one apply per trigger.
     expect(onTime).toHaveBeenCalledTimes(4);
     expect(onTime).toHaveBeenLastCalledWith(3);
+  });
+});
+
+describe("useVideoFrameClock over a MediaSwitch (two recordings, ADR 0058)", () => {
+  function twoRecordings() {
+    const sw = new MediaSwitch({ now: () => 0 });
+    sw.setAxis(sourceAxis(100, [joinedSource("B", 3600, 40)]));
+    const a = new FakeVideo();
+    const b = new FakeVideo();
+    sw.attach(null, asElement(a));
+    sw.attach("B", asElement(b));
+    return { sw, a, b };
+  }
+
+  it("gives consumers the active element's media time plus its offset", () => {
+    const { sw, a, b } = twoRecordings();
+    const onTime = vi.fn();
+    renderHook(() => useVideoFrameClock({ current: sw }, onTime));
+    a.presentFrame(12);
+    expect(onTime).toHaveBeenLastCalledWith(12);
+    sw.currentTime = 3610;
+    b.presentFrame(10.5);
+    expect(onTime).toHaveBeenLastCalledWith(3610.5);
+  });
+
+  it("re-applies at once on a switch, even on a paused preview with no frame or seek", () => {
+    const { sw } = twoRecordings();
+    const onTime = vi.fn();
+    renderHook(() => useVideoFrameClock({ current: sw }, onTime));
+    onTime.mockClear();
+    sw.currentTime = 3620;
+    expect(onTime).toHaveBeenCalledTimes(1);
+    expect(onTime.mock.calls[0][0]).toBeCloseTo(3620, 9);
+  });
+
+  it("drops the frames of the element that is not on screen", () => {
+    const { sw, b } = twoRecordings();
+    const onTime = vi.fn();
+    renderHook(() => useVideoFrameClock({ current: sw }, onTime));
+    onTime.mockClear();
+    b.presentFrame(4); // a primed standby presents its first frame
+    expect(onTime).not.toHaveBeenCalled();
+  });
+
+  it("keeps the frame loop running across a switch and stops it on unmount", () => {
+    const { sw, a, b } = twoRecordings();
+    const onTime = vi.fn();
+    const { unmount } = renderHook(() => useVideoFrameClock({ current: sw }, onTime));
+    a.presentFrame(9.9);
+    sw.currentTime = 3600;
+    b.presentFrame(0.04);
+    expect(onTime).toHaveBeenLastCalledWith(3600.04);
+    b.presentFrame(0.08);
+    expect(onTime).toHaveBeenLastCalledWith(3600.08);
+    unmount();
+    expect(a.pendingFrames).toBe(0);
+    expect(b.pendingFrames).toBe(0);
   });
 });
