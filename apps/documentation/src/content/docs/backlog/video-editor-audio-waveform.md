@@ -40,3 +40,6 @@ listed it as a non-goal ("Useful, separate"); this is that separate piece.
 - Persisting peaks across app restarts.
 - Pausing the decode while the Audio lane is hidden: a decode cancelled halfway would start
   over from 0 when the lane comes back, so it keeps running while the flag is on.
+- The Audio entry of the Timeline guide (`track-guide.ts`). The guide describes only what the
+  editor does today, and with the flag off the lane has no waveform. The entry grows a waveform
+  legend in the PR that turns the flag on for everyone.
