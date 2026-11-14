@@ -27,6 +27,9 @@ import * as stylex from "@stylexjs/stylex";
 import { tokens } from "@kaipu/tokens/kaipu.stylex";
 import { Badge, Button } from "@kaipu/ui";
 import { clipBounds, sourceAxis } from "@renderer/features/video-editor/source-axis";
+import { axisCursorTrack } from "@renderer/features/video-editor/cursor/axis-cursor-track";
+import { anyJoinedHasWebcam } from "@renderer/features/video-editor/joined-library";
+import { useJoinedRecordings } from "@renderer/features/video-editor/use-joined-recordings";
 import {
   boundaryIndexAt,
   clampOverlays,
@@ -462,10 +465,20 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
             // disk) rather than leaving broken references that the worker can't render.
             // Floating images (ADR 0057) go the same way: one whose asset is gone is dropped,
             // and a scene that had none keeps no `media` key.
+            // A saved layer survives when a joined recording (ADR 0058) has a webcam although
+            // the opened one does not: its meta is read here, before the editor exists, so
+            // the layer is never stripped for want of metas the editor loads later.
+            const joinedHasWebcam = await anyJoinedHasWebcam(session.scene.sources);
+            if (cancelled) return;
             const filteredScene: VideoScene = dropMediaWithoutAsset(
               {
                 // The sidecar decides whether the recording has a webcam, not the session.
-                ...reconcileWebcam(session.scene, source.webcam ?? null, source.durationSeconds),
+                ...reconcileWebcam(
+                  session.scene,
+                  source.webcam ?? null,
+                  source.durationSeconds,
+                  joinedHasWebcam,
+                ),
                 items: session.scene.items.filter(
                   (item) => item.kind !== "slide" || loadedIds.has(item.assetId),
                 ),
@@ -541,9 +554,45 @@ function VideoEditor({
   const navigate = useNavigate();
   const controller = useVideoScene(resolvedScene);
   const { scene } = controller;
+  // Recordings joined after the opened one (ADR 0058), loaded once the editor is up. One
+  // cursor track on the source axis (each joined track shifted by its offset) feeds everything
+  // that reads the pointer, so the camera path, the activity marks and the cursor layer follow a
+  // joined clip. A loading or missing recording simply adds nothing.
+  const joinedRecordings = useJoinedRecordings(scene.sources);
+  const axis = useMemo(
+    () => sourceAxis(source.durationSeconds, scene.sources),
+    [source.durationSeconds, scene.sources],
+  );
+  const axisEnd = useMemo(
+    () => Math.max(...axis.recordings.map((r) => r.offset + r.duration)),
+    [axis],
+  );
+  const axisTrack = useMemo(
+    () =>
+      axisCursorTrack(
+        cursorTrack,
+        joinedRecordings.map((j) => ({ offset: j.source.offset, track: j.cursorTrack })),
+      ),
+    [cursorTrack, joinedRecordings],
+  );
+  // Sensitivity and Re-analyse run per recording on its own track and range: the opened one
+  // and every joined recording that is READY (ADR 0058).
+  const zoomRecordings = useMemo(
+    () => [
+      { offset: 0, duration: source.durationSeconds, track: cursorTrack },
+      ...joinedRecordings
+        .filter((j) => j.status === "ready")
+        .map((j) => ({
+          offset: j.source.offset,
+          duration: j.source.durationSeconds,
+          track: j.cursorTrack,
+        })),
+    ],
+    [source.durationSeconds, cursorTrack, joinedRecordings],
+  );
   const cursorData = useMemo(
-    () => cursorLayerData(source.capture, cursorTrack, scene.cursor ?? DEFAULT_CURSOR),
-    [source.capture, cursorTrack, scene.cursor],
+    () => cursorLayerData(source.capture, axisTrack, scene.cursor ?? DEFAULT_CURSOR),
+    [source.capture, axisTrack, scene.cursor],
   );
   const [cursorInspectorOpen, setCursorInspectorOpen] = useState(false);
   // The Captures panel (NIW2-764) takes the right column like the cursor settings do: one
@@ -618,34 +667,26 @@ function VideoEditor({
     controller,
     layout,
     timelineDuration: playback.duration,
-    sourceDuration: source.durationSeconds,
-    cursorTrack,
+    axis,
+    recordings: zoomRecordings,
   });
-  const mutes = useMuteEditing(controller, layout, source.durationSeconds);
+  const mutes = useMuteEditing(controller, layout, axis);
   // The picture's background, padding, corners and shadow (ADR 0051): a scene field like a
   // zoom, so the undo history, the session and the export fingerprint all carry it.
   const backgroundEdits = useBackgroundEditing(controller);
-  const webcamEdits = useWebcamEditing({
-    controller,
-    layout,
-    sourceDuration: source.durationSeconds,
-  });
+  const webcamEdits = useWebcamEditing({ controller, layout, axis });
   // The sidecar decides whether there is a webcam (the loader reconciled the scene with
   // it); without one there is no layer, lane, inspector section nor second <video>.
   const webcamTrack = source.webcam ?? null;
   const hasWebcam = webcamTrack !== null && scene.webcam !== null;
-  const redactionEdits = useRedactionEditing({
-    controller,
-    layout,
-    sourceDuration: source.durationSeconds,
-  });
+  const redactionEdits = useRedactionEditing({ controller, layout, axis });
   // One camera simulation shared by the preview (useCameraPreview) and the export (doc 05).
   // Declared before any callback that closes over it (handleExport).
-  const cameraPath = useCameraPath(scene.zoomSegments, cursorTrack, source.durationSeconds);
+  const cameraPath = useCameraPath(scene.zoomSegments, axisTrack, axisEnd);
   // Cursor activity: the marks drawn inside the Zooms lane — depend only on the (immutable) track.
   const activity = useMemo(
-    () => (cursorTrack ? activityMarks(cursorTrack, source.durationSeconds) : []),
-    [cursorTrack, source.durationSeconds],
+    () => (axisTrack ? activityMarks(axisTrack, axisEnd) : []),
+    [axisTrack, axisEnd],
   );
   const videoTools = useVideoTools();
   const videoExport = useVideoExport();
@@ -1009,7 +1050,12 @@ function VideoEditor({
             // Reconciled like the loader does, or an old session (no webcam key) on a webcam
             // recording would never fingerprint like the scene that was exported.
             const savedScene = parsedScene
-              ? reconcileWebcam(parsedScene, source.webcam ?? null, source.durationSeconds)
+              ? reconcileWebcam(
+                  parsedScene,
+                  source.webcam ?? null,
+                  source.durationSeconds,
+                  await anyJoinedHasWebcam(parsedScene.sources),
+                )
               : null;
             if (savedScene && editFingerprint(savedScene, cursorData !== null) !== fingerprint)
               return;
@@ -1836,9 +1882,9 @@ function VideoEditor({
               selectedId={selectedZoomId}
               onSelect={handleSelectZoom}
               onEdgeDrag={zooms.edgeDrag}
-              hasTrack={cursorTrack !== null}
+              hasTrack={axisTrack !== null}
               marks={activity}
-              showMarks={cursorTrack !== null && !isTrackHidden("activity", hiddenTracks)}
+              showMarks={axisTrack !== null && !isTrackHidden("activity", hiddenTracks)}
             />
           ),
         },
@@ -1894,7 +1940,7 @@ function VideoEditor({
         },
       ].filter((lane) => !isTrackHidden(lane.key as TrackKey, hiddenTracks)),
     [
-      cursorTrack,
+      axisTrack,
       activity,
       hiddenTracks,
       layout,
@@ -2117,11 +2163,11 @@ function VideoEditor({
             duration={playback.duration}
             isFullscreen={isFullscreen}
             zoomCount={
-              cursorTrack || zooms.visibleZooms.length > 0 ? zooms.visibleZooms.length : null
+              axisTrack || zooms.visibleZooms.length > 0 ? zooms.visibleZooms.length : null
             }
             privacyCount={redactionEdits.visibleRedactions.length}
             tracks={{
-              available: availableTracks({ hasCursorTrack: cursorTrack !== null, hasWebcam }),
+              available: availableTracks({ hasCursorTrack: axisTrack !== null, hasWebcam }),
               hidden: hiddenTracks,
               onToggle: toggleTrack,
             }}
@@ -2345,7 +2391,7 @@ function VideoEditor({
                     <DetectionPanel
                       zooms={zooms}
                       sensitivity={scene.zoomSensitivity}
-                      clicksAvailable={cursorTrack?.clicksAvailable ?? false}
+                      clicksAvailable={axisTrack?.clicksAvailable ?? false}
                     />
                   )}
                 </>

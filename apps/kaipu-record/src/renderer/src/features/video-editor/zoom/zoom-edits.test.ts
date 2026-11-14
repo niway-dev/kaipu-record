@@ -85,17 +85,43 @@ describe("dragZoomEdge", () => {
     zoomSegments: [AUTO, { ...AUTO, id: "auto-8000", start: 8, end: 12 }],
   };
   it("stops at the neighbour and flips the segment to manual", () => {
-    const [, s] = dragZoomEdge(two, "auto-8000", "start", 2, 20).zoomSegments;
+    const [, s] = dragZoomEdge(two, "auto-8000", "start", 2, { start: 0, end: 20 }).zoomSegments;
     expect(s).toMatchObject({ start: 3, end: 12, origin: "manual" });
   });
   it("keeps the minimum length", () => {
-    const [s] = dragZoomEdge(two, "auto-1000", "end", 1.2, 20).zoomSegments;
+    const [s] = dragZoomEdge(two, "auto-1000", "end", 1.2, { start: 0, end: 20 }).zoomSegments;
     expect(s.end).toBe(2);
   });
   it("stays inside the source and ignores an unknown id", () => {
-    const [, s] = dragZoomEdge(two, "auto-8000", "end", 99, 20).zoomSegments;
+    const [, s] = dragZoomEdge(two, "auto-8000", "end", 99, { start: 0, end: 20 }).zoomSegments;
     expect(s.end).toBe(20);
-    expect(dragZoomEdge(two, "nope", "end", 5, 20)).toBe(two);
+    expect(dragZoomEdge(two, "nope", "end", 5, { start: 0, end: 20 })).toBe(two);
+  });
+});
+
+describe("dragZoomEdge in a joined recording (ADR 0058)", () => {
+  const rangeB = { start: 3600, end: 3630 };
+  const inB = {
+    ...initialScene(20),
+    zoomSegments: [
+      AUTO,
+      { ...AUTO, id: "auto-3610000", start: 3610, end: 3614 },
+      { ...AUTO, id: "auto-3620000", start: 3620, end: 3624 },
+    ],
+  };
+  it("stays inside B's range and stops at B's neighbour", () => {
+    const end = dragZoomEdge(inB, "auto-3620000", "end", 99999, rangeB).zoomSegments[2];
+    expect(end).toMatchObject({ start: 3620, end: 3630, origin: "manual" });
+    const start = dragZoomEdge(inB, "auto-3620000", "start", 3000, rangeB).zoomSegments[2];
+    expect(start.start).toBe(3614);
+  });
+  it("the first zoom of B may reach B's start but never A's range", () => {
+    const [, s] = dragZoomEdge(inB, "auto-3610000", "start", 5, rangeB).zoomSegments;
+    expect(s.start).toBe(3600);
+  });
+  it("a zoom in A is clamped to A's range, so it cannot reach B", () => {
+    const [s] = dragZoomEdge(inB, "auto-1000", "end", 3605, { start: 0, end: 20 }).zoomSegments;
+    expect(s.end).toBe(20);
   });
 });
 

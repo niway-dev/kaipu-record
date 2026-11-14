@@ -3,6 +3,7 @@ import { act, renderHook } from "@testing-library/react";
 import type { CursorTrack } from "@shared/cursor-track";
 import { withInitialZooms } from "../initial-zooms";
 import { initialScene } from "../scene";
+import { joinRecording, sourceAxis } from "../source-axis";
 import { toLayout } from "../timeline";
 import { useVideoScene } from "../use-video-scene";
 import { useZoomEditing } from "./use-zoom-editing";
@@ -26,8 +27,8 @@ function setup(track: CursorTrack | null = TRACK, initial = initialScene(20)) {
       controller,
       layout,
       timelineDuration: 20,
-      sourceDuration: 20,
-      cursorTrack: track,
+      axis: sourceAxis(20, controller.scene.sources),
+      recordings: [{ offset: 0, duration: 20, track }],
     });
     return { controller, zooms };
   });
@@ -118,5 +119,79 @@ describe("useZoomEditing", () => {
     expect(result.current.zooms.canDetect).toBe(false);
     act(() => result.current.zooms.sensitivityCommit(90));
     expect(result.current.controller.scene.zoomSensitivity).toBe(55);
+  });
+});
+
+describe("useZoomEditing with a joined recording (ADR 0058)", () => {
+  /** A [0, 20] and a joined B at [3600, 3620]; timeline 0-20 plays A, 20-40 plays B. */
+  const joined = () => joinRecording(initialScene(20), 20, JOIN, 20).scene;
+  const JOIN = { assetId: "asset-b", title: "B", durationSeconds: 20, width: 0, height: 0 };
+
+  function setupJoined(
+    recordings: { offset: number; duration: number; track: CursorTrack | null }[],
+  ) {
+    return renderHook(() => {
+      const controller = useVideoScene(joined());
+      const zooms = useZoomEditing({
+        controller,
+        layout: toLayout(controller.scene.items),
+        timelineDuration: 40,
+        axis: sourceAxis(20, controller.scene.sources),
+        recordings,
+      });
+      return { controller, zooms };
+    });
+  }
+
+  it("adds a zoom at the playhead in B on B's axis seconds", () => {
+    const { result } = setupJoined([]);
+    act(() => {
+      result.current.zooms.addAtPlayhead(25);
+    });
+    expect(result.current.controller.scene.zoomSegments[0]).toMatchObject({
+      start: 3605,
+      end: 3608,
+    });
+  });
+
+  it("clamps a zoom added near the end of B to B's range", () => {
+    const { result } = setupJoined([]);
+    act(() => {
+      result.current.zooms.addAtPlayhead(39);
+    });
+    expect(result.current.controller.scene.zoomSegments[0]).toMatchObject({
+      start: 3619,
+      end: 3620,
+    });
+  });
+
+  it("an edge drag in B stops at B's end", () => {
+    const { result } = setupJoined([]);
+    act(() => {
+      result.current.zooms.addAtPlayhead(25);
+    });
+    const id = result.current.controller.scene.zoomSegments[0].id;
+    act(() => result.current.zooms.edgeDrag(id, "end", null, "start"));
+    act(() => result.current.zooms.edgeDrag(id, "end", 99999, "move"));
+    act(() => result.current.zooms.edgeDrag(id, "end", null, "end"));
+    expect(result.current.controller.scene.zoomSegments[0].end).toBe(3620);
+  });
+
+  it("detects when any listed recording has a track, and only changes that recording's zooms", () => {
+    const { result } = setupJoined([
+      { offset: 0, duration: 20, track: null },
+      { offset: 3600, duration: 20, track: TRACK },
+    ]);
+    expect(result.current.zooms.canDetect).toBe(true);
+    act(() => result.current.zooms.sensitivityCommit(70));
+    const zooms = result.current.controller.scene.zoomSegments;
+    expect(zooms).toHaveLength(1);
+    expect(zooms[0].start).toBeGreaterThanOrEqual(3600);
+    expect(zooms[0].end).toBeLessThanOrEqual(3620);
+  });
+
+  it("cannot detect when no listed recording has a track", () => {
+    const { result } = setupJoined([{ offset: 0, duration: 20, track: null }]);
+    expect(result.current.zooms.canDetect).toBe(false);
   });
 });

@@ -5,6 +5,7 @@
  */
 import { useCallback, useMemo } from "react";
 import { useLatest } from "../use-latest";
+import { clipBounds, type SourceAxis } from "../source-axis";
 import { dragRangeEdge, isSourceRangeVisible, sourceTimeAtTimeline } from "../source-time";
 import type { LayoutEntry } from "../timeline";
 import type { VideoSceneController } from "../use-video-scene";
@@ -42,11 +43,12 @@ export interface RedactionEditing {
 export function useRedactionEditing({
   controller,
   layout,
-  sourceDuration,
+  axis,
 }: {
   controller: VideoSceneController;
   layout: LayoutEntry[];
-  sourceDuration: number;
+  /** The source axis: a region is clamped to the range of the recording it is in (ADR 0058). */
+  axis: SourceAxis;
 }): RedactionEditing {
   const { scene } = controller;
 
@@ -59,10 +61,11 @@ export function useRedactionEditing({
     (timelineTime: number) => {
       const at = sourceTimeAtTimeline(layout, timelineTime);
       if (at === null) return null;
-      const start = Math.min(at, Math.max(0, sourceDuration - REDACTION.minSeconds));
-      return { start, end: Math.min(sourceDuration, start + REDACTION.defaultSeconds) };
+      const bounds = clipBounds(axis, { sourceStart: at });
+      const start = Math.min(at, Math.max(bounds.start, bounds.end - REDACTION.minSeconds));
+      return { start, end: Math.min(bounds.end, start + REDACTION.defaultSeconds) };
     },
-    [layout, sourceDuration],
+    [layout, axis],
   );
 
   const add = useCallback(
@@ -119,7 +122,7 @@ export function useRedactionEditing({
             id,
             edge,
             sourceTime,
-            sourceDuration,
+            clipBounds(axis, { sourceStart: self.start }),
             REDACTION.minSeconds,
           );
           controllerRef.current.updateLive(updateRedaction(controllerRef.current.scene, id, range));
@@ -127,7 +130,7 @@ export function useRedactionEditing({
       }
       if (phase === "end") controllerRef.current.endInteract();
     },
-    [controllerRef, sourceDuration],
+    [controllerRef, axis],
   );
 
   return {
