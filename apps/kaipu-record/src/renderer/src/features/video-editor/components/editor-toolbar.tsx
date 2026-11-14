@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import {
   ArrowUpRight,
   BookOpen,
-  Camera,
   Check,
   Download,
   Droplet,
@@ -295,10 +294,6 @@ export interface EditorToolbarProps {
   exportDisabled: boolean;
   /** Opens the Timeline guide on its first tab (NIW2-679). */
   onOpenGuide?: () => void;
-  /** Save the frame at the playhead into the library, linked to this video (NIW2-764). */
-  onCaptureFrame?: () => void;
-  /** A capture is being composed: the button waits instead of starting a second one. */
-  captureBusy?: boolean;
 }
 
 /**
@@ -640,8 +635,6 @@ export function EditorToolbar({
   children,
   exportDisabled,
   onOpenGuide,
-  onCaptureFrame,
-  captureBusy = false,
 }: EditorToolbarProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -693,20 +686,6 @@ export function EditorToolbar({
         >
           <ImagePlus size={18} />
         </button>
-        {/* A still of the frame on screen, saved into the library and tied to this video
-            (NIW2-764). Beside Add image, which inserts an image into the timeline instead. */}
-        {onCaptureFrame && (
-          <button
-            type="button"
-            className={styles.iconBtn}
-            title={t("captureFrame")}
-            aria-label={t("captureFrame")}
-            disabled={captureBusy}
-            onClick={onCaptureFrame}
-          >
-            <Camera size={18} />
-          </button>
-        )}
         {onOpenGuide && (
           <button
             type="button"

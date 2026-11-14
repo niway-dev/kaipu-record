@@ -1,5 +1,8 @@
-import { X } from "lucide-react";
+import { Camera, X } from "lucide-react";
+import { useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
+import { reportError } from "@renderer/features/analytics";
+import { DeleteConfirmDialog } from "@renderer/features/library/components/delete-confirm-dialog";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { uiArea } from "@renderer/lib/ui-area";
 import { formatClock } from "../capture-time";
@@ -15,13 +18,17 @@ export interface CapturesPanelProps {
   onSeek(sourceSeconds: number): void;
   onCaptureFrame(): void;
   captureBusy: boolean;
+  /** Delete one capture from the library (called only after the user confirms). */
+  onDelete(capture: LibraryVideo): Promise<void>;
+  /** The capture that already exists at the playhead: outlined and scrolled into view. */
+  highlightedId?: string | null;
   onClose(): void;
 }
 
 /**
  * The editor's right column while Captures is open (NIW2-764): it takes the inspector's
  * place, the way the cursor settings do. Lists this video's frame captures, newest first;
- * clicking an image moves the playhead to that moment.
+ * its Go to button moves the playhead to that moment.
  */
 export function CapturesPanel({
   captures,
@@ -29,9 +36,30 @@ export function CapturesPanel({
   onSeek,
   onCaptureFrame,
   captureBusy,
+  onDelete,
+  highlightedId = null,
   onClose,
 }: CapturesPanelProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
+  const tLibrary = useTranslations("library");
+  const [pendingDelete, setPendingDelete] = useState<LibraryVideo | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmDelete = async (): Promise<void> => {
+    if (!pendingDelete || deleting) return;
+    const target = pendingDelete;
+    setDeleting(true);
+    try {
+      await onDelete(target);
+    } catch (error) {
+      reportError(tLibrary("errorDelete"), error, {
+        context: { id: target.id, phase: "delete-capture" },
+      });
+    } finally {
+      setDeleting(false);
+      setPendingDelete(null);
+    }
+  };
   const empty = loaded && captures.length === 0;
   return (
     <aside
@@ -42,27 +70,31 @@ export function CapturesPanel({
     >
       <div className={styles.header}>
         <h2 className={styles.title}>{t("capturesTitle")}</h2>
-        <button
-          type="button"
-          className={styles.close}
-          aria-label={t("capturesClose")}
-          title={t("capturesClose")}
-          onClick={onClose}
-        >
-          <X size={14} />
-        </button>
+        <div className={styles.headerActions}>
+          {/* Disabled until the first read lands: the duplicate check needs the real list. */}
+          <button
+            type="button"
+            className={styles.captureButton}
+            disabled={captureBusy || !loaded}
+            onClick={onCaptureFrame}
+          >
+            <Camera size={14} />
+            {t("captureFrame")}
+          </button>
+          <button
+            type="button"
+            className={styles.close}
+            aria-label={t("capturesClose")}
+            title={t("capturesClose")}
+            onClick={onClose}
+          >
+            <X size={14} />
+          </button>
+        </div>
       </div>
       {empty ? (
         <div className={styles.empty}>
           <p className={styles.emptyText}>{t("capturesEmpty")}</p>
-          <button
-            type="button"
-            className={styles.emptyButton}
-            disabled={captureBusy}
-            onClick={onCaptureFrame}
-          >
-            {t("captureFrame")}
-          </button>
         </div>
       ) : (
         <ul className={styles.list}>
@@ -70,19 +102,32 @@ export function CapturesPanel({
             <CaptureItem
               key={capture.assetId}
               capture={capture}
-              imageLabel={
-                capture.sourceTimeSeconds === null
-                  ? capture.title
-                  : t("captureSeek", { time: formatClock(capture.sourceTimeSeconds) })
-              }
-              onImageClick={
+              imageLabel={capture.title}
+              highlighted={capture.assetId === highlightedId}
+              // A slide frame has no second in the video: no Go to for it.
+              onSeek={
                 capture.sourceTimeSeconds === null
                   ? undefined
                   : () => onSeek(capture.sourceTimeSeconds as number)
               }
+              seekLabel={
+                capture.sourceTimeSeconds === null
+                  ? undefined
+                  : t("captureSeek", { time: formatClock(capture.sourceTimeSeconds) })
+              }
+              onDelete={() => setPendingDelete(capture)}
+              deleteLabel={t("captureDelete")}
             />
           ))}
         </ul>
+      )}
+      {pendingDelete && (
+        <DeleteConfirmDialog
+          title={pendingDelete.title}
+          isDeleting={deleting}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => void confirmDelete()}
+        />
       )}
     </aside>
   );

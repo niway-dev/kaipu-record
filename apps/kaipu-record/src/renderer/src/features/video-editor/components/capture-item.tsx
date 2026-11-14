@@ -1,4 +1,5 @@
-import { Copy } from "lucide-react";
+import { Copy, LocateFixed, Trash2 } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { reportError } from "@renderer/features/analytics";
 import type { LibraryVideo } from "@renderer/features/library/types";
@@ -12,6 +13,16 @@ export interface CaptureItemProps {
   imageLabel: string;
   /** Click on the image; without it the image is not interactive. */
   onImageClick?: () => void;
+  /** The editor's Go to button: shown when given (a capture with a time in the video). */
+  onSeek?: () => void;
+  /** Accessible name of the Go to button. */
+  seekLabel?: string;
+  /** The editor's Delete button: shown when given (the caller confirms). */
+  onDelete?: () => void;
+  /** Accessible name of the Delete button. */
+  deleteLabel?: string;
+  /** Outline the item and scroll it into view (the capture that already exists). */
+  highlighted?: boolean;
 }
 
 /**
@@ -23,9 +34,20 @@ export function CaptureItem({
   capture,
   imageLabel,
   onImageClick,
+  onSeek,
+  seekLabel,
+  onDelete,
+  deleteLabel,
+  highlighted = false,
 }: CaptureItemProps): React.JSX.Element {
   const t = useTranslations("library");
   const localId = capture.id;
+  const itemRef = useRef<HTMLLIElement | null>(null);
+
+  useEffect(() => {
+    // jsdom has no scrollIntoView.
+    if (highlighted) itemRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [highlighted]);
 
   const copy = async (): Promise<void> => {
     if (!localId) return;
@@ -54,7 +76,12 @@ export function CaptureItem({
   );
 
   return (
-    <li className={styles.item} data-testid="capture-item">
+    <li
+      ref={itemRef}
+      className={styles.item}
+      data-testid="capture-item"
+      data-highlighted={highlighted ? "true" : undefined}
+    >
       {onImageClick ? (
         <button
           type="button"
@@ -72,16 +99,41 @@ export function CaptureItem({
         {capture.sourceTimeSeconds !== null && (
           <span className={styles.time}>{formatClock(capture.sourceTimeSeconds)}</span>
         )}
-        <button
-          type="button"
-          className={styles.copy}
-          aria-label={t("copyImage")}
-          title={t("copyImage")}
-          disabled={!localId}
-          onClick={() => void copy()}
-        >
-          <Copy size={14} />
-        </button>
+        <span className={styles.actions}>
+          {onSeek && (
+            <button
+              type="button"
+              className={styles.copy}
+              aria-label={seekLabel}
+              title={seekLabel}
+              onClick={onSeek}
+            >
+              <LocateFixed size={14} />
+            </button>
+          )}
+          <button
+            type="button"
+            className={styles.copy}
+            aria-label={t("copyImage")}
+            title={t("copyImage")}
+            disabled={!localId}
+            onClick={() => void copy()}
+          >
+            <Copy size={14} />
+          </button>
+          {onDelete && (
+            <button
+              type="button"
+              className={styles.copy}
+              aria-label={deleteLabel}
+              title={deleteLabel}
+              disabled={!localId}
+              onClick={onDelete}
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </span>
       </div>
     </li>
   );

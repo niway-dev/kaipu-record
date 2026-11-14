@@ -2241,7 +2241,18 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     for (const t of getToasts()) dismissToast(t.id);
   });
 
-  it.each(["Captures", "Capture frame"])(
+  /** Capture frame lives in the Captures panel (NIW2-768): open it if needed, then press it. */
+  async function pressCapture(): Promise<void> {
+    if (!screen.queryByTestId("captures-panel")) {
+      fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+    }
+    const panel = await screen.findByTestId("captures-panel");
+    const button = within(panel).getByRole("button", { name: "Capture frame" });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+  }
+
+  it.each(["Captures"])(
     "%s clears the selection, so Delete cannot remove an item whose inspector is hidden",
     async (button) => {
       renderEditor();
@@ -2275,7 +2286,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     stillCapture.capture.mockRejectedValueOnce(new Error("no decodable frame"));
     renderEditor();
     await waitForEditorLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await pressCapture();
     const toast = await waitFor(() => {
       const found = getToasts().find((t) => t.action);
       expect(found).toBeDefined();
@@ -2294,7 +2305,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     renderEditor();
     await waitForEditorLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await pressCapture();
 
     await waitFor(() => expect(saved).toHaveLength(1));
     expect(stillCapture.capture).toHaveBeenCalledWith(
@@ -2321,7 +2332,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     renderEditor();
     await waitForEditorLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await pressCapture();
     await screen.findByTestId("captures-panel");
     await waitFor(() => expect(screen.getAllByTestId("capture-item")).toHaveLength(1));
 
@@ -2332,7 +2343,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
       timelineSeconds: 5,
       sourceSeconds: 5,
     });
-    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await pressCapture();
     await waitFor(() => expect(screen.getAllByTestId("capture-item")).toHaveLength(2));
     const times = screen.getAllByTestId("capture-item").map((el) => el.textContent);
     expect(times[0]).toContain("0:05.0");
@@ -2349,7 +2360,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     });
     renderEditor();
     await waitForEditorLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await pressCapture();
     await waitFor(() => expect(saved).toHaveLength(1));
     expect(saved[0].meta).toMatchObject({ source: { videoAssetId: "asset-1", timeSeconds: null } });
     expect((saved[0].meta as { title: string }).title).toContain("frame 2s");
@@ -2359,7 +2370,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     stubDecodedVideoSize(0, 0);
     renderEditor();
     await waitForEditorLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await pressCapture();
     await waitFor(() =>
       expect(getToasts()).toContainEqual(
         expect.objectContaining({ message: "The video is still loading. Try again in a moment." }),
@@ -2367,21 +2378,23 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     );
     expect(stillCapture.capture).not.toHaveBeenCalled();
     expect(saved).toHaveLength(0);
-    expect(screen.queryByTestId("captures-panel")).toBeNull();
+    // The panel was opened to press the button, and stays: nothing was saved into it.
+    expect(screen.queryAllByTestId("capture-item")).toHaveLength(0);
   });
 
   it("says so when the capture fails, and saves nothing", async () => {
     stillCapture.capture.mockRejectedValue(new Error("worker died"));
     renderEditor();
     await waitForEditorLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await pressCapture();
     await waitFor(() =>
       expect(getToasts()).toContainEqual(
         expect.objectContaining({ message: "Couldn't capture the frame." }),
       ),
     );
     expect(saved).toHaveLength(0);
-    expect(screen.queryByTestId("captures-panel")).toBeNull();
+    // The panel was opened to press the button, and stays: nothing was saved into it.
+    expect(screen.queryAllByTestId("capture-item")).toHaveLength(0);
   });
 
   it("says so when the save fails", async () => {
@@ -2390,7 +2403,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     }) as never;
     renderEditor();
     await waitForEditorLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await pressCapture();
     await waitFor(() =>
       expect(getToasts()).toContainEqual(
         expect.objectContaining({ message: "Couldn't capture the frame." }),
@@ -2402,7 +2415,52 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     stillCapture.busy = true;
     renderEditor();
     await waitForEditorLoaded();
-    expect(screen.getByRole("button", { name: "Capture frame" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+    const panel = await screen.findByTestId("captures-panel");
+    expect(within(panel).getByRole("button", { name: "Capture frame" })).toBeDisabled();
+  });
+
+  it("has no Capture frame button in the top bar", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    expect(screen.queryByRole("button", { name: "Capture frame" })).toBeNull();
+  });
+
+  it("does not save again at a moment that is already captured: it points at the saved one", async () => {
+    // The playhead rests at 0 on the timeline, which is source second 0 here.
+    libraryItems = [savedItem("dup", 0), savedItem("other", 9)];
+    renderEditor();
+    await waitForEditorLoaded();
+    await pressCapture();
+    await waitFor(() => expect(screen.getAllByTestId("capture-item")).toHaveLength(2));
+    await pressCapture();
+    await waitFor(() =>
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({ message: "Already captured at 0:00.0" }),
+      ),
+    );
+    expect(stillCapture.capture).not.toHaveBeenCalled();
+    expect(saved).toHaveLength(0);
+    const highlighted = document.querySelector('[data-highlighted="true"]');
+    expect(highlighted).not.toBeNull();
+    expect(highlighted?.textContent).toContain("0:00.0");
+  });
+
+  it("deletes a capture only after confirming, then refreshes the list", async () => {
+    libraryItems = [savedItem("mine", 7)];
+    window.electronAPI.deleteLocalRecording = vi.fn(async (id: string) => {
+      libraryItems = libraryItems.filter((i) => (i as { assetId: string }).assetId !== id);
+    }) as never;
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete capture" }));
+    expect(window.electronAPI.deleteLocalRecording).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(window.electronAPI.deleteLocalRecording).toHaveBeenCalledWith("mine"),
+    );
+    await waitFor(() => expect(screen.queryAllByTestId("capture-item")).toHaveLength(0));
   });
 
   it("opens from the Captures button with nothing captured, in place of the inspector", async () => {

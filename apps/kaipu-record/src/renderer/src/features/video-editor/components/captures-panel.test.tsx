@@ -28,6 +28,7 @@ function renderPanel(over: Partial<CapturesPanelProps> = {}): CapturesPanelProps
     onSeek: vi.fn(),
     onCaptureFrame: vi.fn(),
     captureBusy: false,
+    onDelete: vi.fn(async () => {}),
     onClose: vi.fn(),
     ...over,
   };
@@ -51,9 +52,14 @@ describe("CapturesPanel", () => {
     expect(document.querySelector('[data-ui-area="editorVideo.capturesPanel"]')).not.toBeNull();
   });
 
-  it("with nothing captured, says so and offers Capture frame", () => {
-    const props = renderPanel();
+  it("with nothing captured, says so without a second button", () => {
+    renderPanel();
     expect(screen.getByText("No captures of this video yet.")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Capture frame" })).toHaveLength(1);
+  });
+
+  it("always offers Capture frame in the header and fires it", () => {
+    const props = renderPanel({ captures: [capture({})] });
     fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
     expect(props.onCaptureFrame).toHaveBeenCalledOnce();
   });
@@ -63,7 +69,12 @@ describe("CapturesPanel", () => {
     expect(screen.queryByText("No captures of this video yet.")).toBeNull();
   });
 
-  it("disables the empty state's button while a capture runs", () => {
+  it("disables Capture frame until the list is loaded", () => {
+    renderPanel({ loaded: false });
+    expect(screen.getByRole("button", { name: "Capture frame" })).toBeDisabled();
+  });
+
+  it("disables Capture frame while a capture runs", () => {
     renderPanel({ captureBusy: true });
     expect(screen.getByRole("button", { name: "Capture frame" })).toBeDisabled();
   });
@@ -85,24 +96,64 @@ describe("CapturesPanel", () => {
     );
   });
 
-  it("names the image of a capture that has no click action (a slide frame)", () => {
-    renderPanel({
-      captures: [capture({ sourceTimeSeconds: null, title: "Demo slide frame" })],
-    });
-    expect(screen.queryByRole("button", { name: /Go to/ })).toBeNull();
+  it("names the image itself: in the panel it is not a button", () => {
+    renderPanel({ captures: [capture({ title: "Demo slide frame" })] });
     expect(screen.getByRole("img", { name: "Demo slide frame" })).toBeInTheDocument();
   });
 
-  it("leaves the image alt empty inside the seek button, which already names it", () => {
-    renderPanel({ captures: [capture({ sourceTimeSeconds: 83.4 })] });
-    const button = screen.getByRole("button", { name: "Go to 1:23.4" });
-    expect(button.querySelector("img")).toHaveAttribute("alt", "");
+  it("has no Go to on a capture with no time (a slide frame), but keeps Copy and Delete", () => {
+    renderPanel({ captures: [capture({ sourceTimeSeconds: null })] });
+    expect(screen.queryByRole("button", { name: /Go to/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy image" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete capture" })).toBeInTheDocument();
   });
 
-  it("seeks to the capture's source time when its image is clicked", () => {
+  it("seeks to the capture's source time from its Go to button", () => {
     const props = renderPanel({ captures: [capture({ sourceTimeSeconds: 83.4 })] });
     fireEvent.click(screen.getByRole("button", { name: "Go to 1:23.4" }));
     expect(props.onSeek).toHaveBeenCalledWith(83.4);
+  });
+
+  it("marks the highlighted capture", () => {
+    renderPanel({
+      captures: [capture({ assetId: "a" }), capture({ assetId: "b" })],
+      highlightedId: "b",
+    });
+    const items = screen.getAllByTestId("capture-item");
+    expect(items[0]).not.toHaveAttribute("data-highlighted");
+    expect(items[1]).toHaveAttribute("data-highlighted", "true");
+  });
+
+  it("asks before deleting and deletes only on confirm", async () => {
+    const target = capture({ id: "frame-9", title: "Demo frame 9s" });
+    const props = renderPanel({ captures: [target] });
+    fireEvent.click(screen.getByRole("button", { name: "Delete capture" }));
+    expect(props.onDelete).not.toHaveBeenCalled();
+    expect(screen.getByText(/Demo frame 9s/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(props.onDelete).toHaveBeenCalledWith(target));
+  });
+
+  it("cancel closes the dialog without deleting", () => {
+    const props = renderPanel({ captures: [capture({})] });
+    fireEvent.click(screen.getByRole("button", { name: "Delete capture" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(props.onDelete).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+  });
+
+  it("reports a failed delete and keeps the item", async () => {
+    const props = renderPanel({
+      captures: [capture({})],
+      onDelete: vi.fn(async () => {
+        throw new Error("busy");
+      }),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Delete capture" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(props.onDelete).toHaveBeenCalled());
+    await waitFor(() => expect(getToasts().length).toBeGreaterThan(0));
+    expect(screen.getAllByTestId("capture-item")).toHaveLength(1);
   });
 
   it("copies the image by its library id and confirms", async () => {

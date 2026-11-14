@@ -130,8 +130,14 @@ import {
 } from "@renderer/features/video-editor/export/export-reuse";
 import { useSourceExports } from "@renderer/features/video-editor/export/use-source-exports";
 import { useStillCapture } from "@renderer/features/video-editor/export/use-still-capture";
+import { planStill } from "@renderer/features/video-editor/export/still-plan";
+import type { LibraryVideo } from "@renderer/features/library/types";
 import { useSourceCaptures } from "@renderer/features/video-editor/use-source-captures";
-import { captureTitleTime } from "@renderer/features/video-editor/capture-time";
+import {
+  captureTitleTime,
+  findCaptureAt,
+  formatClock,
+} from "@renderer/features/video-editor/capture-time";
 import { CapturesPanel } from "@renderer/features/video-editor/components/captures-panel";
 import { probeSource, type SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
@@ -1058,14 +1064,49 @@ function VideoEditor({
   const stillCapture = useStillCapture();
   const sourceCaptures = useSourceCaptures(source.assetId, capturesOpen);
   const refreshCaptures = sourceCaptures.refresh;
+  const existingCaptures = sourceCaptures.captures;
+  // The capture a repeated press found already saved: outlined for ~2 s in the panel.
+  const [highlightedCaptureId, setHighlightedCaptureId] = useState<string | null>(null);
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (highlightTimer.current) clearTimeout(highlightTimer.current);
+    },
+    [],
+  );
   const captureFrame = stillCapture.capture;
+  // Held from the press until the list holds the new capture: `stillCapture.busy` ends when
+  // the frame is composed, and a second press before the list refreshes would miss the
+  // duplicate check.
+  const captureInFlight = useRef(false);
   const handleCaptureFrame = useCallback(async () => {
     const video = playback.videoRef.current;
     if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
       showToast({ message: t("videoStillLoading") });
       return;
     }
+    if (captureInFlight.current) return;
+    captureInFlight.current = true;
+    // Timeline seconds: the clock the transport and the scene share, never source time.
+    // Read now, not from state: while playing, state lags the frame on screen.
+    const playhead = playback.readTimelineTime();
     try {
+      // The same frame twice is a duplicate: point at the saved one instead of composing.
+      const existing = findCaptureAt(existingCaptures, planStill(scene, playhead).sourceSeconds);
+      if (existing) {
+        clearSelection();
+        setCursorInspectorOpen(false);
+        setCapturesOpen(true);
+        setHighlightedCaptureId(existing.assetId);
+        if (highlightTimer.current) clearTimeout(highlightTimer.current);
+        highlightTimer.current = setTimeout(() => setHighlightedCaptureId(null), 2000);
+        showToast({
+          message: t("captureExists", { time: formatClock(existing.sourceTimeSeconds as number) }),
+        });
+        return;
+      }
+      if (highlightTimer.current) clearTimeout(highlightTimer.current);
+      setHighlightedCaptureId(null);
       const frame = await captureFrame({
         scene,
         sourceId: source.id,
@@ -1076,9 +1117,7 @@ function VideoEditor({
         cameraPath,
         cursor: cursorData,
         webcamTrack: source.webcam ?? null,
-        // Timeline seconds: the clock the transport and the scene share, never source time.
-        // Read now, not from state: while playing, state lags the frame on screen.
-        playhead: playback.readTimelineTime(),
+        playhead,
       });
       // The link stores the SOURCE second (what the library page and the sidecar show). A
       // slide has no source footage: its link has no time (seeking to it does nothing), and
@@ -1103,10 +1142,13 @@ function VideoEditor({
         // added since the failed attempt, never the scene of that attempt.
         retry: () => void captureFrameRef.current(),
       });
+    } finally {
+      captureInFlight.current = false;
     }
   }, [
     playback,
     captureFrame,
+    existingCaptures,
     scene,
     source,
     assetStoreRef,
@@ -1117,6 +1159,15 @@ function VideoEditor({
     t,
   ]);
   const captureFrameRef = useLatest(handleCaptureFrame);
+
+  const deleteCapture = useCallback(
+    async (capture: LibraryVideo): Promise<void> => {
+      if (!capture.id) return;
+      await window.electronAPI.deleteLocalRecording(capture.id);
+      await refreshCaptures();
+    },
+    [refreshCaptures],
+  );
 
   const toggleCaptures = useCallback(() => {
     if (capturesOpen) {
@@ -1916,8 +1967,6 @@ function VideoEditor({
             onExport={handleExport}
             exportDisabled={gifExport.status === "exporting" || scene.items.length === 0}
             onOpenGuide={openGuideFirstTab}
-            onCaptureFrame={() => void handleCaptureFrame()}
-            captureBusy={stillCapture.busy}
           >
             {/* Not interactive — a reminder, not a control (plans/video-editor-v2/08 § PR 10
                 polish, W12's "ORIGINAL UNTOUCHED" pill). The original recording on disk and
@@ -1953,6 +2002,8 @@ function VideoEditor({
               onSeek={seekToCapture}
               onCaptureFrame={() => void handleCaptureFrame()}
               captureBusy={stillCapture.busy}
+              onDelete={deleteCapture}
+              highlightedId={highlightedCaptureId}
               onClose={() => setCapturesOpen(false)}
             />
           ) : (

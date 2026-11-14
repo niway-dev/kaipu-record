@@ -8,6 +8,14 @@
   list-style: none;
 }
 
+/* The capture the user just asked for again: already in the list, so point at it. */
+.item[data-highlighted="true"] .imageFrame,
+.item[data-highlighted="true"] .imageButton {
+  border-color: var(--accent-primary);
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
 .imageFrame,
 .imageButton {
   display: block;
@@ -55,6 +63,12 @@
   font-size: var(--font-size-xs);
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
 }
 
 .copy {
