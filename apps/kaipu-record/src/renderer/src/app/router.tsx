@@ -20,7 +20,6 @@ import {
 } from "@renderer/pages/settings/settings-pages";
 import { CloudPage } from "@renderer/pages/cloud/cloud-page";
 import { ShortcutsPage } from "@renderer/pages/shortcuts/shortcuts-page";
-import { ScreenshotsPage } from "@renderer/pages/screenshots/screenshots-page";
 import { ScreenshotEditorPage } from "@renderer/pages/screenshot-editor/screenshot-editor-page";
 import { VideoEditorPage } from "@renderer/pages/video-editor/video-editor-page";
 import { EditorHomePage } from "@renderer/pages/editor/editor-home-page";
@@ -78,7 +77,8 @@ const router = createHashRouter([
           // Prepare was the screen's old name: its URLs land on Export, query kept.
           { path: ROUTES.prepare, element: <LegacyPrepareRedirect /> },
           { path: ROUTES.prepareNew, element: <LegacyPrepareRedirect /> },
-          { path: ROUTES.screenshots, element: <ScreenshotsPage /> },
+          // The Screenshots page merged into Capture (`/`): old links and back paths land there.
+          { path: ROUTES.screenshots, element: <Navigate to={ROUTES.record} replace /> },
           // Editor workspace: every Edit lands here, addressed by URL.
           { path: ROUTES.editor, element: <EditorHomePage /> },
           // New: an empty editor that opens the image editor on a pasted image.

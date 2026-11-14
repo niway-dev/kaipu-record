@@ -1,5 +1,5 @@
 /**
- * Which tray image each platform shows for each capture mode, free of Electron
+ * Which tray image each platform shows, free of Electron
  * so it can be tested on its own. `tray.ts` maps the file names to bundled paths.
  *
  *  - macOS (and Linux, unchanged): black-on-alpha PNGs marked as template images,
@@ -8,14 +8,7 @@
  *    .ico files with a light glyph (16/24/32 px, see generate-app-icons.sh).
  */
 
-/** The capture mode the tray icon is showing. */
-export type TrayState = "record" | "screenshot";
-
-export type TrayIconFile =
-  | "tray-recording.png"
-  | "tray-screenshot.png"
-  | "tray-windows-recording.ico"
-  | "tray-windows-screenshot.ico";
+export type TrayIconFile = "tray-screenshot.png" | "tray-windows-screenshot.ico";
 
 export interface TrayIcon {
   file: TrayIconFile;
@@ -23,15 +16,7 @@ export interface TrayIcon {
   template: boolean;
 }
 
-export function trayIconFor(state: TrayState, platform: NodeJS.Platform): TrayIcon {
-  if (platform === "win32") {
-    return {
-      file: state === "record" ? "tray-windows-recording.ico" : "tray-windows-screenshot.ico",
-      template: false,
-    };
-  }
-  return {
-    file: state === "record" ? "tray-recording.png" : "tray-screenshot.png",
-    template: true,
-  };
+export function trayIconFor(platform: NodeJS.Platform): TrayIcon {
+  if (platform === "win32") return { file: "tray-windows-screenshot.ico", template: false };
+  return { file: "tray-screenshot.png", template: true };
 }

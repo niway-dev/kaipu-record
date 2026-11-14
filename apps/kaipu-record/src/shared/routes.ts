@@ -11,6 +11,7 @@
  * value imports from workspace packages, per the preload rule in CLAUDE.md.
  */
 export const ROUTES = {
+  /** The Capture page (the old Record route; the name stays until the widget PR lands). */
   record: "/",
   library: "/library",
   libraryDetail: "/library/:assetId",
@@ -22,6 +23,7 @@ export const ROUTES = {
   prepare: "/prepare/:assetId",
   /** Legacy (Prepare with no recording, NIW2-587), redirects to `exportNew` keeping the query. */
   prepareNew: "/prepare",
+  /** Legacy (the Screenshots page merged into Capture), redirects to `record`. */
   screenshots: "/screenshots",
   /** The Editor workspace: recent items when nothing is open. */
   editor: "/editor",

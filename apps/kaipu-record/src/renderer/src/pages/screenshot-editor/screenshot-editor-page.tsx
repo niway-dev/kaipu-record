@@ -24,6 +24,7 @@ import type { CanvasSavePayload } from "@shared/types/screenshot-canvas";
 import type { TextCacheSavePayload } from "@shared/types/text-recognition";
 import { captureException, reportError } from "@renderer/features/analytics";
 import { screenshotTitle } from "@shared/screenshot-title";
+import { ROUTES } from "@shared/routes";
 import {
   isAmbiguousIdentityError,
   notifyAmbiguousIdentity,
@@ -178,7 +179,7 @@ const clampZoom = (z: number): number =>
 export function ScreenshotEditorPage(): React.JSX.Element {
   const location = useLocation();
   const source = location.state as ImageSource | null;
-  if (!source) return <Navigate to="/screenshots" replace />;
+  if (!source) return <Navigate to={ROUTES.record} replace />;
   return <ScreenshotEditor key={location.key} source={source} fresh />;
 }
 
@@ -609,7 +610,7 @@ function ScreenshotEditorBody({
   const [discarding, setDiscarding] = useState(false);
   const blocker = useBlocker(dirty && !discarding);
   useEffect(() => {
-    if (discarding) navigate("/screenshots");
+    if (discarding) navigate(ROUTES.record);
   }, [discarding, navigate]);
 
   // ⌘/Ctrl + wheel (and trackpad pinch, which arrives as ctrlKey wheel) zooms the
