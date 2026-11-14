@@ -624,7 +624,7 @@ export const editorVideo = catalog(
       gates: [{ flag: "timeline-levels", side: "on" }],
     },
     "add-from-library": {
-      profile: "timeline-levels",
+      profile: "add-from-library",
       how: "With the `timeline-levels` flag forced on, open “Weekly sync” and press Add recording at the left end of the transport bar: the Add from Library modal opens on its Recordings tab, a compact list of the Library's other recordings, newest first, with the first one selected and previewed on the right (paused at its first frame) above Add after current clip, Add at start and Add at end; the transport button stays lit while the modal is open.",
       steps: [
         open(ASSETS.weeklySync),
@@ -632,7 +632,8 @@ export const editorVideo = catalog(
         addRecordingButton,
         // The list is drawn after the Library read lands; “Walkthrough 1” is among its rows.
         { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
-        // The preview autoplays: hold it at 0:00 once its first frame is there.
+        // The preview autoplays: hold every video at 0:00. The wait is met by any video with a
+        // frame (the editor's too), so the preview may still show its poster, the same picture.
         { waitFor: { video: "paused-at-start" } },
         // The row thumbnails decode after the list is drawn.
         { waitMs: 400 },
@@ -645,7 +646,7 @@ export const editorVideo = catalog(
       gates: [{ flag: "timeline-levels", side: "on" }],
     },
     "add-from-library-screenshots": {
-      profile: "timeline-levels",
+      profile: "add-from-library",
       how: "With the flag forced on, open “Weekly sync”, press Add recording and open the Screenshots tab: a three-column grid of the Library's screenshots (GIFs are not listed), newest first, “Weekly sync frame” tagged “From this recording”, with the footer hint that a click adds the image at the playhead.",
       steps: [
         open(ASSETS.weeklySync),
@@ -662,7 +663,7 @@ export const editorVideo = catalog(
       gates: [{ flag: "timeline-levels", side: "on" }],
     },
     "add-from-library-no-match": {
-      profile: "timeline-levels",
+      profile: "add-from-library",
       how: "With the flag forced on, open “Weekly sync”, press Add recording and type a title no recording has: the list gives way to “No recordings match” with a hint to try another title.",
       steps: [
         open(ASSETS.weeklySync),
@@ -688,13 +689,15 @@ export const editorVideo = catalog(
       gates: [{ flag: "timeline-levels", side: "on" }],
     },
     "add-from-library-added": {
-      profile: "timeline-levels",
+      profile: "add-from-library",
       how: "With the flag forced on, open “Weekly sync”, press Add recording and click Add after current clip with “Walkthrough 1” selected: the playhead is at 0:00, so the recording is inserted after the clip under it, and the sequence shows the clips labelled “Weekly sync” and “Walkthrough 1” (the modal is closed for the shot).",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
         addRecordingButton,
         { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        // The first row (the newest, “Floating images”) is selected by default: pick this one.
+        { click: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
         {
           click: {
             area: "editorVideo.addFromLibrary",

@@ -97,7 +97,14 @@ export const PROFILES = {
   },
   "timeline-levels": {
     description:
-      "Flag timeline-levels forced on, and the vault adds “Floating images”, a recording whose saved edit holds two overlapping floating images: the Clips rows, the preview layer, the image panel, Add to timeline on each capture in the Captures panel, and “Weekly sync frame”, a screenshot taken from “Weekly sync” (the “From this recording” tag in Add from Library).",
+      "Flag timeline-levels forced on, and the vault adds “Floating images”, a recording whose saved edit holds two overlapping floating images: the Clips rows, the preview layer, the image panel and Add to timeline on each capture in the Captures panel.",
+    seed: "demo",
+    flags: { "timeline-levels": true },
+    floatingImages: true,
+  },
+  "add-from-library": {
+    description:
+      "The timeline-levels profile, plus “Weekly sync frame”, a screenshot taken from “Weekly sync” (the “From this recording” tag in Add from Library). A profile of its own, so the Captures panel of “Weekly sync” in the other states does not list it.",
     seed: "demo",
     flags: { "timeline-levels": true },
     floatingImages: true,

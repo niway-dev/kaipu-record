@@ -2884,8 +2884,9 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
     expect(labels).toHaveLength(2);
     expect(labels[0]).toContain(SOURCE.title);
     expect(labels[1]).toContain("Checkout bug");
-    // The modal stays open for the next one.
+    // The modal stays open for the next one, and a toast says the add landed behind it.
     expect(modal()).toBeInTheDocument();
+    expect(getToasts().map((toast) => toast.message)).toContain("Added “Checkout bug”");
 
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
 
@@ -3070,7 +3071,7 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
       expect(screen.queryByText("A gif")).toBeNull();
     });
 
-    it("a click adds the screenshot as a floating image at the playhead, selects it and keeps the modal open", async () => {
+    it("a click adds the screenshot as a floating image, selects it, says so and keeps the modal open", async () => {
       const read = vi.fn(async () => PNG_BYTES.buffer.slice(0) as ArrayBuffer);
       window.electronAPI.readScreenshotBytes = read as never;
       renderEditor();
@@ -3086,6 +3087,10 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
       expect(screen.getByText(/\/ 0:30\.0$/)).toBeInTheDocument();
       expect(within(footer).queryAllByTestId("clip-label")).toHaveLength(0);
       expect(modal()).toBeInTheDocument();
+      // The modal covers the timeline, so a toast confirms the add.
+      await waitFor(() =>
+        expect(getToasts().map((toast) => toast.message)).toContain("Added “Pricing page”"),
+      );
     });
 
     it("a screenshot whose bytes cannot be read adds nothing and says so", async () => {
@@ -3099,7 +3104,11 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
 
       fireEvent.click(await screen.findByRole("button", { name: "Add Pricing page" }));
 
-      await waitFor(() => expect(getToasts()).not.toHaveLength(0));
+      await waitFor(() =>
+        expect(getToasts().map((toast) => toast.message)).toEqual([
+          "Couldn't load the image. Try another file.",
+        ]),
+      );
       expect(screen.queryByText("Floating image")).toBeNull();
     });
   });

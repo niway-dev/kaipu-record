@@ -477,8 +477,8 @@ export interface SeedOptions {
   joinedRecordings?: boolean;
   /**
    * Add one screenshot taken from “Weekly sync” (`sourceVideoAssetId` in its sidecar). Only the
-   * profile whose Add from Library states need the “From this recording” tag turns it on, so no
-   * other state's Library changes.
+   * `add-from-library` profile turns it on: “Weekly sync”'s Captures panel lists it too, so the
+   * other states' Captures shots stay as they were.
    */
   frameCaptures?: boolean;
   /** Add the screenshot that draws real text (profiles that exercise text recognition). */

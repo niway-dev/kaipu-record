@@ -20,7 +20,7 @@ describe("ModalOverlay", () => {
     expect(dialog).toHaveAttribute("aria-modal", "true");
   });
 
-  it("renders its content in the xwide sheet and still cancels on Escape", async () => {
+  it("accepts the xwide size and still cancels on Escape", async () => {
     const user = userEvent.setup();
     const onCancel = vi.fn();
     render(

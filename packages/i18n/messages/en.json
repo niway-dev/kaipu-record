@@ -1525,6 +1525,7 @@
     "addFromLibraryClickToAdd": "Click to add",
     "addFromLibraryLoading": "Loading recordings…",
     "addFromLibraryRow": "Add {title}",
+    "addFromLibraryAdded": "Added “{title}”",
     "addRecordingMissing": "Could not add {title}: its file is not available on this device.",
     "insertHere": "Insert here · {time}",
     "splitHere": "Split here",

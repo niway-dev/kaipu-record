@@ -1119,17 +1119,18 @@ function VideoEditor({
   // `readTimelineTime`, not the `timelineTime` state: while playing, the state lags the frame
   // on screen (as in Capture frame).
   const insertFloatingImage = useCallback(
-    async (bytes: ArrayBuffer, mime: string) => {
-      if (controller.interacting) return;
+    // True once the image is on the timeline: Add from Library confirms it with a toast.
+    async (bytes: ArrayBuffer, mime: string): Promise<boolean> => {
+      if (controller.interacting) return false;
       let asset: SlideAsset;
       try {
         asset = await assetStoreRef.current.put(bytes, mime);
       } catch {
         showToast({ message: t("imageLoadError") });
-        return;
+        return false;
       }
       const current = controllerRef.current;
-      if (current.interacting) return;
+      if (current.interacting) return false;
       const id = newId();
       const next = addFloatingImage(current.scene, {
         id,
@@ -1139,9 +1140,10 @@ function VideoEditor({
         playhead: playbackRef.current.readTimelineTime(),
         picture: pictureSize,
       });
-      if (next === current.scene) return;
+      if (next === current.scene) return false;
       current.commit(next);
       selectKind("media", id);
+      return true;
     },
     [controller, controllerRef, playbackRef, pictureSize, selectKind, t],
   );
@@ -1149,18 +1151,20 @@ function VideoEditor({
   // A capture's Add to timeline: main reads the vault PNG by id (fetch on the media scheme
   // returns no bytes here), then it goes in as a floating image (flag on) or as any image slide.
   const addCaptureToTimeline = useCallback(
-    async (capture: LibraryVideo) => {
+    // True when a floating image went in (flag on); an image slide reports nothing back.
+    async (capture: LibraryVideo): Promise<boolean> => {
       const id = capture.id;
-      if (!id) return;
+      if (!id) return false;
       let bytes: ArrayBuffer;
       try {
         bytes = await window.electronAPI.readScreenshotBytes(id);
       } catch {
         showToast({ message: t("imageLoadError") });
-        return;
+        return false;
       }
-      if (levelsOn) await insertFloatingImage(bytes, "image/png");
-      else await insertImageSlide(bytes, "image/png");
+      if (levelsOn) return insertFloatingImage(bytes, "image/png");
+      await insertImageSlide(bytes, "image/png");
+      return false;
     },
     [insertImageSlide, insertFloatingImage, levelsOn, t],
   );
@@ -1576,8 +1580,13 @@ function VideoEditor({
       // Anchored to the clip after the boundary: a join still loading may insert ahead of it.
       // The boundary was chosen at click time by the modal (after the clip under the playhead,
       // the start or the end).
-      if ((await joinRecordingAt(video, anchoredBoundary(layout, boundary))) === "missing") {
+      // The modal stays open over the timeline, so a join that landed says so (NIW2-790): a
+      // second click would add another copy, and nothing behind the modal shows the first.
+      const result = await joinRecordingAt(video, anchoredBoundary(layout, boundary));
+      if (result === "missing") {
         showToast({ message: t("addRecordingMissing", { title: video.title }) });
+      } else if (result === "joined") {
+        showToast({ message: t("addFromLibraryAdded", { title: video.title }), tone: "success" });
       }
     },
     [joinRecordingAt, layout, t],
@@ -2776,7 +2785,16 @@ function VideoEditor({
           loaded={libraryRecordings.loaded}
           failed={libraryRecordings.failed}
           onAddRecording={(video, boundary) => void addRecording(video, boundary)}
-          onAddScreenshot={(shot) => void addCaptureToTimeline(shot)}
+          onAddScreenshot={(shot) =>
+            void addCaptureToTimeline(shot).then((added) => {
+              if (added) {
+                showToast({
+                  message: t("addFromLibraryAdded", { title: shot.title }),
+                  tone: "success",
+                });
+              }
+            })
+          }
           onClose={() => setAddRecordingOpen(false)}
         />
       )}
