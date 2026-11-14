@@ -123,8 +123,10 @@ Release flag, [NIW2-772](https://linear.app/niway/issue/NIW2-772/video-editor-hi
   shorten when there is no spare footage).
 - Not confirmed from a primary source: CapCut's track packing and picture-in-picture defaults,
   Screen Studio, Premiere and DaVinci gap behaviour.
-- Whether an image slide could be added in a released build before PR #620 (through the old
-  top-bar **Add image**) was not checked; if it could, hiding the button in 0.19.0 removes it.
+- Verified in the repo: the top-bar **Add image** is in the tags `desktop-v0.17.0` and
+  `desktop-v0.18.0` (`handleAddImage` in `video-editor-page.tsx`), and PR #620 removed it. So with
+  `timeline-levels` off, desktop 0.19.0 has no way to add an image to a video, which 0.18.0 had.
+  The owner chose the flag before this was checked; it is theirs to confirm.
 
 ---
 
@@ -158,7 +160,9 @@ interface VideoScene {
 
 - **Start.** `sourceToTimeline(anchor.time)` for a source anchor; the slide's timeline start plus
   `offset` for an item anchor. `null` means the item is not placed: the anchor's second is in
-  deleted footage, the slide was removed, or the slide is now shorter than `offset`.
+  deleted footage, the slide was removed, or the slide is now shorter than `offset`. An anchor
+  second belongs to a clip when it is in `[sourceStart, sourceEnd)`; the resolution uses that
+  half-open range even where `sourceToTimeline` accepts a clip's end.
 - **End.** `min(start + duration, end of the timeline)`.
 - **Moving it** to timeline time `t` rewrites the anchor from the sequence entry at `t`. Dragging
   the left edge rewrites the anchor and the duration together; the right edge only the duration.

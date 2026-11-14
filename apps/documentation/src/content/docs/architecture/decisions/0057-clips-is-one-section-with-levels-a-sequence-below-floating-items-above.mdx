@@ -57,7 +57,8 @@ under every timeline-anchored item.
    back when the footage does — the same rule zoom segments follow.
 5. **Rows are computed, stacking is stored.** The level an item is drawn on in the timeline is
    derived on every layout: `row = 1 + the highest row among the lower-z items it overlaps in
-time`, or the first upper row when it overlaps none. Items that do not overlap share a row;
+time`, or the first upper row when it overlaps none. An item goes to a higher row
+   only when it overlaps one below it, so items that overlap nothing share the first upper row;
    an empty row does not exist. `z` is the only stored order, so an edit elsewhere can move an
    item to another row but never changes which of two overlapping items is in front.
 6. **Effects.** A floating item fades in and out (opacity). Between two sequence items the first
