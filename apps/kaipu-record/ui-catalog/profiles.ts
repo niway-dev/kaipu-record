@@ -40,7 +40,7 @@ export interface Profile {
    * the capture overlay turns it off; it runs last (spec failure 11).
    */
   readonly disableScreenCapture?: boolean;
-  /** `dismiss` (default) clicks "Skip setup"; `keep` leaves the first-run takeover up. */
+  /** `dismiss` (default) closes it with Escape; `keep` leaves the first-run takeover up. */
   readonly onboarding?: "dismiss" | "keep";
   /** Permissions every state of the profile needs; else they are reported not capturable. */
   readonly requires?: Requires;

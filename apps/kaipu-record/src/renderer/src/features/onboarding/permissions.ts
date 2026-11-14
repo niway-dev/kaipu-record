@@ -22,7 +22,7 @@ export interface PermissionMeta {
   /** i18n key under the `onboarding` namespace for this permission's display name. */
   nameKey: "permScreenName" | "permMicName" | "permCameraName";
   required: boolean;
-  /** i18n key under the `onboarding` namespace for this permission's description. */
+  /** i18n key under the `onboarding` namespace for the one line that says why it is needed. */
   descriptionKey: "permScreenDesc" | "permMicDesc" | "permCameraDesc";
 }
 

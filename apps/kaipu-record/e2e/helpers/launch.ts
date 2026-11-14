@@ -251,19 +251,20 @@ export async function launchApp(options: LaunchOptions = {}): Promise<{
 /**
  * A fresh profile opens with the onboarding takeover — a full-window `aria-modal` dialog
  * that intercepts pointer events over the whole app, so it must be dismissed before any
- * interaction. The window can resolve before React mounts it, so wait for its "Skip setup"
- * button (rather than an immediate isVisible check that races the mount), click it, and wait
- * for the dialog to detach. If it never appears (already dismissed), proceed.
+ * interaction. The window can resolve before React mounts it, so wait for the dialog
+ * (rather than an immediate isVisible check that races the mount), press Escape, which
+ * closes it from any step (there is no skip link before Permissions are granted), and
+ * wait for the dialog to detach. If it never appears (already dismissed), proceed.
  */
 export async function dismissOnboarding(page: Page): Promise<void> {
-  const skip = page.getByRole("button", { name: "Skip setup" });
+  const dialog = page.getByRole("dialog", { name: "Onboarding" });
   try {
-    await skip.waitFor({ state: "visible", timeout: 10_000 });
+    await dialog.waitFor({ state: "visible", timeout: 10_000 });
   } catch {
     return;
   }
-  await skip.click();
-  await page.getByRole("dialog", { name: "Onboarding" }).waitFor({ state: "detached" });
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "detached" });
 }
 
 /**

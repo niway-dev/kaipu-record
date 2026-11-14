@@ -109,7 +109,10 @@ const { execFileSync } = require("node:child_process");
     const page = await app.firstWindow();
     await page.waitForLoadState("domcontentloaded");
     page.on("pageerror", (e) => console.log("PAGE ERROR", e.message));
-    await page.getByRole("button", { name: "Skip setup", exact: true }).click();
+    const onboarding = page.getByRole("dialog", { name: "Onboarding" });
+    await onboarding.waitFor({ state: "visible", timeout: 15000 });
+    await page.keyboard.press("Escape");
+    await onboarding.waitFor({ state: "detached" });
     await page.evaluate(
       async ({ id }) => {
         await window.electronAPI.saveVideoEditSession(

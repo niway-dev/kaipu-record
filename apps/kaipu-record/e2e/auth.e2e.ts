@@ -44,14 +44,14 @@ async function launch(userDataDir: string): Promise<{ app: ElectronApplication; 
 /** Mirrors e2e/helpers/launch.ts's dismissOnboarding — duplicated locally to keep this
  * file self-contained around its own bespoke launch. */
 async function dismissOnboarding(page: Page): Promise<void> {
-  const skip = page.getByRole("button", { name: "Skip setup" });
+  const dialog = page.getByRole("dialog", { name: "Onboarding" });
   try {
-    await skip.waitFor({ state: "visible", timeout: 10_000 });
+    await dialog.waitFor({ state: "visible", timeout: 10_000 });
   } catch {
     return;
   }
-  await skip.click();
-  await page.getByRole("dialog", { name: "Onboarding" }).waitFor({ state: "detached" });
+  await page.keyboard.press("Escape");
+  await dialog.waitFor({ state: "detached" });
 }
 
 // The account moved from Settings to its own Cloud page.

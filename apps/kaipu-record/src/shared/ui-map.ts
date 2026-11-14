@@ -671,8 +671,9 @@ export const UI_MAP = {
   onboarding: {
     kind: "overlay",
     areas: {
-      root: { states: ["welcome", "permissions", "done"] },
+      root: { states: ["welcome", "permissions", "shortcuts", "done"] },
       welcomeStep: { states: ["default"] },
+      demo: { states: ["record", "capture", "share", "editor", "workspaces"] },
       permissionsStep: {
         states: ["none", "all"],
         gatedBy: [
@@ -682,6 +683,7 @@ export const UI_MAP = {
           { permission: "accessibility" },
         ],
       },
+      shortcutsStep: { states: ["none", "someTried"] },
       doneStep: { states: ["default"] },
     },
   },

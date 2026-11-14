@@ -117,6 +117,12 @@ export const ACTIONS = [
   "reloadMain",
   /** Empty the system clipboard (`clipboard.clear()` in main), so "no image on it" is a state. */
   "clearClipboard",
+  /**
+   * Report ⇧⌘1 and ⇧⌘2 as pressed (`shortcut:fired` from main to every window) without
+   * running them, so the onboarding's Shortcuts step shows two cards tried. A real global
+   * press would open the capture widget over the shot.
+   */
+  "reportShortcutsTried",
 ] as const;
 export type ActionName = (typeof ACTIONS)[number];
 
@@ -254,6 +260,14 @@ export interface CatalogState<S extends ScreenId> {
    * taken, since an image without it would not show what the state claims.
    */
   readonly keepToasts?: boolean;
+  /**
+   * Emulate `prefers-reduced-motion: reduce` on the main window for this state (the media
+   * query is reset for every other state), and shoot it with animations allowed. A demo that
+   * holds a frame under reduced motion does it with a paused, negative-delay animation, and
+   * Playwright's `animations: "disabled"` cancels even a paused infinite animation back to
+   * its un-keyframed styles, so the frozen frame would never be captured.
+   */
+  readonly reducedMotion?: true;
   /**
    * The image shows what was on the runner's screen (a source thumbnail, a capture's preview,
    * a take's first frame). It cannot be scanned as text, so `ui-catalog:lint` lists it for a
