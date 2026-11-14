@@ -1,0 +1,118 @@
+---
+title: "ADR 0057: Clips is one section with levels — a gapless sequence at the bottom, floating items above it anchored to the footage under them"
+description: Images and videos added to a video live inside the Clips section. The bottom level is the sequence, where an inserted item pushes what follows and there are no gaps. Upper levels hold floating items that push nothing, have a box in the frame and a stored stacking order, and are anchored to the footage under their start so they travel with it. Rows are computed, never stored. Replaces the separate, timeline-anchored media lanes of ADR 0040.
+---
+
+# ADR 0057: Clips is one section with levels — a gapless sequence at the bottom, floating items above it anchored to the footage under them
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Status        | Proposed — owner decisions 2026-11-13, nothing implemented. [NIW2-770](https://linear.app/niway/issue/NIW2-770/video-editor-clips-becomes-a-section-with-levels-added-images-and). Spec: [Clips levels: added images and videos on the timeline](/specs/2026-11-13-clips-levels-added-media-design/)                                                                                                                                                                                                                                                                                       |
+| Date          | 2026-11-13                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Supersedes    | [0040](/architecture/decisions/0040-typed-tracks-on-demand-and-stackable-media-lanes/) in part: its media lanes as separate "Overlay" lanes, their timeline anchoring, and "transitions on media items" as a non-goal. 0040's draw order, per-source audio mixed at export, the two-visible-videos limit and "sources come only from the Library" stand                                                                                                                                                                                                                                    |
+| Relates to    | [0038](/architecture/decisions/0038-webcam-is-a-viewport-layer-composed-after-the-zoom-crop/) (a floating item is a viewport layer like the camera, drawn below it), [0050](/architecture/decisions/0050-track-visibility-is-view-state-hidden-lanes-keep-their-edits/) (Clips is always shown), [0051](/architecture/decisions/0051-the-video-background-is-the-screenshot-beautify-drawn-as-the-outermost-step/) (floating items stay inside the picture), [0049](/architecture/decisions/0049-flags-are-a-typed-registry-with-state-in-our-api-labs-is-user-opt-in/) (the release flag) |
+| Superseded by | —                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+
+## Context
+
+The video editor's main track is one ordered list, `scene.items`, of clips of a single recording
+and full-frame image slides, laid end to end with no gap
+(`features/video-editor/scene.ts`, `timeline.ts`). Zooms, privacy regions, muted spans, the
+webcam layout and the cursor are stored in seconds of the recording, so they follow the footage
+through every trim, split and reorder with no code. Annotations are stored in timeline seconds.
+
+[PR #620](https://github.com/niway-dev/kaipu-record/pull/620) gave each frame capture an **Add to
+timeline** button that inserts the capture as a 3 s slide in that list. The owner tested it on
+2026-11-13 and asked for a different model, with a sketch: the Clips section holds objects on
+several levels; an added image or video can sit before the recording, after it, or above it;
+items that fit on one level share it; overlapping items are both on screen; items take effects
+such as a fade into the next clip.
+
+ADR 0040 (2026-10-31, parked 2026-11-06, nothing built) had designed added media as separate
+"Overlay" lanes above Clips, anchored to timeline time, with transitions out of scope. It names
+the condition that would move it to footage-anchored items: users reporting that cuts misalign
+overlays from what they illustrate. Joining media in the sequence makes that misalignment the
+normal case rather than a report: every item inserted before the recording shifts the recording
+under every timeline-anchored item.
+
+## Decision
+
+1. **One section.** Added media lives inside Clips. There are no separate Overlay lanes.
+2. **The bottom level is the sequence.** It stays what `scene.items` is today: items end to end,
+   no gaps, and an item inserted there pushes everything after it later. Joining a photo or a
+   video before or after the recording is an insert in this list. The recording is never placed
+   at a free position; it moves only because something before it pushes it.
+3. **Upper levels float.** A floating item never pushes anything. It has a duration in timeline
+   seconds, a box in the output frame (normalized centre and width, aspect locked, inside the
+   picture like the webcam layer) and a stacking order `z`. Two floating items that overlap in
+   time are both drawn, higher `z` in front; an item that covers the whole frame hides what is
+   under it. A new floating image starts fitted to the whole frame.
+4. **Anchored to the footage under its start.** A floating item stores where it starts as a
+   position in the footage, not in the timeline: a second of the recording when it starts over a
+   clip, or an offset into a sequence item when it starts over a slide. Its timeline start is
+   derived through `sourceToTimeline`. It plays continuously from there across later cuts. An
+   item whose anchor is in deleted footage is not placed, not drawn and not exported, and comes
+   back when the footage does — the same rule zoom segments follow.
+5. **Rows are computed, stacking is stored.** The level an item is drawn on in the timeline is
+   derived on every layout: `row = 1 + the highest row among the lower-z items it overlaps in
+time`, or the first upper row when it overlaps none. Items that do not overlap share a row;
+   an empty row does not exist. `z` is the only stored order, so an edit elsewhere can move an
+   item to another row but never changes which of two overlapping items is in front.
+6. **Effects.** A floating item fades in and out (opacity). Between two sequence items the first
+   transition is a fade through the background, which needs one decoded source at a time. A true
+   crossfade overlaps the two items and shortens the video by its length; it ships with floating
+   videos, which bring the second decoder.
+7. **Durations.** An image defaults to 10 s floating and 5 s in the sequence. A video keeps its
+   own length and can be trimmed.
+8. **Sound.** A floating or joined video's sound is on by default with a mute per item and no
+   volume control, mixed at export as 0040 describes.
+
+## Alternatives rejected
+
+- **Every level free, nothing pushes** (the Premiere and Resolve track model). One rule for every
+  item. Rejected: joining means moving the recording by hand, an accidental drag leaves seconds
+  of empty video in the export, and every gap needs its own rule for sound and picture.
+- **Separate Overlay lanes above Clips** (ADR 0040). Rejected by the owner's sketch: the items
+  are the same kind of object as a clip and belong in the same section.
+- **Timeline-anchored floating items** (ADR 0040). Rejected: with joins, any insert before the
+  recording leaves every floating item over a different moment.
+- **Anchor as sequence item id plus offset for clips.** Rejected: trimming the head of the clip
+  changes what the same offset points at. A second of the recording does not move.
+- **The row as the stacking order.** Rejected: automatic packing would then change which image
+  is in front when an unrelated item is shortened.
+- **Gaps in the sequence.** Rejected for now by the owner ("sin huecos por ahora").
+
+## Consequences
+
+- `scene.media` is a new optional list; a scene without it opens as today.
+- Stage 2 (a second video in the sequence) gives clips and source anchors a source id. Until
+  then "the recording" is the only source and the anchor carries only a time.
+- Annotations still use timeline seconds and now misalign on every insert before the recording,
+  not only on a mid-timeline delete. Moving them to the same anchor is a follow-up, listed in the
+  spec; it needs a migration of saved scenes.
+- A floating item longer than what remains of the video is cut at the video's end; it never
+  extends the video.
+- The owner's sketch 3 (an item on the upper level from 0, the recording starting later and
+  overlapping its end) is not representable as drawn. It reads either as the crossfade of
+  decision 6 or as empty background before the recording; the owner has not chosen.
+- Preview and export must compute floating items from one pure function of the scene, the layout
+  and the time, or they will disagree.
+
+## Non-goals
+
+- Masks, rotation, crop or blend modes on floating items.
+- Zooms, privacy regions or the cursor on added videos.
+- Volume, ducking or audio fades other than the crossfade's.
+- Free lanes for zooms, privacy, annotations or the camera (0040 stands).
+
+## What would reopen this
+
+- The owner wants empty time before or between items: add an explicit background block as a
+  sequence item, with a duration. Not free positioning.
+- Users want an item to stay at an output time across cuts (a title over the first seconds, music):
+  add a per-item "pin to the timeline" anchor kind.
+- Sketch 3 is read as empty background: the block above.
+- Measurements show the preview holds more than two simultaneous videos, or not two: move the
+  limit (0040).
