@@ -12,7 +12,7 @@ description: The first-run onboarding as the owner's v2 design. Welcome shows wh
 The onboarding goes from three steps to four, and only Permissions blocks:
 
 1. **Welcome** shows what Kaipu does, in five cards: Record, Capture, Edit and share,
-   The video editor and Workspaces. Clicking a card plays a demo of about ten seconds.
+   The video editor and Workspaces. Clicking a card plays a demo of a few seconds.
    Each demo is CSS keyframes over simplified versions of the app's own UI, with a cursor
    in a mint halo.
 2. **Permissions**: Screen Recording and Microphone are required, Camera and Accessibility
@@ -57,6 +57,9 @@ preview screen, and analytics on the funnel.
   The mock lets them, but then "only Permissions blocks" would not hold.
 - Keyboard: Enter advances when allowed, ← and → move, Esc closes. Esc inside a demo returns
   to the cards first.
+- Esc closes the onboarding on every step, Permissions included, and marks it complete. It is
+  the one exit that does not wait for the required permissions; the Record page checks screen
+  access again and shows its permission notice if it is still missing.
 - Closing or skipping marks the onboarding complete, as before. Settings → Onboarding → Replay
   opens it again at Welcome.
 
@@ -77,6 +80,10 @@ All five run in a 660 × 330 stage. The scenes match the mock:
 
 ### Window
 
-The onboarding window opens at 1000 × 760 with a minimum of 900 × 700
-(`WINDOW_SIZES.onboarding`). Each step fits the mock's 900 × 670 content area without
-scrolling.
+The onboarding is an overlay inside the main window, not a window of its own. While it
+shows, the renderer asks main for the onboarding floor (`setOnboardingWindowMode`): a
+minimum of 720 × 720 (`ONBOARDING_MIN_WIDTH` is the base width, `ONBOARDING_MIN_HEIGHT` is
+720), clamped to the screen's work area, and the window grows to it if it is smaller. Closing
+the onboarding restores the base minimum. The 900 × 670 content area of the mock is the
+design target: each step is built to fit it without scrolling. The `onboarding` entry in
+`WINDOW_PRESETS` (1000 × 760, minimum 900 × 700) is not what this overlay applies.

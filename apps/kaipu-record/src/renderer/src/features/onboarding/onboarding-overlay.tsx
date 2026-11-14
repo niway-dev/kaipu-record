@@ -142,9 +142,7 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
 
   const finishAndScreenshot = useCallback(() => {
     onClose();
-    void window.electronAPI
-      .getSettings()
-      .then((settings) => window.electronAPI.requestCaptureScreenshot(settings.screenshotMode));
+    window.electronAPI.requestCaptureScreenshot();
   }, [onClose]);
 
   return (

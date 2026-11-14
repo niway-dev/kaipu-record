@@ -6,8 +6,11 @@ import { createTimeline } from "./timeline";
 
 const T = 13;
 const P = "e";
-/** Second shown under reduced motion: privacy blur on, arrow about to land. */
-const FROZEN_AT = 10.5;
+/**
+ * Second shown under reduced motion: the privacy blur and its timeline segment are on, the
+ * zoom has settled back to 1x, the cursor is nearly done moving, and the arrow has not landed.
+ */
+const FROZEN_AT = 8.5;
 
 const x = (t: number): number => 40 + (t / T) * 580;
 const w = (a: number, b: number): number => x(b) - x(a);

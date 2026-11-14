@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
 import { DEMO_IDS, DEMO_ICONS, OnboardingDemo, type DemoId } from "./index";
 
@@ -18,15 +18,6 @@ function animations(container: HTMLElement): string[] {
 }
 
 describe("OnboardingDemo", () => {
-  // The demo keys are merged into the catalogs separately; until then the translator
-  // reports each missing key. These tests check structure, not wording.
-  beforeEach(() => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-  });
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   it("lists the demos in card order, each with an icon", () => {
     expect(DEMO_IDS).toEqual(["record", "capture", "share", "editor", "workspaces"]);
     for (const id of DEMO_IDS) expect(DEMO_ICONS[id]).toBeTypeOf("function");

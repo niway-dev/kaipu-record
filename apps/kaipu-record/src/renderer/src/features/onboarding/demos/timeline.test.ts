@@ -61,6 +61,14 @@ describe("createTimeline", () => {
     expect(css).toContain("@keyframes kd-start{0.00%{opacity:1}");
   });
 
+  it("vis with a <= 0 and no end stays visible the whole loop", () => {
+    const tl = createTimeline();
+    tl.vis("always", 10, 0);
+    const css = tl.css();
+    expect(css).toContain("@keyframes kd-always{0.00%{opacity:1}");
+    expect(css).not.toContain("opacity:0");
+  });
+
   it("ringK pulses at each click second and prefixes the name", () => {
     const tl = createTimeline();
     const anim = tl.ringK("rg", 10, [1]);

@@ -84,6 +84,7 @@
 }
 
 .cardDesc {
+  display: block;
   font-size: 12.5px;
   line-height: 1.45;
   color: var(--text-3);

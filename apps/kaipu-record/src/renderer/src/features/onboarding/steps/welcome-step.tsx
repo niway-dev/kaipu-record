@@ -65,7 +65,7 @@ interface WelcomeStepProps {
   onDemoChange: (demo: DemoId) => void;
 }
 
-/** Welcome: what Kaipu does, as five cards; a card plays its ten-second demo in place. */
+/** Welcome: what Kaipu does, as five cards; a card plays its demo (a few seconds, looping) in place. */
 export function WelcomeStep({ demo, onDemoChange }: WelcomeStepProps): React.JSX.Element {
   const t = useTranslations("onboarding");
   const reducedMotion = useReducedMotion();
@@ -75,7 +75,7 @@ export function WelcomeStep({ demo, onDemoChange }: WelcomeStepProps): React.JSX
     return (
       <div {...uiArea("onboarding.demo")} className={`${common.step} ${styles.demoView}`}>
         <div className={styles.demoHead}>
-          <div className={styles.switcher} role="tablist" aria-label={t("demoSwitcher")}>
+          <div className={styles.switcher} role="group" aria-label={t("demoSwitcher")}>
             {DEMO_IDS.map((id) => {
               const Icon = DEMO_ICONS[id];
               const active = id === demo;
@@ -84,8 +84,7 @@ export function WelcomeStep({ demo, onDemoChange }: WelcomeStepProps): React.JSX
                 <button
                   key={id}
                   type="button"
-                  role="tab"
-                  aria-selected={active}
+                  aria-pressed={active}
                   aria-label={title}
                   title={title}
                   className={active ? styles.switchActive : styles.switch}
@@ -135,9 +134,7 @@ export function WelcomeStep({ demo, onDemoChange }: WelcomeStepProps): React.JSX
                   <Play size={10} fill="currentColor" strokeWidth={0} /> {t("watch")}
                 </span>
               </span>
-              <span className={styles.cardDesc} style={{ display: "block" }}>
-                {t(CARD_TEXT[id].desc)}
-              </span>
+              <span className={styles.cardDesc}>{t(CARD_TEXT[id].desc)}</span>
             </button>
           );
         })}

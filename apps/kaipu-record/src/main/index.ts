@@ -291,11 +291,10 @@ const OVERLAY_PREWARM_AFTER_LAUNCH_MS = 3000;
 const BASE_MIN_HEIGHT = 560;
 /** The screenshot editor (toolbar + canvas + beautify panel) needs more room. */
 /**
- * The first-run takeover. Its content does not reflow — a 96px brand mark, a
- * headline, a two-line subtitle and a 2x2 grid of permission cards — so under
- * this floor the step stops being a page and turns into a scroll well with the
- * footer buttons pushed out of reach. Width is the base floor (the step is
- * capped at 640px plus gutters); only the height needs raising.
+ * The first-run takeover. Its content does not reflow — four steps, the tallest being
+ * Welcome (five feature cards) and Permissions (four rows) — so under this floor the step
+ * stops being a page and turns into a scroll well with the footer buttons pushed out of
+ * reach. Width is the base floor; only the height needs raising.
  */
 const ONBOARDING_MIN_WIDTH = BASE_MIN_WIDTH;
 // 700 used to exclude the native title bar; the 48 px bar is now inside the window, which
@@ -988,7 +987,11 @@ app.whenReady().then(async () => {
   // region capture as the ⌘⇧1 hotkey.
   ipcMain.on(IPC_CHANNELS.screenshotRequestCapture, (_event, request?: { mode?: unknown }) => {
     capturePanel?.hide();
-    triggerCaptureScreenshot({ mode: isCaptureMode(request?.mode) ? request.mode : "frame" });
+    if (isCaptureMode(request?.mode)) {
+      triggerCaptureScreenshot({ mode: request.mode });
+    } else {
+      triggerShortcutCapture("captureScreenshot");
+    }
   });
 
   // App version for the renderer-side version gate.

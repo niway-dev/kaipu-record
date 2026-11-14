@@ -101,11 +101,13 @@ export function createTimeline({ frozenAt }: { frozenAt?: number } = {}): Timeli
     const out = pop ? "opacity:0;transform:scale(1)" : "opacity:0";
     const pts: KeyframePoint[] =
       a <= 0
-        ? [
-            [0, on],
-            [b ?? 0, out],
-          ]
-        : b
+        ? b == null
+          ? [[0, on]]
+          : [
+              [0, on],
+              [b, out],
+            ]
+        : b != null
           ? [
               [0, off],
               [a, on],

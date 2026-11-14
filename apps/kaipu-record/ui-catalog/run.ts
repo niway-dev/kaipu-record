@@ -26,6 +26,7 @@ import {
   type ScreenSpec,
   type WindowKind,
 } from "../src/shared/ui-map";
+import { IPC_CHANNELS } from "../src/shared/types/ipc";
 import { presetForPath } from "../src/shared/window-size";
 import { CATALOGS, KNOWN_VARIABLE } from "./catalog";
 import { compareCrops, describeDifference, type CropComparison } from "./compare";
@@ -653,13 +654,13 @@ async function runAction(ctx: Ctx, name: string): Promise<void> {
       await ctx.app.evaluate(({ clipboard }) => clipboard.clear());
       return;
     case "reportShortcutsTried":
-      await ctx.app.evaluate(({ BrowserWindow }) => {
+      await ctx.app.evaluate(({ BrowserWindow }, channel) => {
         for (const win of BrowserWindow.getAllWindows()) {
           for (const action of ["captureScreenshot", "startRecording"]) {
-            win.webContents.send("shortcut:fired", action);
+            win.webContents.send(channel, action);
           }
         }
-      });
+      }, IPC_CHANNELS.shortcutFired);
       return;
     case "requestTake":
       await waitForActivity(

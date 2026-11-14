@@ -105,23 +105,24 @@ describe("OnboardingOverlay", () => {
     const onClose = vi.fn();
     render(<OnboardingOverlay onClose={onClose} />);
     fireEvent.click(screen.getByText("The video editor"));
-    expect(screen.getByRole("tab", { name: "The video editor" })).toHaveAttribute(
-      "aria-selected",
+    expect(screen.getByRole("button", { name: "The video editor" })).toHaveAttribute(
+      "aria-pressed",
       "true",
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: "Workspaces" }));
-    expect(screen.getByRole("tab", { name: "Workspaces" })).toHaveAttribute(
-      "aria-selected",
+    fireEvent.click(screen.getByRole("button", { name: "Workspaces" }));
+    expect(screen.getByRole("button", { name: "Workspaces" })).toHaveAttribute(
+      "aria-pressed",
       "true",
     );
 
     fireEvent.click(screen.getByRole("button", { name: /all features/i }));
-    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Feature demos" })).toBeNull();
 
     fireEvent.click(screen.getByText("Capture"));
+    expect(screen.getByRole("group", { name: "Feature demos" })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Feature demos" })).toBeNull();
     expect(onClose).not.toHaveBeenCalled();
   });
 
@@ -264,19 +265,16 @@ describe("OnboardingOverlay", () => {
     expect(requestCaptureScreenshot).not.toHaveBeenCalled();
   });
 
-  it("You're set: Take a screenshot opens the widget in the saved screenshot mode", async () => {
+  it("You're set: Take a screenshot lets main pick the mode, as the shortcut does", async () => {
     const { requestCaptureScreenshot } = mockElectronAPI({
       checkPermissions: vi.fn().mockResolvedValue(granted),
-      getSettings: vi
-        .fn()
-        .mockResolvedValue({ shortcuts: defaultShortcutsFor("darwin"), screenshotMode: "area" }),
     });
     const onClose = vi.fn();
     render(<OnboardingOverlay onClose={onClose} />);
     await toDone();
     fireEvent.click(screen.getByRole("button", { name: /take a screenshot/i }));
     expect(onClose).toHaveBeenCalledOnce();
-    await waitFor(() => expect(requestCaptureScreenshot).toHaveBeenCalledWith("area"));
+    expect(requestCaptureScreenshot).toHaveBeenCalledWith();
   });
 
   it("a dot jumps back to an earlier step", async () => {
@@ -287,7 +285,7 @@ describe("OnboardingOverlay", () => {
     expect(screen.getByRole("heading", { name: /welcome to kaipu/i })).toBeInTheDocument();
   });
 
-  it("Enter on a focused card opens it instead of advancing", () => {
+  it("Enter on a focused card button does not advance the step", () => {
     render(<OnboardingOverlay onClose={vi.fn()} />);
     const card = screen.getByText("Workspaces").closest("button") as HTMLButtonElement;
     card.focus();
