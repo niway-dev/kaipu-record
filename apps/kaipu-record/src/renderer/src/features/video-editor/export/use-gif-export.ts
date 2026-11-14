@@ -11,7 +11,13 @@ import type { GifFps, GifStartMessage, GifWorkerMessage } from "./gif-messages";
 import { prepareWorkerInputs } from "./job-inputs";
 import type { WebcamTrackMessage } from "./export-messages";
 import { type ExportWebcamTrack, fetchWebcamTrack } from "./webcam-fetch";
-import { mediaUrl } from "@renderer/lib/media-url";
+import type { ExportJoinedRecording } from "./export-runner";
+import {
+  createRecordingCache,
+  fetchJoinedFiles,
+  JoinedRecordingUnreadable,
+  usedJoinedRecordings,
+} from "./joined-files";
 
 export interface GifJobArgs {
   scene: VideoScene;
@@ -26,6 +32,8 @@ export interface GifJobArgs {
   cursor?: CursorLayerData | null;
   /** The recording's webcam track, when it has one (ADR 0038), as for the MP4 export. */
   webcamTrack?: ExportWebcamTrack | null;
+  /** The scene's joined recordings (ADR 0058), as for the MP4 export; `[]` without joins. */
+  joined: ExportJoinedRecording[];
   /** Range in edited-timeline seconds. */
   range: { start: number; end: number };
   /** Requested GIF width (capped at the source width). */
@@ -75,6 +83,7 @@ async function buildStartMessage(
   mode: GifStartMessage["mode"],
   sourceBlob: Blob,
   webcam: WebcamTrackMessage | null,
+  joined: GifStartMessage["joined"],
 ): Promise<{ message: GifStartMessage; transfer: Transferable[]; plan: ExportPlan }> {
   const plan = sliceExportPlan(buildExportPlan(args.scene), args.range.start, args.range.end);
   const { overlays, slides, mediaImages, camera, transfer } = await prepareWorkerInputs(args, plan);
@@ -92,6 +101,7 @@ async function buildStartMessage(
     camera,
     cursor: args.cursor ?? null,
     webcam: plan.webcam ? webcam : null,
+    joined,
   };
   return { message, transfer, plan };
 }
@@ -116,22 +126,50 @@ export function useGifExport(): GifExportController {
   const estimateWorkerRef = useRef<Worker | null>(null);
   const estimateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const estimateSeqRef = useRef(0);
-  // The source is fetched once per id and reused by every estimate and the export.
-  const sourceRef = useRef<{ id: string; blob: Promise<Blob> } | null>(null);
+  // Every recording (the opened one and each joined one) is fetched once per vault id and
+  // reused by every estimate and the export; a failed fetch is not cached.
+  const recordingsRef = useRef(createRecordingCache("gif export"));
   // The webcam file, likewise fetched once per id (only for a scene with a webcam layer).
   const webcamRef = useRef<{ id: string; track: Promise<WebcamTrackMessage | null> } | null>(null);
 
-  const sourceBlob = useCallback((id: string): Promise<Blob> => {
-    if (sourceRef.current?.id !== id) {
-      const blob = fetch(mediaUrl("recording", id)).then((r) => r.blob());
-      // A failed fetch must not be cached for the next attempt.
-      blob.catch(() => {
-        if (sourceRef.current?.blob === blob) sourceRef.current = null;
-      });
-      sourceRef.current = { id, blob };
-    }
-    return sourceRef.current.blob;
-  }, []);
+  const sourceBlob = useCallback((id: string): Promise<Blob> => recordingsRef.current.blob(id), []);
+
+  /**
+   * What the plan's joined clips read, fetched; or the refusal to show. Never throws for a
+   * recording that is missing, loading or unreadable: those are the user's to fix.
+   */
+  const joinedFiles = useCallback(
+    async (
+      args: GifJobArgs,
+    ): Promise<{ files: GifStartMessage["joined"] } | { refusal: string }> => {
+      const plan = sliceExportPlan(buildExportPlan(args.scene), args.range.start, args.range.end);
+      const used = usedJoinedRecordings(plan, args.scene, args.joined);
+      if (!used.ok) {
+        return {
+          refusal:
+            used.reason === "missing"
+              ? t("exportRecordingMissing", { title: used.title })
+              : t("exportRecordingLoading"),
+        };
+      }
+      try {
+        const files = await fetchJoinedFiles(
+          used.used,
+          plan.webcam,
+          recordingsRef.current,
+          (error) => captureException(error, { context: "gif-export-webcam" }),
+        );
+        return { files };
+      } catch (error) {
+        if (error instanceof JoinedRecordingUnreadable) {
+          captureException(error, { context: "gif-export" });
+          return { refusal: t("exportRecordingMissing", { title: error.title }) };
+        }
+        throw error;
+      }
+    },
+    [t],
+  );
 
   const webcamTrack = useCallback((args: GifJobArgs): Promise<WebcamTrackMessage | null> => {
     if (!args.scene.webcam || !args.webcamTrack) return Promise.resolve(null);
@@ -175,7 +213,19 @@ export function useGifExport(): GifExportController {
           try {
             const blob = await sourceBlob(args.sourceId);
             const webcam = await webcamTrack(args);
-            const { message, transfer } = await buildStartMessage(args, "estimate", blob, webcam);
+            const joined = await joinedFiles(args);
+            if ("refusal" in joined) {
+              if (seq !== estimateSeqRef.current) return;
+              setEstimate({ status: "error", bytes: null, frameCount: null });
+              return;
+            }
+            const { message, transfer } = await buildStartMessage(
+              args,
+              "estimate",
+              blob,
+              webcam,
+              joined.files,
+            );
             if (seq !== estimateSeqRef.current) return; // superseded meanwhile
             const worker = newGifWorker();
             estimateWorkerRef.current = worker;
@@ -203,7 +253,7 @@ export function useGifExport(): GifExportController {
         })();
       }, ESTIMATE_DEBOUNCE_MS);
     },
-    [sourceBlob, webcamTrack],
+    [sourceBlob, webcamTrack, joinedFiles],
   );
 
   const teardown = useCallback(() => {
@@ -239,7 +289,18 @@ export function useGifExport(): GifExportController {
       try {
         const blob = await sourceBlob(args.sourceId);
         const webcam = await webcamTrack(args);
-        const { message, transfer, plan } = await buildStartMessage(args, "export", blob, webcam);
+        const joined = await joinedFiles(args);
+        if ("refusal" in joined) {
+          fail(joined.refusal);
+          return;
+        }
+        const { message, transfer, plan } = await buildStartMessage(
+          args,
+          "export",
+          blob,
+          webcam,
+          joined.files,
+        );
         if (!activeRef.current) return; // cancelled while preparing
 
         let poster: ArrayBuffer | null = null;
@@ -296,7 +357,7 @@ export function useGifExport(): GifExportController {
         fail(t("gifExportError"), error);
       }
     },
-    [cancelEstimate, sourceBlob, webcamTrack, teardown, t],
+    [cancelEstimate, sourceBlob, webcamTrack, joinedFiles, teardown, t],
   );
 
   // Unmount: never leave a worker running behind the page.

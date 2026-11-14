@@ -164,6 +164,7 @@ import {
   findReusableExports,
 } from "@renderer/features/video-editor/export/export-reuse";
 import { useSourceExports } from "@renderer/features/video-editor/export/use-source-exports";
+import { RecordingUnavailableError } from "@renderer/features/video-editor/export/joined-files";
 import { useStillCapture } from "@renderer/features/video-editor/export/use-still-capture";
 import { planStill } from "@renderer/features/video-editor/export/still-plan";
 import type { LibraryVideo } from "@renderer/features/library/types";
@@ -577,6 +578,19 @@ function VideoEditor({
   // that reads the pointer, so the camera path, the activity marks and the cursor layer follow a
   // joined clip. A loading or missing recording simply adds nothing.
   const joinedRecordings = useJoinedRecordings(scene.sources);
+  // The joined recordings as the MP4 export, the GIF export and the frame capture take them:
+  // `id` is the CURRENT vault id, so a renamed recording is still fetched.
+  const exportJoined = useMemo(
+    () =>
+      joinedRecordings.map((j) => ({
+        sourceId: j.source.id,
+        id: j.id,
+        title: j.source.title,
+        status: j.status,
+        webcam: j.webcam,
+      })),
+    [joinedRecordings],
+  );
 
   // The decoded frame as one state object: the webcam layer places itself against it (the
   // preview's output frame is the source frame), and a stable object keeps its trigger quiet.
@@ -1167,13 +1181,7 @@ function VideoEditor({
         cursor: cursorData,
         // The sidecar's webcam track: with a webcam layer in the scene, the export composes it.
         webcamTrack: source.webcam ?? null,
-        joined: joinedRecordings.map((j) => ({
-          sourceId: j.source.id,
-          id: j.id,
-          title: j.source.title,
-          status: j.status,
-          webcam: j.webcam,
-        })),
+        joined: exportJoined,
         presetId: choice.presetId,
         framing: choice.framing,
         sourceInfo: sourceProbe,
@@ -1233,7 +1241,7 @@ function VideoEditor({
       autosave,
       cameraPath,
       cursorData,
-      joinedRecordings,
+      exportJoined,
     ],
   );
 
@@ -1290,12 +1298,22 @@ function VideoEditor({
         cameraPath,
         cursor: cursorData,
         webcamTrack: source.webcam ?? null,
+        joined: exportJoined,
         range: settings.range,
         width: settings.width,
         fps: settings.fps,
       };
     },
-    [frameSize, scene, source.id, source.webcam, assetStoreRef, cameraPath, cursorData],
+    [
+      frameSize,
+      scene,
+      source.id,
+      source.webcam,
+      exportJoined,
+      assetStoreRef,
+      cameraPath,
+      cursorData,
+    ],
   );
 
   const handleGifSettingsChange = useCallback(
@@ -1411,14 +1429,6 @@ function VideoEditor({
       }
       if (highlightTimer.current) clearTimeout(highlightTimer.current);
       setHighlightedCaptureId(null);
-      // The still composer decodes the OPENED recording's file (the export layer of ADR 0058 is
-      // not built yet), so a frame over a joined recording would be the wrong picture. Say so
-      // rather than save it; the link below is already the joined recording's, so this guard is
-      // the only line to remove when the composer learns recordings.
-      if (origin && origin.sourceId !== null) {
-        showToast({ message: t("captureJoinedNotYet") });
-        return;
-      }
       const frame = await captureFrame({
         scene,
         sourceId: source.id,
@@ -1429,6 +1439,7 @@ function VideoEditor({
         cameraPath,
         cursor: cursorData,
         webcamTrack: source.webcam ?? null,
+        joined: exportJoined,
         playhead,
       });
       // The link stores the SOURCE second (what the library page and the sidecar show). A
@@ -1454,12 +1465,17 @@ function VideoEditor({
       setCapturesOpen(true);
       await refreshCaptures();
     } catch (error) {
-      reportError(t("captureError"), error, {
-        context: { phase: "capture-frame", assetId: source.assetId },
-        // The latest handler: a retry captures what is on screen now, with any redaction
-        // added since the failed attempt, never the scene of that attempt.
-        retry: () => void captureFrameRef.current(),
-      });
+      // A recording that cannot be read is named; anything else is the generic message.
+      reportError(
+        error instanceof RecordingUnavailableError ? error.message : t("captureError"),
+        error,
+        {
+          context: { phase: "capture-frame", assetId: source.assetId },
+          // The latest handler: a retry captures what is on screen now, with any redaction
+          // added since the failed attempt, never the scene of that attempt.
+          retry: () => void captureFrameRef.current(),
+        },
+      );
     } finally {
       captureInFlight.current = false;
     }
@@ -1474,6 +1490,7 @@ function VideoEditor({
     assetStoreRef,
     cameraPath,
     cursorData,
+    exportJoined,
     refreshCaptures,
     clearSelection,
     t,

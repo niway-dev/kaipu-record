@@ -1,8 +1,12 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initialScene, type TrackItem, type VideoScene } from "../scene";
+import { joinedSource } from "../media-switch.fixture";
+import { mediaUrl } from "@renderer/lib/media-url";
+import type { ExportJoinedRecording } from "./export-runner";
 import { createSlideAssetStore } from "../slide-assets";
 import { WEBCAM_DEFAULTS } from "../webcam/webcam-model";
+import type { GifStartMessage } from "./gif-messages";
 import { buildStillMessage, type StillCaptureArgs, useStillCapture } from "./use-still-capture";
 
 const { captureException } = vi.hoisted(() => ({ captureException: vi.fn() }));
@@ -65,6 +69,7 @@ function args(overrides: Partial<StillCaptureArgs> = {}): StillCaptureArgs {
     previewWidth: 640,
     slideAssets: createSlideAssetStore(),
     cameraPath: null,
+    joined: [],
     playhead: 12,
     ...overrides,
   };
@@ -249,5 +254,97 @@ describe("useStillCapture", () => {
     await waitFor(() => expect(createdWorkers).toHaveLength(1));
     unmount();
     expect(createdWorkers[0].terminate).toHaveBeenCalled();
+  });
+});
+
+// ADR 0058: the opened recording is [0, 100] on the axis; "b" is joined at 3600 with a clip
+// 3600-3610. The timeline is clip a (src 0-10), then clip b (axis 3600-3610): playhead 15 is
+// 5 s into b's own file.
+describe("useStillCapture over a joined recording", () => {
+  const JOINED_SCENE: VideoScene = {
+    ...SCENE,
+    items: [clip("a", 0, 10), clip("b", 3600, 3610)],
+    redactions: [],
+    sources: [joinedSource("b", 3600, 40)],
+  };
+  const joined = (over: Partial<ExportJoinedRecording> = {}): ExportJoinedRecording[] => [
+    { sourceId: "b", id: "vault-b", title: "Second take", status: "ready", webcam: null, ...over },
+  ];
+  const finish = async (n: number, promise: Promise<unknown>) => {
+    await waitFor(() => expect(createdWorkers).toHaveLength(n));
+    act(() =>
+      createdWorkers[n - 1].emit({ type: "still", data: new ArrayBuffer(1), width: 1, height: 1 }),
+    );
+    await promise;
+  };
+  const fetched = () => vi.mocked(fetch).mock.calls.map((c) => c[0]);
+
+  it("fetches each recording by its current vault id, the one under the playhead only", async () => {
+    const { result } = renderHook(() => useStillCapture());
+    let promise!: ReturnType<typeof result.current.capture>;
+    act(() => {
+      promise = result.current.capture(
+        args({ scene: JOINED_SCENE, joined: joined(), playhead: 15 }),
+      );
+    });
+    await finish(1, promise);
+    expect(fetched()).toEqual([mediaUrl("recording", "vault-b")]);
+    const msg = createdWorkers[0].postMessage.mock.calls[0][0] as GifStartMessage;
+    // The opened recording's file is not sent when no frame reads it.
+    expect(msg.sourceBlob).toBeNull();
+    expect(msg.joined).toEqual([
+      { sourceId: "b", offset: 3600, blob: expect.any(Blob), webcam: null },
+    ]);
+    act(() => {
+      promise = result.current.capture(
+        args({ scene: JOINED_SCENE, joined: joined(), playhead: 5 }),
+      );
+    });
+    await finish(2, promise);
+    expect(fetched()).toEqual([mediaUrl("recording", "vault-b"), mediaUrl("recording", "rec-1")]);
+    const opened = createdWorkers[1].postMessage.mock.calls[0][0] as GifStartMessage;
+    expect(opened.sourceBlob).toBeInstanceOf(Blob);
+    expect(opened.joined).toEqual([]);
+  });
+
+  it("refuses naming the recording when the one under the playhead is missing, before any fetch", async () => {
+    const { result } = renderHook(() => useStillCapture());
+    await expect(
+      result.current.capture(
+        args({ scene: JOINED_SCENE, joined: joined({ status: "missing" }), playhead: 15 }),
+      ),
+    ).rejects.toThrow("Second take");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(createdWorkers).toHaveLength(0);
+  });
+
+  it("refuses while the recording under the playhead is still loading", async () => {
+    const { result } = renderHook(() => useStillCapture());
+    await expect(
+      result.current.capture(
+        args({
+          scene: JOINED_SCENE,
+          joined: joined({ status: "loading", id: null }),
+          playhead: 15,
+        }),
+      ),
+    ).rejects.toThrow(/still loading/);
+    expect(createdWorkers).toHaveLength(0);
+  });
+
+  it("does not cache a joined fetch that answered 404, and names the recording", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({ ok: false, status: 404, blob: async () => new Blob() } as Response)
+      .mockResolvedValueOnce({ ok: true, blob: async () => new Blob(["b"]) } as Response);
+    const { result } = renderHook(() => useStillCapture());
+    const a = args({ scene: JOINED_SCENE, joined: joined(), playhead: 15 });
+    await expect(result.current.capture(a)).rejects.toThrow("Second take");
+    await waitFor(() => expect(result.current.busy).toBe(false));
+    let promise!: ReturnType<typeof result.current.capture>;
+    act(() => {
+      promise = result.current.capture(a);
+    });
+    await finish(1, promise);
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 });

@@ -2380,6 +2380,58 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     expect(within(panel).getByText("1:23.4")).toBeInTheDocument();
   });
 
+  it("captures over a joined clip and saves it linked to the joined recording, in its own seconds", async () => {
+    // ADR 0058: the opened recording is [0, 30]; "b" is joined at axis 3600 and the only clip
+    // on the timeline, so the playhead at 0 is 0 s into b's file (axis 3600).
+    const joinedScene = {
+      ...initialScene(30),
+      items: [{ id: "b-clip", kind: "clip" as const, sourceStart: 3600, sourceEnd: 3610 }],
+      sources: [
+        {
+          id: "scene-b",
+          assetId: "asset-b",
+          title: "Second take",
+          offset: 3600,
+          durationSeconds: 40,
+          width: 1280,
+          height: 720,
+        },
+      ],
+    };
+    const loadSession = window.electronAPI.loadVideoEditSession;
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
+      sessionJson: serializeSession(joinedScene),
+      assets: [],
+    }));
+    stillCapture.capture.mockResolvedValue({
+      png: PNG,
+      width: 1280,
+      height: 720,
+      timelineSeconds: 4,
+      sourceSeconds: 3604,
+    });
+    try {
+      renderEditor();
+      await waitForEditorLoaded();
+      await pressCapture();
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0].meta).toMatchObject({
+        manual: false,
+        source: { videoAssetId: "asset-b", timeSeconds: 4, sceneSourceId: "scene-b" },
+      });
+      expect(stillCapture.capture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          joined: [expect.objectContaining({ sourceId: "scene-b", title: "Second take" })],
+        }),
+      );
+      expect(getToasts().map((toast) => toast.message)).not.toContain(
+        "Frame capture does not work over a joined recording yet.",
+      );
+    } finally {
+      window.electronAPI.loadVideoEditSession = loadSession;
+    }
+  });
+
   it("adds the next capture at the top of an open panel without reopening it", async () => {
     renderEditor();
     await waitForEditorLoaded();
