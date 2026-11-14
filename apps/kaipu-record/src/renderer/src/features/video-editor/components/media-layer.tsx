@@ -265,7 +265,11 @@ export function MediaLayer({
               event.stopPropagation();
               onSelect(item.id);
             }}
-            onClick={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              // A press already selected it; a click with no press (assistive technology) did not.
+              if (item.id !== selectedId) onSelect(item.id);
+            }}
             onPointerDown={(event) => press(event, "move", item)}
             onPointerMove={move}
             onPointerUp={release}

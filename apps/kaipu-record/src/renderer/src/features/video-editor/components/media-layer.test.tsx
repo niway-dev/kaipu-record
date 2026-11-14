@@ -147,6 +147,18 @@ describe("MediaLayer", () => {
     expect(onEnd).not.toHaveBeenCalled();
   });
 
+  it("a click with no pointerdown selects an unselected item (assistive technology)", () => {
+    const { onSelect } = renderLayer({ media: [img("m", 0, 0)], time: 1 });
+    fireEvent.click(items()[0]);
+    expect(onSelect).toHaveBeenCalledWith("m");
+  });
+
+  it("a click on the already selected item does not select it again", () => {
+    const { onSelect } = renderLayer({ media: [img("m", 0, 0)], time: 1, selectedId: "m" });
+    fireEvent.click(items()[0]);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
   it("Enter selects from the keyboard", () => {
     const { onSelect } = renderLayer({ media: [img("m", 0, 0)], time: 1 });
     fireEvent.keyDown(items()[0], { key: "Enter" });
