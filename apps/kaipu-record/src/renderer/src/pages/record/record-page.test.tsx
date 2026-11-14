@@ -64,7 +64,13 @@ vi.mock("@renderer/features/recording/hooks/use-recording-setup", () => ({
   useRecordingSetup: () => makeSetup(),
 }));
 vi.mock("@renderer/features/shortcuts/use-shortcut-labels", () => ({
-  useShortcutLabels: () => null,
+  useShortcutLabels: () => ({
+    startRecording: "⇧⌘2",
+    bringToFront: "⌃⌘O",
+    captureScreenshot: "⇧⌘1",
+    captureWindow: "⌃⌘W",
+    captureInstant: "⌃⌘X",
+  }),
 }));
 vi.mock("@renderer/features/recording/hooks/use-recording-activity", () => ({
   useRecordingActivity: () => ({ active: false, status: "recording", elapsedSeconds: 0 }),
@@ -170,7 +176,7 @@ describe("RecordPage auto-start", () => {
   });
 });
 
-describe("RecordPage idle layout (design Kaipu Record Modes)", () => {
+describe("RecordPage idle layout (design Kaipu Capture Home)", () => {
   const realApi = window.electronAPI;
   beforeEach(() => {
     setupState = { selectedSource: SCREEN, isRecording: false };
@@ -179,38 +185,82 @@ describe("RecordPage idle layout (design Kaipu Record Modes)", () => {
     window.electronAPI = realApi;
   });
 
-  it("shows Start, the last used mode with its remembered area, and the inputs", async () => {
-    const requestRecordSelector = vi.fn();
+  it("is the Capture page: heading, workspace, two entry cards, the Instant line and the setup", async () => {
+    renderAt(undefined);
+    expect(await screen.findByRole("heading", { level: 1, name: "Capture" })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.getByText("to Default workspace")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Switch" })).toBeInTheDocument();
+    // The old Record page's furniture is gone.
+    expect(screen.queryByRole("button", { name: /Start recording/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Window/ })).toBeNull();
+    expect(screen.queryByText("Record to Default workspace")).toBeNull();
+    expect(screen.queryByText("Ready to record")).toBeNull();
+
+    expect(screen.getByRole("button", { name: /^Screenshot/ })).toHaveTextContent(
+      "Pick an area, then annotate or copy it.",
+    );
+    expect(screen.getByRole("button", { name: /^Recording/ })).toHaveTextContent(
+      "Pick an area, then record with sound and camera.",
+    );
+    // The Instant line is text with a keycap, not a button.
+    expect(screen.getByText("captures the last area again, without the selector.")).toBeVisible();
+    expect(screen.getByText("⌃⌘X")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Instant/ })).toBeNull();
+
+    expect(screen.getByRole("heading", { level: 2, name: "Recording setup" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Set once. In the selector you only turn these on or off."),
+    ).toBeInTheDocument();
+    // No source card: what to record is picked in the selector.
+    expect(screen.queryByText("CHOOSE A SOURCE")).toBeNull();
+  });
+
+  it("shows the last used mode on each card, and the Frame aspect on the Recording one", async () => {
     const settings = await realApi.getSettings();
     window.electronAPI = {
       ...realApi,
-      requestRecordSelector,
       getSettings: async () => ({
         ...settings,
+        screenshotMode: "screen",
         recordingMode: "frame",
         recordingArea: { "7": { x: 0, y: 0, width: 1280, height: 720, ratio: "16:9" } },
       }),
     };
     renderAt(undefined);
-    // Spec decision 13: the heading names where the take lands, in place of "Ready to record".
-    // NIW2-626: the page names itself once, so no "RECORD" eyebrow repeats the rail's label.
-    expect(
-      await screen.findByRole("heading", { name: "Record to Default workspace" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("RECORD")).toBeNull();
-    expect(screen.queryByText("Ready to record")).toBeNull();
-    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    expect(await screen.findByTestId("frame-caption")).toHaveTextContent("16:9 · 1280 × 720");
-    expect(screen.getByRole("button", { name: /^Frame/ })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText("Sound & camera")).toBeInTheDocument();
-    // No source card: what to record is picked in the selector.
-    expect(screen.queryByText("CHOOSE A SOURCE")).toBeNull();
+    expect(await screen.findByText("Last used · Screen")).toBeInTheDocument();
+    expect(screen.getByText("Last used · Frame · 16:9")).toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: /Start recording/ }));
-    fireEvent.click(screen.getByRole("button", { name: /^Screen/ }));
-    expect(requestRecordSelector.mock.calls).toEqual([[undefined], ["screen"]]);
+  it("opens the selector from the cards, in the last used screenshot mode and the last recording mode", async () => {
+    const requestCaptureScreenshot = vi.fn();
+    const requestRecordSelector = vi.fn();
+    const settings = await realApi.getSettings();
+    window.electronAPI = {
+      ...realApi,
+      requestCaptureScreenshot,
+      requestRecordSelector,
+      getSettings: async () => ({ ...settings, screenshotMode: "screen" }),
+    };
+    renderAt(undefined);
+    await screen.findByText("Last used · Screen");
+    fireEvent.click(screen.getByRole("button", { name: /^Screenshot/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Recording/ }));
+    expect(requestCaptureScreenshot.mock.calls).toEqual([["screen"]]);
+    // No mode: main opens the selector in the last used one.
+    expect(requestRecordSelector.mock.calls).toEqual([[]]);
     // A click never starts a take by itself: main opens the selector first.
     expect(startRecording).not.toHaveBeenCalled();
+  });
+
+  it("ends with the shortcuts line and the app version", async () => {
+    renderAt(undefined);
+    const footer = await screen.findByText("V1.0.0");
+    const line = footer.parentElement!;
+    expect(line).toHaveTextContent("⇧⌘1 Capture");
+    expect(line).toHaveTextContent("⇧⌘2 Record");
+    expect(line).toHaveTextContent("⌃⌘X Instant");
+    expect(line).toHaveTextContent("⌃⌘O Show app");
   });
 
   it("Switch beside the heading opens the workspace list, with Add workspace when there is one", async () => {
@@ -296,7 +346,8 @@ describe("RecordPage idle layout (design Kaipu Record Modes)", () => {
   it("keeps the recording layout while a take runs", () => {
     setupState.isRecording = true;
     renderAt(undefined);
-    expect(screen.queryByRole("button", { name: /Start recording/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Screenshot/ })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Capture" })).toBeNull();
     expect(screen.getByRole("button", { name: /Stop recording/ })).toBeInTheDocument();
   });
 });

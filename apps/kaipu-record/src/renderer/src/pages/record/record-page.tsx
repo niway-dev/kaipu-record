@@ -5,12 +5,9 @@ import { useRecordingSetup } from "@renderer/features/recording/hooks/use-record
 import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
 import { useRecordingActivity } from "@renderer/features/recording/hooks/use-recording-activity";
 import { useSourceSelection } from "@renderer/features/recording/hooks/use-source-selection";
-import { useRecordingSettings } from "@renderer/features/recording/hooks/use-recording-settings";
-import { useRecordingMode } from "@renderer/features/recording/hooks/use-recording-mode";
 import { usePermissions } from "@renderer/features/permissions";
 import { SourceCard } from "@renderer/features/recording/components/source-card";
 import { RecordingToggles } from "@renderer/features/recording/components/recording-toggles";
-import { RecordModeButtons } from "@renderer/features/recording/components/record-mode-buttons";
 import { RecordingIndicator } from "@renderer/features/recording/components/recording-indicator";
 import { CountdownOverlay } from "@renderer/features/recording/components/countdown-overlay";
 import { ScreenSourceSelector } from "@renderer/features/recording/components/screen-source-selector";
@@ -30,7 +27,8 @@ import {
 } from "@renderer/features/audio-settings";
 import { exclusive } from "@renderer/features/settings-controls/use-settings-disclosure";
 import { useTranslations } from "@kaipu/i18n";
-import type { CaptureMode } from "@shared/types/screenshot-capture";
+import { CaptureEntries, useCaptureEntryActions } from "@renderer/features/capture-entries";
+import { useAppVersion } from "@renderer/shell/use-app-version";
 import { ReconcileBanner } from "@renderer/features/library/reconcile/reconcile-banner";
 import { useOptionalWorkspaces } from "@renderer/features/workspaces/workspaces-context";
 import { WorkspaceNotConnectedNotice } from "@renderer/features/workspaces/not-connected-notice";
@@ -59,8 +57,8 @@ export function RecordPage(): React.JSX.Element {
   const setup = useRecordingSetup();
   // One audio store for the Mic and Audio tiles: each write sends the whole `audio` object.
   const audioStore = useAudioSettings();
-  const { area } = useRecordingSettings();
-  const recordingMode = useRecordingMode(area);
+  const entries = useCaptureEntryActions();
+  const version = useAppVersion();
   const { sources, isLoading: isLoadingSources, error: sourcesError } = useSourceSelection(setup);
   const {
     status: permissionStatus,
@@ -127,8 +125,6 @@ export function RecordPage(): React.JSX.Element {
   // The gap between the countdown ending and the window handing off to the bar:
   // streams are acquiring, isRecording is still false. Keep the overlay up.
   const isStarting = setup.recordingStatus === "starting";
-
-  const openSelector = (mode?: CaptureMode): void => window.electronAPI.requestRecordSelector(mode);
 
   // Anything but idle is busy (countdown, acquiring, recording, saving): the Mic and Camera
   // settings lock their device lists and the pre-take meter lets go of the device. Same
@@ -264,15 +260,25 @@ export function RecordPage(): React.JSX.Element {
   );
 
   if (!isRecording) {
-    // Design "Kaipu Record Modes": what to record is picked in the selector (the capture
-    // overlay), so the page is Start, the last used mode, and the sound and camera inputs.
+    // Design "Kaipu Capture Home": two entries that open the selector (the capture widget),
+    // then what is set once: the sound and camera inputs. What to capture is picked in the
+    // selector, so the page has no Start button and no source card.
+    const footerShortcuts = shortcuts
+      ? [
+          [shortcuts.captureScreenshot, t("footerCapture")],
+          [shortcuts.startRecording, t("footerRecord")],
+          [shortcuts.captureInstant, t("footerInstant")],
+          [shortcuts.bringToFront, t("footerShowApp")],
+        ].filter(([keys]) => keys)
+      : [];
     return (
       <div {...uiArea("record.page")} className={styles.idlePage}>
         <WorkspaceNotConnectedNotice ui={uiArea("record.workspaceNotice")} />
         <div className={styles.idleHeading}>
-          <h1 className={styles.idleTitle}>
-            {t("recordingTo", { name: workspaces?.active?.name ?? "…" })}
-          </h1>
+          <h1 className={styles.idleTitle}>{t("capturePageTitle")}</h1>
+          <span className={styles.idleWorkspace}>
+            {t("capturePageWorkspace", { name: workspaces?.active?.name ?? "…" })}
+          </span>
           {workspaces?.active && (
             <button
               type="button"
@@ -283,26 +289,41 @@ export function RecordPage(): React.JSX.Element {
             </button>
           )}
         </div>
-        <p className={styles.subtitle}>{t("subtitle")}</p>
         <ReconcileBanner ui={uiArea("record.reconcileBanner")} />
 
-        <RecordModeButtons
-          variant="page"
-          mode={recordingMode.mode}
-          area={recordingMode.area}
-          shortcut={shortcuts?.startRecording}
-          startUi={uiArea("record.startButton")}
-          modesUi={uiArea("record.modePicker")}
-          onStart={() => openSelector()}
-          onPick={openSelector}
-        >
-          <div className={styles.cardDivider} />
-          <p className={styles.sectionLabel}>{t("soundAndCamera")}</p>
+        <CaptureEntries
+          variant="card"
+          shortcuts={shortcuts}
+          screenshotLastUsed={entries.screenshotLastUsed}
+          recordingLastUsed={entries.recordingLastUsed}
+          onScreenshot={entries.openScreenshot}
+          onRecording={entries.openRecording}
+          screenshotUi={uiArea("record.screenshotCard")}
+          recordingUi={uiArea("record.recordingCard")}
+          instantUi={uiArea("record.instantLine")}
+        />
+
+        <section {...uiArea("record.setup")} className={styles.setup}>
+          <div className={styles.setupHeading}>
+            <h2 className={styles.setupTitle}>{t("setupTitle")}</h2>
+            <p className={styles.setupHint}>{t("setupHint")}</p>
+          </div>
           <div className={styles.lockable}>
             {toggles}
             {inputNotices}
           </div>
-        </RecordModeButtons>
+        </section>
+
+        <footer {...uiArea("record.footer")} className={styles.footer}>
+          {footerShortcuts.map(([keys, label]) => (
+            <span key={label} className={styles.footerItem}>
+              {keys} {label}
+            </span>
+          ))}
+          {version && (
+            <span className={styles.footerVersion}>{t("footerVersion", { version })}</span>
+          )}
+        </footer>
 
         {pickerAndCountdown}
       </div>

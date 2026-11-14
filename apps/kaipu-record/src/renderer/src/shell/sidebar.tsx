@@ -1,16 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Link, matchPath, useLocation } from "react-router-dom";
-import {
-  Video,
-  Library,
-  Camera,
-  Keyboard,
-  Settings,
-  User,
-  Cloud,
-  PenLine,
-  Upload,
-} from "lucide-react";
+import { Focus, Library, Keyboard, Settings, User, Cloud, PenLine, Upload } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { Rail, type RailItem } from "@kaipu/ui";
 import { ROUTES } from "@shared/routes";
@@ -26,16 +16,8 @@ import { uiArea } from "@renderer/lib/ui-area";
 
 interface NavItem {
   to: string;
-  labelKey:
-    | "record"
-    | "screenshots"
-    | "editor"
-    | "export"
-    | "library"
-    | "shortcuts"
-    | "settings"
-    | "cloud";
-  Icon: typeof Video;
+  labelKey: "capture" | "editor" | "export" | "library" | "shortcuts" | "settings" | "cloud";
+  Icon: typeof Focus;
   end?: boolean;
 }
 
@@ -43,10 +25,10 @@ interface LinkItem extends RailItem {
   to: string;
 }
 
-// Record is the index route (`/`), so it uses `end` to avoid matching everything.
+// Capture is the index route (`/`), so it uses `end` to avoid matching everything.
+// Record and Screenshot used to be two entries; both live on this page now.
 const NAV: NavItem[] = [
-  { to: ROUTES.record, labelKey: "record", Icon: Video, end: true },
-  { to: ROUTES.screenshots, labelKey: "screenshots", Icon: Camera },
+  { to: ROUTES.record, labelKey: "capture", Icon: Focus, end: true },
   // Active on every /editor/* URL (not `end`), so an open item keeps it lit.
   { to: ROUTES.editor, labelKey: "editor", Icon: PenLine },
   // Active on /export and /export/:assetId. Export also re-encodes videos Kaipu did not

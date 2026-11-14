@@ -44,7 +44,6 @@ function renderAt(path: string) {
   const router = createMemoryRouter(
     [
       { path: "/", element: <Sidebar /> },
-      { path: ROUTES.screenshots, element: <Sidebar /> },
       { path: ROUTES.library, element: <Sidebar /> },
       { path: ROUTES.libraryDetail, element: <Sidebar /> },
       { path: ROUTES.exportNew, element: <Sidebar /> },
@@ -66,12 +65,11 @@ afterEach(() => {
 });
 
 describe("Sidebar items", () => {
-  it("lists Export between Editor and Library", () => {
+  it("lists Capture first and Export between Editor and Library", () => {
     renderAt("/");
     const labels = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(labels.slice(0, 8)).toEqual([
-      "Record",
-      "Screenshot",
+    expect(labels.slice(0, 7)).toEqual([
+      "Capture",
       "Editor",
       "Export",
       "Library",
@@ -97,8 +95,7 @@ describe("Sidebar active item", () => {
   // The rail computes `active` itself now (no NavLink), so every route must
   // light exactly the one item it belongs to.
   it.each([
-    ["/", "Record"],
-    ["/screenshots", "Screenshot"],
+    ["/", "Capture"],
     ["/editor", "Editor"],
     ["/editor/video/asset-1", "Editor"],
     ["/editor/image/asset-1", "Editor"],
@@ -166,7 +163,7 @@ describe("Sidebar Library badge (copies being made or ready)", () => {
     expect(getReadyCopies().copies[0]).toMatchObject({ card: true });
     // The Library page had the card on screen.
     act(() => noteReadyCardsShown(["copy-1"]));
-    await act(() => router.navigate(ROUTES.screenshots));
+    await act(() => router.navigate(ROUTES.shortcuts));
     expect(getReadyCopies().copies).toEqual([
       { assetId: "copy-1", announced: true, card: false, shown: true },
     ]);
@@ -205,7 +202,9 @@ describe("Sidebar is icon-only (NIW2-626)", () => {
     renderAt("/library");
     const library = screen.getByRole("link", { name: "Library" });
     expect(library).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "Record" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Capture" })).not.toHaveAttribute("aria-current");
+    expect(screen.queryByRole("link", { name: "Record" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Screenshot" })).toBeNull();
   });
 
   it("shows the label in a tooltip on keyboard focus and on hover", () => {
