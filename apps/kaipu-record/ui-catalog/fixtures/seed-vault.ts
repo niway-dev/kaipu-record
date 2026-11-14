@@ -32,6 +32,8 @@ export const ASSETS = {
   weeklySync: "c0a1a10c-0000-4000-8000-000000000006",
   cursorDemo: "c0a1a10c-0000-4000-8000-000000000007",
   lightCopy: "c0a1a10c-0000-4000-8000-000000000008",
+  /** Seeded only where `floatingImages` is on: a saved edit with two overlapping floating images. */
+  floatingDemo: "c0a1a10c-0000-4000-8000-000000000009",
   settingsShot: "c0a1a10c-0000-4000-8000-000000000101",
   dashboardShot: "c0a1a10c-0000-4000-8000-000000000102",
   dialogShot: "c0a1a10c-0000-4000-8000-000000000103",
@@ -155,6 +157,8 @@ interface RecordingFixture {
   webcam?: boolean;
   /** A native cursor track: what a take recorded with `native-cursor-capture` on carries. */
   cursorTrack?: boolean;
+  /** A saved edit with two overlapping floating images (ADR 0057): `FLOATING_IMAGES`. */
+  floating?: boolean;
   /** An export: the asset it was made from. */
   derivedFrom?: string;
   /** An export: the preset it was made with (the sidecar's `exportPreset`). */
@@ -219,6 +223,79 @@ const CURSOR_RECORDING: RecordingFixture = {
   cursorTrack: true,
 };
 
+/** Seeded only where `floatingImages` is on: a recording whose saved edit floats two images. */
+const FLOATING_RECORDING: RecordingFixture = {
+  stem: "Floating images",
+  assetId: ASSETS.floatingDemo,
+  title: "Floating images",
+  cut: 9,
+  ago: 20 * 60_000,
+  floating: true,
+};
+
+/**
+ * The two images of `FLOATING_RECORDING`, overlapping for their first 5 s: `back` is a wide
+ * image filling the picture from 0 s for 6 s; `front` is a square one in the bottom-right corner
+ * from 0 s for 5 s. Both start at once, with no fade in, so the very first frame shows both. Asset ids are fixed so the saved scene can refer to them.
+ */
+export const FLOATING_IMAGES = {
+  back: {
+    id: "float-back",
+    assetId: "c0a1a10c-0000-4000-8000-000000000401",
+    width: 1600,
+    height: 900,
+  },
+  front: {
+    id: "float-front",
+    assetId: "c0a1a10c-0000-4000-8000-000000000402",
+    width: 800,
+    height: 800,
+  },
+} as const;
+
+/** The saved scene of `FLOATING_RECORDING`: one clip, two floating images, nothing else. */
+export function floatingScene(seconds: number): unknown {
+  const { back, front } = FLOATING_IMAGES;
+  return {
+    items: [{ id: "clip-1", kind: "clip", sourceStart: 0, sourceEnd: seconds }],
+    overlays: [],
+    zoomSegments: [],
+    redactions: [],
+    zoomSensitivity: 55,
+    audioMuted: false,
+    mutedRanges: [],
+    webcam: null,
+    media: [
+      {
+        id: back.id,
+        kind: "image",
+        assetId: back.assetId,
+        naturalWidth: back.width,
+        naturalHeight: back.height,
+        anchor: { kind: "source", time: 0 },
+        duration: 6,
+        box: { x: 0.5, y: 0.5, width: 1 },
+        z: 0,
+        fadeInMs: 0,
+        fadeOutMs: 200,
+      },
+      {
+        id: front.id,
+        kind: "image",
+        assetId: front.assetId,
+        naturalWidth: front.width,
+        naturalHeight: front.height,
+        anchor: { kind: "source", time: 0 },
+        duration: 5,
+        box: { x: 0.78, y: 0.7, width: 0.3 },
+        z: 1,
+        fadeInMs: 0,
+        fadeOutMs: 200,
+      },
+    ],
+  };
+}
+
 const SCREENSHOTS = [
   {
     stem: "Settings page",
@@ -254,6 +331,8 @@ export interface SeedOptions {
   content: "demo" | "empty" | "missing";
   /** Add the native-cursor recording (profiles with the cursor flag on). */
   cursorRecording?: boolean;
+  /** Add the recording with two overlapping floating images (profiles with `timeline-levels`). */
+  floatingImages?: boolean;
   /** Add the screenshot that draws real text (profiles that exercise text recognition). */
   textScreenshot?: boolean;
   /** Add the two screenshots the Colors panel states open (profiles that exercise it). */
@@ -440,6 +519,48 @@ async function seedRecording(
   if (item.cursorTrack) {
     await writeJson(path.join(meta, `${item.stem}.cursor.json`), cursorTrackJson(item.cut));
   }
+  if (item.floating) {
+    const { back, front } = FLOATING_IMAGES;
+    const assets = path.join(meta, `${item.stem}.assets`);
+    await mkdir(assets, { recursive: true });
+    await writeFile(
+      path.join(assets, `${back.assetId}.png`),
+      paintPng(
+        back.width,
+        back.height,
+        [40, 90, 160],
+        [
+          [0, 0, back.width, 120, [30, 60, 110]],
+          [160, 300, 1280, 90, [90, 140, 210]],
+          [160, 450, 900, 90, [90, 140, 210]],
+        ],
+      ),
+    );
+    await writeFile(
+      path.join(assets, `${front.assetId}.png`),
+      paintPng(
+        front.width,
+        front.height,
+        [220, 120, 40],
+        [
+          [80, 80, 640, 120, [250, 190, 120]],
+          [80, 300, 640, 420, [180, 90, 20]],
+        ],
+      ),
+    );
+    await writeJson(path.join(meta, `${item.stem}.edit.json`), {
+      version: 1,
+      scene: floatingScene(item.cut),
+    });
+    const source = await stat(media);
+    await writeJson(path.join(meta, `${item.stem}.edit.meta.json`), {
+      sourceSizeBytes: source.size,
+      sourceMtimeMs: source.mtimeMs,
+      assetIds: [back.assetId, front.assetId],
+      savedAt: createdAt + HOUR,
+      exportedSavedAt: null,
+    });
+  }
   if (item.edited) {
     const savedAt = createdAt + HOUR;
     await writeJson(path.join(meta, `${item.stem}.edit.json`), {
@@ -541,7 +662,11 @@ export async function seedCatalogVault(vaultDir: string, options: SeedOptions): 
     })),
   });
 
-  const recordings = options.cursorRecording ? [CURSOR_RECORDING, ...RECORDINGS] : RECORDINGS;
+  const recordings = [
+    ...(options.floatingImages ? [FLOATING_RECORDING] : []),
+    ...(options.cursorRecording ? [CURSOR_RECORDING] : []),
+    ...RECORDINGS,
+  ];
   for (const item of recordings) await seedRecording(vaultDir, meta, fixtures, now, item);
 
   for (const shot of SCREENSHOTS) {

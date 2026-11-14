@@ -77,7 +77,7 @@ async function buildStartMessage(
   webcam: WebcamTrackMessage | null,
 ): Promise<{ message: GifStartMessage; transfer: Transferable[]; plan: ExportPlan }> {
   const plan = sliceExportPlan(buildExportPlan(args.scene), args.range.start, args.range.end);
-  const { overlays, slides, camera, transfer } = await prepareWorkerInputs(args, plan);
+  const { overlays, slides, mediaImages, camera, transfer } = await prepareWorkerInputs(args, plan);
   const message: GifStartMessage = {
     type: "start",
     mode,
@@ -85,6 +85,7 @@ async function buildStartMessage(
     plan,
     overlays,
     slides,
+    mediaImages,
     source: { width: args.videoWidth, height: args.videoHeight },
     output: gifOutputSize(args.videoWidth, args.videoHeight, args.width),
     fps: args.fps,

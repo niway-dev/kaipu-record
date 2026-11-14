@@ -9,6 +9,7 @@ import type { SlideAssetStore } from "../slide-assets";
 import type { VideoScene } from "../scene";
 import type { CameraPath } from "../zoom/camera-path";
 import { buildExportPlan } from "./export-plan";
+import { floatingAssetIds } from "./floating-frame";
 import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
 import { rasterizeOverlays } from "./overlay-raster";
 import {
@@ -344,7 +345,11 @@ export async function startVideoExport(
   const usedAssetIds = new Set(
     plan.segments.filter((s) => s.kind === "slide").map((s) => s.assetId),
   );
-  const slideAssets = args.slideAssets.entries().filter((asset) => usedAssetIds.has(asset.assetId));
+  const storedAssets = args.slideAssets.entries();
+  const slideAssets = storedAssets.filter((asset) => usedAssetIds.has(asset.assetId));
+  // Floating images (spec 2026-11-13) are used by no slide: their assets are taken the same way.
+  const mediaIds = floatingAssetIds(plan.floating);
+  const mediaAssets = storedAssets.filter((asset) => mediaIds.has(asset.assetId));
 
   // Main takes the export's vault lease before the source is read; refused while
   // "Check and fix files" runs (NIW2-561).
@@ -404,7 +409,19 @@ export async function startVideoExport(
       })),
     );
 
-    if (!active) return; // cancelled while the above was in flight
+    // Their own bitmaps: an asset used by a slide AND a floating item cannot ride twice in
+    // one transfer list.
+    const mediaImages = await Promise.all(
+      mediaAssets.map(async (asset) => ({
+        assetId: asset.assetId,
+        bitmap: await createImageBitmap(new Blob([asset.bytes], { type: asset.mimeType })),
+      })),
+    );
+
+    if (!active) {
+      for (const m of mediaImages) m.bitmap.close();
+      return; // cancelled while the above was in flight
+    }
 
     const id = `export-${crypto.randomUUID()}`;
     sessionId = id;
@@ -528,6 +545,7 @@ export async function startVideoExport(
       plan,
       overlays,
       slides,
+      mediaImages,
       output: { width: runTarget.width, height: runTarget.height },
       source: { width: args.videoWidth, height: args.videoHeight },
       target: runTarget,
@@ -538,6 +556,7 @@ export async function startVideoExport(
     runWorker.postMessage(startMessage, [
       ...overlays.map((o) => o.bitmap),
       ...slides.map((s) => s.bitmap),
+      ...mediaImages.map((m) => m.bitmap),
       ...(camera ? [camera.cx.buffer, camera.cy.buffer, camera.scale.buffer] : []),
     ]);
   };

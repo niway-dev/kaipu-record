@@ -62,7 +62,10 @@ export async function buildStillMessage(
   still: ReturnType<typeof planStill>;
 }> {
   const still = planStill(args.scene, args.playhead);
-  const { overlays, slides, camera, transfer } = await prepareWorkerInputs(args, still.plan);
+  const { overlays, slides, mediaImages, camera, transfer } = await prepareWorkerInputs(
+    args,
+    still.plan,
+  );
   const size = { width: args.videoWidth, height: args.videoHeight };
   const message: GifStartMessage = {
     type: "start",
@@ -72,6 +75,7 @@ export async function buildStillMessage(
     plan: still.plan,
     overlays,
     slides,
+    mediaImages,
     source: size,
     output: size,
     // Unused in still mode (no schedule); the field is required by the shared message.

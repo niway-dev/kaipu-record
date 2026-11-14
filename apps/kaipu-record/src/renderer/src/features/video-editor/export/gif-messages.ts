@@ -42,6 +42,8 @@ export interface GifStartMessage {
   /** Overlay bitmaps rasterized at SOURCE size, like the MP4 export. */
   overlays: Array<{ overlayId: string; bitmap: ImageBitmap }>;
   slides: Array<{ assetId: string; bitmap: ImageBitmap }>;
+  /** Floating-image bitmaps (`plan.floating`), separate from `slides`; absent: none. */
+  mediaImages?: Array<{ assetId: string; bitmap: ImageBitmap }>;
   /** Frames are composed at source size (identical geometry to the MP4)… */
   source: { width: number; height: number };
   /** …then downsampled once to the GIF size. */

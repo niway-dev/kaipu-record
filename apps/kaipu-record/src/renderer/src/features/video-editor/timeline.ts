@@ -3,7 +3,7 @@
  * Private copies of this mapping logic WILL drift and desync preview from export;
  * every consumer (preview, timeline UI, export) must import from this module.
  */
-import { newId, type TrackItem, type VideoOverlay } from "./scene";
+import { newId, type MediaAnchor, type TrackItem, type VideoOverlay } from "./scene";
 
 export const MIN_ITEM_DURATION = 0.1;
 
@@ -84,6 +84,47 @@ export function clipAtSource(layout: LayoutEntry[], sourceTime: number): LayoutE
 export function sourceToTimeline(layout: LayoutEntry[], sourceTime: number): number | null {
   const entry = clipAtSource(layout, sourceTime);
   return entry ? entry.timelineStart + (sourceTime - entry.sourceStart) : null;
+}
+
+/**
+ * The anchor of a floating item whose start is at timeline time `t` (clamped into the
+ * timeline): the footage under it for a clip, the slide and the offset into it for a slide.
+ * Null on an empty layout.
+ */
+export function anchorAt(layout: LayoutEntry[], t: number): MediaAnchor | null {
+  const entry = entryAt(layout, t);
+  if (!entry) return null;
+  const clamped = Math.max(0, Math.min(t, layoutDuration(layout)));
+  const offset = Math.max(0, Math.min(clamped - entry.timelineStart, itemSpan(entry)));
+  return entry.kind === "clip"
+    ? { kind: "source", time: entry.sourceStart + offset }
+    : { kind: "item", itemId: entry.itemId, offset };
+}
+
+/**
+ * The timeline time an anchor points at now, or null when what it was tied to is gone
+ * (footage deleted, slide removed). The inverse of `anchorAt` for any time before the end of the
+ * timeline (an anchor AT the end belongs to no footage: callers keep an item's start before it), and the only place an anchor
+ * becomes a time, so a trim, a split, a reorder or an insert before it moves the item with
+ * its footage instead of leaving it over another moment.
+ */
+export function resolveAnchor(layout: LayoutEntry[], anchor: MediaAnchor): number | null {
+  if (anchor.kind === "source") {
+    // Half-open: a clip's start is a source time that the clip before it may also END on (a
+    // split, then a reorder or a deleted half), and the clip that STARTS there owns it. A time
+    // that no clip contains is deleted footage, so the item goes with it.
+    const entry = layout.find(
+      (e) => e.kind === "clip" && anchor.time >= e.sourceStart && anchor.time < e.sourceEnd,
+    );
+    return entry ? entry.timelineStart + (anchor.time - entry.sourceStart) : null;
+  }
+  const entry = layout.find((e) => e.kind === "slide" && e.itemId === anchor.itemId);
+  if (!entry) return null;
+  return entry.timelineStart + Math.max(0, Math.min(anchor.offset, itemSpan(entry)));
+}
+
+function itemSpan(entry: LayoutEntry): number {
+  return entry.timelineEnd - entry.timelineStart;
 }
 
 /**

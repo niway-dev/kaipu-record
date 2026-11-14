@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TrackItem, VideoOverlay } from "./scene";
 import {
+  anchorAt,
   boundaryIndexAt,
   clampOverlays,
   clipAtSource,
@@ -9,6 +10,7 @@ import {
   layoutDuration,
   MIN_ITEM_DURATION,
   removeItem,
+  resolveAnchor,
   setSlideDuration,
   skipTarget,
   SKIP_SECONDS,
@@ -294,5 +296,72 @@ describe("skipTarget", () => {
   it("returns the playhead unchanged on an empty timeline", () => {
     expect(skipTarget([], 0, 1, false)).toBe(0);
     expect(skipTarget([], 0, -1, true)).toBe(0);
+  });
+});
+
+describe("floating-item anchors", () => {
+  // 0–10 s of the recording, a 4 s slide, then 20–30 s of the recording (10–20 s deleted).
+  const items: TrackItem[] = [clip("a", 0, 10), slide("s", 4), clip("b", 20, 30)];
+  const layout = toLayout(items);
+
+  it("anchors a time inside a clip to the footage under it", () => {
+    expect(anchorAt(layout, 3)).toEqual({ kind: "source", time: 3 });
+    expect(anchorAt(layout, 16)).toEqual({ kind: "source", time: 22 });
+  });
+
+  it("anchors a time inside a slide to that slide and the offset into it", () => {
+    expect(anchorAt(layout, 12)).toEqual({ kind: "item", itemId: "s", offset: 2 });
+  });
+
+  it("resolves a source anchor to the timeline time of that footage", () => {
+    expect(resolveAnchor(layout, { kind: "source", time: 22 })).toBe(16);
+  });
+
+  it("resolves an item anchor to the slide start plus its offset, kept inside the slide", () => {
+    expect(resolveAnchor(layout, { kind: "item", itemId: "s", offset: 2 })).toBe(12);
+    expect(resolveAnchor(layout, { kind: "item", itemId: "s", offset: 99 })).toBe(14);
+  });
+
+  it("resolves to null when the footage or the slide is gone", () => {
+    expect(resolveAnchor(layout, { kind: "source", time: 15 })).toBeNull();
+    expect(resolveAnchor(layout, { kind: "item", itemId: "gone", offset: 0 })).toBeNull();
+    expect(resolveAnchor(layout, { kind: "item", itemId: "a", offset: 0 })).toBeNull();
+  });
+
+  it("keeps the same second of the recording after an insert before it", () => {
+    const anchor = anchorAt(layout, 3);
+    const inserted = toLayout([slide("intro", 3), ...items]);
+    expect(resolveAnchor(inserted, anchor!)).toBe(6);
+  });
+
+  it("resolves the start of a clip to that clip when an earlier clip ends on the same source time", () => {
+    // A split at 5 s with a 3 s slide put between the halves: source 5 is the END of the
+    // first clip (timeline 5) and the START of the second (timeline 8).
+    const apart = toLayout([clip("a", 0, 5), slide("s", 3), clip("b", 5, 10)]);
+    expect(resolveAnchor(apart, { kind: "source", time: 5 })).toBe(8);
+    expect(resolveAnchor(apart, { kind: "source", time: 2 })).toBe(2);
+    expect(resolveAnchor(apart, { kind: "source", time: 7 })).toBe(10);
+  });
+
+  it("an anchor on the end of a clip belongs to no clip: the footage under it is gone", () => {
+    // Source 10 is where clip a ends, before the deleted 10-20 s gap.
+    expect(resolveAnchor(layout, { kind: "source", time: 10 })).toBeNull();
+    expect(resolveAnchor(layout, { kind: "source", time: 30 })).toBeNull();
+  });
+
+  it("deleting the footage that starts at the anchor drops it, even when the clip before ends there", () => {
+    // Clips [0,5) [5,10) [20,30); the image sits at source 5, then the middle clip is deleted.
+    const before = toLayout([clip("a", 0, 5), clip("m", 5, 10), clip("b", 20, 30)]);
+    const anchor = { kind: "source" as const, time: 5 };
+    expect(resolveAnchor(before, anchor)).toBe(5);
+    expect(resolveAnchor(toLayout([clip("a", 0, 5), clip("b", 20, 30)]), anchor)).toBeNull();
+  });
+
+  it("clamps a time past the end onto the last entry", () => {
+    expect(anchorAt(layout, 999)).toEqual({ kind: "source", time: 30 });
+  });
+
+  it("is null on an empty layout", () => {
+    expect(anchorAt([], 1)).toBeNull();
   });
 });

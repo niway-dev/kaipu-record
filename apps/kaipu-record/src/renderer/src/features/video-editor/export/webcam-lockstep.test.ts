@@ -388,3 +388,44 @@ describe("fillWebcamGap durations (C1: the last fill reaches the gap's end)", ()
     expectContiguous(frames, 10);
   });
 });
+
+describe("fillWebcamGap with a floating image on screen (live)", () => {
+  const run = async (opts: { live: (t: number) => boolean; refuse?: (t: number) => boolean }) => {
+    const emitted: number[] = [];
+    const state = await fillWebcamGap({
+      state: { from: 0, face: null },
+      nextFrame: 1,
+      segmentEnd: 10,
+      fps: 10,
+      visible: () => false,
+      frameAt: () => Promise.resolve(null),
+      live: opts.live,
+      emit: async (t) => {
+        if (opts.refuse?.(t)) return false;
+        emitted.push(Math.round(t * 10) / 10);
+        return true;
+      },
+    });
+    return { emitted, state };
+  };
+
+  it("fills at every time the image is on screen and once more to remove it, without a webcam", async () => {
+    const { emitted, state } = await run({ live: (t) => t >= 0.19 && t < 0.49 });
+    expect(emitted).toEqual([0.2, 0.3, 0.4, 0.5]);
+    expect(state.live).toBe(false);
+  });
+
+  it("adds nothing when no image is ever on screen", async () => {
+    const { emitted } = await run({ live: () => false });
+    expect(emitted).toEqual([]);
+  });
+
+  it("retries the removal at the next fill when the emit that should have removed the image is refused", async () => {
+    const { emitted, state } = await run({
+      live: (t) => t >= 0.19 && t < 0.49,
+      refuse: (t) => Math.abs(t - 0.5) < 1e-6,
+    });
+    expect(emitted).toEqual([0.2, 0.3, 0.4, 0.6]);
+    expect(state.live).toBe(false);
+  });
+});

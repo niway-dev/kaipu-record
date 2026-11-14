@@ -35,6 +35,40 @@ export interface SlideItem {
 
 export type TrackItem = ClipItem | SlideItem;
 
+/**
+ * What a floating item is tied to. A join or an insert shifts the recording, so a timeline
+ * time would end up over another moment: the item follows the footage under its start
+ * (ADR 0057). `resolveAnchor` in timeline.ts turns it back into a timeline time.
+ */
+export type MediaAnchor =
+  | { kind: "source"; time: number } // seconds into the recording, inside a clip
+  | { kind: "item"; itemId: string; offset: number }; // seconds into a slide of the sequence
+
+/** Centre and width of a floating item, as 0–1 of the picture (the webcam layer's space). */
+export interface MediaBox {
+  x: number;
+  y: number;
+  width: number;
+}
+
+/** A floating image over the Clips sequence: a box in the frame, a stacking order, fades. */
+export interface ImageMediaItem {
+  id: string;
+  kind: "image";
+  /** Stored exactly as a slide's asset is, in the same asset store. */
+  assetId: string;
+  naturalWidth: number;
+  naturalHeight: number;
+  anchor: MediaAnchor;
+  /** Timeline seconds; the end is clamped to the end of the timeline when drawn. */
+  duration: number;
+  box: MediaBox;
+  /** Unique within the scene; higher is in front. */
+  z: number;
+  fadeInMs: number;
+  fadeOutMs: number;
+}
+
 interface OverlayBase {
   id: string;
   /** Visibility window in timeline seconds. */
@@ -118,6 +152,11 @@ export interface VideoScene {
    * (a scene or a session from before backgrounds) = `DEFAULT_BACKGROUND`, today's picture.
    */
   background?: VideoBackground;
+  /**
+   * Floating images above the Clips sequence (ADR 0057). Absent = none, which is every scene
+   * saved before this field: it opens unchanged.
+   */
+  media?: ImageMediaItem[];
 }
 
 export function newId(): string {

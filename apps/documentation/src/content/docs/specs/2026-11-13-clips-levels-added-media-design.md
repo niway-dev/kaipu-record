@@ -5,10 +5,11 @@ description: The Clips section of the video editor becomes a section with levels
 
 # Clips levels: added images and videos on the timeline — design
 
-**Status: 🔵 Proposed · approved by the owner 2026-11-14.** Owner decisions taken in chat on
+**Status: 🟢 Stage 1 ready to validate · design approved by the owner 2026-11-14** (floating
+images, behind the release flag `timeline-levels`, NIW2-771). Stages 2 and 3 are 🔵 Proposed and
+not started. Owner decisions taken in chat on
 2026-11-13 over a sketch of four timelines; the owner approved the design on 2026-11-14 with the
-defaults of open questions 1 and 4, and Add to timeline hidden in 0.19.0. Nothing in this design is
-implemented; stage 1 is NIW2-771 and the flag NIW2-772. Ticket:
+defaults of open questions 1 and 4, and Add to timeline hidden in 0.19.0 (NIW2-772). Ticket:
 [NIW2-770](https://linear.app/niway/issue/NIW2-770/video-editor-clips-becomes-a-section-with-levels-added-images-and).
 ADR: [0057](/architecture/decisions/0057-clips-is-one-section-with-levels-a-sequence-below-floating-items-above/)
 (new; supersedes part of [0040](/architecture/decisions/0040-typed-tracks-on-demand-and-stackable-media-lanes/)).
@@ -189,6 +190,12 @@ background of ADR 0051 around all of it. Over a slide of the sequence the order 
 `slide → annotations → framing → floating items`. In the preview the items are layers between the
 picture and the webcam layer; in the export they are drawn in `compose-output-frame.ts` before the
 webcam.
+
+With a fixed-canvas framing preset (Vertical, Square) the export canvas is not the preview's
+picture: the preview never shows the preset, so a box is a share of the OUTPUT frame there, bars
+included, the way the webcam is placed (ADR 0038). The image keeps its own aspect, so a `Full`
+image still spans the output's width. A composer test pins this; it has not been compared against
+a preview, because the preview cannot show the preset.
 
 ## 3. The stages
 

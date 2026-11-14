@@ -9,6 +9,7 @@ import type { VideoScene } from "../scene";
 import type { CameraPath } from "../zoom/camera-path";
 import type { CameraPathMessage } from "./export-messages";
 import type { ExportPlan } from "./export-plan";
+import { floatingAssetIds } from "./floating-frame";
 import { rasterizeOverlays } from "./overlay-raster";
 
 export interface JobInputArgs {
@@ -25,6 +26,8 @@ export interface JobInputArgs {
 export interface WorkerInputs {
   overlays: Array<{ overlayId: string; bitmap: ImageBitmap }>;
   slides: Array<{ assetId: string; bitmap: ImageBitmap }>;
+  /** The floating images' bitmaps (decoded apart from `slides`); empty without floating items. */
+  mediaImages: Array<{ assetId: string; bitmap: ImageBitmap }>;
   camera: CameraPathMessage | null;
   transfer: Transferable[];
 }
@@ -56,6 +59,16 @@ export async function prepareWorkerInputs(
         bitmap: await createImageBitmap(new Blob([asset.bytes], { type: asset.mimeType })),
       })),
   );
+  const mediaIds = floatingAssetIds(plan.floating);
+  const mediaImages = await Promise.all(
+    args.slideAssets
+      .entries()
+      .filter((asset) => mediaIds.has(asset.assetId))
+      .map(async (asset) => ({
+        assetId: asset.assetId,
+        bitmap: await createImageBitmap(new Blob([asset.bytes], { type: asset.mimeType })),
+      })),
+  );
   const camera =
     plan.hasZoom && args.cameraPath
       ? {
@@ -68,7 +81,8 @@ export async function prepareWorkerInputs(
   const transfer: Transferable[] = [
     ...overlays.map((o) => o.bitmap),
     ...slides.map((s) => s.bitmap),
+    ...mediaImages.map((m) => m.bitmap),
     ...(camera ? [camera.cx.buffer, camera.cy.buffer, camera.scale.buffer] : []),
   ];
-  return { overlays, slides, camera, transfer };
+  return { overlays, slides, mediaImages, camera, transfer };
 }

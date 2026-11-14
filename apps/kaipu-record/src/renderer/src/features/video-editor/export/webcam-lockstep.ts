@@ -129,6 +129,8 @@ export function webcamFillTimes(
 export interface WebcamFillState<T> {
   from: number;
   face: T | null;
+  /** Whether a floating image was drawn on the last frame added (see `live` below). */
+  live?: boolean;
 }
 
 /**
@@ -151,15 +153,26 @@ export async function fillWebcamGap<T>(opts: {
   fps: number;
   visible(sourceTime: number): boolean;
   frameAt(sourceTime: number): Promise<T | null>;
+  /**
+   * A floating image is on screen at `sourceTime`: its fades change every frame, so a fill is
+   * added at each time it is, and once more on the first time it is not (to remove it) —
+   * with or without a webcam.
+   */
+  live?(sourceTime: number): boolean;
   emit(sourceTime: number, face: T | null, duration: number): Promise<boolean>;
 }): Promise<WebcamFillState<T>> {
   let { from, face } = opts.state;
+  let wasLive = opts.state.live ?? false;
   const gapEnd = Math.min(opts.nextFrame, opts.segmentEnd);
   for (const t of webcamFillTimes(from, opts.nextFrame, opts.segmentEnd, opts.fps)) {
     from = t;
     const due = opts.visible(t) ? await opts.frameAt(t) : null;
-    if (due === face) continue;
-    if (await opts.emit(t, due, gapEnd - t)) face = due;
+    const isLive = opts.live?.(t) ?? false;
+    if (due === face && !isLive && !wasLive) continue;
+    if (await opts.emit(t, due, gapEnd - t)) {
+      face = due;
+      wasLive = isLive;
+    }
   }
-  return { from, face };
+  return { from, face, live: wasLive };
 }

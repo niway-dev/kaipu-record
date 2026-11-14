@@ -43,6 +43,11 @@ export interface ExportStartMessage {
   overlays: Array<{ overlayId: string; start: number; end: number; bitmap: ImageBitmap }>;
   /** Slide image bitmaps keyed by assetId. */
   slides: Array<{ assetId: string; bitmap: ImageBitmap }>;
+  /**
+   * Bitmaps of the floating images (`plan.floating`) keyed by assetId, decoded SEPARATELY from
+   * `slides` (one bitmap cannot be in the transfer list twice). Absent: no floating images.
+   */
+  mediaImages?: Array<{ assetId: string; bitmap: ImageBitmap }>;
   /** Pixel dimensions of the OUTPUT video (the preset's target size; NIW2-218). */
   output: { width: number; height: number };
   /** Native pixel dimensions of the source video (overlays are rasterized at this size). */

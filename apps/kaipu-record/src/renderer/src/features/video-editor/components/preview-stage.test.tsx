@@ -203,3 +203,25 @@ describe("PreviewStage — background (NIW2-668)", () => {
     expect(container.querySelector("video")).toBe(video);
   });
 });
+
+describe("PreviewStage — media slot (NIW2-771)", () => {
+  it("draws floating images in the picture, outside the zoomed content layer and before the webcam", () => {
+    const { getByTestId } = render(
+      <PreviewStage
+        playback={stubPlayback()}
+        mediaUrl="blob:x"
+        cursor={<i data-testid="cursor" />}
+        media={<i data-testid="media" />}
+        webcam={<i data-testid="webcam" />}
+      />,
+    );
+    const media = getByTestId("media");
+    expect(getByTestId("preview-content").contains(media)).toBe(false);
+    expect(getByTestId("preview-picture").contains(media)).toBe(true);
+    const order = [...getByTestId("preview-picture").children].map((el) =>
+      el.getAttribute("data-testid"),
+    );
+    expect(order.indexOf("cursor")).toBeLessThan(order.indexOf("media"));
+    expect(order.indexOf("media")).toBeLessThan(order.indexOf("webcam"));
+  });
+});
