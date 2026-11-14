@@ -7,6 +7,7 @@ import {
   joinableRecordings,
   resolutionLabel,
   insertBoundaryAt,
+  boundaryAfterClipAt,
 } from "./add-from-library";
 
 function video(over: Partial<LibraryVideo> & { assetId: string }): LibraryVideo {
@@ -207,5 +208,76 @@ describe("anchoredBoundary", () => {
   it("is 0 for the end of an empty sequence", () => {
     const resolve = anchoredBoundary([], 5);
     expect(resolve({ ...opened, items: [] })).toBe(0);
+  });
+});
+
+describe("boundaryAfterClipAt", () => {
+  // illustrative: three clips of 10 s, 20 s and 5 s, ending at 10, 30 and 35
+  const three = toLayout([
+    { id: "a", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+    { id: "b", kind: "clip", sourceStart: 10, sourceEnd: 30 },
+    { id: "c", kind: "clip", sourceStart: 30, sourceEnd: 35 },
+  ]);
+
+  it("a playhead at 169 s inside one 2040 s clip lands after it, not at 0", () => {
+    const one = toLayout([{ id: "p", kind: "clip", sourceStart: 0, sourceEnd: 2040 }]);
+    expect(boundaryAfterClipAt(one, 169)).toEqual({ index: 1, time: 2040 });
+    // the old nearest-boundary rule picked the start here
+    expect(insertBoundaryAt(one, 169).index).toBe(0);
+  });
+
+  it("inside the second of three clips lands after the second, even nearer its start", () => {
+    expect(boundaryAfterClipAt(three, 11)).toEqual({ index: 2, time: 30 });
+    expect(boundaryAfterClipAt(three, 29)).toEqual({ index: 2, time: 30 });
+  });
+
+  it("at an exact boundary lands after the clip that ends there", () => {
+    expect(boundaryAfterClipAt(three, 10)).toEqual({ index: 1, time: 10 });
+    expect(boundaryAfterClipAt(three, 30)).toEqual({ index: 2, time: 30 });
+  });
+
+  it("at 0 or before lands after the first clip", () => {
+    expect(boundaryAfterClipAt(three, 0)).toEqual({ index: 1, time: 10 });
+    expect(boundaryAfterClipAt(three, -4)).toEqual({ index: 1, time: 10 });
+  });
+
+  it("at or past the end of the sequence lands at the end", () => {
+    expect(boundaryAfterClipAt(three, 35)).toEqual({ index: 3, time: 35 });
+    expect(boundaryAfterClipAt(three, 99)).toEqual({ index: 3, time: 35 });
+  });
+
+  it("an empty sequence lands at 0", () => {
+    expect(boundaryAfterClipAt([], 5)).toEqual({ index: 0, time: 0 });
+  });
+
+  it("a slide counts as the clip under the playhead", () => {
+    const withSlide = toLayout([
+      { id: "a", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+      { id: "s", kind: "slide", assetId: "img", duration: 4, naturalWidth: 8, naturalHeight: 6 },
+      { id: "c", kind: "clip", sourceStart: 10, sourceEnd: 20 },
+    ]);
+    expect(boundaryAfterClipAt(withSlide, 12)).toEqual({ index: 2, time: 14 });
+  });
+});
+
+describe("anchoredBoundary from a chosen boundary", () => {
+  it("pins the click-time boundary to the clip after it, not the nearest one at the join", () => {
+    const two: VideoScene = {
+      ...initialScene(30),
+      items: [
+        { id: "p", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+        { id: "q", kind: "clip", sourceStart: 10, sourceEnd: 30 },
+      ],
+    };
+    const resolve = anchoredBoundary(
+      toLayout(two.items),
+      boundaryAfterClipAt(toLayout(two.items), 2),
+    );
+    expect(resolve(two)).toBe(10);
+    const prepended: VideoScene = {
+      ...two,
+      items: [{ id: "b", kind: "clip", sourceStart: 0, sourceEnd: 20 }, ...two.items],
+    };
+    expect(resolve(prepended)).toBe(30);
   });
 });

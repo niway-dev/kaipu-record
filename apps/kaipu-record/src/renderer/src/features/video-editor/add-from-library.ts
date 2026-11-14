@@ -58,15 +58,35 @@ export function insertBoundaryAt(
 }
 
 /**
- * The boundary `t` names on `layout`, pinned to the clip that FOLLOWS it (null: the end of the
- * sequence), as a function of the scene a join composes from. A join waits behind earlier ones,
+ * Where clicking a Library recording lands when the playhead is at `t` (NIW2-788): after the
+ * clip under the playhead, not at the nearest boundary. A playhead inside a clip, or exactly at
+ * its end, means that clip, so one exactly at a clip's start means the clip before it; at 0 or
+ * before, the first clip. At or past the end of the sequence it is the end; an empty sequence, 0.
+ * Slides count as clips. Dropping keeps `insertBoundaryAt`'s nearest boundary.
+ */
+export function boundaryAfterClipAt(
+  layout: LayoutEntry[],
+  t: number,
+): { index: number; time: number } {
+  const found = layout.findIndex((entry) => t <= entry.timelineEnd);
+  const index = found === -1 ? layout.length : found + 1;
+  return { index, time: index === 0 ? 0 : layout[index - 1].timelineEnd };
+}
+
+/**
+ * The boundary `at` names on `layout` (a time: the nearest one, for a drop; or a boundary already
+ * chosen, for a click), pinned to the clip that FOLLOWS it (null: the end of the sequence), as a
+ * function of the scene a join composes from. A join waits behind earlier ones,
  * and one that inserted a clip ahead of the boundary moves it: the anchor moves with it, so the
  * recording lands where the user dropped it. Following the clip, and the end, keeps two quick
  * adds at the end in the order they were made. If the anchor clip was removed meanwhile, the
  * original boundary time stands. The scene's layout is `joinRecording`'s own (`toLayout`).
  */
-export function anchoredBoundary(layout: LayoutEntry[], t: number): (scene: VideoScene) => number {
-  const { index, time } = insertBoundaryAt(layout, t);
+export function anchoredBoundary(
+  layout: LayoutEntry[],
+  at: number | { index: number; time: number },
+): (scene: VideoScene) => number {
+  const { index, time } = typeof at === "number" ? insertBoundaryAt(layout, at) : at;
   const anchor = layout[index]?.itemId ?? null;
   return (scene) => {
     const current = toLayout(scene.items);

@@ -29,7 +29,7 @@ export interface AddFromLibraryPanelProps {
 /**
  * The editor's right column while Add recording is open (NIW2-782): like Captures, it takes the
  * inspector's place. It lists the Library's other recordings, newest first, with a search field.
- * A row adds the whole recording at the clip boundary nearest the playhead.
+ * A row adds the whole recording after the clip under the playhead (a drop uses the nearest boundary).
  */
 export function AddFromLibraryPanel({
   videos,

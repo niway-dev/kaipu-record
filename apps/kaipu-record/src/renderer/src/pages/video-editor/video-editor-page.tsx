@@ -180,7 +180,10 @@ import {
   formatClock,
 } from "@renderer/features/video-editor/capture-time";
 import { CapturesPanel } from "@renderer/features/video-editor/components/captures-panel";
-import { anchoredBoundary } from "@renderer/features/video-editor/add-from-library";
+import {
+  anchoredBoundary,
+  boundaryAfterClipAt,
+} from "@renderer/features/video-editor/add-from-library";
 import { AddFromLibraryPanel } from "@renderer/features/video-editor/components/add-from-library-panel";
 import { probeSource, type SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
@@ -1587,10 +1590,17 @@ function VideoEditor({
     setAddRecordingOpen(true);
   }, [addRecordingOpen, clearSelection]);
   const addRecording = useCallback(
-    async (video: LibraryVideo, at: number): Promise<void> => {
+    async (video: LibraryVideo, at: number, rule: "nearest" | "afterClip"): Promise<void> => {
       // `busy` (a drag owns the scene) does nothing: the click is simply not taken.
       // Anchored to the clip after the boundary: a join still loading may insert ahead of it.
-      if ((await joinRecordingAt(video, anchoredBoundary(layout, at))) === "missing") {
+      if (
+        (await joinRecordingAt(
+          video,
+          // Fixed now, at click or drop time: a click goes after the clip under the playhead
+          // (NIW2-788), a drop to the boundary nearest the pointer.
+          anchoredBoundary(layout, rule === "afterClip" ? boundaryAfterClipAt(layout, at) : at),
+        )) === "missing"
+      ) {
         showToast({ message: t("addRecordingMissing", { title: video.title }) });
       }
     },
@@ -1603,7 +1613,7 @@ function VideoEditor({
     (boundaryTime: number) => {
       const video = draggedRecordingRef.current;
       draggedRecordingRef.current = null;
-      if (video) void addRecording(video, boundaryTime);
+      if (video) void addRecording(video, boundaryTime, "nearest");
     },
     [addRecording],
   );
@@ -2571,7 +2581,7 @@ function VideoEditor({
               openedAssetId={source.assetId}
               loaded={libraryRecordings.loaded}
               failed={libraryRecordings.failed}
-              onAdd={(video) => void addRecording(video, playback.timelineTime)}
+              onAdd={(video) => void addRecording(video, playback.timelineTime, "afterClip")}
               onDragStart={(video) => {
                 draggedRecordingRef.current = video;
               }}
