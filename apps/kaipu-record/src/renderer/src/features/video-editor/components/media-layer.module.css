@@ -33,45 +33,56 @@
 .selection {
   position: absolute;
   pointer-events: none;
-  outline: 2px solid var(--accent-primary);
+  /* Drawn inside the box: the picture clips at its edge (overflow hidden), so an outline, which
+     sits outside the box, vanished whenever the image filled the picture (Full). The thin white
+     ring keeps the accent frame visible over footage of the same colour. */
+  box-shadow:
+    inset 0 0 0 2px var(--accent-primary),
+    inset 0 0 0 3px rgb(255 255 255 / 85%);
 }
 
+/* Inside the box corners, never centred on them, so the picture's edge cannot cut a handle in
+   half. The pointer arithmetic uses the box and the press delta, not the handle's position. */
 .handle {
   position: absolute;
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
   box-sizing: border-box;
   border: 2px solid var(--accent-primary);
-  border-radius: 2px;
+  border-radius: 3px;
   background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 45%);
   pointer-events: auto;
   touch-action: none;
 }
 
+/* A 26px grab area around the 14px square. */
+.handle::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+
 .handle[data-corner="nw"] {
-  top: 0;
-  left: 0;
-  transform: translate(-50%, -50%);
+  top: 2px;
+  left: 2px;
   cursor: nwse-resize;
 }
 
 .handle[data-corner="ne"] {
-  top: 0;
-  left: 100%;
-  transform: translate(-50%, -50%);
+  top: 2px;
+  right: 2px;
   cursor: nesw-resize;
 }
 
 .handle[data-corner="sw"] {
-  top: 100%;
-  left: 0;
-  transform: translate(-50%, -50%);
+  bottom: 2px;
+  left: 2px;
   cursor: nesw-resize;
 }
 
 .handle[data-corner="se"] {
-  top: 100%;
-  left: 100%;
-  transform: translate(-50%, -50%);
+  bottom: 2px;
+  right: 2px;
   cursor: nwse-resize;
 }

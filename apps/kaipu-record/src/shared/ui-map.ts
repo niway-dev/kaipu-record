@@ -268,11 +268,11 @@ export const UI_MAP = {
       webcam: { states: ["visible"] },
       // Floating images over the Clips sequence (ADR 0057, NIW2-771), behind the
       // `timeline-levels` flag. mediaLayer: the images drawn in the preview, `selected` adds the
-      // outline with its four corner handles. mediaPanel: the inspector of a selected image
+      // frame with its four corner handles, `selectedFull` the same on a Full image. mediaPanel: the inspector of a selected image
       // (Full, Box, forward/backward, fades, Delete), here with an overlapping pair.
       // timelineMediaRows: the rows above the sequence in the Clips section (drawn by the
       // timeline strip), here with two overlapping images.
-      mediaLayer: { states: ["selected"], gatedBy: [{ flag: "timeline-levels" }] },
+      mediaLayer: { states: ["selected", "selectedFull"], gatedBy: [{ flag: "timeline-levels" }] },
       mediaPanel: { states: ["overlapping"], gatedBy: [{ flag: "timeline-levels" }] },
       timelineMediaRows: { states: ["twoImages"], gatedBy: [{ flag: "timeline-levels" }] },
       // addRecordingOpen: the Add recording button at the left end, lit while its panel is open

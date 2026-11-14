@@ -271,6 +271,25 @@ export const editorVideo = catalog(
       ready: { area: "editorVideo.mediaPanel" },
       gates: [{ flag: "timeline-levels", side: "on" }],
     },
+    "media-selected-full": {
+      profile: "timeline-levels",
+      how: "With the flag forced on, open “Floating images” and select the back image, which fills the whole picture (Full): its frame and four corner handles sit inside the picture edge instead of being clipped by it.",
+      steps: [
+        open(ASSETS.floatingDemo),
+        loaded,
+        {
+          press: "Enter",
+          target: {
+            area: "editorVideo.mediaLayer",
+            part: { css: '[data-media-id="float-back"]' },
+          },
+        },
+        { waitFor: { area: "editorVideo.mediaPanel" } },
+      ],
+      demonstrates: ["editorVideo.mediaLayer:selectedFull"],
+      ready: { area: "editorVideo.mediaPanel" },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
     "two-recordings": {
       profile: "two-recordings",
       how: "Open “Two recordings”, whose edit joined “Checkout bug”: the clips alternate the two recordings, each labelled with its name and length over its own thumbnails, and the Webcam track says “No camera in this recording” under the joined clip.",
