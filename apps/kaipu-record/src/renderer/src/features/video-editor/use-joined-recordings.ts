@@ -91,8 +91,9 @@ export function useJoinedRecordings(
         library = await readJoinedLibrary(fresh.map((s) => s.assetId));
       } catch {
         // An unreadable library says nothing about the recordings: show them missing for now, but
-        // forget that they were started so the next scene change reads again. The effect depends
-        // on `list` only, so this cannot loop inside one pass.
+        // forget that they were started so the next change to the joined sources (a join, an undo
+        // or a redo) reads again; other scene edits do not retry. The effect depends on `list`
+        // only, so this cannot loop inside one pass.
         for (const [source, entry] of entries) {
           if (started.current.get(source.id) === entry) started.current.delete(source.id);
         }
