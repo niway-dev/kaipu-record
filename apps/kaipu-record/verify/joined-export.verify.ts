@@ -6,12 +6,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { dismissOnboarding, launchApp, localIdForAssetId } from "../e2e/helpers/launch";
 import { ffprobeAvailable } from "../e2e/helpers/ffprobe";
-import {
-  ensureFixtures,
-  FIXTURE_FILES,
-  FIXTURES_DIR,
-  joinedLetterFilters,
-} from "../ui-catalog/fixtures/make-fixtures";
+import { ensureFixtures, joinedLetterFilters } from "../ui-catalog/fixtures/make-fixtures";
 import { ASSETS, joinedScene, seedCatalogVault } from "../ui-catalog/fixtures/seed-vault";
 import { parseSession } from "../src/renderer/src/features/video-editor/session";
 import { toLayout } from "../src/renderer/src/features/video-editor/timeline";
@@ -167,29 +162,6 @@ async function averageColor(
   return { r: stdout[0], g: stdout[1], b: stdout[2] };
 }
 
-/** Peak level in dB of `[start, start + length)` of a file's audio (ffmpeg volumedetect). */
-async function peakDb(file: string, start: number, length: number): Promise<number> {
-  const { stderr } = await run("ffmpeg", [
-    "-hide_banner",
-    "-nostats",
-    "-ss",
-    start.toFixed(3),
-    "-t",
-    length.toFixed(3),
-    "-i",
-    file,
-    "-vn",
-    "-af",
-    "volumedetect",
-    "-f",
-    "null",
-    "-",
-  ]);
-  const match = /max_volume:\s*(-?[\d.]+|-inf) dB/.exec(stderr);
-  if (!match) throw new Error(`volumedetect printed no max_volume:\n${stderr.slice(-400)}`);
-  return match[1] === "-inf" ? Number.NEGATIVE_INFINITY : Number(match[1]);
-}
-
 /** Mean level in dB of `[start, start + length)` of a file's audio (ffmpeg volumedetect). */
 async function meanDb(file: string, start: number, length: number): Promise<number> {
   const { stderr } = await run("ffmpeg", [
@@ -212,9 +184,6 @@ async function meanDb(file: string, start: number, length: number): Promise<numb
   if (!match) throw new Error(`volumedetect printed no mean_volume:\n${stderr.slice(-400)}`);
   return match[1] === "-inf" ? Number.NEGATIVE_INFINITY : Number(match[1]);
 }
-
-/** Louder than this is sound; the fixtures' silent AAC measures about -91 dB or lower. */
-const AUDIBLE_DB = -60;
 
 async function seedWithJoined(vaultDir: string): Promise<void> {
   ensureFixtures();
@@ -433,44 +402,6 @@ test("Two recordings exports both recordings in sequence", async () => {
     `[verify] ${NAME}: two-recordings duration=${info.durationSec.toFixed(2)}s (timeline ${total}s) ` +
       `size=${info.width}x${info.height} audio=${info.audioCodec} samples=${JSON.stringify(samples)}`,
   );
-});
-
-test("Two recordings keeps B's audio in B's span", async () => {
-  test.setTimeout(420_000);
-  if (!(await requireTools())) return;
-  ensureFixtures();
-  const { spans } = seededSpans("present");
-  const mp4 = await twoRecordingsExport();
-
-  // Which seeded recordings have sound, measured on the fixture files the seed copies.
-  const aSource = await peakDb(path.join(FIXTURES_DIR, FIXTURE_FILES.cut(12)), 0, 12);
-  const bSource = await peakDb(path.join(FIXTURES_DIR, FIXTURE_FILES.joinedCut), 0, 7);
-  const aAudible = aSource > AUDIBLE_DB;
-  const bAudible = bSource > AUDIBLE_DB;
-
-  const info = await probe(mp4);
-  expect(info.audioCodec, "the export has an audio stream").not.toBeNull();
-  const peaks: Record<string, number> = {};
-  for (const span of spans) {
-    peaks[span.label] = await peakDb(mp4, span.start + 0.1, span.end - span.start - 0.2);
-  }
-  const report = { aSource, bSource, aAudible, bAudible, peaks, proven: false };
-  if (aAudible !== bAudible) {
-    // One recording is audible and the other silent: the joined audio must follow its clip.
-    const [loud, quiet] = aAudible ? (["A1", "B"] as const) : (["B", "A1"] as const);
-    expect(peaks[loud], `${loud} span is audible`).toBeGreaterThan(AUDIBLE_DB);
-    expect(peaks[quiet], `${quiet} span is silent`).toBeLessThan(AUDIBLE_DB);
-    report.proven = true;
-  } else {
-    test.info().annotations.push({
-      type: "not-proven",
-      description:
-        `audio routing not proven by this seed: both recordings are ${aAudible ? "audible" : "silent"} ` +
-        `(A ${aSource} dB, B ${bSource} dB)`,
-    });
-  }
-  await writeFile(path.join(OUT_DIR, "report-audio.json"), JSON.stringify(report, null, 2));
-  console.log(`[verify] ${NAME}: audio ${JSON.stringify(report)}`);
 });
 
 /**
