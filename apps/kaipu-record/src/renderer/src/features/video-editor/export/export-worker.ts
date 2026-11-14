@@ -79,6 +79,7 @@ import {
   CanvasSink,
   CanvasSource,
   Input,
+  type InputAudioTrack,
   Mp4OutputFormat,
   Output,
   Quality,
@@ -103,6 +104,15 @@ import { chooseVideoEncoding, type VideoEncodingChoice } from "./video-encoding"
 import { WEBCAM_FPS } from "@shared/webcam-track";
 import { openWebcamSourceOrNone, webcamImageOf, type WebcamSource } from "./webcam-source";
 import { clipFramesOf, clipSource, clipWebcamCursorOf } from "./joined-media";
+import {
+  audioPlan,
+  clipAudioOf,
+  convertPlanar,
+  interleave,
+  overlapsSilence,
+  type AudioReference,
+  type RecordingAudio,
+} from "./joined-audio";
 
 // ---------------------------------------------------------------------------
 // Typing helper: TypeScript doesn't expose `Worker` on `self` in module workers.
@@ -172,6 +182,7 @@ async function runExportWithInput(
   webcams: ReadonlyMap<string | null, WebcamSource>,
 ): Promise<void> {
   const { plan, output: size, target: preset } = msg;
+  const joinedRefs = msg.joined.map((j) => ({ sourceId: j.sourceId, offset: j.offset }));
   // Fixed-canvas presets compose at SOURCE size into a view canvas, then frame it onto the
   // output. Identity framing (Balanced, Light, Maximum) composes straight onto the output.
   const framed = preset.framing !== "identity";
@@ -200,8 +211,26 @@ async function runExportWithInput(
       },
     ]),
   );
-  // Audio is optional: screen-only recordings produce no audio track.
-  const audioTrack = await input.getPrimaryAudioTrack();
+  // Audio is optional: a recording can have no audio track. Each recording that has one is
+  // read from its own file; `audioPlan` decides whether the MP4 has audio and in which format.
+  const audioTracks = new Map<string | null, InputAudioTrack>();
+  const recordingAudio: RecordingAudio[] = [];
+  const openedAudio = await input.getPrimaryAudioTrack();
+  if (openedAudio) audioTracks.set(null, openedAudio);
+  recordingAudio.push(await audioFacts(null, openedAudio));
+  for (const [sourceId, joinedInput] of joinedInputs) {
+    const joinedAudio = await joinedInput.getPrimaryAudioTrack();
+    if (joinedAudio) audioTracks.set(sourceId, joinedAudio);
+    recordingAudio.push(await audioFacts(sourceId, joinedAudio));
+  }
+  const audioDecision = audioPlan(plan, recordingAudio);
+  const audioReference = audioDecision.reference;
+  const audioReaders = new Map(
+    [...audioTracks].map(([key, track]) => [
+      key,
+      { samples: (start: number, end: number) => new AudioSampleSink(track).samples(start, end) },
+    ]),
+  );
 
   // OffscreenCanvas — the only canvas type available in workers.
   const canvas = new OffscreenCanvas(size.width, size.height);
@@ -253,27 +282,28 @@ async function runExportWithInput(
   // A whole-video mute produces a file with NO audio track, not a silent one:
   // smaller, and no dead volume control in the player. This is the same branch a
   // screen-only recording already takes, so nothing downstream is new.
-  const audioMuted = plan.audio.audioMuted;
-  // Sample rate / channel count for synthesized slide silence — derived from
-  // the source track so it matches the real audio instead of assuming a
-  // fixed layout; 48000/2 is only a fallback if the track ever reports 0.
-  const silenceSampleRate = audioTrack ? (await audioTrack.getSampleRate()) || 48000 : 48000;
-  const sourceChannels = audioTrack ? (await audioTrack.getNumberOfChannels()) || 2 : 2;
+  //
+  // The runner reaches the same decision from its probes, but only for the size estimate; this
+  // one, from the opened files, is what the MP4 gets.
+  //
+  // Sample rate / channel count of the track and of the synthesized silence — the reference
+  // recording's (the first used one with audio), so every clip is converted to one format.
+  const silenceSampleRate = audioReference?.sampleRate ?? 48000;
+  const sourceChannels = audioReference?.channels ?? 2;
   // An explicit AAC config (every preset but Maximum) is checked against the encoder first:
   // Light asks for mono 64 kbps, which Chromium's AAC encoder on macOS refuses.
   const audioEncoding =
-    preset.audioBitrate === "high" || !audioTrack || audioMuted
+    preset.audioBitrate === "high" || !audioReference
       ? null
       : await pickAudioEncoding(audioEncodingCandidates(preset, sourceChannels), silenceSampleRate);
-  const audioSource =
-    audioTrack && !audioMuted
-      ? new AudioSampleSource({
-          codec: "aac",
-          quality: audioEncoding
-            ? new Quality({ bitrate: audioEncoding.bitrate })
-            : new Quality("high"),
-        })
-      : null;
+  const audioSource = audioReference
+    ? new AudioSampleSource({
+        codec: "aac",
+        quality: audioEncoding
+          ? new Quality({ bitrate: audioEncoding.bitrate })
+          : new Quality("high"),
+      })
+    : null;
   // Downmix (Light) only when the encoder took the mono config; silence matches it.
   const downmix = audioEncoding?.numberOfChannels === 1 && sourceChannels !== 1;
   const silenceChannelCount = audioEncoding?.numberOfChannels ?? sourceChannels;
@@ -441,53 +471,65 @@ async function runExportWithInput(
     // is cheap relative to encode, and mediabunny accepts interleaved or separate
     // feeding without backpressure issues.
     // ---------------------------------------------------------------------------
-    if (audioTrack && audioSource) {
+    if (audioReference && audioSource) {
       // AudioSampleSource honors each sample's OWN timestamp (unlike AudioBufferSource,
       // which auto-advances). Rebase every emitted sample onto a single contiguous
       // output cursor so cut boundaries stay gapless and monotonic — the audio analogue
       // of `prevOutTs` on the video pass.
       let audioCursor = 0;
-      for (const segment of plan.segments) {
-        if (segment.kind === "clip") {
-          // Muted spans of THIS segment, clipped and merged. Walking them in
-          // order lets each decoded sample be zeroed in place rather than
-          // dropped: dropping would shorten the audio and drift it out of sync
-          // with the video, which is silence's whole job to avoid.
-          const silenced = silencedSpansFor(segment.sourceStart, segment.sourceEnd, plan.audio);
-          const sink = new AudioSampleSink(audioTrack);
-          for await (const sample of sink.samples(segment.sourceStart, segment.sourceEnd)) {
-            // Clip each decoded sample to the segment's exact source range — see the
-            // "Audio trimming" header comment for why this is needed.
-            const trimmed = trimAudioSample(sample, segment.sourceStart, segment.sourceEnd);
-            if (trimmed) {
-              const start = trimmed.timestamp;
-              const end = start + trimmed.duration;
-              const muted = silenced.some((span) => start < span.end && end > span.start);
-              const shaped = downmix ? downmixToMono(trimmed) : trimmed;
-              const emitted = muted ? zeroedLike(shaped) : shaped;
-              emitted.setTimestamp(audioCursor);
-              audioCursor += emitted.duration;
-              await audioSource.add(emitted);
-              if (emitted !== shaped) emitted.close();
-              if (shaped !== trimmed) shaped.close();
-              if (trimmed !== sample) trimmed.close();
-            }
-            sample.close();
+      const addSilence = async (duration: number): Promise<void> => {
+        // A zeroed interleaved-f32 sample keeps A/V durations aligned so the MP4 muxer
+        // doesn't produce a track-length mismatch.
+        const frames = Math.ceil(duration * silenceSampleRate);
+        const silence = new AudioSample({
+          data: new Float32Array(frames * silenceChannelCount),
+          format: "f32",
+          numberOfChannels: silenceChannelCount,
+          sampleRate: silenceSampleRate,
+          timestamp: audioCursor,
+        });
+        audioCursor += silence.duration;
+        await audioSource.add(silence);
+        silence.close();
+      };
+      for (const [index, segment] of plan.segments.entries()) {
+        // Slides, and clips of a recording without audio, are silence of the segment's length.
+        if (segment.kind !== "clip" || audioDecision.perSegment[index] !== "decode") {
+          await addSilence(segment.duration);
+          continue;
+        }
+        // Muted spans of THIS segment, clipped and merged, in AXIS seconds. Walking them in
+        // order lets each decoded sample be zeroed in place rather than
+        // dropped: dropping would shorten the audio and drift it out of sync
+        // with the video, which is silence's whole job to avoid.
+        const silenced = silencedSpansFor(segment.sourceStart, segment.sourceEnd, plan.audio);
+        // The decoder reads the clip's own recording in LOCAL seconds.
+        const src = clipSource(segment, joinedRefs);
+        const decoded = clipAudioOf(src, audioReaders);
+        if (!decoded) {
+          await addSilence(segment.duration);
+          continue;
+        }
+        for await (const sample of decoded) {
+          // Clip each decoded sample to the segment's exact (local) range — see the
+          // "Audio trimming" header comment for why this is needed.
+          const trimmed = trimAudioSample(sample, src.localStart, src.localEnd);
+          if (trimmed) {
+            const start = trimmed.timestamp;
+            const end = start + trimmed.duration;
+            const muted = overlapsSilence(start, end, src.offset, silenced);
+            const converted = toReferenceFormat(trimmed, audioReference);
+            const shaped = downmix ? downmixToMono(converted) : converted;
+            const emitted = muted ? zeroedLike(shaped) : shaped;
+            emitted.setTimestamp(audioCursor);
+            audioCursor += emitted.duration;
+            await audioSource.add(emitted);
+            if (emitted !== shaped) emitted.close();
+            if (shaped !== converted) shaped.close();
+            if (converted !== trimmed) converted.close();
+            if (trimmed !== sample) trimmed.close();
           }
-        } else {
-          // Slides are silent. A zeroed interleaved-f32 sample keeps A/V durations
-          // aligned so the MP4 muxer doesn't produce a track-length mismatch.
-          const frames = Math.ceil(segment.duration * silenceSampleRate);
-          const silence = new AudioSample({
-            data: new Float32Array(frames * silenceChannelCount),
-            format: "f32",
-            numberOfChannels: silenceChannelCount,
-            sampleRate: silenceSampleRate,
-            timestamp: audioCursor,
-          });
-          audioCursor += silence.duration;
-          await audioSource.add(silence);
-          silence.close();
+          sample.close();
         }
       }
       audioSource.close();
@@ -611,6 +653,53 @@ async function pickAudioEncoding(
     if (ok) return candidate;
   }
   return candidates[candidates.length - 1]!;
+}
+
+/** What `audioPlan` needs to know about a recording's audio track (none: no audio). */
+async function audioFacts(
+  sourceId: string | null,
+  track: InputAudioTrack | null,
+): Promise<RecordingAudio> {
+  return {
+    sourceId,
+    hasAudio: track !== null,
+    sampleRate: track ? (await track.getSampleRate()) || 48000 : 48000,
+    channels: track ? (await track.getNumberOfChannels()) || 2 : 2,
+  };
+}
+
+/**
+ * The sample in the reference recording's channel count and sample rate. The same format
+ * returns the sample itself (the common case, and always so without joins); otherwise a new
+ * sample, which the caller closes.
+ */
+function toReferenceFormat(sample: AudioSample, reference: AudioReference): AudioSample {
+  if (
+    sample.sampleRate === reference.sampleRate &&
+    sample.numberOfChannels === reference.channels
+  ) {
+    return sample;
+  }
+  const frames = sample.numberOfFrames;
+  const planes: Float32Array[] = [];
+  for (let c = 0; c < sample.numberOfChannels; c++) {
+    const plane = new Float32Array(frames);
+    sample.copyTo(plane, { planeIndex: c, format: "f32-planar" });
+    planes.push(plane);
+  }
+  const converted = convertPlanar(
+    planes,
+    sample.sampleRate,
+    reference.sampleRate,
+    reference.channels,
+  );
+  return new AudioSample({
+    data: interleave(converted),
+    format: "f32",
+    numberOfChannels: reference.channels,
+    sampleRate: reference.sampleRate,
+    timestamp: sample.timestamp,
+  });
 }
 
 function downmixToMono(sample: AudioSample): AudioSample {

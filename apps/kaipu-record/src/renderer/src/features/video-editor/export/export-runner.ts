@@ -10,6 +10,8 @@ import type { VideoScene } from "../scene";
 import type { CameraPath } from "../zoom/camera-path";
 import { buildExportPlan } from "./export-plan";
 import { recordingsUsed } from "./export-recordings";
+import { audioPlan } from "./joined-audio";
+import { probeSource } from "./probe-source";
 import { floatingAssetIds } from "./floating-frame";
 import type {
   ExportStartMessage,
@@ -337,14 +339,39 @@ export async function startVideoExport(
     usedJoined.push({ entry, offset: sceneSource.offset });
   }
 
+  // Whether the MP4 carries audio, for the preset's size estimate: the scene is not muted and
+  // a recording a clip reads has audio. The worker reaches the same decision from the opened
+  // files (`audioPlan`) and is the one that counts. A joined recording that cannot be probed
+  // counts as without audio here.
+  // No await for a scene without joins: the start stays synchronous up to the first fetch.
+  const probes =
+    usedJoined.length > 0
+      ? await Promise.all(usedJoined.map(({ entry }) => probeSource(entry.id!)))
+      : [];
+  // Another export may have started while the probes ran.
+  if (active) return false;
+  const audioDecision = audioPlan(plan, [
+    {
+      sourceId: null,
+      hasAudio: args.sourceInfo?.hasAudio ?? true,
+      sampleRate: args.sourceInfo?.sampleRate ?? 48000,
+      channels: 2,
+    },
+    ...usedJoined.map(({ entry }, i) => ({
+      sourceId: entry.sourceId,
+      hasAudio: probes[i]?.hasAudio ?? false,
+      sampleRate: probes[i]?.sampleRate ?? 48000,
+      channels: 2,
+    })),
+  ]);
   const target = resolveExportTarget(
     presetId,
     {
       width: args.videoWidth,
       height: args.videoHeight,
       fps: args.sourceInfo?.fps ?? 30,
-      hasAudio: (args.sourceInfo?.hasAudio ?? true) && !plan.audio.audioMuted,
-      sampleRate: args.sourceInfo?.sampleRate,
+      hasAudio: audioDecision.reference !== null,
+      sampleRate: audioDecision.reference?.sampleRate,
     },
     plan.totalDuration,
     {

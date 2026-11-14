@@ -29,6 +29,8 @@ import { __resetReadyCopiesForTests, getReadyCopies } from "./ready-copies";
 
 const { captureException } = vi.hoisted(() => ({ captureException: vi.fn() }));
 vi.mock("@renderer/features/analytics", () => ({ captureException }));
+const { probeSource } = vi.hoisted(() => ({ probeSource: vi.fn() }));
+vi.mock("./probe-source", () => ({ probeSource }));
 
 class FakeWorker {
   onmessage: ((event: MessageEvent) => void) | null = null;
@@ -627,5 +629,60 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
     await waitFor(() => expect(workers).toHaveLength(1));
     expect(sent().joined).toEqual([]);
     expect(fetch.mock.calls.map((c) => c[0])).toEqual(["kaipu-media://recording/rec-1"]);
+  });
+
+  describe("audio of the joined recordings", () => {
+    const probe = (hasAudio: boolean) => ({
+      width: 1920,
+      height: 1080,
+      durationSec: 40,
+      fps: 30,
+      hasAudio,
+      sampleRate: 44100,
+    });
+    const start = async (over: Partial<StartExportArgs>) => {
+      vi.stubGlobal("fetch", fetchMock());
+      await startVideoExport(
+        args({ scene: JOINED_SCENE, joined: [entry("b")], presetId: "balanced", ...over }),
+        t,
+      );
+      await waitFor(() => expect(workers).toHaveLength(1));
+    };
+
+    it("sizes the export with audio when only the joined recording has it", async () => {
+      probeSource.mockResolvedValue(probe(true));
+      await start({ sourceInfo: { fps: 30, hasAudio: false } });
+      expect(probeSource).toHaveBeenCalledWith("vault-b");
+      expect(sent().target.packetCounts.audio).toBeGreaterThan(0);
+    });
+
+    it("sizes it without audio when neither used recording has it", async () => {
+      probeSource.mockResolvedValue(probe(false));
+      await start({ sourceInfo: { fps: 30, hasAudio: false } });
+      expect(sent().target.packetCounts.audio).toBe(0);
+    });
+
+    it("counts a joined recording that cannot be probed as without audio", async () => {
+      probeSource.mockResolvedValue(null);
+      await start({ sourceInfo: { fps: 30, hasAudio: false } });
+      expect(sent().target.packetCounts.audio).toBe(0);
+    });
+
+    it("sizes it without audio when the scene is muted", async () => {
+      probeSource.mockResolvedValue(probe(true));
+      await start({
+        scene: { ...JOINED_SCENE, audioMuted: true } as VideoScene,
+        sourceInfo: { fps: 30, hasAudio: true },
+      });
+      expect(sent().target.packetCounts.audio).toBe(0);
+    });
+
+    it("probes nothing for a scene without joined recordings", async () => {
+      probeSource.mockClear();
+      vi.stubGlobal("fetch", fetchMock());
+      await startVideoExport(args({ joined: [] }), t);
+      await waitFor(() => expect(workers).toHaveLength(1));
+      expect(probeSource).not.toHaveBeenCalled();
+    });
   });
 });
