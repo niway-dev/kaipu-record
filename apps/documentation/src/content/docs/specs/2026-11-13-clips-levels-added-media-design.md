@@ -159,11 +159,12 @@ interface VideoScene {
 }
 ```
 
-- **Start.** `sourceToTimeline(anchor.time)` for a source anchor; the slide's timeline start plus
-  `offset` for an item anchor. `null` means the item is not placed: the anchor's second is in
-  deleted footage, the slide was removed, or the slide is now shorter than `offset`. An anchor
-  second belongs to a clip when it is in `[sourceStart, sourceEnd)`; the resolution uses that
-  half-open range even where `sourceToTimeline` accepts a clip's end.
+- **Start.** For a source anchor, the clip whose `[sourceStart, sourceEnd)` holds `anchor.time`,
+  at `timelineStart + (anchor.time − sourceStart)`; for an item anchor, the slide's timeline start
+  plus `offset`. `null` means the item is not placed: the anchor's second is in deleted footage,
+  the slide was removed, or the slide is now shorter than `offset`. The resolution needs its own
+  half-open lookup: `sourceToTimeline` (through `clipAtSource`) accepts a clip's end and returns
+  the first match, so at a split point it would pick the earlier clip.
 - **End.** `min(start + duration, end of the timeline)`.
 - **Moving it** to timeline time `t` rewrites the anchor from the sequence entry at `t`. `t` is
   clamped below the end of the timeline: at the very end `entryAt` returns the last entry and
