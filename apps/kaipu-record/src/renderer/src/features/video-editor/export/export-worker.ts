@@ -273,6 +273,13 @@ async function runExportWithInput(
     overlayWindows: plan.overlayWindows,
     overlayBitmaps: new Map(msg.overlays.map((o) => [o.overlayId, o.bitmap])),
     webcam: plan.webcam,
+    // Floating images (spec 2026-11-13): drawn whenever the plan has them, no flag.
+    floating: {
+      plan: plan.floating,
+      bitmaps: new Map<string, ImageBitmap>(
+        (msg.mediaImages ?? []).map((m) => [m.assetId, m.bitmap]),
+      ),
+    },
     // ADR 0051: the preset's background around the picture, drawn last; `none` draws nothing.
     background: plan.background,
     framing: view

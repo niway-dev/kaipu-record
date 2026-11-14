@@ -257,6 +257,51 @@ describe("export runner (NIW2-218 background export)", () => {
     expect(entries).toHaveBeenCalledOnce();
   });
 
+  describe("floating images", () => {
+    it("takes the asset of an image used only by a floating item and sends it as media", async () => {
+      vi.stubGlobal(
+        "createImageBitmap",
+        vi.fn(async () => ({ close: vi.fn() })),
+      );
+      const store = createSlideAssetStore();
+      const asset = (assetId: string) => ({
+        assetId,
+        bytes: new ArrayBuffer(2),
+        mimeType: "image/png",
+        url: "",
+        naturalWidth: 10,
+        naturalHeight: 10,
+      });
+      vi.spyOn(store, "entries").mockReturnValue([asset("only-media"), asset("unused")]);
+      const scene: VideoScene = {
+        ...SCENE,
+        media: [
+          {
+            id: "m",
+            kind: "image",
+            assetId: "only-media",
+            naturalWidth: 10,
+            naturalHeight: 10,
+            anchor: { kind: "source", time: 5 },
+            duration: 3,
+            box: { x: 0.5, y: 0.5, width: 0.5 },
+            z: 0,
+            fadeInMs: 0,
+            fadeOutMs: 0,
+          },
+        ],
+      };
+      await startVideoExport(args({ scene, slideAssets: store }), t);
+      await waitFor(() => expect(workers).toHaveLength(1));
+      const message = workers[0]!.postMessage.mock.calls[0]![0] as ExportStartMessage;
+      const transfer = workers[0]!.postMessage.mock.calls[0]![1] as unknown[];
+      expect(message.slides).toEqual([]);
+      expect(message.mediaImages?.map((m) => m.assetId)).toEqual(["only-media"]);
+      expect(message.plan.floating?.items.map((i) => i.id)).toEqual(["m"]);
+      expect(transfer).toContain(message.mediaImages![0].bitmap);
+    });
+  });
+
   describe("the webcam file (ADR 0038)", () => {
     const WEBCAM_SCENE: VideoScene = {
       ...SCENE,

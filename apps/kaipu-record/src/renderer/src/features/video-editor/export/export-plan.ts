@@ -5,6 +5,8 @@
  * about timeline↔source mapping — see that module's header comment.
  */
 import { layoutDuration, toLayout } from "../timeline";
+import { placeMedia } from "../media";
+import type { FloatingMediaPlan } from "./floating-frame";
 import type { VideoScene } from "../scene";
 import type { AudioEdits } from "../audio-edits";
 import type { Redaction } from "../privacy/redaction";
@@ -66,6 +68,12 @@ export interface ExportPlan {
    * `hasBackground` — with `none` the padding, radius and shadow are never drawn.
    */
   background: VideoBackground;
+  /**
+   * The floating images placed on the timeline (spec 2026-11-13), or absent when there are
+   * none: a scene without them yields exactly the plan it always did. Never behind a flag.
+   * The composer draws them from `mediaAt` over the finished picture, under the webcam.
+   */
+  floating?: FloatingMediaPlan;
 }
 
 export function buildExportPlan(scene: VideoScene): ExportPlan {
@@ -98,6 +106,12 @@ export function buildExportPlan(scene: VideoScene): ExportPlan {
     end: overlay.end,
   }));
 
+  // Only items that are placed (their footage still exists) travel, so an unplaced image's
+  // asset is never decoded or sent.
+  const placed = placeMedia(scene.media, layout);
+  const floating: FloatingMediaPlan | null =
+    placed.length > 0 ? { items: placed.map((p) => p.item), layout, timeOffset: 0 } : null;
+
   return {
     segments,
     overlayWindows,
@@ -115,6 +129,7 @@ export function buildExportPlan(scene: VideoScene): ExportPlan {
     audio: { audioMuted: scene.audioMuted, mutedRanges: scene.mutedRanges },
     webcam: scene.webcam,
     background: scene.background ?? DEFAULT_BACKGROUND,
+    ...(floating ? { floating } : {}),
   };
 }
 
@@ -156,7 +171,21 @@ export function sliceExportPlan(plan: ExportPlan, start: number, end: number): E
       start: Math.max(w.start, from) - from,
       end: Math.min(w.end, to) - from,
     }));
-  return { ...plan, segments, overlayWindows, totalDuration: to - from };
+  const sliced: ExportPlan = { ...plan, segments, overlayWindows, totalDuration: to - from };
+  if (plan.floating) {
+    // Anchors resolve against the whole timeline, so the layout stays and the plan's clock
+    // gets an offset. Items that are not on screen anywhere in the range are dropped, so
+    // their images are not decoded for it.
+    const { items, layout, timeOffset } = plan.floating;
+    const windowStart = from + timeOffset;
+    const windowEnd = to + timeOffset;
+    const kept = placeMedia(items, layout)
+      .filter((p) => p.start < windowEnd && p.end > windowStart)
+      .map((p) => p.item);
+    if (kept.length > 0) sliced.floating = { items: kept, layout, timeOffset: windowStart };
+    else delete sliced.floating;
+  }
+  return sliced;
 }
 
 export interface GifFrameSlot {

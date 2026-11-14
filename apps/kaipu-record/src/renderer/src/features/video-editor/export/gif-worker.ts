@@ -131,6 +131,13 @@ function createFrameRenderer(
     overlayWindows: plan.overlayWindows,
     overlayBitmaps: new Map(msg.overlays.map((o) => [o.overlayId, o.bitmap])),
     webcam: plan.webcam,
+    // Floating images (spec 2026-11-13): the sliced plan's clock is offset to the timeline's.
+    floating: {
+      plan: plan.floating,
+      bitmaps: new Map<string, ImageBitmap>(
+        (msg.mediaImages ?? []).map((m) => [m.assetId, m.bitmap]),
+      ),
+    },
     // ADR 0051: composed on `full` (source size) like the rest, then downscaled by `grab()`.
     background: plan.background,
   });
