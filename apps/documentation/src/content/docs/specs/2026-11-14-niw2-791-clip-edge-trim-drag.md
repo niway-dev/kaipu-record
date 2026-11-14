@@ -80,17 +80,19 @@ At rest, each handle of the selected clip shows one of two states:
 - **Footage hidden**: arrows pointing outward (`<<` on the start handle, `>>` on the end handle).
   Footage on that side was trimmed or deleted and can be dragged back.
 
-The state comes from the same limits the drag obeys: the recording's range (`clipBounds`), the
-minimum item duration, and the footage other clips already show. Cases:
+The state comes from the same limits the drag obeys: the recording's range (`clipBounds`, added by
+the joined-recordings stack), the minimum item duration, and the footage other clips already show.
+Cases:
 
-| Situation                                                      | Start handle                                                    | End handle                                      |
-| -------------------------------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------- |
-| A whole recording, untrimmed                                   | at the limit                                                    | at the limit                                    |
-| The head was trimmed                                           | footage hidden                                                  | at the limit                                    |
-| First half of a split clip, second half kept (in either order) | at the limit                                                    | at the limit: the other half shows that footage |
-| First half of a split clip, second half deleted                | at the limit                                                    | footage hidden                                  |
-| Second half of a split clip, first half deleted                | footage hidden                                                  | at the limit                                    |
-| A joined clip at the start of its own recording                | at the limit, even though the scene has other footage before it |                                                 |
+| Situation                                                      | Start handle                                                    | End handle                                                     |
+| -------------------------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------- |
+| A whole recording, untrimmed                                   | at the limit                                                    | at the limit                                                   |
+| The head was trimmed                                           | footage hidden                                                  | at the limit                                                   |
+| First half of a split clip, second half kept (in either order) | at the limit                                                    | at the limit: the other half shows that footage                |
+| First half of a split clip, second half deleted                | at the limit                                                    | footage hidden                                                 |
+| Second half of a split clip, first half deleted                | footage hidden                                                  | at the limit                                                   |
+| A whole joined recording, untrimmed                            | at the limit, even though the scene has other footage before it | at the limit, even though the scene has other footage after it |
+| A joined recording with its tail trimmed                       | at the limit                                                    | footage hidden (only its own recording counts)                 |
 
 ### Timeline guide
 
@@ -120,7 +122,9 @@ legend, and its sample timeline shows them. Every locale is updated.
 
 ## Implementation notes
 
-Facts at the top of the joined-recordings stack (commit 1056d682):
+Facts on the branch of [PR #633](https://github.com/niway-dev/kaipu-record/pull/633), the top of the
+joined-recordings stack. That stack adds `clipBounds` and the joined scenes; re-check these pointers
+once it merges:
 
 - `trimClip`: `apps/kaipu-record/src/renderer/src/features/video-editor/timeline.ts`, the start edge
   sets `sourceStart` only and the end edge `sourceEnd`.
