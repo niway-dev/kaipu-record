@@ -105,10 +105,12 @@ beforeEach(() => {
   window.electronAPI.recordingStat = vi.fn(async () => 8_100_000);
   window.electronAPI.recordingFinalize = vi.fn(async () => RECORDING);
   window.electronAPI.setExportActive = vi.fn();
+  window.electronAPI.beginExport = vi.fn(async () => {});
 });
 
 afterEach(() => {
   captureException.mockClear();
+  probeSource.mockReset();
   __resetExportRunnerForTests();
   __resetReadyCopiesForTests();
   vi.unstubAllGlobals();
@@ -832,7 +834,6 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
     });
 
     it("probes nothing for a scene without joined recordings", async () => {
-      probeSource.mockClear();
       vi.stubGlobal("fetch", fetchMock());
       await startVideoExport(args({ joined: () => [] }), t);
       await waitFor(() => expect(workers).toHaveLength(1));
