@@ -173,6 +173,28 @@ describe("useJoinedRecordings", () => {
     expect(result.current[0].status).toBe("missing");
   });
 
+  it("asks main for no hold when the source left the scene while the library was being read", async () => {
+    items = [item("b")];
+    holds = { b: "b-file" };
+    let finish: () => void = () => {};
+    window.electronAPI.listLibraryItems = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve({ items, vaultError: null, catalogVerifiedAt: null });
+        }),
+    ) as never;
+    let sources = [source("s1", "b")];
+    const { rerender } = renderHook(() => useJoinedRecordings(sources));
+    await waitFor(() => expect(window.electronAPI.listLibraryItems).toHaveBeenCalled());
+
+    sources = []; // undone before the read answered
+    rerender();
+    finish();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(acquire).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+  });
+
   it("loads a newly joined source without reloading the others", async () => {
     items = [item("b"), item("c")];
     holds = { b: "b-file", c: "c-file" };

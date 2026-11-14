@@ -132,7 +132,7 @@ async function resolve(
   library: Awaited<ReturnType<typeof readJoinedLibrary>> | null,
 ): Promise<Loaded> {
   const item = library?.get(source.assetId);
-  if (!item) return MISSING;
+  if (!item || entry.cancelled) return MISSING; // cancelled during the read: skip the round trip
   let heldId: string | null;
   try {
     heldId = await window.electronAPI.acquireEditorSession(source.assetId);
