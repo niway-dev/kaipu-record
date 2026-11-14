@@ -551,7 +551,7 @@ function showAlreadyRecordingNotice(): void {
   }).show();
 }
 
-function triggerStartRecording(options: { reveal?: boolean } = {}): void {
+function triggerStartRecording(options: { reveal?: boolean; countdownDone?: boolean } = {}): void {
   if (hub?.isActive()) {
     // Don't un-hide the (deliberately hidden) main window into an active
     // recording — it would get burned into the video with no explanation.
@@ -572,7 +572,12 @@ function triggerStartRecording(options: { reveal?: boolean } = {}): void {
   } else {
     showMainWindow();
   }
-  sendToRenderer(IPC_CHANNELS.recordingRequestStart);
+  // The overlay already counted down: the recorder starts the take at once.
+  if (options.countdownDone) {
+    sendToRenderer(IPC_CHANNELS.recordingRequestStart, { countdownDone: true });
+  } else {
+    sendToRenderer(IPC_CHANNELS.recordingRequestStart);
+  }
 }
 
 /**
@@ -702,13 +707,20 @@ async function applyRecordTarget(target: RecordTarget): Promise<void> {
   if (target.start) {
     // If the recorder never starts (a dialog in the hidden window, no source, not idle) or
     // the countdown is cancelled, the hidden app comes back instead of staying out of sight.
-    hub.prepareRegionCountdown(target.displayId, target.rect, showMainWindow);
+    hub.prepareRegionCountdown(
+      target.displayId,
+      target.rect,
+      showMainWindow,
+      target.countdownDone ? { countdownDone: true } : undefined,
+    );
     // The renderer is not told the target: `selectArea` broadcast it as settings, and the
     // recorder reads source and area when its countdown ends, not when the request lands; an
     // acquisition it made during the countdown with an older target is released (recorder-store
     // test "resolves the take's input again when the countdown ends"). A start path without a
     // countdown must carry the target in the request instead.
-    triggerStartRecording({ reveal: false });
+    triggerStartRecording(
+      target.countdownDone ? { reveal: false, countdownDone: true } : { reveal: false },
+    );
     return;
   }
   const mainVisible = !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible();
@@ -1120,6 +1132,7 @@ app.whenReady().then(async () => {
     (target) => void applyRecordTarget(target),
     () => (hub?.isActive() || hub?.isPending()) ?? false,
     async () => (await hub?.screenshotTarget()) ?? null,
+    () => showMainWindowAt(`${ROUTES.settings}/recording`),
   );
   // Pays Vision's first-use compile in the background, once the renderer reports `image-text`.
   startTextRecognitionWarmUp();

@@ -80,6 +80,35 @@ export function intentForKey(event: KeyboardEvent): CaptureIntent | null {
   return key === "p" ? "capture" : key === "v" ? "record" : null;
 }
 
+/** The three recording inputs the widget toggles, as `RecordingSettings` names them. */
+export type InputToggleKey = "isMicrophoneEnabled" | "isSystemAudioEnabled" | "isCameraEnabled";
+
+const TOGGLE_KEYS: Record<string, InputToggleKey> = {
+  m: "isMicrophoneEnabled",
+  a: "isSystemAudioEnabled",
+  w: "isCameraEnabled",
+};
+
+/** A text field, select or contenteditable: the keys typed into it are not shortcuts. */
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable || target.contentEditable === "true") return true;
+  return ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+}
+
+/**
+ * M (microphone), A (system audio) and W (camera, "webcam") toggle an input, only while
+ * recording (ADR 0056). Not C: it sits beside ⌘C and one missed ⌘ would switch the camera on.
+ * A held key (`repeat`), any press with a modifier and events from editable controls do
+ * nothing, so a stray bare key never silently turns an input on.
+ */
+export function toggleForKey(event: KeyboardEvent, intent: CaptureIntent): InputToggleKey | null {
+  if (intent !== "record" || event.repeat) return null;
+  if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return null;
+  if (isEditableTarget(event.target)) return null;
+  return TOGGLE_KEYS[event.key.toLowerCase()] ?? null;
+}
+
 /**
  * What Enter does: take the screenshot, or (opened to record) start the countdown on the
  * selection. Design "Kaipu Record Modes" moved Mic, System audio and Camera onto the

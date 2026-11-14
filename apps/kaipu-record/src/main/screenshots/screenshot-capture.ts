@@ -49,6 +49,8 @@ export type ProviderResult =
       rect: Rectangle | null;
       /** The ratio the Frame box was locked to, when the overlay reported one. */
       ratio?: RecordingRatio;
+      /** The overlay already ran the countdown: the recording starts with no second one. */
+      countdownDone?: true;
     };
 
 export interface ScreenshotCaptureProvider {
@@ -146,6 +148,8 @@ export interface CaptureTarget {
   viaOverlay: boolean;
   /** Frame mode, record intent: the ratio the box was locked to. */
   ratio?: RecordingRatio;
+  /** Record action only: the overlay already ran the countdown. */
+  countdownDone?: true;
 }
 
 /** Shows the overlay in `ui` mode and resolves the answer to a target; null when cancelled. */
@@ -165,9 +169,15 @@ export async function pickTarget(
   const { mode, action } = answer;
   switch (answer.kind) {
     case "rect":
-      return answer.ratio
-        ? { display, rect: answer.rect, mode, action, viaOverlay: true, ratio: answer.ratio }
-        : { display, rect: answer.rect, mode, action, viaOverlay: true };
+      return {
+        display,
+        rect: answer.rect,
+        mode,
+        action,
+        viaOverlay: true,
+        ...(answer.ratio ? { ratio: answer.ratio } : {}),
+        ...(answer.countdownDone ? { countdownDone: true as const } : {}),
+      };
     case "window":
       return {
         display,
@@ -179,7 +189,14 @@ export async function pickTarget(
         viaOverlay: true,
       };
     case "display":
-      return { display, rect: null, mode, action, viaOverlay: true };
+      return {
+        display,
+        rect: null,
+        mode,
+        action,
+        viaOverlay: true,
+        ...(answer.countdownDone ? { countdownDone: true as const } : {}),
+      };
   }
 }
 
@@ -215,6 +232,9 @@ export async function runWithOverlay(
         displayId: target.display.id,
         rect: target.rect,
         ...(target.rect && target.ratio ? { ratio: target.ratio } : {}),
+        ...(target.countdownDone && target.action === "record"
+          ? { countdownDone: true as const }
+          : {}),
       };
     }
     await overlay.hideAll(); // Failure 1: capture only once no overlay is on screen

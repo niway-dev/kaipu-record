@@ -25,9 +25,10 @@ const PERSIST_EVERY_MS = 60;
  * read labels (that would light the camera on a page where nothing records); unnamed
  * devices are labelled by ordinal at render time.
  */
-export function useCameras(): CameraDevice[] {
+export function useCameras(enabled = true): CameraDevice[] {
   const [cameras, setCameras] = useState<CameraDevice[]>([]);
   useEffect(() => {
+    if (!enabled) return;
     const media = navigator.mediaDevices;
     if (!media?.enumerateDevices) return;
     let cancelled = false;
@@ -50,7 +51,7 @@ export function useCameras(): CameraDevice[] {
       cancelled = true;
       media.removeEventListener?.("devicechange", load);
     };
-  }, []);
+  }, [enabled]);
   return cameras;
 }
 

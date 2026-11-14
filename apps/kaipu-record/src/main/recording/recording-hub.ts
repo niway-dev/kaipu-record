@@ -140,11 +140,14 @@ export interface RecordingHubHandle {
    * it is loading while the start request travels and the recorder's `recordingCountdownVisible`
    * wait is answered at once. With the countdown off (0) no shade is opened: the take starts
    * right away and its own shade appears with `recordingStart`.
+   * `options.countdownDone`: the overlay already ran the countdown, so this start behaves as
+   * if the length were 0 whatever the setting says (no shade, no Esc held).
    */
   prepareRegionCountdown(
     displayId: number,
     rect: CaptureRect | null,
     onAbandoned?: () => void,
+    options?: { countdownDone?: boolean },
   ): void;
   /**
    * Best-effort recovery when the recorder renderer is gone (crash, or the
@@ -1283,7 +1286,7 @@ export function registerRecordingHub(
       cameraBubbleHiddenForCapture = false;
       if (settings.isCameraEnabled) cameraBubble.show();
     },
-    prepareRegionCountdown: (displayId, rect, onAbandoned) => {
+    prepareRegionCountdown: (displayId, rect, onAbandoned, options) => {
       clearCountdownRegion();
       if (activity.active) return;
       const display = screen.getAllDisplays().find((candidate) => candidate.id === displayId);
@@ -1293,7 +1296,8 @@ export function registerRecordingHub(
         revealAbandoned(onAbandoned ?? null);
         return;
       }
-      const seconds = getAppSettings().recordingCountdownSeconds;
+      // The overlay counted already: the same branch as a countdown of 0 for this start.
+      const seconds = options?.countdownDone ? 0 : getAppSettings().recordingCountdownSeconds;
       const prepared = { display, rect: area ? area.rect : null, drawn: false };
       countdownRegion = prepared;
       countdownAbandoned = onAbandoned ?? null;

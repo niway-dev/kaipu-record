@@ -44,7 +44,7 @@ interface RecordModeButtonsProps {
 }
 
 /**
- * The recording entry points (design "Kaipu Record Modes"): "Start recording" opens the
+ * The recording entry points (design "Kaipu Record Modes"): "New recording" (Start recording in the tray) opens the
  * selector in the last used mode, and the Frame · Window · Screen chips jump straight into
  * one. All three modes are offered: Window opens the thumbnail picker while the overlay's
  * Window mode is off (NIW2-469). Nothing here starts a take by itself.
@@ -73,7 +73,8 @@ export function RecordModeButtons({
       onClick={onStart}
     >
       <span className={own.dot} aria-hidden />
-      <span>{t("startRecording")}</span>
+      {/* Home's button opens the capture widget, where Record is the only Record button (ADR 0056). */}
+      <span>{t(variant === "page" ? "newRecording" : "startRecording")}</span>
       {shortcut && <kbd className={styles.primaryShortcut}>{shortcut}</kbd>}
     </button>
   );

@@ -201,8 +201,17 @@ export type OverlayAnswer =
       rect: CaptureRect;
       /** Record intent only: the ratio the box was locked to, stored with the take. */
       ratio?: RecordingRatio;
+      /** Record action only: the overlay already ran the countdown, so nobody counts again. */
+      countdownDone?: true;
     }
-  | { kind: "display"; mode: "screen"; action: CaptureAction; displayId: number }
+  | {
+      kind: "display";
+      mode: "screen";
+      action: CaptureAction;
+      displayId: number;
+      /** Record action only: the overlay already ran the countdown, so nobody counts again. */
+      countdownDone?: true;
+    }
   | {
       kind: "window";
       mode: "window";

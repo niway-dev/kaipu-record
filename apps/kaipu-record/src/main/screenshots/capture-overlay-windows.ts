@@ -143,6 +143,12 @@ export interface CaptureOverlayDeps {
   /** The warm-up's delays; tests shorten them. */
   warmDelayMs: number;
   warmRetryMs: number;
+  /**
+   * The widget's "More settings": main shows the Record settings page. Called after the
+   * pick was cancelled and the capture flow's own cancel path ran, so the window it shows
+   * is not hidden again by that path.
+   */
+  openRecordSettings: () => void;
 }
 
 const electronDeps = (): CaptureOverlayDeps => ({
@@ -167,6 +173,7 @@ const electronDeps = (): CaptureOverlayDeps => ({
   protectContent: () => false,
   warmDelayMs: OVERLAY_WARM_DELAY_MS,
   warmRetryMs: OVERLAY_WARM_RETRY_MS,
+  openRecordSettings: () => {},
 });
 
 type OverlayEntry = {
@@ -295,9 +302,14 @@ function parseAnswer(
   const action = parseAction(answer.action);
   if (!action) return null;
   const displayId = answer.displayId;
+  // The overlay already ran the countdown: kept only as the exact boolean, on a record
+  // action. Any other value or action drops it; the answer itself is never refused for it.
+  const countdownDone = answer.countdownDone === true && action === "record" ? true : undefined;
   if (answer.kind === "display") {
     if (answer.mode !== undefined && answer.mode !== "screen") return null;
-    return { kind: "display", mode: "screen", action, displayId };
+    return countdownDone
+      ? { kind: "display", mode: "screen", action, displayId, countdownDone }
+      : { kind: "display", mode: "screen", action, displayId };
   }
   if (answer.kind === "window") {
     if (answer.mode !== undefined && answer.mode !== "window") return null;
@@ -325,9 +337,15 @@ function parseAnswer(
     if (answer.mode !== undefined && answer.mode !== "frame") return null;
     // A ratio is kept only when it names a chip; anything else reads as unlocked.
     const ratio = isRecordingRatio(answer.ratio) ? answer.ratio : undefined;
-    return ratio
-      ? { kind: "rect", mode: "frame", action, displayId, rect, ratio }
-      : { kind: "rect", mode: "frame", action, displayId, rect };
+    return {
+      kind: "rect",
+      mode: "frame",
+      action,
+      displayId,
+      rect,
+      ...(ratio ? { ratio } : {}),
+      ...(countdownDone ? { countdownDone } : {}),
+    };
   }
   return null;
 }
@@ -375,6 +393,11 @@ export class CaptureOverlayWindows implements OverlayPort {
   private lastIntent: CaptureIntent | null = null;
   /** `dispose()` ran: the app is quitting, so no window is loaded again. */
   private disposed = false;
+  /**
+   * True while the overlay runs its own recording countdown: Esc then belongs to the
+   * renderer (it cancels only the countdown). Reset on every session start and end.
+   */
+  private counting = false;
 
   constructor(deps: Partial<CaptureOverlayDeps> = {}) {
     this.deps = { ...electronDeps(), ...deps };
@@ -391,6 +414,7 @@ export class CaptureOverlayWindows implements OverlayPort {
     if (this.disposed || this.session || displays.length === 0) {
       return Promise.resolve({ kind: "cancelled" });
     }
+    this.counting = false;
     // A disabled mode opens in Frame, the same fallback the page and the tray show.
     const ui: OverlayUi = this.deps.enabledModes.includes(requested) ? requested : "frame";
 
@@ -656,6 +680,7 @@ export class CaptureOverlayWindows implements OverlayPort {
     this.entries = [];
     const session = this.session;
     this.session = null;
+    this.counting = false;
     if (session) this.lastIntent = this.intent;
     this.hoverDisplayId = null;
     this.frameDisplayId = null;
@@ -735,6 +760,8 @@ export class CaptureOverlayWindows implements OverlayPort {
     window.webContents.on("before-input-event", (event, input) => {
       if (input.type !== "keyDown" || input.key !== "Escape") return;
       if (!this.entries.includes(entry)) return;
+      // The overlay's own countdown: the key goes to the renderer, which cancels only it.
+      if (this.counting) return;
       event.preventDefault();
       this.answer({ kind: "cancelled" });
     });
@@ -924,6 +951,22 @@ export class CaptureOverlayWindows implements OverlayPort {
       const intent = (payload as { intent?: unknown } | undefined)?.intent;
       // The overlay only switches between the two choices it offers; `instant` opens none.
       if (intent === "capture" || intent === "record") this.switchIntent(intent);
+    });
+
+    // The overlay's own countdown started or ended: while it runs, main does not take Esc.
+    this.deps.ipc.on(IPC_CHANNELS.screenshotOverlayCounting, (event, payload) => {
+      if (!this.session?.settle || !this.ownsSender(event)) return;
+      const active = (payload as { active?: unknown } | undefined)?.active;
+      if (active === true || active === false) this.counting = active;
+    });
+
+    // "More settings": cancel exactly as Esc does, then show the settings once that has run.
+    this.deps.ipc.on(IPC_CHANNELS.screenshotOverlayOpenRecordSettings, (event) => {
+      if (!this.session?.settle || !this.ownsSender(event)) return;
+      this.answer({ kind: "cancelled" });
+      // The cancel travels through the pick's promise chain (microtasks) to the capture
+      // flow's `afterCapture`, which leaves the main window hidden; showing it after that.
+      setImmediate(() => this.deps.openRecordSettings());
     });
 
     this.deps.ipc.on(IPC_CHANNELS.screenshotOverlayHiddenAck, (event) => {

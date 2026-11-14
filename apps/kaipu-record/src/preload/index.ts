@@ -343,7 +343,8 @@ const kaipuApi: KaipuElectronAPI = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.shortcutFired, listener);
   },
   onRequestStartRecording: (callback) => {
-    const listener = (): void => callback();
+    const listener = (_e: IpcRendererEvent, payload?: { countdownDone?: boolean }): void =>
+      callback(payload);
     ipcRenderer.on(IPC_CHANNELS.recordingRequestStart, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingRequestStart, listener);
   },
@@ -379,6 +380,8 @@ const kaipuApi: KaipuElectronAPI = {
       ipcRenderer.send(IPC_CHANNELS.screenshotOverlayFrameDisplay, { displayId }),
     setMode: (mode) => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayMode, { mode }),
     setIntent: (intent) => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayIntent, { intent }),
+    setCounting: (active) => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayCounting, { active }),
+    openRecordSettings: () => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayOpenRecordSettings),
     onState: (callback) => {
       const listener = (_e: IpcRendererEvent, state: OverlayState): void => callback(state);
       ipcRenderer.on(IPC_CHANNELS.screenshotOverlayState, listener);

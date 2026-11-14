@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Pause, Play, Square } from "lucide-react";
 import { useRecordingSetup } from "@renderer/features/recording/hooks/use-recording-setup";
 import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-labels";
@@ -40,6 +40,8 @@ import { uiArea } from "@renderer/lib/ui-area";
 /** Navigation state main's requests leave on the Record page (see AppRoot). */
 interface RecordNavState {
   startAt?: number;
+  /** The overlay already ran the countdown: this start begins the take at once. */
+  skipCountdown?: boolean;
   openPicker?: number;
   /** The picker was opened as the Window mode of "Start recording": a pick starts. */
   startOnPick?: boolean;
@@ -51,6 +53,7 @@ export function RecordPage(): React.JSX.Element {
   // Where this take lands (spec decision 13): named in the heading, switchable from it.
   const workspaces = useOptionalWorkspaces();
   const location = useLocation();
+  const navigate = useNavigate();
   const navState = (location.state as RecordNavState | null) ?? null;
   const shortcuts = useShortcutLabels();
   // Navigation to the finished recording's detail page happens at the app-shell
@@ -91,9 +94,14 @@ export function RecordPage(): React.JSX.Element {
     const startAt = navState?.startAt;
     if (startAt && startedForRef.current !== startAt && selectedSource && !isRecording) {
       startedForRef.current = startAt;
-      startRecording();
+      if (navState?.skipCountdown === true) startRecording({ skipCountdown: true });
+      else startRecording();
+      // The history entry keeps its state: Back to "/" after the take would remount this page
+      // and replay the start (now with no countdown). Consume the request once it fired.
+      const { startAt: _startAt, skipCountdown: _skipCountdown, ...rest } = navState ?? {};
+      navigate(location, { replace: true, state: Object.keys(rest).length > 0 ? rest : null });
     }
-  }, [navState?.startAt, selectedSource, isRecording, startRecording]);
+  }, [navState, navigate, location, selectedSource, isRecording, startRecording]);
 
   // The tray's "Change", or Window from "Start recording", navigates here with an
   // `openPicker` flag (see AppRoot) — open the source picker once per flag. Opened as the
