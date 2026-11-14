@@ -2433,9 +2433,8 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
           joined: [expect.objectContaining({ sourceId: "scene-b", title: "Second take" })],
         }),
       );
-      expect(getToasts().map((toast) => toast.message)).not.toContain(
-        "Frame capture does not work over a joined recording yet.",
-      );
+      // Only the session restore notice: no frame-capture refusal or error.
+      expect(getToasts().map((toast) => toast.message)).toEqual(["Restored your previous edit"]);
     } finally {
       window.electronAPI.loadVideoEditSession = loadSession;
     }
