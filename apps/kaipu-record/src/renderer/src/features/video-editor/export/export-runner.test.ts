@@ -634,6 +634,35 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
     expect(fetch.mock.calls.map((c) => c[0])).toEqual(["kaipu-media://recording/rec-1"]);
   });
 
+  describe("a plan that cannot be built", () => {
+    it("says the timeline is empty, and reports nothing, for an empty timeline", async () => {
+      await startVideoExport(args({ scene: { ...initialScene(1), items: [], overlays: [] } }), t);
+      expect(getExportSnapshot()).toMatchObject({
+        status: "error",
+        error: "exportEmptyTimeline",
+      });
+      expect(captureException).not.toHaveBeenCalled();
+      expect(workers).toHaveLength(0);
+    });
+
+    it("reports a broken scene and shows the generic error, not the empty-timeline one", async () => {
+      // A clip that starts in the opened recording and ends inside B's range.
+      const broken: VideoScene = {
+        ...JOINED_SCENE,
+        items: [{ id: "x", kind: "clip", sourceStart: 90, sourceEnd: 3610 }],
+      };
+      await startVideoExport(args({ scene: broken, joined: [entry("b")] }), t);
+      expect(getExportSnapshot()).toMatchObject({
+        status: "error",
+        error: "exportGenericError",
+      });
+      expect(captureException).toHaveBeenCalledWith(expect.any(Error), {
+        context: "video-export",
+      });
+      expect(workers).toHaveLength(0);
+    });
+  });
+
   describe("audio of the joined recordings", () => {
     const probe = (hasAudio: boolean) => ({
       width: 1920,

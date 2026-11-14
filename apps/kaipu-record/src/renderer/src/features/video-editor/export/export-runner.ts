@@ -8,7 +8,7 @@ import { showToast } from "@renderer/ui/toast-store";
 import type { SlideAssetStore } from "../slide-assets";
 import type { VideoScene } from "../scene";
 import type { CameraPath } from "../zoom/camera-path";
-import { buildExportPlan } from "./export-plan";
+import { buildExportPlan, EmptyTimelineError } from "./export-plan";
 import { recordingsUsed } from "./export-recordings";
 import { audioPlan } from "./joined-audio";
 import { probeSource } from "./probe-source";
@@ -305,8 +305,13 @@ export async function startVideoExport(
   let plan;
   try {
     plan = buildExportPlan(args.scene);
-  } catch {
-    set({ ...IDLE, ready: snapshot.ready, status: "error", error: t("exportEmptyTimeline") });
+  } catch (error) {
+    // Only an empty timeline reads as one; a broken scene (a clip straddling a recording's
+    // end) is a defect to report, with the generic message.
+    if (!(error instanceof EmptyTimelineError))
+      captureException(error, { context: "video-export" });
+    const message = error instanceof EmptyTimelineError ? t("exportEmptyTimeline") : GENERIC_ERROR;
+    set({ ...IDLE, ready: snapshot.ready, status: "error", error: message });
     return true;
   }
 

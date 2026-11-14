@@ -80,11 +80,19 @@ export interface ExportPlan {
   floating?: FloatingMediaPlan;
 }
 
+/** The scene has nothing to encode: the one failure `buildExportPlan` expects (a user can cause it). */
+export class EmptyTimelineError extends Error {
+  constructor() {
+    super("empty timeline");
+    this.name = "EmptyTimelineError";
+  }
+}
+
 export function buildExportPlan(scene: VideoScene): ExportPlan {
   const layout = toLayout(scene.items);
   // The UI disables the Exportar action when the timeline is empty; this throw is
   // just a backstop so the worker never starts an export with nothing to encode.
-  if (layout.length === 0) throw new Error("empty timeline");
+  if (layout.length === 0) throw new EmptyTimelineError();
 
   const segments: RenderSegment[] = layout.map((entry) =>
     entry.kind === "clip"
