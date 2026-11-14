@@ -31,6 +31,8 @@ type DragMode = "move" | Corner;
 interface Drag {
   mode: DragMode;
   id: string;
+  /** The pointer that owns the drag: any other pointer is ignored until it ends. */
+  pointerId: number;
   /** The item as it was when the press landed: every delta is applied to this. */
   start: ImageMediaItem;
   x: number;
@@ -184,6 +186,8 @@ export function MediaLayer({
     // Left button only: a context click must not arm a drag whose pointerup may never arrive.
     if (event.button !== 0) return;
     event.stopPropagation();
+    // A second finger must not replace a live drag: the first would lose its `onEnd`.
+    if (drag.current) return;
     if (mode === "move" && item.id !== selectedId) onSelect(item.id);
     const slot = slotRef.current?.getBoundingClientRect();
     if (!slot || slot.width === 0 || slot.height === 0) return;
@@ -191,6 +195,7 @@ export function MediaLayer({
     drag.current = {
       mode,
       id: item.id,
+      pointerId: event.pointerId,
       start: item,
       x: event.clientX,
       y: event.clientY,
@@ -202,7 +207,7 @@ export function MediaLayer({
 
   const move = (event: React.PointerEvent<HTMLElement>): void => {
     const d = drag.current;
-    if (!d) return;
+    if (!d || d.pointerId !== event.pointerId) return;
     const dx = event.clientX - d.x;
     const dy = event.clientY - d.y;
     if (!d.began) {
@@ -221,8 +226,13 @@ export function MediaLayer({
     );
   };
 
+  // Cancel and lost capture arrive per pointer: only the owner's ends the drag.
+  const abort = (event: React.PointerEvent<HTMLElement>): void => {
+    if (drag.current?.pointerId === event.pointerId) finish();
+  };
+
   const release = (event: React.PointerEvent<HTMLElement>): void => {
-    if (!drag.current) return;
+    if (drag.current?.pointerId !== event.pointerId) return;
     event.currentTarget.releasePointerCapture?.(event.pointerId);
     finish();
   };
@@ -259,8 +269,8 @@ export function MediaLayer({
             onPointerDown={(event) => press(event, "move", item)}
             onPointerMove={move}
             onPointerUp={release}
-            onPointerCancel={finish}
-            onLostPointerCapture={finish}
+            onPointerCancel={abort}
+            onLostPointerCapture={abort}
           >
             {url && (
               <img
@@ -292,8 +302,8 @@ export function MediaLayer({
               onPointerDown={(event) => press(event, corner, selected)}
               onPointerMove={move}
               onPointerUp={release}
-              onPointerCancel={finish}
-              onLostPointerCapture={finish}
+              onPointerCancel={abort}
+              onLostPointerCapture={abort}
             />
           ))}
         </div>

@@ -208,6 +208,25 @@ describe("MediaLayer", () => {
     expect(onEnd).toHaveBeenCalledOnce();
   });
 
+  it("a second pointer cannot take over a drag: the first one still ends the interaction", () => {
+    const { onBegin, onBoxChange, onEnd } = renderLayer({
+      media: [img("m", 0, 0)],
+      time: 1,
+      selectedId: "m",
+    });
+    const el = items()[0];
+    fireEvent.pointerDown(el, { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(el, { clientX: 150, clientY: 100, pointerId: 1 });
+    fireEvent.pointerDown(el, { clientX: 300, clientY: 300, pointerId: 2 });
+    fireEvent.pointerMove(el, { clientX: 400, clientY: 400, pointerId: 2 });
+    fireEvent.pointerUp(el, { clientX: 300, clientY: 300, pointerId: 2 });
+    expect(onEnd).not.toHaveBeenCalled();
+    expect(onBoxChange).toHaveBeenCalledTimes(1);
+    fireEvent.pointerUp(el, { clientX: 150, clientY: 100, pointerId: 1 });
+    expect(onBegin).toHaveBeenCalledOnce();
+    expect(onEnd).toHaveBeenCalledOnce();
+  });
+
   it("lets a drawing tool through while it is armed: no image or handle takes the pointer", () => {
     renderLayer({ media: [img("m", 0, 0)], time: 1, selectedId: "m", interactive: false });
     // jsdom applies no CSS, so the image's pass-through is the attribute the stylesheet keys on,
