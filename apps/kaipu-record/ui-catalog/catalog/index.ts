@@ -20,7 +20,6 @@ import { settingsScreenshots } from "./settings-screenshots";
 import { settingsWorkspaces } from "./settings-workspaces";
 import { shell } from "./shell";
 import { shortcuts } from "./shortcuts";
-import { screenshots } from "./screenshots";
 import { signIn } from "./sign-in";
 import { cameraBubble } from "./windows/camera-bubble";
 import { captureOverlay } from "./windows/capture-overlay";
@@ -41,7 +40,6 @@ export const CATALOGS: readonly AnyScreenCatalog[] = [
   editorVideo,
   exportCatalog,
   exportNew,
-  screenshots,
   // The image editor opens saved screenshots and the video editor recordings, which stamps
   // them; the Editor home reads those stamps, so it comes after both.
   editorImage,
@@ -94,7 +92,7 @@ export const KNOWN_VARIABLE: readonly KnownVariable[] = [
     reason: "shows when the document was saved, which is the run's clock",
   },
   {
-    areas: ["screenshots.recent", "editor.continue", "editor.hero", "editorCapture.page"],
+    areas: ["editor.continue", "editor.hero", "editorCapture.page"],
     reason: "show dates and the title a pasted image gets, which are the run's clock",
   },
   {
@@ -114,8 +112,9 @@ export const KNOWN_VARIABLE: readonly KnownVariable[] = [
   {
     areas: [
       "record.page",
-      "record.startButton",
-      "record.modePicker",
+      "record.screenshotCard",
+      "record.recordingCard",
+      "record.setup",
       "record.mic",
       "record.camera",
       "record.sourcePicker",

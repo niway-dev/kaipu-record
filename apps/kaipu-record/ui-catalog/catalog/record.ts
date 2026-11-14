@@ -6,23 +6,32 @@ const audioOn: Step = { call: "updateRecordingSettings", args: [{ isSystemAudioE
 const cameraOn: Step = { call: "updateRecordingSettings", args: [{ isCameraEnabled: true }] };
 const cameraOff: Step = { call: "updateRecordingSettings", args: [{ isCameraEnabled: false }] };
 const modeBack: Step = { call: "updateSettings", args: [{ recordingMode: "screen" }] };
+const shotModeBack: Step = { call: "updateSettings", args: [{ screenshotMode: "frame" }] };
 
-/** The Record page (`#/`). Recording toggles are reset to the profile's own before each state. */
+/**
+ * The Capture page (`#/`, still the `record` screen): the two entry cards, the Instant line,
+ * the Recording setup and the footer. Recording toggles are reset to the profile's own before
+ * each state.
+ */
 export const record = catalog(
   "record",
   {
     idle: {
       profile: "default",
-      how: "Open the app; the last mode is Screen, the mic is on, system audio and camera are off.",
+      how: "Open the app; the last screenshot mode is Frame, the last recording mode is Screen, the mic is on, system audio and camera are off.",
       demonstrates: [
         "record.page:idle",
-        "record.startButton:idle",
-        "record.modePicker:screen",
+        "record.screenshotCard:frame",
+        "record.recordingCard:screen",
+        "record.instantLine:default",
+        "record.setup:default",
+        "record.footer:default",
         "record.mic:on",
         "record.audio:off",
         "record.camera:off",
       ],
       gates: [
+        { setting: "screenshotMode", side: "frame" },
         { setting: "recordingMode", side: "screen" },
         { recordingSetting: "isMicrophoneEnabled", side: "on" },
         { recordingSetting: "isSystemAudioEnabled", side: "off" },
@@ -32,19 +41,34 @@ export const record = catalog(
     "idle@min": {
       profile: "default",
       window: "main-min",
-      demonstrates: ["record.page:idle", "record.startButton:idle"],
+      demonstrates: [
+        "record.page:idle",
+        "record.screenshotCard:frame",
+        "record.recordingCard:screen",
+      ],
+      gates: [
+        { setting: "screenshotMode", side: "frame" },
+        { setting: "recordingMode", side: "screen" },
+      ],
+    },
+    "screenshot-mode-screen": {
+      profile: "default",
+      steps: [{ call: "updateSettings", args: [{ screenshotMode: "screen" }] }],
+      demonstrates: ["record.screenshotCard:screen"],
+      gates: [{ setting: "screenshotMode", side: "screen" }],
+      after: [shotModeBack],
     },
     "mode-frame": {
       profile: "default",
       steps: [{ call: "updateSettings", args: [{ recordingMode: "frame" }] }],
-      demonstrates: ["record.modePicker:frame"],
+      demonstrates: ["record.recordingCard:frame"],
       gates: [{ setting: "recordingMode", side: "frame" }],
       after: [modeBack],
     },
     "mode-window": {
       profile: "default",
       steps: [{ call: "updateSettings", args: [{ recordingMode: "window" }] }],
-      demonstrates: ["record.modePicker:window"],
+      demonstrates: ["record.recordingCard:window"],
       gates: [{ setting: "recordingMode", side: "window" }],
       after: [modeBack],
     },
