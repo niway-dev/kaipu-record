@@ -108,7 +108,16 @@ export function anchorAt(layout: LayoutEntry[], t: number): MediaAnchor | null {
  * its footage instead of leaving it over another moment.
  */
 export function resolveAnchor(layout: LayoutEntry[], anchor: MediaAnchor): number | null {
-  if (anchor.kind === "source") return sourceToTimeline(layout, anchor.time);
+  if (anchor.kind === "source") {
+    // A clip's start is a source time that the clip before it may also END on (a split, then a
+    // reorder): the clip whose range STARTS at or contains the time wins, and only a time at
+    // the very end of the footage falls back to the clip that ends on it.
+    const entry =
+      layout.find(
+        (e) => e.kind === "clip" && anchor.time >= e.sourceStart && anchor.time < e.sourceEnd,
+      ) ?? clipAtSource(layout, anchor.time);
+    return entry ? entry.timelineStart + (anchor.time - entry.sourceStart) : null;
+  }
   const entry = layout.find((e) => e.kind === "slide" && e.itemId === anchor.itemId);
   if (!entry) return null;
   return entry.timelineStart + Math.max(0, Math.min(anchor.offset, itemSpan(entry)));

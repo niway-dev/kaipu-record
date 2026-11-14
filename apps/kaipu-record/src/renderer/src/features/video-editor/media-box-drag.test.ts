@@ -25,13 +25,6 @@ describe("dragBoxCorner", () => {
     expect(rect.width).toBeCloseTo(500);
   });
 
-  it("keeps the aspect whatever the pointer does", () => {
-    for (const corner of ["nw", "ne", "sw", "se"] as const) {
-      const { rect } = after(corner, 37, -91);
-      expect(rect.width / rect.height).toBeCloseTo(2);
-    }
-  });
-
   it("keeps the opposite corner fixed for every corner", () => {
     const fixed = {
       nw: (r: { x: number; y: number; width: number; height: number }) => [

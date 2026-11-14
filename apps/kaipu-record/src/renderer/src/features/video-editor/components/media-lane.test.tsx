@@ -267,17 +267,23 @@ describe("MediaLane gestures", () => {
     expect(media.onInteractionStart).not.toHaveBeenCalled();
   });
 
-  it("keeps the dragged block mounted when it changes row", () => {
+  it("a drag that moves the block to another row carries on: the same element keeps its capture", () => {
     const a = placed("a", 0, 4, 1);
     const b = placed("b", 5, 8, 2);
-    const media = makeMedia([a, b]);
-    const { container, rerender } = render(<MediaLane media={media} duration={10} />);
+    const before = makeMedia([a, b]);
+    const { container, rerender } = render(<MediaLane media={before} duration={10} />);
     mockRect(container.firstChild as HTMLElement);
-    const blockB = container.querySelector("[data-testid='media-block-b']");
-    // b moved onto a in time: it is now row 2.
-    const moved = [a, placed("b", 2, 5, 2)];
-    rerender(<MediaLane media={makeMedia(moved)} duration={10} />);
-    expect(container.querySelector("[data-testid='media-block-b']")).toBe(blockB);
+    const blockB = container.querySelector<HTMLElement>("[data-testid='media-block-b']")!;
+    fireEvent.pointerDown(blockB, { pointerId: 1, button: 0, clientX: 600 });
+    // b was dragged onto a in time: it is now row 2.
+    const after = makeMedia([a, placed("b", 2, 5, 2)]);
+    rerender(<MediaLane media={after} duration={10} />);
     expect(blockB).toHaveAttribute("data-row", "2");
+    expect(container.querySelector("[data-testid='media-block-b']")).toBe(blockB);
+    // Not remounted: the same node still carries the drag, and nothing ended it.
+    fireEvent.pointerMove(blockB, { pointerId: 1, clientX: 300 });
+    expect(after.onMove).toHaveBeenCalled();
+    expect(before.onInteractionEnd).not.toHaveBeenCalled();
+    expect(after.onInteractionEnd).not.toHaveBeenCalled();
   });
 });

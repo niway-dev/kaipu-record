@@ -208,8 +208,75 @@ describe("MediaLayer", () => {
     expect(onEnd).toHaveBeenCalledOnce();
   });
 
-  it("lets a drawing tool through while it is armed", () => {
-    renderLayer({ media: [img("m", 0, 0)], time: 1, interactive: false });
+  it("lets a drawing tool through while it is armed: no image or handle takes the pointer", () => {
+    renderLayer({ media: [img("m", 0, 0)], time: 1, selectedId: "m", interactive: false });
+    // jsdom applies no CSS, so the image's pass-through is the attribute the stylesheet keys on,
+    // and the handles, which no rule can disable, must simply not exist.
     expect(items()[0].dataset.interactive).toBe("false");
+    expect(screen.queryAllByTestId(/^media-handle-/)).toHaveLength(0);
+    expect(screen.getByTestId("media-selection")).toBeTruthy();
+  });
+
+  it("ignores a right or middle press: no select, no drag", () => {
+    const { onSelect, onBegin, onBoxChange, onEnd } = renderLayer({
+      media: [img("m", 0, 0)],
+      time: 1,
+    });
+    const el = items()[0];
+    fireEvent.pointerDown(el, { clientX: 100, clientY: 100, pointerId: 1, button: 2 });
+    fireEvent.pointerMove(el, { clientX: 200, clientY: 100, pointerId: 1 });
+    fireEvent.pointerUp(el, { pointerId: 1 });
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onBegin).not.toHaveBeenCalled();
+    expect(onBoxChange).not.toHaveBeenCalled();
+    expect(onEnd).not.toHaveBeenCalled();
+  });
+
+  it("ends a drag in progress when the layer unmounts, so the editor is not left interacting", () => {
+    const { onBegin, onEnd, unmount } = renderLayer({
+      media: [img("m", 0, 0)],
+      time: 1,
+      selectedId: "m",
+    });
+    const el = items()[0];
+    fireEvent.pointerDown(el, { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(el, { clientX: 150, clientY: 100, pointerId: 1 });
+    expect(onBegin).toHaveBeenCalledOnce();
+    unmount();
+    expect(onEnd).toHaveBeenCalledOnce();
+  });
+
+  it("does not report an end on unmount when the press never became a drag", () => {
+    const { onEnd, unmount } = renderLayer({ media: [img("m", 0, 0)], time: 1, selectedId: "m" });
+    fireEvent.pointerDown(items()[0], { clientX: 100, clientY: 100, pointerId: 1 });
+    unmount();
+    expect(onEnd).not.toHaveBeenCalled();
+  });
+
+  it("ends the drag when the dragged image leaves the playhead span", () => {
+    const item = img("m", 0, 0);
+    const { onEnd, rerender, onBegin } = renderLayer({ media: [item], time: 1, selectedId: "m" });
+    const el = items()[0];
+    fireEvent.pointerDown(el, { clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(el, { clientX: 150, clientY: 100, pointerId: 1 });
+    expect(onBegin).toHaveBeenCalledOnce();
+    // The playhead moved past the image: its element unmounts, the layer stays.
+    rerender(
+      <MediaLayer
+        media={[item]}
+        layout={layout}
+        time={30}
+        picture={picture}
+        selectedId="m"
+        interactive
+        imageUrl={(assetId) => `blob:${assetId}`}
+        onSelect={vi.fn()}
+        onBegin={vi.fn()}
+        onBoxChange={vi.fn()}
+        onEnd={onEnd}
+      />,
+    );
+    expect(items()).toHaveLength(0);
+    expect(onEnd).toHaveBeenCalledOnce();
   });
 });

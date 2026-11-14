@@ -334,6 +334,20 @@ describe("floating-item anchors", () => {
     expect(resolveAnchor(inserted, anchor!)).toBe(6);
   });
 
+  it("resolves the start of a clip to that clip when an earlier clip ends on the same source time", () => {
+    // A split at 5 s with a 3 s slide put between the halves: source 5 is the END of the
+    // first clip (timeline 5) and the START of the second (timeline 8).
+    const apart = toLayout([clip("a", 0, 5), slide("s", 3), clip("b", 5, 10)]);
+    expect(resolveAnchor(apart, { kind: "source", time: 5 })).toBe(8);
+    expect(resolveAnchor(apart, { kind: "source", time: 2 })).toBe(2);
+    expect(resolveAnchor(apart, { kind: "source", time: 7 })).toBe(10);
+  });
+
+  it("resolves the very end of the footage to the clip that ends there", () => {
+    expect(resolveAnchor(layout, { kind: "source", time: 30 })).toBe(layoutDuration(layout));
+    expect(resolveAnchor(layout, { kind: "source", time: 10 })).toBe(10 - 0);
+  });
+
   it("clamps a time past the end onto the last entry", () => {
     expect(anchorAt(layout, 999)).toEqual({ kind: "source", time: 30 });
   });

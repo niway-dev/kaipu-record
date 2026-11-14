@@ -14,7 +14,7 @@
  * locked (media-box-drag.ts). A drag is one undo step: `onBegin` on the first movement,
  * `onBoxChange` live, `onEnd` on release, abort included (the same contract as the webcam layer).
  */
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { uiArea } from "@renderer/lib/ui-area";
 import { mediaAt, mediaBoxPx, placeMedia, type PictureSize, type VisibleMedia } from "../media";
@@ -98,6 +98,22 @@ export function MediaLayer({
   const list = drawList(media, layout, time, selectedId);
   const selected = list.find((v) => v.item.id === selectedId)?.item ?? null;
 
+  // The latest `onEnd`, for the unmount cleanup below (it must not re-run on a re-render).
+  const latestEnd = useRef(onEnd);
+  latestEnd.current = onEnd;
+
+  // A captured pointer is not released by its element going away (the playhead moved off the
+  // image, the item was deleted, the layer unmounted mid-drag), so `finish` never runs: end the
+  // interaction by hand, or every later commit, undo and redo is ignored.
+  useEffect(
+    () => () => {
+      const d = drag.current;
+      drag.current = null;
+      if (d?.began) latestEnd.current();
+    },
+    [],
+  );
+
   const finish = (): void => {
     const d = drag.current;
     if (!d) return;
@@ -105,11 +121,23 @@ export function MediaLayer({
     if (d.began) onEnd();
   };
 
+  // The dragged image is no longer drawn (the playhead left its span, or it was deleted) while
+  // the layer stays: its element took the pointer capture with it, so end the drag here.
+  const draggedId = drag.current?.id;
+  const draggedStillDrawn = draggedId === undefined || list.some((v) => v.item.id === draggedId);
+  useEffect(() => {
+    if (!draggedStillDrawn) finish();
+    // `finish` only reads refs and the latest `onEnd` through the render that scheduled it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draggedStillDrawn]);
+
   const press = (
     event: React.PointerEvent<HTMLElement>,
     mode: DragMode,
     item: ImageMediaItem,
   ): void => {
+    // Left button only: a context click must not arm a drag whose pointerup may never arrive.
+    if (event.button !== 0) return;
     event.stopPropagation();
     if (mode === "move" && item.id !== selectedId) onSelect(item.id);
     const slot = slotRef.current?.getBoundingClientRect();
@@ -207,7 +235,9 @@ export function MediaLayer({
           style={percentStyle(selected, picture)}
           data-testid="media-selection"
         >
-          {CORNERS.map((corner) => (
+          {/* While a drawing tool is armed the handles are gone too: they take pointers, and a
+              stroke that starts over one must reach the layer below. */}
+          {(interactive ? CORNERS : []).map((corner) => (
             <span
               key={corner}
               className={styles.handle}

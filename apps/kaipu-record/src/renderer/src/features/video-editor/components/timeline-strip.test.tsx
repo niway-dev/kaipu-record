@@ -694,6 +694,13 @@ describe("TimelineStrip floating images", () => {
       />,
     ).container;
     const block = container.querySelector<HTMLElement>("[data-testid='media-block-m1']")!;
+    // Control: the same press on the ruler of this very render does scrub, so the test below
+    // would fail if the media lane ever sat under a scrub handler.
+    const ruler = container.querySelector<HTMLElement>("[data-testid='ruler']")!;
+    ruler.setPointerCapture = vi.fn();
+    fireEvent.pointerDown(ruler, { pointerId: 1, clientX: 300 });
+    expect(playback.seek).toHaveBeenCalledTimes(1);
+    (playback.seek as ReturnType<typeof vi.fn>).mockClear();
     fireEvent.pointerDown(block, { pointerId: 1, button: 0, clientX: 300 });
     fireEvent.pointerUp(block, { pointerId: 1, clientX: 300 });
     fireEvent.click(block);

@@ -175,6 +175,12 @@ background of ADR 0051 around all of it. Over a slide of the sequence the order 
 picture and the webcam layer; in the export they are drawn in `compose-output-frame.ts` before the
 webcam.
 
+With a fixed-canvas framing preset (Vertical, Square) the export canvas is not the preview's
+picture: the preview never shows the preset, so a box is a share of the OUTPUT frame there, bars
+included, the way the webcam is placed (ADR 0038). The image keeps its own aspect, so a `Full`
+image still spans the output's width. A composer test pins this; it has not been compared against
+a preview, because the preview cannot show the preset.
+
 ## 3. The stages
 
 1. **Floating images** (NIW2-771). Sections 1 and 2, the Clips rows, the preview handles, the

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ImageMediaItem, TrackItem } from "./scene";
-import { toLayout } from "./timeline";
+import { layoutDuration, toLayout } from "./timeline";
 import {
   addImageMedia,
   boxFitted,
@@ -264,8 +264,13 @@ describe("edits", () => {
     expect(placed.end - placed.start).toBeGreaterThanOrEqual(MEDIA_MIN_DURATION);
   });
 
-  it("does not change the sequence length", () => {
-    expect(toLayout(items)).toEqual(layout);
+  it("ends inside the sequence and leaves the sequence length alone", () => {
+    // Floating items live beside the track items: a scene with one is the same length, and the
+    // image, added 5 s from the end, is cut at the end instead of extending it.
+    const scene = { items, media: add(undefined, 55) };
+    expect(layoutDuration(toLayout(scene.items))).toBe(layoutDuration(layout));
+    const [placed] = placeMedia(scene.media, toLayout(scene.items));
+    expect(placed.end).toBeLessThanOrEqual(layoutDuration(layout));
   });
 
   it("moves an item to a timeline time, keeping its duration and rewriting the anchor", () => {

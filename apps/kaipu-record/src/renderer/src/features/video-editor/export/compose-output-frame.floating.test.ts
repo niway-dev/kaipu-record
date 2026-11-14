@@ -262,3 +262,29 @@ describe("under a background", () => {
     expect(pictureBlit.args[4] as number).toBeLessThan(H);
   });
 });
+
+describe("under a fixed-canvas framing preset", () => {
+  it("lays the box out on the framed canvas, the way the webcam is, after the framer", () => {
+    // A vertical 1080 x 1920 export of a 1920 x 1080 source: the preview has no such canvas, the
+    // export does, and a floating image is a share of the OUTPUT frame there (bars included).
+    const view = new FakeOffscreenCanvas(W, H) as unknown as OffscreenCanvas;
+    const framed = fakeContext("framed");
+    compose(
+      {
+        framing: { view, ctx: framed, width: 1080, height: 1920, mode: "fit", padding: "black" },
+        floating: floatingOf([item("a", 0)]),
+      } as Partial<OutputComposerOptions>,
+      1,
+    );
+    const draws = log.filter((c) => c.call === "drawImage");
+    const floatDraw = draws.find((c) => (c.args[0] as { tag?: string }).tag === "asset-a")!;
+    expect(floatDraw).toBeDefined();
+    expect(floatDraw.canvas).toBe("framed");
+    // Width 0.5 of 1080 = 540, height from the image's 16:9 = 303.75, centred.
+    const [, x, y, w, h] = floatDraw.args as number[];
+    expect(w).toBeCloseTo(540);
+    expect(h).toBeCloseTo(303.75);
+    expect(x).toBeCloseTo(270);
+    expect(y).toBeCloseTo(1920 / 2 - 303.75 / 2);
+  });
+});
