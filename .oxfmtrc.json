@@ -1,6 +1,7 @@
 {
   "ignorePatterns": [
     "**/CHANGELOG.md",
+    ".github/pull_request_template.md",
     "**/.claude/worktrees/**",
     "apps/documentation/public/mockups/**",
     "apps/documentation/public/audits/**",
