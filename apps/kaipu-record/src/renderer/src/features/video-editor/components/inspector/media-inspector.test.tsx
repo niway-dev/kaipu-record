@@ -117,4 +117,20 @@ describe("MediaInspector", () => {
     expect(h.onFades).toHaveBeenCalledWith({ fadeInMs: 100.4 });
     expect(fadeIn.value).toBe("100");
   });
+
+  it("does not carry typed text over to another image with the same values", () => {
+    const h = renderPanel();
+    fireEvent.change(screen.getByLabelText("Duration (s)"), { target: { value: "7" } });
+    // Another image is selected without the field being left first: same duration, same fades.
+    h.rerender(
+      <MediaInspector
+        item={{ ...item, id: "other" }}
+        seconds={10}
+        canBringForward
+        canSendBackward
+        {...h}
+      />,
+    );
+    expect((screen.getByLabelText("Duration (s)") as HTMLInputElement).value).toBe("10");
+  });
 });

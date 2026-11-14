@@ -64,7 +64,7 @@ function NumberField({
   );
 }
 
-export function MediaInspector({
+function MediaInspectorPanel({
   item,
   seconds,
   canBringForward,
@@ -162,4 +162,15 @@ export function MediaInspector({
       </button>
     </section>
   );
+}
+
+/**
+ * Keyed by the selected item: the number fields are uncontrolled, so another image with the same
+ * duration or fades would otherwise keep text typed for the previous one, and leaving that field
+ * would commit it to the new image.
+ */
+export function MediaInspector(
+  props: React.ComponentProps<typeof MediaInspectorPanel>,
+): React.JSX.Element {
+  return <MediaInspectorPanel key={props.item.id} {...props} />;
 }
