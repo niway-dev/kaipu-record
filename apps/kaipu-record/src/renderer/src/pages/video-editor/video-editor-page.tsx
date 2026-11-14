@@ -1523,12 +1523,14 @@ function VideoEditor({
 
   /** A capture's image: move the playhead to its moment, if that moment is still on the timeline. */
   const seekToCapture = useCallback(
-    (seconds: number, sceneSourceId?: string | null) => {
+    (seconds: number, sceneSourceId?: string | null, assetId?: string | null) => {
       // The link keeps seconds inside ITS recording's file; the timeline speaks axis seconds.
+      // The capture's own asset: a joined recording's capture made in its own editor carries no
+      // copy id, and must land in that recording's range, not at the same second of this one.
       const axisSeconds = axisSecondsOfCapture(
         scene.sources,
         source.assetId,
-        source.assetId,
+        assetId ?? source.assetId,
         seconds,
         sceneSourceId,
       );

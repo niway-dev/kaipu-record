@@ -2707,6 +2707,44 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     await waitFor(() => expect(screen.getByText(/^0:07\.0 \/ /)).toBeInTheDocument());
   });
 
+  it("moves the playhead into a joined recording's range for its capture made in its own editor", async () => {
+    // A capture of the joined recording taken in that recording's own editor: no copy id.
+    const joinedScene = {
+      ...initialScene(30),
+      items: [
+        { id: "a-clip", kind: "clip" as const, sourceStart: 0, sourceEnd: 10 },
+        { id: "b-clip", kind: "clip" as const, sourceStart: 3600, sourceEnd: 3610 },
+      ],
+      sources: [
+        {
+          id: "scene-b",
+          assetId: "asset-b",
+          title: "Second take",
+          offset: 3600,
+          durationSeconds: 40,
+          width: 1280,
+          height: 720,
+        },
+      ],
+    };
+    const loadSession = window.electronAPI.loadVideoEditSession;
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
+      sessionJson: serializeSession(joinedScene),
+      assets: [],
+    }));
+    libraryItems = [savedItem("theirs", 4, 4, "asset-b", null)];
+    try {
+      renderEditor();
+      await waitForEditorLoaded();
+      fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Go to 0:04.0" }));
+      // Second 4 of the joined recording is timeline 10 + 4, not second 4 of the opened one.
+      await waitFor(() => expect(screen.getByText(/^0:14\.0 \/ /)).toBeInTheDocument());
+    } finally {
+      window.electronAPI.loadVideoEditSession = loadSession;
+    }
+  });
+
   it("closes with Escape, and when a tool is picked", async () => {
     renderEditor();
     await waitForEditorLoaded();
