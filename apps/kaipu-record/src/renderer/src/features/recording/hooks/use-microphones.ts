@@ -11,11 +11,16 @@ import type { Microphone } from "@renderer/features/recording/types";
  * the OS is still hiding every label, which is the one case where there is no other way
  * to ask. Once permission has been granted, `enumerateDevices` returns real labels on its
  * own and the probe never runs again.
+ *
+ * `enabled` false reads nothing and never reaches the probe above. The screenshot overlay
+ * passes false while it is on capture intent. Switching it to Record passes true, which
+ * enables the enumeration and, if every label is blank, the probe.
  */
-export function useMicrophones(): Microphone[] {
+export function useMicrophones(enabled = true): Microphone[] {
   const [microphones, setMicrophones] = useState<Microphone[]>([]);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
 
     const audioInputs = async (): Promise<MediaDeviceInfo[]> => {
@@ -29,7 +34,7 @@ export function useMicrophones(): Microphone[] {
       // Every label blank means the OS has not granted the microphone yet (a granted
       // device keeps its name without a live stream). Opening one briefly is the only
       // way to ask, so it stays — as a fallback, not as the default path.
-      if (inputs.length > 0 && inputs.every((device) => device.label === "")) {
+      if (!cancelled && inputs.length > 0 && inputs.every((device) => device.label === "")) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           stream.getTracks().forEach((track) => track.stop());
@@ -53,7 +58,7 @@ export function useMicrophones(): Microphone[] {
       cancelled = true;
       navigator.mediaDevices.removeEventListener("devicechange", load);
     };
-  }, []);
+  }, [enabled]);
 
   return microphones;
 }

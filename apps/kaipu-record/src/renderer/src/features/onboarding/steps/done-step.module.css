@@ -1,54 +1,92 @@
 .step {
-  max-width: 640px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  animation: pop 0.35s ease;
+  max-width: 560px;
 }
 
-/*
- * The mark carries its own pink ground, so the old pink disc is gone. The glow
- * stays — it is what made this screen feel like an arrival — but as a
- * drop-shadow that follows the artwork's rounded square instead of a circle.
- */
-.mark {
+.places {
   display: flex;
-  margin-bottom: 24px;
-  filter: drop-shadow(0 16px 52px rgba(246, 5, 92, 0.6));
+  gap: 10px;
+  margin-top: 24px;
+  width: 100%;
 }
 
-.title {
-  font-size: 28px;
+.place {
+  flex: 1;
+  display: flex;
+  gap: 11px;
+  padding: 13px 14px;
+}
+
+.placeIcon {
+  display: flex;
+  color: var(--text-2);
+  margin-top: 1px;
+}
+
+.placeTitle {
+  font-size: 13.5px;
   font-weight: var(--font-weight-semibold);
-  letter-spacing: -0.02em;
-  margin-bottom: 10px;
+  color: var(--text);
 }
 
-.subtitle {
-  font-size: var(--font-size-md);
-  line-height: 1.5;
-  color: var(--text-secondary);
-  max-width: 420px;
+.placeDesc {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+  margin-top: 3px;
 }
 
-.kbd {
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.record,
+.screenshot {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 46px;
+  padding: 0 20px;
+  border-radius: 8px;
+  font-family: var(--font-family);
+  font-size: 15px;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.record {
+  background: var(--accent-primary);
+  color: #fff;
+  border: none;
+  box-shadow: 0 14px 30px -12px rgba(246, 5, 92, 0.95);
+}
+
+.record:hover {
+  background: var(--accent-primary-hover);
+}
+
+.screenshot {
+  padding: 0 18px;
+  background: transparent;
+  color: var(--text-2);
+  border: 1px solid var(--line-strong);
+}
+
+.screenshot:hover {
+  background: var(--bg-hover);
+}
+
+.hint,
+.hintMuted {
   font-family: var(--font-mono);
-  font-size: 13px;
-  background: var(--bg-card-hover);
-  border: 1px solid var(--border-light);
-  border-bottom-width: 2px;
-  border-radius: 6px;
-  padding: 3px 8px;
-  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: var(--font-weight-regular, 400);
+  color: rgba(255, 255, 255, 0.8);
 }
 
-@keyframes pop {
-  0% {
-    transform: scale(0.7);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
+.hintMuted {
+  color: var(--text-4);
 }

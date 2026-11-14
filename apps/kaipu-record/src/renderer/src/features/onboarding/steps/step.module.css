@@ -1,0 +1,59 @@
+/* What every onboarding step shares: the column, Kai, the title and the subtitle. */
+
+.step {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: pop 0.35s ease;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step {
+    animation: none;
+  }
+}
+
+/* Kai brings its own pink ground; only the glow lifts it off the page. */
+.mark {
+  display: flex;
+  filter: drop-shadow(0 18px 40px rgba(246, 5, 92, 0.45));
+}
+
+.title {
+  font-size: 28px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.03em;
+  color: var(--text);
+  margin-top: 18px;
+}
+
+.subtitle {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-3);
+  margin: 9px auto 0;
+  max-width: 440px;
+}
+
+/* The small grey line under a step's content. */
+.note {
+  font-size: 12px;
+  color: var(--text-4);
+  margin-top: 14px;
+}
+
+.card {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  text-align: left;
+}

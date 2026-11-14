@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { systemDefaultFirst, useMicrophones } from "./use-microphones";
 
 type Listener = () => void;
@@ -148,6 +148,28 @@ describe("useMicrophones and the microphone indicator", () => {
 
     await waitFor(() => expect(result.current).toHaveLength(1));
     expect(getUserMedia).toHaveBeenCalledTimes(1);
+  });
+
+  // The capture overlay can close while enumeration is still pending. The probe must not
+  // run afterwards, or it opens the microphone during a screenshot.
+  it("never opens the microphone when enabled turns false while enumeration is pending", async () => {
+    let resolveEnumerate!: (devices: MediaDeviceInfo[]) => void;
+    enumerateDevices.mockReturnValueOnce(
+      new Promise<MediaDeviceInfo[]>((resolve) => {
+        resolveEnumerate = resolve;
+      }),
+    );
+
+    const { rerender } = renderHook(({ enabled }) => useMicrophones(enabled), {
+      initialProps: { enabled: true },
+    });
+    await waitFor(() => expect(enumerateDevices).toHaveBeenCalled());
+
+    rerender({ enabled: false });
+    resolveEnumerate([device({ deviceId: "mic-1", label: "" })]);
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    expect(getUserMedia).not.toHaveBeenCalled();
   });
 
   it("stops the probe stream it opened, so nothing stays live", async () => {

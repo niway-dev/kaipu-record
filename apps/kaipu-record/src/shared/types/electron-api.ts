@@ -109,6 +109,16 @@ export interface CaptureOverlayBridge {
   setMode(mode: CaptureMode): void;
   /** P / V or the Capture | Record switch: ask main to switch every overlay to `intent`. */
   setIntent(intent: CaptureIntent): void;
+  /**
+   * The overlay started (`true`) or ended (`false`) its own recording countdown. While it
+   * counts, main does not cancel the session on Esc: the renderer handles the key.
+   */
+  setCounting(active: boolean): void;
+  /**
+   * "More settings" in the widget: main cancels the session as Esc does, then shows the main
+   * window on the Record settings page.
+   */
+  openRecordSettings(): void;
   /** Main's state broadcast (mode, hover, frame display, window list). Returns an unsubscribe fn. */
   onState(callback: (state: OverlayState) => void): () => void;
   /** Ask main for the current state again, once `onState` is listening (see `screenshotOverlayStateRequest`). */
@@ -590,7 +600,7 @@ export interface KaipuElectronAPI {
   /** Capture Panel → main: open the main window and start recording there. */
   requestStartRecording(): void;
   /** Record page subscribes so a panel request triggers its start. */
-  onRequestStartRecording(callback: () => void): () => void;
+  onRequestStartRecording(callback: (payload?: { countdownDone?: boolean }) => void): () => void;
   /** Capture Panel "Change" → main: open the main window + Record page's source picker. */
   requestChooseSource(): void;
   /** Record page subscribes so a panel "Change" opens its source picker. */
@@ -599,8 +609,11 @@ export interface KaipuElectronAPI {
    * a source also starts the countdown.
    */
   onRequestChooseSource(callback: (request: { startOnPick: boolean }) => void): () => void;
-  /** Capture Panel → main: run the interactive screenshot capture (same as ⌘⇧1). */
-  requestCaptureScreenshot(mode: CaptureMode): void;
+  /**
+   * Capture Panel → main: run the interactive screenshot capture (same as ⌘⇧1). No mode = the
+   * same mode the ⌘⇧1 shortcut would use.
+   */
+  requestCaptureScreenshot(mode?: CaptureMode): void;
   /**
    * Record page / Capture Panel → main: open the recording selector, in `mode` (a mode
    * chip, which also makes it the last used one) or in the last used mode (Start).
@@ -625,6 +638,8 @@ export interface KaipuElectronAPI {
   suspendShortcuts(): void;
   /** Resume (re-register) global shortcuts after rebinding. */
   resumeShortcuts(): void;
+  /** Subscribe to every global shortcut press (its action), after main ran it. */
+  onShortcutFired(callback: (action: ShortcutAction) => void): () => void;
 
   // ── Screenshots ───────────────────────────────────────────────────────
   /** Run a capture in `mode`; always answers captured, cancelled or unsupported. */

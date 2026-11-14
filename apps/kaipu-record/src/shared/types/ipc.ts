@@ -526,6 +526,11 @@ export const IPC_CHANNELS = {
   // validates, rebroadcasts the state, and lists the windows the first time Window is entered.
   screenshotOverlayMode: "screenshot:overlay-mode",
   screenshotOverlayIntent: "screenshot:overlay-intent",
+  // Overlay → main: the overlay is (or stopped) running its own recording countdown
+  // (`{ active: boolean }`). While active, main leaves Esc to the renderer.
+  screenshotOverlayCounting: "screenshot:overlay-counting",
+  // Overlay → main (no payload): cancel the pick like Esc, then show the Record settings page.
+  screenshotOverlayOpenRecordSettings: "screenshot:overlay-open-record-settings",
   // Overlay → main (Frame): "move the frame to this display" (`{ displayId: number }`).
   screenshotOverlayFrameDisplay: "screenshot:overlay-frame-display",
   // Main → overlay (no payload): "reply after your next animation frame"; overlay → main
@@ -654,6 +659,8 @@ export const IPC_CHANNELS = {
   // so the combo reaches the renderer instead of firing the (still-registered) action.
   shortcutsSuspend: "shortcuts:suspend",
   shortcutsResume: "shortcuts:resume",
+  // main → renderer: a global shortcut just fired (its action). Onboarding marks it tried.
+  shortcutFired: "shortcut:fired",
   // Analytics: secondary windows forward serialized exceptions to the main-process sink.
   analyticsCaptureException: "analytics:capture-exception",
   // Video-editor session persistence. Save/load the edit session JSON + slide asset

@@ -5,6 +5,11 @@ description: Second iteration of the screenshot modes. Area is folded into Frame
 
 # Screenshot modes v2 — design
 
+> **Superseded in part (2026-11-13):** [ADR 0056](/architecture/decisions/0056-the-capture-widget-docks-to-the-work-area-not-to-the-selection/)
+> replaces the action bar, the recording panel, the ratio bar and the hint pill that this design places next to the selection with one
+> [capture widget docked to the work area](/specs/2026-11-13-capture-widget-one-toolbar-design/)
+> ([NIW2-751](https://linear.app/niway/issue/NIW2-751)). The overlay mechanics, the geometry and the modes below still hold.
+
 **Status: 🟡 In progress · 2026-10-18.** Implementation on `feat/screenshot-modes-v2` (tasks 1–7 done, PR pending); macOS and Windows QA pending. Window mode shipped behind `WINDOW_MODE_ENABLED = false` (owner found it buggy on 2026-10-18); Frame and Screen are live. Iterates on the
 [capture modes design](/specs/2026-10-15-screenshot-capture-modes-design/) that shipped in
 desktop 0.12.0 (PR #306). Where the two differ this one wins; that spec keeps the contract,

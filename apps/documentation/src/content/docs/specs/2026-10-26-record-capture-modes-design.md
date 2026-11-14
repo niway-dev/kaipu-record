@@ -5,6 +5,11 @@ description: Design for choosing what a recording covers the way screenshots alr
 
 # Record capture modes — design
 
+> **Superseded in part (2026-11-13):** [ADR 0056](/architecture/decisions/0056-the-capture-widget-docks-to-the-work-area-not-to-the-selection/)
+> replaces the action bar, the recording panel, the ratio bar and the hint pill that this design places next to the selection with one
+> [capture widget docked to the work area](/specs/2026-11-13-capture-widget-one-toolbar-design/)
+> ([NIW2-751](https://linear.app/niway/issue/NIW2-751)). The overlay mechanics, the geometry and the modes below still hold.
+
 **Status: 🟡 In progress · 2026-10-26.** Tasks 1–4 and 6 implemented on `feat/record-capture-modes` (merged, owner QA pending). Task 5 (selector chrome, widget, Record page and tray submenu) is implemented across four PRs integrated on `feat/record-modes-integration`: #383 (selector and Record page, from the Claude Design file "Kaipu Record Modes"), #382 (capture metadata in the library), #380 (camera bubble shape and size) and #381 (tray Record submenu). Owner QA pending; verified by unit and component tests only, never run on a real display. Refinements made during implementation are marked _Implementation note_ below; the ones task 5 brought are collected in "Task 5 implementation notes" after the open questions. Linear: [NIW2-513](https://linear.app/niway/issue/NIW2-513/record-capture-modes-record-a-display-or-a-selected-area-through-the)
 (parent; one child per task in section 8 once this design is approved). Builds on the
 [screenshot capture modes design](/specs/2026-10-15-screenshot-capture-modes-design/) and

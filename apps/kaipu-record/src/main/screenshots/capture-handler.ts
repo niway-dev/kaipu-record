@@ -113,6 +113,8 @@ export interface RecordTarget {
   start: boolean;
   /** The ratio the Frame box was locked to; stored with the take's capture metadata. */
   ratio?: RecordingRatio;
+  /** The overlay already ran the countdown: main and the recorder must not count again. */
+  countdownDone?: true;
 }
 
 function assertCaptureMode(value: unknown): CaptureMode {
@@ -218,11 +220,15 @@ export function createCaptureHandler(
         // picture, so it never starts a recording. Answered as a cancel.
       } else if (result.kind === "record") {
         // A recording target, not a screenshot: no save, no mode memory, no analytics here.
-        const { displayId, rect, start, ratio } = result;
+        const { displayId, rect, start, ratio, countdownDone } = result;
         try {
-          deps.onRecordTarget?.(
-            ratio ? { displayId, rect, start, ratio } : { displayId, rect, start },
-          );
+          deps.onRecordTarget?.({
+            displayId,
+            rect,
+            start,
+            ...(ratio ? { ratio } : {}),
+            ...(countdownDone ? { countdownDone } : {}),
+          });
           recordStarted = start && deps.onRecordTarget !== undefined;
         } catch (error) {
           console.error("recording target could not be applied", error);

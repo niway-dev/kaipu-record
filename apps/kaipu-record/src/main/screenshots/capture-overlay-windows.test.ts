@@ -378,6 +378,80 @@ describe("CaptureOverlayWindows: answers", () => {
       ).toEqual({ kind: "rect", mode: "frame", action: "record", displayId: 1, rect });
     });
 
+    it("keeps countdownDone on a record rect answer", async () => {
+      expect(
+        await answerWith("frame", {
+          kind: "rect",
+          mode: "frame",
+          action: "record",
+          displayId: 1,
+          rect,
+          countdownDone: true,
+        }),
+      ).toEqual({
+        kind: "rect",
+        mode: "frame",
+        action: "record",
+        displayId: 1,
+        rect,
+        countdownDone: true,
+      });
+    });
+
+    it("keeps countdownDone on a record display answer", async () => {
+      expect(
+        await answerWith("screen", {
+          kind: "display",
+          mode: "screen",
+          action: "record",
+          displayId: 1,
+          countdownDone: true,
+        }),
+      ).toEqual({
+        kind: "display",
+        mode: "screen",
+        action: "record",
+        displayId: 1,
+        countdownDone: true,
+      });
+    });
+
+    const notDone = [
+      ["the string true", "record", "true"],
+      ["the number 1", "record", 1],
+      ["false", "record", false],
+      ["true on a capture action", "capture", true],
+      ["true on a select action", "select", true],
+    ] as const;
+
+    it.each(notDone)("drops countdownDone for %s on a rect answer", async (_n, action, value) => {
+      expect(
+        await answerWith("frame", {
+          kind: "rect",
+          mode: "frame",
+          action,
+          displayId: 1,
+          rect,
+          countdownDone: value,
+        }),
+      ).toEqual({ kind: "rect", mode: "frame", action, displayId: 1, rect });
+    });
+
+    it.each(notDone)(
+      "drops countdownDone for %s on a display answer",
+      async (_n, action, value) => {
+        expect(
+          await answerWith("screen", {
+            kind: "display",
+            mode: "screen",
+            action,
+            displayId: 1,
+            countdownDone: value,
+          }),
+        ).toEqual({ kind: "display", mode: "screen", action, displayId: 1 });
+      },
+    );
+
     it("accepts a window answer by id, with main's own rect and whole size, not the renderer's", async () => {
       const fullSize = { width: 900, height: 400 };
       const port = new CaptureOverlayWindows({
@@ -1173,6 +1247,82 @@ describe("CaptureOverlayWindows: Escape handled by main", () => {
     });
   });
 
+  describe("while the overlay counts down", () => {
+    const esc = () => ({ preventDefault: vi.fn() });
+
+    it("does not cancel or preventDefault on Escape while counting", async () => {
+      const port = overlays();
+      let settled = false;
+      void port.pick("frame", [left]).then(() => (settled = true));
+      created[0].window.send(IPC_CHANNELS.screenshotOverlayCounting, { active: true });
+      const event = esc();
+
+      created[0].window.emitContents("before-input-event", event, input("Escape"));
+      await Promise.resolve();
+
+      expect(settled).toBe(false);
+      expect(event.preventDefault).not.toHaveBeenCalled();
+    });
+
+    it("cancels again once counting is switched off", async () => {
+      const port = overlays();
+      const picked = port.pick("frame", [left]);
+      created[0].window.send(IPC_CHANNELS.screenshotOverlayCounting, { active: true });
+      created[0].window.send(IPC_CHANNELS.screenshotOverlayCounting, { active: false });
+      const event = esc();
+
+      created[0].window.emitContents("before-input-event", event, input("Escape"));
+
+      expect(await picked).toEqual({ kind: "cancelled" });
+      expect(event.preventDefault).toHaveBeenCalled();
+    });
+
+    it("clears the countdown flag at session start, so the next pick cancels on Escape", async () => {
+      const port = overlays();
+      void port.pick("frame", [left]);
+      created[0].window.send(IPC_CHANNELS.screenshotOverlayCounting, { active: true });
+      port.destroyAll();
+      const next = port.pick("frame", [left]);
+      const event = esc();
+
+      created[1].window.emitContents("before-input-event", event, input("Escape"));
+
+      expect(await next).toEqual({ kind: "cancelled" });
+      expect(event.preventDefault).toHaveBeenCalled();
+    });
+
+    it.each([["yes"], [1], [null], [undefined], ["true"]])(
+      "ignores a malformed payload (%j)",
+      async (active) => {
+        const port = overlays();
+        const picked = port.pick("frame", [left]);
+        created[0].window.send(IPC_CHANNELS.screenshotOverlayCounting, { active });
+        created[0].window.send(IPC_CHANNELS.screenshotOverlayCounting, undefined);
+        const event = esc();
+
+        created[0].window.emitContents("before-input-event", event, input("Escape"));
+
+        expect(await picked).toEqual({ kind: "cancelled" });
+        expect(event.preventDefault).toHaveBeenCalled();
+      },
+    );
+
+    it("ignores the message from a window that is not an overlay of the session", async () => {
+      const port = overlays();
+      const picked = port.pick("frame", [left]);
+      ipcListeners.get(IPC_CHANNELS.screenshotOverlayCounting)?.(
+        { sender: { id: 99_999 } },
+        { active: true },
+      );
+      const event = esc();
+
+      created[0].window.emitContents("before-input-event", event, input("Escape"));
+
+      expect(await picked).toEqual({ kind: "cancelled" });
+      expect(event.preventDefault).toHaveBeenCalled();
+    });
+  });
+
   it("an Escape from a finished session's window leaves the next pick alone", async () => {
     const port = overlays();
     void port.pick("screen", [left]);
@@ -1189,6 +1339,73 @@ describe("CaptureOverlayWindows: Escape handled by main", () => {
       action: "capture",
       displayId: 1,
     });
+  });
+});
+
+describe("CaptureOverlayWindows: open the Record settings", () => {
+  const flushImmediates = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+
+  it("cancels the pick, then asks main to show the Record settings once, after the cancel settled", async () => {
+    const openRecordSettings = vi.fn();
+    const port = new CaptureOverlayWindows({
+      enabledModes: CAPTURE_MODES,
+      platform: "darwin",
+      openRecordSettings,
+    });
+    const picked = port.pick("frame", [left]);
+    const order: string[] = [];
+    void picked.then(() => order.push("pick settled"));
+    openRecordSettings.mockImplementation(() => order.push("open settings"));
+
+    created[0].window.send(IPC_CHANNELS.screenshotOverlayOpenRecordSettings, undefined);
+
+    expect(await picked).toEqual({ kind: "cancelled" });
+    // Not synchronous: the capture flow's own cancel path runs first.
+    expect(openRecordSettings).not.toHaveBeenCalled();
+    await flushImmediates();
+    expect(openRecordSettings).toHaveBeenCalledOnce();
+    expect(order).toEqual(["pick settled", "open settings"]);
+  });
+
+  it("does nothing without a live pick", async () => {
+    const openRecordSettings = vi.fn();
+    const port = new CaptureOverlayWindows({
+      enabledModes: CAPTURE_MODES,
+      platform: "darwin",
+      openRecordSettings,
+    });
+    void port.pick("frame", [left]);
+    const stale = created[0].window;
+    port.destroyAll();
+
+    stale.send(IPC_CHANNELS.screenshotOverlayOpenRecordSettings, undefined);
+    ipcListeners.get(IPC_CHANNELS.screenshotOverlayOpenRecordSettings)?.(
+      { sender: { id: 99_999 } },
+      undefined,
+    );
+    await flushImmediates();
+
+    expect(openRecordSettings).not.toHaveBeenCalled();
+  });
+
+  it("ignores a window that is not an overlay of the session", async () => {
+    const openRecordSettings = vi.fn();
+    const port = new CaptureOverlayWindows({
+      enabledModes: CAPTURE_MODES,
+      platform: "darwin",
+      openRecordSettings,
+    });
+    const picked = port.pick("frame", [left]);
+
+    ipcListeners.get(IPC_CHANNELS.screenshotOverlayOpenRecordSettings)?.(
+      { sender: { id: 99_999 } },
+      undefined,
+    );
+    await flushImmediates();
+
+    expect(openRecordSettings).not.toHaveBeenCalled();
+    port.cancelPick();
+    await picked;
   });
 });
 
