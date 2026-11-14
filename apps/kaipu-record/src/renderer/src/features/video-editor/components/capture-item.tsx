@@ -1,4 +1,4 @@
-import { Copy, LocateFixed, Trash2 } from "lucide-react";
+import { Copy, ImagePlus, LocateFixed, Trash2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { reportError } from "@renderer/features/analytics";
@@ -13,10 +13,17 @@ export interface CaptureItemProps {
   imageLabel: string;
   /** Click on the image; without it the image is not interactive. */
   onImageClick?: () => void;
-  /** The editor's Go to button: shown when given (a capture with a time in the video). */
+  /**
+   * The editor's Go to: a button over the image, revealed on hover or focus (a capture with
+   * a time in the video).
+   */
   onSeek?: () => void;
   /** Accessible name of the Go to button. */
   seekLabel?: string;
+  /** The editor's Add to timeline button: shown when given. */
+  onAddToTimeline?: () => void;
+  /** Accessible name of the Add to timeline button. */
+  addToTimelineLabel?: string;
   /** The editor's Delete button: shown when given (the caller confirms). */
   onDelete?: () => void;
   /** Accessible name of the Delete button. */
@@ -36,6 +43,8 @@ export function CaptureItem({
   onImageClick,
   onSeek,
   seekLabel,
+  onAddToTimeline,
+  addToTimelineLabel,
   onDelete,
   deleteLabel,
   highlighted = false,
@@ -93,22 +102,40 @@ export function CaptureItem({
           {image}
         </button>
       ) : (
-        <div className={styles.imageFrame}>{image}</div>
+        <div className={styles.imageFrame}>
+          {image}
+          {/* A subtle veil with Go to centered on it, only while the image is hovered or
+              has keyboard focus. Only the button takes clicks. */}
+          {onSeek && (
+            <span className={styles.veil}>
+              <button
+                type="button"
+                className={styles.seekButton}
+                aria-label={seekLabel}
+                title={seekLabel}
+                onClick={onSeek}
+              >
+                <LocateFixed size={16} />
+              </button>
+            </span>
+          )}
+        </div>
       )}
       <div className={styles.meta}>
         {capture.sourceTimeSeconds !== null && (
           <span className={styles.time}>{formatClock(capture.sourceTimeSeconds)}</span>
         )}
         <span className={styles.actions}>
-          {onSeek && (
+          {onAddToTimeline && (
             <button
               type="button"
               className={styles.actionButton}
-              aria-label={seekLabel}
-              title={seekLabel}
-              onClick={onSeek}
+              aria-label={addToTimelineLabel}
+              title={addToTimelineLabel}
+              disabled={!localId}
+              onClick={onAddToTimeline}
             >
-              <LocateFixed size={14} />
+              <ImagePlus size={14} />
             </button>
           )}
           <button

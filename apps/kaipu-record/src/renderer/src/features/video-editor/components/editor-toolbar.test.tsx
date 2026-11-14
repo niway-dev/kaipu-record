@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -19,7 +19,8 @@ function renderToolbar(overrides: Partial<EditorToolbarProps> = {}): EditorToolb
     canRedo: true,
     onUndo: vi.fn(),
     onRedo: vi.fn(),
-    onAddImage: vi.fn(),
+    onCaptureFrame: vi.fn(),
+    captureDisabled: false,
     onExport: vi.fn(),
     exportDisabled: false,
     ...overrides,
@@ -49,14 +50,35 @@ let rerenderRail: (next: Partial<EditorToolRailProps>) => void = () => {};
 describe("EditorToolbar", () => {
   it("renders the four actions that stay in the title bar", () => {
     renderToolbar();
-    for (const name of ["Undo", "Redo", "Add image", "Export"]) {
+    for (const name of ["Undo", "Redo", "Capture frame", "Export"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
   });
 
-  it("has no Capture frame button: it moved into the Captures panel (NIW2-768)", () => {
+  it("has no Add image button: Capture frame took its place (NIW2-768)", () => {
     renderToolbar();
-    expect(screen.queryByRole("button", { name: "Capture frame" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add image" })).toBeNull();
+    expect(screen.queryByTestId("slide-image-input")).toBeNull();
+  });
+
+  it("sits Capture frame right after the divider that follows Redo", () => {
+    renderToolbar();
+    const redo = screen.getByRole("button", { name: "Redo" });
+    const capture = screen.getByRole("button", { name: "Capture frame" });
+    expect(redo.nextElementSibling?.nextElementSibling).toBe(capture);
+  });
+
+  it("fires onCaptureFrame, and disables Capture frame per captureDisabled", () => {
+    const props = renderToolbar();
+    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    expect(props.onCaptureFrame).toHaveBeenCalledOnce();
+    cleanup();
+
+    const disabled = renderToolbar({ captureDisabled: true });
+    const button = screen.getByRole("button", { name: "Capture frame" });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(disabled.onCaptureFrame).not.toHaveBeenCalled();
   });
 
   it("no longer holds split and delete: they moved to the transport bar (NIW2-664)", () => {
@@ -138,20 +160,6 @@ describe("EditorToolbar", () => {
     expect(props.onUndo).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "Redo" }));
     expect(props.onRedo).toHaveBeenCalledOnce();
-  });
-
-  it("clicking Add image opens the hidden file input, and picking a file fires onAddImage", () => {
-    const props = renderToolbar();
-    const input = screen.getByTestId("slide-image-input") as HTMLInputElement;
-    const clickSpy = vi.spyOn(input, "click");
-
-    fireEvent.click(screen.getByRole("button", { name: "Add image" }));
-    expect(clickSpy).toHaveBeenCalledOnce();
-
-    const file = new File(["fake-bytes"], "slide.png", { type: "image/png" });
-    fireEvent.change(input, { target: { files: [file] } });
-    expect(props.onAddImage).toHaveBeenCalledWith(file);
-    expect(input.value).toBe("");
   });
 
   it("disables buttons per props, and a disabled button fires no callback", () => {

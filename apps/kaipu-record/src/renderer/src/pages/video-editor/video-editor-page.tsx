@@ -798,18 +798,17 @@ function VideoEditor({
   // 0 lands before everything (the intro-card case); mid-clip lands at the closest cut
   // point. Placing a slide mid-clip requires splitting first (predictable, no
   // auto-split). `controller.commit` already no-ops mid-drag, same as every other
-  // discrete action here.
-  const handleAddImage = useCallback(
-    async (file: File) => {
+  // discrete action here. The only source of images is a capture's Add to timeline.
+  const insertImageSlide = useCallback(
+    async (bytes: ArrayBuffer, mime: string) => {
       // Same guard as every other discrete action: don't mutate the scene while a
       // trim or overlay drag owns it via begin/updateLive/endInteract.
       if (controller.interacting) return;
-      const bytes = await file.arrayBuffer();
       // Wrap the image decode in a try/catch so a corrupt or unsupported file
       // surfaces a clear toast rather than an unhandled rejection.
       let asset: SlideAsset;
       try {
-        asset = await assetStoreRef.current.put(bytes, file.type);
+        asset = await assetStoreRef.current.put(bytes, mime);
       } catch {
         showToast({ message: t("imageLoadError") });
         return;
@@ -826,6 +825,24 @@ function VideoEditor({
       controller.commit({ ...scene, items: insertItemAt(scene.items, index, slide) });
     },
     [scene, controller, playback.timelineTime],
+  );
+
+  // A capture's Add to timeline: main reads the vault PNG by id (fetch on the media scheme
+  // returns no bytes here), then it goes in as any image slide.
+  const addCaptureToTimeline = useCallback(
+    async (capture: LibraryVideo) => {
+      const id = capture.id;
+      if (!id) return;
+      let bytes: ArrayBuffer;
+      try {
+        bytes = await window.electronAPI.readScreenshotBytes(id);
+      } catch {
+        showToast({ message: t("imageLoadError") });
+        return;
+      }
+      await insertImageSlide(bytes, "image/png");
+    },
+    [insertImageSlide, t],
   );
 
   // Reads the live preview <video>'s native/displayed size at click time (not
@@ -1062,7 +1079,9 @@ function VideoEditor({
   // Frame captures (NIW2-764): the composed frame at the playhead, saved into the library
   // with the video and second it came from, then listed in the Captures panel.
   const stillCapture = useStillCapture();
-  const sourceCaptures = useSourceCaptures(source.assetId, capturesOpen);
+  // Read from the first render, panel open or not: the top-bar Capture frame needs the real
+  // list for its duplicate check, so it stays disabled until this read lands.
+  const sourceCaptures = useSourceCaptures(source.assetId, true);
   const refreshCaptures = sourceCaptures.refresh;
   const latestCaptures = sourceCaptures.latest;
   // The capture a repeated press found already saved: outlined for ~2 s in the panel.
@@ -1965,7 +1984,9 @@ function VideoEditor({
             canRedo={controller.canRedo}
             onUndo={controller.undo}
             onRedo={controller.redo}
-            onAddImage={handleAddImage}
+            onCaptureFrame={() => void handleCaptureFrame()}
+            // Until the first captures read lands: the duplicate check needs the real list.
+            captureDisabled={stillCapture.busy || !sourceCaptures.loaded}
             onExport={handleExport}
             exportDisabled={gifExport.status === "exporting" || scene.items.length === 0}
             onOpenGuide={openGuideFirstTab}
@@ -2002,8 +2023,7 @@ function VideoEditor({
               captures={sourceCaptures.captures}
               loaded={sourceCaptures.loaded}
               onSeek={seekToCapture}
-              onCaptureFrame={() => void handleCaptureFrame()}
-              captureBusy={stillCapture.busy}
+              onAddToTimeline={(capture) => void addCaptureToTimeline(capture)}
               onDelete={deleteCapture}
               highlightedId={highlightedCaptureId}
               onClose={() => setCapturesOpen(false)}

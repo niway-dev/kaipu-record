@@ -3,11 +3,11 @@ import { createPortal } from "react-dom";
 import {
   ArrowUpRight,
   BookOpen,
+  Camera,
   Check,
   Download,
   Droplet,
   EyeOff,
-  ImagePlus,
   Images,
   Mouse,
   MousePointer2,
@@ -32,9 +32,6 @@ import { formatAccelerator } from "@renderer/features/shortcuts/keyboard-acceler
 import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import styles from "./editor-toolbar.module.css";
 import { uiArea } from "@renderer/lib/ui-area";
-
-/** Accepted image types for the "Add image" tool — matches SlideAssetStore's decode path. */
-const SLIDE_IMAGE_TYPES = "image/png,image/jpeg,image/webp";
 
 type ToolLabelKey = "toolSelect" | "toolBox" | "toolArrow" | "toolText";
 
@@ -284,8 +281,10 @@ export interface EditorToolbarProps {
   canRedo: boolean;
   onUndo(): void;
   onRedo(): void;
-  /** Insert an image slide at the playhead's nearest item boundary. */
-  onAddImage(file: File): void;
+  /** Capture the frame on screen into the library (NIW2-764). */
+  onCaptureFrame(): void;
+  /** Disabled while a capture runs and until the first captures read lands. */
+  captureDisabled: boolean;
   /** Run the export pipeline. Disabled while exporting or when the timeline is empty. */
   onExport(): void;
   /** Status chips (the original-untouched pill, the autosave state), between the
@@ -599,7 +598,7 @@ export function EditorToolRail({
         </button>
       )}
       {/* The frames captured from this video (NIW2-764). Capture frame itself sits in the
-          title bar beside Add image; this only shows the list. */}
+          title bar; this only shows the list. */}
       {onToggleCaptures && (
         <>
           <span className={styles.railSeparator} aria-hidden />
@@ -620,7 +619,7 @@ export function EditorToolRail({
 }
 
 /**
- * Undo/redo, image, the status chips and Export: the editor's global actions, in one
+ * Undo/redo, Capture frame, the status chips and Export: the editor's global actions, in one
  * row. The page renders it into the title bar's right side (Kaipu Black, NIW2-619); it
  * used to be a card above the inspector (NIW2-611). Split and delete act on the
  * playhead and the selection, so they sit on the transport bar (NIW2-664).
@@ -630,14 +629,14 @@ export function EditorToolbar({
   canRedo,
   onUndo,
   onRedo,
-  onAddImage,
+  onCaptureFrame,
+  captureDisabled,
   onExport,
   children,
   exportDisabled,
   onOpenGuide,
 }: EditorToolbarProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const shortcuts = editShortcuts();
 
   return (
@@ -664,27 +663,17 @@ export function EditorToolbar({
           <Redo2 size={18} />
         </button>
         <span className={styles.divider} />
-        <input
-          ref={fileInputRef}
-          type="file"
-          data-testid="slide-image-input"
-          accept={SLIDE_IMAGE_TYPES}
-          className={styles.hiddenInput}
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            // Reset so choosing the same file again still fires a change event.
-            event.target.value = "";
-            if (file) onAddImage(file);
-          }}
-        />
+        {/* A still of the frame on screen, saved into the library and tied to this video
+            (NIW2-764). Inserting a capture into the timeline is the panel's Add to timeline. */}
         <button
           type="button"
           className={styles.iconBtn}
-          title={t("addImage")}
-          aria-label={t("addImage")}
-          onClick={() => fileInputRef.current?.click()}
+          title={t("captureFrame")}
+          aria-label={t("captureFrame")}
+          disabled={captureDisabled}
+          onClick={onCaptureFrame}
         >
-          <ImagePlus size={18} />
+          <Camera size={18} />
         </button>
         {onOpenGuide && (
           <button

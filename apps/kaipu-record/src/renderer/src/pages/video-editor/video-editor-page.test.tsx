@@ -194,18 +194,72 @@ async function pressUntil(key: string, assertion: () => void): Promise<void> {
   });
 }
 
-/** Adds an image slide via the toolbar — the simplest way to produce one undoable
- *  commit, which is what makes `controller.dirty` true. */
+// The two bridge methods `seedCapture` replaces, put back after every test.
+const bridgeBeforeSlide: {
+  listLibraryItems?: typeof window.electronAPI.listLibraryItems;
+  readScreenshotBytes?: typeof window.electronAPI.readScreenshotBytes;
+} = {};
+afterEach(() => {
+  if (bridgeBeforeSlide.listLibraryItems) {
+    window.electronAPI.listLibraryItems = bridgeBeforeSlide.listLibraryItems;
+  }
+  if (bridgeBeforeSlide.readScreenshotBytes) {
+    window.electronAPI.readScreenshotBytes = bridgeBeforeSlide.readScreenshotBytes;
+  }
+  bridgeBeforeSlide.listLibraryItems = undefined;
+  bridgeBeforeSlide.readScreenshotBytes = undefined;
+});
+
+const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+
+/**
+ * Seed one capture of this video whose PNG bytes are `bytes`. The only way to put an image
+ * on the timeline is a capture's Add to timeline (NIW2-768); the editor must be mounted
+ * AFTER this runs, because it reads the captures list when it opens.
+ */
+function seedCapture(bytes: Uint8Array, id = "cap-1"): ReturnType<typeof vi.fn> {
+  bridgeBeforeSlide.listLibraryItems ??= window.electronAPI.listLibraryItems;
+  bridgeBeforeSlide.readScreenshotBytes ??= window.electronAPI.readScreenshotBytes;
+  const read = vi.fn(async () => bytes.buffer.slice(0) as ArrayBuffer);
+  window.electronAPI.readScreenshotBytes = read as never;
+  window.electronAPI.listLibraryItems = vi.fn(async () => ({
+    items: [
+      {
+        assetId: id,
+        kind: "screenshot",
+        title: "frame",
+        createdAt: 1,
+        durationSeconds: 0,
+        derivedFromAssetId: null,
+        sourceVideoAssetId: SOURCE.assetId,
+        sourceTimeSeconds: 3,
+        local: { id, thumbnailUrl: `kaipu-media://screenshot/${id}` },
+      },
+    ],
+    vaultError: null,
+    catalogVerifiedAt: null,
+  })) as never;
+  return read;
+}
+
+/** Opens Captures (if closed) and presses the first capture's Add to timeline. */
+async function pressAddToTimeline(): Promise<void> {
+  if (!screen.queryByTestId("captures-panel")) {
+    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+  }
+  fireEvent.click(await screen.findByRole("button", { name: "Add to timeline" }));
+}
+
+/** Adds an image slide through a seeded capture — the simplest way to produce one undoable
+ *  commit, which is what makes `controller.dirty` true. The editor must already be mounted
+ *  with a capture seeded (`seedCapture` before `renderEditor`). */
 async function makeDirty(footer: HTMLElement): Promise<void> {
-  fireEvent.click(screen.getByRole("button", { name: "Add image" }));
-  const input = screen.getByTestId("slide-image-input") as HTMLInputElement;
-  const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "x.png", {
-    type: "image/png",
-  });
-  fireEvent.change(input, { target: { files: [file] } });
+  await pressAddToTimeline();
   await waitFor(() => {
     expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(2);
   });
+  // Back to the inspector the tests that follow expect.
+  fireEvent.click(screen.getByRole("button", { name: "Close captures" }));
 }
 
 /**
@@ -337,13 +391,13 @@ describe("VideoEditorLoader — an identity two files claim (NIW2-560)", () => {
 });
 
 describe("VideoEditorPage — actions in the title bar (NIW2-619)", () => {
-  it("renders undo, redo, add image, the status and Export into the title bar, not the side column", async () => {
+  it("renders undo, redo, capture frame, the status and Export into the title bar, not the side column", async () => {
     renderEditor();
     await waitForEditorLoaded();
 
     const inspector = document.querySelector('[data-testid="editor-inspector"]')!;
     const side = inspector.parentElement!;
-    for (const name of ["Undo", "Redo", "Add image", "Export"]) {
+    for (const name of ["Undo", "Redo", "Capture frame", "Export"]) {
       const button = screen.getByRole("button", { name });
       expect(headerActions.contains(button)).toBe(true);
       expect(side.contains(button)).toBe(false);
@@ -506,7 +560,7 @@ describe("VideoEditorPage — editable cursor entry", () => {
   });
 });
 
-describe("VideoEditorPage — add-image wiring", () => {
+describe("VideoEditorPage — Add to timeline wiring", () => {
   beforeEach(() => {
     vi.stubGlobal("Image", FakeImage);
   });
@@ -516,6 +570,7 @@ describe("VideoEditorPage — add-image wiring", () => {
   });
 
   it("inserts a new image slide at the boundary nearest the playhead (index 0 at t=0)", async () => {
+    seedCapture(PNG_BYTES);
     renderEditor();
     const footer = await waitForEditorLoaded();
 
@@ -554,6 +609,7 @@ describe("VideoEditorPage — background export vs. useBlocker", () => {
   it("an export runs in the background: the user stays in the editor, and the session is stamped as exported", async () => {
     // The global stub is a plain async function, not a spy; wrap it for this test only.
     const save = vi.spyOn(window.electronAPI, "saveVideoEditSession");
+    seedCapture(PNG_BYTES);
     renderEditor();
     const footer = await waitForEditorLoaded();
     await makeDirty(footer);
@@ -583,6 +639,7 @@ describe("VideoEditorPage — background export vs. useBlocker", () => {
     });
     const save = vi.spyOn(window.electronAPI, "saveVideoEditSession");
     save.mockClear();
+    seedCapture(PNG_BYTES);
     renderEditor();
     const footer = await waitForEditorLoaded();
     await makeDirty(footer);
@@ -590,10 +647,7 @@ describe("VideoEditorPage — background export vs. useBlocker", () => {
     await waitFor(() => expect(pending).not.toBeNull());
 
     // Another edit while the export encodes.
-    fireEvent.click(screen.getByRole("button", { name: "Add image" }));
-    fireEvent.change(screen.getByTestId("slide-image-input"), {
-      target: { files: [new File([new Uint8Array([0x89, 0x50])], "y.png", { type: "image/png" })] },
-    });
+    await pressAddToTimeline();
     await waitFor(() => expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(3));
 
     await act(async () => {
@@ -635,6 +689,7 @@ describe("VideoEditorPage — background export vs. useBlocker", () => {
       .spyOn(window.electronAPI, "saveVideoEditSession")
       .mockReturnValue(new Promise(() => {}));
     try {
+      seedCapture(PNG_BYTES);
       const router = renderEditor();
       const footer = await waitForEditorLoaded();
       await makeDirty(footer);
@@ -734,7 +789,7 @@ describe("VideoEditorPage — handleExport metadata guard", () => {
   });
 });
 
-describe("VideoEditorPage — add-image decode failure", () => {
+describe("VideoEditorPage — Add to timeline decode failure", () => {
   class FailingImage {
     onload: (() => void) | null = null;
     onerror: (() => void) | null = null;
@@ -756,15 +811,11 @@ describe("VideoEditorPage — add-image decode failure", () => {
   });
 
   it("shows a toast and leaves the timeline untouched when the image fails to decode", async () => {
+    seedCapture(new Uint8Array([0x00, 0x01]));
     renderEditor();
     const footer = await waitForEditorLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Add image" }));
-    const input = screen.getByTestId("slide-image-input") as HTMLInputElement;
-    const file = new File([new Uint8Array([0x00, 0x01])], "corrupt.png", {
-      type: "image/png",
-    });
-    fireEvent.change(input, { target: { files: [file] } });
+    await pressAddToTimeline();
 
     await waitFor(() => {
       expect(getToasts()).toContainEqual(
@@ -777,23 +828,20 @@ describe("VideoEditorPage — add-image decode failure", () => {
     expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(1);
   });
 
-  it("resets the file input's value so re-selecting the same (still-corrupt) file fires another change event", async () => {
+  it("shows the same toast and inserts nothing when the capture's file cannot be read", async () => {
+    const read = seedCapture(PNG_BYTES);
+    read.mockRejectedValueOnce(new Error("gone"));
     renderEditor();
-    await waitForEditorLoaded();
+    const footer = await waitForEditorLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Add image" }));
-    const input = screen.getByTestId("slide-image-input") as HTMLInputElement;
-    const file = new File([new Uint8Array([0x00, 0x01])], "corrupt.png", {
-      type: "image/png",
-    });
-    fireEvent.change(input, { target: { files: [file] } });
+    await pressAddToTimeline();
 
     await waitFor(() => {
-      expect(getToasts().length).toBeGreaterThan(0);
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({ message: "Couldn't load the image. Try another file." }),
+      );
     });
-    // editor-toolbar.tsx resets event.target.value synchronously in its onChange,
-    // before handleAddImage's async decode even settles.
-    expect(input.value).toBe("");
+    expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(1);
   });
 });
 
@@ -818,6 +866,7 @@ describe("VideoEditorPage — keydown gate behind open modals", () => {
 
   it("does not toggle playback via Space while the discard-changes modal is open (blocker.state === 'blocked')", async () => {
     const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    seedCapture(PNG_BYTES);
     const router = renderEditor();
     const footer = await waitForEditorLoaded();
     await makeDirty(footer);
@@ -2241,13 +2290,9 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     for (const t of getToasts()) dismissToast(t.id);
   });
 
-  /** Capture frame lives in the Captures panel (NIW2-768): open it if needed, then press it. */
+  /** Capture frame is the top-bar camera (NIW2-768); a successful capture opens the panel. */
   async function pressCapture(): Promise<void> {
-    if (!screen.queryByTestId("captures-panel")) {
-      fireEvent.click(screen.getByRole("button", { name: "Captures" }));
-    }
-    const panel = await screen.findByTestId("captures-panel");
-    const button = within(panel).getByRole("button", { name: "Capture frame" });
+    const button = screen.getByRole("button", { name: "Capture frame" });
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
   }
@@ -2413,15 +2458,41 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     stillCapture.busy = true;
     renderEditor();
     await waitForEditorLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
-    const panel = await screen.findByTestId("captures-panel");
-    expect(within(panel).getByRole("button", { name: "Capture frame" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Capture frame" })).toBeDisabled();
   });
 
-  it("has no Capture frame button in the top bar", async () => {
+  it("has Capture frame in the top bar, none in the Captures panel, and no Add image", async () => {
     renderEditor();
     await waitForEditorLoaded();
-    expect(screen.queryByRole("button", { name: "Capture frame" })).toBeNull();
+    const capture = screen.getByRole("button", { name: "Capture frame" });
+    expect(headerActions.contains(capture)).toBe(true);
+    expect(screen.queryByRole("button", { name: "Add image" })).toBeNull();
+    expect(screen.queryByTestId("slide-image-input")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+    const panel = await screen.findByTestId("captures-panel");
+    expect(within(panel).queryByRole("button", { name: "Capture frame" })).toBeNull();
+  });
+
+  it("Add to timeline reads the capture's bytes by id and inserts a slide", async () => {
+    libraryItems = [savedItem("mine", 7), savedItem("other", 9)];
+    const read = vi.fn(async () => PNG);
+    window.electronAPI.readScreenshotBytes = read as never;
+    vi.stubGlobal("Image", FakeImage);
+    try {
+      renderEditor();
+      const footer = await waitForEditorLoaded();
+      const before = footer.querySelectorAll(BLOCK_BUTTONS).length;
+      fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+      // Newest first: "other" (createdAt 9) is the first row, "mine" the second.
+      const buttons = await screen.findAllByRole("button", { name: "Add to timeline" });
+      expect(buttons).toHaveLength(2);
+      fireEvent.click(buttons[1]);
+      await waitFor(() => expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(before + 1));
+      expect(read).toHaveBeenCalledOnce();
+      expect(read).toHaveBeenCalledWith("mine");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("does not save again at a moment that is already captured: it points at the saved one", async () => {
@@ -2490,7 +2561,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Captures" }));
     const panel = await screen.findByTestId("captures-panel");
     expect(screen.queryByTestId("editor-inspector")).toBeNull();
-    expect(await within(panel).findByText("No captures of this video yet.")).toBeInTheDocument();
+    expect(await within(panel).findByText(/No captures of this video yet\./)).toBeInTheDocument();
     expect(stillCapture.capture).not.toHaveBeenCalled();
 
     fireEvent.click(within(panel).getByRole("button", { name: "Close captures" }));

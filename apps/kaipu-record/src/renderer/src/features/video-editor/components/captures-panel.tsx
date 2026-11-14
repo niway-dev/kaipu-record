@@ -1,4 +1,4 @@
-import { Camera, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { reportError } from "@renderer/features/analytics";
@@ -17,8 +17,8 @@ export interface CapturesPanelProps {
   loaded: boolean;
   /** Seek the playhead to a capture's source time. */
   onSeek(sourceSeconds: number): void;
-  onCaptureFrame(): void;
-  captureBusy: boolean;
+  /** Insert a capture's image into the timeline as an image slide. */
+  onAddToTimeline(capture: LibraryVideo): void;
   /** Delete one capture from the library (called only after the user confirms). */
   onDelete(capture: LibraryVideo): Promise<void>;
   /** The capture that already exists at the playhead: outlined and scrolled into view. */
@@ -28,15 +28,15 @@ export interface CapturesPanelProps {
 
 /**
  * The editor's right column while Captures is open (NIW2-764): it takes the inspector's
- * place, the way the cursor settings do. Lists this video's frame captures, newest first;
- * its Go to button moves the playhead to that moment.
+ * place, the way the cursor settings do. Lists this video's frame captures, newest first.
+ * Capture frame itself is in the top bar. Hovering a capture's image shows a Go to button
+ * that moves the playhead to that moment; each row can add the image to the timeline.
  */
 export function CapturesPanel({
   captures,
   loaded,
   onSeek,
-  onCaptureFrame,
-  captureBusy,
+  onAddToTimeline,
   onDelete,
   highlightedId = null,
   onClose,
@@ -73,27 +73,15 @@ export function CapturesPanel({
     >
       <div className={styles.header}>
         <h2 className={styles.title}>{t("capturesTitle")}</h2>
-        <div className={styles.headerActions}>
-          {/* Disabled until the first read lands: the duplicate check needs the real list. */}
-          <button
-            type="button"
-            className={styles.captureButton}
-            disabled={captureBusy || !loaded}
-            onClick={onCaptureFrame}
-          >
-            <Camera size={14} />
-            {t("captureFrame")}
-          </button>
-          <button
-            type="button"
-            className={styles.close}
-            aria-label={t("capturesClose")}
-            title={t("capturesClose")}
-            onClick={onClose}
-          >
-            <X size={14} />
-          </button>
-        </div>
+        <button
+          type="button"
+          className={styles.close}
+          aria-label={t("capturesClose")}
+          title={t("capturesClose")}
+          onClick={onClose}
+        >
+          <X size={14} />
+        </button>
       </div>
       {empty ? (
         <div className={styles.empty}>
@@ -118,6 +106,8 @@ export function CapturesPanel({
                   ? undefined
                   : t("captureSeek", { time: formatClock(capture.sourceTimeSeconds) })
               }
+              onAddToTimeline={() => onAddToTimeline(capture)}
+              addToTimelineLabel={t("captureAddToTimeline")}
               onDelete={() => setPendingDelete(capture)}
               deleteLabel={t("captureDelete")}
             />

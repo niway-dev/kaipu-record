@@ -27,8 +27,7 @@ function renderPanel(over: Partial<CapturesPanelProps> = {}): CapturesPanelProps
     captures: [],
     loaded: true,
     onSeek: vi.fn(),
-    onCaptureFrame: vi.fn(),
-    captureBusy: false,
+    onAddToTimeline: vi.fn(),
     onDelete: vi.fn(async () => {}),
     onClose: vi.fn(),
     ...over,
@@ -53,31 +52,20 @@ describe("CapturesPanel", () => {
     expect(document.querySelector('[data-ui-area="editorVideo.capturesPanel"]')).not.toBeNull();
   });
 
-  it("with nothing captured, says so without a second button", () => {
+  it("with nothing captured, says so and where to capture", () => {
     renderPanel();
-    expect(screen.getByText("No captures of this video yet.")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Capture frame" })).toHaveLength(1);
+    expect(screen.getByText(/No captures of this video yet\./)).toBeInTheDocument();
+    expect(screen.getByText(/camera in the top bar/)).toBeInTheDocument();
   });
 
-  it("always offers Capture frame in the header and fires it", () => {
-    const props = renderPanel({ captures: [capture({})] });
-    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
-    expect(props.onCaptureFrame).toHaveBeenCalledOnce();
+  it("has no Capture frame button: it lives in the top bar", () => {
+    renderPanel({ captures: [capture({})] });
+    expect(screen.queryByRole("button", { name: "Capture frame" })).toBeNull();
   });
 
   it("waits for the first read before saying there is nothing", () => {
     renderPanel({ loaded: false });
-    expect(screen.queryByText("No captures of this video yet.")).toBeNull();
-  });
-
-  it("disables Capture frame until the list is loaded", () => {
-    renderPanel({ loaded: false });
-    expect(screen.getByRole("button", { name: "Capture frame" })).toBeDisabled();
-  });
-
-  it("disables Capture frame while a capture runs", () => {
-    renderPanel({ captureBusy: true });
-    expect(screen.getByRole("button", { name: "Capture frame" })).toBeDisabled();
+    expect(screen.queryByText(/No captures of this video yet/)).toBeNull();
   });
 
   it("lists each capture in the given order with its time", () => {
@@ -107,6 +95,27 @@ describe("CapturesPanel", () => {
     expect(screen.queryByRole("button", { name: /Go to/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy image" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete capture" })).toBeInTheDocument();
+  });
+
+  it("puts Go to on the image, not in the actions row", () => {
+    renderPanel({ captures: [capture({})] });
+    const goTo = screen.getByRole("button", { name: "Go to 1:23.4" });
+    const frame = document.querySelector('[data-testid="capture-item"] > div');
+    expect(frame?.contains(goTo)).toBe(true);
+    expect(frame?.contains(screen.getByRole("button", { name: "Copy image" }))).toBe(false);
+  });
+
+  it("adds a capture to the timeline from its Add to timeline button", () => {
+    const target = capture({ id: "frame-3" });
+    const props = renderPanel({ captures: [capture({ id: "other", assetId: "o" }), target] });
+    fireEvent.click(screen.getAllByRole("button", { name: "Add to timeline" })[1]);
+    expect(props.onAddToTimeline).toHaveBeenCalledOnce();
+    expect(props.onAddToTimeline).toHaveBeenCalledWith(target);
+  });
+
+  it("offers Add to timeline on a slide capture too", () => {
+    renderPanel({ captures: [capture({ sourceTimeSeconds: null })] });
+    expect(screen.getByRole("button", { name: "Add to timeline" })).toBeInTheDocument();
   });
 
   it("seeks to the capture's source time from its Go to button", () => {

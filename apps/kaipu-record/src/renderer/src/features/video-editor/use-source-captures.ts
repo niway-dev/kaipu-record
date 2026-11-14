@@ -19,7 +19,8 @@ export interface SourceCaptures {
 /**
  * The screenshots taken from `videoAssetId` with the editor's Capture frame button
  * (NIW2-764: `sourceVideoAssetId` in the sidecar), newest first. Read when `enabled` turns
- * on (the Captures panel opening) and again whenever main broadcasts `library:changed`,
+ * on (the editor passes true from its first render: the top-bar Capture frame needs the
+ * list for its duplicate check, panel open or not) and again whenever main broadcasts `library:changed`,
  * so a capture just saved shows up without reopening anything. The editor keeps no library
  * list of its own, so this reads `listLibraryItems` like `useSourceExports`. A failed read
  * keeps what was on screen.
