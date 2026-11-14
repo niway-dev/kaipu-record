@@ -26,13 +26,18 @@ export function RecordingStatus({
     <div
       {...uiArea("capturePanel.recordingStatus")}
       className={styles.status}
-      role="status"
       data-paused={paused || undefined}
     >
       <span className={styles.dot} aria-hidden />
       <div className={styles.text}>
-        <div className={styles.label}>{label}</div>
-        {!starting && <div className={styles.clock}>{formatElapsed(elapsedSeconds * 1000)}</div>}
+        <div className={styles.label} role="status">
+          {label}
+        </div>
+        {!starting && (
+          <div className={styles.clock} role="timer">
+            {formatElapsed(elapsedSeconds * 1000)}
+          </div>
+        )}
       </div>
     </div>
   );

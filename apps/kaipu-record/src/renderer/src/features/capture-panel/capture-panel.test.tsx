@@ -166,6 +166,15 @@ describe("CapturePanel, busy", () => {
     expect(screen.queryByText("Instant, whole screen")).not.toBeInTheDocument();
   });
 
+  it("keeps the ticking clock out of the status live region, in its own timer", async () => {
+    recordingApi({ elapsedSeconds: 65 });
+    render(<CapturePanel />);
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent("Recording · Screen");
+    expect(status).not.toHaveTextContent("00:01:05");
+    expect(screen.getByRole("timer")).toHaveTextContent("00:01:05");
+  });
+
   it("Stop sends the stop command to the recording window", async () => {
     const controlCommand = vi.fn();
     window.electronAPI = {
