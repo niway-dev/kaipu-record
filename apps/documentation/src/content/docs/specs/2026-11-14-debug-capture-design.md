@@ -20,16 +20,16 @@ It is a developer tool: on by default in `bun run dev`, and in signed builds onl
 owner's machines, through a PostHog flag matched by device id like the release flags. The app
 uploads nothing; what leaves the Mac is what the owner chooses to share.
 
-| #   | Decision                                                                                                                                           | Why                                                                                                                                                                                                                                                                                      | ADR |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
-| 1   | A bundle (images + `state.json` + `console.log`), not screenshots alone                                                                            | A picture shows that a button is grey, not why; the state and the console lines usually do                                                                                                                                                                                               | —   |
-| 2   | One composite image of every visible Kaipu window at its screen position, plus each window alone                                                   | The owner's request: see every widget in one picture. The composite shows how windows sit relative to each other; the singles keep full detail                                                                                                                                           | —   |
-| 3   | Window images come from `webContents.capturePage()`, composited in pure JS from `nativeImage` bitmaps                                              | Electron API on both platforms, needs no permission and no native dependency (no `postinstall`, see `CLAUDE.md`)                                                                                                                                                                         | —   |
-| 4   | Plus one full-screen image per display through `desktopCapturer`                                                                                   | Shows the native parts `capturePage` cannot see (menus, system dialogs, other apps around the widget). Uses the Screen Recording permission Kaipu already holds                                                                                                                          | —   |
-| 5   | Console lines come from a ring buffer in main: main's own `console.*` plus every window's `console-message` event                                  | No renderer change for the logs, and no file logger; the bundle still carries the recent past                                                                                                                                                                                            | —   |
-| 6   | Gate: `is.dev` OR the new `debug-capture` flag (added to `FLAG_NAMES`, `FLAG_DEFAULTS` false); the main window reports every resolved flag to main | Main evaluates no flags (its `posthog-node` client sends events and exceptions only); this follows the existing `reportCaptureWhileRecording` / `reportImageText` pattern. The flag stays off by default and in PostHog matches only the owner's device ids                              | —   |
-| 7   | The app never uploads the folder, and it holds settings and paths as they are                                                                      | Only the owner uses it now. Uploading or redacting belongs to a later user-facing bug report                                                                                                                                                                                             | —   |
-| 8   | ⌃⌥⌘D on macOS (`Control+Alt+Shift+D` on Windows), hard-coded, not in Settings → Shortcuts, held through `holdTemporaryShortcut`                    | A debug key is not a user feature. No Kaipu shortcut uses it (checked `shared/types/ipc.ts`). `applyGlobalShortcuts` calls `unregisterAll` on every settings write and re-registers only the user shortcuts and the held ones, so a bare `globalShortcut.register` would vanish silently | —   |
+| #   | Decision                                                                                                                                           | Why                                                                                                                                                                                                                                                                                                                                                                                 | ADR |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| 1   | A bundle (images + `state.json` + `console.log`), not screenshots alone                                                                            | A picture shows that a button is grey, not why; the state and the console lines usually do                                                                                                                                                                                                                                                                                          | —   |
+| 2   | One composite image of every visible Kaipu window at its screen position, plus each window alone                                                   | The owner's request: see every widget in one picture. The composite shows how windows sit relative to each other; the singles keep full detail                                                                                                                                                                                                                                      | —   |
+| 3   | Window images come from `webContents.capturePage()`, composited in pure JS from `nativeImage` bitmaps                                              | Electron API on both platforms, needs no permission and no native dependency (no `postinstall`, see `CLAUDE.md`)                                                                                                                                                                                                                                                                    | —   |
+| 4   | Plus one full-screen image per display through `desktopCapturer`                                                                                   | Shows the native parts `capturePage` cannot see (menus, system dialogs, other apps around the widget). Windows with content protection on (preview card, capture selector, video-ready card, camera bubble during a take) are absent from these images by design, so `composite.png` is the image that shows every widget. Uses the Screen Recording permission Kaipu already holds | —   |
+| 5   | Console lines come from a ring buffer in main: main's own `console.*` plus every window's `console-message` event                                  | No renderer change for the logs, and no file logger; the bundle still carries the recent past                                                                                                                                                                                                                                                                                       | —   |
+| 6   | Gate: `is.dev` OR the new `debug-capture` flag (added to `FLAG_NAMES`, `FLAG_DEFAULTS` false); the main window reports every resolved flag to main | Main evaluates no flags (its `posthog-node` client sends events and exceptions only); this follows the existing `reportCaptureWhileRecording` / `reportImageText` pattern. The flag stays off by default and in PostHog matches only the owner's device ids                                                                                                                         | —   |
+| 7   | The app never uploads the folder, and it holds settings and paths as they are                                                                      | Only the owner uses it now. Uploading or redacting belongs to a later user-facing bug report                                                                                                                                                                                                                                                                                        | —   |
+| 8   | ⌃⌥⌘D on macOS (`Control+Alt+Shift+D` on Windows), hard-coded, not in Settings → Shortcuts, held through `holdTemporaryShortcut`                    | A debug key is not a user feature. No Kaipu shortcut uses it (checked `shared/types/ipc.ts`). `applyGlobalShortcuts` calls `unregisterAll` on every settings write and re-registers only the user shortcuts and the held ones, so a bare `globalShortcut.register` would vanish silently                                                                                            | —   |
 
 No new ADR: every decision above is reversible by editing one module, and none changes how the
 app's parts fit together. `debug-capture` is a PostHog-evaluated flag like the other `FLAG_NAMES`
@@ -39,8 +39,9 @@ gets its registry entry and pin test like every other.
 
 ### Open questions
 
-1. Does `capturePage()` return the camera bubble's live video, or a black frame? If black, the
-   full-screen image (decision 4) still shows it; the build records which one happens.
+1. Does `capturePage()` return the camera bubble's live video, or a black frame? The full-screen
+   image is no fallback: the bubble turns on content protection during a take, and protected
+   windows are absent from OS screen captures. The build records which one happens.
 2. Does `capturePage()` keep transparency for the rounded, frameless windows (tray popover,
    preview card)? The composite needs it to not draw black corners over the window below.
 3. Is ⌃⌥⌘D taken by another app the owner runs? `globalShortcut.register` returns `false` in that
@@ -121,8 +122,9 @@ gets its registry entry and pin test like every other.
 - [ ] When the folder cannot be written, a native error dialog names the cause.
 - [ ] A hidden window is listed in `state.json` with `"captured": false` and is absent from the
       composite.
-- [ ] The three flag criteria below run in a packaged build: in `bun run dev` the gate is always
-      open.
+- [ ] The flag criteria below (no flag, flag off or on at runtime, signed build) run in a
+      packaged build, because in `bun run dev` the gate is always open. The settings-write
+      criterion also runs in dev.
 - [ ] In a packaged build without the flag, ⌃⌥⌘D does nothing (the shortcut is not registered).
 - [ ] ⌃⌥⌘D still captures after a settings write (change any setting, press it again).
 - [ ] Turning the flag off at runtime releases the shortcut; turning it on holds it again.
@@ -185,10 +187,10 @@ the visible elements carrying the UI-map area attribute (`uiArea()`, see the
 [UI map ADR](/architecture/decisions/0046-a-typed-ui-map-declares-every-screen-area-and-state/)).
 Reading routes needs no new IPC channel (the flag report of decision 6 is the only new one).
 
-Order, so the images and the state describe the same moment: all `capturePage()` calls start
-first, in parallel; then the route reads run in parallel under one shared 1 s deadline, and a
-window that has not answered by then gets `"route": null`. Hidden windows are not read. The
-screen images and `state.json` follow.
+Order, so the images and the state describe the same moment: all `capturePage()` calls and the
+`desktopCapturer` screen grabs start first, together, in parallel; then the route reads run in
+parallel under one shared 1 s deadline, and a window that has not answered by then gets
+`"route": null`. Hidden windows are not read. `state.json` is written last.
 
 ### Flags main knows
 
@@ -205,14 +207,18 @@ them into this map is a later clean-up, not part of this work.
 1. Union of the bounds of the captured windows, in points.
 2. Canvas size = union × the largest `scaleFactor` among their displays.
 3. Each window's `capturePage()` bitmap (`toBitmap()`, BGRA) is resized to its bounds × that
-   factor and alpha-blended at its offset, back to front. Electron exposes no z-order, so the
+   factor and alpha-blended at its offset, back to front, with the premultiplied-alpha formula
+   (`src + dst × (1 − αsrc)`), since Chromium bitmaps are premultiplied; the PNG is
+   un-premultiplied on encode. Electron exposes no z-order, so the
    order is an approximation in two groups: normal windows first, then always-on-top windows;
    inside each group the focused window, if any, goes last.
 4. Background is a neutral dark grey, so transparent corners stay visible as such.
 5. The worker encodes the PNG itself (filter + `node:zlib` deflate, no dependency) and main
    writes the bytes with async `fs`.
 
-The blend runs in a `worker_threads` worker, not on main's event loop: main also runs the
+The blend runs in a `worker_threads` worker, the first one in main (today only the renderer has
+web workers). It is bundled through electron-vite's `?modulePath` import, and the packaged-build
+proof shows it loads. It runs off main's event loop: main also runs the
 recording hub and the shortcuts, and a take in progress is a likely moment to press the key.
 Main does only what needs Electron: `capturePage()` and `toBitmap()`. It transfers the raw BGRA
 buffers and bounds to the worker, which resizes (pure JS, bilinear), blends and encodes; Electron
