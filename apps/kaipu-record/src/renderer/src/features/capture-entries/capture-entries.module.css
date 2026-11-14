@@ -1,6 +1,7 @@
 /*
  * The Screenshot and Recording entries (design "Kaipu Capture Home"). `card` is the Capture
- * page's pair; `row` is the tray popover's compact version. Colours are theme tokens.
+ * page's pair; `row` is the tray popover's compact version. Colours are theme tokens, except
+ * the white tile glyph and two shadow tints (keycap, card tile), which are literals.
  */
 
 .root {
