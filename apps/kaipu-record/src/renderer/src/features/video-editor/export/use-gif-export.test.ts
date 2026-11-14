@@ -357,5 +357,21 @@ describe("useGifExport", () => {
       expect(urls().filter((u) => u === mediaUrl("recording", "vault-b"))).toHaveLength(2);
       expect(urls().filter((u) => u === mediaUrl("recording", "rec-1"))).toHaveLength(1);
     });
+
+    it("an estimate over a used joined recording that is missing ends in error, without a worker", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const { result } = renderHook(() => useGifExport());
+      act(() =>
+        result.current.requestEstimate(
+          args({ scene: JOINED_SCENE, joined: joined({ status: "missing" }) }),
+        ),
+      );
+      expect(result.current.estimate.status).toBe("estimating");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ESTIMATE_DEBOUNCE_MS + 10);
+      });
+      await waitFor(() => expect(result.current.estimate.status).toBe("error"));
+      expect(createdWorkers).toHaveLength(0);
+    });
   });
 });
