@@ -53,6 +53,7 @@ export function ShortcutsStep({ tried }: ShortcutsStepProps): React.JSX.Element 
   const t = useTranslations("onboarding");
   const shortcuts = useShortcutBindings();
   const count = triedShortcutCount(tried);
+  const triedAll = count === ONBOARDING_SHORTCUTS.length;
 
   return (
     <div {...uiArea("onboarding.shortcutsStep")} className={`${common.step} ${styles.step}`}>
@@ -96,8 +97,8 @@ export function ShortcutsStep({ tried }: ShortcutsStepProps): React.JSX.Element 
         })}
       </ul>
 
-      <p className={count === 4 ? styles.countAll : styles.count} aria-live="polite">
-        {count === 4 ? t("triedAll") : t("triedCount", { count })}
+      <p className={triedAll ? styles.countAll : styles.count} aria-live="polite">
+        {triedAll ? t("triedAll") : t("triedCount", { count })}
       </p>
       <p className={`${common.note} ${styles.change}`}>{t("shortcutsChange")}</p>
     </div>
