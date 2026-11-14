@@ -225,6 +225,34 @@
   color: var(--text-muted);
 }
 
+/* "From <video> at 0:33.4": a quiet link under the meta row, the video's title truncated. */
+.captureSource {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  transition: color var(--transition);
+}
+
+.captureSource:hover,
+.captureSource:focus-visible {
+  color: var(--accent-primary);
+}
+
+.captureSourceText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .dot {
   color: var(--text-muted);
   opacity: 0.5;

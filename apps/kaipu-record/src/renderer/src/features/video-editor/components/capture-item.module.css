@@ -8,6 +8,14 @@
   list-style: none;
 }
 
+/* The capture the user just asked for again: already in the list, so point at it. */
+.item[data-highlighted="true"] .imageFrame,
+.item[data-highlighted="true"] .imageButton {
+  border-color: var(--accent-primary);
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
 .imageFrame,
 .imageButton {
   display: block;
@@ -20,6 +28,11 @@
   border-radius: var(--radius-sm);
 }
 
+/* Holds the Go to veil (the editor's panel); the Library's image is a button instead. */
+.imageFrame {
+  position: relative;
+}
+
 .imageButton {
   cursor: pointer;
   transition: border-color var(--transition);
@@ -28,6 +41,53 @@
 .imageButton:hover,
 .imageButton:focus-visible {
   border-color: var(--line-strong);
+}
+
+/* The veil: subtle, over the image, only while it is hovered or holds focus. Go to sits in
+   its center and is the only part that takes clicks. */
+.veil {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition);
+}
+
+.imageFrame:hover .veil,
+.imageFrame:focus-within .veil {
+  opacity: 1;
+}
+
+.seekButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  color: var(--text-primary);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background var(--transition);
+}
+
+.seekButton:hover,
+.seekButton:focus-visible {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .veil,
+  .seekButton {
+    transition: none;
+  }
 }
 
 .image {
@@ -57,7 +117,13 @@
   font-variant-numeric: tabular-nums;
 }
 
-.copy {
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.actionButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -74,12 +140,12 @@
     color var(--transition);
 }
 
-.copy:hover:not(:disabled) {
+.actionButton:hover:not(:disabled) {
   background: var(--bg-card-hover);
   color: var(--text-primary);
 }
 
-.copy:disabled {
+.actionButton:disabled {
   opacity: 0.4;
   cursor: default;
 }

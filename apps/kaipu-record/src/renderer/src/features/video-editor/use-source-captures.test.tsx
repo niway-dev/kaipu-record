@@ -54,6 +54,42 @@ describe("useSourceCaptures", () => {
     expect(result.current.captures.map((c) => c.assetId)).toEqual(["new", "old"]);
   });
 
+  it("a refresh overtaken by a newer read resolves only once the newer list is on screen", async () => {
+    const { result } = renderHook(() => useSourceCaptures("v1", true));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    // The first read hangs until released; a library:changed read starts after it.
+    let releaseFirst: () => void = () => {};
+    let releaseSecond: () => void = () => {};
+    const respond = (wait: (r: () => void) => void) =>
+      new Promise((resolve) =>
+        wait(() => resolve({ items, vaultError: null, catalogVerifiedAt: null })),
+      );
+    window.electronAPI.listLibraryItems = vi
+      .fn()
+      .mockImplementationOnce(() => respond((r) => (releaseFirst = r)))
+      .mockImplementationOnce(() => respond((r) => (releaseSecond = r))) as never;
+    items = [item({ assetId: "n", createdAt: 9, sourceVideoAssetId: "v1", sourceTimeSeconds: 1 })];
+    let done = false;
+    let first: Promise<void> = Promise.resolve();
+    act(() => {
+      first = result.current.refresh().then(() => {
+        done = true;
+      });
+      changed?.();
+    });
+    await act(async () => {
+      releaseFirst();
+      await Promise.resolve();
+    });
+    expect(done).toBe(false);
+    await act(async () => {
+      releaseSecond();
+      await first;
+    });
+    expect(done).toBe(true);
+    expect(result.current.latest().map((c) => c.assetId)).toEqual(["n"]);
+  });
+
   it("does not read the library while disabled", () => {
     const { result } = renderHook(() => useSourceCaptures("v1", false));
     expect(window.electronAPI.listLibraryItems).not.toHaveBeenCalled();

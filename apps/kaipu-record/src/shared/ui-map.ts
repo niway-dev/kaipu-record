@@ -171,6 +171,8 @@ export const UI_MAP = {
       // The frame captures taken from this video in the editor (NIW2-764), under the tab's
       // content; only a video with at least one capture has it.
       captures: { states: ["list"] },
+      // A capture's own page: the line naming the video it came from, linking to that moment.
+      captureSource: { states: ["linked"] },
       // DestinationsList: "heavy" adds the heavy-to-send line under the rows (over 25 MB).
       destinations: { states: ["ready", "heavy"] },
       // The ••• menu floats below its button, outside the actions box, so it is its own area.
@@ -246,7 +248,10 @@ export const UI_MAP = {
       cursorInspector: { states: ["open"], gatedBy: [{ flag: "native-cursor-capture" }] },
       // The Captures panel (NIW2-764): this video's frame captures, in the right column in
       // place of the inspector. `empty` has none yet; `list` shows them, newest first.
-      capturesPanel: { states: ["empty", "list"] },
+      // hover: the veil with Go to over a capture's image; duplicate: Capture frame (top bar)
+      // at a moment already captured outlines the saved one; confirmDelete: the confirmation
+      // dialog a capture's Delete button opens.
+      capturesPanel: { states: ["empty", "list", "hover", "duplicate", "confirmDelete"] },
       webcam: { states: ["visible"] },
       transport: { states: ["paused", "playing", "withCounts", "speedChanged", "zoomed"] },
       toolRail: { states: ["default", "annotate", "privacy"] },

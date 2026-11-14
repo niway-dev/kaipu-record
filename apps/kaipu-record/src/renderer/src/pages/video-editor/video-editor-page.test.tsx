@@ -194,18 +194,72 @@ async function pressUntil(key: string, assertion: () => void): Promise<void> {
   });
 }
 
-/** Adds an image slide via the toolbar — the simplest way to produce one undoable
- *  commit, which is what makes `controller.dirty` true. */
+// The two bridge methods `seedCapture` replaces, put back after every test.
+const bridgeBeforeSlide: {
+  listLibraryItems?: typeof window.electronAPI.listLibraryItems;
+  readScreenshotBytes?: typeof window.electronAPI.readScreenshotBytes;
+} = {};
+afterEach(() => {
+  if (bridgeBeforeSlide.listLibraryItems) {
+    window.electronAPI.listLibraryItems = bridgeBeforeSlide.listLibraryItems;
+  }
+  if (bridgeBeforeSlide.readScreenshotBytes) {
+    window.electronAPI.readScreenshotBytes = bridgeBeforeSlide.readScreenshotBytes;
+  }
+  bridgeBeforeSlide.listLibraryItems = undefined;
+  bridgeBeforeSlide.readScreenshotBytes = undefined;
+});
+
+const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+
+/**
+ * Seed one capture of this video whose PNG bytes are `bytes`. The only way to put an image
+ * on the timeline is a capture's Add to timeline (NIW2-768); the editor must be mounted
+ * AFTER this runs, because it reads the captures list when it opens.
+ */
+function seedCapture(bytes: Uint8Array, id = "cap-1"): ReturnType<typeof vi.fn> {
+  bridgeBeforeSlide.listLibraryItems ??= window.electronAPI.listLibraryItems;
+  bridgeBeforeSlide.readScreenshotBytes ??= window.electronAPI.readScreenshotBytes;
+  const read = vi.fn(async () => bytes.buffer.slice(0) as ArrayBuffer);
+  window.electronAPI.readScreenshotBytes = read as never;
+  window.electronAPI.listLibraryItems = vi.fn(async () => ({
+    items: [
+      {
+        assetId: id,
+        kind: "screenshot",
+        title: "frame",
+        createdAt: 1,
+        durationSeconds: 0,
+        derivedFromAssetId: null,
+        sourceVideoAssetId: SOURCE.assetId,
+        sourceTimeSeconds: 3,
+        local: { id, thumbnailUrl: `kaipu-media://screenshot/${id}` },
+      },
+    ],
+    vaultError: null,
+    catalogVerifiedAt: null,
+  })) as never;
+  return read;
+}
+
+/** Opens Captures (if closed) and presses the first capture's Add to timeline. */
+async function pressAddToTimeline(): Promise<void> {
+  if (!screen.queryByTestId("captures-panel")) {
+    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+  }
+  fireEvent.click(await screen.findByRole("button", { name: "Add to timeline" }));
+}
+
+/** Adds an image slide through a seeded capture — the simplest way to produce one undoable
+ *  commit, which is what makes `controller.dirty` true. The editor must already be mounted
+ *  with a capture seeded (`seedCapture` before `renderEditor`). */
 async function makeDirty(footer: HTMLElement): Promise<void> {
-  fireEvent.click(screen.getByRole("button", { name: "Add image" }));
-  const input = screen.getByTestId("slide-image-input") as HTMLInputElement;
-  const file = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "x.png", {
-    type: "image/png",
-  });
-  fireEvent.change(input, { target: { files: [file] } });
+  await pressAddToTimeline();
   await waitFor(() => {
     expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(2);
   });
+  // Back to the inspector the tests that follow expect.
+  fireEvent.click(screen.getByRole("button", { name: "Close captures" }));
 }
 
 /**
@@ -337,13 +391,13 @@ describe("VideoEditorLoader — an identity two files claim (NIW2-560)", () => {
 });
 
 describe("VideoEditorPage — actions in the title bar (NIW2-619)", () => {
-  it("renders undo, redo, add image, the status and Export into the title bar, not the side column", async () => {
+  it("renders undo, redo, capture frame, the status and Export into the title bar, not the side column", async () => {
     renderEditor();
     await waitForEditorLoaded();
 
     const inspector = document.querySelector('[data-testid="editor-inspector"]')!;
     const side = inspector.parentElement!;
-    for (const name of ["Undo", "Redo", "Add image", "Export"]) {
+    for (const name of ["Undo", "Redo", "Capture frame", "Export"]) {
       const button = screen.getByRole("button", { name });
       expect(headerActions.contains(button)).toBe(true);
       expect(side.contains(button)).toBe(false);
@@ -506,7 +560,7 @@ describe("VideoEditorPage — editable cursor entry", () => {
   });
 });
 
-describe("VideoEditorPage — add-image wiring", () => {
+describe("VideoEditorPage — Add to timeline wiring", () => {
   beforeEach(() => {
     vi.stubGlobal("Image", FakeImage);
   });
@@ -516,6 +570,7 @@ describe("VideoEditorPage — add-image wiring", () => {
   });
 
   it("inserts a new image slide at the boundary nearest the playhead (index 0 at t=0)", async () => {
+    seedCapture(PNG_BYTES);
     renderEditor();
     const footer = await waitForEditorLoaded();
 
@@ -554,6 +609,7 @@ describe("VideoEditorPage — background export vs. useBlocker", () => {
   it("an export runs in the background: the user stays in the editor, and the session is stamped as exported", async () => {
     // The global stub is a plain async function, not a spy; wrap it for this test only.
     const save = vi.spyOn(window.electronAPI, "saveVideoEditSession");
+    seedCapture(PNG_BYTES);
     renderEditor();
     const footer = await waitForEditorLoaded();
     await makeDirty(footer);
@@ -583,6 +639,7 @@ describe("VideoEditorPage — background export vs. useBlocker", () => {
     });
     const save = vi.spyOn(window.electronAPI, "saveVideoEditSession");
     save.mockClear();
+    seedCapture(PNG_BYTES);
     renderEditor();
     const footer = await waitForEditorLoaded();
     await makeDirty(footer);
@@ -590,10 +647,7 @@ describe("VideoEditorPage — background export vs. useBlocker", () => {
     await waitFor(() => expect(pending).not.toBeNull());
 
     // Another edit while the export encodes.
-    fireEvent.click(screen.getByRole("button", { name: "Add image" }));
-    fireEvent.change(screen.getByTestId("slide-image-input"), {
-      target: { files: [new File([new Uint8Array([0x89, 0x50])], "y.png", { type: "image/png" })] },
-    });
+    await pressAddToTimeline();
     await waitFor(() => expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(3));
 
     await act(async () => {
@@ -635,6 +689,7 @@ describe("VideoEditorPage — background export vs. useBlocker", () => {
       .spyOn(window.electronAPI, "saveVideoEditSession")
       .mockReturnValue(new Promise(() => {}));
     try {
+      seedCapture(PNG_BYTES);
       const router = renderEditor();
       const footer = await waitForEditorLoaded();
       await makeDirty(footer);
@@ -734,7 +789,7 @@ describe("VideoEditorPage — handleExport metadata guard", () => {
   });
 });
 
-describe("VideoEditorPage — add-image decode failure", () => {
+describe("VideoEditorPage — Add to timeline decode failure", () => {
   class FailingImage {
     onload: (() => void) | null = null;
     onerror: (() => void) | null = null;
@@ -756,15 +811,11 @@ describe("VideoEditorPage — add-image decode failure", () => {
   });
 
   it("shows a toast and leaves the timeline untouched when the image fails to decode", async () => {
+    seedCapture(new Uint8Array([0x00, 0x01]));
     renderEditor();
     const footer = await waitForEditorLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Add image" }));
-    const input = screen.getByTestId("slide-image-input") as HTMLInputElement;
-    const file = new File([new Uint8Array([0x00, 0x01])], "corrupt.png", {
-      type: "image/png",
-    });
-    fireEvent.change(input, { target: { files: [file] } });
+    await pressAddToTimeline();
 
     await waitFor(() => {
       expect(getToasts()).toContainEqual(
@@ -777,23 +828,20 @@ describe("VideoEditorPage — add-image decode failure", () => {
     expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(1);
   });
 
-  it("resets the file input's value so re-selecting the same (still-corrupt) file fires another change event", async () => {
+  it("shows the same toast and inserts nothing when the capture's file cannot be read", async () => {
+    const read = seedCapture(PNG_BYTES);
+    read.mockRejectedValueOnce(new Error("gone"));
     renderEditor();
-    await waitForEditorLoaded();
+    const footer = await waitForEditorLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Add image" }));
-    const input = screen.getByTestId("slide-image-input") as HTMLInputElement;
-    const file = new File([new Uint8Array([0x00, 0x01])], "corrupt.png", {
-      type: "image/png",
-    });
-    fireEvent.change(input, { target: { files: [file] } });
+    await pressAddToTimeline();
 
     await waitFor(() => {
-      expect(getToasts().length).toBeGreaterThan(0);
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({ message: "Couldn't load the image. Try another file." }),
+      );
     });
-    // editor-toolbar.tsx resets event.target.value synchronously in its onChange,
-    // before handleAddImage's async decode even settles.
-    expect(input.value).toBe("");
+    expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(1);
   });
 });
 
@@ -818,6 +866,7 @@ describe("VideoEditorPage — keydown gate behind open modals", () => {
 
   it("does not toggle playback via Space while the discard-changes modal is open (blocker.state === 'blocked')", async () => {
     const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    seedCapture(PNG_BYTES);
     const router = renderEditor();
     const footer = await waitForEditorLoaded();
     await makeDirty(footer);
@@ -2241,41 +2290,46 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     for (const t of getToasts()) dismissToast(t.id);
   });
 
-  it.each(["Captures", "Capture frame"])(
-    "%s clears the selection, so Delete cannot remove an item whose inspector is hidden",
-    async (button) => {
-      renderEditor();
-      const footer = await waitForEditorLoaded();
-      // Counted, not fixed: other lanes may hold items an earlier test saved, and Split cuts
-      // those too. The test only needs Delete to remove nothing.
-      const before = footer.querySelectorAll(BLOCK_BUTTONS).length;
-      fireEvent.click(screen.getByRole("button", { name: "Forward" }));
-      await waitFor(() => expect(screen.getByText("0:05.0 / 0:30.0")).toBeInTheDocument());
-      fireEvent.click(screen.getByRole("button", { name: "Split here" }));
-      await waitFor(() =>
-        expect(footer.querySelectorAll(BLOCK_BUTTONS).length).toBeGreaterThan(before),
-      );
-      const afterSplit = footer.querySelectorAll(BLOCK_BUTTONS).length;
-      fireEvent.click(footer.querySelectorAll(BLOCK_BUTTONS)[0]);
-      await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Delete segment" })).toBeEnabled(),
-      );
+  /** Capture frame is the top-bar camera (NIW2-768); a successful capture opens the panel. */
+  async function pressCapture(): Promise<void> {
+    const button = screen.getByRole("button", { name: "Capture frame" });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+  }
 
-      fireEvent.click(screen.getByRole("button", { name: button }));
+  it("Captures clears the selection, so Delete cannot remove an item whose inspector is hidden", async () => {
+    const button = "Captures";
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    // Counted, not fixed: other lanes may hold items an earlier test saved, and Split cuts
+    // those too. The test only needs Delete to remove nothing.
+    const before = footer.querySelectorAll(BLOCK_BUTTONS).length;
+    fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+    await waitFor(() => expect(screen.getByText("0:05.0 / 0:30.0")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Split here" }));
+    await waitFor(() =>
+      expect(footer.querySelectorAll(BLOCK_BUTTONS).length).toBeGreaterThan(before),
+    );
+    const afterSplit = footer.querySelectorAll(BLOCK_BUTTONS).length;
+    fireEvent.click(footer.querySelectorAll(BLOCK_BUTTONS)[0]);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Delete segment" })).toBeEnabled(),
+    );
 
-      await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Delete segment" })).toBeDisabled(),
-      );
-      fireEvent.keyDown(document.body, { key: "Delete" });
-      expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(afterSplit);
-    },
-  );
+    fireEvent.click(screen.getByRole("button", { name: button }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Delete segment" })).toBeDisabled(),
+    );
+    fireEvent.keyDown(document.body, { key: "Delete" });
+    expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(afterSplit);
+  });
 
   it("Retry after a failed capture captures the frame on screen now, not the failed attempt's", async () => {
     stillCapture.capture.mockRejectedValueOnce(new Error("no decodable frame"));
     renderEditor();
     await waitForEditorLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await pressCapture();
     const toast = await waitFor(() => {
       const found = getToasts().find((t) => t.action);
       expect(found).toBeDefined();
@@ -2294,7 +2348,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     renderEditor();
     await waitForEditorLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await pressCapture();
 
     await waitFor(() => expect(saved).toHaveLength(1));
     expect(stillCapture.capture).toHaveBeenCalledWith(
@@ -2321,7 +2375,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     renderEditor();
     await waitForEditorLoaded();
 
-    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await pressCapture();
     await screen.findByTestId("captures-panel");
     await waitFor(() => expect(screen.getAllByTestId("capture-item")).toHaveLength(1));
 
@@ -2332,7 +2386,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
       timelineSeconds: 5,
       sourceSeconds: 5,
     });
-    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await pressCapture();
     await waitFor(() => expect(screen.getAllByTestId("capture-item")).toHaveLength(2));
     const times = screen.getAllByTestId("capture-item").map((el) => el.textContent);
     expect(times[0]).toContain("0:05.0");
@@ -2349,7 +2403,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     });
     renderEditor();
     await waitForEditorLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await pressCapture();
     await waitFor(() => expect(saved).toHaveLength(1));
     expect(saved[0].meta).toMatchObject({ source: { videoAssetId: "asset-1", timeSeconds: null } });
     expect((saved[0].meta as { title: string }).title).toContain("frame 2s");
@@ -2359,7 +2413,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     stubDecodedVideoSize(0, 0);
     renderEditor();
     await waitForEditorLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await pressCapture();
     await waitFor(() =>
       expect(getToasts()).toContainEqual(
         expect.objectContaining({ message: "The video is still loading. Try again in a moment." }),
@@ -2367,21 +2421,23 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     );
     expect(stillCapture.capture).not.toHaveBeenCalled();
     expect(saved).toHaveLength(0);
-    expect(screen.queryByTestId("captures-panel")).toBeNull();
+    // The panel was opened to press the button, and stays: nothing was saved into it.
+    expect(screen.queryAllByTestId("capture-item")).toHaveLength(0);
   });
 
   it("says so when the capture fails, and saves nothing", async () => {
     stillCapture.capture.mockRejectedValue(new Error("worker died"));
     renderEditor();
     await waitForEditorLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await pressCapture();
     await waitFor(() =>
       expect(getToasts()).toContainEqual(
         expect.objectContaining({ message: "Couldn't capture the frame." }),
       ),
     );
     expect(saved).toHaveLength(0);
-    expect(screen.queryByTestId("captures-panel")).toBeNull();
+    // The panel was opened to press the button, and stays: nothing was saved into it.
+    expect(screen.queryAllByTestId("capture-item")).toHaveLength(0);
   });
 
   it("says so when the save fails", async () => {
@@ -2390,7 +2446,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     }) as never;
     renderEditor();
     await waitForEditorLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await pressCapture();
     await waitFor(() =>
       expect(getToasts()).toContainEqual(
         expect.objectContaining({ message: "Couldn't capture the frame." }),
@@ -2405,6 +2461,98 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     expect(screen.getByRole("button", { name: "Capture frame" })).toBeDisabled();
   });
 
+  it("has Capture frame in the top bar, none in the Captures panel, and no Add image", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    const capture = screen.getByRole("button", { name: "Capture frame" });
+    expect(headerActions.contains(capture)).toBe(true);
+    expect(screen.queryByRole("button", { name: "Add image" })).toBeNull();
+    expect(screen.queryByTestId("slide-image-input")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+    const panel = await screen.findByTestId("captures-panel");
+    expect(within(panel).queryByRole("button", { name: "Capture frame" })).toBeNull();
+  });
+
+  it("Add to timeline reads the capture's bytes by id and inserts a slide", async () => {
+    libraryItems = [savedItem("mine", 7), savedItem("other", 9)];
+    const read = vi.fn(async () => PNG);
+    window.electronAPI.readScreenshotBytes = read as never;
+    vi.stubGlobal("Image", FakeImage);
+    try {
+      renderEditor();
+      const footer = await waitForEditorLoaded();
+      const before = footer.querySelectorAll(BLOCK_BUTTONS).length;
+      fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+      // Newest first: "other" (createdAt 9) is the first row, "mine" the second.
+      const buttons = await screen.findAllByRole("button", { name: "Add to timeline" });
+      expect(buttons).toHaveLength(2);
+      fireEvent.click(buttons[1]);
+      await waitFor(() => expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(before + 1));
+      expect(read).toHaveBeenCalledOnce();
+      expect(read).toHaveBeenCalledWith("mine");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("does not save again at a moment that is already captured: it points at the saved one", async () => {
+    // The playhead rests at 0 on the timeline, which is source second 0 here.
+    libraryItems = [savedItem("dup", 0), savedItem("other", 9)];
+    renderEditor();
+    await waitForEditorLoaded();
+    await pressCapture();
+    await waitFor(() => expect(screen.getAllByTestId("capture-item")).toHaveLength(2));
+    await pressCapture();
+    await waitFor(() =>
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({ message: "Already captured at 0:00.0" }),
+      ),
+    );
+    expect(stillCapture.capture).not.toHaveBeenCalled();
+    expect(saved).toHaveLength(0);
+    const highlighted = document.querySelector('[data-highlighted="true"]');
+    expect(highlighted).not.toBeNull();
+    expect(highlighted?.textContent).toContain("0:00.0");
+  });
+
+  it("deletes a capture only after confirming, then refreshes the list", async () => {
+    libraryItems = [savedItem("mine", 7)];
+    window.electronAPI.deleteLocalRecording = vi.fn(async (id: string) => {
+      libraryItems = libraryItems.filter((i) => (i as { assetId: string }).assetId !== id);
+    }) as never;
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete capture" }));
+    expect(window.electronAPI.deleteLocalRecording).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(window.electronAPI.deleteLocalRecording).toHaveBeenCalledWith("mine"),
+    );
+    await waitFor(() => expect(screen.queryAllByTestId("capture-item")).toHaveLength(0));
+  });
+
+  it("keeps the editor's keys quiet behind the delete confirmation", async () => {
+    libraryItems = [savedItem("mine", 7)];
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete capture" }));
+    const play = vi
+      .spyOn(HTMLMediaElement.prototype, "play")
+      .mockImplementation(() => Promise.resolve());
+    // Space would toggle playback and Escape would close the whole panel behind the dialog.
+    fireEvent.keyDown(window, { key: " " });
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(play).not.toHaveBeenCalled();
+    expect(screen.getByTestId("captures-panel")).toBeInTheDocument();
+    // The control: with the dialog closed, the same Space starts playback.
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.keyDown(window, { key: " " });
+    await waitFor(() => expect(play).toHaveBeenCalled());
+    play.mockRestore();
+  });
+
   it("opens from the Captures button with nothing captured, in place of the inspector", async () => {
     renderEditor();
     await waitForEditorLoaded();
@@ -2413,7 +2561,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Captures" }));
     const panel = await screen.findByTestId("captures-panel");
     expect(screen.queryByTestId("editor-inspector")).toBeNull();
-    expect(await within(panel).findByText("No captures of this video yet.")).toBeInTheDocument();
+    expect(await within(panel).findByText(/No captures of this video yet\./)).toBeInTheDocument();
     expect(stillCapture.capture).not.toHaveBeenCalled();
 
     fireEvent.click(within(panel).getByRole("button", { name: "Close captures" }));

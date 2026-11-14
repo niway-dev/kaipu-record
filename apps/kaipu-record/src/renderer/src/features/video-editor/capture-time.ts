@@ -20,3 +20,20 @@ export function captureTitleTime(seconds: number): string {
   if (m > 0) return `${m}m${two(s)}s`;
   return `${s}s`;
 }
+
+/**
+ * The existing capture taken at `sourceSeconds`, compared at millisecond precision (the
+ * resolution a stored link keeps), or undefined. A slide frame has no source second
+ * (`null`), so it never matches: two slide captures are not the same frame.
+ */
+export function findCaptureAt<T extends { sourceTimeSeconds: number | null }>(
+  captures: readonly T[],
+  sourceSeconds: number | null,
+): T | undefined {
+  if (sourceSeconds === null) return undefined;
+  const ms = Math.round(sourceSeconds * 1000);
+  return captures.find(
+    (capture) =>
+      capture.sourceTimeSeconds !== null && Math.round(capture.sourceTimeSeconds * 1000) === ms,
+  );
+}

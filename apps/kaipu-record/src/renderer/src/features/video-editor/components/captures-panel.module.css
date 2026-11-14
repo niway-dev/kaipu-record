@@ -69,24 +69,3 @@
   line-height: 1.45;
   color: var(--text-secondary);
 }
-
-.emptyButton {
-  padding: 6px 12px;
-  background: transparent;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-family: var(--font-family);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  transition: background var(--transition);
-}
-
-.emptyButton:hover:not(:disabled) {
-  background: var(--bg-card-hover);
-}
-
-.emptyButton:disabled {
-  opacity: 0.4;
-  cursor: default;
-}

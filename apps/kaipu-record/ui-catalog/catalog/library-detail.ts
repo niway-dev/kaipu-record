@@ -116,7 +116,13 @@ export const libraryDetail = catalog(
         { waitFor: { video: true } },
         {
           click: {
-            area: "editorVideo.toolbar",
+            area: "editorVideo.toolRail",
+            part: { role: "button", name: "Captures", exact: true },
+          },
+        },
+        {
+          click: {
+            area: "editorVideo.capturesPanel",
             part: { role: "button", name: "Capture frame", exact: true },
           },
         },
@@ -129,6 +135,43 @@ export const libraryDetail = catalog(
       ],
       demonstrates: ["libraryDetail.captures:list", "libraryDetail.tabs:captures"],
       ready: { video: "paused-at-start" },
+      // The capture is a new file in the workspace: put the vault back for the next state.
+      after: [{ action: "restoreVault" }],
+    },
+    "capture-source": {
+      profile: "default",
+      how: "Open “Weekly sync” in the editor, capture a frame from the Captures panel, then open the recording's page, its Captures (1) tab and the capture itself: its page says which video it came from and at what time.",
+      steps: [
+        { navigate: `/editor/video/${ASSETS.weeklySync}` },
+        { waitFor: { video: true } },
+        {
+          click: {
+            area: "editorVideo.toolRail",
+            part: { role: "button", name: "Captures", exact: true },
+          },
+        },
+        {
+          click: {
+            area: "editorVideo.capturesPanel",
+            part: { role: "button", name: "Capture frame", exact: true },
+          },
+        },
+        { waitFor: { area: "editorVideo.capturesPanel", part: { role: "button", name: "Go to" } } },
+        detail(ASSETS.weeklySync),
+        tab("Captures (1)"),
+        { waitFor: { area: "libraryDetail.captures" } },
+        {
+          click: {
+            area: "libraryDetail.captures",
+            part: { role: "button", name: "Open the capture from", exact: false },
+          },
+        },
+        { waitFor: { area: "libraryDetail.captureSource" } },
+        { waitMs: 400 },
+      ],
+      demonstrates: ["libraryDetail.captureSource:linked"],
+      // It ends on the capture's own page: an image, no <video> to wait for.
+      ready: { area: "libraryDetail.captureSource" },
       // The capture is a new file in the workspace: put the vault back for the next state.
       after: [{ action: "restoreVault" }],
     },

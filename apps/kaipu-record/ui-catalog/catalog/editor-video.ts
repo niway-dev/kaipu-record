@@ -29,13 +29,17 @@ const zoomIn: Step = {
     part: { role: "button", name: "Zoom in the timeline", exact: true },
   },
 };
-/** Capture frame, beside Add image in the header. */
-const toolbarButton = (name: string): Step => ({
-  click: { area: "editorVideo.toolbar", part: { role: "button", name, exact: true } },
-});
+/** Capture frame, the camera in the top bar: it opens the Captures panel on the new capture. */
+const captureFrameButton: Step = {
+  click: {
+    area: "editorVideo.toolbar",
+    part: { role: "button", name: "Capture frame", exact: true },
+  },
+};
 /**
- * A capture's image in the panel's list: its button is named "Go to <time>". The shot waits for
- * it to be on screen, not for the image inside to decode, which the next step covers.
+ * A capture in the panel's list: the Go to button over its image is named "Go to <time>". The
+ * shot waits for it to be in the DOM (it is invisible until hover), not for the image to
+ * decode, which the next step covers.
  */
 const captureListed: Step = {
   waitFor: { area: "editorVideo.capturesPanel", part: { role: "button", name: "Go to" } },
@@ -363,7 +367,7 @@ export const editorVideo = catalog(
     },
     "captures-empty": {
       profile: "default",
-      how: "Open “Walkthrough 1”, which has no captures, and press Captures in the tool column: the right column shows the empty panel with its Capture frame button.",
+      how: "Open “Walkthrough 1”, which has no captures, and press Captures in the tool column: the right column shows the empty panel, which points to the camera in the top bar.",
       steps: [
         open(ASSETS.walkthrough),
         loaded,
@@ -372,7 +376,7 @@ export const editorVideo = catalog(
         {
           waitFor: {
             area: "editorVideo.capturesPanel",
-            part: { role: "button", name: "Capture frame", exact: true },
+            part: { text: "No captures of this video yet." },
           },
         },
       ],
@@ -381,11 +385,11 @@ export const editorVideo = catalog(
     },
     "captures-list": {
       profile: "default",
-      how: "Open “Weekly sync” and press Capture frame in the header: the frame at the playhead is saved into the library and the right column lists it with its time.",
+      how: "Open “Weekly sync” and press Capture frame, the camera in the top bar: the frame at the playhead is saved into the library and the right column opens on the Captures list with its time.",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
-        toolbarButton("Capture frame"),
+        captureFrameButton,
         captureListed,
         // The list appears before the image inside it has decoded.
         { waitMs: 400 },
@@ -393,6 +397,70 @@ export const editorVideo = catalog(
       demonstrates: ["editorVideo.capturesPanel:list"],
       ready: { area: "editorVideo.capturesPanel" },
       // The capture is a new file in the workspace: put the vault back for the next state.
+      after: [{ action: "restoreVault" }],
+    },
+    "captures-hover": {
+      profile: "default",
+      how: "Open “Weekly sync”, press Capture frame in the top bar and rest the pointer on the new capture's image: a subtle dark veil covers it with the Go to button in its center. Its row below keeps the time, Add to timeline, Copy and Delete.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        captureFrameButton,
+        captureListed,
+        // The list appears before the image inside it has decoded.
+        { waitMs: 400 },
+        // Hovering the button (the veil's only part that takes the pointer) is hovering the image.
+        {
+          hover: {
+            area: "editorVideo.capturesPanel",
+            part: { role: "button", name: "Go to" },
+          },
+        },
+      ],
+      keepPointer: true,
+      demonstrates: ["editorVideo.capturesPanel:hover"],
+      ready: { area: "editorVideo.capturesPanel" },
+      after: [{ action: "restoreVault" }],
+    },
+    "captures-duplicate": {
+      profile: "default",
+      how: "Open “Weekly sync” and press Capture frame in the top bar twice at the same playhead: the second press saves nothing, outlines the existing capture and a toast says “Already captured at …”.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        captureFrameButton,
+        captureListed,
+        captureFrameButton,
+        // The outline lasts ~2 s; the shot is taken as soon as it appears.
+        {
+          waitFor: {
+            area: "editorVideo.capturesPanel",
+            part: { css: '[data-highlighted="true"]' },
+          },
+        },
+      ],
+      demonstrates: ["editorVideo.capturesPanel:duplicate"],
+      ready: { area: "editorVideo.capturesPanel" },
+      after: [{ action: "restoreVault" }],
+    },
+    "captures-confirm-delete": {
+      profile: "default",
+      how: "Open “Weekly sync”, capture a frame from the top bar and press the capture's Delete button: a confirmation names the capture and nothing is deleted until it is confirmed.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        captureFrameButton,
+        captureListed,
+        {
+          click: {
+            area: "editorVideo.capturesPanel",
+            part: { role: "button", name: "Delete capture", exact: true },
+          },
+        },
+        { waitFor: { area: "editorVideo.capturesPanel", part: { role: "alertdialog" } } },
+      ],
+      demonstrates: ["editorVideo.capturesPanel:confirmDelete"],
+      ready: { area: "editorVideo.capturesPanel" },
       after: [{ action: "restoreVault" }],
     },
     "export-sheet": {

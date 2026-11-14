@@ -130,8 +130,14 @@ import {
 } from "@renderer/features/video-editor/export/export-reuse";
 import { useSourceExports } from "@renderer/features/video-editor/export/use-source-exports";
 import { useStillCapture } from "@renderer/features/video-editor/export/use-still-capture";
+import { planStill } from "@renderer/features/video-editor/export/still-plan";
+import type { LibraryVideo } from "@renderer/features/library/types";
 import { useSourceCaptures } from "@renderer/features/video-editor/use-source-captures";
-import { captureTitleTime } from "@renderer/features/video-editor/capture-time";
+import {
+  captureTitleTime,
+  findCaptureAt,
+  formatClock,
+} from "@renderer/features/video-editor/capture-time";
 import { CapturesPanel } from "@renderer/features/video-editor/components/captures-panel";
 import { probeSource, type SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
@@ -792,18 +798,17 @@ function VideoEditor({
   // 0 lands before everything (the intro-card case); mid-clip lands at the closest cut
   // point. Placing a slide mid-clip requires splitting first (predictable, no
   // auto-split). `controller.commit` already no-ops mid-drag, same as every other
-  // discrete action here.
-  const handleAddImage = useCallback(
-    async (file: File) => {
+  // discrete action here. The only source of images is a capture's Add to timeline.
+  const insertImageSlide = useCallback(
+    async (bytes: ArrayBuffer, mime: string) => {
       // Same guard as every other discrete action: don't mutate the scene while a
       // trim or overlay drag owns it via begin/updateLive/endInteract.
       if (controller.interacting) return;
-      const bytes = await file.arrayBuffer();
       // Wrap the image decode in a try/catch so a corrupt or unsupported file
       // surfaces a clear toast rather than an unhandled rejection.
       let asset: SlideAsset;
       try {
-        asset = await assetStoreRef.current.put(bytes, file.type);
+        asset = await assetStoreRef.current.put(bytes, mime);
       } catch {
         showToast({ message: t("imageLoadError") });
         return;
@@ -820,6 +825,24 @@ function VideoEditor({
       controller.commit({ ...scene, items: insertItemAt(scene.items, index, slide) });
     },
     [scene, controller, playback.timelineTime],
+  );
+
+  // A capture's Add to timeline: main reads the vault PNG by id (fetch on the media scheme
+  // returns no bytes here), then it goes in as any image slide.
+  const addCaptureToTimeline = useCallback(
+    async (capture: LibraryVideo) => {
+      const id = capture.id;
+      if (!id) return;
+      let bytes: ArrayBuffer;
+      try {
+        bytes = await window.electronAPI.readScreenshotBytes(id);
+      } catch {
+        showToast({ message: t("imageLoadError") });
+        return;
+      }
+      await insertImageSlide(bytes, "image/png");
+    },
+    [insertImageSlide, t],
   );
 
   // Reads the live preview <video>'s native/displayed size at click time (not
@@ -1056,16 +1079,53 @@ function VideoEditor({
   // Frame captures (NIW2-764): the composed frame at the playhead, saved into the library
   // with the video and second it came from, then listed in the Captures panel.
   const stillCapture = useStillCapture();
-  const sourceCaptures = useSourceCaptures(source.assetId, capturesOpen);
+  // Read from the first render, panel open or not: the top-bar Capture frame needs the real
+  // list for its duplicate check, so it stays disabled until this read lands.
+  const sourceCaptures = useSourceCaptures(source.assetId, true);
   const refreshCaptures = sourceCaptures.refresh;
+  const latestCaptures = sourceCaptures.latest;
+  // The capture a repeated press found already saved: outlined for ~2 s in the panel.
+  const [highlightedCaptureId, setHighlightedCaptureId] = useState<string | null>(null);
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (highlightTimer.current) clearTimeout(highlightTimer.current);
+    },
+    [],
+  );
   const captureFrame = stillCapture.capture;
+  // Held from the press until the list holds the new capture: `stillCapture.busy` ends when
+  // the frame is composed, and a second press before the list refreshes would miss the
+  // duplicate check.
+  const captureInFlight = useRef(false);
   const handleCaptureFrame = useCallback(async () => {
     const video = playback.videoRef.current;
     if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
       showToast({ message: t("videoStillLoading") });
       return;
     }
+    if (captureInFlight.current) return;
+    captureInFlight.current = true;
+    // Timeline seconds: the clock the transport and the scene share, never source time.
+    // Read now, not from state: while playing, state lags the frame on screen.
+    const playhead = playback.readTimelineTime();
     try {
+      // The same frame twice is a duplicate: point at the saved one instead of composing.
+      const existing = findCaptureAt(latestCaptures(), planStill(scene, playhead).sourceSeconds);
+      if (existing) {
+        clearSelection();
+        setCursorInspectorOpen(false);
+        setCapturesOpen(true);
+        setHighlightedCaptureId(existing.assetId);
+        if (highlightTimer.current) clearTimeout(highlightTimer.current);
+        highlightTimer.current = setTimeout(() => setHighlightedCaptureId(null), 2000);
+        showToast({
+          message: t("captureExists", { time: formatClock(existing.sourceTimeSeconds as number) }),
+        });
+        return;
+      }
+      if (highlightTimer.current) clearTimeout(highlightTimer.current);
+      setHighlightedCaptureId(null);
       const frame = await captureFrame({
         scene,
         sourceId: source.id,
@@ -1076,9 +1136,7 @@ function VideoEditor({
         cameraPath,
         cursor: cursorData,
         webcamTrack: source.webcam ?? null,
-        // Timeline seconds: the clock the transport and the scene share, never source time.
-        // Read now, not from state: while playing, state lags the frame on screen.
-        playhead: playback.readTimelineTime(),
+        playhead,
       });
       // The link stores the SOURCE second (what the library page and the sidecar show). A
       // slide has no source footage: its link has no time (seeking to it does nothing), and
@@ -1103,10 +1161,13 @@ function VideoEditor({
         // added since the failed attempt, never the scene of that attempt.
         retry: () => void captureFrameRef.current(),
       });
+    } finally {
+      captureInFlight.current = false;
     }
   }, [
     playback,
     captureFrame,
+    latestCaptures,
     scene,
     source,
     assetStoreRef,
@@ -1117,6 +1178,15 @@ function VideoEditor({
     t,
   ]);
   const captureFrameRef = useLatest(handleCaptureFrame);
+
+  const deleteCapture = useCallback(
+    async (capture: LibraryVideo): Promise<void> => {
+      if (!capture.id) return;
+      await window.electronAPI.deleteLocalRecording(capture.id);
+      await refreshCaptures();
+    },
+    [refreshCaptures],
+  );
 
   const toggleCaptures = useCallback(() => {
     if (capturesOpen) {
@@ -1469,6 +1539,8 @@ function VideoEditor({
       if (blocker.state === "blocked" || gifExport.status !== "idle" || exportSheetOpen) return;
       // The Timeline guide is a modal: its own Esc closes it, and nothing behind it reacts.
       if (guideTab !== null) return;
+      // Any other modal (a capture's delete confirmation) owns the keys while it is open.
+      if (document.querySelector('[aria-modal="true"]')) return;
       if (!e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "h") {
         // In fullscreen only the stage is drawn: a guide portaled to <body> would be invisible.
         if (!document.fullscreenElement) openGuideFirstTab();
@@ -1912,12 +1984,12 @@ function VideoEditor({
             canRedo={controller.canRedo}
             onUndo={controller.undo}
             onRedo={controller.redo}
-            onAddImage={handleAddImage}
+            onCaptureFrame={() => void handleCaptureFrame()}
+            // Until the first captures read lands: the duplicate check needs the real list.
+            captureDisabled={stillCapture.busy || !sourceCaptures.loaded}
             onExport={handleExport}
             exportDisabled={gifExport.status === "exporting" || scene.items.length === 0}
             onOpenGuide={openGuideFirstTab}
-            onCaptureFrame={() => void handleCaptureFrame()}
-            captureBusy={stillCapture.busy}
           >
             {/* Not interactive — a reminder, not a control (plans/video-editor-v2/08 § PR 10
                 polish, W12's "ORIGINAL UNTOUCHED" pill). The original recording on disk and
@@ -1951,8 +2023,9 @@ function VideoEditor({
               captures={sourceCaptures.captures}
               loaded={sourceCaptures.loaded}
               onSeek={seekToCapture}
-              onCaptureFrame={() => void handleCaptureFrame()}
-              captureBusy={stillCapture.busy}
+              onAddToTimeline={(capture) => void addCaptureToTimeline(capture)}
+              onDelete={deleteCapture}
+              highlightedId={highlightedCaptureId}
               onClose={() => setCapturesOpen(false)}
             />
           ) : (
