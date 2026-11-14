@@ -334,7 +334,6 @@ export function RecordPage(): React.JSX.Element {
     <div {...uiArea("record.page")} className={styles.page}>
       <RecordingIndicator
         ui={uiArea("record.recordingIndicator")}
-        variant="bar"
         paused={isPaused}
         elapsedSeconds={activity.elapsedSeconds}
       />
