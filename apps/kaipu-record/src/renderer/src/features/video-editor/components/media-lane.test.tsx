@@ -198,9 +198,11 @@ describe("MediaLane gestures", () => {
     const { media, body } = setup();
     fireEvent.pointerDown(body, { pointerId: 1, button: 0, clientX: 300 });
     fireEvent.pointerUp(body, { pointerId: 1, clientX: 300 });
-    fireEvent.click(body);
+    // A real mouse click has detail 1; detail 0 would select through the keyboard branch.
+    fireEvent.click(body, { detail: 1 });
     expect(media.onMove).not.toHaveBeenCalled();
     expect(media.onResizeEdge).not.toHaveBeenCalled();
+    expect(media.onSelect).toHaveBeenCalledTimes(1);
     expect(media.onSelect).toHaveBeenCalledWith("a");
   });
 
@@ -218,7 +220,7 @@ describe("MediaLane gestures", () => {
   });
 
   it("dragging the left edge reports the time under the pointer for the start edge", () => {
-    const { media, start, body } = setup();
+    const { media, start } = setup();
     fireEvent.pointerDown(start, { pointerId: 1, button: 0, clientX: 200 });
     expect(media.onInteractionStart).toHaveBeenCalledTimes(1);
     fireEvent.pointerMove(start, { pointerId: 1, clientX: 150 });
@@ -226,8 +228,7 @@ describe("MediaLane gestures", () => {
     fireEvent.pointerUp(start, { pointerId: 1, clientX: 150 });
     expect(media.onInteractionEnd).toHaveBeenCalledTimes(1);
     expect(media.onMove).not.toHaveBeenCalled();
-    // The edge's pointerdown did not also start a body drag.
-    expect(body).toBeTruthy();
+    // The edge's pointerdown did not also start a body drag: one interaction, not two.
     expect(media.onInteractionStart).toHaveBeenCalledTimes(1);
   });
 
