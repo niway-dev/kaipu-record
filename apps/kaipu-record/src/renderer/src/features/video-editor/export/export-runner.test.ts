@@ -82,7 +82,7 @@ function args(overrides: Partial<StartExportArgs> = {}): StartExportArgs {
     previewWidth: 2560,
     slideAssets: createSlideAssetStore(),
     cameraPath: null,
-    joined: [],
+    joined: () => [],
     presetId: "light",
     onSaved: vi.fn(),
     ...overrides,
@@ -501,8 +501,8 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
   };
   const entry = (
     sourceId: string,
-    overrides: Partial<StartExportArgs["joined"][number]> = {},
-  ): StartExportArgs["joined"][number] => ({
+    overrides: Partial<ReturnType<StartExportArgs["joined"]>[number]> = {},
+  ): ReturnType<StartExportArgs["joined"]>[number] => ({
     sourceId,
     id: `vault-${sourceId}`,
     title: `Title ${sourceId}`,
@@ -523,7 +523,7 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
     const beginExport = vi.fn(async () => {});
     window.electronAPI.beginExport = beginExport;
     await startVideoExport(
-      args({ scene: JOINED_SCENE, joined: [entry("b", { status: "missing", id: "" })] }),
+      args({ scene: JOINED_SCENE, joined: () => [entry("b", { status: "missing", id: "" })] }),
       t,
     );
     expect(getExportSnapshot().status).toBe("error");
@@ -537,7 +537,7 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
   });
 
   it("names the scene's title when a used joined recording has no entry at all", async () => {
-    await startVideoExport(args({ scene: JOINED_SCENE, joined: [] }), t);
+    await startVideoExport(args({ scene: JOINED_SCENE, joined: () => [] }), t);
     expect(getExportSnapshot().error).toBe("b (exportRecordingMissing)");
     expect(workers).toHaveLength(0);
   });
@@ -546,7 +546,7 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
     const beginExport = vi.fn(async () => {});
     window.electronAPI.beginExport = beginExport;
     await startVideoExport(
-      args({ scene: JOINED_SCENE, joined: [entry("b", { status: "loading", id: "" })] }),
+      args({ scene: JOINED_SCENE, joined: () => [entry("b", { status: "loading", id: "" })] }),
       t,
     );
     expect(getExportSnapshot().error).toBe("exportRecordingLoading");
@@ -561,7 +561,7 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
     await startVideoExport(
       args({
         scene: JOINED_SCENE,
-        joined: [entry("b"), entry("c", { status: "missing", id: "" })],
+        joined: () => [entry("b"), entry("c", { status: "missing", id: "" })],
       }),
       t,
     );
@@ -571,7 +571,7 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
 
   it("fails by name and lets go of everything when a used joined file answers 404", async () => {
     vi.stubGlobal("fetch", fetchMock(["vault-b"]));
-    await startVideoExport(args({ scene: JOINED_SCENE, joined: [entry("b")] }), t);
+    await startVideoExport(args({ scene: JOINED_SCENE, joined: () => [entry("b")] }), t);
     expect(getExportSnapshot().status).toBe("error");
     expect(getExportSnapshot().error).toBe("Title b (exportRecordingMissing)");
     expect(window.electronAPI.recordingCreate).not.toHaveBeenCalled();
@@ -593,7 +593,7 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
       args({
         scene,
         webcamTrack: null,
-        joined: [entry("b", { webcam: { startOffsetMs: 250 } }), entry("c")],
+        joined: () => [entry("b", { webcam: { startOffsetMs: 250 } }), entry("c")],
       }),
       t,
     );
@@ -617,7 +617,7 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
     await startVideoExport(
       args({
         scene: { ...JOINED_SCENE, webcam: WEBCAM },
-        joined: [entry("b", { webcam: { startOffsetMs: 5 } })],
+        joined: () => [entry("b", { webcam: { startOffsetMs: 5 } })],
       }),
       t,
     );
@@ -628,7 +628,7 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
   it("sends an empty joined list and makes the same fetches for a scene without joined recordings", async () => {
     const fetch = fetchMock();
     vi.stubGlobal("fetch", fetch);
-    await startVideoExport(args({ joined: [] }), t);
+    await startVideoExport(args({ joined: () => [] }), t);
     await waitFor(() => expect(workers).toHaveLength(1));
     expect(sent().joined).toEqual([]);
     expect(fetch.mock.calls.map((c) => c[0])).toEqual(["kaipu-media://recording/rec-1"]);
@@ -651,7 +651,7 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
         ...JOINED_SCENE,
         items: [{ id: "x", kind: "clip", sourceStart: 90, sourceEnd: 3610 }],
       };
-      await startVideoExport(args({ scene: broken, joined: [entry("b")] }), t);
+      await startVideoExport(args({ scene: broken, joined: () => [entry("b")] }), t);
       expect(getExportSnapshot()).toMatchObject({
         status: "error",
         error: "exportGenericError",
@@ -668,11 +668,11 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
     const resolvers: Array<(value: null) => void> = [];
     probeSource.mockImplementation(() => new Promise<null>((resolve) => resolvers.push(resolve)));
     const first = startVideoExport(
-      args({ scene: JOINED_SCENE, joined: [entry("b")], title: "First call" }),
+      args({ scene: JOINED_SCENE, joined: () => [entry("b")], title: "First call" }),
       t,
     );
     const second = startVideoExport(
-      args({ scene: JOINED_SCENE, joined: [entry("b")], title: "Second call" }),
+      args({ scene: JOINED_SCENE, joined: () => [entry("b")], title: "Second call" }),
       t,
     );
     // The first call's probe lands first: it runs, the second is turned away after its own.
@@ -689,6 +689,21 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
     expect(getExportSnapshot().job?.sourceTitle).toBe("First call");
   });
 
+  it("Retry reads the joined recordings as they are now, not as they were when the export was refused", async () => {
+    vi.stubGlobal("fetch", fetchMock());
+    let current = [entry("b", { status: "loading", id: null })];
+    await startVideoExport(args({ scene: JOINED_SCENE, joined: () => current }), t);
+    expect(getExportSnapshot().error).toBe("exportRecordingLoading");
+    expect(workers).toHaveLength(0);
+
+    // The recording finished loading: the editor now holds a different object for it.
+    current = [entry("b")];
+    retryVideoExport();
+    await waitFor(() => expect(workers).toHaveLength(1));
+    expect(getExportSnapshot()).toMatchObject({ status: "exporting", error: null });
+    expect(sent().joined.map((j) => j.sourceId)).toEqual(["b"]);
+  });
+
   describe("a cancelled export that is still waiting while a new one runs", () => {
     const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
     const ok = (url: string) => ({ ok: true, status: 200, blob: async () => new Blob([url]) });
@@ -699,7 +714,7 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
       const fetch = vi.fn(async (url: string) => (url.includes("vault-b") ? held : ok(url)));
       vi.stubGlobal("fetch", fetch);
       void startVideoExport(
-        args({ scene: JOINED_SCENE, joined: [entry("b")], title: "Export A" }),
+        args({ scene: JOINED_SCENE, joined: () => [entry("b")], title: "Export A" }),
         t,
       );
       await waitFor(() => expect(fetch).toHaveBeenCalledWith("kaipu-media://recording/vault-b"));
@@ -782,7 +797,7 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
     const start = async (over: Partial<StartExportArgs>) => {
       vi.stubGlobal("fetch", fetchMock());
       await startVideoExport(
-        args({ scene: JOINED_SCENE, joined: [entry("b")], presetId: "balanced", ...over }),
+        args({ scene: JOINED_SCENE, joined: () => [entry("b")], presetId: "balanced", ...over }),
         t,
       );
       await waitFor(() => expect(workers).toHaveLength(1));
@@ -819,7 +834,7 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
     it("probes nothing for a scene without joined recordings", async () => {
       probeSource.mockClear();
       vi.stubGlobal("fetch", fetchMock());
-      await startVideoExport(args({ joined: [] }), t);
+      await startVideoExport(args({ joined: () => [] }), t);
       await waitFor(() => expect(workers).toHaveLength(1));
       expect(probeSource).not.toHaveBeenCalled();
     });

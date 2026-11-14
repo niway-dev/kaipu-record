@@ -75,8 +75,12 @@ export interface StartExportArgs {
    * layer in the scene, its file is fetched and composed (ADR 0038).
    */
   webcamTrack?: ExportWebcamTrack | null;
-  /** One per `scene.sources` entry; empty for a scene without joined recordings. */
-  joined: ExportJoinedRecording[];
+  /**
+   * One per `scene.sources` entry; empty for a scene without joined recordings. A function,
+   * read at every start (Retry included): a recording that was still loading when an export
+   * was refused is ready by the time the user retries, and the editor holds a new object for it.
+   */
+  joined: () => readonly ExportJoinedRecording[];
   /** NIW2-218: destination preset; Balanced (the Settings default) when omitted. */
   presetId?: ExportPresetId;
   /** Fit/Fill for Vertical and Square; the preset's default when omitted. */
@@ -323,11 +327,12 @@ export async function startVideoExport(
   // A joined recording a clip reads must be readable before anything is taken: no lease, no
   // writer session, no worker (a joined recording no clip uses never blocks). The refusal is
   // shown once the job is known, because the export card only renders for a job.
+  const joined = args.joined();
   const usedJoined: Array<{ entry: ExportJoinedRecording; offset: number }> = [];
   let refusal: string | null = null;
   for (const sourceId of recordingsUsed(plan)) {
     if (sourceId === null) continue;
-    const entry = args.joined.find((j) => j.sourceId === sourceId);
+    const entry = joined.find((j) => j.sourceId === sourceId);
     const sceneSource = args.scene.sources?.find((s) => s.id === sourceId);
     if (!entry || entry.status === "missing" || !sceneSource) {
       const title = entry?.title ?? sceneSource?.title ?? sourceId;

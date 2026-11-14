@@ -591,6 +591,13 @@ function VideoEditor({
       })),
     [joinedRecordings],
   );
+  // What the MP4 export reads at each start, Retry included: a recording that was still loading
+  // when an export was refused is ready by the time the user retries, so a closure over this
+  // render's list would refuse for ever. Read at start time, never captured.
+  const exportJoinedRef = useRef(exportJoined);
+  useEffect(() => {
+    exportJoinedRef.current = exportJoined;
+  }, [exportJoined]);
 
   // The decoded frame as one state object: the webcam layer places itself against it (the
   // preview's output frame is the source frame), and a stable object keeps its trigger quiet.
@@ -1181,7 +1188,7 @@ function VideoEditor({
         cursor: cursorData,
         // The sidecar's webcam track: with a webcam layer in the scene, the export composes it.
         webcamTrack: source.webcam ?? null,
-        joined: exportJoined,
+        joined: () => exportJoinedRef.current,
         presetId: choice.presetId,
         framing: choice.framing,
         sourceInfo: sourceProbe,
@@ -1241,7 +1248,6 @@ function VideoEditor({
       autosave,
       cameraPath,
       cursorData,
-      exportJoined,
     ],
   );
 
