@@ -6,6 +6,7 @@ import { useTranslations } from "@kaipu/i18n";
 import { parseCursorTrack, type CursorTrack } from "@shared/cursor-track";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
 import { captureEvent, captureException, reportError } from "@renderer/features/analytics";
+import { useFlag } from "@renderer/features/analytics/use-flag";
 import { buildEditorSpeedChangedProperties, EDITOR_SPEED_CHANGED_EVENT } from "@shared/analytics";
 import {
   initialScene,
@@ -105,6 +106,7 @@ import {
   useCompanionThumbnails,
   useSourceThumbnails,
 } from "@renderer/features/video-editor/use-source-thumbnails";
+import { useAudioPeaks } from "@renderer/features/video-editor/use-audio-peaks";
 import { useLatest } from "@renderer/features/video-editor/use-latest";
 import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
 import { useVideoTools } from "@renderer/features/video-editor/annotations/video-tools";
@@ -626,6 +628,14 @@ function VideoEditor({
   const appSettings = useAppSettings();
   const trackVisibility = useHiddenTracks(appSettings);
   const { hidden: hiddenTracks, showTrack } = trackVisibility;
+  // The Audio lane's waveform (NIW2-775): decoded only while the flag is on and the lane is
+  // showing, so a hidden lane or a flag-off editor never pays for it.
+  const waveformFlag = useFlag("audio-waveform");
+  const audioPeaks = useAudioPeaks(
+    sourceUrl,
+    source.durationSeconds,
+    waveformFlag && !isTrackHidden("audio", hiddenTracks),
+  );
   const selection = useEditorSelection();
   // `select` / `clear` are stable (useCallback, no deps); the `selection` object itself
   // is rebuilt every render, so never put it in a dependency array.
@@ -1725,6 +1735,7 @@ function VideoEditor({
               ranges={mutes.mutedRanges}
               layout={layout}
               audioMuted={mutes.audioMuted}
+              waveform={audioPeaks}
               selectedId={selectedMuteId}
               onSelect={handleSelectMute}
               onEdgeDrag={mutes.edgeDrag}
@@ -1756,6 +1767,7 @@ function VideoEditor({
       privacyGhost,
       mutes.mutedRanges,
       mutes.audioMuted,
+      audioPeaks,
       mutes.edgeDrag,
       selectedMuteId,
       handleSelectMute,
