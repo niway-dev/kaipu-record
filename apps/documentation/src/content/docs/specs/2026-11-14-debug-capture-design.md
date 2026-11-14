@@ -27,7 +27,7 @@ uploads nothing; what leaves the Mac is what the owner chooses to share.
 | 3   | Window images come from `webContents.capturePage()`, composited in pure JS from `nativeImage` bitmaps                                              | Electron API on both platforms, needs no permission and no native dependency (no `postinstall`, see `CLAUDE.md`)                                                                                                                                                                         | —   |
 | 4   | Plus one full-screen image per display through `desktopCapturer`                                                                                   | Shows the native parts `capturePage` cannot see (menus, system dialogs, other apps around the widget). Uses the Screen Recording permission Kaipu already holds                                                                                                                          | —   |
 | 5   | Console lines come from a ring buffer in main: main's own `console.*` plus every window's `console-message` event                                  | No renderer change for the logs, and no file logger; the bundle still carries the recent past                                                                                                                                                                                            | —   |
-| 6   | Gate: `is.dev` OR the new `debug-capture` flag (added to `FLAG_NAMES`, `FLAG_DEFAULTS` false); the main window reports every resolved flag to main | Main has no PostHog client; this follows the existing `reportCaptureWhileRecording` / `reportImageText` pattern. The flag stays off by default and in PostHog matches only the owner's device ids                                                                                        | —   |
+| 6   | Gate: `is.dev` OR the new `debug-capture` flag (added to `FLAG_NAMES`, `FLAG_DEFAULTS` false); the main window reports every resolved flag to main | Main evaluates no flags (its `posthog-node` client sends events and exceptions only); this follows the existing `reportCaptureWhileRecording` / `reportImageText` pattern. The flag stays off by default and in PostHog matches only the owner's device ids                              | —   |
 | 7   | The app never uploads the folder, and it holds settings and paths as they are                                                                      | Only the owner uses it now. Uploading or redacting belongs to a later user-facing bug report                                                                                                                                                                                             | —   |
 | 8   | ⌃⌥⌘D on macOS (`Control+Alt+Shift+D` on Windows), hard-coded, not in Settings → Shortcuts, held through `holdTemporaryShortcut`                    | A debug key is not a user feature. No Kaipu shortcut uses it (checked `shared/types/ipc.ts`). `applyGlobalShortcuts` calls `unregisterAll` on every settings write and re-registers only the user shortcuts and the held ones, so a bare `globalShortcut.register` would vanish silently | —   |
 
@@ -84,7 +84,8 @@ gets its registry entry and pin test like every other.
 - **The whole capture fails silently.** If the folder cannot be written (disk full, no
   permission on `userData`) or the capture throws before Finder opens, nothing would show, which
   looks the same as an unregistered key. Main logs the error with `console.error` and shows a
-  native `dialog.showErrorBox` with the cause; a native dialog is not a Kaipu window, so it never
+  native, non-blocking `dialog.showMessageBox` (no parent window) with the cause, never the
+  synchronous `showErrorBox`, which would freeze main while open; a native dialog is not a Kaipu window, so it never
   ends up in a later capture.
 - **The capture stalls a recording.** Pixel work on main's event loop would delay the recording
   hub. The composite blend runs in a worker thread and the canvas is capped (see "The
@@ -120,13 +121,15 @@ gets its registry entry and pin test like every other.
 - [ ] When the folder cannot be written, a native error dialog names the cause.
 - [ ] A hidden window is listed in `state.json` with `"captured": false` and is absent from the
       composite.
+- [ ] The three flag criteria below run in a packaged build: in `bun run dev` the gate is always
+      open.
 - [ ] In a packaged build without the flag, ⌃⌥⌘D does nothing (the shortcut is not registered).
 - [ ] ⌃⌥⌘D still captures after a settings write (change any setting, press it again).
 - [ ] Turning the flag off at runtime releases the shortcut; turning it on holds it again.
 - [ ] With the `debug-capture` flag on for the owner's device id, the signed build captures.
 - [ ] Unit tests cover: the composite placement and scaling (pure function over bitmaps and
       bounds), the ring buffer bound, the gate (dev / flag / neither), the shortcut surviving
-      `applyGlobalShortcuts`, a failing window not aborting the bundle, a hidden window left out
+      `applyGlobalShortcuts` and being released when the reported flag turns off, a failing window not aborting the bundle, a hidden window left out
       of the composite, a second press during a capture being ignored, a flag report from a
       window other than the main one being ignored, the no-permission path skipping `screens/`,
       and the canvas cap lowering the factor.
@@ -189,7 +192,8 @@ screen images and `state.json` follow.
 
 ### Flags main knows
 
-Main has no PostHog client, and today it learns only the flags the renderer reports one by one
+Main evaluates no flags (its `posthog-node` client in `services/analytics.service.ts` only sends
+events and exceptions), and today it learns only the flags the renderer reports one by one
 (`capture-while-recording`, `image-text`). The new report sends the whole map: whenever any flag
 resolves or changes, the main window sends `{ name: boolean }` for every `FLAG_NAMES` entry.
 Main keeps the last map and its time; the gate reads `debug-capture` from it, and `state.json`
@@ -205,11 +209,14 @@ them into this map is a later clean-up, not part of this work.
    order is an approximation in two groups: normal windows first, then always-on-top windows;
    inside each group the focused window, if any, goes last.
 4. Background is a neutral dark grey, so transparent corners stay visible as such.
-5. `nativeImage.createFromBitmap` → PNG.
+5. The worker encodes the PNG itself (filter + `node:zlib` deflate, no dependency) and main
+   writes the bytes with async `fs`.
 
 The blend runs in a `worker_threads` worker, not on main's event loop: main also runs the
 recording hub and the shortcuts, and a take in progress is a likely moment to press the key.
-Main sends the bitmaps and bounds, the worker returns the BGRA canvas. The canvas is capped at
+Main does only what needs Electron: `capturePage()` and `toBitmap()`. It transfers the raw BGRA
+buffers and bounds to the worker, which resizes (pure JS, bilinear), blends and encodes; Electron
+modules such as `nativeImage` are not available in a worker. The canvas is capped at
 33 megapixels (8K): when the union × factor exceeds it, the factor is lowered until it fits, and
 `state.json` records the factor used. Windows on two displays far apart still give a large,
 mostly empty canvas, which is acceptable for a debug tool.
