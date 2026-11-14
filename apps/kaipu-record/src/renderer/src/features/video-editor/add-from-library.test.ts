@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { LibraryVideo } from "@renderer/features/library/types";
-import { boundaryIndexAt, type LayoutEntry } from "./timeline";
-import { joinableRecordings, resolutionLabel, insertBoundaryAt } from "./add-from-library";
+import { boundaryIndexAt, toLayout, type LayoutEntry } from "./timeline";
+import { initialScene, type VideoScene } from "./scene";
+import {
+  anchoredBoundary,
+  joinableRecordings,
+  resolutionLabel,
+  insertBoundaryAt,
+} from "./add-from-library";
 
 function video(over: Partial<LibraryVideo> & { assetId: string }): LibraryVideo {
   return {
@@ -147,5 +153,59 @@ describe("insertBoundaryAt", () => {
 
   it("says the start for an empty layout", () => {
     expect(insertBoundaryAt([], 5)).toEqual({ index: 0, time: 0 });
+  });
+});
+
+describe("anchoredBoundary", () => {
+  // illustrative: opened 30 s recording P, then a 20 s clip B inserted ahead of it
+  const opened = initialScene(30);
+  const prepended = (scene: VideoScene): VideoScene => ({
+    ...scene,
+    items: [{ id: "b", kind: "clip", sourceStart: 0, sourceEnd: 20 }, ...scene.items],
+  });
+
+  it("follows the clip after the boundary when another clip was inserted ahead of it", () => {
+    const two: VideoScene = {
+      ...opened,
+      items: [
+        { id: "p", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+        { id: "q", kind: "clip", sourceStart: 10, sourceEnd: 30 },
+      ],
+    };
+    const resolve = anchoredBoundary(toLayout(two.items), 10);
+    expect(resolve(two)).toBe(10);
+    expect(resolve(prepended(two))).toBe(30);
+  });
+
+  it("with a following clip at boundary 0, stays at 0 while that clip is still first", () => {
+    const resolve = anchoredBoundary(toLayout(opened.items), 0);
+    expect(resolve(opened)).toBe(0);
+    // another clip inserted at 0 before this join: the anchor P moves to 20, so the new clip
+    // goes right before P, after the first one
+    expect(resolve(prepended(opened))).toBe(20);
+  });
+
+  it("with no following clip, means the end of the sequence as it is by then", () => {
+    const resolve = anchoredBoundary(toLayout(opened.items), 30);
+    expect(resolve(opened)).toBe(30);
+    expect(resolve(prepended(opened))).toBe(50);
+  });
+
+  it("falls back to the original boundary time when the anchor clip was removed", () => {
+    const two: VideoScene = {
+      ...opened,
+      items: [
+        { id: "p", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+        { id: "q", kind: "clip", sourceStart: 10, sourceEnd: 30 },
+      ],
+    };
+    const resolve = anchoredBoundary(toLayout(two.items), 10);
+    const withoutQ: VideoScene = { ...two, items: [two.items[0]] };
+    expect(resolve(withoutQ)).toBe(10);
+  });
+
+  it("is 0 for the end of an empty sequence", () => {
+    const resolve = anchoredBoundary([], 5);
+    expect(resolve({ ...opened, items: [] })).toBe(0);
   });
 });

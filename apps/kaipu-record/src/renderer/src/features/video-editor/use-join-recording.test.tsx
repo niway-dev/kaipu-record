@@ -1,7 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CursorTrack } from "@shared/cursor-track";
-import { initialScene } from "./scene";
+import { anchoredBoundary } from "./add-from-library";
+import { initialScene, type VideoScene } from "./scene";
+import { toLayout } from "./timeline";
 import { useJoinRecording, type JoinableRecording } from "./use-join-recording";
 import { useVideoScene } from "./use-video-scene";
 
@@ -53,6 +55,10 @@ function setup() {
     return { controller, join };
   });
 }
+
+// A clip's place in its source; a slide has none.
+const clipStarts = (items: VideoScene["items"]): number[] =>
+  items.map((item) => (item.kind === "clip" ? item.sourceStart : -1));
 
 describe("useJoinRecording", () => {
   it("joins in ONE undo step, with the recording's zooms, after reading its cursor track", async () => {
@@ -164,6 +170,57 @@ describe("useJoinRecording", () => {
     act(() => result.current.controller.undo());
     expect(result.current.controller.scene.sources).toBeUndefined();
     expect(result.current.controller.canUndo).toBe(false);
+  });
+
+  it("hands a resolver function the scene the join composes from, and still takes a plain number", async () => {
+    const C: JoinableRecording = { ...B, id: "c-file", assetId: "asset-c", title: "C" };
+    const seen: VideoScene[] = [];
+    const { result } = setup();
+    await act(async () => void (await result.current.join(B, 20)));
+    const afterB = result.current.controller.scene;
+    expect(afterB.items).toHaveLength(2);
+    await act(
+      async () =>
+        void (await result.current.join(C, (scene) => {
+          seen.push(scene);
+          return 0;
+        })),
+    );
+    // The resolver saw B's join, and its answer (0) decided the position.
+    expect(seen).toEqual([afterB]);
+    const items = result.current.controller.scene.items;
+    expect(items).toHaveLength(3);
+    expect(clipStarts(items)[0]).toBe(result.current.controller.scene.sources![1].offset);
+  });
+
+  it("lands a recording at the boundary it was dropped on when an earlier join is still loading", async () => {
+    const C: JoinableRecording = { ...B, id: "c-file", assetId: "asset-c", title: "C" };
+    let openGate!: () => void;
+    const gate = new Promise<void>((resolve) => (openGate = resolve));
+    acquire.mockImplementation(async (assetId: string) => {
+      if (assetId === "asset-b") await gate;
+      return `${assetId}-held`;
+    });
+    const { result } = renderHook(() => {
+      const controller = useVideoScene(initialScene(30));
+      return { controller, join: useJoinRecording(controller, 30, 16 / 9) };
+    });
+    const opened = result.current.controller.scene;
+    const layout = toLayout(opened.items);
+    const primaryId = opened.items[0].id;
+
+    // Prepend B at 0 (still loading), then drop C on the end indicator (0:30), measured on the
+    // scene as it is now.
+    const first = result.current.join(B, anchoredBoundary(layout, 0));
+    const second = result.current.join(C, anchoredBoundary(layout, 30));
+    openGate();
+    expect(await Promise.all([first, second])).toEqual(["joined", "joined"]);
+
+    await waitFor(() => expect(result.current.controller.scene.items).toHaveLength(3));
+    const { items, sources } = result.current.controller.scene;
+    const sourceOf = (assetId: string) => sources!.find((s) => s.assetId === assetId)!;
+    expect(clipStarts(items)).toEqual([sourceOf("asset-b").offset, 0, sourceOf("asset-c").offset]);
+    expect(items[1].id).toBe(primaryId);
   });
 
   describe("the track the join-time zooms are detected on", () => {

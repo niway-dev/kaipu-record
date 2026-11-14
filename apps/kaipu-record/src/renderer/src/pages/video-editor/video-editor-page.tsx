@@ -179,6 +179,7 @@ import {
   formatClock,
 } from "@renderer/features/video-editor/capture-time";
 import { CapturesPanel } from "@renderer/features/video-editor/components/captures-panel";
+import { anchoredBoundary } from "@renderer/features/video-editor/add-from-library";
 import { AddFromLibraryPanel } from "@renderer/features/video-editor/components/add-from-library-panel";
 import { probeSource, type SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
@@ -1568,11 +1569,12 @@ function VideoEditor({
   const addRecording = useCallback(
     async (video: LibraryVideo, at: number): Promise<void> => {
       // `busy` (a drag owns the scene) does nothing: the click is simply not taken.
-      if ((await joinRecordingAt(video, at)) === "missing") {
+      // Anchored to the clip after the boundary: a join still loading may insert ahead of it.
+      if ((await joinRecordingAt(video, anchoredBoundary(layout, at))) === "missing") {
         showToast({ message: t("addRecordingMissing", { title: video.title }) });
       }
     },
-    [joinRecordingAt, t],
+    [joinRecordingAt, layout, t],
   );
   // The row being dragged onto the sequence. A drag's contents are hidden until the drop, so
   // the panel hands the video over here when the drag starts and the Clips row reads it on drop.

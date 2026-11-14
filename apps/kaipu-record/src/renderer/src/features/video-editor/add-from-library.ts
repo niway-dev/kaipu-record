@@ -1,5 +1,6 @@
 import type { LibraryVideo } from "@renderer/features/library/types";
-import { boundaryIndexAt, MIN_ITEM_DURATION, type LayoutEntry } from "./timeline";
+import type { VideoScene } from "./scene";
+import { boundaryIndexAt, MIN_ITEM_DURATION, toLayout, type LayoutEntry } from "./timeline";
 
 /**
  * The recordings the Add recording panel offers (NIW2-782): the Library's own recordings, other
@@ -54,4 +55,22 @@ export function insertBoundaryAt(
 ): { index: number; time: number } {
   const index = boundaryIndexAt(layout, t);
   return { index, time: index === 0 ? 0 : layout[index - 1].timelineEnd };
+}
+
+/**
+ * The boundary `t` names on `layout`, pinned to the clip that FOLLOWS it (null: the end of the
+ * sequence), as a function of the scene a join composes from. A join waits behind earlier ones,
+ * and one that inserted a clip ahead of the boundary moves it: the anchor moves with it, so the
+ * recording lands where the user dropped it. Following the clip, and the end, keeps two quick
+ * adds at the end in the order they were made. If the anchor clip was removed meanwhile, the
+ * original boundary time stands. The scene's layout is `joinRecording`'s own (`toLayout`).
+ */
+export function anchoredBoundary(layout: LayoutEntry[], t: number): (scene: VideoScene) => number {
+  const { index, time } = insertBoundaryAt(layout, t);
+  const anchor = layout[index]?.itemId ?? null;
+  return (scene) => {
+    const current = toLayout(scene.items);
+    if (anchor === null) return current.length === 0 ? 0 : current[current.length - 1].timelineEnd;
+    return current.find((entry) => entry.itemId === anchor)?.timelineStart ?? time;
+  };
 }

@@ -4,6 +4,7 @@ import type { WebcamTrackMeta } from "@shared/webcam-track";
 import { composeJoin } from "./compose-join";
 import { frameCursorTrack } from "./cursor/axis-cursor-track";
 import { loadCursorTrackBestEffort } from "./joined-library";
+import type { VideoScene } from "./scene";
 import { useLatest } from "./use-latest";
 import type { VideoSceneController } from "./use-video-scene";
 
@@ -25,6 +26,9 @@ export interface JoinableRecording {
  */
 export type JoinRecordingResult = "joined" | "missing" | "busy";
 
+/** A timeline second, or how to find it on the scene the join composes from. */
+export type JoinTarget = number | ((scene: VideoScene) => number);
+
 /**
  * The join operation (ADR 0058) the UI will call: `joinRecordingAt(recording, t)` puts the
  * recording into the Clips sequence at the clip boundary nearest timeline time `t`. The media it
@@ -38,12 +42,16 @@ export type JoinRecordingResult = "joined" | "missing" | "busy";
  * Calls run one after another: each one reads the scene after the awaits, and the previous join's
  * commit only reaches `controller.scene` once React has rendered it. The next join therefore waits
  * for that render, otherwise it would compose from the old scene and replace the first join.
+ *
+ * `t` is a timeline second, or a function that turns the scene the join actually composes from
+ * into one (`anchoredBoundary`): a number measured when the user acted names another boundary if
+ * a join queued before this one has since inserted a clip ahead of it.
  */
 export function useJoinRecording(
   controller: VideoSceneController,
   primaryDuration: number,
   frameAspect: number,
-): (recording: JoinableRecording, t: number) => Promise<JoinRecordingResult> {
+): (recording: JoinableRecording, t: JoinTarget) => Promise<JoinRecordingResult> {
   const controllerRef = useLatest(controller);
   // End of the joins queued so far, and what the running one waits for after its commit.
   const tailRef = useRef<Promise<unknown>>(Promise.resolve());
@@ -60,7 +68,7 @@ export function useJoinRecording(
     [],
   );
   const joinNow = useCallback(
-    async (recording: JoinableRecording, t: number): Promise<JoinRecordingResult> => {
+    async (recording: JoinableRecording, t: JoinTarget): Promise<JoinRecordingResult> => {
       if (recording.id === null) return "missing";
       let heldId: string | null;
       try {
@@ -85,6 +93,7 @@ export function useJoinRecording(
       // Read now, not before the awaits: the scene may have been edited while they ran.
       const current = controllerRef.current;
       if (current.interacting) return "busy";
+      const at = typeof t === "function" ? t(current.scene) : t;
       const next = composeJoin(
         current.scene,
         primaryDuration,
@@ -95,7 +104,7 @@ export function useJoinRecording(
           width,
           height,
         },
-        t,
+        at,
         frameTrack,
         recording.webcam ?? null,
       );
