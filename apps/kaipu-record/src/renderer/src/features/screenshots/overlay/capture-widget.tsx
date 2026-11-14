@@ -193,6 +193,14 @@ export function CaptureWidget({
         // focused by a mouse click keeps focus in Chromium, and there Enter is still the
         // overlay's primary key, so it passes. `:focus-visible` tells the two apart, and the
         // pointer flag covers an engine that reports it once any key is pressed; Tab clears it.
+        // Focus leaving the widget also ends the pointer's claim: the Tab that brings it back
+        // fires outside this root, so onKeyDown never sees it. A move between controls inside
+        // the widget keeps the flag.
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            pointerFocus.current = false;
+          }
+        }}
         onKeyDown={(event) => {
           if (event.key === "Tab") pointerFocus.current = false;
           if (event.key !== "Enter" || pointerFocus.current) return;

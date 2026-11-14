@@ -3069,6 +3069,57 @@ describe("CaptureOverlay — the device menus", () => {
     expect(answer).not.toHaveBeenCalled();
   });
 
+  it("leaving the widget after a mouse click and Tabbing back hands Enter to the focused control", async () => {
+    const { answer } = await renderRecording();
+    const toggle = screen.getByRole("button", { name: "Microphone" });
+    fireEvent.pointerDown(toggle);
+    toggle.focus();
+    fireEvent.click(toggle);
+    // Focus leaves the widget; the Tab that brings it back fires outside the widget root.
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    outside.focus();
+    const cancel = screen.getByRole("button", { name: /^Cancel/ });
+    cancel.focus();
+    stubFocusVisible(true);
+
+    expect(fireEvent.keyDown(cancel, { key: "Enter" })).toBe(true);
+    await flush();
+    expect(answer).not.toHaveBeenCalled();
+    outside.remove();
+  });
+
+  it("blurring to the page body after a mouse click also hands Enter back on re-entry", async () => {
+    const { answer } = await renderRecording();
+    const toggle = screen.getByRole("button", { name: "Microphone" });
+    fireEvent.pointerDown(toggle);
+    toggle.focus();
+    fireEvent.click(toggle);
+    toggle.blur();
+    const cancel = screen.getByRole("button", { name: /^Cancel/ });
+    cancel.focus();
+    stubFocusVisible(true);
+
+    expect(fireEvent.keyDown(cancel, { key: "Enter" })).toBe(true);
+    await flush();
+    expect(answer).not.toHaveBeenCalled();
+  });
+
+  it("moving focus between two widget controls after a mouse click keeps Enter on the overlay", async () => {
+    const { answer } = await renderRecording();
+    const toggle = screen.getByRole("button", { name: "Microphone" });
+    fireEvent.pointerDown(toggle);
+    toggle.focus();
+    fireEvent.click(toggle);
+    const cancel = screen.getByRole("button", { name: /^Cancel/ });
+    cancel.focus();
+    stubFocusVisible(true);
+
+    fireEvent.keyDown(cancel, { key: "Enter" });
+    await flush();
+    expect(answer).toHaveBeenCalledOnce();
+  });
+
   it("the Record button still starts a recording through the widget", async () => {
     const { answer } = await renderRecording();
     fireEvent.click(screen.getByTestId("start-recording"));
