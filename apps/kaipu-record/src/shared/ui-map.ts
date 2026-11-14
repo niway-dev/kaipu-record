@@ -248,9 +248,10 @@ export const UI_MAP = {
       cursorInspector: { states: ["open"], gatedBy: [{ flag: "native-cursor-capture" }] },
       // The Captures panel (NIW2-764): this video's frame captures, in the right column in
       // place of the inspector. `empty` has none yet; `list` shows them, newest first.
-      // duplicate: Capture frame at a moment already captured outlines the saved one;
-      // confirmDelete: the confirmation dialog a capture's Delete button opens.
-      capturesPanel: { states: ["empty", "list", "duplicate", "confirmDelete"] },
+      // hover: the veil with Go to over a capture's image; duplicate: Capture frame (top bar)
+      // at a moment already captured outlines the saved one; confirmDelete: the confirmation
+      // dialog a capture's Delete button opens.
+      capturesPanel: { states: ["empty", "list", "hover", "duplicate", "confirmDelete"] },
       webcam: { states: ["visible"] },
       transport: { states: ["paused", "playing", "withCounts", "speedChanged", "zoomed"] },
       toolRail: { states: ["default", "annotate", "privacy"] },
