@@ -46,6 +46,17 @@ export function floatingFrame(
   );
 }
 
+/** Whether any floating item draws something at output time `outTs` (see `floatingFrame`). */
+export function floatingLiveAt(
+  floating: FloatingMediaPlan | null | undefined,
+  outTs: number,
+): boolean {
+  if (!floating || floating.items.length === 0) return false;
+  return (
+    mediaAt({ media: floating.items }, floating.layout, outTs + floating.timeOffset).length > 0
+  );
+}
+
 /** The asset ids the export has to decode for floating items (none for no items). */
 export function floatingAssetIds(floating: FloatingMediaPlan | null | undefined): Set<string> {
   return new Set((floating?.items ?? []).map((item) => item.assetId));

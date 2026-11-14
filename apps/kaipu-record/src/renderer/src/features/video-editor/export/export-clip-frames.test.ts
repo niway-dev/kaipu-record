@@ -48,6 +48,7 @@ function run(opts: {
   webcam?: { layer: WebcamScene; seconds: number } | null;
   maxFps?: number | null;
   prevOutTs?: number | null;
+  floatingLive?: (outTs: number) => boolean;
 }) {
   const clip = vi.fn();
   const emitted: { outTs: number; duration: number }[] = [];
@@ -61,6 +62,7 @@ function run(opts: {
     cap: createFrameRateCap(opts.maxFps ?? null),
     minFrameGap: opts.maxFps ? 1 / opts.maxFps : 0,
     prevOutTs: opts.prevOutTs ?? null,
+    floatingLive: opts.floatingLive,
     compose: { clip },
     emit: async (outTs, duration) => void emitted.push({ outTs, duration }),
   });
@@ -165,6 +167,38 @@ describe("exportClipFrames", () => {
     await result;
     const slots = emitted.map((e) => Math.round(e.outTs * 24));
     expect(new Set(slots).size).toBe(slots.length);
+  });
+
+  describe("floating images over a still screen, no webcam", () => {
+    // Illustrative: floating items are on screen from output 10.5 to 11.0 (the clip is 10..12).
+    const live = (outTs: number): boolean => outTs >= 10.5 && outTs < 11;
+
+    it("composes the held frame while an item is on screen, and once more to remove it", async () => {
+      // One screen frame for the whole clip: without fills the item is never drawn.
+      const { result, clip, emitted } = run({
+        segment: SEGMENT,
+        screens: [screen(4, 2)],
+        floatingLive: live,
+      });
+      await result;
+      const outTimes = emitted.map((e) => e.outTs);
+      expect(outTimes[0]).toBe(10);
+      const during = outTimes.filter((t) => t >= 10.5 && t < 11);
+      expect(during.length).toBeGreaterThanOrEqual(10);
+      // The first frame after the item ends redraws without it.
+      expect(outTimes.some((t) => t >= 11 && t < 11.1)).toBe(true);
+      // Nothing else is added: still frames stay as one sample outside the item's span.
+      expect(outTimes.filter((t) => t > 10 && t < 10.5 - 1 / 30)).toEqual([]);
+      expect(outTimes.filter((t) => t > 11.1)).toEqual([]);
+      for (const call of clip.mock.calls) expect(call[0]).toEqual({ tag: "screen@4" });
+      expect(outTimes).toEqual([...outTimes].sort((a, b) => a - b));
+    });
+
+    it("adds nothing without floating items", async () => {
+      const { result, emitted } = run({ segment: SEGMENT, screens: [screen(4, 2)] });
+      await result;
+      expect(emitted).toHaveLength(1);
+    });
   });
 
   it("threads prevOutTs across a cut: a frame that would regress is skipped", async () => {

@@ -90,6 +90,7 @@ import { silencedSpansFor } from "../audio-edits";
 import { exportClipFrames } from "./export-clip-frames";
 import { exportCanvasSinkOptions } from "./canvas-sink-options";
 import { createOutputComposer } from "./compose-output-frame";
+import { floatingLiveAt } from "./floating-frame";
 import {
   audioEncodingCandidates,
   packetCountsFor,
@@ -243,9 +244,11 @@ async function runExportWithInput(
   // Webcam fills (see the header) add frames up to the webcam's rate over a still screen.
   const fillFps = Math.min(WEBCAM_FPS, preset.maxFps ?? WEBCAM_FPS);
   const sourceFps = stats?.averagePacketRate ?? 30;
+  // Floating images add frames over a still screen too, at the same rate.
+  const floatingItems = (plan.floating?.items.length ?? 0) > 0;
   const workerCounts = packetCountsFor({
     durationSec: plan.totalDuration,
-    fps: webcam ? Math.max(sourceFps, fillFps) : sourceFps,
+    fps: webcam || floatingItems ? Math.max(sourceFps, fillFps) : sourceFps,
     maxFps: preset.maxFps,
     slideFrames: slideFrameCount(plan.segments, plan.slideFps),
     hasAudio: audioSource !== null,
@@ -352,6 +355,11 @@ async function runExportWithInput(
             cap,
             minFrameGap,
             prevOutTs,
+            // Floating images over a still screen: the held frame is re-composed while one is
+            // on screen (export-clip-frames.ts), so it shows at its own times with its fades.
+            floatingLive: floatingItems
+              ? (outTs) => floatingLiveAt(plan.floating, outTs)
+              : undefined,
             compose,
             emit: async (outTs, duration) => {
               await sendPosterOnce();

@@ -3,7 +3,7 @@ import { mediaAt, mediaBoxPx } from "../media";
 import { initialScene, type ImageMediaItem, type TrackItem, type VideoScene } from "../scene";
 import { toLayout } from "../timeline";
 import { buildExportPlan, sliceExportPlan } from "./export-plan";
-import { floatingAssetIds, floatingFrame } from "./floating-frame";
+import { floatingAssetIds, floatingFrame, floatingLiveAt } from "./floating-frame";
 
 const clip = (id: string, sourceStart: number, sourceEnd: number): TrackItem => ({
   id,
@@ -147,5 +147,23 @@ describe("floatingFrame is mediaAt", () => {
     const twice = sliceExportPlan(sliceExportPlan(plan, 2, 16), 3, 10);
     const once = sliceExportPlan(plan, 5, 12);
     expect(twice.floating?.timeOffset).toBe(once.floating?.timeOffset);
+  });
+});
+
+describe("floatingLiveAt", () => {
+  it("is true exactly while an item draws something, fades included", () => {
+    // Illustrative: an image anchored at source 1 (timeline 4) for 2 s, fading in over 0.5 s.
+    const plan = buildExportPlan(scene([img("a", 1, 2, 1, { fadeInMs: 500 })]));
+    expect(floatingLiveAt(plan.floating, 3.9)).toBe(false);
+    // Opacity is 0 at the very start of a fade-in: nothing is drawn yet.
+    expect(floatingLiveAt(plan.floating, 4)).toBe(false);
+    expect(floatingLiveAt(plan.floating, 4.1)).toBe(true);
+    expect(floatingLiveAt(plan.floating, 5.9)).toBe(true);
+    expect(floatingLiveAt(plan.floating, 6)).toBe(false);
+  });
+
+  it("is false without a plan or without items", () => {
+    expect(floatingLiveAt(undefined, 1)).toBe(false);
+    expect(floatingLiveAt({ items: [], layout: [], timeOffset: 0 }, 1)).toBe(false);
   });
 });
