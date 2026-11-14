@@ -30,9 +30,10 @@ export type JoinRecordingResult = "joined" | "missing" | "busy";
  * recording into the Clips sequence at the clip boundary nearest timeline time `t`. The media it
  * needs, the cursor track and the webcam meta, is read FIRST, so the scene changes once, with the
  * zooms and the webcam already in it. The track is mapped into the frame's coordinates (the
- * opened recording's `frameAspect`) first, so the zooms are detected where the pointer is on the frame. The rename hold taken to resolve the recording's current id
- * is released again here: once the scene lists the new source, `useJoinedRecordings` takes its
- * own and keeps it for as long as the source is in the scene.
+ * opened recording's `frameAspect`) first, so the zooms are detected where the pointer is on the
+ * frame. The rename hold taken to resolve the recording's current id is released again here: once
+ * the scene lists the new source, `useJoinedRecordings` takes its own and keeps it for as long as
+ * the source is in the scene.
  */
 export function useJoinRecording(
   controller: VideoSceneController,
