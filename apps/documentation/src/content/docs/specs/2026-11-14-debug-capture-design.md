@@ -80,6 +80,11 @@ gets its registry entry and pin test like every other.
   that loads it. Main accepts the report only when `event.sender` is the main window's
   `webContents`, and coerces each value to `=== true`; a report from any other window is
   ignored and logged.
+- **The whole capture fails silently.** If the folder cannot be written (disk full, no
+  permission on `userData`) or the capture throws before Finder opens, nothing would show, which
+  looks the same as an unregistered key. Main logs the error with `console.error` and shows a
+  native `dialog.showErrorBox` with the cause; a native dialog is not a Kaipu window, so it never
+  ends up in a later capture.
 - **Holding the shortcut twice, or never.** The hold is idempotent: a flag report that is
   already applied does nothing. When `holdTemporaryShortcut` returns `false` (another app owns
   the key), main logs it once and tries again on the next flag report.
@@ -108,6 +113,7 @@ gets its registry entry and pin test like every other.
       `KAIPU_FLAG_OVERRIDES` overrides, settings, and the recording state.
 - [ ] `console.log` holds the last lines of main and of each window, each line tagged with its
       source and a timestamp.
+- [ ] When the folder cannot be written, a native error dialog names the cause.
 - [ ] A hidden window is listed in `state.json` with `"captured": false` and is absent from the
       composite.
 - [ ] In a packaged build without the flag, ⌃⌥⌘D does nothing (the shortcut is not registered).
