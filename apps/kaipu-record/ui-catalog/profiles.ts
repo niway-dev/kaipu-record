@@ -102,7 +102,7 @@ export const PROFILES = {
   },
   "two-recordings": {
     description:
-      "The vault adds “Two recordings” (a saved edit that joined “Checkout bug”, clips alternating A, B, A, with a webcam on the opened one only) and “Missing recording” (its joined recording is not in the vault): the timeline's recording labels, hover outline, missing state and “No camera in this recording” span. A profile of its own, so the Library lists of the other states do not change.",
+      "The vault adds “Two recordings” (a saved edit that joined “Checkout bug”, clips alternating A, B, A, with a webcam on the opened one), “Missing recording” (its joined recording is not in the vault) and “Different aspect” (joins the 1:1 “Square recording”, no webcam): the timeline's recording labels, hover outline, missing state and “No camera in this recording” span. A profile of its own, so the Library lists of the other states do not change.",
     seed: "demo",
     joinedRecordings: true,
   },

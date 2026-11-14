@@ -261,7 +261,8 @@ export const JOINED_OFFSET = 3600;
  * The saved scene of a recording that joined a second one (ADR 0058): its clips alternate A (the
  * opened recording, seconds 0 to 5), B (the whole joined recording, on its own range from
  * `JOINED_OFFSET`) and A again (from 5 s to the end). `present` joins “Checkout bug” (7 s);
- * `missing` joins a recording that is not in the vault. Saved as version 2 by the caller.
+ * `missing` joins a recording that is not in the vault; `square` joins “Square recording”
+ * (1080x1080). Saved as version 2 by the caller.
  */
 export function joinedScene(kind: JoinedKind, openedSeconds: number): unknown {
   const joinedSeconds = kind === "missing" ? 6 : JOINED_SECOND.cut;
@@ -316,14 +317,14 @@ const SQUARE_SECOND: RecordingFixture = {
   assetId: ASSETS.squareSecond,
   title: "Square recording",
   cut: JOINED_CUT_SECONDS,
-  joinedVideo: true,
   square: true,
   ago: 14 * 60_000,
 };
 
 /**
- * Seeded only where `joinedRecordings` is on. Both open with a webcam, so the Webcam track
- * exists and a recording without one reads “No camera in this recording”.
+ * Seeded only where `joinedRecordings` is on. “Two recordings” and “Missing recording” open with
+ * a webcam, so the Webcam track exists there; “Different aspect” opens without one and reads
+ * “No camera in this recording”.
  */
 const JOINED_RECORDINGS: readonly RecordingFixture[] = [
   {

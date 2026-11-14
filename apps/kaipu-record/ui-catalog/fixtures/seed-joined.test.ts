@@ -1,7 +1,7 @@
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { recordingAt, sourceAxis } from "../../src/renderer/src/features/video-editor/source-axis";
 import { parseSession } from "../../src/renderer/src/features/video-editor/session";
 import { toLayout } from "../../src/renderer/src/features/video-editor/timeline";
@@ -48,10 +48,17 @@ describe("joinedScene", () => {
 });
 
 describe("the “Different aspect” seed", () => {
+  // Each test's temp directories are removed once the file's tests have run.
+  const tempDirs: string[] = [];
+  afterAll(() => {
+    for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
+  });
+
   it("joins a 1080x1080 recording whose media is the square fixture", async () => {
     // Stand-in files named like the real fixtures: the seed copies them by name, so each one
     // carries its own name and the copy under test can be told apart.
     const fixtures = mkdtempSync(path.join(tmpdir(), "kaipu-seed-fixtures-"));
+    tempDirs.push(fixtures);
     const names = [
       FIXTURE_FILES.countdown,
       FIXTURE_FILES.joinedCut,
@@ -66,7 +73,7 @@ describe("the “Different aspect” seed", () => {
     ];
     for (const name of names) writeFileSync(path.join(fixtures, name), name);
     const vault = mkdtempSync(path.join(tmpdir(), "kaipu-seed-vault-"));
-    mkdirSync(vault, { recursive: true });
+    tempDirs.push(vault);
     await seedCatalogVault(vault, {
       now: 1_700_000_000_000,
       content: "demo",
