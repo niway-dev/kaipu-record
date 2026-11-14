@@ -54,6 +54,22 @@ describe("useSourceCaptures", () => {
     expect(result.current.captures.map((c) => c.assetId)).toEqual(["new", "old"]);
   });
 
+  it("passes the scene source a capture was taken from through to the capture", async () => {
+    items = [
+      item({
+        assetId: "b2",
+        createdAt: 2,
+        sourceVideoAssetId: "v1",
+        sourceTimeSeconds: 3,
+        sourceSceneSourceId: "b2",
+      } as Partial<LibraryItem>),
+      item({ assetId: "opened", createdAt: 1, sourceVideoAssetId: "v1", sourceTimeSeconds: 4 }),
+    ];
+    const { result } = renderHook(() => useSourceCaptures("v1", true));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.captures.map((c) => c.sourceSceneSourceId)).toEqual(["b2", undefined]);
+  });
+
   it("a refresh overtaken by a newer read resolves only once the newer list is on screen", async () => {
     const { result } = renderHook(() => useSourceCaptures("v1", true));
     await waitFor(() => expect(result.current.loaded).toBe(true));

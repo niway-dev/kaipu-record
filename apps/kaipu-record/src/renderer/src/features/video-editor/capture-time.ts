@@ -25,19 +25,27 @@ export function captureTitleTime(seconds: number): string {
 }
 
 /**
- * The existing capture taken at `sourceSeconds`, compared at millisecond precision (the
- * resolution a stored link keeps), or undefined. A slide frame has no source second
+ * The existing capture taken at `sourceSeconds` of the recording `sceneSourceId` (null = the
+ * opened one), compared at millisecond precision (the resolution a stored link keeps), or undefined. A slide frame has no source second
  * (`null`), so it never matches: two slide captures are not the same frame.
  */
-export function findCaptureAt<T extends { sourceTimeSeconds: number | null }>(
+export function findCaptureAt<
+  T extends { sourceTimeSeconds: number | null; sourceSceneSourceId?: string | null },
+>(
   captures: readonly T[],
   sourceSeconds: number | null,
+  sceneSourceId: string | null = null,
 ): T | undefined {
   if (sourceSeconds === null) return undefined;
   const ms = Math.round(sourceSeconds * 1000);
   return captures.find(
     (capture) =>
-      capture.sourceTimeSeconds !== null && Math.round(capture.sourceTimeSeconds * 1000) === ms,
+      capture.sourceTimeSeconds !== null &&
+      Math.round(capture.sourceTimeSeconds * 1000) === ms &&
+      // The same asset joined twice has the same local seconds in both copies: only the copy
+      // the frame came from makes a duplicate. A link written before the copy was recorded
+      // (absent) counts as the opened recording.
+      (capture.sourceSceneSourceId ?? null) === sceneSourceId,
   );
 }
 
@@ -74,15 +82,23 @@ export function captureOriginAt(
 
 /**
  * The axis second of a capture's link (`assetId`, `seconds` in that recording's own file): the
- * inverse of `captureOriginAt`. The opened recording wins when the same asset is also joined;
- * an asset the scene does not hold has no place on its axis (null).
+ * inverse of `captureOriginAt`. When the link names a source of THIS scene (`sceneSourceId`)
+ * holding that asset, the capture sits on that copy, so the same recording joined twice stays
+ * apart. Otherwise (absent, null, or an id from another scene) the opened recording wins when
+ * the same asset is also joined, then the first joined copy; an asset the scene does not hold
+ * has no place on its axis (null).
  */
 export function axisSecondsOfCapture(
   sources: readonly SceneSource[] | undefined,
   primaryAssetId: string,
   assetId: string,
   seconds: number,
+  sceneSourceId?: string | null,
 ): number | null {
+  if (sceneSourceId) {
+    const named = sources?.find((s) => s.id === sceneSourceId && s.assetId === assetId);
+    if (named) return named.offset + seconds;
+  }
   if (assetId === primaryAssetId) return seconds;
   const joined = sources?.find((s) => s.assetId === assetId);
   return joined ? joined.offset + seconds : null;

@@ -2373,7 +2373,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     expect(saved[0].meta).toEqual({
       title: "My recording frame 1m23s",
       manual: false,
-      source: { videoAssetId: "asset-1", timeSeconds: 83.4 },
+      source: { videoAssetId: "asset-1", timeSeconds: 83.4, sceneSourceId: null },
     });
     const panel = await screen.findByTestId("captures-panel");
     await waitFor(() => expect(within(panel).getAllByTestId("capture-item")).toHaveLength(1));

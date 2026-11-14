@@ -67,6 +67,11 @@ export interface Sidecar {
   /** A frame capture: the video it was taken from and the second on screen. Not an export. */
   sourceVideoAssetId?: string | null;
   sourceTimeSeconds?: number | null;
+  /**
+   * The `SceneSource.id` of the joined copy the frame came from (null = the opened recording).
+   * Absent in a sidecar written before joined recordings (ADR 0058).
+   */
+  sourceSceneSourceId?: string | null;
   /** base64 sha256 + the file stats it was computed for; stale when they differ. */
   contentSha256?: string;
   hashedSizeBytes?: number;
@@ -1038,6 +1043,10 @@ export class LibraryVault {
         typeof meta.sourceTimeSeconds === "number" && Number.isFinite(meta.sourceTimeSeconds)
           ? meta.sourceTimeSeconds
           : null,
+      ...(meta.sourceSceneSourceId === null ||
+      (typeof meta.sourceSceneSourceId === "string" && meta.sourceSceneSourceId)
+        ? { sourceSceneSourceId: meta.sourceSceneSourceId }
+        : {}),
       contentSha256: hashIsFresh ? (meta.contentSha256 ?? null) : null,
       tagIds: Array.isArray(meta.tagIds)
         ? meta.tagIds.filter((t): t is string => typeof t === "string")

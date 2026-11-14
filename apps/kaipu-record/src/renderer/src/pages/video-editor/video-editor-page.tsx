@@ -1387,7 +1387,7 @@ function VideoEditor({
       );
       const existing =
         origin && origin.assetId === source.assetId
-          ? findCaptureAt(latestCaptures(), origin.localSeconds)
+          ? findCaptureAt(latestCaptures(), origin.localSeconds, origin.sourceId)
           : undefined;
       if (existing) {
         clearSelection();
@@ -1436,6 +1436,7 @@ function VideoEditor({
         source: {
           videoAssetId: saved?.assetId ?? source.assetId,
           timeSeconds: saved ? saved.localSeconds : frame.sourceSeconds,
+          sceneSourceId: saved?.sourceId ?? null,
         },
       });
       // The panel takes the inspector's place, so the selection goes too (as the cursor
@@ -1492,9 +1493,15 @@ function VideoEditor({
 
   /** A capture's image: move the playhead to its moment, if that moment is still on the timeline. */
   const seekToCapture = useCallback(
-    (seconds: number, assetId: string = source.assetId) => {
+    (seconds: number, sceneSourceId?: string | null) => {
       // The link keeps seconds inside ITS recording's file; the timeline speaks axis seconds.
-      const axisSeconds = axisSecondsOfCapture(scene.sources, source.assetId, assetId, seconds);
+      const axisSeconds = axisSecondsOfCapture(
+        scene.sources,
+        source.assetId,
+        source.assetId,
+        seconds,
+        sceneSourceId,
+      );
       if (axisSeconds === null) return;
       const at = timelineTimeAtSource(layout, axisSeconds);
       if (at !== null) playback.seek(at);

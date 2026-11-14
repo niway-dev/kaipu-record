@@ -16,7 +16,8 @@ export interface CapturesPanelProps {
   /** False until the first read lands: nothing is said about "no captures" before that. */
   loaded: boolean;
   /** Seek the playhead to a capture's source time. */
-  onSeek(sourceSeconds: number): void;
+  /** `sceneSourceId`: the copy of the recording the capture came from (null/absent = opened). */
+  onSeek(sourceSeconds: number, sceneSourceId?: string | null): void;
   /** Insert a capture's image into the timeline as an image slide. */
   onAddToTimeline(capture: LibraryVideo): void;
   /** Delete one capture from the library (called only after the user confirms). */
@@ -103,7 +104,7 @@ export function CapturesPanel({
               onSeek={
                 capture.sourceTimeSeconds === null
                   ? undefined
-                  : () => onSeek(capture.sourceTimeSeconds as number)
+                  : () => onSeek(capture.sourceTimeSeconds as number, capture.sourceSceneSourceId)
               }
               seekLabel={
                 capture.sourceTimeSeconds === null

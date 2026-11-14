@@ -84,6 +84,9 @@ export function composeLibrary(input: ComposeInput): ComposeResult {
       derivedFromAssetId: healthy?.derivedFromAssetId ?? entry.derivedFromAssetId,
       sourceVideoAssetId: healthy?.sourceVideoAssetId ?? null,
       sourceTimeSeconds: healthy?.sourceTimeSeconds ?? null,
+      ...(healthy?.sourceSceneSourceId !== undefined
+        ? { sourceSceneSourceId: healthy.sourceSceneSourceId }
+        : {}),
       editSavedAt: local ? (input.editSession[local.id]?.savedAt ?? null) : null,
       editExportedSavedAt: local ? (input.editSession[local.id]?.exportedSavedAt ?? null) : null,
       capture: healthy?.capture ?? null,
@@ -108,6 +111,9 @@ export function composeLibrary(input: ComposeInput): ComposeResult {
       derivedFromAssetId: rec.derivedFromAssetId,
       sourceVideoAssetId: rec.sourceVideoAssetId,
       sourceTimeSeconds: rec.sourceTimeSeconds,
+      ...(rec.sourceSceneSourceId !== undefined
+        ? { sourceSceneSourceId: rec.sourceSceneSourceId }
+        : {}),
       editSavedAt: input.editSession[rec.id]?.savedAt ?? null,
       editExportedSavedAt: input.editSession[rec.id]?.exportedSavedAt ?? null,
       capture: rec.capture ?? null,

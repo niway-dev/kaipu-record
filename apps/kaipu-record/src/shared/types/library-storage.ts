@@ -43,6 +43,8 @@ export interface LocalRecording {
   /** Frame captures: the video this shot was taken from, and the second on screen. */
   sourceVideoAssetId: string | null;
   sourceTimeSeconds: number | null;
+  /** The joined copy a frame came from: a `SceneSource.id`, null = the opened recording, absent = older sidecar. */
+  sourceSceneSourceId?: string | null;
   /**
    * base64 sha256 of the file, only when the cached hash still matches the file's
    * current size + mtime. null = not computed yet or stale (never "unknown bytes").
