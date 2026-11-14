@@ -124,6 +124,33 @@ describe("usePreviewPlayback over two recordings — a cut across recordings", (
     expect(prime).not.toHaveBeenCalled();
   });
 
+  it("primes the next clip after the switch moved: A -> B -> A warms A for the B -> A cut", () => {
+    const { result, sw, a } = setup(ACROSS);
+    act(() => result.current.play());
+    a.seekWrites.length = 0;
+    a.currentTime = 9.99;
+    a.seekWrites.length = 0;
+    advance(20); // the cut into B: A (still the shown element a moment ago) is now the standby
+    expect(sw.activeKey).toBe("B");
+    expect(a.seekWrites).toEqual([50]); // pre-seeked to a2's local start, not left cold
+    expect(a.paused).toBe(true);
+    expect(a.muted).toBe(true);
+  });
+
+  it("does not move B's element away from clip b when the clip after it is also in B", () => {
+    // c is a plain split of the joined clip: b [3600..3610], c [3610..3620].
+    const items = [clip("a1", 0, 10), clip("b", 3600, 3610), clip("c", 3610, 3620)];
+    const { result, sw, a, b } = setup(items);
+    act(() => result.current.play());
+    b.seekWrites.length = 0;
+    a.currentTime = 9.99;
+    advance(20);
+    expect(sw.activeKey).toBe("B");
+    // Priming c while A was still shown would have written c's local start (10) into B.
+    expect(b.seekWrites).not.toContain(10);
+    expect(b.currentTime).toBe(0);
+  });
+
   it("makes the cut a flip, not a seek: the primed element is not written again", () => {
     const { result, a, b } = setup(ACROSS);
     act(() => result.current.seek(9)); // primes B on its first frame (already at 0: no write)

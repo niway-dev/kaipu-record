@@ -173,10 +173,23 @@ export function usePreviewPlayback(layout: LayoutEntry[], audio?: AudioEdits): P
     const next = at >= 0 ? layoutNow[at + 1] : undefined;
     if (next?.kind === "clip") video.prime(next.sourceStart);
   }, []);
+  // `prime` is a no-op while the target recording is the one on screen, so a transition
+  // that MOVES the element (a seek, a hand-off through `advanceFrom`, a drift snap) must
+  // prime after the move: before it, the switch still shows the previous clip's recording
+  // and would prime for the wrong one. Those callers pass `{ primeNow: false }` and call
+  // `primeActiveAfterMove` once the element has moved.
   const setActiveClip = useCallback(
-    (id: string | null) => {
+    (id: string | null, options: { primeNow?: boolean } = {}) => {
       const changed = activeClipIdRef.current !== id;
       activeClipIdRef.current = id;
+      if (changed && id !== null && options.primeNow !== false) primeAfter(id);
+      return changed;
+    },
+    [primeAfter],
+  );
+  const primeActiveAfterMove = useCallback(
+    (changed: boolean) => {
+      const id = activeClipIdRef.current;
       if (changed && id !== null) primeAfter(id);
     },
     [primeAfter],
@@ -240,8 +253,9 @@ export function usePreviewPlayback(layout: LayoutEntry[], audio?: AudioEdits): P
         enterSlide(next, 0);
       } else {
         exitSlide();
-        setActiveClip(next.itemId);
+        const changed = setActiveClip(next.itemId, { primeNow: false });
         seekVideoToSource(next.sourceStart);
+        primeActiveAfterMove(changed);
         // Coming off a slide the video was paused — resume it if we're still playing.
         const video = videoRef.current;
         if (video) applyRate(video);
@@ -251,7 +265,15 @@ export function usePreviewPlayback(layout: LayoutEntry[], audio?: AudioEdits): P
       setTimelineTime(next.timelineStart);
       emitTime(next.timelineStart);
     },
-    [enterSlide, exitSlide, seekVideoToSource, emitTime, applyRate, setActiveClip],
+    [
+      enterSlide,
+      exitSlide,
+      seekVideoToSource,
+      emitTime,
+      applyRate,
+      setActiveClip,
+      primeActiveAfterMove,
+    ],
   );
 
   /**
@@ -406,8 +428,9 @@ export function usePreviewPlayback(layout: LayoutEntry[], audio?: AudioEdits): P
       } else {
         if (slideRef.current) exitSlide();
         if (videoRef.current) applyRate(videoRef.current);
-        setActiveClip(hit.entry.itemId);
+        const changed = setActiveClip(hit.entry.itemId, { primeNow: false });
         seekVideoToSource(hit.sourceTime);
+        primeActiveAfterMove(changed);
         // Setting currentTime on an already-playing <video> keeps it playing at the new
         // position, so a normal scrub needs no play() call. The ruler scrubber fires
         // seek() on every pointermove; calling play() each time interrupts the previous
@@ -421,7 +444,15 @@ export function usePreviewPlayback(layout: LayoutEntry[], audio?: AudioEdits): P
       setTimelineTime(clamped);
       emitTime(clamped);
     },
-    [enterSlide, exitSlide, seekVideoToSource, emitTime, applyRate, setActiveClip],
+    [
+      enterSlide,
+      exitSlide,
+      seekVideoToSource,
+      emitTime,
+      applyRate,
+      setActiveClip,
+      primeActiveAfterMove,
+    ],
   );
 
   const play = useCallback(() => {
@@ -541,8 +572,9 @@ export function usePreviewPlayback(layout: LayoutEntry[], audio?: AudioEdits): P
         (e) => e.kind === "clip" && e.sourceStart >= sourceT - END_EPSILON,
       );
       if (target) {
-        setActiveClip(target.itemId);
+        const changed = setActiveClip(target.itemId, { primeNow: false });
         seekVideoToSource(target.sourceStart);
+        primeActiveAfterMove(changed);
         setTimelineTime(target.timelineStart);
       } else {
         pause();
@@ -552,7 +584,7 @@ export function usePreviewPlayback(layout: LayoutEntry[], audio?: AudioEdits): P
     }
 
     setTimelineTime(t);
-  }, [pause, seekVideoToSource, handOffAtCut, applyMute, setActiveClip]);
+  }, [pause, seekVideoToSource, handOffAtCut, applyMute, setActiveClip, primeActiveAfterMove]);
 
   const onVideoEnded = useCallback(() => {
     // A slide owns the clock: an `ended` queued by the clip before it (the hand-off beat
