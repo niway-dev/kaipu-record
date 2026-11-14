@@ -7,8 +7,8 @@ description: The Clips section of the video editor becomes a section with levels
 
 **Status: 🔵 Proposed · approved by the owner 2026-11-14.** Owner decisions taken in chat on
 2026-11-13 over a sketch of four timelines; the owner approved the design on 2026-11-14 with the
-defaults of open questions 1 and 4, and Add to timeline hidden in 0.19.0. Nothing is implemented
-in this PR; stage 1 and the flag are stacked on it. Ticket:
+defaults of open questions 1 and 4, and Add to timeline hidden in 0.19.0. Nothing in this design is
+implemented; stage 1 is NIW2-771 and the flag NIW2-772. Ticket:
 [NIW2-770](https://linear.app/niway/issue/NIW2-770/video-editor-clips-becomes-a-section-with-levels-added-images-and).
 ADR: [0057](/architecture/decisions/0057-clips-is-one-section-with-levels-a-sequence-below-floating-items-above/)
 (new; supersedes part of [0040](/architecture/decisions/0040-typed-tracks-on-demand-and-stackable-media-lanes/)).
@@ -51,7 +51,8 @@ it stays over the same moment when the sequence changes. It is built in three st
    decision 5. It needs a migration of saved scenes and has no ticket yet.
 3. **Two videos plus the camera in the preview** has not been measured on the owner's hardware.
    Stage 3 starts with that measurement.
-4. **A cut under the start hides the whole item.** Deleting even one second of footage under a
+4. **A cut under the start hides the whole item (approved 2026-11-14; revisit with the real app in
+   stage 1).** Deleting even one second of footage under a
    floating item's start removes all of it, although most of what it covered is still there. It is
    the rule the owner took by default, approved on 2026-11-14, and the simplest one to build first. The alternative is to
    move the start to the next surviving second and shorten the item. To judge in stage 1 with the
