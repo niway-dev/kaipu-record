@@ -298,7 +298,6 @@ export async function startVideoExport(
   t: Translator<"videoEditor">,
 ): Promise<boolean> {
   if (active) return false;
-  lastStart = { args, t };
   const GENERIC_ERROR = t("exportGenericError");
   const presetId: ExportPresetId = args.presetId ?? "balanced";
 
@@ -306,6 +305,7 @@ export async function startVideoExport(
   try {
     plan = buildExportPlan(args.scene);
   } catch (error) {
+    lastStart = { args, t };
     // Only an empty timeline reads as one; a broken scene (a clip straddling a recording's
     // end) is a defect to report, with the generic message.
     if (!(error instanceof EmptyTimelineError))
@@ -347,6 +347,9 @@ export async function startVideoExport(
       : [];
   // Another export may have started while the probes ran.
   if (active) return false;
+  // Retry re-runs the last call that got this far (a refusal below stays retryable). A call
+  // turned away just above must not replace the one that is running.
+  lastStart = { args, t };
   const audioDecision = audioPlan(plan, [
     {
       sourceId: null,

@@ -663,6 +663,32 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
     });
   });
 
+  it("Retry re-runs the call that ran, not a second call that was turned away", async () => {
+    vi.stubGlobal("fetch", fetchMock());
+    const resolvers: Array<(value: null) => void> = [];
+    probeSource.mockImplementation(() => new Promise<null>((resolve) => resolvers.push(resolve)));
+    const first = startVideoExport(
+      args({ scene: JOINED_SCENE, joined: [entry("b")], title: "First call" }),
+      t,
+    );
+    const second = startVideoExport(
+      args({ scene: JOINED_SCENE, joined: [entry("b")], title: "Second call" }),
+      t,
+    );
+    // The first call's probe lands first: it runs, the second is turned away after its own.
+    resolvers[0]!(null);
+    await waitFor(() => expect(workers).toHaveLength(1));
+    resolvers[1]!(null);
+    expect(await first).toBe(true);
+    expect(await second).toBe(false);
+
+    workers[0]!.onmessage?.({ data: { type: "error", message: "boom" } } as MessageEvent);
+    probeSource.mockResolvedValue(null);
+    retryVideoExport();
+    await waitFor(() => expect(workers).toHaveLength(2));
+    expect(getExportSnapshot().job?.sourceTitle).toBe("First call");
+  });
+
   describe("audio of the joined recordings", () => {
     const probe = (hasAudio: boolean) => ({
       width: 1920,
