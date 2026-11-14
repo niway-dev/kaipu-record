@@ -20,6 +20,21 @@ describe("ModalOverlay", () => {
     expect(dialog).toHaveAttribute("aria-modal", "true");
   });
 
+  it("renders its content in the xwide sheet and still cancels on Escape", async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    render(
+      <ModalOverlay onCancel={onCancel} size="xwide">
+        <p>picker</p>
+      </ModalOverlay>,
+    );
+
+    expect(screen.getByText("picker")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    expect(onCancel).toHaveBeenCalledOnce();
+  });
+
   it("takes focus on mount, so Escape reaches it without a click first", () => {
     render(<ModalOverlay onCancel={() => {}}>body</ModalOverlay>);
     expect(screen.getByRole("alertdialog")).toHaveFocus();

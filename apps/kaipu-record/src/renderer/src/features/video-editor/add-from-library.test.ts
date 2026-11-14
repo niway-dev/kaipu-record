@@ -8,6 +8,9 @@ import {
   resolutionLabel,
   insertBoundaryAt,
   boundaryAfterClipAt,
+  boundaryAtStart,
+  boundaryAtEnd,
+  libraryScreenshots,
 } from "./add-from-library";
 
 function video(over: Partial<LibraryVideo> & { assetId: string }): LibraryVideo {
@@ -279,5 +282,68 @@ describe("anchoredBoundary from a chosen boundary", () => {
       items: [{ id: "b", kind: "clip", sourceStart: 0, sourceEnd: 20 }, ...two.items],
     };
     expect(resolve(prepended)).toBe(30);
+  });
+});
+
+describe("boundaryAtStart and boundaryAtEnd", () => {
+  // illustrative: clips of 10 s and 20 s, ending at 10 and 30
+  const two = toLayout([
+    { id: "a", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+    { id: "b", kind: "clip", sourceStart: 10, sourceEnd: 30 },
+  ]);
+
+  it("the start is index 0 at time 0", () => {
+    expect(boundaryAtStart()).toEqual({ index: 0, time: 0 });
+  });
+
+  it("the end is after the last clip: its index is the layout length, its time the last end", () => {
+    expect(boundaryAtEnd(two)).toEqual({ index: 2, time: 30 });
+  });
+
+  it("an empty sequence has its start and its end at 0", () => {
+    expect(boundaryAtEnd([])).toEqual({ index: 0, time: 0 });
+  });
+
+  it("anchoring the end pins no clip, so it stays the end however many are added ahead", () => {
+    const resolve = anchoredBoundary(two, boundaryAtEnd(two));
+    const longer: VideoScene = {
+      ...initialScene(30),
+      items: [
+        { id: "a", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+        { id: "b", kind: "clip", sourceStart: 10, sourceEnd: 30 },
+        { id: "n", kind: "clip", sourceStart: 30, sourceEnd: 40 },
+      ],
+    };
+    expect(resolve(longer)).toBe(40);
+  });
+});
+
+describe("libraryScreenshots", () => {
+  it("keeps only screenshots with a local file: no recordings, no GIFs, no cloud-only items", () => {
+    const list = [
+      video({ assetId: "rec" }),
+      video({ assetId: "gif", kind: "gif" }),
+      video({ assetId: "cloud", kind: "screenshot", id: null }),
+      video({ assetId: "shot", kind: "screenshot" }),
+    ];
+    expect(ids(libraryScreenshots(list, ""))).toEqual(["shot"]);
+  });
+
+  it("lists newest first", () => {
+    const list = [
+      video({ assetId: "old", kind: "screenshot", createdAt: 1 }),
+      video({ assetId: "new", kind: "screenshot", createdAt: 9 }),
+    ];
+    expect(ids(libraryScreenshots(list, ""))).toEqual(["new", "old"]);
+  });
+
+  it("matches the title case-insensitively on the trimmed query", () => {
+    const list = [
+      video({ assetId: "a", kind: "screenshot", title: "Screenshot Pricing page" }),
+      video({ assetId: "b", kind: "screenshot", title: "Screenshot Login" }),
+    ];
+    expect(ids(libraryScreenshots(list, "  PRICING "))).toEqual(["a"]);
+    // Same createdAt, so a blank query keeps both.
+    expect(libraryScreenshots(list, "   ")).toHaveLength(2);
   });
 });

@@ -3,7 +3,7 @@ import type { VideoScene } from "./scene";
 import { boundaryIndexAt, MIN_ITEM_DURATION, toLayout, type LayoutEntry } from "./timeline";
 
 /**
- * The recordings the Add recording panel offers (NIW2-782): the Library's own recordings, other
+ * The recordings the Add from Library modal offers (NIW2-782, NIW2-790): the Library's own recordings, other
  * than the one being edited, that can become a clip. An export (derived from another recording),
  * a cloud-only item (no local file), a recording whose sidecar could not be read and one too
  * short for a clip are left out. A recording the scene already joined stays: joining it again
@@ -25,6 +25,25 @@ export function joinableRecordings(
         video.derivedFromAssetId === null &&
         !video.metadataIssue &&
         video.assetId !== openedAssetId &&
+        (needle === "" || video.title.toLowerCase().includes(needle)),
+    )
+    .sort((a, b) => b.createdAt - a.createdAt);
+}
+
+/**
+ * The screenshots the Screenshots tab offers (NIW2-790): the Library's own screenshots that have
+ * a local file (`readScreenshotBytes` reads it by id, so a cloud-only one cannot be added).
+ * GIFs are left out on purpose: a GIF export is an animated MP4-sized file, not a still, and a
+ * floating image is drawn from one PNG. `query` is a case-insensitive title match after
+ * trimming; a blank one lists everything. Newest first.
+ */
+export function libraryScreenshots(videos: readonly LibraryVideo[], query: string): LibraryVideo[] {
+  const needle = query.trim().toLowerCase();
+  return videos
+    .filter(
+      (video) =>
+        video.kind === "screenshot" &&
+        video.id !== null &&
         (needle === "" || video.title.toLowerCase().includes(needle)),
     )
     .sort((a, b) => b.createdAt - a.createdAt);
@@ -71,6 +90,19 @@ export function boundaryAfterClipAt(
   const found = layout.findIndex((entry) => t <= entry.timelineEnd);
   const index = found === -1 ? layout.length : found + 1;
   return { index, time: index === 0 ? 0 : layout[index - 1].timelineEnd };
+}
+
+/** Add at start: before the first clip. */
+export function boundaryAtStart(): { index: number; time: number } {
+  return { index: 0, time: 0 };
+}
+
+/** Add at end: after the last clip (`index` is the layout length); 0 for an empty sequence. */
+export function boundaryAtEnd(layout: LayoutEntry[]): { index: number; time: number } {
+  return {
+    index: layout.length,
+    time: layout.length === 0 ? 0 : layout[layout.length - 1].timelineEnd,
+  };
 }
 
 /**
