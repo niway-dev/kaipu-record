@@ -9,6 +9,8 @@ export interface AudioPeaks {
   filled: number;
   /** The peak that draws as a full-height bar (see `referenceLevel`). */
   reference: number;
+  /** True once the whole recording is decoded; false for the partial peaks published on the way. */
+  complete: boolean;
 }
 
 /** Peaks that stay decoded (about 1.3 MB for a 54-minute take): the last 8 recordings. */
@@ -88,10 +90,11 @@ export function useAudioPeaks(mediaUrl: string, durationSeconds: number): AudioP
         const sink = new AudioSampleSink(track);
         const accumulator = new PeakAccumulator(durationSeconds);
         // A new wrapper per publish so React re-renders; the array underneath is shared.
-        const snapshot = (): AudioPeaks => ({
+        const snapshot = (complete: boolean): AudioPeaks => ({
           peaks: accumulator.peaks,
           filled: accumulator.filled,
           reference: referenceLevel(accumulator.peaks, accumulator.filled),
+          complete,
         });
 
         let sliceStart = performance.now();
@@ -116,7 +119,7 @@ export function useAudioPeaks(mediaUrl: string, durationSeconds: number): AudioP
           const now = performance.now();
           if (now - lastPublish >= PUBLISH_EVERY_MS) {
             lastPublish = now;
-            setAudioPeaks(snapshot());
+            setAudioPeaks(snapshot(false));
           }
           if (now - sliceStart >= SLICE_MS) {
             await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -124,7 +127,7 @@ export function useAudioPeaks(mediaUrl: string, durationSeconds: number): AudioP
           }
         }
         if (cancelled) return;
-        const done = snapshot();
+        const done = snapshot(true);
         cacheSet(key, done);
         setAudioPeaks(done);
       } catch {

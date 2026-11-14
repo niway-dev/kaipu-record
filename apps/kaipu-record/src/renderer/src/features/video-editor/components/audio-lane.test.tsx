@@ -15,6 +15,7 @@ const waveform: AudioPeaks = {
   peaks: new Float32Array(1000).fill(0.2),
   filled: 1000,
   reference: 0.2,
+  complete: true,
 };
 
 function lane(overrides: Partial<AudioLaneProps> = {}): React.JSX.Element {
@@ -64,7 +65,9 @@ describe("AudioLane waveform", () => {
   it("treats a null or still-empty waveform like no waveform", () => {
     const { container, rerender } = render(lane({ waveform: null }));
     expect(screen.getByText("No muted sections yet.")).toBeTruthy();
-    rerender(lane({ waveform: { peaks: new Float32Array(10), filled: 0, reference: 0 } }));
+    rerender(
+      lane({ waveform: { peaks: new Float32Array(10), filled: 0, reference: 0, complete: false } }),
+    );
     expect(screen.getByText("No muted sections yet.")).toBeTruthy();
     expect(container.querySelector("[data-audio-waveform]")).toBeNull();
   });
@@ -75,6 +78,15 @@ describe("AudioLane waveform", () => {
     expect(canvas).not.toBeNull();
     expect(canvas!.getAttribute("aria-hidden")).toBe("true");
     expect(screen.queryByText("No muted sections yet.")).toBeNull();
+  });
+
+  it("marks the canvas complete only once the whole recording is decoded", () => {
+    const { container, rerender } = render(lane({ waveform: { ...waveform, complete: false } }));
+    const attr = () =>
+      container.querySelector("[data-audio-waveform]")!.getAttribute("data-audio-waveform");
+    expect(attr()).toBe("partial");
+    rerender(lane({ waveform }));
+    expect(attr()).toBe("complete");
   });
 
   it("covers only the visible window of the lane under a timeline strip", () => {

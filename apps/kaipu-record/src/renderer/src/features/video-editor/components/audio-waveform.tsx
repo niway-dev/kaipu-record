@@ -104,7 +104,8 @@ export function AudioWaveform({
       ref={canvasRef}
       className={styles.waveform}
       style={view ? { left: scroll, width: viewWidth } : undefined}
-      data-audio-waveform
+      // "complete" once the whole recording is decoded: the UI catalog waits for it.
+      data-audio-waveform={waveform.complete ? "complete" : "partial"}
       aria-hidden="true"
     />
   );

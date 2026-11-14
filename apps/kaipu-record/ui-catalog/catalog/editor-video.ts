@@ -45,13 +45,12 @@ const captureListed: Step = {
   waitFor: { area: "editorVideo.capturesPanel", part: { role: "button", name: "Go to" } },
 };
 /**
- * The waveform canvas in the Audio lane: it appears once the first peaks are decoded. Every
- * seeded recording has audio, so every state that opens one waits for it: a shot must not
- * land before, or while, the lane fills in. A seeded clip decodes in one pass, so the first
- * canvas is the finished waveform.
+ * The Audio lane's waveform once the whole recording is decoded. Every seeded recording has
+ * audio, so every state that opens one waits for it: a shot must not land before, or while,
+ * the lane fills in (partial peaks are published every 400 ms on the way).
  */
 const audioWaveformDrawn: Step = {
-  waitFor: { area: "editorVideo.audioLane", part: { css: "[data-audio-waveform]" } },
+  waitFor: { area: "editorVideo.audioLane", part: { css: '[data-audio-waveform="complete"]' } },
 };
 const exportSheet: Step = {
   click: { area: "editorVideo.toolbar", part: { role: "button", name: "Export", exact: true } },

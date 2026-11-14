@@ -77,6 +77,7 @@ describe("useAudioPeaks", () => {
       [0.1, 0.5, 0.25, 0.75].map(Math.fround),
     );
     expect(result.current!.reference).toBeCloseTo(0.75);
+    expect(result.current!.complete).toBe(true);
     expect(openMock).toHaveBeenCalledWith(URL_R1);
     for (const sample of samples) expect(sample.close).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(inputs[0]!.dispose).toHaveBeenCalled());
