@@ -90,6 +90,7 @@ import {
 } from "@renderer/features/video-editor/components/inspector/webcam-inspector";
 import { useWebcamEditing } from "@renderer/features/video-editor/webcam/use-webcam-editing";
 import { webcamAt, webcamOverrideAt } from "@renderer/features/video-editor/webcam/webcam-model";
+import type { WebcamRecordings } from "@renderer/features/video-editor/webcam/webcam-sync";
 import {
   webcamInspectorTarget,
   webcamOutlined,
@@ -157,6 +158,8 @@ import { planStill } from "@renderer/features/video-editor/export/still-plan";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { useSourceCaptures } from "@renderer/features/video-editor/use-source-captures";
 import {
+  axisSecondsOfCapture,
+  captureOriginAt,
   captureTitleTime,
   findCaptureAt,
   formatClock,
@@ -180,7 +183,10 @@ import {
   TOOL_GROUPS,
 } from "@renderer/features/video-editor/components/editor-toolbar";
 import { ExportDialog } from "@renderer/features/video-editor/components/export-dialog";
-import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
+import {
+  PreviewStage,
+  type StageRecording,
+} from "@renderer/features/video-editor/components/preview-stage";
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import { TransportBar } from "@renderer/features/video-editor/components/transport-bar";
 import { useTimelineViewStore } from "@renderer/features/video-editor/use-timeline-view";
@@ -678,7 +684,50 @@ function VideoEditor({
   // The sidecar decides whether there is a webcam (the loader reconciled the scene with
   // it); without one there is no layer, lane, inspector section nor second <video>.
   const webcamTrack = source.webcam ?? null;
-  const hasWebcam = webcamTrack !== null && scene.webcam !== null;
+  // A scene has one webcam layout; it shows a face wherever the recording under the playhead has
+  // one. So the layer, lane and inspector exist when ANY recording was recorded with a webcam.
+  const hasWebcam =
+    scene.webcam !== null &&
+    (webcamTrack !== null || joinedRecordings.some((j) => j.webcam !== null));
+  // Each recording's own webcam file and offset: the layer swaps files as the playhead crosses
+  // from one recording into another and aims at the local second (ADR 0058).
+  const webcamRecordings = useMemo<WebcamRecordings>(
+    () => ({
+      axis,
+      files: new Map([
+        [
+          null,
+          {
+            src: webcamTrack ? mediaUrl("webcam", source.id) : null,
+            startOffsetMs: webcamTrack?.startOffsetMs ?? 0,
+          },
+        ],
+        ...joinedRecordings.map(
+          (j) =>
+            [
+              j.source.id,
+              {
+                src: j.webcam && j.id ? mediaUrl("webcam", j.id) : null,
+                startOffsetMs: j.webcam?.startOffsetMs ?? 0,
+              },
+            ] as const,
+        ),
+      ]),
+    }),
+    [axis, webcamTrack, source.id, joinedRecordings],
+  );
+  // One `<video>` per joined recording the stage can play; a missing one has none (the picture
+  // says so while the playhead is on its clip), a loading one has none yet.
+  const stageRecordings = useMemo<StageRecording[]>(
+    () =>
+      joinedRecordings.map((j) => ({
+        sourceId: j.source.id,
+        title: j.source.title,
+        mediaUrl: j.status === "ready" && j.id ? mediaUrl("recording", j.id) : null,
+        missing: j.status === "missing",
+      })),
+    [joinedRecordings],
+  );
   const redactionEdits = useRedactionEditing({ controller, layout, axis });
   // One camera simulation shared by the preview (useCameraPreview) and the export (doc 05).
   // Declared before any callback that closes over it (handleExport).
@@ -696,7 +745,7 @@ function VideoEditor({
   // The webcam lane's filmstrip: the webcam file's frames, reported at SOURCE time, and the
   // source range it has footage for.
   const webcamStrip = useCompanionThumbnails(
-    hasWebcam ? mediaUrl("webcam", source.id) : "",
+    webcamTrack && scene.webcam !== null ? mediaUrl("webcam", source.id) : "",
     source.durationSeconds,
     (webcamTrack?.startOffsetMs ?? 0) / 1000,
   );
@@ -996,12 +1045,11 @@ function VideoEditor({
 
   const startVideoExport = useCallback(
     (choice: VideoExportChoice) => {
-      const video = playback.videoRef.current;
-      if (!video) return;
-      // videoWidth/videoHeight are 0 until the browser has decoded the stream's
-      // metadata (loadedmetadata). Starting the export before that hands the worker
-      // a 0×0 OffscreenCanvas, which produces a corrupt file — refuse early.
-      if (video.videoWidth === 0 || video.videoHeight === 0) {
+      // The OPENED recording's decoded size, held as state when its metadata lands (never the
+      // element on screen, which can be a joined recording of another size). It is 0 until the
+      // browser has decoded the stream's metadata. Starting the export before that hands the
+      // worker a 0×0 OffscreenCanvas, which produces a corrupt file — refuse early.
+      if (frameSize.width === 0 || frameSize.height === 0) {
         showToast({ message: t("videoStillLoading") });
         return;
       }
@@ -1019,9 +1067,9 @@ function VideoEditor({
         title: source.title,
         derivedFromAssetId: source.assetId,
         sourceSizeBytes: source.sizeBytes ?? null,
-        videoWidth: video.videoWidth,
-        videoHeight: video.videoHeight,
-        previewWidth: video.clientWidth,
+        videoWidth: frameSize.width,
+        videoHeight: frameSize.height,
+        previewWidth: contentRef.current?.clientWidth ?? 0,
         slideAssets: assetStoreRef.current,
         cameraPath,
         cursor: cursorData,
@@ -1075,7 +1123,7 @@ function VideoEditor({
     [
       t,
       sourceProbe,
-      playback,
+      frameSize,
       videoExport,
       scene,
       source,
@@ -1109,9 +1157,7 @@ function VideoEditor({
   const sourceExports = useSourceExports(source.assetId, exportSheetOpen);
   const lastGifSettingsRef = useRef<GifSettings | null>(null);
   const handleExport = useCallback(() => {
-    const video = playback.videoRef.current;
-    if (!video) return;
-    if (video.videoWidth === 0 || video.videoHeight === 0) {
+    if (frameSize.width === 0 || frameSize.height === 0) {
       showToast({ message: t("videoStillLoading") });
       return;
     }
@@ -1121,7 +1167,7 @@ function VideoEditor({
       return;
     }
     setExportSheetOpen(true);
-  }, [playback, t]);
+  }, [frameSize, t]);
 
   const closeExportSheet = useCallback(() => {
     gifExport.cancelEstimate();
@@ -1131,14 +1177,13 @@ function VideoEditor({
   // Shared job inputs for the GIF estimate and export; null while the video is loading.
   const gifJobArgs = useCallback(
     (settings: GifSettings): GifJobArgs | null => {
-      const video = playback.videoRef.current;
-      if (!video || video.videoWidth === 0 || video.videoHeight === 0) return null;
+      if (frameSize.width === 0 || frameSize.height === 0) return null;
       return {
         scene,
         sourceId: source.id,
-        videoWidth: video.videoWidth,
-        videoHeight: video.videoHeight,
-        previewWidth: video.clientWidth,
+        videoWidth: frameSize.width,
+        videoHeight: frameSize.height,
+        previewWidth: contentRef.current?.clientWidth ?? 0,
         slideAssets: assetStoreRef.current,
         cameraPath,
         cursor: cursorData,
@@ -1148,7 +1193,7 @@ function VideoEditor({
         fps: settings.fps,
       };
     },
-    [playback, scene, source.id, source.webcam, assetStoreRef, cameraPath, cursorData],
+    [frameSize, scene, source.id, source.webcam, assetStoreRef, cameraPath, cursorData],
   );
 
   const handleGifSettingsChange = useCallback(
@@ -1225,8 +1270,8 @@ function VideoEditor({
   // duplicate check.
   const captureInFlight = useRef(false);
   const handleCaptureFrame = useCallback(async () => {
-    const video = playback.videoRef.current;
-    if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
+    // The opened recording's decoded size (state), not the element on screen.
+    if (frameSize.width === 0 || frameSize.height === 0) {
       showToast({ message: t("videoStillLoading") });
       return;
     }
@@ -1237,7 +1282,19 @@ function VideoEditor({
     const playhead = playback.readTimelineTime();
     try {
       // The same frame twice is a duplicate: point at the saved one instead of composing.
-      const existing = findCaptureAt(latestCaptures(), planStill(scene, playhead).sourceSeconds);
+      // The recording under the playhead and the second INSIDE ITS OWN file: a frame of a joined
+      // recording links to that recording's asset, not to the opened one. The captures read here
+      // are the opened recording's, so a joined frame is never a duplicate of them.
+      const origin = captureOriginAt(
+        axis,
+        scene.sources,
+        source.assetId,
+        planStill(scene, playhead).sourceSeconds,
+      );
+      const existing =
+        origin && origin.assetId === source.assetId
+          ? findCaptureAt(latestCaptures(), origin.localSeconds)
+          : undefined;
       if (existing) {
         clearSelection();
         setCursorInspectorOpen(false);
@@ -1252,12 +1309,20 @@ function VideoEditor({
       }
       if (highlightTimer.current) clearTimeout(highlightTimer.current);
       setHighlightedCaptureId(null);
+      // The still composer decodes the OPENED recording's file (the export layer of ADR 0058 is
+      // not built yet), so a frame over a joined recording would be the wrong picture. Say so
+      // rather than save it; the link below is already the joined recording's, so this guard is
+      // the only line to remove when the composer learns recordings.
+      if (origin && origin.sourceId !== null) {
+        showToast({ message: t("captureJoinedNotYet") });
+        return;
+      }
       const frame = await captureFrame({
         scene,
         sourceId: source.id,
-        videoWidth: video.videoWidth,
-        videoHeight: video.videoHeight,
-        previewWidth: video.clientWidth,
+        videoWidth: frameSize.width,
+        videoHeight: frameSize.height,
+        previewWidth: contentRef.current?.clientWidth ?? 0,
         slideAssets: assetStoreRef.current,
         cameraPath,
         cursor: cursorData,
@@ -1268,11 +1333,16 @@ function VideoEditor({
       // slide has no source footage: its link has no time (seeking to it does nothing), and
       // only the title uses the timeline second.
       const titleSeconds = frame.sourceSeconds ?? frame.timelineSeconds;
+      // Where the composed frame really came from (a slide has no recording: no time).
+      const saved = captureOriginAt(axis, scene.sources, source.assetId, frame.sourceSeconds);
       await window.electronAPI.saveScreenshot(frame.png, {
         // The title becomes the file name (ADR 0035): compact time, nothing a name refuses.
         title: t("captureTitle", { title: source.title, time: captureTitleTime(titleSeconds) }),
         manual: false,
-        source: { videoAssetId: source.assetId, timeSeconds: frame.sourceSeconds },
+        source: {
+          videoAssetId: saved?.assetId ?? source.assetId,
+          timeSeconds: saved ? saved.localSeconds : frame.sourceSeconds,
+        },
       });
       // The panel takes the inspector's place, so the selection goes too (as the cursor
       // inspector does): Delete must never remove an item whose inspector is not on screen.
@@ -1292,6 +1362,8 @@ function VideoEditor({
     }
   }, [
     playback,
+    frameSize,
+    axis,
     captureFrame,
     latestCaptures,
     scene,
@@ -1326,11 +1398,14 @@ function VideoEditor({
 
   /** A capture's image: move the playhead to its moment, if that moment is still on the timeline. */
   const seekToCapture = useCallback(
-    (sourceSeconds: number) => {
-      const at = timelineTimeAtSource(layout, sourceSeconds);
+    (seconds: number, assetId: string = source.assetId) => {
+      // The link keeps seconds inside ITS recording's file; the timeline speaks axis seconds.
+      const axisSeconds = axisSecondsOfCapture(scene.sources, source.assetId, assetId, seconds);
+      if (axisSeconds === null) return;
+      const at = timelineTimeAtSource(layout, axisSeconds);
       if (at !== null) playback.seek(at);
     },
-    [layout, playback],
+    [layout, playback, scene.sources, source.assetId],
   );
 
   const handleDeleteOverlay = useCallback(() => {
@@ -1984,6 +2059,8 @@ function VideoEditor({
             <PreviewStage
               playback={playback}
               mediaUrl={sourceUrl}
+              axis={axis}
+              recordings={stageRecordings}
               slideUrl={slideUrl}
               expanded={isFullscreen}
               contentRef={contentRef}
@@ -2010,12 +2087,12 @@ function VideoEditor({
               }
               webcam={
                 hasWebcam &&
-                webcamTrack &&
                 scene.webcam && (
                   <WebcamLayer
                     videoRef={playback.videoRef}
-                    src={mediaUrl("webcam", source.id)}
-                    startOffsetMs={webcamTrack.startOffsetMs}
+                    src={webcamTrack ? mediaUrl("webcam", source.id) : null}
+                    startOffsetMs={webcamTrack?.startOffsetMs ?? 0}
+                    recordings={webcamRecordings}
                     webcam={scene.webcam}
                     path={cameraPath}
                     cameraEnabled={cameraApplied}
@@ -2456,11 +2533,11 @@ function VideoEditor({
           sourceSizeBytes={source.sizeBytes ?? null}
           thumbnailUrl={source.thumbnailUrl ?? null}
           timelineDuration={playback.duration}
-          sourceWidth={playback.videoRef.current?.videoWidth ?? 0}
+          sourceWidth={frameSize.width}
           estimate={gifExport.estimate}
           presetSource={{
-            width: playback.videoRef.current?.videoWidth ?? 0,
-            height: playback.videoRef.current?.videoHeight ?? 0,
+            width: frameSize.width,
+            height: frameSize.height,
             fps: sourceProbe?.fps ?? 30,
             hasAudio: (sourceProbe?.hasAudio ?? true) && !scene.audioMuted,
             sampleRate: sourceProbe?.sampleRate,

@@ -1,12 +1,30 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useTranslations } from "@kaipu/i18n";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DEFAULT_BACKGROUND, type VideoBackground } from "../background";
+import { MediaSwitch, type SwitchElement } from "../media-switch";
+import type { SourceAxis } from "../source-axis";
 import type { PreviewPlayback } from "../use-preview-playback";
 import { previewBackgroundStyle } from "./preview-background";
 import styles from "./preview-stage.module.css";
 
+const NO_RECORDINGS: readonly StageRecording[] = [];
+
+/** A joined recording the stage can show (ADR 0058): one `<video>` each, only the active visible. */
+export interface StageRecording {
+  /** The `SceneSource.id`. */
+  sourceId: string;
+  title: string;
+  /** The playable file, or null while it loads or when it is missing (no element then). */
+  mediaUrl: string | null;
+  /** The asset is gone, cloud-only or refused: the picture says so while the playhead is on it. */
+  missing: boolean;
+}
+
 export function PreviewStage({
   playback,
   mediaUrl,
+  axis,
+  recordings = NO_RECORDINGS,
   slideUrl,
   overlay,
   underlay,
@@ -20,7 +38,13 @@ export function PreviewStage({
   background = DEFAULT_BACKGROUND,
 }: {
   playback: PreviewPlayback;
+  /** The opened recording's file. */
   mediaUrl: string;
+  /** The scene's source axis; the stage's switch maps an axis second to a recording with it.
+   *  Absent = the opened recording alone. */
+  axis?: SourceAxis;
+  /** The joined recordings, in any order. Absent = none. */
+  recordings?: readonly StageRecording[];
   /** Image of the slide under the playhead, or null when the playhead is on a clip.
    *  When set, it covers the video (which is paused underneath) so the slide reads as
    *  its own frame; the annotation layer still renders on top. */
@@ -83,6 +107,59 @@ export function PreviewStage({
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+  // One `<video>` per recording behind ONE switch that speaks axis seconds (ADR 0058): the
+  // playback hook, the frame clock and the layers keep reading `playback.videoRef` as if it were
+  // a single element. The switch is published before paint and withdrawn on unmount.
+  const [mediaSwitch] = useState(() => new MediaSwitch());
+  useLayoutEffect(() => {
+    const ref = playback.videoRef;
+    ref.current = mediaSwitch;
+    return () => {
+      if (ref.current === mediaSwitch) ref.current = null;
+    };
+  }, [mediaSwitch, playback.videoRef]);
+  useLayoutEffect(() => {
+    if (axis) mediaSwitch.setAxis(axis);
+  }, [mediaSwitch, axis]);
+  const attachOpened = useCallback(
+    (el: HTMLVideoElement | null) => mediaSwitch.attach(null, el as SwitchElement | null),
+    [mediaSwitch],
+  );
+  const attachers = useRef(new Map<string, (el: HTMLVideoElement | null) => void>());
+  const attachJoined = (sourceId: string): ((el: HTMLVideoElement | null) => void) => {
+    let attach = attachers.current.get(sourceId);
+    if (!attach) {
+      attach = (el) => mediaSwitch.attach(sourceId, el as SwitchElement | null);
+      attachers.current.set(sourceId, attach);
+    }
+    return attach;
+  };
+  // The recording on screen, for the "missing" notice: the switch is the one that knows.
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  useEffect(() => {
+    setActiveKey(mediaSwitch.activeKey);
+    return mediaSwitch.onActiveChange(() => setActiveKey(mediaSwitch.activeKey));
+  }, [mediaSwitch]);
+  const t = useTranslations("videoEditor");
+  const missingNow = slideUrl
+    ? undefined
+    : recordings.find((r) => r.missing && r.sourceId === activeKey);
+  // Only the recording on screen drives the transport: a paused or primed standby also emits
+  // `pause`, `timeupdate` and `ended`, and none of those may reach the hook.
+  const events = (): React.ComponentProps<"video"> => ({
+    onTimeUpdate: (event) => {
+      if (mediaSwitch.isActive(event.currentTarget)) playback.onVideoTimeUpdate();
+    },
+    onEnded: (event) => {
+      if (mediaSwitch.isActive(event.currentTarget)) playback.onVideoEnded();
+    },
+    onPlay: (event) => {
+      if (mediaSwitch.isActive(event.currentTarget)) playback.onVideoPlay();
+    },
+    onPause: (event) => {
+      if (mediaSwitch.isActive(event.currentTarget)) playback.onVideoPause();
+    },
+  });
   const look = previewBackgroundStyle(background, frameSize?.w ?? 0, frameSize?.h ?? 0);
   return (
     <div className={styles.stage}>
@@ -101,15 +178,15 @@ export function PreviewStage({
         <div data-testid="preview-picture" className={styles.picture} style={look.picture}>
           <div ref={contentRef} data-testid="preview-content" className={styles.content}>
             <video
-              ref={playback.videoRef}
+              ref={attachOpened}
               className={styles.video}
               src={mediaUrl}
-              onTimeUpdate={playback.onVideoTimeUpdate}
-              onEnded={playback.onVideoEnded}
+              {...events()}
               onLoadedMetadata={(event) => {
                 // A new `src` resets the element's rate: put the chosen speed back first,
                 // whatever the decoded size says.
                 playback.onVideoLoadedMetadata();
+                // The frame, its ratio and the export size are the OPENED recording's.
                 const { videoWidth, videoHeight } = event.currentTarget;
                 if (videoWidth > 0 && videoHeight > 0) {
                   setRatio(videoWidth / videoHeight);
@@ -119,15 +196,33 @@ export function PreviewStage({
               // Keep `playing` in sync with what the element actually does — a rejected play()
               // (e.g. interrupted by a seek) leaves it paused, and these events stop the
               // transport from getting stuck showing "pause" while nothing plays.
-              onPlay={playback.onVideoPlay}
-              onPause={playback.onVideoPause}
               // No onClick: a click on the picture does not toggle playback. The play
               // button and Space do (NIW2-611).
             />
+            {recordings.map((recording) =>
+              recording.mediaUrl === null ? null : (
+                <video
+                  key={recording.sourceId}
+                  ref={attachJoined(recording.sourceId)}
+                  data-recording={recording.sourceId}
+                  className={styles.video}
+                  src={recording.mediaUrl}
+                  {...events()}
+                  // A joined recording keeps its own aspect, letterboxed inside the opened
+                  // recording's frame: the frame's ratio and the export size stay the opened one's.
+                  onLoadedMetadata={playback.onVideoLoadedMetadata}
+                />
+              ),
+            )}
             {slideUrl && <img className={styles.slide} src={slideUrl} alt="" draggable={false} />}
             {underlay}
             {overlay}
           </div>
+          {missingNow && (
+            <div role="status" data-testid="preview-missing" className={styles.missing}>
+              {t("recordingMissing", { title: missingNow.title })}
+            </div>
+          )}
           {cursor}
           {media}
           {webcam}

@@ -1727,6 +1727,8 @@
     "githubPaid": "GitHub Pro / Team / Enterprise · {limit}",
     "laneWebcam": "Cámara",
     "webcamTitle": "Cámara web",
+    "recordingMissing": "Grabación no disponible: {title}",
+    "captureJoinedNotYet": "Capturar un fotograma todavía no funciona sobre una grabación unida.",
     "webcamLayerAria": "Cámara web: arrástrala para moverla",
     "mediaItemAria": "Imagen flotante: arrástrala para moverla",
     "mediaResizeHandleAria": "Cambiar el tamaño de la imagen flotante",

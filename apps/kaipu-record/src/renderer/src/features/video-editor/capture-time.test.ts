@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { captureTitleTime, findCaptureAt, formatClock } from "./capture-time";
+import {
+  axisSecondsOfCapture,
+  captureOriginAt,
+  captureTitleTime,
+  findCaptureAt,
+  formatClock,
+} from "./capture-time";
+import type { SceneSource } from "./scene";
+import { sourceAxis } from "./source-axis";
 
 describe("formatClock", () => {
   it("prints minutes, seconds and tenths", () => {
@@ -38,5 +46,61 @@ describe("findCaptureAt", () => {
   });
   it("never matches a slide frame (null source second)", () => {
     expect(findCaptureAt(captures, null)).toBeUndefined();
+  });
+});
+
+describe("capture origin over joined recordings (ADR 0058)", () => {
+  const source = (id: string, assetId: string, offset: number): SceneSource => ({
+    id,
+    assetId,
+    title: id,
+    offset,
+    durationSeconds: 40,
+    width: 1280,
+    height: 720,
+  });
+  const sources = [source("B", "asset-b", 3600), source("C", "asset-c", 7200)];
+  const axis = sourceAxis(100, sources);
+
+  it("names the opened recording and the same second for a frame inside its range", () => {
+    expect(captureOriginAt(axis, sources, "asset-a", 42.5)).toEqual({
+      sourceId: null,
+      assetId: "asset-a",
+      localSeconds: 42.5,
+    });
+  });
+
+  it("names the joined recording and the LOCAL second for a frame inside its range", () => {
+    expect(captureOriginAt(axis, sources, "asset-a", 3612.25)).toEqual({
+      sourceId: "B",
+      assetId: "asset-b",
+      localSeconds: 12.25,
+    });
+  });
+
+  it("has no origin for a slide or for a second no recording holds", () => {
+    expect(captureOriginAt(axis, sources, "asset-a", null)).toBeNull();
+    expect(captureOriginAt(axis, sources, "asset-a", 500)).toBeNull();
+  });
+
+  it("maps a joined capture back to the axis: offset plus its seconds", () => {
+    expect(axisSecondsOfCapture(sources, "asset-a", "asset-c", 3)).toBe(7203);
+  });
+
+  it("keeps an opened capture's seconds as they are, and wins over a joined copy of the same asset", () => {
+    const twice = [...sources, source("D", "asset-a", 9000)];
+    expect(axisSecondsOfCapture(twice, "asset-a", "asset-a", 5)).toBe(5);
+  });
+
+  it("has no axis second for an asset the scene does not hold", () => {
+    expect(axisSecondsOfCapture(sources, "asset-a", "asset-z", 5)).toBeNull();
+    expect(axisSecondsOfCapture(undefined, "asset-a", "asset-z", 5)).toBeNull();
+  });
+
+  it("round-trips a frame through its origin and back to the axis", () => {
+    const origin = captureOriginAt(axis, sources, "asset-a", 7231.5)!;
+    expect(axisSecondsOfCapture(sources, "asset-a", origin.assetId, origin.localSeconds)).toBe(
+      7231.5,
+    );
   });
 });

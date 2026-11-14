@@ -225,3 +225,184 @@ describe("PreviewStage — media slot (NIW2-771)", () => {
     expect(order.indexOf("media")).toBeLessThan(order.indexOf("webcam"));
   });
 });
+
+describe("PreviewStage — joined recordings (ADR 0058)", () => {
+  // The opened recording sits at axis [0, 100]; joined B at [3600, 3640]; joined M is missing at [7200, 7210].
+  const axis = {
+    recordings: [
+      { sourceId: null, offset: 0, duration: 100 },
+      { sourceId: "B", offset: 3600, duration: 40 },
+      { sourceId: "M", offset: 7200, duration: 10 },
+    ],
+  };
+  const recordings = [
+    { sourceId: "B", title: "Standup", mediaUrl: "blob:b", missing: false },
+    { sourceId: "M", title: "Old demo", mediaUrl: null, missing: true },
+    { sourceId: "L", title: "Still loading", mediaUrl: null, missing: false },
+  ];
+  const videosOf = (c: HTMLElement) => Array.from(c.querySelectorAll("video"));
+  const frameOf = (c: HTMLElement) =>
+    c.querySelector<HTMLElement>('[data-testid="preview-frame"]')!;
+
+  function setup(extra: Partial<React.ComponentProps<typeof PreviewStage>> = {}) {
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    const playback = stubPlayback();
+    const view = render(
+      <PreviewStage
+        playback={playback}
+        mediaUrl="blob:a"
+        axis={axis}
+        recordings={recordings}
+        {...extra}
+      />,
+    );
+    return { playback, ...view };
+  }
+  afterEach(() => vi.restoreAllMocks());
+
+  it("renders one video per recording that has a file, and none for a missing or loading one", () => {
+    const { container } = setup();
+    const srcs = videosOf(container).map((v) => v.getAttribute("src"));
+    expect(srcs).toEqual(["blob:a", "blob:b"]);
+  });
+
+  it("publishes one media switch as the playback's video", () => {
+    const { playback } = setup();
+    const media = playback.videoRef.current!;
+    expect(media).not.toBeNull();
+    expect(media.activeElement?.()).toBe(document.querySelector('video[src="blob:a"]'));
+  });
+
+  it("shows only the video of the recording the playhead is in", () => {
+    const { container, playback } = setup();
+    const [a, b] = videosOf(container);
+    act(() => {
+      playback.videoRef.current!.currentTime = 3605;
+    });
+    expect(playback.videoRef.current!.activeElement?.()).toBe(b);
+    // The old frame stays up until the new recording has one to show, so a seek never flashes.
+    expect(a!.style.visibility).toBe("visible");
+    fireEvent(b!, new Event("seeked"));
+    expect(b!.style.visibility).toBe("visible");
+    expect(a!.style.visibility).toBe("hidden");
+    act(() => {
+      playback.videoRef.current!.currentTime = 20;
+    });
+    fireEvent(a!, new Event("seeked"));
+    expect(a!.style.visibility).toBe("visible");
+    expect(b!.style.visibility).toBe("hidden");
+  });
+
+  it("keeps the frame's ratio and the reported size the opened recording's", () => {
+    const onFrameSize = vi.fn();
+    const { container } = setup({ onFrameSize });
+    const [a, b] = videosOf(container);
+    const size = (v: HTMLVideoElement, w: number, h: number) => {
+      Object.defineProperty(v, "videoWidth", { configurable: true, get: () => w });
+      Object.defineProperty(v, "videoHeight", { configurable: true, get: () => h });
+    };
+    size(a!, 1920, 1080);
+    fireEvent.loadedMetadata(a!);
+    size(b!, 1080, 1920); // a portrait recording joined to a landscape one
+    fireEvent.loadedMetadata(b!);
+    expect(onFrameSize).toHaveBeenCalledTimes(1);
+    expect(onFrameSize).toHaveBeenCalledWith({ width: 1920, height: 1080 });
+    expect(frameOf(container).style.getPropertyValue("--frame-ratio")).toBe(String(1920 / 1080));
+  });
+
+  it("re-applies the chosen speed when any recording's metadata lands", () => {
+    const { container, playback } = setup();
+    fireEvent.loadedMetadata(videosOf(container)[1]!);
+    expect(playback.onVideoLoadedMetadata).toHaveBeenCalledOnce();
+  });
+
+  it("lets only the video on screen drive the transport", () => {
+    const { container, playback } = setup();
+    const [a, b] = videosOf(container);
+    fireEvent.pause(b!); // the standby: paused and primed, not the picture
+    fireEvent.timeUpdate(b!);
+    fireEvent.ended(b!);
+    expect(playback.onVideoPause).not.toHaveBeenCalled();
+    expect(playback.onVideoTimeUpdate).not.toHaveBeenCalled();
+    expect(playback.onVideoEnded).not.toHaveBeenCalled();
+    fireEvent.pause(a!);
+    fireEvent.timeUpdate(a!);
+    expect(playback.onVideoPause).toHaveBeenCalledOnce();
+    expect(playback.onVideoTimeUpdate).toHaveBeenCalledOnce();
+  });
+
+  it("says which recording is missing while the playhead is on its clip, and not before or after", () => {
+    const { playback, queryByTestId } = setup();
+    expect(queryByTestId("preview-missing")).toBeNull();
+    act(() => {
+      playback.videoRef.current!.currentTime = 7203;
+    });
+    const notice = queryByTestId("preview-missing")!;
+    expect(notice.textContent).toContain("Old demo");
+    expect(notice.getAttribute("role")).toBe("status");
+    act(() => {
+      playback.videoRef.current!.currentTime = 20;
+    });
+    expect(queryByTestId("preview-missing")).toBeNull();
+  });
+
+  it("does not show the missing notice for a recording that is only loading", () => {
+    const { playback, queryByTestId } = setup({
+      axis: { recordings: [...axis.recordings, { sourceId: "L", offset: 9000, duration: 10 }] },
+    });
+    act(() => {
+      playback.videoRef.current!.currentTime = 9003;
+    });
+    expect(queryByTestId("preview-missing")).toBeNull();
+  });
+
+  it("puts a slide over the missing notice", () => {
+    const { playback, queryByTestId, rerender } = setup();
+    act(() => {
+      playback.videoRef.current!.currentTime = 7203;
+    });
+    expect(queryByTestId("preview-missing")).not.toBeNull();
+    rerender(
+      <PreviewStage
+        playback={playback}
+        mediaUrl="blob:a"
+        axis={axis}
+        recordings={recordings}
+        slideUrl="blob:slide"
+      />,
+    );
+    expect(queryByTestId("preview-missing")).toBeNull();
+  });
+
+  it("keeps every recording's video inside the picture, over the frame's background", () => {
+    vi.spyOn(Element.prototype, "clientWidth", "get").mockReturnValue(960);
+    vi.spyOn(Element.prototype, "clientHeight", "get").mockReturnValue(540);
+    const { container } = setup({
+      background: { bg: "magenta", padding: 48, radius: 16, shadow: 24 },
+    });
+    const picture = container.querySelector('[data-testid="preview-picture"]')!;
+    expect(videosOf(container).every((v) => picture.contains(v))).toBe(true);
+    expect(frameOf(container).style.getPropertyValue("--frame-bg")).toBe(
+      "linear-gradient(135deg, #ff2d6e, #a3044a)",
+    );
+  });
+
+  it("drops a recording's video from the switch when its file goes away", () => {
+    const { container, playback, rerender } = setup();
+    expect(videosOf(container)).toHaveLength(2);
+    rerender(
+      <PreviewStage
+        playback={playback}
+        mediaUrl="blob:a"
+        axis={axis}
+        recordings={[{ ...recordings[0]!, mediaUrl: null, missing: true }]}
+      />,
+    );
+    expect(videosOf(container)).toHaveLength(1);
+    act(() => {
+      playback.videoRef.current!.currentTime = 3605;
+    });
+    expect(playback.videoRef.current!.activeElement?.()).toBeNull();
+  });
+});

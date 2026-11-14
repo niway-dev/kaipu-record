@@ -1,3 +1,6 @@
+import type { SceneSource } from "./scene";
+import { recordingAt, type SourceAxis } from "./source-axis";
+
 /** "0:09.0": minutes, seconds and tenths, so a 5 s skip or a captured frame is visible. */
 export function formatClock(seconds: number): string {
   const tenths = Math.max(0, Math.floor(seconds * 10 + 1e-6));
@@ -36,4 +39,51 @@ export function findCaptureAt<T extends { sourceTimeSeconds: number | null }>(
     (capture) =>
       capture.sourceTimeSeconds !== null && Math.round(capture.sourceTimeSeconds * 1000) === ms,
   );
+}
+
+/** The recording a frame came from, and where inside it (ADR 0058). */
+export interface CaptureOrigin {
+  /** The `SceneSource.id`; null = the opened recording. */
+  sourceId: string | null;
+  /** The library asset the saved link points at. */
+  assetId: string;
+  /** Seconds inside THAT recording's own file, never axis seconds. */
+  localSeconds: number;
+}
+
+/**
+ * Which recording holds the axis second a frame was taken at, and the local second inside it.
+ * Null for a slide (`axisSeconds` null) or a second no recording holds.
+ */
+export function captureOriginAt(
+  axis: SourceAxis,
+  sources: readonly SceneSource[] | undefined,
+  primaryAssetId: string,
+  axisSeconds: number | null,
+): CaptureOrigin | null {
+  if (axisSeconds === null) return null;
+  const hit = recordingAt(axis, axisSeconds);
+  if (!hit) return null;
+  if (hit.recording.sourceId === null) {
+    return { sourceId: null, assetId: primaryAssetId, localSeconds: hit.localTime };
+  }
+  const joined = sources?.find((s) => s.id === hit.recording.sourceId);
+  if (!joined) return null;
+  return { sourceId: joined.id, assetId: joined.assetId, localSeconds: hit.localTime };
+}
+
+/**
+ * The axis second of a capture's link (`assetId`, `seconds` in that recording's own file): the
+ * inverse of `captureOriginAt`. The opened recording wins when the same asset is also joined;
+ * an asset the scene does not hold has no place on its axis (null).
+ */
+export function axisSecondsOfCapture(
+  sources: readonly SceneSource[] | undefined,
+  primaryAssetId: string,
+  assetId: string,
+  seconds: number,
+): number | null {
+  if (assetId === primaryAssetId) return seconds;
+  const joined = sources?.find((s) => s.assetId === assetId);
+  return joined ? joined.offset + seconds : null;
 }
