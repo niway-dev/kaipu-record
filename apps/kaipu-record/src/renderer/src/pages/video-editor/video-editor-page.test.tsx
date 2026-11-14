@@ -2854,11 +2854,11 @@ describe("VideoEditorPage — Add recording (NIW2-782)", () => {
     expect(within(panel).queryByText(SOURCE.title)).toBeNull();
   });
 
-  it("clicking a recording inserts all of it at the clip boundary nearest the playhead, as one undo step", async () => {
+  it("clicking a recording inserts all of it after the clip under the playhead, as one undo step", async () => {
     renderEditor();
     const footer = await waitForEditorLoaded();
     expect(screen.getByText(/\/ 0:30\.0$/)).toBeInTheDocument();
-    // 20 s into a single 30 s clip: the nearest boundary is its end, not the start.
+    // 20 s into a single 30 s clip: the recording goes after that clip, at its end.
     for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByRole("button", { name: "Forward" }));
     await waitFor(() => expect(screen.getByText("0:20.0 / 0:30.0")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Add recording" }));

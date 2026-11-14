@@ -657,14 +657,14 @@ export const editorVideo = catalog(
     },
     "add-from-library-added": {
       profile: "timeline-levels",
-      how: "With the flag forced on, open “Weekly sync”, press Add recording and click “Walkthrough 1”: the playhead is at 0:00, so the whole recording is inserted at the nearest clip boundary, the start, and the sequence shows two clips labelled “Walkthrough 1” and “Weekly sync”.",
+      how: "With the flag forced on, open “Weekly sync”, press Add recording and click “Walkthrough 1”: the playhead is at 0:00, inside “Weekly sync”, so the whole recording is inserted after that clip and the sequence shows two clips labelled “Weekly sync” and “Walkthrough 1”.",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
         addRecordingButton,
         { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
         { click: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
-        // Both recordings now label a clip: the joined one first, the opened one after it.
+        // Both recordings now label a clip: the opened one first, the joined one after it.
         { waitFor: { area: "editorVideo.timeline", part: { text: "Walkthrough 1" } } },
         { waitFor: { area: "editorVideo.timeline", part: { text: "Weekly sync" } } },
         saved,
