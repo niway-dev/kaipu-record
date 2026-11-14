@@ -2246,7 +2246,13 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
   let saved: { png: ArrayBuffer; meta: Record<string, unknown> }[];
   const original = { ...window.electronAPI };
 
-  function savedItem(assetId: string, timeSeconds: number, createdAt = timeSeconds) {
+  function savedItem(
+    assetId: string,
+    timeSeconds: number,
+    createdAt = timeSeconds,
+    videoAssetId: string = SOURCE.assetId,
+    sceneSourceId: string | null = null,
+  ) {
     return {
       assetId,
       kind: "screenshot",
@@ -2254,8 +2260,9 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
       createdAt,
       durationSeconds: 0,
       derivedFromAssetId: null,
-      sourceVideoAssetId: SOURCE.assetId,
+      sourceVideoAssetId: videoAssetId,
       sourceTimeSeconds: timeSeconds,
+      sourceSceneSourceId: sceneSourceId,
       local: { id: assetId, thumbnailUrl: `kaipu-media://screenshot/${assetId}` },
     };
   }
@@ -2281,6 +2288,8 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
           (meta as { source: { timeSeconds: number } }).source.timeSeconds,
           // Taken one after another: the later save is the newer item.
           saved.length,
+          (meta as { source: { videoAssetId: string } }).source.videoAssetId,
+          (meta as { source: { sceneSourceId: string | null } }).source.sceneSourceId,
         ),
         ...libraryItems,
       ];
@@ -2427,6 +2436,54 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
       expect(getToasts().map((toast) => toast.message)).not.toContain(
         "Frame capture does not work over a joined recording yet.",
       );
+    } finally {
+      window.electronAPI.loadVideoEditSession = loadSession;
+    }
+  });
+
+  it("a second press on the same joined frame points at the saved capture instead of saving again", async () => {
+    const joinedScene = {
+      ...initialScene(30),
+      items: [{ id: "b-clip", kind: "clip" as const, sourceStart: 3600, sourceEnd: 3610 }],
+      sources: [
+        {
+          id: "scene-b",
+          assetId: "asset-b",
+          title: "Second take",
+          offset: 3600,
+          durationSeconds: 40,
+          width: 1280,
+          height: 720,
+        },
+      ],
+    };
+    const loadSession = window.electronAPI.loadVideoEditSession;
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
+      sessionJson: serializeSession(joinedScene),
+      assets: [],
+    }));
+    stillCapture.capture.mockResolvedValue({
+      png: PNG,
+      width: 1280,
+      height: 720,
+      timelineSeconds: 0,
+      sourceSeconds: 3600,
+    });
+    try {
+      renderEditor();
+      await waitForEditorLoaded();
+      await pressCapture();
+      await waitFor(() => expect(saved).toHaveLength(1));
+      // The saved capture of the joined recording is listed in the panel.
+      const panel = await screen.findByTestId("captures-panel");
+      await waitFor(() => expect(within(panel).getAllByTestId("capture-item")).toHaveLength(1));
+
+      await pressCapture();
+
+      await waitFor(() =>
+        expect(getToasts().map((toast) => toast.message)).toContain("Already captured at 0:00.0"),
+      );
+      expect(saved).toHaveLength(1);
     } finally {
       window.electronAPI.loadVideoEditSession = loadSession;
     }

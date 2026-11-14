@@ -27,14 +27,20 @@ export function captureTitleTime(seconds: number): string {
 /**
  * The existing capture taken at `sourceSeconds` of the recording `sceneSourceId` (null = the
  * opened one), compared at millisecond precision (the resolution a stored link keeps), or undefined. A slide frame has no source second
- * (`null`), so it never matches: two slide captures are not the same frame.
+ * (`null`), so it never matches: two slide captures are not the same frame. With `assetId`, only
+ * a capture of that library asset matches.
  */
 export function findCaptureAt<
-  T extends { sourceTimeSeconds: number | null; sourceSceneSourceId?: string | null },
+  T extends {
+    sourceTimeSeconds: number | null;
+    sourceSceneSourceId?: string | null;
+    sourceVideoAssetId?: string | null;
+  },
 >(
   captures: readonly T[],
   sourceSeconds: number | null,
   sceneSourceId: string | null = null,
+  assetId?: string,
 ): T | undefined {
   if (sourceSeconds === null) return undefined;
   const ms = Math.round(sourceSeconds * 1000);
@@ -42,6 +48,9 @@ export function findCaptureAt<
     (capture) =>
       capture.sourceTimeSeconds !== null &&
       Math.round(capture.sourceTimeSeconds * 1000) === ms &&
+      // The list holds the captures of every recording the scene joins: the same local second
+      // of another recording is another frame. Without an asset, any asset matches.
+      (assetId === undefined || capture.sourceVideoAssetId === assetId) &&
       // The same asset joined twice has the same local seconds in both copies: only the copy
       // the frame came from makes a duplicate. A link written before the copy was recorded
       // (absent) counts as the opened recording.

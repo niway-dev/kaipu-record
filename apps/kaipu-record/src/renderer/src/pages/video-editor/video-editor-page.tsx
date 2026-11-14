@@ -1372,7 +1372,13 @@ function VideoEditor({
   const stillCapture = useStillCapture();
   // Read from the first render, panel open or not: the top-bar Capture frame needs the real
   // list for its duplicate check, so it stays disabled until this read lands.
-  const sourceCaptures = useSourceCaptures(source.assetId, true);
+  // The opened recording's captures and those of every recording the scene joins: a frame
+  // taken over a joined clip is listed here too, and counts for the duplicate check.
+  const captureAssetIds = useMemo(
+    () => [source.assetId, ...(scene.sources ?? []).map((s) => s.assetId)],
+    [source.assetId, scene.sources],
+  );
+  const sourceCaptures = useSourceCaptures(captureAssetIds, true);
   const refreshCaptures = sourceCaptures.refresh;
   const latestCaptures = sourceCaptures.latest;
   // The capture a repeated press found already saved: outlined for ~2 s in the panel.
@@ -1404,17 +1410,16 @@ function VideoEditor({
       // The same frame twice is a duplicate: point at the saved one instead of composing.
       // The recording under the playhead and the second INSIDE ITS OWN file: a frame of a joined
       // recording links to that recording's asset, not to the opened one. The captures read here
-      // are the opened recording's, so a joined frame is never a duplicate of them.
+      // hold every recording the scene joins, so the check is by asset, second and copy.
       const origin = captureOriginAt(
         axis,
         scene.sources,
         source.assetId,
         planStill(scene, playhead).sourceSeconds,
       );
-      const existing =
-        origin && origin.assetId === source.assetId
-          ? findCaptureAt(latestCaptures(), origin.localSeconds, origin.sourceId)
-          : undefined;
+      const existing = origin
+        ? findCaptureAt(latestCaptures(), origin.localSeconds, origin.sourceId, origin.assetId)
+        : undefined;
       if (existing) {
         clearSelection();
         setCursorInspectorOpen(false);

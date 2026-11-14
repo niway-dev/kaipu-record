@@ -72,6 +72,35 @@ describe("findCaptureAt", () => {
   });
 });
 
+describe("findCaptureAt with an asset", () => {
+  const captures = [
+    { id: "opened", sourceVideoAssetId: "a", sourceTimeSeconds: 5 },
+    { id: "legacy-b", sourceVideoAssetId: "b", sourceTimeSeconds: 5 },
+    { id: "scene-b", sourceVideoAssetId: "b", sourceTimeSeconds: 5, sourceSceneSourceId: "sb" },
+    {
+      id: "scene-b-later",
+      sourceVideoAssetId: "b",
+      sourceTimeSeconds: 9,
+      sourceSceneSourceId: "sb",
+    },
+  ];
+  it("a joined frame is a duplicate of a capture of the same asset, second and copy", () => {
+    expect(findCaptureAt(captures, 5, "sb", "b")?.id).toBe("scene-b");
+    expect(findCaptureAt(captures, 9, "sb", "b")?.id).toBe("scene-b-later");
+  });
+  it("a capture of the joined asset made from its own editor is not a duplicate of a joined frame", () => {
+    expect(findCaptureAt([captures[1]], 5, "sb", "b")).toBeUndefined();
+  });
+  it("a capture of another asset at the same second is not a duplicate", () => {
+    expect(findCaptureAt(captures, 5, null, "a")?.id).toBe("opened");
+    expect(findCaptureAt(captures, 5, "sb", "a")).toBeUndefined();
+    expect(findCaptureAt([captures[0]], 5, null, "b")).toBeUndefined();
+  });
+  it("the opened recording still treats an absent copy as the opened one", () => {
+    expect(findCaptureAt([captures[1]], 5, null, "b")?.id).toBe("legacy-b");
+  });
+});
+
 describe("capture origin over joined recordings (ADR 0058)", () => {
   const source = (id: string, assetId: string, offset: number): SceneSource => ({
     id,
