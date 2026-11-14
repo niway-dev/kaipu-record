@@ -5,6 +5,13 @@ import { initialScene } from "./scene";
 import { useJoinRecording, type JoinableRecording } from "./use-join-recording";
 import { useVideoScene } from "./use-video-scene";
 
+const composeSpy = vi.hoisted(() => vi.fn());
+vi.mock("./compose-join", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./compose-join")>();
+  composeSpy.mockImplementation(actual.composeJoin);
+  return { composeJoin: composeSpy };
+});
+
 const TRACK: CursorTrack = {
   version: 1,
   display: { id: "1", width: 1600, height: 1000, scaleFactor: 2 },
@@ -42,7 +49,7 @@ afterEach(() => {
 function setup() {
   return renderHook(() => {
     const controller = useVideoScene(initialScene(20));
-    const join = useJoinRecording(controller, 20);
+    const join = useJoinRecording(controller, 20, 16 / 9);
     return { controller, join };
   });
 }
@@ -123,5 +130,39 @@ describe("useJoinRecording", () => {
     });
     expect(outcome).toBe("busy");
     expect(result.current.controller.scene.sources).toBeUndefined();
+  });
+
+  describe("the track the join-time zooms are detected on", () => {
+    const dwellAt = (x: number): CursorTrack => ({
+      ...TRACK,
+      x: [x, x],
+      clicks: [{ t: 10_000, x, y: 0.5, button: 0 }],
+    });
+    const trackGivenToCompose = async (b: JoinableRecording, frameAspect: number) => {
+      window.electronAPI.loadCursorTrack = vi.fn(async () => JSON.stringify(dwellAt(0.1))) as never;
+      composeSpy.mockClear();
+      const { result } = renderHook(() => {
+        const controller = useVideoScene(initialScene(20));
+        return { controller, join: useJoinRecording(controller, 20, frameAspect) };
+      });
+      await act(async () => void (await result.current.join(b, 20)));
+      return composeSpy.mock.calls[0][4];
+    };
+
+    it("is in frame coordinates when the recording's aspect differs from the frame's", async () => {
+      const square = {
+        ...B,
+        capture: { mode: "screen" as const, width: 1000, height: 1000, ratio: null },
+      };
+      const track = await trackGivenToCompose(square, 16 / 9);
+      // illustrative: a 1:1 picture centred in a 16:9 frame, x = 0.5 + (0.1 - 0.5) * (9 / 16)
+      expect(track?.x[0]).toBeCloseTo(0.275, 3);
+      expect(track?.clicks[0].x).toBeCloseTo(0.275, 3);
+    });
+
+    it("stays unchanged when the aspects match", async () => {
+      const track = await trackGivenToCompose(B, 16 / 9);
+      expect(track?.x[0]).toBeCloseTo(0.1, 6);
+    });
   });
 });

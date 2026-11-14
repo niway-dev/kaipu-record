@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import type { RecordingCapture } from "@shared/recording-capture";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
 import { composeJoin } from "./compose-join";
+import { frameCursorTrack } from "./cursor/axis-cursor-track";
 import { loadCursorTrackBestEffort } from "./joined-library";
 import { useLatest } from "./use-latest";
 import type { VideoSceneController } from "./use-video-scene";
@@ -28,13 +29,15 @@ export type JoinRecordingResult = "joined" | "missing" | "busy";
  * The join operation (ADR 0058) the UI will call: `joinRecordingAt(recording, t)` puts the
  * recording into the Clips sequence at the clip boundary nearest timeline time `t`. The media it
  * needs, the cursor track and the webcam meta, is read FIRST, so the scene changes once, with the
- * zooms and the webcam already in it. The rename hold taken to resolve the recording's current id
+ * zooms and the webcam already in it. The track is mapped into the frame's coordinates (the
+ * opened recording's `frameAspect`) first, so the zooms are detected where the pointer is on the frame. The rename hold taken to resolve the recording's current id
  * is released again here: once the scene lists the new source, `useJoinedRecordings` takes its
  * own and keeps it for as long as the source is in the scene.
  */
 export function useJoinRecording(
   controller: VideoSceneController,
   primaryDuration: number,
+  frameAspect: number,
 ): (recording: JoinableRecording, t: number) => Promise<JoinRecordingResult> {
   const controllerRef = useLatest(controller);
   return useCallback(
@@ -53,6 +56,13 @@ export function useJoinRecording(
       } finally {
         window.electronAPI.closeEditorSession(heldId);
       }
+      const width = recording.capture?.width ?? 0;
+      const height = recording.capture?.height ?? 0;
+      const frameTrack = frameCursorTrack(
+        track ?? null,
+        frameAspect,
+        height > 0 ? width / height : 0,
+      );
       // Read now, not before the awaits: the scene may have been edited while they ran.
       const current = controllerRef.current;
       if (current.interacting) return "busy";
@@ -64,16 +74,16 @@ export function useJoinRecording(
             assetId: recording.assetId,
             title: recording.title,
             durationSeconds: recording.durationSeconds,
-            width: recording.capture?.width ?? 0,
-            height: recording.capture?.height ?? 0,
+            width,
+            height,
           },
           t,
-          track,
+          frameTrack,
           recording.webcam ?? null,
         ),
       );
       return "joined";
     },
-    [controllerRef, primaryDuration],
+    [controllerRef, primaryDuration, frameAspect],
   );
 }
