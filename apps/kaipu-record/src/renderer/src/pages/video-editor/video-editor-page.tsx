@@ -6,7 +6,6 @@ import { useTranslations } from "@kaipu/i18n";
 import { parseCursorTrack, type CursorTrack } from "@shared/cursor-track";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
 import { captureEvent, captureException, reportError } from "@renderer/features/analytics";
-import { useFlag } from "@renderer/features/analytics/use-flag";
 import { buildEditorSpeedChangedProperties, EDITOR_SPEED_CHANGED_EVENT } from "@shared/analytics";
 import {
   initialScene,
@@ -628,11 +627,10 @@ function VideoEditor({
   const appSettings = useAppSettings();
   const trackVisibility = useHiddenTracks(appSettings);
   const { hidden: hiddenTracks, showTrack } = trackVisibility;
-  // The Audio lane's waveform (NIW2-775): decoded only while the flag is on. Hiding the lane
-  // does not stop it: a decode cancelled halfway would start over from 0 when the lane comes
-  // back, which on a long take costs the whole decode again.
-  const waveformFlag = useFlag("audio-waveform");
-  const audioPeaks = useAudioPeaks(sourceUrl, source.durationSeconds, waveformFlag);
+  // The Audio lane's waveform (NIW2-775). Hiding the lane does not stop the decode: a decode
+  // cancelled halfway would start over from 0 when the lane comes back, which on a long take
+  // costs the whole decode again.
+  const audioPeaks = useAudioPeaks(sourceUrl, source.durationSeconds, true);
   const selection = useEditorSelection();
   // `select` / `clear` are stable (useCallback, no deps); the `selection` object itself
   // is rebuilt every render, so never put it in a dependency array.

@@ -108,8 +108,9 @@ export const editorVideo = catalog(
     },
     overview: {
       profile: "default",
-      how: "Open “Walkthrough 1” in the editor: no zooms, no privacy regions and nothing muted.",
-      steps: [open(ASSETS.walkthrough)],
+      how: "Open “Walkthrough 1” in the editor: no zooms, no privacy regions and nothing muted. The Audio lane draws the recording's loudness as bars.",
+      // Waits for the waveform so the shot never lands before the first peaks are decoded.
+      steps: [open(ASSETS.walkthrough), audioWaveformDrawn],
       demonstrates: [
         "editorVideo.preview:frame",
         "editorVideo.transport:paused",
@@ -120,10 +121,9 @@ export const editorVideo = catalog(
         "editorVideo.timeline:default",
         "editorVideo.zoomLane:empty",
         "editorVideo.privacyLane:empty",
-        "editorVideo.audioLane:empty",
+        "editorVideo.audioLane:waveform",
       ],
       ready: { video: true },
-      gates: [{ flag: "audio-waveform", side: "off" }],
     },
     playing: {
       profile: "default",
@@ -163,22 +163,14 @@ export const editorVideo = catalog(
       ready: { area: "editorVideo.inspector" },
     },
     // The seeded recordings carry a speech-like stereo track (fixtures/make-fixtures.ts), so
-    // the lane shows tall bars, quiet stubs and the pauses between phrases.
-    waveform: {
-      profile: "audio-waveform",
-      how: "With the audio-waveform flag forced on, open “Walkthrough 1”: the Audio lane draws the recording's loudness as bars instead of the empty-state text.",
-      steps: [open(ASSETS.walkthrough), loaded, audioWaveformDrawn],
-      demonstrates: ["editorVideo.audioLane:waveform"],
-      ready: { area: "editorVideo.audioLane" },
-      gates: [{ flag: "audio-waveform", side: "on" }],
-    },
+    // the lane shows tall bars, quiet stubs and the pauses between phrases (`overview` shows
+    // the plain waveform).
     "waveform-muted": {
-      profile: "audio-waveform",
-      how: "With the audio-waveform flag forced on, open “Team notes”: its muted range is a hatched block over bars drawn dimmed.",
+      profile: "default",
+      how: "Open “Team notes”: its muted range is a hatched block over bars drawn dimmed.",
       steps: [open(ASSETS.teamNotes), loaded, audioWaveformDrawn],
       demonstrates: ["editorVideo.audioLane:waveformMuted"],
       ready: { area: "editorVideo.audioLane" },
-      gates: [{ flag: "audio-waveform", side: "on" }],
     },
     "mute-selected": {
       profile: "default",

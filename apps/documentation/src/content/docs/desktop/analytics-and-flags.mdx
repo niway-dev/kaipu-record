@@ -58,7 +58,6 @@ Ventana principal          Ventanas secundarias
 | `image-canvas`            | `false` | disabled           | Image editor canvas (NIW2-698).                                                                                                                      |
 | `image-inspect`           | `false` | disabled           | Image editor Inspect mode (NIW2-699).                                                                                                                |
 | `image-text`              | `false` | disabled           | Text recognition in the image editor, macOS only (NIW2-705).                                                                                         |
-| `audio-waveform`          | `false` | not created yet    | Waveform of the recording's loudness in the video editor's Audio lane (NIW2-775).                                                                    |
 
 posthog-js (≥ 1.261.8) returns `undefined` for a **disabled** or missing flag, so the code
 default applies, and `false` for an enabled flag the user does not match. A PostHog value
@@ -66,8 +65,7 @@ otherwise wins over the default.
 
 ### Turning a release flag on
 
-`capture-while-recording` and the three `image-*` flags exist in PostHog **disabled**, and
-`audio-waveform` has to be created there disabled, so every build uses its default, `false`. To ship the feature without a release, **enable the flag at
+`capture-while-recording` and the three `image-*` flags exist in PostHog **disabled**, so every build uses its default, `false`. To ship the feature without a release, **enable the flag at
 100%**. Builds that predate the flag never read it, so they are unaffected. Once the feature is
 validated, flip the default to `true` in `src/shared/analytics.ts` (or remove the flag) and
 delete it from PostHog.

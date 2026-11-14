@@ -33,7 +33,7 @@ export interface AudioLaneProps {
   audioMuted: boolean;
   /**
    * The recording's loudness peaks, drawn as bars behind the blocks (NIW2-775). Null when
-   * the `audio-waveform` flag is off, the recording has no audio, or decoding failed: the
+   * the recording has no audio, or decoding failed: the
    * lane then looks as it always did.
    */
   waveform?: AudioPeaks | null;
