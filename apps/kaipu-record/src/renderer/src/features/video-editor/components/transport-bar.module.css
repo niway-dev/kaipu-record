@@ -282,8 +282,9 @@
   cursor: default;
 }
 
-.addRecordingButtonOpen,
-.addRecordingButtonOpen:hover {
+/* Doubled class: it must outrank `.addRecordingButton:hover:not(:disabled)` (0,3,0). */
+.addRecordingButton.addRecordingButtonOpen,
+.addRecordingButton.addRecordingButtonOpen:hover:not(:disabled) {
   border-color: var(--accent-primary);
   color: var(--accent-primary);
 }
