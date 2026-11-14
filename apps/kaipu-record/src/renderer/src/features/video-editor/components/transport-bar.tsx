@@ -65,6 +65,11 @@ export interface TransportBarProps {
   /** The timeline's zoom and scroll (NIW2-667). The strip reads the same store, so the
    *  buttons, the slider and the wheel on the lanes all move one view. */
   timelineView: TimelineViewStore;
+  /** Opens the Add from Library panel (NIW2-782). The button, at the left end of the row,
+   *  exists only when this is given: the page passes it with the `timeline-levels` flag on. */
+  onAddRecording?: () => void;
+  /** The panel is open: the button is lit and `aria-pressed`. */
+  addRecordingActive?: boolean;
 }
 
 /**
@@ -201,6 +206,8 @@ export function TransportBar({
   onToggleFullscreen,
   timelineView,
   onOpenGuide,
+  onAddRecording,
+  addRecordingActive = false,
 }: TransportBarProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const locale = useLocale();
@@ -221,6 +228,19 @@ export function TransportBar({
   return (
     <div {...uiArea("editorVideo.transport")} className={styles.transport}>
       <div className={styles.side}>
+        {onAddRecording && (
+          <button
+            type="button"
+            className={`${styles.addRecordingButton} ${addRecordingActive ? styles.addRecordingButtonOpen : ""}`}
+            title={t("addRecordingTitle")}
+            aria-pressed={addRecordingActive}
+            disabled={isFullscreen}
+            onClick={onAddRecording}
+          >
+            <Plus size={14} aria-hidden />
+            {t("addRecording")}
+          </button>
+        )}
         <button
           ref={tracksButtonRef}
           type="button"

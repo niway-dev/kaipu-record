@@ -44,6 +44,19 @@ const captureFrameButton: Step = {
 const captureListed: Step = {
   waitFor: { area: "editorVideo.capturesPanel", part: { role: "button", name: "Go to" } },
 };
+/** The Add recording button at the left end of the transport bar (`timeline-levels` on). */
+const addRecordingButton: Step = {
+  click: {
+    area: "editorVideo.transport",
+    part: { role: "button", name: "Add recording", exact: true },
+  },
+};
+/** A recording in the Add from Library list: its row is a button named "Add <title>". */
+const libraryRow = (title: string) => ({
+  role: "button" as const,
+  name: `Add ${title}`,
+  exact: true,
+});
 const exportSheet: Step = {
   click: { area: "editorVideo.toolbar", part: { role: "button", name: "Export", exact: true } },
 };
@@ -225,7 +238,7 @@ export const editorVideo = catalog(
     },
     "levels-off": {
       profile: "default",
-      how: "Open “Walkthrough 1” with the `timeline-levels` flag off: no floating images, no rows above the sequence, and no Add to timeline in the Captures panel.",
+      how: "Open “Walkthrough 1” with the `timeline-levels` flag off: no floating images, no rows above the sequence, no Add recording button, and no Add to timeline in the Captures panel.",
       steps: [open(ASSETS.walkthrough)],
       demonstrates: ["editorVideo.page:loaded"],
       ready: { video: true },
@@ -581,6 +594,70 @@ export const editorVideo = catalog(
       after: [{ action: "restoreVault" }],
       gates: [{ flag: "timeline-levels", side: "on" }],
     },
+    "add-from-library": {
+      profile: "timeline-levels",
+      how: "With the `timeline-levels` flag forced on, open “Weekly sync” and press Add recording at the left end of the transport bar: the right column lists the Library's other recordings, newest first, each with its thumbnail, duration, title, date and resolution, under a search field; the button stays lit while the panel is open.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        addRecordingButton,
+        // The list is drawn after the Library read lands; “Walkthrough 1” is among its rows.
+        { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        // The row thumbnails decode after the list is drawn.
+        { waitMs: 400 },
+      ],
+      demonstrates: ["editorVideo.addFromLibrary:list", "editorVideo.transport:addRecordingOpen"],
+      ready: { area: "editorVideo.addFromLibrary" },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "add-from-library-no-match": {
+      profile: "timeline-levels",
+      how: "With the flag forced on, open “Weekly sync”, press Add recording and type a title no recording has: the list gives way to “No recordings match”.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        addRecordingButton,
+        { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        {
+          fill: {
+            area: "editorVideo.addFromLibrary",
+            part: { role: "searchbox", name: "Search recordings", exact: true },
+          },
+          value: "no such recording",
+        },
+        {
+          waitFor: {
+            area: "editorVideo.addFromLibrary",
+            part: { text: "No recordings match" },
+          },
+        },
+      ],
+      demonstrates: ["editorVideo.addFromLibrary:noMatch"],
+      ready: { area: "editorVideo.addFromLibrary" },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "add-from-library-added": {
+      profile: "timeline-levels",
+      how: "With the flag forced on, open “Weekly sync”, press Add recording and click “Walkthrough 1”: the playhead is at 0:00, so the whole recording is inserted at the nearest clip boundary, the start, and the sequence shows two clips labelled “Walkthrough 1” and “Weekly sync”.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        addRecordingButton,
+        { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        { click: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        // Both recordings now label a clip: the joined one first, the opened one after it.
+        { waitFor: { area: "editorVideo.timeline", part: { text: "Walkthrough 1" } } },
+        { waitFor: { area: "editorVideo.timeline", part: { text: "Weekly sync" } } },
+        saved,
+        // The joined clip's thumbnails decode after the labels are there.
+        { waitMs: 800 },
+      ],
+      demonstrates: ["editorVideo.timeline:recordingAdded"],
+      ready: { area: "editorVideo.timeline" },
+      // The join autosaved into the vault: put it back for the next state that opens this one.
+      after: [{ action: "restoreVault" }],
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
     "export-sheet": {
       profile: "default",
       how: "Open “Walkthrough 1” and press Export with the export quality at Balanced.",
@@ -604,6 +681,10 @@ export const editorVideo = catalog(
   },
   {
     notCapturable: {
+      "editorVideo.insertIndicator:visible": nc(
+        "transient",
+        "drawn only while a Library recording is held over the Clips row; the runner's drag moves the mouse inside one element and cannot start the HTML5 drag the indicator listens to, and releasing it drops the recording",
+      ),
       "editorVideo.toolbar:saving": nc(
         "transient",
         "held for ~800 ms after an edit, until the autosave writes; a shot would race it",

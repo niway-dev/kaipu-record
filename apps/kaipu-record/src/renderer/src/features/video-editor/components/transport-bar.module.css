@@ -251,6 +251,44 @@
   color: var(--text-primary);
 }
 
+/* Add recording (NIW2-782): the Tracks trigger's twin at the row's left end, lit with the
+   accent while its panel is open. */
+.addRecordingButton {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.addRecordingButton:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.addRecordingButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Doubled class: it must outrank `.addRecordingButton:hover:not(:disabled)` (0,3,0). */
+.addRecordingButton.addRecordingButtonOpen,
+.addRecordingButton.addRecordingButtonOpen:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
 /* Fullscreen: the timeline footer is not drawn, so there is nothing to choose. */
 .tracksButton:disabled {
   opacity: 0.4;
