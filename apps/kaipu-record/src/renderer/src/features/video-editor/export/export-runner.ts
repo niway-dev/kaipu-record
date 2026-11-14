@@ -311,30 +311,22 @@ export async function startVideoExport(
   }
 
   // A joined recording a clip reads must be readable before anything is taken: no lease, no
-  // writer session, no worker (a joined recording no clip uses never blocks).
+  // writer session, no worker (a joined recording no clip uses never blocks). The refusal is
+  // shown once the job is known, because the export card only renders for a job.
   const usedJoined: Array<{ entry: ExportJoinedRecording; offset: number }> = [];
+  let refusal: string | null = null;
   for (const sourceId of recordingsUsed(plan)) {
     if (sourceId === null) continue;
     const entry = args.joined.find((j) => j.sourceId === sourceId);
     const sceneSource = args.scene.sources?.find((s) => s.id === sourceId);
     if (!entry || entry.status === "missing" || !sceneSource) {
       const title = entry?.title ?? sceneSource?.title ?? sourceId;
-      set({
-        ...IDLE,
-        ready: snapshot.ready,
-        status: "error",
-        error: t("exportRecordingMissing", { title }),
-      });
-      return true;
+      refusal = t("exportRecordingMissing", { title });
+      break;
     }
     if (entry.status === "loading" || entry.id === null) {
-      set({
-        ...IDLE,
-        ready: snapshot.ready,
-        status: "error",
-        error: t("exportRecordingLoading"),
-      });
-      return true;
+      refusal = t("exportRecordingLoading");
+      break;
     }
     usedJoined.push({ entry, offset: sceneSource.offset });
   }
@@ -345,7 +337,7 @@ export async function startVideoExport(
   // counts as without audio here.
   // No await for a scene without joins: the start stays synchronous up to the first fetch.
   const probes =
-    usedJoined.length > 0
+    usedJoined.length > 0 && refusal === null
       ? await Promise.all(usedJoined.map(({ entry }) => probeSource(entry.id!)))
       : [];
   // Another export may have started while the probes ran.
@@ -390,6 +382,11 @@ export async function startVideoExport(
     ...(args.destination ? { destination: args.destination } : {}),
     wholeRecording: isWholeFingerprint(args.fingerprint),
   };
+
+  if (refusal !== null) {
+    set({ ...IDLE, ready: snapshot.ready, status: "error", error: refusal, job });
+    return true;
+  }
 
   active = true;
   // A new export replaces the previous one's Ready card.

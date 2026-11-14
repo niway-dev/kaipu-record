@@ -528,6 +528,8 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
     );
     expect(getExportSnapshot().status).toBe("error");
     expect(getExportSnapshot().error).toBe("Title b (exportRecordingMissing)");
+    // The export card renders only for a job: without one the refusal is never seen.
+    expect(getExportSnapshot().job).toMatchObject({ sourceTitle: expect.any(String) });
     expect(beginExport).not.toHaveBeenCalled();
     expect(window.electronAPI.setExportActive).not.toHaveBeenCalledWith(true);
     expect(window.electronAPI.recordingCreate).not.toHaveBeenCalled();
@@ -548,6 +550,7 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
       t,
     );
     expect(getExportSnapshot().error).toBe("exportRecordingLoading");
+    expect(getExportSnapshot().job).not.toBeNull();
     expect(beginExport).not.toHaveBeenCalled();
     expect(window.electronAPI.recordingCreate).not.toHaveBeenCalled();
     expect(workers).toHaveLength(0);
