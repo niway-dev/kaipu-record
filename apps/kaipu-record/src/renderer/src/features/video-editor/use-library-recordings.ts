@@ -27,6 +27,8 @@ export function useLibraryRecordings(enabled: boolean): LibraryRecordings {
   });
   useEffect(() => {
     if (!enabled) return;
+    // The previous open's rows must not show (a deleted recording would) while this read runs.
+    setState({ videos: [], loaded: false, failed: false });
     let alive = true;
     // Only the latest read may write: an older one resolving last would show a stale list.
     let latest = 0;

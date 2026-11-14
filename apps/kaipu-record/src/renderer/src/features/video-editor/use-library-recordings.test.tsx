@@ -63,9 +63,20 @@ describe("useLibraryRecordings", () => {
     await waitFor(() => expect(result.current.loaded).toBe(true));
     rerender({ on: false });
     items = [item("a"), item("b")];
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    window.electronAPI.listLibraryItems = vi.fn(async () => {
+      await gate;
+      return { items, vaultError: null, catalogVerifiedAt: null };
+    }) as never;
     rerender({ on: true });
+    // Before the second read lands, the previous open's list is gone, not shown stale.
+    expect(result.current).toEqual({ videos: [], loaded: false, failed: false });
+    release();
     await waitFor(() => expect(result.current.videos.map((v) => v.assetId)).toEqual(["a", "b"]));
-    expect(window.electronAPI.listLibraryItems).toHaveBeenCalledTimes(2);
+    expect(window.electronAPI.listLibraryItems).toHaveBeenCalledTimes(1);
   });
 
   it("re-reads when main says the Library changed while it is on", async () => {
