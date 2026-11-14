@@ -41,27 +41,27 @@ export function rectStyle(rect: Redaction["rect"]): React.CSSProperties {
  * Downscale the region of the current video frame into `canvas` (cells, sized in SOURCE px
  * so the grid matches the export's mosaic exactly); CSS upscales it `pixelated`.
  */
-function drawPixelated(
+export function drawPixelated(
   canvas: HTMLCanvasElement | null,
   media: PreviewMedia,
   r: Redaction,
-  frame: { width: number; height: number },
+  /** The frame's aspect from the opened recording's decoded size (exact, never the layout's
+   *  rounded px); 0 when unknown, which maps nothing. */
+  frameAspect: number,
 ): void {
   if (!canvas || r.kind !== "blur") return;
   // Over two recordings the pixels live in the element on screen, not in the switch; a
   // recording with no element (a missing one) has nothing to sample.
-  const video = media.activeElement ? media.activeElement() : (media as HTMLVideoElement);
+  const switched = media.activeElement !== undefined;
+  const video = switched ? media.activeElement!() : (media as HTMLVideoElement);
   if (!video) return;
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   if (vw === 0 || vh === 0) return;
   // The rect is normalized to the FRAME; a joined recording of another aspect is letterboxed
   // inside it, so the rect is first mapped onto the picture the element actually shows.
-  const rect = frameRectToPictureRect(
-    r.rect,
-    frame.height > 0 ? frame.width / frame.height : 0,
-    vw / vh,
-  );
+  // A bare element IS the opened recording: identity by construction, no mapping.
+  const rect = switched ? frameRectToPictureRect(r.rect, frameAspect, vw / vh) : r.rect;
   if (rect === r.rect || isInsidePicture(rect)) {
     const px = rectToPx(rect, vw, vh);
     if (px.w === 0 || px.h === 0) return;
@@ -158,12 +158,16 @@ export function RedactionLayer({
   redactions,
   videoRef,
   hidden,
+  frame,
 }: {
   /** Only regions visible on the timeline (use-redaction-editing's visibleRedactions). */
   redactions: Redaction[];
   videoRef: React.RefObject<PreviewMedia | null>;
   /** Hold-to-compare or a slide: render nothing. */
   hidden: boolean;
+  /** The opened recording's decoded size (exact). A pixelate over a joined recording of
+   *  another aspect needs the frame's exact aspect; the layer's rounded px would not do. */
+  frame?: { width: number; height: number };
 }): React.JSX.Element {
   const layerRef = useRef<HTMLDivElement | null>(null);
   const [heightPx, setHeightPx] = useState(0);
@@ -178,7 +182,11 @@ export function RedactionLayer({
     return () => observer.disconnect();
   }, []);
 
-  const trigger = useMemo(() => ({ redactions, hidden }), [redactions, hidden]);
+  const frameAspect = frame && frame.width > 0 && frame.height > 0 ? frame.width / frame.height : 0;
+  const trigger = useMemo(
+    () => ({ redactions, hidden, frameAspect }),
+    [redactions, hidden, frameAspect],
+  );
   useVideoFrameClock(
     videoRef,
     (t) => {
@@ -192,10 +200,7 @@ export function RedactionLayer({
           !hidden && t >= r.start - PREVIEW_PAD_SECONDS && t <= r.end + PREVIEW_PAD_SECONDS;
         el.style.display = on ? "" : "none";
         if (on && r.kind === "blur" && r.style === "pixelate") {
-          drawPixelated(el.querySelector("canvas"), video, r, {
-            width: layer.clientWidth,
-            height: layer.clientHeight,
-          });
+          drawPixelated(el.querySelector("canvas"), video, r, frameAspect);
         }
       }
     },

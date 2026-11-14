@@ -125,9 +125,8 @@ describe("usePreviewPlayback over two recordings — a cut across recordings", (
   });
 
   it("primes the next clip after the switch moved: A -> B -> A warms A for the B -> A cut", () => {
-    const { result, sw, a } = setup(ACROSS);
+    const { result, sw, a, b } = setup(ACROSS);
     act(() => result.current.play());
-    a.seekWrites.length = 0;
     a.currentTime = 9.99;
     a.seekWrites.length = 0;
     advance(20); // the cut into B: A (still the shown element a moment ago) is now the standby
@@ -135,6 +134,12 @@ describe("usePreviewPlayback over two recordings — a cut across recordings", (
     expect(a.seekWrites).toEqual([50]); // pre-seeked to a2's local start, not left cold
     expect(a.paused).toBe(true);
     expect(a.muted).toBe(true);
+
+    b.currentTime = 9.99; // B's local second 9.99 is clip b's last frame
+    a.seekWrites.length = 0;
+    advance(20); // the cut back into A: it was primed, so the flip does not seek it again
+    expect(sw.activeKey).toBeNull();
+    expect(a.seekWrites).toEqual([]);
   });
 
   it("does not move B's element away from clip b when the clip after it is also in B", () => {

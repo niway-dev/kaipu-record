@@ -2192,6 +2192,7 @@ function VideoEditor({
                   redactions={redactionEdits.visibleRedactions}
                   videoRef={playback.videoRef}
                   hidden={holdingOriginal || onSlide}
+                  frame={frameSize}
                 />
               }
               chrome={
