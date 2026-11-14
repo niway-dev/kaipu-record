@@ -46,13 +46,6 @@ describe("PeakAccumulator", () => {
     expect(acc.peaks[99]).toBeCloseTo(0.5);
     expect(acc.filled).toBe(100);
   });
-
-  it("accepts an interleaved buffer with a channel count", () => {
-    const acc = new PeakAccumulator(1);
-    acc.addInterleaved(0, 100, Float32Array.of(0.1, -0.7, 0.2, 0.3), 2);
-    expect(acc.peaks[0]).toBeCloseTo(0.7);
-    expect(acc.peaks[1]).toBeCloseTo(0.3);
-  });
 });
 
 describe("referenceLevel", () => {

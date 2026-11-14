@@ -40,29 +40,6 @@ export class PeakAccumulator {
       }
     }
   }
-
-  /** Interleaved samples (`L R L R …` for two channels). */
-  addInterleaved(
-    timestampSeconds: number,
-    sampleRate: number,
-    data: Float32Array,
-    channels: number,
-  ): void {
-    if (!(sampleRate > 0) || channels < 1) return;
-    const { peaks } = this;
-    const frames = Math.floor(data.length / channels);
-    for (let frame = 0; frame < frames; frame++) {
-      const bucket = Math.floor((timestampSeconds + frame / sampleRate) * PEAK_BUCKETS_PER_SECOND);
-      if (bucket < 0 || bucket >= peaks.length) continue;
-      let value = 0;
-      for (let c = 0; c < channels; c++) {
-        const abs = Math.abs(data[frame * channels + c]!);
-        if (abs > value) value = abs;
-      }
-      if (value > peaks[bucket]!) peaks[bucket] = value;
-      if (bucket >= this.filled) this.filled = bucket + 1;
-    }
-  }
 }
 
 /**

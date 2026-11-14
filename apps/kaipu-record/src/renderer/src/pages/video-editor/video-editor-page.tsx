@@ -628,14 +628,11 @@ function VideoEditor({
   const appSettings = useAppSettings();
   const trackVisibility = useHiddenTracks(appSettings);
   const { hidden: hiddenTracks, showTrack } = trackVisibility;
-  // The Audio lane's waveform (NIW2-775): decoded only while the flag is on and the lane is
-  // showing, so a hidden lane or a flag-off editor never pays for it.
+  // The Audio lane's waveform (NIW2-775): decoded only while the flag is on. Hiding the lane
+  // does not stop it: a decode cancelled halfway would start over from 0 when the lane comes
+  // back, which on a long take costs the whole decode again.
   const waveformFlag = useFlag("audio-waveform");
-  const audioPeaks = useAudioPeaks(
-    sourceUrl,
-    source.durationSeconds,
-    waveformFlag && !isTrackHidden("audio", hiddenTracks),
-  );
+  const audioPeaks = useAudioPeaks(sourceUrl, source.durationSeconds, waveformFlag);
   const selection = useEditorSelection();
   // `select` / `clear` are stable (useCallback, no deps); the `selection` object itself
   // is rebuilt every render, so never put it in a dependency array.
