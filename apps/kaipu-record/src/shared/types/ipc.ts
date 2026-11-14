@@ -654,6 +654,8 @@ export const IPC_CHANNELS = {
   // so the combo reaches the renderer instead of firing the (still-registered) action.
   shortcutsSuspend: "shortcuts:suspend",
   shortcutsResume: "shortcuts:resume",
+  // main → renderer: a global shortcut just fired (its action). Onboarding marks it tried.
+  shortcutFired: "shortcut:fired",
   // Analytics: secondary windows forward serialized exceptions to the main-process sink.
   analyticsCaptureException: "analytics:capture-exception",
   // Video-editor session persistence. Save/load the edit session JSON + slide asset

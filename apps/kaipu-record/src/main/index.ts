@@ -1045,6 +1045,11 @@ app.whenReady().then(async () => {
       captureWindow: () => triggerShortcutCapture("captureWindow"),
       captureInstant: () => triggerCaptureScreenshot({ mode: "screen", intent: "instant" }),
     },
+    onFired: (action) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(IPC_CHANNELS.shortcutFired, action);
+      }
+    },
   });
   onSettingsKeysChanged(["shortcuts"], () => applyGlobalShortcuts());
   // Windows / Linux: the native caption buttons follow the theme the renderer paints.

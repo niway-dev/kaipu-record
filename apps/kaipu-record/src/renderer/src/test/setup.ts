@@ -319,6 +319,7 @@ window.electronAPI = {
   }),
   suspendShortcuts: () => {},
   resumeShortcuts: () => {},
+  onShortcutFired: () => () => {},
   reportException: () => {},
   captureScreenshot: async () => ({ kind: "cancelled" }),
   screenshotSupportedModes: async () => ["frame", "window", "screen"],

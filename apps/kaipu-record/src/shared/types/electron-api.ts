@@ -625,6 +625,8 @@ export interface KaipuElectronAPI {
   suspendShortcuts(): void;
   /** Resume (re-register) global shortcuts after rebinding. */
   resumeShortcuts(): void;
+  /** Subscribe to every global shortcut press (its action), after main ran it. */
+  onShortcutFired(callback: (action: ShortcutAction) => void): () => void;
 
   // ── Screenshots ───────────────────────────────────────────────────────
   /** Run a capture in `mode`; always answers captured, cancelled or unsupported. */
