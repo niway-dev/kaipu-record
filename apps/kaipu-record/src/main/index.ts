@@ -984,11 +984,12 @@ app.whenReady().then(async () => {
   // Capture Panel "Change" → open the main window and open its source picker.
   ipcMain.on(IPC_CHANNELS.recordingRequestSourcePicker, triggerChooseSource);
 
-  // Capture Panel "Capture Screen" → dismiss the panel and run the same interactive
-  // region capture as the ⌘⇧1 hotkey.
+  // The Screenshot entry (Capture page, tray popover) or the control bar → dismiss the panel
+  // and run the interactive capture. No mode: the stored one, the same path as ⌘⇧1.
   ipcMain.on(IPC_CHANNELS.screenshotRequestCapture, (_event, request?: { mode?: unknown }) => {
     capturePanel?.hide();
-    triggerCaptureScreenshot({ mode: isCaptureMode(request?.mode) ? request.mode : "frame" });
+    if (isCaptureMode(request?.mode)) triggerCaptureScreenshot({ mode: request.mode });
+    else triggerShortcutCapture("captureScreenshot");
   });
 
   // App version for the renderer-side version gate.

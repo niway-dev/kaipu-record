@@ -601,8 +601,12 @@ export interface KaipuElectronAPI {
    * a source also starts the countdown.
    */
   onRequestChooseSource(callback: (request: { startOnPick: boolean }) => void): () => void;
-  /** Capture Panel → main: run the interactive screenshot capture (same as ⌘⇧1). */
-  requestCaptureScreenshot(mode: CaptureMode): void;
+  /**
+   * Capture page / tray popover → main: run the interactive screenshot capture in `mode`.
+   * Without a mode, main uses the stored screenshot mode, exactly as ⌘⇧1 does — so a click
+   * before the renderer has loaded its settings cannot open the wrong mode.
+   */
+  requestCaptureScreenshot(mode?: CaptureMode): void;
   /**
    * Record page / Capture Panel → main: open the recording selector, in `mode` (a mode
    * chip, which also makes it the last used one) or in the last used mode (Start).

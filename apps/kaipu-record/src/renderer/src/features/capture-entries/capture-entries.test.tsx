@@ -83,7 +83,9 @@ describe("CaptureEntries, card variant", () => {
     renderEntries("card");
     expect(screen.getByText("⌃⌘X")).toBeInTheDocument();
     expect(screen.getByText("Instant")).toBeInTheDocument();
-    expect(screen.getByText("captures the last area again, without the selector.")).toBeVisible();
+    expect(
+      screen.getByText("captures the screen under the cursor at once, without the selector."),
+    ).toBeVisible();
     expect(screen.getAllByRole("button")).toHaveLength(2);
   });
 
@@ -137,9 +139,11 @@ describe("CaptureEntries, row variant", () => {
 
   it("shows the short Instant text with its keycap", () => {
     renderEntries("row");
-    expect(screen.getByText("Instant, last area")).toBeInTheDocument();
+    expect(screen.getByText("Instant, whole screen")).toBeInTheDocument();
     expect(screen.getByText("⌃⌘X")).toBeInTheDocument();
-    expect(screen.queryByText("captures the last area again, without the selector.")).toBeNull();
+    expect(
+      screen.queryByText("captures the screen under the cursor at once, without the selector."),
+    ).toBeNull();
   });
 });
 
@@ -175,7 +179,7 @@ describe("useCaptureEntryActions", () => {
     await waitFor(() => expect(result.current.recordingLastUsed).toBe("Frame"));
   });
 
-  it("opens the screenshot selector in the last used mode and the recording one in none", async () => {
+  it("leaves both modes to main: the stored ones open, whatever this window has loaded", async () => {
     const { requestCaptureScreenshot, requestRecordSelector } = givenSettings({
       screenshotMode: "screen",
     });
@@ -183,7 +187,7 @@ describe("useCaptureEntryActions", () => {
     await waitFor(() => expect(result.current.screenshotLastUsed).toBe("Screen"));
     result.current.openScreenshot();
     result.current.openRecording();
-    expect(requestCaptureScreenshot.mock.calls).toEqual([["screen"]]);
+    expect(requestCaptureScreenshot.mock.calls).toEqual([[]]);
     expect(requestRecordSelector.mock.calls).toEqual([[]]);
   });
 });

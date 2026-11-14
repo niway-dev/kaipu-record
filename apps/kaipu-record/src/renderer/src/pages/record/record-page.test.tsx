@@ -204,7 +204,9 @@ describe("RecordPage idle layout (design Kaipu Capture Home)", () => {
       "Pick an area, then record with sound and camera.",
     );
     // The Instant line is text with a keycap, not a button.
-    expect(screen.getByText("captures the last area again, without the selector.")).toBeVisible();
+    expect(
+      screen.getByText("captures the screen under the cursor at once, without the selector."),
+    ).toBeVisible();
     expect(screen.getByText("⌃⌘X")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Instant/ })).toBeNull();
 
@@ -232,7 +234,7 @@ describe("RecordPage idle layout (design Kaipu Capture Home)", () => {
     expect(screen.getByText("Last used · Frame · 16:9")).toBeInTheDocument();
   });
 
-  it("opens the selector from the cards, in the last used screenshot mode and the last recording mode", async () => {
+  it("opens the selector from the cards, leaving both modes to main", async () => {
     const requestCaptureScreenshot = vi.fn();
     const requestRecordSelector = vi.fn();
     const settings = await realApi.getSettings();
@@ -246,8 +248,8 @@ describe("RecordPage idle layout (design Kaipu Capture Home)", () => {
     await screen.findByText("Last used · Screen");
     fireEvent.click(screen.getByRole("button", { name: /^Screenshot/ }));
     fireEvent.click(screen.getByRole("button", { name: /^Recording/ }));
-    expect(requestCaptureScreenshot.mock.calls).toEqual([["screen"]]);
-    // No mode: main opens the selector in the last used one.
+    // No mode: main opens the selector in the stored mode of each.
+    expect(requestCaptureScreenshot.mock.calls).toEqual([[]]);
     expect(requestRecordSelector.mock.calls).toEqual([[]]);
     // A click never starts a take by itself: main opens the selector first.
     expect(startRecording).not.toHaveBeenCalled();

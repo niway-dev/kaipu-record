@@ -39,11 +39,11 @@ an app-wide status bar.
 - Two entry cards side by side. Each: accent icon tile, title, one-line description, the
   shortcut keycap, a chevron, and "Last used · {mode}".
   - Screenshot: "Pick an area, then annotate or copy it." Opens the selector with the capture
-    intent in the last used screenshot mode.
+    intent in the stored screenshot mode; main resolves the mode, as for ⇧⌘1.
   - Recording: "Pick an area, then record with sound and camera." Opens the selector with the
     record intent in the last used recording mode. Frame with a remembered area adds its aspect
     ratio ("Frame · 16:9", or "Frame · Free"); Frame with no area yet shows just "Frame".
-- Instant line: ⌃⌘X keycap, **Instant**, "captures the last area again, without the selector."
+- Instant line: ⌃⌘X keycap, **Instant**, "captures the screen under the cursor at once, without the selector." (the mock said "the last area again"; ⌃⌘X captures the whole display under the cursor, so the copy says what it does)
 - Divider, then **Recording setup** with "Set once. In the selector you only turn these on or
   off." and the Microphone, System audio and Camera split tiles; a chevron opens one settings
   panel at a time under the row (unchanged behaviour).
@@ -56,7 +56,7 @@ Idle:
 
 1. Header: Kaipu Record and **Open ↗** (shows the main window).
 2. Two rows: Screenshot ⇧⌘1 and Recording ⇧⌘2. Each opens the selector, like the page cards.
-3. Instant line: ⌃⌘X "Instant, last area".
+3. Instant line: ⌃⌘X "Instant, whole screen".
 4. **Record with**: three switches, Mic, Audio, Camera, each showing ON or OFF. No arrows.
 5. Footer: the workspace the next take lands in (clicking it shows the main window, where the
    title bar switches it) and **Setup** (shows the main window on the Capture page).

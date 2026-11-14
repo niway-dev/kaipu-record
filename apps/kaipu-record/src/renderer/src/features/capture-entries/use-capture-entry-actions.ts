@@ -46,10 +46,9 @@ export function useCaptureEntryActions(): CaptureEntryActions {
       ? `${modeName(recording.mode)} · ${ratio}`
       : modeName(recording.mode);
 
-  const openScreenshot = useCallback(
-    () => window.electronAPI.requestCaptureScreenshot(screenshotMode),
-    [screenshotMode],
-  );
+  // No mode: main opens the selector in the stored screenshot mode (the ⌘⇧1 path), so a
+  // click before this window has loaded its settings cannot send the default.
+  const openScreenshot = useCallback(() => window.electronAPI.requestCaptureScreenshot(), []);
   // No mode: main opens the selector in the last used recording mode.
   const openRecording = useCallback(() => window.electronAPI.requestRecordSelector(), []);
 

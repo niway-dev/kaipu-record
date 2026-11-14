@@ -1,4 +1,4 @@
-import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Isolate the panel from the recording internals: useRecordingSetup pulls in
@@ -79,22 +79,18 @@ describe("CapturePanel, idle", () => {
     render(<CapturePanel />);
     expect(screen.getByRole("button", { name: /^Screenshot/ })).toHaveTextContent("⇧⌘1");
     expect(screen.getByRole("button", { name: /^Recording/ })).toHaveTextContent("⇧⌘2");
-    expect(screen.getByText("Instant, last area")).toBeInTheDocument();
+    expect(screen.getByText("Instant, whole screen")).toBeInTheDocument();
   });
 
-  it("the Screenshot row opens the selector in the last used screenshot mode", async () => {
+  it("the Screenshot row leaves the mode to main, even before settings load", () => {
     const requestCaptureScreenshot = vi.fn();
-    const settings = await realApi.getSettings();
-    const getSettings = vi.fn(async () => ({ ...settings, screenshotMode: "screen" as const }));
+    // Settings never arrive: a mode chosen here could only be the default. Main resolves the
+    // stored mode itself (the ⌘⇧1 path), so the row sends none.
+    const getSettings = vi.fn(() => new Promise<never>(() => {}));
     window.electronAPI = { ...realApi, requestCaptureScreenshot, getSettings };
     render(<CapturePanel />);
-    // The stored mode arrives after the first render; the row must not act on the default.
-    await waitFor(() => expect(getSettings).toHaveBeenCalled());
-    await act(async () => {
-      await Promise.all(getSettings.mock.results.map((r) => r.value));
-    });
     fireEvent.click(screen.getByRole("button", { name: /^Screenshot/ }));
-    expect(requestCaptureScreenshot.mock.calls).toEqual([["screen"]]);
+    expect(requestCaptureScreenshot.mock.calls).toEqual([[]]);
   });
 
   it("the Recording row opens the record selector in the last used mode", () => {
@@ -167,7 +163,7 @@ describe("CapturePanel, busy", () => {
     expect(stop).toHaveTextContent("⇧⌘2");
     expect(screen.queryByRole("button", { name: /^Screenshot/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Recording/ })).not.toBeInTheDocument();
-    expect(screen.queryByText("Instant, last area")).not.toBeInTheDocument();
+    expect(screen.queryByText("Instant, whole screen")).not.toBeInTheDocument();
   });
 
   it("Stop sends the stop command to the recording window", async () => {
