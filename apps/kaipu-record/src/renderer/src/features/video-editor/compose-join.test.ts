@@ -5,6 +5,7 @@ import { composeJoin } from "./compose-join";
 import { initialScene } from "./scene";
 import { sourceAxis } from "./source-axis";
 import { detectZoomSegments } from "./zoom/detect-zoom-segments";
+import type { ZoomSegment } from "./zoom/zoom-model";
 
 const TRACK: CursorTrack = {
   version: 1,
@@ -51,9 +52,22 @@ describe("composeJoin", () => {
   it("keeps the opened recording's webcam layout and zooms when joining", () => {
     const opened = initialScene(20, WEBCAM);
     const layout = { ...opened.webcam!.layout, size: 0.4 };
-    const scene = { ...opened, webcam: { ...opened.webcam!, layout } };
+    const zoom: ZoomSegment = {
+      id: "z-opened",
+      start: 2,
+      end: 5,
+      scale: 2,
+      mode: "fixed",
+      anchor: { x: 0.5, y: 0.5 },
+      smoothing: 50,
+      origin: "manual",
+      trigger: null,
+    };
+    const scene = { ...opened, webcam: { ...opened.webcam!, layout }, zoomSegments: [zoom] };
     const next = composeJoin(scene, 20, INPUT, 0, TRACK, WEBCAM);
     expect(next.webcam!.layout).toEqual(layout);
+    // The opened recording's own zoom is untouched (the joined recording's land at 3600+).
+    expect(next.zoomSegments.find((z) => z.id === "z-opened")).toEqual(zoom);
     // At t = 0 the new clip goes first; the opened recording's clip follows it.
     expect(next.items[0]).toMatchObject({ kind: "clip", sourceStart: 3600 });
   });

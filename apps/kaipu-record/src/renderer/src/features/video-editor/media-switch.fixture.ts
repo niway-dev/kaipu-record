@@ -51,6 +51,10 @@ export class FakeVideo {
     this.cancelled.push(id);
     this.frames.delete(id);
   }
+  /** How many listeners are registered for `type` (0 once the switch has unbound it). */
+  listenerCount(type: string): number {
+    return this.listeners.get(type)?.size ?? 0;
+  }
   emit(type: string): void {
     for (const listener of [...(this.listeners.get(type) ?? [])]) listener();
   }

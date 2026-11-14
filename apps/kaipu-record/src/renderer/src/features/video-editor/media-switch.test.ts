@@ -140,8 +140,8 @@ describe("MediaSwitch — priming", () => {
   it("pre-seeks the other recording's element, paused and muted, without showing it", () => {
     const { sw, a, b } = setup();
     a.paused = false;
-    sw.prime(3600);
-    expect(b.currentTime).toBe(0);
+    sw.prime(3605);
+    expect(b.currentTime).toBe(5);
     expect(b.paused).toBe(true);
     expect(b.muted).toBe(true);
     expect(b.play).not.toHaveBeenCalled();
@@ -408,8 +408,11 @@ describe("MediaSwitch — attach and detach", () => {
     const { sw, b } = setup();
     const heard = vi.fn();
     sw.addEventListener("seeked", heard);
+    expect(b.listenerCount("seeked")).toBe(1);
     sw.currentTime = 3610;
     sw.attach("B", null);
+    expect(b.listenerCount("seeked")).toBe(0);
+    expect(b.listenerCount("loadeddata")).toBe(0);
     b.emit("seeked");
     expect(heard).not.toHaveBeenCalled();
   });

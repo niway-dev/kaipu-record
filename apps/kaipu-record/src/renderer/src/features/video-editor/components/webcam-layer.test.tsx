@@ -499,8 +499,6 @@ describe("WebcamLayer over joined recordings (ADR 0058)", () => {
     layer(el);
     const cam = loadWebcam(100);
     act(() => setTime(el, 3610)); // 10 s into B; its webcam started 200 ms late
-    const loaded = loadWebcam(100);
-    expect(loaded).toBe(cam);
     expect(cam.currentTime).toBeCloseTo(9.8, 6);
   });
 

@@ -72,9 +72,10 @@
   transform-origin: 0 0;
 }
 
-/* The video fills a box that already has its exact aspect ratio, so there is nothing to
-   letterbox; object-fit stays `contain` as a guard for the frames decoded before
-   loadedmetadata reports the real size. */
+/* The video fills the frame's box. The opened recording has the frame's exact aspect ratio, so
+   it fills it; a joined recording of another aspect (ADR 0058) is letterboxed by
+   `object-fit: contain`, scaled to fit and centred. `contain` also guards the frames decoded
+   before loadedmetadata reports the real size. */
 .video {
   display: block;
   position: absolute;
