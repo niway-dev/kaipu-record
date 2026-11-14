@@ -77,12 +77,11 @@ work area when that would cross an edge, keeping the size the editor needs. The 
 floor grows the same way. Leaving the editor still restores the exact bounds from before,
 position included.
 
-## The menu-bar icon follows the capture mode
+## The menu-bar icon
 
-Two template images, not three: the capture panel always had Record or Screenshot selected,
-so there was no idle state to draw. The icon mirrored `PanelTabs`' selection through one IPC
-(`tray:set-mode`), which was removed with the Capture page redesign: the tray now always shows
-the record glyph. The artwork is the owner's black cuts, rasterized at 20 px / 40 px and
+The tray shows one template image, the record glyph. It used to follow the capture panel's
+Record or Screenshot tab through one IPC (`tray:set-mode`); the Capture page redesign removed
+the tabs, and that IPC with them. The artwork is the owner's black cuts, rasterized at 20 px / 40 px and
 verified pixel-by-pixel to be 100 % black-on-alpha, which is what `setTemplateImage` needs.
 The old play-arrow tray art was the last place carrying the pre-fox brand.
 
