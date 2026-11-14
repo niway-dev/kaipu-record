@@ -2975,6 +2975,23 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
     expect(screen.getByTestId("editor-inspector")).toBeInTheDocument();
   });
 
+  it("opening Add from Library pauses playback, and Space behind the modal does not start it again", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.keyDown(window, { key: " " });
+    await screen.findByRole("button", { name: "Pause" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Add from Library" });
+    expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+
+    // Behind the modal the editor's shortcuts are off: Space on a row does not toggle playback.
+    fireEvent.keyDown(within(dialog).getAllByTestId("add-from-library-row")[0], { key: " " });
+    await act(async () => {});
+    expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
+  });
+
   it("Escape, the close button and the backdrop close Add from Library", async () => {
     renderEditor();
     await waitForEditorLoaded();

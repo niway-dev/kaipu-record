@@ -1573,7 +1573,13 @@ function VideoEditor({
   // opened recording's span on the shared axis (ADR 0058), `frameAspect` the frame the joined
   // recording's cursor is mapped into.
   const joinRecordingAt = useJoinRecording(controller, source.durationSeconds, frameAspect);
-  const toggleAddRecording = useCallback(() => setAddRecordingOpen((open) => !open), []);
+  // Opening the modal pauses playback (NIW2-790): behind it the editor's shortcuts are off, so
+  // Space could not stop the picture, and "Add after current clip" and a screenshot's place
+  // would follow a playhead still moving under the modal.
+  const toggleAddRecording = useCallback(() => {
+    if (!addRecordingOpen) playbackRef.current.pause();
+    setAddRecordingOpen(!addRecordingOpen);
+  }, [addRecordingOpen, playbackRef]);
   const addRecording = useCallback(
     async (video: LibraryVideo, boundary: { index: number; time: number }): Promise<void> => {
       // `busy` (a drag owns the scene) does nothing: the click is simply not taken.
