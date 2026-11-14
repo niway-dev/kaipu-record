@@ -83,11 +83,20 @@ export const UI_MAP = {
       page: { states: ["idle", "recording", "paused"] },
       workspaceNotice: { states: ["notConnected"] },
       reconcileBanner: { states: ["fixable", "attention"] },
-      startButton: { states: ["idle"] },
-      modePicker: {
+      // The two entry cards: the whole card opens the selector. The Screenshot card has no
+      // "window": Capture window is switched off (`ENABLED_CAPTURE_MODES`).
+      screenshotCard: {
+        states: ["frame", "screen"],
+        gatedBy: [{ setting: "screenshotMode" }],
+      },
+      recordingCard: {
         states: ["frame", "window", "screen"],
         gatedBy: [{ setting: "recordingMode" }],
       },
+      instantLine: { states: ["default"] },
+      // Recording setup: the heading, its hint, and the Mic, Audio and Camera tiles below it.
+      setup: { states: ["default"] },
+      footer: { states: ["default"] },
       mic: {
         states: ["on", "off"],
         gatedBy: [{ recordingSetting: "isMicrophoneEnabled" }, { permission: "microphone" }],
@@ -204,21 +213,8 @@ export const UI_MAP = {
   },
   prepare: { kind: "route", route: ROUTES.prepare, redirect: true },
   prepareNew: { kind: "route", route: ROUTES.prepareNew, redirect: true },
-  screenshots: {
-    kind: "route",
-    route: ROUTES.screenshots,
-    areas: {
-      page: { states: ["idle", "busyWhileRecording"] },
-      captureButton: { states: ["idle", "disabled"] },
-      // No "window": Capture window is switched off (`ENABLED_CAPTURE_MODES`), so the page has
-      // only the Frame and Screen chips.
-      modeChips: {
-        states: ["frame", "screen"],
-        gatedBy: [{ setting: "screenshotMode" }],
-      },
-      recent: { states: ["list"] },
-    },
-  },
+  // The Screenshots page merged into Capture (`record`): the old route only redirects.
+  screenshots: { kind: "route", route: ROUTES.screenshots, redirect: true },
   editor: {
     kind: "route",
     route: ROUTES.editor,

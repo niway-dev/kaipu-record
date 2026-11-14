@@ -1,0 +1,178 @@
+/*
+ * The Screenshot and Recording entries (design "Kaipu Capture Home"). `card` is the Capture
+ * page's pair; `row` is the tray popover's compact version. Colours are theme tokens.
+ */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-family);
+  color: var(--text-primary);
+}
+
+.entries {
+  display: flex;
+}
+
+.entry {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  font-family: inherit;
+  text-align: left;
+  color: inherit;
+  background: var(--bg-card);
+  border: 1px solid var(--line-strong);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    border-color var(--transition);
+}
+
+.entry:hover {
+  background: var(--bg-card-hover);
+}
+
+.entry:focus-visible {
+  outline: 2px solid var(--accent-primary-ring);
+  outline-offset: 2px;
+}
+
+.tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
+  background: var(--accent-primary);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.hint {
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.lastUsed {
+  margin-top: 7px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+
+.trailing {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.chevron {
+  color: var(--text-4);
+}
+
+.keycap {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  padding: 2px 7px;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+}
+
+.instant {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.instantTitle {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+}
+
+/* ── card: the page's two equal entries ─────────────────────── */
+
+.root[data-variant="card"] .entries {
+  gap: var(--space-md);
+}
+
+.root[data-variant="card"] .entry {
+  flex: 1;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 12px;
+}
+
+.root[data-variant="card"] .tile {
+  width: 46px;
+  height: 46px;
+  border-radius: 11px;
+  box-shadow: 0 12px 26px -12px rgba(246, 5, 92, 0.9);
+}
+
+.root[data-variant="card"] .title {
+  font-size: var(--font-size-lg);
+}
+
+.root[data-variant="card"] .trailing {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-sm);
+}
+
+.root[data-variant="card"] .instant {
+  margin-top: var(--space-md);
+  font-size: 12.5px;
+}
+
+/* ── row: the tray popover's 44px rows ──────────────────────── */
+
+.root[data-variant="row"] .entries {
+  flex-direction: column;
+  gap: 6px;
+}
+
+.root[data-variant="row"] .entry {
+  height: 44px;
+  gap: 10px;
+  padding: 0 10px;
+  border-radius: 9px;
+}
+
+.root[data-variant="row"] .tile {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+}
+
+.root[data-variant="row"] .title {
+  font-size: 13.5px;
+}
+
+.root[data-variant="row"] .trailing {
+  align-items: center;
+}
+
+.root[data-variant="row"] .instant {
+  margin-top: 9px;
+  font-size: var(--font-size-xs);
+}
