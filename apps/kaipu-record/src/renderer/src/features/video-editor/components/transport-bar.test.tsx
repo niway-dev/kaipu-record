@@ -693,6 +693,15 @@ describe("TransportBar — Add recording (NIW2-782)", () => {
     expect(onAddRecording).toHaveBeenCalledTimes(1);
   });
 
+  it("disables Add recording in fullscreen: the timeline footer is not drawn there", () => {
+    const onAddRecording = vi.fn();
+    renderBar({ onAddRecording, isFullscreen: true });
+    const button = screen.getByRole("button", { name: "Add recording" });
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(onAddRecording).not.toHaveBeenCalled();
+  });
+
   it("marks the button pressed while the Add from Library panel is open", () => {
     renderBar({ onAddRecording: vi.fn(), addRecordingActive: true });
     expect(screen.getByRole("button", { name: "Add recording" })).toHaveAttribute(
