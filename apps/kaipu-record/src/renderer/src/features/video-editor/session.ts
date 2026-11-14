@@ -363,7 +363,8 @@ function validateSource(raw: unknown): SceneSource | null {
   if (!isStr(s["id"]) || !isStr(s["assetId"]) || !isStr(s["title"])) return null;
   if (!isNum(s["offset"]) || !isNum(s["durationSeconds"])) return null;
   if (!isNum(s["width"]) || !isNum(s["height"])) return null;
-  if (s["offset"] < 0 || s["durationSeconds"] <= 0 || s["width"] < 0 || s["height"] < 0) {
+  // A joined range never starts at 0: that is the opened recording's (ADR 0058).
+  if (s["offset"] <= 0 || s["durationSeconds"] <= 0 || s["width"] < 0 || s["height"] < 0) {
     return null;
   }
   return {
@@ -379,7 +380,8 @@ function validateSource(raw: unknown): SceneSource | null {
 
 /**
  * The joined recordings of a version 2 session (ADR 0058), in the saved order. Null when the
- * list is missing, empty or damaged, when two entries share an id or when two ranges overlap:
+ * list is missing, empty or damaged, when two entries share an id, when a range starts at 0 or
+ * when two ranges overlap or touch:
  * every joined clip's seconds are read through this table, so a repaired one would put footage
  * under the wrong recording.
  */
@@ -395,7 +397,8 @@ function parseSources(raw: unknown): SceneSource[] | null {
   const byOffset = [...sources].sort((a, b) => a.offset - b.offset);
   for (let i = 1; i < byOffset.length; i++) {
     const previous = byOffset[i - 1];
-    if (byOffset[i].offset < previous.offset + previous.durationSeconds) return null;
+    // Ranges never touch: `recordingAt` includes both ends, so a shared second is ambiguous.
+    if (byOffset[i].offset <= previous.offset + previous.durationSeconds) return null;
   }
   return sources;
 }

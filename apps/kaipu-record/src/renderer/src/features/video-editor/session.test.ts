@@ -870,6 +870,12 @@ describe("joined recordings (session version 2, ADR 0058)", () => {
     expect(parseSession(serializeSession(twoRecordings(overlapping)))).toBeNull();
   });
 
+  it("returns null for ranges that touch, or a joined range at offset 0", () => {
+    const end = SOURCE_B.offset + SOURCE_B.durationSeconds;
+    expect(parseSession(v2([SOURCE_B, { ...SOURCE_B, id: "src-c", offset: end }]))).toBeNull();
+    expect(parseSession(v2([{ ...SOURCE_B, offset: 0 }]))).toBeNull();
+  });
+
   it("accepts sources given out of order and ranges that do not overlap", () => {
     const parsed = parseSession(v2([{ ...SOURCE_B, id: "c", offset: 7200 }, SOURCE_B]));
     expect(parsed!.scene.sources!.map((s) => s.id)).toEqual(["c", "src-b"]);
