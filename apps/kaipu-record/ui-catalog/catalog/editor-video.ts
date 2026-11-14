@@ -51,12 +51,22 @@ const addRecordingButton: Step = {
     part: { role: "button", name: "Add recording", exact: true },
   },
 };
-/** A recording in the Add from Library list: its row is a button named "Add <title>". */
+/** A recording row in the Add from Library list: a button named after the recording. */
 const libraryRow = (title: string) => ({
+  role: "button" as const,
+  name: title,
+  exact: true,
+});
+/** A screenshot card in the Add from Library Screenshots tab: a button named "Add <title>". */
+const libraryShot = (title: string) => ({
   role: "button" as const,
   name: `Add ${title}`,
   exact: true,
 });
+/** The modal's Screenshots tab (its name carries the count, so it is not matched exactly). */
+const screenshotsTab: Step = {
+  click: { area: "editorVideo.addFromLibrary", part: { role: "tab", name: "Screenshots" } },
+};
 const exportSheet: Step = {
   click: { area: "editorVideo.toolbar", part: { role: "button", name: "Export", exact: true } },
 };
@@ -615,23 +625,45 @@ export const editorVideo = catalog(
     },
     "add-from-library": {
       profile: "timeline-levels",
-      how: "With the `timeline-levels` flag forced on, open “Weekly sync” and press Add recording at the left end of the transport bar: the right column lists the Library's other recordings, newest first, each with its thumbnail, duration, title, date and resolution, under a search field; the button stays lit while the panel is open.",
+      how: "With the `timeline-levels` flag forced on, open “Weekly sync” and press Add recording at the left end of the transport bar: the Add from Library modal opens on its Recordings tab, a compact list of the Library's other recordings, newest first, with the first one selected and previewed on the right (paused at its first frame) above Add after current clip, Add at start and Add at end; the transport button stays lit while the modal is open.",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
         addRecordingButton,
         // The list is drawn after the Library read lands; “Walkthrough 1” is among its rows.
         { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        // The preview autoplays: hold it at 0:00 once its first frame is there.
+        { waitFor: { video: "paused-at-start" } },
         // The row thumbnails decode after the list is drawn.
         { waitMs: 400 },
       ],
-      demonstrates: ["editorVideo.addFromLibrary:list", "editorVideo.transport:addRecordingOpen"],
+      demonstrates: [
+        "editorVideo.addFromLibrary:recordings",
+        "editorVideo.transport:addRecordingOpen",
+      ],
+      ready: { area: "editorVideo.addFromLibrary" },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "add-from-library-screenshots": {
+      profile: "timeline-levels",
+      how: "With the flag forced on, open “Weekly sync”, press Add recording and open the Screenshots tab: a three-column grid of the Library's screenshots (GIFs are not listed), newest first, “Weekly sync frame” tagged “From this recording”, with the footer hint that a click adds the image at the playhead.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        addRecordingButton,
+        { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        screenshotsTab,
+        { waitFor: { area: "editorVideo.addFromLibrary", part: libraryShot("Weekly sync frame") } },
+        // The card thumbnails decode after the grid is drawn.
+        { waitMs: 400 },
+      ],
+      demonstrates: ["editorVideo.addFromLibrary:screenshots"],
       ready: { area: "editorVideo.addFromLibrary" },
       gates: [{ flag: "timeline-levels", side: "on" }],
     },
     "add-from-library-no-match": {
       profile: "timeline-levels",
-      how: "With the flag forced on, open “Weekly sync”, press Add recording and type a title no recording has: the list gives way to “No recordings match”.",
+      how: "With the flag forced on, open “Weekly sync”, press Add recording and type a title no recording has: the list gives way to “No recordings match” with a hint to try another title.",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
@@ -657,14 +689,22 @@ export const editorVideo = catalog(
     },
     "add-from-library-added": {
       profile: "timeline-levels",
-      how: "With the flag forced on, open “Weekly sync”, press Add recording and click “Walkthrough 1”: the playhead is at 0:00, inside “Weekly sync”, so the whole recording is inserted after that clip and the sequence shows two clips labelled “Weekly sync” and “Walkthrough 1”.",
+      how: "With the flag forced on, open “Weekly sync”, press Add recording and click Add after current clip with “Walkthrough 1” selected: the playhead is at 0:00, so the recording is inserted after the clip under it, and the sequence shows the clips labelled “Weekly sync” and “Walkthrough 1” (the modal is closed for the shot).",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
         addRecordingButton,
         { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
-        { click: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
-        // Both recordings now label a clip: the opened one first, the joined one after it.
+        {
+          click: {
+            area: "editorVideo.addFromLibrary",
+            part: { role: "button", name: "Add after current clip", exact: true },
+          },
+        },
+        // The modal stays open after an add, so close it with Escape to see the sequence.
+        { press: "Escape" },
+        { waitFor: { area: "editorVideo.addFromLibrary", state: "hidden" } },
+        // Both recordings now label a clip.
         { waitFor: { area: "editorVideo.timeline", part: { text: "Walkthrough 1" } } },
         { waitFor: { area: "editorVideo.timeline", part: { text: "Weekly sync" } } },
         saved,
@@ -702,7 +742,7 @@ export const editorVideo = catalog(
     notCapturable: {
       "editorVideo.insertIndicator:visible": nc(
         "transient",
-        "drawn only while a Library recording is held over the Clips row; the runner's drag moves the mouse inside one element and cannot start the HTML5 drag the indicator listens to, and releasing it drops the recording",
+        "drawn only while a recording is dragged over the Clips row, and nothing drags one today (the Add from Library modal adds from its buttons); the target stays for NIW2-789",
       ),
       "editorVideo.toolbar:saving": nc(
         "transient",

@@ -22,6 +22,8 @@ export interface Profile {
   readonly floatingImages?: boolean;
   /** Add the recordings whose saved edits joined another recording (`seed-vault.ts`). */
   readonly joinedRecordings?: boolean;
+  /** Add one screenshot taken from “Weekly sync” (`seed-vault.ts`), for the “From this recording” tag. */
+  readonly frameCaptures?: boolean;
   /** Add the screenshot that draws real text (`fixtures/text/`), for the Select text states. */
   readonly textScreenshot?: boolean;
   /** Add the screenshots the Colors panel states open (`fixtures/make-fixtures.ts`). */
@@ -95,10 +97,11 @@ export const PROFILES = {
   },
   "timeline-levels": {
     description:
-      "Flag timeline-levels forced on, and the vault adds “Floating images”, a recording whose saved edit holds two overlapping floating images: the Clips rows, the preview layer, the image panel, and Add to timeline on each capture in the Captures panel.",
+      "Flag timeline-levels forced on, and the vault adds “Floating images”, a recording whose saved edit holds two overlapping floating images: the Clips rows, the preview layer, the image panel, Add to timeline on each capture in the Captures panel, and “Weekly sync frame”, a screenshot taken from “Weekly sync” (the “From this recording” tag in Add from Library).",
     seed: "demo",
     flags: { "timeline-levels": true },
     floatingImages: true,
+    frameCaptures: true,
   },
   "two-recordings": {
     description:

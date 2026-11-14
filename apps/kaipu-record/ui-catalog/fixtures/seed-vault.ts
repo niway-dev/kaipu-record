@@ -77,6 +77,11 @@ export const ASSETS = {
   p3Shot: "c0a1a10c-0000-4000-8000-00000000010d",
   /** Seeded only where `inspectShots` is on: a copy of “Settings page” that mock C9 pins on. */
   pinsShot: "c0a1a10c-0000-4000-8000-00000000010e",
+  /**
+   * Seeded only where `frameCaptures` is on: a screenshot taken from “Weekly sync” (its sidecar
+   * carries `sourceVideoAssetId`), for the Add from Library “From this recording” tag.
+   */
+  weeklyFrame: "c0a1a10c-0000-4000-8000-00000000010f",
   loopGif: "c0a1a10c-0000-4000-8000-000000000201",
 } as const;
 
@@ -148,6 +153,7 @@ export const ITEM_IDS = {
   photoShot: "Landscape photo",
   p3Shot: P3_SHOT.stem,
   pinsShot: PINS_SHOT.stem,
+  weeklyFrame: "Weekly sync frame",
   walkthrough: "Walkthrough 1",
   teamNotes: "Team notes",
   bugReport: "Bug report",
@@ -469,6 +475,12 @@ export interface SeedOptions {
   floatingImages?: boolean;
   /** Add the recordings whose saved edits joined another one (`JOINED_RECORDINGS`). */
   joinedRecordings?: boolean;
+  /**
+   * Add one screenshot taken from “Weekly sync” (`sourceVideoAssetId` in its sidecar). Only the
+   * profile whose Add from Library states need the “From this recording” tag turns it on, so no
+   * other state's Library changes.
+   */
+  frameCaptures?: boolean;
   /** Add the screenshot that draws real text (profiles that exercise text recognition). */
   textScreenshot?: boolean;
   /** Add the two screenshots the Colors panel states open (profiles that exercise it). */
@@ -836,6 +848,20 @@ export async function seedCatalogVault(vaultDir: string, options: SeedOptions): 
       title: shot.title,
       createdAt: now - shot.ago,
       ...tagIdsOf("tags" in shot ? shot.tags : []),
+    });
+  }
+
+  if (options.frameCaptures) {
+    await copyFile(
+      path.join(fixtures, FIXTURE_FILES.screens[0]),
+      path.join(vaultDir, `${ITEM_IDS.weeklyFrame}.png`),
+    );
+    await writeJson(path.join(meta, `${ITEM_IDS.weeklyFrame}.json`), {
+      sidecarVersion: 2,
+      assetId: ASSETS.weeklyFrame,
+      title: ITEM_IDS.weeklyFrame,
+      createdAt: now - 14 * DAY + 5 * 60_000,
+      sourceVideoAssetId: ASSETS.weeklySync,
     });
   }
 

@@ -257,13 +257,17 @@ export const UI_MAP = {
         // addToTimeline: the row's Add to timeline button, which exists only with the flag on.
         gatedBy: [{ flag: "timeline-levels" }],
       },
-      // The Add from Library panel (NIW2-782), behind the `timeline-levels` flag: the right column
-      // in place of the inspector, listing the Library's other recordings. list: the rows (each
-      // with thumbnail, duration, title, date and resolution) and the search field; noMatch: a
-      // search that matches no recording.
-      addFromLibrary: { states: ["list", "noMatch"], gatedBy: [{ flag: "timeline-levels" }] },
-      // The "Insert here" bar and pill on the Clips row while a recording from that panel is
-      // dragged over it: it exists only during the drag.
+      // The Add from Library modal (NIW2-790), behind the `timeline-levels` flag: a sheet over the
+      // editor opened by the transport's Add recording button. recordings: the Recordings tab,
+      // a compact list with the first row selected and previewed, and the Add after current clip /
+      // Add at start / Add at end actions; screenshots: the Screenshots tab, a card grid with the
+      // "From this recording" tag; noMatch: a search that matches no recording.
+      addFromLibrary: {
+        states: ["recordings", "screenshots", "noMatch"],
+        gatedBy: [{ flag: "timeline-levels" }],
+      },
+      // The "Insert here" bar and pill on the Clips row while a recording is dragged over it: it
+      // exists only during the drag, and nothing drags a recording today (NIW2-789 reuses it).
       insertIndicator: { states: ["visible"], gatedBy: [{ flag: "timeline-levels" }] },
       webcam: { states: ["visible"] },
       // Floating images over the Clips sequence (ADR 0057, NIW2-771), behind the
@@ -275,7 +279,7 @@ export const UI_MAP = {
       mediaLayer: { states: ["selected", "selectedFull"], gatedBy: [{ flag: "timeline-levels" }] },
       mediaPanel: { states: ["overlapping"], gatedBy: [{ flag: "timeline-levels" }] },
       timelineMediaRows: { states: ["twoImages"], gatedBy: [{ flag: "timeline-levels" }] },
-      // addRecordingOpen: the Add recording button at the left end, lit while its panel is open
+      // addRecordingOpen: the Add recording button at the left end, lit while its modal is open
       // (it exists only with `timeline-levels` on).
       transport: {
         states: ["paused", "playing", "withCounts", "speedChanged", "zoomed", "addRecordingOpen"],
