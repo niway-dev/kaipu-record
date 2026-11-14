@@ -56,11 +56,12 @@
   touch-action: none;
 }
 
-/* A 26px grab area around the 14px square. */
+/* A 26px grab area around the 14px square. The pseudo-element is placed against the handle's
+   padding box, 10px once the 2px border is taken off, so 8px each side makes 26px. */
 .handle::after {
   content: "";
   position: absolute;
-  inset: -6px;
+  inset: -8px;
 }
 
 .handle[data-corner="nw"] {
