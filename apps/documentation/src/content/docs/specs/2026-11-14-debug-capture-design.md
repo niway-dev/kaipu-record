@@ -68,8 +68,9 @@ gets its registry entry and pin test like every other.
 - **The capture changes what it is capturing.** The shortcut must not focus a Kaipu window,
   because the tray popover hides on blur; images are taken before Finder opens.
 - **Wrong placement on a Retina or mixed-DPI setup.** Window bounds are in points and bitmaps in
-  pixels; the composite scales each window by its display's `scaleFactor`, and the singles keep
-  their native pixels.
+  pixels. The composite uses one factor for every window, the largest `scaleFactor` among their
+  displays: each bitmap is resized to its bounds × that factor, so a window on a 1x display
+  next to a 2x one is upscaled 2x. The singles keep their native pixels.
 - **Shipping it to users by mistake.** In a packaged build with the flag off or unresolved
   (offline, Send diagnostics off), the shortcut is not registered at all.
 - **No Screen Recording permission.** `bun run dev` runs as the Electron binary, which may
