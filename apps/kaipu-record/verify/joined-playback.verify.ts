@@ -3,9 +3,7 @@ import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { dismissOnboarding, launchApp } from "../e2e/helpers/launch";
 import { ensureFixtures } from "../ui-catalog/fixtures/make-fixtures";
-import { ASSETS, joinedScene, seedCatalogVault } from "../ui-catalog/fixtures/seed-vault";
-import { parseSession } from "../src/renderer/src/features/video-editor/session";
-import { toLayout } from "../src/renderer/src/features/video-editor/timeline";
+import { ASSETS, seedCatalogVault } from "../ui-catalog/fixtures/seed-vault";
 import { startScenario } from "./helpers";
 
 /*
@@ -14,6 +12,12 @@ import { startScenario } from "./helpers";
  * the opened recording, the joined one, the opened one again), plays 1.0 s before each cut to
  * 2.5 s after it, and logs every frame each preview `<video>` presents. The numbers are
  * evidence for a human; the only assertion is that both recordings really played.
+ *
+ * `KAIPU_PROOF_MODE=single` measures one plain recording alone instead (no joined recordings,
+ * no cuts), once with a webcam and once without. It runs unchanged on a tree from before the
+ * joined-recordings work, to tell "the preview always presented frames like this" from "the
+ * per-recording `<video>` elements did it": in that mode this file imports only things that
+ * tree has, and the joined-mode imports are dynamic.
  *
  * `KAIPU_PROOF_VIDEO=0` skips the window video: the screencast costs CPU and can add stutter
  * of its own, so run once with it (screenshots + video) and once without it (the numbers).
@@ -53,7 +57,11 @@ declare global {
 }
 
 /** The saved scene's cuts, in timeline seconds, computed from the seeded layout. */
-function seededCuts(): { aToB: number; bToA: number; total: number } {
+async function seededCuts(): Promise<{ aToB: number; bToA: number; total: number }> {
+  // Dynamic: an older tree has neither module, and single mode must still load this file there.
+  const { joinedScene } = await import("../ui-catalog/fixtures/seed-vault");
+  const { parseSession } = await import("../src/renderer/src/features/video-editor/session");
+  const { toLayout } = await import("../src/renderer/src/features/video-editor/timeline");
   const session = parseSession(
     JSON.stringify({ version: 2, scene: joinedScene("present", OPENED_SECONDS) }),
     OPENED_SECONDS,
@@ -166,15 +174,28 @@ async function seekTo(page: Page, seconds: number): Promise<number> {
   return now;
 }
 
-async function installFrameLogger(page: Page): Promise<void> {
-  await page.evaluate(() => {
+/**
+ * Log every frame the preview's `<video>` elements present. The screen set is the elements inside
+ * `preview-content` on any tree (the webcam layer is a sibling of that container, never inside
+ * it). With one screen element, that element is the visible one (before the per-recording
+ * elements there was no `visibility` to read); with several, the one with `visibility: visible`.
+ * `withWebcam` also logs the webcam layer's `<video>` as `el: "webcam"`, always active.
+ */
+async function installFrameLogger(page: Page, withWebcam = false): Promise<void> {
+  await page.evaluate((webcamToo) => {
     window.__frames = [];
     window.__raf = [];
-    const videos = [
+    const screen = [
       ...document.querySelectorAll<HTMLVideoElement>('[data-testid="preview-content"] video'),
     ];
-    const idOf = (v: HTMLVideoElement): string => v.dataset.recording ?? "opened";
-    const isVisible = (v: HTMLVideoElement): boolean => v.style.visibility === "visible";
+    const webcam = webcamToo
+      ? [...document.querySelectorAll<HTMLVideoElement>('[data-testid="webcam-video"]')]
+      : [];
+    const videos = [...screen, ...webcam];
+    const idOf = (v: HTMLVideoElement): string =>
+      webcam.includes(v) ? "webcam" : (v.dataset.recording ?? "opened");
+    const isVisible = (v: HTMLVideoElement): boolean =>
+      webcam.includes(v) || screen.length === 1 || v.style.visibility === "visible";
     for (const video of videos) {
       const watch: VideoFrameRequestCallback = (now, metadata) => {
         window.__frames.push({
@@ -190,12 +211,12 @@ async function installFrameLogger(page: Page): Promise<void> {
       video.requestVideoFrameCallback(watch);
     }
     const tick = (t: number): void => {
-      const shown = videos.find(isVisible);
+      const shown = screen.find(isVisible);
       window.__raf.push({ t, visible: shown ? idOf(shown) : null });
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
-  });
+  }, withWebcam);
 }
 
 async function readLog(page: Page): Promise<Log> {
@@ -209,145 +230,264 @@ async function clearLog(page: Page): Promise<void> {
   });
 }
 
-test("joined playback: frame gap at the cuts between two recordings", async () => {
-  const cuts = seededCuts();
-  console.log(
-    `[verify] ${NAME}: layout A→B at ${cuts.aToB}s, B→A at ${cuts.bToA}s, total ${cuts.total}s`,
-  );
+const single = process.env.KAIPU_PROOF_MODE === "single";
 
-  const seedVault = async (vaultDir: string): Promise<void> => {
-    ensureFixtures();
-    await seedCatalogVault(vaultDir, { now: Date.now(), content: "demo", joinedRecordings: true });
-  };
+/** One plain recording seeded the catalog way: with a webcam, and one without. */
+const SINGLE_ITEMS = [
+  { assetId: ASSETS.releaseDemo, title: "Release demo", webcam: true },
+  { assetId: ASSETS.walkthrough, title: "Walkthrough 1", webcam: false },
+] as const;
+const SINGLE_SEEK_SECONDS = 1.0;
+const SINGLE_PLAY_SECONDS = 4;
 
-  // With the window video by default; without it only the screenshots remain.
-  const withVideo = process.env.KAIPU_PROOF_VIDEO !== "0";
-  let page: Page;
-  let shot: (name: string) => Promise<void>;
-  let finish: () => Promise<void>;
-  if (withVideo) {
-    const scenario = await startScenario(NAME, { seedVault });
-    ({ page, shot, finish } = scenario);
-  } else {
-    await rm(OUT_DIR, { recursive: true, force: true });
-    await mkdir(OUT_DIR, { recursive: true });
-    const launched = await launchApp({ seedVault });
-    page = launched.page;
-    let n = 0;
-    shot = async (name) => {
-      n += 1;
-      await page.screenshot({
-        path: path.join(OUT_DIR, `${String(n).padStart(2, "0")}-${name}.png`),
-      });
-    };
-    finish = async () => {
-      try {
-        await launched.teardown();
-      } catch (error) {
-        console.error(`[verify] ${NAME}: closing the app failed`, error);
-      }
-      for (const f of (await readdir(OUT_DIR)).sort()) {
-        console.log(`[verify] ${NAME}: ${f} (${(await stat(path.join(OUT_DIR, f))).size} bytes)`);
-      }
-    };
-  }
-  console.log(`[verify] ${NAME}: window video ${withVideo ? "on" : "off (KAIPU_PROOF_VIDEO=0)"}`);
+const diffs = (values: number[]): number[] => values.slice(1).map((v, i) => v - values[i]);
 
+async function measureSingle(item: (typeof SINGLE_ITEMS)[number]): Promise<void> {
+  await mkdir(OUT_DIR, { recursive: true });
+  const launched = await launchApp({
+    seedVault: async (vaultDir) => {
+      ensureFixtures();
+      await seedCatalogVault(vaultDir, { now: Date.now(), content: "demo" });
+    },
+  });
+  const page = launched.page;
   try {
     await dismissOnboarding(page);
     const gotIt = page.getByRole("button", { name: "Got it" });
     if (await gotIt.isVisible().catch(() => false)) await gotIt.click();
     await page.evaluate((id) => {
       location.hash = `#/editor/video/${id}`;
-    }, ASSETS.joinedDemo);
+    }, item.assetId);
     await page.waitForFunction(() => location.hash.startsWith("#/editor/video/"));
     const play = page.getByRole("button", { name: "Play", exact: true });
     await expect(play).toBeVisible({ timeout: 30_000 });
-
-    // Both recordings ready: the opened `<video>` and the joined one, each holding a frame.
-    const ready = (): Promise<unknown> =>
-      page.waitForFunction(
-        () => {
-          const v = [
-            ...document.querySelectorAll<HTMLVideoElement>('[data-testid="preview-content"] video'),
-          ];
-          return v.length === 2 && v.every((el) => el.readyState >= 2);
-        },
-        undefined,
-        { timeout: 30_000 },
-      );
-    try {
-      await ready();
-    } catch {
-      // A standby element may only load its first frame once it is primed; seeking primes it.
-      const states = await page.evaluate(() =>
-        [
+    await page.waitForFunction(
+      (webcam) => {
+        const screen = [
           ...document.querySelectorAll<HTMLVideoElement>('[data-testid="preview-content"] video'),
-        ].map((el) => ({ id: el.dataset.recording ?? "opened", readyState: el.readyState })),
-      );
-      console.log(`[verify] ${NAME}: not both ready yet ${JSON.stringify(states)}`);
-    }
+        ];
+        const cam = document.querySelectorAll<HTMLVideoElement>('[data-testid="webcam-video"]');
+        return (
+          screen.length >= 1 &&
+          screen.every((el) => el.readyState >= 2) &&
+          (!webcam || (cam.length === 1 && cam[0].readyState >= 2))
+        );
+      },
+      item.webcam,
+      { timeout: 30_000 },
+    );
 
-    await installFrameLogger(page);
+    await installFrameLogger(page, true);
+    const from = await seekTo(page, SINGLE_SEEK_SECONDS);
+    await clearLog(page);
+    await play.click();
+    await page.waitForTimeout(SINGLE_PLAY_SECONDS * 1000);
+    await page.getByRole("button", { name: "Pause", exact: true }).click();
+    const log = await readLog(page);
+    const end = (await clockNow(page)).now;
 
-    const allFrames: FrameEntry[] = [];
-    const measure = async (label: string, cutAt: number): Promise<void> => {
-      const from = await seekTo(page, cutAt - LEAD_SECONDS);
-      await clearLog(page);
-      await play.click();
-      await page.waitForTimeout((LEAD_SECONDS + TAIL_SECONDS) * 1000);
-      await page.getByRole("button", { name: "Pause", exact: true }).click();
-      const log = await readLog(page);
-      const end = (await clockNow(page)).now;
-      const summary = summarize(log);
-      allFrames.push(...log.frames);
-      await writeFile(
-        path.join(OUT_DIR, `frames-${label}.json`),
-        JSON.stringify({ cut: label, cutAt, from, end, summary, ...log }, null, 1),
-      );
-      console.log(
-        `[verify] ${NAME}: cut=${label.toUpperCase().replace("-", "→")} ` +
-          `maxGapMs=${fmt(summary.maxGapMs)} medianMs=${fmt(summary.medianMs)} stalls=${summary.stalls}`,
-      );
-      console.log(
-        `[verify] ${NAME}: cut=${label} played ${from.toFixed(1)}s→${end.toFixed(1)}s, ` +
-          `${summary.framesVisible} visible frames, switch at ${
-            summary.switchAtMs === null ? "none seen" : `${fmt(summary.switchAtMs)} ms`
-          }`,
-      );
+    const stats = (el: "screen" | "webcam") => {
+      const own = log.frames
+        .filter((f) => (el === "webcam" ? f.el === "webcam" : f.el !== "webcam" && f.active))
+        .sort((a, b) => a.now - b.now);
+      const wall = diffs(own.map((f) => f.now));
+      const media = diffs(own.map((f) => f.mediaTime * 1000));
+      return {
+        visibleFrames: own.length,
+        wallGapMedianMs: median(wall),
+        wallGapMaxMs: Math.max(0, ...wall),
+        mediaStepMedianMs: median(media),
+        gapsOver60: wall.filter((g) => g > 60).length,
+      };
     };
-    await measure("a-b", cuts.aToB);
-    await measure("b-a", cuts.bToA);
-
-    // Paused pictures just before and after each cut, taken after the timed runs so the
-    // screenshots cannot disturb the numbers.
-    for (const [label, cutAt] of [
-      ["a-b", cuts.aToB],
-      ["b-a", cuts.bToA],
-    ] as const) {
-      await seekTo(page, cutAt - 0.3);
-      await shot(`before-${label}`);
-      await seekTo(page, cutAt + 0.3);
-      await shot(`after-${label}`);
-    }
-
-    // Both recordings really played: each element presented visible frames, and its
-    // presented-frame counter moved.
-    const log = { frames: allFrames };
-    for (const id of new Set(log.frames.map((f) => f.el))) {
-      const own = log.frames.filter((f) => f.el === id && f.active);
-      const counters = own.map((f) => f.presentedFrames);
+    const screen = stats("screen");
+    const webcam = item.webcam ? stats("webcam") : null;
+    const slug = item.title.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    await writeFile(
+      path.join(OUT_DIR, `single-${slug}.json`),
+      JSON.stringify(
+        { item: item.title, webcam: item.webcam, from, end, screen, webcamStats: webcam, ...log },
+        null,
+        1,
+      ),
+    );
+    console.log(
+      `[verify] ${NAME}: single item=${item.title} webcam=${item.webcam ? "yes" : "no"} ` +
+        `visibleFrames=${screen.visibleFrames} wallGapMedianMs=${fmt(screen.wallGapMedianMs)} ` +
+        `wallGapMaxMs=${fmt(screen.wallGapMaxMs)} mediaStepMedianMs=${fmt(screen.mediaStepMedianMs)} ` +
+        `gapsOver60=${screen.gapsOver60}`,
+    );
+    if (webcam) {
       console.log(
-        `[verify] ${NAME}: ${id} presented ${own.length} visible frames ` +
-          `(counter ${Math.min(...counters)}→${Math.max(...counters)})`,
-      );
-      expect(own.length, `${id} presented visible frames`).toBeGreaterThan(5);
-      expect(Math.max(...counters), `${id} presented-frame counter moved`).toBeGreaterThan(
-        Math.min(...counters),
+        `[verify] ${NAME}: single item=${item.title} el=webcam ` +
+          `frames=${webcam.visibleFrames} wallGapMedianMs=${fmt(webcam.wallGapMedianMs)} ` +
+          `wallGapMaxMs=${fmt(webcam.wallGapMaxMs)} mediaStepMedianMs=${fmt(webcam.mediaStepMedianMs)} ` +
+          `gapsOver60=${webcam.gapsOver60}`,
       );
     }
-    expect(new Set(log.frames.filter((f) => f.active).map((f) => f.el)).size).toBe(2);
+    expect(screen.visibleFrames, `${item.title} presented screen frames`).toBeGreaterThan(5);
   } finally {
-    await finish();
+    try {
+      await launched.teardown();
+    } catch (error) {
+      console.error(`[verify] ${NAME}: closing the app failed`, error);
+    }
   }
-});
+}
+
+if (single) {
+  test("single recording playback: frame cadence of one recording alone", async () => {
+    test.setTimeout(240_000);
+    // Webcam first, then the one without: each in its own app launch.
+    for (const item of SINGLE_ITEMS) await measureSingle(item);
+  });
+} else {
+  test("joined playback: frame gap at the cuts between two recordings", async () => {
+    const cuts = await seededCuts();
+    console.log(
+      `[verify] ${NAME}: layout A→B at ${cuts.aToB}s, B→A at ${cuts.bToA}s, total ${cuts.total}s`,
+    );
+
+    const seedVault = async (vaultDir: string): Promise<void> => {
+      ensureFixtures();
+      await seedCatalogVault(vaultDir, {
+        now: Date.now(),
+        content: "demo",
+        joinedRecordings: true,
+      });
+    };
+
+    // With the window video by default; without it only the screenshots remain.
+    const withVideo = process.env.KAIPU_PROOF_VIDEO !== "0";
+    let page: Page;
+    let shot: (name: string) => Promise<void>;
+    let finish: () => Promise<void>;
+    if (withVideo) {
+      const scenario = await startScenario(NAME, { seedVault });
+      ({ page, shot, finish } = scenario);
+    } else {
+      await rm(OUT_DIR, { recursive: true, force: true });
+      await mkdir(OUT_DIR, { recursive: true });
+      const launched = await launchApp({ seedVault });
+      page = launched.page;
+      let n = 0;
+      shot = async (name) => {
+        n += 1;
+        await page.screenshot({
+          path: path.join(OUT_DIR, `${String(n).padStart(2, "0")}-${name}.png`),
+        });
+      };
+      finish = async () => {
+        try {
+          await launched.teardown();
+        } catch (error) {
+          console.error(`[verify] ${NAME}: closing the app failed`, error);
+        }
+        for (const f of (await readdir(OUT_DIR)).sort()) {
+          console.log(`[verify] ${NAME}: ${f} (${(await stat(path.join(OUT_DIR, f))).size} bytes)`);
+        }
+      };
+    }
+    console.log(`[verify] ${NAME}: window video ${withVideo ? "on" : "off (KAIPU_PROOF_VIDEO=0)"}`);
+
+    try {
+      await dismissOnboarding(page);
+      const gotIt = page.getByRole("button", { name: "Got it" });
+      if (await gotIt.isVisible().catch(() => false)) await gotIt.click();
+      await page.evaluate((id) => {
+        location.hash = `#/editor/video/${id}`;
+      }, ASSETS.joinedDemo);
+      await page.waitForFunction(() => location.hash.startsWith("#/editor/video/"));
+      const play = page.getByRole("button", { name: "Play", exact: true });
+      await expect(play).toBeVisible({ timeout: 30_000 });
+
+      // Both recordings ready: the opened `<video>` and the joined one, each holding a frame.
+      const ready = (): Promise<unknown> =>
+        page.waitForFunction(
+          () => {
+            const v = [
+              ...document.querySelectorAll<HTMLVideoElement>(
+                '[data-testid="preview-content"] video',
+              ),
+            ];
+            return v.length === 2 && v.every((el) => el.readyState >= 2);
+          },
+          undefined,
+          { timeout: 30_000 },
+        );
+      try {
+        await ready();
+      } catch {
+        // A standby element may only load its first frame once it is primed; seeking primes it.
+        const states = await page.evaluate(() =>
+          [
+            ...document.querySelectorAll<HTMLVideoElement>('[data-testid="preview-content"] video'),
+          ].map((el) => ({ id: el.dataset.recording ?? "opened", readyState: el.readyState })),
+        );
+        console.log(`[verify] ${NAME}: not both ready yet ${JSON.stringify(states)}`);
+      }
+
+      await installFrameLogger(page);
+
+      const allFrames: FrameEntry[] = [];
+      const measure = async (label: string, cutAt: number): Promise<void> => {
+        const from = await seekTo(page, cutAt - LEAD_SECONDS);
+        await clearLog(page);
+        await play.click();
+        await page.waitForTimeout((LEAD_SECONDS + TAIL_SECONDS) * 1000);
+        await page.getByRole("button", { name: "Pause", exact: true }).click();
+        const log = await readLog(page);
+        const end = (await clockNow(page)).now;
+        const summary = summarize(log);
+        allFrames.push(...log.frames);
+        await writeFile(
+          path.join(OUT_DIR, `frames-${label}.json`),
+          JSON.stringify({ cut: label, cutAt, from, end, summary, ...log }, null, 1),
+        );
+        console.log(
+          `[verify] ${NAME}: cut=${label.toUpperCase().replace("-", "→")} ` +
+            `maxGapMs=${fmt(summary.maxGapMs)} medianMs=${fmt(summary.medianMs)} stalls=${summary.stalls}`,
+        );
+        console.log(
+          `[verify] ${NAME}: cut=${label} played ${from.toFixed(1)}s→${end.toFixed(1)}s, ` +
+            `${summary.framesVisible} visible frames, switch at ${
+              summary.switchAtMs === null ? "none seen" : `${fmt(summary.switchAtMs)} ms`
+            }`,
+        );
+      };
+      await measure("a-b", cuts.aToB);
+      await measure("b-a", cuts.bToA);
+
+      // Paused pictures just before and after each cut, taken after the timed runs so the
+      // screenshots cannot disturb the numbers.
+      for (const [label, cutAt] of [
+        ["a-b", cuts.aToB],
+        ["b-a", cuts.bToA],
+      ] as const) {
+        await seekTo(page, cutAt - 0.3);
+        await shot(`before-${label}`);
+        await seekTo(page, cutAt + 0.3);
+        await shot(`after-${label}`);
+      }
+
+      // Both recordings really played: each element presented visible frames, and its
+      // presented-frame counter moved.
+      const log = { frames: allFrames };
+      for (const id of new Set(log.frames.map((f) => f.el))) {
+        const own = log.frames.filter((f) => f.el === id && f.active);
+        const counters = own.map((f) => f.presentedFrames);
+        console.log(
+          `[verify] ${NAME}: ${id} presented ${own.length} visible frames ` +
+            `(counter ${Math.min(...counters)}→${Math.max(...counters)})`,
+        );
+        expect(own.length, `${id} presented visible frames`).toBeGreaterThan(5);
+        expect(Math.max(...counters), `${id} presented-frame counter moved`).toBeGreaterThan(
+          Math.min(...counters),
+        );
+      }
+      expect(new Set(log.frames.filter((f) => f.active).map((f) => f.el)).size).toBe(2);
+    } finally {
+      await finish();
+    }
+  });
+}
