@@ -61,7 +61,7 @@ export interface ExportStartMessage {
   webcam: WebcamTrackMessage | null;
   /**
    * The joined recordings (ADR 0058) the plan's clips read, in first-use order, each with its
-   * start on the source axis; `[]` for a scene without joins. Not read by the worker yet.
+   * start on the source axis; `[]` for a scene without joins.
    */
   joined: Array<{
     sourceId: string;
