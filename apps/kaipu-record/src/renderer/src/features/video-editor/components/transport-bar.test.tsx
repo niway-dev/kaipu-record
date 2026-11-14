@@ -674,3 +674,38 @@ describe("TransportBar — a narrow bar sheds the least valuable thing first (NI
     expect(rule).toMatch(/position:\s*absolute/);
   });
 });
+
+describe("TransportBar — Add recording (NIW2-782)", () => {
+  it("has no Add recording button unless the page passes onAddRecording", () => {
+    renderBar();
+    expect(screen.queryByRole("button", { name: "Add recording" })).toBeNull();
+  });
+
+  it("puts Add recording at the left end of the row, before Tracks", () => {
+    renderBar({ onAddRecording: vi.fn() });
+    expect(controlNames().slice(0, 2)).toEqual(["Add recording", "Tracks, 6 of 6 shown"]);
+  });
+
+  it("clicking Add recording calls onAddRecording", () => {
+    const onAddRecording = vi.fn();
+    renderBar({ onAddRecording });
+    fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+    expect(onAddRecording).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks the button pressed while the Add from Library panel is open", () => {
+    renderBar({ onAddRecording: vi.fn(), addRecordingActive: true });
+    expect(screen.getByRole("button", { name: "Add recording" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("is not pressed while the panel is closed", () => {
+    renderBar({ onAddRecording: vi.fn() });
+    expect(screen.getByRole("button", { name: "Add recording" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+});

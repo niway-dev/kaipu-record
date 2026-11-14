@@ -169,6 +169,8 @@ import { useStillCapture } from "@renderer/features/video-editor/export/use-stil
 import { planStill } from "@renderer/features/video-editor/export/still-plan";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { useSourceCaptures } from "@renderer/features/video-editor/use-source-captures";
+import { useJoinRecording } from "@renderer/features/video-editor/use-join-recording";
+import { useLibraryRecordings } from "@renderer/features/video-editor/use-library-recordings";
 import {
   axisSecondsOfCapture,
   captureOriginAt,
@@ -177,6 +179,7 @@ import {
   formatClock,
 } from "@renderer/features/video-editor/capture-time";
 import { CapturesPanel } from "@renderer/features/video-editor/components/captures-panel";
+import { AddFromLibraryPanel } from "@renderer/features/video-editor/components/add-from-library-panel";
 import { probeSource, type SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import { useHiddenTracks } from "@renderer/features/video-editor/use-hidden-tracks";
@@ -693,6 +696,12 @@ function VideoEditor({
   // images keeps showing them, so a preview never hides what the export draws.
   const levelsOn = useFlag("timeline-levels");
   const showMedia = levelsOn || (scene.media?.length ?? 0) > 0;
+  // Add recording (NIW2-782): Add from Library takes the right column like Captures does.
+  // The state is only ever read through `addRecordingShown`, so with the flag off the panel
+  // cannot open whatever the state holds.
+  const [addRecordingOpen, setAddRecordingOpen] = useState(false);
+  const addRecordingShown = levelsOn && addRecordingOpen;
+  const libraryRecordings = useLibraryRecordings(addRecordingShown);
   // Writes the session ~800 ms after every commit/endInteract, and flushes on unmount
   // and beforeunload. See plans/video-editor-v2/07: before this, closing the window
   // threw away every cut, zoom and redaction, because useBlocker below only ever sees
@@ -884,7 +893,10 @@ function VideoEditor({
     setCursorInspectorOpen(false);
     // Selecting something opens its inspector, which replaces the captures; a deselect
     // (null id) opens nothing, so the panel stays.
-    if (id !== null) setCapturesOpen(false);
+    if (id !== null) {
+      setCapturesOpen(false);
+      setAddRecordingOpen(false);
+    }
     selectSelection(...args);
   }, [selectSelection, showTrack]);
   // Hiding a lane clears a selection that lives on it: the item would stay selected on a
@@ -1430,6 +1442,7 @@ function VideoEditor({
       if (existing) {
         clearSelection();
         setCursorInspectorOpen(false);
+        setAddRecordingOpen(false);
         setCapturesOpen(true);
         setHighlightedCaptureId(existing.assetId);
         if (highlightTimer.current) clearTimeout(highlightTimer.current);
@@ -1474,6 +1487,7 @@ function VideoEditor({
       // inspector does): Delete must never remove an item whose inspector is not on screen.
       clearSelection();
       setCursorInspectorOpen(false);
+      setAddRecordingOpen(false);
       setCapturesOpen(true);
       await refreshCaptures();
     } catch (error) {
@@ -1525,8 +1539,35 @@ function VideoEditor({
     }
     clearSelection();
     setCursorInspectorOpen(false);
+    setAddRecordingOpen(false);
     setCapturesOpen(true);
   }, [capturesOpen, clearSelection]);
+
+  // Add recording (NIW2-782). The join itself is `useJoinRecording`: the clip lands at the
+  // boundary nearest the time it is given, as one undo step. `source.durationSeconds` is the
+  // opened recording's span on the shared axis (ADR 0058), `frameAspect` the frame the joined
+  // recording's cursor is mapped into.
+  const joinRecordingAt = useJoinRecording(controller, source.durationSeconds, frameAspect);
+  const toggleAddRecording = useCallback(() => {
+    if (addRecordingOpen) {
+      setAddRecordingOpen(false);
+      return;
+    }
+    // Like Captures, the panel takes the inspector's place, so the selection goes too.
+    clearSelection();
+    setCursorInspectorOpen(false);
+    setCapturesOpen(false);
+    setAddRecordingOpen(true);
+  }, [addRecordingOpen, clearSelection]);
+  const addRecording = useCallback(
+    async (video: LibraryVideo, at: number): Promise<void> => {
+      // `busy` (a drag owns the scene) does nothing: the click is simply not taken.
+      if ((await joinRecordingAt(video, at)) === "missing") {
+        showToast({ message: t("addRecordingMissing", { title: video.title }) });
+      }
+    },
+    [joinRecordingAt, t],
+  );
 
   /** A capture's image: move the playhead to its moment, if that moment is still on the timeline. */
   const seekToCapture = useCallback(
@@ -1840,6 +1881,7 @@ function VideoEditor({
     clearSelection();
     setVideoTool("select");
     setCapturesOpen(false);
+    setAddRecordingOpen(false);
     setCursorInspectorOpen(true);
   }, [clearSelection, setVideoTool]);
   /** Timeline range covered by a source range's visible pieces (inspector + draw badge). */
@@ -1862,6 +1904,7 @@ function VideoEditor({
       if (isPrivacyTool(tool)) clearSelection();
       setCursorInspectorOpen(false);
       setCapturesOpen(false);
+      setAddRecordingOpen(false);
       videoTools.setTool(tool);
     },
     [clearSelection, videoTools],
@@ -1983,6 +2026,7 @@ function VideoEditor({
         clearSelection();
         setCursorInspectorOpen(false);
         setCapturesOpen(false);
+        setAddRecordingOpen(false);
         return;
       }
       // Annotation selection takes precedence over segment deletion when both exist —
@@ -2402,6 +2446,8 @@ function VideoEditor({
             onToggleFullscreen={handleFullscreen}
             timelineView={timelineView}
             onOpenGuide={openGuideFirstTab}
+            onAddRecording={levelsOn ? toggleAddRecording : undefined}
+            addRecordingActive={addRecordingShown}
           />
         </main>
         {/* NIW2-611: the video takes the left edge and the tools sit on its right, so the
@@ -2475,6 +2521,14 @@ function VideoEditor({
               onDelete={deleteCapture}
               highlightedId={highlightedCaptureId}
               onClose={() => setCapturesOpen(false)}
+            />
+          ) : addRecordingShown ? (
+            <AddFromLibraryPanel
+              videos={libraryRecordings.videos}
+              openedAssetId={source.assetId}
+              loaded={libraryRecordings.loaded}
+              onAdd={(video) => void addRecording(video, playback.timelineTime)}
+              onClose={() => setAddRecordingOpen(false)}
             />
           ) : (
             <EditorInspector>
