@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { initialScene, type TrackItem } from "../scene";
 import {
   buildExportPlan,
+  type ExportPlan,
   gifFrameSchedule,
   gifOutputSize,
   gifRangeProblem,
@@ -65,6 +66,35 @@ describe("sliceExportPlan", () => {
     expect(sliced.segments).toEqual([
       { kind: "slide", timelineStart: 0, duration: 1, assetId: "asset-s1" },
       { kind: "clip", timelineStart: 1, duration: 1, sourceStart: 0, sourceEnd: 1, sourceId: null },
+    ]);
+  });
+
+  it("keeps the recording id of a clip from a joined recording", () => {
+    // One clip reading joined recording "b" (source 20–25) over timeline 0–5.
+    const joined: ExportPlan = {
+      ...plan,
+      segments: [
+        {
+          kind: "clip",
+          timelineStart: 0,
+          duration: 5,
+          sourceStart: 20,
+          sourceEnd: 25,
+          sourceId: "b",
+        },
+      ],
+      overlayWindows: [],
+      totalDuration: 5,
+    };
+    expect(sliceExportPlan(joined, 1, 3).segments).toEqual([
+      {
+        kind: "clip",
+        timelineStart: 0,
+        duration: 2,
+        sourceStart: 21,
+        sourceEnd: 23,
+        sourceId: "b",
+      },
     ]);
   });
 
