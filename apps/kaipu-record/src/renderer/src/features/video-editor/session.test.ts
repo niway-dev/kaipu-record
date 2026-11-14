@@ -762,6 +762,28 @@ describe("floating images (media)", () => {
     expect([item.fadeInMs, item.fadeOutMs]).toEqual([2000, 0]);
   });
 
+  it("keeps a fitted box narrower than the drag minimum through a save and reopen", () => {
+    // A 400x6000 image fitted into a 1600x900 picture is 0.0375 wide: valid, and narrower than
+    // the 0.05 floor a drag respects.
+    const tall = {
+      ...IMAGE,
+      naturalWidth: 400,
+      naturalHeight: 6000,
+      box: { x: 0.5, y: 0.5, width: 0.0375 },
+    };
+    const scene: VideoScene = { ...initialScene(10), items: [CLIP_ITEM], media: [tall] };
+    expect(parseSession(serializeSession(scene))!.scene.media![0].box.width).toBe(0.0375);
+  });
+
+  it("drops an item whose box width is zero or negative", () => {
+    const parsed = withMedia([
+      { ...IMAGE, id: "zero", box: { x: 0.5, y: 0.5, width: 0 } },
+      { ...IMAGE, id: "neg", box: { x: 0.5, y: 0.5, width: -0.2 } },
+      IMAGE,
+    ])!;
+    expect(parsed.scene.media!.map((m) => m.id)).toEqual(["m1"]);
+  });
+
   it("makes z unique, keeping the saved front-to-back order", () => {
     const parsed = withMedia([
       { ...IMAGE, id: "a", z: 5 },

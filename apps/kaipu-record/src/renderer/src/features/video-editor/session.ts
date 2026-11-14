@@ -67,6 +67,7 @@ export interface VideoEditSession {
 
 import { parseCursorSettings } from "./cursor/cursor-model";
 import { parseBackground } from "./background";
+import { MEDIA_MAX_FADE_MS } from "./media";
 
 export function serializeSession(scene: VideoScene): string {
   return JSON.stringify({ version: 1, scene });
@@ -265,8 +266,6 @@ function validateItem(raw: unknown): TrackItem | null {
   return null;
 }
 
-const MEDIA_FADE_MAX_MS = 2000;
-
 function clampUnit(n: number): number {
   return Math.min(1, Math.max(0, n));
 }
@@ -289,9 +288,9 @@ function validateMediaItem(raw: unknown): ImageMediaItem | null {
     return null;
   }
   const b = obj(m["box"]);
-  if (!b || !isNum(b["x"]) || !isNum(b["y"]) || !isNum(b["width"])) return null;
+  if (!b || !isNum(b["x"]) || !isNum(b["y"]) || !isNum(b["width"]) || b["width"] <= 0) return null;
   const fade = (v: unknown): number =>
-    isNum(v) ? Math.min(MEDIA_FADE_MAX_MS, Math.max(0, Math.round(v))) : 0;
+    isNum(v) ? Math.min(MEDIA_MAX_FADE_MS, Math.max(0, Math.round(v))) : 0;
   return {
     id: m["id"],
     kind: "image",
@@ -303,8 +302,9 @@ function validateMediaItem(raw: unknown): ImageMediaItem | null {
     box: {
       x: clampUnit(b["x"]),
       y: clampUnit(b["y"]),
-      // Same floor as `setMediaBox`: a hand-edited zero would leave nothing to grab.
-      width: Math.min(1, Math.max(0.05, b["width"])),
+      // A valid width is kept, even below the drag minimum: a tall image fitted to the picture
+      // is narrower than that, like `setMediaBox` keeps it. Zero or negative was rejected above.
+      width: Math.min(1, b["width"]),
     },
     z: isNum(m["z"]) ? m["z"] : 0,
     fadeInMs: fade(m["fadeInMs"]),
