@@ -54,11 +54,11 @@ Ventana principal          Ventanas secundarias
 | Flag                      | Default | In PostHog         | Purpose                                                                                                                                              |
 | ------------------------- | ------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `native-cursor-capture`   | `true`  | deleted 2026-11-12 | Cursor-free macOS capture with an editable cursor in the editor, for Screen, Frame and Window ([NIW2-660](https://linear.app/niway/issue/NIW2-660)). |
-| `capture-while-recording` | `false` | disabled           | Screenshots during a take, macOS only (NIW2-688).                                                                                                    |
-| `image-canvas`            | `false` | disabled           | Image editor canvas (NIW2-698).                                                                                                                      |
-| `image-inspect`           | `false` | disabled           | Image editor Inspect mode (NIW2-699).                                                                                                                |
-| `image-text`              | `false` | disabled           | Text recognition in the image editor, macOS only (NIW2-705).                                                                                         |
-| `timeline-levels`         | `false` | active, owner only | Clips levels, stage 1: Add to timeline adds a floating image above the sequence (NIW2-770).                                                          |
+| `capture-while-recording` | `false` | owner devices only | Screenshots during a take, macOS only (NIW2-688).                                                                                                    |
+| `image-canvas`            | `false` | owner devices only | Image editor canvas (NIW2-698).                                                                                                                      |
+| `image-inspect`           | `false` | owner devices only | Image editor Inspect mode (NIW2-699).                                                                                                                |
+| `image-text`              | `false` | owner devices only | Text recognition in the image editor, macOS only (NIW2-705).                                                                                         |
+| `timeline-levels`         | `false` | owner devices only | Add to timeline in the video editor's Captures panel (NIW2-772); with it on, the button adds a floating image above the Clips sequence (NIW2-771).   |
 
 posthog-js (≥ 1.261.8) returns `undefined` for a **disabled** or missing flag, so the code
 default applies, and `false` for an enabled flag the user does not match. A PostHog value
@@ -66,11 +66,12 @@ otherwise wins over the default.
 
 ### Turning a release flag on
 
-`capture-while-recording` and the three `image-*` flags exist in PostHog **disabled**, so every
-build uses its default, `false`. To ship the feature without a release, **enable the flag at
-100%**. Builds that predate the flag never read it, so they are unaffected. Once the feature is
-validated, flip the default to `true` in `src/shared/analytics.ts` (or remove the flag) and
-delete it from PostHog.
+`capture-while-recording`, the three `image-*` flags and `timeline-levels` exist in PostHog, each
+with one condition that matches only the owner's two devices, so every other build uses its
+default, `false`. To ship the feature without a release, **roll the flag out to 100%**. Builds
+that predate the flag never read it, so they are unaffected. Once the feature is validated, flip
+the default to `true` in `src/shared/analytics.ts` (or remove the flag) and delete it from
+PostHog.
 
 ### Native cursor: no remote kill switch
 

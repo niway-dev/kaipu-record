@@ -291,11 +291,10 @@ const OVERLAY_PREWARM_AFTER_LAUNCH_MS = 3000;
 const BASE_MIN_HEIGHT = 560;
 /** The screenshot editor (toolbar + canvas + beautify panel) needs more room. */
 /**
- * The first-run takeover. Its content does not reflow — a 96px brand mark, a
- * headline, a two-line subtitle and a 2x2 grid of permission cards — so under
- * this floor the step stops being a page and turns into a scroll well with the
- * footer buttons pushed out of reach. Width is the base floor (the step is
- * capped at 640px plus gutters); only the height needs raising.
+ * The first-run takeover. Its content does not reflow — four steps, the tallest being
+ * Welcome (five feature cards) and Permissions (four rows) — so under this floor the step
+ * stops being a page and turns into a scroll well with the footer buttons pushed out of
+ * reach. Width is the base floor; only the height needs raising.
  */
 const ONBOARDING_MIN_WIDTH = BASE_MIN_WIDTH;
 // 700 used to exclude the native title bar; the 48 px bar is now inside the window, which
@@ -552,7 +551,7 @@ function showAlreadyRecordingNotice(): void {
   }).show();
 }
 
-function triggerStartRecording(options: { reveal?: boolean } = {}): void {
+function triggerStartRecording(options: { reveal?: boolean; countdownDone?: boolean } = {}): void {
   if (hub?.isActive()) {
     // Don't un-hide the (deliberately hidden) main window into an active
     // recording — it would get burned into the video with no explanation.
@@ -573,7 +572,12 @@ function triggerStartRecording(options: { reveal?: boolean } = {}): void {
   } else {
     showMainWindow();
   }
-  sendToRenderer(IPC_CHANNELS.recordingRequestStart);
+  // The overlay already counted down: the recorder starts the take at once.
+  if (options.countdownDone) {
+    sendToRenderer(IPC_CHANNELS.recordingRequestStart, { countdownDone: true });
+  } else {
+    sendToRenderer(IPC_CHANNELS.recordingRequestStart);
+  }
 }
 
 /**
@@ -703,13 +707,20 @@ async function applyRecordTarget(target: RecordTarget): Promise<void> {
   if (target.start) {
     // If the recorder never starts (a dialog in the hidden window, no source, not idle) or
     // the countdown is cancelled, the hidden app comes back instead of staying out of sight.
-    hub.prepareRegionCountdown(target.displayId, target.rect, showMainWindow);
+    hub.prepareRegionCountdown(
+      target.displayId,
+      target.rect,
+      showMainWindow,
+      target.countdownDone ? { countdownDone: true } : undefined,
+    );
     // The renderer is not told the target: `selectArea` broadcast it as settings, and the
     // recorder reads source and area when its countdown ends, not when the request lands; an
     // acquisition it made during the countdown with an older target is released (recorder-store
     // test "resolves the take's input again when the countdown ends"). A start path without a
     // countdown must carry the target in the request instead.
-    triggerStartRecording({ reveal: false });
+    triggerStartRecording(
+      target.countdownDone ? { reveal: false, countdownDone: true } : { reveal: false },
+    );
     return;
   }
   const mainVisible = !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible();
@@ -988,7 +999,11 @@ app.whenReady().then(async () => {
   // region capture as the ⌘⇧1 hotkey.
   ipcMain.on(IPC_CHANNELS.screenshotRequestCapture, (_event, request?: { mode?: unknown }) => {
     capturePanel?.hide();
-    triggerCaptureScreenshot({ mode: isCaptureMode(request?.mode) ? request.mode : "frame" });
+    if (isCaptureMode(request?.mode)) {
+      triggerCaptureScreenshot({ mode: request.mode });
+    } else {
+      triggerShortcutCapture("captureScreenshot");
+    }
   });
 
   // App version for the renderer-side version gate.
@@ -1044,6 +1059,11 @@ app.whenReady().then(async () => {
       captureScreenshot: () => pressWidgetKey("capture"),
       captureWindow: () => triggerShortcutCapture("captureWindow"),
       captureInstant: () => triggerCaptureScreenshot({ mode: "screen", intent: "instant" }),
+    },
+    onFired: (action) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send(IPC_CHANNELS.shortcutFired, action);
+      }
     },
   });
   onSettingsKeysChanged(["shortcuts"], () => applyGlobalShortcuts());
@@ -1112,6 +1132,7 @@ app.whenReady().then(async () => {
     (target) => void applyRecordTarget(target),
     () => (hub?.isActive() || hub?.isPending()) ?? false,
     async () => (await hub?.screenshotTarget()) ?? null,
+    () => showMainWindowAt(`${ROUTES.settings}/recording`),
   );
   // Pays Vision's first-use compile in the background, once the renderer reports `image-text`.
   startTextRecognitionWarmUp();

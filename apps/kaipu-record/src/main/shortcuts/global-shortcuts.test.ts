@@ -63,3 +63,23 @@ describe("global shortcuts and Window mode", () => {
     expect(registered).toContain(DEFAULT_SHORTCUTS.captureWindow);
   });
 });
+
+describe("global shortcuts report each press", () => {
+  beforeEach(() => register.mockClear());
+
+  it("runs the action's handler, then tells onFired which action it was", () => {
+    const h = handlers() as Record<string, ReturnType<typeof vi.fn>>;
+    const onFired = vi.fn();
+    registerGlobalShortcuts({
+      getShortcuts: () => DEFAULT_SHORTCUTS,
+      handlers: h as never,
+      onFired,
+    });
+    const call = register.mock.calls.find(
+      ([accelerator]) => accelerator === DEFAULT_SHORTCUTS.captureInstant,
+    );
+    call?.[1]();
+    expect(h.captureInstant).toHaveBeenCalledTimes(1);
+    expect(onFired).toHaveBeenCalledWith("captureInstant");
+  });
+});

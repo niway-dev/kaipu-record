@@ -39,9 +39,10 @@ export const FLAG_DEFAULTS: Record<FlagName, boolean> = {
   "image-inspect": false,
   // Text recognition in the image editor, macOS only for now (NIW2-705): off until owner QA.
   "image-text": false,
-  // Clips levels (NIW2-770): Add to timeline adds a floating image above the sequence. Off until
-  // the owner accepts stage 1; a scene that already has floating items still shows and exports
-  // them with the flag off.
+  // Clips levels (NIW2-770). With the flag off the Captures panel hides Add to timeline (NIW2-772),
+  // so 0.19.0 does not ship the 3 s slide; with it on, Add to timeline adds a floating image above
+  // the sequence (NIW2-771). A scene that already has floating items still shows and exports them
+  // with the flag off.
   "timeline-levels": false,
 };
 

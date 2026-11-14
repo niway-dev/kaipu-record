@@ -276,15 +276,22 @@ function clearCountdownTimer(): void {
  * time. With the countdown off the take starts right away: no "counting" state, no wait for
  * the countdown to be on screen. No-ops unless idle, so callers don't need their own re-entry
  * guard.
+ *
+ * `options.skipCountdown`: the capture overlay already ran the countdown for this request, so
+ * it takes the "countdown off" branch whatever the setting says. Only this request is affected.
  */
-export function requestStartRecording(resolveInput: () => StartInput): void {
+export function requestStartRecording(
+  resolveInput: () => StartInput,
+  options?: { skipCountdown?: boolean },
+): void {
   if (snapshot.status !== "idle") return;
   lastResolveInput = resolveInput;
   beginRecordTiming("requestStartRecording");
   const request = ++countdownRequest;
-  const seconds = countdownSeconds;
+  const skip = options?.skipCountdown === true;
+  const seconds = skip ? 0 : countdownSeconds;
   if (seconds === 0) {
-    markRecordTiming("countdown off");
+    markRecordTiming(skip ? "countdown done in the overlay" : "countdown off");
     startTake(resolveInput);
     return;
   }

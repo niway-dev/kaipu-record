@@ -43,7 +43,10 @@ const path = require("node:path");
       }),
     );
     await page.screenshot({ path: path.join(evidence, "initial.png") });
-    await page.getByRole("button", { name: "Skip setup", exact: true }).click();
+    const onboarding = page.getByRole("dialog", { name: "Onboarding" });
+    await onboarding.waitFor({ state: "visible", timeout: 15000 });
+    await page.keyboard.press("Escape");
+    await onboarding.waitFor({ state: "detached" });
     await page.getByRole("button", { name: "Screen", exact: true }).click();
     await page.waitForTimeout(1500);
     const overlay = app

@@ -42,7 +42,7 @@ export interface Profile {
    * the capture overlay turns it off; it runs last (spec failure 11).
    */
   readonly disableScreenCapture?: boolean;
-  /** `dismiss` (default) clicks "Skip setup"; `keep` leaves the first-run takeover up. */
+  /** `dismiss` (default) closes it with Escape; `keep` leaves the first-run takeover up. */
   readonly onboarding?: "dismiss" | "keep";
   /** Permissions every state of the profile needs; else they are reported not capturable. */
   readonly requires?: Requires;
@@ -117,6 +117,12 @@ export const PROFILES = {
     seed: "demo",
     flags: { "image-canvas": true },
     corruptCanvas: true,
+  },
+  "timeline-levels": {
+    description:
+      "Flag timeline-levels forced on: the video editor's Captures panel shows Add to timeline on each capture.",
+    seed: "demo",
+    flags: { "timeline-levels": true },
   },
   "image-inspect": {
     description:

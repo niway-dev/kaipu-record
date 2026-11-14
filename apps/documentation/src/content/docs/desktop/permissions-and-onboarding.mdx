@@ -39,27 +39,44 @@ Los panes son URLs deep-link por kind y plataforma (`MAC_PANES` / `WINDOWS_PANES
 
 ## Onboarding
 
-`features/onboarding/` — first-run overlay with three steps (`steps/`): **welcome →
-permissions → done**.
+`features/onboarding/` — first-run overlay with four steps (`steps/`): **welcome →
+permissions → shortcuts → done**. The navigation rules live in `onboarding-flow.ts`, free
+of React; the design is the [onboarding v2 spec](/specs/2026-11-13-onboarding-v2/).
+Only Permissions blocks.
 
-- **Welcome** carries the **language picker** (`Español` / `English`, each named in
-  itself). A first run always opens in **English**: `settings-store.ts` deliberately does
-  not seed `AppSettings.locale` from the OS, so this picker is where the user chooses.
-  It writes through the same provider as the Settings picker.
-- **Permissions** lists four rows: Screen Recording and Microphone (**required** to
-  finish — `REQUIRED_PERMISSIONS` in `permissions.ts`), Camera (optional) and, on macOS
-  only, **Accessibility** (optional, for auto-zoom on clicks). Accessibility is not a
-  `PermissionKind`: it is a single mac-only tri-state read through `useAccessibility`,
-  so it is rendered as its own row after the three media ones and hidden when the OS
-  reports `not-required`. Its "Allow" button and the Settings → Permissions row are the
-  only two call sites of `requestAccessibility()`; nothing on the recording path prompts.
+- **Welcome** shows what Kaipu does in five cards (Record, Capture, Edit and share, The
+  video editor, Workspaces). A card plays its demo in place: CSS keyframes over simplified
+  versions of the app's UI, in `demos/`. Under reduced motion each demo is frozen on a late
+  frame. Esc or "All features" returns to the cards. Welcome also carries the **language
+  picker** (`Español` / `English`, each named in itself). A first run always opens in
+  **English**: `settings-store.ts` deliberately does not seed `AppSettings.locale` from the
+  OS, so this picker is where the user chooses.
+- **Permissions** lists four rows, each with one line saying why: Screen Recording and
+  Microphone (**required** — `REQUIRED_PERMISSIONS` in `permissions.ts`), Camera
+  (optional) and, on macOS only, **Accessibility** (optional, for auto-zoom on clicks).
+  Accessibility is not a `PermissionKind`: it is a single mac-only tri-state read through
+  `useAccessibility`, so it is rendered as its own row and hidden when the OS reports
+  `not-required`. Its privacy and restart detail sits behind an (i). Its "Allow" button and
+  the Settings → Permissions row are the only two call sites of `requestAccessibility()`.
   Granting happens in System Settings, and the hook re-reads on window focus, so the row
-  flips to GRANTED when the user comes back.
-- `requiredPermissionsMet(status)` decides whether Continue is enabled.
+  flips to GRANTED when the user comes back. A grant in flight shows "Requesting…"; a
+  permission the OS already denied offers "Open Settings".
+- While screen and microphone are missing, Continue is off, the skip link only says why,
+  and the footer dots cannot jump past Permissions (`canJumpTo`).
+- **Shortcuts** shows the four shortcuts (capture, record, instant, show Kaipu) as keycaps
+  from the live bindings. A global shortcut reaches main, not the window, so main sends
+  `shortcut:fired` with the action after running it (`onFired` in `global-shortcuts.ts`),
+  and the step marks that card tried. The press runs the real action. A click on a card
+  does nothing. Trying them is optional.
+- **You're set** says where Kaipu lives (menu bar or system tray, and the Library) and has
+  two ways out: "Record something" and "Take a screenshot" close the onboarding, then open
+  the capture widget the same way ⇧⌘2 and ⇧⌘1 do.
+- Keyboard: Enter advances (a focused button keeps its own Enter), ← → move, Esc closes
+  (inside a demo it returns to the cards first). The E2E helper `dismissOnboarding` closes
+  it with Esc, since no skip link closes it before Permissions are granted.
 - State lives in `onboarding-store.ts`, exposed through `onboarding-context.ts` /
-  `onboarding-provider.tsx`.
-- **Replay**: the Settings page can reopen the overlay (`useOnboarding`) so the user can
-  review permissions whenever they want.
+  `onboarding-provider.tsx`. Closing or skipping marks it complete.
+- **Replay**: the Settings page can reopen the overlay (`useOnboarding`) at Welcome.
 
 Each media permission has display metadata (`PERMISSION_META`): lucide icon, name,
 whether it is required, and description.
