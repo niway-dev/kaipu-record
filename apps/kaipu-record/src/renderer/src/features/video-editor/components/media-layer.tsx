@@ -14,7 +14,7 @@
  * locked (media-box-drag.ts). A drag is one undo step: `onBegin` on the first movement,
  * `onBoxChange` live, `onEnd` on release, abort included (the same contract as the webcam layer).
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { uiArea } from "@renderer/lib/ui-area";
 import { mediaAt, mediaBoxPx, placeMedia, type PictureSize, type VisibleMedia } from "../media";
@@ -54,6 +54,11 @@ function drawList(
   return [...visible, { item: placed.item, opacity: 0 }].sort((a, b) => a.item.z - b.item.z);
 }
 
+/** Which items are drawn and at what opacity: two frames with the same key look the same. */
+function drawKey(list: VisibleMedia[]): string {
+  return list.map((v) => `${v.item.id}:${v.opacity.toFixed(3)}`).join("|");
+}
+
 function percentStyle(item: ImageMediaItem, picture: PictureSize): React.CSSProperties {
   const rect = mediaBoxPx(item, picture);
   return {
@@ -68,6 +73,8 @@ export function MediaLayer({
   media,
   layout,
   time,
+  playing = false,
+  readTime,
   picture,
   selectedId,
   interactive,
@@ -79,8 +86,14 @@ export function MediaLayer({
 }: {
   media: ImageMediaItem[] | undefined;
   layout: LayoutEntry[];
-  /** Timeline seconds under the playhead. */
+  /** Timeline seconds under the playhead, as the page state has it: exact when paused or
+   *  scrubbing, but sparse while playing (a few `timeupdate`s a second). */
   time: number;
+  /** While true the layer reads `readTime` every frame instead, so a 200 ms fade is a ramp and
+   *  an image appears on its frame, like the export, which samples at frame timestamps. */
+  playing?: boolean;
+  /** The clock the moving playhead reads (`playback.readTimelineTime`). */
+  readTime?: () => number;
   picture: PictureSize;
   selectedId: string | null;
   /** False while a drawing tool is armed, so a stroke can start over an image. */
@@ -95,7 +108,33 @@ export function MediaLayer({
   const t = useTranslations("videoEditor");
   const slotRef = useRef<HTMLDivElement | null>(null);
   const drag = useRef<Drag | null>(null);
-  const list = drawList(media, layout, time, selectedId);
+  // The time the frame is drawn at while playing: sampled per animation frame, and committed to
+  // state only when what is drawn changed, so a still stretch costs no re-render.
+  const [liveTime, setLiveTime] = useState<number | null>(null);
+  const latestDraw = useRef({ media, layout, selectedId });
+  latestDraw.current = { media, layout, selectedId };
+  const shownKey = useRef("");
+  useEffect(() => {
+    if (!playing || !readTime) {
+      setLiveTime(null);
+      return;
+    }
+    let raf = 0;
+    const tick = (): void => {
+      const now = readTime();
+      const d = latestDraw.current;
+      const key = drawKey(drawList(d.media, d.layout, now, d.selectedId));
+      if (key !== shownKey.current) {
+        shownKey.current = key;
+        setLiveTime(now);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [playing, readTime]);
+  const list = drawList(media, layout, playing && liveTime !== null ? liveTime : time, selectedId);
+  shownKey.current = drawKey(list);
   const selected = list.find((v) => v.item.id === selectedId)?.item ?? null;
 
   // The latest `onEnd`, for the unmount cleanup below (it must not re-run on a re-render).
@@ -124,9 +163,13 @@ export function MediaLayer({
   // The dragged image or its handle is gone while the layer stays (the playhead left its span,
   // it was deleted, a drawing tool was armed mid-drag): the element took the pointer capture
   // with it, so end the drag here.
-  const draggedId = drag.current?.id;
+  const dragging = drag.current;
   const draggedStillDrawn =
-    draggedId === undefined || (interactive && list.some((v) => v.item.id === draggedId));
+    dragging === null ||
+    (interactive &&
+      list.some((v) => v.item.id === dragging.id) &&
+      // A corner handle exists only while its item is the selection (Escape clears that).
+      (dragging.mode === "move" || selectedId === dragging.id));
   useEffect(() => {
     if (!draggedStillDrawn) finish();
     // `finish` only reads refs and the latest `onEnd` through the render that scheduled it.

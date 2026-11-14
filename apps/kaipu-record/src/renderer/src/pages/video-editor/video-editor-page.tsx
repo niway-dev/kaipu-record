@@ -1993,6 +1993,8 @@ function VideoEditor({
                     media={scene.media}
                     layout={layout}
                     time={playback.timelineTime}
+                    playing={playback.playing}
+                    readTime={playback.readTimelineTime}
                     picture={pictureSize}
                     selectedId={selectedMediaId}
                     // A drawing tool armed: a stroke can start over an image.

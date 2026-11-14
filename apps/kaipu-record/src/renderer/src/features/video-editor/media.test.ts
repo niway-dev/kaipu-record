@@ -277,6 +277,23 @@ describe("edits", () => {
     expect(moved[0].duration).toBe(10);
   });
 
+  it("a nudge of an item cut at the end by a shorter sequence stays where it is", () => {
+    // Starts at 5 for 10 s, but the sequence is now 10 s long: it covers 5-10.
+    const short = toLayout([clip("a", 0, 10)]);
+    const moved = moveMedia([img("m", 5, 10, 0)], short, "m", 5.1);
+    expect(moved[0].anchor).toEqual({ kind: "source", time: 5.1 });
+    // It may go on to the right (still cut, never past the minimum duration from the end) and
+    // back to the left, where it fits whole again.
+    expect(moveMedia([img("m", 5, 10, 0)], short, "m", 9.9)[0].anchor).toEqual({
+      kind: "source",
+      time: 9.5,
+    });
+    expect(moveMedia([img("m", 5, 10, 0)], short, "m", 0.5)[0].anchor).toEqual({
+      kind: "source",
+      time: 0.5,
+    });
+  });
+
   it("keeps a moved item inside the timeline with its full duration", () => {
     const moved = moveMedia([img("m", 5, 10, 0)], layout, "m", 59);
     expect(moved[0].anchor).toEqual({ kind: "source", time: 50 });

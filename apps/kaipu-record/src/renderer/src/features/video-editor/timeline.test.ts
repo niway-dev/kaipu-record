@@ -343,13 +343,18 @@ describe("floating-item anchors", () => {
     expect(resolveAnchor(apart, { kind: "source", time: 7 })).toBe(10);
   });
 
-  it("resolves the very end of the footage to the clip that ends there", () => {
-    expect(resolveAnchor(layout, { kind: "source", time: 30 })).toBe(layoutDuration(layout));
+  it("an anchor on the end of a clip belongs to no clip: the footage under it is gone", () => {
+    // Source 10 is where clip a ends, before the deleted 10-20 s gap.
+    expect(resolveAnchor(layout, { kind: "source", time: 10 })).toBeNull();
+    expect(resolveAnchor(layout, { kind: "source", time: 30 })).toBeNull();
   });
 
-  it("falls back to the clip that ends on the time when no clip contains it", () => {
-    // Source 10 is the end of clip a, before the deleted 10-20 s gap.
-    expect(resolveAnchor(layout, { kind: "source", time: 10 })).toBe(10);
+  it("deleting the footage that starts at the anchor drops it, even when the clip before ends there", () => {
+    // Clips [0,5) [5,10) [20,30); the image sits at source 5, then the middle clip is deleted.
+    const before = toLayout([clip("a", 0, 5), clip("m", 5, 10), clip("b", 20, 30)]);
+    const anchor = { kind: "source" as const, time: 5 };
+    expect(resolveAnchor(before, anchor)).toBe(5);
+    expect(resolveAnchor(toLayout([clip("a", 0, 5), clip("b", 20, 30)]), anchor)).toBeNull();
   });
 
   it("clamps a time past the end onto the last entry", () => {

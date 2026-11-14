@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { mediaBoxPx } from "../media";
 import type { ImageMediaItem, MediaBox } from "../scene";
 import { toLayout } from "../timeline";
@@ -304,5 +304,82 @@ describe("MediaLayer", () => {
     );
     expect(screen.queryAllByTestId(/^media-handle-/)).toHaveLength(0);
     expect(onEnd).toHaveBeenCalledOnce();
+  });
+
+  it("ends a corner drag when the selection is cleared in the middle of it (Escape)", () => {
+    const item = img("m", 0, 0);
+    const { onEnd, onBegin, rerender } = renderLayer({ media: [item], time: 1, selectedId: "m" });
+    const handle = screen.getByTestId("media-handle-se");
+    fireEvent.pointerDown(handle, { clientX: 500, clientY: 300, pointerId: 1 });
+    fireEvent.pointerMove(handle, { clientX: 580, clientY: 300, pointerId: 1 });
+    expect(onBegin).toHaveBeenCalledOnce();
+    rerender(
+      <MediaLayer
+        media={[item]}
+        layout={layout}
+        time={1}
+        picture={picture}
+        selectedId={null}
+        interactive
+        imageUrl={(assetId) => `blob:${assetId}`}
+        onSelect={vi.fn()}
+        onBegin={vi.fn()}
+        onBoxChange={vi.fn()}
+        onEnd={onEnd}
+      />,
+    );
+    expect(onEnd).toHaveBeenCalledOnce();
+  });
+
+  describe("while playing", () => {
+    it("draws at the per-frame clock, not at the sparse page time", () => {
+      vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+      try {
+        // A 1 s fade-in; the page state still says 0 (the image is not drawn there).
+        const fading = img("m", 0, 0, { fadeInMs: 1000 });
+        let clock = 0.25;
+        renderLayer({ media: [fading], time: 0, playing: true, readTime: () => clock });
+        expect(items()).toHaveLength(0);
+        act(() => void vi.advanceTimersByTime(20));
+        expect(items()).toHaveLength(1);
+        expect(items()[0].querySelector("img")!.style.opacity).toBe("0.25");
+        clock = 0.75;
+        act(() => void vi.advanceTimersByTime(20));
+        expect(items()[0].querySelector("img")!.style.opacity).toBe("0.75");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("goes back to the page time when playback stops", () => {
+      vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
+      try {
+        const fading = img("m", 0, 0, { fadeInMs: 1000 });
+        const props = { media: [fading], time: 0, readTime: () => 0.5 };
+        const { rerender } = renderLayer({ ...props, playing: true });
+        act(() => void vi.advanceTimersByTime(20));
+        expect(items()).toHaveLength(1);
+        rerender(
+          <MediaLayer
+            media={[fading]}
+            layout={layout}
+            time={0}
+            playing={false}
+            readTime={props.readTime}
+            picture={picture}
+            selectedId={null}
+            interactive
+            imageUrl={(assetId) => `blob:${assetId}`}
+            onSelect={vi.fn()}
+            onBegin={vi.fn()}
+            onBoxChange={vi.fn()}
+            onEnd={vi.fn()}
+          />,
+        );
+        expect(items()).toHaveLength(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

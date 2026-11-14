@@ -237,7 +237,13 @@ export function moveMedia(
 ): ImageMediaItem[] {
   const total = layoutDuration(layout);
   return update(media, id, (item) => {
-    const start = Math.max(0, Math.min(to, Math.max(0, total - item.duration)));
+    // An item the sequence was shortened under is cut at the end, and clamping against its stored
+    // duration would throw a nudge to the start of the video: it may go as far right as there is
+    // still room for the minimum duration, and it only has to fit whole when it fits now.
+    const current = resolveAnchor(layout, item.anchor);
+    const cut = current !== null && current + item.duration > total;
+    const room = cut ? MEDIA_MIN_DURATION : item.duration;
+    const start = Math.max(0, Math.min(to, Math.max(0, total - room)));
     const anchor = anchorAt(layout, start);
     return anchor ? { ...item, anchor } : item;
   });
