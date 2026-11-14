@@ -402,6 +402,10 @@ export const TimelineStrip = memo(function TimelineStrip({
     if (hoverRef.current) delete hoverRef.current.dataset.visible;
   }, []);
 
+  // The Clips row is a drop target for a dragged Library recording, with the "Insert here"
+  // indicator. Nothing drags one today: Add from Library (NIW2-790) is a modal with no draggable
+  // rows, and the page does not pass `onDropRecording`. The target stays for dragging a
+  // recording to reorder clips (NIW2-789), which reuses it.
   // Dragging a Library recording over the Clips row: the clip would land on the boundary nearest
   // the pointer (`insertBoundaryAt`, the join's own rule), so that boundary is drawn. Only a drag
   // that carries the recording type counts; files and text pass through untouched.

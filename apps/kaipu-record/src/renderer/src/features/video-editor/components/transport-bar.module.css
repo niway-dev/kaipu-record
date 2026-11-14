@@ -252,7 +252,7 @@
 }
 
 /* Add recording (NIW2-782): the Tracks trigger's twin at the row's left end, lit with the
-   accent while its panel is open. */
+   accent while its modal is open. */
 .addRecordingButton {
   display: inline-flex;
   flex: none;

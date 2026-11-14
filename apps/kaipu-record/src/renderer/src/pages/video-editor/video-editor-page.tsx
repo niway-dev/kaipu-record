@@ -180,11 +180,8 @@ import {
   formatClock,
 } from "@renderer/features/video-editor/capture-time";
 import { CapturesPanel } from "@renderer/features/video-editor/components/captures-panel";
-import {
-  anchoredBoundary,
-  boundaryAfterClipAt,
-} from "@renderer/features/video-editor/add-from-library";
-import { AddFromLibraryPanel } from "@renderer/features/video-editor/components/add-from-library-panel";
+import { anchoredBoundary } from "@renderer/features/video-editor/add-from-library";
+import { AddFromLibraryModal } from "@renderer/features/video-editor/components/add-from-library-modal";
 import { probeSource, type SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import { useHiddenTracks } from "@renderer/features/video-editor/use-hidden-tracks";
@@ -701,9 +698,8 @@ function VideoEditor({
   // images keeps showing them, so a preview never hides what the export draws.
   const levelsOn = useFlag("timeline-levels");
   const showMedia = levelsOn || (scene.media?.length ?? 0) > 0;
-  // Add recording (NIW2-782): Add from Library takes the right column like Captures does.
-  // The state is only ever read through `addRecordingShown`, so with the flag off the panel
-  // cannot open whatever the state holds.
+  // Add recording (NIW2-782, a modal since NIW2-790). The state is only ever read through
+  // `addRecordingShown`, so with the flag off the modal cannot open whatever the state holds.
   const [addRecordingOpen, setAddRecordingOpen] = useState(false);
   const addRecordingShown = levelsOn && addRecordingOpen;
   const libraryRecordings = useLibraryRecordings(addRecordingShown);
@@ -922,11 +918,9 @@ function VideoEditor({
     if (lane) showTrack(lane);
     setCursorInspectorOpen(false);
     // Selecting something opens its inspector, which replaces the captures; a deselect
-    // (null id) opens nothing, so the panel stays.
-    if (id !== null) {
-      setCapturesOpen(false);
-      setAddRecordingOpen(false);
-    }
+    // (null id) opens nothing, so the panel stays. Add from Library is a modal: adding a
+    // screenshot from it selects the new image behind it and the modal stays open.
+    if (id !== null) setCapturesOpen(false);
     selectSelection(...args);
   }, [selectSelection, showTrack]);
   // Hiding a lane clears a selection that lives on it: the item would stay selected on a
@@ -1472,7 +1466,6 @@ function VideoEditor({
       if (existing) {
         clearSelection();
         setCursorInspectorOpen(false);
-        setAddRecordingOpen(false);
         setCapturesOpen(true);
         setHighlightedCaptureId(existing.assetId);
         if (highlightTimer.current) clearTimeout(highlightTimer.current);
@@ -1517,7 +1510,6 @@ function VideoEditor({
       // inspector does): Delete must never remove an item whose inspector is not on screen.
       clearSelection();
       setCursorInspectorOpen(false);
-      setAddRecordingOpen(false);
       setCapturesOpen(true);
       await refreshCaptures();
     } catch (error) {
@@ -1569,7 +1561,6 @@ function VideoEditor({
     }
     clearSelection();
     setCursorInspectorOpen(false);
-    setAddRecordingOpen(false);
     setCapturesOpen(true);
   }, [capturesOpen, clearSelection]);
 
@@ -1578,44 +1569,18 @@ function VideoEditor({
   // opened recording's span on the shared axis (ADR 0058), `frameAspect` the frame the joined
   // recording's cursor is mapped into.
   const joinRecordingAt = useJoinRecording(controller, source.durationSeconds, frameAspect);
-  const toggleAddRecording = useCallback(() => {
-    if (addRecordingOpen) {
-      setAddRecordingOpen(false);
-      return;
-    }
-    // Like Captures, the panel takes the inspector's place, so the selection goes too.
-    clearSelection();
-    setCursorInspectorOpen(false);
-    setCapturesOpen(false);
-    setAddRecordingOpen(true);
-  }, [addRecordingOpen, clearSelection]);
+  const toggleAddRecording = useCallback(() => setAddRecordingOpen((open) => !open), []);
   const addRecording = useCallback(
-    async (video: LibraryVideo, at: number, rule: "nearest" | "afterClip"): Promise<void> => {
+    async (video: LibraryVideo, boundary: { index: number; time: number }): Promise<void> => {
       // `busy` (a drag owns the scene) does nothing: the click is simply not taken.
       // Anchored to the clip after the boundary: a join still loading may insert ahead of it.
-      if (
-        (await joinRecordingAt(
-          video,
-          // Fixed now, at click or drop time: a click goes after the clip under the playhead
-          // (NIW2-788), a drop to the boundary nearest the pointer.
-          anchoredBoundary(layout, rule === "afterClip" ? boundaryAfterClipAt(layout, at) : at),
-        )) === "missing"
-      ) {
+      // The boundary was chosen at click time by the modal (after the clip under the playhead,
+      // the start or the end).
+      if ((await joinRecordingAt(video, anchoredBoundary(layout, boundary))) === "missing") {
         showToast({ message: t("addRecordingMissing", { title: video.title }) });
       }
     },
     [joinRecordingAt, layout, t],
-  );
-  // The row being dragged onto the sequence. A drag's contents are hidden until the drop, so
-  // the panel hands the video over here when the drag starts and the Clips row reads it on drop.
-  const draggedRecordingRef = useRef<LibraryVideo | null>(null);
-  const dropRecording = useCallback(
-    (boundaryTime: number) => {
-      const video = draggedRecordingRef.current;
-      draggedRecordingRef.current = null;
-      if (video) void addRecording(video, boundaryTime, "nearest");
-    },
-    [addRecording],
   );
 
   /** A capture's image: move the playhead to its moment, if that moment is still on the timeline. */
@@ -1930,7 +1895,6 @@ function VideoEditor({
     clearSelection();
     setVideoTool("select");
     setCapturesOpen(false);
-    setAddRecordingOpen(false);
     setCursorInspectorOpen(true);
   }, [clearSelection, setVideoTool]);
   /** Timeline range covered by a source range's visible pieces (inspector + draw badge). */
@@ -1953,7 +1917,6 @@ function VideoEditor({
       if (isPrivacyTool(tool)) clearSelection();
       setCursorInspectorOpen(false);
       setCapturesOpen(false);
-      setAddRecordingOpen(false);
       videoTools.setTool(tool);
     },
     [clearSelection, videoTools],
@@ -2075,7 +2038,6 @@ function VideoEditor({
         clearSelection();
         setCursorInspectorOpen(false);
         setCapturesOpen(false);
-        setAddRecordingOpen(false);
         return;
       }
       // Annotation selection takes precedence over segment deletion when both exist —
@@ -2575,21 +2537,6 @@ function VideoEditor({
               highlightedId={highlightedCaptureId}
               onClose={() => setCapturesOpen(false)}
             />
-          ) : addRecordingShown ? (
-            <AddFromLibraryPanel
-              videos={libraryRecordings.videos}
-              openedAssetId={source.assetId}
-              loaded={libraryRecordings.loaded}
-              failed={libraryRecordings.failed}
-              onAdd={(video) => void addRecording(video, playback.timelineTime, "afterClip")}
-              onDragStart={(video) => {
-                draggedRecordingRef.current = video;
-              }}
-              onDragEnd={() => {
-                draggedRecordingRef.current = null;
-              }}
-              onClose={() => setAddRecordingOpen(false)}
-            />
           ) : (
             <EditorInspector>
               {cursorInspectorOpen && cursorData ? (
@@ -2755,7 +2702,6 @@ function VideoEditor({
           extraLanes={extraLanes}
           media={timelineMedia}
           onOpenGuide={openGuide}
-          onDropRecording={levelsOn ? dropRecording : undefined}
         />
       </footer>
       {blocker.state === "blocked" && (
@@ -2819,6 +2765,19 @@ function VideoEditor({
           }}
           onExportGif={startGifExport}
           onCancel={closeExportSheet}
+        />
+      )}
+      {addRecordingShown && (
+        <AddFromLibraryModal
+          videos={libraryRecordings.videos}
+          openedAssetId={source.assetId}
+          layout={layout}
+          playhead={playback.timelineTime}
+          loaded={libraryRecordings.loaded}
+          failed={libraryRecordings.failed}
+          onAddRecording={(video, boundary) => void addRecording(video, boundary)}
+          onAddScreenshot={(shot) => void addCaptureToTimeline(shot)}
+          onClose={() => setAddRecordingOpen(false)}
         />
       )}
       {gifExport.status !== "idle" && (

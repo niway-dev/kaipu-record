@@ -65,10 +65,10 @@ export interface TransportBarProps {
   /** The timeline's zoom and scroll (NIW2-667). The strip reads the same store, so the
    *  buttons, the slider and the wheel on the lanes all move one view. */
   timelineView: TimelineViewStore;
-  /** Opens the Add from Library panel (NIW2-782). The button, at the left end of the row,
+  /** Opens the Add from Library modal (NIW2-782, NIW2-790). The button, at the left end of the row,
    *  exists only when this is given: the page passes it with the `timeline-levels` flag on. */
   onAddRecording?: () => void;
-  /** The panel is open: the button is lit and `aria-pressed`. */
+  /** The modal is open: the button is lit and `aria-pressed`. */
   addRecordingActive?: boolean;
 }
 

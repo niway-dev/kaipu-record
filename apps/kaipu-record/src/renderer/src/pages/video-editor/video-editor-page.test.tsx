@@ -1,20 +1,10 @@
-import {
-  act,
-  cleanup,
-  createEvent,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import { SESSION_BEFORE_WEBCAM } from "@renderer/features/video-editor/session-before-webcam.fixture";
 import { serializeSession } from "@renderer/features/video-editor/session";
-import { RECORDING_DRAG_MIME } from "@renderer/features/video-editor/add-from-library";
 import { initialScene } from "@renderer/features/video-editor/scene";
 import { TRACK_KEYS } from "@renderer/features/video-editor/tracks";
 import { WEBCAM_DEFAULTS } from "@renderer/features/video-editor/webcam/webcam-model";
@@ -2789,7 +2779,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
   });
 });
 
-describe("VideoEditorPage — Add recording (NIW2-782)", () => {
+describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
   const original = { ...window.electronAPI };
 
   /** A Library recording the editor can join (a `LibraryItem` as main lists it). */
@@ -2828,42 +2818,64 @@ describe("VideoEditorPage — Add recording (NIW2-782)", () => {
     ) as never;
     window.electronAPI.loadCursorTrack = vi.fn(async () => null) as never;
     window.electronAPI.closeEditorSession = vi.fn() as never;
+    // jsdom plays no media: the modal's preview calls are stubbed.
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(() => Promise.resolve());
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
   });
 
   afterEach(() => {
+    // Unmount while the media stubs are still in place: the preview's cleanup pauses its video.
+    cleanup();
+    vi.restoreAllMocks();
     stubDecodedVideoSize(0, 0);
     levelsFlag.on = false;
     Object.assign(window.electronAPI, original);
     for (const toast of getToasts()) dismissToast(toast.id);
   });
 
-  it("Add recording opens Add from Library with the other recordings, newest first", async () => {
+  /** The modal's recording rows, by title: a row selects, the buttons below add. */
+  const row = (title: string): Promise<HTMLElement> => screen.findByRole("button", { name: title });
+  const addAfterCurrentClip = (): void => {
+    fireEvent.click(screen.getByRole("button", { name: "Add after current clip" }));
+  };
+  const modal = (): HTMLElement => screen.getByRole("alertdialog", { name: "Add from Library" });
+
+  it("Add recording opens the Add from Library modal with the other recordings, newest first", async () => {
     renderEditor();
     await waitForEditorLoaded();
 
     fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
 
-    const panel = await screen.findByTestId("add-from-library-panel");
+    const dialog = await screen.findByRole("alertdialog", { name: "Add from Library" });
     await waitFor(() =>
-      expect(within(panel).getAllByTestId("add-from-library-row")).toHaveLength(2),
+      expect(within(dialog).getAllByTestId("add-from-library-row")).toHaveLength(2),
     );
-    const names = within(panel)
+    const names = within(dialog)
       .getAllByTestId("add-from-library-row")
-      .map((row) => row.getAttribute("aria-label"));
-    expect(names).toEqual(["Add Signup flow", "Add Checkout bug"]);
-    expect(within(panel).queryByText(SOURCE.title)).toBeNull();
+      .map((rowEl) => rowEl.getAttribute("aria-label"));
+    expect(names).toEqual(["Signup flow", "Checkout bug"]);
+    expect(within(dialog).queryByText(SOURCE.title)).toBeNull();
+    // The first row is selected and previewed.
+    expect(within(dialog).getByRole("heading", { name: "Signup flow" })).toBeInTheDocument();
+    // The button stays lit while the modal is open.
+    expect(screen.getByRole("button", { name: "Add recording" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
-  it("clicking a recording inserts all of it after the clip under the playhead, as one undo step", async () => {
+  it("Add after current clip inserts all of the selected recording after the clip under the playhead, as one undo step", async () => {
     renderEditor();
     const footer = await waitForEditorLoaded();
     expect(screen.getByText(/\/ 0:30\.0$/)).toBeInTheDocument();
-    // 20 s into a single 30 s clip: the recording goes after that clip, at its end.
+    // 20 s into a single 30 s clip: after the clip under the playhead is its end.
     for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByRole("button", { name: "Forward" }));
     await waitFor(() => expect(screen.getByText("0:20.0 / 0:30.0")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Add Checkout bug" }));
+    fireEvent.click(await row("Checkout bug"));
+    addAfterCurrentClip();
 
     await waitFor(() => expect(screen.getByText("0:20.0 / 0:40.0")).toBeInTheDocument());
     const labels = within(footer)
@@ -2872,24 +2884,63 @@ describe("VideoEditorPage — Add recording (NIW2-782)", () => {
     expect(labels).toHaveLength(2);
     expect(labels[0]).toContain(SOURCE.title);
     expect(labels[1]).toContain("Checkout bug");
-    // The panel stays open for the next one.
-    expect(screen.getByTestId("add-from-library-panel")).toBeInTheDocument();
+    // The modal stays open for the next one.
+    expect(modal()).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
 
     await waitFor(() => expect(screen.getByText("0:20.0 / 0:30.0")).toBeInTheDocument());
     expect(within(footer).queryAllByTestId("clip-label")).toHaveLength(0);
-    // One step undone it: the second Undo has nothing of this join left to take back.
+    // One step undid it: the second Undo has nothing of this join left to take back.
     expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
+  });
+
+  it("Add at start puts the recording before the opened one, and Add at end after it", async () => {
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    // The playhead is in the middle of the clip, so neither is the "after current clip" place.
+    fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+
+    fireEvent.click(await row("Checkout bug"));
+    fireEvent.click(screen.getByRole("button", { name: "Add at start" }));
+    await waitFor(() => expect(screen.getByText(/\/ 0:40\.0$/)).toBeInTheDocument());
+    fireEvent.click(await row("Signup flow"));
+    fireEvent.click(screen.getByRole("button", { name: "Add at end" }));
+    await waitFor(() => expect(screen.getByText(/\/ 0:50\.0$/)).toBeInTheDocument());
+
+    const labels = within(footer)
+      .getAllByTestId("clip-label")
+      .map((label) => label.textContent);
+    expect(labels).toHaveLength(3);
+    expect(labels[0]).toContain("Checkout bug");
+    expect(labels[1]).toContain(SOURCE.title);
+    expect(labels[2]).toContain("Signup flow");
+  });
+
+  it("a double click on a row adds it after the current clip", async () => {
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+
+    fireEvent.doubleClick(await row("Checkout bug"));
+
+    await waitFor(() => expect(screen.getByText(/\/ 0:40\.0$/)).toBeInTheDocument());
+    const labels = within(footer)
+      .getAllByTestId("clip-label")
+      .map((label) => label.textContent);
+    expect(labels[1]).toContain("Checkout bug");
   });
 
   it("each insert is its own undo step", async () => {
     renderEditor();
     await waitForEditorLoaded();
     fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Add Checkout bug" }));
+    fireEvent.click(await row("Checkout bug"));
+    fireEvent.click(screen.getByRole("button", { name: "Add at end" }));
     await waitFor(() => expect(screen.getByText(/\/ 0:40\.0$/)).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Add Signup flow" }));
+    fireEvent.click(await row("Signup flow"));
+    fireEvent.click(screen.getByRole("button", { name: "Add at end" }));
     await waitFor(() => expect(screen.getByText(/\/ 0:50\.0$/)).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
@@ -2903,7 +2954,8 @@ describe("VideoEditorPage — Add recording (NIW2-782)", () => {
     await waitForEditorLoaded();
     fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Add Lost take" }));
+    await row("Lost take");
+    addAfterCurrentClip();
 
     await waitFor(() =>
       expect(getToasts().map((toast) => toast.message)).toContain(
@@ -2913,43 +2965,50 @@ describe("VideoEditorPage — Add recording (NIW2-782)", () => {
     expect(screen.getByText(/\/ 0:30\.0$/)).toBeInTheDocument();
   });
 
-  it("Add from Library and Captures share the right column: opening one closes the other", async () => {
+  it("the modal does not take the inspector's place: the right column stays", async () => {
     renderEditor();
     await waitForEditorLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
-    expect(screen.getByTestId("captures-panel")).toBeInTheDocument();
-
     fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
-    expect(screen.queryByTestId("captures-panel")).toBeNull();
-    expect(screen.getByTestId("add-from-library-panel")).toBeInTheDocument();
+    await screen.findByRole("alertdialog", { name: "Add from Library" });
 
-    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
-    expect(screen.queryByTestId("add-from-library-panel")).toBeNull();
-    expect(screen.getByTestId("captures-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("editor-inspector")).toBeInTheDocument();
   });
 
-  it("Escape and the close button close Add from Library", async () => {
+  it("Escape, the close button and the backdrop close Add from Library", async () => {
     renderEditor();
     await waitForEditorLoaded();
     fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
-    expect(screen.getByTestId("add-from-library-panel")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Close Add from Library" }));
-    expect(screen.queryByTestId("add-from-library-panel")).toBeNull();
+    expect(screen.queryByRole("alertdialog", { name: "Add from Library" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Add recording" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
-    fireEvent.keyDown(window, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByTestId("add-from-library-panel")).toBeNull());
+    fireEvent.keyDown(modal(), { key: "Escape" });
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog", { name: "Add from Library" })).toBeNull(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+    fireEvent.click(modal());
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog", { name: "Add from Library" })).toBeNull(),
+    );
   });
 
-  it("selecting a clip closes Add from Library for that clip's inspector", async () => {
+  it("closing the modal leaves no preview video behind", async () => {
     renderEditor();
-    const footer = await waitForEditorLoaded();
+    await waitForEditorLoaded();
+    const videosBefore = document.querySelectorAll("video").length;
     fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
-    expect(screen.getByTestId("add-from-library-panel")).toBeInTheDocument();
+    await screen.findByTestId("add-from-library-video");
+    expect(document.querySelectorAll("video")).toHaveLength(videosBefore + 1);
 
-    fireEvent.click(footer.querySelectorAll(BLOCK_BUTTONS)[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Close Add from Library" }));
 
-    await waitFor(() => expect(screen.queryByTestId("add-from-library-panel")).toBeNull());
+    expect(document.querySelectorAll("video")).toHaveLength(videosBefore);
   });
 
   it("with timeline-levels off nothing in the editor adds a recording", async () => {
@@ -2958,138 +3017,90 @@ describe("VideoEditorPage — Add recording (NIW2-782)", () => {
     await waitForEditorLoaded();
 
     expect(screen.queryByRole("button", { name: "Add recording" })).toBeNull();
-    expect(screen.queryByTestId("add-from-library-panel")).toBeNull();
+    expect(screen.queryByRole("alertdialog", { name: "Add from Library" })).toBeNull();
   });
 
-  describe("dragging a recording onto the sequence", () => {
-    /** jsdom has no DragEvent, so testing-library's event drops `clientX`: set it by hand. */
-    function dragOnto(
-      type: "dragOver" | "drop",
-      target: Element,
-      clientX: number,
-      dataTransfer: unknown,
-    ): void {
-      const event = createEvent[type](target, { dataTransfer: dataTransfer as never });
-      Object.defineProperty(event, "clientX", { value: clientX });
-      fireEvent(target, event);
-    }
-
-    /** jsdom lays nothing out: the timeline's scroller is at x = 0 with a 1000 px lane. */
-    function stubLane(): void {
-      vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
-        function (this: HTMLElement) {
-          const width = this.dataset.testid === "timeline-scroller" ? 1000 : 0;
-          return {
-            left: 0,
-            right: width,
-            width,
-            top: 0,
-            bottom: 0,
-            height: 0,
-            x: 0,
-            y: 0,
-          } as DOMRect;
+  describe("Screenshots tab", () => {
+    beforeEach(() => {
+      vi.stubGlobal("Image", FakeImage);
+      libraryItems = [
+        ...libraryItems,
+        {
+          assetId: "shot-1",
+          kind: "screenshot",
+          title: "Pricing page",
+          createdAt: 6,
+          durationSeconds: 0,
+          derivedFromAssetId: null,
+          sourceVideoAssetId: SOURCE.assetId,
+          sourceTimeSeconds: 3,
+          capture: null,
+          local: { id: "shot-1-id", thumbnailUrl: "kaipu-media://screenshot/shot-1-id" },
         },
-      );
-    }
-
-    function startDrag(title: string): { types: string[] } {
-      const dataTransfer = {
-        setData: vi.fn(),
-        setDragImage: vi.fn(),
-        effectAllowed: "none",
-        types: [RECORDING_DRAG_MIME],
-        dropEffect: "none",
-      };
-      fireEvent.dragStart(screen.getByRole("button", { name: `Add ${title}` }), { dataTransfer });
-      return dataTransfer;
-    }
-
-    afterEach(() => vi.restoreAllMocks());
-
-    it("shows Insert here at the nearest clip boundary and a drop inserts the recording there, as one undo step", async () => {
-      stubLane();
-      renderEditor();
-      const footer = await waitForEditorLoaded();
-      fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
-      await screen.findByRole("button", { name: "Add Checkout bug" });
-      const track = footer.querySelector(BLOCK_BUTTONS)!.parentElement!;
-      const dataTransfer = startDrag("Checkout bug");
-
-      // 900 px of 1000 = 27 s of a 30 s clip: its end is the nearest boundary.
-      dragOnto("dragOver", track, 900, dataTransfer);
-      expect(screen.getByText("Insert here · 0:30.0")).toBeInTheDocument();
-      dragOnto("drop", track, 900, dataTransfer);
-
-      await waitFor(() => expect(screen.getByText(/\/ 0:40\.0$/)).toBeInTheDocument());
-      const labels = within(footer)
-        .getAllByTestId("clip-label")
-        .map((label) => label.textContent);
-      expect(labels[0]).toContain(SOURCE.title);
-      expect(labels[1]).toContain("Checkout bug");
-      expect(screen.queryByTestId("insert-indicator")).toBeNull();
-
-      fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-
-      await waitFor(() => expect(screen.getByText(/\/ 0:30\.0$/)).toBeInTheDocument());
-      expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
+        // A GIF export is not a still: it never reaches the tab.
+        {
+          assetId: "gif-1",
+          kind: "gif",
+          title: "A gif",
+          createdAt: 7,
+          durationSeconds: 3,
+          derivedFromAssetId: null,
+          sourceVideoAssetId: null,
+          sourceTimeSeconds: null,
+          capture: null,
+          local: { id: "gif-1-id", thumbnailUrl: null },
+        },
+      ];
     });
 
-    it("dropping near the start inserts the recording before the opened one", async () => {
-      stubLane();
-      renderEditor();
-      const footer = await waitForEditorLoaded();
-      fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
-      await screen.findByRole("button", { name: "Add Checkout bug" });
-      const track = footer.querySelector(BLOCK_BUTTONS)!.parentElement!;
-      const dataTransfer = startDrag("Checkout bug");
-
-      dragOnto("drop", track, 60, dataTransfer);
-
-      await waitFor(() => expect(screen.getByText(/\/ 0:40\.0$/)).toBeInTheDocument());
-      const labels = within(footer)
-        .getAllByTestId("clip-label")
-        .map((label) => label.textContent);
-      expect(labels[0]).toContain("Checkout bug");
-      expect(labels[1]).toContain(SOURCE.title);
+    afterEach(() => {
+      vi.unstubAllGlobals();
     });
 
-    it("a drag that is not a Library recording inserts nothing", async () => {
-      stubLane();
+    it("lists the Library's screenshots, tags the ones from this recording and leaves GIFs out", async () => {
+      renderEditor();
+      await waitForEditorLoaded();
+      fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+
+      fireEvent.click(await screen.findByRole("tab", { name: /Screenshots/ }));
+
+      const card = await screen.findByRole("button", { name: "Add Pricing page" });
+      expect(within(card).getByText("From this recording")).toBeInTheDocument();
+      expect(screen.getAllByTestId("add-from-library-screenshot")).toHaveLength(1);
+      expect(screen.queryByText("A gif")).toBeNull();
+    });
+
+    it("a click adds the screenshot as a floating image at the playhead, selects it and keeps the modal open", async () => {
+      const read = vi.fn(async () => PNG_BYTES.buffer.slice(0) as ArrayBuffer);
+      window.electronAPI.readScreenshotBytes = read as never;
       renderEditor();
       const footer = await waitForEditorLoaded();
       fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
-      await screen.findByRole("button", { name: "Add Checkout bug" });
-      const track = footer.querySelector(BLOCK_BUTTONS)!.parentElement!;
-      // A row drag is really under way, so only the strip's type check can refuse the drop.
-      startDrag("Checkout bug");
+      fireEvent.click(await screen.findByRole("tab", { name: /Screenshots/ }));
 
-      dragOnto("drop", track, 900, { types: ["Files"], getData: () => "" });
-      // A join is asynchronous (it reads the recording's meta), so give a wrongly accepted drop
-      // the time to land before asserting that nothing did.
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      });
+      fireEvent.click(await screen.findByRole("button", { name: "Add Pricing page" }));
 
+      await waitFor(() => expect(read).toHaveBeenCalledWith("shot-1-id"));
+      // It floats: the sequence is untouched, and the new image's panel is the inspector's.
+      await waitFor(() => expect(screen.getByText("Floating image")).toBeInTheDocument());
       expect(screen.getByText(/\/ 0:30\.0$/)).toBeInTheDocument();
+      expect(within(footer).queryAllByTestId("clip-label")).toHaveLength(0);
+      expect(modal()).toBeInTheDocument();
     });
 
-    it("with timeline-levels off the Clips row accepts no drop", async () => {
-      levelsFlag.on = false;
-      stubLane();
+    it("a screenshot whose bytes cannot be read adds nothing and says so", async () => {
+      window.electronAPI.readScreenshotBytes = vi.fn(async () => {
+        throw new Error("gone");
+      }) as never;
       renderEditor();
-      const footer = await waitForEditorLoaded();
-      const track = footer.querySelector(BLOCK_BUTTONS)!.parentElement!;
-      const dataTransfer = { types: [RECORDING_DRAG_MIME], getData: () => "asset-b" };
-      const over = createEvent.dragOver(track, { dataTransfer: dataTransfer as never });
-      Object.defineProperty(over, "clientX", { value: 900 });
+      await waitForEditorLoaded();
+      fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+      fireEvent.click(await screen.findByRole("tab", { name: /Screenshots/ }));
 
-      const notPrevented = fireEvent(track, over);
-      dragOnto("drop", track, 900, dataTransfer);
+      fireEvent.click(await screen.findByRole("button", { name: "Add Pricing page" }));
 
-      expect(notPrevented).toBe(true);
-      expect(screen.queryByTestId("insert-indicator")).toBeNull();
-      expect(screen.getByText(/\/ 0:30\.0$/)).toBeInTheDocument();
+      await waitFor(() => expect(getToasts()).not.toHaveLength(0));
+      expect(screen.queryByText("Floating image")).toBeNull();
     });
   });
 });

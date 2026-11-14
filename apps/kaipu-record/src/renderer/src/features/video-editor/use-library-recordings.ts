@@ -3,7 +3,7 @@ import { toLibraryVideo } from "@renderer/features/library/map-item";
 import type { LibraryVideo } from "@renderer/features/library/types";
 
 export interface LibraryRecordings {
-  /** Every Library item, mapped; the Add from Library panel keeps the recordings it can join. */
+  /** Every Library item, mapped; the Add from Library modal keeps the recordings it can join and the screenshots it can add. */
   videos: LibraryVideo[];
   /** True once a read has landed (or failed), so "no recordings" is never said before it. */
   loaded: boolean;
@@ -12,7 +12,7 @@ export interface LibraryRecordings {
 }
 
 /**
- * The Library's items for the Add from Library panel (NIW2-782). One `listLibraryItems()` read
+ * The Library's items for the Add from Library modal (NIW2-782, NIW2-790). One `listLibraryItems()` read
  * each time `enabled` turns on, and another whenever main broadcasts `library:changed` while it
  * is on, like `useSourceCaptures`. Deliberately not `useLocalLibrary`: that hook also
  * re-confirms the cloud catalog, reports errors as toasts and heals orphan metadata
