@@ -90,7 +90,12 @@ export function useJoinedRecordings(
       try {
         library = await readJoinedLibrary(fresh.map((s) => s.assetId));
       } catch {
-        library = null; // unreadable library: nothing can be resolved, so everything is missing
+        // An unreadable library says nothing about the recordings: show them missing for now, but
+        // forget that they were started so the next scene change reads again. The effect depends
+        // on `list` only, so this cannot loop inside one pass.
+        for (const [source, entry] of entries) {
+          if (started.current.get(source.id) === entry) started.current.delete(source.id);
+        }
       }
       await Promise.all(
         entries.map(async ([source, entry]) => {

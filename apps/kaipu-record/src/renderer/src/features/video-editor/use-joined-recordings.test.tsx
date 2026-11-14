@@ -144,6 +144,35 @@ describe("useJoinedRecordings", () => {
     await waitFor(() => expect(second.result.current[0].status).toBe("missing"));
   });
 
+  it("a failed library read is retried on the next scene change, not remembered as gone", async () => {
+    items = [item("b")];
+    holds = { b: "b-file" };
+    const list = window.electronAPI.listLibraryItems as unknown as ReturnType<typeof vi.fn>;
+    list.mockRejectedValueOnce(new Error("ipc hiccup"));
+    let sources = [source("s1", "b")];
+    const { result, rerender } = renderHook(() => useJoinedRecordings(sources));
+    await waitFor(() => expect(result.current[0].status).toBe("missing"));
+    expect(acquire).not.toHaveBeenCalled();
+
+    sources = [...sources]; // the scene changed (a new array): the failed source is read again
+    rerender();
+    await waitFor(() => expect(result.current[0].status).toBe("ready"));
+    expect(result.current[0].id).toBe("b-file");
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
+  it("a source that is truly absent from the library stays missing and is not read again", async () => {
+    items = [];
+    let sources = [source("s1", "gone")];
+    const { result, rerender } = renderHook(() => useJoinedRecordings(sources));
+    await waitFor(() => expect(result.current[0].status).toBe("missing"));
+
+    sources = [...sources];
+    rerender();
+    expect(window.electronAPI.listLibraryItems).toHaveBeenCalledTimes(1);
+    expect(result.current[0].status).toBe("missing");
+  });
+
   it("loads a newly joined source without reloading the others", async () => {
     items = [item("b"), item("c")];
     holds = { b: "b-file", c: "c-file" };
