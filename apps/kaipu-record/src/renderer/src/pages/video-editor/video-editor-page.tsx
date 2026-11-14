@@ -131,6 +131,7 @@ import { useSessionAutosave } from "@renderer/features/video-editor/use-session-
 import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-playback";
 import {
   useCompanionThumbnails,
+  useRecordingCompanionThumbnails,
   useRecordingThumbnails,
   useSourceThumbnails,
 } from "@renderer/features/video-editor/use-source-thumbnails";
@@ -879,6 +880,25 @@ function VideoEditor({
     source.durationSeconds,
     (webcamTrack?.startOffsetMs ?? 0) / 1000,
   );
+  // Each joined recording's own webcam filmstrip, at the recording's local time plus its webcam's
+  // start offset, decoded only while that recording still has a clip (NIW2-786).
+  const webcamStripRequests = useMemo(() => {
+    if (scene.webcam === null) return [];
+    const byId = new Map(joinedRecordings.map((j) => [j.source.id, j]));
+    return recordingStripRequests.flatMap((request) => {
+      const joined = byId.get(request.key);
+      return joined?.webcam && joined.id
+        ? [
+            {
+              ...request,
+              mediaUrl: mediaUrl("webcam", joined.id),
+              companionOffsetSeconds: joined.webcam.startOffsetMs / 1000,
+            },
+          ]
+        : [];
+    });
+  }, [scene.webcam, joinedRecordings, recordingStripRequests]);
+  const webcamRecordingStrips = useRecordingCompanionThumbnails(webcamStripRequests);
   // Per-user settings. `editor.hiddenTracks` is view state: it decides which lanes the
   // timeline draws and is read nowhere else (ADR 0050); the export sheet reads the rest.
   const appSettings = useAppSettings();
@@ -2179,6 +2199,8 @@ function VideoEditor({
                     thumbnails={webcamStrip.thumbnails}
                     covered={webcamStrip.covered}
                     noCameraItemIds={noCameraClips}
+                    clipRecordings={clipRecordingMap}
+                    recordingStrips={webcamRecordingStrips}
                     selectedId={webcamSelectedId}
                     onSelect={handleSelectWebcam}
                     onEdgeDrag={webcamEdits.edgeDrag}
@@ -2234,6 +2256,8 @@ function VideoEditor({
       webcamStrip.thumbnails,
       webcamStrip.covered,
       noCameraClips,
+      clipRecordingMap,
+      webcamRecordingStrips,
       webcamSelectedId,
       handleSelectWebcam,
       redactionEdits.visibleRedactions,

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CanvasSink, type Input } from "mediabunny";
 import { openRecordingInput } from "@renderer/lib/open-recording-input";
 
@@ -145,9 +145,16 @@ export interface RecordingStripRequest {
   key: string;
   mediaUrl: string;
   durationSeconds: number;
+  /**
+   * Set for a companion file (a joined recording's webcam, ADR 0037): its frames are reported at
+   * the recording's OWN time (0 to its duration) with this offset added, like
+   * {@link useCompanionThumbnails}, and `covered` says where the file has footage.
+   */
+  companionOffsetSeconds?: number;
 }
 
 const NO_STRIPS: ReadonlyMap<string, SourceThumbnail[]> = new Map();
+const NO_COMPANION_STRIPS: ReadonlyMap<string, CompanionThumbnails> = new Map();
 
 /**
  * Filmstrips of SEVERAL recordings (the ones joined into a scene, ADR 0058), by request key,
@@ -158,15 +165,44 @@ const NO_STRIPS: ReadonlyMap<string, SourceThumbnail[]> = new Map();
 export function useRecordingThumbnails(
   requests: readonly RecordingStripRequest[],
 ): ReadonlyMap<string, SourceThumbnail[]> {
-  const [strips, setStrips] = useState<ReadonlyMap<string, SourceThumbnail[]>>(NO_STRIPS);
+  const strips = useRecordingStrips(requests);
+  return useMemo(
+    () =>
+      strips.size === 0
+        ? NO_STRIPS
+        : new Map([...strips].map(([key, strip]) => [key, strip.thumbnails])),
+    [strips],
+  );
+}
+
+/**
+ * {@link useRecordingThumbnails} for the joined recordings' WEBCAM files: the same lazy,
+ * per-request decoding, but each strip keeps its `covered` range so a clip outside the
+ * camera's footage stays empty. Requests carry `companionOffsetSeconds`.
+ */
+export function useRecordingCompanionThumbnails(
+  requests: readonly RecordingStripRequest[],
+): ReadonlyMap<string, CompanionThumbnails> {
+  return useRecordingStrips(requests);
+}
+
+function requestSignature(request: RecordingStripRequest): string {
+  return `${request.mediaUrl}|${request.durationSeconds}|${request.companionOffsetSeconds ?? "source"}`;
+}
+
+function useRecordingStrips(
+  requests: readonly RecordingStripRequest[],
+): ReadonlyMap<string, CompanionThumbnails> {
+  const [strips, setStrips] =
+    useState<ReadonlyMap<string, CompanionThumbnails>>(NO_COMPANION_STRIPS);
   const running = useRef(new Map<string, { signature: string; stop: () => void }>());
-  const signature = JSON.stringify(requests.map((r) => [r.key, r.mediaUrl, r.durationSeconds]));
+  const signature = JSON.stringify(requests.map((r) => [r.key, requestSignature(r)]));
 
   useEffect(() => {
     const wanted = new Map(requests.map((r) => [r.key, r]));
     for (const [key, entry] of [...running.current]) {
       const request = wanted.get(key);
-      if (request && entry.signature === `${request.mediaUrl}|${request.durationSeconds}`) continue;
+      if (request && entry.signature === requestSignature(request)) continue;
       entry.stop();
       running.current.delete(key);
       setStrips((prev) => {
@@ -178,13 +214,13 @@ export function useRecordingThumbnails(
     }
     for (const request of requests) {
       if (running.current.has(request.key) || !request.mediaUrl) continue;
-      const stop = loadStrip(request.mediaUrl, request.durationSeconds, undefined, (strip) =>
-        setStrips((prev) => new Map(prev).set(request.key, strip.thumbnails)),
+      const stop = loadStrip(
+        request.mediaUrl,
+        request.durationSeconds,
+        request.companionOffsetSeconds,
+        (strip) => setStrips((prev) => new Map(prev).set(request.key, strip)),
       );
-      running.current.set(request.key, {
-        signature: `${request.mediaUrl}|${request.durationSeconds}`,
-        stop,
-      });
+      running.current.set(request.key, { signature: requestSignature(request), stop });
     }
     // `signature` stands for `requests`: a new array with the same content must not restart.
     // eslint-disable-next-line react-hooks/exhaustive-deps
