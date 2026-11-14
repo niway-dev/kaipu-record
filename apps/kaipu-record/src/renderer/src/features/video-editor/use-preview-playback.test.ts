@@ -267,6 +267,26 @@ describe("usePreviewPlayback — scrubbing keeps playback alive", () => {
   });
 });
 
+describe("usePreviewPlayback — readTimelineTime (the playhead this instant)", () => {
+  it("while a clip plays, reads the video rather than the last timeupdate", () => {
+    const { result } = renderHook(() => usePreviewPlayback(layout));
+    const video = makePlayableVideo();
+    result.current.videoRef.current = video;
+    act(() => result.current.seek(1));
+    act(() => result.current.play());
+    video.currentTime = 2.7; // the frame on screen; no timeupdate has fired yet
+    expect(result.current.timelineTime).toBe(1);
+    expect(result.current.readTimelineTime()).toBe(2.7);
+  });
+
+  it("while paused, is the state the transport shows", () => {
+    const { result } = renderHook(() => usePreviewPlayback(layout));
+    result.current.videoRef.current = makePlayableVideo();
+    act(() => result.current.seek(3));
+    expect(result.current.readTimelineTime()).toBe(3);
+  });
+});
+
 describe("usePreviewPlayback — play/pause stays in sync with the element", () => {
   it("resets to paused when the element rejects play(), so the button can retry", async () => {
     const { result } = renderHook(() => usePreviewPlayback(layout));

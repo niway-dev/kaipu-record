@@ -30,6 +30,8 @@ import { ItemActionsMenu } from "@renderer/features/library/components/item-acti
 import { notMovableReason } from "@renderer/features/workspaces/move/move-flow";
 import { ItemDetails } from "@renderer/features/library/components/item-details";
 import { VersionsList } from "@renderer/features/library/components/versions-list";
+import { CaptureItem } from "@renderer/features/video-editor/components/capture-item";
+import { formatClock } from "@renderer/features/video-editor/capture-time";
 import {
   githubFit,
   resolveExportTarget,
@@ -61,7 +63,7 @@ import { uiArea } from "@renderer/lib/ui-area";
 
 type LibraryMessageKey = keyof Messages["library"];
 
-type PanelTab = "versions" | "details" | "destinations";
+type PanelTab = "versions" | "details" | "destinations" | "captures";
 
 /** The editing-state line under the metadata. "project-available" has no line on purpose:
  *  the owner asked for it to go; the other states say something the user has to act on. */
@@ -127,6 +129,15 @@ export function LibraryDetailPage(): React.JSX.Element {
   // and buildLineage works fine on an empty/loading `videos` list.
   const { openItem } = useOpenInEditor();
   const lineage = useMemo(() => buildLineage(videos), [videos]);
+  // Frame captures taken from this video in the editor (NIW2-764), newest first. They are
+  // library screenshots that name this video in their sidecar, so the list is already here.
+  const captures = useMemo(
+    () =>
+      videos
+        .filter((v) => v.kind === "screenshot" && v.sourceVideoAssetId === assetId)
+        .sort((a, b) => b.createdAt - a.createdAt),
+    [videos, assetId],
+  );
 
   // The Library passes the list as it shows it (filter and sort applied); opened from
   // anywhere else, the whole library in its own order is the list. Ids that left the library
@@ -271,9 +282,15 @@ export function LibraryDetailPage(): React.JSX.Element {
       ? { width: gifInfo.width, height: gifInfo.height }
       : screenshotDimensions;
 
-  const tabs: PanelTab[] = preparable
-    ? ["versions", "details", "destinations"]
-    : ["versions", "details"];
+  // Frame captures get a tab of their own, shown only when there are some: the tab bar is
+  // where the owner sees they exist (a section under a long tab was out of view).
+  const hasCaptures = !isScreenshot && captures.length > 0;
+  const tabs: PanelTab[] = [
+    "versions",
+    "details",
+    ...(preparable ? (["destinations"] as const) : []),
+    ...(hasCaptures ? (["captures"] as const) : []),
+  ];
   const defaultTab: PanelTab =
     master && preparable !== null && !hasCopies ? "destinations" : "versions";
   const tab: PanelTab = pickedTab && tabs.includes(pickedTab) ? pickedTab : defaultTab;
@@ -281,6 +298,7 @@ export function LibraryDetailPage(): React.JSX.Element {
     versions: t("tabVersions"),
     details: t("tabDetails"),
     destinations: t("destinationsTitle"),
+    captures: t("tabCaptures", { count: captures.length }),
   };
   const onTabKey = (event: React.KeyboardEvent, current: PanelTab): void => {
     const at = tabs.indexOf(current);
@@ -721,7 +739,22 @@ export function LibraryDetailPage(): React.JSX.Element {
             id={`library-tabpanel-${tab}`}
             aria-labelledby={`library-tab-${tab}`}
           >
-            {tab === "destinations" && preparable ? (
+            {tab === "captures" ? (
+              <ul {...uiArea("libraryDetail.captures")} className={styles.capturesList}>
+                {captures.map((capture) => (
+                  <CaptureItem
+                    key={capture.assetId}
+                    capture={capture}
+                    imageLabel={
+                      capture.sourceTimeSeconds === null
+                        ? capture.title
+                        : t("captureOpen", { time: formatClock(capture.sourceTimeSeconds) })
+                    }
+                    onImageClick={() => navigate(`/library/${capture.assetId}`)}
+                  />
+                ))}
+              </ul>
+            ) : tab === "destinations" && preparable ? (
               <DestinationsList
                 sizeBytes={video.fileSizeBytes}
                 probe={probe}

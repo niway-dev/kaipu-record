@@ -28,8 +28,14 @@ export const GIF_HARD_CAP_BYTES = 64 * 1024 * 1024;
 
 export interface GifStartMessage {
   type: "start";
-  /** "estimate" encodes a handful of sampled frames; "export" encodes the whole range. */
-  mode: "estimate" | "export";
+  /**
+   * "estimate" encodes a handful of sampled frames; "export" encodes the whole range;
+   * "still" (NIW2-764) composes ONE frame at `stillTime` and returns it as a PNG, with no
+   * palette and no GIF downscale (`output` is ignored, the PNG is `source` sized).
+   */
+  mode: "estimate" | "export" | "still";
+  /** Still mode only: the timeline time of the frame, inside the (unsliced) `plan`. */
+  stillTime?: number;
   sourceBlob: Blob;
   /** The plan already sliced to the range and rebased to 0 (`sliceExportPlan`). */
   plan: ExportPlan;
@@ -63,4 +69,6 @@ export type GifWorkerMessage =
       /** Frames in the file, after folding unchanged ones into the previous delay. */
       frameCount: number;
     }
+  /** Still mode: the composed frame as a PNG (transferable), at the source size. */
+  | { type: "still"; data: ArrayBuffer; width: number; height: number }
   | { type: "error"; message: string; code?: "too-large" };

@@ -372,6 +372,8 @@ describe("already exported → reuse (NIW2-218)", () => {
     editing: "exported-only" as const,
     transfer: { state: "idle" as const },
     derivedFromAssetId: "source",
+    sourceVideoAssetId: null,
+    sourceTimeSeconds: null,
     editSavedAt: null,
     editExportedSavedAt: null,
     export: { preset: "youtube-1440" as const, fingerprint: "whole" },

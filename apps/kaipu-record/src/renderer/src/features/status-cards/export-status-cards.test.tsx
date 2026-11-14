@@ -44,6 +44,8 @@ const RECORDING: LocalRecording = {
   durationSeconds: 78,
   thumbnailUrl: null,
   derivedFromAssetId: "asset-src",
+  sourceVideoAssetId: null,
+  sourceTimeSeconds: null,
   contentSha256: null,
 };
 

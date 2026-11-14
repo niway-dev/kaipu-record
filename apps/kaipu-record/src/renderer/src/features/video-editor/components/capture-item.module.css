@@ -1,0 +1,85 @@
+/* One frame capture: the image at the column's width, then its time and Copy. */
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.imageFrame,
+.imageButton {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.imageButton {
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+
+.imageButton:hover,
+.imageButton:focus-visible {
+  border-color: var(--line-strong);
+}
+
+.image {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* A capture whose file has no thumbnail: a quiet placeholder, never a broken-image icon. */
+.missing {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.time {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.copy:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.copy:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

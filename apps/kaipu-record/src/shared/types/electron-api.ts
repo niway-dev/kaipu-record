@@ -754,6 +754,8 @@ export interface KaipuElectronAPI {
       canvas?: CanvasSavePayload;
       /** Recognized words for the assets in `canvas`, minus words under baked redactions. */
       text?: TextCacheSavePayload;
+      /** A frame capture of a video: its asset id and the second on screen. New items only. */
+      source?: { videoAssetId: string; timeSeconds: number | null };
     },
   ): Promise<LocalRecording>;
   /**

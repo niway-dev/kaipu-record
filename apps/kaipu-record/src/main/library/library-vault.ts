@@ -64,6 +64,9 @@ export interface Sidecar {
   createdAt?: number;
   assetId?: string;
   derivedFromAssetId?: string | null;
+  /** A frame capture: the video it was taken from and the second on screen. Not an export. */
+  sourceVideoAssetId?: string | null;
+  sourceTimeSeconds?: number | null;
   /** base64 sha256 + the file stats it was computed for; stale when they differ. */
   contentSha256?: string;
   hashedSizeBytes?: number;
@@ -1027,6 +1030,14 @@ export class LibraryVault {
       sizeBytes: info.size,
       durationSeconds: meta.durationSeconds ?? 0,
       derivedFromAssetId: meta.derivedFromAssetId ?? null,
+      sourceVideoAssetId:
+        typeof meta.sourceVideoAssetId === "string" && meta.sourceVideoAssetId
+          ? meta.sourceVideoAssetId
+          : null,
+      sourceTimeSeconds:
+        typeof meta.sourceTimeSeconds === "number" && Number.isFinite(meta.sourceTimeSeconds)
+          ? meta.sourceTimeSeconds
+          : null,
       contentSha256: hashIsFresh ? (meta.contentSha256 ?? null) : null,
       tagIds: Array.isArray(meta.tagIds)
         ? meta.tagIds.filter((t): t is string => typeof t === "string")
@@ -1080,6 +1091,8 @@ export class LibraryVault {
       sizeBytes: info.size,
       durationSeconds: 0,
       derivedFromAssetId: null,
+      sourceVideoAssetId: null,
+      sourceTimeSeconds: null,
       contentSha256: null,
       tagIds: [],
       gif: null,

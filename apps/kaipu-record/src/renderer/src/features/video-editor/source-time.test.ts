@@ -7,6 +7,7 @@ import {
   isSourceRangeVisible,
   sourceRangeToTimelineBlocks,
   sourceTimeAtTimeline,
+  timelineTimeAtSource,
 } from "./source-time";
 
 // Source 0–30 s, with 10–15 s deleted and a 3 s slide inserted between the pieces.
@@ -39,6 +40,30 @@ describe("sourceTimeAtTimeline", () => {
     expect(sourceTimeAtTimeline(layout, 5)).toBe(5);
     expect(sourceTimeAtTimeline(layout, 11)).toBeNull();
     expect(sourceTimeAtTimeline(layout, 14)).toBe(16);
+  });
+});
+
+describe("timelineTimeAtSource", () => {
+  it("maps a source time inside a kept clip to its place on the timeline", () => {
+    expect(timelineTimeAtSource(layout, 5)).toBe(5);
+    // Clip b starts at timeline 13 and source 15.
+    expect(timelineTimeAtSource(layout, 16)).toBe(14);
+  });
+  it("is null for footage that was cut out", () => {
+    expect(timelineTimeAtSource(layout, 12)).toBeNull();
+    expect(timelineTimeAtSource(layout, 31)).toBeNull();
+  });
+  it("is the same moment when the clip is the whole recording", () => {
+    expect(timelineTimeAtSource(toLayout([items[0]]), 10)).toBe(10);
+  });
+  it("puts a split point in the piece that starts there, not on the slide before it", () => {
+    // Split at source 10 with a slide between the pieces: timeline 10–13 is the slide.
+    const split = toLayout([
+      { id: "a", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+      items[1],
+      { id: "b", kind: "clip", sourceStart: 10, sourceEnd: 20 },
+    ]);
+    expect(timelineTimeAtSource(split, 10)).toBe(13);
   });
 });
 

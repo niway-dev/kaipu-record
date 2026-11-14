@@ -29,6 +29,17 @@ const zoomIn: Step = {
     part: { role: "button", name: "Zoom in the timeline", exact: true },
   },
 };
+/** Capture frame, beside Add image in the header. */
+const toolbarButton = (name: string): Step => ({
+  click: { area: "editorVideo.toolbar", part: { role: "button", name, exact: true } },
+});
+/**
+ * A capture's image in the panel's list: its button is named "Go to <time>". The shot waits for
+ * it to be on screen, not for the image inside to decode, which the next step covers.
+ */
+const captureListed: Step = {
+  waitFor: { area: "editorVideo.capturesPanel", part: { role: "button", name: "Go to" } },
+};
 const exportSheet: Step = {
   click: { area: "editorVideo.toolbar", part: { role: "button", name: "Export", exact: true } },
 };
@@ -348,6 +359,40 @@ export const editorVideo = catalog(
       ],
       demonstrates: ["editorVideo.audioLane:allMuted", "editorVideo.toolbar:saved"],
       ready: { area: "editorVideo.audioLane" },
+      after: [{ action: "restoreVault" }],
+    },
+    "captures-empty": {
+      profile: "default",
+      how: "Open “Walkthrough 1”, which has no captures, and press Captures in the tool column: the right column shows the empty panel with its Capture frame button.",
+      steps: [
+        open(ASSETS.walkthrough),
+        loaded,
+        rail("Captures"),
+        // The panel is drawn before its first read lands; the empty state is what follows.
+        {
+          waitFor: {
+            area: "editorVideo.capturesPanel",
+            part: { role: "button", name: "Capture frame", exact: true },
+          },
+        },
+      ],
+      demonstrates: ["editorVideo.capturesPanel:empty"],
+      ready: { area: "editorVideo.capturesPanel" },
+    },
+    "captures-list": {
+      profile: "default",
+      how: "Open “Weekly sync” and press Capture frame in the header: the frame at the playhead is saved into the library and the right column lists it with its time.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        toolbarButton("Capture frame"),
+        captureListed,
+        // The list appears before the image inside it has decoded.
+        { waitMs: 400 },
+      ],
+      demonstrates: ["editorVideo.capturesPanel:list"],
+      ready: { area: "editorVideo.capturesPanel" },
+      // The capture is a new file in the workspace: put the vault back for the next state.
       after: [{ action: "restoreVault" }],
     },
     "export-sheet": {

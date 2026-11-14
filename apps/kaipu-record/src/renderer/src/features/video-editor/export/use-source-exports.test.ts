@@ -11,6 +11,8 @@ function item(assetId: string, derivedFromAssetId: string | null): LibraryItem {
     createdAt: 1,
     durationSeconds: 5,
     derivedFromAssetId,
+    sourceVideoAssetId: null,
+    sourceTimeSeconds: null,
     editSavedAt: null,
     editExportedSavedAt: null,
     local: null,

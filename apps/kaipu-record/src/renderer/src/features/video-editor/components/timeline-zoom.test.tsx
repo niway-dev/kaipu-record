@@ -85,6 +85,7 @@ function makePlayback(overrides: Partial<PreviewPlayback> = {}): PreviewPlayback
     speed: 1,
     duration: 100,
     timelineTime: 0,
+    readTimelineTime: () => overrides.timelineTime ?? 0,
     activeSlideId: null,
     play: vi.fn(),
     pause: vi.fn(),

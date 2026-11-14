@@ -21,6 +21,8 @@ const local = (
   durationSeconds: 5,
   thumbnailUrl: null,
   derivedFromAssetId: null,
+  sourceVideoAssetId: null,
+  sourceTimeSeconds: null,
   contentSha256: SHA,
   ...overrides,
 });

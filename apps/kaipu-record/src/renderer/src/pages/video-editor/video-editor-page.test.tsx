@@ -50,6 +50,8 @@ const startExport = vi.fn(
       durationSeconds: 10,
       thumbnailUrl: null,
       derivedFromAssetId: null,
+      sourceVideoAssetId: null,
+      sourceTimeSeconds: null,
       contentSha256: null,
     });
   },
@@ -62,6 +64,16 @@ vi.mock("@renderer/features/video-editor/export/use-video-export", () => ({
     start: startExport,
     cancel: vi.fn(),
   }),
+}));
+
+// The worker pipeline behind a frame capture has its own suite (use-still-capture.test.ts);
+// here only the page's wiring around it matters, so the hook is a controllable stub.
+const stillCapture = vi.hoisted(() => ({
+  capture: vi.fn(),
+  busy: false,
+}));
+vi.mock("@renderer/features/video-editor/export/use-still-capture", () => ({
+  useStillCapture: () => ({ capture: stillCapture.capture, busy: stillCapture.busy }),
 }));
 
 // The page reports one product event for the speed button. The real client is a no-op
@@ -596,6 +608,8 @@ describe("VideoEditorPage — background export vs. useBlocker", () => {
         durationSeconds: 10,
         thumbnailUrl: null,
         derivedFromAssetId: null,
+        sourceVideoAssetId: null,
+        sourceTimeSeconds: null,
         contentSha256: null,
       });
     });
@@ -2165,5 +2179,291 @@ describe("VideoEditorPage — Timeline guide (NIW2-679)", () => {
     await waitForEditorLoaded();
     fireEvent.keyDown(window, { key: "h", metaKey: true });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+describe("VideoEditorPage — frame captures (NIW2-764)", () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer;
+  let libraryItems: unknown[];
+  let saved: { png: ArrayBuffer; meta: Record<string, unknown> }[];
+  const original = { ...window.electronAPI };
+
+  function savedItem(assetId: string, timeSeconds: number, createdAt = timeSeconds) {
+    return {
+      assetId,
+      kind: "screenshot",
+      title: "frame",
+      createdAt,
+      durationSeconds: 0,
+      derivedFromAssetId: null,
+      sourceVideoAssetId: SOURCE.assetId,
+      sourceTimeSeconds: timeSeconds,
+      local: { id: assetId, thumbnailUrl: `kaipu-media://screenshot/${assetId}` },
+    };
+  }
+
+  beforeEach(() => {
+    stubDecodedVideoSize(1280, 720);
+    libraryItems = [];
+    saved = [];
+    stillCapture.busy = false;
+    stillCapture.capture.mockReset();
+    stillCapture.capture.mockResolvedValue({
+      png: PNG,
+      width: 1280,
+      height: 720,
+      timelineSeconds: 0,
+      sourceSeconds: 83.4,
+    });
+    window.electronAPI.saveScreenshot = vi.fn(async (png: ArrayBuffer, meta: never) => {
+      saved.push({ png, meta });
+      libraryItems = [
+        savedItem(
+          `frame-${saved.length}`,
+          (meta as { source: { timeSeconds: number } }).source.timeSeconds,
+          // Taken one after another: the later save is the newer item.
+          saved.length,
+        ),
+        ...libraryItems,
+      ];
+      return {} as never;
+    }) as never;
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: libraryItems,
+      vaultError: null,
+      catalogVerifiedAt: null,
+    })) as never;
+  });
+
+  afterEach(() => {
+    stubDecodedVideoSize(0, 0);
+    Object.assign(window.electronAPI, original);
+    for (const t of getToasts()) dismissToast(t.id);
+  });
+
+  it.each(["Captures", "Capture frame"])(
+    "%s clears the selection, so Delete cannot remove an item whose inspector is hidden",
+    async (button) => {
+      renderEditor();
+      const footer = await waitForEditorLoaded();
+      // Counted, not fixed: other lanes may hold items an earlier test saved, and Split cuts
+      // those too. The test only needs Delete to remove nothing.
+      const before = footer.querySelectorAll(BLOCK_BUTTONS).length;
+      fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+      await waitFor(() => expect(screen.getByText("0:05.0 / 0:30.0")).toBeInTheDocument());
+      fireEvent.click(screen.getByRole("button", { name: "Split here" }));
+      await waitFor(() =>
+        expect(footer.querySelectorAll(BLOCK_BUTTONS).length).toBeGreaterThan(before),
+      );
+      const afterSplit = footer.querySelectorAll(BLOCK_BUTTONS).length;
+      fireEvent.click(footer.querySelectorAll(BLOCK_BUTTONS)[0]);
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Delete segment" })).toBeEnabled(),
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: button }));
+
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Delete segment" })).toBeDisabled(),
+      );
+      fireEvent.keyDown(document.body, { key: "Delete" });
+      expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(afterSplit);
+    },
+  );
+
+  it("Retry after a failed capture captures the frame on screen now, not the failed attempt's", async () => {
+    stillCapture.capture.mockRejectedValueOnce(new Error("no decodable frame"));
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    const toast = await waitFor(() => {
+      const found = getToasts().find((t) => t.action);
+      expect(found).toBeDefined();
+      return found!;
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+    await waitFor(() => expect(screen.getByText("0:05.0 / 0:30.0")).toBeInTheDocument());
+    act(() => toast.action!.onClick());
+
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(stillCapture.capture).toHaveBeenLastCalledWith(expect.objectContaining({ playhead: 5 }));
+  });
+
+  it("captures the frame at the playhead, saves it linked to the video, and opens the panel on it", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(stillCapture.capture).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceId: "rec-1",
+        videoWidth: 1280,
+        videoHeight: 720,
+        playhead: 0,
+      }),
+    );
+    expect(saved[0].png).toBe(PNG);
+    // The title becomes the file name: compact time, no colon. The time is the SOURCE's.
+    expect(saved[0].meta).toEqual({
+      title: "My recording frame 1m23s",
+      manual: false,
+      source: { videoAssetId: "asset-1", timeSeconds: 83.4 },
+    });
+    const panel = await screen.findByTestId("captures-panel");
+    await waitFor(() => expect(within(panel).getAllByTestId("capture-item")).toHaveLength(1));
+    expect(within(panel).getByText("1:23.4")).toBeInTheDocument();
+  });
+
+  it("adds the next capture at the top of an open panel without reopening it", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await screen.findByTestId("captures-panel");
+    await waitFor(() => expect(screen.getAllByTestId("capture-item")).toHaveLength(1));
+
+    stillCapture.capture.mockResolvedValue({
+      png: PNG,
+      width: 1280,
+      height: 720,
+      timelineSeconds: 5,
+      sourceSeconds: 5,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await waitFor(() => expect(screen.getAllByTestId("capture-item")).toHaveLength(2));
+    const times = screen.getAllByTestId("capture-item").map((el) => el.textContent);
+    expect(times[0]).toContain("0:05.0");
+    expect(times[1]).toContain("1:23.4");
+  });
+
+  it("links a slide frame with no time, and titles it with the timeline time", async () => {
+    stillCapture.capture.mockResolvedValue({
+      png: PNG,
+      width: 1280,
+      height: 720,
+      timelineSeconds: 2,
+      sourceSeconds: null,
+    });
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(saved[0].meta).toMatchObject({ source: { videoAssetId: "asset-1", timeSeconds: null } });
+    expect((saved[0].meta as { title: string }).title).toContain("frame 2s");
+  });
+
+  it("refuses while the video is still loading, like the export", async () => {
+    stubDecodedVideoSize(0, 0);
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await waitFor(() =>
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({ message: "The video is still loading. Try again in a moment." }),
+      ),
+    );
+    expect(stillCapture.capture).not.toHaveBeenCalled();
+    expect(saved).toHaveLength(0);
+    expect(screen.queryByTestId("captures-panel")).toBeNull();
+  });
+
+  it("says so when the capture fails, and saves nothing", async () => {
+    stillCapture.capture.mockRejectedValue(new Error("worker died"));
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await waitFor(() =>
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({ message: "Couldn't capture the frame." }),
+      ),
+    );
+    expect(saved).toHaveLength(0);
+    expect(screen.queryByTestId("captures-panel")).toBeNull();
+  });
+
+  it("says so when the save fails", async () => {
+    window.electronAPI.saveScreenshot = vi.fn(async () => {
+      throw new Error("disk full");
+    }) as never;
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    await waitFor(() =>
+      expect(getToasts()).toContainEqual(
+        expect.objectContaining({ message: "Couldn't capture the frame." }),
+      ),
+    );
+  });
+
+  it("disables Capture frame while a capture is running", async () => {
+    stillCapture.busy = true;
+    renderEditor();
+    await waitForEditorLoaded();
+    expect(screen.getByRole("button", { name: "Capture frame" })).toBeDisabled();
+  });
+
+  it("opens from the Captures button with nothing captured, in place of the inspector", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    expect(screen.getByTestId("editor-inspector")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+    const panel = await screen.findByTestId("captures-panel");
+    expect(screen.queryByTestId("editor-inspector")).toBeNull();
+    expect(await within(panel).findByText("No captures of this video yet.")).toBeInTheDocument();
+    expect(stillCapture.capture).not.toHaveBeenCalled();
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Close captures" }));
+    expect(screen.queryByTestId("captures-panel")).toBeNull();
+    expect(screen.getByTestId("editor-inspector")).toBeInTheDocument();
+  });
+
+  it("lists only this video's existing captures when it opens", async () => {
+    libraryItems = [
+      savedItem("mine", 7),
+      { ...savedItem("theirs", 9), sourceVideoAssetId: "another-video" },
+    ];
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+    await waitFor(() => expect(screen.getAllByTestId("capture-item")).toHaveLength(1));
+    expect(screen.getByText("0:07.0")).toBeInTheDocument();
+  });
+
+  it("moves the playhead to a capture's moment when its image is clicked", async () => {
+    libraryItems = [savedItem("mine", 7)];
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Go to 0:07.0" }));
+    await waitFor(() => expect(screen.getByText(/^0:07\.0 \/ /)).toBeInTheDocument());
+  });
+
+  it("closes with Escape, and when a tool is picked", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+    await screen.findByTestId("captures-panel");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByTestId("captures-panel")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+    await screen.findByTestId("captures-panel");
+    fireEvent.keyDown(window, { key: "r" });
+    expect(screen.queryByTestId("captures-panel")).toBeNull();
+  });
+
+  it("gives the column to the inspector of whatever gets selected", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+    await screen.findByTestId("captures-panel");
+    // Z adds a zoom at the playhead and selects it: its inspector must be visible.
+    fireEvent.keyDown(window, { key: "z" });
+    await waitFor(() => expect(screen.queryByTestId("captures-panel")).toBeNull());
+    expect(screen.getByTestId("editor-inspector")).toBeInTheDocument();
   });
 });

@@ -48,6 +48,8 @@ const SAVED: LocalRecording = {
   durationSeconds: 4,
   thumbnailUrl: null,
   derivedFromAssetId: "src-asset",
+  sourceVideoAssetId: null,
+  sourceTimeSeconds: null,
   contentSha256: null,
   gif: { width: 640, height: 360, fps: 15 },
 };

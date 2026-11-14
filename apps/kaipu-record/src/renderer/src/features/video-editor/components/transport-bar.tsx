@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useLocale, useTranslations } from "@kaipu/i18n";
 import { uiArea } from "@renderer/lib/ui-area";
+import { formatClock } from "../capture-time";
 import { formatSpeed, nextSpeed } from "../playback-speed";
 import { skipTarget, type LayoutEntry } from "../timeline";
 import { visibleCount, type TrackKey } from "../tracks";
@@ -64,14 +65,6 @@ export interface TransportBarProps {
   /** The timeline's zoom and scroll (NIW2-667). The strip reads the same store, so the
    *  buttons, the slider and the wheel on the lanes all move one view. */
   timelineView: TimelineViewStore;
-}
-
-/** "0:09.0": minutes, seconds and tenths, so a 5 s skip or a split is visible. */
-function formatTime(seconds: number): string {
-  const tenths = Math.max(0, Math.floor(seconds * 10 + 1e-6));
-  const m = Math.floor(tenths / 600);
-  const s = Math.floor((tenths % 600) / 10);
-  return `${m}:${String(s).padStart(2, "0")}.${tenths % 10}`;
 }
 
 /**
@@ -313,10 +306,10 @@ export function TransportBar({
             full-and-short pair the counts use, the full text staying for screen readers. */}
         <span className={styles.timeDisplay}>
           <span className={styles.timeFull}>
-            {formatTime(timelineTime)} / {formatTime(duration)}
+            {formatClock(timelineTime)} / {formatClock(duration)}
           </span>
           <span className={styles.timeShort} aria-hidden="true">
-            {formatTime(timelineTime)}
+            {formatClock(timelineTime)}
           </span>
         </span>
       </div>

@@ -90,6 +90,8 @@ beforeEach(() => {
       durationSeconds: 10,
       thumbnailUrl: null,
       derivedFromAssetId: null,
+      sourceVideoAssetId: null,
+      sourceTimeSeconds: null,
       contentSha256: null,
     }),
   );
@@ -241,6 +243,8 @@ describe("useVideoExport", () => {
         durationSeconds: 10,
         thumbnailUrl: null,
         derivedFromAssetId: null,
+        sourceVideoAssetId: null,
+        sourceTimeSeconds: null,
         contentSha256: null,
       });
     });

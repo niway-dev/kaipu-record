@@ -33,6 +33,8 @@ const cloudOnlyItem: LibraryItem = {
   createdAt: 1000,
   durationSeconds: 0,
   derivedFromAssetId: null,
+  sourceVideoAssetId: null,
+  sourceTimeSeconds: null,
   editSavedAt: null,
   editExportedSavedAt: null,
   local: null,
@@ -70,6 +72,8 @@ const exportedOnlyItem: LibraryItem = {
   createdAt: 2000,
   durationSeconds: 45,
   derivedFromAssetId: null,
+  sourceVideoAssetId: null,
+  sourceTimeSeconds: null,
   editSavedAt: null,
   editExportedSavedAt: null,
   local: {
@@ -83,6 +87,8 @@ const exportedOnlyItem: LibraryItem = {
     durationSeconds: 45,
     thumbnailUrl: null,
     derivedFromAssetId: null,
+    sourceVideoAssetId: null,
+    sourceTimeSeconds: null,
     contentSha256: "abc",
   },
   cloud: {
@@ -512,6 +518,8 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     sharing: "private" as const,
     capture: null,
     derivedFromAssetId: null,
+    sourceVideoAssetId: null,
+    sourceTimeSeconds: null,
     editSavedAt: null,
     editExportedSavedAt: null,
   };
@@ -525,6 +533,8 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     sizeBytes: 1,
     durationSeconds: 10,
     derivedFromAssetId: null,
+    sourceVideoAssetId: null,
+    sourceTimeSeconds: null,
     contentSha256: null,
   });
 
@@ -1715,5 +1725,115 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
       expect(within(panel).queryByText("Frame rate")).toBeNull();
       expect(within(panel).queryByText("Audio")).toBeNull();
     });
+  });
+});
+
+describe("LibraryDetailPage — frame captures of a video (NIW2-764)", () => {
+  /** A screenshot taken from `exportedOnlyItem` (asset-b) at `at` seconds of the video. */
+  function capture(id: string, at: number, createdAt: number, from = "asset-b"): LibraryItem {
+    return {
+      ...exportedOnlyItem,
+      assetId: `cap-${id}`,
+      kind: "screenshot",
+      title: `Frame ${id}`,
+      durationSeconds: 0,
+      createdAt,
+      sourceVideoAssetId: from,
+      sourceTimeSeconds: at,
+      local: {
+        ...exportedOnlyItem.local!,
+        id: `cap-${id}`,
+        assetId: `cap-${id}`,
+        kind: "screenshot",
+        title: `Frame ${id}`,
+        filePath: `/vault/cap-${id}.png`,
+        thumbnailUrl: `kaipu-media://screenshot/cap-${id}`,
+        sourceVideoAssetId: from,
+        sourceTimeSeconds: at,
+      },
+      cloud: null,
+      availability: "local",
+      editing: "project-available",
+    };
+  }
+
+  const list = (...items: LibraryItem[]): void => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items,
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+  };
+
+  beforeEach(() => {
+    window.electronAPI.onLibraryChanged = () => () => {};
+    window.electronAPI.copyScreenshotById = vi.fn(async () => {});
+  });
+
+  afterEach(() => {
+    for (const t of getToasts()) dismissToast(t.id);
+  });
+
+  /** The Captures tab: where the list lives, named with its count. */
+  const openCapturesTab = (count: number): void => {
+    fireEvent.click(screen.getByRole("tab", { name: `Captures (${count})` }));
+  };
+
+  it("lists the video's captures newest first in a Captures tab, with their time and a Copy button", async () => {
+    list(
+      exportedOnlyItem,
+      capture("old", 12.3, 1),
+      capture("new", 83.4, 2),
+      capture("other", 5, 3, "some-other-video"),
+    );
+    renderDetail("asset-b");
+    await waitForLoaded();
+    openCapturesTab(2);
+
+    const section = document.querySelector('[data-ui-area="libraryDetail.captures"]');
+    expect(section).not.toBeNull();
+    const items = within(section as HTMLElement).getAllByTestId("capture-item");
+    expect(items.map((el) => el.textContent)).toEqual([
+      expect.stringContaining("1:23.4"),
+      expect.stringContaining("0:12.3"),
+    ]);
+    expect(screen.getByRole("tab", { name: "Captures (2)" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("shows no Captures tab for a video without captures", async () => {
+    list(exportedOnlyItem, capture("other", 5, 3, "some-other-video"));
+    renderDetail("asset-b");
+    await waitForLoaded();
+    expect(screen.queryByRole("tab", { name: /^Captures/ })).toBeNull();
+  });
+
+  it("copies a capture by its library id", async () => {
+    list(exportedOnlyItem, capture("one", 7, 1));
+    renderDetail("asset-b");
+    await waitForLoaded();
+    openCapturesTab(1);
+    fireEvent.click(screen.getByRole("button", { name: "Copy image" }));
+    await waitFor(() =>
+      expect(window.electronAPI.copyScreenshotById).toHaveBeenCalledWith("cap-one"),
+    );
+  });
+
+  it("opens a capture's own page when its image is clicked", async () => {
+    list(exportedOnlyItem, capture("one", 7, 1));
+    const router = renderDetail("asset-b");
+    await waitForLoaded();
+    openCapturesTab(1);
+    fireEvent.click(screen.getByRole("button", { name: "Open the capture from 0:07.0" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/library/cap-one"));
+  });
+
+  it("does not list captures on a capture's own page", async () => {
+    list(exportedOnlyItem, capture("one", 7, 1));
+    renderDetail("cap-one");
+    await waitForLoaded();
+    expect(screen.queryByRole("tab", { name: /^Captures/ })).toBeNull();
   });
 });

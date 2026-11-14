@@ -54,6 +54,27 @@ describe("EditorToolbar", () => {
     }
   });
 
+  it("Capture frame sits right after Add image and fires onCaptureFrame", () => {
+    const props = renderToolbar({ onCaptureFrame: vi.fn() });
+    const names = screen.getAllByRole("button").map((b) => b.getAttribute("aria-label"));
+    const at = names.indexOf("Add image");
+    expect(names.slice(at, at + 2)).toEqual(["Add image", "Capture frame"]);
+    fireEvent.click(screen.getByRole("button", { name: "Capture frame" }));
+    expect(props.onCaptureFrame).toHaveBeenCalledOnce();
+    // Add image is untouched: it still opens the file picker.
+    expect(screen.getByTestId("slide-image-input")).toBeInTheDocument();
+  });
+
+  it("disables Capture frame while a capture runs", () => {
+    renderToolbar({ onCaptureFrame: vi.fn(), captureBusy: true });
+    expect(screen.getByRole("button", { name: "Capture frame" })).toBeDisabled();
+  });
+
+  it("shows no Capture frame button without the handler", () => {
+    renderToolbar();
+    expect(screen.queryByRole("button", { name: "Capture frame" })).toBeNull();
+  });
+
   it("no longer holds split and delete: they moved to the transport bar (NIW2-664)", () => {
     renderToolbar();
     expect(screen.queryByRole("button", { name: "Split here" })).toBeNull();
@@ -621,5 +642,27 @@ describe("nextToolInGroup", () => {
 
   it("has no group for Select", () => {
     expect(nextToolInGroup("select")).toBeNull();
+  });
+});
+
+describe("EditorToolRail — Captures (NIW2-764)", () => {
+  it("toggles the Captures panel from the tool column", () => {
+    const props = renderRail({ onToggleCaptures: vi.fn() });
+    fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+    expect(props.onToggleCaptures).toHaveBeenCalledOnce();
+  });
+
+  it("marks Captures pressed while open, and Select as not active then", () => {
+    renderRail({ onToggleCaptures: vi.fn(), capturesOpen: true, tool: "select" });
+    expect(screen.getByRole("button", { name: "Captures" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Select" }).className).not.toMatch(/toolActive/);
+  });
+
+  it("has no Captures button without the handler", () => {
+    renderRail();
+    expect(screen.queryByRole("button", { name: "Captures" })).toBeNull();
   });
 });

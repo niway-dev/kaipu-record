@@ -3,11 +3,13 @@ import { createPortal } from "react-dom";
 import {
   ArrowUpRight,
   BookOpen,
+  Camera,
   Check,
   Download,
   Droplet,
   EyeOff,
   ImagePlus,
+  Images,
   Mouse,
   MousePointer2,
   Redo2,
@@ -293,6 +295,10 @@ export interface EditorToolbarProps {
   exportDisabled: boolean;
   /** Opens the Timeline guide on its first tab (NIW2-679). */
   onOpenGuide?: () => void;
+  /** Save the frame at the playhead into the library, linked to this video (NIW2-764). */
+  onCaptureFrame?: () => void;
+  /** A capture is being composed: the button waits instead of starting a second one. */
+  captureBusy?: boolean;
 }
 
 /**
@@ -304,7 +310,7 @@ export interface EditorToolbarProps {
  *
  * A group's button shows its current variant's icon and a corner mark that it has
  * more. The webcam and cursor buttons follow, below a rule, only for a recording that
- * has a webcam or a redrawable cursor.
+ * has a webcam or a redrawable cursor. Captures (NIW2-764) comes last, below its own rule.
  */
 export interface EditorToolRailProps {
   /** Silence a stretch of audio at the playhead. */
@@ -326,6 +332,11 @@ export interface EditorToolRailProps {
   onOpenCursor?(): void;
   /** The cursor's settings are open; the Select tool then shows as not active. */
   cursorSelected?: boolean;
+  /** Open or close the Captures panel (NIW2-764), which takes the inspector's place in the
+   *  right column like the cursor's settings do. */
+  onToggleCaptures?(): void;
+  /** The Captures panel is open; the Select tool then shows as not active. */
+  capturesOpen?: boolean;
 }
 
 const GROUP_LABEL: Record<ToolGroup, "toolAnnotate" | "toolPrivacy"> = {
@@ -352,6 +363,8 @@ export function EditorToolRail({
   onHideWebcam,
   onOpenCursor,
   cursorSelected = false,
+  onToggleCaptures,
+  capturesOpen = false,
 }: EditorToolRailProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
   // The variant each group shows while another tool is active: the last one used.
@@ -520,7 +533,7 @@ export function EditorToolRail({
         data-tool-group="select"
         title={`${t("toolSelect")} (${TOOL_SHORTCUT.select})`}
         aria-label={t("toolSelect")}
-        className={`${styles.tool} ${tool === "select" && !cursorSelected ? styles.toolActive : ""}`}
+        className={`${styles.tool} ${tool === "select" && !cursorSelected && !capturesOpen ? styles.toolActive : ""}`}
         onClick={() => onToolChange("select")}
       >
         <MousePointer2 size={19} />
@@ -590,6 +603,23 @@ export function EditorToolRail({
           <Mouse size={19} />
         </button>
       )}
+      {/* The frames captured from this video (NIW2-764). Capture frame itself sits in the
+          title bar beside Add image; this only shows the list. */}
+      {onToggleCaptures && (
+        <>
+          <span className={styles.railSeparator} aria-hidden />
+          <button
+            type="button"
+            title={t("capturesTitle")}
+            aria-label={t("capturesTitle")}
+            aria-pressed={capturesOpen}
+            className={`${styles.tool} ${capturesOpen ? styles.toolActive : ""}`}
+            onClick={onToggleCaptures}
+          >
+            <Images size={19} />
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -610,6 +640,8 @@ export function EditorToolbar({
   children,
   exportDisabled,
   onOpenGuide,
+  onCaptureFrame,
+  captureBusy = false,
 }: EditorToolbarProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -661,6 +693,20 @@ export function EditorToolbar({
         >
           <ImagePlus size={18} />
         </button>
+        {/* A still of the frame on screen, saved into the library and tied to this video
+            (NIW2-764). Beside Add image, which inserts an image into the timeline instead. */}
+        {onCaptureFrame && (
+          <button
+            type="button"
+            className={styles.iconBtn}
+            title={t("captureFrame")}
+            aria-label={t("captureFrame")}
+            disabled={captureBusy}
+            onClick={onCaptureFrame}
+          >
+            <Camera size={18} />
+          </button>
+        )}
         {onOpenGuide && (
           <button
             type="button"
