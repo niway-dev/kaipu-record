@@ -108,7 +108,8 @@ Stage 1, [NIW2-771](https://linear.app/niway/issue/NIW2-771/video-editor-floatin
 Release flag, [NIW2-772](https://linear.app/niway/issue/NIW2-772/video-editor-hide-add-to-timeline-behind-the-release-flag-timeline):
 
 - [ ] With `timeline-levels` off, the Captures panel shows no **Add to timeline** button.
-- [ ] With it on, the button is there and does what it does on `main` today.
+- [ ] With it on, the button is there. Until stage 1 lands it does what it does on `main` today
+      (it inserts a slide in the sequence); stage 1 replaces that with a floating image.
 
 ## Sources and unverified claims
 
