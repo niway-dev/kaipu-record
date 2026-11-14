@@ -103,7 +103,8 @@ export function anchorAt(layout: LayoutEntry[], t: number): MediaAnchor | null {
 
 /**
  * The timeline time an anchor points at now, or null when what it was tied to is gone
- * (footage deleted, slide removed). The inverse of `anchorAt` and the only place an anchor
+ * (footage deleted, slide removed). The inverse of `anchorAt` for any time before the end of the
+ * timeline (an anchor AT the end belongs to no footage: callers keep an item's start before it), and the only place an anchor
  * becomes a time, so a trim, a split, a reorder or an insert before it moves the item with
  * its footage instead of leaving it over another moment.
  */

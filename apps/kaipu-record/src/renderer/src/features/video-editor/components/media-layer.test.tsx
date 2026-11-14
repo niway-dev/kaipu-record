@@ -351,31 +351,35 @@ describe("MediaLayer", () => {
       }
     });
 
-    it("goes back to the page time when playback stops", () => {
+    it("goes back to the page time when playback stops, and does not replay a stale frame", () => {
       vi.useFakeTimers({ toFake: ["requestAnimationFrame", "cancelAnimationFrame"] });
       try {
         const fading = img("m", 0, 0, { fadeInMs: 1000 });
-        const props = { media: [fading], time: 0, readTime: () => 0.5 };
-        const { rerender } = renderLayer({ ...props, playing: true });
+        const common = {
+          media: [fading],
+          layout,
+          picture,
+          selectedId: null,
+          interactive: true,
+          imageUrl: (assetId: string) => `blob:${assetId}`,
+          onSelect: vi.fn(),
+          onBegin: vi.fn(),
+          onBoxChange: vi.fn(),
+          onEnd: vi.fn(),
+        };
+        let clock = 0.5;
+        const readTime = () => clock;
+        const { rerender } = render(
+          <MediaLayer {...common} time={0} playing readTime={readTime} />,
+        );
         act(() => void vi.advanceTimersByTime(20));
         expect(items()).toHaveLength(1);
-        rerender(
-          <MediaLayer
-            media={[fading]}
-            layout={layout}
-            time={0}
-            playing={false}
-            readTime={props.readTime}
-            picture={picture}
-            selectedId={null}
-            interactive
-            imageUrl={(assetId) => `blob:${assetId}`}
-            onSelect={vi.fn()}
-            onBegin={vi.fn()}
-            onBoxChange={vi.fn()}
-            onEnd={vi.fn()}
-          />,
-        );
+        rerender(<MediaLayer {...common} time={0} playing={false} readTime={readTime} />);
+        expect(items()).toHaveLength(0);
+        // Playing again: the clock now reads a moment where nothing is drawn. The frame at the
+        // old live time (0.5) must not show before the first tick.
+        clock = 0;
+        rerender(<MediaLayer {...common} time={0} playing readTime={readTime} />);
         expect(items()).toHaveLength(0);
       } finally {
         vi.useRealTimers();
