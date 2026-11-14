@@ -3058,9 +3058,18 @@ describe("VideoEditorPage — Add recording (NIW2-782)", () => {
       stubLane();
       renderEditor();
       const footer = await waitForEditorLoaded();
+      fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+      await screen.findByRole("button", { name: "Add Checkout bug" });
       const track = footer.querySelector(BLOCK_BUTTONS)!.parentElement!;
+      // A row drag is really under way, so only the strip's type check can refuse the drop.
+      startDrag("Checkout bug");
 
       dragOnto("drop", track, 900, { types: ["Files"], getData: () => "" });
+      // A join is asynchronous (it reads the recording's meta), so give a wrongly accepted drop
+      // the time to land before asserting that nothing did.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      });
 
       expect(screen.getByText(/\/ 0:30\.0$/)).toBeInTheDocument();
     });
