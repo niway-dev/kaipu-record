@@ -27,7 +27,7 @@ function renderPanel(props: Partial<React.ComponentProps<typeof MediaInspector>>
     onFades: vi.fn(),
     onDelete: vi.fn(),
   };
-  render(
+  const view = render(
     <MediaInspector
       item={item}
       seconds={10}
@@ -37,7 +37,7 @@ function renderPanel(props: Partial<React.ComponentProps<typeof MediaInspector>>
       {...props}
     />,
   );
-  return handlers;
+  return { ...handlers, rerender: view.rerender };
 }
 
 describe("MediaInspector", () => {
@@ -94,5 +94,27 @@ describe("MediaInspector", () => {
     fireEvent.blur(fadeIn);
     expect(h.onFades).not.toHaveBeenCalled();
     expect(fadeIn.value).toBe("200");
+  });
+
+  it("shows what the scene holds when a commit leaves the stored value as it was", () => {
+    // The item already reaches the end of the video: typing 20 asks for more, the page clamps
+    // it, and `seconds` stays 12. The field must go back to 12, not keep the typed 20.
+    const h = renderPanel({ seconds: 12 });
+    const duration = screen.getByLabelText("Duration (s)") as HTMLInputElement;
+    fireEvent.change(duration, { target: { value: "20" } });
+    fireEvent.blur(duration);
+    expect(h.onDuration).toHaveBeenCalledWith(20);
+    expect(duration.value).toBe("12");
+  });
+
+  it("shows the stored fade when a typed decimal rounds back to it", () => {
+    // The scene rounds a fade to whole milliseconds, so 100.4 is stored as 100 and `value`
+    // does not change; the field must say 100.
+    const h = renderPanel({ item: { ...item, fadeInMs: 100 } });
+    const fadeIn = screen.getByLabelText("Fade in (ms)") as HTMLInputElement;
+    fireEvent.change(fadeIn, { target: { value: "100.4" } });
+    fireEvent.blur(fadeIn);
+    expect(h.onFades).toHaveBeenCalledWith({ fadeInMs: 100.4 });
+    expect(fadeIn.value).toBe("100");
   });
 });

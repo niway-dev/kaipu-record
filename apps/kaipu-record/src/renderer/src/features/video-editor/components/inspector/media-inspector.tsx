@@ -39,7 +39,10 @@ function NumberField({
     }
     const next = Math.min(max, Math.max(min, typed));
     if (next !== value) onCommit(next);
-    else input.value = String(value);
+    // Back to what the scene holds now. When the commit changed it, `key={value}` remounts the
+    // field with the new value; when it did not (a duration clamped to the end of the video, a
+    // fade rounded back to the stored one, a commit refused mid-drag) this puts the old one back.
+    input.value = String(value);
   };
   return (
     <label className={styles.field}>
