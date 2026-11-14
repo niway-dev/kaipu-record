@@ -1582,13 +1582,12 @@ function VideoEditor({
   }, [addRecordingOpen, playbackRef]);
   const addRecording = useCallback(
     async (video: LibraryVideo, boundary: { index: number; time: number }): Promise<void> => {
-      // `busy` (a drag owns the scene) does nothing: the click is simply not taken.
-      // Anchored to the clip after the boundary: a join still loading may insert ahead of it.
-      // The boundary was chosen at click time by the modal (after the clip under the playhead,
-      // the start or the end).
+      // The modal chose the boundary at click time (after the clip under the playhead, the start
+      // or the end). It is anchored to the clip after it, because a join still loading may
+      // insert ahead of it. `busy` (a drag owns the scene) does nothing: the click is not taken.
+      const result = await joinRecordingAt(video, anchoredBoundary(layout, boundary));
       // The modal stays open over the timeline, so a join that landed says so (NIW2-790): a
       // second click would add another copy, and nothing behind the modal shows the first.
-      const result = await joinRecordingAt(video, anchoredBoundary(layout, boundary));
       if (result === "missing") {
         showToast({ message: t("addRecordingMissing", { title: video.title }) });
       } else if (result === "joined") {
