@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { reportError } from "@renderer/features/analytics";
 import { DeleteConfirmDialog } from "@renderer/features/library/components/delete-confirm-dialog";
+import { notifyVaultRefusal } from "@renderer/features/library/vault-errors";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { uiArea } from "@renderer/lib/ui-area";
 import { formatClock } from "../capture-time";
@@ -52,6 +53,8 @@ export function CapturesPanel({
     try {
       await onDelete(target);
     } catch (error) {
+      // Files being fixed, or a read-only record: a plain notice, as the Library's delete gives.
+      if (notifyVaultRefusal(error, tLibrary)) return;
       reportError(tLibrary("errorDelete"), error, {
         context: { id: target.id, phase: "delete-capture" },
       });

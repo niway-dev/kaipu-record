@@ -2252,35 +2252,33 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     fireEvent.click(button);
   }
 
-  it.each(["Captures"])(
-    "%s clears the selection, so Delete cannot remove an item whose inspector is hidden",
-    async (button) => {
-      renderEditor();
-      const footer = await waitForEditorLoaded();
-      // Counted, not fixed: other lanes may hold items an earlier test saved, and Split cuts
-      // those too. The test only needs Delete to remove nothing.
-      const before = footer.querySelectorAll(BLOCK_BUTTONS).length;
-      fireEvent.click(screen.getByRole("button", { name: "Forward" }));
-      await waitFor(() => expect(screen.getByText("0:05.0 / 0:30.0")).toBeInTheDocument());
-      fireEvent.click(screen.getByRole("button", { name: "Split here" }));
-      await waitFor(() =>
-        expect(footer.querySelectorAll(BLOCK_BUTTONS).length).toBeGreaterThan(before),
-      );
-      const afterSplit = footer.querySelectorAll(BLOCK_BUTTONS).length;
-      fireEvent.click(footer.querySelectorAll(BLOCK_BUTTONS)[0]);
-      await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Delete segment" })).toBeEnabled(),
-      );
+  it("Captures clears the selection, so Delete cannot remove an item whose inspector is hidden", async () => {
+    const button = "Captures";
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    // Counted, not fixed: other lanes may hold items an earlier test saved, and Split cuts
+    // those too. The test only needs Delete to remove nothing.
+    const before = footer.querySelectorAll(BLOCK_BUTTONS).length;
+    fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+    await waitFor(() => expect(screen.getByText("0:05.0 / 0:30.0")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Split here" }));
+    await waitFor(() =>
+      expect(footer.querySelectorAll(BLOCK_BUTTONS).length).toBeGreaterThan(before),
+    );
+    const afterSplit = footer.querySelectorAll(BLOCK_BUTTONS).length;
+    fireEvent.click(footer.querySelectorAll(BLOCK_BUTTONS)[0]);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Delete segment" })).toBeEnabled(),
+    );
 
-      fireEvent.click(screen.getByRole("button", { name: button }));
+    fireEvent.click(screen.getByRole("button", { name: button }));
 
-      await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Delete segment" })).toBeDisabled(),
-      );
-      fireEvent.keyDown(document.body, { key: "Delete" });
-      expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(afterSplit);
-    },
-  );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Delete segment" })).toBeDisabled(),
+    );
+    fireEvent.keyDown(document.body, { key: "Delete" });
+    expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(afterSplit);
+  });
 
   it("Retry after a failed capture captures the frame on screen now, not the failed attempt's", async () => {
     stillCapture.capture.mockRejectedValueOnce(new Error("no decodable frame"));

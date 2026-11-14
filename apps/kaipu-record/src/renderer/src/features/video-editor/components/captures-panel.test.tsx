@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
+import { VAULT_MAINTENANCE_MARKER } from "@shared/types/library-storage";
 import { CapturesPanel, type CapturesPanelProps } from "./captures-panel";
 
 function capture(over: Partial<LibraryVideo>): LibraryVideo {
@@ -153,6 +154,23 @@ describe("CapturesPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(props.onDelete).toHaveBeenCalled());
     await waitFor(() => expect(getToasts().length).toBeGreaterThan(0));
+    expect(screen.getAllByTestId("capture-item")).toHaveLength(1);
+  });
+
+  it("says the files are being fixed when the vault refuses the delete", async () => {
+    renderPanel({
+      captures: [capture({})],
+      onDelete: vi.fn(async () => {
+        throw new Error(`refused: ${VAULT_MAINTENANCE_MARKER}`);
+      }),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Delete capture" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() =>
+      expect(getToasts().map((t) => t.message)).toEqual([
+        "Kaipu is fixing your files. Try again in a moment.",
+      ]),
+    );
     expect(screen.getAllByTestId("capture-item")).toHaveLength(1);
   });
 

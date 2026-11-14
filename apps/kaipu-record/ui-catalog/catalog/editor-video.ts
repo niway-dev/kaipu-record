@@ -30,16 +30,16 @@ const zoomIn: Step = {
   },
 };
 /** Capture frame, in the Captures panel's header. */
-/**
- * A capture's image in the panel's list: its button is named "Go to <time>". The shot waits for
- * it to be on screen, not for the image inside to decode, which the next step covers.
- */
 const captureFrameButton: Step = {
   click: {
     area: "editorVideo.capturesPanel",
     part: { role: "button", name: "Capture frame", exact: true },
   },
 };
+/**
+ * A capture in the panel's list: its Go to button is named "Go to <time>". The shot waits for
+ * it to be on screen, not for the image to decode, which the next step covers.
+ */
 const captureListed: Step = {
   waitFor: { area: "editorVideo.capturesPanel", part: { role: "button", name: "Go to" } },
 };

@@ -170,7 +170,8 @@ export const libraryDetail = catalog(
         { waitMs: 400 },
       ],
       demonstrates: ["libraryDetail.captureSource:linked"],
-      ready: { video: "paused-at-start" },
+      // It ends on the capture's own page: an image, no <video> to wait for.
+      ready: { area: "libraryDetail.captureSource" },
       // The capture is a new file in the workspace: put the vault back for the next state.
       after: [{ action: "restoreVault" }],
     },
