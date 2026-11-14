@@ -8,8 +8,8 @@
  *   fresh open / pre-v2 session     → detect at the scene's sensitivity
  */
 import type { CursorTrack } from "@shared/cursor-track";
-import type { VideoScene } from "./scene";
-import { detectZoomSegments } from "./zoom/detect-zoom-segments";
+import type { SceneSource, VideoScene } from "./scene";
+import { detectRecordingZooms } from "./zoom/recording-zooms";
 
 export function withInitialZooms(
   scene: VideoScene,
@@ -20,6 +20,32 @@ export function withInitialZooms(
   if (!track || hasZoomData) return scene;
   return {
     ...scene,
-    zoomSegments: detectZoomSegments(track, sourceDurationSeconds, scene.zoomSensitivity),
+    zoomSegments: detectRecordingZooms(
+      [{ offset: 0, duration: sourceDurationSeconds, track }],
+      scene.zoomSensitivity,
+    ),
+  };
+}
+
+/**
+ * A joined recording's auto zooms (ADR 0058), added to the scene at its sensitivity: detected on
+ * the recording's own track and shifted into its range. Every other segment, manual or auto,
+ * stays exactly as it was; a detected one that would overlap an existing segment is skipped, so
+ * the one-active-zoom rule holds. Returns the same scene without a track or without detections.
+ */
+export function withJoinedZooms(
+  scene: VideoScene,
+  source: SceneSource,
+  track: CursorTrack | null,
+): VideoScene {
+  if (!track) return scene;
+  const detected = detectRecordingZooms(
+    [{ offset: source.offset, duration: source.durationSeconds, track }],
+    scene.zoomSensitivity,
+  ).filter((d) => !scene.zoomSegments.some((z) => d.start < z.end && z.start < d.end));
+  if (detected.length === 0) return scene;
+  return {
+    ...scene,
+    zoomSegments: [...scene.zoomSegments, ...detected].sort((a, b) => a.start - b.start),
   };
 }

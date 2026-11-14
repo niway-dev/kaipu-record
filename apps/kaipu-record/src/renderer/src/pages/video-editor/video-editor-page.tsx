@@ -26,6 +26,7 @@ import {
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "@kaipu/tokens/kaipu.stylex";
 import { Badge, Button } from "@kaipu/ui";
+import { clipBounds, sourceAxis } from "@renderer/features/video-editor/source-axis";
 import {
   boundaryIndexAt,
   clampOverlays,
@@ -445,7 +446,7 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
         const saved = await window.electronAPI.loadVideoEditSession(editorSource.id);
         if (cancelled) return;
         if (saved !== null) {
-          const session = parseSession(saved.sessionJson);
+          const session = parseSession(saved.sessionJson, source.durationSeconds);
           if (session !== null) {
             // Hydrate the asset store with the known assetIds so restored slide items
             // can still reference them by id. All assets come back as raw bytes
@@ -1004,7 +1005,9 @@ function VideoEditor({
             // Left the editor: its unmount flush wrote the latest edit (or Discard dropped
             // it). Stamp only if what is on disk is the edit that was exported.
             const saved = await window.electronAPI.loadVideoEditSession(source.id);
-            const parsedScene = saved ? parseSession(saved.sessionJson)?.scene : null;
+            const parsedScene = saved
+              ? parseSession(saved.sessionJson, source.durationSeconds)?.scene
+              : null;
             // Reconciled like the loader does, or an old session (no webcam key) on a webcam
             // recording would never fingerprint like the scene that was exported.
             const savedScene = parsedScene
@@ -1387,12 +1390,16 @@ function VideoEditor({
         controllerRef.current.beginInteract();
       }
       if (phase === "move") {
+        const current = controllerRef.current.scene;
+        const dragged = current.items.find((item) => item.id === itemId);
         const items = trimClip(
-          controllerRef.current.scene.items,
+          current.items,
           itemId,
           edge,
           sourceTime,
-          source.durationSeconds,
+          dragged?.kind === "clip"
+            ? clipBounds(sourceAxis(source.durationSeconds, current.sources), dragged)
+            : { start: 0, end: source.durationSeconds },
         );
         const duration = layoutDuration(toLayout(items));
         controllerRef.current.updateLive({

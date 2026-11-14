@@ -23,6 +23,12 @@
  * `background` (ADR 0051) is additive too: absent or damaged → the default (none, 0, 0, 0), an
  * unknown preset → none, numbers clamp to the screenshot editor's PADDING/RADIUS/SHADOW ranges.
  * Older builds ignore the key, so a session with a background opens there without one.
+ *
+ * `sources` (ADR 0058) is the one NOT additive: a scene that joined recordings is written as
+ * version 2, because an older build that ignored the key would play the joined clips' seconds
+ * against the opened recording's file. Version 2 requires valid, non-overlapping sources and a
+ * damaged table rejects the session (the clips are meaningless without it); a scene without
+ * sources is still written as version 1, byte for byte as before.
  */
 import { ZOOM_DEFAULTS, ZOOM_LIMITS, type ZoomSegment } from "./zoom/zoom-model";
 import { clampIntensity, REDACTION, type NormRect, type Redaction } from "./privacy/redaction";
@@ -42,6 +48,7 @@ import type {
   ImageMediaItem,
   MediaAnchor,
   MutedRange,
+  SceneSource,
   SlideItem,
   TextOverlay,
   TrackItem,
@@ -56,7 +63,7 @@ import type {
 const MIN_LENGTH_TOLERANCE = 1e-6;
 
 export interface VideoEditSession {
-  version: 1;
+  version: 1 | 2;
   scene: VideoScene;
   /**
    * False when the saved JSON predates v2 (no `zoomSegments` key). The loader then runs
@@ -68,21 +75,28 @@ export interface VideoEditSession {
 import { parseCursorSettings } from "./cursor/cursor-model";
 import { parseBackground } from "./background";
 import { MEDIA_MAX_FADE_MS } from "./media";
+import { MIN_ITEM_DURATION } from "./timeline";
 
 export function serializeSession(scene: VideoScene): string {
+  if (scene.sources && scene.sources.length > 0) return JSON.stringify({ version: 2, scene });
+  // No joins: version 1 and no `sources` key, exactly as it was written before they existed.
+  if (scene.sources !== undefined) {
+    const { sources: _empty, ...withoutSources } = scene;
+    return JSON.stringify({ version: 1, scene: withoutSources });
+  }
   return JSON.stringify({ version: 1, scene });
 }
 
 /**
  * Parse and validate a session JSON string. Returns `null` for any of:
  * - invalid JSON
- * - wrong `version`
+ * - wrong `version` (1 and 2 are read), or version 2 without valid sources
  * - missing `items`/`overlays` arrays
  * - item with unknown `kind`
  * - overlay with unknown `kind`
  * - any required field that is non-numeric when a number is expected
  */
-export function parseSession(json: string): VideoEditSession | null {
+export function parseSession(json: string, primaryDurationSeconds = 0): VideoEditSession | null {
   let raw: unknown;
   try {
     raw = JSON.parse(json);
@@ -93,7 +107,8 @@ export function parseSession(json: string): VideoEditSession | null {
   if (typeof raw !== "object" || raw === null) return null;
   const r = raw as Record<string, unknown>;
 
-  if (r["version"] !== 1) return null;
+  const version = r["version"];
+  if (version !== 1 && version !== 2) return null;
 
   if (typeof r["scene"] !== "object" || r["scene"] === null) return null;
   const sceneRaw = r["scene"] as Record<string, unknown>;
@@ -181,8 +196,15 @@ export function parseSession(json: string): VideoEditSession | null {
 
   const media = parseMedia(sceneRaw["media"]);
 
+  // Only a version 2 file carries a source table; version 1 never did, so a stray key is ignored.
+  let sources: SceneSource[] | undefined;
+  if (version === 2) {
+    sources = parseSources(sceneRaw["sources"], primaryDurationSeconds) ?? undefined;
+    if (!sources) return null;
+  }
+
   return {
-    version: 1,
+    version,
     scene: {
       items,
       cursor: parseCursorSettings(sceneRaw["cursor"]),
@@ -199,6 +221,7 @@ export function parseSession(json: string): VideoEditSession | null {
       // Additive too, and only present when the session had some: a session from before
       // floating images has no key, so it opens exactly as it did.
       ...(media ? { media } : {}),
+      ...(sources ? { sources } : {}),
     },
     hasZoomData,
   };
@@ -333,6 +356,50 @@ function parseMedia(raw: unknown): ImageMediaItem[] | undefined {
     .sort((a, b) => a.item.z - b.item.z || a.position - b.position);
   const zById = new Map(byZ.map(({ item }, z) => [item.id, z]));
   return items.map((item) => ({ ...item, z: zById.get(item.id)! }));
+}
+
+function validateSource(raw: unknown): SceneSource | null {
+  const s = obj(raw);
+  if (!s) return null;
+  if (!isStr(s["id"]) || !isStr(s["assetId"]) || !isStr(s["title"])) return null;
+  if (!isNum(s["offset"]) || !isNum(s["durationSeconds"])) return null;
+  if (!isNum(s["width"]) || !isNum(s["height"])) return null;
+  // Shorter than the shortest clip, a range could not hold the clip it was joined with.
+  if (s["durationSeconds"] < MIN_ITEM_DURATION || s["width"] < 0 || s["height"] < 0) return null;
+  return {
+    id: s["id"],
+    assetId: s["assetId"],
+    title: s["title"],
+    offset: s["offset"],
+    durationSeconds: s["durationSeconds"],
+    width: s["width"],
+    height: s["height"],
+  };
+}
+
+/**
+ * The joined recordings of a version 2 session (ADR 0058), in the saved order. Null when the
+ * list is missing, empty or damaged, when two entries share an id, or when a range overlaps or
+ * touches another one or the opened recording's `[0, primaryDurationSeconds]` (0 when the caller
+ * does not know it): every joined clip's seconds are read through this table, so a repaired one
+ * would put footage under the wrong recording.
+ */
+function parseSources(raw: unknown, primaryDurationSeconds: number): SceneSource[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const sources: SceneSource[] = [];
+  for (const entry of raw as unknown[]) {
+    const validated = validateSource(entry);
+    if (!validated) return null;
+    sources.push(validated);
+  }
+  if (new Set(sources.map((s) => s.id)).size !== sources.length) return null;
+  // Ranges never touch: `recordingAt` includes both ends, so a shared second is ambiguous.
+  let end = primaryDurationSeconds;
+  for (const source of [...sources].sort((a, b) => a.offset - b.offset)) {
+    if (source.offset <= end) return null;
+    end = source.offset + source.durationSeconds;
+  }
+  return sources;
 }
 
 function validateOverlay(raw: unknown): VideoOverlay | null {

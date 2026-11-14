@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initialScene, type VideoScene } from "./scene";
+import { initialScene, type SceneSource, type VideoScene } from "./scene";
 import { parseSession, serializeSession } from "./session";
 import { PADDING_RANGE, RADIUS_RANGE, SHADOW_RANGE } from "../screenshots/beautify/backgrounds";
 import { DEFAULT_BACKGROUND } from "./background";
@@ -111,7 +111,7 @@ describe("parseSession — null on invalid input", () => {
   });
 
   it("returns null for wrong version", () => {
-    const withWrongVersion = JSON.stringify({ version: 2, scene: { items: [], overlays: [] } });
+    const withWrongVersion = JSON.stringify({ version: 3, scene: { items: [], overlays: [] } });
     expect(parseSession(withWrongVersion)).toBeNull();
 
     const withNoVersion = JSON.stringify({ scene: { items: [], overlays: [] } });
@@ -798,5 +798,121 @@ describe("floating images (media)", () => {
 
   it("drops a repeated id", () => {
     expect(withMedia([IMAGE, { ...IMAGE, z: 3 }])!.scene.media).toHaveLength(1);
+  });
+});
+
+describe("joined recordings (session version 2, ADR 0058)", () => {
+  const SOURCE_B: SceneSource = {
+    id: "src-b",
+    assetId: "lib-b",
+    title: "Recording B",
+    offset: 3600,
+    durationSeconds: 20,
+    width: 1280,
+    height: 720,
+  };
+  const twoRecordings = (sources: SceneSource[] = [SOURCE_B]): VideoScene => ({
+    ...initialScene(10),
+    items: [CLIP_ITEM, { id: "clip-b", kind: "clip", sourceStart: 3600, sourceEnd: 3620 }],
+    sources,
+  });
+  const v2 = (sources: unknown): string =>
+    JSON.stringify({
+      version: 2,
+      scene: { items: [CLIP_ITEM], overlays: [], ...(sources === undefined ? {} : { sources }) },
+    });
+
+  it("round-trips a two-recording scene as version 2", () => {
+    const scene = twoRecordings();
+    const json = serializeSession(scene);
+    expect(JSON.parse(json).version).toBe(2);
+    const parsed = parseSession(json)!;
+    expect(parsed.version).toBe(2);
+    expect(parsed.scene).toEqual(scene);
+  });
+
+  it("writes a scene without sources byte for byte as before: version 1, no sources key", () => {
+    const scene: VideoScene = {
+      ...initialScene(10),
+      items: [CLIP_ITEM, SLIDE_ITEM],
+      overlays: [BOX_OVERLAY],
+      redactions: [],
+    };
+    expect(serializeSession(scene)).toBe(JSON.stringify({ version: 1, scene }));
+    expect(serializeSession(scene)).not.toContain("sources");
+    // An emptied list is the same as none: still version 1, still no key.
+    const emptied = serializeSession({ ...scene, sources: [] });
+    expect(emptied).toBe(JSON.stringify({ version: 1, scene }));
+  });
+
+  it("still opens the frozen pre-webcam session unchanged", () => {
+    const parsed = parseSession(SESSION_BEFORE_WEBCAM)!;
+    expect(parsed.version).toBe(1);
+    expect(parsed.scene.sources).toBeUndefined();
+  });
+
+  it("returns null for version 2 without sources, or with an empty list", () => {
+    expect(parseSession(v2(undefined))).toBeNull();
+    expect(parseSession(v2([]))).toBeNull();
+  });
+
+  it("returns null for version 3", () => {
+    expect(
+      parseSession(
+        JSON.stringify({ version: 3, scene: JSON.parse(serializeSession(twoRecordings())).scene }),
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null for overlapping sources", () => {
+    const overlapping = [SOURCE_B, { ...SOURCE_B, id: "src-c", offset: 3610 }];
+    expect(parseSession(v2(overlapping))).toBeNull();
+    expect(parseSession(serializeSession(twoRecordings(overlapping)))).toBeNull();
+  });
+
+  it("returns null for ranges that touch, or a joined range at offset 0", () => {
+    const end = SOURCE_B.offset + SOURCE_B.durationSeconds;
+    expect(parseSession(v2([SOURCE_B, { ...SOURCE_B, id: "src-c", offset: end }]))).toBeNull();
+    expect(parseSession(v2([{ ...SOURCE_B, offset: 0 }]))).toBeNull();
+  });
+
+  it("returns null for a joined range inside or touching the opened recording's", () => {
+    expect(parseSession(v2([{ ...SOURCE_B, offset: 5 }]), 20)).toBeNull();
+    expect(parseSession(v2([{ ...SOURCE_B, offset: 20 }]), 20)).toBeNull();
+    expect(parseSession(v2([SOURCE_B]), SOURCE_B.offset - 1)).not.toBeNull();
+  });
+
+  it("returns null for a joined recording shorter than the shortest clip", () => {
+    expect(parseSession(v2([{ ...SOURCE_B, durationSeconds: 0.05 }]))).toBeNull();
+  });
+
+  it("accepts sources given out of order and ranges that do not overlap", () => {
+    const parsed = parseSession(v2([{ ...SOURCE_B, id: "c", offset: 7200 }, SOURCE_B]));
+    expect(parsed!.scene.sources!.map((s) => s.id)).toEqual(["c", "src-b"]);
+  });
+
+  it("returns null for a malformed source", () => {
+    expect(parseSession(v2("nope"))).toBeNull();
+    expect(parseSession(v2([null]))).toBeNull();
+    expect(parseSession(v2([{ ...SOURCE_B, id: 3 }]))).toBeNull();
+    expect(parseSession(v2([{ ...SOURCE_B, assetId: undefined }]))).toBeNull();
+    expect(parseSession(v2([{ ...SOURCE_B, title: undefined }]))).toBeNull();
+    expect(parseSession(v2([{ ...SOURCE_B, offset: -1 }]))).toBeNull();
+    expect(parseSession(v2([{ ...SOURCE_B, offset: "1" }]))).toBeNull();
+    expect(parseSession(v2([{ ...SOURCE_B, durationSeconds: 0 }]))).toBeNull();
+    expect(parseSession(v2([{ ...SOURCE_B, width: -1 }]))).toBeNull();
+    expect(parseSession(v2([{ ...SOURCE_B, height: Number.NaN }]))).toBeNull();
+  });
+
+  it("returns null for a repeated source id", () => {
+    expect(parseSession(v2([SOURCE_B, { ...SOURCE_B, offset: 7200 }]))).toBeNull();
+  });
+
+  it("ignores a sources key in a version 1 file, as an older build would", () => {
+    const json = JSON.stringify({
+      version: 1,
+      scene: { items: [CLIP_ITEM], overlays: [], sources: [SOURCE_B] },
+    });
+    expect(parseSession(json)!.scene.sources).toBeUndefined();
   });
 });

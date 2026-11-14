@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LibraryVideo } from "@renderer/features/library/types";
-import { initialScene, type VideoScene } from "../scene";
+import { initialScene, type SceneSource, type VideoScene } from "../scene";
 import { parseSession, serializeSession } from "../session";
 import { encodeFingerprint, normalizeExportPresetId } from "./export-presets";
 import { seedWebcamScene } from "../webcam/webcam-model";
@@ -375,5 +375,53 @@ describe("facelessFingerprint", () => {
     expect(facelessFingerprint("whole:abc123:cursor3")).toBe("whole:cursor3");
     expect(facelessFingerprint("whole:abc123")).toBe("whole");
     expect(facelessFingerprint("edit:wc2:abc")).toBeUndefined();
+  });
+});
+
+describe("editFingerprint — joined recordings (ADR 0058)", () => {
+  const plain = (): VideoScene => {
+    const scene = initialScene(10);
+    return { ...scene, items: [{ ...scene.items[0]!, id: "clip" }] };
+  };
+  const joined = (extra: Partial<SceneSource> = {}): SceneSource => ({
+    id: "src-1",
+    assetId: "lib-b",
+    title: "Recording B",
+    offset: 3600,
+    durationSeconds: 20,
+    width: 1280,
+    height: 720,
+    ...extra,
+  });
+  const withJoin = (source: SceneSource): VideoScene => ({ ...plain(), sources: [source] });
+
+  it("is the same as before for a scene without joins, with or without an empty list", () => {
+    expect(editFingerprint(plain())).toBe("edit:2bdufz02r20");
+    expect(editFingerprint({ ...plain(), sources: [] })).toBe("edit:2bdufz02r20");
+    expect(editFingerprint(plain(), true)).toBe("edit:cursor3:czrk19yfc6");
+  });
+
+  it("changes when a recording is joined", () => {
+    expect(editFingerprint(withJoin(joined()))).not.toBe(editFingerprint(plain()));
+  });
+
+  it("changes with the joined recording's asset, offset or length", () => {
+    const base = editFingerprint(withJoin(joined()));
+    expect(editFingerprint(withJoin(joined({ assetId: "lib-c" })))).not.toBe(base);
+    expect(editFingerprint(withJoin(joined({ offset: 7200 })))).not.toBe(base);
+    expect(editFingerprint(withJoin(joined({ durationSeconds: 21 })))).not.toBe(base);
+  });
+
+  it("does not change with the scene-local id, the title or the capture size", () => {
+    expect(
+      editFingerprint(withJoin(joined({ id: "other", title: "Renamed", width: 1, height: 2 }))),
+    ).toBe(editFingerprint(withJoin(joined())));
+  });
+
+  it("is stable across a session round-trip", () => {
+    const scene = withJoin(joined());
+    expect(editFingerprint(parseSession(serializeSession(scene))!.scene)).toBe(
+      editFingerprint(scene),
+    );
   });
 });
