@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "@kaipu/i18n";
 import { absoluteDate, formatDuration } from "@renderer/features/library/format";
 import type { LibraryVideo } from "@renderer/features/library/types";
+import { uiArea } from "@renderer/lib/ui-area";
 import { joinableRecordings, RECORDING_DRAG_MIME, resolutionLabel } from "../add-from-library";
 import styles from "./add-from-library-panel.module.css";
 
@@ -49,6 +50,7 @@ export function AddFromLibraryPanel({
   );
   return (
     <aside
+      {...uiArea("editorVideo.addFromLibrary")}
       className={styles.panel}
       aria-label={t("addFromLibraryTitle")}
       data-testid="add-from-library-panel"

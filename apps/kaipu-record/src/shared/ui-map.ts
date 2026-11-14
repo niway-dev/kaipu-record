@@ -257,6 +257,14 @@ export const UI_MAP = {
         // addToTimeline: the row's Add to timeline button, which exists only with the flag on.
         gatedBy: [{ flag: "timeline-levels" }],
       },
+      // The Add from Library panel (NIW2-782), behind the `timeline-levels` flag: the right column
+      // in place of the inspector, listing the Library's other recordings. list: the rows (each
+      // with thumbnail, duration, title, date and resolution) and the search field; noMatch: a
+      // search that matches no recording.
+      addFromLibrary: { states: ["list", "noMatch"], gatedBy: [{ flag: "timeline-levels" }] },
+      // The "Insert here" bar and pill on the Clips row while a recording from that panel is
+      // dragged over it: it exists only during the drag.
+      insertIndicator: { states: ["visible"], gatedBy: [{ flag: "timeline-levels" }] },
       webcam: { states: ["visible"] },
       // Floating images over the Clips sequence (ADR 0057, NIW2-771), behind the
       // `timeline-levels` flag. mediaLayer: the images drawn in the preview, `selected` adds the
@@ -267,7 +275,11 @@ export const UI_MAP = {
       mediaLayer: { states: ["selected"], gatedBy: [{ flag: "timeline-levels" }] },
       mediaPanel: { states: ["overlapping"], gatedBy: [{ flag: "timeline-levels" }] },
       timelineMediaRows: { states: ["twoImages"], gatedBy: [{ flag: "timeline-levels" }] },
-      transport: { states: ["paused", "playing", "withCounts", "speedChanged", "zoomed"] },
+      // addRecordingOpen: the Add recording button at the left end, lit while its panel is open
+      // (it exists only with `timeline-levels` on).
+      transport: {
+        states: ["paused", "playing", "withCounts", "speedChanged", "zoomed", "addRecordingOpen"],
+      },
       toolRail: { states: ["default", "annotate", "privacy"] },
       toolFlyout: { states: ["audio"] },
       tracksPopover: { states: ["open"] },
@@ -281,9 +293,17 @@ export const UI_MAP = {
       // A scene with recordings joined into it (ADR 0058, NIW2-780): twoRecordings labels each clip
       // with its recording's name and length and draws a joined clip from its own file;
       // recordingHover outlines every clip of the hovered clip's recording; recordingMissing is a
-      // clip whose joined recording is gone (hatched, "Recording missing: <title>").
+      // clip whose joined recording is gone (hatched, "Recording missing: <title>");
+      // recordingAdded: the sequence right after Add from Library added a recording (NIW2-782).
       timeline: {
-        states: ["default", "zoomed", "twoRecordings", "recordingHover", "recordingMissing"],
+        states: [
+          "default",
+          "zoomed",
+          "twoRecordings",
+          "recordingHover",
+          "recordingMissing",
+          "recordingAdded",
+        ],
       },
       zoomLane: { states: ["empty", "segments"] },
       // noCamera: the span over a clip whose recording has no webcam while another one has.

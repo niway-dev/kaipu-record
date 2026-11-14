@@ -34,6 +34,11 @@ function renderPanel(over: Partial<AddFromLibraryPanelProps> = {}): AddFromLibra
 afterEach(cleanup);
 
 describe("AddFromLibraryPanel", () => {
+  it("is marked as the editorVideo.addFromLibrary area", () => {
+    renderPanel();
+    expect(document.querySelector('[data-ui-area="editorVideo.addFromLibrary"]')).not.toBeNull();
+  });
+
   it("shows each recording with its thumbnail, title, duration, date and resolution", () => {
     renderPanel({ videos: [video({ assetId: "a", title: "Checkout bug", durationSeconds: 96 })] });
     const row = screen.getByRole("button", { name: "Add Checkout bug" });

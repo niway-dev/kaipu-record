@@ -109,6 +109,14 @@ function drag(type: "dragOver" | "dragLeave" | "drop", target: Element, init: Dr
 }
 
 describe("TimelineStrip — drop a Library recording (NIW2-782)", () => {
+  it("marks the indicator as the editorVideo.insertIndicator area", () => {
+    const track = renderStrip(vi.fn());
+    drag("dragOver", track, { dataTransfer: recording(), clientX: 480 });
+    expect(screen.getByTestId("insert-indicator").getAttribute("data-ui-area")).toBe(
+      "editorVideo.insertIndicator",
+    );
+  });
+
   it("shows Insert here and a bar on the nearest clip boundary while a recording is dragged over the Clips row", () => {
     const track = renderStrip(vi.fn());
 

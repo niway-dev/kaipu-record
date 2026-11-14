@@ -55,6 +55,7 @@ import {
   xOf,
   type TimelineView,
 } from "./timeline-view";
+import { uiArea } from "@renderer/lib/ui-area";
 import styles from "./timeline-strip.module.css";
 
 // Past this fraction the hover readout sits LEFT of its line: on the right it would hang
@@ -666,6 +667,7 @@ function InsertIndicator({
   const edge = fraction < 0.05 ? "start" : fraction > 0.95 ? "end" : undefined;
   return (
     <div
+      {...uiArea("editorVideo.insertIndicator")}
       className={styles.insertIndicator}
       data-testid="insert-indicator"
       data-edge={edge}
