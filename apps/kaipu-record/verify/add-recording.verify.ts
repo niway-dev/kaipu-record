@@ -16,7 +16,8 @@ import { startScenario } from "./helpers";
  * boundary is 0:03.0, and records what the indicator said, the clip order after the drop, and
  * the durations before, after and after the undo. Screenshots and `result.json` go to
  * `test-results/verify/add-recording/`. The seeded vault is a throwaway one per launch, so
- * nothing needs restoring.
+ * nothing needs restoring. The scenario uses `Meta+z`, so it runs on macOS only (the verify
+ * suite runs on the Mac mini).
  */
 const NAME = "add-recording";
 const OPENED = "Weekly sync";
@@ -37,6 +38,11 @@ async function durationLabel(page: Page): Promise<string> {
 async function clipLabels(page: Page): Promise<string[]> {
   const labels = await page.locator("[data-testid='clip-label']").allInnerTexts();
   return labels.map((label) => label.replace(/\s+/g, " ").trim());
+}
+
+/** The clip blocks of the timeline: one `button[data-item-id]` per clip. */
+function clipBlocks(page: Page): Locator {
+  return page.locator("[data-ui-area='editorVideo.timeline'] button[data-item-id]");
 }
 
 test("A Library recording dragged onto the Clips row shows Insert here, drops there and undoes in one step", async () => {
@@ -85,9 +91,7 @@ test("A Library recording dragged onto the Clips row shows Insert here, drops th
 
     // 3. The drag. The Clips row's clip block is the first `button[data-item-id]` of the
     // timeline; aim 6 px inside its right edge, so the nearest boundary is its end (0:03.0).
-    const block = page
-      .locator("[data-ui-area='editorVideo.timeline'] button[data-item-id]")
-      .first();
+    const block = clipBlocks(page).first();
     const box = await block.boundingBox();
     if (!box) throw new Error("the clip block has no box");
     const targetX = box.x + box.width - 6;
@@ -95,7 +99,6 @@ test("A Library recording dragged onto the Clips row shows Insert here, drops th
     result.clipBox = box;
     result.pointer = { x: targetX, y: targetY };
 
-    let method: "mouse API" | "dragTo" | "none worked" = "none worked";
     await row.hover();
     const from = await row.boundingBox();
     if (!from) throw new Error("the row has no box");
@@ -114,31 +117,15 @@ test("A Library recording dragged onto the Clips row shows Insert here, drops th
     await page.mouse.move(targetX - 2, targetY);
     await page.mouse.move(targetX, targetY);
     const indicator = page.locator("[data-testid='insert-indicator']");
-    try {
-      await expect(indicator).toBeVisible({ timeout: 5_000 });
-      method = "mouse API";
-    } catch {
-      method = "none worked";
-    }
-    if (method === "mouse API") {
-      const text = (await indicator.innerText()).replace(/\s+/g, " ").trim();
-      result.indicatorText = text;
-      result.indicatorEdge = await indicator.getAttribute("data-edge");
-      result.indicatorLeftPercent = await indicator.evaluate(
-        (el) => (el as HTMLElement).style.left,
-      );
-      expect(text).toContain("Insert here");
-      await s.shot("indicator");
-      await page.mouse.up();
-    } else {
-      await page.mouse.up();
-      result.indicatorText = "not captured: the mouse API did not start a native drag";
-      // Fallback: Playwright's own drag-and-drop (no mid-drag screenshot is possible).
-      await row.dragTo(block, { targetPosition: { x: box.width - 6, y: box.height / 2 } });
-      const changed = await durationLabel(page);
-      if (changed !== before) method = "dragTo";
-    }
-    result.dragMethod = method;
+    await expect(indicator).toBeVisible({ timeout: 5_000 });
+    const text = (await indicator.innerText()).replace(/\s+/g, " ").trim();
+    result.indicatorText = text;
+    result.indicatorEdge = await indicator.getAttribute("data-edge");
+    result.indicatorLeftPercent = await indicator.evaluate((el) => (el as HTMLElement).style.left);
+    expect(text).toContain("Insert here");
+    await s.shot("indicator");
+    await page.mouse.up();
+    result.dragMethod = "mouse API";
 
     // 4. The drop: 3 s + 12 s.
     await expect.poll(() => durationLabel(page), { timeout: 20_000 }).not.toBe(before);
@@ -150,17 +137,22 @@ test("A Library recording dragged onto the Clips row shows Insert here, drops th
     const labels = await clipLabels(page);
     result.durationAfter = after;
     result.labelsAfter = labels;
+    result.blocksAfter = await clipBlocks(page).count();
     await s.shot("after");
     expect(after).toBe("0:15.0");
     expect(labels[0]).toContain(OPENED);
     expect(labels[1]).toContain(DRAGGED);
+    expect(result.blocksAfter).toBe(2);
 
-    // 5. One undo takes the whole join back.
+    // 5. One undo takes the whole join back: one clip is left, and no clip label is drawn.
     await page.keyboard.press("Meta+z");
     await expect.poll(() => durationLabel(page), { timeout: 10_000 }).toBe("0:03.0");
     result.durationAfterUndo = await durationLabel(page);
     result.labelsAfterUndo = await clipLabels(page);
+    result.blocksAfterUndo = await clipBlocks(page).count();
     await s.shot("undo");
+    expect(result.labelsAfterUndo).toHaveLength(0);
+    expect(result.blocksAfterUndo).toBe(1);
   } finally {
     await writeFile(path.join(s.outDir, "result.json"), JSON.stringify(result, null, 2));
     console.log(`[verify] ${NAME}: ${JSON.stringify(result)}`);
