@@ -1,18 +1,8 @@
 import React from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { uiArea } from "@renderer/lib/ui-area";
+import { formatElapsed } from "@renderer/features/recording/elapsed";
 import styles from "./panel-recording.module.css";
-
-/** m:ss, or h:mm:ss past the hour: the tray has room for a clock, not for 00:00:42. */
-export function formatClock(totalSeconds: number): string {
-  const total = Math.max(0, Math.floor(totalSeconds));
-  const seconds = String(total % 60).padStart(2, "0");
-  const minutes = Math.floor(total / 60) % 60;
-  const hours = Math.floor(total / 3600);
-  return hours > 0
-    ? `${hours}:${String(minutes).padStart(2, "0")}:${seconds}`
-    : `${minutes}:${seconds}`;
-}
 
 interface RecordingStatusProps {
   /** The countdown or the first frames: nothing is recorded yet, so no clock. */
@@ -42,7 +32,7 @@ export function RecordingStatus({
       <span className={styles.dot} aria-hidden />
       <div className={styles.text}>
         <div className={styles.label}>{label}</div>
-        {!starting && <div className={styles.clock}>{formatClock(elapsedSeconds)}</div>}
+        {!starting && <div className={styles.clock}>{formatElapsed(elapsedSeconds * 1000)}</div>}
       </div>
     </div>
   );

@@ -79,10 +79,10 @@ position included.
 
 ## The menu-bar icon follows the capture mode
 
-Two template images, not three: the capture panel always has Record or Screenshot selected,
-so there is no idle state to draw. The icon mirrors `PanelTabs`' selection through one IPC
-(`tray:set-mode`); the panel's "capture" and the brand's "screenshot" vocabularies are mapped at
-that single call site. The artwork is the owner's black cuts, rasterized at 20 px / 40 px and
+Two template images, not three: the capture panel always had Record or Screenshot selected,
+so there was no idle state to draw. The icon mirrored `PanelTabs`' selection through one IPC
+(`tray:set-mode`), which was removed with the Capture page redesign: the tray now always shows
+the record glyph. The artwork is the owner's black cuts, rasterized at 20 px / 40 px and
 verified pixel-by-pixel to be 100 % black-on-alpha, which is what `setTemplateImage` needs.
 The old play-arrow tray art was the last place carrying the pre-fox brand.
 

@@ -11,22 +11,6 @@
   gap: var(--space-md);
 }
 
-.heading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: var(--space-sm);
-}
-
-.headingDot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--accent-primary);
-}
-
 /* ── Recording state ────────────────────────── */
 
 /* Pause + Stop row (replaces the single Start button while recording). */
@@ -200,13 +184,4 @@
   right: 0;
   bottom: 0;
   letter-spacing: 0;
-}
-
-.headingTitle {
-  font-family: var(--font-family);
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  margin: 0;
-  letter-spacing: -0.3px;
 }
