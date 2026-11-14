@@ -66,6 +66,12 @@ export interface GifExportController extends GifExportState {
   /** Debounced (≤ 300 ms) size estimate for these settings; replaces any running one. */
   requestEstimate(args: GifJobArgs): void;
   cancelEstimate(): void;
+  /**
+   * Asks again, over this joined list, for an estimate that was refused because a joined
+   * recording was loading, missing or unreadable. Does nothing otherwise, so the parent can
+   * call it whenever the list changes.
+   */
+  retryRefusedEstimate(joined: GifJobArgs["joined"]): void;
 }
 
 const IDLE: GifExportState = { status: "idle", fraction: 0, error: null };
@@ -126,6 +132,10 @@ export function useGifExport(): GifExportController {
   const estimateWorkerRef = useRef<Worker | null>(null);
   const estimateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const estimateSeqRef = useRef(0);
+  // The args of the last estimate refused over a joined recording; the sheet's settings effect
+  // does not re-run when that recording finishes loading, so the parent re-asks through
+  // `retryRefusedEstimate`. Cleared by every new request and by `cancelEstimate`.
+  const refusedEstimateRef = useRef<GifJobArgs | null>(null);
   // Every recording (the opened one and each joined one) is fetched once per vault id and
   // reused by every estimate and the export; a failed fetch is not cached.
   const recordingsRef = useRef(createRecordingCache("gif export"));
@@ -192,6 +202,7 @@ export function useGifExport(): GifExportController {
   }, []);
 
   const cancelEstimate = useCallback(() => {
+    refusedEstimateRef.current = null;
     estimateSeqRef.current++;
     if (estimateTimerRef.current) clearTimeout(estimateTimerRef.current);
     estimateTimerRef.current = null;
@@ -203,6 +214,7 @@ export function useGifExport(): GifExportController {
   const requestEstimate = useCallback(
     (args: GifJobArgs) => {
       const seq = ++estimateSeqRef.current;
+      refusedEstimateRef.current = null;
       if (estimateTimerRef.current) clearTimeout(estimateTimerRef.current);
       estimateWorkerRef.current?.terminate();
       estimateWorkerRef.current = null;
@@ -216,6 +228,7 @@ export function useGifExport(): GifExportController {
             const joined = await joinedFiles(args);
             if ("refusal" in joined) {
               if (seq !== estimateSeqRef.current) return;
+              refusedEstimateRef.current = args;
               setEstimate({ status: "error", bytes: null, frameCount: null });
               return;
             }
@@ -254,6 +267,14 @@ export function useGifExport(): GifExportController {
       }, ESTIMATE_DEBOUNCE_MS);
     },
     [sourceBlob, webcamTrack, joinedFiles],
+  );
+
+  const retryRefusedEstimate = useCallback(
+    (joined: GifJobArgs["joined"]) => {
+      const refused = refusedEstimateRef.current;
+      if (refused) requestEstimate({ ...refused, joined });
+    },
+    [requestEstimate],
   );
 
   const teardown = useCallback(() => {
@@ -372,5 +393,13 @@ export function useGifExport(): GifExportController {
     };
   }, []);
 
-  return { ...state, start, cancel, estimate, requestEstimate, cancelEstimate };
+  return {
+    ...state,
+    start,
+    cancel,
+    estimate,
+    requestEstimate,
+    cancelEstimate,
+    retryRefusedEstimate,
+  };
 }
