@@ -11,7 +11,10 @@ export const CORNERS: readonly Corner[] = ["nw", "ne", "sw", "se"];
 
 type Sized = Pick<ImageMediaItem, "box" | "naturalWidth" | "naturalHeight">;
 
-/** Narrowest a box can be resized to, as a share of the picture (the model clamps to the same). */
+/**
+ * Narrowest a box can be resized to, as a share of the picture. A drag rule only: the model keeps
+ * any valid width, and a fitted tall image can start below this (see `dragBoxCorner`).
+ */
 export const MIN_RESIZE_WIDTH = MEDIA_MIN_BOX_WIDTH;
 
 /** Move: the centre follows the pointer; the model clamps the centre inside the picture. */
@@ -31,7 +34,8 @@ export function dragBoxBody(
 /**
  * Resize from a corner with the ASPECT LOCKED: the opposite corner stays where it is, the width
  * follows the pointer (whichever axis it moved further along), and the height derives from the
- * image's own aspect. The box never goes below `MIN_RESIZE_WIDTH` nor beyond the picture's width.
+ * image's own aspect. The box never goes below `MIN_RESIZE_WIDTH` (or its own start width, when
+ * that is already narrower, so a first move cannot grow it) nor beyond the picture's width.
  */
 export function dragBoxCorner(
   start: Sized,
@@ -54,7 +58,8 @@ export function dragBoxCorner(
   // The axis the pointer moved further along decides, with its sign, so an inward move along one
   // axis shrinks the box even while the other axis stays where it was.
   const wanted = rect.width + (Math.abs(outX) >= Math.abs(outY) ? outX : outY);
-  const width = Math.max(MIN_RESIZE_WIDTH * picture.width, Math.min(picture.width, wanted));
+  const floor = Math.min(MIN_RESIZE_WIDTH * picture.width, rect.width);
+  const width = Math.max(floor, Math.min(picture.width, wanted));
   const height = width / aspect;
   const left = east ? anchorX : anchorX - width;
   const top = south ? anchorY : anchorY - height;

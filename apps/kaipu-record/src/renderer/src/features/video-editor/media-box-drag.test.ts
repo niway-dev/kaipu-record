@@ -76,3 +76,23 @@ describe("dragBoxCorner", () => {
     expect(after("se", 5000, 0).box.width).toBeCloseTo(1);
   });
 });
+
+describe("dragBoxCorner on a fitted tall image narrower than the drag minimum", () => {
+  // 400 x 6000 fitted to a 1000 x 500 picture: width 0.0375 of the picture, below the 0.05 minimum.
+  const narrow = { box: { x: 0.5, y: 0.5, width: 0.0375 }, naturalWidth: 400, naturalHeight: 6000 };
+
+  it("a first move that does not grow it keeps its width", () => {
+    for (const [dx, dy] of [
+      [0, 0],
+      [-10, -10],
+      [-10, 0],
+    ] as const) {
+      const box = dragBoxCorner(narrow, "se", dx, dy, picture);
+      expect(box.width).toBeCloseTo(0.0375);
+    }
+  });
+
+  it("still grows when dragged outwards", () => {
+    expect(dragBoxCorner(narrow, "se", 50, 0, picture).width).toBeGreaterThan(0.0375);
+  });
+});
