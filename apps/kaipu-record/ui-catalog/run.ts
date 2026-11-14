@@ -652,6 +652,15 @@ async function runAction(ctx: Ctx, name: string): Promise<void> {
     case "clearClipboard":
       await ctx.app.evaluate(({ clipboard }) => clipboard.clear());
       return;
+    case "reportShortcutsTried":
+      await ctx.app.evaluate(({ BrowserWindow }) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          for (const action of ["captureScreenshot", "startRecording"]) {
+            win.webContents.send("shortcut:fired", action);
+          }
+        }
+      });
+      return;
     case "requestTake":
       await waitForActivity(
         page,

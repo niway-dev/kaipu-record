@@ -117,6 +117,12 @@ export const ACTIONS = [
   "reloadMain",
   /** Empty the system clipboard (`clipboard.clear()` in main), so "no image on it" is a state. */
   "clearClipboard",
+  /**
+   * Report ⇧⌘1 and ⇧⌘2 as pressed (`shortcut:fired` from main to every window) without
+   * running them, so the onboarding's Shortcuts step shows two cards tried. A real global
+   * press would open the capture widget over the shot.
+   */
+  "reportShortcutsTried",
 ] as const;
 export type ActionName = (typeof ACTIONS)[number];
 
