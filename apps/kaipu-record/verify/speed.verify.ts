@@ -33,17 +33,15 @@ for (const locale of ["en", "es"] as const) {
     const { app, page, teardown } = await launchApp({ settings: { locale } });
     try {
       // The e2e helper only knows the English labels; this scenario also runs in Spanish.
-      const skip = page.getByRole("button", { name: /Skip setup|Omitir configuración/ });
+      const dialog = page.getByRole("dialog", { name: /Onboarding|Introducción/ });
       if (
-        await skip.waitFor({ state: "visible", timeout: 10_000 }).then(
+        await dialog.waitFor({ state: "visible", timeout: 10_000 }).then(
           () => true,
           () => false,
         )
       ) {
-        await skip.click();
-        await page
-          .getByRole("dialog", { name: /Onboarding|Introducción/ })
-          .waitFor({ state: "detached" });
+        await page.keyboard.press("Escape");
+        await dialog.waitFor({ state: "detached" });
       }
       const gotIt = page.getByRole("button", { name: /Got it|Entendido/ });
       if (await gotIt.isVisible().catch(() => false)) await gotIt.click();

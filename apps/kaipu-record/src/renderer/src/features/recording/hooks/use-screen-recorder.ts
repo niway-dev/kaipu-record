@@ -19,7 +19,7 @@ export interface ScreenRecorderControls {
   /** Begin the 3-2-1 countdown then start; `resolveInput` is called once the countdown
    *  shows (to acquire the take during it) and again right as it elapses, so the take
    *  always records the latest source/quality/watermark. */
-  requestStart(resolveInput: () => StartInput): void;
+  requestStart(resolveInput: () => StartInput, options?: { skipCountdown?: boolean }): void;
   /** Cancel a pending start, or stop an active recording — whichever applies. */
   stopOrCancel(): void;
   pause(): void;

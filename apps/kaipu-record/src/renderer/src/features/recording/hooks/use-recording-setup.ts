@@ -63,7 +63,7 @@ export interface RecordingSetup {
   countdown: number | null;
   canStartRecording: boolean;
   /** Begin recording after a short countdown (used by the Record page). */
-  startRecording(): void;
+  startRecording(options?: { skipCountdown?: boolean }): void;
   /** Cancel a pending start, or stop an active recording — whichever applies. */
   stopRecording(): void;
   /** Stop if recording, otherwise start (with the same countdown). */
@@ -97,17 +97,6 @@ export function useRecordingSetup(): RecordingSetup {
   // start callback never goes stale; the take reads it when it is requested, so a later change
   // (a switch in another window, an edit) never reaches a take already running.
   const qualityRef = useRef<RecordingQuality>(DEFAULT_QUALITY);
-  useEffect(() => {
-    // A broadcast is newer than the initial read, which may resolve after it.
-    let heardChange = false;
-    void window.electronAPI.getSettings().then((appSettings) => {
-      if (!heardChange) qualityRef.current = sanitizeQuality(appSettings.recordingQuality);
-    });
-    return window.electronAPI.onSettingsChanged((appSettings) => {
-      heardChange = true;
-      qualityRef.current = sanitizeQuality(appSettings.recordingQuality);
-    });
-  }, []);
 
   // The audio settings (mic level, noise reduction, system volume, ducking) are persisted
   // app settings too. Read on mount, then kept current through `onSettingsChanged`, so a
@@ -119,22 +108,50 @@ export function useRecordingSetup(): RecordingSetup {
   const [preferredMicrophone, setPreferredMicrophone] = useState<
     AppSettings["microphone"] | undefined
   >(undefined);
+  // Until main's app settings have arrived (the first read or a broadcast) the refs above hold
+  // defaults. A start asked before that waits here, so a take never records with default
+  // quality and audio: the countdown gave the read time to land, a start without one does not.
+  const appSettingsReadyRef = useRef(false);
+  const startsWaitingRef = useRef<Array<() => void>>([]);
+  // The queue must outlive the settings effect's cleanup: under StrictMode (dev) effects mount,
+  // clean up and mount again, and the Record page asks only once. A queued start is dropped only
+  // when the hook really unmounted; true -> false -> true is replay-safe.
+  const mountedRef = useRef(false);
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    const ready = (): void => {
+      appSettingsReadyRef.current = true;
+      const waiting = startsWaitingRef.current.splice(0);
+      for (const start of waiting) start();
+    };
+    const apply = (appSettings: AppSettings): void => {
+      qualityRef.current = sanitizeQuality(appSettings.recordingQuality);
+      audioRef.current = sanitizeAudioSettings(appSettings.audio);
+      cameraBubbleRef.current = sanitizeCameraBubble(appSettings.cameraBubble);
+      setPreferredMicrophone(appSettings.microphone ?? null);
+    };
     // A broadcast is newer than the initial read, which may resolve after it: once one has
     // arrived, the read must not overwrite it.
     let heardChange = false;
-    void window.electronAPI.getSettings().then((appSettings) => {
-      if (heardChange) return;
-      audioRef.current = sanitizeAudioSettings(appSettings.audio);
-      cameraBubbleRef.current = sanitizeCameraBubble(appSettings.cameraBubble);
-      setPreferredMicrophone(appSettings.microphone ?? null);
-    });
-    return window.electronAPI.onSettingsChanged((appSettings) => {
+    void window.electronAPI.getSettings().then(
+      (appSettings) => {
+        if (!heardChange) apply(appSettings);
+        ready();
+      },
+      // A failed read leaves the defaults, as before; the start must not wait forever.
+      ready,
+    );
+    const unsubscribe = window.electronAPI.onSettingsChanged((appSettings) => {
       heardChange = true;
-      audioRef.current = sanitizeAudioSettings(appSettings.audio);
-      cameraBubbleRef.current = sanitizeCameraBubble(appSettings.cameraBubble);
-      setPreferredMicrophone(appSettings.microphone ?? null);
+      apply(appSettings);
+      ready();
     });
+    return unsubscribe;
   }, []);
 
   // Watermark decision (free → on, paid/forced → off) — the single seam. Kept in a
@@ -175,35 +192,55 @@ export function useRecordingSetup(): RecordingSetup {
   const cameraEnabledRef = useRef(isCameraEnabled);
   cameraEnabledRef.current = isCameraEnabled;
 
-  const startRecording = useCallback(() => {
-    if (recorder.status !== "idle" || !sourceRef.current) return;
-    recorder.requestStart((): StartInput => {
-      const source = sourceRef.current;
-      if (!source) throw new Error("startRecording: no source selected");
-      const engineQuality = qualityToEngine(qualityRef.current);
-      const wm = watermarkRef.current;
-      const { deviceId, ...bubble } = cameraBubbleRef.current;
-      return {
-        sourceId: source.id,
-        sourceName: source.name,
-        area: areaRef.current,
-        microphoneDeviceId: micEnabledRef.current ? (micRef.current?.deviceId ?? null) : null,
-        systemAudio: systemAudioRef.current,
-        audio: audioRef.current,
-        width: engineQuality.width,
-        height: engineQuality.height,
-        frameRate: engineQuality.frameRate,
-        videoBitrate: engineQuality.videoBitrate,
-        watermark: wm.enabled ? wm.config : null,
-        webcamWhenEnabled: { deviceId, lines: webcamCaptureLines(bubble), bubble },
-        webcam: cameraEnabledRef.current
-          ? { deviceId, lines: webcamCaptureLines(bubble), bubble }
-          : null,
+  const startRecording = useCallback(
+    (options?: { skipCountdown?: boolean }) => {
+      if (recorder.status !== "idle" || !sourceRef.current) return;
+      const resolveInput = (): StartInput => {
+        const source = sourceRef.current;
+        if (!source) throw new Error("startRecording: no source selected");
+        const engineQuality = qualityToEngine(qualityRef.current);
+        const wm = watermarkRef.current;
+        const { deviceId, ...bubble } = cameraBubbleRef.current;
+        return {
+          sourceId: source.id,
+          sourceName: source.name,
+          area: areaRef.current,
+          microphoneDeviceId: micEnabledRef.current ? (micRef.current?.deviceId ?? null) : null,
+          systemAudio: systemAudioRef.current,
+          audio: audioRef.current,
+          width: engineQuality.width,
+          height: engineQuality.height,
+          frameRate: engineQuality.frameRate,
+          videoBitrate: engineQuality.videoBitrate,
+          watermark: wm.enabled ? wm.config : null,
+          webcamWhenEnabled: { deviceId, lines: webcamCaptureLines(bubble), bubble },
+          webcam: cameraEnabledRef.current
+            ? { deviceId, lines: webcamCaptureLines(bubble), bubble }
+            : null,
+        };
       };
-    });
-  }, [recorder]);
+      // Only an explicit skip adds the second argument; every other start is called as before.
+      const request = (): void => {
+        if (options?.skipCountdown === true)
+          recorder.requestStart(resolveInput, { skipCountdown: true });
+        else recorder.requestStart(resolveInput);
+      };
+      if (appSettingsReadyRef.current) request();
+      else {
+        startsWaitingRef.current.push(() => {
+          if (mountedRef.current && sourceRef.current) request();
+        });
+      }
+    },
+    [recorder],
+  );
 
-  const stopRecording = useCallback(() => recorder.stopOrCancel(), [recorder]);
+  const stopRecording = useCallback(() => {
+    // A start still waiting for settings is cancelled too: the recorder is idle, so it would
+    // accept the queued request once the settings land and record after the Stop.
+    startsWaitingRef.current.length = 0;
+    recorder.stopOrCancel();
+  }, [recorder]);
 
   const toggleRecording = useCallback(() => {
     if (isRecording) recorder.stopOrCancel();

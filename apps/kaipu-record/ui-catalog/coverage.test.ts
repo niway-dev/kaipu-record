@@ -197,4 +197,11 @@ describe("ui catalog coverage", () => {
       {},
     );
   });
+
+  it("shoots every onboarding demo state in reduced motion, and no other state", () => {
+    const flagged = ENTRIES.filter((e) => e.spec.reducedMotion).map((e) => e.id);
+    const demos = ENTRIES.filter((e) => e.id.startsWith("onboarding/demo-")).map((e) => e.id);
+    expect(demos.length).toBeGreaterThan(0);
+    expect(flagged).toEqual(demos);
+  });
 });

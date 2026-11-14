@@ -1,135 +1,158 @@
 .step {
-  width: 100%;
-  max-width: 640px;
+  max-width: 560px;
+}
+
+.rows {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  animation: pop 0.35s ease;
-}
-
-/*
- * No tinted square and no border: the mark brings its own pink ground, so a
- * second container around it would read as a badge on a badge. Only the glow is
- * kept — it is what lifts the mark off the page at this size.
- */
-.mark {
-  display: flex;
-  margin-bottom: 20px;
-  filter: drop-shadow(0 16px 44px rgba(246, 5, 92, 0.45));
-}
-
-.title {
-  font-size: 26px;
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: -0.02em;
-  margin-bottom: 10px;
-}
-
-.subtitle {
-  font-size: var(--font-size-md);
-  line-height: 1.5;
-  color: var(--text-secondary);
-  max-width: 430px;
-  margin-bottom: 20px;
-}
-
-/* Two columns of cards: four permissions on macOS make a 2×2 grid that fits the
-   default window without scrolling, where a single column of four rows did not. */
-.rows {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
+  margin-top: 22px;
   width: 100%;
-}
-
-/* Three permissions (non-mac) leave one slot: let the last card take the full row. */
-.row:last-child:nth-child(odd) {
-  grid-column: 1 / -1;
 }
 
 .row {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px;
-  text-align: left;
-}
-
-/* icon · name over (badge + why) · status. A card is just this header: the four of
-   them fit the default window height without scrolling. */
-.header {
-  display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 13px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 12px 14px;
+  text-align: left;
+  transition: border-color var(--transition);
 }
 
-.icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  background: var(--bg-card-hover);
+.rowGranted {
+  border-color: rgba(34, 197, 94, 0.32);
+}
+
+.icon,
+.iconGranted {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
   flex-shrink: 0;
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+
+.iconGranted {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--accent-green);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
 }
 
 .nameRow {
-  flex: 1;
-  min-width: 0;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-}
-
-.name {
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-semibold);
-  line-height: 1.25;
-}
-
-/* badge + (i) share one line under the name, so they stay level with each other
-   whether the name above wraps or not. */
-.meta {
-  display: inline-flex;
   align-items: center;
   gap: 8px;
 }
 
-.infoIcon {
-  display: inline-flex;
-  align-items: center;
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: color var(--transition);
+.name {
+  font-size: 14px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text);
 }
 
-.infoIcon:hover {
-  color: var(--text-primary);
+.required,
+.optional {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  border-radius: 4px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  background: var(--bg-hover);
+  color: var(--text-4);
+}
+
+.required {
+  color: var(--accent-primary);
+  background: var(--accent-soft);
+  border-color: rgba(246, 5, 92, 0.45);
+}
+
+.infoIcon {
+  display: inline-flex;
+  color: var(--text-4);
+  cursor: help;
 }
 
 .info {
-  margin: 0;
-  max-width: 260px;
-  padding: var(--space-sm) var(--space-md);
-  font-size: var(--font-size-sm);
-  line-height: 1.45;
-  color: var(--text-secondary);
+  max-width: 280px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
   text-align: left;
 }
 
-@keyframes pop {
-  0% {
-    transform: scale(0.7);
-    opacity: 0;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
+.description {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-3);
+  margin-top: 3px;
+}
+
+.granted {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--accent-green);
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.32);
+  border-radius: 6px;
+  padding: 7px 11px;
+}
+
+.grant,
+.grantPrimary {
+  flex-shrink: 0;
+  font-family: var(--font-family);
+  font-size: 12.5px;
+  font-weight: var(--font-weight-semibold);
+  border-radius: 6px;
+  padding: 8px 16px;
+  cursor: pointer;
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.grant:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.grantPrimary {
+  color: #fff;
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.grantPrimary:hover {
+  background: var(--accent-primary-hover);
+}
+
+.requesting {
+  flex-shrink: 0;
+  font-size: 12.5px;
+  color: var(--text-3);
+  background: var(--bg-hover);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 14px;
 }

@@ -971,6 +971,43 @@ describe("recorder-store", () => {
       await stopAndSettle();
     });
 
+    it("with skipCountdown and 3 s set, starts at once: no counting, no visible-wait", async () => {
+      setCountdown(3);
+      const reports = vi.fn();
+      window.electronAPI.reportRecorderPhase = reports;
+      window.electronAPI.waitForCountdownVisible = vi.fn(() => new Promise<void>(() => {}));
+      prepareEngineMock.mockImplementation(async () => {
+        callOrder.push("prepareEngine");
+        return fakePrepared();
+      });
+
+      store.requestStartRecording(() => input, { skipCountdown: true });
+
+      expect(store.getRecorderSnapshot()).toEqual({ status: "starting", countdown: null });
+      expect(window.electronAPI.waitForCountdownVisible).not.toHaveBeenCalled();
+      expect(window.electronAPI.recordingStart).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceId: "screen:1" }),
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.getRecorderSnapshot().status).toBe("recording");
+      expect(reports.mock.calls.map(([report]) => report)).toEqual([{ phase: "starting" }]);
+
+      await stopAndSettle();
+    });
+
+    it("skipCountdown applies to that one request: the next plain start counts again", async () => {
+      setCountdown(3);
+      prepareEngineMock.mockImplementation(async () => fakePrepared());
+      store.requestStartRecording(() => input, { skipCountdown: true });
+      await vi.advanceTimersByTimeAsync(0);
+      await stopAndSettle();
+
+      store.requestStartRecording(() => input);
+
+      expect(store.getRecorderSnapshot()).toEqual({ status: "counting", countdown: 3 });
+      store.stopOrCancelRecording();
+    });
+
     it("with 0 resolves the input at once, and a throw goes back to idle without starting", () => {
       setCountdown(0);
       const reports = vi.fn();

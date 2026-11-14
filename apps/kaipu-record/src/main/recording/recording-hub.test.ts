@@ -756,6 +756,36 @@ describe("recording hub — a Dock dropped by a floating panel comes back", () =
       expect(mockState.shortcutRegister).not.toHaveBeenCalled();
     });
 
+    it("with the overlay's countdown already done, draws no shade and holds no Esc even at 3 s", async () => {
+      mockState.shortcutRegister.mockClear();
+      const { hub } = await setup(3);
+      const phase = mockState.ipcOn.get(IPC_CHANNELS.recordingRecorderPhase)!;
+      const visible = mockState.ipcHandle.get(IPC_CHANNELS.recordingCountdownVisible)!;
+
+      hub.prepareRegionCountdown(2, { x: 100, y: 50, width: 640, height: 360 }, undefined, {
+        countdownDone: true,
+      });
+      phase({}, { phase: "starting" });
+
+      expect(mockState.shade.show).not.toHaveBeenCalled();
+      expect(mockState.shade.update).not.toHaveBeenCalled();
+      // The recorder's wait is released: nothing is pending.
+      expect(visible({})).toBeUndefined();
+      expect(mockState.shortcutRegister).not.toHaveBeenCalled();
+    });
+
+    it("a start without the flag still draws the full countdown at 3 s", async () => {
+      const { hub, display } = await setup(3);
+      const rect = { x: 100, y: 50, width: 640, height: 360 };
+
+      hub.prepareRegionCountdown(2, rect, undefined, { countdownDone: false });
+
+      expect(mockState.shade.show).toHaveBeenCalledWith(display, rect, expect.any(Function), {
+        phase: "countdown",
+        value: 3,
+      });
+    });
+
     it("draws the countdown the recorder runs when its length disagrees with the region's", async () => {
       // Main read 0 when the region was prepared, but the recorder (its own copy of the
       // setting, not yet updated) counts 3: the countdown it runs must still be on screen.

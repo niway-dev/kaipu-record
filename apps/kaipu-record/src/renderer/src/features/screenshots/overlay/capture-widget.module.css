@@ -1,0 +1,485 @@
+/*
+ * The capture widget (ADR 0056): one toolbar docked to the work area. It always floats over
+ * arbitrary screen content, so it keeps the dark Kaipu Black surface whatever the app theme.
+ * Sizes follow direction A of the commissioned mock: segments 34 tall, the confirm button 44.
+ */
+
+.widget {
+  /* Literals, not theme tokens: the overlay window runs `applyTheme`, and the light theme would
+     turn these tokens light under the white selected-state text. The dark token values, by hand
+     (the capture toast does the same). */
+  /* --bg-sidebar #0b0b0d */
+  --widget-surface: color-mix(in srgb, #0b0b0d 97%, transparent);
+  /* --text-primary #e8e8ed, at 20 / 5 / 10 % */
+  --widget-line: color-mix(in srgb, #e8e8ed 20%, transparent);
+  --widget-fill: color-mix(in srgb, #e8e8ed 5%, transparent);
+  --widget-fill-hover: color-mix(in srgb, #e8e8ed 10%, transparent);
+  /* --text-primary, --text-2, --text-3, --text-4 */
+  --widget-text: #e8e8ed;
+  --widget-text-2: #c8c8d0;
+  --widget-text-3: #a1a1aa;
+  --widget-text-4: #92929c;
+  /* --bg-active, --border */
+  --widget-active: #202024;
+  --widget-divider: rgba(255, 255, 255, 0.08);
+  /* --accent-primary-soft and --accent-primary-ring, dark values (the light theme lowers them) */
+  --widget-accent-soft: rgba(246, 5, 92, 0.14);
+  --widget-accent-ring: rgba(246, 5, 92, 0.5);
+
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 10px;
+  border: 1px solid var(--widget-line);
+  border-radius: 14px;
+  background: var(--widget-surface);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.65),
+    0 24px 50px -20px rgba(0, 0, 0, 0.8);
+  color: var(--widget-text);
+  font-family: var(--font-family);
+  font-size: 13px;
+  cursor: default;
+  user-select: none;
+}
+
+.row {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--widget-text-4);
+}
+
+.segments {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.segment,
+.chip,
+.copy,
+.cancel,
+.inputName,
+.inputToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--widget-fill);
+  color: var(--widget-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    border-color var(--transition);
+}
+
+.segment:hover:not(:disabled),
+.chip:hover:not(:disabled),
+.copy:hover,
+.cancel:hover,
+.inputName:hover,
+.inputToggle:hover {
+  background: var(--widget-fill-hover);
+}
+
+/* One "selected" style everywhere: soft pink fill, pink border, white text. */
+.segment[aria-pressed="true"],
+.chip[aria-pressed="true"] {
+  background: var(--widget-accent-soft);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+.segment:disabled,
+.chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.chip {
+  padding: 0 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.soon {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--widget-text-4);
+}
+
+.readout {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--widget-line);
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.unit {
+  margin-left: 4px;
+  color: var(--widget-text-4);
+  font-size: 9px;
+}
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border: 1px solid var(--widget-line);
+  border-radius: 4px;
+  background: var(--widget-fill);
+  color: var(--widget-text-2);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* ── Row 2: inputs ────────────────────────────────────────────── */
+
+.input {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-width: 0;
+  height: 40px;
+  padding: 0 4px 0 2px;
+  border: 1px solid var(--widget-line);
+  border-radius: 10px;
+  background: var(--widget-fill);
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition);
+}
+
+.input[data-on="true"] {
+  border-color: var(--accent-primary);
+  background: var(--widget-accent-soft);
+}
+
+/* The halo after a key toggle, for as long as the toast shows. */
+.input[data-halo="true"] {
+  box-shadow: 0 0 0 4px var(--widget-accent-ring);
+}
+
+.inputName {
+  background: transparent;
+  border-color: transparent;
+  font-weight: 600;
+}
+
+span.inputName {
+  cursor: default;
+}
+
+.inputToggle {
+  gap: 8px;
+  padding: 0 6px;
+  background: transparent;
+}
+
+.inputToggle[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.stateWord {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--widget-text-3);
+}
+
+.input[data-on="true"] .stateWord {
+  color: #fff;
+}
+
+.switch {
+  position: relative;
+  width: 26px;
+  height: 15px;
+  border-radius: 999px;
+  background: var(--widget-active);
+  transition: background var(--transition);
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--widget-text-3);
+  transition:
+    transform var(--transition),
+    background var(--transition);
+}
+
+.input[data-on="true"] .switch {
+  background: var(--accent-primary);
+}
+
+.input[data-on="true"] .switch::after {
+  background: #fff;
+  transform: translateX(11px);
+}
+
+.menu {
+  position: absolute;
+  left: 0;
+  z-index: 2;
+  min-width: 220px;
+  max-width: 320px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--widget-line);
+  border-radius: 10px;
+  background: var(--widget-surface);
+  box-shadow: 0 16px 36px -12px rgba(0, 0, 0, 0.8);
+}
+
+.menu[data-edge="bottom"] {
+  bottom: calc(100% + 6px);
+}
+
+.menu[data-edge="top"] {
+  top: calc(100% + 6px);
+}
+
+.menuItem,
+.menuEmpty {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--widget-text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menuItem {
+  cursor: pointer;
+}
+
+.menuItem:hover {
+  background: var(--widget-fill-hover);
+}
+
+.menuItem[aria-checked="true"] {
+  background: var(--widget-accent-soft);
+  color: #fff;
+}
+
+.menuEmpty {
+  color: var(--widget-text-3);
+}
+
+/* ── Row 2: actions ───────────────────────────────────────────── */
+
+.copy {
+  flex: 1 1 0;
+  height: 44px;
+  justify-content: flex-start;
+  padding: 0 14px;
+}
+
+.copy .kbd {
+  margin-left: auto;
+}
+
+.cancel {
+  height: 44px;
+  padding: 0 16px;
+  border-color: var(--widget-line);
+  background: transparent;
+}
+
+.confirm {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 200px;
+  height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--accent-primary);
+  border-radius: 10px;
+  background: var(--accent-primary);
+  box-shadow: 0 10px 24px -10px var(--widget-accent-ring);
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.confirm:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+}
+
+.confirm:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.confirmMain {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.confirmSub {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  opacity: 0.85;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+/* ── Row 3: hints ─────────────────────────────────────────────── */
+
+.hints {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding-top: 8px;
+  border-top: 1px solid var(--widget-divider);
+  color: var(--widget-text-3);
+  font-size: 11.5px;
+}
+
+.hintGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.more {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--widget-text-2);
+  font: inherit;
+  font-size: 11.5px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ── Toast and countdown ──────────────────────────────────────── */
+
+.toast {
+  position: absolute;
+  left: 50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--widget-line);
+  border-radius: 999px;
+  background: var(--widget-surface);
+  color: var(--widget-text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast[data-edge="bottom"] {
+  bottom: calc(100% + 10px);
+}
+
+.toast[data-edge="top"] {
+  top: calc(100% + 10px);
+}
+
+/* While counting, everything dims to about 35 % except Cancel and the confirm button. */
+.widget[data-counting="true"] .row > *:not([data-keep]),
+.widget[data-counting="true"] .hints {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.confirm[data-counting="true"] {
+  background: transparent;
+  box-shadow: none;
+  opacity: 1;
+}
+
+.disc {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  /* --bg-app #060607. The disc sits outside .widget, so it cannot read the --widget-* values. */
+  background: color-mix(in srgb, #060607 82%, transparent);
+  border: 2px solid var(--accent-primary);
+  color: #fff;
+  font-size: 64px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}

@@ -1,6 +1,10 @@
 import { catalog, type Step } from "../../types";
+import { nc } from "../not-capturable";
 
-/** The overlay's own start: its countdown runs on the shade, over the chosen region. */
+/**
+ * The overlay's own start. Its countdown runs on the widget (ADR 0056), so the shade shows no
+ * countdown here, only the border once the take starts.
+ */
 const fromOverlay = (mode: string): Step[] => [
   { call: "requestRecordSelector", args: [mode], on: "main" },
   { waitFor: { window: "capture-overlay" } },
@@ -36,31 +40,18 @@ export const recordingShade = catalog(
       demonstrates: ["recordingShade.areaBorder:area"],
       after: [{ action: "stopTake" }],
     },
-
-    "countdown-area": {
-      profile: "recording",
-      how: "Open the overlay in Frame mode and press Enter on its frame; shot during the countdown.",
-      steps: [
-        ...fromOverlay("frame"),
-        { waitFor: { area: "recordingShade.countdown" }, timeoutMs: 10_000 },
-      ],
-      demonstrates: ["recordingShade.countdown:area"],
-      gates: [{ setting: "recordingCountdownSeconds", side: "3" }],
-      after: [{ action: "stopTake" }],
-    },
-    "countdown-display": {
-      profile: "recording",
-      how: "Ask to record in Screen mode: with one display there is no chooser, the countdown starts at once.",
-      steps: [
-        { call: "requestRecordSelector", args: ["screen"], on: "main" },
-        { waitFor: { area: "recordingShade.countdown" }, timeoutMs: 10_000 },
-      ],
-      demonstrates: ["recordingShade.countdown:fullDisplay"],
-      gates: [{ setting: "recordingCountdownSeconds", side: "3" }],
-      after: [{ action: "stopTake" }],
-    },
   },
   {
+    notCapturable: {
+      "recordingShade.countdown:area": nc(
+        "needsSetup",
+        "no product path starts it today: the shade counts down only when main gets a record answer without `countdownDone`, and every overlay start now counts on the widget (ADR 0056) or has no countdown. Follow-up: remove the shade countdown and this area",
+      ),
+      "recordingShade.countdown:fullDisplay": nc(
+        "needsSetup",
+        "same reason: Screen mode always opens the overlay, so no start reaches the shade's full-display countdown",
+      ),
+    },
     oneSided: {
       "recordingShade.countdown": "with `recordingCountdownSeconds` 0 there is no countdown",
     },

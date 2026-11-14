@@ -1,8 +1,16 @@
 import { catalog, type Step } from "../../types";
 import { nc } from "../not-capturable";
 
-/** With one display, Screen mode captures it at once: no overlay, no system selector. */
-const captureScreen: Step = { call: "requestCaptureScreenshot", args: ["screen"], on: "main" };
+/**
+ * Screen mode opens the overlay even on one display (ADR 0056): the widget confirms the
+ * capture, and Enter is its primary action.
+ */
+const captureScreen: Step[] = [
+  { call: "requestCaptureScreenshot", args: ["screen"], on: "main" },
+  { waitFor: { window: "capture-overlay" } },
+  { waitMs: 500 },
+  { press: "Enter", on: "capture-overlay" },
+];
 const dismiss: Step = { press: "Escape" };
 const set = (patch: Record<string, string>): Step => ({
   call: "updateSettings",
@@ -35,8 +43,8 @@ export const captureToast = catalog(
     saved: {
       profile: "recording",
       embedsScreen: true,
-      how: "Capture the whole display in Screen mode (one display: no chooser).",
-      steps: [captureScreen, { waitFor: { window: "capture-toast" } }],
+      how: "Open the overlay in Screen mode and press Enter: the whole display is captured.",
+      steps: [...captureScreen, { waitFor: { window: "capture-toast" } }],
       demonstrates: ["captureToast.root:saved", "captureToast.card:rest"],
       gates: [
         { setting: "screenshotAfterCapture", side: "preview" },
@@ -48,7 +56,7 @@ export const captureToast = catalog(
       profile: "recording",
       embedsScreen: true,
       steps: [
-        captureScreen,
+        ...captureScreen,
         { waitFor: { window: "capture-toast" } },
         { hover: { area: "captureToast.card" } },
       ],
@@ -61,7 +69,7 @@ export const captureToast = catalog(
       embedsScreen: true,
       steps: [
         set({ screenshotCopy: "manual" }),
-        captureScreen,
+        ...captureScreen,
         { waitFor: { window: "capture-toast" } },
       ],
       demonstrates: ["captureToast.card:rest"],
@@ -77,8 +85,8 @@ export const captureToast = catalog(
         { waitFor: { window: "capture-overlay" } },
         {
           click: {
-            area: "captureOverlay.selectionToolbar",
-            part: { role: "button", name: "Copy" },
+            area: "captureOverlay.captureWidget",
+            part: { role: "button", name: "Copy to clipboard" },
           },
           on: "capture-overlay",
         },

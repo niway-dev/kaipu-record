@@ -3,7 +3,7 @@ import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from "ele
 import { electronAPI } from "@electron-toolkit/preload";
 import { IPC_CHANNELS } from "@shared/types";
 import { readFlagOverridesArg } from "@shared/flag-overrides";
-import type { AppSettings, ReconcileProgress } from "@shared/types";
+import type { AppSettings, ReconcileProgress, ShortcutAction } from "@shared/types";
 import type { AuthError, AuthStatus } from "@shared/types/auth";
 import type {
   CaptureRequestPayload,
@@ -337,8 +337,14 @@ const kaipuApi: KaipuElectronAPI = {
   getShortcutStatus: () => ipcRenderer.invoke(IPC_CHANNELS.shortcutsGetStatus),
   suspendShortcuts: () => ipcRenderer.send(IPC_CHANNELS.shortcutsSuspend),
   resumeShortcuts: () => ipcRenderer.send(IPC_CHANNELS.shortcutsResume),
+  onShortcutFired: (callback) => {
+    const listener = (_event: unknown, action: ShortcutAction): void => callback(action);
+    ipcRenderer.on(IPC_CHANNELS.shortcutFired, listener);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.shortcutFired, listener);
+  },
   onRequestStartRecording: (callback) => {
-    const listener = (): void => callback();
+    const listener = (_e: IpcRendererEvent, payload?: { countdownDone?: boolean }): void =>
+      callback(payload);
     ipcRenderer.on(IPC_CHANNELS.recordingRequestStart, listener);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.recordingRequestStart, listener);
   },
@@ -374,6 +380,8 @@ const kaipuApi: KaipuElectronAPI = {
       ipcRenderer.send(IPC_CHANNELS.screenshotOverlayFrameDisplay, { displayId }),
     setMode: (mode) => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayMode, { mode }),
     setIntent: (intent) => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayIntent, { intent }),
+    setCounting: (active) => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayCounting, { active }),
+    openRecordSettings: () => ipcRenderer.send(IPC_CHANNELS.screenshotOverlayOpenRecordSettings),
     onState: (callback) => {
       const listener = (_e: IpcRendererEvent, state: OverlayState): void => callback(state);
       ipcRenderer.on(IPC_CHANNELS.screenshotOverlayState, listener);

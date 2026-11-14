@@ -108,6 +108,23 @@ describe("createCaptureHandler — choosing what to record", () => {
     expect(rememberMode).not.toHaveBeenCalled();
   });
 
+  it("hands countdownDone to onRecordTarget when the overlay already counted down", async () => {
+    const { handler, onRecordTarget } = setup(async () => ({
+      kind: "record",
+      start: true,
+      displayId: 2,
+      rect,
+      countdownDone: true,
+    }));
+    await handler({ mode: "frame" });
+    expect(onRecordTarget).toHaveBeenCalledExactlyOnceWith({
+      displayId: 2,
+      rect,
+      start: true,
+      countdownDone: true,
+    });
+  });
+
   it("hands a record answer to main and takes no screenshot", async () => {
     const { handler, onRecordTarget, saveToVault, track, rememberMode, windows } = setup(
       async () => ({ kind: "record", start: true, displayId: 2, rect }),

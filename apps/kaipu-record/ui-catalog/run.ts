@@ -26,6 +26,7 @@ import {
   type ScreenSpec,
   type WindowKind,
 } from "../src/shared/ui-map";
+import { IPC_CHANNELS } from "../src/shared/types/ipc";
 import { presetForPath } from "../src/shared/window-size";
 import { CATALOGS, KNOWN_VARIABLE } from "./catalog";
 import { compareCrops, describeDifference, type CropComparison } from "./compare";
@@ -652,6 +653,15 @@ async function runAction(ctx: Ctx, name: string): Promise<void> {
     case "clearClipboard":
       await ctx.app.evaluate(({ clipboard }) => clipboard.clear());
       return;
+    case "reportShortcutsTried":
+      await ctx.app.evaluate(({ BrowserWindow }, channel) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          for (const action of ["captureScreenshot", "startRecording"]) {
+            win.webContents.send(channel, action);
+          }
+        }
+      }, IPC_CHANNELS.shortcutFired);
+      return;
     case "requestTake":
       await waitForActivity(
         page,
@@ -927,6 +937,9 @@ async function shoot(
     await blurFocus(run.main);
     await callApi(run.main, "updateRecordingSettings", [run.baselineToggles]);
     await restoreSettings(run);
+    // Set before the reload and the steps below, so the screen renders with the setting; the
+    // emulation survives a reload. `null` puts the real preference back for other states.
+    await run.main.emulateMedia({ reducedMotion: spec.reducedMotion ? "reduce" : null });
     const route = routeOf(screenSpec);
     if (target && ESCAPE_RESETS.includes(target)) {
       const leftover = run.app
@@ -1019,10 +1032,14 @@ async function shoot(
     }));
     if (!spec.keepPointer) await page.mouse.move(viewport.width - 1, viewport.height - 1);
 
+    // Playwright's "disabled" cancels infinite animations to their un-keyframed styles, even
+    // paused ones. A reduced-motion state holds its frame with exactly those, so it must keep
+    // them; every other state keeps them off so a running animation cannot change the shot.
+    const animations = spec.reducedMotion ? "allow" : "disabled";
     const windowFile = path.join("screens", screen, `${name}.png`);
     const windowPath = path.join(outRoot, windowFile);
     mkdirSync(path.dirname(windowPath), { recursive: true });
-    await page.screenshot({ path: windowPath, animations: "disabled", caret: "hide" });
+    await page.screenshot({ path: windowPath, animations, caret: "hide" });
     const png = pngSize(windowPath);
     const problems: string[] = [];
     // A main-window shot is the size it asked for times the display's scale: comparing it
@@ -1074,7 +1091,7 @@ async function shoot(
       const file = path.join("areas", screen, area.slice(screen.length + 1), `${name}.png`);
       const full = path.join(outRoot, file);
       mkdirSync(path.dirname(full), { recursive: true });
-      await page.screenshot({ path: full, clip: rect, animations: "disabled", caret: "hide" });
+      await page.screenshot({ path: full, clip: rect, animations, caret: "hide" });
       found.push({ id: area, file, rect, sha256: sha256(full) });
     }
 

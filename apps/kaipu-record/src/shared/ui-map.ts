@@ -603,21 +603,19 @@ export const UI_MAP = {
     query: "window=capture-overlay",
     areas: {
       frameBox: { states: ["screenshot", "record"] },
-      // Only the capture intent draws it: opened to record, the Frame box draws the record
-      // widget instead (frame-box.tsx), and Window has no overlay picker to record from.
-      selectionToolbar: { states: ["capture"] },
-      screenCard: { states: ["screenshot", "record", "highlighted"] },
-      windowPicker: { states: ["noWindow", "hovered"] },
-      ratioBar: { states: ["free", "ratio"] },
-      recordWidget: {
-        states: ["default"],
+      // One toolbar docked to the work area replaces the action bar, the record widget, the
+      // ratio bar and the hint pill (ADR 0056). Screen mode shows one per display.
+      captureWidget: {
+        states: ["screenshot", "record", "boxAtBottom", "screen", "keyToast", "counting"],
         gatedBy: [
           { recordingSetting: "isMicrophoneEnabled" },
           { recordingSetting: "isSystemAudioEnabled" },
           { recordingSetting: "isCameraEnabled" },
         ],
       },
-      hintPill: { states: ["frame", "pick"] },
+      // The display badge of Screen mode: number, name, size.
+      screenCard: { states: ["default", "highlighted"] },
+      windowPicker: { states: ["noWindow", "hovered"] },
     },
   },
   captureToast: {
@@ -686,8 +684,9 @@ export const UI_MAP = {
   onboarding: {
     kind: "overlay",
     areas: {
-      root: { states: ["welcome", "permissions", "done"] },
+      root: { states: ["welcome", "permissions", "shortcuts", "done"] },
       welcomeStep: { states: ["default"] },
+      demo: { states: ["record", "capture", "share", "editor", "workspaces"] },
       permissionsStep: {
         states: ["none", "all"],
         gatedBy: [
@@ -697,6 +696,7 @@ export const UI_MAP = {
           { permission: "accessibility" },
         ],
       },
+      shortcutsStep: { states: ["none", "someTried"] },
       doneStep: { states: ["default"] },
     },
   },
