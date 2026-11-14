@@ -117,6 +117,13 @@ describe("replaceAutoZooms", () => {
     expect(next).toHaveLength(1 + detectZoomSegments(TRACK_A, 20, SENSITIVITY).length);
   });
 
+  it("never mints the id of a manual zoom lying outside every range", () => {
+    const [first] = detectZoomSegments(TRACK_A, 20, SENSITIVITY);
+    const edited = manual(first.id, -1, -0.5);
+    const next = replaceAutoZooms([edited], recordings, SENSITIVITY);
+    expect(next.filter((z) => z.id === first.id)).toEqual([edited]);
+  });
+
   it("keeps the zooms of a recording the caller did not list", () => {
     const autoB = { ...manual("auto-3601000", 3601, 3603), origin: "auto" as const };
     const manualB = manual("m-b", 3610, 3612);

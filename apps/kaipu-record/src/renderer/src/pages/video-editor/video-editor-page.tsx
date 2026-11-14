@@ -446,7 +446,7 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
         const saved = await window.electronAPI.loadVideoEditSession(editorSource.id);
         if (cancelled) return;
         if (saved !== null) {
-          const session = parseSession(saved.sessionJson);
+          const session = parseSession(saved.sessionJson, source.durationSeconds);
           if (session !== null) {
             // Hydrate the asset store with the known assetIds so restored slide items
             // can still reference them by id. All assets come back as raw bytes
@@ -1005,7 +1005,9 @@ function VideoEditor({
             // Left the editor: its unmount flush wrote the latest edit (or Discard dropped
             // it). Stamp only if what is on disk is the edit that was exported.
             const saved = await window.electronAPI.loadVideoEditSession(source.id);
-            const parsedScene = saved ? parseSession(saved.sessionJson)?.scene : null;
+            const parsedScene = saved
+              ? parseSession(saved.sessionJson, source.durationSeconds)?.scene
+              : null;
             // Reconciled like the loader does, or an old session (no webcam key) on a webcam
             // recording would never fingerprint like the scene that was exported.
             const savedScene = parsedScene

@@ -10,6 +10,7 @@ import {
   removeZoom,
   updateZoom,
 } from "./zoom-edits";
+import { detectZoomSegments, replaceAutoSegments } from "./detect-zoom-segments";
 import type { ZoomSegment } from "./zoom-model";
 
 const AUTO: ZoomSegment = {
@@ -100,10 +101,17 @@ describe("dragZoomEdge", () => {
 });
 
 describe("applySensitivityToRecordings", () => {
-  it("is applySensitivity for one recording at offset 0", () => {
-    expect(
-      applySensitivityToRecordings(withZoom, [{ offset: 0, duration: 20, track: TRACK }], 60),
-    ).toEqual(applySensitivity(withZoom, TRACK, 20, 60));
+  it("for one recording at offset 0, is what applySensitivity did before joins", () => {
+    // The pre-ADR-0058 body of applySensitivity, written out so the new path is compared with
+    // the old formula and not with itself.
+    const before = replaceAutoSegments(withZoom.zoomSegments, detectZoomSegments(TRACK, 20, 60));
+    const next = applySensitivityToRecordings(
+      withZoom,
+      [{ offset: 0, duration: 20, track: TRACK }],
+      60,
+    );
+    expect(next.zoomSegments).toEqual(before);
+    expect(next.zoomSensitivity).toBe(60);
   });
 
   it("regenerates each recording's autos without touching the other's manual zooms", () => {

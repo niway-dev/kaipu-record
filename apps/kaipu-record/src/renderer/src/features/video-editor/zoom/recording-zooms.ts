@@ -48,11 +48,10 @@ export function detectRecordingZooms(
 }
 
 /**
- * Sensitivity / Re-analyse across recordings: the scene's segments with every "auto" one in a
- * recording listed WITH a track replaced by a fresh detection, manual ones kept as
- * `replaceAutoSegments` does. Everything else is left alone, auto segments included: a recording
- * listed without a track has no data to regenerate them from, and one the caller did not list at
- * all must not lose its zooms because of it.
+ * Sensitivity / Re-analyse across recordings: `replaceAutoSegments` over the whole scene (every
+ * manual zoom keeps its place and its id, and no new auto overlaps one or reuses its id), plus the
+ * "auto" segments of recordings that are not regenerated. A recording listed without a track has
+ * no data to regenerate them from, and one the caller did not list must not lose its zooms.
  */
 export function replaceAutoZooms(
   current: ZoomSegment[],
@@ -61,12 +60,9 @@ export function replaceAutoZooms(
 ): ZoomSegment[] {
   const regenerated = (z: ZoomSegment): boolean =>
     recordings.some(
-      (r) => r.track !== null && z.start >= r.offset && z.start < r.offset + r.duration,
+      (r) => r.track !== null && z.start >= r.offset && z.start <= r.offset + r.duration,
     );
-  const kept = current.filter((z) => !regenerated(z));
-  const rest = replaceAutoSegments(
-    current.filter(regenerated),
-    detectRecordingZooms(recordings, sensitivity),
-  );
-  return kept.length === 0 ? rest : [...rest, ...kept].sort((a, b) => a.start - b.start);
+  const keptAutos = current.filter((z) => z.origin !== "manual" && !regenerated(z));
+  const next = replaceAutoSegments(current, detectRecordingZooms(recordings, sensitivity));
+  return keptAutos.length === 0 ? next : [...next, ...keptAutos].sort((a, b) => a.start - b.start);
 }

@@ -876,6 +876,16 @@ describe("joined recordings (session version 2, ADR 0058)", () => {
     expect(parseSession(v2([{ ...SOURCE_B, offset: 0 }]))).toBeNull();
   });
 
+  it("returns null for a joined range inside or touching the opened recording's", () => {
+    expect(parseSession(v2([{ ...SOURCE_B, offset: 5 }]), 20)).toBeNull();
+    expect(parseSession(v2([{ ...SOURCE_B, offset: 20 }]), 20)).toBeNull();
+    expect(parseSession(v2([SOURCE_B]), SOURCE_B.offset - 1)).not.toBeNull();
+  });
+
+  it("returns null for a joined recording shorter than the shortest clip", () => {
+    expect(parseSession(v2([{ ...SOURCE_B, durationSeconds: 0.05 }]))).toBeNull();
+  });
+
   it("accepts sources given out of order and ranges that do not overlap", () => {
     const parsed = parseSession(v2([{ ...SOURCE_B, id: "c", offset: 7200 }, SOURCE_B]));
     expect(parsed!.scene.sources!.map((s) => s.id)).toEqual(["c", "src-b"]);

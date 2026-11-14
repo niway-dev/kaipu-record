@@ -151,6 +151,12 @@ describe("joinRecording", () => {
     items: [clip("a1", 0, 10), clip("a2", 10, 20)],
   });
 
+  it("refuses a recording shorter than the shortest clip", () => {
+    expect(() => joinRecording(base(), 20, { ...INPUT, durationSeconds: 0.05 }, 8)).toThrow(
+      RangeError,
+    );
+  });
+
   it("inserts one clip over the whole recording at the nearest clip boundary", () => {
     const scene = base();
     const { scene: next, source: joined } = joinRecording(scene, 20, INPUT, 8);

@@ -75,6 +75,7 @@ export interface VideoEditSession {
 import { parseCursorSettings } from "./cursor/cursor-model";
 import { parseBackground } from "./background";
 import { MEDIA_MAX_FADE_MS } from "./media";
+import { MIN_ITEM_DURATION } from "./timeline";
 
 export function serializeSession(scene: VideoScene): string {
   if (scene.sources && scene.sources.length > 0) return JSON.stringify({ version: 2, scene });
@@ -95,7 +96,7 @@ export function serializeSession(scene: VideoScene): string {
  * - overlay with unknown `kind`
  * - any required field that is non-numeric when a number is expected
  */
-export function parseSession(json: string): VideoEditSession | null {
+export function parseSession(json: string, primaryDurationSeconds = 0): VideoEditSession | null {
   let raw: unknown;
   try {
     raw = JSON.parse(json);
@@ -198,7 +199,7 @@ export function parseSession(json: string): VideoEditSession | null {
   // Only a version 2 file carries a source table; version 1 never did, so a stray key is ignored.
   let sources: SceneSource[] | undefined;
   if (version === 2) {
-    sources = parseSources(sceneRaw["sources"]) ?? undefined;
+    sources = parseSources(sceneRaw["sources"], primaryDurationSeconds) ?? undefined;
     if (!sources) return null;
   }
 
@@ -363,10 +364,8 @@ function validateSource(raw: unknown): SceneSource | null {
   if (!isStr(s["id"]) || !isStr(s["assetId"]) || !isStr(s["title"])) return null;
   if (!isNum(s["offset"]) || !isNum(s["durationSeconds"])) return null;
   if (!isNum(s["width"]) || !isNum(s["height"])) return null;
-  // A joined range never starts at 0: that is the opened recording's (ADR 0058).
-  if (s["offset"] <= 0 || s["durationSeconds"] <= 0 || s["width"] < 0 || s["height"] < 0) {
-    return null;
-  }
+  // Shorter than the shortest clip, a range could not hold the clip it was joined with.
+  if (s["durationSeconds"] < MIN_ITEM_DURATION || s["width"] < 0 || s["height"] < 0) return null;
   return {
     id: s["id"],
     assetId: s["assetId"],
@@ -380,12 +379,12 @@ function validateSource(raw: unknown): SceneSource | null {
 
 /**
  * The joined recordings of a version 2 session (ADR 0058), in the saved order. Null when the
- * list is missing, empty or damaged, when two entries share an id, when a range starts at 0 or
- * when two ranges overlap or touch:
- * every joined clip's seconds are read through this table, so a repaired one would put footage
- * under the wrong recording.
+ * list is missing, empty or damaged, when two entries share an id, or when a range overlaps or
+ * touches another one or the opened recording's `[0, primaryDurationSeconds]` (0 when the caller
+ * does not know it): every joined clip's seconds are read through this table, so a repaired one
+ * would put footage under the wrong recording.
  */
-function parseSources(raw: unknown): SceneSource[] | null {
+function parseSources(raw: unknown, primaryDurationSeconds: number): SceneSource[] | null {
   if (!Array.isArray(raw) || raw.length === 0) return null;
   const sources: SceneSource[] = [];
   for (const entry of raw as unknown[]) {
@@ -394,11 +393,11 @@ function parseSources(raw: unknown): SceneSource[] | null {
     sources.push(validated);
   }
   if (new Set(sources.map((s) => s.id)).size !== sources.length) return null;
-  const byOffset = [...sources].sort((a, b) => a.offset - b.offset);
-  for (let i = 1; i < byOffset.length; i++) {
-    const previous = byOffset[i - 1];
-    // Ranges never touch: `recordingAt` includes both ends, so a shared second is ambiguous.
-    if (byOffset[i].offset <= previous.offset + previous.durationSeconds) return null;
+  // Ranges never touch: `recordingAt` includes both ends, so a shared second is ambiguous.
+  let end = primaryDurationSeconds;
+  for (const source of [...sources].sort((a, b) => a.offset - b.offset)) {
+    if (source.offset <= end) return null;
+    end = source.offset + source.durationSeconds;
   }
   return sources;
 }
