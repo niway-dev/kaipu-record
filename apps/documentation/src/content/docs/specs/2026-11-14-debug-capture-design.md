@@ -27,7 +27,7 @@ is uploaded.
 | 3   | Window images come from `webContents.capturePage()`, composited in pure JS from `nativeImage` bitmaps                           | Electron API on both platforms, needs no permission and no native dependency (no `postinstall`, see `CLAUDE.md`)                                                                                                                                                                         | —           |
 | 4   | Plus one full-screen image per display through `desktopCapturer`                                                                | Shows the native parts `capturePage` cannot see (menus, system dialogs, other apps around the widget). Uses the Screen Recording permission Kaipu already holds                                                                                                                          | —           |
 | 5   | Console lines come from a ring buffer in main: main's own `console.*` plus every window's `console-message` event               | No renderer change and no file logger; the bundle still carries the recent past                                                                                                                                                                                                          | —           |
-| 6   | Gate: `is.dev` OR the new `debug-capture` flag; the renderer reports the flag to main                                           | Main has no PostHog client; this is the existing `reportCaptureWhileRecording` / `reportImageText` pattern. The flag stays off by default and in PostHog matches only the owner's device ids                                                                                             | reuses 0049 |
+| 6   | Gate: `is.dev` OR the new `debug-capture` flag (added to `FLAG_NAMES`, `FLAG_DEFAULTS` false); the renderer reports it to main  | Main has no PostHog client; this is the existing `reportCaptureWhileRecording` / `reportImageText` pattern. The flag stays off by default and in PostHog matches only the owner's device ids                                                                                             | reuses 0049 |
 | 7   | The folder stays on the Mac and holds settings and paths as they are                                                            | Only the owner uses it now. Uploading or redacting belongs to a later user-facing bug report                                                                                                                                                                                             | —           |
 | 8   | ⌃⌥⌘D on macOS (`Control+Alt+Shift+D` on Windows), hard-coded, not in Settings → Shortcuts, held through `holdTemporaryShortcut` | A debug key is not a user feature. No Kaipu shortcut uses it (checked `shared/types/ipc.ts`). `applyGlobalShortcuts` calls `unregisterAll` on every settings write and re-registers only the user shortcuts and the held ones, so a bare `globalShortcut.register` would vanish silently | —           |
 
@@ -70,6 +70,13 @@ app's parts fit together. Flags follow
   their native pixels.
 - **Shipping it to users by mistake.** In a packaged build with the flag off or unresolved
   (offline, Send diagnostics off), the shortcut is not registered at all.
+- **No Screen Recording permission.** `bun run dev` runs as the Electron binary, which may
+  not hold the permission the signed app has. Then `desktopCapturer` returns blank or no
+  sources: `screens/` is skipped, `state.json` says `"screens": "no permission"`, and the
+  window images and the composite (which need no permission) are still written.
+- **Holding the shortcut twice, or never.** The hold is idempotent: a flag report that is
+  already applied does nothing. When `holdTemporaryShortcut` returns `false` (another app owns
+  the key), main logs it once and tries again on the next flag report.
 - **The shortcut silently stops working.** Every settings write unregisters all global
   shortcuts. The debug key is held with `holdTemporaryShortcut` (re-applied after
   `unregisterAll`), and released with `releaseTemporaryShortcut` when the reported flag turns off.
@@ -158,9 +165,9 @@ This needs no new IPC channel; a window that does not answer within 1 s gets `"r
 1. Union of the bounds of the captured windows, in points.
 2. Canvas size = union × the largest `scaleFactor` among their displays.
 3. Each window's `capturePage()` bitmap (`toBitmap()`, BGRA) is resized to its bounds × that
-   factor and alpha-blended at its offset, in z-order (back to front:
-   `BrowserWindow.getAllWindows()` order is not z-order, so the focused window goes last and
-   always-on-top windows after the rest).
+   factor and alpha-blended at its offset, back to front. Electron exposes no z-order, so the
+   order is an approximation in two groups: normal windows first, then always-on-top windows;
+   inside each group the focused window, if any, goes last.
 4. Background is a neutral dark grey, so transparent corners stay visible as such.
 5. `nativeImage.createFromBitmap` → PNG.
 
