@@ -591,9 +591,10 @@ function VideoEditor({
       })),
     [joinedRecordings],
   );
-  // What the MP4 export reads at each start, Retry included: a recording that was still loading
-  // when an export was refused is ready by the time the user retries, so a closure over this
-  // render's list would refuse for ever. Read at start time, never captured.
+  // What the MP4 export reads at each start, Retry included: a recording still loading when an
+  // export was refused may be ready when the user retries, and a closure over this render's
+  // list would refuse for ever. The ref follows the list only while this editor is mounted: a
+  // Retry from another page reads the list as the editor left it.
   const exportJoinedRef = useRef(exportJoined);
   useEffect(() => {
     exportJoinedRef.current = exportJoined;
