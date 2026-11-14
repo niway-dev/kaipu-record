@@ -42,7 +42,7 @@ it stays over the same moment when the sequence changes. It is built in three st
 
 ## Open questions
 
-1. **Sketch 3.** An item on the upper level from 0 while the recording starts later and overlaps
+1. **Sketch 3 (resolved 2026-11-14: the crossfade).** An item on the upper level from 0 while the recording starts later and overlaps
    its end. With no gaps it cannot be drawn as is. It is either the crossfade of stage 3 (the
    overlap is the transition) or empty background before the recording (an explicit background
    block in the sequence). Not needed for stage 1. The owner approved the default, the crossfade, on 2026-11-14.
@@ -129,7 +129,7 @@ Release flag, [NIW2-772](https://linear.app/niway/issue/NIW2-772/video-editor-hi
 - Verified in the repo: the top-bar **Add image** is in the tags `desktop-v0.17.0` and
   `desktop-v0.18.0` (`handleAddImage` in `video-editor-page.tsx`), and PR #620 removed it. So with
   `timeline-levels` off, desktop 0.19.0 has no way to add an image to a video, which 0.18.0 had.
-  The owner chose the flag before this was checked; it is theirs to confirm.
+  The owner confirmed hiding it in 0.19.0 on 2026-11-14, when approving the design.
 
 ---
 
