@@ -1,16 +1,9 @@
-import { useEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useRef } from "react";
 import { Play } from "lucide-react";
 import { useLocale, useSetLocale, useTranslations, type Locale } from "@kaipu/i18n";
 import { KaipuLogo } from "@kaipu/brand";
 import { uiArea } from "@renderer/lib/ui-area";
-import {
-  DEMO_CURSOR_COLOR,
-  DEMO_ICONS,
-  DEMO_IDS,
-  OnboardingDemo,
-  useReducedMotion,
-  type DemoId,
-} from "../demos";
+import { DEMO_ICONS, DEMO_IDS, OnboardingDemo, useReducedMotion, type DemoId } from "../demos";
 import common from "./step.module.css";
 import styles from "./welcome-step.module.css";
 
@@ -69,7 +62,6 @@ interface WelcomeStepProps {
 export function WelcomeStep({ demo, onDemoChange }: WelcomeStepProps): React.JSX.Element {
   const t = useTranslations("onboarding");
   const reducedMotion = useReducedMotion();
-  const cursor = { "--demo-cursor": DEMO_CURSOR_COLOR } as CSSProperties;
   const activeSwitchRef = useRef<HTMLButtonElement | null>(null);
   const cardRefs = useRef<Partial<Record<DemoId, HTMLButtonElement | null>>>({});
   const previousDemo = useRef<DemoId | null>(null);
@@ -118,11 +110,7 @@ export function WelcomeStep({ demo, onDemoChange }: WelcomeStepProps): React.JSX
   }
 
   return (
-    <div
-      {...uiArea("onboarding.welcomeStep")}
-      className={`${common.step} ${styles.step}`}
-      style={cursor}
-    >
+    <div {...uiArea("onboarding.welcomeStep")} className={`${common.step} ${styles.step}`}>
       <span className={common.mark}>
         <KaipuLogo use="app" size={64} />
       </span>
