@@ -25,12 +25,13 @@ export function canAdvanceFrom(step: StepId, requiredMet: boolean): boolean {
 }
 
 /**
- * Whether a footer dot may jump from `from` to `to`. Going back is always allowed; going
- * past Permissions is not while the required permissions are missing.
+ * Whether a footer dot may jump from `from` to `to`. Going back is always allowed; a
+ * forward move is refused only when it would cross Permissions (from at or before it) while
+ * the required permissions are missing. A user already past Permissions (say, on Shortcuts
+ * after revoking the microphone in System Settings) can still move forward.
  */
 export function canJumpTo(from: number, to: number, requiredMet: boolean): boolean {
-  if (to <= from) return true;
-  return requiredMet || to <= PERMISSIONS_INDEX;
+  return to <= from || requiredMet || to <= PERMISSIONS_INDEX || from > PERMISSIONS_INDEX;
 }
 
 /**

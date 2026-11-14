@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { Play } from "lucide-react";
 import { useLocale, useSetLocale, useTranslations, type Locale } from "@kaipu/i18n";
 import { KaipuLogo } from "@kaipu/brand";
@@ -65,11 +65,23 @@ interface WelcomeStepProps {
   onDemoChange: (demo: DemoId) => void;
 }
 
-/** Welcome: what Kaipu does, as five cards; a card plays its demo (a few seconds, looping) in place. */
+/** Welcome: what Kaipu does, as five cards; a card plays its demo (about ten seconds, looping) in place. */
 export function WelcomeStep({ demo, onDemoChange }: WelcomeStepProps): React.JSX.Element {
   const t = useTranslations("onboarding");
   const reducedMotion = useReducedMotion();
   const cursor = { "--demo-cursor": DEMO_CURSOR_COLOR } as CSSProperties;
+  const activeSwitchRef = useRef<HTMLButtonElement | null>(null);
+  const cardRefs = useRef<Partial<Record<DemoId, HTMLButtonElement | null>>>({});
+  const previousDemo = useRef<DemoId | null>(null);
+
+  // The card or switcher button that had focus unmounts when the view swaps, so focus would
+  // fall to BODY. Opening a demo focuses its switcher button; closing returns to its card.
+  // The first render of the cards (no demo ever open) must not steal focus.
+  useEffect(() => {
+    if (demo) activeSwitchRef.current?.focus();
+    else if (previousDemo.current) cardRefs.current[previousDemo.current]?.focus();
+    previousDemo.current = demo;
+  }, [demo]);
 
   if (demo) {
     return (
@@ -84,6 +96,7 @@ export function WelcomeStep({ demo, onDemoChange }: WelcomeStepProps): React.JSX
                 <button
                   key={id}
                   type="button"
+                  ref={active ? activeSwitchRef : undefined}
                   aria-pressed={active}
                   aria-label={title}
                   title={title}
@@ -122,6 +135,9 @@ export function WelcomeStep({ demo, onDemoChange }: WelcomeStepProps): React.JSX
             <button
               key={id}
               type="button"
+              ref={(el) => {
+                cardRefs.current[id] = el;
+              }}
               className={`${common.card} ${styles.featureCard} ${id === "editor" ? styles.featured : ""}`}
               onClick={() => onDemoChange(id)}
             >

@@ -12,7 +12,7 @@ description: The first-run onboarding as the owner's v2 design. Welcome shows wh
 The onboarding goes from three steps to four, and only Permissions blocks:
 
 1. **Welcome** shows what Kaipu does, in five cards: Record, Capture, Edit and share,
-   The video editor and Workspaces. Clicking a card plays a demo of a few seconds.
+   The video editor and Workspaces. Clicking a card plays a demo of about ten seconds.
    Each demo is CSS keyframes over simplified versions of the app's own UI, with a cursor
    in a mint halo.
 2. **Permissions**: Screen Recording and Microphone are required, Camera and Accessibility

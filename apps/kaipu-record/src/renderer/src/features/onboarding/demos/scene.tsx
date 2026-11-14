@@ -213,6 +213,7 @@ export function createScene(tl: Timeline) {
       "div",
       {
         "data-demo-stage": "",
+        "aria-hidden": true,
         style: {
           position: "relative",
           width: STAGE_WIDTH,

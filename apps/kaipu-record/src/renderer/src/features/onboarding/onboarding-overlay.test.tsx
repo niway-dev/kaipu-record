@@ -126,6 +126,17 @@ describe("OnboardingOverlay", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it("moves focus into the demo, and back to its card when the cards return", () => {
+    render(<OnboardingOverlay onClose={vi.fn()} />);
+    expect(document.activeElement).not.toBe(screen.getByText("Capture").closest("button"));
+    fireEvent.click(screen.getByText("Capture"));
+    const pressed = screen.getByRole("button", { name: "Capture", pressed: true });
+    expect(document.activeElement).toBe(pressed);
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(document.activeElement).toBe(screen.getByText("Capture").closest("button"));
+  });
+
   it("Skip to permissions on Welcome goes to Permissions, not out", async () => {
     const onClose = vi.fn();
     render(<OnboardingOverlay onClose={onClose} />);
@@ -231,6 +242,17 @@ describe("OnboardingOverlay", () => {
     pressGlobalShortcut("captureScreenshot");
     await waitFor(() => expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    expect(await screen.findByText("0 OF 4 TRIED · OPTIONAL")).toBeInTheDocument();
+  });
+
+  it("does not count a press made on a step after leaving Shortcuts", async () => {
+    mockElectronAPI({ checkPermissions: vi.fn().mockResolvedValue(granted) });
+    render(<OnboardingOverlay onClose={vi.fn()} />);
+    await toShortcuts();
+    fireEvent.click(screen.getByRole("button", { name: "Go to step 1" }));
+    await screen.findByRole("heading", { name: /welcome to kaipu/i });
+    pressGlobalShortcut("captureScreenshot");
+    await toShortcuts();
     expect(await screen.findByText("0 OF 4 TRIED · OPTIONAL")).toBeInTheDocument();
   });
 

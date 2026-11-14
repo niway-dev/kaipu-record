@@ -26,6 +26,7 @@ describe("onboarding flow", () => {
     expect(canJumpTo(1, 3, false)).toBe(false);
     expect(canJumpTo(3, 0, false)).toBe(true);
     expect(canJumpTo(0, 3, true)).toBe(true);
+    expect(canJumpTo(2, 3, false)).toBe(true); // already past Permissions
   });
 
   it("the skip link goes to permissions first, then skips the tour once they are met", () => {
