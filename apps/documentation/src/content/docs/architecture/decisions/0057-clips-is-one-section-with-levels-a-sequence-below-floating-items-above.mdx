@@ -92,6 +92,9 @@ time`, or the first upper row when it overlaps none. Items that do not overlap s
 - Annotations still use timeline seconds and now misalign on every insert before the recording,
   not only on a mid-timeline delete. Moving them to the same anchor is a follow-up, listed in the
   spec; it needs a migration of saved scenes.
+- A cut that removes the second a floating item starts on hides the whole item, even when the
+  rest of the footage it covered survives. Accepted for the first stage and listed as an open
+  question in the spec; the alternative is to move its start to the next surviving second.
 - A floating item longer than what remains of the video is cut at the video's end; it never
   extends the video.
 - The owner's sketch 3 (an item on the upper level from 0, the recording starting later and

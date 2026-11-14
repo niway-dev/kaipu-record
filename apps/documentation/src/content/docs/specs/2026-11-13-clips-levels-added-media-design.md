@@ -49,6 +49,11 @@ it stays over the same moment when the sequence changes. It is built in three st
    decision 5. It needs a migration of saved scenes and has no ticket yet.
 3. **Two videos plus the camera in the preview** has not been measured on the owner's hardware.
    Stage 3 starts with that measurement.
+4. **A cut under the start hides the whole item.** Deleting even one second of footage under a
+   floating item's start removes all of it, although most of what it covered is still there. It is
+   the rule the owner took by default and the simplest one to build first. The alternative is to
+   move the start to the next surviving second and shorten the item. To judge in stage 1 with the
+   real app.
 
 ## Out of scope
 
@@ -152,8 +157,8 @@ interface VideoScene {
 ```
 
 - **Start.** `sourceToTimeline(anchor.time)` for a source anchor; the slide's timeline start plus
-  `offset` for an item anchor. `null` (deleted footage, a removed slide) means the item is not
-  placed.
+  `offset` for an item anchor. `null` means the item is not placed: the anchor's second is in
+  deleted footage, the slide was removed, or the slide is now shorter than `offset`.
 - **End.** `min(start + duration, end of the timeline)`.
 - **Moving it** to timeline time `t` rewrites the anchor from the sequence entry at `t`. Dragging
   the left edge rewrites the anchor and the duration together; the right edge only the duration.
@@ -195,5 +200,6 @@ multi-source work is its own; nothing in stage 1 does it in advance.
 Kept from the [timeline v2 design](/specs/2026-10-31-editor-timeline-v2-design/) and ADR 0040:
 the draw order, viewport-layer placement, per-source audio, the two-videos limit, Library-only
 sources. Replaced: separate Overlay lanes, timeline anchoring, "a drop that overlaps goes to a new
-lane" as stored state, the 5 s image default, and transitions as a non-goal. Still parked and
+lane" as stored state, one 5 s image default for every image (now 10 s floating, 5 s in the sequence), and transitions
+as a non-goal. Still parked and
 untouched: camera sections (ADR 0039) and `removedTracks` (see ADR 0050).
