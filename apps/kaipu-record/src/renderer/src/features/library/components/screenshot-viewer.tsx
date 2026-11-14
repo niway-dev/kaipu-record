@@ -1,4 +1,4 @@
-import { ImageOff, Minus, Plus } from "lucide-react";
+import { Check, Copy, ImageOff, Minus, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import styles from "./screenshot-viewer.module.css";
@@ -12,12 +12,22 @@ interface ScreenshotViewerProps {
   src?: string | null;
   /** Called once the image has loaded, with its natural pixel size. */
   onNaturalSize?(width: number, height: number): void;
+  /** Copies the image to the clipboard; resolves true when it did. Given, a copy button shows
+   *  over the image's top-right corner on hover (and on keyboard focus). */
+  onCopy?(): Promise<boolean>;
 }
+
+/** How long the copy button keeps its check mark after a copy. */
+const COPIED_MS = 1500;
 
 /** Saved-screenshot viewer for the library detail page — the image-kind counterpart
  *  of RecordingPlayer. Shows the stored PNG (served via kaipu-media://screenshot/id),
- *  with zoom controls under it: `−`, Fit and `+`. */
-export function ScreenshotViewer({ src, onNaturalSize }: ScreenshotViewerProps): React.JSX.Element {
+ *  with zoom controls under it: `−`, Fit and `+`, and an optional copy button over it. */
+export function ScreenshotViewer({
+  src,
+  onNaturalSize,
+  onCopy,
+}: ScreenshotViewerProps): React.JSX.Element {
   const t = useTranslations("prepare");
   const tLibrary = useTranslations("library");
   const [failed, setFailed] = useState(false);
@@ -35,6 +45,18 @@ export function ScreenshotViewer({ src, onNaturalSize }: ScreenshotViewerProps):
         })()
       : null;
   const shown = Boolean(src) && !failed;
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), COPIED_MS);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  const copy = async (): Promise<void> => {
+    if (!onCopy) return;
+    if (await onCopy()) setCopied(true);
+  };
 
   useEffect(() => {
     const el = frameRef.current;
@@ -54,36 +76,55 @@ export function ScreenshotViewer({ src, onNaturalSize }: ScreenshotViewerProps):
 
   return (
     <div {...uiArea("libraryDetail.preview")} className={styles.root}>
-      <div ref={frameRef} className={styles.viewer} data-zoomed={zoom > 1 ? "true" : "false"}>
-        {shown ? (
-          <img
-            src={src!}
-            alt=""
-            className={styles.image}
-            style={
-              zoom === 1
-                ? undefined
-                : zoom < 1
-                  ? fitSize
-                    ? // Zoomed out: a fraction of the size shown at Fit, so a small image shrinks
-                      // too and a tall one never passes the Fit box.
-                      { width: `${zoom * fitSize.width}px` }
-                    : // Frame or image size not known yet: scale the frame-bound max size.
-                      { maxWidth: `${zoom * 100}%`, maxHeight: `${zoom * 100}%` }
-                  : { width: `${zoom * 100}%`, maxWidth: "none", maxHeight: "none" }
-            }
-            onLoad={(e) => {
-              const { naturalWidth, naturalHeight } = e.currentTarget;
-              setNatural({ width: naturalWidth, height: naturalHeight });
-              onNaturalSize?.(naturalWidth, naturalHeight);
-            }}
-            onError={() => setFailed(true)}
-          />
-        ) : (
-          <div className={styles.unavailable}>
-            <ImageOff size={28} strokeWidth={1.5} />
-            {tLibrary("imageUnavailable")}
-          </div>
+      {/* The frame scrolls when zoomed; the copy button sits outside it so it stays put. */}
+      <div className={styles.stage}>
+        <div ref={frameRef} className={styles.viewer} data-zoomed={zoom > 1 ? "true" : "false"}>
+          {shown ? (
+            <img
+              src={src!}
+              alt=""
+              className={styles.image}
+              style={
+                zoom === 1
+                  ? undefined
+                  : zoom < 1
+                    ? fitSize
+                      ? // Zoomed out: a fraction of the size shown at Fit, so a small image shrinks
+                        // too and a tall one never passes the Fit box.
+                        { width: `${zoom * fitSize.width}px` }
+                      : // Frame or image size not known yet: scale the frame-bound max size.
+                        { maxWidth: `${zoom * 100}%`, maxHeight: `${zoom * 100}%` }
+                    : { width: `${zoom * 100}%`, maxWidth: "none", maxHeight: "none" }
+              }
+              onLoad={(e) => {
+                const { naturalWidth, naturalHeight } = e.currentTarget;
+                setNatural({ width: naturalWidth, height: naturalHeight });
+                onNaturalSize?.(naturalWidth, naturalHeight);
+              }}
+              onError={() => setFailed(true)}
+            />
+          ) : (
+            <div className={styles.unavailable}>
+              <ImageOff size={28} strokeWidth={1.5} />
+              {tLibrary("imageUnavailable")}
+            </div>
+          )}
+        </div>
+        {shown && onCopy && (
+          <button
+            type="button"
+            className={styles.copyButton}
+            data-copied={copied ? "true" : "false"}
+            aria-label={tLibrary("copyImage")}
+            title={tLibrary("copyImage")}
+            onClick={() => void copy()}
+          >
+            {copied ? (
+              <Check size={14} strokeWidth={2} aria-hidden />
+            ) : (
+              <Copy size={14} strokeWidth={1.8} aria-hidden />
+            )}
+          </button>
         )}
       </div>
       {shown && (

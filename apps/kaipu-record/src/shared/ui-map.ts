@@ -158,7 +158,8 @@ export const UI_MAP = {
       details: { states: ["recording", "edited", "stale", "copy"] },
       postRecordingCard: { states: ["fresh"], gatedBy: [{ setting: "showRecordingSavedCard" }] },
       savedNotice: { states: ["shown"] },
-      preview: { states: ["video", "image", "gif", "unavailable"] },
+      // imageHover: the pointer over a screenshot shows the copy button in its corner.
+      preview: { states: ["video", "image", "imageHover", "gif", "unavailable"] },
       actions: { states: ["recording", "screenshot", "gif", "cloudOnly"] },
       tabs: { states: ["destinations", "versions", "details", "captures"] },
       // VersionsList: the original alone; with its edited project; with the copies made from

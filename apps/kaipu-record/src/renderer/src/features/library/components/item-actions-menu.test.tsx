@@ -20,10 +20,8 @@ function renderMenu(movable: boolean) {
   render(
     <ItemActionsMenu
       assetId="a"
-      isScreenshot={false}
       canRemoveLocalCopy={false}
       movable={movable}
-      onCopyImage={() => {}}
       onCopyPath={() => {}}
       onRemoveLocalCopy={() => {}}
       onDelete={() => {}}
@@ -44,5 +42,13 @@ describe("ItemActionsMenu — Move to workspace", () => {
     renderMenu(false);
     expect(screen.getByRole("menuitem", { name: /Copy path/ })).toBeTruthy();
     expect(screen.queryByRole("menuitem", { name: /Move to workspace/ })).toBeNull();
+  });
+});
+
+describe("ItemActionsMenu — Copy image", () => {
+  it("is not in the menu: the screenshot preview has its own copy button", () => {
+    renderMenu(true);
+    expect(screen.queryByRole("menuitem", { name: /Copy image/ })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: /Copy path/ })).toBeTruthy();
   });
 });

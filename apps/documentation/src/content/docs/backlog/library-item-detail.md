@@ -24,8 +24,9 @@ evidence (`.evidence/library-mock/claude-design-prompt.md`, not committed).
   page falls back to the Library's own order). Then the title with rename and an `i` whose
   tooltip carries the original's rule. On the same row, never wrapping: **Edit video** /
   **Edit image** (the only pink button), **Reveal in Finder**, **Open** (the file in its default
-  macOS app) and a `•••` menu — Copy image (screenshots), Copy path, Move to workspace…, Remove
-  local copy (when allowed) and Delete…. A GIF has no editor, so no primary button.
+  macOS app) and a `•••` menu — Copy path, Move to workspace…, Remove local copy (when allowed)
+  and Delete…. A GIF has no editor, so no primary button. A screenshot copies from a button over
+  the image's top-right corner, which shows on hover or keyboard focus.
 - **One metadata line**: type, duration, dimensions, size, absolute date. Cloud state only when
   the file is not on this Mac. The edit-state badges (not exported, stale) stay under it, then
   the tags.

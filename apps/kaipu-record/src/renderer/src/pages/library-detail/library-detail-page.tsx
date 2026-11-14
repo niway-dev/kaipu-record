@@ -352,16 +352,19 @@ export function LibraryDetailPage(): React.JSX.Element {
 
   // Copy a saved screenshot to the clipboard — main reads the vault file by id
   // (fetch on the kaipu-media:// scheme doesn't return bytes in the renderer).
-  const copyScreenshot = async (): Promise<void> => {
-    if (!localId) return;
+  // Resolves true when the image reached the clipboard (the preview's copy button marks it).
+  const copyScreenshot = async (): Promise<boolean> => {
+    if (!localId) return false;
     try {
       await window.electronAPI.copyScreenshotById(localId);
       showToast({ message: t("copyImageDone") });
+      return true;
     } catch (error) {
       reportError(t("copyError"), error, {
         context: { id: localId, phase: "copy-by-id" },
         retry: () => void copyScreenshot(),
       });
+      return false;
     }
   };
 
@@ -544,10 +547,8 @@ export function LibraryDetailPage(): React.JSX.Element {
                 <ItemActionsMenu
                   key={video.assetId}
                   assetId={video.assetId}
-                  isScreenshot={isScreenshot}
                   canRemoveLocalCopy={canRemoveLocalCopy}
                   movable={notMovableReason(video) === null}
-                  onCopyImage={() => void copyScreenshot()}
                   onCopyPath={() => void copyPath()}
                   onRemoveLocalCopy={() => void doRemoveLocalCopy()}
                   onDelete={() => setConfirmingDelete(true)}
@@ -702,6 +703,7 @@ export function LibraryDetailPage(): React.JSX.Element {
               <ScreenshotViewer
                 key={video.assetId}
                 src={video.thumbnailUrl}
+                onCopy={localId ? copyScreenshot : undefined}
                 onNaturalSize={(width, height) =>
                   setShotSize({ assetId: video.assetId, width, height })
                 }

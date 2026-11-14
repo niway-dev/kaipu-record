@@ -1201,6 +1201,11 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
     availability: "local",
     editing: "project-available",
   };
+  // The same screenshot with its image, so the preview shows the copy button.
+  const shownShot: LibraryItem = {
+    ...screenshotItem,
+    local: { ...screenshotItem.local!, thumbnailUrl: "kaipu-media://screenshot/shot-1" },
+  };
   const gifItem: LibraryItem = {
     ...screenshotItem,
     assetId: "gif-1",
@@ -1382,8 +1387,8 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
     expect(items).toEqual(["Copy path", "Remove local download", "Delete…"]);
   });
 
-  it("the ••• menu of a screenshot adds Copy image, which copies it", async () => {
-    list(screenshotItem);
+  it("a screenshot copies from the button over its preview, not from the ••• menu", async () => {
+    list(shownShot);
     window.electronAPI.copyScreenshotById = vi.fn(async () => {});
     renderWithState("/library/shot-1");
     await waitForLoaded();
@@ -1392,9 +1397,10 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
       within(screen.getByRole("menu"))
         .getAllByRole("menuitem")
         .map((item) => item.textContent),
-    ).toEqual(["Copy image", "Copy path", "Delete…"]);
+    ).toEqual(["Copy path", "Delete…"]);
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     await act(async () => {
-      fireEvent.click(screen.getByRole("menuitem", { name: "Copy image" }));
+      fireEvent.click(screen.getByRole("button", { name: "Copy image" }));
     });
     expect(window.electronAPI.copyScreenshotById).toHaveBeenCalledWith("shot-1");
   });
@@ -1478,17 +1484,30 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
       expect(document.querySelector("img")).not.toBeNull();
     });
 
-    it("Copy image confirms with a toast that outlives the menu", async () => {
-      list(screenshotItem);
+    it("Copy image confirms with a toast", async () => {
+      list(shownShot);
       window.electronAPI.copyScreenshotById = vi.fn(async () => {});
       renderWithState("/library/shot-1");
       await waitForLoaded();
-      openMenu();
       await act(async () => {
-        fireEvent.click(screen.getByRole("menuitem", { name: "Copy image" }));
+        fireEvent.click(screen.getByRole("button", { name: "Copy image" }));
       });
-      expect(screen.queryByRole("menu")).toBeNull();
       expect(getToasts()).toContainEqual(expect.objectContaining({ message: "Image copied" }));
+    });
+
+    it("a failed Copy image leaves the button unmarked", async () => {
+      list(shownShot);
+      window.electronAPI.copyScreenshotById = vi.fn(async () => {
+        throw new Error("clipboard busy");
+      });
+      renderWithState("/library/shot-1");
+      await waitForLoaded();
+      const copy = screen.getByRole("button", { name: "Copy image" });
+      await act(async () => {
+        fireEvent.click(copy);
+      });
+      expect(copy.dataset.copied).toBe("false");
+      expect(getToasts()).not.toContainEqual(expect.objectContaining({ message: "Image copied" }));
     });
 
     it("a version row keeps the walk: its link carries the passed order", async () => {
