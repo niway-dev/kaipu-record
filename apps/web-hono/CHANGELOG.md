@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.0](https://github.com/niway-dev/kaipu-record/compare/web-v0.13.0...web-v0.14.0) (2026-11-14)
+
+
+### Features
+
+* **desktop:** ⌃⌘X starts capturing and stops or closes on a second press (NIW2-743) ([59ddd3f](https://github.com/niway-dev/kaipu-record/commit/59ddd3f82525145dc952a163cdfe8a3d851eafb0))
+* **desktop:** ⌃⌘X starts capturing and stops or closes on a second press (NIW2-743) ([0162e77](https://github.com/niway-dev/kaipu-record/commit/0162e77efdcb60f5a26f2bd782e5927f32fe3adf))
+
 ## [0.13.0](https://github.com/niway-dev/kaipu-record/compare/web-v0.12.1...web-v0.13.0) (2026-11-13)
 
 
