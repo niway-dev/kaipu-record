@@ -5,8 +5,10 @@ description: The Clips section of the video editor becomes a section with levels
 
 # Clips levels: added images and videos on the timeline — design
 
-**Status: 🔵 Proposed · 2026-11-13.** Owner decisions taken in chat on 2026-11-13 over a sketch of
-four timelines. Nothing is implemented. Ticket:
+**Status: 🔵 Proposed · approved by the owner 2026-11-14.** Owner decisions taken in chat on
+2026-11-13 over a sketch of four timelines; the owner approved the design on 2026-11-14 with the
+defaults of open questions 1 and 4, and Add to timeline hidden in 0.19.0. Nothing is implemented
+in this PR; stage 1 and the flag are stacked on it. Ticket:
 [NIW2-770](https://linear.app/niway/issue/NIW2-770/video-editor-clips-becomes-a-section-with-levels-added-images-and).
 ADR: [0057](/architecture/decisions/0057-clips-is-one-section-with-levels-a-sequence-below-floating-items-above/)
 (new; supersedes part of [0040](/architecture/decisions/0040-typed-tracks-on-demand-and-stackable-media-lanes/)).
@@ -43,7 +45,7 @@ it stays over the same moment when the sequence changes. It is built in three st
 1. **Sketch 3.** An item on the upper level from 0 while the recording starts later and overlaps
    its end. With no gaps it cannot be drawn as is. It is either the crossfade of stage 3 (the
    overlap is the transition) or empty background before the recording (an explicit background
-   block in the sequence). Not needed for stage 1. Default until the owner says: the crossfade.
+   block in the sequence). Not needed for stage 1. The owner approved the default, the crossfade, on 2026-11-14.
 2. **Annotations.** Boxes, arrows and text are stored in timeline seconds and are left over a
    different moment by any insert before them. The owner agreed to move them to the anchor of
    decision 5. It needs a migration of saved scenes and has no ticket yet.
@@ -51,7 +53,7 @@ it stays over the same moment when the sequence changes. It is built in three st
    Stage 3 starts with that measurement.
 4. **A cut under the start hides the whole item.** Deleting even one second of footage under a
    floating item's start removes all of it, although most of what it covered is still there. It is
-   the rule the owner took by default and the simplest one to build first. The alternative is to
+   the rule the owner took by default, approved on 2026-11-14, and the simplest one to build first. The alternative is to
    move the start to the next surviving second and shorten the item. To judge in stage 1 with the
    real app.
 
