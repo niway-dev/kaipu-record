@@ -287,6 +287,31 @@ export const editorVideo = catalog(
       demonstrates: ["editorVideo.timeline:recordingHover"],
       ready: { video: true },
     },
+    "different-aspect": {
+      profile: "two-recordings",
+      how: "Open “Different aspect” and put the playhead in its joined clip: the square recording is fitted inside the 16:9 frame with the background on both sides.",
+      steps: [
+        open(ASSETS.differentAspectDemo),
+        loaded,
+        // The clips run 5 s, 7 s (the joined one, 5 s to 12 s), 7 s: 45% of a 19 s ruler is
+        // 8.55 s. A press on the ruler seeks there.
+        {
+          click: { area: "editorVideo.timeline", part: { css: '[data-testid="ruler"]' } },
+          at: { x: 0.45, y: 0.5 },
+        },
+        // The switch shows a recording by setting its element's visibility, only once that
+        // element holds the frame. The joined `<video>` reading visible is the joined picture
+        // on screen, not the opened one.
+        {
+          waitFor: {
+            area: "editorVideo.preview",
+            part: { css: '[data-recording="join-sq"][style*="visibility: visible"]' },
+          },
+        },
+      ],
+      demonstrates: ["editorVideo.preview:differentAspect"],
+      ready: { video: true },
+    },
     "recording-missing": {
       profile: "two-recordings",
       how: "Open “Missing recording”, whose joined recording is not in the vault: its clip is hatched and reads “Recording missing: Old standup”, and the editor goes on working.",

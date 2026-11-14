@@ -47,6 +47,12 @@ export const ASSETS = {
   joinedDemo: "c0a1a10c-0000-4000-8000-00000000000a",
   joinedSecond: "c0a1a10c-0000-4000-8000-00000000000b",
   joinedMissingDemo: "c0a1a10c-0000-4000-8000-00000000000c",
+  /**
+   * Also under `joinedRecordings`: `differentAspectDemo` joined `squareSecond`, a 1080x1080
+   * recording, so its joined clip is fitted inside the opened recording's 16:9 frame.
+   */
+  differentAspectDemo: "c0a1a10c-0000-4000-8000-00000000000d",
+  squareSecond: "c0a1a10c-0000-4000-8000-00000000000e",
   settingsShot: "c0a1a10c-0000-4000-8000-000000000101",
   dashboardShot: "c0a1a10c-0000-4000-8000-000000000102",
   dialogShot: "c0a1a10c-0000-4000-8000-000000000103",
@@ -176,6 +182,8 @@ interface RecordingFixture {
   joined?: JoinedKind;
   /** The media is `FIXTURE_FILES.joinedCut` (blue, a "B"), not a cut of the opened countdown. */
   joinedVideo?: boolean;
+  /** The media is `FIXTURE_FILES.joinedSquareCut` (1080x1080) and the capture is 1080x1080. */
+  square?: boolean;
   /** An export: the asset it was made from. */
   derivedFrom?: string;
   /** An export: the preset it was made with (the sidecar's `exportPreset`). */
@@ -241,7 +249,7 @@ const CURSOR_RECORDING: RecordingFixture = {
 };
 
 /** What a joined recording's saved edit points at: a recording in the vault, or one that is gone. */
-export type JoinedKind = "present" | "missing";
+export type JoinedKind = "present" | "missing" | "square";
 
 /** The Library asset id `joinedMissingDemo` joined: nothing in the vault has it. */
 export const JOINED_MISSING_ASSET = "c0a1a10c-0000-4000-8000-0000000000ff";
@@ -256,14 +264,17 @@ export const JOINED_OFFSET = 3600;
  * `missing` joins a recording that is not in the vault. Saved as version 2 by the caller.
  */
 export function joinedScene(kind: JoinedKind, openedSeconds: number): unknown {
-  const joinedSeconds = kind === "present" ? JOINED_SECOND.cut : 6;
+  const joinedSeconds = kind === "missing" ? 6 : JOINED_SECOND.cut;
+  const joined = {
+    present: { id: "join-b", assetId: ASSETS.joinedSecond, title: JOINED_SECOND.title },
+    missing: { id: "join-gone", assetId: JOINED_MISSING_ASSET, title: "Old standup" },
+    square: { id: "join-sq", assetId: ASSETS.squareSecond, title: SQUARE_SECOND.title },
+  }[kind];
   const source = {
-    id: kind === "present" ? "join-b" : "join-gone",
-    assetId: kind === "present" ? ASSETS.joinedSecond : JOINED_MISSING_ASSET,
-    title: kind === "present" ? JOINED_SECOND.title : "Old standup",
+    ...joined,
     offset: JOINED_OFFSET,
     durationSeconds: joinedSeconds,
-    width: 1920,
+    width: kind === "square" ? 1080 : 1920,
     height: 1080,
   };
   const cutAt = Math.min(5, openedSeconds - 1);
@@ -299,6 +310,17 @@ const JOINED_SECOND: RecordingFixture = {
   ago: 15 * 60_000,
 };
 
+/** Seeded with `JOINED_RECORDINGS`: the 1:1 recording “Different aspect” joins. */
+const SQUARE_SECOND: RecordingFixture = {
+  stem: "Square recording",
+  assetId: ASSETS.squareSecond,
+  title: "Square recording",
+  cut: JOINED_CUT_SECONDS,
+  joinedVideo: true,
+  square: true,
+  ago: 14 * 60_000,
+};
+
 /**
  * Seeded only where `joinedRecordings` is on. Both open with a webcam, so the Webcam track
  * exists and a recording without one reads “No camera in this recording”.
@@ -322,7 +344,16 @@ const JOINED_RECORDINGS: readonly RecordingFixture[] = [
     webcam: true,
     joined: "missing",
   },
+  {
+    stem: "Different aspect",
+    assetId: ASSETS.differentAspectDemo,
+    title: "Different aspect",
+    cut: 12,
+    ago: 16 * 60_000,
+    joined: "square",
+  },
   JOINED_SECOND,
+  SQUARE_SECOND,
 ];
 
 /** Seeded only where `floatingImages` is on: a recording whose saved edit floats two images. */
@@ -583,7 +614,11 @@ async function seedRecording(
   item: RecordingFixture,
 ): Promise<void> {
   const media = path.join(vaultDir, `${item.stem}.mp4`);
-  const video = item.joinedVideo ? FIXTURE_FILES.joinedCut : FIXTURE_FILES.cut(item.cut);
+  const video = item.square
+    ? FIXTURE_FILES.joinedSquareCut
+    : item.joinedVideo
+      ? FIXTURE_FILES.joinedCut
+      : FIXTURE_FILES.cut(item.cut);
   await copyFile(path.join(fixtures, video), media);
   await copyFile(path.join(fixtures, FIXTURE_FILES.thumbnail), path.join(meta, `${item.stem}.jpg`));
   const createdAt = now - item.ago;
@@ -599,7 +634,7 @@ async function seedRecording(
     capture: {
       mode: "screen",
       cursorPixels: item.cursorTrack ? "excluded" : "embedded",
-      width: 1920,
+      width: item.square ? 1080 : 1920,
       height: 1080,
       ratio: null,
     },

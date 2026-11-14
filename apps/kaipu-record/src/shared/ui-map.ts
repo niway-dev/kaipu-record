@@ -244,7 +244,7 @@ export const UI_MAP = {
     route: ROUTES.editorVideo,
     areas: {
       page: { states: ["loaded"] },
-      preview: { states: ["frame", "zoomSelected", "overlaySelected"] },
+      preview: { states: ["frame", "zoomSelected", "overlaySelected", "differentAspect"] },
       cursor: { states: ["visible"], gatedBy: [{ flag: "native-cursor-capture" }] },
       cursorInspector: { states: ["open"], gatedBy: [{ flag: "native-cursor-capture" }] },
       // The Captures panel (NIW2-764): this video's frame captures, in the right column in

@@ -19,7 +19,7 @@ import path from "node:path";
 export const FIXTURES_DIR = path.join(__dirname, "out");
 
 /** Bump when anything below changes the generated files. */
-const RECIPE_VERSION = "3";
+const RECIPE_VERSION = "4";
 
 /** Seconds of the countdown; every recording fixture is a cut of it. */
 export const COUNTDOWN_SECONDS = 12;
@@ -44,6 +44,12 @@ export const FIXTURE_FILES = {
    * opened recording's. Same size, codec and container as `cut`.
    */
   joinedCut: "countdown-joined-7s.mp4",
+  /**
+   * The joined variant at 1080x1080 (1:1) for the recording that joined a square one: the same
+   * blue ground and "B", cut to `JOINED_CUT_SECONDS`. Its aspect differs from the opened 16:9
+   * recording's, so the preview fits it inside the frame with the background around it.
+   */
+  joinedSquareCut: "countdown-joined-square-7s.mp4",
 } as const;
 
 /** Length of `FIXTURE_FILES.joinedCut`; it is also the seed's duration for that recording. */
@@ -328,6 +334,7 @@ export function fixturesReady(dir: string = FIXTURES_DIR): boolean {
     FIXTURE_FILES.gif,
     FIXTURE_FILES.thumbnail,
     FIXTURE_FILES.joinedCut,
+    FIXTURE_FILES.joinedSquareCut,
     ...FIXTURE_FILES.screens,
     FIXTURE_FILES.colorsShot,
     FIXTURE_FILES.photoShot,
@@ -370,6 +377,19 @@ export function makeFixtures(dir: string = FIXTURES_DIR): void {
     at(FIXTURE_FILES.joinedCut),
   ]);
   rmSync(at("countdown-joined.mp4"));
+  renderCountdown(at("countdown-joined-square.mp4"), 1080, 1080, "joined");
+  ffmpeg([
+    "-i",
+    at("countdown-joined-square.mp4"),
+    "-t",
+    String(JOINED_CUT_SECONDS),
+    "-c",
+    "copy",
+    ...BITEXACT,
+    ...NO_METADATA,
+    at(FIXTURE_FILES.joinedSquareCut),
+  ]);
+  rmSync(at("countdown-joined-square.mp4"));
   renderCountdown(at(FIXTURE_FILES.webcam), 640, 480);
   // The first second shows "10": the frame a recording's poster is taken from.
   ffmpeg([
