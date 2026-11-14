@@ -1167,6 +1167,13 @@ function VideoEditor({
         cursor: cursorData,
         // The sidecar's webcam track: with a webcam layer in the scene, the export composes it.
         webcamTrack: source.webcam ?? null,
+        joined: joinedRecordings.map((j) => ({
+          sourceId: j.source.id,
+          id: j.id,
+          title: j.source.title,
+          status: j.status,
+          webcam: j.webcam,
+        })),
         presetId: choice.presetId,
         framing: choice.framing,
         sourceInfo: sourceProbe,
@@ -1226,6 +1233,7 @@ function VideoEditor({
       autosave,
       cameraPath,
       cursorData,
+      joinedRecordings,
     ],
   );
 

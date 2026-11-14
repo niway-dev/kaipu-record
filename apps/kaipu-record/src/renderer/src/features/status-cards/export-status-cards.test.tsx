@@ -240,6 +240,7 @@ describe("ExportStatusCards", () => {
           previewWidth: 1920,
           slideAssets: createSlideAssetStore(),
           cameraPath: null,
+          joined: [],
           presetId: "youtube-1440",
           destination: "youtube",
           onSaved: vi.fn(),

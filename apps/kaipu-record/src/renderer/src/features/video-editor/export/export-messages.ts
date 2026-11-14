@@ -59,6 +59,16 @@ export interface ExportStartMessage {
   cursor?: CursorLayerData | null;
   /** The webcam file, or null: no webcam layer, and no second decoder in the worker. */
   webcam: WebcamTrackMessage | null;
+  /**
+   * The joined recordings (ADR 0058) the plan's clips read, in first-use order, each with its
+   * start on the source axis; `[]` for a scene without joins. Not read by the worker yet.
+   */
+  joined: Array<{
+    sourceId: string;
+    offset: number;
+    blob: Blob;
+    webcam: WebcamTrackMessage | null;
+  }>;
 }
 
 /**

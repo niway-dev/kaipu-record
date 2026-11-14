@@ -9,8 +9,13 @@ import type { SlideAssetStore } from "../slide-assets";
 import type { VideoScene } from "../scene";
 import type { CameraPath } from "../zoom/camera-path";
 import { buildExportPlan } from "./export-plan";
+import { recordingsUsed } from "./export-recordings";
 import { floatingAssetIds } from "./floating-frame";
-import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
+import type {
+  ExportStartMessage,
+  ExportWorkerMessage,
+  WebcamTrackMessage,
+} from "./export-messages";
 import { rasterizeOverlays } from "./overlay-raster";
 import {
   type ExportFraming,
@@ -31,6 +36,19 @@ export interface VideoExportState {
   status: "idle" | "exporting" | "error";
   fraction: number;
   error: string | null;
+}
+
+/**
+ * One recording joined into the scene (ADR 0058), as the editor holds it: `id` is the CURRENT
+ * vault id (never the asset id: a rename changes it), `status` says whether it can be read.
+ */
+export interface ExportJoinedRecording {
+  /** `SceneSource.id`: what a plan clip's `sourceId` names. */
+  sourceId: string;
+  id: string | null;
+  title: string;
+  status: "loading" | "ready" | "missing";
+  webcam: ExportWebcamTrack | null;
 }
 
 export interface StartExportArgs {
@@ -55,6 +73,8 @@ export interface StartExportArgs {
    * layer in the scene, its file is fetched and composed (ADR 0038).
    */
   webcamTrack?: ExportWebcamTrack | null;
+  /** One per `scene.sources` entry; empty for a scene without joined recordings. */
+  joined: ExportJoinedRecording[];
   /** NIW2-218: destination preset; Balanced (the Settings default) when omitted. */
   presetId?: ExportPresetId;
   /** Fit/Fill for Vertical and Square; the preset's default when omitted. */
@@ -288,6 +308,35 @@ export async function startVideoExport(
     return true;
   }
 
+  // A joined recording a clip reads must be readable before anything is taken: no lease, no
+  // writer session, no worker (a joined recording no clip uses never blocks).
+  const usedJoined: Array<{ entry: ExportJoinedRecording; offset: number }> = [];
+  for (const sourceId of recordingsUsed(plan)) {
+    if (sourceId === null) continue;
+    const entry = args.joined.find((j) => j.sourceId === sourceId);
+    const sceneSource = args.scene.sources?.find((s) => s.id === sourceId);
+    if (!entry || entry.status === "missing" || !sceneSource) {
+      const title = entry?.title ?? sceneSource?.title ?? sourceId;
+      set({
+        ...IDLE,
+        ready: snapshot.ready,
+        status: "error",
+        error: t("exportRecordingMissing", { title }),
+      });
+      return true;
+    }
+    if (entry.status === "loading" || entry.id === null) {
+      set({
+        ...IDLE,
+        ready: snapshot.ready,
+        status: "error",
+        error: t("exportRecordingLoading"),
+      });
+      return true;
+    }
+    usedJoined.push({ entry, offset: sceneSource.offset });
+  }
+
   const target = resolveExportTarget(
     presetId,
     {
@@ -372,6 +421,27 @@ export async function startVideoExport(
   } catch (error) {
     fail(GENERIC_ERROR, error);
     return true;
+  }
+  // Each joined recording a clip reads, in `recordingsUsed` order. A file that cannot be read
+  // fails the export by name (`fail` ends the lease and the session); a joined webcam that
+  // cannot be read only loses that recording's face.
+  const joinedFiles: ExportStartMessage["joined"] = [];
+  for (const { entry, offset } of usedJoined) {
+    try {
+      const response = await fetch(mediaUrl("recording", entry.id!));
+      if (!response.ok) throw new Error(`joined recording ${entry.sourceId}: ${response.status}`);
+      const blob = await response.blob();
+      const joinedWebcam: WebcamTrackMessage | null = await fetchWebcamTrack(
+        entry.id!,
+        plan.webcam,
+        entry.webcam,
+        (error) => captureException(error, { context: "video-export-webcam" }),
+      );
+      joinedFiles.push({ sourceId: entry.sourceId, offset, blob, webcam: joinedWebcam });
+    } catch (error) {
+      fail(t("exportRecordingMissing", { title: entry.title }), error);
+      return true;
+    }
   }
   /**
    * The scene has a webcam layer the file will not carry: no webcam file to send, or (set
@@ -552,6 +622,7 @@ export async function startVideoExport(
       camera,
       cursor: args.cursor ?? null,
       webcam,
+      joined: joinedFiles,
     };
     runWorker.postMessage(startMessage, [
       ...overlays.map((o) => o.bitmap),

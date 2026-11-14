@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Translator } from "@kaipu/i18n";
 import type { LocalRecording } from "@shared/types/library-storage";
 import { initialScene, type VideoScene } from "../scene";
+import { joinedSource } from "../media-switch.fixture";
 import { WEBCAM_DEFAULTS } from "../webcam/webcam-model";
 import type { ExportStartMessage } from "./export-messages";
 import { createSlideAssetStore } from "../slide-assets";
@@ -79,6 +80,7 @@ function args(overrides: Partial<StartExportArgs> = {}): StartExportArgs {
     previewWidth: 2560,
     slideAssets: createSlideAssetStore(),
     cameraPath: null,
+    joined: [],
     presetId: "light",
     onSaved: vi.fn(),
     ...overrides,
@@ -480,5 +482,150 @@ describe("exportTitle", () => {
     expect(exportTitle(t, "youtube-1440", "Demo")).toBe("Demo (presetTitleYoutube)");
     expect(exportTitle(t, "youtube-4k", "Demo")).toBe("Demo (presetTitleYoutube)");
     expect(exportTitle(t, "vertical", "Demo")).toBe("Demo (presetTitleVertical)");
+  });
+});
+
+describe("an export that uses joined recordings (NIW2-781)", () => {
+  // Opened [0, 100]; joined B at [3600, 3640] and C at [7200, 7220]; the sequence goes a -> B.
+  const WEBCAM = { layout: { ...WEBCAM_DEFAULTS }, segments: [] };
+  const JOINED_SCENE: VideoScene = {
+    ...initialScene(100),
+    sources: [joinedSource("b", 3600, 40), joinedSource("c", 7200, 20)],
+    items: [
+      { id: "a", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+      { id: "b", kind: "clip", sourceStart: 3600, sourceEnd: 3610 },
+    ],
+    overlays: [],
+  };
+  const entry = (
+    sourceId: string,
+    overrides: Partial<StartExportArgs["joined"][number]> = {},
+  ): StartExportArgs["joined"][number] => ({
+    sourceId,
+    id: `vault-${sourceId}`,
+    title: `Title ${sourceId}`,
+    status: "ready",
+    webcam: null,
+    ...overrides,
+  });
+  const fetchMock = (notOk: string[] = []) =>
+    vi.fn(async (url: string) => ({
+      ok: !notOk.some((id) => url.includes(id)),
+      status: notOk.some((id) => url.includes(id)) ? 404 : 200,
+      blob: async () => new Blob([url]),
+    }));
+  const sent = (): ExportStartMessage =>
+    workers[0]!.postMessage.mock.calls[0]![0] as ExportStartMessage;
+
+  it("refuses by name when a used joined recording is missing, taking nothing", async () => {
+    const beginExport = vi.fn(async () => {});
+    window.electronAPI.beginExport = beginExport;
+    await startVideoExport(
+      args({ scene: JOINED_SCENE, joined: [entry("b", { status: "missing", id: "" })] }),
+      t,
+    );
+    expect(getExportSnapshot().status).toBe("error");
+    expect(getExportSnapshot().error).toBe("Title b (exportRecordingMissing)");
+    expect(beginExport).not.toHaveBeenCalled();
+    expect(window.electronAPI.setExportActive).not.toHaveBeenCalledWith(true);
+    expect(window.electronAPI.recordingCreate).not.toHaveBeenCalled();
+    expect(workers).toHaveLength(0);
+  });
+
+  it("names the scene's title when a used joined recording has no entry at all", async () => {
+    await startVideoExport(args({ scene: JOINED_SCENE, joined: [] }), t);
+    expect(getExportSnapshot().error).toBe("b (exportRecordingMissing)");
+    expect(workers).toHaveLength(0);
+  });
+
+  it("refuses with the loading message while a used joined recording loads, taking nothing", async () => {
+    const beginExport = vi.fn(async () => {});
+    window.electronAPI.beginExport = beginExport;
+    await startVideoExport(
+      args({ scene: JOINED_SCENE, joined: [entry("b", { status: "loading", id: "" })] }),
+      t,
+    );
+    expect(getExportSnapshot().error).toBe("exportRecordingLoading");
+    expect(beginExport).not.toHaveBeenCalled();
+    expect(window.electronAPI.recordingCreate).not.toHaveBeenCalled();
+    expect(workers).toHaveLength(0);
+  });
+
+  it("is not blocked by a missing joined recording that no clip uses", async () => {
+    vi.stubGlobal("fetch", fetchMock());
+    await startVideoExport(
+      args({
+        scene: JOINED_SCENE,
+        joined: [entry("b"), entry("c", { status: "missing", id: "" })],
+      }),
+      t,
+    );
+    await waitFor(() => expect(workers).toHaveLength(1));
+    expect(getExportSnapshot().status).toBe("exporting");
+  });
+
+  it("fails by name and lets go of everything when a used joined file answers 404", async () => {
+    vi.stubGlobal("fetch", fetchMock(["vault-b"]));
+    await startVideoExport(args({ scene: JOINED_SCENE, joined: [entry("b")] }), t);
+    expect(getExportSnapshot().status).toBe("error");
+    expect(getExportSnapshot().error).toBe("Title b (exportRecordingMissing)");
+    expect(window.electronAPI.recordingCreate).not.toHaveBeenCalled();
+    expect(workers).toHaveLength(0);
+    expect(isVideoExportBusy()).toBe(false);
+    // The lease is main's `exportActive` mirror: the last report is "not exporting".
+    expect(vi.mocked(window.electronAPI.setExportActive).mock.calls.at(-1)).toEqual([false]);
+  });
+
+  it("sends each used joined recording with its source id, offset, file and webcam", async () => {
+    const fetch = fetchMock();
+    vi.stubGlobal("fetch", fetch);
+    const scene: VideoScene = {
+      ...JOINED_SCENE,
+      webcam: WEBCAM,
+      items: [...JOINED_SCENE.items, { id: "c", kind: "clip", sourceStart: 7200, sourceEnd: 7210 }],
+    };
+    await startVideoExport(
+      args({
+        scene,
+        webcamTrack: null,
+        joined: [entry("b", { webcam: { startOffsetMs: 250 } }), entry("c")],
+      }),
+      t,
+    );
+    await waitFor(() => expect(workers).toHaveLength(1));
+    expect(fetch).toHaveBeenCalledWith("kaipu-media://recording/vault-b");
+    expect(fetch).toHaveBeenCalledWith("kaipu-media://webcam/vault-b");
+    expect(fetch).not.toHaveBeenCalledWith("kaipu-media://webcam/vault-c");
+    expect(sent().joined).toEqual([
+      {
+        sourceId: "b",
+        offset: 3600,
+        blob: expect.any(Blob),
+        webcam: { blob: expect.any(Blob), startOffsetMs: 250 },
+      },
+      { sourceId: "c", offset: 7200, blob: expect.any(Blob), webcam: null },
+    ]);
+  });
+
+  it("exports a joined recording whose webcam fails to load, without that webcam only", async () => {
+    vi.stubGlobal("fetch", fetchMock(["webcam/vault-b"]));
+    await startVideoExport(
+      args({
+        scene: { ...JOINED_SCENE, webcam: WEBCAM },
+        joined: [entry("b", { webcam: { startOffsetMs: 5 } })],
+      }),
+      t,
+    );
+    await waitFor(() => expect(workers).toHaveLength(1));
+    expect(sent().joined.map((j) => j.webcam)).toEqual([null]);
+  });
+
+  it("sends an empty joined list and makes the same fetches for a scene without joined recordings", async () => {
+    const fetch = fetchMock();
+    vi.stubGlobal("fetch", fetch);
+    await startVideoExport(args({ joined: [] }), t);
+    await waitFor(() => expect(workers).toHaveLength(1));
+    expect(sent().joined).toEqual([]);
+    expect(fetch.mock.calls.map((c) => c[0])).toEqual(["kaipu-media://recording/rec-1"]);
   });
 });
