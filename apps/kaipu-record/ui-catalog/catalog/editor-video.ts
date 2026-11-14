@@ -44,7 +44,12 @@ const captureFrameButton: Step = {
 const captureListed: Step = {
   waitFor: { area: "editorVideo.capturesPanel", part: { role: "button", name: "Go to" } },
 };
-/** The waveform canvas in the Audio lane: it appears once the first peaks are decoded. */
+/**
+ * The waveform canvas in the Audio lane: it appears once the first peaks are decoded. Every
+ * seeded recording has audio, so every state that opens one waits for it: a shot must not
+ * land before, or while, the lane fills in. A seeded clip decodes in one pass, so the first
+ * canvas is the finished waveform.
+ */
 const audioWaveformDrawn: Step = {
   waitFor: { area: "editorVideo.audioLane", part: { css: "[data-audio-waveform]" } },
 };
@@ -75,14 +80,14 @@ export const editorVideo = catalog(
       profile: "default",
       window: "editor-min",
       how: "Open “Team notes” (a saved zoom and a muted range) in the editor at its minimum size.",
-      steps: [open(ASSETS.teamNotes)],
+      steps: [open(ASSETS.teamNotes), audioWaveformDrawn],
       demonstrates: ["editorVideo.page:loaded"],
       ready: { video: true },
     },
     "cursor-off": {
       profile: "default",
       how: "Open “Walkthrough 1”, recorded without the flag: no cursor track, no cursor layer or Cursor tool.",
-      steps: [open(ASSETS.walkthrough)],
+      steps: [open(ASSETS.walkthrough), audioWaveformDrawn],
       demonstrates: ["editorVideo.page:loaded"],
       ready: { video: true },
       gates: [{ flag: "native-cursor-capture", side: "off" }],
@@ -90,7 +95,7 @@ export const editorVideo = catalog(
     "cursor-on": {
       profile: "cursor-flag",
       how: "With the flag forced on, open “Cursor demo”, which carries a native cursor track: the editor draws the cursor.",
-      steps: [open(ASSETS.cursorDemo)],
+      steps: [open(ASSETS.cursorDemo), audioWaveformDrawn],
       demonstrates: ["editorVideo.cursor:visible"],
       ready: { video: true },
       gates: [{ flag: "native-cursor-capture", side: "on" }],
@@ -99,6 +104,7 @@ export const editorVideo = catalog(
       profile: "cursor-flag",
       steps: [
         open(ASSETS.cursorDemo),
+        audioWaveformDrawn,
         { waitFor: { video: true } },
         { click: { area: "editorVideo.toolRail", part: { role: "button", name: "Cursor" } } },
       ],
@@ -109,7 +115,6 @@ export const editorVideo = catalog(
     overview: {
       profile: "default",
       how: "Open “Walkthrough 1” in the editor: no zooms, no privacy regions and nothing muted. The Audio lane draws the recording's loudness as bars.",
-      // Waits for the waveform so the shot never lands before the first peaks are decoded.
       steps: [open(ASSETS.walkthrough), audioWaveformDrawn],
       demonstrates: [
         "editorVideo.preview:frame",
@@ -129,6 +134,7 @@ export const editorVideo = catalog(
       profile: "default",
       steps: [
         open(ASSETS.walkthrough),
+        audioWaveformDrawn,
         loaded,
         {
           click: {
@@ -143,7 +149,7 @@ export const editorVideo = catalog(
     "team-notes": {
       profile: "default",
       how: "Open “Team notes”: a zoom, a muted range, a blur and a box are on the timeline.",
-      steps: [open(ASSETS.teamNotes)],
+      steps: [open(ASSETS.teamNotes), audioWaveformDrawn],
       demonstrates: [
         "editorVideo.transport:withCounts",
         "editorVideo.zoomLane:segments",
@@ -156,6 +162,7 @@ export const editorVideo = catalog(
       profile: "default",
       steps: [
         open(ASSETS.teamNotes),
+        audioWaveformDrawn,
         loaded,
         { click: { area: "editorVideo.zoomLane", part: { role: "button", name: "Zoom 1" } } },
       ],
@@ -168,7 +175,7 @@ export const editorVideo = catalog(
     "waveform-muted": {
       profile: "default",
       how: "Open “Team notes”: its muted range is a hatched block over bars drawn dimmed.",
-      steps: [open(ASSETS.teamNotes), loaded, audioWaveformDrawn],
+      steps: [open(ASSETS.teamNotes), audioWaveformDrawn, loaded],
       demonstrates: ["editorVideo.audioLane:waveformMuted"],
       ready: { area: "editorVideo.audioLane" },
     },
@@ -176,6 +183,7 @@ export const editorVideo = catalog(
       profile: "default",
       steps: [
         open(ASSETS.teamNotes),
+        audioWaveformDrawn,
         loaded,
         {
           click: {
@@ -190,6 +198,7 @@ export const editorVideo = catalog(
       profile: "default",
       steps: [
         open(ASSETS.teamNotes),
+        audioWaveformDrawn,
         loaded,
         { click: { area: "editorVideo.privacyLane", part: { css: "[data-redaction-block]" } } },
       ],
@@ -200,6 +209,7 @@ export const editorVideo = catalog(
       how: "Open “Team notes” and select the box annotation on the timeline.",
       steps: [
         open(ASSETS.teamNotes),
+        audioWaveformDrawn,
         loaded,
         { click: { area: "editorVideo.timeline", part: { css: 'button[class*="pill"]' } } },
       ],
@@ -210,6 +220,7 @@ export const editorVideo = catalog(
       how: "Open “Walkthrough 1”, choose the Magenta background and set padding 48, corners 16 and shadow 24: the picture sits inset on the gradient.",
       steps: [
         open(ASSETS.walkthrough),
+        audioWaveformDrawn,
         loaded,
         {
           click: {
@@ -240,18 +251,18 @@ export const editorVideo = catalog(
     },
     "tool-box": {
       profile: "default",
-      steps: [open(ASSETS.walkthrough), loaded, rail("Box")],
+      steps: [open(ASSETS.walkthrough), audioWaveformDrawn, loaded, rail("Box")],
       demonstrates: ["editorVideo.toolRail:annotate", "editorVideo.inspector:annotation"],
     },
     "tool-blur": {
       profile: "default",
-      steps: [open(ASSETS.walkthrough), loaded, rail("Blur")],
+      steps: [open(ASSETS.walkthrough), audioWaveformDrawn, loaded, rail("Blur")],
       demonstrates: ["editorVideo.toolRail:privacy"],
     },
     webcam: {
       profile: "default",
       how: "Open “Release demo”, a recording with a webcam track: the bubble is on the preview.",
-      steps: [open(ASSETS.releaseDemo)],
+      steps: [open(ASSETS.releaseDemo), audioWaveformDrawn],
       demonstrates: ["editorVideo.webcam:visible"],
       ready: { video: true },
     },
@@ -262,6 +273,7 @@ export const editorVideo = catalog(
       // it selects it, as it does from the keyboard.
       steps: [
         open(ASSETS.releaseDemo),
+        audioWaveformDrawn,
         loaded,
         {
           press: "Enter",
@@ -275,7 +287,13 @@ export const editorVideo = catalog(
     "webcam-hidden": {
       profile: "default",
       how: "Open “Release demo” and press Hide webcam here: a hidden section appears on the webcam lane.",
-      steps: [open(ASSETS.releaseDemo), loaded, rail("Hide webcam here"), saved],
+      steps: [
+        open(ASSETS.releaseDemo),
+        audioWaveformDrawn,
+        loaded,
+        rail("Hide webcam here"),
+        saved,
+      ],
       demonstrates: ["editorVideo.webcamLane:segments"],
       // The edit saved into the vault: without this the second shot finds the section hidden.
       after: [{ action: "restoreVault" }],
@@ -283,7 +301,7 @@ export const editorVideo = catalog(
     "audio-menu": {
       profile: "default",
       how: "Open “Bug report” and press Audio in the tool rail: a menu offers Mute a section and Mute the whole recording.",
-      steps: [open(ASSETS.bugReport), loaded, rail("Audio")],
+      steps: [open(ASSETS.bugReport), audioWaveformDrawn, loaded, rail("Audio")],
       demonstrates: ["editorVideo.toolFlyout:audio"],
     },
     "tracks-popover": {
@@ -291,6 +309,7 @@ export const editorVideo = catalog(
       how: "Open “Team notes” and press Tracks in the transport bar: a panel lists the lanes with a checkbox each, Clips always on.",
       steps: [
         open(ASSETS.teamNotes),
+        audioWaveformDrawn,
         loaded,
         // The trigger's name carries the count ("Tracks, 5 of 5 shown"), so match the start.
         { click: { area: "editorVideo.transport", part: { role: "button", name: "Tracks" } } },
@@ -302,6 +321,7 @@ export const editorVideo = catalog(
       how: "Open “Team notes” and press Guide in the header: the Timeline guide opens on the Clips tab, with the sample timeline lit on Clips.",
       steps: [
         open(ASSETS.teamNotes),
+        audioWaveformDrawn,
         loaded,
         {
           click: { area: "editorVideo.toolbar", part: { role: "button", name: "Timeline guide" } },
@@ -314,6 +334,7 @@ export const editorVideo = catalog(
       how: "Open “Team notes”, press Guide in the header, then the Zooms tab: the legend explains zoom blocks, amber click ticks and pauses.",
       steps: [
         open(ASSETS.teamNotes),
+        audioWaveformDrawn,
         loaded,
         {
           click: { area: "editorVideo.toolbar", part: { role: "button", name: "Timeline guide" } },
@@ -327,6 +348,7 @@ export const editorVideo = catalog(
       how: "Open “Team notes”, press Guide in the header, then the Webcam tab: the legend explains the frame strip, hidden and custom blocks.",
       steps: [
         open(ASSETS.teamNotes),
+        audioWaveformDrawn,
         loaded,
         {
           click: { area: "editorVideo.toolbar", part: { role: "button", name: "Timeline guide" } },
@@ -340,6 +362,7 @@ export const editorVideo = catalog(
       how: "Open “Team notes” and press the speed button next to mute twice: it reads 2× and the preview plays at double speed.",
       steps: [
         open(ASSETS.teamNotes),
+        audioWaveformDrawn,
         loaded,
         // The button's name carries the speed ("Playback speed 1×"), so match the start.
         {
@@ -363,7 +386,7 @@ export const editorVideo = catalog(
       // Two presses reach 400% (100% → 200% → 400%); a sixth would be a click on a disabled
       // button (2000% is the deepest zoom, reached by the fifth press), which Playwright waits on
       // until the step times out.
-      steps: [open(ASSETS.teamNotes), loaded, zoomIn, zoomIn],
+      steps: [open(ASSETS.teamNotes), audioWaveformDrawn, loaded, zoomIn, zoomIn],
       demonstrates: ["editorVideo.transport:zoomed", "editorVideo.timeline:zoomed"],
     },
     "mute-all": {
@@ -371,6 +394,7 @@ export const editorVideo = catalog(
       how: "Open “Bug report” and press Mute the whole recording: the audio lane reads muted and the edit saves.",
       steps: [
         open(ASSETS.bugReport),
+        audioWaveformDrawn,
         loaded,
         rail("Audio"),
         flyoutItem("Mute the whole recording"),
@@ -385,6 +409,7 @@ export const editorVideo = catalog(
       how: "Open “Walkthrough 1”, which has no captures, and press Captures in the tool column: the right column shows the empty panel, which points to the camera in the top bar.",
       steps: [
         open(ASSETS.walkthrough),
+        audioWaveformDrawn,
         loaded,
         rail("Captures"),
         // The panel is drawn before its first read lands; the empty state is what follows.
@@ -403,6 +428,7 @@ export const editorVideo = catalog(
       how: "Open “Weekly sync” and press Capture frame, the camera in the top bar: the frame at the playhead is saved into the library and the right column opens on the Captures list with its time.",
       steps: [
         open(ASSETS.weeklySync),
+        audioWaveformDrawn,
         loaded,
         captureFrameButton,
         captureListed,
@@ -419,6 +445,7 @@ export const editorVideo = catalog(
       how: "Open “Weekly sync”, press Capture frame in the top bar and rest the pointer on the new capture's image: a subtle dark veil covers it with the Go to button in its center. Its row below keeps the time, Add to timeline, Copy and Delete.",
       steps: [
         open(ASSETS.weeklySync),
+        audioWaveformDrawn,
         loaded,
         captureFrameButton,
         captureListed,
@@ -442,6 +469,7 @@ export const editorVideo = catalog(
       how: "Open “Weekly sync” and press Capture frame in the top bar twice at the same playhead: the second press saves nothing, outlines the existing capture and a toast says “Already captured at …”.",
       steps: [
         open(ASSETS.weeklySync),
+        audioWaveformDrawn,
         loaded,
         captureFrameButton,
         captureListed,
@@ -463,6 +491,7 @@ export const editorVideo = catalog(
       how: "Open “Weekly sync”, capture a frame from the top bar and press the capture's Delete button: a confirmation names the capture and nothing is deleted until it is confirmed.",
       steps: [
         open(ASSETS.weeklySync),
+        audioWaveformDrawn,
         loaded,
         captureFrameButton,
         captureListed,
@@ -481,7 +510,7 @@ export const editorVideo = catalog(
     "export-sheet": {
       profile: "default",
       how: "Open “Walkthrough 1” and press Export with the export quality at Balanced.",
-      steps: [open(ASSETS.walkthrough), loaded, exportSheet],
+      steps: [open(ASSETS.walkthrough), audioWaveformDrawn, loaded, exportSheet],
       demonstrates: ["editorVideo.exportSheet:open"],
       gates: [{ setting: "exportQuality", side: "balanced" }],
     },
@@ -491,6 +520,7 @@ export const editorVideo = catalog(
       steps: [
         settings({ exportQuality: "maximum" }),
         open(ASSETS.walkthrough),
+        audioWaveformDrawn,
         loaded,
         exportSheet,
       ],
@@ -501,6 +531,10 @@ export const editorVideo = catalog(
   },
   {
     notCapturable: {
+      "editorVideo.audioLane:empty": nc(
+        "needsSetup",
+        "the empty-state text shows only for a recording without an audio track, and every seeded recording has one; audio-lane.test.tsx covers it",
+      ),
       "editorVideo.toolbar:saving": nc(
         "transient",
         "held for ~800 ms after an edit, until the autosave writes; a shot would race it",

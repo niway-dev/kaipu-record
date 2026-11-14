@@ -70,7 +70,7 @@ describe("useAudioPeaks", () => {
   it("publishes the reduced peaks of the decoded samples and closes every sample", async () => {
     const samples = [fakeSample(0, [0.1, 0.5]), fakeSample(0.02, [0.25, -0.75])];
     stubSamples(samples);
-    const { result } = renderHook(() => useAudioPeaks(URL_R1, 1, true));
+    const { result } = renderHook(() => useAudioPeaks(URL_R1, 1));
 
     await waitFor(() => expect(result.current?.filled).toBe(4));
     expect(Array.from(result.current!.peaks.slice(0, 4))).toEqual(
@@ -87,7 +87,7 @@ describe("useAudioPeaks", () => {
     let call = 0;
     sample.copyTo = (dest) => dest.set(call++ === 0 ? [0.3, 0.2] : [0.1, 0.9]);
     stubSamples([sample]);
-    const { result } = renderHook(() => useAudioPeaks(URL_R1, 1, true));
+    const { result } = renderHook(() => useAudioPeaks(URL_R1, 1));
 
     await waitFor(() => expect(result.current?.filled).toBe(2));
     expect(result.current!.peaks[0]).toBeCloseTo(0.3);
@@ -97,56 +97,56 @@ describe("useAudioPeaks", () => {
   it("returns null and disposes the input when the recording has no audio track", async () => {
     stubInput(null);
     stubSamples([]);
-    const { result } = renderHook(() => useAudioPeaks(URL_R1, 1, true));
+    const { result } = renderHook(() => useAudioPeaks(URL_R1, 1));
 
     await waitFor(() => expect(inputs[0]!.dispose).toHaveBeenCalled());
     expect(result.current).toBeNull();
     expect(SinkMock).not.toHaveBeenCalled();
   });
 
-  it("decodes nothing while disabled or without a url", () => {
+  it("decodes nothing without a url or a duration", () => {
     stubSamples([fakeSample(0, [0.5])]);
-    const disabled = renderHook(() => useAudioPeaks(URL_R1, 1, false));
-    const empty = renderHook(() => useAudioPeaks("", 1, true));
+    const noUrl = renderHook(() => useAudioPeaks("", 1));
+    const noDuration = renderHook(() => useAudioPeaks(URL_R1, 0));
 
     expect(openMock).not.toHaveBeenCalled();
-    expect(disabled.result.current).toBeNull();
-    expect(empty.result.current).toBeNull();
+    expect(noUrl.result.current).toBeNull();
+    expect(noDuration.result.current).toBeNull();
   });
 
-  it("starts decoding when the flag turns on and drops the peaks when it turns off", async () => {
+  it("starts decoding when the url arrives and drops the peaks when it goes away", async () => {
     stubSamples([fakeSample(0, [0.5])]);
-    const { result, rerender } = renderHook(({ enabled }) => useAudioPeaks(URL_R1, 1, enabled), {
-      initialProps: { enabled: false },
+    const { result, rerender } = renderHook(({ url }) => useAudioPeaks(url, 1), {
+      initialProps: { url: "" },
     });
     expect(openMock).not.toHaveBeenCalled();
 
-    rerender({ enabled: true });
+    rerender({ url: URL_R1 });
     await waitFor(() => expect(result.current?.filled).toBe(1));
 
-    rerender({ enabled: false });
+    rerender({ url: "" });
     expect(result.current).toBeNull();
   });
 
   it("reuses the peaks of a recording reopened in the same session", async () => {
     stubSamples([fakeSample(0, [0.5, 0.4])]);
-    const first = renderHook(() => useAudioPeaks(URL_R1, 1, true));
+    const first = renderHook(() => useAudioPeaks(URL_R1, 1));
     await waitFor(() => expect(first.result.current?.filled).toBe(2));
     await waitFor(() => expect(inputs[0]!.dispose).toHaveBeenCalled());
     first.unmount();
 
-    const second = renderHook(() => useAudioPeaks(URL_R1, 1, true));
+    const second = renderHook(() => useAudioPeaks(URL_R1, 1));
     expect(second.result.current?.filled).toBe(2); // published on mount, no waiting
     expect(openMock).toHaveBeenCalledTimes(1);
   });
 
   it("keys the cache by url and duration", async () => {
     stubSamples([fakeSample(0, [0.5])]);
-    const first = renderHook(() => useAudioPeaks(URL_R1, 1, true));
+    const first = renderHook(() => useAudioPeaks(URL_R1, 1));
     await waitFor(() => expect(first.result.current?.filled).toBe(1));
     first.unmount();
 
-    const other = renderHook(() => useAudioPeaks(URL_R1, 2, true));
+    const other = renderHook(() => useAudioPeaks(URL_R1, 2));
     await waitFor(() => expect(openMock).toHaveBeenCalledTimes(2));
     other.unmount();
   });
@@ -161,7 +161,7 @@ describe("useAudioPeaks", () => {
         }),
       };
     } as never);
-    const { result } = renderHook(() => useAudioPeaks(URL_R1, 1, true));
+    const { result } = renderHook(() => useAudioPeaks(URL_R1, 1));
 
     await waitFor(() => expect(inputs[0]!.dispose).toHaveBeenCalled());
     expect(result.current).toBeNull();
@@ -169,11 +169,11 @@ describe("useAudioPeaks", () => {
 
   it("does not cache a decode that was cancelled", async () => {
     stubSamples([fakeSample(0, [0.5])]);
-    const first = renderHook(() => useAudioPeaks(URL_R1, 1, true));
+    const first = renderHook(() => useAudioPeaks(URL_R1, 1));
     first.unmount(); // before the decode could finish
     await waitFor(() => expect(inputs[0]!.dispose).toHaveBeenCalled());
 
-    renderHook(() => useAudioPeaks(URL_R1, 1, true));
+    renderHook(() => useAudioPeaks(URL_R1, 1));
     await waitFor(() => expect(openMock).toHaveBeenCalledTimes(2));
   });
 });

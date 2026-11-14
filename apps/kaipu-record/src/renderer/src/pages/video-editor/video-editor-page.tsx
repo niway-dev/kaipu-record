@@ -630,7 +630,7 @@ function VideoEditor({
   // The Audio lane's waveform (NIW2-775). Hiding the lane does not stop the decode: a decode
   // cancelled halfway would start over from 0 when the lane comes back, which on a long take
   // costs the whole decode again.
-  const audioPeaks = useAudioPeaks(sourceUrl, source.durationSeconds, true);
+  const audioPeaks = useAudioPeaks(sourceUrl, source.durationSeconds);
   const selection = useEditorSelection();
   // `select` / `clear` are stable (useCallback, no deps); the `selection` object itself
   // is rebuilt every render, so never put it in a dependency array.

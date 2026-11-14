@@ -52,18 +52,14 @@ export function __resetAudioPeaksCacheForTests(): void {
  * are kept per recording in a small LRU. Cuts never invalidate it: the lane reads the
  * peaks by source time.
  *
- * Null while `enabled` is false, without an audio track, or if decoding fails: the
+ * Null without a media url, without an audio track, or if decoding fails: the
  * waveform is cosmetic and must never break the editor.
  */
-export function useAudioPeaks(
-  mediaUrl: string,
-  durationSeconds: number,
-  enabled: boolean,
-): AudioPeaks | null {
+export function useAudioPeaks(mediaUrl: string, durationSeconds: number): AudioPeaks | null {
   const [audioPeaks, setAudioPeaks] = useState<AudioPeaks | null>(null);
 
   useEffect(() => {
-    if (!enabled || !mediaUrl || !(durationSeconds > 0)) {
+    if (!mediaUrl || !(durationSeconds > 0)) {
       setAudioPeaks(null);
       return;
     }
@@ -133,7 +129,7 @@ export function useAudioPeaks(
         setAudioPeaks(done);
       } catch {
         // The waveform is cosmetic; a decode failure must never break the editor. Drop
-        // the partial peaks so the lane looks exactly as it does without the flag.
+        // the partial peaks so the lane falls back to its empty-state look.
         if (!cancelled) setAudioPeaks(null);
       } finally {
         // Frees the UrlSource's cache and connections as soon as the work is done.
@@ -142,7 +138,7 @@ export function useAudioPeaks(
     })();
 
     return cleanup;
-  }, [mediaUrl, durationSeconds, enabled]);
+  }, [mediaUrl, durationSeconds]);
 
   return audioPeaks;
 }
