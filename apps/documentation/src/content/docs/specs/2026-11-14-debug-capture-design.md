@@ -76,6 +76,10 @@ gets its registry entry and pin test like every other.
   not hold the permission the signed app has. Then `desktopCapturer` returns blank or no
   sources: `screens/` is skipped, `state.json` says `"screens": "no permission"`, and the
   window images and the composite (which need no permission) are still written.
+- **Another window turns the tool on.** The preload exposes the flag reporters to every window
+  that loads it. Main accepts the report only when `event.sender` is the main window's
+  `webContents`, and coerces each value to `=== true`; a report from any other window is
+  ignored and logged.
 - **Holding the shortcut twice, or never.** The hold is idempotent: a flag report that is
   already applied does nothing. When `holdTemporaryShortcut` returns `false` (another app owns
   the key), main logs it once and tries again on the next flag report.
