@@ -689,6 +689,87 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
     expect(getExportSnapshot().job?.sourceTitle).toBe("First call");
   });
 
+  describe("a cancelled export that is still waiting while a new one runs", () => {
+    const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const ok = (url: string) => ({ ok: true, status: 200, blob: async () => new Blob([url]) });
+
+    it("its late 404 on a joined file leaves the new export running", async () => {
+      let answerA!: (response: unknown) => void;
+      const held = new Promise((resolve) => (answerA = resolve));
+      const fetch = vi.fn(async (url: string) => (url.includes("vault-b") ? held : ok(url)));
+      vi.stubGlobal("fetch", fetch);
+      void startVideoExport(
+        args({ scene: JOINED_SCENE, joined: [entry("b")], title: "Export A" }),
+        t,
+      );
+      await waitFor(() => expect(fetch).toHaveBeenCalledWith("kaipu-media://recording/vault-b"));
+      cancelVideoExport();
+      await startVideoExport(args({ title: "Export B" }), t);
+      await waitFor(() => expect(workers).toHaveLength(1));
+      const sessionB = vi.mocked(window.electronAPI.recordingCreate).mock.calls[0]![0];
+
+      answerA({ ok: false, status: 404, blob: async () => new Blob([]) });
+      await flush();
+
+      expect(getExportSnapshot()).toMatchObject({ status: "exporting", error: null });
+      expect(getExportSnapshot().job?.sourceTitle).toBe("Export B");
+      expect(isVideoExportBusy()).toBe(true);
+      expect(workers[0]!.terminate).not.toHaveBeenCalled();
+      expect(window.electronAPI.recordingAbort).not.toHaveBeenCalledWith(sessionB);
+      expect(vi.mocked(window.electronAPI.setExportActive).mock.calls.at(-1)).toEqual([true]);
+    });
+
+    it("its late writer session never replaces the new export's worker or session", async () => {
+      let sessionA!: () => void;
+      window.electronAPI.recordingCreate = vi
+        .fn()
+        .mockImplementationOnce(() => new Promise<void>((resolve) => (sessionA = resolve)))
+        .mockResolvedValue({ tempPath: "/tmp/b.part" });
+      void startVideoExport(args({ title: "Export A" }), t);
+      await waitFor(() => expect(window.electronAPI.recordingCreate).toHaveBeenCalledTimes(1));
+      const idA = vi.mocked(window.electronAPI.recordingCreate).mock.calls[0]![0];
+      cancelVideoExport();
+      await startVideoExport(args({ title: "Export B" }), t);
+      await waitFor(() => expect(workers).toHaveLength(1));
+      const idB = vi.mocked(window.electronAPI.recordingCreate).mock.calls[1]![0];
+
+      sessionA();
+      await flush();
+
+      expect(workers).toHaveLength(1);
+      expect(workers[0]!.terminate).not.toHaveBeenCalled();
+      expect(window.electronAPI.recordingAbort).toHaveBeenCalledWith(idA);
+      expect(window.electronAPI.recordingAbort).not.toHaveBeenCalledWith(idB);
+      // B is still the export that finishes: its worker's messages reach its own session.
+      workers[0]!.onmessage?.({
+        data: { type: "chunk", data: new ArrayBuffer(1), position: 0 },
+      } as MessageEvent);
+      expect(window.electronAPI.recordingWrite).toHaveBeenCalledWith(idB, expect.anything(), 0);
+    });
+
+    it("its lease wait ending later does not read any file for it", async () => {
+      let leaseA!: () => void;
+      window.electronAPI.beginExport = vi
+        .fn()
+        .mockImplementationOnce(() => new Promise<void>((resolve) => (leaseA = resolve)))
+        .mockResolvedValue(undefined);
+      const fetch = vi.fn(async (url: string) => ok(url));
+      vi.stubGlobal("fetch", fetch);
+      void startVideoExport(args({ title: "Export A", sourceId: "rec-a" }), t);
+      await waitFor(() => expect(window.electronAPI.beginExport).toHaveBeenCalledTimes(1));
+      cancelVideoExport();
+      await startVideoExport(args({ title: "Export B", sourceId: "rec-b" }), t);
+      await waitFor(() => expect(workers).toHaveLength(1));
+
+      leaseA();
+      await flush();
+
+      expect(fetch.mock.calls.map((c) => c[0])).toEqual(["kaipu-media://recording/rec-b"]);
+      expect(workers).toHaveLength(1);
+      expect(getExportSnapshot().status).toBe("exporting");
+    });
+  });
+
   describe("audio of the joined recordings", () => {
     const probe = (hasAudio: boolean) => ({
       width: 1920,

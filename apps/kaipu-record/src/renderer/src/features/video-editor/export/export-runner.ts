@@ -192,6 +192,11 @@ let sessionId: string | null = null;
 // (the worker is terminated synchronously, but a message already queued on the event loop
 // could still be delivered first).
 let active = false;
+// Which `startVideoExport` call owns the running export. Every await in a call can outlive a
+// cancel(), and by then another call may be exporting: a continuation acts only while its own
+// number is still the current one (`isCurrent`), so a cancelled export's late failure, session
+// or fetch can never tear down or replace the export that took its place.
+let runCounter = 0;
 // What Retry re-runs.
 let lastStart: { args: StartExportArgs; t: Translator<"videoEditor"> } | null = null;
 
@@ -397,6 +402,8 @@ export async function startVideoExport(
   }
 
   active = true;
+  const run = ++runCounter;
+  const isCurrent = (): boolean => active && runCounter === run;
   // A new export replaces the previous one's Ready card.
   set({
     status: "exporting",
@@ -408,6 +415,9 @@ export async function startVideoExport(
   });
 
   const fail = (message: string, error?: unknown): void => {
+    // A cancelled export failing late: cancel() already released what it held, and the global
+    // session and worker now belong to the export that replaced it.
+    if (!isCurrent()) return;
     if (error !== undefined) captureException(error, { context: "video-export" });
     const id = sessionId;
     sessionId = null;
@@ -441,6 +451,9 @@ export async function startVideoExport(
     else fail(GENERIC_ERROR, error);
     return true;
   }
+  // Cancelled while main decided on the lease: cancel() reported "not exporting" after this
+  // call's `export:begin` reached main, and main released the lease then. Read nothing.
+  if (!isCurrent()) return true;
 
   let sourceBlob: Blob;
   let webcam: Awaited<ReturnType<typeof fetchWebcamTrack>>;
@@ -454,11 +467,13 @@ export async function startVideoExport(
     fail(GENERIC_ERROR, error);
     return true;
   }
+  if (!isCurrent()) return true;
   // Each joined recording a clip reads, in `recordingsUsed` order. A file that cannot be read
   // fails the export by name (`fail` ends the lease and the session); a joined webcam that
   // cannot be read only loses that recording's face.
   const joinedFiles: ExportStartMessage["joined"] = [];
   for (const { entry, offset } of usedJoined) {
+    if (!isCurrent()) return true;
     try {
       const response = await fetch(mediaUrl("recording", entry.id!));
       if (!response.ok) throw new Error(`joined recording ${entry.sourceId}: ${response.status}`);
@@ -469,6 +484,7 @@ export async function startVideoExport(
         entry.webcam,
         (error) => captureException(error, { context: "video-export-webcam" }),
       );
+      if (!isCurrent()) return true;
       joinedFiles.push({ sourceId: entry.sourceId, offset, blob, webcam: joinedWebcam });
     } catch (error) {
       fail(t("exportRecordingMissing", { title: entry.title }), error);
@@ -520,7 +536,7 @@ export async function startVideoExport(
       })),
     );
 
-    if (!active) {
+    if (!isCurrent()) {
       for (const m of mediaImages) m.bitmap.close();
       return; // cancelled while the above was in flight
     }
@@ -530,9 +546,11 @@ export async function startVideoExport(
     // An export, not a take: main keeps the camera bubble's protection on the live take.
     await window.electronAPI.recordingCreate(id, "export");
 
-    if (!active) {
-      teardown(id);
-      sessionId = null;
+    if (!isCurrent()) {
+      // Cancelled while main opened the session (cancel() aborted it, maybe before it
+      // existed). Abort only this call's id: the worker and `sessionId` may be the new
+      // export's.
+      void window.electronAPI.recordingAbort(id).catch(() => {});
       return;
     }
 
@@ -543,7 +561,7 @@ export async function startVideoExport(
 
     runWorker.onmessage = (event: MessageEvent<ExportWorkerMessage>) => {
       const msg = event.data;
-      if (!active || worker !== runWorker) return;
+      if (!isCurrent() || worker !== runWorker) return;
       if (msg.type === "chunk") {
         window.electronAPI.recordingWrite(id, msg.data, msg.position);
       } else if (msg.type === "poster") {
@@ -566,7 +584,7 @@ export async function startVideoExport(
           sessionId = null;
           if (snapshot.status === "exporting") set({ fraction: 0, attemptStartedAt: Date.now() });
           void launch({ ...runTarget, fastStart: false }).catch((error: unknown) => {
-            if (active) fail(GENERIC_ERROR, error);
+            fail(GENERIC_ERROR, error);
           });
           return;
         }
@@ -578,7 +596,7 @@ export async function startVideoExport(
           // writer session aborted, `active` flipped false) — finalizing or calling
           // onSaved past that point would resurrect a cancelled export.
           await Promise.resolve();
-          if (!active) return;
+          if (!isCurrent()) return;
           const fingerprint =
             args.fingerprint && faceDropped
               ? facelessFingerprint(args.fingerprint)
@@ -601,7 +619,7 @@ export async function startVideoExport(
               ...(args.destination ? { exportDestination: args.destination } : {}),
             });
             // Re-check again: cancel() could have run during the finalize await too.
-            if (!active) return;
+            if (!isCurrent()) return;
             worker?.terminate();
             worker = null;
             sessionId = null;
@@ -620,7 +638,6 @@ export async function startVideoExport(
               captureException(error, { context: "video-export-saved" });
             }
           } catch (error) {
-            if (!active) return;
             fail(GENERIC_ERROR, error);
           }
         })();
