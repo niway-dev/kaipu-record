@@ -123,6 +123,7 @@ export const editorVideo = catalog(
         "editorVideo.audioLane:empty",
       ],
       ready: { video: true },
+      gates: [{ flag: "audio-waveform", side: "off" }],
     },
     playing: {
       profile: "default",
@@ -169,6 +170,7 @@ export const editorVideo = catalog(
       steps: [open(ASSETS.walkthrough), loaded, audioWaveformDrawn],
       demonstrates: ["editorVideo.audioLane:waveform"],
       ready: { area: "editorVideo.audioLane" },
+      gates: [{ flag: "audio-waveform", side: "on" }],
     },
     "waveform-muted": {
       profile: "audio-waveform",
@@ -176,6 +178,7 @@ export const editorVideo = catalog(
       steps: [open(ASSETS.teamNotes), loaded, audioWaveformDrawn],
       demonstrates: ["editorVideo.audioLane:waveformMuted"],
       ready: { area: "editorVideo.audioLane" },
+      gates: [{ flag: "audio-waveform", side: "on" }],
     },
     "mute-selected": {
       profile: "default",

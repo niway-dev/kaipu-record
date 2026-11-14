@@ -266,7 +266,10 @@ export const UI_MAP = {
       privacyLane: { states: ["empty", "regions"] },
       // `waveform` and `waveformMuted` (hatched blocks over dimmed bars) need the
       // `audio-waveform` flag (NIW2-775); the other states are the lane without it.
-      audioLane: { states: ["empty", "mutedRanges", "allMuted", "waveform", "waveformMuted"] },
+      audioLane: {
+        states: ["empty", "mutedRanges", "allMuted", "waveform", "waveformMuted"],
+        gatedBy: [{ flag: "audio-waveform" }],
+      },
       exportSheet: { states: ["open"], gatedBy: [{ setting: "exportQuality" }] },
     },
   },
