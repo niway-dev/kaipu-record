@@ -96,3 +96,39 @@ describe("freeWindowAt", () => {
     expect(freeWindowAt(ranges, 4.5, 3, 30, 1)).toBeNull();
   });
 });
+
+describe("per-recording lookups on one source axis (ADR 0058)", () => {
+  // Opened recording A is [0, 100]; joined B is [3600, 3620]. Sequence: A 0–10, B 3605–3615,
+  // A 10–20, so on the timeline A1 is 0–10, B 10–20, A2 20–30.
+  const joined = toLayout([
+    { id: "a1", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+    { id: "b", kind: "clip", sourceStart: 3605, sourceEnd: 3615 },
+    { id: "a2", kind: "clip", sourceStart: 10, sourceEnd: 20 },
+  ]);
+
+  it("a range inside B maps only onto B's clip", () => {
+    expect(sourceRangeToTimelineBlocks(joined, 3607, 3612)).toEqual([
+      { itemId: "b", timelineStart: 12, timelineEnd: 17, sourceStart: 3607, sourceEnd: 3612 },
+    ]);
+  });
+
+  it("a range inside A maps only onto A's clips, never onto B's", () => {
+    const blocks = sourceRangeToTimelineBlocks(joined, 8, 12);
+    expect(blocks.map((b) => b.itemId)).toEqual(["a1", "a2"]);
+  });
+
+  it("a range in B's trimmed-away head is hidden, and one in the gap too", () => {
+    expect(isSourceRangeVisible(joined, 3600, 3604)).toBe(false);
+    expect(isSourceRangeVisible(joined, 200, 300)).toBe(false);
+    expect(isSourceRangeVisible(joined, 3606, 3608)).toBe(true);
+  });
+
+  it("the source time under the playhead tells which recording the playhead is on", () => {
+    expect(sourceTimeAtTimeline(joined, 12)).toBe(3607);
+    expect(sourceTimeAtTimeline(joined, 25)).toBe(15);
+  });
+
+  it("a range that runs past A's footage over the gap does not pick up B's clip", () => {
+    expect(sourceRangeToTimelineBlocks(joined, 15, 3000).map((b) => b.itemId)).toEqual(["a2"]);
+  });
+});

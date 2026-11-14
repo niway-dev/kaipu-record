@@ -26,6 +26,7 @@ import {
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "@kaipu/tokens/kaipu.stylex";
 import { Badge, Button } from "@kaipu/ui";
+import { clipBounds, sourceAxis } from "@renderer/features/video-editor/source-axis";
 import {
   boundaryIndexAt,
   clampOverlays,
@@ -1387,12 +1388,16 @@ function VideoEditor({
         controllerRef.current.beginInteract();
       }
       if (phase === "move") {
+        const current = controllerRef.current.scene;
+        const dragged = current.items.find((item) => item.id === itemId);
         const items = trimClip(
-          controllerRef.current.scene.items,
+          current.items,
           itemId,
           edge,
           sourceTime,
-          source.durationSeconds,
+          dragged?.kind === "clip"
+            ? clipBounds(sourceAxis(source.durationSeconds, current.sources), dragged)
+            : { start: 0, end: source.durationSeconds },
         );
         const duration = layoutDuration(toLayout(items));
         controllerRef.current.updateLive({

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TrackItem, VideoOverlay } from "./scene";
+import { clipBounds, sourceAxis } from "./source-axis";
 import {
   anchorAt,
   boundaryIndexAt,
@@ -192,8 +193,10 @@ describe("trimClip", () => {
     expect(trimClip(items, "a", "start", -5)[0]).toMatchObject({ sourceStart: 0 });
   });
 
-  it("clamps the end edge to the source duration", () => {
-    expect(trimClip([clip("a", 0, 30)], "a", "end", 90, 60)[0]).toMatchObject({ sourceEnd: 60 });
+  it("clamps the end edge to the end of the clip's range", () => {
+    expect(trimClip([clip("a", 0, 30)], "a", "end", 90, { start: 0, end: 60 })[0]).toMatchObject({
+      sourceEnd: 60,
+    });
   });
 
   it("start edge stops at the previous clip's end in source, or reclaims a deleted gap", () => {
@@ -363,5 +366,85 @@ describe("floating-item anchors", () => {
 
   it("is null on an empty layout", () => {
     expect(anchorAt([], 1)).toBeNull();
+  });
+});
+
+describe("joined recordings on one source axis (ADR 0058)", () => {
+  // A is the opened recording [0, 100]; B is joined at [3600, 3620].
+  const axis = sourceAxis(100, [
+    {
+      id: "src-b",
+      assetId: "lib-b",
+      title: "B",
+      offset: 3600,
+      durationSeconds: 20,
+      width: 0,
+      height: 0,
+    },
+  ]);
+  const boundsOf = (items: TrackItem[], id: string) =>
+    clipBounds(axis, items.find((i) => i.id === id) as { sourceStart: number });
+  // Sequence: A 0–10, B 3605–3615 (trimmed), A 10–20.
+  const items = [clip("a1", 0, 10), clip("b", 3605, 3615), clip("a2", 10, 20)];
+
+  it("trimClip stops a joined clip at both ends of its range", () => {
+    const b = boundsOf(items, "b");
+    expect(trimClip(items, "b", "end", 4000, b)[1]).toMatchObject({ sourceEnd: 3620 });
+    expect(trimClip(items, "b", "start", 100, b)[1]).toMatchObject({ sourceStart: 3600 });
+  });
+
+  it("trimClip cannot pull a joined clip's start back into A", () => {
+    expect(trimClip(items, "b", "start", 20, boundsOf(items, "b"))[1]).toMatchObject({
+      sourceStart: 3600,
+    });
+  });
+
+  it("trimClip keeps A's clips out of B's range", () => {
+    expect(trimClip(items, "a2", "end", 3610, boundsOf(items, "a2"))[2]).toMatchObject({
+      sourceEnd: 100,
+    });
+  });
+
+  it("splitting a joined clip leaves both halves inside its range", () => {
+    // B plays on the timeline at 10–20; cut at 13 → source 3608.
+    const next = splitClipAt(items, 13);
+    const halves = next.filter((i) => i.kind === "clip" && i.sourceStart >= 3600) as {
+      sourceStart: number;
+      sourceEnd: number;
+    }[];
+    expect(halves.map((h) => [h.sourceStart, h.sourceEnd])).toEqual([
+      [3605, 3608],
+      [3608, 3615],
+    ]);
+    for (const h of halves) {
+      expect(h.sourceStart).toBeGreaterThanOrEqual(3600);
+      expect(h.sourceEnd).toBeLessThanOrEqual(3620);
+    }
+  });
+
+  it("reordering and deleting keep a joined clip's source range unchanged", () => {
+    const moved = insertItemAt(removeItem(items, "b"), 0, items[1]);
+    expect(moved.map((i) => i.id)).toEqual(["b", "a1", "a2"]);
+    expect(moved[0]).toMatchObject({ sourceStart: 3605, sourceEnd: 3615 });
+    expect(removeItem(items, "b").map((i) => i.id)).toEqual(["a1", "a2"]);
+  });
+
+  it("a source anchor inside B's range follows B's clip after a reorder", () => {
+    const anchor = { kind: "source" as const, time: 3607 };
+    expect(resolveAnchor(toLayout(items), anchor)).toBeCloseTo(12);
+    const reordered = [items[1], items[0], items[2]];
+    expect(resolveAnchor(toLayout(reordered), anchor)).toBeCloseTo(2);
+  });
+
+  it("a source anchor inside B's range resolves to null once B's clip is deleted", () => {
+    expect(
+      resolveAnchor(toLayout(removeItem(items, "b")), { kind: "source", time: 3607 }),
+    ).toBeNull();
+  });
+
+  it("an anchor on A does not follow B", () => {
+    expect(
+      resolveAnchor(toLayout(removeItem(items, "b")), { kind: "source", time: 12 }),
+    ).toBeCloseTo(12);
   });
 });

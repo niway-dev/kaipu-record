@@ -4,6 +4,7 @@ import { initialScene } from "../scene";
 import {
   addManualZoom,
   applySensitivity,
+  applySensitivityToRecordings,
   dragZoomEdge,
   lockZoomAt,
   removeZoom,
@@ -95,5 +96,29 @@ describe("dragZoomEdge", () => {
     const [, s] = dragZoomEdge(two, "auto-8000", "end", 99, 20).zoomSegments;
     expect(s.end).toBe(20);
     expect(dragZoomEdge(two, "nope", "end", 5, 20)).toBe(two);
+  });
+});
+
+describe("applySensitivityToRecordings", () => {
+  it("is applySensitivity for one recording at offset 0", () => {
+    expect(
+      applySensitivityToRecordings(withZoom, [{ offset: 0, duration: 20, track: TRACK }], 60),
+    ).toEqual(applySensitivity(withZoom, TRACK, 20, 60));
+  });
+
+  it("regenerates each recording's autos without touching the other's manual zooms", () => {
+    const manualB: ZoomSegment = { ...AUTO, id: "mb", start: 3601, end: 3603, origin: "manual" };
+    const scene = { ...initialScene(20), zoomSegments: [AUTO, manualB] };
+    const next = applySensitivityToRecordings(
+      scene,
+      [
+        { offset: 0, duration: 20, track: TRACK },
+        { offset: 3600, duration: 20, track: TRACK },
+      ],
+      60,
+    );
+    expect(next.zoomSegments).toContainEqual(manualB);
+    expect(next.zoomSegments.filter((z) => z.start >= 3600 && z.origin === "auto")).toHaveLength(1);
+    expect(next.zoomSegments.filter((z) => z.start < 3600)).toHaveLength(1);
   });
 });

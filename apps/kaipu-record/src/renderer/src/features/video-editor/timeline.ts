@@ -156,8 +156,11 @@ export function trimClip(
   itemId: string,
   edge: "start" | "end",
   sourceTime: number,
-  /** Length of the source recording; the end edge never goes past it. */
-  sourceDuration: number = Infinity,
+  /**
+   * The range of the recording this clip belongs to (`clipBounds` in source-axis.ts); an edge
+   * never leaves it, so a joined clip cannot grow into the gap or into another recording.
+   */
+  bounds: { start: number; end: number } = { start: 0, end: Infinity },
 ): TrackItem[] {
   return items.map((item) => {
     if (item.id !== itemId || item.kind !== "clip") return item;
@@ -165,8 +168,8 @@ export function trimClip(
     // disjoint, so the dragged edge stops at the nearest other clip lying wholly on that
     // side (a deleted gap can be reclaimed, another clip's footage cannot). Clips that
     // ALREADY overlap this one (legacy/persisted state) are ignored so it is never trapped.
-    let lower = 0;
-    let upper = sourceDuration;
+    let lower = bounds.start;
+    let upper = bounds.end;
     for (const other of items) {
       if (other.id === itemId || other.kind !== "clip") continue;
       if (other.sourceEnd <= item.sourceStart) lower = Math.max(lower, other.sourceEnd);

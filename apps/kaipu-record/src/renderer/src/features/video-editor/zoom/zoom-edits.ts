@@ -7,7 +7,8 @@ import type { CursorTrack } from "@shared/cursor-track";
 import { newId, type VideoScene } from "../scene";
 import { dragRangeEdge } from "../source-time";
 import { clampAnchor } from "./camera-path";
-import { DETECTION, detectZoomSegments, replaceAutoSegments } from "./detect-zoom-segments";
+import { DETECTION } from "./detect-zoom-segments";
+import { replaceAutoZooms, type RecordingZoomInput } from "./recording-zooms";
 import { ZOOM_DEFAULTS, ZOOM_LIMITS, type ZoomSegment } from "./zoom-model";
 
 /**
@@ -126,11 +127,24 @@ export function applySensitivity(
   sourceDurationSeconds: number,
   sensitivity: number,
 ): VideoScene {
-  const s = Math.min(100, Math.max(0, Math.round(sensitivity)));
-  const zoomSegments = replaceAutoSegments(
-    scene.zoomSegments,
-    detectZoomSegments(track, sourceDurationSeconds, s),
+  return applySensitivityToRecordings(
+    scene,
+    [{ offset: 0, duration: sourceDurationSeconds, track }],
+    sensitivity,
   );
+}
+
+/**
+ * The same for a scene with joined recordings (ADR 0058): detection runs per recording on its
+ * own track, shifted into its range. One entry with offset 0 is `applySensitivity`.
+ */
+export function applySensitivityToRecordings(
+  scene: VideoScene,
+  recordings: readonly RecordingZoomInput[],
+  sensitivity: number,
+): VideoScene {
+  const s = Math.min(100, Math.max(0, Math.round(sensitivity)));
+  const zoomSegments = replaceAutoZooms(scene.zoomSegments, recordings, s);
   // A Re-analyse that changes nothing — or a slider dragged back to where it started —
   // must return the SAME object: `commit` and `endInteract` no-op on reference equality,
   // so no undo step is pushed, the editor does not go dirty and the autosave stays quiet.
