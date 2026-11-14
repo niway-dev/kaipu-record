@@ -100,6 +100,19 @@ describe("AddFromLibraryPanel", () => {
     expect(screen.getByText("No other recordings")).toBeInTheDocument();
   });
 
+  it("says the read failed, not that there are no recordings, when it failed with no rows", () => {
+    renderPanel({ failed: true, videos: [] });
+    expect(
+      screen.getByText("Couldn't read the Library. It will try again when it changes."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No other recordings")).toBeNull();
+  });
+
+  it("still lists the rows it has when a read failed", () => {
+    renderPanel({ failed: true, videos: [video({ assetId: "a", title: "Checkout bug" })] });
+    expect(screen.getByText("Checkout bug")).toBeInTheDocument();
+  });
+
   it("says it is loading, and nothing about empty, before the first read lands", () => {
     renderPanel({ loaded: false });
     expect(screen.getByText("Loading recordings…")).toBeInTheDocument();

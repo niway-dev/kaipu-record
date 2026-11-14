@@ -14,6 +14,8 @@ export interface AddFromLibraryPanelProps {
   openedAssetId: string;
   /** False until the first read lands: nothing is said about "no recordings" before that. */
   loaded: boolean;
+  /** The latest Library read failed: with no rows to show, say so instead of "No other recordings". */
+  failed?: boolean;
   /** Add this recording to the sequence (a click on its row). */
   onAdd(video: LibraryVideo): void;
   /** A row started to be dragged: the browser hides a drag's contents until the drop, so the
@@ -33,6 +35,7 @@ export function AddFromLibraryPanel({
   videos,
   openedAssetId,
   loaded,
+  failed = false,
   onAdd,
   onDragStart,
   onDragEnd,
@@ -82,7 +85,11 @@ export function AddFromLibraryPanel({
         <p className={styles.note}>{t("addFromLibraryLoading")}</p>
       ) : shown.length === 0 ? (
         <p className={styles.note}>
-          {all.length === 0 ? t("addFromLibraryEmpty") : t("addFromLibraryNoMatch")}
+          {all.length === 0
+            ? failed
+              ? t("addFromLibraryFailed")
+              : t("addFromLibraryEmpty")
+            : t("addFromLibraryNoMatch")}
         </p>
       ) : (
         <ul className={styles.list}>

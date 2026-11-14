@@ -7,6 +7,8 @@ export interface LibraryRecordings {
   videos: LibraryVideo[];
   /** True once a read has landed (or failed), so "no recordings" is never said before it. */
   loaded: boolean;
+  /** True when the latest read rejected or the vault could not be read: an empty list then is not "no recordings". */
+  failed: boolean;
 }
 
 /**
@@ -14,11 +16,15 @@ export interface LibraryRecordings {
  * each time `enabled` turns on, and another whenever main broadcasts `library:changed` while it
  * is on, like `useSourceCaptures`. Deliberately not `useLocalLibrary`: that hook also
  * re-confirms the cloud catalog, reports errors as toasts and heals orphan metadata
- * (decoding video), none of which belongs in the editor. A failed read ends loading with an
- * empty list rather than loading for ever.
+ * (decoding video), none of which belongs in the editor. A failed read ends loading and sets
+ * `failed`, rather than loading for ever or passing for an empty Library.
  */
 export function useLibraryRecordings(enabled: boolean): LibraryRecordings {
-  const [state, setState] = useState<LibraryRecordings>({ videos: [], loaded: false });
+  const [state, setState] = useState<LibraryRecordings>({
+    videos: [],
+    loaded: false,
+    failed: false,
+  });
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
@@ -29,10 +35,15 @@ export function useLibraryRecordings(enabled: boolean): LibraryRecordings {
       try {
         const result = await window.electronAPI.listLibraryItems();
         if (alive && seq === latest) {
-          setState({ videos: result.items.map(toLibraryVideo), loaded: true });
+          // On a vault error the cloud-only items are still real data, so they are kept.
+          setState({
+            videos: result.items.map(toLibraryVideo),
+            loaded: true,
+            failed: result.vaultError !== null,
+          });
         }
       } catch {
-        if (alive && seq === latest) setState((prev) => ({ ...prev, loaded: true }));
+        if (alive && seq === latest) setState((prev) => ({ ...prev, loaded: true, failed: true }));
       }
     };
     void read();

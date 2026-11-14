@@ -45,7 +45,7 @@ describe("useLibraryRecordings", () => {
   it("reads nothing while disabled, so a closed panel costs no Library read", () => {
     const { result } = renderHook(() => useLibraryRecordings(false));
     expect(window.electronAPI.listLibraryItems).not.toHaveBeenCalled();
-    expect(result.current).toEqual({ videos: [], loaded: false });
+    expect(result.current).toEqual({ videos: [], loaded: false, failed: false });
   });
 
   it("reads the Library once when it turns on and maps the items", async () => {
@@ -92,5 +92,29 @@ describe("useLibraryRecordings", () => {
     const { result } = renderHook(() => useLibraryRecordings(true));
     await waitFor(() => expect(result.current.loaded).toBe(true));
     expect(result.current.videos).toEqual([]);
+    expect(result.current.failed).toBe(true);
+  });
+
+  it("keeps the items and flags failed when the vault cannot be read", async () => {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: [item("cloud", { local: null })],
+      vaultError: "EACCES",
+      catalogVerifiedAt: null,
+    })) as never;
+    const { result } = renderHook(() => useLibraryRecordings(true));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.failed).toBe(true);
+    expect(result.current.videos.map((v) => v.assetId)).toEqual(["cloud"]);
+  });
+
+  it("a clean read after a failed one clears failed", async () => {
+    window.electronAPI.listLibraryItems = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("ipc down"))
+      .mockResolvedValue({ items, vaultError: null, catalogVerifiedAt: null }) as never;
+    const { result } = renderHook(() => useLibraryRecordings(true));
+    await waitFor(() => expect(result.current.failed).toBe(true));
+    act(() => changed?.());
+    await waitFor(() => expect(result.current.failed).toBe(false));
   });
 });

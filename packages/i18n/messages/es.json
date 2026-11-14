@@ -1504,6 +1504,7 @@
     "addFromLibraryClose": "Cerrar Agregar desde la Biblioteca",
     "addFromLibrarySearch": "Buscar grabaciones",
     "addFromLibraryEmpty": "No hay otras grabaciones",
+    "addFromLibraryFailed": "No se pudo leer la Biblioteca. Volverá a intentarlo cuando cambie.",
     "addFromLibraryNoMatch": "Ninguna grabación coincide",
     "addFromLibraryLoading": "Cargando grabaciones…",
     "addFromLibraryHint": "Haz clic en una grabación para agregarla en el corte más cercano al cabezal, o arrástrala sobre la secuencia.",
