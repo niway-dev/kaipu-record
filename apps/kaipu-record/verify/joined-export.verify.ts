@@ -1,11 +1,17 @@
 import { test, expect, type Page } from "@playwright/test";
 import { execFile } from "node:child_process";
-import { copyFile, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { dismissOnboarding, launchApp, localIdForAssetId } from "../e2e/helpers/launch";
 import { ffprobeAvailable } from "../e2e/helpers/ffprobe";
-import { ensureFixtures, FIXTURE_FILES, FIXTURES_DIR } from "../ui-catalog/fixtures/make-fixtures";
+import {
+  ensureFixtures,
+  FIXTURE_FILES,
+  FIXTURES_DIR,
+  joinedLetterFilters,
+} from "../ui-catalog/fixtures/make-fixtures";
 import { ASSETS, joinedScene, seedCatalogVault } from "../ui-catalog/fixtures/seed-vault";
 import { parseSession } from "../src/renderer/src/features/video-editor/session";
 import { toLayout } from "../src/renderer/src/features/video-editor/timeline";
@@ -25,6 +31,7 @@ import enMessages from "../../../packages/i18n/messages/en.json";
 const NAME = "joined-export";
 const OUT_DIR = path.resolve(__dirname, "..", "test-results", "verify", NAME);
 const OPENED_SECONDS = 12;
+const JOINED_SECONDS = 7;
 const run = promisify(execFile);
 
 interface Span {
@@ -66,6 +73,7 @@ interface ProbeInfo {
   width: number;
   height: number;
   durationSec: number;
+  videoDurationSec: number;
   videoCodec: string;
   audioCodec: string | null;
 }
@@ -97,6 +105,7 @@ async function probe(file: string): Promise<ProbeInfo> {
     width: video.width ?? 0,
     height: video.height ?? 0,
     durationSec: Number(json.format.duration ?? video.duration),
+    videoDurationSec: Number(video.duration ?? json.format.duration),
     videoCodec: video.codec_name,
     audioCodec: audio?.codec_name ?? null,
   };
@@ -181,12 +190,126 @@ async function peakDb(file: string, start: number, length: number): Promise<numb
   return match[1] === "-inf" ? Number.NEGATIVE_INFINITY : Number(match[1]);
 }
 
+/** Mean level in dB of `[start, start + length)` of a file's audio (ffmpeg volumedetect). */
+async function meanDb(file: string, start: number, length: number): Promise<number> {
+  const { stderr } = await run("ffmpeg", [
+    "-hide_banner",
+    "-nostats",
+    "-ss",
+    start.toFixed(3),
+    "-t",
+    length.toFixed(3),
+    "-i",
+    file,
+    "-vn",
+    "-af",
+    "volumedetect",
+    "-f",
+    "null",
+    "-",
+  ]);
+  const match = /mean_volume:\s*(-?[\d.]+|-inf) dB/.exec(stderr);
+  if (!match) throw new Error(`volumedetect printed no mean_volume:\n${stderr.slice(-400)}`);
+  return match[1] === "-inf" ? Number.NEGATIVE_INFINITY : Number(match[1]);
+}
+
 /** Louder than this is sound; the fixtures' silent AAC measures about -91 dB or lower. */
 const AUDIBLE_DB = -60;
 
 async function seedWithJoined(vaultDir: string): Promise<void> {
   ensureFixtures();
   await seedCatalogVault(vaultDir, { now: Date.now(), content: "demo", joinedRecordings: true });
+}
+
+const OPENED_GROUND = "0x1c1d21";
+const JOINED_GROUND = "0x1d4ed8";
+
+/**
+ * One recording for the audio-routing proof, in the style of make-fixtures.ts (H.264, one
+ * keyframe per second, AAC, faststart). `audio` adds a 440 Hz sine; without it the file has no
+ * audio stream at all (`-an`), like a recording made with no microphone.
+ */
+async function makeRecording(
+  out: string,
+  opts: { seconds: number; ground: "opened" | "joined"; audio: boolean },
+): Promise<void> {
+  const opened = opts.ground === "opened";
+  const letter = opened ? [] : joinedLetterFilters(1920, 1080);
+  const args = [
+    "-hide_banner",
+    "-loglevel",
+    "error",
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    `color=c=${opened ? OPENED_GROUND : JOINED_GROUND}:s=1920x1080:r=30:d=${opts.seconds}`,
+  ];
+  if (opts.audio) {
+    args.push("-f", "lavfi", "-i", `sine=frequency=440:sample_rate=48000:duration=${opts.seconds}`);
+  }
+  if (letter.length > 0) args.push("-vf", letter.join(","));
+  args.push(
+    "-t",
+    String(opts.seconds),
+    "-c:v",
+    "libx264",
+    "-preset",
+    "veryfast",
+    "-threads",
+    "1",
+    "-pix_fmt",
+    "yuv420p",
+    "-g",
+    "30",
+    "-keyint_min",
+    "30",
+    "-sc_threshold",
+    "0",
+  );
+  if (opts.audio) args.push("-ac", "2", "-c:a", "aac", "-b:a", "64k");
+  else args.push("-an");
+  args.push("-movflags", "+faststart", out);
+  await run("ffmpeg", args);
+}
+
+/**
+ * The catalog vault, with the media of "Two recordings" (the opened one, 12 s) and "Checkout
+ * bug" (the joined one, 7 s) replaced by files made here: one has a sine tone and the other no
+ * audio stream. The catalog fixtures stay silent, so no catalog screenshot changes. The sidecars
+ * keep their durations (12 and 7); the edit's meta record is rewritten with the new file's size
+ * and mtime, which is what the editor checks before it trusts a saved edit.
+ */
+async function seedAudioRouting(
+  vaultDir: string,
+  which: "opened-sound" | "joined-sound",
+): Promise<void> {
+  await seedWithJoined(vaultDir);
+  const work = await mkdtemp(path.join(tmpdir(), "kaipu-audio-routing-"));
+  try {
+    const opened = path.join(work, "opened.mp4");
+    const joined = path.join(work, "joined.mp4");
+    await makeRecording(opened, {
+      seconds: OPENED_SECONDS,
+      ground: "opened",
+      audio: which === "opened-sound",
+    });
+    await makeRecording(joined, {
+      seconds: JOINED_SECONDS,
+      ground: "joined",
+      audio: which === "joined-sound",
+    });
+    await copyFile(opened, path.join(vaultDir, "Two recordings.mp4"));
+    await copyFile(joined, path.join(vaultDir, "Checkout bug.mp4"));
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+  const metaFile = path.join(vaultDir, ".kaipu", "Two recordings.edit.meta.json");
+  const meta = JSON.parse(await readFile(metaFile, "utf8")) as Record<string, unknown>;
+  const media = await stat(path.join(vaultDir, "Two recordings.mp4"));
+  meta.sourceSizeBytes = media.size;
+  meta.sourceMtimeMs = media.mtimeMs;
+  await writeFile(metaFile, `${JSON.stringify(meta, null, 2)}\n`);
 }
 
 /** Open the seeded item in the editor with the video loaded. */
@@ -218,8 +341,12 @@ async function startExport(page: Page): Promise<void> {
 }
 
 /** Launch, export one seeded item with the default preset, keep the MP4 in OUT_DIR. */
-async function exportItem(assetId: string, outName: string): Promise<string> {
-  const launched = await launchApp({ seedVault: seedWithJoined });
+async function exportItem(
+  assetId: string,
+  outName: string,
+  seedVault: (vaultDir: string) => Promise<void> = seedWithJoined,
+): Promise<string> {
+  const launched = await launchApp({ seedVault });
   try {
     await openItem(launched.page, assetId);
     await startExport(launched.page);
@@ -344,6 +471,59 @@ test("Two recordings keeps B's audio in B's span", async () => {
   }
   await writeFile(path.join(OUT_DIR, "report-audio.json"), JSON.stringify(report, null, 2));
   console.log(`[verify] ${NAME}: audio ${JSON.stringify(report)}`);
+});
+
+/**
+ * Layer 3 criterion: a recording without an audio track contributes silence for its clips
+ * instead of dropping the whole export's audio. Clips A1 and A2 read the opened recording, B
+ * the joined one; `which` says which of the two has a sine tone, the other has no audio stream.
+ */
+async function proveAudioRouting(which: "opened-sound" | "joined-sound"): Promise<void> {
+  const { spans, total } = seededSpans("present");
+  const mp4 = await exportItem(ASSETS.joinedDemo, `${which}.mp4`, (dir) =>
+    seedAudioRouting(dir, which),
+  );
+  const info = await probe(mp4);
+  const means: Record<string, number> = {};
+  for (const span of spans) {
+    means[span.label] = await meanDb(mp4, span.start + 0.3, span.end - span.start - 0.6);
+  }
+  // Both cases share one report, keyed by case (the cases run in order in one worker).
+  const reportFile = path.join(OUT_DIR, "report-audio-routing.json");
+  const previous = await readFile(reportFile, "utf8").catch(() => "{}");
+  await writeFile(
+    reportFile,
+    JSON.stringify(
+      { ...JSON.parse(previous), [which]: { total, spans, probe: info, meanDb: means } },
+      null,
+      2,
+    ),
+  );
+  console.log(
+    `[verify] ${NAME}: ${which} probe=${JSON.stringify(info)} meanDb=${JSON.stringify(means)}`,
+  );
+
+  expect(info.audioCodec, "the export has an audio stream").not.toBeNull();
+  expect(
+    Math.abs(info.durationSec - info.videoDurationSec),
+    "the audio is as long as the video",
+  ).toBeLessThan(0.2);
+  const loud = which === "opened-sound" ? (["A1", "A2"] as const) : (["B"] as const);
+  const quiet = which === "opened-sound" ? (["B"] as const) : (["A1", "A2"] as const);
+  for (const label of loud) expect(means[label], `${label} span is audible`).toBeGreaterThan(-40);
+  for (const label of quiet) expect(means[label], `${label} span is silent`).toBeLessThan(-70);
+}
+
+test("Two recordings: opened with sound, joined without an audio track", async () => {
+  test.setTimeout(420_000);
+  if (!(await requireTools())) return;
+  await proveAudioRouting("opened-sound");
+});
+
+test("Two recordings: opened without an audio track, joined with sound", async () => {
+  test.setTimeout(420_000);
+  if (!(await requireTools())) return;
+  await proveAudioRouting("joined-sound");
 });
 
 test("Different aspect fits the square recording inside the 16:9 frame", async () => {
