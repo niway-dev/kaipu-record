@@ -117,6 +117,12 @@ export const PROFILES = {
     colorsScreenshots: true,
     inspectShots: true,
   },
+  "audio-waveform": {
+    description:
+      "Flag audio-waveform forced on: the video editor's Audio lane draws the recording's loudness as bars.",
+    seed: "demo",
+    flags: { "audio-waveform": true },
+  },
   "image-text": {
     description:
       "Flag image-text forced on: the image editor's Select text tool and text recognition.",

@@ -44,6 +44,10 @@ const captureFrameButton: Step = {
 const captureListed: Step = {
   waitFor: { area: "editorVideo.capturesPanel", part: { role: "button", name: "Go to" } },
 };
+/** The waveform canvas in the Audio lane: it appears once the first peaks are decoded. */
+const audioWaveformDrawn: Step = {
+  waitFor: { area: "editorVideo.audioLane", part: { css: "[data-audio-waveform]" } },
+};
 const exportSheet: Step = {
   click: { area: "editorVideo.toolbar", part: { role: "button", name: "Export", exact: true } },
 };
@@ -156,6 +160,22 @@ export const editorVideo = catalog(
       ],
       demonstrates: ["editorVideo.preview:zoomSelected", "editorVideo.inspector:zoom"],
       ready: { area: "editorVideo.inspector" },
+    },
+    // The seeded recordings carry a silent stereo track (fixtures/make-fixtures.ts), so the
+    // bars are the quiet stubs; a take with speech draws taller ones.
+    waveform: {
+      profile: "audio-waveform",
+      how: "With the audio-waveform flag forced on, open “Walkthrough 1”: the Audio lane draws the recording's loudness as bars instead of the empty-state text.",
+      steps: [open(ASSETS.walkthrough), loaded, audioWaveformDrawn],
+      demonstrates: ["editorVideo.audioLane:waveform"],
+      ready: { area: "editorVideo.audioLane" },
+    },
+    "waveform-muted": {
+      profile: "audio-waveform",
+      how: "With the audio-waveform flag forced on, open “Team notes”: its muted range is a hatched block over bars drawn dimmed.",
+      steps: [open(ASSETS.teamNotes), loaded, audioWaveformDrawn],
+      demonstrates: ["editorVideo.audioLane:waveformMuted"],
+      ready: { area: "editorVideo.audioLane" },
     },
     "mute-selected": {
       profile: "default",
