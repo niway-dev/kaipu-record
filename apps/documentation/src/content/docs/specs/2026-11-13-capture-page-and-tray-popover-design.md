@@ -31,7 +31,7 @@ entry point in the app and the name "Record" stops telling the truth.
 
 **Out of scope:** the capture widget itself (the docked toolbar, NIW2-751), renaming the
 `record` route constants and files (follow-up once the widget PR lands, to avoid conflicts),
-an app-wide status bar.
+and the app shell's status strip, which already lists the shortcuts on every page.
 
 ## Capture page
 

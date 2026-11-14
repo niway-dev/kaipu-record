@@ -10,7 +10,7 @@ const shotModeBack: Step = { call: "updateSettings", args: [{ screenshotMode: "f
 
 /**
  * The Capture page (`#/`, still the `record` screen): the two entry cards, the Instant line,
- * the Recording setup and the footer. Recording toggles are reset to the profile's own before
+ * and the Recording setup. Recording toggles are reset to the profile's own before
  * each state.
  */
 export const record = catalog(
