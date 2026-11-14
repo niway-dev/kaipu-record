@@ -94,7 +94,7 @@ describe("replaceAutoZooms", () => {
   ];
 
   it("replaces autos in every recording and keeps manual zooms in each range", () => {
-    const stale = { ...manual("stale", 100, 101), origin: "auto" as const };
+    const stale = { ...manual("stale", 3618, 3619), origin: "auto" as const };
     const current = [manual("m-a", 2, 4), stale, manual("m-b", 3601, 3603)];
     const next = replaceAutoZooms(current, recordings, SENSITIVITY);
     expect(next.find((z) => z.id === "stale")).toBeUndefined();
@@ -115,5 +115,17 @@ describe("replaceAutoZooms", () => {
     );
     expect(next).toContainEqual(autoB);
     expect(next).toHaveLength(1 + detectZoomSegments(TRACK_A, 20, SENSITIVITY).length);
+  });
+
+  it("keeps the zooms of a recording the caller did not list", () => {
+    const autoB = { ...manual("auto-3601000", 3601, 3603), origin: "auto" as const };
+    const manualB = manual("m-b", 3610, 3612);
+    const next = replaceAutoZooms(
+      [autoB, manualB],
+      [{ offset: 0, duration: 20, track: TRACK_A }],
+      SENSITIVITY,
+    );
+    expect(next).toContainEqual(autoB);
+    expect(next).toContainEqual(manualB);
   });
 });
