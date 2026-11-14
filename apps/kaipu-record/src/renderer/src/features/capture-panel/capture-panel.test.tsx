@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Isolate the panel from the recording internals: useRecordingSetup pulls in
@@ -85,17 +85,16 @@ describe("CapturePanel, idle", () => {
   it("the Screenshot row opens the selector in the last used screenshot mode", async () => {
     const requestCaptureScreenshot = vi.fn();
     const settings = await realApi.getSettings();
-    window.electronAPI = {
-      ...realApi,
-      requestCaptureScreenshot,
-      getSettings: async () => ({ ...settings, screenshotMode: "screen" }),
-    };
+    const getSettings = vi.fn(async () => ({ ...settings, screenshotMode: "screen" as const }));
+    window.electronAPI = { ...realApi, requestCaptureScreenshot, getSettings };
     render(<CapturePanel />);
     // The stored mode arrives after the first render; the row must not act on the default.
-    await waitFor(() => {
-      fireEvent.click(screen.getByRole("button", { name: /^Screenshot/ }));
-      expect(requestCaptureScreenshot).toHaveBeenLastCalledWith("screen");
+    await waitFor(() => expect(getSettings).toHaveBeenCalled());
+    await act(async () => {
+      await Promise.all(getSettings.mock.results.map((r) => r.value));
     });
+    fireEvent.click(screen.getByRole("button", { name: /^Screenshot/ }));
+    expect(requestCaptureScreenshot.mock.calls).toEqual([["screen"]]);
   });
 
   it("the Recording row opens the record selector in the last used mode", () => {
@@ -162,7 +161,7 @@ describe("CapturePanel, busy", () => {
   it("shows the elapsed time, the mode and Stop with its shortcut instead of the entries", async () => {
     recordingApi({ elapsedSeconds: 65 });
     render(<CapturePanel />);
-    expect(await screen.findByText("1:05")).toBeInTheDocument();
+    expect(await screen.findByText("00:01:05")).toBeInTheDocument();
     expect(screen.getByText("Recording · Screen")).toBeInTheDocument();
     const stop = screen.getByRole("button", { name: /^Stop/ });
     expect(stop).toHaveTextContent("⇧⌘2");
@@ -202,15 +201,17 @@ describe("CapturePanel, busy", () => {
     recordingApi({ status: "paused", elapsedSeconds: 9 });
     render(<CapturePanel />);
     expect(await screen.findByText("Paused")).toBeInTheDocument();
-    expect(screen.getByText("0:09")).toBeInTheDocument();
+    expect(screen.getByText("00:00:09")).toBeInTheDocument();
     expect(screen.queryByText(/Recording ·/)).not.toBeInTheDocument();
   });
 
   it("a pending take (countdown) is busy: Starting…, no entries, Stop cancels it", async () => {
     const requestRecordSelector = vi.fn();
+    const controlCommand = vi.fn();
     window.electronAPI = {
       ...realApi,
       requestRecordSelector,
+      controlCommand,
       getRecordingState: async () => ({
         active: false,
         status: "recording" as const,
@@ -224,6 +225,8 @@ describe("CapturePanel, busy", () => {
     expect(screen.queryByRole("button", { name: /^Screenshot/ })).not.toBeInTheDocument();
     expect(screen.getByText("Finish the recording to change these.")).toBeInTheDocument();
     expect(requestRecordSelector).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /^Stop/ }));
+    expect(controlCommand.mock.calls).toEqual([["stop"]]);
   });
 
   it("keeps the footer: Setup stays reachable mid-take", async () => {

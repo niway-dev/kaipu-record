@@ -169,6 +169,12 @@ describe("useCaptureEntryActions", () => {
     await waitFor(() => expect(screenMode.result.current.recordingLastUsed).toBe("Screen"));
   });
 
+  it("names only the mode for a Frame recording without a saved area", async () => {
+    givenSettings({ recordingMode: "frame" });
+    const { result } = renderHook(() => useCaptureEntryActions());
+    await waitFor(() => expect(result.current.recordingLastUsed).toBe("Frame"));
+  });
+
   it("opens the screenshot selector in the last used mode and the recording one in none", async () => {
     const { requestCaptureScreenshot, requestRecordSelector } = givenSettings({
       screenshotMode: "screen",
