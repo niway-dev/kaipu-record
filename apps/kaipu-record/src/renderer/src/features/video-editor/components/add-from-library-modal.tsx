@@ -45,6 +45,8 @@ export interface AddFromLibraryModalProps {
 }
 
 type Tab = "recordings" | "screenshots";
+const TABS: readonly Tab[] = ["recordings", "screenshots"];
+const TAB_PANEL_ID = "add-from-library-panel";
 
 /**
  * Add from Library (NIW2-790): the modal the transport's Add recording button opens. Recordings
@@ -111,14 +113,39 @@ export function AddFromLibraryModal({
           <div className={styles.title}>
             <ModalTitle id="add-from-library-title">{t("addFromLibraryTitle")}</ModalTitle>
           </div>
-          <div className={styles.tabs} role="tablist">
+          <div
+            className={styles.tabs}
+            role="tablist"
+            aria-label={t("addFromLibraryTitle")}
+            onKeyDown={(event) => {
+              // WAI-ARIA tabs, as in the Timeline guide: arrows and Home/End move between tabs, and
+              // only the selected one is a Tab stop.
+              const index = TABS.indexOf(tab);
+              const target =
+                event.key === "ArrowRight"
+                  ? TABS[(index + 1) % TABS.length]
+                  : event.key === "ArrowLeft"
+                    ? TABS[(index - 1 + TABS.length) % TABS.length]
+                    : event.key === "Home"
+                      ? TABS[0]
+                      : event.key === "End"
+                        ? TABS[TABS.length - 1]
+                        : null;
+              if (!target) return;
+              event.preventDefault();
+              setTab(target);
+              document.getElementById(`add-from-library-tab-${target}`)?.focus();
+            }}
+          >
             <TabButton
+              id="add-from-library-tab-recordings"
               active={tab === "recordings"}
               label={t("addFromLibraryTabRecordings")}
               count={loaded ? allRecordings.length : null}
               onSelect={() => setTab("recordings")}
             />
             <TabButton
+              id="add-from-library-tab-screenshots"
               active={tab === "screenshots"}
               label={t("addFromLibraryTabScreenshots")}
               count={loaded ? allScreenshots.length : null}
@@ -136,188 +163,199 @@ export function AddFromLibraryModal({
             <X size={14} aria-hidden />
           </button>
         </header>
-        <div className={styles.searchRow}>
-          <label className={styles.search}>
-            <Search size={14} aria-hidden className={styles.searchIcon} />
-            <input
-              type="search"
-              className={styles.searchInput}
-              value={query}
-              aria-label={
-                tab === "recordings"
-                  ? t("addFromLibrarySearch")
-                  : t("addFromLibrarySearchScreenshots")
-              }
-              placeholder={
-                tab === "recordings"
-                  ? t("addFromLibrarySearch")
-                  : t("addFromLibrarySearchScreenshots")
-              }
-              onChange={(event) => setQueries((prev) => ({ ...prev, [tab]: event.target.value }))}
-            />
-          </label>
-        </div>
-        {!showBody ? (
-          <div className={styles.note} role="status">
-            {!loaded ? (
-              <p>
-                {tab === "recordings"
-                  ? t("addFromLibraryLoading")
-                  : t("addFromLibraryScreenshotsLoading")}
-              </p>
-            ) : all.length === 0 ? (
-              <p>
-                {failed
-                  ? t("addFromLibraryFailed")
-                  : tab === "recordings"
-                    ? t("addFromLibraryEmpty")
-                    : t("addFromLibraryScreenshotsEmpty")}
-              </p>
-            ) : (
-              <>
-                <p className={styles.noteTitle}>
-                  {tab === "recordings"
-                    ? t("addFromLibraryNoMatch", { query: needle })
-                    : t("addFromLibraryScreenshotsNoMatch", { query: needle })}
-                </p>
-                <p className={styles.noteHint}>{t("addFromLibraryNoMatchHint")}</p>
-              </>
-            )}
+        <div
+          className={styles.panel}
+          role="tabpanel"
+          id={TAB_PANEL_ID}
+          aria-labelledby={`add-from-library-tab-${tab}`}
+        >
+          <div className={styles.searchRow}>
+            <label className={styles.search}>
+              <Search size={14} aria-hidden className={styles.searchIcon} />
+              <input
+                type="search"
+                className={styles.searchInput}
+                value={query}
+                aria-label={
+                  tab === "recordings"
+                    ? t("addFromLibrarySearch")
+                    : t("addFromLibrarySearchScreenshots")
+                }
+                placeholder={
+                  tab === "recordings"
+                    ? t("addFromLibrarySearch")
+                    : t("addFromLibrarySearchScreenshots")
+                }
+                onChange={(event) => setQueries((prev) => ({ ...prev, [tab]: event.target.value }))}
+              />
+            </label>
           </div>
-        ) : tab === "recordings" && selected ? (
-          <div className={styles.split}>
-            <ul className={styles.list} aria-label={t("addFromLibraryTabRecordings")}>
-              {recordings.map((video) => {
-                const resolution = resolutionLabel(video);
-                const isSelected = video.assetId === selected.assetId;
-                return (
-                  <li key={video.assetId}>
+          {!showBody ? (
+            <div className={styles.note} role="status">
+              {!loaded ? (
+                <p>
+                  {tab === "recordings"
+                    ? t("addFromLibraryLoading")
+                    : t("addFromLibraryScreenshotsLoading")}
+                </p>
+              ) : all.length === 0 ? (
+                <p>
+                  {failed
+                    ? t("addFromLibraryFailed")
+                    : tab === "recordings"
+                      ? t("addFromLibraryEmpty")
+                      : t("addFromLibraryScreenshotsEmpty")}
+                </p>
+              ) : (
+                <>
+                  <p className={styles.noteTitle}>
+                    {tab === "recordings"
+                      ? t("addFromLibraryNoMatch", { query: needle })
+                      : t("addFromLibraryScreenshotsNoMatch", { query: needle })}
+                  </p>
+                  <p className={styles.noteHint}>{t("addFromLibraryNoMatchHint")}</p>
+                </>
+              )}
+            </div>
+          ) : tab === "recordings" && selected ? (
+            <div className={styles.split}>
+              <ul className={styles.list} aria-label={t("addFromLibraryTabRecordings")}>
+                {recordings.map((video) => {
+                  const resolution = resolutionLabel(video);
+                  const isSelected = video.assetId === selected.assetId;
+                  return (
+                    <li key={video.assetId}>
+                      <button
+                        type="button"
+                        className={styles.row}
+                        data-testid="add-from-library-row"
+                        data-selected={isSelected ? "true" : undefined}
+                        aria-pressed={isSelected}
+                        aria-label={video.title}
+                        onClick={() => setSelectedAssetId(video.assetId)}
+                        onDoubleClick={() => addAfterClip(video)}
+                      >
+                        <span className={styles.thumb}>
+                          {video.thumbnailUrl ? (
+                            <img className={styles.thumbImage} src={video.thumbnailUrl} alt="" />
+                          ) : (
+                            <span
+                              className={styles.placeholder}
+                              data-testid="add-from-library-placeholder"
+                            >
+                              <Film size={16} aria-hidden />
+                            </span>
+                          )}
+                          <span className={styles.duration}>
+                            {formatDuration(video.durationSeconds)}
+                          </span>
+                        </span>
+                        <span className={styles.text}>
+                          <span className={styles.name}>{video.title}</span>
+                          <span className={styles.meta}>
+                            {absoluteDate(video.createdAt, locale)}
+                          </span>
+                          {resolution && <span className={styles.meta}>{resolution}</span>}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <section className={styles.detail}>
+                <AddFromLibraryPreview video={selected} />
+                <h4 className={styles.detailTitle}>{selected.title}</h4>
+                <div className={styles.facts}>
+                  <span>{formatDuration(selected.durationSeconds)}</span>
+                  <span>{absoluteDate(selected.createdAt, locale)}</span>
+                  {resolutionLabel(selected) && <span>{resolutionLabel(selected)}</span>}
+                </div>
+                <div className={styles.actions}>
+                  <div className={styles.cta}>
+                    <ModalActions>
+                      <ModalButton variant="primary" onClick={() => addAfterClip(selected)}>
+                        {t("addFromLibraryAddAfter")}
+                      </ModalButton>
+                    </ModalActions>
+                  </div>
+                  <div className={styles.alternatives}>
                     <button
                       type="button"
-                      className={styles.row}
-                      data-testid="add-from-library-row"
-                      data-selected={isSelected ? "true" : undefined}
-                      aria-pressed={isSelected}
-                      aria-label={video.title}
-                      onClick={() => setSelectedAssetId(video.assetId)}
-                      onDoubleClick={() => addAfterClip(video)}
+                      className={styles.textButton}
+                      onClick={() => onAddRecording(selected, boundaryAtStart())}
                     >
-                      <span className={styles.thumb}>
-                        {video.thumbnailUrl ? (
-                          <img className={styles.thumbImage} src={video.thumbnailUrl} alt="" />
+                      {t("addFromLibraryAddStart")}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.textButton}
+                      onClick={() => onAddRecording(selected, boundaryAtEnd(layout))}
+                    >
+                      {t("addFromLibraryAddEnd")}
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          ) : (
+            <ul className={styles.grid}>
+              {screenshots.map((shot) => {
+                const resolution = resolutionLabel(shot);
+                return (
+                  <li key={shot.assetId}>
+                    <button
+                      type="button"
+                      className={styles.card}
+                      data-testid="add-from-library-screenshot"
+                      aria-label={t("addFromLibraryRow", { title: shot.title })}
+                      onClick={() => onAddScreenshot(shot)}
+                    >
+                      <span className={styles.poster}>
+                        {shot.thumbnailUrl ? (
+                          <img src={shot.thumbnailUrl} alt="" />
                         ) : (
-                          <span
-                            className={styles.placeholder}
-                            data-testid="add-from-library-placeholder"
-                          >
-                            <Film size={16} aria-hidden />
-                          </span>
+                          <ImagePlus size={20} aria-hidden />
                         )}
-                        <span className={styles.duration}>
-                          {formatDuration(video.durationSeconds)}
-                        </span>
+                        {shot.sourceVideoAssetId === openedAssetId && (
+                          <span className={styles.tag}>{t("addFromLibraryFromThisRecording")}</span>
+                        )}
                       </span>
-                      <span className={styles.text}>
-                        <span className={styles.name}>{video.title}</span>
-                        <span className={styles.meta}>{absoluteDate(video.createdAt, locale)}</span>
-                        {resolution && <span className={styles.meta}>{resolution}</span>}
+                      <span className={styles.cardTitle}>{shot.title}</span>
+                      <span className={styles.cardMeta}>
+                        {resolution
+                          ? `${absoluteDate(shot.createdAt, locale)} · ${resolution}`
+                          : absoluteDate(shot.createdAt, locale)}
                       </span>
                     </button>
                   </li>
                 );
               })}
             </ul>
-            <section className={styles.detail}>
-              <AddFromLibraryPreview video={selected} />
-              <h4 className={styles.detailTitle}>{selected.title}</h4>
-              <div className={styles.facts}>
-                <span>{formatDuration(selected.durationSeconds)}</span>
-                <span>{absoluteDate(selected.createdAt, locale)}</span>
-                {resolutionLabel(selected) && <span>{resolutionLabel(selected)}</span>}
-              </div>
-              <div className={styles.actions}>
-                <div className={styles.cta}>
-                  <ModalActions>
-                    <ModalButton variant="primary" onClick={() => addAfterClip(selected)}>
-                      {t("addFromLibraryAddAfter")}
-                    </ModalButton>
-                  </ModalActions>
-                </div>
-                <div className={styles.alternatives}>
-                  <button
-                    type="button"
-                    className={styles.textButton}
-                    onClick={() => onAddRecording(selected, boundaryAtStart())}
-                  >
-                    {t("addFromLibraryAddStart")}
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.textButton}
-                    onClick={() => onAddRecording(selected, boundaryAtEnd(layout))}
-                  >
-                    {t("addFromLibraryAddEnd")}
-                  </button>
-                </div>
-              </div>
-            </section>
-          </div>
-        ) : (
-          <ul className={styles.grid}>
-            {screenshots.map((shot) => {
-              const resolution = resolutionLabel(shot);
-              return (
-                <li key={shot.assetId}>
-                  <button
-                    type="button"
-                    className={styles.card}
-                    data-testid="add-from-library-screenshot"
-                    aria-label={t("addFromLibraryRow", { title: shot.title })}
-                    onClick={() => onAddScreenshot(shot)}
-                  >
-                    <span className={styles.poster}>
-                      {shot.thumbnailUrl ? (
-                        <img src={shot.thumbnailUrl} alt="" />
-                      ) : (
-                        <ImagePlus size={20} aria-hidden />
-                      )}
-                      {shot.sourceVideoAssetId === openedAssetId && (
-                        <span className={styles.tag}>{t("addFromLibraryFromThisRecording")}</span>
-                      )}
-                    </span>
-                    <span className={styles.cardTitle}>{shot.title}</span>
-                    <span className={styles.cardMeta}>
-                      {resolution
-                        ? `${absoluteDate(shot.createdAt, locale)} · ${resolution}`
-                        : absoluteDate(shot.createdAt, locale)}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {tab === "screenshots" && (
-          <footer className={styles.footer}>
-            <span>
-              {t("addFromLibraryAtPlayhead")} ·{" "}
-              <span className={styles.mono}>{formatScrubTime(playhead)}</span>
-            </span>
-            <span className={styles.spacer} />
-            <span>{t("addFromLibraryClickToAdd")}</span>
-          </footer>
-        )}
+          )}
+          {tab === "screenshots" && (
+            <footer className={styles.footer}>
+              <span>
+                {t("addFromLibraryAtPlayhead")} ·{" "}
+                <span className={styles.mono}>{formatScrubTime(playhead)}</span>
+              </span>
+              <span className={styles.spacer} />
+              <span>{t("addFromLibraryClickToAdd")}</span>
+            </footer>
+          )}
+        </div>
       </div>
     </ModalOverlay>
   );
 }
 
 function TabButton({
+  id,
   active,
   label,
   count,
   onSelect,
 }: {
+  id: string;
   active: boolean;
   label: string;
   count: number | null;
@@ -327,7 +365,10 @@ function TabButton({
     <button
       type="button"
       role="tab"
+      id={id}
+      aria-controls={TAB_PANEL_ID}
       aria-selected={active}
+      tabIndex={active ? 0 : -1}
       className={styles.tab}
       data-active={active ? "true" : undefined}
       onClick={onSelect}

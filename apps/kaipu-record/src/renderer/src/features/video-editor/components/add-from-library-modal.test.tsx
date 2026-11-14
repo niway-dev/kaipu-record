@@ -166,6 +166,32 @@ describe("AddFromLibraryModal", () => {
       expect(screen.queryByTestId("add-from-library-video")).toBeNull();
     });
 
+    it("is a tab widget: the panel is labelled by the selected tab, and arrows and Home/End move the selection and focus", () => {
+      renderModal({ videos: [video({ assetId: "a" }), shot({ assetId: "s1" })] });
+      const recordingsTab = screen.getByRole("tab", { name: /Recordings/ });
+      const screenshotsTab = screen.getByRole("tab", { name: /Screenshots/ });
+      expect(screen.getByRole("tabpanel")).toHaveAccessibleName(/Recordings/);
+      expect(recordingsTab).toHaveAttribute("aria-controls", screen.getByRole("tabpanel").id);
+      // Only the selected tab is a Tab stop.
+      expect(recordingsTab).toHaveAttribute("tabindex", "0");
+      expect(screenshotsTab).toHaveAttribute("tabindex", "-1");
+
+      fireEvent.keyDown(recordingsTab, { key: "ArrowRight" });
+      expect(screenshotsTab).toHaveAttribute("aria-selected", "true");
+      expect(screenshotsTab).toHaveFocus();
+      expect(screen.getByRole("tabpanel")).toHaveAccessibleName(/Screenshots/);
+      expect(cards()).toHaveLength(1);
+
+      // Wraps around, and Home/End go to the ends.
+      fireEvent.keyDown(screenshotsTab, { key: "ArrowRight" });
+      expect(recordingsTab).toHaveAttribute("aria-selected", "true");
+      fireEvent.keyDown(recordingsTab, { key: "End" });
+      expect(screenshotsTab).toHaveAttribute("aria-selected", "true");
+      fireEvent.keyDown(screenshotsTab, { key: "Home" });
+      expect(recordingsTab).toHaveAttribute("aria-selected", "true");
+      expect(recordingsTab).toHaveFocus();
+    });
+
     it("counts the tabs from the unfiltered lists", () => {
       renderModal({
         videos: [

@@ -101,6 +101,14 @@
   color: var(--text-primary);
 }
 
+/* The tab panel: everything under the header, filling the sheet's fixed height. */
+.panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .searchRow {
   flex: none;
   padding: 12px 16px 0;
