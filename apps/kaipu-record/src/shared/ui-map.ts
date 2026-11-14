@@ -252,7 +252,9 @@ export const UI_MAP = {
       // hover: the veil with Go to over a capture's image; duplicate: Capture frame (top bar)
       // at a moment already captured outlines the saved one; confirmDelete: the confirmation
       // dialog a capture's Delete button opens.
-      capturesPanel: { states: ["empty", "list", "hover", "duplicate", "confirmDelete"] },
+      capturesPanel: {
+        states: ["empty", "list", "hover", "duplicate", "confirmDelete", "addToTimeline"],
+      },
       webcam: { states: ["visible"] },
       transport: { states: ["paused", "playing", "withCounts", "speedChanged", "zoomed"] },
       toolRail: { states: ["default", "annotate", "privacy"] },

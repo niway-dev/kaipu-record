@@ -16,6 +16,7 @@ export const FLAG_NAMES = [
   "image-canvas",
   "image-inspect",
   "image-text",
+  "timeline-levels",
 ] as const;
 export type FlagName = (typeof FLAG_NAMES)[number];
 
@@ -38,6 +39,11 @@ export const FLAG_DEFAULTS: Record<FlagName, boolean> = {
   "image-inspect": false,
   // Text recognition in the image editor, macOS only for now (NIW2-705): off until owner QA.
   "image-text": false,
+  // The video editor's Captures panel Add to timeline button (NIW2-772). The redesign of the
+  // Clips section into levels (NIW2-770) builds on this flag: NIW2-771 puts floating images
+  // on levels above the clips. Off until that redesign replaces the 3 s slide the button
+  // inserts today.
+  "timeline-levels": false,
 };
 
 /** Identity super-properties attached to every event/error for multi-surface filtering. */

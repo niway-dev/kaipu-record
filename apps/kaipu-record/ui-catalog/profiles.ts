@@ -109,6 +109,12 @@ export const PROFILES = {
     flags: { "image-canvas": true },
     corruptCanvas: true,
   },
+  "timeline-levels": {
+    description:
+      "Flag timeline-levels forced on: the video editor's Captures panel shows Add to timeline on each capture.",
+    seed: "demo",
+    flags: { "timeline-levels": true },
+  },
   "image-inspect": {
     description:
       "Flag image-inspect forced on: the image editor's Inspect mode (loupe, live colour, format bar).",

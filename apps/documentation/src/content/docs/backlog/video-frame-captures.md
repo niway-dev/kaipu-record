@@ -29,7 +29,8 @@ taken with a system screenshot ends up outside the library, with no tie back to 
    video (`sourceTimeSeconds`), in its sidecar.
 3. The **Captures** panel, in the editor's right column, lists this video's captures, newest
    first. Its header holds only the title and the close button. Each capture shows its image
-   and, below it, its time in the video and three buttons: **Add to timeline** inserts that
+   and, below it, its time in the video and three buttons (**Add to timeline** only with the
+   `timeline-levels` flag on, see below): **Add to timeline** inserts that
    image into the timeline as an image slide at the playhead's nearest item boundary (what
    Add image did), **Copy** puts the image on the clipboard, **Delete** removes it from the
    library after the same confirmation the Library asks for. **Go to** is on the image:
@@ -66,17 +67,18 @@ taken with a system screenshot ends up outside the library, with no tie back to 
 
 ## Decisions
 
-| Decision                                                                              | Why                                                                                                                                                    |
-| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Add image is removed; the camera takes its place in the top bar (NIW2-768 correction) | The owner reaches for that spot to capture a frame; inserting an image is now a capture's own action, so no file picker is needed.                     |
-| The capture is the composed frame (background, zoom, webcam, privacy redactions)      | It is what the preview shows, and a raw frame would leak what Privacy covers. Built with the export composer, so a capture and an export never differ. |
-| A new sidecar field, not `derivedFromAssetId`                                         | `derivedFromAssetId` means "an export of"; reusing it would make captures count as exports of the video in the export-reuse check.                     |
-| Frames at the video's own resolution                                                  | A cover needs full resolution; the preview size depends on the window.                                                                                 |
-| One Capture frame button, in the top bar; none in the panel                           | One entry point for one action; the panel is where the result appears and where Add to timeline, Copy and Delete live.                                 |
-| Add to timeline per capture replaces Add image                                        | The slide's source is a capture the library already holds; main reads its PNG by id, so no file picker and no bytes through the renderer's fetch.      |
-| Go to is a veil button on the image, shown on hover and keyboard focus                | The image is the moment; the row keeps only actions on the file. The veil is subtle and the button stays in the tab order.                             |
-| A duplicate is the same source millisecond, checked before composing                  | The owner's rule; checking first answers at once and spends no composer run. Slides have no source time, so they are never duplicates.                 |
-| The capture's link opens the video's Library page, paused on the second               | It plays the original, whose clock the stored second uses; the editor's timeline may have cut that second out.                                         |
+| Decision                                                                              | Why                                                                                                                                                             |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Add image is removed; the camera takes its place in the top bar (NIW2-768 correction) | The owner reaches for that spot to capture a frame; inserting an image is now a capture's own action, so no file picker is needed.                              |
+| The capture is the composed frame (background, zoom, webcam, privacy redactions)      | It is what the preview shows, and a raw frame would leak what Privacy covers. Built with the export composer, so a capture and an export never differ.          |
+| A new sidecar field, not `derivedFromAssetId`                                         | `derivedFromAssetId` means "an export of"; reusing it would make captures count as exports of the video in the export-reuse check.                              |
+| Frames at the video's own resolution                                                  | A cover needs full resolution; the preview size depends on the window.                                                                                          |
+| One Capture frame button, in the top bar; none in the panel                           | One entry point for one action; the panel is where the result appears and where Add to timeline, Copy and Delete live.                                          |
+| Add to timeline per capture replaces Add image                                        | The slide's source is a capture the library already holds; main reads its PNG by id, so no file picker and no bytes through the renderer's fetch.               |
+| Add to timeline is behind the `timeline-levels` release flag (default off) (NIW2-772) | The owner tested the 3 s slide on 2026-11-13 and does not want it released that way; the Clips levels redesign (NIW2-770) replaces it. 0.19.0 ships without it. |
+| Go to is a veil button on the image, shown on hover and keyboard focus                | The image is the moment; the row keeps only actions on the file. The veil is subtle and the button stays in the tab order.                                      |
+| A duplicate is the same source millisecond, checked before composing                  | The owner's rule; checking first answers at once and spends no composer run. Slides have no source time, so they are never duplicates.                          |
+| The capture's link opens the video's Library page, paused on the second               | It plays the original, whose clock the stored second uses; the editor's timeline may have cut that second out.                                                  |
 
 ## Out of scope
 
