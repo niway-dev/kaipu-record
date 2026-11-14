@@ -107,9 +107,12 @@ import { clipFramesOf, clipSource, clipWebcamCursorOf } from "./joined-media";
 import {
   audioPlan,
   clipAudioOf,
-  convertPlanar,
+  createResampler,
   interleave,
+  mapChannels,
+  needsResampling,
   overlapsSilence,
+  type Resampler,
   type AudioReference,
   type RecordingAudio,
 } from "./joined-audio";
@@ -510,6 +513,25 @@ async function runExportWithInput(
           await addSilence(segment.duration);
           continue;
         }
+        // One resampler per clip run, created on the first sample whose rate differs from the
+        // reference, so the phase and the total length survive the chunk boundaries. The same
+        // rate never creates one.
+        let resampler: Resampler | null = null;
+        let lastEnd = src.localStart;
+        const emitConverted = async (
+          converted: AudioSample,
+          start: number,
+          end: number,
+        ): Promise<void> => {
+          const muted = overlapsSilence(start, end, src.offset, silenced);
+          const shaped = downmix ? downmixToMono(converted) : converted;
+          const emitted = muted ? zeroedLike(shaped) : shaped;
+          emitted.setTimestamp(audioCursor);
+          audioCursor += emitted.duration;
+          await audioSource.add(emitted);
+          if (emitted !== shaped) emitted.close();
+          if (shaped !== converted) shaped.close();
+        };
         for await (const sample of decoded) {
           // Clip each decoded sample to the segment's exact (local) range — see the
           // "Audio trimming" header comment for why this is needed.
@@ -517,19 +539,29 @@ async function runExportWithInput(
           if (trimmed) {
             const start = trimmed.timestamp;
             const end = start + trimmed.duration;
-            const muted = overlapsSilence(start, end, src.offset, silenced);
-            const converted = toReferenceFormat(trimmed, audioReference);
-            const shaped = downmix ? downmixToMono(converted) : converted;
-            const emitted = muted ? zeroedLike(shaped) : shaped;
-            emitted.setTimestamp(audioCursor);
-            audioCursor += emitted.duration;
-            await audioSource.add(emitted);
-            if (emitted !== shaped) emitted.close();
-            if (shaped !== converted) shaped.close();
-            if (converted !== trimmed) converted.close();
+            lastEnd = end;
+            if (!resampler && needsResampling(trimmed.sampleRate, audioReference.sampleRate)) {
+              resampler = createResampler(
+                trimmed.sampleRate,
+                audioReference.sampleRate,
+                audioReference.channels,
+              );
+            }
+            const converted = toReferenceFormat(trimmed, audioReference, resampler);
+            if (converted) {
+              await emitConverted(converted, start, end);
+              if (converted !== trimmed) converted.close();
+            }
             if (trimmed !== sample) trimmed.close();
           }
           sample.close();
+        }
+        // The frames the resampler still owes, so the clip's audio ends where its video does.
+        const owed = resampler?.flush();
+        if (owed && (owed[0]?.length ?? 0) > 0) {
+          const tail = planesToSample(owed, audioReference, lastEnd);
+          await emitConverted(tail, lastEnd, lastEnd + tail.duration);
+          tail.close();
         }
       }
       audioSource.close();
@@ -671,9 +703,14 @@ async function audioFacts(
 /**
  * The sample in the reference recording's channel count and sample rate. The same format
  * returns the sample itself (the common case, and always so without joins); otherwise a new
- * sample, which the caller closes.
+ * sample, which the caller closes, or null when the resampler has no frame due yet. A
+ * differing rate comes with the clip run's `resampler`.
  */
-function toReferenceFormat(sample: AudioSample, reference: AudioReference): AudioSample {
+function toReferenceFormat(
+  sample: AudioSample,
+  reference: AudioReference,
+  resampler: Resampler | null,
+): AudioSample | null {
   if (
     sample.sampleRate === reference.sampleRate &&
     sample.numberOfChannels === reference.channels
@@ -687,18 +724,23 @@ function toReferenceFormat(sample: AudioSample, reference: AudioReference): Audi
     sample.copyTo(plane, { planeIndex: c, format: "f32-planar" });
     planes.push(plane);
   }
-  const converted = convertPlanar(
-    planes,
-    sample.sampleRate,
-    reference.sampleRate,
-    reference.channels,
-  );
+  const mapped = mapChannels(planes, reference.channels);
+  const converted = resampler ? resampler.push(mapped) : mapped;
+  if ((converted[0]?.length ?? 0) === 0) return null;
+  return planesToSample(converted, reference, sample.timestamp);
+}
+
+function planesToSample(
+  planes: Float32Array[],
+  reference: AudioReference,
+  timestamp: number,
+): AudioSample {
   return new AudioSample({
-    data: interleave(converted),
+    data: interleave(planes),
     format: "f32",
     numberOfChannels: reference.channels,
     sampleRate: reference.sampleRate,
-    timestamp: sample.timestamp,
+    timestamp,
   });
 }
 

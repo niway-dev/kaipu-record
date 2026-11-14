@@ -85,61 +85,100 @@ export function clipAudioOf<S>(
   return reader ? reader.samples(src.localStart, src.localEnd) : null;
 }
 
-/**
- * Linear resampling of one channel. mediabunny resamples only whole files (Conversion), not
- * the samples an `AudioSampleSink` yields, so the worker converts per sample with this. The
- * length follows the duration, within one sample.
- */
-export function resampleLinear(
-  plane: Float32Array,
-  fromRate: number,
-  toRate: number,
-): Float32Array {
-  if (fromRate === toRate || plane.length === 0) return plane;
-  const length = Math.max(1, Math.round((plane.length * toRate) / fromRate));
-  const out = new Float32Array(length);
-  const step = fromRate / toRate;
-  const last = plane.length - 1;
-  for (let i = 0; i < length; i++) {
-    const position = Math.min(i * step, last);
-    const lower = Math.floor(position);
-    const upper = Math.min(lower + 1, last);
-    const fraction = position - lower;
-    out[i] = plane[lower]! * (1 - fraction) + plane[upper]! * fraction;
-  }
-  return out;
+/** Whether samples at `fromRate` need resampling to reach `toRate`; the same rate creates none. */
+export function needsResampling(fromRate: number, toRate: number): boolean {
+  return fromRate !== toRate;
+}
+
+/** Streaming linear resampler for one clip run; see {@link createResampler}. */
+export interface Resampler {
+  /** Resamples the next chunk (one plane per channel); may return fewer frames than due. */
+  push(planes: Float32Array[]): Float32Array[];
+  /** The frames still owed once the run ends, so the total length is exact. */
+  flush(): Float32Array[];
 }
 
 /**
- * Planar channels converted to `toChannels` and `toRate`. Mono is duplicated up; more channels
- * than wanted are averaged into mono, or cut to the first `toChannels` when the target is not
- * mono. The same format returns the input unchanged.
+ * Linear resampling that carries its state across chunks. mediabunny resamples only whole
+ * files (Conversion), not the samples an `AudioSampleSink` yields, so the worker feeds every
+ * trimmed sample of one clip, in order, to one of these.
+ *
+ * Output frame `j` sits at input position `j * fromRate / toRate`, counted from the first
+ * frame of the run, so the phase survives chunk boundaries: the last input frame is kept to
+ * interpolate with the next chunk's first. The total is capped at
+ * `round(totalIn * toRate / fromRate)` frames, so the cumulative length error stays below one
+ * frame however many chunks arrive (rounding each chunk alone drifts by a fraction of a frame
+ * per chunk, always in one direction). A frame whose right neighbour has not arrived yet waits
+ * for the next push, or for `flush`, which holds the last frame.
  */
-export function convertPlanar(
-  planes: Float32Array[],
-  fromRate: number,
-  toRate: number,
-  toChannels: number,
-): Float32Array[] {
-  if (fromRate === toRate && planes.length === toChannels) return planes;
-  let channels = planes;
-  if (planes.length !== toChannels) {
-    if (toChannels === 1) {
-      const frames = planes[0]?.length ?? 0;
-      const mono = new Float32Array(frames);
-      for (const plane of planes) for (let i = 0; i < frames; i++) mono[i] += plane[i]!;
-      for (let i = 0; i < frames; i++) mono[i] /= planes.length;
-      channels = [mono];
-    } else if (planes.length === 1) {
-      channels = Array.from({ length: toChannels }, () => planes[0]!);
-    } else {
-      channels = Array.from(
-        { length: toChannels },
-        (_, c) => planes[Math.min(c, planes.length - 1)]!,
-      );
+export function createResampler(fromRate: number, toRate: number, channels: number): Resampler {
+  let tail: Float32Array[] = Array.from({ length: channels }, () => new Float32Array(0));
+  let tailStart = 0; // global input index of tail[c][0]
+  let totalIn = 0;
+  let totalOut = 0;
+
+  const emit = (planes: Float32Array[], final: boolean): Float32Array[] => {
+    const joined = tail.map((old, c) => {
+      const next = planes[c] ?? new Float32Array(0);
+      const all = new Float32Array(old.length + next.length);
+      all.set(old, 0);
+      all.set(next, old.length);
+      return all;
+    });
+    totalIn += planes[0]?.length ?? 0;
+    const target = Math.round((totalIn * toRate) / fromRate);
+    const out: number[][] = Array.from({ length: channels }, () => []);
+    let j = totalOut;
+    for (; j < target; j++) {
+      const scaled = j * fromRate;
+      const rem = scaled % toRate;
+      const lower = (scaled - rem) / toRate;
+      const upper = rem > 0 ? lower + 1 : lower;
+      if (!final && upper > totalIn - 1) break;
+      const fraction = rem / toRate;
+      for (let c = 0; c < channels; c++) {
+        const plane = joined[c]!;
+        const last = tailStart + plane.length - 1;
+        const a = plane[lower - tailStart]!;
+        const b = plane[Math.min(upper, last) - tailStart]!;
+        out[c]!.push(a * (1 - fraction) + b * fraction);
+      }
     }
+    totalOut = j;
+    // Keep from the lower neighbour of the next frame to emit.
+    const keepFrom = Math.min(Math.floor((totalOut * fromRate) / toRate), totalIn);
+    const drop = Math.max(0, keepFrom - tailStart);
+    tail = joined.map((plane) => plane.slice(drop));
+    tailStart += drop;
+    return out.map((values) => Float32Array.from(values));
+  };
+
+  return {
+    push: (planes) => emit(planes, false),
+    flush: () =>
+      emit(
+        Array.from({ length: channels }, () => new Float32Array(0)),
+        true,
+      ),
+  };
+}
+
+/**
+ * Planar channels mapped to `toChannels`. Mono is duplicated up; more channels than wanted are
+ * averaged into mono, or cut to the first `toChannels` when the target is not mono. The same
+ * count returns the input unchanged.
+ */
+export function mapChannels(planes: Float32Array[], toChannels: number): Float32Array[] {
+  if (planes.length === toChannels) return planes;
+  if (toChannels === 1) {
+    const frames = planes[0]?.length ?? 0;
+    const mono = new Float32Array(frames);
+    for (const plane of planes) for (let i = 0; i < frames; i++) mono[i] += plane[i]!;
+    for (let i = 0; i < frames; i++) mono[i] /= planes.length;
+    return [mono];
   }
-  return channels.map((plane) => resampleLinear(plane, fromRate, toRate));
+  if (planes.length === 1) return Array.from({ length: toChannels }, () => planes[0]!);
+  return Array.from({ length: toChannels }, (_, c) => planes[Math.min(c, planes.length - 1)]!);
 }
 
 /** Planar channels as one interleaved array (frame 0 of each channel, then frame 1, ...). */

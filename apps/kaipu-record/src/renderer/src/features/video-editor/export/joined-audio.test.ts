@@ -3,10 +3,11 @@ import type { RenderClipSegment } from "./export-plan";
 import {
   audioPlan,
   clipAudioOf,
-  convertPlanar,
+  createResampler,
   interleave,
+  mapChannels,
+  needsResampling,
   overlapsSilence,
-  resampleLinear,
   type RecordingAudio,
 } from "./joined-audio";
 import { clipSource } from "./joined-media";
@@ -99,52 +100,88 @@ describe("overlapsSilence", () => {
   });
 });
 
-describe("resampleLinear", () => {
-  it("keeps the duration within one sample and a constant signal constant", () => {
-    const out = resampleLinear(new Float32Array(4410).fill(0.5), 44100, 48000);
-    expect(Math.abs(out.length / 48000 - 4410 / 44100)).toBeLessThanOrEqual(1 / 48000);
-    expect(out.every((v) => Math.abs(v - 0.5) < 1e-6)).toBe(true);
+describe("createResampler", () => {
+  const chunks = (total: number, size: number, from: (i: number) => number) => {
+    const out: Float32Array[] = [];
+    for (let start = 0; start < total; start += size) {
+      const n = Math.min(size, total - start);
+      out.push(Float32Array.from({ length: n }, (_, i) => from(start + i)));
+    }
+    return out;
+  };
+  const run = (pieces: Float32Array[], fromRate: number, toRate: number): Float32Array => {
+    const resampler = createResampler(fromRate, toRate, 1);
+    const parts = [...pieces.map((p) => resampler.push([p])[0]!), resampler.flush()[0]!];
+    const out = new Float32Array(parts.reduce((n, p) => n + p.length, 0));
+    let at = 0;
+    for (const part of parts) {
+      out.set(part, at);
+      at += part.length;
+    }
+    return out;
+  };
+
+  it("keeps the total length within one frame of the duration over 100 chunks", () => {
+    const pieces = chunks(100 * 1024, 1024, () => 0.5);
+    const resampler = createResampler(44100, 48000, 1);
+    let total = 0;
+    for (const piece of pieces) total += resampler.push([piece])[0]!.length;
+    total += resampler.flush()[0]!.length;
+    expect(Math.abs(total - Math.round((102400 * 48000) / 44100))).toBeLessThanOrEqual(1);
   });
-  it("returns the same data for the same rate", () => {
-    const input = new Float32Array([1, 2, 3]);
-    expect(resampleLinear(input, 48000, 48000)).toBe(input);
+  it("gives the same samples whether a ramp arrives in chunks or in one piece", () => {
+    const ramp = (i: number) => i;
+    const whole = run(chunks(5000, 5000, ramp), 44100, 48000);
+    const split = run(chunks(5000, 1024, ramp), 44100, 48000);
+    expect(split.length).toBe(whole.length);
+    let max = 0;
+    for (let i = 0; i < whole.length; i++) max = Math.max(max, Math.abs(split[i]! - whole[i]!));
+    expect(max).toBeLessThan(1e-6);
   });
-  it("interpolates between neighbours when upsampling by two", () => {
-    const out = resampleLinear(new Float32Array([0, 1, 0, 1]), 1, 2);
-    expect(out[0]).toBe(0);
+  it("interpolates across a chunk boundary instead of restarting", () => {
+    const out = run([new Float32Array([0, 1]), new Float32Array([0, 1])], 1, 2);
     expect(out[1]).toBeCloseTo(0.5);
+    expect(out[3]).toBeCloseTo(0.5);
     expect(out[2]).toBeCloseTo(1);
+  });
+  it("keeps a constant signal constant and downsamples by the rate ratio", () => {
+    const out = run(
+      chunks(4800, 1000, () => 0.25),
+      48000,
+      16000,
+    );
+    expect(out.length).toBe(1600);
+    expect(out.every((v) => Math.abs(v - 0.25) < 1e-6)).toBe(true);
+  });
+  it("resamples every channel", () => {
+    const resampler = createResampler(24000, 48000, 2);
+    const out = resampler.push([new Float32Array(100).fill(0.2), new Float32Array(100).fill(0.4)]);
+    const tail = resampler.flush();
+    expect(out.map((p, c) => p.length + tail[c]!.length)).toEqual([200, 200]);
+    expect(out[1]![10]).toBeCloseTo(0.4);
   });
 });
 
-describe("convertPlanar", () => {
+describe("needsResampling", () => {
+  it("is false for the reference rate, so the same format creates no resampler", () => {
+    expect(needsResampling(48000, 48000)).toBe(false);
+    expect(needsResampling(44100, 48000)).toBe(true);
+  });
+});
+
+describe("mapChannels", () => {
   it("duplicates mono into stereo", () => {
-    const out = convertPlanar([new Float32Array([0.25, 0.5])], 48000, 48000, 2);
+    const out = mapChannels([new Float32Array([0.25, 0.5])], 2);
     expect(out).toHaveLength(2);
     expect([...out[1]!]).toEqual([0.25, 0.5]);
   });
   it("averages stereo into mono", () => {
-    const out = convertPlanar(
-      [new Float32Array([1, 0]), new Float32Array([0, 1])],
-      48000,
-      48000,
-      1,
-    );
+    const out = mapChannels([new Float32Array([1, 0]), new Float32Array([0, 1])], 1);
     expect([...out[0]!]).toEqual([0.5, 0.5]);
   });
-  it("resamples every channel", () => {
-    const out = convertPlanar(
-      [new Float32Array(100).fill(0.2), new Float32Array(100).fill(0.4)],
-      24000,
-      48000,
-      2,
-    );
-    expect(out.map((p) => p.length)).toEqual([200, 200]);
-    expect(out[1]![150]).toBeCloseTo(0.4);
-  });
-  it("is the identity for the same format", () => {
+  it("is the identity for the same channel count", () => {
     const planes = [new Float32Array([1, 2])];
-    expect(convertPlanar(planes, 48000, 48000, 1)).toBe(planes);
+    expect(mapChannels(planes, 1)).toBe(planes);
   });
 });
 
