@@ -352,6 +352,34 @@ describe("floating-item anchors", () => {
     expect(resolveAnchor(layout, { kind: "source", time: 30 })).toBeNull();
   });
 
+  describe("anchors in a joined recording", () => {
+    // A 0–5 s of the opened recording, B 3600–3607 s of the joined one, then A 5–10 s.
+    const a = clip("a", 0, 5);
+    const b = clip("b", 3600, 3607);
+    const a2 = clip("a2", 5, 10);
+
+    it("resolves a source anchor in B to the timeline time of its footage", () => {
+      const layout = toLayout([a, b, a2]);
+      expect(resolveAnchor(layout, { kind: "source", time: 3602 })).toBe(7);
+      expect(resolveAnchor(layout, { kind: "source", time: 2 })).toBe(2);
+      expect(resolveAnchor(layout, { kind: "source", time: 5 })).toBe(12);
+      // Source 7 is 2 s into A2, which starts at timeline 12 after B's 7 s.
+      expect(resolveAnchor(layout, { kind: "source", time: 7 })).toBe(14);
+    });
+
+    it("a floating image anchored in a joined recording follows that recording's footage when the clips are reordered", () => {
+      const reordered = toLayout([b, a, a2]);
+      expect(resolveAnchor(reordered, { kind: "source", time: 3602 })).toBe(2);
+      expect(resolveAnchor(reordered, { kind: "source", time: 2 })).toBe(9);
+    });
+
+    it("resolves to null in the gap between the recordings and past the end of B", () => {
+      const layout = toLayout([a, b, a2]);
+      expect(resolveAnchor(layout, { kind: "source", time: 1000 })).toBeNull();
+      expect(resolveAnchor(layout, { kind: "source", time: 3607.5 })).toBeNull();
+    });
+  });
+
   it("deleting the footage that starts at the anchor drops it, even when the clip before ends there", () => {
     // Clips [0,5) [5,10) [20,30); the image sits at source 5, then the middle clip is deleted.
     const before = toLayout([clip("a", 0, 5), clip("m", 5, 10), clip("b", 20, 30)]);
