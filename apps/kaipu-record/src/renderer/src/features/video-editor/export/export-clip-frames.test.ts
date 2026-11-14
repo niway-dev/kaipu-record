@@ -211,4 +211,19 @@ describe("exportClipFrames", () => {
     expect(await result).toBe(10.5);
     expect(emitted.map((e) => e.outTs)).toEqual([10.5]);
   });
+
+  it("outputs a frame already shifted to axis seconds at the same slot as an opened clip there", async () => {
+    // Opened clip 4-6 at output 10; a joined clip with the same axis range comes out of
+    // shiftFrames with the same timestamps, so the output times must match.
+    const opened = run({ segment: SEGMENT, screens: [screen(4, 1), screen(5, 1)] });
+    await opened.result;
+    const shiftedFrames = [screen(4 - 3600, 1), screen(5 - 3600, 1)].map((f) => ({
+      ...f,
+      timestamp: f.timestamp + 3600,
+    }));
+    const joined = run({ segment: { ...SEGMENT, sourceId: "b" }, screens: shiftedFrames });
+    await joined.result;
+    expect(joined.emitted).toEqual(opened.emitted);
+    expect(joined.emitted.map((e) => e.outTs)).toEqual([10, 11]);
+  });
 });

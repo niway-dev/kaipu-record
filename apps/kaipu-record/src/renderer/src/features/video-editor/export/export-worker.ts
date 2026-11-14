@@ -102,6 +102,7 @@ import { cappedSlideFps, createFrameRateCap } from "./frame-rate-cap";
 import { chooseVideoEncoding, type VideoEncodingChoice } from "./video-encoding";
 import { WEBCAM_FPS } from "@shared/webcam-track";
 import { openWebcamSourceOrNone, webcamImageOf, type WebcamSource } from "./webcam-source";
+import { clipFramesOf, clipSource, clipWebcamCursorOf } from "./joined-media";
 
 // ---------------------------------------------------------------------------
 // Typing helper: TypeScript doesn't expose `Worker` on `self` in module workers.
@@ -128,15 +129,33 @@ workerSelf.onmessage = (event: MessageEvent<ExportStartMessage>) => {
 
 async function runExport(msg: ExportStartMessage): Promise<void> {
   const input = new Input({ source: new BlobSource(msg.sourceBlob), formats: ALL_FORMATS });
-  let webcam: WebcamSource | null = null;
+  // One Input (and webcam source) per joined recording, keyed by `SceneSource.id`; the opened
+  // recording is key null. Empty for a scene without joins.
+  const joinedInputs = new Map<string, Input>();
+  const webcams = new Map<string | null, WebcamSource>();
   try {
-    // A broken webcam file never fails the export: it goes on without the layer.
-    webcam = await openWebcamSourceOrNone(msg.webcam, msg.plan.webcam, (error) =>
-      post({ type: "webcam-error", message: errorMessage(error) }),
-    );
-    await runExportWithInput(msg, input, webcam);
+    // A broken webcam file never fails the export: it goes on without the layer. For a joined
+    // recording only that recording loses its camera.
+    const onWebcamError = (error: unknown): void =>
+      post({ type: "webcam-error", message: errorMessage(error) });
+    const openedWebcam = await openWebcamSourceOrNone(msg.webcam, msg.plan.webcam, onWebcamError);
+    if (openedWebcam) webcams.set(null, openedWebcam);
+    for (const entry of msg.joined) {
+      joinedInputs.set(
+        entry.sourceId,
+        new Input({ source: new BlobSource(entry.blob), formats: ALL_FORMATS }),
+      );
+      const joinedWebcam = await openWebcamSourceOrNone(
+        entry.webcam,
+        msg.plan.webcam,
+        onWebcamError,
+      );
+      if (joinedWebcam) webcams.set(entry.sourceId, joinedWebcam);
+    }
+    await runExportWithInput(msg, input, joinedInputs, webcams);
   } finally {
-    webcam?.dispose();
+    for (const source of webcams.values()) source.dispose();
+    for (const joinedInput of joinedInputs.values()) joinedInput.dispose();
     // `Input` is the only Disposable handle mediabunny exposes here — neither
     // CanvasSink nor AudioBufferSink implement Disposable/close in the .d.ts,
     // and disposing the Input already cancels their in-flight decode
@@ -149,7 +168,8 @@ async function runExport(msg: ExportStartMessage): Promise<void> {
 async function runExportWithInput(
   msg: ExportStartMessage,
   input: Input,
-  webcam: WebcamSource | null,
+  joinedInputs: ReadonlyMap<string, Input>,
+  webcams: ReadonlyMap<string | null, WebcamSource>,
 ): Promise<void> {
   const { plan, output: size, target: preset } = msg;
   // Fixed-canvas presets compose at SOURCE size into a view canvas, then frame it onto the
@@ -159,6 +179,27 @@ async function runExportWithInput(
 
   const videoTrack = await input.getPrimaryVideoTrack();
   if (!videoTrack) throw new Error("source has no video track");
+  // Each joined recording decodes from its own file: the clips' sinks are built on its track.
+  const trackOf = new Map<string | null, typeof videoTrack>([[null, videoTrack]]);
+  for (const [sourceId, joinedInput] of joinedInputs) {
+    const joinedTrack = await joinedInput.getPrimaryVideoTrack();
+    if (!joinedTrack) throw new Error(`joined recording ${sourceId} has no video track`);
+    trackOf.set(sourceId, joinedTrack);
+  }
+  // `fit: "contain"` (canvas-sink-options.ts) letterboxes a joined recording of another
+  // aspect inside the opened recording's frame, the same as the preview.
+  const readers = new Map(
+    [...trackOf].map(([key, track]) => [
+      key,
+      {
+        canvases: (start: number, end: number) =>
+          new CanvasSink(
+            track,
+            exportCanvasSinkOptions(composeSize.width, composeSize.height),
+          ).canvases(start, end),
+      },
+    ]),
+  );
   // Audio is optional: screen-only recordings produce no audio track.
   const audioTrack = await input.getPrimaryAudioTrack();
 
@@ -248,7 +289,7 @@ async function runExportWithInput(
   const floatingItems = (plan.floating?.items.length ?? 0) > 0;
   const workerCounts = packetCountsFor({
     durationSec: plan.totalDuration,
-    fps: webcam || floatingItems ? Math.max(sourceFps, fillFps) : sourceFps,
+    fps: webcams.size > 0 || floatingItems ? Math.max(sourceFps, fillFps) : sourceFps,
     maxFps: preset.maxFps,
     slideFrames: slideFrameCount(plan.segments, plan.slideFps),
     hasAudio: audioSource !== null,
@@ -336,18 +377,16 @@ async function runExportWithInput(
     const slideFps = cappedSlideFps(plan.slideFps, preset.maxFps);
     for (const segment of plan.segments) {
       if (segment.kind === "clip") {
-        const sink = new CanvasSink(
-          videoTrack,
-          exportCanvasSinkOptions(composeSize.width, composeSize.height),
-        );
-
+        // Which file the clip reads and where in it (axis -> local); frames and webcam
+        // lookups come back in axis seconds, so everything below stays on the axis.
+        const src = clipSource(segment, msg.joined);
         // The webcam frames of this clip, decoded beside the screen's (null: no webcam).
-        const webcamCursor = webcam?.cursorFor(segment.sourceStart, segment.sourceEnd) ?? null;
+        const webcamCursor = clipWebcamCursorOf(src, webcams);
         try {
           // Fills, rebase, fps cap and composition: export-clip-frames.ts.
           prevOutTs = await exportClipFrames({
             segment,
-            frames: sink.canvases(segment.sourceStart, segment.sourceEnd),
+            frames: clipFramesOf(src, readers),
             webcamCursor,
             layer: plan.webcam,
             webcamImageOf,
