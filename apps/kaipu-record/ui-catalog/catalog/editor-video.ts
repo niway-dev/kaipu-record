@@ -396,12 +396,13 @@ export const editorVideo = catalog(
       ],
       demonstrates: ["editorVideo.capturesPanel:list"],
       ready: { area: "editorVideo.capturesPanel" },
+      gates: [{ flag: "timeline-levels", side: "off" }],
       // The capture is a new file in the workspace: put the vault back for the next state.
       after: [{ action: "restoreVault" }],
     },
     "captures-hover": {
       profile: "default",
-      how: "Open “Weekly sync”, press Capture frame in the top bar and rest the pointer on the new capture's image: a subtle dark veil covers it with the Go to button in its center. Its row below keeps the time, Add to timeline, Copy and Delete.",
+      how: "Open “Weekly sync”, press Capture frame in the top bar and rest the pointer on the new capture's image: a subtle dark veil covers it with the Go to button in its center. Its row below keeps the time, Copy and Delete (Add to timeline is behind the timeline-levels flag).",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
@@ -420,6 +421,7 @@ export const editorVideo = catalog(
       keepPointer: true,
       demonstrates: ["editorVideo.capturesPanel:hover"],
       ready: { area: "editorVideo.capturesPanel" },
+      gates: [{ flag: "timeline-levels", side: "off" }],
       after: [{ action: "restoreVault" }],
     },
     "captures-duplicate": {
@@ -462,6 +464,26 @@ export const editorVideo = catalog(
       demonstrates: ["editorVideo.capturesPanel:confirmDelete"],
       ready: { area: "editorVideo.capturesPanel" },
       after: [{ action: "restoreVault" }],
+    },
+    "captures-add-to-timeline": {
+      profile: "timeline-levels",
+      how: "With the timeline-levels flag forced on, open “Weekly sync” and press Capture frame in the top bar: the new capture's row shows Add to timeline beside Copy and Delete.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        captureFrameButton,
+        captureListed,
+        {
+          waitFor: {
+            area: "editorVideo.capturesPanel",
+            part: { role: "button", name: "Add to timeline", exact: true },
+          },
+        },
+      ],
+      demonstrates: ["editorVideo.capturesPanel:addToTimeline"],
+      ready: { area: "editorVideo.capturesPanel" },
+      after: [{ action: "restoreVault" }],
+      gates: [{ flag: "timeline-levels", side: "on" }],
     },
     "export-sheet": {
       profile: "default",
