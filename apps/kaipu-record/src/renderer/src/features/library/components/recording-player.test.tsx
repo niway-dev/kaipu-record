@@ -56,6 +56,27 @@ describe("RecordingPlayer", () => {
     fireEvent.loadedMetadata(video(container));
     expect(video(container).currentTime).toBe(3);
   });
+
+  it("opens paused at startAt, once", () => {
+    const pause = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    const { container } = render(<RecordingPlayer id="clip" startAt={33.4} />);
+    fireEvent.loadedMetadata(video(container));
+    expect(video(container).currentTime).toBe(33.4);
+    expect(pause).toHaveBeenCalledTimes(1);
+
+    at(video(container), 50);
+    fireEvent.loadedMetadata(video(container));
+    expect(video(container).currentTime).toBe(50);
+    expect(pause).toHaveBeenCalledTimes(1);
+  });
+
+  it("neither seeks nor pauses without startAt", () => {
+    const pause = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    const { container } = render(<RecordingPlayer id="clip" />);
+    fireEvent.loadedMetadata(video(container));
+    expect(video(container).currentTime).toBe(0);
+    expect(pause).not.toHaveBeenCalled();
+  });
 });
 
 describe("pictureBox", () => {

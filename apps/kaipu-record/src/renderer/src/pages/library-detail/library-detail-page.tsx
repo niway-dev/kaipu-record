@@ -110,7 +110,11 @@ export function LibraryDetailPage(): React.JSX.Element {
   // A recording can momentarily lag the navigation into its own detail page right
   // after it finalizes; recover (re-list once, then fall back to the Library +
   // log) instead of dead-ending on "File not found".
-  const navState = location.state as { fromRecording?: boolean; order?: string[] } | null;
+  const navState = location.state as {
+    fromRecording?: boolean;
+    order?: string[];
+    startAt?: number;
+  } | null;
   const fromRecording = navState?.fromRecording;
   const { recovering } = useMissingRecordingRecovery({
     id: assetId,
@@ -262,6 +266,10 @@ export function LibraryDetailPage(): React.JSX.Element {
 
   const localId = video.id;
   const isScreenshot = video.kind === "screenshot";
+  // A frame captured in the editor names the video it came from; a deleted video leaves no line.
+  const sourceVideo = video.sourceVideoAssetId
+    ? videos.find((v) => v.assetId === video.sourceVideoAssetId)
+    : undefined;
   // NIW2-217: a GIF export plays in an <img>, has no editor and no edit-state line.
   const isGif = video.kind === "gif";
   const gifInfo = isGif ? video.gif : null;
@@ -586,6 +594,31 @@ export function LibraryDetailPage(): React.JSX.Element {
               </>
             )}
           </div>
+          {isScreenshot && sourceVideo && (
+            <button
+              type="button"
+              {...uiArea("libraryDetail.captureSource")}
+              className={styles.captureSource}
+              onClick={() =>
+                navigate(
+                  `/library/${sourceVideo.assetId}`,
+                  video.sourceTimeSeconds === null
+                    ? undefined
+                    : { state: { startAt: video.sourceTimeSeconds } },
+                )
+              }
+            >
+              <VideoIcon size={13} strokeWidth={1.8} aria-hidden />
+              <span className={styles.captureSourceText}>
+                {video.sourceTimeSeconds === null
+                  ? t("captureFromVideoNoTime", { title: sourceVideo.title })
+                  : t("captureFromVideo", {
+                      title: sourceVideo.title,
+                      time: formatClock(video.sourceTimeSeconds),
+                    })}
+              </span>
+            </button>
+          )}
           {video.metadataIssue && <p className={styles.note}>{t("metadataUnreadable")}</p>}
           {video.comparison === "local-changes" && (
             <p className={styles.note}>{t("comparisonLocalChanges")}</p>
@@ -684,6 +717,7 @@ export function LibraryDetailPage(): React.JSX.Element {
                     poster={video.thumbnailUrl}
                     webcam={video.webcam}
                     durationSeconds={video.durationSeconds}
+                    startAt={navState?.startAt}
                   />
                   {/* Under the video, not at the column's foot: the pair is centered together. */}
                   {fileName && (

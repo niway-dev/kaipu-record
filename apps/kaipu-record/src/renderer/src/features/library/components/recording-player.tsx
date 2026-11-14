@@ -34,6 +34,11 @@ interface RecordingPlayerProps {
   webcam?: WebcamTrackMeta | null;
   /** The recording's length, so a camera-off stretch at the very end stays inside it. */
   durationSeconds?: number;
+  /**
+   * Open paused on this second (a capture's link to its video). Applied once, on the first
+   * metadata of this mount; a rename's position restore wins over it.
+   */
+  startAt?: number;
 }
 
 /**
@@ -48,6 +53,7 @@ export function RecordingPlayer({
   poster,
   webcam,
   durationSeconds,
+  startAt,
 }: RecordingPlayerProps): React.JSX.Element {
   const t = useTranslations("library");
   const [playable, setPlayable] = useState(true);
@@ -64,6 +70,7 @@ export function RecordingPlayer({
   // Set when `id` changed: the reload's own events (time 0, autoplay) must not overwrite
   // the position until it has been restored.
   const restoring = useRef(false);
+  const startApplied = useRef(false);
   const mountedId = useRef(id);
   // Layout effect: runs before the reload's events are dispatched.
   useLayoutEffect(() => {
@@ -77,7 +84,15 @@ export function RecordingPlayer({
     if (video.videoWidth > 0 && video.videoHeight > 0) {
       setFrame({ width: video.videoWidth, height: video.videoHeight });
     }
-    if (!restoring.current) return;
+    if (!restoring.current) {
+      if (startApplied.current || typeof startAt !== "number" || !Number.isFinite(startAt)) return;
+      startApplied.current = true;
+      video.currentTime = startAt;
+      // Show the captured frame instead of playing past it; also cancels autoplay.
+      video.pause();
+      return;
+    }
+    startApplied.current = true;
     restoring.current = false;
     video.currentTime = position.current.time;
     if (position.current.paused) video.pause();

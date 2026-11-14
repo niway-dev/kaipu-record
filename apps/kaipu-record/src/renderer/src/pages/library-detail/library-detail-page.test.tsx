@@ -1294,6 +1294,74 @@ describe("LibraryDetailPage — header, menu, navigation and tabs (NIW2-669)", (
     await waitFor(() => expect(router.state.location.pathname).toBe("/editor/image/shot-1"));
   });
 
+  describe("a capture's source line", () => {
+    const sourceVideo: LibraryItem = {
+      ...exportedOnlyItem,
+      assetId: "video-1",
+      title: "Weekly sync",
+      local: {
+        ...exportedOnlyItem.local!,
+        id: "video-1",
+        assetId: "video-1",
+        title: "Weekly sync",
+      },
+      cloud: null,
+      availability: "local",
+    };
+    const capture = (sourceVideoAssetId: string | null, sourceTimeSeconds: number | null) =>
+      ({
+        ...screenshotItem,
+        sourceVideoAssetId,
+        sourceTimeSeconds,
+        local: { ...screenshotItem.local!, sourceVideoAssetId, sourceTimeSeconds },
+      }) as LibraryItem;
+
+    it("names the video and the time, and opens that video at that second", async () => {
+      list(sourceVideo, capture("video-1", 33.4));
+      const router = renderWithState("/library/shot-1");
+      await waitForLoaded();
+      const line = screen.getByRole("button", { name: "From Weekly sync at 0:33.4" });
+      fireEvent.click(line);
+      await waitFor(() => expect(router.state.location.pathname).toBe("/library/video-1"));
+      expect(router.state.location.state).toEqual({ startAt: 33.4 });
+    });
+
+    it("a frame of an image slide names the video only and sends no start time", async () => {
+      list(sourceVideo, capture("video-1", null));
+      const router = renderWithState("/library/shot-1");
+      await waitForLoaded();
+      fireEvent.click(screen.getByRole("button", { name: "From Weekly sync" }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/library/video-1"));
+      expect(router.state.location.state).toBeNull();
+    });
+
+    it("shows nothing when the source video is not in the library", async () => {
+      list(capture("gone", 5));
+      renderWithState("/library/shot-1");
+      await waitForLoaded();
+      expect(screen.queryByRole("button", { name: /^From / })).toBeNull();
+    });
+
+    it("shows nothing on a screenshot that is not a capture", async () => {
+      list(sourceVideo, screenshotItem);
+      renderWithState("/library/shot-1");
+      await waitForLoaded();
+      expect(screen.queryByRole("button", { name: /^From / })).toBeNull();
+    });
+
+    it("the video page opens paused at startAt", async () => {
+      const pause = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+      list(sourceVideo);
+      renderWithState("/library/video-1", { startAt: 12 });
+      await waitForLoaded();
+      const player = await screen.findByTestId("recording-video");
+      fireEvent.loadedMetadata(player);
+      expect((player as HTMLVideoElement).currentTime).toBe(12);
+      expect(pause).toHaveBeenCalled();
+      pause.mockRestore();
+    });
+  });
+
   it("a GIF has no primary edit action", async () => {
     list(gifItem);
     renderWithState("/library/gif-1");
