@@ -8,6 +8,46 @@
  * time `t` the webcam time is `t − startOffsetMs / 1000`.
  */
 
+import { recordingAt, type SourceAxis } from "../source-axis";
+
+/** One recording's webcam file: null `src` = it was recorded without one. */
+export interface WebcamFile {
+  src: string | null;
+  startOffsetMs: number;
+}
+
+/**
+ * The webcam files of every recording in the scene, by `SceneSource.id` (null = the opened
+ * recording), and the axis that says which recording holds an axis second (ADR 0058).
+ */
+export interface WebcamRecordings {
+  axis: SourceAxis;
+  files: ReadonlyMap<string | null, WebcamFile>;
+}
+
+/**
+ * The webcam file to show at axis second `t`, with its own offset and the LOCAL second the
+ * offset applies to (`webcamTimeFor(localTime, startOffsetMs)`): a webcam's clock starts with
+ * its own recording, so the axis offset is taken off first. Without `recordings` (one
+ * recording) the opened file serves every second. A second no range holds (a legacy clip)
+ * is the opened recording's.
+ */
+export function webcamFileAt(
+  recordings: WebcamRecordings | undefined,
+  opened: WebcamFile,
+  t: number,
+): WebcamFile & { localTime: number } {
+  if (!recordings) return { ...opened, localTime: t };
+  const found = recordingAt(recordings.axis, t);
+  if (!found) return { ...opened, localTime: t };
+  const file = recordings.files.get(found.recording.sourceId);
+  return {
+    src: file?.src ?? null,
+    startOffsetMs: file?.startOffsetMs ?? 0,
+    localTime: found.localTime,
+  };
+}
+
 /** Drift past which the webcam element is re-seeked: a little over two webcam frames. */
 export const WEBCAM_DRIFT_SECONDS = 0.08;
 

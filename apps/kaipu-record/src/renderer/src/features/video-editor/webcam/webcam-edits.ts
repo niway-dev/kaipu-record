@@ -5,7 +5,7 @@
  * A recording without a webcam has no layer to edit, so every edit passes the scene through.
  */
 import { newId, type VideoScene } from "../scene";
-import { dragRangeEdge } from "../source-time";
+import { dragRangeEdge, type SourceBounds } from "../source-time";
 import {
   WEBCAM_MIN_SEGMENT_SECONDS,
   clampWebcamPatch,
@@ -40,9 +40,9 @@ export function setWebcamLayout(scene: VideoScene, patch: Partial<WebcamLayout>)
 
 /**
  * Add a segment over source seconds [start, end). Refused (the scene back, `id: null`) when
- * there is no webcam, the window is under the minimum length, leaves [0, duration] or overlaps
- * a segment: the caller finds a free window with `freeWindowAt`. A `hidden` segment keeps no
- * layout.
+ * there is no webcam, the window is under the minimum length, leaves `bounds` (the range of one
+ * recording) or overlaps a segment: the caller finds a free window with `freeWindowAt`. A
+ * `hidden` segment keeps no layout.
  */
 export function addWebcamSegment(
   scene: VideoScene,
@@ -52,7 +52,7 @@ export function addWebcamSegment(
     mode: WebcamSegment["mode"];
     layout?: Partial<WebcamLayout>;
   },
-  sourceDurationSeconds: number,
+  bounds: SourceBounds,
 ): { scene: VideoScene; id: string | null } {
   const webcam = scene.webcam;
   const { start, end } = input;
@@ -60,8 +60,8 @@ export function addWebcamSegment(
     webcam !== null &&
     Number.isFinite(start) &&
     Number.isFinite(end) &&
-    start >= 0 &&
-    end <= sourceDurationSeconds &&
+    start >= bounds.start &&
+    end <= bounds.end &&
     end - start >= WEBCAM_MIN_SEGMENT_SECONDS &&
     !webcam.segments.some((s) => start < s.end && end > s.start);
   if (!valid) return { scene, id: null };
@@ -107,14 +107,15 @@ export function updateWebcamSegment(
 
 /**
  * Timeline edge drag. The same rule as zooms (`dragRangeEdge`): stay inside
- * [0, sourceDuration], keep the minimum length, never cross a neighbouring segment.
+ * `bounds` (the range of the recording the segment is in), keep the minimum length, never cross a
+ * neighbouring segment.
  */
 export function dragWebcamSegmentEdge(
   scene: VideoScene,
   id: string,
   edge: "start" | "end",
   to: number,
-  sourceDurationSeconds: number,
+  bounds: SourceBounds,
 ): VideoScene {
   const webcam = scene.webcam;
   if (!webcam?.segments.some((s) => s.id === id)) return scene;
@@ -123,7 +124,7 @@ export function dragWebcamSegmentEdge(
     id,
     edge,
     to,
-    sourceDurationSeconds,
+    bounds,
     WEBCAM_MIN_SEGMENT_SECONDS,
   );
   const current = webcam.segments.find((s) => s.id === id)!;

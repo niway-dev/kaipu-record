@@ -90,8 +90,18 @@ export interface SourceRange {
 }
 
 /**
+ * The span of the source axis an edit may stay inside: the range of ONE recording (ADR 0058),
+ * `{ start: 0, end: duration }` for a scene without joins. `clipBounds` in source-axis.ts picks
+ * it from a time.
+ */
+export interface SourceBounds {
+  start: number;
+  end: number;
+}
+
+/**
  * New [start, end] for dragging one edge of range `id` to source time `to`, keeping
- * `minSeconds` of length, staying inside [0, sourceDuration] and never crossing the
+ * `minSeconds` of length, staying inside `bounds` (the recording's range) and never crossing the
  * neighbouring ranges in `siblings` (zooms must not overlap: the camera assumes one
  * active segment at a time). Pass `siblings = []` for redactions (they may overlap).
  */
@@ -100,19 +110,22 @@ export function dragRangeEdge(
   id: string,
   edge: "start" | "end",
   to: number,
-  sourceDuration: number,
+  bounds: SourceBounds,
   minSeconds: number,
 ): { start: number; end: number } {
   const self = siblings.find((r) => r.id === id);
   if (!self) throw new Error(`dragRangeEdge: unknown range ${id}`);
   const others = siblings.filter((r) => r.id !== id);
   if (edge === "start") {
-    const floor = Math.max(0, ...others.filter((r) => r.end <= self.start).map((r) => r.end));
+    const floor = Math.max(
+      bounds.start,
+      ...others.filter((r) => r.end <= self.start).map((r) => r.end),
+    );
     const start = Math.min(Math.max(to, floor), self.end - minSeconds);
     return { start: Math.max(floor, start), end: self.end };
   }
   const ceiling = Math.min(
-    sourceDuration,
+    bounds.end,
     ...others.filter((r) => r.start >= self.end).map((r) => r.start),
   );
   const end = Math.max(Math.min(to, ceiling), self.start + minSeconds);
@@ -121,21 +134,18 @@ export function dragRangeEdge(
 
 /**
  * The free source window [start, end) of length ≤ `seconds` starting at `at`, clipped
- * to the next sibling and the source end; null when less than `minSeconds` fits.
+ * to the next sibling and the end of `bounds`; null when less than `minSeconds` fits.
  * Used to place a hand-made zoom at the playhead without overlapping another zoom.
  */
 export function freeWindowAt(
   siblings: SourceRange[],
   at: number,
   seconds: number,
-  sourceDuration: number,
+  bounds: SourceBounds,
   minSeconds: number,
 ): { start: number; end: number } | null {
   if (siblings.some((r) => at >= r.start && at < r.end)) return null;
-  const next = Math.min(
-    sourceDuration,
-    ...siblings.filter((r) => r.start >= at).map((r) => r.start),
-  );
+  const next = Math.min(bounds.end, ...siblings.filter((r) => r.start >= at).map((r) => r.start));
   const end = Math.min(at + seconds, next);
   return end - at >= minSeconds ? { start: at, end } : null;
 }

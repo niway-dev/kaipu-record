@@ -5,7 +5,7 @@
  */
 import type { CursorTrack } from "@shared/cursor-track";
 import { newId, type VideoScene } from "../scene";
-import { dragRangeEdge } from "../source-time";
+import { dragRangeEdge, type SourceBounds } from "../source-time";
 import { clampAnchor } from "./camera-path";
 import { DETECTION } from "./detect-zoom-segments";
 import { replaceAutoZooms, type RecordingZoomInput } from "./recording-zooms";
@@ -39,14 +39,15 @@ export function updateZoom(scene: VideoScene, id: string, patch: ZoomPatch): Vid
 /**
  * Timeline edge drag (doc 08 calls this, never `updateZoom`). Delegates the clamping to
  * `dragRangeEdge` (doc 06) so zooms and redactions obey one rule: stay inside
- * [0, sourceDuration], keep `ZOOM_LIMITS.minSeconds`, never cross a neighbouring zoom.
+ * `bounds` (the range of the recording the zoom is in), keep `ZOOM_LIMITS.minSeconds`, never
+ * cross a neighbouring zoom.
  */
 export function dragZoomEdge(
   scene: VideoScene,
   id: string,
   edge: "start" | "end",
   to: number,
-  sourceDurationSeconds: number,
+  bounds: SourceBounds,
 ): VideoScene {
   if (!scene.zoomSegments.some((s) => s.id === id)) return scene;
   const { start, end } = dragRangeEdge(
@@ -54,7 +55,7 @@ export function dragZoomEdge(
     id,
     edge,
     to,
-    sourceDurationSeconds,
+    bounds,
     ZOOM_LIMITS.minSeconds,
   );
   return {

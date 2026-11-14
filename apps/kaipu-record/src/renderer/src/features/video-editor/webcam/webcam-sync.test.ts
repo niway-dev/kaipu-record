@@ -4,8 +4,10 @@ import {
   webcamHasFrameAt,
   webcamResyncTarget,
   webcamSeekLead,
+  webcamFileAt,
   webcamTimeFor,
 } from "./webcam-sync";
+import { sourceAxis } from "../source-axis";
 
 describe("webcamTimeFor", () => {
   it("subtracts the offset: a webcam that started 500 ms late is at 0 when the screen is at 0.5 s", () => {
@@ -98,5 +100,52 @@ describe("webcamSeekLead", () => {
     expect(webcamSeekLead(true, WEBCAM_DRIFT_SECONDS / 2)).toBe(0);
     expect(webcamSeekLead(true, 5)).toBe(1);
     expect(webcamSeekLead(true, Number.NaN)).toBe(0);
+  });
+});
+
+describe("webcamFileAt", () => {
+  const opened = { src: "kaipu-media://webcam/opened", startOffsetMs: 500 };
+  const joinedSource = (id: string, offset: number, durationSeconds: number) => ({
+    id,
+    assetId: `asset-${id}`,
+    title: id,
+    offset,
+    durationSeconds,
+    width: 1280,
+    height: 720,
+  });
+  // Opened [0, 100], B [3600, 3640] with a webcam, C [7200, 7230] recorded without one.
+  const recordings = {
+    axis: sourceAxis(100, [joinedSource("B", 3600, 40), joinedSource("C", 7200, 30)]),
+    files: new Map([
+      [null, opened],
+      ["B", { src: "kaipu-media://webcam/b", startOffsetMs: 200 }],
+      ["C", { src: null, startOffsetMs: 0 }],
+    ]),
+  };
+
+  it("serves the opened file at the axis second itself when there is one recording", () => {
+    expect(webcamFileAt(undefined, opened, 12)).toEqual({ ...opened, localTime: 12 });
+  });
+
+  it("serves the opened recording's file inside its range", () => {
+    expect(webcamFileAt(recordings, opened, 12)).toEqual({ ...opened, localTime: 12 });
+  });
+
+  it("serves a joined recording's own file, with its own offset and the LOCAL second", () => {
+    const at = webcamFileAt(recordings, opened, 3610);
+    expect(at.src).toBe("kaipu-media://webcam/b");
+    expect(at.startOffsetMs).toBe(200);
+    expect(at.localTime).toBeCloseTo(10, 9);
+    // The webcam clock is that file's: local 10 s minus its 200 ms offset.
+    expect(webcamTimeFor(at.localTime, at.startOffsetMs)).toBeCloseTo(9.8, 9);
+  });
+
+  it("has no file during clips of a recording recorded without a webcam", () => {
+    expect(webcamFileAt(recordings, opened, 7210).src).toBeNull();
+  });
+
+  it("falls back to the opened recording for a second no range holds", () => {
+    expect(webcamFileAt(recordings, opened, 150)).toEqual({ ...opened, localTime: 150 });
   });
 });

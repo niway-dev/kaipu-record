@@ -258,6 +258,67 @@ export const editorVideo = catalog(
       ready: { area: "editorVideo.mediaPanel" },
       gates: [{ flag: "timeline-levels", side: "on" }],
     },
+    "two-recordings": {
+      profile: "two-recordings",
+      how: "Open “Two recordings”, whose edit joined “Checkout bug”: the clips alternate the two recordings, each labelled with its name and length over its own thumbnails, and the Webcam track says “No camera in this recording” under the joined clip.",
+      steps: [open(ASSETS.joinedDemo)],
+      demonstrates: ["editorVideo.timeline:twoRecordings", "editorVideo.webcamLane:noCamera"],
+      ready: { video: true },
+    },
+    "two-recordings-hover": {
+      profile: "two-recordings",
+      how: "Open “Two recordings” and rest the pointer on its first clip: both clips of that recording get a subtle outline, the joined clip between them does not.",
+      steps: [
+        open(ASSETS.joinedDemo),
+        loaded,
+        // The thumbnails decode after the editor opens; the labels are there from the start.
+        { waitMs: 800 },
+        { hover: { area: "editorVideo.timeline", part: { css: '[data-item-id="clip-a1"]' } } },
+        // The other clip of the hovered recording is outlined only once the hover landed, so a
+        // missed hover fails here instead of shooting the un-hovered timeline.
+        {
+          waitFor: {
+            area: "editorVideo.timeline",
+            part: { css: '[data-item-id="clip-a2"][data-same-recording="true"]' },
+          },
+        },
+      ],
+      keepPointer: true,
+      demonstrates: ["editorVideo.timeline:recordingHover"],
+      ready: { video: true },
+    },
+    "different-aspect": {
+      profile: "two-recordings",
+      how: "Open “Different aspect” and put the playhead in its joined clip: the square recording is fitted inside the 16:9 frame with the background on both sides.",
+      steps: [
+        open(ASSETS.differentAspectDemo),
+        loaded,
+        // The clips run 5 s, 7 s (the joined one, 5 s to 12 s), 7 s: 45% of a 19 s ruler is
+        // 8.55 s. A press on the ruler seeks there.
+        {
+          click: { area: "editorVideo.timeline", part: { css: '[data-testid="ruler"]' } },
+          at: { x: 0.45, y: 0.5 },
+        },
+        // The switch shows a recording by setting its element's visibility, only once that
+        // element holds the frame. The joined `<video>` reading visible is the joined picture
+        // on screen, not the opened one.
+        {
+          waitFor: {
+            area: "editorVideo.preview",
+            part: { css: '[data-recording="join-sq"][style*="visibility: visible"]' },
+          },
+        },
+      ],
+      demonstrates: ["editorVideo.preview:differentAspect"],
+      ready: { video: true },
+    },
+    "recording-missing": {
+      profile: "two-recordings",
+      how: "Open “Missing recording”, whose joined recording is not in the vault: its clip is hatched and reads “Recording missing: Old standup”, and the editor goes on working.",
+      steps: [open(ASSETS.joinedMissingDemo)],
+      demonstrates: ["editorVideo.timeline:recordingMissing"],
+      ready: { video: true },
+    },
     "tool-box": {
       profile: "default",
       steps: [open(ASSETS.walkthrough), loaded, rail("Box")],

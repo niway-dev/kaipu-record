@@ -176,6 +176,12 @@ async function waitForEditorLoaded(): Promise<HTMLElement> {
   await waitFor(() => {
     expect(document.querySelector("footer")).not.toBeNull();
   });
+  // A real browser reports the opened recording's decoded size with `loadedmetadata`, and the page
+  // keeps it as state (ADR 0058: never read off whichever element is on screen). jsdom decodes
+  // nothing, so report it the way the browser would: with the size the test stubbed (0 = unknown,
+  // which the stage ignores).
+  const opened = document.querySelector("video");
+  if (opened) fireEvent.loadedMetadata(opened);
   return document.querySelector("footer")!;
 }
 

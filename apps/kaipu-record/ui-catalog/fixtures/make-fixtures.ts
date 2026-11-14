@@ -19,7 +19,7 @@ import path from "node:path";
 export const FIXTURES_DIR = path.join(__dirname, "out");
 
 /** Bump when anything below changes the generated files. */
-const RECIPE_VERSION = "2";
+const RECIPE_VERSION = "4";
 
 /** Seconds of the countdown; every recording fixture is a cut of it. */
 export const COUNTDOWN_SECONDS = 12;
@@ -38,7 +38,24 @@ export const FIXTURE_FILES = {
   /** Smooth gradients plus noise, thousands of exact colors: counts as a photograph. */
   photoShot: "photo-shot.png",
   cut: (seconds: RecordingCut) => `countdown-${seconds}s.mp4`,
+  /**
+   * The recording a seeded edit joins ("Checkout bug"): the same countdown on a blue ground with a
+   * "B" in the corner, cut to `JOINED_CUT_SECONDS`, so its filmstrip is told apart from the
+   * opened recording's. Same size, codec and container as `cut`.
+   */
+  joinedCut: "countdown-joined-7s.mp4",
+  /**
+   * The joined variant at 1080x1080 (1:1) for the recording that joined a square one: the same
+   * blue ground and "B", cut to `JOINED_CUT_SECONDS`. Its aspect differs from the opened 16:9
+   * recording's, so the preview fits it inside the frame with the background around it.
+   */
+  joinedSquareCut: "countdown-joined-square-7s.mp4",
 } as const;
+
+/** Length of `FIXTURE_FILES.joinedCut`; it is also the seed's duration for that recording. */
+export const JOINED_CUT_SECONDS = 7;
+
+const JOINED_BACKGROUND = "0x1d4ed8";
 
 const BACKGROUND = "0x1c1d21";
 const DIGIT = "0xe4e5e9";
@@ -137,14 +154,42 @@ export function countdownDigitFilters(width: number, height: number): string[] {
   });
 }
 
+/**
+ * A block "B" in the top-left corner: a full left column, three bars (top, middle, bottom) that
+ * stop one stroke short of the right edge, and two right columns with a gap between them.
+ */
+export function joinedLetterFilters(width: number, height: number): string[] {
+  const h = Math.round(height * 0.3);
+  const w = Math.round(h * 0.6);
+  const t = Math.max(2, Math.round(h * 0.14));
+  const x = Math.round(width * 0.06);
+  const y = Math.round(height * 0.08);
+  const half = (h - 3 * t) / 2;
+  const boxes: Box[] = [
+    { x, y, w: t, h }, // left column
+    { x, y, w: w - t, h: t }, // top bar
+    { x, y: y + t + half, w: w - t, h: t }, // middle bar
+    { x, y: y + h - t, w: w - t, h: t }, // bottom bar
+    { x: x + w - t, y: y + t, w: t, h: half }, // right column, upper
+    { x: x + w - t, y: y + 2 * t + half, w: t, h: half }, // right column, lower
+  ];
+  return boxes.map((b) => `drawbox=x=${b.x}:y=${b.y}:w=${b.w}:h=${b.h}:color=${DIGIT}:t=fill`);
+}
+
 /** The full filtergraph of a countdown frame, `width`×`height`, with its progress line. */
-export function countdownFilterGraph(width: number, height: number): string {
+export function countdownFilterGraph(
+  width: number,
+  height: number,
+  variant: "default" | "joined" = "default",
+): string {
   const line = Math.max(2, Math.round(height / 180));
+  const background = variant === "joined" ? JOINED_BACKGROUND : BACKGROUND;
+  const extra = variant === "joined" ? `,${joinedLetterFilters(width, height).join(",")}` : "";
   return [
-    `color=c=${BACKGROUND}:s=${width}x${height}:r=30:d=${COUNTDOWN_SECONDS}[bg]`,
+    `color=c=${background}:s=${width}x${height}:r=30:d=${COUNTDOWN_SECONDS}[bg]`,
     `color=c=${PROGRESS}:s=${width}x${line}:r=30:d=${COUNTDOWN_SECONDS}[bar]`,
     `[bg][bar]overlay=x='-W+W*t/${COUNTDOWN_SECONDS}':y=H-${line * 4}:eval=frame:shortest=1,` +
-      `${countdownDigitFilters(width, height).join(",")}[v]`,
+      `${countdownDigitFilters(width, height).join(",")}${extra}[v]`,
   ].join(";");
 }
 
@@ -155,10 +200,15 @@ function ffmpeg(args: string[]): void {
 }
 
 /** H.264 + silent stereo AAC, one keyframe per second so every cut lands on a keyframe. */
-function renderCountdown(out: string, width: number, height: number): void {
+function renderCountdown(
+  out: string,
+  width: number,
+  height: number,
+  variant: "default" | "joined" = "default",
+): void {
   ffmpeg([
     "-filter_complex",
-    countdownFilterGraph(width, height),
+    countdownFilterGraph(width, height, variant),
     "-f",
     "lavfi",
     "-i",
@@ -283,6 +333,8 @@ export function fixturesReady(dir: string = FIXTURES_DIR): boolean {
     FIXTURE_FILES.webcam,
     FIXTURE_FILES.gif,
     FIXTURE_FILES.thumbnail,
+    FIXTURE_FILES.joinedCut,
+    FIXTURE_FILES.joinedSquareCut,
     ...FIXTURE_FILES.screens,
     FIXTURE_FILES.colorsShot,
     FIXTURE_FILES.photoShot,
@@ -311,6 +363,33 @@ export function makeFixtures(dir: string = FIXTURES_DIR): void {
       at(FIXTURE_FILES.cut(seconds)),
     ]);
   }
+  // The joined recording: rendered on its own (a blue ground, a "B"), then cut like the others.
+  renderCountdown(at("countdown-joined.mp4"), 1920, 1080, "joined");
+  ffmpeg([
+    "-i",
+    at("countdown-joined.mp4"),
+    "-t",
+    String(JOINED_CUT_SECONDS),
+    "-c",
+    "copy",
+    ...BITEXACT,
+    ...NO_METADATA,
+    at(FIXTURE_FILES.joinedCut),
+  ]);
+  rmSync(at("countdown-joined.mp4"));
+  renderCountdown(at("countdown-joined-square.mp4"), 1080, 1080, "joined");
+  ffmpeg([
+    "-i",
+    at("countdown-joined-square.mp4"),
+    "-t",
+    String(JOINED_CUT_SECONDS),
+    "-c",
+    "copy",
+    ...BITEXACT,
+    ...NO_METADATA,
+    at(FIXTURE_FILES.joinedSquareCut),
+  ]);
+  rmSync(at("countdown-joined-square.mp4"));
   renderCountdown(at(FIXTURE_FILES.webcam), 640, 480);
   // The first second shows "10": the frame a recording's poster is taken from.
   ffmpeg([

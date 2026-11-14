@@ -143,6 +143,20 @@ describe("mediaAt", () => {
     expect(mediaAt({ media }, layout, 15)).toEqual([]);
   });
 
+  it("shows a floating image anchored in a joined recording over that recording, in either clip order", () => {
+    // A 0–5 s of the opened recording, B 3600–3607 s of the joined one, then A 5–10 s.
+    // The image is anchored at 3602 s (2 s into B) and lasts 4 s.
+    const media = [img("m", 3602, 4, 0)];
+    const aThenB = toLayout([clip("a", 0, 5), clip("b", 3600, 3607), clip("a2", 5, 10)]);
+    const bThenA = toLayout([clip("b", 3600, 3607), clip("a", 0, 5), clip("a2", 5, 10)]);
+    // Order A, B, A2: the image starts at timeline 7, inside B (5–12), and is not over A (0–5).
+    expect(mediaAt({ media }, aThenB, 8).map((v) => v.item.id)).toEqual(["m"]);
+    expect(mediaAt({ media }, aThenB, 2)).toEqual([]);
+    // Order B, A, A2: the image starts at timeline 2, inside B (0–7), and is not over A (7–12).
+    expect(mediaAt({ media }, bThenA, 3).map((v) => v.item.id)).toEqual(["m"]);
+    expect(mediaAt({ media }, bThenA, 8)).toEqual([]);
+  });
+
   it("is empty with no media or no layout", () => {
     expect(mediaAt({}, layout, 5)).toEqual([]);
     expect(mediaAt({ media: [img("m", 0, 5, 0)] }, [], 1)).toEqual([]);

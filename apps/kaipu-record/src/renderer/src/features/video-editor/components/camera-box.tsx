@@ -19,6 +19,7 @@
  */
 import { useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
+import type { FrameSource } from "../playback-media";
 import { useVideoFrameClock } from "../use-video-frame-clock";
 import { type CameraPath, cameraAt, clampAnchor } from "../zoom/camera-path";
 import type { ZoomSegment } from "../zoom/zoom-model";
@@ -42,7 +43,7 @@ export function CameraBox({
   onMove,
   onEnd,
 }: {
-  videoRef: React.RefObject<HTMLVideoElement | null>;
+  videoRef: React.RefObject<FrameSource | null>;
   path: CameraPath;
   segment: ZoomSegment;
   onBegin(): void;

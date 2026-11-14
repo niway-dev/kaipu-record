@@ -26,7 +26,7 @@ export function RegionDrawer({
 }: {
   kind: "blur" | "cover";
   /** The preview video — its native size feeds the size badge (source pixels). */
-  videoRef: React.RefObject<HTMLVideoElement | null>;
+  videoRef: React.RefObject<Pick<HTMLVideoElement, "videoWidth" | "videoHeight"> | null>;
   /** Formatted source window the region will get ("0:12.0" → "0:17.0"); null over a slide. */
   range: { from: string; to: string } | null;
   onDraft(rect: NormRect | null): void;

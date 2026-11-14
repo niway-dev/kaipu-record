@@ -33,6 +33,9 @@ export interface WebcamLaneProps {
   thumbnails?: SourceThumbnail[];
   /** Where the webcam file has footage, in SOURCE time; a tile outside it stays empty. */
   covered?: CoveredRange | null;
+  /** Clips (by item id) whose recording has no camera while another recording of the scene does
+   *  (ADR 0058): their stretch of the lane reads "No camera in this recording". */
+  noCameraItemIds?: ReadonlySet<string>;
   selectedId: string | null;
   onSelect(id: string): void;
   /** `sourceTime` is null when the pointer is over a slide — ignore that move. */
@@ -44,6 +47,7 @@ export const WebcamLane = memo(function WebcamLane({
   layout,
   thumbnails = [],
   covered = null,
+  noCameraItemIds,
   selectedId,
   onSelect,
   onEdgeDrag,
@@ -160,6 +164,22 @@ export const WebcamLane = memo(function WebcamLane({
       data-testid="webcam-lane"
     >
       {filmstrip}
+      {noCameraItemIds &&
+        layout
+          .filter((entry) => noCameraItemIds.has(entry.itemId))
+          .map((entry) => (
+            <div
+              key={entry.itemId}
+              className={styles.noCamera}
+              data-testid="no-camera-span"
+              style={{
+                left: `${timeToFraction(entry.timelineStart, duration) * 100}%`,
+                width: `${timeToFraction(entry.timelineEnd - entry.timelineStart, duration) * 100}%`,
+              }}
+            >
+              <span className={styles.noCameraLabel}>{t("noCameraInRecording")}</span>
+            </div>
+          ))}
       {segments.flatMap((segment, index) => {
         const blocks = sourceRangeToTimelineBlocks(layout, segment.start, segment.end);
         const selected = segment.id === selectedId;

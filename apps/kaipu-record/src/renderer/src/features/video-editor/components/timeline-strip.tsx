@@ -5,6 +5,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type CSSProperties,
   type ReactElement,
 } from "react";
@@ -13,6 +14,12 @@ import { useTranslations } from "@kaipu/i18n";
 import { isGuideTab, type GuideTab } from "../track-guide";
 import type { PreviewPlayback } from "../use-preview-playback";
 import type { LayoutEntry } from "../timeline";
+import {
+  recordingBoundaries,
+  sameRecordingItemIds,
+  type ClipRecording,
+  type ClipRecordings,
+} from "../clip-recordings";
 import { layoutDuration } from "../timeline";
 import type { VideoOverlay } from "../scene";
 import type { SourceThumbnail } from "../use-source-thumbnails";
@@ -79,6 +86,8 @@ export const TimelineStrip = memo(function TimelineStrip({
   layout,
   playback,
   thumbnails,
+  clipRecordings = null,
+  recordingThumbnails,
   selectedItemId,
   onSelectItem,
   onTrim,
@@ -97,6 +106,12 @@ export const TimelineStrip = memo(function TimelineStrip({
   layout: LayoutEntry[];
   playback: PreviewPlayback;
   thumbnails: SourceThumbnail[];
+  /** Which recording each clip belongs to, by item id (NIW2-780). Null (the default) when the
+   *  scene has no joined recording: no name labels, no hover outline, no dividers, and every
+   *  clip draws `thumbnails` as it always did. `thumbnails` are the OPENED recording's. */
+  clipRecordings?: ClipRecordings | null;
+  /** The joined recordings' own filmstrips by `SceneSource.id`, at each recording's local time. */
+  recordingThumbnails?: ReadonlyMap<string, SourceThumbnail[]>;
   selectedItemId: string | null;
   onSelectItem: (id: string | null) => void;
   /** Fired while dragging a trim handle. `phase` tracks the drag lifecycle so the
@@ -133,6 +148,16 @@ export const TimelineStrip = memo(function TimelineStrip({
   timelineView?: TimelineViewStore;
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
+  // Hovering a clip outlines every clip of the same recording; only a scene with joins has any.
+  const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
+  const sameRecording = useMemo(
+    () => sameRecordingItemIds(clipRecordings, hoveredItemId),
+    [clipRecordings, hoveredItemId],
+  );
+  const boundaries = useMemo(
+    () => recordingBoundaries(layout, clipRecordings),
+    [layout, clipRecordings],
+  );
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const cornerRef = useRef<HTMLSpanElement | null>(null);
   const playheadRef = useRef<HTMLDivElement | null>(null);
@@ -489,23 +514,33 @@ export const TimelineStrip = memo(function TimelineStrip({
               onPointerCancel={endScrub}
               onLostPointerCapture={endScrub}
             >
-              {layout.map((entry) => (
-                <TrackBlock
-                  key={entry.itemId}
-                  entry={entry}
-                  duration={duration}
-                  thumbnails={thumbnails}
-                  scale={scale}
-                  shown={shown}
-                  selected={entry.itemId === selectedItemId}
-                  onSelect={onSelectItem}
-                  freezeMapping={freezeMapping}
-                  onDragActive={setEditDrag}
-                  onTrim={onTrim}
-                  slideUrlFor={slideUrlFor}
-                  onSlideDuration={onSlideDuration}
-                />
-              ))}
+              {layout.map((entry) => {
+                const recording = clipRecordings?.get(entry.itemId);
+                return (
+                  <TrackBlock
+                    key={entry.itemId}
+                    entry={entry}
+                    duration={duration}
+                    thumbnails={
+                      recording && recording.sourceId !== null
+                        ? (recordingThumbnails?.get(recording.sourceId) ?? NO_THUMBNAILS)
+                        : thumbnails
+                    }
+                    recording={recording}
+                    sameRecording={sameRecording.has(entry.itemId)}
+                    onHover={clipRecordings ? setHoveredItemId : undefined}
+                    scale={scale}
+                    shown={shown}
+                    selected={entry.itemId === selectedItemId}
+                    onSelect={onSelectItem}
+                    freezeMapping={freezeMapping}
+                    onDragActive={setEditDrag}
+                    onTrim={onTrim}
+                    slideUrlFor={slideUrlFor}
+                    onSlideDuration={onSlideDuration}
+                  />
+                );
+              })}
             </div>
             {/* Annotations are made with the drawing tools on the preview, never on this lane,
                 so an empty lane would only be a blank row: it appears with the first one. */}
@@ -539,6 +574,14 @@ export const TimelineStrip = memo(function TimelineStrip({
             {/* Positioned via direct DOM mutation in the subscribeTime callback (avoid React
                 re-renders at 60fps). The layer spans every row of the lanes column. */}
             <div className={styles.playheadLayer}>
+              {boundaries.map((at) => (
+                <div
+                  key={at}
+                  className={styles.recordingDivider}
+                  data-testid="recording-divider"
+                  style={{ left: `${timeToFraction(at, duration) * 100}%` }}
+                />
+              ))}
               <div ref={hoverRef} className={styles.hoverLine}>
                 <span ref={hoverLabelRef} className={styles.hoverTime} />
               </div>
@@ -617,10 +660,15 @@ type DragHandlers = Pick<
   "onPointerDown" | "onPointerMove" | "onPointerUp" | "onPointerCancel" | "onLostPointerCapture"
 >;
 
+const NO_THUMBNAILS: SourceThumbnail[] = [];
+
 function TrackBlock({
   entry,
   duration,
   thumbnails,
+  recording,
+  sameRecording,
+  onHover,
   scale,
   shown,
   selected,
@@ -633,7 +681,14 @@ function TrackBlock({
 }: {
   entry: LayoutEntry;
   duration: number;
+  /** The frames of THIS clip's recording, at that recording's own time. */
   thumbnails: SourceThumbnail[];
+  /** The clip's recording; set only when the scene has joined recordings (then it is labelled). */
+  recording?: ClipRecording;
+  /** Another clip of the same recording is hovered: outline this one. */
+  sameRecording: boolean;
+  /** Reports the hovered clip (null on leave); omitted when there is nothing to outline. */
+  onHover?: (itemId: string | null) => void;
   /** Pixels per timeline second, and the window of timeline time on screen: the block
    *  draws only the thumbnails in that window. */
   scale: number;
@@ -653,12 +708,14 @@ function TrackBlock({
   slideUrlFor?: (assetId: string) => string | null;
   onSlideDuration?: (itemId: string, duration: number, phase: "start" | "move" | "end") => void;
 }): React.JSX.Element {
+  const t = useTranslations("videoEditor");
   const left = timeToFraction(entry.timelineStart, duration) * 100;
   const width = timeToFraction(entry.timelineEnd - entry.timelineStart, duration) * 100;
   const isSlide = entry.kind === "slide";
   const slideUrl = isSlide && entry.assetId ? (slideUrlFor?.(entry.assetId) ?? null) : null;
+  const missing = recording?.status === "missing";
   const tiles =
-    entry.kind === "clip"
+    entry.kind === "clip" && !missing
       ? thumbnailTiles({
           timelineStart: entry.timelineStart,
           timelineEnd: entry.timelineEnd,
@@ -815,10 +872,21 @@ function TrackBlock({
     <>
       <button
         type="button"
-        className={[styles.block, isSlide && styles.slideBlock, selected && styles.blockSelected]
+        className={[
+          styles.block,
+          isSlide && styles.slideBlock,
+          selected && styles.blockSelected,
+          missing && styles.blockMissing,
+          sameRecording && styles.blockSameRecording,
+        ]
           .filter(Boolean)
           .join(" ")}
         style={{ left: `${left}%`, width: `${width}%` }}
+        data-item-id={entry.itemId}
+        data-recording-missing={missing ? "true" : undefined}
+        data-same-recording={sameRecording ? "true" : undefined}
+        onPointerEnter={onHover && recording ? () => onHover(entry.itemId) : undefined}
+        onPointerLeave={onHover && recording ? () => onHover(null) : undefined}
         onPointerDown={(event) => {
           // Stop the pointerdown from reaching the track background handler — a clip
           // click should only select, not also scrub the timeline.
@@ -840,7 +908,7 @@ function TrackBlock({
           </>
         ) : (
           tiles.map((tile) => {
-            const thumb = thumbnailAt(thumbnails, tile.sourceTime);
+            const thumb = thumbnailAt(thumbnails, tile.sourceTime - (recording?.offset ?? 0));
             return thumb ? (
               <img
                 key={tile.index}
@@ -852,6 +920,24 @@ function TrackBlock({
               />
             ) : null;
           })
+        )}
+        {recording && (
+          <span className={styles.clipLabel} data-testid="clip-label">
+            {missing ? (
+              <span className={styles.clipName}>
+                {t("recordingMissing", { title: recording.title })}
+              </span>
+            ) : (
+              <>
+                <span className={styles.clipName}>{recording.title}</span>
+                <span className={styles.clipDuration}>
+                  {t("clipDuration", {
+                    seconds: (entry.timelineEnd - entry.timelineStart).toFixed(1),
+                  })}
+                </span>
+              </>
+            )}
+          </span>
         )}
       </button>
       {/* Rendered as siblings, not children of the button: the button clips its

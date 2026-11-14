@@ -20,6 +20,8 @@ export interface Profile {
   readonly cursorRecording?: boolean;
   /** Add the recording with two overlapping floating images (`seed-vault.ts`). */
   readonly floatingImages?: boolean;
+  /** Add the recordings whose saved edits joined another recording (`seed-vault.ts`). */
+  readonly joinedRecordings?: boolean;
   /** Add the screenshot that draws real text (`fixtures/text/`), for the Select text states. */
   readonly textScreenshot?: boolean;
   /** Add the screenshots the Colors panel states open (`fixtures/make-fixtures.ts`). */
@@ -97,6 +99,12 @@ export const PROFILES = {
     seed: "demo",
     flags: { "timeline-levels": true },
     floatingImages: true,
+  },
+  "two-recordings": {
+    description:
+      "The vault adds “Two recordings” (a saved edit that joined “Checkout bug”, clips alternating A, B, A, with a webcam on the opened one), “Missing recording” (its joined recording is not in the vault) and “Different aspect” (joins the 1:1 “Square recording”, no webcam): the timeline's recording labels, hover outline, missing state and “No camera in this recording” span. A profile of its own, so the Library lists of the other states do not change.",
+    seed: "demo",
+    joinedRecordings: true,
   },
   "image-canvas": {
     description:

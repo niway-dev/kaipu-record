@@ -28,6 +28,13 @@ import { tokens } from "@kaipu/tokens/kaipu.stylex";
 import { Badge, Button } from "@kaipu/ui";
 import { clipBounds, sourceAxis } from "@renderer/features/video-editor/source-axis";
 import {
+  axisCursorTrack,
+  axisOverlayTrack,
+  frameCursorTrack,
+} from "@renderer/features/video-editor/cursor/axis-cursor-track";
+import { anyJoinedHasWebcam } from "@renderer/features/video-editor/joined-library";
+import { useJoinedRecordings } from "@renderer/features/video-editor/use-joined-recordings";
+import {
   boundaryIndexAt,
   clampOverlays,
   entryAt,
@@ -87,6 +94,7 @@ import {
 } from "@renderer/features/video-editor/components/inspector/webcam-inspector";
 import { useWebcamEditing } from "@renderer/features/video-editor/webcam/use-webcam-editing";
 import { webcamAt, webcamOverrideAt } from "@renderer/features/video-editor/webcam/webcam-model";
+import type { WebcamRecordings } from "@renderer/features/video-editor/webcam/webcam-sync";
 import {
   webcamInspectorTarget,
   webcamOutlined,
@@ -123,8 +131,15 @@ import { useSessionAutosave } from "@renderer/features/video-editor/use-session-
 import { usePreviewPlayback } from "@renderer/features/video-editor/use-preview-playback";
 import {
   useCompanionThumbnails,
+  useRecordingThumbnails,
   useSourceThumbnails,
 } from "@renderer/features/video-editor/use-source-thumbnails";
+import {
+  clipRecordings,
+  noCameraItemIds,
+  recordingsNeedingThumbnails,
+  type RecordingInfo,
+} from "@renderer/features/video-editor/clip-recordings";
 import { useLatest } from "@renderer/features/video-editor/use-latest";
 import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
 import { useVideoTools } from "@renderer/features/video-editor/annotations/video-tools";
@@ -154,6 +169,8 @@ import { planStill } from "@renderer/features/video-editor/export/still-plan";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { useSourceCaptures } from "@renderer/features/video-editor/use-source-captures";
 import {
+  axisSecondsOfCapture,
+  captureOriginAt,
   captureTitleTime,
   findCaptureAt,
   formatClock,
@@ -177,7 +194,10 @@ import {
   TOOL_GROUPS,
 } from "@renderer/features/video-editor/components/editor-toolbar";
 import { ExportDialog } from "@renderer/features/video-editor/components/export-dialog";
-import { PreviewStage } from "@renderer/features/video-editor/components/preview-stage";
+import {
+  PreviewStage,
+  type StageRecording,
+} from "@renderer/features/video-editor/components/preview-stage";
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import { TransportBar } from "@renderer/features/video-editor/components/transport-bar";
 import { useTimelineViewStore } from "@renderer/features/video-editor/use-timeline-view";
@@ -211,8 +231,9 @@ import { mediaUrl } from "@renderer/lib/media-url";
 import type { RecordingCapture } from "@shared/recording-capture";
 import {
   DEFAULT_CURSOR,
-  cursorLayerData,
+  overlayLayerData,
 } from "@renderer/features/video-editor/cursor/cursor-model";
+import { canOverlayRecordedCursor } from "@shared/native-capture";
 import { CursorLayer } from "@renderer/features/video-editor/cursor/cursor-layer";
 import { CursorInspector } from "@renderer/features/video-editor/components/inspector/cursor-inspector";
 import { uiArea } from "@renderer/lib/ui-area";
@@ -462,10 +483,20 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
             // disk) rather than leaving broken references that the worker can't render.
             // Floating images (ADR 0057) go the same way: one whose asset is gone is dropped,
             // and a scene that had none keeps no `media` key.
+            // A saved layer survives when a joined recording (ADR 0058) has a webcam although
+            // the opened one does not: its meta is read here, before the editor exists, so
+            // the layer is never stripped for want of metas the editor loads later.
+            const joinedHasWebcam = await anyJoinedHasWebcam(session.scene.sources);
+            if (cancelled) return;
             const filteredScene: VideoScene = dropMediaWithoutAsset(
               {
                 // The sidecar decides whether the recording has a webcam, not the session.
-                ...reconcileWebcam(session.scene, source.webcam ?? null, source.durationSeconds),
+                ...reconcileWebcam(
+                  session.scene,
+                  source.webcam ?? null,
+                  source.durationSeconds,
+                  joinedHasWebcam,
+                ),
                 items: session.scene.items.filter(
                   (item) => item.kind !== "slide" || loadedIds.has(item.assetId),
                 ),
@@ -541,9 +572,94 @@ function VideoEditor({
   const navigate = useNavigate();
   const controller = useVideoScene(resolvedScene);
   const { scene } = controller;
+  // Recordings joined after the opened one (ADR 0058), loaded once the editor is up. One
+  // cursor track on the source axis (each joined track shifted by its offset) feeds everything
+  // that reads the pointer, so the camera path, the activity marks and the cursor layer follow a
+  // joined clip. A loading or missing recording simply adds nothing.
+  const joinedRecordings = useJoinedRecordings(scene.sources);
+
+  // The decoded frame as one state object: the webcam layer places itself against it (the
+  // preview's output frame is the source frame), and a stable object keeps its trigger quiet.
+  // Floating images use it as the picture's size (only its aspect matters), 16:9 until it lands.
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
+  const pictureSize = useMemo(
+    () => (frameSize.width > 0 && frameSize.height > 0 ? frameSize : { width: 1920, height: 1080 }),
+    [frameSize],
+  );
+  const axis = useMemo(
+    () => sourceAxis(source.durationSeconds, scene.sources),
+    [source.durationSeconds, scene.sources],
+  );
+  const axisEnd = useMemo(
+    () => Math.max(...axis.recordings.map((r) => r.offset + r.duration)),
+    [axis],
+  );
+  // Every joined track is mapped once into frame coordinates (the opened recording's aspect, the
+  // letterbox of a recording of another one), before the camera path, the activity marks, the
+  // auto-zoom detection and the cursor layer read it.
+  const frameAspect =
+    frameSize.width > 0 && frameSize.height > 0 ? frameSize.width / frameSize.height : 0;
+  const joinedFrameTracks = useMemo(
+    () =>
+      joinedRecordings.map((j) =>
+        frameCursorTrack(
+          j.cursorTrack,
+          frameAspect,
+          j.source.width > 0 && j.source.height > 0 ? j.source.width / j.source.height : 0,
+        ),
+      ),
+    [joinedRecordings, frameAspect],
+  );
+  const axisTrack = useMemo(
+    () =>
+      axisCursorTrack(
+        cursorTrack,
+        joinedRecordings.map((j, i) => ({ offset: j.source.offset, track: joinedFrameTracks[i] })),
+      ),
+    [cursorTrack, joinedRecordings, joinedFrameTracks],
+  );
+  // The pointer is drawn only inside the range of a recording that has a track AND whose own
+  // pixels exclude it; the camera, the marks and the zooms above use every track.
+  const overlayTrack = useMemo(
+    () =>
+      axisOverlayTrack(
+        {
+          offset: 0,
+          duration: source.durationSeconds,
+          track: cursorTrack,
+          canOverlay: canOverlayRecordedCursor(source.capture),
+        },
+        joinedRecordings.map((j, i) => ({
+          offset: j.source.offset,
+          duration: j.source.durationSeconds,
+          track: joinedFrameTracks[i],
+          canOverlay: canOverlayRecordedCursor(j.capture),
+        })),
+      ),
+    [source.durationSeconds, source.capture, cursorTrack, joinedRecordings, joinedFrameTracks],
+  );
+  // Sensitivity and Re-analyse run per recording on its own track and range: the opened one
+  // and every joined recording that is READY (ADR 0058).
+  const zoomRecordings = useMemo(
+    () => [
+      { offset: 0, duration: source.durationSeconds, track: cursorTrack },
+      ...joinedRecordings.flatMap((j, i) =>
+        j.status === "ready"
+          ? [
+              {
+                offset: j.source.offset,
+                duration: j.source.durationSeconds,
+                track: joinedFrameTracks[i],
+              },
+            ]
+          : [],
+      ),
+    ],
+    [source.durationSeconds, cursorTrack, joinedRecordings, joinedFrameTracks],
+  );
   const cursorData = useMemo(
-    () => cursorLayerData(source.capture, cursorTrack, scene.cursor ?? DEFAULT_CURSOR),
-    [source.capture, cursorTrack, scene.cursor],
+    () => overlayLayerData(overlayTrack, scene.cursor ?? DEFAULT_CURSOR),
+    [overlayTrack, scene.cursor],
   );
   const [cursorInspectorOpen, setCursorInspectorOpen] = useState(false);
   // The Captures panel (NIW2-764) takes the right column like the cursor settings do: one
@@ -555,14 +671,6 @@ function VideoEditor({
   // images keeps showing them, so a preview never hides what the export draws.
   const levelsOn = useFlag("timeline-levels");
   const showMedia = levelsOn || (scene.media?.length ?? 0) > 0;
-  // The decoded frame as one state object: the webcam layer places itself against it (the
-  // preview's output frame is the source frame), and a stable object keeps its trigger quiet.
-  // Floating images use it as the picture's size (only its aspect matters), 16:9 until it lands.
-  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
-  const pictureSize = useMemo(
-    () => (frameSize.width > 0 && frameSize.height > 0 ? frameSize : { width: 1920, height: 1080 }),
-    [frameSize],
-  );
   // Writes the session ~800 ms after every commit/endInteract, and flushes on unmount
   // and beforeunload. See plans/video-editor-v2/07: before this, closing the window
   // threw away every cut, zoom and redaction, because useBlocker below only ever sees
@@ -618,44 +726,118 @@ function VideoEditor({
     controller,
     layout,
     timelineDuration: playback.duration,
-    sourceDuration: source.durationSeconds,
-    cursorTrack,
+    axis,
+    recordings: zoomRecordings,
   });
-  const mutes = useMuteEditing(controller, layout, source.durationSeconds);
+  const mutes = useMuteEditing(controller, layout, axis);
   // The picture's background, padding, corners and shadow (ADR 0051): a scene field like a
   // zoom, so the undo history, the session and the export fingerprint all carry it.
   const backgroundEdits = useBackgroundEditing(controller);
-  const webcamEdits = useWebcamEditing({
-    controller,
-    layout,
-    sourceDuration: source.durationSeconds,
-  });
+  const webcamEdits = useWebcamEditing({ controller, layout, axis });
   // The sidecar decides whether there is a webcam (the loader reconciled the scene with
   // it); without one there is no layer, lane, inspector section nor second <video>.
   const webcamTrack = source.webcam ?? null;
-  const hasWebcam = webcamTrack !== null && scene.webcam !== null;
-  const redactionEdits = useRedactionEditing({
-    controller,
-    layout,
-    sourceDuration: source.durationSeconds,
-  });
+  // A scene has one webcam layout; it shows a face wherever the recording under the playhead has
+  // one. So the layer, lane and inspector exist when ANY recording was recorded with a webcam.
+  const hasWebcam =
+    scene.webcam !== null &&
+    (webcamTrack !== null || joinedRecordings.some((j) => j.webcam !== null));
+  // Each recording's own webcam file and offset: the layer swaps files as the playhead crosses
+  // from one recording into another and aims at the local second (ADR 0058).
+  const webcamRecordings = useMemo<WebcamRecordings>(
+    () => ({
+      axis,
+      files: new Map([
+        [
+          null,
+          {
+            src: webcamTrack ? mediaUrl("webcam", source.id) : null,
+            startOffsetMs: webcamTrack?.startOffsetMs ?? 0,
+          },
+        ],
+        ...joinedRecordings.map(
+          (j) =>
+            [
+              j.source.id,
+              {
+                src: j.webcam && j.id ? mediaUrl("webcam", j.id) : null,
+                startOffsetMs: j.webcam?.startOffsetMs ?? 0,
+              },
+            ] as const,
+        ),
+      ]),
+    }),
+    [axis, webcamTrack, source.id, joinedRecordings],
+  );
+  // One `<video>` per joined recording the stage can play; a missing one has none (the picture
+  // says so while the playhead is on its clip), a loading one has none yet.
+  const stageRecordings = useMemo<StageRecording[]>(
+    () =>
+      joinedRecordings.map((j) => ({
+        sourceId: j.source.id,
+        title: j.source.title,
+        mediaUrl: j.status === "ready" && j.id ? mediaUrl("recording", j.id) : null,
+        missing: j.status === "missing",
+      })),
+    [joinedRecordings],
+  );
+  const redactionEdits = useRedactionEditing({ controller, layout, axis });
   // One camera simulation shared by the preview (useCameraPreview) and the export (doc 05).
   // Declared before any callback that closes over it (handleExport).
-  const cameraPath = useCameraPath(scene.zoomSegments, cursorTrack, source.durationSeconds);
+  const cameraPath = useCameraPath(scene.zoomSegments, axisTrack, axisEnd);
   // Cursor activity: the marks drawn inside the Zooms lane — depend only on the (immutable) track.
   const activity = useMemo(
-    () => (cursorTrack ? activityMarks(cursorTrack, source.durationSeconds) : []),
-    [cursorTrack, source.durationSeconds],
+    () => (axisTrack ? activityMarks(axisTrack, axisEnd) : []),
+    [axisTrack, axisEnd],
   );
   const videoTools = useVideoTools();
   const videoExport = useVideoExport();
   const gifExport = useGifExport();
   const sourceUrl = mediaUrl("recording", source.id);
   const thumbnails = useSourceThumbnails(sourceUrl, source.durationSeconds);
+  // Which recording each clip is (null without joins: the timeline then draws as before), and
+  // each joined recording's own filmstrip, decoded only while it still has a clip (NIW2-780).
+  const recordingInfos = useMemo<RecordingInfo[]>(
+    () => [
+      { sourceId: null, title: source.title, status: "ready", hasWebcam: webcamTrack !== null },
+      ...joinedRecordings.map((j) => ({
+        sourceId: j.source.id,
+        title: j.source.title,
+        status: j.status,
+        hasWebcam: j.webcam !== null,
+      })),
+    ],
+    [source.title, webcamTrack, joinedRecordings],
+  );
+  const clipRecordingMap = useMemo(
+    () => clipRecordings(layout, axis, recordingInfos),
+    [layout, axis, recordingInfos],
+  );
+  const noCameraClips = useMemo(
+    () =>
+      noCameraItemIds(
+        clipRecordingMap,
+        recordingInfos.some((r) => r.hasWebcam),
+      ),
+    [clipRecordingMap, recordingInfos],
+  );
+  const recordingStripRequests = useMemo(() => {
+    const byId = new Map(joinedRecordings.map((j) => [j.source.id, j]));
+    return recordingsNeedingThumbnails(
+      clipRecordingMap,
+      new Map(joinedRecordings.map((j) => [j.source.id, j.source.durationSeconds])),
+    ).flatMap(({ sourceId, durationSeconds }) => {
+      const joined = byId.get(sourceId);
+      return joined?.id
+        ? [{ key: sourceId, mediaUrl: mediaUrl("recording", joined.id), durationSeconds }]
+        : [];
+    });
+  }, [clipRecordingMap, joinedRecordings]);
+  const recordingThumbnails = useRecordingThumbnails(recordingStripRequests);
   // The webcam lane's filmstrip: the webcam file's frames, reported at SOURCE time, and the
   // source range it has footage for.
   const webcamStrip = useCompanionThumbnails(
-    hasWebcam ? mediaUrl("webcam", source.id) : "",
+    webcamTrack && scene.webcam !== null ? mediaUrl("webcam", source.id) : "",
     source.durationSeconds,
     (webcamTrack?.startOffsetMs ?? 0) / 1000,
   );
@@ -955,12 +1137,11 @@ function VideoEditor({
 
   const startVideoExport = useCallback(
     (choice: VideoExportChoice) => {
-      const video = playback.videoRef.current;
-      if (!video) return;
-      // videoWidth/videoHeight are 0 until the browser has decoded the stream's
-      // metadata (loadedmetadata). Starting the export before that hands the worker
-      // a 0×0 OffscreenCanvas, which produces a corrupt file — refuse early.
-      if (video.videoWidth === 0 || video.videoHeight === 0) {
+      // The OPENED recording's decoded size, held as state when its metadata lands (never the
+      // element on screen, which can be a joined recording of another size). It is 0 until the
+      // browser has decoded the stream's metadata. Starting the export before that hands the
+      // worker a 0×0 OffscreenCanvas, which produces a corrupt file — refuse early.
+      if (frameSize.width === 0 || frameSize.height === 0) {
         showToast({ message: t("videoStillLoading") });
         return;
       }
@@ -978,9 +1159,9 @@ function VideoEditor({
         title: source.title,
         derivedFromAssetId: source.assetId,
         sourceSizeBytes: source.sizeBytes ?? null,
-        videoWidth: video.videoWidth,
-        videoHeight: video.videoHeight,
-        previewWidth: video.clientWidth,
+        videoWidth: frameSize.width,
+        videoHeight: frameSize.height,
+        previewWidth: contentRef.current?.clientWidth ?? 0,
         slideAssets: assetStoreRef.current,
         cameraPath,
         cursor: cursorData,
@@ -1011,7 +1192,12 @@ function VideoEditor({
             // Reconciled like the loader does, or an old session (no webcam key) on a webcam
             // recording would never fingerprint like the scene that was exported.
             const savedScene = parsedScene
-              ? reconcileWebcam(parsedScene, source.webcam ?? null, source.durationSeconds)
+              ? reconcileWebcam(
+                  parsedScene,
+                  source.webcam ?? null,
+                  source.durationSeconds,
+                  await anyJoinedHasWebcam(parsedScene.sources),
+                )
               : null;
             if (savedScene && editFingerprint(savedScene, cursorData !== null) !== fingerprint)
               return;
@@ -1031,7 +1217,7 @@ function VideoEditor({
     [
       t,
       sourceProbe,
-      playback,
+      frameSize,
       videoExport,
       scene,
       source,
@@ -1065,9 +1251,7 @@ function VideoEditor({
   const sourceExports = useSourceExports(source.assetId, exportSheetOpen);
   const lastGifSettingsRef = useRef<GifSettings | null>(null);
   const handleExport = useCallback(() => {
-    const video = playback.videoRef.current;
-    if (!video) return;
-    if (video.videoWidth === 0 || video.videoHeight === 0) {
+    if (frameSize.width === 0 || frameSize.height === 0) {
       showToast({ message: t("videoStillLoading") });
       return;
     }
@@ -1077,7 +1261,7 @@ function VideoEditor({
       return;
     }
     setExportSheetOpen(true);
-  }, [playback, t]);
+  }, [frameSize, t]);
 
   const closeExportSheet = useCallback(() => {
     gifExport.cancelEstimate();
@@ -1087,14 +1271,13 @@ function VideoEditor({
   // Shared job inputs for the GIF estimate and export; null while the video is loading.
   const gifJobArgs = useCallback(
     (settings: GifSettings): GifJobArgs | null => {
-      const video = playback.videoRef.current;
-      if (!video || video.videoWidth === 0 || video.videoHeight === 0) return null;
+      if (frameSize.width === 0 || frameSize.height === 0) return null;
       return {
         scene,
         sourceId: source.id,
-        videoWidth: video.videoWidth,
-        videoHeight: video.videoHeight,
-        previewWidth: video.clientWidth,
+        videoWidth: frameSize.width,
+        videoHeight: frameSize.height,
+        previewWidth: contentRef.current?.clientWidth ?? 0,
         slideAssets: assetStoreRef.current,
         cameraPath,
         cursor: cursorData,
@@ -1104,7 +1287,7 @@ function VideoEditor({
         fps: settings.fps,
       };
     },
-    [playback, scene, source.id, source.webcam, assetStoreRef, cameraPath, cursorData],
+    [frameSize, scene, source.id, source.webcam, assetStoreRef, cameraPath, cursorData],
   );
 
   const handleGifSettingsChange = useCallback(
@@ -1181,8 +1364,8 @@ function VideoEditor({
   // duplicate check.
   const captureInFlight = useRef(false);
   const handleCaptureFrame = useCallback(async () => {
-    const video = playback.videoRef.current;
-    if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
+    // The opened recording's decoded size (state), not the element on screen.
+    if (frameSize.width === 0 || frameSize.height === 0) {
       showToast({ message: t("videoStillLoading") });
       return;
     }
@@ -1193,7 +1376,19 @@ function VideoEditor({
     const playhead = playback.readTimelineTime();
     try {
       // The same frame twice is a duplicate: point at the saved one instead of composing.
-      const existing = findCaptureAt(latestCaptures(), planStill(scene, playhead).sourceSeconds);
+      // The recording under the playhead and the second INSIDE ITS OWN file: a frame of a joined
+      // recording links to that recording's asset, not to the opened one. The captures read here
+      // are the opened recording's, so a joined frame is never a duplicate of them.
+      const origin = captureOriginAt(
+        axis,
+        scene.sources,
+        source.assetId,
+        planStill(scene, playhead).sourceSeconds,
+      );
+      const existing =
+        origin && origin.assetId === source.assetId
+          ? findCaptureAt(latestCaptures(), origin.localSeconds)
+          : undefined;
       if (existing) {
         clearSelection();
         setCursorInspectorOpen(false);
@@ -1208,12 +1403,20 @@ function VideoEditor({
       }
       if (highlightTimer.current) clearTimeout(highlightTimer.current);
       setHighlightedCaptureId(null);
+      // The still composer decodes the OPENED recording's file (the export layer of ADR 0058 is
+      // not built yet), so a frame over a joined recording would be the wrong picture. Say so
+      // rather than save it; the link below is already the joined recording's, so this guard is
+      // the only line to remove when the composer learns recordings.
+      if (origin && origin.sourceId !== null) {
+        showToast({ message: t("captureJoinedNotYet") });
+        return;
+      }
       const frame = await captureFrame({
         scene,
         sourceId: source.id,
-        videoWidth: video.videoWidth,
-        videoHeight: video.videoHeight,
-        previewWidth: video.clientWidth,
+        videoWidth: frameSize.width,
+        videoHeight: frameSize.height,
+        previewWidth: contentRef.current?.clientWidth ?? 0,
         slideAssets: assetStoreRef.current,
         cameraPath,
         cursor: cursorData,
@@ -1224,11 +1427,16 @@ function VideoEditor({
       // slide has no source footage: its link has no time (seeking to it does nothing), and
       // only the title uses the timeline second.
       const titleSeconds = frame.sourceSeconds ?? frame.timelineSeconds;
+      // Where the composed frame really came from (a slide has no recording: no time).
+      const saved = captureOriginAt(axis, scene.sources, source.assetId, frame.sourceSeconds);
       await window.electronAPI.saveScreenshot(frame.png, {
         // The title becomes the file name (ADR 0035): compact time, nothing a name refuses.
         title: t("captureTitle", { title: source.title, time: captureTitleTime(titleSeconds) }),
         manual: false,
-        source: { videoAssetId: source.assetId, timeSeconds: frame.sourceSeconds },
+        source: {
+          videoAssetId: saved?.assetId ?? source.assetId,
+          timeSeconds: saved ? saved.localSeconds : frame.sourceSeconds,
+        },
       });
       // The panel takes the inspector's place, so the selection goes too (as the cursor
       // inspector does): Delete must never remove an item whose inspector is not on screen.
@@ -1248,6 +1456,8 @@ function VideoEditor({
     }
   }, [
     playback,
+    frameSize,
+    axis,
     captureFrame,
     latestCaptures,
     scene,
@@ -1282,11 +1492,14 @@ function VideoEditor({
 
   /** A capture's image: move the playhead to its moment, if that moment is still on the timeline. */
   const seekToCapture = useCallback(
-    (sourceSeconds: number) => {
-      const at = timelineTimeAtSource(layout, sourceSeconds);
+    (seconds: number, assetId: string = source.assetId) => {
+      // The link keeps seconds inside ITS recording's file; the timeline speaks axis seconds.
+      const axisSeconds = axisSecondsOfCapture(scene.sources, source.assetId, assetId, seconds);
+      if (axisSeconds === null) return;
+      const at = timelineTimeAtSource(layout, axisSeconds);
       if (at !== null) playback.seek(at);
     },
-    [layout, playback],
+    [layout, playback, scene.sources, source.assetId],
   );
 
   const handleDeleteOverlay = useCallback(() => {
@@ -1838,9 +2051,9 @@ function VideoEditor({
               selectedId={selectedZoomId}
               onSelect={handleSelectZoom}
               onEdgeDrag={zooms.edgeDrag}
-              hasTrack={cursorTrack !== null}
+              hasTrack={axisTrack !== null}
               marks={activity}
-              showMarks={cursorTrack !== null && !isTrackHidden("activity", hiddenTracks)}
+              showMarks={axisTrack !== null && !isTrackHidden("activity", hiddenTracks)}
             />
           ),
         },
@@ -1856,6 +2069,7 @@ function VideoEditor({
                     layout={layout}
                     thumbnails={webcamStrip.thumbnails}
                     covered={webcamStrip.covered}
+                    noCameraItemIds={noCameraClips}
                     selectedId={webcamSelectedId}
                     onSelect={handleSelectWebcam}
                     onEdgeDrag={webcamEdits.edgeDrag}
@@ -1896,7 +2110,7 @@ function VideoEditor({
         },
       ].filter((lane) => !isTrackHidden(lane.key as TrackKey, hiddenTracks)),
     [
-      cursorTrack,
+      axisTrack,
       activity,
       hiddenTracks,
       layout,
@@ -1910,6 +2124,7 @@ function VideoEditor({
       webcamEdits.edgeDrag,
       webcamStrip.thumbnails,
       webcamStrip.covered,
+      noCameraClips,
       webcamSelectedId,
       handleSelectWebcam,
       redactionEdits.visibleRedactions,
@@ -1940,6 +2155,8 @@ function VideoEditor({
             <PreviewStage
               playback={playback}
               mediaUrl={sourceUrl}
+              axis={axis}
+              recordings={stageRecordings}
               slideUrl={slideUrl}
               expanded={isFullscreen}
               contentRef={contentRef}
@@ -1966,12 +2183,12 @@ function VideoEditor({
               }
               webcam={
                 hasWebcam &&
-                webcamTrack &&
                 scene.webcam && (
                   <WebcamLayer
                     videoRef={playback.videoRef}
-                    src={mediaUrl("webcam", source.id)}
-                    startOffsetMs={webcamTrack.startOffsetMs}
+                    src={webcamTrack ? mediaUrl("webcam", source.id) : null}
+                    startOffsetMs={webcamTrack?.startOffsetMs ?? 0}
+                    recordings={webcamRecordings}
                     webcam={scene.webcam}
                     path={cameraPath}
                     cameraEnabled={cameraApplied}
@@ -2021,6 +2238,7 @@ function VideoEditor({
                   redactions={redactionEdits.visibleRedactions}
                   videoRef={playback.videoRef}
                   hidden={holdingOriginal || onSlide}
+                  frame={frameSize}
                 />
               }
               chrome={
@@ -2119,11 +2337,11 @@ function VideoEditor({
             duration={playback.duration}
             isFullscreen={isFullscreen}
             zoomCount={
-              cursorTrack || zooms.visibleZooms.length > 0 ? zooms.visibleZooms.length : null
+              axisTrack || zooms.visibleZooms.length > 0 ? zooms.visibleZooms.length : null
             }
             privacyCount={redactionEdits.visibleRedactions.length}
             tracks={{
-              available: availableTracks({ hasCursorTrack: cursorTrack !== null, hasWebcam }),
+              available: availableTracks({ hasCursorTrack: axisTrack !== null, hasWebcam }),
               hidden: hiddenTracks,
               onToggle: toggleTrack,
             }}
@@ -2347,7 +2565,7 @@ function VideoEditor({
                     <DetectionPanel
                       zooms={zooms}
                       sensitivity={scene.zoomSensitivity}
-                      clicksAvailable={cursorTrack?.clicksAvailable ?? false}
+                      clicksAvailable={axisTrack?.clicksAvailable ?? false}
                     />
                   )}
                 </>
@@ -2361,6 +2579,8 @@ function VideoEditor({
           layout={layout}
           playback={playback}
           thumbnails={thumbnails}
+          clipRecordings={clipRecordingMap}
+          recordingThumbnails={recordingThumbnails}
           selectedItemId={selectedItemId}
           onSelectItem={setSelectedItemId}
           onTrim={handleTrim}
@@ -2412,11 +2632,11 @@ function VideoEditor({
           sourceSizeBytes={source.sizeBytes ?? null}
           thumbnailUrl={source.thumbnailUrl ?? null}
           timelineDuration={playback.duration}
-          sourceWidth={playback.videoRef.current?.videoWidth ?? 0}
+          sourceWidth={frameSize.width}
           estimate={gifExport.estimate}
           presetSource={{
-            width: playback.videoRef.current?.videoWidth ?? 0,
-            height: playback.videoRef.current?.videoHeight ?? 0,
+            width: frameSize.width,
+            height: frameSize.height,
             fps: sourceProbe?.fps ?? 30,
             hasAudio: (sourceProbe?.hasAudio ?? true) && !scene.audioMuted,
             sampleRate: sourceProbe?.sampleRate,

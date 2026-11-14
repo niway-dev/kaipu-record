@@ -1,6 +1,11 @@
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { FIXTURE_FILES, FIXTURES_DIR, type RecordingCut } from "./make-fixtures";
+import {
+  FIXTURE_FILES,
+  FIXTURES_DIR,
+  JOINED_CUT_SECONDS,
+  type RecordingCut,
+} from "./make-fixtures";
 import { REDACTION_SOLID_RGB } from "../../src/renderer/src/features/screenshots/annotations/redaction";
 import { paintPng, redactionPng, stepSizesPng } from "./mock-shots";
 
@@ -34,6 +39,20 @@ export const ASSETS = {
   lightCopy: "c0a1a10c-0000-4000-8000-000000000008",
   /** Seeded only where `floatingImages` is on: a saved edit with two overlapping floating images. */
   floatingDemo: "c0a1a10c-0000-4000-8000-000000000009",
+  /**
+   * Seeded only where `joinedRecordings` is on (ADR 0058): `joinedDemo` is a recording whose saved
+   * edit joined `joinedSecond` (clips A, B, A); `joinedMissingDemo` joined a recording that is not
+   * in the vault (`JOINED_MISSING_ASSET`).
+   */
+  joinedDemo: "c0a1a10c-0000-4000-8000-00000000000a",
+  joinedSecond: "c0a1a10c-0000-4000-8000-00000000000b",
+  joinedMissingDemo: "c0a1a10c-0000-4000-8000-00000000000c",
+  /**
+   * Also under `joinedRecordings`: `differentAspectDemo` joined `squareSecond`, a 1080x1080
+   * recording, so its joined clip is fitted inside the opened recording's 16:9 frame.
+   */
+  differentAspectDemo: "c0a1a10c-0000-4000-8000-00000000000d",
+  squareSecond: "c0a1a10c-0000-4000-8000-00000000000e",
   settingsShot: "c0a1a10c-0000-4000-8000-000000000101",
   dashboardShot: "c0a1a10c-0000-4000-8000-000000000102",
   dialogShot: "c0a1a10c-0000-4000-8000-000000000103",
@@ -159,6 +178,12 @@ interface RecordingFixture {
   cursorTrack?: boolean;
   /** A saved edit with two overlapping floating images (ADR 0057): `FLOATING_IMAGES`. */
   floating?: boolean;
+  /** A saved version 2 edit that joined another recording (ADR 0058): `joinedScene`. */
+  joined?: JoinedKind;
+  /** The media is `FIXTURE_FILES.joinedCut` (blue, a "B"), not a cut of the opened countdown. */
+  joinedVideo?: boolean;
+  /** The media is `FIXTURE_FILES.joinedSquareCut` (1080x1080) and the capture is 1080x1080. */
+  square?: boolean;
   /** An export: the asset it was made from. */
   derivedFrom?: string;
   /** An export: the preset it was made with (the sidecar's `exportPreset`). */
@@ -222,6 +247,115 @@ const CURSOR_RECORDING: RecordingFixture = {
   ago: 30 * 60_000,
   cursorTrack: true,
 };
+
+/** What a joined recording's saved edit points at: a recording in the vault, or one that is gone. */
+export type JoinedKind = "present" | "missing" | "square";
+
+/** The Library asset id `joinedMissingDemo` joined: nothing in the vault has it. */
+export const JOINED_MISSING_ASSET = "c0a1a10c-0000-4000-8000-0000000000ff";
+
+/** Where a joined recording sits on the source axis (`nextOffset` after a 12 s opened one). */
+export const JOINED_OFFSET = 3600;
+
+/**
+ * The saved scene of a recording that joined a second one (ADR 0058): its clips alternate A (the
+ * opened recording, seconds 0 to 5), B (the whole joined recording, on its own range from
+ * `JOINED_OFFSET`) and A again (from 5 s to the end). `present` joins “Checkout bug” (7 s);
+ * `missing` joins a recording that is not in the vault; `square` joins “Square recording”
+ * (1080x1080). Saved as version 2 by the caller.
+ */
+export function joinedScene(kind: JoinedKind, openedSeconds: number): unknown {
+  const joinedSeconds = kind === "missing" ? 6 : JOINED_SECOND.cut;
+  const joined = {
+    present: { id: "join-b", assetId: ASSETS.joinedSecond, title: JOINED_SECOND.title },
+    missing: { id: "join-gone", assetId: JOINED_MISSING_ASSET, title: "Old standup" },
+    square: { id: "join-sq", assetId: ASSETS.squareSecond, title: SQUARE_SECOND.title },
+  }[kind];
+  const source = {
+    ...joined,
+    offset: JOINED_OFFSET,
+    durationSeconds: joinedSeconds,
+    width: kind === "square" ? 1080 : 1920,
+    height: 1080,
+  };
+  const cutAt = Math.min(5, openedSeconds - 1);
+  return {
+    items: [
+      { id: "clip-a1", kind: "clip", sourceStart: 0, sourceEnd: cutAt },
+      {
+        id: "clip-b",
+        kind: "clip",
+        sourceStart: source.offset,
+        sourceEnd: source.offset + joinedSeconds,
+      },
+      { id: "clip-a2", kind: "clip", sourceStart: cutAt, sourceEnd: openedSeconds },
+    ],
+    overlays: [],
+    zoomSegments: [],
+    redactions: [],
+    zoomSensitivity: 55,
+    audioMuted: false,
+    mutedRanges: [],
+    webcam: null,
+    sources: [source],
+  };
+}
+
+/** Seeded with `JOINED_RECORDINGS`: the recording the first one joins (no webcam). */
+const JOINED_SECOND: RecordingFixture = {
+  stem: "Checkout bug",
+  assetId: ASSETS.joinedSecond,
+  title: "Checkout bug",
+  cut: JOINED_CUT_SECONDS,
+  joinedVideo: true,
+  ago: 15 * 60_000,
+};
+
+/** Seeded with `JOINED_RECORDINGS`: the 1:1 recording “Different aspect” joins. */
+const SQUARE_SECOND: RecordingFixture = {
+  stem: "Square recording",
+  assetId: ASSETS.squareSecond,
+  title: "Square recording",
+  cut: JOINED_CUT_SECONDS,
+  square: true,
+  ago: 14 * 60_000,
+};
+
+/**
+ * Seeded only where `joinedRecordings` is on. “Two recordings” and “Missing recording” open with
+ * a webcam, so the Webcam track exists there; “Different aspect” opens without one and reads
+ * “No camera in this recording”.
+ */
+const JOINED_RECORDINGS: readonly RecordingFixture[] = [
+  {
+    stem: "Two recordings",
+    assetId: ASSETS.joinedDemo,
+    title: "Two recordings",
+    cut: 12,
+    ago: 18 * 60_000,
+    webcam: true,
+    joined: "present",
+  },
+  {
+    stem: "Missing recording",
+    assetId: ASSETS.joinedMissingDemo,
+    title: "Missing recording",
+    cut: 9,
+    ago: 17 * 60_000,
+    webcam: true,
+    joined: "missing",
+  },
+  {
+    stem: "Different aspect",
+    assetId: ASSETS.differentAspectDemo,
+    title: "Different aspect",
+    cut: 12,
+    ago: 16 * 60_000,
+    joined: "square",
+  },
+  JOINED_SECOND,
+  SQUARE_SECOND,
+];
 
 /** Seeded only where `floatingImages` is on: a recording whose saved edit floats two images. */
 const FLOATING_RECORDING: RecordingFixture = {
@@ -333,6 +467,8 @@ export interface SeedOptions {
   cursorRecording?: boolean;
   /** Add the recording with two overlapping floating images (profiles with `timeline-levels`). */
   floatingImages?: boolean;
+  /** Add the recordings whose saved edits joined another one (`JOINED_RECORDINGS`). */
+  joinedRecordings?: boolean;
   /** Add the screenshot that draws real text (profiles that exercise text recognition). */
   textScreenshot?: boolean;
   /** Add the two screenshots the Colors panel states open (profiles that exercise it). */
@@ -479,7 +615,12 @@ async function seedRecording(
   item: RecordingFixture,
 ): Promise<void> {
   const media = path.join(vaultDir, `${item.stem}.mp4`);
-  await copyFile(path.join(fixtures, FIXTURE_FILES.cut(item.cut)), media);
+  const video = item.square
+    ? FIXTURE_FILES.joinedSquareCut
+    : item.joinedVideo
+      ? FIXTURE_FILES.joinedCut
+      : FIXTURE_FILES.cut(item.cut);
+  await copyFile(path.join(fixtures, video), media);
   await copyFile(path.join(fixtures, FIXTURE_FILES.thumbnail), path.join(meta, `${item.stem}.jpg`));
   const createdAt = now - item.ago;
   await writeJson(path.join(meta, `${item.stem}.json`), {
@@ -494,7 +635,7 @@ async function seedRecording(
     capture: {
       mode: "screen",
       cursorPixels: item.cursorTrack ? "excluded" : "embedded",
-      width: 1920,
+      width: item.square ? 1080 : 1920,
       height: 1080,
       ratio: null,
     },
@@ -557,6 +698,20 @@ async function seedRecording(
       sourceSizeBytes: source.size,
       sourceMtimeMs: source.mtimeMs,
       assetIds: [back.assetId, front.assetId],
+      savedAt: createdAt + HOUR,
+      exportedSavedAt: null,
+    });
+  }
+  if (item.joined) {
+    await writeJson(path.join(meta, `${item.stem}.edit.json`), {
+      version: 2,
+      scene: joinedScene(item.joined, item.cut),
+    });
+    const source = await stat(media);
+    await writeJson(path.join(meta, `${item.stem}.edit.meta.json`), {
+      sourceSizeBytes: source.size,
+      sourceMtimeMs: source.mtimeMs,
+      assetIds: [],
       savedAt: createdAt + HOUR,
       exportedSavedAt: null,
     });
@@ -664,6 +819,7 @@ export async function seedCatalogVault(vaultDir: string, options: SeedOptions): 
 
   const recordings = [
     ...(options.floatingImages ? [FLOATING_RECORDING] : []),
+    ...(options.joinedRecordings ? JOINED_RECORDINGS : []),
     ...(options.cursorRecording ? [CURSOR_RECORDING] : []),
     ...RECORDINGS,
   ];
