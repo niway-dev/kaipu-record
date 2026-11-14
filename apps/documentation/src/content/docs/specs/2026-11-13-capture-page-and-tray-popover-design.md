@@ -15,16 +15,16 @@ same state: two rows that open the selector, the Instant line, three on/off swit
 settings, and the workspace. While recording it shows the time, a large Stop and the switches
 read-only.
 
-| Decision                                                                               | Why                                                                                              | ADR  |
-| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---- |
-| One Capture page at `/`, `/screenshots` redirects to it                                | Both entries live in one place; the old route keeps working for links and the editor's back path | none |
-| The card opens the selector; no "Start recording" button                               | A start button that only opens a picker reads like a confirmation                                | none |
-| The card shows the last used mode ("Last used · Frame")                                | Replaces the "Last used" chip row; the selector remembers the mode                               | none |
-| ⌃⌘X Instant is a line, not a button                                                    | It opens nothing                                                                                 | none |
-| Screenshot recents leave the page                                                      | They live in Library                                                                             | none |
-| Settings live on the page, on/off lives in both places                                 | One thing lives in one place; the switch is the same state everywhere                            | none |
-| The popover has no tabs, no mode chips, no settings arrows                             | The selector picks the area; settings live on the page behind "Setup"                            | none |
-| While recording, the popover shows time, Stop ⇧⌘2 and read-only inputs with the reason | Its own job is the second state                                                                  | none |
+| Decision                                                                               | Why                                                                                                        | ADR  |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ---- |
+| One Capture page at `/`, `/screenshots` redirects to it                                | Both entries live in one place; an old link or restored navigation to `/screenshots` still lands somewhere | none |
+| The card opens the selector; no "Start recording" button                               | A start button that only opens a picker reads like a confirmation                                          | none |
+| The card shows the last used mode ("Last used · Frame")                                | Replaces the "Last used" chip row; the selector remembers the mode                                         | none |
+| ⌃⌘X Instant is a line, not a button                                                    | It opens nothing                                                                                           | none |
+| Screenshot recents leave the page                                                      | They live in Library                                                                                       | none |
+| Settings live on the page, on/off lives in both places                                 | One thing lives in one place; the switch is the same state everywhere                                      | none |
+| The popover has no tabs, no mode chips, no settings arrows                             | The selector picks the area; settings live on the page behind "Setup"                                      | none |
+| While recording, the popover shows time, Stop ⇧⌘2 and read-only inputs with the reason | Its own job is the second state                                                                            | none |
 
 Rejected: keep Record as a settings page and delete Screenshot. It works, but capture loses its
 entry point in the app and the name "Record" stops telling the truth.
@@ -41,7 +41,8 @@ an app-wide status bar.
   - Screenshot: "Pick an area, then annotate or copy it." Opens the selector with the capture
     intent in the last used screenshot mode.
   - Recording: "Pick an area, then record with sound and camera." Opens the selector with the
-    record intent in the last used recording mode (plus the aspect ratio when Frame has one).
+    record intent in the last used recording mode. Frame with a remembered area adds its aspect
+    ratio ("Frame · 16:9", or "Frame · Free"); Frame with no area yet shows just "Frame".
 - Instant line: ⌃⌘X keycap, **Instant**, "captures the last area again, without the selector."
 - Divider, then **Recording setup** with "Set once. In the selector you only turn these on or
   off." and the Microphone, System audio and Camera split tiles; a chevron opens one settings
