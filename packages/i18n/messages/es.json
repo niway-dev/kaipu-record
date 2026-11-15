@@ -240,6 +240,8 @@
     "device": "Dispositivo de cámara",
     "deviceDefault": "Cámara predeterminada",
     "deviceUnnamed": "Cámara {index}",
+    "source": "Fuente",
+    "cardDetail": "{camera} · {shape}, {size}",
     "offNote": "La cámara está apagada. Se aplican al encenderla.",
     "liveNote": "Los cambios se aplican en vivo y se verán en la grabación.",
     "mirrorTitle": "Espejar imagen",
@@ -275,6 +277,7 @@
     "levelValue": "{percent}%",
     "noiseTitle": "Reducir el ruido de fondo",
     "noiseHint": "Ventiladores, teclado y ruido de la calle",
+    "sound": "Sonido",
     "liveNote": "El nivel y el ruido se aplican en vivo. El dispositivo queda bloqueado hasta que detengas."
   },
   "systemAudioSettings": {
@@ -288,6 +291,7 @@
     "volumeValue": "{percent}%",
     "duckTitle": "Bajarlo mientras hablo",
     "duckHint": "Mantiene tu voz por encima",
+    "mix": "Mezcla",
     "duckNeedsMic": "Activa el micrófono para usarlo"
   },
   "record": {
@@ -296,14 +300,7 @@
     "pause": "Pausar",
     "resume": "Reanudar",
     "stopRecording": "Detener grabación",
-    "stopHint": "Detén desde aquí o desde la barra flotante",
-    "noSource": "Sin fuente seleccionada",
-    "sourceScreen": "PANTALLA",
-    "sourceWindow": "VENTANA",
-    "chooseSource": "ELEGIR FUENTE",
     "change": "Cambiar",
-    "choose": "Elegir",
-    "locked": "BLOQUEADO",
     "startRecordingBtn": "Iniciar grabación",
     "pausedState": "Pausado",
     "recordingState": "Grabando",

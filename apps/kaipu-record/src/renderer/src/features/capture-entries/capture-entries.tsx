@@ -21,6 +21,11 @@ interface CaptureEntriesProps {
   screenshotUi?: UiAreaProps;
   recordingUi?: UiAreaProps;
   instantUi?: UiAreaProps;
+  /**
+   * Dim the entries and the Instant line and take the entries out of the tab order and the
+   * click path (a take is running). Off by default: the tray popover never passes it.
+   */
+  disabled?: boolean;
 }
 
 interface EntryProps {
@@ -31,6 +36,7 @@ interface EntryProps {
   shortcut?: string;
   lastUsed?: string;
   onClick(): void;
+  disabled?: boolean;
   ui?: UiAreaProps;
 }
 
@@ -42,12 +48,13 @@ function Entry({
   shortcut,
   lastUsed,
   onClick,
+  disabled,
   ui,
 }: EntryProps): React.JSX.Element {
   const t = useTranslations("record");
   const isCard = variant === "card";
   return (
-    <button {...ui} type="button" className={styles.entry} onClick={onClick}>
+    <button {...ui} type="button" className={styles.entry} onClick={onClick} disabled={disabled}>
       <span className={styles.tile} aria-hidden>
         <Icon size={isCard ? 21 : 15} />
       </span>
@@ -85,11 +92,12 @@ export function CaptureEntries({
   screenshotUi,
   recordingUi,
   instantUi,
+  disabled,
 }: CaptureEntriesProps): React.JSX.Element {
   const t = useTranslations("record");
   const instant = shortcuts?.captureInstant;
   return (
-    <div className={styles.root} data-variant={variant}>
+    <div className={styles.root} data-variant={variant} data-disabled={disabled || undefined}>
       <div className={styles.entries}>
         <Entry
           variant={variant}
@@ -99,6 +107,7 @@ export function CaptureEntries({
           shortcut={shortcuts?.captureScreenshot}
           lastUsed={screenshotLastUsed}
           onClick={onScreenshot}
+          disabled={disabled}
           ui={screenshotUi}
         />
         <Entry
@@ -109,6 +118,7 @@ export function CaptureEntries({
           shortcut={shortcuts?.startRecording}
           lastUsed={recordingLastUsed}
           onClick={onRecording}
+          disabled={disabled}
           ui={recordingUi}
         />
       </div>
