@@ -35,7 +35,11 @@ PKGS=$(mktemp -d); OUT=$(mktemp -d)
   && tar xzf mediabunny-1.61.4.tgz -C v161 && tar xzf mediabunny-1.66.0.tgz -C v166)
 node verify/fixtures/av-sync/generate/gen.mjs "$PWD/node_modules/@playwright/test" "$PKGS" "$OUT"
 # writes $OUT/fixture-mb161.mp4 and $OUT/fixture-mb166.mp4
+cp "$OUT/fixture-mb161.mp4" verify/fixtures/av-sync/mb161.mp4
+cp "$OUT/fixture-mb166.mp4" verify/fixtures/av-sync/mb166.mp4
 ```
+
+Then re-run `e2e/helpers/av-sync.test.ts`: it pins each file's offset.
 
 The encoder is not bit-exact between runs, but the offsets are: two runs gave +44.0 ms and
 +0.0 ms on every event.

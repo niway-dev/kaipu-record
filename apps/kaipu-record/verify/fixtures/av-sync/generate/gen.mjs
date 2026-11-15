@@ -1,5 +1,6 @@
-// Regenerates mb161.mp4 and mb166.mp4: serves gen.html, opens it in system Chrome once per
-// mediabunny version, and writes each uploaded MP4 into <out-dir>. See ../README.md.
+// Writes fixture-mb161.mp4 and fixture-mb166.mp4 into <out-dir>: serves gen.html, opens it in
+// system Chrome once per mediabunny version, and saves each uploaded MP4. Copy them over
+// ../mb161.mp4 and ../mb166.mp4 to regenerate the fixtures; see ../README.md.
 //
 // Usage: node gen.mjs <path to @playwright/test> <pkgs-dir> <out-dir>
 // <pkgs-dir> holds v161/package and v166/package (extracted `npm pack` tarballs).
