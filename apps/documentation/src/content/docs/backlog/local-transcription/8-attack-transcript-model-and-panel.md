@@ -25,11 +25,11 @@ This was a read-only source review of the current feature branch. No files were 
 
 **What breaks:** Text can disclose speech the user deliberately silenced. “Words inside muted ranges hidden” does not specify how to handle partial overlap.
 
-**Concrete scenario:** A word has estimated source interval `1000, 1500)` ms. The user mutes `[1100, 1450)`. Filtering by word start or requiring complete containment leaves the entire word in TXT, subtitles and burned-in captions, although most of its audio is silenced. Subtracting the mute from its interval still leaves the complete textual word attached to two small fragments.
+**Concrete scenario:** A word has estimated source interval `[1000, 1500)` ms. The user mutes `[1100, 1450)`. Filtering by word start or requiring complete containment leaves the entire word in TXT, subtitles and burned-in captions, although most of its audio is silenced. Subtracting the mute from its interval still leaves the complete textual word attached to two small fragments.
 
 **Likelihood:** High once users place mutes manually near word boundaries. Severity is highest when muting removes sensitive speech.
 
-**Known versus inferred:** Arbitrary source-time mute intervals and whole-scene `audioMuted` are **verified** in [audio-edits.ts (`apps/kaipu-record/src/renderer/src/features/video-editor/audio-edits.ts:53`). The disclosure is **inferred**, because the proposed overlap policy is unspecified. Timestamp uncertainty is **supplied**.
+**Known versus inferred:** Arbitrary source-time mute intervals and whole-scene `audioMuted` are **verified** in `apps/kaipu-record/src/renderer/src/features/video-editor/audio-edits.ts:53`. The disclosure is **inferred**, because the proposed overlap policy is unspecified. Timestamp uncertainty is **supplied**.
 
 **Evidence needed:** Test words that partially overlap each mute edge, words spanning multiple mutes, and whole-scene mute. Inspect every textual output, including any stored segment text. Establish whether mute promises textual suppression or only silence.
 
@@ -39,13 +39,13 @@ This was a read-only source review of the current feature branch. No files were 
 
 **What breaks:** Words disappear from repeated footage, seek targets jump to the wrong occurrence, or highlighting marks several identical rows.
 
-**Concrete scenario:** Timeline clips show source `0, 5)`, then `[10, 15)`, then `[0, 5)` again. A word at source `[2, 2.4)` belongs at timeline `[2, 2.4)` and `[12, 12.4)`. A scalar inverse returns only the first. A row keyed solely by recording and word cannot distinguish the two.
+**Concrete scenario:** Timeline clips show source `[0, 5)`, then `[10, 15)`, then `[0, 5)` again. A word at source `[2, 2.4)` belongs at timeline `[2, 2.4)` and `[12, 12.4)`. A scalar inverse returns only the first. A row keyed solely by recording and word cannot distinguish the two.
 
 Joining the same recording twice adds another case: the transcript is shared, but the two source instances have different offsets.
 
 **Likelihood:** Certain whenever footage repeats and the implementation uses the scalar inverse.
 
-**Known versus inferred:** The first-occurrence behavior is **verified** in [source-time.ts (`apps/kaipu-record/src/renderer/src/features/video-editor/source-time.ts:62`). Its range helper already returns multiple blocks. Independent joins of the same asset are **verified** in source-axis.ts (`apps/kaipu-record/src/renderer/src/features/video-editor/source-axis.ts:126`). The proposed UI’s failure is **inferred**.
+**Known versus inferred:** The first-occurrence behavior is **verified** in source-time.ts (`apps/kaipu-record/src/renderer/src/features/video-editor/source-time.ts:62`). Its range helper already returns multiple blocks. Independent joins of the same asset are **verified** in source-axis.ts (`apps/kaipu-record/src/renderer/src/features/video-editor/source-axis.ts:126`). The proposed UI’s failure is **inferred**.
 
 **Evidence needed:** A projection test must return both occurrences, in timeline order, with independently correct seek targets and highlighting. Repeat it with the same asset joined twice.
 
@@ -97,7 +97,7 @@ Joining the same recording twice adds another case: the transcript is shared, bu
 
 **What breaks:** Highlights linger through silence; cuts retain complete words whose audio is mostly gone; original segments produce misleading text across edits.
 
-**Concrete scenario:** “Hello” begins at 1 second; the next word begins at 7 seconds after a pause. If the inferred end is the next word’s start, “Hello” occupies six seconds. Cutting `0, 3)` retains a word interval even though the actual utterance ended earlier. Separately, cutting the middle from “do not share this” can leave a stored segment whose text still contains removed words.
+**Concrete scenario:** “Hello” begins at 1 second; the next word begins at 7 seconds after a pause. If the inferred end is the next word’s start, “Hello” occupies six seconds. Cutting `[0, 3)` retains a word interval even though the actual utterance ended earlier. Separately, cutting the middle from “do not share this” can leave a stored segment whose text still contains removed words.
 
 A word spanning an internal cut may also produce two mapped fragments. Emitting the complete word for each fragment duplicates text.
 
@@ -131,7 +131,7 @@ A word spanning an internal cut may also produce two mapped fragments. Emitting 
 
 **Likelihood:** High if captions directly reuse current overlay rasterization; conditional otherwise. This is a specific implementation hazard, not proof that a custom compositor is unsuitable.
 
-**Known versus inferred:** Full-frame rasterization and concurrent rasterization are **verified** in [overlay-raster.ts (`apps/kaipu-record/src/renderer/src/features/video-editor/export/overlay-raster.ts:26`). Overlays precede crop/framing and webcam composition in compose-output-frame.ts (`apps/kaipu-record/src/renderer/src/features/video-editor/export/compose-output-frame.ts:344`). Memory size is a calculation, not a measurement.
+**Known versus inferred:** Full-frame rasterization and concurrent rasterization are **verified** in overlay-raster.ts (`apps/kaipu-record/src/renderer/src/features/video-editor/export/overlay-raster.ts:26`). Overlays precede crop/framing and webcam composition in compose-output-frame.ts (`apps/kaipu-record/src/renderer/src/features/video-editor/export/compose-output-frame.ts:344`). Memory size is a calculation, not a measurement.
 
 **Evidence needed:** Measure peak memory during a long captioned export. Inspect captions under zoom, portrait fill, backgrounds and a bottom-positioned webcam.
 

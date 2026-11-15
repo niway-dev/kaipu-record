@@ -9,36 +9,7 @@ sidebar:
 
 ## Brief
 
-is a claim, and it needs this search first:
-
-1. Every branch and commit: `git fetch origin`, then
-   `git log --all --oneline -S'<text>'`.
-2. Open PRs: `gh pr list --search '<text>'` (account per the GitHub section).
-3. Uncommitted work: `git status` and `git worktree list` in the repo.
-4. T3 threads: `t3_thread_search`, then `t3_thread_read` every match before
-   ruling it out. A match with the topic in its title is the place to look,
-   not a duplicate of the current thread.
-
-Only after all four come back empty, say what was searched and ask.
-
-## GitHub account selection
-
-Before repository-related GitHub CLI operations, read and follow
-`~/GITHUB_ACCOUNTS.md` (resolve `~` to the current user's home directory).
-It is the canonical SSH alias-to-GitHub-account mapping and PR workflow.
-Do not assume the active `gh` account is correct for the current repository.
-
-## Other machines
-
-Before running anything on another of the owner's machines (M4, Mac mini), read
-`~/AGENT_HOSTS.md`: which machines exist, how to reach them over SSH, and what
-to bring back. Run the work there and return only the result.
-<cwd>~/Documents/Workspace/Personal/kaipu-record-monorepo</cwd>
-<shell>zsh</shell>
-<current_date>2026-11-15</current_date>
-<timezone>America/Lima</timezone>
-<filesystem><workspace_roots><root>~/Documents/Workspace/Personal/kaipu-record-monorepo</root></workspace_roots><permission_profile type="disabled"><file_system type="unrestricted" /></permission_profile></filesystem>
-Act as the research sub-agent for this task.
+<!-- Harness instructions that were prepended to the delegated brief are removed here; the brief itself follows unchanged. -->
 
 Research task, read-only. Do not edit any file. Answer in English.
 
@@ -92,7 +63,7 @@ Checked November 2026 against public sources; no hands-on testing. **U = unverif
 1. Screen Studio explicitly excludes system-audio-only recordings from caption generation, making its microphone restriction an especially relevant competitive gap for Kaipu ([caption guide](https://screen.studio/guide/captions)).
 2. Cap already offers local Parakeet/Whisper transcription, active-word styling, explicit video cuts and edited-timeline SRT/VTT export, so local processing alone is not a unique proposition ([Studio documentation](https://cap.so/docs/recording/studio-mode)).
 3. Tella separates a verbatim editing transcript from subtitles that filter fillers, despite deriving both from the same underlying transcript ([transcription and captions](https://www.tella.com/features/automated-subtitles)).
-4. Descript distinguishes correction from media editing and reanalyzes alignment after text corrections ([correct your transcript](https://help.descript.com/hc/en-us/articles/23054692507661-Unable-to-toggle-capitalization-or-punctuation-on-Windows)).
+4. Descript distinguishes correction from media editing and reanalyzes alignment after text corrections ([correct your transcript](https://help.descript.com/hc/en-us/articles/23054692507661-Unable-to-toggle-capitalization-or-punctuation-on-Windows)) _(Editor's note: this link points to a Descript article about a capitalization toggle on Windows, not to transcript correction; the claim is unverified.)_.
 5. Descript exposes maximum characters per line when exporting subtitles rather than assuming the on-video caption layout should determine the sidecar layout ([subtitle export](https://help.descript.com/export-and-share/subtitles)).
 6. Loom makes transcript correction update CC automatically, while charging for eligible SRT downloads and stylized captions ([Loom transcription](https://support.atlassian.com/loom/docs/loom-video-transcription-and-closed-captions/)).
 7. Riverside distinguishes the full recording transcript from the edited transcript and explicitly excludes screen-share audio from the former ([full transcript download](https://support.riverside.com/hc/en-us/articles/5262262435485-Download-transcript-of-full-recording)).

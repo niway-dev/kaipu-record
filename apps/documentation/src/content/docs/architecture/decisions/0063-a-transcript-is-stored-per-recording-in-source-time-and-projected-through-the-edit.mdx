@@ -49,8 +49,10 @@ after edits ([research](/backlog/local-transcription/6-competitor-transcript-ux/
 5. **Every reader uses it.** The transcript panel, the SRT/VTT/TXT exports, and later burned-in
    captions read occurrences from the projection, so all show the same words at the same times.
    Cues are rebuilt from surviving words, never cut from stored sentences.
-6. **Corrections are a separate layer** (later): an array keyed by word id that survives
-   regenerating the words.
+6. **Corrections are a separate layer** (later). Word ids are not stable across a new
+   transcription run, so a correction is anchored by its source time range and the text it
+   replaced, and is re-matched to the new words by time overlap after a re-run; a correction that
+   no longer matches is shown to the user, never dropped silently.
 
 ## Alternatives rejected
 

@@ -69,6 +69,12 @@ Facts this decision rests on:
    that, the feature says what it needs and the app works as before. No audio leaves the machine.
 7. **Elsewhere, unavailable.** Windows, Intel Mac, a missing binary or a missing model all produce
    the same "unavailable" state. Nothing crashes.
+8. **Pinned and attributed.** The build fetches the sherpa-onnx release archive by exact version
+   and checks its SHA-256 before copying the CLI and library into `resources/native/`; a bump is a
+   deliberate change with a new hash. Parakeet's CC-BY-4.0 license requires attribution: the
+   model's name, NVIDIA, the license and a link appear in the app's third-party notices and in the
+   download prompt, as invisible-assistant does in `THIRD_PARTY_NOTICES.md`. sherpa-onnx
+   (Apache-2.0) and onnxruntime (MIT) are listed there too.
 
 ## Alternatives rejected
 

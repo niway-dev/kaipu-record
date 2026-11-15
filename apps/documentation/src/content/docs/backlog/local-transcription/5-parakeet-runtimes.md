@@ -9,26 +9,7 @@ sidebar:
 
 ## Brief
 
-Only after all four come back empty, say what was searched and ask.
-
-## GitHub account selection
-
-Before repository-related GitHub CLI operations, read and follow
-`~/GITHUB_ACCOUNTS.md` (resolve `~` to the current user's home directory).
-It is the canonical SSH alias-to-GitHub-account mapping and PR workflow.
-Do not assume the active `gh` account is correct for the current repository.
-
-## Other machines
-
-Before running anything on another of the owner's machines (M4, Mac mini), read
-`~/AGENT_HOSTS.md`: which machines exist, how to reach them over SSH, and what
-to bring back. Run the work there and return only the result.
-<cwd>~/Documents/Workspace/Personal/kaipu-record-monorepo</cwd>
-<shell>zsh</shell>
-<current_date>2026-11-15</current_date>
-<timezone>America/Lima</timezone>
-<filesystem><workspace_roots><root>~/Documents/Workspace/Personal/kaipu-record-monorepo</root></workspace_roots><permission_profile type="disabled"><file_system type="unrestricted" /></permission_profile></filesystem>
-Act as the research sub-agent for this task.
+<!-- Harness instructions that were prepended to the delegated brief are removed here; the brief itself follows unchanged. -->
 
 Research task, read-only. Do not edit any file. Answer in English.
 

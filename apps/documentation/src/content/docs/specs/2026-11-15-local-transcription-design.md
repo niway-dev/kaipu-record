@@ -92,8 +92,9 @@ real against the repo, with the phase that covers it. None has been observed in 
     floating images (`export-clip-frames.ts`). Burn-in must drive frame scheduling. (later)
 13. **Caption memory.** Reusing full-frame overlay rasters for 1,000 cues at 4K is ~31 GiB
     (calculated). Burn-in uses cue-sized rasters. (later)
-14. **Corrections lost on regeneration.** Corrections become a separate layer keyed by word id,
-    never edits to the generated words. (later, schema leaves room in M1)
+14. **Corrections lost on regeneration.** Word ids change on every run, so corrections become a
+    separate layer anchored by source time range and replaced text, re-matched by overlap after a
+    re-run, never edits to the generated words. (later, schema leaves room in M1)
 15. **Mixed track picks up background audio.** Music or a video playing is transcribed too and
     overlapping speech can be lost. Accepted for the first version; the mic track phase fixes it
     for new recordings.
@@ -158,7 +159,8 @@ and an empty `words` array. The websocket server on the same machine listened on
 - `text` carries the model's punctuation and capitalization.
 - `logProb` is the mean token log-probability of the word, not a calibrated confidence.
 - A media hash mismatch marks the transcript stale; it is never silently re-timed.
-- Corrections (later) live in a separate `corrections` array keyed by word id.
+- Corrections (later) live in a separate `corrections` array anchored by source time range and
+  the replaced text, because word ids do not survive a new run.
 
 ## Phases
 
@@ -195,7 +197,8 @@ Criteria:
   unpacked, signed, `--version` handshake, release workflow check. Missing = "unavailable".
 - **Job in main:** renderer writes the PCM file to `.kaipu/tmp`; main segments, runs CLI batches,
   reports progress per segment, cancels, resumes after a crash without duplicate segments. One job
-  at a time. Its own supervisor — `runHelperProcess` is one-shot with a 16 MB stdout cap.
+  at a time. Where segments overlap (the M0 strategy), words in the overlap are kept from one side
+  only, by their midpoint, so a boundary word is neither lost nor doubled. Its own supervisor — `runHelperProcess` is one-shot with a 16 MB stdout cap.
 - **Words:** token grouping at a leading space or `▁`; start = first token start; end = last token
   start + duration; offset by segment start; integer ms.
 - **File:** schema above, validated on read; registered in every companion path (rename, move,
@@ -209,7 +212,8 @@ Criteria:
 - [ ] With the model installed and the network off, transcribing writes a transcript file that
       validates.
 - [ ] Unit tests: token→word grouping (including the last word's end), segment offsetting,
-      unresolved intervals, schema parse and reject.
+      unresolved intervals, overlap reconciliation (a word straddling a boundary appears exactly
+      once), schema parse and reject.
 - [ ] Rename, cross-workspace move and reconcile keep the transcript with its recording (tests
       beside the existing companion tests).
 - [ ] Killing the CLI mid-job ends failed or resumable, never hung; cancel stops within seconds.
@@ -223,7 +227,9 @@ Criteria:
 - Panel: paragraphs with start time, click to seek to an occurrence, current word highlighted via
   `subscribeTime` (no full re-render per frame), search, copy.
 - States: flag off; model missing (offer download); downloading; transcribing (progress, cancel);
-  done; done with unresolved intervals; failed; no audio; unavailable.
+  done; done with unresolved intervals; stale (the recording's media hash no longer matches: the
+  old words stay readable, marked out of date, with a re-transcribe action); failed; no audio;
+  unavailable.
 - ui-map area, a catalog state per panel state, es and en messages.
 
 Criteria:
