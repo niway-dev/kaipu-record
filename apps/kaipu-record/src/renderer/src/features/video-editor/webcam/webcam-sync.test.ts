@@ -8,6 +8,7 @@ import {
   webcamTimeFor,
 } from "./webcam-sync";
 import { sourceAxis } from "../source-axis";
+import { joinedSource } from "../media-switch.fixture";
 
 describe("webcamTimeFor", () => {
   it("subtracts the offset: a webcam that started 500 ms late is at 0 when the screen is at 0.5 s", () => {
@@ -105,15 +106,6 @@ describe("webcamSeekLead", () => {
 
 describe("webcamFileAt", () => {
   const opened = { src: "kaipu-media://webcam/opened", startOffsetMs: 500 };
-  const joinedSource = (id: string, offset: number, durationSeconds: number) => ({
-    id,
-    assetId: `asset-${id}`,
-    title: id,
-    offset,
-    durationSeconds,
-    width: 1280,
-    height: 720,
-  });
   // Opened [0, 100], B [3600, 3640] with a webcam, C [7200, 7230] recorded without one.
   const recordings = {
     axis: sourceAxis(100, [joinedSource("B", 3600, 40), joinedSource("C", 7200, 30)]),

@@ -153,6 +153,17 @@ describe("axisOverlayTrack: provenance is per recording", () => {
   });
 });
 
+describe("axisOverlayTrack: a recording's own truncation cutoff", () => {
+  it("hides the pointer from the cutoff on, in each recording, instead of holding the last position", () => {
+    const cut = { ...trackAt(0.9), t: [0, 4000], truncatedAtMs: 5000 };
+    const overlay = axisOverlayTrack(opened(trackAt(0.2), true), [joinedAt(cut, true)]);
+    expect(drawnAt(overlay, 22)).toBeCloseTo(0.9);
+    expect(drawnAt(overlay, 24.5)).toBeCloseTo(0.9);
+    expect(drawnAt(overlay, 26)).toBeNull(); // 6 s into the recording, past its 5 s cutoff
+    expect(drawnAt(overlay, 5)).toBeCloseTo(0.2); // the opened recording is unaffected
+  });
+});
+
 describe("axisOverlayTrack: no pointer in a recording without a track", () => {
   it("the primary has a track, the joined one has none, idle hiding off: nothing in the joined range", () => {
     const overlay = axisOverlayTrack(opened(trackAt(0.2), true), [joinedAt(null, true)]);
