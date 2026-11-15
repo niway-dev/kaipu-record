@@ -6,7 +6,6 @@ import { useShortcutLabels } from "@renderer/features/shortcuts/use-shortcut-lab
 import { useRecordingActivity } from "@renderer/features/recording/hooks/use-recording-activity";
 import { useSourceSelection } from "@renderer/features/recording/hooks/use-source-selection";
 import { usePermissions } from "@renderer/features/permissions";
-import { SourceCard } from "@renderer/features/recording/components/source-card";
 import { RecordingToggles } from "@renderer/features/recording/components/recording-toggles";
 import { RecordingIndicator } from "@renderer/features/recording/components/recording-indicator";
 import { CountdownOverlay } from "@renderer/features/recording/components/countdown-overlay";
@@ -269,93 +268,83 @@ export function RecordPage(): React.JSX.Element {
     </>
   );
 
-  if (!isRecording) {
-    // Design "Kaipu Capture Home": two entries that open the selector (the capture widget),
-    // then what is set once: the sound and camera inputs. What to capture is picked in the
-    // selector, so the page has no Start button and no source card.
-    return (
-      <div {...uiArea("record.page")} className={styles.idlePage}>
-        <WorkspaceNotConnectedNotice ui={uiArea("record.workspaceNotice")} />
-        <div className={styles.idleHeading}>
-          <h1 className={styles.idleTitle}>{t("capturePageTitle")}</h1>
-          <span className={styles.idleWorkspace}>
-            {t("capturePageWorkspace", { name: workspaces?.active?.name ?? "…" })}
-          </span>
-          {workspaces?.active && (
-            <button
-              type="button"
-              className={styles.switchWorkspace}
-              onClick={() => workspaces.setMenuOpen(true)}
-            >
-              {t("switchWorkspace")}
-            </button>
-          )}
-        </div>
-        <ReconcileBanner ui={uiArea("record.reconcileBanner")} />
-
-        <CaptureEntries
-          variant="card"
-          shortcuts={shortcuts}
-          screenshotLastUsed={entries.screenshotLastUsed}
-          recordingLastUsed={entries.recordingLastUsed}
-          onScreenshot={entries.openScreenshot}
-          onRecording={entries.openRecording}
-          screenshotUi={uiArea("record.screenshotCard")}
-          recordingUi={uiArea("record.recordingCard")}
-          instantUi={uiArea("record.instantLine")}
-        />
-
-        <section {...uiArea("record.setup")} className={styles.setup}>
-          <div className={styles.setupHeading}>
-            <h2 className={styles.setupTitle}>{t("setupTitle")}</h2>
-            <p className={styles.setupHint}>{t("setupHint")}</p>
-          </div>
-          <div className={styles.lockable}>
-            {toggles}
-            {inputNotices}
-          </div>
-        </section>
-
-        {pickerAndCountdown}
-      </div>
-    );
-  }
-
+  // Design "Kaipu Capture Home": one page in every state. Two entries that open the selector
+  // (the capture widget), then what is set once: the sound and camera inputs. What to capture
+  // is picked in the selector, so the page has no Start button and no source card. While a
+  // take runs the same page stays, with the recording bar under the header and the entries
+  // disabled; the setup row stays live.
   return (
-    <div {...uiArea("record.page")} className={styles.page}>
-      <RecordingIndicator
-        ui={uiArea("record.recordingIndicator")}
-        paused={isPaused}
-        elapsedSeconds={activity.elapsedSeconds}
-      />
-
-      <div className={styles.lockable}>
-        <div className={styles.locked} data-locked inert>
-          <SourceCard source={setup.selectedSource} locked onChoose={setup.openSourcePicker} />
-        </div>
-        {toggles}
-        {inputNotices}
-      </div>
-
-      <div {...uiArea("record.recordingControls")} className={styles.recordingControls}>
-        {isPaused ? (
-          <button className={styles.pauseButton} type="button" onClick={setup.resumeRecording}>
-            <Play size={15} fill="currentColor" />
-            {t("resume")}
-          </button>
-        ) : (
-          <button className={styles.pauseButton} type="button" onClick={setup.pauseRecording}>
-            <Pause size={15} />
-            {t("pause")}
+    <div {...uiArea("record.page")} className={styles.idlePage}>
+      <WorkspaceNotConnectedNotice ui={uiArea("record.workspaceNotice")} />
+      <div className={styles.idleHeading}>
+        <h1 className={styles.idleTitle}>{t("capturePageTitle")}</h1>
+        <span className={styles.idleWorkspace}>
+          {t("capturePageWorkspace", { name: workspaces?.active?.name ?? "…" })}
+        </span>
+        {workspaces?.active && (
+          <button
+            type="button"
+            className={styles.switchWorkspace}
+            onClick={() => workspaces.setMenuOpen(true)}
+          >
+            {t("switchWorkspace")}
           </button>
         )}
-        <button className={styles.stopButton} type="button" onClick={setup.stopRecording}>
-          <Square size={13} fill="currentColor" />
-          {t("stopRecording")}
-        </button>
       </div>
 
-      <p className={styles.recordingHint}>{t("stopHint")}</p>
+      {isRecording && (
+        <RecordingIndicator
+          ui={uiArea("record.recordingIndicator")}
+          paused={isPaused}
+          elapsedSeconds={activity.elapsedSeconds}
+          sourceName={selectedSource?.name}
+        >
+          <div {...uiArea("record.recordingControls")} className={styles.recordingControls}>
+            {isPaused ? (
+              <button className={styles.pauseButton} type="button" onClick={setup.resumeRecording}>
+                <Play size={14} fill="currentColor" />
+                {t("resume")}
+              </button>
+            ) : (
+              <button className={styles.pauseButton} type="button" onClick={setup.pauseRecording}>
+                <Pause size={14} />
+                {t("pause")}
+              </button>
+            )}
+            <button className={styles.stopButton} type="button" onClick={setup.stopRecording}>
+              <Square size={12} fill="currentColor" />
+              {t("stopRecording")}
+            </button>
+          </div>
+        </RecordingIndicator>
+      )}
+
+      <ReconcileBanner ui={uiArea("record.reconcileBanner")} />
+
+      <CaptureEntries
+        variant="card"
+        shortcuts={shortcuts}
+        screenshotLastUsed={entries.screenshotLastUsed}
+        recordingLastUsed={entries.recordingLastUsed}
+        onScreenshot={entries.openScreenshot}
+        onRecording={entries.openRecording}
+        screenshotUi={uiArea("record.screenshotCard")}
+        recordingUi={uiArea("record.recordingCard")}
+        instantUi={uiArea("record.instantLine")}
+        disabled={isRecording}
+      />
+
+      <section {...uiArea("record.setup")} className={styles.setup}>
+        <div className={styles.setupHeading}>
+          <h2 className={styles.setupTitle}>{t("setupTitle")}</h2>
+          <p className={styles.setupHint}>{t("setupHint")}</p>
+        </div>
+        <div className={styles.lockable}>
+          {toggles}
+          {inputNotices}
+        </div>
+      </section>
+
       {pickerAndCountdown}
     </div>
   );
