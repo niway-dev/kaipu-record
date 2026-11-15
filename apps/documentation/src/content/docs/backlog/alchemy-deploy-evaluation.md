@@ -127,10 +127,6 @@ around `deploy-worker.sh` does it.
    `@cloudflare/vite-plugin`, which both `apps/web-hono` and `apps/console` use
    ([TanStack Start](https://alchemy.run/cloudflare/frontend/tanstack-start)). That changes the
    production bundle and the dev server, and the same-origin auth proxy runs through both.
-6. **Promoting the previewed version.** A zero-traffic upload exists (`version.traffic: 0`),
-   but deploying an already-uploaded version by id does not
-   ([#2307](https://github.com/alchemy-run/alchemy/issues/2307)). The release would ship a
-   fresh upload, not the version that was inspected.
 
 ## What would change in the system
 
@@ -151,6 +147,11 @@ around `deploy-worker.sh` does it.
 - **"Alchemy cannot keep version previews."** False: `traffic: 0` exists
   ([gradual deployments](https://alchemy.run/cloudflare/compute/gradual-deployments)). The
   semantics change; the capability is there.
+- **"The release would not ship the version that was previewed."** True for Alchemy, which
+  cannot deploy an uploaded version by id
+  ([#2307](https://github.com/alchemy-run/alchemy/issues/2307)), but `release-web.yml` already
+  runs a fresh `wrangler deploy` today. Nothing is lost; promote-by-id is a gain neither tool
+  gives us now.
 - **"Secrets end up in plaintext state."** True only for stores other than
   `Cloudflare.state()`. It is a requirement to set, not a blocker.
 - **"It can detach `www.kaipu.app`."** Only if the declaration omits it. The domains are
@@ -169,6 +170,8 @@ does not need Alchemy:
   `apps/web-hono` declares its own `services` entry pointing at `kaipu-api-nightly`. That
   closes the API half of the "staging web writes to the production database" trap from
   [Deploy environments](/backlog/deploy-environments/).
+- `scripts/deploy-worker.sh` takes only an app directory today. A nightly workflow needs it to
+  pass `--env nightly` through, so the pinned-wrangler path stays the one deploy path.
 - `routes` is inherited, unlike bindings. Without its own `routes`, `env.nightly` of
   `apps/web-hono` would try to claim `kaipu.app` and `www.kaipu.app`, so it must declare a
   nightly hostname (or none, with `workers_dev`).
