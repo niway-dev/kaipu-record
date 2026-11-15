@@ -54,7 +54,8 @@ below was checked against the code; Alchemy claims carry their source.
   - `apps/server-hono` (`kaipu-api`);
   - `apps/web-hono` (`kaipu-web`, custom domains `kaipu.app` and `www.kaipu.app`);
   - `apps/console` (`kaipu-console`, `console.kaipu.app`).
-  - Web and console reach the API through a Service Binding named `kaipu-api`.
+  - Web and console reach the API through a Service Binding (`API_SERVICE`) whose target is
+    the Worker named `kaipu-api`.
 - **API and web deploy from CI.** release-please cuts a tag per component, and
   `release-api.yml` / `release-web.yml` run `scripts/deploy-worker.sh`. That script pins
   wrangler 4.148.0 and runs `wrangler deploy --secrets-file`, so secrets ship inside the
@@ -166,8 +167,15 @@ does not need Alchemy:
   (`kaipu-api-nightly`, `kaipu-web-nightly`).
 - Bindings are not inherited between wrangler environments, so `env.nightly` in
   `apps/web-hono` declares its own `services` entry pointing at `kaipu-api-nightly`. That
-  closes the "staging web writes to the production database" trap from
+  closes the API half of the "staging web writes to the production database" trap from
   [Deploy environments](/backlog/deploy-environments/).
+- `routes` is inherited, unlike bindings. Without its own `routes`, `env.nightly` of
+  `apps/web-hono` would try to claim `kaipu.app` and `www.kaipu.app`, so it must declare a
+  nightly hostname (or none, with `workers_dev`).
+- It does not close the other half. The web Worker also receives `DATABASE_URL` directly
+  (`release-web.yml`), so a nightly deploy needs its own secrets file with a non-production
+  database URL for **both** Workers. Alchemy would not remove that step either: a stage still
+  needs its own database value or a Neon branch.
 - The rest of that design (database, Infisical folder, hostname, Access) stays open in that
   page; this evaluation does not decide it.
 
