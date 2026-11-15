@@ -76,11 +76,19 @@ export function MicSettingsContent({
       data-compact={compact || undefined}
       data-columns={columns || undefined}
     >
-      <div className={styles.header}>
-        <Mic size={compact ? 13 : 15} aria-hidden className={styles.headerIcon} />
-        <span className={styles.headerTitle}>{t("microphone")}</span>
-        {isRecording && <span className={styles.live}>{t("live")}</span>}
-      </div>
+      {/* The page's setup card already names the microphone: its panel only keeps the
+          "Live" tag, and only during a take. */}
+      {(!columns || isRecording) && (
+        <div className={styles.header} data-bare={columns || undefined}>
+          {!columns && (
+            <>
+              <Mic size={compact ? 13 : 15} aria-hidden className={styles.headerIcon} />
+              <span className={styles.headerTitle}>{t("microphone")}</span>
+            </>
+          )}
+          {isRecording && <span className={styles.live}>{t("live")}</span>}
+        </div>
+      )}
 
       <div className={styles.column}>
         {/* The panel drops the section labels: the radios and the slider name themselves. */}
@@ -151,6 +159,11 @@ export function MicSettingsContent({
       <div className={styles.column}>
         {!compact && (
           <span className={styles.label} aria-hidden>
+            {columns ? t("sound") : t("inputLevel")}
+          </span>
+        )}
+        {columns && (
+          <span className={styles.fieldTitle} aria-hidden>
             {t("inputLevel")}
           </span>
         )}

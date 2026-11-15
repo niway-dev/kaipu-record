@@ -3,6 +3,7 @@ import { Mic, Volume2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import type { Microphone } from "@renderer/features/recording/types";
 import { SettingsDrawer, type SettingsDrawerVariant } from "../settings-controls/settings-drawer";
+import { SetupCard } from "../settings-controls/setup-card";
 import { ToggleSplit } from "../settings-controls/toggle-split";
 import {
   useSettingsDisclosure,
@@ -90,6 +91,10 @@ interface MicTileProps {
   on: boolean;
   onToggle: () => void;
   compact?: boolean;
+  /** The Capture page's setup card (name, current choice, switch, chevron) instead of the tile. */
+  card?: boolean;
+  /** The card's secondary line; "No microphones found" while none is selected. */
+  selectedMicrophone?: Microphone | null;
   control: AudioControl;
   ui?: UiAreaProps;
 }
@@ -99,10 +104,30 @@ export function MicToggleSplit({
   on,
   onToggle,
   compact,
+  card = false,
+  selectedMicrophone = null,
   ui,
 }: MicTileProps): React.JSX.Element {
   const t = useTranslations("micSettings");
   const tRecord = useTranslations("record");
+  if (card) {
+    return (
+      <SetupCard
+        icon={Mic}
+        name={t("microphone")}
+        detail={selectedMicrophone?.label ?? t("noDevices")}
+        status={on ? tRecord("statusOn") : tRecord("statusOff")}
+        on={on}
+        onToggle={onToggle}
+        ui={ui}
+        chevronLabel={t("title")}
+        open={control.open}
+        onOpenChange={control.setOpen}
+        controlsId={control.settingsId}
+        chevronRef={control.chevronRef as Ref<HTMLButtonElement>}
+      />
+    );
+  }
   return (
     <ToggleSplit
       icon={Mic}
@@ -172,6 +197,8 @@ interface AudioTileProps {
   /** Mid-take with no loopback track: the body cannot turn it on; the settings still open. */
   unavailable?: boolean;
   compact?: boolean;
+  /** The Capture page's setup card instead of the tile. */
+  card?: boolean;
   control: AudioControl;
   ui?: UiAreaProps;
 }
@@ -182,10 +209,31 @@ export function SystemAudioToggleSplit({
   onToggle,
   unavailable = false,
   compact,
+  card = false,
   ui,
 }: AudioTileProps): React.JSX.Element {
   const t = useTranslations("systemAudioSettings");
   const tRecord = useTranslations("record");
+  if (card) {
+    return (
+      <SetupCard
+        icon={Volume2}
+        name={t("systemAudio")}
+        detail={t("allSound")}
+        status={on ? tRecord("statusOn") : tRecord("statusOff")}
+        on={on}
+        onToggle={onToggle}
+        ui={ui}
+        switchUnavailable={unavailable}
+        switchTitle={unavailable ? tRecord("audioUnavailable") : undefined}
+        chevronLabel={t("title")}
+        open={control.open}
+        onOpenChange={control.setOpen}
+        controlsId={control.settingsId}
+        chevronRef={control.chevronRef as Ref<HTMLButtonElement>}
+      />
+    );
+  }
   return (
     <ToggleSplit
       icon={Volume2}
