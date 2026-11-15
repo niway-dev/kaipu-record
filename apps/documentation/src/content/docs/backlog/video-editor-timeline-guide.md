@@ -29,8 +29,8 @@ zoom next to the pink zoom blocks. Kaipu had no secondary color and no legend to
 
 ## Honest scope
 
-The guide describes only what the editor does today. Audio covers muted ranges (no waveform or
-boost yet); Webcam covers the frame strip and hidden/custom blocks. A lane that grows a
+The guide describes only what the editor does today. Audio covers muted ranges and says the
+waveform shows loudness (no boost yet); Webcam covers the frame strip and hidden/custom blocks. A lane that grows a
 capability grows its entry in `track-guide.ts` in the same PR.
 
 ## Out of scope (follow-ups)
