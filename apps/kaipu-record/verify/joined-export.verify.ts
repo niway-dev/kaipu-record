@@ -281,8 +281,16 @@ async function seedAudioRouting(
   await writeFile(metaFile, `${JSON.stringify(meta, null, 2)}\n`);
 }
 
-/** Open the seeded item in the editor with the video loaded. */
-async function openItem(page: Page, assetId: string): Promise<void> {
+/**
+ * Open the seeded item in the editor with the video loaded. With `waitForJoined`, also wait until
+ * a joined recording's `<video>` is on the page and holds a frame: the editor loads joined
+ * recordings after it mounts, and an export started before that is refused as "still loading".
+ */
+async function openItem(
+  page: Page,
+  assetId: string,
+  options: { waitForJoined?: boolean } = {},
+): Promise<void> {
   await dismissOnboarding(page);
   const gotIt = page.getByRole("button", { name: "Got it" });
   if (await gotIt.isVisible().catch(() => false)) await gotIt.click();
@@ -298,6 +306,16 @@ async function openItem(page: Page, assetId: string): Promise<void> {
       timeout: 30_000,
     })
     .toBeGreaterThan(0);
+  if (options.waitForJoined) {
+    await page.waitForFunction(
+      () => {
+        const joined = [...document.querySelectorAll<HTMLVideoElement>("video[data-recording]")];
+        return joined.length > 0 && joined.every((el) => el.readyState >= 2);
+      },
+      undefined,
+      { timeout: 30_000 },
+    );
+  }
 }
 
 /** Open the export sheet and press its primary action (default preset). */
@@ -317,7 +335,7 @@ async function exportItem(
 ): Promise<string> {
   const launched = await launchApp({ seedVault });
   try {
-    await openItem(launched.page, assetId);
+    await openItem(launched.page, assetId, { waitForJoined: true });
     await startExport(launched.page);
     const ready = launched.page.getByRole("region", { name: "Your export is ready" });
     await expect(ready).toBeVisible({ timeout: 240_000 });
@@ -334,11 +352,8 @@ async function exportItem(
     await copyFile(path.join(launched.vaultDir, `${newId}.mp4`), copy);
     return copy;
   } finally {
-    try {
-      await launched.teardown();
-    } catch (error) {
-      console.error(`[verify] ${NAME}: closing the app failed`, error);
-    }
+    // A shutdown that hangs or misses its deadline fails the proof: let the rejection out.
+    await launched.teardown();
   }
 }
 
@@ -506,7 +521,22 @@ test("Missing recording stops the export and names the recording", async () => {
     // The seed's missing recording is titled "Old standup".
     const message = template.replace("{title}", "Old standup");
     const card = launched.page.locator("[data-ui-area='shell.exportCard']");
-    await expect(card).toContainText(message, { timeout: 30_000 });
+    // A missing recording has no element to wait for: while the library read is still pending the
+    // export is refused as "still loading", so press Export again until the refusal names it.
+    const loading = (enMessages as { videoEditor: Record<string, string> }).videoEditor
+      .exportRecordingLoading;
+    await expect
+      .poll(
+        async () => {
+          const text = (await card.textContent()) ?? "";
+          if (text.includes(message)) return "missing";
+          if (text.includes(loading)) await startExport(launched.page);
+          return "waiting";
+        },
+        { timeout: 60_000 },
+      )
+      .toBe("missing");
+    await expect(card).toContainText(message);
     await expect(card).toContainText(
       (enMessages as { videoEditor: Record<string, string> }).videoEditor.exportError,
     );
@@ -522,10 +552,6 @@ test("Missing recording stops the export and names the recording", async () => {
       JSON.stringify({ case: "missing-recording", message, before, after }, null, 2),
     );
   } finally {
-    try {
-      await launched.teardown();
-    } catch (error) {
-      console.error(`[verify] ${NAME}: closing the app failed`, error);
-    }
+    await launched.teardown();
   }
 });

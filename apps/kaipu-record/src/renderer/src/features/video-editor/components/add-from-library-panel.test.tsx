@@ -9,7 +9,7 @@ function video(over: Partial<LibraryVideo> & { assetId: string }): LibraryVideo 
     id: `id-${over.assetId}`,
     kind: "recording",
     title: `Title ${over.assetId}`,
-    createdAt: Date.UTC(2026, 10, 5, 12, 0),
+    createdAt: new Date(2026, 10, 5, 12, 0).getTime(),
     durationSeconds: 16,
     derivedFromAssetId: null,
     thumbnailUrl: `kaipu-media://thumb/${over.assetId}`,

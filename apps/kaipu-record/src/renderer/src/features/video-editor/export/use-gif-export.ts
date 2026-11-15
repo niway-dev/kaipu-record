@@ -129,6 +129,9 @@ export function useGifExport(): GifExportController {
   const [estimate, setEstimate] = useState<GifEstimateState>(NO_ESTIMATE);
   const workerRef = useRef<Worker | null>(null);
   const activeRef = useRef(false);
+  // Which `start` call owns the running export: every await in a call can outlive a cancel(),
+  // and by then another call may be exporting.
+  const attemptRef = useRef(0);
   const estimateWorkerRef = useRef<Worker | null>(null);
   const estimateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const estimateSeqRef = useRef(0);
@@ -309,10 +312,14 @@ export function useGifExport(): GifExportController {
       }
       // FR 15: one job at a time — the estimate stops while the export runs.
       cancelEstimate();
+      const attempt = ++attemptRef.current;
+      const isCurrent = (): boolean => attemptRef.current === attempt && activeRef.current;
       activeRef.current = true;
       setState({ status: "exporting", fraction: 0, error: null });
 
       const fail = (message: string, error?: unknown): void => {
+        // A cancelled attempt failing late must not tear down the one that replaced it.
+        if (!isCurrent()) return;
         if (error !== undefined) captureException(error, { context: "gif-export" });
         activeRef.current = false;
         teardown();
@@ -334,14 +341,14 @@ export function useGifExport(): GifExportController {
           webcam,
           joined.files,
         );
-        if (!activeRef.current) return; // cancelled while preparing
+        if (!isCurrent()) return; // cancelled (or replaced) while preparing
 
         let poster: ArrayBuffer | null = null;
         const worker = newGifWorker();
         workerRef.current = worker;
         worker.onmessage = (event: MessageEvent<GifWorkerMessage>) => {
           const msg = event.data;
-          if (!activeRef.current) return;
+          if (!isCurrent()) return;
           if (msg.type === "progress") {
             setState((s) => (s.status === "exporting" ? { ...s, fraction: msg.fraction } : s));
           } else if (msg.type === "poster") {
@@ -358,7 +365,7 @@ export function useGifExport(): GifExportController {
             void (async () => {
               // Yield so a cancel() queued in the same tick wins (see useVideoExport).
               await Promise.resolve();
-              if (!activeRef.current) return;
+              if (!isCurrent()) return;
               try {
                 const recording = await window.electronAPI.gifSave(msg.data, {
                   title: t("gifTitle", { title: args.title }),
@@ -371,12 +378,15 @@ export function useGifExport(): GifExportController {
                 });
                 // A cancel during the save can't un-write the file; the export finished,
                 // so report it rather than leave an unannounced item in the library.
-                activeRef.current = false;
-                teardown();
-                setState(IDLE);
+                // (Unless a newer attempt now owns the hook: it is not ours to reset.)
+                if (attemptRef.current === attempt) {
+                  activeRef.current = false;
+                  teardown();
+                  setState(IDLE);
+                }
                 args.onSaved(recording);
               } catch (error) {
-                if (!activeRef.current) return;
+                if (!isCurrent()) return;
                 fail(t("gifExportError"), error);
               }
             })();

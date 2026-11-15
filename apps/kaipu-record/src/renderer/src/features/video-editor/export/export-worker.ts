@@ -104,6 +104,7 @@ import { chooseVideoEncoding, type VideoEncodingChoice } from "./video-encoding"
 import { WEBCAM_FPS } from "@shared/webcam-track";
 import { openWebcamSourceOrNone, webcamImageOf, type WebcamSource } from "./webcam-source";
 import { clipFramesOf, clipSource, clipWebcamCursorOf } from "./joined-media";
+import { silenceChunkFrames } from "./silence-chunks";
 import {
   audioPlan,
   clipAudioOf,
@@ -484,17 +485,20 @@ async function runExportWithInput(
       const addSilence = async (duration: number): Promise<void> => {
         // A zeroed interleaved-f32 sample keeps A/V durations aligned so the MP4 muxer
         // doesn't produce a track-length mismatch.
-        const frames = Math.ceil(duration * silenceSampleRate);
-        const silence = new AudioSample({
-          data: new Float32Array(frames * silenceChannelCount),
-          format: "f32",
-          numberOfChannels: silenceChannelCount,
-          sampleRate: silenceSampleRate,
-          timestamp: audioCursor,
-        });
-        audioCursor += silence.duration;
-        await audioSource.add(silence);
-        silence.close();
+        // In bounded pieces: one clip of silence can be half an hour, and as a single array
+        // that is hundreds of megabytes inside the worker.
+        for (const frames of silenceChunkFrames(duration, silenceSampleRate)) {
+          const silence = new AudioSample({
+            data: new Float32Array(frames * silenceChannelCount),
+            format: "f32",
+            numberOfChannels: silenceChannelCount,
+            sampleRate: silenceSampleRate,
+            timestamp: audioCursor,
+          });
+          audioCursor += silence.duration;
+          await audioSource.add(silence);
+          silence.close();
+        }
       };
       for (const [index, segment] of plan.segments.entries()) {
         // Slides, and clips of a recording without audio, are silence of the segment's length.
