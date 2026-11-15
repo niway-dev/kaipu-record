@@ -340,7 +340,7 @@ export function RecordPage(): React.JSX.Element {
           <h2 className={styles.setupTitle}>{t("setupTitle")}</h2>
           <p className={styles.setupHint}>{t("setupHint")}</p>
         </div>
-        <div className={styles.lockable}>
+        <div className={styles.setupBody}>
           {toggles}
           {inputNotices}
         </div>

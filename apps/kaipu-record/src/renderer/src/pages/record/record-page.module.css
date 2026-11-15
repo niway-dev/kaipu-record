@@ -44,7 +44,7 @@
 }
 
 /* The setup cards, their open panel and the permission notices. */
-.lockable {
+.setupBody {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);

@@ -390,13 +390,20 @@ describe("CameraSettingsFields — the page's two columns", () => {
     expect(onChange).toHaveBeenLastCalledWith({ deviceId: null });
   });
 
-  it("checks the chosen camera, and a remembered one that is unplugged", () => {
+  it("checks the chosen camera", () => {
     renderFields({ columns: true, bubble: { ...bubble, deviceId: "cam-2" } });
     expect(screen.getByRole("radio", { name: "Camera 2" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("radio", { name: "Default camera" })).toHaveAttribute(
       "aria-checked",
       "false",
     );
+  });
+
+  it("keeps a remembered camera that is unplugged as the checked row", () => {
+    renderFields({ columns: true, bubble: { ...bubble, deviceId: "cam-gone" } });
+    const missing = screen.getByRole("radio", { name: "Camera 3" });
+    expect(missing).toHaveAttribute("aria-checked", "true");
+    expect(missing).toHaveAttribute("data-missing", "true");
   });
 
   it("moves the selection with the arrow keys, with one tab stop", async () => {

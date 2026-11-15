@@ -258,12 +258,12 @@ export interface CameraSettingsFieldsProps {
 }
 
 /**
- * The camera settings themselves, shared by the Record page's drawer and the capture
- * panel's compact one. DOM order is the Tab order the design asks for: Shape → Corners
- * (square and rectangle only) → Size chips →
- * slider → device selector (the device chip is drawn in the header, but comes last). The
- * compact variant drops Size and keeps the switch hints for screen readers only, so the
- * panel stays short.
+ * The camera settings themselves, shared by the Capture page's drawer and the capture
+ * panel's compact one. DOM order is the Tab order the design asks for. By default: Shape →
+ * Corners (square and rectangle only) → Size chips → slider → device selector (the device
+ * chip is drawn in the header, but comes last). In `columns`, the Source radio list comes
+ * first, then Shape and Size, then the rows below both. The compact variant drops Size and
+ * keeps the switch hints for screen readers only, so the panel stays short.
  */
 export function CameraSettingsFields({
   bubble,
