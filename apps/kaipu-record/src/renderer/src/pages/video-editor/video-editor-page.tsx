@@ -124,6 +124,7 @@ import {
   useCompanionThumbnails,
   useSourceThumbnails,
 } from "@renderer/features/video-editor/use-source-thumbnails";
+import { useAudioPeaks } from "@renderer/features/video-editor/use-audio-peaks";
 import { useLatest } from "@renderer/features/video-editor/use-latest";
 import { useVideoScene } from "@renderer/features/video-editor/use-video-scene";
 import { useVideoTools } from "@renderer/features/video-editor/annotations/video-tools";
@@ -663,6 +664,10 @@ function VideoEditor({
   const appSettings = useAppSettings();
   const trackVisibility = useHiddenTracks(appSettings);
   const { hidden: hiddenTracks, showTrack } = trackVisibility;
+  // The Audio lane's waveform (NIW2-775). Hiding the lane does not stop the decode: a decode
+  // cancelled halfway would start over from 0 when the lane comes back, which on a long take
+  // costs the whole decode again.
+  const audioPeaks = useAudioPeaks(sourceUrl, source.durationSeconds);
   const selection = useEditorSelection();
   // `select` / `clear` are stable (useCallback, no deps); the `selection` object itself
   // is rebuilt every render, so never put it in a dependency array.
@@ -1881,6 +1886,7 @@ function VideoEditor({
               ranges={mutes.mutedRanges}
               layout={layout}
               audioMuted={mutes.audioMuted}
+              waveform={audioPeaks}
               selectedId={selectedMuteId}
               onSelect={handleSelectMute}
               onEdgeDrag={mutes.edgeDrag}
@@ -1912,6 +1918,7 @@ function VideoEditor({
       privacyGhost,
       mutes.mutedRanges,
       mutes.audioMuted,
+      audioPeaks,
       mutes.edgeDrag,
       selectedMuteId,
       handleSelectMute,
