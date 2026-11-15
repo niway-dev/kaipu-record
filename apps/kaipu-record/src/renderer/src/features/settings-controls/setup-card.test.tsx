@@ -24,6 +24,14 @@ describe("SetupCard", () => {
     expect(screen.getByText("ON")).toBeInTheDocument();
   });
 
+  it("keeps the full current choice on hover, since the line truncates", () => {
+    render(<SetupCard {...base} detail="iPhone Camera · circle, M" />);
+    expect(screen.getByText("iPhone Camera · circle, M")).toHaveAttribute(
+      "title",
+      "iPhone Camera · circle, M",
+    );
+  });
+
   it("toggles from the switch, and the switch alone", async () => {
     const onToggle = vi.fn();
     const onOpenChange = vi.fn();

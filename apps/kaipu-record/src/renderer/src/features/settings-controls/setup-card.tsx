@@ -79,7 +79,10 @@ export function SetupCard({
         </span>
         <span className={styles.text}>
           <span className={styles.name}>{name}</span>
-          <span className={styles.detail}>{detail}</span>
+          {/* The line truncates in a narrow window; the full text shows on hover. */}
+          <span className={styles.detail} title={detail.trim() || undefined}>
+            {detail}
+          </span>
         </span>
         <span className={styles.status}>{status}</span>
         <button
