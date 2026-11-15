@@ -1190,6 +1190,11 @@ function ScreenshotEditorBody({
         savedIdRef.current = saved.id;
         savedAssetIdRef.current = saved.assetId;
         setSavedId(saved.id);
+        // The edit went to a new item, not over the one that was opened: say so once.
+        if (toCopy) {
+          keepStoredId.current = null;
+          showToast({ message: t("savedAsCopyLayersUnreadable") });
+        }
         // Don't clobber a title typed while the save was running.
         if (latest.current.draft === draftAtStart) captureTitle.adopt(saved.title);
         // Clean only if no edit landed during the save; otherwise the edit is still

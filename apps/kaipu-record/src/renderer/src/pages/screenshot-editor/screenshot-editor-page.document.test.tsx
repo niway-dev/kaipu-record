@@ -284,6 +284,8 @@ describe("ScreenshotEditor — reopen from the document (image-canvas)", () => {
     expect(
       (saveScreenshot.mock.calls[0][1] as { overwriteId?: string }).overwriteId,
     ).toBeUndefined();
+    // The person is told once that the edit went to a copy.
+    expect(getToasts().filter((x) => /saved as a copy/.test(x.message))).toHaveLength(1);
     // Once it is saved the editor is bound to that copy, which later edits overwrite.
     draw(4);
     await waitFor(() => expect(saveScreenshot).toHaveBeenCalledTimes(2), { timeout: 3000 });
