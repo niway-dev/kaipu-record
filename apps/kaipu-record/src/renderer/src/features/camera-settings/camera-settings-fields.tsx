@@ -571,7 +571,7 @@ function CameraSourceList({
         const checked = entry.value === deviceId;
         return (
           <button
-            key={entry.value ?? "default"}
+            key={entry.value === null ? "default-camera" : `device:${entry.value}`}
             ref={(element) => {
               rows.current[index] = element;
             }}

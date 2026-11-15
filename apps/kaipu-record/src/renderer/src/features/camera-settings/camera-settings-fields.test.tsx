@@ -399,6 +399,18 @@ describe("CameraSettingsFields — the page's two columns", () => {
     );
   });
 
+  it("keys rows apart even when a camera's deviceId is the word default", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    renderFields({
+      columns: true,
+      cameras: [{ deviceId: "default", label: "Virtual camera" }],
+    });
+    const group = screen.getByRole("radiogroup", { name: "Camera device" });
+    expect(group.querySelectorAll('[role="radio"]')).toHaveLength(2);
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
   it("keeps a remembered camera that is unplugged as the checked row", () => {
     renderFields({ columns: true, bubble: { ...bubble, deviceId: "cam-gone" } });
     const missing = screen.getByRole("radio", { name: "Camera 3" });
