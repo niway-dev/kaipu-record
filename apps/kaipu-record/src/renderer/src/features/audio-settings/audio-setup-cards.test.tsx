@@ -27,6 +27,7 @@ afterEach(() => {
 function CardHarness({
   micOn = true,
   audioOn = true,
+  isRecording = false,
   unavailable = false,
   selected = YETI as Microphone | null,
   onToggleMic = () => {},
@@ -34,6 +35,7 @@ function CardHarness({
 }: {
   micOn?: boolean;
   audioOn?: boolean;
+  isRecording?: boolean;
   unavailable?: boolean;
   selected?: Microphone | null;
   onToggleMic?: () => void;
@@ -61,7 +63,7 @@ function CardHarness({
         variant="page"
         control={mic}
         on={micOn}
-        isRecording={false}
+        isRecording={isRecording}
         microphones={[BUILT_IN, YETI]}
         selectedMicrophone={selected}
         onSelectMicrophone={() => {}}
@@ -136,6 +138,22 @@ describe("the two-column panels", () => {
     expect(
       within(panel).getByRole("switch", { name: "Reduce background noise" }),
     ).toBeInTheDocument();
+  });
+
+  it("microphone, idle: no header, since the setup card already names the microphone", async () => {
+    render(<CardHarness />);
+    await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+    const panel = screen.getByRole("region", { name: "Microphone settings" });
+    expect(within(panel).queryByText("Microphone")).not.toBeInTheDocument();
+    expect(within(panel).queryByText("Live")).not.toBeInTheDocument();
+  });
+
+  it("microphone, recording: only the Live tag shows, with no panel title", async () => {
+    render(<CardHarness isRecording />);
+    await userEvent.click(screen.getByRole("button", { name: "Microphone settings" }));
+    const panel = screen.getByRole("region", { name: "Microphone settings" });
+    expect(within(panel).getByText("Live")).toBeInTheDocument();
+    expect(within(panel).queryByText("Microphone")).not.toBeInTheDocument();
   });
 
   it("system audio: WHAT TO CAPTURE with the choices, MIX with ducking and volume", async () => {

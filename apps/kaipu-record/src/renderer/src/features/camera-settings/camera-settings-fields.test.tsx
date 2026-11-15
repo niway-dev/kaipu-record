@@ -373,11 +373,9 @@ describe("CameraSettingsFields — the page's two columns", () => {
   it("lists the cameras as radios, default camera first, and no dropdown", () => {
     renderFields({ columns: true });
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
-    const radios = screen.getAllByRole("radio", { name: /camera|FaceTime/i });
     const group = screen.getByRole("radiogroup", { name: "Camera device" });
     const names = Array.from(group.querySelectorAll('[role="radio"]')).map((r) => r.textContent);
     expect(names).toEqual(["Default camera", "FaceTime HD", "Camera 2"]);
-    expect(radios.length).toBeGreaterThan(0);
     expect(screen.getByRole("radio", { name: "Default camera" })).toHaveAttribute(
       "aria-checked",
       "true",
@@ -418,6 +416,8 @@ describe("CameraSettingsFields — the page's two columns", () => {
       bubble: { ...bubble, shape: "rounded", framing: { enabled: true, zoom: 1.5, x: 0, y: 0 } },
     });
     expect(screen.getByText("Source")).toBeInTheDocument();
+    expect(screen.getByText("Shape")).toBeInTheDocument();
+    expect(screen.getByText("Size")).toBeInTheDocument();
     expect(screen.getByRole("radiogroup", { name: "Shape" })).toBeInTheDocument();
     expect(screen.getByRole("radiogroup", { name: "Size" })).toBeInTheDocument();
     expect(screen.getByRole("slider", { name: "Bubble size" })).toBeInTheDocument();

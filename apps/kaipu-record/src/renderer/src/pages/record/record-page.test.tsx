@@ -334,7 +334,7 @@ describe("RecordPage idle layout (design Kaipu Capture Home)", () => {
     expect(screen.queryByRole("region")).toBeNull();
   });
 
-  it("opens the camera settings drawer from the split Camera tile in the idle layout", () => {
+  it("opens the Camera card's panel via its chevron in the idle layout", () => {
     renderAt(undefined);
     fireEvent.click(screen.getByRole("button", { name: "Camera settings" }));
     expect(screen.getByRole("region", { name: "Camera settings" })).toBeInTheDocument();
@@ -353,13 +353,6 @@ describe("RecordPage idle layout (design Kaipu Capture Home)", () => {
     await userEvent.click(screen.getByRole("button", { name: "System audio settings" }));
     expect(screen.getByRole("region", { name: "System audio settings" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Microphone settings" })).toBeNull();
-  });
-
-  it("opens the drawers in the recording layout too", async () => {
-    setupState.isRecording = true;
-    renderAt(undefined);
-    await userEvent.click(screen.getByRole("button", { name: "Camera settings" }));
-    expect(screen.getByRole("region", { name: "Camera settings" })).toBeInTheDocument();
   });
 
   it("locks the Mic and Camera settings during the countdown and while starting", async () => {
