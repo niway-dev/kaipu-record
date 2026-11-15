@@ -325,6 +325,14 @@ export const editorVideo = catalog(
       ready: { area: "editorVideo.mediaPanel" },
       gates: [{ flag: "timeline-levels", side: "on" }],
     },
+    "slide-sequence": {
+      profile: "slide-sequence",
+      how: "With the `timeline-levels` flag forced on, open “Slide sequence”: its clip and its three slides all sit on the one Clips row, side by side, each slide showing its picture and the slide badge, with nothing pushed down under the lanes below.",
+      steps: [open(ASSETS.slidesDemo)],
+      demonstrates: ["editorVideo.timeline:threeSlides"],
+      ready: { video: true },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
     "two-recordings": {
       profile: "two-recordings",
       how: "Open “Two recordings”, whose edit joined “Checkout bug”: the clips alternate the two recordings, each labelled with its name and length over its own thumbnails, and the Webcam track says “No camera in this recording” under the joined clip.",

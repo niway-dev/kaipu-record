@@ -295,7 +295,8 @@ export const UI_MAP = {
       // with its recording's name and length and draws a joined clip from its own file;
       // recordingHover outlines every clip of the hovered clip's recording; recordingMissing is a
       // clip whose joined recording is gone (hatched, "Recording missing: <title>");
-      // recordingAdded: the sequence right after Add from Library added a recording (NIW2-782).
+      // recordingAdded: the sequence right after Add from Library added a recording (NIW2-782);
+      // threeSlides: a clip followed by three slides, all on the one Clips row (NIW2-817).
       timeline: {
         states: [
           "default",
@@ -304,6 +305,7 @@ export const UI_MAP = {
           "recordingHover",
           "recordingMissing",
           "recordingAdded",
+          "threeSlides",
         ],
       },
       zoomLane: { states: ["empty", "segments"] },

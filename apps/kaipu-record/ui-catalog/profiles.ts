@@ -22,6 +22,8 @@ export interface Profile {
   readonly floatingImages?: boolean;
   /** Add the recordings whose saved edits joined another recording (`seed-vault.ts`). */
   readonly joinedRecordings?: boolean;
+  /** Add the recording whose saved edit ends in three slides (`seed-vault.ts`). */
+  readonly slideSequence?: boolean;
   /** Add one screenshot taken from “Weekly sync” (`seed-vault.ts`), for the “From this recording” tag. */
   readonly frameCaptures?: boolean;
   /** Add the screenshot that draws real text (`fixtures/text/`), for the Select text states. */
@@ -115,6 +117,13 @@ export const PROFILES = {
       "The vault adds “Two recordings” (a saved edit that joined “Checkout bug”, clips alternating A, B, A, with a webcam on the opened one), “Missing recording” (its joined recording is not in the vault) and “Different aspect” (joins the 1:1 “Square recording”, no webcam): the timeline's recording labels, hover outline, missing state and “No camera in this recording” span. A profile of its own, so the Library lists of the other states do not change.",
     seed: "demo",
     joinedRecordings: true,
+  },
+  "slide-sequence": {
+    description:
+      "Flag timeline-levels forced on, and the vault adds “Slide sequence”, a recording whose saved edit is one clip followed by three slides: the Clips row with several slides. A profile of its own, so the Library lists of the other states do not change.",
+    seed: "demo",
+    flags: { "timeline-levels": true },
+    slideSequence: true,
   },
   "image-canvas": {
     description:

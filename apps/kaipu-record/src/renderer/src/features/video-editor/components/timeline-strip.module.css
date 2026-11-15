@@ -374,7 +374,6 @@
 /* Slides read differently from footage: a distinct accent tint behind the image and a
    badge marking them as inserted stills rather than recorded frames. */
 .slideBlock {
-  position: relative;
   background: color-mix(in srgb, var(--accent-primary) 22%, var(--bg-card-hover));
 }
 

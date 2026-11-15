@@ -53,6 +53,8 @@ export const ASSETS = {
    */
   differentAspectDemo: "c0a1a10c-0000-4000-8000-00000000000d",
   squareSecond: "c0a1a10c-0000-4000-8000-00000000000e",
+  /** Seeded only where `slideSequence` is on: a saved edit of one clip followed by three slides. */
+  slidesDemo: "c0a1a10c-0000-4000-8000-00000000000f",
   settingsShot: "c0a1a10c-0000-4000-8000-000000000101",
   dashboardShot: "c0a1a10c-0000-4000-8000-000000000102",
   dialogShot: "c0a1a10c-0000-4000-8000-000000000103",
@@ -184,6 +186,8 @@ interface RecordingFixture {
   cursorTrack?: boolean;
   /** A saved edit with two overlapping floating images (ADR 0057): `FLOATING_IMAGES`. */
   floating?: boolean;
+  /** A saved edit of one clip followed by three slides (NIW2-817): `slideScene`. */
+  slides?: boolean;
   /** A saved version 2 edit that joined another recording (ADR 0058): `joinedScene`. */
   joined?: JoinedKind;
   /** The media is `FIXTURE_FILES.joinedCut` (blue, a "B"), not a cut of the opened countdown. */
@@ -436,6 +440,50 @@ export function floatingScene(seconds: number): unknown {
   };
 }
 
+/** Seeded only where `slideSequence` is on: a recording whose saved edit ends in three slides. */
+const SLIDES_RECORDING: RecordingFixture = {
+  stem: "Slide sequence",
+  assetId: ASSETS.slidesDemo,
+  title: "Slide sequence",
+  cut: 9,
+  ago: 19 * 60_000,
+  slides: true,
+};
+
+/** The three slides of `SLIDES_RECORDING`, one distinct colour each. Asset ids are fixed so the saved scene can refer to them. */
+export const SLIDE_IMAGES = [
+  { id: "slide-1", assetId: "c0a1a10c-0000-4000-8000-000000000501", color: [40, 90, 160] },
+  { id: "slide-2", assetId: "c0a1a10c-0000-4000-8000-000000000502", color: [220, 120, 40] },
+  { id: "slide-3", assetId: "c0a1a10c-0000-4000-8000-000000000503", color: [60, 150, 90] },
+] as const;
+
+const SLIDE_WIDTH = 1600;
+const SLIDE_HEIGHT = 900;
+
+/** The saved scene of `SLIDES_RECORDING`: the whole recording as one clip, then three 3 s slides. */
+export function slideScene(seconds: number): unknown {
+  return {
+    items: [
+      { id: "clip-1", kind: "clip", sourceStart: 0, sourceEnd: seconds },
+      ...SLIDE_IMAGES.map((slide) => ({
+        id: slide.id,
+        kind: "slide",
+        assetId: slide.assetId,
+        duration: 3,
+        naturalWidth: SLIDE_WIDTH,
+        naturalHeight: SLIDE_HEIGHT,
+      })),
+    ],
+    overlays: [],
+    zoomSegments: [],
+    redactions: [],
+    zoomSensitivity: 55,
+    audioMuted: false,
+    mutedRanges: [],
+    webcam: null,
+  };
+}
+
 const SCREENSHOTS = [
   {
     stem: "Settings page",
@@ -475,6 +523,8 @@ export interface SeedOptions {
   floatingImages?: boolean;
   /** Add the recordings whose saved edits joined another one (`JOINED_RECORDINGS`). */
   joinedRecordings?: boolean;
+  /** Add the recording whose saved edit ends in three slides (`SLIDES_RECORDING`). */
+  slideSequence?: boolean;
   /**
    * Add one screenshot taken from “Weekly sync” (`sourceVideoAssetId` in its sidecar). Only the
    * `add-from-library` profile turns it on: “Weekly sync”'s Captures panel lists it too, so the
@@ -714,6 +764,37 @@ async function seedRecording(
       exportedSavedAt: null,
     });
   }
+  if (item.slides) {
+    const assets = path.join(meta, `${item.stem}.assets`);
+    await mkdir(assets, { recursive: true });
+    for (const slide of SLIDE_IMAGES) {
+      await writeFile(
+        path.join(assets, `${slide.assetId}.png`),
+        paintPng(
+          SLIDE_WIDTH,
+          SLIDE_HEIGHT,
+          [...slide.color],
+          [
+            [0, 0, SLIDE_WIDTH, 120, [30, 40, 60]],
+            [160, 300, 1280, 90, [235, 235, 235]],
+            [160, 450, 900, 90, [235, 235, 235]],
+          ],
+        ),
+      );
+    }
+    await writeJson(path.join(meta, `${item.stem}.edit.json`), {
+      version: 1,
+      scene: slideScene(item.cut),
+    });
+    const source = await stat(media);
+    await writeJson(path.join(meta, `${item.stem}.edit.meta.json`), {
+      sourceSizeBytes: source.size,
+      sourceMtimeMs: source.mtimeMs,
+      assetIds: SLIDE_IMAGES.map((slide) => slide.assetId),
+      savedAt: createdAt + HOUR,
+      exportedSavedAt: null,
+    });
+  }
   if (item.joined) {
     await writeJson(path.join(meta, `${item.stem}.edit.json`), {
       version: 2,
@@ -832,6 +913,7 @@ export async function seedCatalogVault(vaultDir: string, options: SeedOptions): 
   const recordings = [
     ...(options.floatingImages ? [FLOATING_RECORDING] : []),
     ...(options.joinedRecordings ? JOINED_RECORDINGS : []),
+    ...(options.slideSequence ? [SLIDES_RECORDING] : []),
     ...(options.cursorRecording ? [CURSOR_RECORDING] : []),
     ...RECORDINGS,
   ];
