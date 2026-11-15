@@ -170,11 +170,11 @@ does not need Alchemy:
   `apps/web-hono` declares its own `services` entry pointing at `kaipu-api-nightly`. That
   closes the API half of the "staging web writes to the production database" trap from
   [Deploy environments](/backlog/deploy-environments/).
-- `scripts/deploy-worker.sh` takes only an app directory today. A nightly workflow needs it to
+- `scripts/deploy-worker.sh` takes an app directory and `--dry-run`, with no environment argument. A nightly workflow needs it to
   pass `--env nightly` through, so the pinned-wrangler path stays the one deploy path.
 - `routes` is inherited, unlike bindings. Without its own `routes`, `env.nightly` of
   `apps/web-hono` would try to claim `kaipu.app` and `www.kaipu.app`, so it must declare a
-  nightly hostname (or none, with `workers_dev`).
+  nightly hostname, or an empty `routes` and serve it on its `workers.dev` URL.
 - It does not close the other half. The web Worker also receives `DATABASE_URL` directly
   (`release-web.yml`), so a nightly deploy needs its own secrets file with a non-production
   database URL for **both** Workers. Alchemy would not remove that step either: a stage still
