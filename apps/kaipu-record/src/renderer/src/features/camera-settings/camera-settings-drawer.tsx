@@ -46,6 +46,7 @@ export function CameraSettingsDrawer({
         cameraOn={cameraOn}
         isRecording={isRecording}
         compact={variant === "panel"}
+        columns={variant === "page"}
         firstRef={firstRef}
       />
     </SettingsDrawer>
