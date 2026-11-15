@@ -24,6 +24,7 @@ import type { CanvasSavePayload } from "@shared/types/screenshot-canvas";
 import type { TextCacheSavePayload } from "@shared/types/text-recognition";
 import { captureException, reportError } from "@renderer/features/analytics";
 import { screenshotTitle } from "@shared/screenshot-title";
+import { ROUTES } from "@shared/routes";
 import {
   isAmbiguousIdentityError,
   notifyAmbiguousIdentity,
@@ -54,6 +55,7 @@ import {
 import { SaveOptionsDialog } from "@renderer/features/screenshots/save-options-dialog";
 import { CaptureTitleInput } from "@renderer/features/screenshots/capture-title-input";
 import {
+  readWithRetry,
   savedAtOf,
   whyNoDocument,
   type CanvasLoad,
@@ -77,6 +79,7 @@ import {
   intersectFrame,
   nextAnnotationId,
   parseCanvasDoc,
+  withoutRedactedText,
   reserveAnnotationIds,
   useAnnotationTools,
   useEditorScene,
@@ -178,7 +181,7 @@ const clampZoom = (z: number): number =>
 export function ScreenshotEditorPage(): React.JSX.Element {
   const location = useLocation();
   const source = location.state as ImageSource | null;
-  if (!source) return <Navigate to="/screenshots" replace />;
+  if (!source) return <Navigate to={ROUTES.record} replace />;
   return <ScreenshotEditor key={location.key} source={source} fresh />;
 }
 
@@ -218,9 +221,12 @@ const isPng = (bytes: ArrayBuffer): boolean => {
 async function loadCanvasDoc(id: string): Promise<CanvasLoad<LoadedCanvasDoc>> {
   const unreadable: CanvasLoad<LoadedCanvasDoc> = { status: "unreadable" };
   try {
-    const stored = await window.electronAPI.readScreenshotCanvas(id);
+    const stored = await readWithRetry(() => window.electronAPI.readScreenshotCanvas(id));
     // The reader answers null for a missing document and an unusable one alike.
-    if (!stored) return { status: await whyNoDocument(id) };
+    if (!stored) {
+      const why = await whyNoDocument(id);
+      return why === "unknown" ? { status: "unreadable", keepStored: true } : { status: why };
+    }
     const parsed = parseCanvasDoc(stored.docJson);
     if (!parsed) return unreadable;
     const bytes = stored.assets[parsed.base.assetId];
@@ -249,10 +255,11 @@ async function loadCanvasDoc(id: string): Promise<CanvasLoad<LoadedCanvasDoc>> {
       savedAt: await savedAtOf(id),
     };
   } catch (error) {
-    // The next save replaces the document with one built on the flat PNG, so a read that
-    // failed (not a missing or invalid document) loses the editable layers: record it.
+    // The editable layers could not be loaded (the read failed, not a missing or invalid
+    // document), so they are not on screen: record it.
     captureException(error, { phase: "read-canvas" });
-    return unreadable;
+    // The read failed, not the document: it may be intact, so no save may replace it.
+    return { status: "unreadable", keepStored: true };
   }
 }
 
@@ -416,6 +423,15 @@ function ScreenshotEditorBody({
   const savedAssetIdRef = useRef<string | undefined>(
     source.kind === "local" ? source.assetId : undefined,
   );
+  // The item whose stored document could not be read for an I/O reason (NIW2-799): it may be
+  // intact, and this editor holds only the flat PNG, so a save must never replace it. Saves
+  // that would overwrite it go to a copy instead; once that copy exists the editor is bound
+  // to it and this no longer matches.
+  const keepStoredId = useRef<string | null>(
+    reopen?.status === "unreadable" && reopen.keepStored && source.kind === "local"
+      ? source.id
+      : null,
+  );
   // The item the auto-save on open created: the ONLY thing Discard may delete.
   const autoSavedId = useRef<string | null>(null);
   /** The latest save main refused during maintenance mode, retried when it ends. */
@@ -548,6 +564,9 @@ function ScreenshotEditorBody({
         savedAssetIdRef.current = result.recording.assetId;
         setSavedId(newId);
         if (autoSavedId.current === id) autoSavedId.current = newId;
+        // The rename moved the stored document with the item: the guard follows it, or the
+        // next save would see a different id and overwrite a document it never read.
+        if (keepStoredId.current === id) keepStoredId.current = newId;
         notifyRenameOutcome(result, { library: tLibrary, common: tCommon }, () => {
           if (alive.current) void renameSaved(next);
         });
@@ -609,7 +628,7 @@ function ScreenshotEditorBody({
   const [discarding, setDiscarding] = useState(false);
   const blocker = useBlocker(dirty && !discarding);
   useEffect(() => {
-    if (discarding) navigate("/screenshots");
+    if (discarding) navigate(ROUTES.record);
   }, [discarding, navigate]);
 
   // ⌘/Ctrl + wheel (and trackpad pinch, which arrives as ctrlKey wheel) zooms the
@@ -1065,9 +1084,16 @@ function ScreenshotEditorBody({
       assetsRef.current,
       snap.annotations,
     );
+    // A text a redaction covers entirely is hidden in the PNG, so its characters must not sit
+    // in the document as plain JSON either (NIW2-799). The live scene keeps it.
+    const shown = metricsRef.current;
+    const stored: Scene = {
+      ...snap,
+      annotations: withoutRedactedText(snap.annotations, { w: shown?.w ?? 0, h: shown?.h ?? 0 }),
+    };
     const docJson = JSON.stringify(
       buildCanvasDoc(
-        snap,
+        stored,
         { pixelWidth, pixelHeight },
         { lockedAt: (id) => firstSaveAt(id, staged) },
       ),
@@ -1127,12 +1153,15 @@ function ScreenshotEditorBody({
       const snap = latest.current.scene;
       const draftAtStart = latest.current.draft;
       // Callers pass the saved id they saw; a rename queued before this save moved it.
-      const overwriteId =
+      let overwriteId =
         opts.overwriteId !== undefined
           ? (savedIdRef.current ?? opts.overwriteId)
           : opts.bindToSaved
             ? (savedIdRef.current ?? undefined)
             : undefined;
+      // The document of the item being saved over could not be read: save a copy instead.
+      const toCopy = overwriteId !== undefined && overwriteId === keepStoredId.current;
+      if (toCopy) overwriteId = undefined;
       try {
         const png = await exportAs("png", snap);
         const stagedStamps = new Map<string, number>();
@@ -1141,7 +1170,11 @@ function ScreenshotEditorBody({
         const saved = await window.electronAPI.saveScreenshot(png, {
           // The live field, not only its committed value: Save must write what the
           // user sees even if the field has not blurred yet (e.g. a shortcut).
-          title: opts.title ?? resolveCaptureTitle(draftAtStart, captureTitle.autoTitle),
+          title:
+            opts.title ??
+            (toCopy
+              ? `${resolveCaptureTitle(draftAtStart, captureTitle.autoTitle)} (${t("copySuffix")})`
+              : resolveCaptureTitle(draftAtStart, captureTitle.autoTitle)),
           overwriteId,
           ...(overwriteId !== undefined ? { overwriteAssetId: savedAssetIdRef.current } : {}),
           // The auto-save on open is not the user's work; every other save is.
@@ -1160,6 +1193,11 @@ function ScreenshotEditorBody({
         savedIdRef.current = saved.id;
         savedAssetIdRef.current = saved.assetId;
         setSavedId(saved.id);
+        // The edit went to a new item, not over the one that was opened: say so once.
+        if (toCopy) {
+          keepStoredId.current = null;
+          showToast({ message: t("savedAsCopyLayersUnreadable") });
+        }
         // Don't clobber a title typed while the save was running.
         if (latest.current.draft === draftAtStart) captureTitle.adopt(saved.title);
         // Clean only if no edit landed during the save; otherwise the edit is still
