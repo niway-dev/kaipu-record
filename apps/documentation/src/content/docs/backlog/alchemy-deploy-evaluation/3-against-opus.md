@@ -163,7 +163,7 @@ The obvious fix is to split the stacks per Worker. That brings back cross-stack 
 
 #### 1.5 The release-candidate gate loses its credential-free dry run
 
-**What breaks:** the gate from the [local-first release verification ADR](apps/documentation/src/content/docs/architecture/decisions/0004-local-first-release-verification.mdx) and the [verify-only-the-component-it-ships ADR](apps/documentation/src/content/docs/architecture/decisions/0052-release-candidates-verify-only-the-component-they-ship.mdx). `pr-checks.yml:395-408` runs "the exact deploy command" with `--dry-run` and an empty `{}` secrets file, with no Cloudflare credentials [V: repo]. That check exists because api-v0.5.0 failed on the tag.
+**What breaks:** the gate from the [local-first release verification ADR](/architecture/decisions/0004-local-first-release-verification/) and the [verify-only-the-component-it-ships ADR](/architecture/decisions/0052-release-candidates-verify-only-the-component-they-ship/). `pr-checks.yml:395-408` runs "the exact deploy command" with `--dry-run` and an empty `{}` secrets file, with no Cloudflare credentials [V: repo]. That check exists because api-v0.5.0 failed on the tag.
 
 **On the Alchemy side:**
 
@@ -181,7 +181,7 @@ The obvious fix is to split the stacks per Worker. That brings back cross-stack 
 
 #### 1.6 Version URLs (ADR 0007) become stateful, and promoting the previewed version is unsupported
 
-**What breaks:** the [Version-URL previews ADR](apps/documentation/src/content/docs/architecture/decisions/0007-prod-previews-via-version-urls.mdx). `preview-web.yml` runs `versions upload` from any ref with zero routed traffic, and it never touches deployment state [V: repo].
+**What breaks:** the [Version-URL previews ADR](/architecture/decisions/0007-prod-previews-via-version-urls/). `preview-web.yml` runs `versions upload` from any ref with zero routed traffic, and it never touches deployment state [V: repo].
 
 **On the Alchemy side:**
 

@@ -85,7 +85,7 @@ Reply in Markdown:
 **7. Optional: PR comments and teardown come with it.**
 
 - A `GitHub.Comment` resource updates one PR comment in place, and a cleanup job destroys `pr-N` stages on close, with a guard that refuses to destroy `prod` ([CI](https://alchemy.run/environments/ci)).
-- This overlaps with `preview-web.yml` (161 lines) and the version-URL decision in [ADR 0007 (prod previews via version URLs)](apps/documentation/src/content/docs/architecture/decisions/0007-prod-previews-via-version-urls.mdx).
+- This overlaps with `preview-web.yml` (161 lines) and the version-URL decision in [ADR 0007 (prod previews via version URLs)](/architecture/decisions/0007-prod-previews-via-version-urls/).
 
 ### 2. What changes in the system
 
@@ -98,7 +98,7 @@ Reply in Markdown:
 **Workflows**
 
 - `release-api.yml` and `release-web.yml` stop building jq secrets files and run `alchemy deploy --stage prod` behind the same release-please tags.
-- The verify gate from [ADR 0004 (local-first release verification)](apps/documentation/src/content/docs/architecture/decisions/0004-local-first-release-verification.mdx) stays in front.
+- The verify gate from [ADR 0004 (local-first release verification)](/architecture/decisions/0004-local-first-release-verification/) stays in front.
 - The release-candidate `--dry-run` becomes `alchemy plan` (the `plan` command is named in the state-store docs).
 - `preview-web.yml` either stays as is or becomes a `pr-N` stage.
 

@@ -57,7 +57,7 @@ The three reports are kept verbatim, each with the brief its agent received:
 They are evidence, not the decision. Where this page and a report disagree, this page wins:
 it was corrected against the repository afterwards (for example, the Service Binding is
 `API_SERVICE`, and the web Worker also receives `DATABASE_URL`). The only edit made to the
-reports is that local absolute paths became repository-relative paths.
+reports is that local absolute paths became repository-relative paths, and links to repository files point at their pages on this site.
 
 ## What we deploy today
 
