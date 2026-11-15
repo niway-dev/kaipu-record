@@ -55,6 +55,7 @@ import {
 import { SaveOptionsDialog } from "@renderer/features/screenshots/save-options-dialog";
 import { CaptureTitleInput } from "@renderer/features/screenshots/capture-title-input";
 import {
+  readWithRetry,
   savedAtOf,
   whyNoDocument,
   type CanvasLoad,
@@ -220,9 +221,12 @@ const isPng = (bytes: ArrayBuffer): boolean => {
 async function loadCanvasDoc(id: string): Promise<CanvasLoad<LoadedCanvasDoc>> {
   const unreadable: CanvasLoad<LoadedCanvasDoc> = { status: "unreadable" };
   try {
-    const stored = await window.electronAPI.readScreenshotCanvas(id);
+    const stored = await readWithRetry(() => window.electronAPI.readScreenshotCanvas(id));
     // The reader answers null for a missing document and an unusable one alike.
-    if (!stored) return { status: await whyNoDocument(id) };
+    if (!stored) {
+      const why = await whyNoDocument(id);
+      return why === "unknown" ? { status: "unreadable", keepStored: true } : { status: why };
+    }
     const parsed = parseCanvasDoc(stored.docJson);
     if (!parsed) return unreadable;
     const bytes = stored.assets[parsed.base.assetId];
@@ -254,7 +258,8 @@ async function loadCanvasDoc(id: string): Promise<CanvasLoad<LoadedCanvasDoc>> {
     // The next save replaces the document with one built on the flat PNG, so a read that
     // failed (not a missing or invalid document) loses the editable layers: record it.
     captureException(error, { phase: "read-canvas" });
-    return unreadable;
+    // The read failed, not the document: it may be intact, so no save may replace it.
+    return { status: "unreadable", keepStored: true };
   }
 }
 
@@ -417,6 +422,15 @@ function ScreenshotEditorBody({
   // The saved item's identity: an overwrite names it so main can follow a rename.
   const savedAssetIdRef = useRef<string | undefined>(
     source.kind === "local" ? source.assetId : undefined,
+  );
+  // The item whose stored document could not be read for an I/O reason (NIW2-799): it may be
+  // intact, and this editor holds only the flat PNG, so a save must never replace it. Saves
+  // that would overwrite it go to a copy instead; once that copy exists the editor is bound
+  // to it and this no longer matches.
+  const keepStoredId = useRef<string | null>(
+    reopen?.status === "unreadable" && reopen.keepStored && source.kind === "local"
+      ? source.id
+      : null,
   );
   // The item the auto-save on open created: the ONLY thing Discard may delete.
   const autoSavedId = useRef<string | null>(null);
@@ -1136,12 +1150,15 @@ function ScreenshotEditorBody({
       const snap = latest.current.scene;
       const draftAtStart = latest.current.draft;
       // Callers pass the saved id they saw; a rename queued before this save moved it.
-      const overwriteId =
+      let overwriteId =
         opts.overwriteId !== undefined
           ? (savedIdRef.current ?? opts.overwriteId)
           : opts.bindToSaved
             ? (savedIdRef.current ?? undefined)
             : undefined;
+      // The document of the item being saved over could not be read: save a copy instead.
+      const toCopy = overwriteId !== undefined && overwriteId === keepStoredId.current;
+      if (toCopy) overwriteId = undefined;
       try {
         const png = await exportAs("png", snap);
         const stagedStamps = new Map<string, number>();
@@ -1150,7 +1167,11 @@ function ScreenshotEditorBody({
         const saved = await window.electronAPI.saveScreenshot(png, {
           // The live field, not only its committed value: Save must write what the
           // user sees even if the field has not blurred yet (e.g. a shortcut).
-          title: opts.title ?? resolveCaptureTitle(draftAtStart, captureTitle.autoTitle),
+          title:
+            opts.title ??
+            (toCopy
+              ? `${resolveCaptureTitle(draftAtStart, captureTitle.autoTitle)} (${t("copySuffix")})`
+              : resolveCaptureTitle(draftAtStart, captureTitle.autoTitle)),
           overwriteId,
           ...(overwriteId !== undefined ? { overwriteAssetId: savedAssetIdRef.current } : {}),
           // The auto-save on open is not the user's work; every other save is.

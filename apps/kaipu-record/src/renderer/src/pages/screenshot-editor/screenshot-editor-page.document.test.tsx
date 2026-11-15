@@ -261,6 +261,45 @@ describe("ScreenshotEditor — reopen from the document (image-canvas)", () => {
     expect(json).toContain('"a9"');
   });
 
+  it("a read that fails does not let the next save overwrite the stored document (NIW2-799)", async () => {
+    readCanvas.mockRejectedValue(Object.assign(new Error("EIO"), { code: "EIO" }));
+    saveScreenshot.mockImplementation(async (_png: ArrayBuffer, opts: { title: string }) => ({
+      id: "copy-1",
+      assetId: "a-copy-1",
+      title: opts.title,
+      kind: "screenshot",
+    }));
+    mountLocal();
+    await loadImage();
+    const draw = (pointerId: number) => {
+      fireEvent.click(screen.getByRole("button", { name: "Redact" }));
+      const surface = screen.getByTestId("canvas-hit-surface");
+      fireEvent.pointerDown(surface, { button: 0, clientX: 20, clientY: 20, pointerId });
+      fireEvent.pointerMove(surface, { clientX: 120, clientY: 90, pointerId });
+      fireEvent.pointerUp(surface, { pointerId });
+    };
+    draw(3);
+    await waitFor(() => expect(saveScreenshot).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    // The edit lands in a new item: shot-1 and its document stay as they were.
+    expect(
+      (saveScreenshot.mock.calls[0][1] as { overwriteId?: string }).overwriteId,
+    ).toBeUndefined();
+    // Once it is saved the editor is bound to that copy, which later edits overwrite.
+    draw(4);
+    await waitFor(() => expect(saveScreenshot).toHaveBeenCalledTimes(2), { timeout: 3000 });
+    expect((saveScreenshot.mock.calls[1][1] as { overwriteId?: string }).overwriteId).toBe(
+      "copy-1",
+    );
+  });
+
+  it("a read that fails once is tried again and opens the document (NIW2-799)", async () => {
+    readCanvas.mockRejectedValueOnce(new Error("EIO")).mockResolvedValue(stored(docJson()));
+    mountLocal();
+    await loadImage();
+    expect(await shownSrc()).toBe("blob:asset");
+    expect(annotationIds()).toEqual(["a7"]);
+  });
+
   it.each([
     ["no document (null)", () => readCanvas.mockResolvedValue(null)],
     ["a read that rejects", () => readCanvas.mockRejectedValue(new Error("boom"))],
