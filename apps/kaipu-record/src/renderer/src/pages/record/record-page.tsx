@@ -139,9 +139,9 @@ export function RecordPage(): React.JSX.Element {
 
   const isSystemAudioUnavailable = isRecording && activity.systemAudioAvailable === false;
 
-  // Mic, Audio and Camera: split tiles in the row, one inline drawer open at a time, right
-  // under the row in the page's flow (the content area scrolls, so a tall drawer pushes
-  // instead of being clipped). Same pattern as the capture panel, with the wide variant.
+  // Mic, Audio and Camera: setup cards in the row (name, current choice, switch, chevron), one
+  // inline panel open at a time, right under the row in the page's flow (the content area
+  // scrolls, so a tall panel pushes instead of being clipped).
   const [mic, systemAudio, camera] = exclusive([
     useAudioControl(audioStore),
     useAudioControl(audioStore),
@@ -160,7 +160,9 @@ export function RecordPage(): React.JSX.Element {
         onToggleCamera={setup.toggleCamera}
         micSlot={
           <MicToggleSplit
+            card
             ui={uiArea("record.mic")}
+            selectedMicrophone={setup.selectedMicrophone}
             control={mic}
             on={setup.isMicrophoneEnabled}
             onToggle={setup.toggleMicrophone}
@@ -168,6 +170,7 @@ export function RecordPage(): React.JSX.Element {
         }
         audioSlot={
           <SystemAudioToggleSplit
+            card
             ui={uiArea("record.audio")}
             control={systemAudio}
             on={setup.isSystemAudioEnabled}
@@ -177,6 +180,7 @@ export function RecordPage(): React.JSX.Element {
         }
         cameraSlot={
           <CameraPanelTile
+            card
             ui={uiArea("record.camera")}
             compact={false}
             control={camera}

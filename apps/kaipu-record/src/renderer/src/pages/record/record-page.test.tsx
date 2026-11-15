@@ -11,9 +11,11 @@ import { WorkspaceSwitcher } from "@renderer/features/workspaces/workspace-switc
 // The record page is composition over hooks; mock them so we can drive the
 // auto-start / open-picker effects (finding 15 — the subtlest logic in the app,
 // previously untested).
-const { startRecording, openSourcePicker } = vi.hoisted(() => ({
+const { startRecording, openSourcePicker, toggleMicrophone, toggleCamera } = vi.hoisted(() => ({
   startRecording: vi.fn(),
   openSourcePicker: vi.fn(),
+  toggleMicrophone: vi.fn(),
+  toggleCamera: vi.fn(),
 }));
 
 const SCREEN = { id: "s1", name: "Display 1", type: "screen" as const };
@@ -28,6 +30,7 @@ let setupState: {
   microphoneEnabled?: boolean;
   microphoneGranted?: boolean;
   microphones?: { deviceId: string; label: string }[];
+  selectedMicrophone?: { deviceId: string; label: string } | null;
   recordingStatus?: RecorderStatus;
   cameraEnabled?: boolean;
 };
@@ -42,11 +45,11 @@ function makeSetup(): RecordingSetup {
     isMicrophoneEnabled: setupState.microphoneEnabled ?? false,
     isSystemAudioEnabled: false,
     isCameraEnabled: setupState.cameraEnabled ?? false,
-    toggleMicrophone: vi.fn(),
+    toggleMicrophone,
     toggleSystemAudio: vi.fn(),
-    toggleCamera: vi.fn(),
+    toggleCamera,
     microphones: setupState.microphones ?? [],
-    selectedMicrophone: null,
+    selectedMicrophone: setupState.selectedMicrophone ?? null,
     selectMicrophone: vi.fn(),
     isRecording: setupState.isRecording,
     recordingStatus: setupState.recordingStatus ?? (setupState.isRecording ? "recording" : "idle"),
@@ -288,6 +291,29 @@ describe("RecordPage idle layout (design Kaipu Capture Home)", () => {
     const menu = screen.getByRole("menu");
     expect(menu).toHaveTextContent("Default workspace");
     expect(screen.getByRole("menuitem", { name: /New workspace/ })).toBeInTheDocument();
+  });
+
+  it("shows the setup as three cards with the current choice, and flips them from their switches", async () => {
+    setupState.microphoneEnabled = true;
+    setupState.selectedMicrophone = { deviceId: "a", label: "Yeti Nano" };
+    toggleMicrophone.mockClear();
+    toggleCamera.mockClear();
+    renderAt(undefined);
+    expect(screen.getByText("Microphone")).toBeInTheDocument();
+    expect(screen.getByText("Yeti Nano")).toBeInTheDocument();
+    expect(screen.getByText("System audio")).toBeInTheDocument();
+    expect(screen.getByText("All sound")).toBeInTheDocument();
+    expect(screen.getByText("Camera")).toBeInTheDocument();
+    expect(await screen.findByText("Default camera · circle, M")).toBeInTheDocument();
+
+    const mic = screen.getByRole("switch", { name: "Microphone" });
+    expect(mic).toHaveAttribute("aria-checked", "true");
+    await userEvent.click(mic);
+    expect(toggleMicrophone).toHaveBeenCalledOnce();
+    await userEvent.click(screen.getByRole("switch", { name: "Camera" }));
+    expect(toggleCamera).toHaveBeenCalledOnce();
+    // The switch only flips the setting: no panel opens.
+    expect(screen.queryByRole("region")).toBeNull();
   });
 
   it("opens the camera settings drawer from the split Camera tile in the idle layout", () => {
