@@ -219,6 +219,48 @@ describe("ScreenshotEditor — reopen from the document (image-canvas)", () => {
     expect(doc.items.map((i) => i.id)).toEqual(["image-base", "a8"]);
   });
 
+  it("a text fully under a redaction is not written back to the document (NIW2-799)", async () => {
+    const text = (id: string, content: string, y: number) => ({
+      id,
+      kind: "text",
+      x: 0.3,
+      y,
+      text: content,
+      color: "#ff0000",
+      size: 1,
+    });
+    const solid = {
+      id: "a9",
+      kind: "blur",
+      style: "solid",
+      x: 0.25,
+      y: 0.45,
+      w: 0.5,
+      h: 0.25,
+      locked: true,
+    };
+    readCanvas.mockResolvedValue(
+      stored(
+        docJson({
+          items: [image, text("t1", "hunter2", 0.5), text("t2", "visible-note", 0.8), solid, arrow],
+        }),
+      ),
+    );
+    mountLocal();
+    await loadImage();
+    // An edit triggers the autosave that rewrites the document.
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    const surface = screen.getByTestId("canvas-hit-surface");
+    fireEvent.pointerDown(surface, { button: 0, clientX: 100, clientY: 20, pointerId: 1 });
+    fireEvent.pointerUp(surface, { pointerId: 1 });
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(saveScreenshot).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    const json = sentCanvas()!.docJson;
+    expect(json).not.toContain("hunter2");
+    expect(json).toContain("visible-note");
+    expect(json).toContain('"a9"');
+  });
+
   it.each([
     ["no document (null)", () => readCanvas.mockResolvedValue(null)],
     ["a read that rejects", () => readCanvas.mockRejectedValue(new Error("boom"))],

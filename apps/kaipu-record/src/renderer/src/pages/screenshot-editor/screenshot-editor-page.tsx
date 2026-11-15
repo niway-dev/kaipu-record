@@ -78,6 +78,7 @@ import {
   intersectFrame,
   nextAnnotationId,
   parseCanvasDoc,
+  withoutRedactedText,
   reserveAnnotationIds,
   useAnnotationTools,
   useEditorScene,
@@ -1066,9 +1067,16 @@ function ScreenshotEditorBody({
       assetsRef.current,
       snap.annotations,
     );
+    // A text a redaction covers entirely is hidden in the PNG, so its characters must not sit
+    // in the document as plain JSON either (NIW2-799). The live scene keeps it.
+    const shown = metricsRef.current;
+    const stored: Scene = {
+      ...snap,
+      annotations: withoutRedactedText(snap.annotations, { w: shown?.w ?? 0, h: shown?.h ?? 0 }),
+    };
     const docJson = JSON.stringify(
       buildCanvasDoc(
-        snap,
+        stored,
         { pixelWidth, pixelHeight },
         { lockedAt: (id) => firstSaveAt(id, staged) },
       ),
