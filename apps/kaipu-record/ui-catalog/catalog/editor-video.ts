@@ -328,7 +328,8 @@ export const editorVideo = catalog(
     "slide-sequence": {
       profile: "slide-sequence",
       how: "With the `timeline-levels` flag forced on, open “Slide sequence”: its clip and its three slides all sit on the one Clips row, side by side, each slide showing its picture and the slide badge, with nothing pushed down under the lanes below.",
-      steps: [open(ASSETS.slidesDemo)],
+      // The clip's thumbnails decode after the editor opens; the slides' pictures are there at once.
+      steps: [open(ASSETS.slidesDemo), loaded, { waitMs: 800 }],
       demonstrates: ["editorVideo.timeline:threeSlides"],
       ready: { video: true },
       gates: [{ flag: "timeline-levels", side: "on" }],
