@@ -183,9 +183,14 @@ export function axisOverlayTrack(
       startMs + durationMs + RANGE_END_MS,
       next ? next.offset * 1000 : Infinity,
     );
+    // A track whose sampler hit its cap has no pointer data after `truncatedAtMs`: this recording
+    // shows the pointer only up to there, as it does on its own (`cursor-model`).
+    const truncated = track.truncatedAtMs !== undefined && track.truncatedAtMs < durationMs;
+    const cutMs = truncated ? Math.max(0, track.truncatedAtMs ?? 0) : durationMs;
     const inside: number[] = [];
     for (let i = 0; i < track.t.length; i++) {
-      if (track.t[i] >= 0 && track.t[i] <= durationMs) inside.push(i);
+      const at = track.t[i];
+      if (at >= 0 && at <= durationMs && (!truncated || at < cutMs)) inside.push(i);
     }
     if (inside.length === 0) continue;
     first ??= track;
@@ -196,7 +201,9 @@ export function axisOverlayTrack(
     if (track.t[head] > 0) push(startMs, track.x[head], track.y[head]);
     for (const i of inside) push(startMs + track.t[i], track.x[i], track.y[i]);
     const tail = inside[inside.length - 1];
-    if (track.t[tail] < durationMs) push(startMs + durationMs, track.x[tail], track.y[tail]);
+    if (track.t[tail] < cutMs) push(startMs + cutMs, track.x[tail], track.y[tail]);
+    // Off the display from the cutoff on, instead of holding the last position to the range end.
+    if (truncated) push(startMs + cutMs, -1, -1);
     push(endMs, -1, -1);
     for (const click of track.clicks) {
       if (click.t >= 0 && click.t <= durationMs) clicks.push({ ...click, t: click.t + startMs });

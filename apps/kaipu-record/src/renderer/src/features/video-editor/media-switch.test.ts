@@ -391,6 +391,38 @@ describe("MediaSwitch — a recording with no element (missing or still loading)
     expect(sw.activeElement()).toBe(late);
     expect(late.style.visibility).toBe("visible");
   });
+
+  it("hands the clock's mute state to the element that takes it over, before it plays", () => {
+    const { sw, advanceWall } = setup();
+    sw.setAxis(sourceAxis(100, [joined("M", 7200, 30)]));
+    sw.currentTime = 7205;
+    sw.muted = true;
+    void sw.play();
+    advanceWall(1000);
+    const late = new FakeVideo();
+    let mutedAtPlay: boolean | null = null;
+    late.play.mockImplementation(() => {
+      mutedAtPlay = late.muted;
+      return Promise.resolve();
+    });
+    sw.attach("M", asElement(late));
+    expect(late.muted).toBe(true);
+    expect(mutedAtPlay).toBe(true);
+  });
+});
+
+describe("MediaSwitch — priming the recording that is still on screen", () => {
+  it("does not seek the outgoing recording while the next one loads, and primes it once it is a standby", () => {
+    const { sw, a, b } = setup();
+    b.startSeek(); // B has no frame yet: A stays on screen while the switch is pending
+    sw.currentTime = 3610;
+    expect(sw.activeKey).toBe("B");
+    expect(a.style.visibility).toBe("visible");
+    sw.prime(50); // the clip after B is back in A, at 50 s
+    expect(a.seekWrites).toEqual([]); // the picture on screen does not jump
+    b.finishSeek(); // B shows its frame; A is a standby now
+    expect(a.currentTime).toBe(50);
+  });
 });
 
 describe("MediaSwitch — attach and detach", () => {

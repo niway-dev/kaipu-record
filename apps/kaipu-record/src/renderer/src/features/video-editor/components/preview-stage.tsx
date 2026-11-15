@@ -140,10 +140,16 @@ export function PreviewStage({
     setActiveKey(mediaSwitch.activeKey);
     return mediaSwitch.onActiveChange(() => setActiveKey(mediaSwitch.activeKey));
   }, [mediaSwitch]);
+  // A joined recording whose file would not load or decode, by the URL that failed: it is taken
+  // off the screen like a missing one (the switch falls back) and gets the same notice. A new URL
+  // for the same recording is a new attempt.
+  const [failedUrls, setFailedUrls] = useState<ReadonlyMap<string, string>>(new Map());
+  const failedToLoad = (r: { sourceId: string; mediaUrl: string | null }): boolean =>
+    r.mediaUrl !== null && failedUrls.get(r.sourceId) === r.mediaUrl;
   const t = useTranslations("videoEditor");
   const missingNow = slideUrl
     ? undefined
-    : recordings.find((r) => r.missing && r.sourceId === activeKey);
+    : recordings.find((r) => (r.missing || failedToLoad(r)) && r.sourceId === activeKey);
   // Only the recording on screen drives the transport: a paused or primed standby also emits
   // `pause`, `timeupdate` and `ended`, and none of those may reach the hook.
   const events = (): React.ComponentProps<"video"> => ({
@@ -200,7 +206,7 @@ export function PreviewStage({
               // button and Space do (NIW2-611).
             />
             {recordings.map((recording) =>
-              recording.mediaUrl === null ? null : (
+              recording.mediaUrl === null || failedToLoad(recording) ? null : (
                 <video
                   key={recording.sourceId}
                   ref={attachJoined(recording.sourceId)}
@@ -211,6 +217,11 @@ export function PreviewStage({
                   // A joined recording keeps its own aspect, letterboxed inside the opened
                   // recording's frame: the frame's ratio and the export size stay the opened one's.
                   onLoadedMetadata={playback.onVideoLoadedMetadata}
+                  onError={() => {
+                    const failedUrl = recording.mediaUrl;
+                    if (failedUrl === null) return;
+                    setFailedUrls((prev) => new Map(prev).set(recording.sourceId, failedUrl));
+                  }}
                 />
               ),
             )}

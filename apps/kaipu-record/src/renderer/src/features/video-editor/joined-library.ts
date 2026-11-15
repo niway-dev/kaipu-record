@@ -24,7 +24,10 @@ export async function readJoinedLibrary(
   const out = new Map<string, JoinedLibraryEntry>();
   if (assetIds.length === 0) return out;
   const wanted = new Set(assetIds);
-  const { items } = await window.electronAPI.listLibraryItems();
+  const { items, vaultError } = await window.electronAPI.listLibraryItems();
+  // An unreadable vault resolves with only the cached cloud items: a joined local recording would
+  // look deleted. Reject so the callers' "cannot be read" paths run instead.
+  if (vaultError !== null) throw new Error(vaultError);
   for (const item of items) {
     if (!wanted.has(item.assetId) || item.kind !== "recording" || item.local === null) continue;
     out.set(item.assetId, {
