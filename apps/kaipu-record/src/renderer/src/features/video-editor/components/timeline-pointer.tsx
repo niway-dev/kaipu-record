@@ -7,7 +7,7 @@
  *
  * Two contexts, because they change at different rates: the conversion is one stable
  * object, while the view (what the lane may need to window its drawing by) changes on
- * every scroll and only the webcam filmstrip reads it.
+ * every scroll and only the webcam filmstrip and the audio waveform read it.
  */
 import { createContext, useCallback, useContext, type RefObject } from "react";
 import { fitView, timeAt, type TimelineView } from "./timeline-view";
