@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import type { ImageSource } from "@renderer/features/screenshots/image-source";
 import type { CanvasReadResult } from "@shared/types/screenshot-canvas";
@@ -290,6 +290,28 @@ describe("ScreenshotEditor — reopen from the document (image-canvas)", () => {
     expect((saveScreenshot.mock.calls[1][1] as { overwriteId?: string }).overwriteId).toBe(
       "copy-1",
     );
+  });
+
+  it("a null read whose existence check fails also keeps the stored document (NIW2-799)", async () => {
+    readCanvas.mockResolvedValue(null);
+    const originalStat = window.electronAPI.statScreenshotCanvas;
+    onTestFinished(() => {
+      window.electronAPI.statScreenshotCanvas = originalStat;
+    });
+    window.electronAPI.statScreenshotCanvas = vi.fn(async () => {
+      throw new Error("EIO");
+    }) as never;
+    mountLocal();
+    await loadImage();
+    fireEvent.click(screen.getByRole("button", { name: "Redact" }));
+    const surface = screen.getByTestId("canvas-hit-surface");
+    fireEvent.pointerDown(surface, { button: 0, clientX: 20, clientY: 20, pointerId: 3 });
+    fireEvent.pointerMove(surface, { clientX: 120, clientY: 90, pointerId: 3 });
+    fireEvent.pointerUp(surface, { pointerId: 3 });
+    await waitFor(() => expect(saveScreenshot).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    expect(
+      (saveScreenshot.mock.calls[0][1] as { overwriteId?: string }).overwriteId,
+    ).toBeUndefined();
   });
 
   it("a read that fails once is tried again and opens the document (NIW2-799)", async () => {

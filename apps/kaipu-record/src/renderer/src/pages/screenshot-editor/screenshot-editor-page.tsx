@@ -255,8 +255,8 @@ async function loadCanvasDoc(id: string): Promise<CanvasLoad<LoadedCanvasDoc>> {
       savedAt: await savedAtOf(id),
     };
   } catch (error) {
-    // The next save replaces the document with one built on the flat PNG, so a read that
-    // failed (not a missing or invalid document) loses the editable layers: record it.
+    // The editable layers could not be loaded (the read failed, not a missing or invalid
+    // document), so they are not on screen: record it.
     captureException(error, { phase: "read-canvas" });
     // The read failed, not the document: it may be intact, so no save may replace it.
     return { status: "unreadable", keepStored: true };
