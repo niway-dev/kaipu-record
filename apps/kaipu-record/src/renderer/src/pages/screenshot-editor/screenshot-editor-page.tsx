@@ -564,6 +564,9 @@ function ScreenshotEditorBody({
         savedAssetIdRef.current = result.recording.assetId;
         setSavedId(newId);
         if (autoSavedId.current === id) autoSavedId.current = newId;
+        // The rename moved the stored document with the item: the guard follows it, or the
+        // next save would see a different id and overwrite a document it never read.
+        if (keepStoredId.current === id) keepStoredId.current = newId;
         notifyRenameOutcome(result, { library: tLibrary, common: tCommon }, () => {
           if (alive.current) void renameSaved(next);
         });

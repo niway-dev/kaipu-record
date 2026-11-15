@@ -50,6 +50,18 @@ describe("readWithRetry", () => {
     expect(read).toHaveBeenCalledTimes(3);
   });
 
+  it("does not retry a failure no pause can fix, such as a permission error", async () => {
+    const read = vi.fn().mockRejectedValue(new Error("canvas document read failed: EACCES"));
+    await expect(readWithRetry(read)).rejects.toThrow("EACCES");
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("still retries an unknown code, since it may be transient", async () => {
+    const read = vi.fn().mockRejectedValue(new Error("canvas document read failed: unknown"));
+    await expect(readWithRetry(read)).rejects.toThrow("unknown");
+    expect(read).toHaveBeenCalledTimes(3);
+  });
+
   it("does not retry a read that resolves with null", async () => {
     const read = vi.fn().mockResolvedValue(null);
     expect(await readWithRetry(read)).toBeNull();

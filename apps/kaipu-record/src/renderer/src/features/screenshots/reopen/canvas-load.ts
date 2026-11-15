@@ -49,15 +49,24 @@ const READ_ATTEMPTS = 3;
 const READ_RETRY_MS = 200;
 
 /**
+ * Read failures no pause can fix. Only the errno code crosses the IPC boundary, in the message
+ * ("canvas document read failed: EACCES"); anything else, including an unknown code, is retried.
+ */
+const PERMANENT_READ_CODES = /: (EACCES|EPERM|EISDIR|ENOTDIR|EINVAL|ELOOP|ENAMETOOLONG)$/;
+function isPermanentReadError(error: unknown): boolean {
+  return error instanceof Error && PERMANENT_READ_CODES.test(error.message);
+}
+
+/**
  * Runs `read`, trying again after a short pause when it rejects, up to three attempts in all.
- * The last rejection is rethrown. A read that resolves (even with null) is never retried.
+ * A permanent failure (see above) is rethrown at once. The last rejection is rethrown. A read that resolves (even with null) is never retried.
  */
 export async function readWithRetry<T>(read: () => Promise<T>): Promise<T> {
   for (let attempt = 1; ; attempt += 1) {
     try {
       return await read();
     } catch (error) {
-      if (attempt >= READ_ATTEMPTS) throw error;
+      if (attempt >= READ_ATTEMPTS || isPermanentReadError(error)) throw error;
       await new Promise((resolve) => setTimeout(resolve, READ_RETRY_MS));
     }
   }

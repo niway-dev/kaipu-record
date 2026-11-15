@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
@@ -292,6 +292,49 @@ describe("ScreenshotEditor — reopen from the document (image-canvas)", () => {
     expect((saveScreenshot.mock.calls[1][1] as { overwriteId?: string }).overwriteId).toBe(
       "copy-1",
     );
+  });
+
+  it("renaming the shot after a failed read still keeps the stored document (NIW2-799)", async () => {
+    readCanvas.mockRejectedValue(Object.assign(new Error("EIO"), { code: "EIO" }));
+    const rename = vi.fn(async (_id: string, _assetId: string, title: string) => ({
+      file: "renamed",
+      reason: undefined,
+      recording: {
+        id: "renamed-1",
+        assetId: "a-renamed-1",
+        title,
+        kind: "screenshot",
+        filePath: "/vault/renamed-1.png",
+      },
+    }));
+    const originalRename = window.electronAPI.renameLocalRecording;
+    onTestFinished(() => {
+      window.electronAPI.renameLocalRecording = originalRename;
+    });
+    window.electronAPI.renameLocalRecording = rename as never;
+    saveScreenshot.mockImplementation(async (_png: ArrayBuffer, opts: { title: string }) => ({
+      id: "copy-1",
+      assetId: "a-copy-1",
+      title: opts.title,
+      kind: "screenshot",
+    }));
+    mountLocal();
+    await loadImage();
+    // The stored document moves with the item, so the guard must follow the new id.
+    const field = screen.getByRole("textbox", { name: /title/i });
+    fireEvent.change(field, { target: { value: "Renamed" } });
+    fireEvent.blur(field);
+    await waitFor(() => expect(rename).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    fireEvent.click(screen.getByRole("button", { name: "Redact" }));
+    const surface = screen.getByTestId("canvas-hit-surface");
+    fireEvent.pointerDown(surface, { button: 0, clientX: 20, clientY: 20, pointerId: 3 });
+    fireEvent.pointerMove(surface, { clientX: 120, clientY: 90, pointerId: 3 });
+    fireEvent.pointerUp(surface, { pointerId: 3 });
+    await waitFor(() => expect(saveScreenshot).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    expect(
+      (saveScreenshot.mock.calls[0][1] as { overwriteId?: string }).overwriteId,
+    ).toBeUndefined();
   });
 
   it("a null read whose existence check fails also keeps the stored document (NIW2-799)", async () => {
