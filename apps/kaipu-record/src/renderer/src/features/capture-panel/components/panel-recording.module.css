@@ -1,0 +1,105 @@
+/* The tray popover while a take runs: the status box and the Stop button. */
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--accent-primary-tint);
+  border: 1px solid var(--accent-primary);
+  border-radius: 10px;
+}
+
+.dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  box-shadow: 0 0 0 4px var(--accent-primary-soft);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.status[data-paused] {
+  background: transparent;
+  border-color: var(--line-strong);
+}
+
+.status[data-paused] .dot {
+  background: var(--accent-yellow);
+  box-shadow: none;
+  animation: none;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.clock {
+  margin-top: 1px;
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.stop {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  height: 42px;
+  margin-top: 8px;
+  font-family: inherit;
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent-primary);
+  border: 0;
+  border-radius: 9px;
+  box-shadow: var(--glow-accent);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.stop:hover {
+  background: var(--accent-primary-hover);
+}
+
+.stop:focus-visible {
+  outline: 2px solid var(--accent-primary-ring);
+  outline-offset: 2px;
+}
+
+.square {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: #fff;
+}
+
+.shortcut {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}

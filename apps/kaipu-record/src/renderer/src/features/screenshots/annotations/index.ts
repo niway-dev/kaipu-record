@@ -72,6 +72,7 @@ export {
   redactRegion,
   bakeRedactions,
   bakeCanvasRedactions,
+  withoutRedactedText,
   type CanvasAssets,
   type PixelRegion,
 } from "./redaction";
