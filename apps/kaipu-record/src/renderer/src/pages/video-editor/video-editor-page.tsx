@@ -2555,7 +2555,7 @@ function VideoEditor({
               openedAssetId={source.assetId}
               loaded={libraryRecordings.loaded}
               failed={libraryRecordings.failed}
-              onAdd={(video) => void addRecording(video, playback.timelineTime)}
+              onAdd={(video) => void addRecording(video, playback.readTimelineTime())}
               onDragStart={(video) => {
                 draggedRecordingRef.current = video;
               }}
