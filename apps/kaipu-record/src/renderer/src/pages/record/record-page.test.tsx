@@ -313,6 +313,8 @@ describe("RecordPage idle layout (design Kaipu Capture Home)", () => {
 
   it("shows the setup as three cards with the current choice, and flips them from their switches", async () => {
     setupState.microphoneEnabled = true;
+    // The card names the selection only while that input is enumerated.
+    setupState.microphones = [{ deviceId: "a", label: "Yeti Nano" }];
     setupState.selectedMicrophone = { deviceId: "a", label: "Yeti Nano" };
     toggleMicrophone.mockClear();
     toggleCamera.mockClear();
