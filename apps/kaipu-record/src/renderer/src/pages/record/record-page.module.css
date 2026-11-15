@@ -1,22 +1,10 @@
-.page {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  max-width: 580px;
-  width: 100%;
-  min-height: 100%;
-  margin: 0 auto;
-  padding: var(--space-xl) 0;
-  gap: var(--space-md);
-}
+/* ── Recording bar buttons (the bar itself is RecordingIndicator) ─────── */
 
-/* ── Recording state ────────────────────────── */
-
-/* Pause + Stop row (replaces the single Start button while recording). */
 .recordingControls {
   display: flex;
   gap: 10px;
+  margin-left: 16px;
+  flex-shrink: 0;
 }
 
 .pauseButton,
@@ -25,17 +13,17 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 50px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 9px;
+  border: 1px solid var(--line-strong);
   font-family: var(--font-family);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
 }
 
 .pauseButton {
-  padding: 0 26px;
   background: var(--bg-card);
   color: var(--text-primary);
 }
@@ -45,7 +33,6 @@
 }
 
 .stopButton {
-  flex: 1;
   background: var(--accent-primary);
   border-color: var(--accent-primary);
   color: #fff;
@@ -56,27 +43,11 @@
   filter: brightness(1.06);
 }
 
-.recordingHint {
-  margin: 0;
-  text-align: center;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-/* Setup controls (source, toggles, notices) that lock while recording. */
-.lockable {
+/* The setup cards, their open panel and the permission notices. */
+.setupBody {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-}
-
-/* Only the source card locks during a take; the toggles stay live. */
-.locked[data-locked] {
-  opacity: 0.5;
-  transition: opacity 140ms ease;
 }
 
 /* ── Idle (design "Kaipu Capture Home") ─────────────────────── */

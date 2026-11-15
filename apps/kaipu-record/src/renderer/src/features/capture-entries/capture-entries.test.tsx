@@ -1,4 +1,4 @@
-import { fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS, type AppSettings } from "@shared/types";
 import { defaultShortcutsFor } from "@shared/shortcut-defaults";
@@ -115,6 +115,31 @@ describe("CaptureEntries, card variant", () => {
       "data-ui-area",
       "record.instantLine",
     );
+  });
+});
+
+describe("CaptureEntries, disabled", () => {
+  it("disables both entries and marks the root, in either variant, without calling a handler", () => {
+    for (const variant of ["card", "row"] as const) {
+      const { onScreenshot, onRecording } = renderEntries(variant, { disabled: true });
+      const screenshot = screen.getByRole("button", { name: /^Screenshot/ });
+      const recording = screen.getByRole("button", { name: /^Recording/ });
+      expect(screenshot).toBeDisabled();
+      expect(recording).toBeDisabled();
+      expect(screenshot.closest("[data-disabled]")).not.toBeNull();
+      fireEvent.click(screenshot);
+      fireEvent.click(recording);
+      expect(onScreenshot).not.toHaveBeenCalled();
+      expect(onRecording).not.toHaveBeenCalled();
+      cleanup();
+    }
+  });
+
+  it("renders exactly as before when the prop is not passed (the tray popover)", () => {
+    renderEntries("row");
+    expect(screen.getByRole("button", { name: /^Screenshot/ })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^Recording/ })).toBeEnabled();
+    expect(document.querySelector("[data-disabled]")).toBeNull();
   });
 });
 
