@@ -264,7 +264,12 @@ export const UI_MAP = {
       zoomLane: { states: ["empty", "segments"] },
       webcamLane: { states: ["segments"] },
       privacyLane: { states: ["empty", "regions"] },
-      audioLane: { states: ["empty", "mutedRanges", "allMuted"] },
+      // `waveform` draws the loudness bars; `waveformMuted` is a hatched block over dimmed bars
+      // (NIW2-775). `empty` (the empty-state text) is left only for a recording without an
+      // audio track, which the seeded vault does not have.
+      audioLane: {
+        states: ["empty", "mutedRanges", "allMuted", "waveform", "waveformMuted"],
+      },
       exportSheet: { states: ["open"], gatedBy: [{ setting: "exportQuality" }] },
     },
   },
