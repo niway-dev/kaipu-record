@@ -284,7 +284,12 @@ export const UI_MAP = {
       // noCamera: the span over a clip whose recording has no webcam while another one has.
       webcamLane: { states: ["segments", "noCamera"] },
       privacyLane: { states: ["empty", "regions"] },
-      audioLane: { states: ["empty", "mutedRanges", "allMuted"] },
+      // `waveform` draws the loudness bars; `waveformMuted` is a hatched block over dimmed bars
+      // (NIW2-775). `empty` (the empty-state text) is left only for a recording without an
+      // audio track, which the seeded vault does not have.
+      audioLane: {
+        states: ["empty", "mutedRanges", "allMuted", "waveform", "waveformMuted"],
+      },
       exportSheet: { states: ["open"], gatedBy: [{ setting: "exportQuality" }] },
     },
   },
