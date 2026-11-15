@@ -67,8 +67,10 @@ Facts this decision rests on:
    downloading to `userData/models/<id>/`, shows progress, allows cancel, writes to a `.partial`
    directory, checks every file's SHA-256, and renames it into place in one step. The engine loads
    only a complete, verified directory. Settings can delete it.
-6. **Offline after the download.** Local-first is met from the moment the model is installed. Before
-   that, the feature says what it needs and the app works as before. No audio leaves the machine.
+6. **Offline after the download, an explicit exception to local-first.** ADR 0021's context asks
+   for every feature offline, forever; transcription needs one download first. From the moment the
+   model is installed it works offline. Before that, the feature says what it needs and the app
+   works as before. No audio leaves the machine.
 7. **Elsewhere, unavailable.** Windows, Intel Mac, a missing binary or a missing model all produce
    the same "unavailable" state. Nothing crashes.
 8. **Pinned and attributed.** No install script fetches anything. An explicit script

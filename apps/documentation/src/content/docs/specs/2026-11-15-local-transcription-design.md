@@ -201,7 +201,8 @@ Criteria:
   at a time. Where segments overlap (the M0 strategy), one cut point is chosen inside each overlap
   (the quietest frame M0 finds usable) and each side keeps only the words that end before it
   (earlier segment) or start after it (later segment); a word that straddles the cut is taken from
-  the segment where it lies whole. M0 measures how often this still loses or doubles a word. Its own supervisor — `runHelperProcess` is one-shot with a 16 MB stdout cap.
+  the segment where it lies whole. M0 measures how often this still loses or doubles a word. The job has its own supervisor,
+  because `runHelperProcess` is one-shot with a 16 MB stdout cap.
 - **Words:** token grouping at a leading space or `▁`; start = first token start; end = last token
   start + duration; offset by segment start; integer ms.
 - **File:** schema above, validated on read; registered in every companion path (rename, move,
@@ -279,8 +280,9 @@ Criteria:
 - [AI and automation](/marketing/ai-and-automation/): "Transcription runtime: Parakeet, not
   Whisper"; "transcription stays local".
 - [ADR 0021](/architecture/decisions/0021-tag-sync-on-events-with-server-version/) states in its
-  context that Kaipu is local-first: a user without an account keeps every feature offline. Met
-  after the one-time download, which ADR 0062 records as the condition.
+  context that Kaipu is local-first: a user without an account keeps every feature offline,
+  forever. Transcription meets that only after the one-time model download; ADR 0062 records this
+  as an explicit exception, and the app keeps working as before until the download happens.
 - [ADR 0055](/architecture/decisions/0055-text-recognition-is-a-port-served-by-the-os-engine-on-each-platform/) (text recognition is a port) — same shape: a port in main, a per-platform backend,
   "unavailable" as the failure.
 - [ADR 0037](/architecture/decisions/0037-webcam-is-its-own-track-and-the-bubble-is-excluded-from-capture/) (webcam on its own track) — the pattern for the later mic track.
