@@ -133,3 +133,26 @@
   border-radius: 1px;
   background: var(--accent-primary);
 }
+
+/* The page's device rows: dot, name, live meter, then the type, as one line. */
+.devices[data-dense] .deviceText {
+  display: contents;
+}
+
+.devices[data-dense] .deviceName {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.devices[data-dense] .meter {
+  order: 1;
+}
+
+.devices[data-dense] .deviceType {
+  order: 2;
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
