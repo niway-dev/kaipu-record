@@ -85,6 +85,12 @@ describe("Microphone and System audio cards", () => {
     expect(screen.getByText("No microphones found")).toBeInTheDocument();
   });
 
+  it("says none was found, not the saved name, once the last microphone is unplugged", () => {
+    render(<CardHarness selected={YETI} microphones={[]} />);
+    expect(screen.getByText("No microphones found")).toBeInTheDocument();
+    expect(screen.queryByText("Yeti Nano")).not.toBeInTheDocument();
+  });
+
   it("does not say none was found while devices exist but none is selected yet", () => {
     render(<CardHarness selected={null} />);
     expect(screen.queryByText("No microphones found")).not.toBeInTheDocument();

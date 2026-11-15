@@ -96,9 +96,10 @@ interface MicTileProps {
   /** The card's secondary line: the selected microphone's name. */
   selectedMicrophone?: Microphone | null;
   /**
-   * The enumerated inputs. The card says "No microphones found" only when this is empty, the
-   * panel's rule; with devices but no selection yet (main's settings still loading) the line
-   * stays blank instead of claiming there are none.
+   * The enumerated inputs. The card says "No microphones found" exactly when this is empty,
+   * the panel's rule, even if a saved device is still selected (the last input was unplugged);
+   * with devices but no selection yet (main's settings still loading) the line stays blank
+   * instead of claiming there are none.
    */
   microphones?: Microphone[];
   control: AudioControl;
@@ -122,7 +123,7 @@ export function MicToggleSplit({
       <SetupCard
         icon={Mic}
         name={t("microphone")}
-        detail={selectedMicrophone?.label ?? (microphones.length === 0 ? t("noDevices") : "\u00a0")}
+        detail={microphones.length === 0 ? t("noDevices") : (selectedMicrophone?.label ?? "\u00a0")}
         status={on ? tRecord("statusOn") : tRecord("statusOff")}
         on={on}
         onToggle={onToggle}
