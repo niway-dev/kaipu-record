@@ -82,6 +82,9 @@ const captureEventSpy = vi.hoisted(() => vi.fn());
 vi.mock("@renderer/features/analytics", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@renderer/features/analytics")>()),
   captureEvent: captureEventSpy,
+  // Add to timeline is behind the timeline-levels flag (NIW2-772); the wiring tests need it on.
+  // The panel's own tests pin the button hidden with the flag off.
+  useFlag: (name: string) => (name === "timeline-levels" ? true : false),
 }));
 
 // Thumbnails never decode in jsdom (no WebCodecs); spying on the hook lets the webcam tests

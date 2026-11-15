@@ -1,7 +1,7 @@
 import { X } from "lucide-react";
 import { useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
-import { reportError } from "@renderer/features/analytics";
+import { reportError, useFlag } from "@renderer/features/analytics";
 import { DeleteConfirmDialog } from "@renderer/features/library/components/delete-confirm-dialog";
 import { notifyVaultRefusal } from "@renderer/features/library/vault-errors";
 import type { LibraryVideo } from "@renderer/features/library/types";
@@ -30,7 +30,8 @@ export interface CapturesPanelProps {
  * The editor's right column while Captures is open (NIW2-764): it takes the inspector's
  * place, the way the cursor settings do. Lists this video's frame captures, newest first.
  * Capture frame itself is in the top bar. Hovering a capture's image shows a Go to button
- * that moves the playhead to that moment; each row can add the image to the timeline.
+ * that moves the playhead to that moment; with the `timeline-levels` flag on, each row can add
+ * the image to the timeline.
  */
 export function CapturesPanel({
   captures,
@@ -42,6 +43,9 @@ export function CapturesPanel({
   onClose,
 }: CapturesPanelProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
+  // Add to timeline inserts a 3 s slide, which the Clips levels redesign (NIW2-770) replaces:
+  // the button exists only with the flag on (NIW2-772).
+  const timelineLevels = useFlag("timeline-levels");
   const tLibrary = useTranslations("library");
   const [pendingDelete, setPendingDelete] = useState<LibraryVideo | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -106,7 +110,7 @@ export function CapturesPanel({
                   ? undefined
                   : t("captureSeek", { time: formatClock(capture.sourceTimeSeconds) })
               }
-              onAddToTimeline={() => onAddToTimeline(capture)}
+              onAddToTimeline={timelineLevels ? () => onAddToTimeline(capture) : undefined}
               addToTimelineLabel={t("captureAddToTimeline")}
               onDelete={() => setPendingDelete(capture)}
               deleteLabel={t("captureDelete")}

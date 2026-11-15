@@ -5,6 +5,13 @@ import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import { VAULT_MAINTENANCE_MARKER } from "@shared/types/library-storage";
 import { CapturesPanel, type CapturesPanelProps } from "./captures-panel";
 
+// `useFlag` reads PostHog; the tests pin each side of timeline-levels (NIW2-772).
+const flags = vi.hoisted(() => ({ "timeline-levels": false }) as Record<string, boolean>);
+vi.mock("@renderer/features/analytics", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@renderer/features/analytics")>()),
+  useFlag: (name: string) => flags[name] ?? false,
+}));
+
 function capture(over: Partial<LibraryVideo>): LibraryVideo {
   return {
     id: "frame-1",
@@ -38,6 +45,7 @@ function renderPanel(over: Partial<CapturesPanelProps> = {}): CapturesPanelProps
 
 const original = { ...window.electronAPI };
 beforeEach(() => {
+  flags["timeline-levels"] = false;
   window.electronAPI.copyScreenshotById = vi.fn(async () => {});
 });
 afterEach(() => {
@@ -105,17 +113,38 @@ describe("CapturesPanel", () => {
     expect(frame?.contains(screen.getByRole("button", { name: "Copy image" }))).toBe(false);
   });
 
-  it("adds a capture to the timeline from its Add to timeline button", () => {
-    const target = capture({ id: "frame-3" });
-    const props = renderPanel({ captures: [capture({ id: "other", assetId: "o" }), target] });
-    fireEvent.click(screen.getAllByRole("button", { name: "Add to timeline" })[1]);
-    expect(props.onAddToTimeline).toHaveBeenCalledOnce();
-    expect(props.onAddToTimeline).toHaveBeenCalledWith(target);
+  describe("with timeline-levels off (the default)", () => {
+    it("has no Add to timeline button, and keeps Go to, Copy and Delete", () => {
+      renderPanel({ captures: [capture({ id: "a" }), capture({ id: "b", assetId: "b" })] });
+      expect(screen.queryByRole("button", { name: "Add to timeline" })).toBeNull();
+      expect(screen.getAllByRole("button", { name: "Go to 1:23.4" })).toHaveLength(2);
+      expect(screen.getAllByRole("button", { name: "Copy image" })).toHaveLength(2);
+      expect(screen.getAllByRole("button", { name: "Delete capture" })).toHaveLength(2);
+    });
+
+    it("has none on a slide capture either", () => {
+      renderPanel({ captures: [capture({ sourceTimeSeconds: null })] });
+      expect(screen.queryByRole("button", { name: "Add to timeline" })).toBeNull();
+    });
   });
 
-  it("offers Add to timeline on a slide capture too", () => {
-    renderPanel({ captures: [capture({ sourceTimeSeconds: null })] });
-    expect(screen.getByRole("button", { name: "Add to timeline" })).toBeInTheDocument();
+  describe("with timeline-levels on", () => {
+    beforeEach(() => {
+      flags["timeline-levels"] = true;
+    });
+
+    it("adds a capture to the timeline from its Add to timeline button", () => {
+      const target = capture({ id: "frame-3" });
+      const props = renderPanel({ captures: [capture({ id: "other", assetId: "o" }), target] });
+      fireEvent.click(screen.getAllByRole("button", { name: "Add to timeline" })[1]);
+      expect(props.onAddToTimeline).toHaveBeenCalledOnce();
+      expect(props.onAddToTimeline).toHaveBeenCalledWith(target);
+    });
+
+    it("offers Add to timeline on a slide capture too", () => {
+      renderPanel({ captures: [capture({ sourceTimeSeconds: null })] });
+      expect(screen.getByRole("button", { name: "Add to timeline" })).toBeInTheDocument();
+    });
   });
 
   it("seeks to the capture's source time from its Go to button", () => {
