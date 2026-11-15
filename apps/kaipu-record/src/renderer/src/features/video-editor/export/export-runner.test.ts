@@ -691,6 +691,103 @@ describe("an export that uses joined recordings (NIW2-781)", () => {
     expect(getExportSnapshot().job?.sourceTitle).toBe("First call");
   });
 
+  it("takes the slides before the joined probes are awaited, not after the editor could have unmounted", async () => {
+    vi.stubGlobal("fetch", fetchMock());
+    const store = createSlideAssetStore();
+    const entries = vi.spyOn(store, "entries");
+    const resolvers: Array<(value: null) => void> = [];
+    probeSource.mockImplementation(() => new Promise<null>((resolve) => resolvers.push(resolve)));
+    const pending = startVideoExport(
+      args({ scene: JOINED_SCENE, joined: () => [entry("b")], slideAssets: store }),
+      t,
+    );
+    expect(entries).toHaveBeenCalledOnce(); // before the probes settle
+    store.dispose();
+    resolvers[0]!(null);
+    expect(await pending).toBe(true);
+    expect(entries).toHaveBeenCalledOnce();
+  });
+
+  it("Retry sends the camera path and cursor the editor holds now, not those of the refused call", async () => {
+    vi.stubGlobal("fetch", fetchMock());
+    const path = (scale: number) => ({
+      fps: 30,
+      cx: new Float32Array([0.5]),
+      cy: new Float32Array([0.5]),
+      scale: new Float32Array([scale]),
+    });
+    let current: { cameraPath: ReturnType<typeof path> | null; cursor: null } = {
+      cameraPath: path(1),
+      cursor: null,
+    };
+    let joinedNow = [entry("b", { status: "loading", id: null })];
+    const zoomed: VideoScene = {
+      ...JOINED_SCENE,
+      zoomSegments: [
+        {
+          id: "z",
+          start: 1,
+          end: 5,
+          scale: 2,
+          mode: "follow",
+          anchor: null,
+          smoothing: 70,
+          origin: "manual",
+          trigger: null,
+        },
+      ],
+    };
+    await startVideoExport(
+      args({
+        scene: zoomed,
+        joined: () => joinedNow,
+        cameraPath: path(1) as never,
+        live: () => current as never,
+      }),
+      t,
+    );
+    expect(getExportSnapshot().error).toBe("exportRecordingLoading");
+    // The recording is ready now, and the preview's camera path has changed with it.
+    joinedNow = [entry("b")];
+    current = { cameraPath: path(2), cursor: null };
+    retryVideoExport();
+    await waitFor(() => expect(workers).toHaveLength(1));
+    expect(Array.from(sent().camera?.scale ?? [])).toEqual([2]);
+  });
+
+  it("a call cancelled while its joined probes run starts nothing", async () => {
+    vi.stubGlobal("fetch", fetchMock());
+    const beginExport = vi.fn(async () => {});
+    window.electronAPI.beginExport = beginExport;
+    const resolvers: Array<(value: null) => void> = [];
+    probeSource.mockImplementation(() => new Promise<null>((resolve) => resolvers.push(resolve)));
+    const pending = startVideoExport(args({ scene: JOINED_SCENE, joined: () => [entry("b")] }), t);
+    cancelVideoExport();
+    resolvers[0]!(null);
+    expect(await pending).toBe(false);
+    expect(beginExport).not.toHaveBeenCalled();
+    expect(workers).toHaveLength(0);
+    expect(getExportSnapshot().status).toBe("idle");
+  });
+
+  it("a call whose probes outlast another export that started and finished does not start a second one", async () => {
+    vi.stubGlobal("fetch", fetchMock());
+    const resolvers: Array<(value: null) => void> = [];
+    probeSource.mockImplementation(() => new Promise<null>((resolve) => resolvers.push(resolve)));
+    const slow = startVideoExport(
+      args({ scene: JOINED_SCENE, joined: () => [entry("b")], title: "Slow" }),
+      t,
+    );
+    // A scene without joins starts at once, and fails: the runner is idle again.
+    await startVideoExport(args({ title: "Fast" }), t);
+    await waitFor(() => expect(workers).toHaveLength(1));
+    workers[0]!.onmessage?.({ data: { type: "error", message: "boom" } } as MessageEvent);
+    resolvers[0]!(null);
+    expect(await slow).toBe(false);
+    expect(workers).toHaveLength(1);
+    expect(getExportSnapshot().job?.sourceTitle).toBe("Fast");
+  });
+
   it("Retry reads the joined recordings as they are now, not as they were when the export was refused", async () => {
     vi.stubGlobal("fetch", fetchMock());
     let current = [entry("b", { status: "loading", id: null })];

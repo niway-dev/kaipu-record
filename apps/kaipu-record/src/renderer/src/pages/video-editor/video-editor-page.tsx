@@ -817,6 +817,13 @@ function VideoEditor({
   // One camera simulation shared by the preview (useCameraPreview) and the export (doc 05).
   // Declared before any callback that closes over it (handleExport).
   const cameraPath = useCameraPath(scene.zoomSegments, axisTrack, axisEnd);
+  // What the MP4 export reads for the camera and the cursor at each start, Retry included: an
+  // export refused while a joined recording loaded was built without its pointer data, and the
+  // preview's differ once it is ready. Followed only while this editor is mounted.
+  const exportLiveRef = useRef({ cameraPath, cursor: cursorData });
+  useEffect(() => {
+    exportLiveRef.current = { cameraPath, cursor: cursorData };
+  }, [cameraPath, cursorData]);
   // Cursor activity: the marks drawn inside the Zooms lane — depend only on the (immutable) track.
   const activity = useMemo(
     () => (axisTrack ? activityMarks(axisTrack, axisEnd) : []),
@@ -1227,6 +1234,7 @@ function VideoEditor({
         slideAssets: assetStoreRef.current,
         cameraPath,
         cursor: cursorData,
+        live: () => exportLiveRef.current,
         // The sidecar's webcam track: with a webcam layer in the scene, the export composes it.
         webcamTrack: source.webcam ?? null,
         joined: () => exportJoinedRef.current,
