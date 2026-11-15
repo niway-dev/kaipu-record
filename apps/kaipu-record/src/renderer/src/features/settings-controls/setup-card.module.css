@@ -31,6 +31,13 @@
   background: var(--bg-input);
 }
 
+/* A blocked card is the one the user opens to fix it: its open state keeps a stronger border
+   and tint, in red, instead of reading closed. */
+.card[data-blocked][data-open] {
+  border-color: rgba(248, 81, 73, 0.7);
+  background: rgba(248, 81, 73, 0.1);
+}
+
 .body {
   flex: 1 1 auto;
   min-width: 0;
