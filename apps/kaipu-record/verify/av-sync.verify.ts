@@ -81,48 +81,69 @@ test("export keeps the source's A/V sync, whole and across cuts", async () => {
     {};
   let first = true;
   let outDir = "";
+  let failed = false;
 
-  for (const fixture of fixtures) {
-    const source = await measureAvSync(path.join(FIXTURE_DIR, `${fixture}.mp4`));
-    report[fixture] = { source, exports: {} };
-    for (const scene of Object.keys(SCENES) as SceneName[]) {
-      const s = await startScenario("av-sync", {
-        keepOutput: !first,
-        videoName: `video-${fixture}-${scene}`,
-        seedVault: seedFor(fixture, scene),
-      });
-      first = false;
-      outDir = s.outDir;
-      try {
-        await openEditor(s.page);
-        await expect
-          .poll(() => s.page.evaluate(() => document.querySelector("video")?.videoWidth ?? 0), {
-            timeout: 15_000,
-          })
-          .toBeGreaterThan(0);
-        await s.page.getByRole("button", { name: "Export", exact: true }).click();
-        await s.page
-          .getByRole("alertdialog")
-          .getByRole("button", { name: /^Export( |$)/ })
-          .click();
-        const ready = s.page.getByRole("region", { name: "Your export is ready" });
-        await expect(ready).toBeVisible({ timeout: 120_000 });
-        await ready.getByRole("button", { name: /in your Library$/ }).click();
-        await expect
-          .poll(() => s.page.evaluate(() => location.hash), { timeout: 15_000 })
-          .toMatch(/^#\/library\/.+/);
-        const assetId = (await s.page.evaluate(() => location.hash)).replace("#/library/", "");
-        const localId = await localIdForAssetId(s.vaultDir, assetId);
-        const kept = path.join(s.outDir, `export-${fixture}-${scene}.mp4`);
-        await copyFile(path.join(s.vaultDir, `${localId}.mp4`), kept);
-        report[fixture]!.exports[scene] = await measureAvSync(kept);
-      } finally {
-        await s.finish();
+  // The report is written even when an export or a measurement throws, so a run that fails
+  // after its first scenario started still leaves the offsets measured so far next to the
+  // kept files.
+  try {
+    for (const fixture of fixtures) {
+      const source = await measureAvSync(path.join(FIXTURE_DIR, `${fixture}.mp4`));
+      report[fixture] = { source, exports: {} };
+      for (const scene of Object.keys(SCENES) as SceneName[]) {
+        const s = await startScenario("av-sync", {
+          keepOutput: !first,
+          videoName: `video-${fixture}-${scene}`,
+          seedVault: seedFor(fixture, scene),
+        });
+        first = false;
+        outDir = s.outDir;
+        try {
+          await openEditor(s.page);
+          await expect
+            .poll(() => s.page.evaluate(() => document.querySelector("video")?.videoWidth ?? 0), {
+              timeout: 15_000,
+            })
+            .toBeGreaterThan(0);
+          await s.page.getByRole("button", { name: "Export", exact: true }).click();
+          await s.page
+            .getByRole("alertdialog")
+            .getByRole("button", { name: /^Export( |$)/ })
+            .click();
+          const ready = s.page.getByRole("region", { name: "Your export is ready" });
+          await expect(ready).toBeVisible({ timeout: 120_000 });
+          await ready.getByRole("button", { name: /in your Library$/ }).click();
+          await expect
+            .poll(() => s.page.evaluate(() => location.hash), { timeout: 15_000 })
+            .toMatch(/^#\/library\/.+/);
+          const assetId = (await s.page.evaluate(() => location.hash)).replace("#/library/", "");
+          const localId = await localIdForAssetId(s.vaultDir, assetId);
+          const kept = path.join(s.outDir, `export-${fixture}-${scene}.mp4`);
+          await copyFile(path.join(s.vaultDir, `${localId}.mp4`), kept);
+          report[fixture]!.exports[scene] = await measureAvSync(kept);
+        } finally {
+          await s.finish();
+        }
       }
+    }
+  } catch (error) {
+    failed = true;
+    throw error;
+  } finally {
+    // Empty only when no scenario started: there is no output folder and nothing measured
+    // beyond what the error says.
+    if (outDir) {
+      // After a failure, a failed write is only logged: it must not replace the error already
+      // on its way out of the loop. On a passing run it fails the test like any other step.
+      await writeFile(path.join(outDir, "report.json"), JSON.stringify(report, null, 2)).catch(
+        (error) => {
+          if (!failed) throw error;
+          console.error("[av-sync] could not write report.json", error);
+        },
+      );
     }
   }
 
-  await writeFile(path.join(outDir, "report.json"), JSON.stringify(report, null, 2));
   for (const [fixture, { source, exports }] of Object.entries(report)) {
     console.log(`[av-sync] ${fixture} source offsets ms: ${source.offsetsMs.join(", ")}`);
     for (const [scene, r] of Object.entries(exports)) {

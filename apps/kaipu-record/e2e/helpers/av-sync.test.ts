@@ -12,7 +12,14 @@ import {
 } from "./av-sync";
 
 const FIXTURES = path.resolve(__dirname, "..", "..", "verify", "fixtures", "av-sync");
-const hasFfmpeg = spawnSync("ffmpeg", ["-version"]).status === 0;
+// CI installs ffmpeg for the desktop unit tests, so there the fixture measurements always run
+// and a missing binary fails them. A laptop without ffmpeg skips them, and says so.
+const skipFixtures = !process.env.CI && spawnSync("ffmpeg", ["-version"]).status !== 0;
+if (skipFixtures) {
+  process.stderr.write(
+    "av-sync.test.ts: ffmpeg is not on PATH, skipping the fixture measurements\n",
+  );
+}
 
 describe("parseMetadataPrint", () => {
   it("reads each frame's pts_time and the value of the key, including -inf", () => {
@@ -61,7 +68,9 @@ describe("pairEvents", () => {
 });
 
 // The measurement against files whose offsets are known (see verify/fixtures/av-sync/README.md).
-describe.skipIf(!hasFfmpeg)("measureAvSync on the fixtures", () => {
+// Each case decodes a 10 s fixture twice (video and audio): well under a second on a laptop,
+// slower on a shared CI runner, so the budget is above the node project's 5 s default.
+describe.skipIf(skipFixtures)("measureAvSync on the fixtures", { timeout: 30_000 }, () => {
   it.each([
     ["ffmpeg.mp4", 0],
     ["mb161.mp4", 44],

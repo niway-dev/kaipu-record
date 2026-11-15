@@ -153,10 +153,12 @@ test("a take's microphone audio starts with the take, cold and warm", async () =
     for (const [index, name] of ["cold", "warm"].entries()) {
       const take = takes[name]!;
       expect(take.toneCalls, `${name}: the recorder opened the tone`).toBe(index + 1);
-      // Audible within half a frame at 30 fps of the first frame. mediabunny 1.61.4 left the
-      // AAC encoder's 2112 priming samples in the timeline and measured 48-51 ms here.
+      // Audible within half a frame at 30 fps of the first frame, on either side: late means
+      // lost or delayed samples, early means the audio is timed ahead of the picture.
+      // mediabunny 1.61.4 left the AAC encoder's 2112 priming samples in the timeline and
+      // measured 48-51 ms late here.
       expect(
-        take.firstLoudSec - take.firstVideoSec,
+        Math.abs(take.firstLoudSec - take.firstVideoSec),
         `${name}: audio starts with the first frame`,
       ).toBeLessThan(0.017);
       expect(take.silentAfterStartMs, `${name}: no holes in the audio`).toBeLessThanOrEqual(5);
