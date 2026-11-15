@@ -66,6 +66,21 @@ a transition.
 7. **The composer revision moves from `wc1` to `wc2`**, for edit and whole-recording
    fingerprints, because fades change how existing hidden segments draw.
 
+### Amendment of 2026-11-15: the first testable version
+
+The owner narrowed what is built first, in the
+[first-version design](/specs/2026-11-15-camera-sections-first-version-design/). Where it
+differs from the decisions above, the first-version design wins until this ADR is implemented in
+full:
+
+- Decision 1: the first version animates position only. Size stays decided here and is
+  deferred. Existing overrides keep their other fields; the parser does not drop them yet.
+- Decision 2: new sections default to Slide, 700 ms, `back`, not 400 ms, ease-in-out.
+- Decision 4: for `back`, the overshoot is scaled to the room before the frame edge instead of
+  being clamped after easing. The custom `cubic-bezier` is deferred.
+- Decisions 5 and 7: the hide and show fade is deferred, and with it the move to `wc2`. Hiding
+  stays instant.
+
 ## Alternatives rejected
 
 - **The transition between two sections as its own object** (a "transition clip" at the
