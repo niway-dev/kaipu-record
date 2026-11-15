@@ -1,0 +1,49 @@
+<!doctype html>
+<meta charset="utf-8" />
+<script type="module">
+  // Synthetic A/V sync source: dark frames with a white flash and a 1 kHz beep that start on
+  // the same instant at each event. Encoded by the mediabunny version named in ?v=.
+  const v = new URLSearchParams(location.search).get("v");
+  const MB = await import(`/pkgs/v${v}/package/dist/bundles/mediabunny.mjs`);
+  const W = 1280, H = 720, FPS = 30, DUR = 10, SR = 48000, CH = 2;
+  const EVENTS = [2, 4, 6, 8];
+  const FLASH_FRAMES = 2, BEEP_SEC = 0.08;
+
+  const target = new MB.BufferTarget();
+  const output = new MB.Output({ format: new MB.Mp4OutputFormat({ fastStart: false }), target });
+  const canvas = new OffscreenCanvas(W, H);
+  const ctx = canvas.getContext("2d");
+  const video = new MB.CanvasSource(canvas, { codec: "avc", bitrate: 4_000_000 });
+  const audio = new MB.AudioSampleSource({ codec: "aac", bitrate: 128_000 });
+  output.addVideoTrack(video, { frameRate: FPS });
+  output.addAudioTrack(audio);
+  await output.start();
+
+  const perFrame = SR / FPS; // 1600 samples, exact
+  for (let i = 0; i < DUR * FPS; i++) {
+    const flash = EVENTS.some((e) => i >= e * FPS && i < e * FPS + FLASH_FRAMES);
+    ctx.fillStyle = flash ? "#ffffff" : "#202020";
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = flash ? "#000000" : "#808080";
+    ctx.font = "48px sans-serif";
+    ctx.fillText(`frame ${i}  t=${(i / FPS).toFixed(3)}`, 40, 80);
+    await video.add(i / FPS, 1 / FPS);
+
+    const data = new Float32Array(perFrame * CH);
+    for (let s = 0; s < perFrame; s++) {
+      const n = i * perFrame + s; // absolute sample index
+      const inBeep = EVENTS.some((e) => n >= e * SR && n < (e + BEEP_SEC) * SR);
+      const x = inBeep ? 0.5 * Math.sin((2 * Math.PI * 1000 * (n % SR)) / SR) : 0;
+      data[s * CH] = x;
+      data[s * CH + 1] = x;
+    }
+    const sample = new MB.AudioSample({
+      data, format: "f32", numberOfChannels: CH, sampleRate: SR, timestamp: i / FPS,
+    });
+    await audio.add(sample);
+    sample.close();
+  }
+  await output.finalize();
+  await fetch(`/upload?name=fixture-mb${v}.mp4`, { method: "POST", body: target.buffer });
+  document.title = "done";
+</script>
