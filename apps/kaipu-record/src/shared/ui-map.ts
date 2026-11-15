@@ -84,17 +84,19 @@ export const UI_MAP = {
       workspaceNotice: { states: ["notConnected"] },
       reconcileBanner: { states: ["fixable", "attention"] },
       // The two entry cards: the whole card opens the selector. The Screenshot card has no
-      // "window": Capture window is switched off (`ENABLED_CAPTURE_MODES`).
+      // "window": Capture window is switched off (`ENABLED_CAPTURE_MODES`). "locked": dimmed
+      // and not clickable during a take, under the recording bar; so is the Instant line.
       screenshotCard: {
-        states: ["frame", "screen"],
+        states: ["frame", "screen", "locked"],
         gatedBy: [{ setting: "screenshotMode" }],
       },
       recordingCard: {
-        states: ["frame", "window", "screen"],
+        states: ["frame", "window", "screen", "locked"],
         gatedBy: [{ setting: "recordingMode" }],
       },
-      instantLine: { states: ["default"] },
-      // Recording setup: the heading, its hint, and the Mic, Audio and Camera tiles below it.
+      instantLine: { states: ["default", "locked"] },
+      // Recording setup: the heading, its hint, and the Microphone, System audio and Camera
+      // cards below it. It stays live during a take.
       setup: { states: ["default"] },
       mic: {
         states: ["on", "off"],

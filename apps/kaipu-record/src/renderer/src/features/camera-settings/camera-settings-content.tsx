@@ -10,6 +10,8 @@ export interface CameraSettingsContentProps {
   cameraOn: boolean;
   isRecording: boolean;
   compact?: boolean;
+  /** The Capture page's two columns; its setup card already names the camera. */
+  columns?: boolean;
 }
 
 /** Header + settings, or the blocked card while camera access is denied. */
@@ -18,6 +20,7 @@ export function CameraSettingsContent({
   cameraOn,
   isRecording,
   compact = false,
+  columns = false,
   firstRef,
 }: CameraSettingsContentProps & {
   firstRef: RefObject<HTMLElement | null>;
@@ -26,10 +29,12 @@ export function CameraSettingsContent({
   const blocked = store.access === "blocked";
   return (
     <div className={styles.content} data-compact={compact || undefined}>
-      <div className={styles.header}>
-        <Camera size={compact ? 13 : 15} aria-hidden className={styles.headerIcon} />
-        <span className={styles.headerTitle}>{t("camera")}</span>
-      </div>
+      {!columns && (
+        <div className={styles.header}>
+          <Camera size={compact ? 13 : 15} aria-hidden className={styles.headerIcon} />
+          <span className={styles.headerTitle}>{t("camera")}</span>
+        </div>
+      )}
       {blocked ? (
         <CameraBlockedCard
           compact={compact}
@@ -44,6 +49,7 @@ export function CameraSettingsContent({
           cameraOn={cameraOn}
           isRecording={isRecording}
           compact={compact}
+          columns={columns}
           shapeRef={firstRef as RefObject<HTMLDivElement | null>}
         />
       )}
