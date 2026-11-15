@@ -61,7 +61,7 @@
     },
     "apps/kaipu-record": {
       "name": "kaipu-record",
-      "version": "0.17.0",
+      "version": "0.18.0",
       "dependencies": {
         "@better-auth/electron": "catalog:",
         "@electron-toolkit/preload": "^3.0.2",
@@ -77,7 +77,7 @@
         "electron-updater": "^6.3.9",
         "gifenc": "1.0.3",
         "lucide-react": "^1.18.0",
-        "mediabunny": "^1.61.4",
+        "mediabunny": "^1.66.0",
         "pdf-lib": "^1.17.1",
         "posthog-js": "^1.395.0",
         "posthog-node": "^5.38.6",
@@ -144,7 +144,7 @@
     },
     "apps/web-hono": {
       "name": "web-hono",
-      "version": "0.11.0",
+      "version": "0.13.0",
       "dependencies": {
         "@base-ui/react": "^1.0.0",
         "@better-auth/electron": "catalog:",
@@ -2652,7 +2652,7 @@
 
     "media-typer": ["media-typer@1.1.0", "", {}, "sha512-aisnrDP4GNe06UcKFnV5bfMNPBUw4jsLGaWwWfnH3v02GnBuXX2MCVn5RbrWo0j3pczUilYblq7fQ7Nw2t5XKw=="],
 
-    "mediabunny": ["mediabunny@1.61.4", "", { "dependencies": { "@types/dom-mediacapture-transform": "^0.1.11", "@types/dom-webcodecs": "0.1.13" } }, "sha512-gZPBi40ldiZGeU2DJxT/Q3hlNiaxfpwNYTfmi0Maq3SoBJT64+W+ySc0Z7t+2JUGxNbkXnLFrDkSS2OQuweOhA=="],
+    "mediabunny": ["mediabunny@1.66.0", "", { "dependencies": { "@types/dom-mediacapture-transform": "^0.1.11", "@types/dom-webcodecs": "0.1.13" } }, "sha512-0Zff/qLkY1ZRyjBEt2vQjLeMigmU/dFKwJLpiPyCiskIel2f2R2kqMxaLYbeHN+rmyz4PVwwLSnU9anjUHHeJQ=="],
 
     "merge-descriptors": ["merge-descriptors@2.0.0", "", {}, "sha512-Snk314V5ayFLhp3fkUREub6WtjBfPdCPY1Ln8/8munuLuiYhsABgBVWsozAG+MWMbVEvcdcpbi9R7ww22l9Q3g=="],
 
