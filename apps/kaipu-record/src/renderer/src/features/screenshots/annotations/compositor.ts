@@ -398,7 +398,18 @@ export function buildSvg(scene: Scene, g: Geom): string {
     .map((a, i) => {
       if (a.kind === "image") return imageSvg(a, g, sv > 0);
       if (a.kind === "blur" && ext) return bakedBlurSvg(a, scene.annotations.slice(0, i), g);
-      return annotationSvg(a, g.naturalW, g.naturalH, g.scale, steps);
+      const drawn = annotationSvg(a, g.naturalW, g.naturalH, g.scale, steps);
+      if (!ext) return drawn;
+      // Redrawing the baked images over a later redaction hides this annotation only where
+      // those pixels are opaque. A base with transparency lets it show through, so the
+      // annotation is cut out of every redaction drawn after it (NIW2-799).
+      const covers = scene.annotations
+        .slice(i + 1)
+        .filter((b): b is BlurAnnotation => b.kind === "blur");
+      if (covers.length === 0) return drawn;
+      const maskId = `cut-${a.id}`;
+      defs.push(redactionCutMask(maskId, covers, g));
+      return `<g mask="url(#${maskId})">${drawn}</g>`;
     })
     .join("")}</g>`;
 
@@ -434,6 +445,21 @@ function imageSvg(a: ImageAnnotation, g: Geom, shadow: boolean, idSuffix = ""): 
       : "") +
     `<g clip-path="url(#${clip})"><use href="#${assetDefId(a, g)}" x="${x}" y="${y}"/></g>`
   );
+}
+
+/**
+ * A mask that shows everything except the rects of `covers`. Authored in the annotation
+ * group's space (translated to the base's corner), like the annotations it is applied to.
+ */
+function redactionCutMask(id: string, covers: readonly BlurAnnotation[], g: Geom): string {
+  const far = 1_000_000;
+  const holes = covers
+    .map(
+      (c) =>
+        `<rect x="${c.x * g.naturalW}" y="${c.y * g.naturalH}" width="${c.w * g.naturalW}" height="${c.h * g.naturalH}" fill="#000"/>`,
+    )
+    .join("");
+  return `<mask id="${id}" maskUnits="userSpaceOnUse" x="${-far}" y="${-far}" width="${2 * far}" height="${2 * far}"><rect x="${-far}" y="${-far}" width="${2 * far}" height="${2 * far}" fill="#fff"/>${holes}</mask>`;
 }
 
 /**

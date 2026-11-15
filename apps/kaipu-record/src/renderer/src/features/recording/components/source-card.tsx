@@ -6,7 +6,6 @@ import type { SelectedSource } from "@renderer/features/recording/types";
 
 interface SourceCardProps {
   source: SelectedSource | null;
-  variant?: "full" | "compact";
   /** While recording the source can't change — show a LOCKED badge, not Change. */
   locked?: boolean;
   onChoose: () => void;
@@ -16,16 +15,13 @@ interface SourceCardProps {
  *  This wrapper turns a `SelectedSource` into the words and icons the view shows. */
 export function SourceCard({
   source,
-  variant = "full",
   locked = false,
   onChoose,
 }: SourceCardProps): React.JSX.Element {
   const t = useTranslations("record");
-  const compact = variant === "compact";
   return (
     <SourceCardView
-      variant={variant}
-      icon={<Monitor size={compact ? 14 : 16} />}
+      icon={<Monitor size={16} />}
       name={source?.name ?? t("noSource")}
       meta={
         source

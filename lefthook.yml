@@ -13,7 +13,9 @@ pre-commit:
   jobs:
     - name: format
       glob: "*.{js,jsx,cjs,mjs,ts,tsx,cts,mts,json,jsonc,css,md,mdx}"
-      run: ./node_modules/.bin/oxfmt --write {staged_files}
+      # A commit whose staged files are all in .oxfmtrc.json ignorePatterns (a CHANGELOG)
+      # leaves oxfmt no target; without the flag that exits 2.
+      run: ./node_modules/.bin/oxfmt --write --no-error-on-unmatched-pattern {staged_files}
       stage_fixed: true
     - name: lint
       glob: "*.{js,jsx,cjs,mjs,ts,tsx,cts,mts}"
