@@ -25,6 +25,23 @@ function PageHarness({
   );
 }
 
+/** The Capture page's setup row: the Camera card and its two-column panel. */
+function CardHarness({
+  on = true,
+  onToggle = () => {},
+}: {
+  on?: boolean;
+  onToggle?: () => void;
+}): React.JSX.Element {
+  const control = useCameraControl();
+  return (
+    <div>
+      <CameraPanelTile card compact={false} control={control} on={on} onToggle={onToggle} />
+      <CameraPanelDrawer variant="page" control={control} on={on} isRecording={false} />
+    </div>
+  );
+}
+
 function PanelHarness({ isRecording = false }: { isRecording?: boolean }): React.JSX.Element {
   const control = useCameraControl();
   return (
@@ -37,14 +54,14 @@ function PanelHarness({ isRecording = false }: { isRecording?: boolean }): React
 }
 
 describe("Camera drawer (Record page, page variant)", () => {
-  it("opens a drawer with focus on the Shape group, and Esc returns focus to the chevron", async () => {
+  it("opens a drawer with focus on the chosen camera, and Esc returns focus to the chevron", async () => {
     render(<PageHarness />);
     const chevron = screen.getByRole("button", { name: "Camera settings" });
     await userEvent.click(chevron);
 
     const drawer = screen.getByRole("region", { name: "Camera settings" });
     expect(chevron).toHaveAttribute("aria-controls", drawer.id);
-    expect(screen.getByRole("radio", { name: "Circle" })).toHaveFocus();
+    expect(screen.getByRole("radio", { name: "Default camera" })).toHaveFocus();
 
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("region")).not.toBeInTheDocument();
@@ -237,5 +254,44 @@ describe("window blur", () => {
       fireEvent.blur(window);
     });
     expect(screen.queryByRole("region")).not.toBeInTheDocument();
+  });
+});
+
+describe("Camera card (Capture page)", () => {
+  it("shows the camera, shape and size, and flips the camera from its switch", async () => {
+    const onToggle = vi.fn();
+    render(<CardHarness onToggle={onToggle} />);
+    expect(await screen.findByText("Default camera · circle, M")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("switch", { name: "Camera" }));
+    expect(onToggle).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+  });
+
+  it("opens the two-column panel from its chevron and picks a camera through the same setting", async () => {
+    const updateSettings = vi.fn(async () => ({}) as never);
+    window.electronAPI.updateSettings = updateSettings;
+    const media = navigator.mediaDevices;
+    Object.defineProperty(navigator, "mediaDevices", {
+      value: {
+        enumerateDevices: async () => [
+          { kind: "videoinput", deviceId: "cam-1", label: "iPhone Camera" },
+          { kind: "videoinput", deviceId: "cam-2", label: "FaceTime HD Camera" },
+        ],
+      },
+      configurable: true,
+    });
+    try {
+      render(<CardHarness />);
+      await userEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+      await userEvent.click(await screen.findByRole("radio", { name: "FaceTime HD Camera" }));
+      await waitFor(() =>
+        expect(updateSettings).toHaveBeenCalledWith({
+          cameraBubble: expect.objectContaining({ deviceId: "cam-2" }),
+        }),
+      );
+      expect(await screen.findByText("FaceTime HD Camera · circle, M")).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(navigator, "mediaDevices", { value: media, configurable: true });
+    }
   });
 });
