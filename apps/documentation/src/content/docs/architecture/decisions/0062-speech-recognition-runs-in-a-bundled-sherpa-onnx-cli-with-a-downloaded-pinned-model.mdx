@@ -1,0 +1,118 @@
+---
+title: "ADR 0062: Speech recognition runs in a bundled sherpa-onnx CLI, with a model downloaded once and pinned"
+description: Transcribing a recording goes through one port in main, served on macOS arm64 by the sherpa-onnx-offline batch CLI shipped in the app, running NVIDIA Parakeet TDT 0.6B v3 int8 from a catalog of models. The model is downloaded once after install with the user's consent, pinned by revision and SHA-256; after that, transcription works offline.
+---
+
+# ADR 0062: Speech recognition runs in a bundled sherpa-onnx CLI, with a model downloaded once and pinned
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Status        | Proposed, 2026-11-15. Not implemented: the M0 spike measures it, M1 builds it ([NIW2-818](https://linear.app/niway/issue/NIW2-818/local-transcription-with-parakeet-transcript-panel-and-subtitle-export)). Spec: [local transcription](/specs/2026-11-15-local-transcription-design/)                                                                                                                                                           |
+| Date          | 2026-11-15                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Relates to    | [0055](/architecture/decisions/0055-text-recognition-is-a-port-served-by-the-os-engine-on-each-platform/) (same shape: a port in main, a backend per platform, "unavailable" as the failure), [0021](/architecture/decisions/0021-tag-sync-on-events-with-server-version/) (local-first), [0063](/architecture/decisions/0063-a-transcript-is-stored-per-recording-in-source-time-and-projected-through-the-edit/) (what is done with the words) |
+| Superseded by | —                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+
+## Context
+
+The owner wants subtitles and a transcript of each recording, made on the user's machine. The
+owner already runs NVIDIA Parakeet TDT 0.6B v3 (int8) in invisible-assistant, through the
+sherpa-onnx v1.13.8 prebuilt package, and measured it ahead of Whisper on Spanish there (4.54% vs
+6.91% WER on FLEURS es_419, about a third of the latency;
+[research](/backlog/local-transcription/3-invisible-assistant-prior-art/)).
+
+Facts this decision rests on:
+
+- **The Node addon fails inside Electron.** `sherpa-onnx-node` throws "External buffers are not
+  allowed", in a utilityProcess too
+  ([hub: local speech-to-text](https://github.com/csdev19/general-knowledge/blob/main/desktop/local-speech-to-text.md)).
+  The engine has to be a separate process.
+- **The websocket server opens a network port on every interface.** On 2026-11-15 on the owner's
+  M5 Pro, `sherpa-onnx-offline-websocket-server` accepts only `--port` and lsof showed it
+  listening on `*:<port>`. The invisible-assistant notes say it exits on a malformed payload.
+- **The batch CLI works on the same files.** On the same machine, `sherpa-onnx-offline` with the
+  v3 int8 model transcribed two short TTS clips (English and Spanish, 12.4 s) word-perfect with
+  punctuation, in 1.78 s wall time including model load (RTF 0.025, peak RSS 1.24 GB). It prints
+  one JSON line per input file with `text`, `tokens`, `timestamps`, `durations` and
+  `ys_log_probs`.
+- **The model is ~640 MB** (encoder, decoder, joiner, tokens; CC-BY-4.0). The desktop installer
+  today carries only small in-house Swift helpers in `resources/native/`.
+- **Local-first.** ADR 0021's context states that a user without an account keeps every feature
+  offline.
+- **Audio decode lives in the renderer.** The app has no ffmpeg (ADR 0001); mediabunny decodes
+  through WebCodecs, which exists in the renderer, not in main.
+
+## Decision
+
+1. **A port in main.** `SpeechRecognizer` takes a PCM file plus segments and returns tokens with
+   start, duration and log-probability per segment. Main owns the job: segmentation, CLI calls,
+   progress, cancel and resume. One job at a time.
+2. **macOS arm64 backend: `sherpa-onnx-offline` from sherpa-onnx v1.13.8**, with its
+   `libonnxruntime`, shipped in `resources/native/`, asar unpacked, signed, checked by a
+   `--version` handshake at startup and by the release workflow. It reads WAV files and writes
+   JSON on stdout. It opens no port. It runs under its own supervisor (deadline per batch,
+   bounded stdout, kill on cancel), not the one-shot `runHelperProcess` with its 16 MB cap.
+3. **The renderer decodes once.** It turns the recording's audio track into a 16 kHz mono PCM file
+   in `.kaipu/tmp`, in chunks, and hands main the path. Main splits it into segments using the
+   strategy M0 chooses (padding and overlap, see M0 results) and calls the CLI on batches of
+   segments, so the model load (~1.5 s) is paid once per batch.
+4. **A model catalog.** Each entry: id, label, languages, size, source URL, pinned revision,
+   SHA-256 of every file, and capabilities (word timestamps). Two entries at first: Parakeet TDT
+   0.6B v3 int8 (default, 25 European languages) and v2 int8 (English only). Whisper and others
+   are later entries, not new code paths.
+5. **The model is downloaded once, with consent.** The app shows size and destination before
+   downloading to `userData/models/<id>/`, shows progress, allows cancel, writes to a `.partial`
+   directory, checks every file's SHA-256, and renames it into place in one step. The engine loads
+   only a complete, verified directory. Settings can delete it.
+6. **Offline after the download.** Local-first is met from the moment the model is installed. Before
+   that, the feature says what it needs and the app works as before. No audio leaves the machine.
+7. **Elsewhere, unavailable.** Windows, Intel Mac, a missing binary or a missing model all produce
+   the same "unavailable" state. Nothing crashes.
+
+## Alternatives rejected
+
+- **The websocket server, as in invisible-assistant.** Fits live dictation; a recording is a batch.
+  It listens on every interface with no flag to bind localhost, and exits on a malformed payload.
+  The CLI from the same package gives the same model and the same output without a port.
+- **`sherpa-onnx-node` in main or a utilityProcess.** Fails in Electron (hub page above).
+- **An in-house Swift helper on Core ML / FluidAudio.** Fast on Apple Silicon, but a new runtime to
+  build and maintain, macOS only, and unmeasured in this repo; the owner's working setup is
+  sherpa-onnx. Reopens if the CLI's speed or memory fails M0.
+- **Whisper as the default.** Worse on Spanish in the owner's measurement and slower; it remains
+  a catalog entry for later.
+- **The model inside the installer.** Adds ~640 MB to every download, including for people who
+  never transcribe.
+- **Cloud transcription.** Sends the user's audio out and needs an account; contrary to local-first.
+
+## Consequences
+
+- One more signed binary and a ~25 MB library in the macOS app; the release workflow checks them.
+- A download feature exists in the desktop app for the first time: staging, hashes, cancel, delete.
+- Transcription needs ~1.2 GB of memory while the CLI runs (probe); M0 measures long recordings.
+- The renderer must stay open during decode only; after that, closing the editor does not stop
+  the job.
+- Mic and system audio are already mixed in one track at capture, so music or a played video is
+  transcribed too. Accepted for the first version.
+- Parakeet v3 returned empty text on real speech in the owner's benchmark; segments with speech
+  energy and no words are recorded as unresolved, not hidden.
+
+## Non-goals
+
+- Live captions while recording.
+- Speaker labels, translation, summaries.
+- A general model manager for other AI features.
+
+## What would reopen this
+
+- M0 shows the CLI cannot transcribe 60 minutes within a reasonable time or memory on Apple
+  Silicon, or loses words at segment boundaries no padding fixes.
+- A sherpa-onnx release breaks the JSON output or drops `durations`.
+- The Node addon starts working inside Electron (one process less).
+- Windows becomes a target: decide whether the same CLI ships there.
+
+## M0 results
+
+To be filled by the M0 spike: machine, recordings (5, 20, 60 minutes), segmentation strategy
+compared, batch size, wall time, peak RSS of the process tree, empty-with-speech count, word timing
+error against hand marks, renderer decode time. No transcript text from the owner's recordings.

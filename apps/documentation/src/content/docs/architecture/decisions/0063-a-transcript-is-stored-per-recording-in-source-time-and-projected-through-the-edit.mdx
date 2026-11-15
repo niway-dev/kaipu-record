@@ -1,0 +1,88 @@
+---
+title: "ADR 0063: A transcript is stored per recording in source time and projected through the edit"
+description: A recording's words are stored once, in a .kaipu companion file, timed in that recording's own source milliseconds and never rewritten by an edit. One projection module maps each word to every place it plays in the edited timeline, hiding words that touch a mute; the transcript panel and every subtitle export read from that one projection.
+---
+
+# ADR 0063: A transcript is stored per recording in source time and projected through the edit
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Proposed, 2026-11-15. Not implemented: the file lands in M1, the projection in M2, exports in M3 ([NIW2-818](https://linear.app/niway/issue/NIW2-818/local-transcription-with-parakeet-transcript-panel-and-subtitle-export)). Spec: [local transcription](/specs/2026-11-15-local-transcription-design/)                                                                                                 |
+| Date          | 2026-11-15                                                                                                                                                                                                                                                                                                                                                                                                |
+| Relates to    | [0062](/architecture/decisions/0062-speech-recognition-runs-in-a-bundled-sherpa-onnx-cli-with-a-downloaded-pinned-model/) (where the words come from), 0058 (joined recordings share one source axis; on the NIW2-782 branch, not on main at the time of writing), [0037](/architecture/decisions/0037-webcam-is-its-own-track-and-the-bubble-is-excluded-from-capture/) (a recording's companion tracks) |
+| Superseded by | —                                                                                                                                                                                                                                                                                                                                                                                                         |
+
+## Context
+
+The editor never changes the recording. A project is a list of source ranges on a timeline
+(`timeline.ts`, `source-time.ts`); mutes are source-anchored ranges (`audio-edits.ts`); the same
+footage can play more than once; and `timelineTimeAtSource` returns only the first place a source
+time plays. Joined recordings put several recordings on one source axis (ADR 0058, not yet on
+main). Per-recording data lives in `.kaipu/` companions that rename, move, cross-workspace move
+and reconcile carry along (`library-vault.ts`, `vault-reconcile.ts`, `workspaces/move-item.ts`).
+
+Transcription of an hour of audio takes minutes and is not free to repeat. Edits are frequent and
+cheap. Premiere and Final Cut tie the transcript to source media and warn that captions drift
+after edits ([research](/backlog/local-transcription/6-competitor-transcript-ux/)).
+
+## Decision
+
+1. **One file per recording**, `.kaipu/<id>.transcript.json`, schema version 1 (fields in the
+   [spec](/specs/2026-11-15-local-transcription-design/#transcript-file-schema-version-1)):
+   model id, revision and file hashes; engine version; the media's content hash; segments;
+   unresolved intervals; words with id, text, start and end in **integer milliseconds of the
+   recording's own source time**, and a mean log-probability.
+2. **Never rewritten by an edit.** Cutting, muting, reordering or repeating footage does not touch
+   the file. A media hash mismatch marks it stale; it is never silently re-timed.
+3. **A companion like the others.** Rename, move, cross-workspace move, reconcile and delete list
+   it explicitly. A job that finishes after its recording moved re-validates the item before
+   writing.
+4. **One projection.** A pure module beside `source-time.ts` maps a word to **0..n timeline
+   occurrences**, one per place its source range plays:
+   - a word outside every timeline range has no occurrence;
+   - a word that overlaps a muted range at all, or a recording whose audio is muted, has no
+     occurrence (a word partly heard is hidden whole, so no muted speech reaches text);
+   - repeated footage gives one occurrence per repeat, each with its own seek target;
+   - joined recordings add the recording's axis offset at projection time.
+5. **Every reader uses it.** The transcript panel, the SRT/VTT/TXT exports, and later burned-in
+   captions read occurrences from the projection, so all show the same words at the same times.
+   Cues are rebuilt from surviving words, never cut from stored sentences.
+6. **Corrections are a separate layer** (later): an array keyed by word id that survives
+   regenerating the words.
+
+## Alternatives rejected
+
+- **Store the transcript in the project, in timeline time.** Every edit would have to re-time it,
+  and a second project on the same recording would transcribe again.
+- **Re-transcribe the exported audio.** Minutes per export, and the panel could not show text
+  before export.
+- **Map with `timelineTimeAtSource`.** Returns the first occurrence only: repeated footage would
+  lose its words and seek to the wrong copy.
+- **Clip a word at a mute boundary, or keep it if mostly audible.** Clipping a word's time does not
+  clip its text; any audible-share threshold lets muted speech reach a subtitle.
+- **Embed the transcript in the MP4.** Fragile to rename and rewrite; companions already solve it.
+
+## Consequences
+
+- The panel and the exports cannot disagree; one test suite covers cuts, mutes, repeats and joins.
+- A word next to a mute disappears entirely, even if most of it is audible. The user sees a gap
+  rather than leaked speech.
+- Export reuse, which today fingerprints the scene only, must add the transcript revision once
+  captions are burned into the video.
+- Joined recordings work once ADR 0058's source axis is on main; until then the projection handles
+  one recording per source.
+
+## Non-goals
+
+- Text-based editing (deleting words to cut video).
+- Speaker diarization.
+- Storing timeline-time captions as a second source of truth.
+
+## What would reopen this
+
+- Per-clip speed changes arrive: the projection then needs a time scale per range.
+- Text-based editing is wanted: the word list becomes an editing surface and may need ids stable
+  across regeneration.
+- Users need captions that differ from the spoken words (a rewritten caption track).
