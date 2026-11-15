@@ -42,8 +42,8 @@ one benchmarks repository per product.
    `runs/<YYYY-MM-DD>T<HHMM>-<sha7>-<host>/` with `run.json`, `weight.json` and, per scenario,
    compressed samples, peaks and the VM-tag breakdown.
 2. **One commit per run**, made by the publisher, never by hand.
-3. **A series is keyed by host, build type, encoder configuration, fixture hash and schema
-   version.** Runs are compared only inside a series.
+3. **A series is keyed by host, build type, encoder configuration, fixture hash, schema and
+   scenario versions, Electron major version and macOS major version.** Runs are compared only inside a series.
 4. **The benchmark code stays in the monorepo** (`apps/kaipu-record/bench/`), so scenarios change
    with the app in the same pull request. The results repository holds data and the scripts that
    render it, nothing else.

@@ -64,8 +64,9 @@ Each has the default this design uses until the owner answers.
 7. **First budget numbers.** The "idles under ~150 MB and records under ~15% CPU" line in
    [Electron vs Tauri](/desktop/electron-vs-tauri/) was never measured. _Default:_ budgets are set
    after ten valid nightly runs on the mini.
-8. **Unverified, answered by the spike (ticket 0):** whether the production build launches, plays
-   and exports on `macos-15` hosted runners and with which encoder; whether the bundles build on
+8. **Unverified, answered by the spike (ticket 0):** the release-candidate E2E already launches
+   the built app and exports on `macos-latest`, so what is left is which encoder that export uses,
+   whether pinning `macos-15` changes it, and whether playback works there; whether the bundles build on
    Linux without the Swift step of `build:native-capture`; whether `footprint` runs there without
    extra privileges.
 9. **A benchmarks repository per product.** The owner wants one for every product ("for our
@@ -195,6 +196,10 @@ main session where it mattered.
   Playwright's `_electron` with an isolated user-data directory. `scripts/ui-catalog-remote.sh` runs
   the app on the mini over ssh as a launchd job. `verify/timeline-zoom.verify.ts` already generates
   a 10-minute `testsrc2` fixture with ffmpeg.
+- **The app already runs on a hosted macOS runner.** `e2e_desktop` in `.github/workflows/pr-checks.yml`
+  launches the built app on `macos-latest` for desktop release candidates and calls itself "the
+  only place the export path runs in the cloud". It does not say which encoder runs, and it does
+  not record.
 - **ADR 0027 and ADR 0052** give ordinary pull requests an immediate pass and verify only release
   candidates. A non-required weight comment does not touch the required check; a blocking benchmark
   on the release pull request would amend ADR 0052 (open question 1).
@@ -370,8 +375,11 @@ runtime cost.
 
 ## Measurement method
 
-1. **Build** the production app at the requested ref (`electron-vite build` plus `build:unpack` for
-   the packaged layout). Dev builds are measured only by `bench:attach`.
+1. **Build** the production app at the requested ref: `bun run rebuild:native`, then
+   `electron-vite build` plus `build:unpack` for the packaged layout. Without the rebuild Electron
+   loads the unpatched `uiohook-napi` prebuild, with its start() deadlock, and the suite measures a
+   binary users never get (the same reason `e2e_desktop` and `release-desktop.yml` rebuild).
+   `run.json` records the native-deps stamp. Dev builds are measured only by `bench:attach`.
 2. **Launch fresh** for each scenario through `e2e/helpers/launch.ts`, isolated user-data directory
    and seeded workspace.
 3. **Map processes**: `getAppMetrics()` gives PID, type and creation time; renderers are matched to
@@ -403,9 +411,14 @@ runtime cost.
   run starts with a preflight: a one-second capture that must contain non-blank frames. A missing
   grant or a blank capture fails each recording and screenshot scenario (invariant 4); it is never
   a skip.
-- **Host lock** shared with the UI catalog and the verify runner: whoever holds it runs; the others
-  wait up to a limit or skip and record the skip. Changes to `ui-catalog-remote.sh` and the verify
-  runner are part of the build.
+- **Host lock** shared with the UI catalog and the verify flow: whoever holds it runs; the others
+  wait up to a limit or skip and record the skip. `ui-catalog-remote.sh` and `bench:remote` take it
+  in code. The verify flow on the mini is a manual recipe in `.claude/skills/verify/SKILL.md`, not a
+  script, so it honours the lock by convention: the build adds a step to that recipe that takes the
+  lock with the same command.
+- **Runner guard**: the scenario runner refuses to start on a host that is not in
+  `ui-catalog/runners.json` (exit 2, no override), the guard ADR 0044 gave the catalog, so running
+  it by mistake on the owner's laptop never launches Electron.
 - **Nightly**: a launchd timer on the mini fetches `origin/main`, runs the full suite and publishes.
 - **Release pull request**: running with `--status` posts a `benchmarks/mini` commit status on the
   candidate's head SHA with a link to the run. Informative until open question 1 is answered.
@@ -460,7 +473,7 @@ scripts/                          render results.md, compare two runs
 ```
 
 **Series key:** host, build type (production or dev), encoder configuration, fixture hash, schema
-version. A change in any of them starts a new series; runs are compared only inside a series.
+version, scenario version, Electron major version and macOS major version. A change in any of them starts a new series; runs are compared only inside a series.
 
 **`run.json` identities:** app SHA and version, benchmark code SHA, schema and scenario versions,
 lockfile hash, Electron and Chromium versions, fixture hashes, encoder settings chosen, macOS
@@ -552,7 +565,8 @@ points were judged real against the repository; none was handled by existing cod
 - **The prototype sampler** takes fixed PIDs and samples every 10 s; this design replaces it.
 - **`footprint` prints `phys_footprint_peak`:** checked on the M5 on 2026-11-14 against a shell
   process. That it is the process lifetime peak is assumed and is part of ticket 1's tests.
-- **Unverified:** WebCodecs hardware encode on hosted runners; Linux bundle build without the Swift
+- **Unverified:** WebCodecs hardware encode on hosted runners (export itself runs there, in
+  `e2e_desktop`); Linux bundle build without the Swift
   step; `ioreg` GPU statistics on the mini's macOS version; the noise level of the mini between
   nightly runs (measured by the first ten runs).
 - **Research reports, verbatim:** [repo sweep](/specs/2026-11-15-kaipu-benchmarks-design/1-repo-sweep-haiku/),

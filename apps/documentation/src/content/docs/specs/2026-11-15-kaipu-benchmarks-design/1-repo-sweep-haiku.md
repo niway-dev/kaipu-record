@@ -12,7 +12,7 @@ sidebar:
 ```text
 Read-only sweep of a monorepo for a design. Topic: a performance benchmark suite for the Electron desktop app (apps/kaipu-record) that measures RAM (macOS phys_footprint per process), CPU, duration, output size and bundle weight per scenario (idle, recording, screenshots, editing, long-video editing, export 1080p/4K, playback), and keeps results as artifacts over time.
 
-Repo: ~/.t3/worktrees/kaipu-record-monorepo/feature-niw2-808-kaipu--5c05e6ce3ca795ca (cd to this absolute path in every command). Hub: <hub>
+Repo: <repo> (cd to this absolute path in every command). Hub: <hub>
 
 Find and report, each with path and the exact sentence(s) that bear on the topic:
 1. ADRs. Locate the ADR folder (likely under apps/documentation/src/content/docs/, e.g. architecture/ or a decisions folder; `grep -ril "^# ADR\|Status:" apps/documentation/src/content/docs | head`). List EVERY ADR title (number + title, one line each). Then flag the ones touching: performance, memory, benchmarks, CI/GitHub Actions, E2E/verify/Playwright, UI catalog, Mac mini, release/build, bundle size, export pipeline, artifacts storage, evidence.

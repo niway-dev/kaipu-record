@@ -40,7 +40,9 @@ The question is where the app runs while it is measured. Facts that constrain it
 - **GitHub-hosted macOS runners** are M1 VMs with 3 cores and 7 GB of RAM, without Metal
   Performance Shaders, with no known way to grant screen-recording permission non-interactively,
   and with an unknown WebCodecs encoder path
-  ([GitHub docs](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)). The
+  ([GitHub docs](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)).
+  The release-candidate E2E (`e2e_desktop` in `pr-checks.yml`) already launches the built app and
+  exports there; which encoder it uses is not recorded. The
   repository is public, so their standard minutes are free.
 - **GitHub says self-hosted runners "should almost never be used for public repositories"**
   ([security guide](https://docs.github.com/en/actions/reference/security/secure-use)).
@@ -58,7 +60,10 @@ The question is where the app runs while it is measured. Facts that constrain it
 1. **The Mac mini runs the authoritative series**, through `bun run bench:remote` over ssh as a
    launchd job, nightly on `main`, on demand for any ref, and on the desktop release pull request.
    It is never registered as a self-hosted Actions runner.
-2. **One host lock** on the mini is shared by benchmarks, the UI catalog and the verify runner. A
+2. **One host lock** on the mini is shared by benchmarks, the UI catalog and the verify flow
+   (the catalog and benchmark scripts take it in code; the manual verify recipe takes it by
+   convention, with the same command). The scenario runner refuses any host outside
+   `ui-catalog/runners.json`, as the catalog does. A
    run that cannot take it waits up to a limit or skips and records the skip; a run that overlapped
    another is invalid.
 3. **`.github/workflows/benchmarks.yml` runs the suite on demand** (`workflow_dispatch` only) on a
@@ -86,7 +91,7 @@ The question is where the app runs while it is measured. Facts that constrain it
 ## Consequences
 
 - The mini carries a third kind of job; the lock changes `ui-catalog-remote.sh` and the verify
-  runner as well.
+  skill's mini recipe as well.
 - There is no series when the mini is off; the nightly records the gap.
 - The hosted series needs a token scoped to the results repository. Only a publish job holds it:
   it runs in a GitHub environment restricted to `main`, never runs checked-out app or bench code,
