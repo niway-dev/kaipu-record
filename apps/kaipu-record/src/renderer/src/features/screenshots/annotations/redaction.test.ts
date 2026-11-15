@@ -6,6 +6,7 @@ import {
   bakeRedactions,
   redactRegion,
   redactionBlockSize,
+  withoutRedactedText,
   type PixelRegion,
 } from "./redaction";
 import type { Annotation } from "./scene";
@@ -253,5 +254,67 @@ describe("bakeCanvasRedactions", () => {
     ]);
     expect(out.base).toBe(base);
     expect(out.assets).toBe(assets);
+  });
+});
+
+describe("withoutRedactedText (NIW2-799)", () => {
+  const size = { w: 200, h: 200 };
+  // 7 chars at the S preset (19 px): about 0.37 x 0.12 of a 200 px image.
+  const text = (id: string, x: number, y: number): Annotation => ({
+    id,
+    kind: "text",
+    x,
+    y,
+    text: "hunter2",
+    color: "#f00",
+    size: 1,
+  });
+  const blur = (id: string, x: number, y: number, w: number, h: number): Annotation => ({
+    id,
+    kind: "blur",
+    x,
+    y,
+    w,
+    h,
+    style: "solid",
+  });
+  const ids = (list: Annotation[]) => list.map((a) => a.id);
+
+  it("drops a text a later redaction covers entirely", () => {
+    const list = [text("t", 0.3, 0.5), blur("b", 0.25, 0.45, 0.5, 0.25)];
+    expect(ids(withoutRedactedText(list, size))).toEqual(["b"]);
+  });
+
+  it("keeps a text the redaction covers only in part", () => {
+    const list = [text("t", 0.3, 0.5), blur("b", 0.25, 0.45, 0.2, 0.25)];
+    expect(ids(withoutRedactedText(list, size))).toEqual(["t", "b"]);
+  });
+
+  it("keeps a text drawn after the redaction: it sits on top of it", () => {
+    const list = [blur("b", 0.25, 0.45, 0.5, 0.25), text("t", 0.3, 0.5)];
+    expect(ids(withoutRedactedText(list, size))).toEqual(["b", "t"]);
+  });
+
+  it("drops a text that two redactions side by side cover together", () => {
+    const list = [
+      text("t", 0.3, 0.5),
+      blur("b1", 0.25, 0.45, 0.2, 0.25),
+      blur("b2", 0.44, 0.45, 0.3, 0.25),
+    ];
+    expect(ids(withoutRedactedText(list, size))).toEqual(["b1", "b2"]);
+  });
+
+  it("keeps a text when two redactions leave a gap between them", () => {
+    const list = [
+      text("t", 0.3, 0.5),
+      blur("b1", 0.25, 0.45, 0.1, 0.25),
+      blur("b2", 0.5, 0.45, 0.25, 0.25),
+    ];
+    expect(ids(withoutRedactedText(list, size))).toEqual(["t", "b1", "b2"]);
+  });
+
+  it("keeps everything when the displayed size is unknown", () => {
+    const list = [text("t", 0.3, 0.5), blur("b", 0.25, 0.45, 0.5, 0.25)];
+    expect(ids(withoutRedactedText(list, { w: 0, h: 0 }))).toEqual(["t", "b"]);
   });
 });

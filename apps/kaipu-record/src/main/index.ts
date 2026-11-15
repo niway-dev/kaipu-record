@@ -30,14 +30,7 @@ import { hasTitleBarOverlay, mainWindowChrome, titleBarOverlay } from "./window-
 import { devAppIdentity } from "./app-identity";
 import { appShutdown, installAppShutdown } from "./app-shutdown";
 import { createMainTranslator } from "@kaipu/i18n/main";
-import {
-  createTray,
-  rebuildTrayMenu,
-  setTrayCountdown,
-  setTrayRecording,
-  setTrayState,
-  type TrayState,
-} from "./tray";
+import { createTray, rebuildTrayMenu, setTrayCountdown, setTrayRecording } from "./tray";
 import { ROUTES } from "@shared/routes";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
@@ -984,6 +977,13 @@ app.whenReady().then(async () => {
     showMainWindow();
   });
 
+  // Capture Panel → "Setup": the main window on the Capture page, where the sources and
+  // devices are set up.
+  ipcMain.on(IPC_CHANNELS.capturePanelOpenSetup, () => {
+    capturePanel?.hide();
+    showMainWindowAt(ROUTES.record);
+  });
+
   // Capture Panel "Start" → open the main window and tell its Record page to start.
   ipcMain.on(IPC_CHANNELS.recordingRequestStart, () => triggerStartRecording());
 
@@ -995,8 +995,8 @@ app.whenReady().then(async () => {
   // Capture Panel "Change" → open the main window and open its source picker.
   ipcMain.on(IPC_CHANNELS.recordingRequestSourcePicker, triggerChooseSource);
 
-  // Capture Panel "Capture Screen" → dismiss the panel and run the same interactive
-  // region capture as the ⌘⇧1 hotkey.
+  // The Screenshot entry (Capture page, tray popover) or the control bar → dismiss the panel
+  // and run the interactive capture. No mode: the stored one, the same path as ⌘⇧1.
   ipcMain.on(IPC_CHANNELS.screenshotRequestCapture, (_event, request?: { mode?: unknown }) => {
     capturePanel?.hide();
     if (isCaptureMode(request?.mode)) {
@@ -1250,9 +1250,6 @@ app.whenReady().then(async () => {
     mainWindow.setBounds(boundsAroundCenter(current, { width, height }, workArea), true);
     mainWindow.setMinimumSize(minWidth, minHeight);
   });
-
-  // The menu bar mirrors the capture panel's selected mode.
-  ipcMain.on(IPC_CHANNELS.traySetMode, (_event, mode: TrayState) => setTrayState(mode));
 
   // Onboarding mode: same treatment for the first-run takeover.
   ipcMain.on(IPC_CHANNELS.windowSetOnboardingMode, (_event, active: boolean) =>

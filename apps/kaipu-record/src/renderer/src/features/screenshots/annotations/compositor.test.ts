@@ -224,6 +224,26 @@ describe("compositor canvas mode", () => {
     }
   });
 
+  it("canvas mode: an annotation drawn before a redaction is cut out of its rect, so a translucent base cannot show it through (NIW2-799)", () => {
+    const s = scene([
+      { id: "t", kind: "text", x: 0.1, y: 0.1, text: "secret", color: "#fff", size: 1 },
+      { id: "r", kind: "blur", x: 0, y: 0, w: 0.5, h: 0.5, style: "blur" },
+      { id: "after", kind: "text", x: 0.1, y: 0.8, text: "later", color: "#fff", size: 1 },
+    ]);
+    const svg = buildSvg(s, { ...geom, extents: ZERO });
+    // The text drawn before the redaction sits inside a mask that is black over the rect.
+    const group = svg.indexOf('<g mask="url(#cut-t)">');
+    expect(group).toBeGreaterThan(-1);
+    expect(group).toBeLessThan(svg.indexOf("secret"));
+    expect(svg).toMatch(
+      /<mask id="cut-t"[^>]*><rect [^>]*fill="#fff"\/><rect x="0" y="0" width="500" height="300" fill="#000"\/><\/mask>/,
+    );
+    // The text drawn after it stays on top of the redaction, unmasked.
+    expect(svg).not.toContain("cut-after");
+    // Outside canvas mode a blur is a filter over the shot: nothing to cut out.
+    expect(buildSvg(s, geom)).not.toContain("<mask");
+  });
+
   it("bakes redactions into the base bytes in canvas mode only", async () => {
     bakeMock.mockReset();
     bakeMock.mockRejectedValue(new Error("baked"));

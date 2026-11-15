@@ -341,6 +341,8 @@ export interface KaipuElectronAPI {
   resizeCapturePanel(height: number): void;
   /** Capture Panel → main: show & focus the main window, hiding the panel. */
   openMainWindow(): void;
+  /** Capture Panel → main: show the main window on the Capture page (the footer's Setup). */
+  openCaptureSetup(): void;
 
   /** Read the current grant status of all media permissions (no system prompt). */
   checkPermissions(): Promise<PermissionStatus>;
@@ -610,8 +612,9 @@ export interface KaipuElectronAPI {
    */
   onRequestChooseSource(callback: (request: { startOnPick: boolean }) => void): () => void;
   /**
-   * Capture Panel → main: run the interactive screenshot capture (same as ⌘⇧1). No mode = the
-   * same mode the ⌘⇧1 shortcut would use.
+   * Capture page / tray popover → main: run the interactive screenshot capture in `mode`.
+   * Without a mode, main uses the stored screenshot mode, exactly as ⌘⇧1 does — so a click
+   * before the renderer has loaded its settings cannot open the wrong mode.
    */
   requestCaptureScreenshot(mode?: CaptureMode): void;
   /**
@@ -709,8 +712,6 @@ export interface KaipuElectronAPI {
    * Main clamps both to the display's work area.
    */
   applyWindowPreset(preset: WindowPresetName): void;
-  /** Mirror the capture panel's selected mode in the menu-bar icon. */
-  setTrayMode(mode: "record" | "screenshot"): void;
   /**
    * Toggle "onboarding mode" window sizing. The first-run takeover is a fixed
    * amount of content — a 96px mark, a headline, and up to four permission
