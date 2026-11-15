@@ -124,7 +124,10 @@ to write the full spec and `ADR 0001`:
 - a second person testing before a release, so an ephemeral per-branch URL is no longer enough;
 - the Lighthouse series needing a **fixed address** measured over months rather than per PR;
 - user count passing the point where a bad release costs more than the environment does;
-- the API needing its own pre-production target, which brings the Service Binding problem back.
+- the API needing its own pre-production target, which brings the Service Binding problem back;
+- a **nightly build** of `main` to a persistent environment. Wrangler `env.nightly` with its own
+  `services` binding covers it; whether Alchemy should replace wrangler for that, and why not
+  yet, is in [Alchemy as the deploy tool](/backlog/alchemy-deploy-evaluation/).
 
 ## Not yet done
 
