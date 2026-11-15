@@ -39,6 +39,28 @@
   margin-top: 0;
 }
 
+/* The page's section labels: small uppercase monospace, the design's INPUT / SOUND / MIX. */
+.content[data-columns] .label {
+  margin-top: 0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+/* Only the "Live" tag is left of the page's header, pushed to the right. */
+.content[data-columns] .header[data-bare] {
+  justify-content: flex-end;
+}
+
+/* A control's own name, above its slider (Input level, Volume in the recording). */
+.fieldTitle {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+}
+
 @container (max-width: 519px) {
   .content[data-columns] {
     grid-template-columns: minmax(0, 1fr);
