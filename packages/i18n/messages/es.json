@@ -1189,6 +1189,7 @@
     "beautifyTipCanvas": "El fondo y el margen forman parte de lo que exportas. El lienzo punteado a su alrededor no.",
     "screenshotPrefix": "Captura",
     "copySuffix": "copia",
+    "savedAsCopyLayersUnreadable": "No se pudieron leer las capas guardadas de esta captura, así que tus cambios se guardaron como una copia y el original quedó intacto.",
     "copyError": "No pudimos copiar la captura al portapapeles.",
     "saveError": "No pudimos guardar la captura.",
     "exportPdf": "PDF",

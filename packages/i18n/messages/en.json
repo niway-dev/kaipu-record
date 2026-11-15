@@ -1189,6 +1189,7 @@
     "beautifyTipCanvas": "Background and padding are part of what you export. The dotted canvas around them is not.",
     "screenshotPrefix": "Screenshot",
     "copySuffix": "copy",
+    "savedAsCopyLayersUnreadable": "Couldn't read this screenshot's saved layers, so your changes were saved as a copy and the original was left untouched.",
     "copyError": "Couldn't copy the screenshot to the clipboard.",
     "saveError": "Couldn't save the screenshot.",
     "exportPdf": "PDF",
