@@ -115,7 +115,7 @@ function mount(source: ImageSource) {
   const router = createMemoryRouter(
     [
       { path: "/editor/capture", element: <ScreenshotEditorPage /> },
-      { path: "/screenshots", element: <div>screenshots</div> },
+      { path: "/", element: <div>capture</div> },
     ],
     { initialEntries: [{ pathname: "/editor/capture", state: source }] },
   );
