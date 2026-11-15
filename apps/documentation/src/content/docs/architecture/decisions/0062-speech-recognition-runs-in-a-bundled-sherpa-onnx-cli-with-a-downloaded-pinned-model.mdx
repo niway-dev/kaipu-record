@@ -48,9 +48,11 @@ Facts this decision rests on:
 1. **A port in main.** `SpeechRecognizer` takes a PCM file plus segments and returns tokens with
    start, duration and log-probability per segment. Main owns the job: segmentation, CLI calls,
    progress, cancel and resume. One job at a time.
-2. **macOS arm64 backend: `sherpa-onnx-offline` from sherpa-onnx v1.13.8**, with its
+2. **macOS arm64 backend: `sherpa-onnx-offline` from one pinned sherpa-onnx release**, with its
    `libonnxruntime`, shipped in `resources/native/`, asar unpacked, signed, checked by a
-   `--version` handshake at startup and by the release workflow. It reads WAV files and writes
+   `--version` handshake at startup and by the release workflow. v1.13.8 is the release verified
+   on the owner's machine; v2.0.0 and v2.0.1 (October 2026) exist and are unmeasured here, so M0
+   runs both and pins the one it chooses. It reads WAV files and writes
    JSON on stdout. It opens no port. It runs under its own supervisor (deadline per batch,
    bounded stdout, kill on cancel), not the one-shot `runHelperProcess` with its 16 MB cap.
 3. **The renderer decodes once.** It turns the recording's audio track into a 16 kHz mono PCM file
@@ -69,8 +71,10 @@ Facts this decision rests on:
    that, the feature says what it needs and the app works as before. No audio leaves the machine.
 7. **Elsewhere, unavailable.** Windows, Intel Mac, a missing binary or a missing model all produce
    the same "unavailable" state. Nothing crashes.
-8. **Pinned and attributed.** The build fetches the sherpa-onnx release archive by exact version
-   and checks its SHA-256 before copying the CLI and library into `resources/native/`; a bump is a
+8. **Pinned and attributed.** No install script fetches anything. An explicit script
+   (`bun run fetch:speech-engine`, like `rebuild:native`) downloads the sherpa-onnx release archive
+   by exact version, checks its SHA-256 and copies the CLI and library into `resources/native/`;
+   every packaging path calls it, `bun run setup` reports when it is missing, and a bump is a
    deliberate change with a new hash. Parakeet's CC-BY-4.0 license requires attribution: the
    model's name, NVIDIA, the license and a link appear in the app's third-party notices and in the
    download prompt, as invisible-assistant does in `THIRD_PARTY_NOTICES.md`. sherpa-onnx
