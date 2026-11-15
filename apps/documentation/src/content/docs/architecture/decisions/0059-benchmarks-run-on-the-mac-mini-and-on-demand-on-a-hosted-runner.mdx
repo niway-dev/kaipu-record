@@ -91,13 +91,17 @@ The question is where the app runs while it is measured. Facts that constrain it
 - The hosted series needs a token scoped to the results repository. Only a publish job holds it:
   it runs in a GitHub environment restricted to `main`, never runs checked-out app or bench code,
   and commits only a schema-validated artifact. Dispatch-only, so no fork pull request reaches it.
-- On the mini, the publisher runs from the `main` checkout and is the only reader of the results
-  token in the Keychain; scenario code from the ref under test never sees it.
+- On the mini, the publisher runs from the `main` checkout as a separate macOS user with its own
+  keychain; the console user that builds and runs the ref under test cannot read it. Until that
+  user exists, only the owner's own refs are benchmarked.
 - Nothing in Actions starts the mini, so a launchd poller on the mini (every 30 minutes) runs the
   suite with `--status` on the head SHA of the open desktop release pull request when that SHA has
   no status yet, plus a manual command. It needs a fine-grained `kaipu-record` token with commit
-  statuses write, also in the Keychain.
+  statuses write, in the publisher user's keychain.
 - A weight comment appears on pull requests that change weight; the owner sees deltas before merge.
+  A later push that removes the delta edits it to "no weight change".
+- Screen-recording grants follow the Electron binary's path (ADR 0044), so the benchmark worktree
+  needs its own grants and a capture preflight that fails, never skips, when they are missing.
 
 ## Non-goals
 

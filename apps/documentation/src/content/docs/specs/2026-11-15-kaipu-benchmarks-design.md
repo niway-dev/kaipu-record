@@ -121,6 +121,9 @@ first recommendation ([weak points](/specs/2026-11-15-kaipu-benchmarks-design/3-
    `.app` while the bundle stays flat. Guarded by three weight layers.
 10. **A failure becomes absent data.** An OOM, a hang, a skipped codec or a failed upload must
     produce a failed or incomplete run, never a missing row that reads as fine.
+11. **A recording runs but captures nothing.** The mini's screen-recording grant belongs to one
+    Electron path; a new path records blank frames with no error. Guarded by the capture preflight
+    and by invariant 4: a recording without a verified output fails.
 
 ## Acceptance criteria
 
@@ -135,7 +138,7 @@ first recommendation ([weak points](/specs/2026-11-15-kaipu-benchmarks-design/3-
       second waits or skips, and says so.
 - [ ] A pull request that adds a dependency gets a weight comment with the delta per bundle chunk,
       packaged `.app` bytes and `.dmg` bytes; a pull request with no weight change gets no new
-      comment.
+      comment; a later push that reverts the change edits the comment to "no weight change".
 - [ ] `gh workflow run benchmarks.yml -f ref=<sha>` runs on a hosted macOS runner and publishes a
       run whose series key names the hosted environment.
 - [ ] A nightly run publishes to `niway-dev/kaipu-benchmarks`, and `results.md` shows it at the top.
@@ -379,7 +382,10 @@ runtime cost.
 5. **Mark phases** from the driver with monotonic timestamps; every sample row carries the current
    phase.
 6. **Read peaks** of every live process before teardown; a process that exited early is recorded
-   with its last sample and its exit, and an unexpected exit fails the scenario.
+   with its last sample and its exit, and an unexpected exit fails the scenario. An exit is
+   expected when the driver caused it (a step closed that window, the app replaced a prewarmed
+   hidden window, teardown) and ended with code 0. Any other exit, any exit by a signal, or a
+   non-zero code is unexpected. Expected exits are still recorded with their cause.
 7. **Verify the outcome** (a finalized output with the expected duration, dimensions and tracks)
    before the scenario counts as passed.
 8. **Write** the run folder and the completion manifest, then publish.
@@ -391,6 +397,12 @@ runtime cost.
 - `bun run bench:remote [--ref <sha>] [--scenario <glob>] [--repeat <n>] [--status]`, modelled on
   `scripts/ui-catalog-remote.sh`: ssh to `macmini`, a private worktree for benchmarks, a launchd
   job so the app runs in the console session with screen-recording permission.
+- **Permission grants follow the Electron binary's path** (ADR 0044): the benchmark worktree has
+  its own `node_modules/electron`, so it gets its own Screen Recording, Camera and Microphone
+  grants once, and a lockfile change that moves or replaces Electron can drop them silently. Every
+  run starts with a preflight: a one-second capture that must contain non-blank frames. A missing
+  grant or a blank capture fails each recording and screenshot scenario (invariant 4); it is never
+  a skip.
 - **Host lock** shared with the UI catalog and the verify runner: whoever holds it runs; the others
   wait up to a limit or skip and record the skip. Changes to `ui-catalog-remote.sh` and the verify
   runner are part of the build.
@@ -401,10 +413,13 @@ runtime cost.
   the head SHA of the open desktop release-please pull request and runs the suite with `--status`
   when that SHA has no `benchmarks/mini` status yet; `bun run bench:remote --status <sha>` does the
   same by hand. The poller needs a fine-grained token for `kaipu-record` with commit statuses
-  write, kept in the mini's Keychain.
-- **Publishing from the mini**: the publisher runs from the mini's `main` checkout, never from
-  the ref under test, and only it reads the results-repository token from the Keychain. Scenario
-  code from an arbitrary ref never sees the token.
+  write, kept in the publisher user's keychain (next bullet).
+- **Publishing from the mini**: the publisher and the release poller run from the mini's `main`
+  checkout, never from the ref under test, as a separate macOS user with its own keychain (a
+  launchd job with `UserName`). The console user that builds and runs the ref cannot read that
+  keychain, so scenario code from an arbitrary ref never reaches either token. The runner hands the
+  publisher only the run folder, which it validates against the schema. Until that user exists,
+  only the owner's own refs are benchmarked, and the build ticket says so.
 
 ### Hosted runner (on demand, clean environment)
 
@@ -419,7 +434,10 @@ runtime cost.
 
 - `.github/workflows/bench-weight.yml` on `pull_request`, non-required, `cancel-in-progress` per
   pull request. Builds the merge-base and the head in the same job on the same runner, measures the
-  weight layers of both and updates one sticky comment only when a layer differs. Comparing two
+  weight layers of both and posts one sticky comment only when a layer differs. Once the comment
+  exists, every later push edits it; when a push removes the delta, it says "no weight change
+  against the base" instead of keeping a stale number. It is never deleted, so the history of the
+  pull request stays readable. Comparing two
   builds from one job keeps runner image and toolchain drift out of the delta. Per-pull-request
   weight is its own series; nightly weight on the mini is a separate one. Runner (Linux or
   macOS) is decided by the spike.

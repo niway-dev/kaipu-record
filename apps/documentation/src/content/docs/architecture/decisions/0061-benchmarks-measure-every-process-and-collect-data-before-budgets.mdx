@@ -52,7 +52,8 @@ false alarms (spec, "What the state of the art does").
    statistics; renderer heap, DOM and frame metrics; scenario outcomes; weight.
 3. **Phase 1 has four invariants and no budgets:** an export's output file grows while it exports
    (at 50% progress at least 30% of the final bytes are on disk, tuned on the first runs); summed
-   idle CPU stays under 1% over 60 s after a 20 s settle; no process exits unexpectedly; every
+   idle CPU stays under 1% over 60 s after a 20 s settle; no process exits unexpectedly (an exit the driver did not cause, a signal or a non-zero code;
+   a closed window, a replaced prewarm and teardown are expected and recorded); every
    scenario ends with a verified output or fails.
 4. **The detector is proven against the real regression:** the suite must fail on the last commit
    before the [NIW2-806](https://linear.app/niway/issue/NIW2-806) fix and pass on the fix.
