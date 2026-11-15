@@ -362,8 +362,8 @@ export const IPC_CHANNELS = {
   windowSetOnboardingMode: "window:set-onboarding-mode",
   /** A screen declaring the window size and minimum it wants (see window-size.ts). */
   windowApplyPreset: "window:apply-preset",
-  /** The capture panel's selected mode, mirrored by the menu-bar icon. */
-  traySetMode: "tray:set-mode",
+  /** Capture Panel → main: show the main window on the Capture page ("Setup"). */
+  capturePanelOpenSetup: "capture-panel:open-setup",
   updateGetStatus: "update:get-status",
   updateStatus: "update:status",
   updateInstall: "update:install",

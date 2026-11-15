@@ -5,11 +5,11 @@ description: The Clips section of the video editor becomes a section with levels
 
 # Clips levels: added images and videos on the timeline — design
 
-**Status: 🟢 Stage 1 ready to validate · design approved by the owner 2026-11-14** (floating
-images, behind the release flag `timeline-levels`, NIW2-771). Stages 2 and 3 are 🔵 Proposed and
-not started. Owner decisions taken in chat on
-2026-11-13 over a sketch of four timelines; the owner approved the design on 2026-11-14 with the
-defaults of open questions 1 and 4, and Add to timeline hidden in 0.19.0 (NIW2-772). Ticket:
+**Status: 🟢 Stage 1 ready to validate · approved by the owner 2026-11-14** (floating images,
+behind the release flag `timeline-levels`, NIW2-771; the flag is NIW2-772). Stages 2 and 3 are 🔵
+Proposed and not started. Owner decisions taken in chat on 2026-11-13 over a sketch of four
+timelines; the owner approved the design on 2026-11-14 with the defaults of open questions 1 and 4,
+and Add to timeline hidden in 0.19.0. Ticket:
 [NIW2-770](https://linear.app/niway/issue/NIW2-770/video-editor-clips-becomes-a-section-with-levels-added-images-and).
 ADR: [0057](/architecture/decisions/0057-clips-is-one-section-with-levels-a-sequence-below-floating-items-above/)
 (new; supersedes part of [0040](/architecture/decisions/0040-typed-tracks-on-demand-and-stackable-media-lanes/)).
