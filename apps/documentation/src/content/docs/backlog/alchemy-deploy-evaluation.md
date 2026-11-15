@@ -48,6 +48,17 @@ Three agents worked from the same facts about this repository, each with its own
 The attackers saw the claim and the facts, never the case for it. Every repository claim
 below was checked against the code; Alchemy claims carry their source.
 
+The three reports are kept verbatim, each with the brief its agent received:
+
+- [The case for (Claude Opus 5.5)](/backlog/alchemy-deploy-evaluation/1-case-for/)
+- [The case against (gpt-6.1-sol)](/backlog/alchemy-deploy-evaluation/2-against-gpt-sol/)
+- [The case against (Claude Opus 5.5)](/backlog/alchemy-deploy-evaluation/3-against-opus/)
+
+They are evidence, not the decision. Where this page and a report disagree, this page wins:
+it was corrected against the repository afterwards (for example, the Service Binding is
+`API_SERVICE`, and the web Worker also receives `DATABASE_URL`). The only edit made to the
+reports is that local absolute paths became repository-relative paths.
+
 ## What we deploy today
 
 - **Three Workers**, each with a `wrangler.jsonc`:
