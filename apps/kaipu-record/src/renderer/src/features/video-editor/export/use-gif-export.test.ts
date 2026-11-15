@@ -169,6 +169,31 @@ describe("useGifExport", () => {
     expect(result.current.status).toBe("idle");
   });
 
+  it("a cancelled attempt that is still preparing creates no worker once a new one runs", async () => {
+    // Both attempts wait on the same source file (it is fetched once); cancel sits between them.
+    let release: (value: unknown) => void = () => {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise((resolve) => (release = resolve))),
+    );
+    const { result } = renderHook(() => useGifExport());
+    let first: Promise<void> = Promise.resolve();
+    let second: Promise<void> = Promise.resolve();
+    act(() => {
+      first = result.current.start(args());
+    });
+    act(() => result.current.cancel());
+    act(() => {
+      second = result.current.start(args());
+    });
+    await act(async () => {
+      release({ ok: true, blob: async () => new Blob(["bytes"]) });
+      await Promise.all([first, second]);
+    });
+    await waitFor(() => expect(createdWorkers).toHaveLength(1));
+    expect(result.current.status).toBe("exporting");
+  });
+
   it("surfaces a worker error with i18n copy and saves nothing", async () => {
     const { result, worker } = await startExport();
     act(() => worker.emit({ type: "error", message: "decode failed" }));

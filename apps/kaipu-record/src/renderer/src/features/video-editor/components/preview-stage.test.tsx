@@ -349,6 +349,18 @@ describe("PreviewStage — joined recordings (ADR 0058)", () => {
     expect(queryByTestId("preview-missing")).toBeNull();
   });
 
+  it("drops a joined recording whose file fails to load and says so while the playhead is on it", () => {
+    const { container, playback, queryByTestId } = setup();
+    const b = container.querySelector('video[src="blob:b"]')!;
+    fireEvent.error(b);
+    expect(container.querySelector('video[src="blob:b"]')).toBeNull();
+    expect(videosOf(container).map((v) => v.getAttribute("src"))).toEqual(["blob:a"]);
+    act(() => {
+      playback.videoRef.current!.currentTime = 3610;
+    });
+    expect(queryByTestId("preview-missing")!.textContent).toContain("Standup");
+  });
+
   it("does not show the missing notice for a recording that is only loading", () => {
     const { playback, queryByTestId } = setup({
       axis: { recordings: [...axis.recordings, { sourceId: "L", offset: 9000, duration: 10 }] },

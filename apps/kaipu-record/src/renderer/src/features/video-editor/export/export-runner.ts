@@ -71,6 +71,13 @@ export interface StartExportArgs {
   cameraPath: CameraPath | null;
   cursor?: CursorLayerData | null;
   /**
+   * The camera path and cursor as the editor holds them NOW, read when the export launches
+   * (Retry included) and taking the place of `cameraPath` and `cursor` above. A refusal while a
+   * joined recording loaded leaves those two built without it; once it is ready the preview's
+   * differ, and a Retry would otherwise export the stale ones.
+   */
+  live?: () => { cameraPath: CameraPath | null; cursor: CursorLayerData | null };
+  /**
    * The recording's webcam track (the sidecar's `webcam`), when it has one: with a webcam
    * layer in the scene, its file is fetched and composed (ADR 0038).
    */
@@ -201,6 +208,8 @@ let active = false;
 // number is still the current one (`isCurrent`), so a cancelled export's late failure, session
 // or fetch can never tear down or replace the export that took its place.
 let runCounter = 0;
+/** Counts cancels, so a start still awaiting its probes can tell it was cancelled. */
+let cancelCounter = 0;
 // What Retry re-runs.
 let lastStart: { args: StartExportArgs; t: Translator<"videoEditor"> } | null = null;
 
@@ -249,6 +258,7 @@ function teardown(id: string | null): void {
  * the resets are idempotent, so one function covers both. A Ready card stays.
  */
 export function cancelVideoExport(): void {
+  cancelCounter += 1;
   active = false;
   const id = sessionId;
   sessionId = null;
@@ -307,6 +317,10 @@ export async function startVideoExport(
   t: Translator<"videoEditor">,
 ): Promise<boolean> {
   if (active) return false;
+  // What this call saw when it began: a cancel, or another export starting (even one that has
+  // already finished), while the joined probes are awaited makes this call stale.
+  const cancelsAtStart = cancelCounter;
+  const runsAtStart = runCounter;
   const GENERIC_ERROR = t("exportGenericError");
   const presetId: ExportPresetId = args.presetId ?? "balanced";
 
@@ -323,6 +337,18 @@ export async function startVideoExport(
     set({ ...IDLE, ready: snapshot.ready, status: "error", error: message });
     return true;
   }
+
+  // The editor's slide store is disposed when the editor unmounts, and the export may
+  // outlive it, and the joined probes below wait long enough for it to unmount: take the slides
+  // before any await.
+  const usedAssetIds = new Set(
+    plan.segments.filter((s) => s.kind === "slide").map((s) => s.assetId),
+  );
+  const storedAssets = args.slideAssets.entries();
+  const slideAssets = storedAssets.filter((asset) => usedAssetIds.has(asset.assetId));
+  // Floating images (spec 2026-11-13) are used by no slide: their assets are taken the same way.
+  const mediaIds = floatingAssetIds(plan.floating);
+  const mediaAssets = storedAssets.filter((asset) => mediaIds.has(asset.assetId));
 
   // A joined recording a clip reads must be readable before anything is taken: no lease, no
   // writer session, no worker (a joined recording no clip uses never blocks). The refusal is
@@ -355,8 +381,9 @@ export async function startVideoExport(
     usedJoined.length > 0 && refusal === null
       ? await Promise.all(usedJoined.map(({ entry }) => probeSource(entry.id!)))
       : [];
-  // Another export may have started while the probes ran.
-  if (active) return false;
+  // Another export may have started (and even finished), or this call may have been cancelled,
+  // while the probes ran: a stale call does nothing.
+  if (active || runCounter !== runsAtStart || cancelCounter !== cancelsAtStart) return false;
   // Retry re-runs the last call that got this far (a refusal below stays retryable). A call
   // turned away just above must not replace the one that is running.
   lastStart = { args, t };
@@ -435,17 +462,6 @@ export async function startVideoExport(
       attemptStartedAt: null,
     });
   };
-
-  // The editor's slide store is disposed when the editor unmounts, and the export may
-  // outlive it: take the slides now.
-  const usedAssetIds = new Set(
-    plan.segments.filter((s) => s.kind === "slide").map((s) => s.assetId),
-  );
-  const storedAssets = args.slideAssets.entries();
-  const slideAssets = storedAssets.filter((asset) => usedAssetIds.has(asset.assetId));
-  // Floating images (spec 2026-11-13) are used by no slide: their assets are taken the same way.
-  const mediaIds = floatingAssetIds(plan.floating);
-  const mediaAssets = storedAssets.filter((asset) => mediaIds.has(asset.assetId));
 
   // Main takes the export's vault lease before the source is read; refused while
   // "Check and fix files" runs (NIW2-561).
@@ -654,13 +670,15 @@ export async function startVideoExport(
 
     // COPIES of the camera arrays: transferring the preview's own buffers would detach
     // them and break the live preview (and undo) after the export starts.
+    const live = args.live?.();
+    const cameraPath = live ? live.cameraPath : args.cameraPath;
     const camera =
-      plan.hasZoom && args.cameraPath
+      plan.hasZoom && cameraPath
         ? {
-            fps: args.cameraPath.fps,
-            cx: args.cameraPath.cx.slice(),
-            cy: args.cameraPath.cy.slice(),
-            scale: args.cameraPath.scale.slice(),
+            fps: cameraPath.fps,
+            cx: cameraPath.cx.slice(),
+            cy: cameraPath.cy.slice(),
+            scale: cameraPath.scale.slice(),
           }
         : null;
     const startMessage: ExportStartMessage = {
@@ -674,7 +692,7 @@ export async function startVideoExport(
       source: { width: args.videoWidth, height: args.videoHeight },
       target: runTarget,
       camera,
-      cursor: args.cursor ?? null,
+      cursor: (live ? live.cursor : args.cursor) ?? null,
       webcam,
       joined: joinedFiles,
     };
