@@ -76,10 +76,13 @@ full:
 - Decision 1: the first version animates position only. Size stays decided here and is
   deferred. Existing overrides keep their other fields; the parser does not drop them yet.
 - Decision 2: new sections default to Slide, 700 ms, `back`, not 400 ms, ease-in-out.
-- Decision 4: for `back`, the overshoot is scaled to the room before the frame edge instead of
-  being clamped after easing. The custom `cubic-bezier` is deferred.
+- Decision 4: for `back`, the overshoot is limited per axis to the room before the frame edge
+  instead of being clamped after easing. The custom `cubic-bezier` is deferred.
 - Decisions 5 and 7: the hide and show fade is deferred, and with it the move to `wc2`. Hiding
   stays instant.
+
+This ADR's title and description keep naming the fade because it remains the decision for the
+full implementation.
 
 ## Alternatives rejected
 
