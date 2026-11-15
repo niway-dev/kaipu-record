@@ -327,11 +327,8 @@ async function measureSingle(item: (typeof SINGLE_ITEMS)[number]): Promise<void>
     }
     expect(screen.visibleFrames, `${item.title} presented screen frames`).toBeGreaterThan(5);
   } finally {
-    try {
-      await launched.teardown();
-    } catch (error) {
-      console.error(`[verify] ${NAME}: closing the app failed`, error);
-    }
+    // A shutdown that hangs or misses its deadline fails the proof: let the rejection out.
+    await launched.teardown();
   }
 }
 
@@ -378,14 +375,18 @@ if (single) {
         });
       };
       finish = async () => {
+        // Report the artifacts either way, then fail the proof if the shutdown failed.
+        let teardownError: unknown = null;
         try {
           await launched.teardown();
         } catch (error) {
+          teardownError = error;
           console.error(`[verify] ${NAME}: closing the app failed`, error);
         }
         for (const f of (await readdir(OUT_DIR)).sort()) {
           console.log(`[verify] ${NAME}: ${f} (${(await stat(path.join(OUT_DIR, f))).size} bytes)`);
         }
+        if (teardownError !== null) throw teardownError;
       };
     }
     console.log(`[verify] ${NAME}: window video ${withVideo ? "on" : "off (KAIPU_PROOF_VIDEO=0)"}`);
@@ -454,6 +455,12 @@ if (single) {
               summary.switchAtMs === null ? "none seen" : `${fmt(summary.switchAtMs)} ms`
             }`,
         );
+        // Each run must cross its own cut: the aggregate checks below cannot tell a run that
+        // showed only one recording from one that switched.
+        expect(
+          summary.switchAtMs,
+          `${label}: the visible recording switched at the cut`,
+        ).not.toBeNull();
       };
       await measure("a-b", cuts.aToB);
       await measure("b-a", cuts.bToA);

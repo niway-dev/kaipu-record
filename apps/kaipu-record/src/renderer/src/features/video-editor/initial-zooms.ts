@@ -42,7 +42,9 @@ export function withJoinedZooms(
   const detected = detectRecordingZooms(
     [{ offset: source.offset, duration: source.durationSeconds, track }],
     scene.zoomSensitivity,
-  ).filter((d) => !scene.zoomSegments.some((z) => d.start < z.end && z.start < d.end));
+  ).filter(
+    (d) => !scene.zoomSegments.some((z) => z.id === d.id || (d.start < z.end && z.start < d.end)),
+  );
   if (detected.length === 0) return scene;
   return {
     ...scene,

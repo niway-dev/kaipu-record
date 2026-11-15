@@ -77,6 +77,14 @@ describe("withJoinedZooms", () => {
     expect(withJoinedZooms(scene, SOURCE_B, TRACK)).toBe(scene);
   });
 
+  it("skips a detected zoom whose id already exists, even when the moved segment no longer overlaps", () => {
+    const detected = withJoinedZooms(initialScene(20), SOURCE_B, TRACK).zoomSegments;
+    expect(detected).toHaveLength(1);
+    const moved = { ...manualZoom, id: detected[0].id, start: 1, end: 2 };
+    const scene = { ...initialScene(20), zoomSegments: [moved] };
+    expect(withJoinedZooms(scene, SOURCE_B, TRACK)).toBe(scene);
+  });
+
   it("returns the same scene without a track", () => {
     const scene = initialScene(20);
     expect(withJoinedZooms(scene, SOURCE_B, null)).toBe(scene);

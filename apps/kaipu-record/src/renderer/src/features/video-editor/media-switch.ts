@@ -139,6 +139,8 @@ export class MediaSwitch implements PreviewMedia {
   private shown: SwitchElement | null = null;
   /** The active element, waiting for its frame before it takes the screen from `shown`. */
   private pendingShow: SwitchElement | null = null;
+  /** A `prime` that had to wait because its target was still on screen; run when it is not. */
+  private deferredPrime: number | null = null;
   private lastRate: number | null = null;
   private readonly changeListeners = new Set<() => void>();
   private readonly eventListeners = new Map<string, Set<() => void>>();
@@ -283,10 +285,17 @@ export class MediaSwitch implements PreviewMedia {
   // ---- priming -----------------------------------------------------------------------
 
   prime(axisTime: number): void {
+    this.deferredPrime = null;
     const found = recordingAt(this.axis, axisTime);
     if (!found || found.recording.sourceId === this.active) return;
     const element = this.elements.get(found.recording.sourceId);
     if (!element) return;
+    // The outgoing recording is still the picture while the active one waits for its first
+    // frame: seeking it would make the visible footage jump. Prime it once it is a standby.
+    if (element === this.shown) {
+      this.deferredPrime = axisTime;
+      return;
+    }
     element.muted = true;
     if (!element.paused) element.pause();
     this.applyRate(element);
@@ -423,7 +432,14 @@ export class MediaSwitch implements PreviewMedia {
     this.shown = this.elements.get(null) ?? null;
     this.pendingShow = null;
     this.applyVisibility();
+    this.flushDeferredPrime();
     for (const listener of [...this.changeListeners]) listener();
+  }
+
+  private flushDeferredPrime(): void {
+    const at = this.deferredPrime;
+    this.deferredPrime = null;
+    if (at !== null) this.prime(at);
   }
 
   /** An element appears for the recording that is already active: continue where its clock was. */
@@ -431,6 +447,7 @@ export class MediaSwitch implements PreviewMedia {
     const clock = this.clocks.get(key);
     if (clock) {
       const wasPlaying = !clock.paused;
+      element.muted = clock.muted;
       if (clock.currentTime > 0) element.currentTime = clock.currentTime;
       clock.pause();
       this.clocks.delete(key);
@@ -445,6 +462,7 @@ export class MediaSwitch implements PreviewMedia {
     this.shown = element;
     this.pendingShow = null;
     this.applyVisibility();
+    this.flushDeferredPrime();
     for (const listener of [...this.changeListeners]) listener();
   }
 
