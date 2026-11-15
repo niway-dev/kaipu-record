@@ -319,6 +319,12 @@ jobs:
           BUILD_FILTER: ${{ needs.changes.outputs.build_filter }}
         run: bun run build --filter="$BUILD_FILTER"
 
+      # The A/V sync measurement (e2e/helpers/av-sync.test.ts) decodes committed fixtures
+      # with ffmpeg, which the runner image does not ship. Under CI that test fails rather
+      # than skips without it, so a fixture that stops measuring right cannot pass unseen.
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
       - name: Test one shard of the desktop app
         working-directory: apps/kaipu-record
         env:

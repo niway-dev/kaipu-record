@@ -47,16 +47,42 @@ export function SystemAudioSettingsContent({
     },
   ];
 
+  const volume = (
+    <LevelSlider
+      label={t("volume")}
+      value={audio.systemAudioVolume}
+      min={SYSTEM_AUDIO_VOLUME_MIN}
+      max={SYSTEM_AUDIO_VOLUME_MAX}
+      valueText={t("volumeValue", { percent: audio.systemAudioVolume })}
+      icon={<Volume1 size={14} />}
+      onChange={(systemAudioVolume) => onChange({ systemAudioVolume })}
+    />
+  );
+  const duck = (
+    <SwitchRow
+      title={t("duckTitle")}
+      hint={t("duckHint")}
+      hintHidden={compact}
+      checked={audio.duckSystemAudioWhileTalking}
+      onChange={(duckSystemAudioWhileTalking) => onChange({ duckSystemAudioWhileTalking })}
+      disabled={!micOn}
+      disabledReason={t("duckNeedsMic")}
+    />
+  );
+
   return (
     <div
       className={styles.content}
       data-compact={compact || undefined}
       data-columns={columns || undefined}
     >
-      <div className={styles.header}>
-        <Volume2 size={compact ? 13 : 15} aria-hidden className={styles.headerIcon} />
-        <span className={styles.headerTitle}>{t("systemAudio")}</span>
-      </div>
+      {/* The page's setup card already names System audio; the panel starts at its columns. */}
+      {!columns && (
+        <div className={styles.header}>
+          <Volume2 size={compact ? 13 : 15} aria-hidden className={styles.headerIcon} />
+          <span className={styles.headerTitle}>{t("systemAudio")}</span>
+        </div>
+      )}
 
       <div className={styles.column}>
         <span className={styles.label} aria-hidden>
@@ -80,27 +106,17 @@ export function SystemAudioSettingsContent({
 
       <div className={styles.column}>
         <span className={styles.label} aria-hidden>
-          {t("volume")}
+          {columns ? t("mix") : t("volume")}
         </span>
-        <LevelSlider
-          label={t("volume")}
-          value={audio.systemAudioVolume}
-          min={SYSTEM_AUDIO_VOLUME_MIN}
-          max={SYSTEM_AUDIO_VOLUME_MAX}
-          valueText={t("volumeValue", { percent: audio.systemAudioVolume })}
-          icon={<Volume1 size={14} />}
-          onChange={(systemAudioVolume) => onChange({ systemAudioVolume })}
-        />
-
-        <SwitchRow
-          title={t("duckTitle")}
-          hint={t("duckHint")}
-          hintHidden={compact}
-          checked={audio.duckSystemAudioWhileTalking}
-          onChange={(duckSystemAudioWhileTalking) => onChange({ duckSystemAudioWhileTalking })}
-          disabled={!micOn}
-          disabledReason={t("duckNeedsMic")}
-        />
+        {/* The page puts the switch first, then the volume under its own title. */}
+        {columns && duck}
+        {columns && (
+          <span className={styles.fieldTitle} aria-hidden>
+            {t("volume")}
+          </span>
+        )}
+        {volume}
+        {!columns && duck}
       </div>
     </div>
   );

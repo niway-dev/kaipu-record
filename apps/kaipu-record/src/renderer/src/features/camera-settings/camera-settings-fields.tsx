@@ -248,17 +248,22 @@ export interface CameraSettingsFieldsProps {
   isRecording: boolean;
   /** The capture panel's drawer: 26 px chips, short labels. */
   compact?: boolean;
-  /** The Shape group, which takes focus when the settings open. */
+  /**
+   * The Capture page's layout: SOURCE (the cameras as a radio list, in place of the
+   * dropdown) beside SHAPE and SIZE, with the rest below both.
+   */
+  columns?: boolean;
+  /** The group that takes focus when the settings open: Shape, or Source in `columns`. */
   shapeRef?: Ref<HTMLDivElement>;
 }
 
 /**
- * The camera settings themselves, shared by the Record page's drawer and the capture
- * panel's compact one. DOM order is the Tab order the design asks for: Shape → Corners
- * (square and rectangle only) → Size chips →
- * slider → device selector (the device chip is drawn in the header, but comes last). The
- * compact variant drops Size and keeps the switch hints for screen readers only, so the
- * panel stays short.
+ * The camera settings themselves, shared by the Capture page's drawer and the capture
+ * panel's compact one. DOM order is the Tab order the design asks for. By default: Shape →
+ * Corners (square and rectangle only) → Size chips → slider → device selector (the device
+ * chip is drawn in the header, but comes last). In `columns`, the Source radio list comes
+ * first, then Shape and Size, then the rows below both. The compact variant drops Size and
+ * keeps the switch hints for screen readers only, so the panel stays short.
  */
 export function CameraSettingsFields({
   bubble,
@@ -267,6 +272,7 @@ export function CameraSettingsFields({
   cameraOn,
   isRecording,
   compact = false,
+  columns = false,
   shapeRef,
 }: CameraSettingsFieldsProps): React.JSX.Element {
   const t = useTranslations("cameraSettings");
@@ -320,8 +326,8 @@ export function CameraSettingsFields({
   const span = CAMERA_BUBBLE_MAX_SIZE - CAMERA_BUBBLE_MIN_SIZE;
   const note = !cameraOn ? t("offNote") : isRecording ? t("liveNote") : "";
 
-  return (
-    <div className={styles.fields} data-compact={compact || undefined}>
+  const shapeControls = (
+    <>
       <span className={styles.label} aria-hidden>
         {t("shape")}
       </span>
@@ -331,75 +337,75 @@ export function CameraSettingsFields({
         value={bubble.shape}
         onChange={(shape) => onChange({ shape })}
         compact={compact}
-        groupRef={shapeRef}
+        groupRef={columns ? undefined : shapeRef}
+      />
+    </>
+  );
+
+  // The circle is round by definition; the square and the rectangle take any corner.
+  const cornerControls = bubble.shape !== "circle" && (
+    <div className={styles.corners}>
+      <LevelSlider
+        label={t("corners")}
+        icon={<SquareRoundCorner size={14} aria-hidden />}
+        value={cornerPercent}
+        min={CAMERA_CORNER_RADIUS_MIN * 100}
+        max={CAMERA_CORNER_RADIUS_MAX * 100}
+        valueText={t("cornersValue", { percent: cornerPercent })}
+        onChange={(percent) => onChange({ cornerRadius: clampCameraCornerRadius(percent / 100) })}
+      />
+    </div>
+  );
+
+  const sizeControls = (
+    <>
+      <span className={styles.label} aria-hidden>
+        {t("size")}
+      </span>
+      <RadioChips
+        label={t("size")}
+        options={sizes}
+        value={preset ?? "custom"}
+        onChange={(choice) => {
+          if (choice !== "custom") onChange({ size: CAMERA_BUBBLE_PRESETS[choice] });
+        }}
+        compact={false}
       />
 
-      {/* The circle is round by definition; the square and the rectangle take any corner. */}
-      {bubble.shape !== "circle" && (
-        <div className={styles.corners}>
-          <LevelSlider
-            label={t("corners")}
-            icon={<SquareRoundCorner size={14} aria-hidden />}
-            value={cornerPercent}
-            min={CAMERA_CORNER_RADIUS_MIN * 100}
-            max={CAMERA_CORNER_RADIUS_MAX * 100}
-            valueText={t("cornersValue", { percent: cornerPercent })}
-            onChange={(percent) =>
-              onChange({ cornerRadius: clampCameraCornerRadius(percent / 100) })
-            }
-          />
-        </div>
-      )}
-
-      {/* The panel has no room for Size: there the bubble's own resize grip sizes it. The
-          Record page keeps it, and it is the keyboard's way to size the bubble. */}
-      {!compact && (
-        <>
-          <span className={styles.label} aria-hidden>
-            {t("size")}
-          </span>
-          <RadioChips
-            label={t("size")}
-            options={sizes}
-            value={preset ?? "custom"}
-            onChange={(choice) => {
-              if (choice !== "custom") onChange({ size: CAMERA_BUBBLE_PRESETS[choice] });
-            }}
-            compact={false}
-          />
-
-          <div className={styles.slider}>
-            <input
-              type="range"
-              min={CAMERA_BUBBLE_MIN_SIZE}
-              max={CAMERA_BUBBLE_MAX_SIZE}
-              step={10}
-              value={bubble.size}
-              aria-label={t("slider")}
-              aria-valuetext={valueText}
-              onKeyDown={onSliderKey}
-              onChange={(event) => onChange({ size: Number(event.currentTarget.value) })}
+      <div className={styles.slider}>
+        <input
+          type="range"
+          min={CAMERA_BUBBLE_MIN_SIZE}
+          max={CAMERA_BUBBLE_MAX_SIZE}
+          step={10}
+          value={bubble.size}
+          aria-label={t("slider")}
+          aria-valuetext={valueText}
+          onKeyDown={onSliderKey}
+          onChange={(event) => onChange({ size: Number(event.currentTarget.value) })}
+        />
+        <div className={styles.ticks} aria-hidden>
+          {CAMERA_BUBBLE_PRESET_IDS.map((id) => (
+            <span
+              key={id}
+              className={styles.tick}
+              data-current={preset === id || undefined}
+              style={{
+                left: `${((CAMERA_BUBBLE_PRESETS[id] - CAMERA_BUBBLE_MIN_SIZE) / span) * 100}%`,
+              }}
             />
-            <div className={styles.ticks} aria-hidden>
-              {CAMERA_BUBBLE_PRESET_IDS.map((id) => (
-                <span
-                  key={id}
-                  className={styles.tick}
-                  data-current={preset === id || undefined}
-                  style={{
-                    left: `${((CAMERA_BUBBLE_PRESETS[id] - CAMERA_BUBBLE_MIN_SIZE) / span) * 100}%`,
-                  }}
-                />
-              ))}
-            </div>
-            <div className={styles.range} aria-hidden>
-              <span>{t("sizePx", { size: CAMERA_BUBBLE_MIN_SIZE })}</span>
-              <span>{t("sizePx", { size: CAMERA_BUBBLE_MAX_SIZE })}</span>
-            </div>
-          </div>
-        </>
-      )}
+          ))}
+        </div>
+        <div className={styles.range} aria-hidden>
+          <span>{t("sizePx", { size: CAMERA_BUBBLE_MIN_SIZE })}</span>
+          <span>{t("sizePx", { size: CAMERA_BUBBLE_MAX_SIZE })}</span>
+        </div>
+      </div>
+    </>
+  );
 
+  const mirrorAndFraming = (
+    <>
       <div className={styles.mirror}>
         <SwitchRow
           title={t("mirrorTitle")}
@@ -422,16 +428,61 @@ export function CameraSettingsFields({
       {bubble.framing.enabled && (
         <FramingControls framing={bubble.framing} onChange={(framing) => onChange({ framing })} />
       )}
+    </>
+  );
 
-      {/* Present from the start and filled later, so it is announced once when it changes. */}
-      <p
-        className={styles.note}
-        data-live={(cameraOn && isRecording) || undefined}
-        role="status"
-        aria-live="polite"
-      >
-        {note}
-      </p>
+  // Present from the start and filled later, so it is announced once when it changes.
+  const noteLine = (
+    <p
+      className={styles.note}
+      data-live={(cameraOn && isRecording) || undefined}
+      role="status"
+      aria-live="polite"
+    >
+      {note}
+    </p>
+  );
+
+  if (columns) {
+    return (
+      <div className={styles.fields} data-columns>
+        <div className={styles.columns}>
+          <div className={styles.column}>
+            <span className={styles.label} aria-hidden>
+              {t("source")}
+            </span>
+            <CameraSourceList
+              cameras={cameras}
+              deviceId={bubble.deviceId}
+              onChange={(deviceId) => onChange({ deviceId })}
+              groupRef={shapeRef}
+            />
+          </div>
+          <div className={styles.column}>
+            {shapeControls}
+            {sizeControls}
+          </div>
+        </div>
+        <div className={styles.below}>
+          {cornerControls}
+          {mirrorAndFraming}
+          {noteLine}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.fields} data-compact={compact || undefined}>
+      {shapeControls}
+      {cornerControls}
+
+      {/* The panel has no room for Size: there the bubble's own resize grip sizes it. The
+          Record page keeps it, and it is the keyboard's way to size the bubble. */}
+      {!compact && sizeControls}
+
+      {mirrorAndFraming}
+      {noteLine}
 
       <select
         className={styles.device}
@@ -452,6 +503,91 @@ export function CameraSettingsFields({
           </option>
         )}
       </select>
+    </div>
+  );
+}
+
+interface CameraSourceListProps {
+  cameras: CameraDevice[];
+  /** The chosen camera, or `null` for the default one. */
+  deviceId: string | null;
+  onChange: (deviceId: string | null) => void;
+  groupRef?: Ref<HTMLDivElement>;
+}
+
+/**
+ * The cameras as a radio list, the default camera first: what the dropdown offered, all
+ * visible at once. ↑/↓ (and ←/→) move the selection with one tab stop, like the microphone list.
+ */
+function CameraSourceList({
+  cameras,
+  deviceId,
+  onChange,
+  groupRef,
+}: CameraSourceListProps): React.JSX.Element {
+  const t = useTranslations("cameraSettings");
+  const rows = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const entries: { value: string | null; text: string; missing?: boolean }[] = [
+    { value: null, text: t("deviceDefault") },
+    ...cameras.map((camera, index) => ({
+      value: camera.deviceId,
+      text: camera.label || t("deviceUnnamed", { index: index + 1 }),
+    })),
+  ];
+  // A remembered camera that is unplugged right now still shows as chosen.
+  if (deviceId && !cameras.some((camera) => camera.deviceId === deviceId)) {
+    entries.push({
+      value: deviceId,
+      text: t("deviceUnnamed", { index: cameras.length + 1 }),
+      missing: true,
+    });
+  }
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    const delta =
+      event.key === "ArrowDown" || event.key === "ArrowRight"
+        ? 1
+        : event.key === "ArrowUp" || event.key === "ArrowLeft"
+          ? -1
+          : 0;
+    if (delta === 0) return;
+    event.preventDefault();
+    const current = entries.findIndex((entry) => entry.value === deviceId);
+    const nextIndex = (current + delta + entries.length) % entries.length;
+    onChange(entries[nextIndex]!.value);
+    rows.current[nextIndex]?.focus();
+  };
+
+  return (
+    <div
+      ref={groupRef}
+      role="radiogroup"
+      aria-label={t("device")}
+      className={styles.sources}
+      onKeyDown={onKeyDown}
+    >
+      {entries.map((entry, index) => {
+        const checked = entry.value === deviceId;
+        return (
+          <button
+            key={entry.value === null ? "default-camera" : `device:${entry.value}`}
+            ref={(element) => {
+              rows.current[index] = element;
+            }}
+            type="button"
+            role="radio"
+            aria-checked={checked}
+            tabIndex={checked ? 0 : -1}
+            className={styles.source}
+            data-missing={entry.missing || undefined}
+            onClick={() => onChange(entry.value)}
+          >
+            <span className={styles.dot} aria-hidden />
+            <span className={styles.sourceName}>{entry.text}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

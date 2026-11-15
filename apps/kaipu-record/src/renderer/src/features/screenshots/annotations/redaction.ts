@@ -1,3 +1,4 @@
+import { annotationBox } from "./handles";
 import type { Annotation, BlurAnnotation, RedactionStyle } from "./scene";
 
 /** A redaction block is at least this many image pixels on a side. */
@@ -210,4 +211,63 @@ export async function bakeCanvasRedactions(
     next[assetId] = baked;
   }
   return { base, assets: next };
+}
+
+/**
+ * Whether `box` (normalized) lies entirely inside the union of `covers`. Cuts the plane along
+ * every edge involved and checks that each cell inside the box sits inside some cover, so two
+ * redactions drawn side by side count together.
+ */
+function coveredByUnion(
+  box: { x: number; y: number; w: number; h: number },
+  covers: readonly { x: number; y: number; w: number; h: number }[],
+): boolean {
+  if (box.w <= 0 || box.h <= 0) return false;
+  const cut = (lo: number, hi: number, edges: number[]): number[] =>
+    [lo, hi, ...edges.filter((e) => e > lo && e < hi)].sort((a, b) => a - b);
+  const xs = cut(
+    box.x,
+    box.x + box.w,
+    covers.flatMap((c) => [c.x, c.x + c.w]),
+  );
+  const ys = cut(
+    box.y,
+    box.y + box.h,
+    covers.flatMap((c) => [c.y, c.y + c.h]),
+  );
+  for (let i = 0; i < xs.length - 1; i++) {
+    for (let j = 0; j < ys.length - 1; j++) {
+      const cx = (xs[i]! + xs[i + 1]!) / 2;
+      const cy = (ys[j]! + ys[j + 1]!) / 2;
+      const inside = covers.some((c) => cx > c.x && cx < c.x + c.w && cy > c.y && cy < c.y + c.h);
+      if (!inside) return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * The annotations a canvas document may store: every text annotation that redactions drawn
+ * AFTER it cover entirely is left out. The redaction hides it on screen and in the saved PNG,
+ * but the document would keep its characters as plain JSON, so "hidden" would not hold for
+ * the file. Locked redactions count (their pixels are already stored). Text that a redaction
+ * covers only in part stays: some of it is visible. A text drawn after a redaction sits on
+ * top of it and stays too.
+ *
+ * `size` is the displayed image size in px, which text boxes are measured against; without
+ * it nothing can be judged covered, so everything is kept. The scene itself is untouched:
+ * moving or deleting the redaction in the same session brings the text back on the next save.
+ */
+export function withoutRedactedText(
+  annotations: readonly Annotation[],
+  size: { w: number; h: number },
+): Annotation[] {
+  if (!(size.w > 0) || !(size.h > 0)) return [...annotations];
+  return annotations.filter((a, i) => {
+    if (a.kind !== "text") return true;
+    const box = annotationBox(a, size);
+    if (!box) return true;
+    const covers = annotations.slice(i + 1).filter((b): b is BlurAnnotation => b.kind === "blur");
+    return !coveredByUnion(box, covers);
+  });
 }

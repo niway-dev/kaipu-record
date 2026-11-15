@@ -1,4 +1,5 @@
 import React, { type RefObject } from "react";
+import { CameraSetupCard } from "./camera-setup-card";
 import { CameraToggleSplit } from "./camera-toggle-split";
 import type { SettingsDrawerVariant } from "../settings-controls/settings-drawer";
 import { CameraSettingsDrawer } from "./camera-settings-drawer";
@@ -32,19 +33,38 @@ interface CameraControlProps {
 /**
  * The split tile goes in the row, the drawer right under the row (in the page's flow, so it
  * pushes the content). They share `control`. The tile is compact for the capture panel and
- * full-size on the Record page (`compact={false}`).
+ * full-size on the Record page (`compact={false}`). `card` is the Capture page's setup card:
+ * name, camera · shape, size, a switch and a chevron.
  */
 export function CameraPanelTile({
   control,
   on,
   onToggle,
   compact = true,
+  card = false,
   ui,
 }: Omit<CameraControlProps, "isRecording"> & {
   control: CameraControl;
   compact?: boolean;
+  card?: boolean;
   ui?: UiAreaProps;
 }): React.JSX.Element {
+  if (card) {
+    return (
+      <CameraSetupCard
+        bubble={control.store.bubble}
+        cameras={control.store.cameras}
+        on={on}
+        onToggle={onToggle}
+        blocked={control.blocked}
+        open={control.open}
+        onOpenChange={control.setOpen}
+        controlsId={control.settingsId}
+        chevronRef={control.chevronRef}
+        ui={ui}
+      />
+    );
+  }
   return (
     <CameraToggleSplit
       compact={compact}

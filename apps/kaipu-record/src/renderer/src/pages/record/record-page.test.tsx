@@ -11,9 +11,29 @@ import { WorkspaceSwitcher } from "@renderer/features/workspaces/workspace-switc
 // The record page is composition over hooks; mock them so we can drive the
 // auto-start / open-picker effects (finding 15 — the subtlest logic in the app,
 // previously untested).
-const { startRecording, openSourcePicker } = vi.hoisted(() => ({
+const {
+  startRecording,
+  openSourcePicker,
+  toggleMicrophone,
+  toggleCamera,
+  stopRecording,
+  pauseRecording,
+  resumeRecording,
+  activity,
+} = vi.hoisted(() => ({
   startRecording: vi.fn(),
   openSourcePicker: vi.fn(),
+  toggleMicrophone: vi.fn(),
+  toggleCamera: vi.fn(),
+  stopRecording: vi.fn(),
+  pauseRecording: vi.fn(),
+  resumeRecording: vi.fn(),
+  /** What the recording activity hook reports; a test changes it before rendering. */
+  activity: {
+    active: false,
+    status: "recording" as "recording" | "paused",
+    elapsedSeconds: 0,
+  },
 }));
 
 const SCREEN = { id: "s1", name: "Display 1", type: "screen" as const };
@@ -28,6 +48,7 @@ let setupState: {
   microphoneEnabled?: boolean;
   microphoneGranted?: boolean;
   microphones?: { deviceId: string; label: string }[];
+  selectedMicrophone?: { deviceId: string; label: string } | null;
   recordingStatus?: RecorderStatus;
   cameraEnabled?: boolean;
 };
@@ -42,21 +63,21 @@ function makeSetup(): RecordingSetup {
     isMicrophoneEnabled: setupState.microphoneEnabled ?? false,
     isSystemAudioEnabled: false,
     isCameraEnabled: setupState.cameraEnabled ?? false,
-    toggleMicrophone: vi.fn(),
+    toggleMicrophone,
     toggleSystemAudio: vi.fn(),
-    toggleCamera: vi.fn(),
+    toggleCamera,
     microphones: setupState.microphones ?? [],
-    selectedMicrophone: null,
+    selectedMicrophone: setupState.selectedMicrophone ?? null,
     selectMicrophone: vi.fn(),
     isRecording: setupState.isRecording,
     recordingStatus: setupState.recordingStatus ?? (setupState.isRecording ? "recording" : "idle"),
     countdown: null,
     canStartRecording: setupState.selectedSource !== null && !setupState.isRecording,
     startRecording,
-    stopRecording: vi.fn(),
+    stopRecording,
     toggleRecording: vi.fn(),
-    pauseRecording: vi.fn(),
-    resumeRecording: vi.fn(),
+    pauseRecording,
+    resumeRecording,
   };
 }
 
@@ -73,7 +94,7 @@ vi.mock("@renderer/features/shortcuts/use-shortcut-labels", () => ({
   }),
 }));
 vi.mock("@renderer/features/recording/hooks/use-recording-activity", () => ({
-  useRecordingActivity: () => ({ active: false, status: "recording", elapsedSeconds: 0 }),
+  useRecordingActivity: () => activity,
 }));
 vi.mock("@renderer/features/recording/hooks/use-source-selection", () => ({
   useSourceSelection: () => ({
@@ -290,7 +311,32 @@ describe("RecordPage idle layout (design Kaipu Capture Home)", () => {
     expect(screen.getByRole("menuitem", { name: /New workspace/ })).toBeInTheDocument();
   });
 
-  it("opens the camera settings drawer from the split Camera tile in the idle layout", () => {
+  it("shows the setup as three cards with the current choice, and flips them from their switches", async () => {
+    setupState.microphoneEnabled = true;
+    // The card names the selection only while that input is enumerated.
+    setupState.microphones = [{ deviceId: "a", label: "Yeti Nano" }];
+    setupState.selectedMicrophone = { deviceId: "a", label: "Yeti Nano" };
+    toggleMicrophone.mockClear();
+    toggleCamera.mockClear();
+    renderAt(undefined);
+    expect(screen.getByText("Microphone")).toBeInTheDocument();
+    expect(screen.getByText("Yeti Nano")).toBeInTheDocument();
+    expect(screen.getByText("System audio")).toBeInTheDocument();
+    expect(screen.getByText("All sound")).toBeInTheDocument();
+    expect(screen.getByText("Camera")).toBeInTheDocument();
+    expect(await screen.findByText("Default camera · circle, M")).toBeInTheDocument();
+
+    const mic = screen.getByRole("switch", { name: "Microphone" });
+    expect(mic).toHaveAttribute("aria-checked", "true");
+    await userEvent.click(mic);
+    expect(toggleMicrophone).toHaveBeenCalledOnce();
+    await userEvent.click(screen.getByRole("switch", { name: "Camera" }));
+    expect(toggleCamera).toHaveBeenCalledOnce();
+    // The switch only flips the setting: no panel opens.
+    expect(screen.queryByRole("region")).toBeNull();
+  });
+
+  it("opens the Camera card's panel via its chevron in the idle layout", () => {
     renderAt(undefined);
     fireEvent.click(screen.getByRole("button", { name: "Camera settings" }));
     expect(screen.getByRole("region", { name: "Camera settings" })).toBeInTheDocument();
@@ -309,13 +355,6 @@ describe("RecordPage idle layout (design Kaipu Capture Home)", () => {
     await userEvent.click(screen.getByRole("button", { name: "System audio settings" }));
     expect(screen.getByRole("region", { name: "System audio settings" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Microphone settings" })).toBeNull();
-  });
-
-  it("opens the drawers in the recording layout too", async () => {
-    setupState.isRecording = true;
-    renderAt(undefined);
-    await userEvent.click(screen.getByRole("button", { name: "Camera settings" }));
-    expect(screen.getByRole("region", { name: "Camera settings" })).toBeInTheDocument();
   });
 
   it("locks the Mic and Camera settings during the countdown and while starting", async () => {
@@ -361,12 +400,124 @@ describe("RecordPage idle layout (design Kaipu Capture Home)", () => {
     renderAt(undefined);
     expect(await screen.findByText("Microphone access is off")).toBeInTheDocument();
   });
+});
 
-  it("keeps the recording layout while a take runs", () => {
-    setupState.isRecording = true;
+describe("RecordPage while a take runs", () => {
+  const realApi = window.electronAPI;
+  beforeEach(() => {
+    setupState = { selectedSource: SCREEN, isRecording: true };
+    activity.status = "recording";
+    activity.elapsedSeconds = 0;
+    stopRecording.mockClear();
+    pauseRecording.mockClear();
+    resumeRecording.mockClear();
+  });
+  afterEach(() => {
+    window.electronAPI = realApi;
+  });
+
+  it("stays the Capture page: the heading and Switch remain", async () => {
     renderAt(undefined);
-    expect(screen.queryByRole("button", { name: /^Screenshot/ })).toBeNull();
-    expect(screen.queryByRole("heading", { name: "Capture" })).toBeNull();
-    expect(screen.getByRole("button", { name: /Stop recording/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Capture" })).toBeInTheDocument();
+    expect(await screen.findByText("to Default workspace")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Switch" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Recording setup" })).toBeInTheDocument();
+  });
+
+  it("shows one bar with the state, the source and the clock, above the capture cards", () => {
+    activity.elapsedSeconds = 42;
+    renderAt(undefined);
+    const bar = document.querySelector('[data-ui-area="record.recordingIndicator"]')!;
+    expect(bar).toHaveTextContent("Recording");
+    expect(bar).toHaveTextContent("Display 1");
+    expect(bar).toHaveTextContent("00:00:42");
+    expect(
+      bar.compareDocumentPosition(screen.getByRole("button", { name: /^Screenshot/ })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { level: 1 }).compareDocumentPosition(bar) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("leaves the source out of the bar when none is selected", () => {
+    setupState.selectedSource = null;
+    renderAt(undefined);
+    const bar = document.querySelector('[data-ui-area="record.recordingIndicator"]')!;
+    expect(bar).toHaveTextContent("Recording");
+    expect(bar).not.toHaveTextContent("Display 1");
+  });
+
+  it("shows Paused and Resume while paused, and Resume calls resumeRecording", async () => {
+    activity.status = "paused";
+    renderAt(undefined);
+    const bar = document.querySelector('[data-ui-area="record.recordingIndicator"]')!;
+    expect(bar).toHaveTextContent("Paused");
+    expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Resume" }));
+    expect(resumeRecording).toHaveBeenCalledOnce();
+  });
+
+  it("Pause and Stop recording call their handlers", async () => {
+    renderAt(undefined);
+    expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Pause" }));
+    expect(pauseRecording).toHaveBeenCalledOnce();
+    await userEvent.click(screen.getByRole("button", { name: /Stop recording/ }));
+    expect(stopRecording).toHaveBeenCalledOnce();
+  });
+
+  it("groups Pause and Stop under the recordingControls area", () => {
+    renderAt(undefined);
+    const controls = document.querySelector('[data-ui-area="record.recordingControls"]')!;
+    expect(controls).toContainElement(screen.getByRole("button", { name: "Pause" }));
+    expect(controls).toContainElement(screen.getByRole("button", { name: /Stop recording/ }));
+  });
+
+  it("disables the Screenshot and Recording cards: they do not open the selector", async () => {
+    const requestCaptureScreenshot = vi.fn();
+    const requestRecordSelector = vi.fn();
+    window.electronAPI = { ...realApi, requestCaptureScreenshot, requestRecordSelector };
+    renderAt(undefined);
+    const screenshot = screen.getByRole("button", { name: /^Screenshot/ });
+    const recording = screen.getByRole("button", { name: /^Recording/ });
+    expect(screenshot).toBeDisabled();
+    expect(recording).toBeDisabled();
+    await userEvent.click(screenshot);
+    await userEvent.click(recording);
+    expect(requestCaptureScreenshot).not.toHaveBeenCalled();
+    expect(requestRecordSelector).not.toHaveBeenCalled();
+  });
+
+  it("keeps the Instant line visible but dimmed with the cards", () => {
+    renderAt(undefined);
+    const line = screen.getByText("Instant").closest("[data-ui-area]")!;
+    expect(line.closest("[data-disabled]")).not.toBeNull();
+  });
+
+  it("keeps the setup row live: the switches still flip and the panels still open", async () => {
+    toggleMicrophone.mockClear();
+    toggleCamera.mockClear();
+    renderAt(undefined);
+    await userEvent.click(screen.getByRole("switch", { name: "Microphone" }));
+    expect(toggleMicrophone).toHaveBeenCalledOnce();
+    await userEvent.click(screen.getByRole("switch", { name: "Camera" }));
+    expect(toggleCamera).toHaveBeenCalledOnce();
+    await userEvent.click(screen.getByRole("button", { name: "Camera settings" }));
+    expect(screen.getByRole("region", { name: "Camera settings" })).toBeInTheDocument();
+  });
+
+  it("drops the old separate recording layout: no locked source card, no stop hint", () => {
+    renderAt(undefined);
+    expect(screen.queryByText("Stop from here or the floating bar")).toBeNull();
+    expect(screen.queryByText("CHOOSE A SOURCE")).toBeNull();
+  });
+
+  it("keeps the source picker working while a take runs", () => {
+    setupState.isSourcePickerOpen = true;
+    setupState.sources = [WINDOW];
+    renderAt(undefined);
+    expect(screen.getByRole("button", { name: /^Windows/ })).toBeInTheDocument();
   });
 });

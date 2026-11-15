@@ -84,17 +84,19 @@ export const UI_MAP = {
       workspaceNotice: { states: ["notConnected"] },
       reconcileBanner: { states: ["fixable", "attention"] },
       // The two entry cards: the whole card opens the selector. The Screenshot card has no
-      // "window": Capture window is switched off (`ENABLED_CAPTURE_MODES`).
+      // "window": Capture window is switched off (`ENABLED_CAPTURE_MODES`). "locked": dimmed
+      // and not clickable during a take, under the recording bar; so is the Instant line.
       screenshotCard: {
-        states: ["frame", "screen"],
+        states: ["frame", "screen", "locked"],
         gatedBy: [{ setting: "screenshotMode" }],
       },
       recordingCard: {
-        states: ["frame", "window", "screen"],
+        states: ["frame", "window", "screen", "locked"],
         gatedBy: [{ setting: "recordingMode" }],
       },
-      instantLine: { states: ["default"] },
-      // Recording setup: the heading, its hint, and the Mic, Audio and Camera tiles below it.
+      instantLine: { states: ["default", "locked"] },
+      // Recording setup: the heading, its hint, and the Microphone, System audio and Camera
+      // cards below it. It stays live during a take.
       setup: { states: ["default"] },
       mic: {
         states: ["on", "off"],
@@ -247,7 +249,11 @@ export const UI_MAP = {
       // hover: the veil with Go to over a capture's image; duplicate: Capture frame (top bar)
       // at a moment already captured outlines the saved one; confirmDelete: the confirmation
       // dialog a capture's Delete button opens.
-      capturesPanel: { states: ["empty", "list", "hover", "duplicate", "confirmDelete"] },
+      capturesPanel: {
+        states: ["empty", "list", "hover", "duplicate", "confirmDelete", "addToTimeline"],
+        // addToTimeline: the row's Add to timeline button, which exists only with the flag on.
+        gatedBy: [{ flag: "timeline-levels" }],
+      },
       webcam: { states: ["visible"] },
       transport: { states: ["paused", "playing", "withCounts", "speedChanged", "zoomed"] },
       toolRail: { states: ["default", "annotate", "privacy"] },
@@ -264,7 +270,12 @@ export const UI_MAP = {
       zoomLane: { states: ["empty", "segments"] },
       webcamLane: { states: ["segments"] },
       privacyLane: { states: ["empty", "regions"] },
-      audioLane: { states: ["empty", "mutedRanges", "allMuted"] },
+      // `waveform` draws the loudness bars; `waveformMuted` is a hatched block over dimmed bars
+      // (NIW2-775). `empty` (the empty-state text) is left only for a recording without an
+      // audio track, which the seeded vault does not have.
+      audioLane: {
+        states: ["empty", "mutedRanges", "allMuted", "waveform", "waveformMuted"],
+      },
       exportSheet: { states: ["open"], gatedBy: [{ setting: "exportQuality" }] },
     },
   },
