@@ -52,7 +52,7 @@ function mount(source: ImageSource, getSettings?: () => Promise<Settings>) {
     [
       { path: "/editor/capture", element: <ScreenshotEditorPage /> },
       { path: "/library", element: <div>library</div> },
-      { path: "/screenshots", element: <div>screenshots</div> },
+      { path: "/", element: <div>capture</div> },
     ],
     { initialEntries: [{ pathname: "/editor/capture", state: source }] },
   );
