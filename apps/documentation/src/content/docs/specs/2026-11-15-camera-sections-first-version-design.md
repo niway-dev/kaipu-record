@@ -54,7 +54,7 @@ keep using: a block on the Camera lane that changes the position, and a slide at
 ## Out of scope
 
 - Size or shape per block, shape morphing, mirror or framing per block.
-- The 200 ms hide and show fade, and the composer revision change that comes with it.
+- The 200 ms hide and show fade, and the composer revision bump it will need.
 - A custom cubic-bezier editor.
 - Motion for floating images, text or any other overlay.
 - Fullscreen-camera or camera-only scenes ([camera-only clips](/backlog/camera-only-clips/)).
@@ -95,6 +95,7 @@ keep using: a block on the Camera lane that changes the position, and a slide at
 - [ ] The exported MP4 of the owner's example shows the same motion as the preview, checked on
       the real app.
 - [ ] Setting a block to Cut makes the change instant.
+- [ ] A test shows that changing a block's transition changes the export's edit fingerprint.
 - [ ] Trimming 30 seconds before the block makes the change happen 30 seconds earlier in the
       output.
 - [ ] A session saved before this change opens with every block as a Cut, and saving it does not
@@ -155,6 +156,9 @@ Paths are under `apps/kaipu-record/src/renderer/src/features/video-editor/`. Rea
 - No CSS transition drives the motion; the preview reads the same function at the media time.
 - `export/webcam-lockstep.ts`: a fill is also due while a transition is active, which means the
   comparison has to cover the layout drawn and not only the webcam frame.
+- Export reuse (`export/export-reuse.ts`): a block's transition is part of what the edit
+  fingerprint covers, so changing it never reuses an older export. The composer revision is
+  already `wc2`; it is bumped only if the fingerprint cannot cover the new field otherwise.
 - Camera lane: the action "Change camera from here", and a striped band at the start of a block
   as long as its transition.
 - Inspector for a selected block: position, Slide or Cut, duration, easing preset.
