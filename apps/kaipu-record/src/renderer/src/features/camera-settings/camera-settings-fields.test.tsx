@@ -368,3 +368,89 @@ describe("CameraSettingsFields — framing", () => {
     });
   });
 });
+
+describe("CameraSettingsFields — the page's two columns", () => {
+  it("lists the cameras as radios, default camera first, and no dropdown", () => {
+    renderFields({ columns: true });
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    const group = screen.getByRole("radiogroup", { name: "Camera device" });
+    const names = Array.from(group.querySelectorAll('[role="radio"]')).map((r) => r.textContent);
+    expect(names).toEqual(["Default camera", "FaceTime HD", "Camera 2"]);
+    expect(screen.getByRole("radio", { name: "Default camera" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
+
+  it("writes the same deviceId the dropdown wrote", async () => {
+    const { onChange } = renderFields({ columns: true });
+    await userEvent.click(screen.getByRole("radio", { name: "FaceTime HD" }));
+    expect(onChange).toHaveBeenLastCalledWith({ deviceId: "cam-1" });
+    await userEvent.click(screen.getByRole("radio", { name: "Default camera" }));
+    expect(onChange).toHaveBeenLastCalledWith({ deviceId: null });
+  });
+
+  it("checks the chosen camera", () => {
+    renderFields({ columns: true, bubble: { ...bubble, deviceId: "cam-2" } });
+    expect(screen.getByRole("radio", { name: "Camera 2" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Default camera" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+  });
+
+  it("keys rows apart even when a camera's deviceId is the word default", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    renderFields({
+      columns: true,
+      cameras: [{ deviceId: "default", label: "Virtual camera" }],
+    });
+    const group = screen.getByRole("radiogroup", { name: "Camera device" });
+    expect(group.querySelectorAll('[role="radio"]')).toHaveLength(2);
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it("keeps a remembered camera that is unplugged as the checked row", () => {
+    renderFields({ columns: true, bubble: { ...bubble, deviceId: "cam-gone" } });
+    const missing = screen.getByRole("radio", { name: "Camera 3" });
+    expect(missing).toHaveAttribute("aria-checked", "true");
+    expect(missing).toHaveAttribute("data-missing", "true");
+  });
+
+  it("moves the selection with the arrow keys, with one tab stop", async () => {
+    const { onChange } = renderFields({ columns: true });
+    const first = screen.getByRole("radio", { name: "Default camera" });
+    expect(first).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("radio", { name: "FaceTime HD" })).toHaveAttribute("tabindex", "-1");
+    first.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(onChange).toHaveBeenLastCalledWith({ deviceId: "cam-1" });
+    expect(screen.getByRole("radio", { name: "FaceTime HD" })).toHaveFocus();
+  });
+
+  it("labels the columns SOURCE and SHAPE + SIZE, and keeps every control below", () => {
+    renderFields({
+      columns: true,
+      bubble: { ...bubble, shape: "rounded", framing: { enabled: true, zoom: 1.5, x: 0, y: 0 } },
+    });
+    expect(screen.getByText("Source")).toBeInTheDocument();
+    expect(screen.getByText("Shape")).toBeInTheDocument();
+    expect(screen.getByText("Size")).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Shape" })).toBeInTheDocument();
+    expect(screen.getByRole("radiogroup", { name: "Size" })).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "Bubble size" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Mirror image" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Framing" })).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "Corners" })).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "Zoom" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reset" })).toBeInTheDocument();
+  });
+
+  it("still says when the camera is off", () => {
+    renderFields({ columns: true, cameraOn: false });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Camera is off. These apply when you turn it on.",
+    );
+  });
+});
