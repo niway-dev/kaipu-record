@@ -32,7 +32,7 @@ the owner measure their own `bun run dev` session on a real long take with the s
 | 1   | The Mac mini is the authoritative benchmark machine, driven over ssh as a launchd job, never as a self-hosted Actions runner                                                                                       | Real hardware, screen-recording permission, the same machine every time; the owner wants it run many times. GitHub warns against self-hosted runners on public repositories                 | 0059 (new) |
 | 2   | A `workflow_dispatch` workflow runs the suite on demand on a GitHub-hosted macOS runner, as a clean isolated environment; its numbers are a separate series                                                        | The owner wants a clean terrain on demand; a hosted VM has a different encoder path and 3 shared cores, so its numbers are never compared with the mini's                                   | 0059 (new) |
 | 3   | Weight (bundle chunks, packaged `.app` manifest, `.dmg`) is measured on every pull request on a hosted runner, as a non-required sticky comment that updates only when weight changes                              | Weight is deterministic, cheap and needs no real hardware; it answers "how much did this library or animation add" before merge without touching the required check (ADR 0027)              | 0059 (new) |
-| 4   | The scenario suite runs nightly on `main`, on demand for any ref, and on each desktop release pull request, which gets a commit status for its exact SHA                                                           | A nightly failure alone does not stop a release that merges between two nightlies; a status tied to the candidate's SHA does                                                                | 0061 (new) |
+| 4   | The scenario suite runs nightly on `main`, on demand for any ref, and on each desktop release pull request, which gets a commit status for its exact SHA                                                           | A nightly result is not tied to the release candidate; a status on its exact SHA is, and shows a stale or missing result. It informs: blocking needs a later ADR that amends 0052           | 0061 (new) |
 | 5   | Results live in `niway-dev/kaipu-benchmarks` (public): one folder per run with `run.json`, raw per-process samples and the peak breakdown, plus generated `results.md` and per-series history                      | Same pattern as `wachiman-benchmarks` and the UI catalog repository; Actions artifacts expire, `gh-pages` mixes data into the product repository, Bencher is an external dependency for now | 0060 (new) |
 | 6   | Memory is `phys_footprint` of every process, sampled each second, plus the lifetime peak read before teardown and the VM-tag breakdown at the peak; RSS and `getAppMetrics()` memory are recorded but never judged | RSS hid 2.8 GB in the incident (256 MB RSS against 3.1 GB footprint); a renderer-only number misses memory that moves to main or GPU                                                        | 0061 (new) |
 | 7   | Data first: the first phase records every metric listed below with no budgets except four invariants; budgets per metric are set from the baseline                                                                 | The owner wants as many metrics as possible and asked for data before thresholds; a budget with no measurement behind it is a guess                                                         | 0061 (new) |
@@ -94,7 +94,7 @@ first recommendation ([weak points](/specs/2026-11-15-kaipu-benchmarks-design/3-
 
 1. **The export detector passes while the whole output is buffered.** A ratio of two short peaks
    passes when fixed memory dominates (illustrative: 600 MB fixed + 40 MB/min retained gives
-   +18.75% from 1 to 4 minutes, and 2 GB at 54 minutes). Guarded by the output-growth invariant
+   +18.75% from 1 to 4 minutes, and about 2.1 GB retained, 2.76 GB in total, at 54 minutes). Guarded by the output-growth invariant
    and the pre-NIW2-806 challenge run.
 2. **A regression ships between two nightlies,** or the mini is off and an old pass stands.
    Guarded by the per-SHA status on the release pull request; a missing or stale result reads as
@@ -260,8 +260,9 @@ The first design round offered these options. The owner's answers are under
 - **2b.** Also weight on every pull request, as a comment updated only when weight changes.
 - **2c.** Also a commit status on the desktop release pull request, tied to the candidate's exact
   SHA; a missing or stale result says so.
-- **Chosen:** all three. 2c exists because a nightly failure email does not stop a release that
-  merges between two nightlies (weak point 1.2).
+- **Chosen:** all three. 2c exists because a nightly result is not tied to the release candidate
+  (weak point 1.2): the status names the candidate's exact SHA and makes a stale or missing result
+  visible. It does not stop a release until a later ADR amends 0052.
 
 ### 3. Where results are kept
 
@@ -396,19 +397,31 @@ runtime cost.
 - **Nightly**: a launchd timer on the mini fetches `origin/main`, runs the full suite and publishes.
 - **Release pull request**: running with `--status` posts a `benchmarks/mini` commit status on the
   candidate's head SHA with a link to the run. Informative until open question 1 is answered.
+  Nothing in Actions can start the mini, so a launchd poller on the mini (every 30 minutes) reads
+  the head SHA of the open desktop release-please pull request and runs the suite with `--status`
+  when that SHA has no `benchmarks/mini` status yet; `bun run bench:remote --status <sha>` does the
+  same by hand. The poller needs a fine-grained token for `kaipu-record` with commit statuses
+  write, kept in the mini's Keychain.
+- **Publishing from the mini**: the publisher runs from the mini's `main` checkout, never from
+  the ref under test, and only it reads the results-repository token from the Keychain. Scenario
+  code from an arbitrary ref never sees the token.
 
 ### Hosted runner (on demand, clean environment)
 
 - `.github/workflows/benchmarks.yml`, `workflow_dispatch` only, inputs `ref`, `scenarios`,
   `repeat`. Runs the scenarios the spike proves possible on `macos-15`, as the series
-  `hosted-macos-15`, and publishes with a token scoped to the results repository. Dispatch-only, so
-  no fork pull request reaches the token.
+  `hosted-macos-15`. Publishing is a separate job in a GitHub environment restricted to `main`:
+  it holds the token scoped to the results repository, never checks out or runs app or bench code,
+  and receives only the run's artifact, which it validates against the schema before committing.
+  Dispatch-only, so no fork pull request reaches the token, and the measuring job never holds it.
 
 ### Weight on every pull request
 
 - `.github/workflows/bench-weight.yml` on `pull_request`, non-required, `cancel-in-progress` per
-  pull request. Builds, measures the weight layers, compares with the latest `main` weight in the
-  results repository and updates one sticky comment only when a layer changes. Runner (Linux or
+  pull request. Builds the merge-base and the head in the same job on the same runner, measures the
+  weight layers of both and updates one sticky comment only when a layer differs. Comparing two
+  builds from one job keeps runner image and toolchain drift out of the delta. Per-pull-request
+  weight is its own series; nightly weight on the mini is a separate one. Runner (Linux or
   macOS) is decided by the spike.
 
 ## Results repository

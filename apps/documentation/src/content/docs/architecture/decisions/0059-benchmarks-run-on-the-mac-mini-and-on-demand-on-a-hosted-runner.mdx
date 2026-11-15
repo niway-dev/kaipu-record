@@ -12,14 +12,14 @@ description: "The desktop benchmark suite's authoritative series runs on the Mac
 | Status        | Proposed — owner decisions 2026-11-15, design in a draft pull request. [NIW2-808](https://linear.app/niway/issue/NIW2-808/kaipu-benchmarks-measure-ram-cpu-and-bundle-weight-per-scenario-and). Spec: [Kaipu benchmarks — design](/specs/2026-11-15-kaipu-benchmarks-design/) |
 | Date          | 2026-11-15                                                                                                                                                                                                                                                                    |
 | Supersedes    | —                                                                                                                                                                                                                                                                             |
-| Amends        | —                                                                                                                                                                                                                                                                             |
+| Amends        | [0027](/architecture/decisions/0027-verify-release-candidates-only/) — decision 2 and 5: ordinary pull requests also get one non-required weight job (decision 4 below); the required check is untouched                                                                      |
 | Superseded by | —                                                                                                                                                                                                                                                                             |
 
 Builds on [0044](/architecture/decisions/0044-the-ui-state-catalog-runs-the-real-app-on-the-mac-mini/)
-(the real app runs on the mini) and keeps
-[0027](/architecture/decisions/0027-verify-release-candidates-only/) and
-[0052](/architecture/decisions/0052-release-candidates-verify-only-the-component-they-ship/) as they
-are. Companions: [0060](/architecture/decisions/0060-benchmark-results-live-in-niway-dev-kaipu-benchmarks/)
+(the real app runs on the mini), keeps
+[0052](/architecture/decisions/0052-release-candidates-verify-only-the-component-they-ship/) as it
+is, and amends [0027](/architecture/decisions/0027-verify-release-candidates-only/) narrowly: one
+non-required weight job on ordinary pull requests (decision 4). Companions: [0060](/architecture/decisions/0060-benchmark-results-live-in-niway-dev-kaipu-benchmarks/)
 (storage) and
 [0061](/architecture/decisions/0061-benchmarks-measure-every-process-and-collect-data-before-budgets/)
 (what is measured and judged).
@@ -47,6 +47,11 @@ The question is where the app runs while it is measured. Facts that constrain it
 - **ADR 0027** gives ordinary pull requests an immediate pass on the required check; the owner wants
   fast merges.
 - The owner wants the suite run many times on the mini, and a clean environment on demand.
+- **ADR 0044 rejected a hosted macOS runner for the UI catalog.** That rejection was about
+  pictures: no GUI session for screen, camera and microphone grants, different fonts and scale,
+  and the owner wanting nothing in CI for the catalog. It does not carry over here: on 2026-11-15
+  the owner explicitly asked for an on-demand hosted run, and that run excludes recording and
+  screenshots, the parts that need a GUI session.
 
 ## Decision
 
@@ -60,8 +65,10 @@ The question is where the app runs while it is measured. Facts that constrain it
    GitHub-hosted macOS runner, as its own series. Its numbers are never compared with the mini's.
    It runs only the scenarios a spike proves possible there (no recording, no screenshots).
 4. **Weight is measured on every pull request** on a hosted runner, as a non-required job that
-   updates one sticky comment only when a weight layer changes. The required check of ADR 0027 is
-   untouched.
+   updates one sticky comment only when a weight layer changes. It builds the merge-base and the
+   head in the same job and compares the two, so runner drift stays out of the delta. This is the
+   one exception to ADR 0027's "no checks on ordinary pull requests"; the required check of ADR
+   0027 is untouched.
 
 ## Alternatives rejected
 
@@ -81,8 +88,15 @@ The question is where the app runs while it is measured. Facts that constrain it
 - The mini carries a third kind of job; the lock changes `ui-catalog-remote.sh` and the verify
   runner as well.
 - There is no series when the mini is off; the nightly records the gap.
-- The hosted series needs a token scoped to the results repository, reachable only from
-  `workflow_dispatch`, never from a fork pull request.
+- The hosted series needs a token scoped to the results repository. Only a publish job holds it:
+  it runs in a GitHub environment restricted to `main`, never runs checked-out app or bench code,
+  and commits only a schema-validated artifact. Dispatch-only, so no fork pull request reaches it.
+- On the mini, the publisher runs from the `main` checkout and is the only reader of the results
+  token in the Keychain; scenario code from the ref under test never sees it.
+- Nothing in Actions starts the mini, so a launchd poller on the mini (every 30 minutes) runs the
+  suite with `--status` on the head SHA of the open desktop release pull request when that SHA has
+  no status yet, plus a manual command. It needs a fine-grained `kaipu-record` token with commit
+  statuses write, also in the Keychain.
 - A weight comment appears on pull requests that change weight; the owner sees deltas before merge.
 
 ## Non-goals

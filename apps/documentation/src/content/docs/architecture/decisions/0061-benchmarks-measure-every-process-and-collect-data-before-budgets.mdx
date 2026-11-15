@@ -32,8 +32,9 @@ renderer to main.
 A first recommendation judged export memory by the ratio of two peaks (a 4-minute input against a
 1-minute one, under 30%). An independent attack
 ([weak points](/specs/2026-11-15-kaipu-benchmarks-design/3-weak-points-gpt-sol/)) showed it passes
-while the whole output is buffered when fixed memory dominates, and that a nightly failure does not
-stop a release that merges between two nightlies.
+while the whole output is buffered when fixed memory dominates, and that a nightly result is not
+tied to the release candidate. A status on the candidate's exact SHA ties it and makes a stale or
+missing result visible; it does not stop a release until a later ADR amends 0052.
 
 The owner wants as many metrics as possible and asked for data before thresholds. Published
 regression systems (Mozilla Perfherder, VS Code) show that thresholds without a noise model produce
