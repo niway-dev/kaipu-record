@@ -196,9 +196,14 @@ Criteria:
   `.partial` staging, hashes, one rename; deletable from settings.
 - **Engine:** `sherpa-onnx-offline` + `libonnxruntime` (arm64) in `resources/native/`, asar
   unpacked, signed, `--version` handshake, release workflow check. Missing = "unavailable".
+  The Mac release builds arm64 and x64 apps, and its helper check today requires universal
+  binaries (`lipo -archs`, `release-desktop.yml`). The engine check is per build instead: the
+  arm64 app must carry an arm64 CLI and library; the x64 app carries none and shows
+  "unavailable". An x64 engine is the later Intel phase.
 - **Job in main:** renderer writes the PCM file to `.kaipu/tmp`; main segments, runs CLI batches,
   reports progress per segment, cancels, resumes after a crash without duplicate segments. One job
-  at a time. Where segments overlap (the M0 strategy), one cut point is chosen inside each overlap
+  at a time. Where segments overlap (the M0 strategy, at least 2 s, longer than any spoken word,
+  so every word lies whole in at least one segment), one cut point is chosen inside each overlap
   (the quietest frame M0 finds usable) and each side keeps only the words that end before it
   (earlier segment) or start after it (later segment); a word that straddles the cut is taken from
   the segment where it lies whole. M0 measures how often this still loses or doubles a word. The job has its own supervisor,
@@ -223,7 +228,10 @@ Criteria:
 - [ ] Rename, cross-workspace move and reconcile keep the transcript with its recording (tests
       beside the existing companion tests).
 - [ ] Killing the CLI mid-job ends failed or resumable, never hung; cancel stops within seconds.
-- [ ] The release workflow fails if the CLI or its library is missing.
+- [ ] The release workflow fails if the arm64 app lacks the CLI or its library, or if either is not
+      arm64.
+- [ ] The download prompt, its progress and the model entry in settings are in the ui-map with a
+      catalog state each, with es and en messages.
 
 ### M2 — Transcript panel
 
