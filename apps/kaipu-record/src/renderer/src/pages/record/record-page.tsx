@@ -162,6 +162,7 @@ export function RecordPage(): React.JSX.Element {
             card
             ui={uiArea("record.mic")}
             selectedMicrophone={setup.selectedMicrophone}
+            microphones={setup.microphones}
             control={mic}
             on={setup.isMicrophoneEnabled}
             onToggle={setup.toggleMicrophone}

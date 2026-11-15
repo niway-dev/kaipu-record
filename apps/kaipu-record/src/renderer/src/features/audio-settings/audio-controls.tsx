@@ -93,8 +93,14 @@ interface MicTileProps {
   compact?: boolean;
   /** The Capture page's setup card (name, current choice, switch, chevron) instead of the tile. */
   card?: boolean;
-  /** The card's secondary line; "No microphones found" while none is selected. */
+  /** The card's secondary line: the selected microphone's name. */
   selectedMicrophone?: Microphone | null;
+  /**
+   * The enumerated inputs. The card says "No microphones found" only when this is empty, the
+   * panel's rule; with devices but no selection yet (main's settings still loading) the line
+   * stays blank instead of claiming there are none.
+   */
+  microphones?: Microphone[];
   control: AudioControl;
   ui?: UiAreaProps;
 }
@@ -106,6 +112,7 @@ export function MicToggleSplit({
   compact,
   card = false,
   selectedMicrophone = null,
+  microphones = [],
   ui,
 }: MicTileProps): React.JSX.Element {
   const t = useTranslations("micSettings");
@@ -115,7 +122,7 @@ export function MicToggleSplit({
       <SetupCard
         icon={Mic}
         name={t("microphone")}
-        detail={selectedMicrophone?.label ?? t("noDevices")}
+        detail={selectedMicrophone?.label ?? (microphones.length === 0 ? t("noDevices") : "\u00a0")}
         status={on ? tRecord("statusOn") : tRecord("statusOff")}
         on={on}
         onToggle={onToggle}

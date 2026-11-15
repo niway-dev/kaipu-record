@@ -30,6 +30,7 @@ function CardHarness({
   isRecording = false,
   unavailable = false,
   selected = YETI as Microphone | null,
+  microphones = [BUILT_IN, YETI],
   onToggleMic = () => {},
   onToggleAudio = () => {},
 }: {
@@ -38,6 +39,7 @@ function CardHarness({
   isRecording?: boolean;
   unavailable?: boolean;
   selected?: Microphone | null;
+  microphones?: Microphone[];
   onToggleMic?: () => void;
   onToggleAudio?: () => void;
 }): React.JSX.Element {
@@ -51,6 +53,7 @@ function CardHarness({
         on={micOn}
         onToggle={onToggleMic}
         selectedMicrophone={selected}
+        microphones={microphones}
       />
       <SystemAudioToggleSplit
         card
@@ -78,8 +81,14 @@ describe("Microphone and System audio cards", () => {
     const { rerender } = render(<CardHarness />);
     expect(screen.getByText("Microphone")).toBeInTheDocument();
     expect(screen.getByText("Yeti Nano")).toBeInTheDocument();
-    rerender(<CardHarness selected={null} />);
+    rerender(<CardHarness selected={null} microphones={[]} />);
     expect(screen.getByText("No microphones found")).toBeInTheDocument();
+  });
+
+  it("does not say none was found while devices exist but none is selected yet", () => {
+    render(<CardHarness selected={null} />);
+    expect(screen.queryByText("No microphones found")).not.toBeInTheDocument();
+    expect(screen.queryByText("Yeti Nano")).not.toBeInTheDocument();
   });
 
   it("says All sound for the system audio card", () => {
