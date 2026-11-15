@@ -138,6 +138,33 @@ describe("screenshot canvas storage", () => {
     expect(await readdir(meta)).not.toContain(`${first.id}.canvas.json`);
   });
 
+  it("a failed asset write leaves no old unredacted asset on disk (NIW2-799)", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const first = await saveScreenshotToVault(Buffer.from("png"), {
+      title: "Shot",
+      canvas: { docJson: doc("old"), assets: [{ assetId: "old", png: bytes("secret") }] },
+    });
+    const { assetsDir } = vault.companionPaths(first.id);
+    // A directory where the second new asset must land makes that write fail after the first
+    // one succeeded, before the superseded asset would be deleted.
+    await mkdir(join(assetsDir, "next.png"));
+    await saveScreenshotToVault(Buffer.from("png2"), {
+      title: "Shot",
+      overwriteId: first.id,
+      overwriteAssetId: first.assetId,
+      canvas: {
+        docJson: doc("fresh", "next"),
+        assets: [
+          { assetId: "fresh", png: bytes("redacted") },
+          { assetId: "next", png: bytes("x") },
+        ],
+      },
+    });
+    expect(await readdir(assetsDir).catch(() => [])).not.toContain("old.png");
+    expect(await readCanvas(vault, first.id)).toBeNull();
+    expect(await readdir(meta)).not.toContain(`${first.id}.canvas.json`);
+  });
+
   describe("readCanvas fallbacks", () => {
     async function seed(docJson: string, assets: Record<string, string> = {}): Promise<void> {
       const paths = vault.companionPaths("S");

@@ -47,8 +47,9 @@ export async function clearCanvas(vault: LibraryVault, id: string): Promise<void
  * Stores the canvas document beside a saved screenshot. Called after the PNG write: the PNG is
  * the save, so a failure here never throws. Assets go first, superseded assets are deleted
  * (they may hold unredacted pixels), and the document is written last: a reader that finds it
- * finds every asset it names. On any failure the document is removed, so a reopen falls back
- * to the flat PNG, which is current.
+ * finds every asset it names. On any failure the document and the whole assets directory are
+ * removed, so a reopen falls back to the flat PNG, which is current, and no superseded asset
+ * outlives the failed write.
  */
 export async function writeCanvas(
   vault: LibraryVault,
@@ -75,7 +76,9 @@ export async function writeCanvas(
     await atomicWriteFile(paths.canvasDoc, canvas.docJson);
   } catch (error) {
     console.warn(`screenshot canvas: could not store the document for ${id}`, error);
-    await rm(vault.companionPaths(id).canvasDoc, { force: true }).catch(() => {});
+    // Remove the assets too, not only the document: the old ones may hold unredacted pixels
+    // that the PNG just written no longer shows, and a document alone would not protect them.
+    await clearCanvas(vault, id);
   }
 }
 

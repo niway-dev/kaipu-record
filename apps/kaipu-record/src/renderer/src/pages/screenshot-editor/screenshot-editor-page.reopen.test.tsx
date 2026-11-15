@@ -88,7 +88,7 @@ function mountLocal() {
   const router = createMemoryRouter(
     [
       { path: "/editor/:id", element: <ScreenshotEditor source={LOCAL} /> },
-      { path: "/screenshots", element: <div>screenshots</div> },
+      { path: "/", element: <div>capture</div> },
     ],
     { initialEntries: ["/editor/shot-1"] },
   );

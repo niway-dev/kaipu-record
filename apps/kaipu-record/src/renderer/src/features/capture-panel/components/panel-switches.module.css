@@ -1,0 +1,69 @@
+/* Mic · Audio · Camera tiles of the tray popover (design "Kaipu Capture Home"). */
+
+.row {
+  display: flex;
+  gap: 6px;
+}
+
+.tile {
+  appearance: none;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  font-family: inherit;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    opacity var(--transition);
+}
+
+.tile:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+}
+
+.tile:focus-visible {
+  outline: 2px solid var(--accent-primary-ring);
+  outline-offset: 2px;
+}
+
+.tile[data-on] {
+  color: var(--accent-primary);
+  background: var(--accent-primary-tint);
+  border-color: var(--accent-primary);
+}
+
+/* Read-only mid-take: the choice is made, so the tile stops looking clickable. */
+.tile:disabled {
+  cursor: default;
+}
+
+.tile[data-dim] {
+  opacity: 0.45;
+}
+
+.name {
+  font-size: 11.5px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.state {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.08em;
+  color: var(--text-4);
+}
+
+.tile[data-on] .state {
+  color: var(--text-primary);
+}
