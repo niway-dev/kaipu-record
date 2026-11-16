@@ -3,8 +3,9 @@
  * source-anchored like the zoom lane, whose patterns it follows — click selects the whole
  * segment, the selected segment shows an edge handle only where its real start/end is
  * visible, and edge drags report SOURCE time (null over a slide) with the start/move/end
- * phase contract. Hidden segments are striped; overrides read "Custom". Deleting goes
- * through the inspector or the Delete key, like every other lane.
+ * phase contract. Hidden segments are striped; overrides read "Custom", and an override that
+ * slides carries a striped band at its start as long as the slide. Deleting goes through the
+ * inspector or the Delete key, like every other lane.
  *
  * Under the segments runs a filmstrip of the webcam file's own frames, laid out per clip
  * like the clips lane, so the row reads as "the face" even with no segment on it.
@@ -15,7 +16,7 @@ import { useTranslations } from "@kaipu/i18n";
 import { sourceRangeToTimelineBlocks, sourceTimeAtTimeline } from "../source-time";
 import { type LayoutEntry, layoutDuration } from "../timeline";
 import type { CoveredRange, SourceThumbnail } from "../use-source-thumbnails";
-import type { WebcamSegment } from "../webcam/webcam-model";
+import { webcamEffectiveTransitionMs, type WebcamSegment } from "../webcam/webcam-model";
 import { thumbnailAt, thumbnailTiles, timeToFraction } from "./timeline-geometry";
 import { useTimelinePointer, useTimelineViewContext } from "./timeline-pointer";
 import { scaleOf, visibleRange } from "./timeline-view";
@@ -37,6 +38,32 @@ export interface WebcamLaneProps {
   onSelect(id: string): void;
   /** `sourceTime` is null when the pointer is over a slide — ignore that move. */
   onEdgeDrag(id: string, edge: "start" | "end", sourceTime: number | null, phase: EdgePhase): void;
+}
+
+/**
+ * The striped band at the start of a block, as long as its EFFECTIVE slide (the duration
+ * asked for, at most half the block), drawn inside the block. Only the piece that holds the
+ * block's real start gets one, and a Cut, a missing transition or a hidden block gets none.
+ * Source and timeline seconds are the same length inside a block: there is no speed change.
+ */
+function transitionBand(
+  segment: WebcamSegment,
+  block: { sourceStart: number; timelineStart: number; timelineEnd: number },
+  firstPiece: boolean,
+): React.JSX.Element | null {
+  const transition = segment.transition;
+  if (segment.mode !== "override" || transition?.kind !== "slide") return null;
+  if (!firstPiece || block.sourceStart !== segment.start) return null;
+  const seconds = webcamEffectiveTransitionMs(segment.end - segment.start, transition.ms) / 1000;
+  const share = Math.min(1, seconds / (block.timelineEnd - block.timelineStart));
+  return (
+    <span
+      className={styles.transition}
+      data-webcam-transition
+      style={{ width: `${share * 100}%` }}
+      aria-hidden="true"
+    />
+  );
 }
 
 export const WebcamLane = memo(function WebcamLane({
@@ -190,6 +217,7 @@ export const WebcamLane = memo(function WebcamLane({
               onSelect(segment.id);
             }}
           >
+            {transitionBand(segment, block, i === 0)}
             {hidden && <EyeOff size={10} className={styles.icon} />}
             <span className={styles.label}>{hidden ? t("webcamHidden") : t("webcamOverride")}</span>
           </button>

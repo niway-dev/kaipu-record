@@ -73,6 +73,22 @@
   background: color-mix(in srgb, var(--accent-primary) 32%, transparent);
 }
 
+/* The slide at a block's start: stripes as long as the transition, over the block's own
+   colour, so the stretch where the bubble is still moving reads apart from where it rests. */
+.transition {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--accent-primary) 55%, transparent) 0 3px,
+    transparent 3px 6px
+  );
+  border-right: 1px solid color-mix(in srgb, var(--accent-primary) 70%, transparent);
+  pointer-events: none;
+}
+
 /* A chip behind the text keeps "Custom" legible over the face. */
 .label {
   padding: 0 3px;

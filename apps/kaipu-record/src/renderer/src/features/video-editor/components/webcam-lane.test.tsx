@@ -196,4 +196,74 @@ describe("WebcamLane", () => {
       expect(container.querySelector("[data-webcam-filmstrip]")).toBeNull();
     });
   });
+
+  describe("transition band", () => {
+    const block = (partial: Partial<WebcamSegment>): WebcamSegment =>
+      segment({
+        id: "o",
+        mode: "override",
+        layout: { position: { x: 0.8, y: 0.2 } },
+        transition: { kind: "slide", ms: 1000, easing: "back" },
+        ...partial,
+      });
+    const renderLane = (segments: WebcamSegment[]) =>
+      render(
+        <WebcamLane
+          layout={layout}
+          segments={segments}
+          selectedId={null}
+          onSelect={vi.fn()}
+          onEdgeDrag={vi.fn()}
+        />,
+      ).container;
+    const bands = (container: HTMLElement) =>
+      Array.from(container.querySelectorAll<HTMLElement>("[data-webcam-transition]"));
+
+    it("draws a band at the block's start as long as the transition, inside the block", () => {
+      // Source 10 to 14 is timeline 5 to 9: 1000 ms of a 4 s block is a quarter of it.
+      const container = renderLane([block({ start: 10, end: 14 })]);
+      const [band] = bands(container);
+      expect(band).toBeDefined();
+      expect(band.style.width).toBe("25%");
+      expect(band.closest('[data-webcam-id="o"]')).not.toBeNull();
+    });
+
+    it("shows the effective duration: at most half of a short block", () => {
+      const short = renderLane([
+        block({
+          id: "s",
+          start: 10,
+          end: 12,
+          transition: { kind: "slide", ms: 2000, easing: "back" },
+        }),
+      ]);
+      expect(bands(short)[0].style.width).toBe("50%");
+    });
+
+    it("draws no band for a Cut, for no transition or for a hidden block", () => {
+      const container = renderLane([
+        block({
+          id: "cut",
+          start: 10,
+          end: 12,
+          transition: { kind: "cut", ms: 700, easing: "back" },
+        }),
+        block({ id: "none", start: 12, end: 14, transition: undefined }),
+        segment({ id: "hid", start: 14, end: 16 }),
+      ]);
+      expect(bands(container)).toHaveLength(0);
+    });
+
+    it("draws the band on the first piece only, and not when the start is cut away", () => {
+      // Source 4 to 12 is two pieces (timeline 4 to 5, then 5 to 7); the start is in the first.
+      const spanning = renderLane([
+        block({ start: 4, end: 12, transition: { kind: "slide", ms: 700, easing: "back" } }),
+      ]);
+      expect(bands(spanning)).toHaveLength(1);
+      expect(bands(spanning)[0].style.width).toBe("70%");
+      // Source 7 to 12: the part before 10 is deleted, so the start is not on screen.
+      const startCut = renderLane([block({ id: "c", start: 7, end: 12 })]);
+      expect(bands(startCut)).toHaveLength(0);
+    });
+  });
 });
