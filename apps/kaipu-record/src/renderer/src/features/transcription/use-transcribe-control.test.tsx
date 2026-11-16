@@ -278,21 +278,44 @@ describe("useTranscribeControl", () => {
 
   it("cancel stops this item's job and does nothing for another item's", async () => {
     stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
-    let signal: AbortSignal | undefined;
-    run.mockImplementationOnce((args) => {
-      signal = args.signal;
-      return new Promise(() => {});
+    const signals: Array<AbortSignal | undefined> = [];
+    const finishers: Array<(p: TranscriptionJobProgress) => void> = [];
+    run.mockImplementation((args) => {
+      signals.push(args.signal);
+      return new Promise((resolve) => {
+        finishers.push((p) => resolve({ status: "finished", progress: p }));
+      });
     });
     const { result } = renderHook(() => useTranscribeControl(ITEM));
     await waitFor(() => expect(result.current.state.kind).toBe("idle"));
 
+    // Another item's job holds the engine: this control is busy elsewhere, and its cancel must
+    // leave that job alone.
+    let other: Promise<unknown> = Promise.resolve();
+    act(() => {
+      other = startTranscription({
+        itemId: "b",
+        assetId: "x",
+        modelId: MODEL_ID,
+        mediaUrl: "u",
+        durationMs: 1,
+      });
+    });
+    expect(result.current.state).toEqual({ kind: "busy-elsewhere" });
     act(() => result.current.cancel());
-    expect(signal).toBeUndefined();
+    expect(signals).toHaveLength(1);
+    expect(signals[0]?.aborted).toBe(false);
 
+    await act(async () => {
+      finishers[0](progress("b", "done"));
+      await other;
+    });
+    // Its own job: a real cancel aborts it.
     act(() => {
       void result.current.start();
     });
+    expect(signals).toHaveLength(2);
     act(() => result.current.cancel());
-    expect(signal?.aborted).toBe(true);
+    expect(signals[1]?.aborted).toBe(true);
   });
 });

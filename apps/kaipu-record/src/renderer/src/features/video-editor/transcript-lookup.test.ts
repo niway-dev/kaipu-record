@@ -64,8 +64,10 @@ describe("occurrenceForSeek", () => {
 
   it("measures the distance to the word's span, and prefers the earlier on a tie", () => {
     expect(occurrenceForSeek(repeats, "hola", 20.2)?.clipId).toBe("again");
-    // 10.7 is 9.3 from the first one's end and 9.3 from the second one's start.
-    expect(occurrenceForSeek(repeats, "hola", 10.7)?.clipId).toBe("first");
+    // Binary-exact values: 10.75 is exactly 9.25 from the first one's end (1.5) and exactly 9.25
+    // from the second one's start (20), so only `distance < bestDistance` picks the earlier.
+    const tie = [occ("hola", 1, 1.5, "hola", "first"), occ("hola", 20, 20.5, "hola", "again")];
+    expect(occurrenceForSeek(tie, "hola", 10.75)?.clipId).toBe("first");
   });
 
   it("is null for an unknown word id", () => {
