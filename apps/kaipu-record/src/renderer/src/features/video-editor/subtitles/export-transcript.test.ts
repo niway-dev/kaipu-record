@@ -123,8 +123,9 @@ describe("buildTranscriptExport", () => {
 
   it("a cut in the middle of a sentence splits the cue: none spans the discontinuity", () => {
     const { occurrences } = shown();
-    // "bienvenidos" ends the first clip's speech (timeline 2.4 s) and "al" starts right after the
-    // cut (timeline 2.9 + 0 = 2.9 s... contiguous on the timeline but 1.1 s skipped in the source).
+    // "bienvenidos" ends the first clip's speech (timeline 2.4 s) and "al" starts in the next clip
+    // (timeline 2.9 s), after a 1.1 s skip in the source. The clip change splits the cue, so no
+    // cue joins words from both sides of the cut.
     const blocks = srtBlocks(buildTranscriptExport(occurrences, "srt"));
     const texts = blocks.map((b) => b.text);
     const withBienvenidos = texts.find((t) => t.includes("bienvenidos")) ?? "";

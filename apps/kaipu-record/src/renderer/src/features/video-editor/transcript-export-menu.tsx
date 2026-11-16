@@ -33,6 +33,10 @@ export function TranscriptExportMenu({
   const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
+  // The menu goes away with the last spoken word; it must not reopen by itself when words return.
+  useEffect(() => {
+    if (!hasWords) setOpen(false);
+  }, [hasWords]);
   const reason = hasWords ? undefined : t("transcriptExportEmpty");
   return (
     <>
@@ -47,6 +51,16 @@ export function TranscriptExportMenu({
         disabled={!hasWords}
         data-testid="transcript-export"
         onClick={() => setOpen((value) => !value)}
+        onKeyDown={(event) => {
+          // The editor's window handler turns Space into play/pause and prevents the default,
+          // which would also stop the button's own Space activation: keep Space on the button.
+          if (event.key === " ") event.stopPropagation();
+          else if (event.key === "ArrowDown") {
+            event.preventDefault();
+            event.stopPropagation();
+            setOpen(true);
+          }
+        }}
       >
         <Download size={13} aria-hidden />
         <span>{t("transcriptExport")}</span>

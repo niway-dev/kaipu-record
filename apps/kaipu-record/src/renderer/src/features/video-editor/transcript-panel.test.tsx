@@ -698,6 +698,7 @@ describe("TranscriptPanel — copy", () => {
 
 describe("TranscriptPanel — export", () => {
   const saveTextFile = vi.fn();
+  let originalSaveTextFile: typeof window.electronAPI.saveTextFile;
   const openMenu = (): void => {
     fireEvent.click(screen.getByRole("button", { name: "Export the transcript" }));
   };
@@ -707,8 +708,30 @@ describe("TranscriptPanel — export", () => {
       status: "saved",
       path: "/Users/me/Downloads/Launch demo.srt",
     });
+    originalSaveTextFile = window.electronAPI.saveTextFile;
     window.electronAPI.saveTextFile = saveTextFile;
     for (const toast of getToasts()) dismissToast(toast.id);
+  });
+  afterEach(() => {
+    window.electronAPI.saveTextFile = originalSaveTextFile;
+  });
+
+  it("opens the menu with ArrowDown on the button, and Space on it does not reach the editor", () => {
+    setup();
+    const button = screen.getByRole("button", { name: "Export the transcript" });
+    const reachedWindow = vi.fn();
+    window.addEventListener("keydown", reachedWindow);
+    try {
+      fireEvent.keyDown(button, { key: " " });
+      expect(reachedWindow).not.toHaveBeenCalled();
+      expect(screen.queryByRole("menu")).toBeNull();
+      fireEvent.keyDown(button, { key: "ArrowDown" });
+      expect(reachedWindow).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener("keydown", reachedWindow);
+    }
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "SubRip (.srt)" })).toHaveFocus();
   });
 
   it("offers SubRip, WebVTT and plain text in a menu that Escape closes", () => {

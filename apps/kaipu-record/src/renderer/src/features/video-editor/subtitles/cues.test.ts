@@ -287,13 +287,15 @@ describe("buildCues", () => {
     });
 
     it("does not extend past what the maximum duration allows", () => {
+      // 40 characters at the default speed ask for 2 s, so only a 1 s limit makes the clamp bite.
       const cues = buildCues(
         words([
           ["a".repeat(40), 0, 0.5],
           ["b", 30, 30.5],
         ]),
+        { maxDuration: 1 },
       );
-      expect(cues[0]!.end - cues[0]!.start).toBeLessThanOrEqual(7);
+      expect(cues[0]!.end - cues[0]!.start).toBeCloseTo(1, 6);
     });
 
     it("does not extend the last cue, whose following silence is unknown", () => {
