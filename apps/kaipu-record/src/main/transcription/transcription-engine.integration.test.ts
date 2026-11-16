@@ -26,7 +26,10 @@ describe.skipIf(!engineDir || !modelDir)("transcription with the real engine", (
     await rm(root, { recursive: true, force: true });
   });
 
-  it("transcribes silence into a valid, empty transcript", async () => {
+  async function runJob(
+    pcm: Buffer,
+    durationMs: number,
+  ): Promise<{ transcriptPath: string; events: TranscriptionJobProgress[] }> {
     const transcriptPath = join(root, ".kaipu", "rec.transcript.json");
     await mkdir(join(root, ".kaipu"), { recursive: true });
     await writeFile(join(root, "rec.mp4"), "media");
@@ -70,14 +73,47 @@ describe.skipIf(!engineDir || !modelDir)("transcription with the real engine", (
       id: "rec",
       assetId: "a",
       modelId: DEFAULT_MODEL_ID,
-      durationMs: 5000,
+      durationMs,
     });
     if (begin.status !== "accepted") throw new Error(`refused: ${begin.reason}`);
-    await service.chunk(begin.jobId, new Uint8Array(5 * 32_000).buffer);
+    for (let at = 0; at < pcm.length; at += 1_000_000) {
+      const slice = pcm.subarray(at, at + 1_000_000);
+      await service.chunk(
+        begin.jobId,
+        slice.buffer.slice(slice.byteOffset, slice.byteOffset + slice.length) as ArrayBuffer,
+      );
+    }
     await service.end(begin.jobId);
     await expect.poll(() => events.at(-1)?.phase, { timeout: 120_000, interval: 250 }).toBe("done");
 
+    return { transcriptPath, events };
+  }
+
+  it("transcribes silence into a valid, empty transcript", async () => {
+    const { transcriptPath } = await runJob(Buffer.alloc(5 * 32_000), 5000);
     const parsed = parseTranscript(JSON.parse(await readFile(transcriptPath, "utf8")));
     expect(parsed.ok).toBe(true);
   }, 150_000);
+
+  // A 16 kHz mono 16-bit WAV with speech longer than one 30 s window, so the job cuts overlapping
+  // segments and reconciles them. Optional: KAIPU_SPEECH_SAMPLE_WAV.
+  it.skipIf(!process.env.KAIPU_SPEECH_SAMPLE_WAV)(
+    "transcribes spoken audio into ordered words in source time",
+    async () => {
+      const wav = await readFile(process.env.KAIPU_SPEECH_SAMPLE_WAV!);
+      const pcm = wav.subarray(44);
+      const durationMs = Math.round((pcm.length / 32_000) * 1000);
+      const { transcriptPath } = await runJob(pcm, durationMs);
+      const parsed = parseTranscript(JSON.parse(await readFile(transcriptPath, "utf8")));
+      if (!parsed.ok) throw new Error(parsed.message);
+      const { words, segments } = parsed.transcript;
+      expect(segments.length).toBeGreaterThan(1);
+      expect(words.length).toBeGreaterThan(20);
+      for (let i = 1; i < words.length; i++) {
+        expect(words[i]!.startMs).toBeGreaterThanOrEqual(words[i - 1]!.startMs);
+      }
+      expect(words.at(-1)!.endMs).toBeLessThanOrEqual(durationMs + 100);
+    },
+    300_000,
+  );
 });
