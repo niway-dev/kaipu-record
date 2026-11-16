@@ -319,11 +319,11 @@ describe("webcamStateAt", () => {
   it("changes only the position in `from`: the other fields apply at once", () => {
     const scene = sceneOf({
       ...override("a", 10, 20, TOP_RIGHT, slide()),
-      layout: { position: TOP_RIGHT, size: 0.4, shape: "square" },
+      layout: { position: TOP_RIGHT, size: 0.4, shape: "rectangle" },
     });
     const state = webcamStateAt(scene, 10.2)!;
     expect(state.from).toEqual({ ...state.layout, position: BASE.position });
-    expect(state.layout).toMatchObject({ size: 0.4, shape: "square" });
+    expect(state.layout).toMatchObject({ size: 0.4, shape: "rectangle" });
   });
 
   it("gives the same values after seeking backwards (a pure function of time)", () => {
