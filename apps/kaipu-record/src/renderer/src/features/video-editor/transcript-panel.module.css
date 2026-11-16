@@ -85,7 +85,7 @@
   margin: 0;
   font-size: var(--font-size-sm);
   line-height: 1.45;
-  color: var(--danger);
+  color: var(--accent-red);
 }
 
 .actions {

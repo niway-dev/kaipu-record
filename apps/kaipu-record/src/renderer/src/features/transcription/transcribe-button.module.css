@@ -93,6 +93,12 @@
   }
 }
 
+/* The word beside an icon and the progress text: one line, centred on the icon. */
+.label,
+.progressText {
+  line-height: 1;
+}
+
 .hint {
   font-size: var(--font-size-xs);
   color: var(--accent-red);
