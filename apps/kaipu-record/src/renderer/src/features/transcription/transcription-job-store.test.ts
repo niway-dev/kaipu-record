@@ -112,20 +112,38 @@ describe("transcription job store", () => {
     });
     expect(run).toHaveBeenCalledTimes(1);
     expect(getSnapshot().running?.itemId).toBe("item-1");
+    // The controls already show the other job running, so nothing is recorded against item-2.
+    expect(getSnapshot().failures).toEqual({});
 
     job.finish(progress("done"));
     await first;
   });
 
-  it("passes main's refusal through and leaves nothing running", async () => {
-    run.mockResolvedValueOnce({ status: "refused", reason: "model-missing" });
+  it.each([
+    ["unavailable", "engine-unavailable"],
+    ["model-missing", "model-missing"],
+    ["busy", "busy"],
+    ["invalid-item", "item-changed"],
+  ] as const)(
+    "passes main's %s refusal through, leaves nothing running and records it as the item's failure",
+    async (reason, failure) => {
+      run.mockResolvedValueOnce({ status: "refused", reason });
 
-    await expect(startTranscription(ARGS)).resolves.toEqual({
-      status: "refused",
-      reason: "model-missing",
-    });
-    expect(getSnapshot().running).toBeNull();
+      await expect(startTranscription(ARGS)).resolves.toEqual({ status: "refused", reason });
+      expect(getSnapshot().running).toBeNull();
+      expect(getSnapshot().failures).toEqual({ "item-1": failure });
+    },
+  );
+
+  it("clears a refusal's failure when the item starts again", async () => {
+    run.mockResolvedValueOnce({ status: "refused", reason: "model-missing" });
+    await startTranscription(ARGS);
+    const job = controlledJob();
+    const again = startTranscription(ARGS);
+
     expect(getSnapshot().failures).toEqual({});
+    job.finish(progress("done"));
+    await again;
   });
 
   it("records a failed job's failure for the item and clears it when the item starts again", async () => {

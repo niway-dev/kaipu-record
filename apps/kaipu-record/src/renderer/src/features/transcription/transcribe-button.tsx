@@ -62,6 +62,8 @@ function failureText(t: Translator<"transcription">, failure: StartFailure): str
       return t("transcribeFailed_item-changed");
     case "decode-failed":
       return t("transcribeFailed_decode-failed");
+    case "busy":
+      return t("transcribeFailed_busy");
     default:
       return t("transcribeFailed_unknown");
   }

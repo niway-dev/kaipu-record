@@ -1604,6 +1604,7 @@
     "transcriptFailure_write-failed": "The transcript could not be saved to disk.",
     "transcriptFailure_item-changed": "The video was renamed, moved or removed while it was being transcribed.",
     "transcriptFailure_decode-failed": "The audio of this video could not be read.",
+    "transcriptFailure_busy": "Another video is being transcribed. Only one runs at a time; try again when it finishes.",
     "transcriptFailure_unknown": "Something went wrong while transcribing.",
     "transcriptNoAudio": "This video has no audio track, so there is nothing to transcribe.",
     "transcriptUnavailable": "Transcription cannot run on this Mac or in this installation. Settings → Transcription says why.",
@@ -3498,6 +3499,7 @@
     "transcribeFailed_write-failed": "The transcript could not be saved. Try again.",
     "transcribeFailed_item-changed": "The video changed while it was transcribed. Try again.",
     "transcribeFailed_decode-failed": "The audio of this video could not be read.",
+    "transcribeFailed_busy": "Another video is being transcribed. Try again when it finishes.",
     "transcribeFailed_unknown": "Transcription failed. Try again."
   }
 }

@@ -1604,6 +1604,7 @@
     "transcriptFailure_write-failed": "No se pudo guardar la transcripción en el disco.",
     "transcriptFailure_item-changed": "El video se renombró, se movió o se eliminó mientras se transcribía.",
     "transcriptFailure_decode-failed": "No se pudo leer el audio de este video.",
+    "transcriptFailure_busy": "Se está transcribiendo otro video. Solo se puede uno a la vez; inténtalo de nuevo cuando termine.",
     "transcriptFailure_unknown": "Algo salió mal al transcribir.",
     "transcriptNoAudio": "Este video no tiene pista de audio, así que no hay nada que transcribir.",
     "transcriptUnavailable": "La transcripción no puede ejecutarse en este Mac ni en esta instalación. Ajustes → Transcripción explica el motivo.",
@@ -3498,6 +3499,7 @@
     "transcribeFailed_write-failed": "No se pudo guardar la transcripción. Inténtalo de nuevo.",
     "transcribeFailed_item-changed": "El video cambió mientras se transcribía. Inténtalo de nuevo.",
     "transcribeFailed_decode-failed": "No se pudo leer el audio de este video.",
+    "transcribeFailed_busy": "Se está transcribiendo otro video. Inténtalo de nuevo cuando termine.",
     "transcribeFailed_unknown": "La transcripción falló. Inténtalo de nuevo."
   }
 }

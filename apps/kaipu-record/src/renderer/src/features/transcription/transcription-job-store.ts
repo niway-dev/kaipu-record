@@ -14,8 +14,11 @@ export interface RunningTranscription {
   segmentsTotal: number;
 }
 
-/** Why a job failed. `unknown` is an IPC failure or a progress timeout, not an engine verdict. */
-export type StartFailure = TranscriptionFailure | "decode-failed" | "unknown";
+/**
+ * Why a job failed or was never accepted. `busy` is main refusing because its engine is already
+ * in use. `unknown` is an IPC failure or a progress timeout, not an engine verdict.
+ */
+export type StartFailure = TranscriptionFailure | "decode-failed" | "busy" | "unknown";
 
 export type StartOutcome =
   | { status: "done" }
@@ -62,6 +65,14 @@ export function resetTranscriptionJobStore(): void {
   snapshot = EMPTY;
 }
 
+/** What the user is told when main refuses to begin a job. */
+const REFUSAL_FAILURE: Record<TranscriptionRefusal, StartFailure> = {
+  unavailable: "engine-unavailable",
+  "model-missing": "model-missing",
+  busy: "busy",
+  "invalid-item": "item-changed",
+};
+
 function withoutKey<T>(record: Readonly<Record<string, T>>, key: string): Record<string, T> {
   const { [key]: _removed, ...rest } = record;
   return rest;
@@ -69,7 +80,9 @@ function withoutKey<T>(record: Readonly<Record<string, T>>, key: string): Record
 
 /**
  * Runs one transcription and mirrors its progress into the store. Resolves with how it ended;
- * never rejects. A job already running answers `refused: busy` without calling main.
+ * never rejects. A job already running answers `refused: busy` without calling main and records
+ * nothing: the controls already show that state. A refusal from main is recorded as the item's
+ * failure, so the click that was refused says why.
  */
 export async function startTranscription(args: {
   itemId: string;
@@ -133,7 +146,9 @@ export async function startTranscription(args: {
     failures:
       outcome.status === "failed"
         ? { ...snapshot.failures, [itemId]: outcome.failure }
-        : snapshot.failures,
+        : outcome.status === "refused"
+          ? { ...snapshot.failures, [itemId]: REFUSAL_FAILURE[outcome.reason] }
+          : snapshot.failures,
     doneCounts:
       outcome.status === "done"
         ? { ...snapshot.doneCounts, [itemId]: (snapshot.doneCounts[itemId] ?? 0) + 1 }

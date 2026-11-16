@@ -255,6 +255,18 @@ describe("useTranscribeControl", () => {
     expect(result.current.state.kind).toBe("done");
   });
 
+  it("shows failed when main refuses the start, so the click leaves a trace", async () => {
+    stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
+    run.mockResolvedValueOnce({ status: "refused", reason: "model-missing" });
+    const { result } = renderHook(() => useTranscribeControl(ITEM));
+    await waitFor(() => expect(result.current.state.kind).toBe("idle"));
+
+    await act(async () => {
+      await result.current.start();
+    });
+    expect(result.current.state).toEqual({ kind: "failed", failure: "model-missing" });
+  });
+
   it("cancel stops this item's job and does nothing for another item's", async () => {
     stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
     let signal: AbortSignal | undefined;
