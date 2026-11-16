@@ -185,7 +185,7 @@ describe("useWebcamEditing", () => {
       );
     });
 
-    it("is unavailable inside a hidden range, with no room, and over a slide, and adds nothing", () => {
+    it("is unavailable inside a hidden range and with no room, and adds nothing", () => {
       const base = initialScene(20, TRACK);
       const hiddenScene: VideoScene = {
         ...base,
