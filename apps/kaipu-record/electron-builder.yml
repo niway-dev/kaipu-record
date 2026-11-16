@@ -9,6 +9,9 @@ files:
   - "!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}"
   - "!{.env,.env.*,.npmrc,pnpm-lock.yaml}"
   - "!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}"
+  # The speech engine downloads at run time. A checkout where the old fetch script ran still has
+  # this folder, and it must not land in any installer.
+  - "!resources/native/sherpa-onnx/**"
 # The kaipu:// scheme the browser sign-in returns through. electron-builder writes it into the
 # macOS Info.plist (CFBundleURLTypes), the NSIS installer's registry entries and the Linux
 # desktop file. Dev builds do not get it (macOS only routes custom schemes to packaged apps);
