@@ -2583,7 +2583,7 @@
     "items": {
       "screenshotModes": {
         "title": "Screenshot modes: Frame and Screen",
-        "description": "Drag a frame or reuse the last one, or capture a whole display. Pick the mode on the selection itself, then Capture, or Copy to the clipboard without opening the editor; a small card offers Annotate or Open in Library."
+        "description": "Drag a frame or reuse the last one, or capture a whole display. Pick the mode on the selection itself, then Capture, or Copy to the clipboard without opening the editor; a small card then offers Copy, Reveal in Finder and Edit."
       },
       "editorHome": {
         "title": "An Editor that starts where you left off",

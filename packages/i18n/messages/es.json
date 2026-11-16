@@ -2583,7 +2583,7 @@
     "items": {
       "screenshotModes": {
         "title": "Modos de captura: Marco y Pantalla",
-        "description": "Arrastra un marco o reutiliza el último, o captura un monitor completo. Elige el modo sobre la misma selección y luego Captura, o Copia al portapapeles sin abrir el editor; una pequeña tarjeta te ofrece Anotar o Abrir en la Biblioteca."
+        "description": "Arrastra un marco o reutiliza el último, o captura un monitor completo. Elige el modo sobre la misma selección y luego Captura, o Copia al portapapeles sin abrir el editor; luego una pequeña tarjeta te ofrece Copiar, Mostrar en Finder y Editar."
       },
       "editorHome": {
         "title": "Un editor que empieza donde lo dejaste",
