@@ -384,7 +384,7 @@ describe("webcamStateRect", () => {
     expect(mid.y + h / 2).toBeCloseTo(point.y, 6);
   });
 
-  it("slides the same route for two parts that go there and back, bending to the side nearer the centre", () => {
+  it("bends a slide along the top edge toward the frame centre and keeps it inside the frame", () => {
     const there = run(sceneWith({ x: 0.9, y: 0.1 }, "linear", { x: 0.1, y: 0.1 }));
     const mid = there[50]!;
     const start = there[0]!;
