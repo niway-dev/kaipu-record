@@ -133,10 +133,20 @@ Title "Keep the camera here…", attached to the bubble, kept inside the preview
 - A part saved with a duration or a motion that no button offers (500 ms, `ease-out`) keeps
   it and plays it. The panel shows no option selected until the user picks one.
 - The control point is clamped into the range the bubble's centre can reach. Between A and B
-  the curve then stays inside the frame, because A, B and the control point are inside it. Bounce goes past B. That travel past the target keeps the first version's rule
-  (its decision 10): it is scaled per axis to the room before the frame edge, so the motion
-  keeps its shape instead of stopping flat against the edge. A clamp to the frame, with the
-  rule a drag uses, stays only as a last guard.
+  the curve then stays inside the frame, because A, B and the control point are inside it.
+- Bounce goes past B, and the curve is not used there. While the eased progress `p` is above
+  1, the centre is `B + (p − 1) × T`, where `T` is the curve's direction and speed as it
+  arrives: twice the vector from the control point to B. The bubble so leaves B the way it
+  came in, in a straight line, and comes back along it.
+- That travel past B keeps the first version's rule (its decision 10), with `T` in the place
+  of the straight distance. On each axis, the farthest the bubble would go is the easing's
+  peak above 1 times that axis of `T`; the room is the space between the bubble's box at B
+  and the frame edge `T` points to on that axis. When the farthest point does not fit, the
+  whole travel on that axis is multiplied by room divided by farthest, so the peak lands on
+  the edge and the motion keeps its shape instead of stopping flat. An axis with no room
+  does not go past B at all; the other axis still does.
+- A clamp to the frame, with the rule a drag uses, stays only as a last guard. For the three
+  motions the panel offers it changes no point.
 - A, the start, is still static: the place of the stretch that ends where the part starts.
   The half-the-part cap, the Cut and the return to the original position are unchanged.
 - The preview's route and the played path call the same function. The composer revision in
@@ -223,8 +233,11 @@ Header "Camera", tabs "This part" and "Whole video".
    at 0:30. With a block starting at 0:24.5 the choice is disabled with its text. In a recording that
    ends at 0:28 it ends at 0:28.
 5. A test evaluates the route at several times and finds every point inside the frame, for
-   Smooth, Bounce and Linear, including a move along an edge. The preview's drawn route and
-   the played position come from one function.
+   Smooth, Bounce and Linear, including a move along an edge. For Bounce into a corner and
+   along an edge, the test reads the points before the last-guard clamp: they are already
+   inside the frame, and around the peak the bubble is past B on every axis that has room,
+   so the motion is not flat against an edge. The preview's drawn route and the played
+   position come from one function.
 6. An exported MP4 and GIF show the bubble on the same route as the preview at the same
    source times.
 7. While the video plays, no ghost, route, label or hidden outline is drawn.
