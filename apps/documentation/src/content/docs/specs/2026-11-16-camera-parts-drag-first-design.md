@@ -41,8 +41,8 @@ default camera position the **original position**; the code keeps `WebcamSegment
 | 8   | The bubble carries a label saying what a drag will edit. A part shows where the camera comes from: a ghost bubble, a dotted route and a chip. These show only while paused and are never exported                     | Owner's mock                                                                                                                          | none                                                                                                      |
 | 9   | The panel has two tabs. "This part" holds the part's place, how it arrives, and "Remove this part". "Whole video" holds every control the inspector has today                                                         | Owner's mock for the layout. Nothing the app can do today is lost                                                                     | none                                                                                                      |
 | 10  | Size keeps today's slider, restyled. The mock's S, M, L are not adopted                                                                                                                                               | Proposal. The slider reaches any size from 10 to 90 %; three presets would drop that. The mock drew them without seeing the inspector | none                                                                                                      |
-| 11  | The route bends toward the centre of the frame. Bounce's travel past the target keeps the first version's per-axis limit                                                                                              | Proposal. The mock bends to a fixed side, so a move along an edge presses against that edge one way and arcs the other                | [ADR 0039, amendment of 2026-11-16](/architecture/decisions/0039-camera-sections-with-eased-transitions/) |
-| 12  | The 56 px minimum width of a part on the lane never covers the next block                                                                                                                                             | Proposal. On a long video a 10-second part is a few pixels wide; a fixed 56 px would hide its neighbour                               | none                                                                                                      |
+| 11  | The route bends toward the centre of the frame. Bounce's travel past the target leaves along the curve's end tangent, with the first version's per-axis limit applied to it                                           | Proposal. The mock bends to a fixed side, so a move along an edge presses against that edge one way and arcs the other                | [ADR 0039, amendment of 2026-11-16](/architecture/decisions/0039-camera-sections-with-eased-transitions/) |
+| 12  | The 56 px minimum width of a part on the lane never covers the next block; with less room the part is narrower and the timeline zoom is how its edges are dragged                                                     | Proposal. On a long video a 10-second part is a few pixels wide; a fixed 56 px would hide its neighbour                               | none                                                                                                      |
 | 13  | A part saved earlier with its own shape or size keeps them. "This part" says so and offers "Use the whole-video look"                                                                                                 | Proposal. Released sessions have such blocks, and the new tab has no shape or size controls                                           | none                                                                                                      |
 | 14  | While the bubble is dragged, only the bubble element moves. The scene is written once, on the drop or on the card's answer, as one undo step                                                                          | Owner's mock: "it must feel like dragging a real object". Today every pointer move writes the scene and re-renders the editor         | none                                                                                                      |
 
@@ -133,10 +133,20 @@ Title "Keep the camera here…", attached to the bubble, kept inside the preview
 - A part saved with a duration or a motion that no button offers (500 ms, `ease-out`) keeps
   it and plays it. The panel shows no option selected until the user picks one.
 - The control point is clamped into the range the bubble's centre can reach. Between A and B
-  the curve then stays inside the frame, because A, B and the control point are inside it. Bounce goes past B. That travel past the target keeps the first version's rule
-  (its decision 10): it is scaled per axis to the room before the frame edge, so the motion
-  keeps its shape instead of stopping flat against the edge. A clamp to the frame, with the
-  rule a drag uses, stays only as a last guard.
+  the curve then stays inside the frame, because A, B and the control point are inside it.
+- Bounce goes past B, and the curve is not used there. While the eased progress `p` is above
+  1, the centre is `B + (p − 1) × T`, where `T` is the curve's direction and speed as it
+  arrives: twice the vector from the control point to B. The bubble so leaves B the way it
+  came in, in a straight line, and comes back along it.
+- That travel past B keeps the first version's rule (its decision 10), with `T` in the place
+  of the straight distance. On each axis, the farthest the bubble would go is the easing's
+  peak above 1 times that axis of `T`; the room is the space between the bubble's box at B
+  and the frame edge `T` points to on that axis. When the farthest point does not fit, the
+  whole travel on that axis is multiplied by room divided by farthest, so the peak lands on
+  the edge and the motion keeps its shape instead of stopping flat. An axis with no room
+  does not go past B at all; the other axis still does.
+- A clamp to the frame, with the rule a drag uses, stays only as a last guard. For the three
+  motions the panel offers it changes no point.
 - A, the start, is still static: the place of the stretch that ends where the part starts.
   The half-the-part cap, the Cut and the return to the original position are unchanged.
 - The preview's route and the played path call the same function. The composer revision in
@@ -168,8 +178,13 @@ Shown only while paused, never in an export:
 - **Name**: Top, Middle or Bottom with left, middle or right, and "Center" for the middle of
   both. It comes from which third the bubble's centre is in, over the range the centre can
   reach. It is a description, never a choice.
-- A part is at least 56 px wide on the lane so it can be grabbed, but never wider than the
-  room before the next block.
+- A part is drawn at least 56 px wide on the lane, so its name fits and it is easy to grab,
+  but never wider than the room before the next block. With less than 56 px of room the part
+  is drawn as wide as that room, and it is still the same part: a click on it selects it, and
+  moving the playhead into it and clicking the bubble opens the panel on it. "Remove this part" and the
+  panel's controls work at any width. To drag its edges the user zooms the timeline in with
+  the transport bar's zoom, which widens every block. A part too narrow to grab at the
+  current zoom is an accepted limit; nothing else is built for it.
 
 ### The rail
 
@@ -223,8 +238,11 @@ Header "Camera", tabs "This part" and "Whole video".
    at 0:30. With a block starting at 0:24.5 the choice is disabled with its text. In a recording that
    ends at 0:28 it ends at 0:28.
 5. A test evaluates the route at several times and finds every point inside the frame, for
-   Smooth, Bounce and Linear, including a move along an edge. The preview's drawn route and
-   the played position come from one function.
+   Smooth, Bounce and Linear, including a move along an edge. For Bounce into a corner and
+   along an edge, the test reads the points before the last-guard clamp: they are already
+   inside the frame, and around the peak the bubble is past B on every axis that has room,
+   so the motion is not flat against an edge. The preview's drawn route and the played
+   position come from one function.
 6. An exported MP4 and GIF show the bubble on the same route as the preview at the same
    source times.
 7. While the video plays, no ghost, route, label or hidden outline is drawn.
