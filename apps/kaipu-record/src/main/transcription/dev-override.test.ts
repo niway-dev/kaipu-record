@@ -51,12 +51,80 @@ describe("parseTranscriptionOverride", () => {
   });
 });
 
+describe("parseTranscriptionOverride with a job pin", () => {
+  it("reads ready,job:running with 3 of 12 as the default", () => {
+    expect(parseTranscriptionOverride("ready,job:running")).toEqual({
+      kind: "ready",
+      job: { kind: "running", segmentsDone: 3, segmentsTotal: 12 },
+    });
+  });
+
+  it("reads running:<done>/<total>", () => {
+    expect(parseTranscriptionOverride("ready,job:running:0/8")).toEqual({
+      kind: "ready",
+      job: { kind: "running", segmentsDone: 0, segmentsTotal: 8 },
+    });
+    expect(parseTranscriptionOverride("ready,job:running:12/12")).toEqual({
+      kind: "ready",
+      job: { kind: "running", segmentsDone: 12, segmentsTotal: 12 },
+    });
+  });
+
+  it("reads failed:<failure> for each failure code", () => {
+    for (const failure of [
+      "no-audio",
+      "engine-unavailable",
+      "model-missing",
+      "engine-failed",
+      "write-failed",
+      "item-changed",
+    ]) {
+      expect(parseTranscriptionOverride(`ready,job:failed:${failure}`)).toEqual({
+        kind: "ready",
+        job: { kind: "failed", failure },
+      });
+    }
+  });
+
+  it("needs the model ready, and ignores anything malformed", () => {
+    for (const bad of [
+      "missing,job:running",
+      "downloading,job:running",
+      "unavailable,job:running",
+      "ready,",
+      "ready,running",
+      "ready,job:",
+      "ready,job:done",
+      "ready,job:running:3",
+      "ready,job:running:5/3",
+      "ready,job:running:1/0",
+      "ready,job:running:1/1234",
+      "ready,job:failed",
+      "ready,job:failed:decode-failed",
+      "ready,job:failed:toString",
+      "ready,job:running,job:running",
+    ]) {
+      expect(parseTranscriptionOverride(bad), bad).toBeNull();
+    }
+  });
+});
+
 describe("resolveTranscriptionOverride", () => {
   it("honors the variable in an unpackaged build", () => {
     expect(resolveTranscriptionOverride("ready", { isPackaged: false })).toEqual({ kind: "ready" });
   });
   it("ignores it in a packaged app", () => {
     expect(resolveTranscriptionOverride("ready", { isPackaged: true })).toBeNull();
+  });
+  it("honors a job pin in an unpackaged build and ignores it in a packaged app", () => {
+    expect(resolveTranscriptionOverride("ready,job:running", { isPackaged: false })).toEqual({
+      kind: "ready",
+      job: { kind: "running", segmentsDone: 3, segmentsTotal: 12 },
+    });
+    expect(resolveTranscriptionOverride("ready,job:running", { isPackaged: true })).toBeNull();
+    expect(
+      resolveTranscriptionOverride("ready,job:failed:engine-failed", { isPackaged: true }),
+    ).toBeNull();
   });
   it("is no override for a bad value", () => {
     expect(resolveTranscriptionOverride("nope", { isPackaged: false })).toBeNull();
@@ -127,6 +195,15 @@ describe("applyTranscriptionOverride", () => {
     const out = applyTranscriptionOverride({ kind: "unavailable" }, REAL);
     expect(out.availability).toEqual({ status: "unavailable", reason: "unsupported-platform" });
     expect(modelOf(out, "default-model").status).toEqual({ state: "missing" });
+  });
+
+  it("reports no job in the status even with a pinned one (the renderer reads its own store)", () => {
+    const out = applyTranscriptionOverride(
+      { kind: "ready", job: { kind: "running", segmentsDone: 3, segmentsTotal: 12 } },
+      REAL,
+    );
+    expect(out.job).toBeNull();
+    expect(modelOf(out, "default-model").status).toEqual({ state: "ready" });
   });
 
   it("does not change the status it was given", () => {

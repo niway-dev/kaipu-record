@@ -20,6 +20,7 @@ import { broadcast, broadcastLibraryChanged, currentVault, scopedAdmitted } from
 import { withItemLock } from "../library/item-lock";
 import { META_DIR, isPlainItemId } from "../library/library-vault";
 import { activeWorkspace } from "../workspaces";
+import { PinnedJobs } from "./dev-job-pin";
 import { applyTranscriptionOverride, type TranscriptionOverride } from "./dev-override";
 import { locateEngine } from "./engine/engine-locator";
 import { runBatch } from "./engine/sherpa-supervisor";
@@ -176,6 +177,9 @@ export function registerTranscriptionIpc(deps: TranscriptionIpcDeps): Transcript
   const service = deps.service ?? createService(deps);
 
   const { override } = deps;
+  // A pinned job (`KAIPU_TRANSCRIPTION=ready,job:...`, unpackaged builds only) replaces the
+  // service for the job calls, so a catalog shot can show a running or failed job.
+  const pinned = override?.job ? new PinnedJobs(override.job, broadcastJobProgress) : null;
 
   ipcMain.handle(IPC_CHANNELS.transcriptionStatus, async () => {
     const status = await service.status();
@@ -201,18 +205,27 @@ export function registerTranscriptionIpc(deps: TranscriptionIpcDeps): Transcript
     IPC_CHANNELS.transcriptionJobBegin,
     scopedAdmitted("library", async (request: unknown): Promise<TranscriptionBeginResult> => {
       const parsed = parseRequest(request);
+      if (pinned) return pinned.begin(parsed);
       return override ? { status: "refused", reason: "unavailable" } : service.begin(parsed);
     }),
   );
-  ipcMain.handle(IPC_CHANNELS.transcriptionJobChunk, (_event, jobId: unknown, pcm: unknown) =>
-    service.chunk(parseId(jobId, "job id"), parseChunk(pcm)),
-  );
-  ipcMain.handle(IPC_CHANNELS.transcriptionJobEnd, (_event, jobId: unknown, reason?: unknown) =>
-    service.end(parseId(jobId, "job id"), parseFailReason(reason)),
-  );
-  ipcMain.handle(IPC_CHANNELS.transcriptionJobCancel, (_event, jobId: unknown) =>
-    service.cancel(parseId(jobId, "job id")),
-  );
+  ipcMain.handle(IPC_CHANNELS.transcriptionJobChunk, (_event, jobId: unknown, pcm: unknown) => {
+    const id = parseId(jobId, "job id");
+    const bytes = parseChunk(pcm);
+    if (!pinned) return service.chunk(id, bytes);
+    pinned.audio(id);
+  });
+  ipcMain.handle(IPC_CHANNELS.transcriptionJobEnd, (_event, jobId: unknown, reason?: unknown) => {
+    const id = parseId(jobId, "job id");
+    const failReason = parseFailReason(reason);
+    if (!pinned) return service.end(id, failReason);
+    pinned.audio(id);
+  });
+  ipcMain.handle(IPC_CHANNELS.transcriptionJobCancel, (_event, jobId: unknown) => {
+    const id = parseId(jobId, "job id");
+    if (!pinned) return service.cancel(id);
+    pinned.cancel(id);
+  });
   ipcMain.handle(
     IPC_CHANNELS.transcriptionReadTranscript,
     scopedAdmitted("library", (id: unknown) => readTranscript(parseId(id, "item id"))),

@@ -469,3 +469,45 @@ describe("a dev override", () => {
     expect(service.begin).not.toHaveBeenCalled();
   });
 });
+
+describe("a dev override with a pinned job", () => {
+  beforeAll(() => {
+    registerTranscriptionIpc({
+      resourcesPath: state.dir,
+      modelsRoot: join(state.dir, "models"),
+      service: service as unknown as TranscriptionService,
+      override: { kind: "ready", job: { kind: "running", segmentsDone: 3, segmentsTotal: 12 } },
+    });
+  });
+  afterAll(() => {
+    registerTranscriptionIpc({
+      resourcesPath: state.dir,
+      modelsRoot: join(state.dir, "models"),
+      service: service as unknown as TranscriptionService,
+    });
+  });
+  beforeEach(() => {
+    state.sent.length = 0;
+  });
+
+  it("accepts a job without the service, announces progress on the first audio, and cancels", async () => {
+    const begin = (await call(IPC_CHANNELS.transcriptionJobBegin, STAMP, REQUEST)) as {
+      status: string;
+      jobId: string;
+    };
+    expect(begin.status).toBe("accepted");
+    expect(service.begin).not.toHaveBeenCalled();
+    expect(state.sent).toEqual([]);
+
+    await call(IPC_CHANNELS.transcriptionJobChunk, begin.jobId, new Uint8Array(4));
+    expect(state.sent).toEqual([IPC_CHANNELS.transcriptionJobProgress]);
+    await call(IPC_CHANNELS.transcriptionJobEnd, begin.jobId);
+    expect(state.sent).toHaveLength(1);
+    expect(service.chunk).not.toHaveBeenCalled();
+    expect(service.end).not.toHaveBeenCalled();
+
+    await call(IPC_CHANNELS.transcriptionJobCancel, begin.jobId);
+    expect(state.sent).toHaveLength(2);
+    expect(service.cancel).not.toHaveBeenCalled();
+  });
+});
