@@ -30,7 +30,8 @@ import { atomicWriteFile } from "../library/atomic-write";
 import type { EngineLocation, EngineUnavailableReason } from "./engine/engine-locator";
 import { SherpaError, type CliResult, type RunBatchOptions } from "./engine/sherpa-supervisor";
 import { DEFAULT_MODEL_ID, listModels, type ModelCatalogEntry } from "./models/catalog";
-import { ModelStoreError, type ModelStore } from "./models/model-store";
+import { DownloadError } from "./download-file";
+import type { ModelStore } from "./models/model-store";
 import { PcmWriter, computeFrameLevelsDb, writeSegmentWav } from "./pcm";
 import { planSegments, type Segment } from "./segment";
 import { buildTranscript, writeTranscriptFileAtomic } from "./transcript-file";
@@ -170,6 +171,15 @@ function toModelStatus(status: ReturnType<ModelStoreApi["status"]>): Transcripti
   return status.state === "ready" ? { state: "ready" } : status;
 }
 
+/**
+ * `install-failed` (the bytes verified but would not install) has no code of its own in the
+ * renderer contract; the user's remedy is the same as for a failed transfer: try again.
+ */
+function toDownloadResult(error: DownloadError): TranscriptionModelDownloadResult {
+  if (error.code === "cancelled") return { status: "cancelled" };
+  return { status: "failed", code: error.code === "install-failed" ? "network" : error.code };
+}
+
 function toBytes(pcm: ArrayBuffer | Uint8Array): Uint8Array {
   return pcm instanceof Uint8Array ? pcm : new Uint8Array(pcm);
 }
@@ -300,10 +310,8 @@ export class TranscriptionService {
       await this.deps.modelStore.download(id, (progress) => this.deps.broadcastModel(progress));
       return { status: "ready" };
     } catch (error) {
-      if (!(error instanceof ModelStoreError)) throw error;
-      return error.code === "cancelled"
-        ? { status: "cancelled" }
-        : { status: "failed", code: error.code };
+      if (!(error instanceof DownloadError)) throw error;
+      return toDownloadResult(error);
     }
   }
 
