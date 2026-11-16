@@ -26,14 +26,14 @@ upstream's published terms and not re-read against the pinned artifact.
 - The files are fetched at the person's request, stored in the app's data folder and never part of
   the installer.
 
-## Bundled engine (inside the signed arm64 app, `resources/native/sherpa-onnx/`)
+## Speech engine (downloaded by the app into its data folder, macOS arm64)
 
 ### sherpa-onnx `sherpa-onnx-offline`, release `v1.13.8`
 
 - License: Apache-2.0, <https://www.apache.org/licenses/LICENSE-2.0>. Upstream:
   <https://github.com/k2-fsa/sherpa-onnx> (not verified against the release archive's own
   `LICENSE`).
-- Pinned in `scripts/speech-engine.lock` with the SHA-256 of the release archive (verified).
+- Pinned in `src/main/transcription/engine/engine-catalog.ts` with the SHA-256 of the release archive (verified).
 - Kaipu runs it as a separate process; it does not link it.
 
 ### ONNX Runtime `libonnxruntime.dylib`

@@ -1,8 +1,0 @@
-# The sherpa-onnx release bundled as the speech engine (ADR 0062). Read by
-# scripts/fetch-speech-engine.sh; nothing else downloads it. To bump, change all four lines
-# together (the SHA-256 is the `digest` of the release asset) and update
-# PINNED_ENGINE_VERSION in src/main/transcription/engine/engine-locator.ts: a test compares them.
-SHERPA_VERSION=v1.13.8
-SHERPA_ARCHIVE=sherpa-onnx-v1.13.8-osx-arm64-shared-no-tts.tar.bz2
-SHERPA_SHA256=91b96512c4fa1960f8a9ed5360a6c8dda53a4b5015d0590244f14086a234557a
-SHERPA_URL=https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-osx-arm64-shared-no-tts.tar.bz2
