@@ -116,9 +116,9 @@
  * are in it (the video editor): pieces collapse lowest priority first as the window
  * narrows toward its 720 px minimum. Each piece marks itself with data-collapse:
  *
+ *   badge      ORIGINAL UNTOUCHED (video-editor-page.tsx)
  *   transcribe-label  the word on the editor's Transcribe button; its icon stays
  *              (transcribe-button.tsx)
- *   badge      ORIGINAL UNTOUCHED (video-editor-page.tsx)
  *   location   the switcher's "This Mac" (workspace-switcher.tsx)
  *   save       the save state, unless it failed and offers a retry (video-editor-page.tsx)
  *   .name      "Kaipu Record" and its separator (here)
@@ -126,16 +126,17 @@
  *
  * Export is last and never shrinks (editor-toolbar.module.css).
  */
-/* The Transcribe word goes first: at the default 1440 px window the bar clipped the whole
-   button to a "T" beside Export, so no click could land on it. */
+/* At the default 1440 px window the pill, the announcement banner and the workspace chip left
+   the Transcribe button no room, so the bar clipped it away: the pill, a reminder and not a
+   control, goes first. */
 @container titlebar (max-width: 1500px) {
-  .bar:has(.actions:not(:empty)) [data-collapse~="transcribe-label"] {
+  .bar:has(.actions:not(:empty)) [data-collapse~="badge"] {
     display: none;
   }
 }
 
 @container titlebar (max-width: 1260px) {
-  .bar:has(.actions:not(:empty)) [data-collapse~="badge"] {
+  .bar:has(.actions:not(:empty)) [data-collapse~="transcribe-label"] {
     display: none;
   }
 }
