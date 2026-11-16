@@ -12,6 +12,17 @@ vi.mock("./transcribe-button", () => ({
   },
 }));
 
+const transcript = vi.hoisted(() => ({
+  state: "none" as string,
+  askedFor: [] as Array<string | null>,
+}));
+vi.mock("./use-transcript", () => ({
+  useTranscript: (id: string | null) => {
+    transcript.askedFor.push(id);
+    return { state: transcript.state, transcript: null, stale: false, refresh: async () => {} };
+  },
+}));
+
 const VIDEO: LibraryVideo = {
   id: "take-1",
   assetId: "asset-1",
@@ -36,6 +47,8 @@ const VIDEO: LibraryVideo = {
 afterEach(() => {
   cleanup();
   seen.props.length = 0;
+  transcript.state = "none";
+  transcript.askedFor.length = 0;
 });
 
 describe("LibraryTranscribeButton", () => {
@@ -114,5 +127,25 @@ describe("EditorTranscribeButton", () => {
       />,
     );
     expect(queryByTestId("transcribe-button")).toBeNull();
+  });
+
+  it("knows a transcript from an earlier session is already there, so it is not offered again", () => {
+    transcript.state = "ready";
+    render(<EditorTranscribeButton videoId="take-1" assetId="asset-1" durationSeconds={3} />);
+    expect(
+      (seen.props[0] as { item: { transcribedAt: number | null } }).item.transcribedAt,
+    ).not.toBeNull();
+  });
+
+  it("does not read the vault for a video without audio", () => {
+    render(
+      <EditorTranscribeButton
+        videoId="take-1"
+        assetId="asset-1"
+        durationSeconds={3}
+        hasAudio={false}
+      />,
+    );
+    expect(transcript.askedFor).toEqual([null]);
   });
 });

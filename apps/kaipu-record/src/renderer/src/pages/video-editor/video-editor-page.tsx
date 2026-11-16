@@ -206,6 +206,7 @@ import {
   type Tab as AddFromLibraryTab,
 } from "@renderer/features/video-editor/components/add-from-library-modal";
 import { TranscriptPanel } from "@renderer/features/video-editor/transcript-panel";
+import { EditorTranscribeButton } from "@renderer/features/transcription/editor-transcribe-button";
 import { probeSource, type SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import { useHiddenTracks } from "@renderer/features/video-editor/use-hidden-tracks";
@@ -2851,6 +2852,14 @@ function VideoEditor({
                 <Shield size={12} strokeWidth={2} /> {t("originalUntouched")}
               </Badge>
             </span>
+            {transcriptionOn && (
+              <EditorTranscribeButton
+                videoId={source.id}
+                assetId={source.assetId}
+                durationSeconds={source.durationSeconds}
+                hasAudio={sourceProbe?.hasAudio}
+              />
+            )}
             {autosave.state !== "idle" && (
               <button
                 type="button"

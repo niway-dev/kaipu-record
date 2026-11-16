@@ -2,6 +2,7 @@ import React from "react";
 import { uiArea } from "@renderer/lib/ui-area";
 import { mediaUrl } from "@renderer/lib/media-url";
 import { TranscribeButton } from "./transcribe-button";
+import { useTranscript } from "./use-transcript";
 
 export interface EditorTranscribeButtonProps {
   /** The recording's local id (its filename id). */
@@ -26,9 +27,13 @@ export function EditorTranscribeButton({
   videoId,
   assetId,
   durationSeconds,
-  transcribedAt = null,
+  transcribedAt: hostTranscribedAt = null,
   hasAudio,
 }: EditorTranscribeButtonProps): React.JSX.Element | null {
+  // The editor has no Library item at hand, so it asks the vault whether a transcript file is
+  // there: without this a video transcribed in an earlier session would offer Transcribe again.
+  const { state } = useTranscript(hasAudio === false ? null : videoId);
+  const transcribedAt = hostTranscribedAt ?? (state === "ready" || state === "invalid" ? 1 : null);
   if (hasAudio === false) return null;
   return (
     <TranscribeButton
