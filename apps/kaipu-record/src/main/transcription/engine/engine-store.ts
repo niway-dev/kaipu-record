@@ -122,8 +122,10 @@ export class EngineStore {
   /**
    * Download and install the engine; resolves with the install directory. Calls made while one
    * install runs share its promise (and so its signal and progress callback). Resolves at once
-   * when the engine is already installed, unless `force` is set. A forced install replaces the
-   * old directory only after the new one passed its handshake, so a failure leaves it as it was.
+   * when the engine is already installed, unless `force` is set. The new engine is verified and
+   * staged first; only then is the old directory removed and the new one renamed into place. A
+   * failure before that leaves the old directory alone; one between the remove and the rename
+   * leaves no engine, and the next status offers the download again.
    */
   install(options: EngineInstallOptions = {}): Promise<string> {
     if (this.inflight) return this.inflight;

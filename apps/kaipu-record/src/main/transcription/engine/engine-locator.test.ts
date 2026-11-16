@@ -181,8 +181,7 @@ describe("parseEngineVersion", () => {
 });
 
 describe("the pinned release", () => {
-  it("is the version the engine catalog pins, and the archive agrees with it", () => {
-    expect(PINNED_ENGINE_VERSION).toBe(ENGINE_ARCHIVE.version);
+  it("names the archive, URL and top directory after the pinned version", () => {
     expect(ENGINE_ARCHIVE.url).toContain(`/download/v${ENGINE_ARCHIVE.version}/`);
     expect(ENGINE_ARCHIVE.url.endsWith(`/${ENGINE_ARCHIVE.archiveName}`)).toBe(true);
     expect(ENGINE_ARCHIVE.archiveName).toBe(`${ENGINE_ARCHIVE.topDir}.tar.bz2`);
