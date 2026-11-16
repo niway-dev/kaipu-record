@@ -117,6 +117,10 @@ explicit script":
 - **The source is one constant.** Today the archive comes from the sherpa-onnx GitHub release.
   Serving it (and the model) from Kaipu's own server later changes the URL in the catalog, not
   the code; the hash pins the bytes either way.
+- **A version bump is checked by hand.** When `ENGINE_ARCHIVE` or `ENGINE_LIBRARIES` in
+  `engine-catalog.ts` changes, list the new archive with `tar -tv`, check the real binaries'
+  dependencies with `otool -L`, and update the pinned size, SHA-256 and library list together.
+  No automated check runs against the real archive.
 
 Superseded by this amendment: the Consequences bullet "One more signed binary and a ~25 MB
 library in the macOS app; the release workflow checks them", and the "a missing binary" case in
@@ -126,8 +130,13 @@ stay as written.
 Consequences that change: the installer does not grow; the release workflow has nothing to check;
 the first download needs about 18 MB more; a downloaded binary is ad-hoc signed by its publisher,
 not by Kaipu's Developer ID (a child process does not inherit the app's hardened runtime, and
-Node's download does not set the quarantine flag, so macOS runs it; a real packaged build has to
-confirm this, see the PR's "not verified").
+Node's download does not set the quarantine flag, so macOS runs it; this is not yet confirmed on a
+packaged build, see the open item below).
+
+- [ ] Confirm that Gatekeeper and the hardened runtime accept the downloaded engine. The engine is a
+      third-party binary, not signed by Kaipu, and it runs with its dylibs from `userData`. Check once on
+      a packaged build (`bun run build:mac`, flag `transcription` on, transcribe a recording), and before
+      the flag leaves OFF in production.
 
 ## Alternatives rejected
 
