@@ -156,6 +156,7 @@ describe("ModelOffer", () => {
       ["hash-mismatch", /corrupt/i],
       ["size-mismatch", /corrupt/i],
       ["insufficient-disk-space", /not enough free disk space/i],
+      ["engine-failed-to-start", /downloaded but does not start on this Mac/i],
       ["busy", /already running/i],
       ["unknown", /could not be downloaded/i],
     ])("explains a %s failure", (failure, message) => {
@@ -193,7 +194,6 @@ describe("ModelOffer", () => {
         "unsupported-platform",
         /Local transcription is not available on this Mac or this platform yet/,
       ],
-      ["engine-broken", /engine did not start/i],
     ])("explains %s and offers no download", (reason, message) => {
       setup({ state: "missing" }, { availability: { status: "unavailable", reason } });
 

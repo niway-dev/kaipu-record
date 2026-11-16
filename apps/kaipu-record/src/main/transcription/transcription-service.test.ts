@@ -121,15 +121,22 @@ function makeHarness(overrides: Partial<TranscriptionServiceDeps> = {}) {
     remove: vi.fn(async () => {}),
   };
   /** The downloaded engine: `missing` plays a machine where it was never installed. */
-  const engine = { missing: false };
+  const engine = { missing: false, broken: false };
   const engineStore = {
-    install: vi.fn(async (options: { signal?: AbortSignal; onBytes?: (bytes: number) => void }) => {
-      const half = Math.floor(ENGINE_ARCHIVE.sizeBytes / 2);
-      options.onBytes?.(half);
-      options.onBytes?.(ENGINE_ARCHIVE.sizeBytes - half);
-      engine.missing = false;
-      return "/engine";
-    }),
+    install: vi.fn(
+      async (options: {
+        force?: boolean;
+        signal?: AbortSignal;
+        onBytes?: (bytes: number) => void;
+      }) => {
+        const half = Math.floor(ENGINE_ARCHIVE.sizeBytes / 2);
+        options.onBytes?.(half);
+        options.onBytes?.(ENGINE_ARCHIVE.sizeBytes - half);
+        engine.missing = false;
+        engine.broken = false;
+        return "/engine";
+      },
+    ),
   };
   const runBatch = vi.fn(async (options: RunBatchOptions): Promise<CliResult[]> => {
     calls.push(options.wavPaths.map((p) => basename(p, ".wav")));
@@ -141,7 +148,11 @@ function makeHarness(overrides: Partial<TranscriptionServiceDeps> = {}) {
   const deps: TranscriptionServiceDeps = {
     locateEngine: vi.fn(
       async (): Promise<EngineLocation> =>
-        engine.missing ? { available: false, reason: "binary-missing" } : AVAILABLE,
+        engine.missing
+          ? { available: false, reason: "binary-missing" }
+          : engine.broken
+            ? { available: false, reason: "handshake-failed" }
+            : AVAILABLE,
     ),
     modelStore,
     engineStore,
@@ -264,8 +275,8 @@ describe("status", () => {
       const { availability } = await h.service.status();
       reasons.push(availability.status === "unavailable" ? availability.reason : null);
     }
-    // A missing engine is "not installed", never "unavailable": the download is offered.
-    expect(reasons).toEqual([null, "engine-broken", "unsupported-platform"]);
+    // A missing or failing engine is "not installed", never "unavailable": the download is the repair.
+    expect(reasons).toEqual([null, null, "unsupported-platform"]);
     await h.service.status();
     await h.service.status();
     expect(locateEngine).toHaveBeenCalledTimes(4);
@@ -405,15 +416,59 @@ describe("the engine downloads with the model", () => {
     expect(info.sizeBytes).toBe(MODEL);
   });
 
-  it("keeps a broken engine unavailable, with every model state as the store reports it", async () => {
+  it("treats an engine that fails its handshake like a missing one: the download is the repair", async () => {
+    const h = makeHarness();
+    h.engine.broken = true;
+    const status = await h.service.status();
+    expect(status.availability).toEqual({ status: "available" });
+    const info = status.models.find((m) => m.id === MODEL_ID)!;
+    expect(info.status).toEqual({ state: "missing" });
+    expect(info.sizeBytes).toBe(ENGINE);
+  });
+
+  it("keeps an unsupported machine unavailable, with every model state as the store reports it", async () => {
     const h = makeHarness({
-      locateEngine: async () => ({ available: false, reason: "handshake-failed" }),
+      locateEngine: async () => ({ available: false, reason: "unsupported-platform" }),
     });
     const status = await h.service.status();
-    expect(status.availability).toEqual({ status: "unavailable", reason: "engine-broken" });
+    expect(status.availability).toEqual({
+      status: "unavailable",
+      reason: "unsupported-platform",
+    });
     const info = status.models.find((m) => m.id === MODEL_ID)!;
     expect(info.status).toEqual({ state: "ready" });
     expect(info.sizeBytes).toBe(MODEL);
+  });
+
+  it("force-reinstalls a failing engine on download, and a missing one without force", async () => {
+    const h = makeHarness();
+    h.engine.broken = true;
+    await h.service.downloadModel(MODEL_ID);
+    expect(h.engineStore.install).toHaveBeenCalledWith(expect.objectContaining({ force: true }));
+    expect((await h.service.status()).availability).toEqual({ status: "available" });
+    expect(h.engine.broken).toBe(false);
+
+    const fresh = makeHarness();
+    fresh.engine.missing = true;
+    await fresh.service.downloadModel(MODEL_ID);
+    expect(fresh.engineStore.install.mock.calls[0]![0].force).toBeFalsy();
+  });
+
+  it("reports engine-failed-to-start when the fresh engine fails its handshake", async () => {
+    const h = makeHarness();
+    h.engine.broken = true;
+    h.engineStore.install.mockRejectedValueOnce(
+      new DownloadError("engine-failed-to-start", "did not pass its version check"),
+    );
+    expect(await h.service.downloadModel(MODEL_ID)).toEqual({
+      status: "failed",
+      code: "engine-failed-to-start",
+    });
+    expect(h.modelStore.download).not.toHaveBeenCalled();
+    // Still offered: the install never replaced anything.
+    expect((await h.service.status()).models.find((m) => m.id === MODEL_ID)!.status).toEqual({
+      state: "missing",
+    });
   });
 
   it("installs the engine, then the model, in one monotonic progress stream", async () => {
@@ -559,7 +614,7 @@ describe("the engine downloads with the model", () => {
     ["hash-mismatch", "hash-mismatch"],
     ["size-mismatch", "size-mismatch"],
     ["insufficient-disk-space", "insufficient-disk-space"],
-    ["install-failed", "network"],
+    ["engine-failed-to-start", "engine-failed-to-start"],
   ] as const)(
     "maps an engine %s failure to %s, and the model is not downloaded",
     async (code, expected) => {

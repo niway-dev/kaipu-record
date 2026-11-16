@@ -45,6 +45,8 @@ export interface EngineStoreOptions {
 }
 
 export interface EngineInstallOptions {
+  /** Reinstall even when the files are there (an installed engine whose handshake fails). */
+  force?: boolean;
   signal?: AbortSignal;
   /** Called with each chunk's size while the archive downloads. */
   onBytes?: (bytes: number) => void;
@@ -120,14 +122,15 @@ export class EngineStore {
   /**
    * Download and install the engine; resolves with the install directory. Calls made while one
    * install runs share its promise (and so its signal and progress callback). Resolves at once
-   * when the engine is already installed.
+   * when the engine is already installed, unless `force` is set. A forced install replaces the
+   * old directory only after the new one passed its handshake, so a failure leaves it as it was.
    */
   install(options: EngineInstallOptions = {}): Promise<string> {
     if (this.inflight) return this.inflight;
     if (options.signal?.aborted) {
       return Promise.reject(new DownloadError("cancelled", "The download was cancelled."));
     }
-    const installed = this.locate();
+    const installed = options.force ? null : this.locate();
     if (installed) return Promise.resolve(installed);
 
     const promise = this.run(options).finally(() => {
@@ -201,7 +204,7 @@ export class EngineStore {
       );
       if (!works) {
         throw new DownloadError(
-          "install-failed",
+          "engine-failed-to-start",
           "The downloaded speech engine did not pass its version check.",
         );
       }
@@ -220,14 +223,14 @@ export class EngineStore {
     }
   }
 
-  /** Runs one install step; its own failures become `install-failed`, an abort `cancelled`. */
+  /** Runs one install step; its own failures become `engine-failed-to-start`, an abort `cancelled`. */
   private async step<T>(signal: AbortSignal, message: string, fn: () => Promise<T>): Promise<T> {
     try {
       return await fn();
     } catch (error) {
       if (error instanceof DownloadError) throw error;
       if (signal.aborted) throw new DownloadError("cancelled", "The download was cancelled.");
-      throw new DownloadError("install-failed", message, { cause: error });
+      throw new DownloadError("engine-failed-to-start", message, { cause: error });
     }
   }
 

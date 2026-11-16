@@ -117,7 +117,7 @@ describe("useTranscriptionStatus", () => {
     await waitFor(() => expect(result.current.status).not.toBeNull());
     expect(result.current.status?.availability).toEqual({
       status: "unavailable",
-      reason: "engine-broken",
+      reason: "unsupported-platform",
     });
     expect(result.current.status?.models).toEqual([]);
   });

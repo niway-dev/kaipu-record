@@ -9,9 +9,9 @@ export type ModelDownloadFailure =
   | Extract<TranscriptionModelDownloadResult, { status: "failed" }>["code"]
   | "unknown";
 
-/** What the app shows when main cannot even answer: the engine cannot be used. */
+/** What the app shows when main cannot even answer: transcription cannot be used. */
 const UNREACHABLE: TranscriptionStatus = {
-  availability: { status: "unavailable", reason: "engine-broken" },
+  availability: { status: "unavailable", reason: "unsupported-platform" },
   defaultModelId: "",
   models: [],
   job: null,

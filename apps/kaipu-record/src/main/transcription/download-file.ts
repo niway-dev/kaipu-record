@@ -15,8 +15,8 @@ export type DownloadErrorCode =
   | "cancelled"
   | "insufficient-disk-space"
   | "busy"
-  /** The bytes verified but could not be turned into a working install (extract, handshake). */
-  | "install-failed";
+  /** The bytes verified but the engine could not be unpacked or does not start (extract, handshake). */
+  | "engine-failed-to-start";
 
 export class DownloadError extends Error {
   readonly code: DownloadErrorCode;

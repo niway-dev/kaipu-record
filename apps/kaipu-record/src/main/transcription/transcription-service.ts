@@ -164,23 +164,25 @@ interface Job {
 }
 
 /**
- * A missing engine is "not installed", not "unavailable": the download is offered. Unavailable
- * stays for a machine that cannot run the engine and for an installed one that fails its check.
+ * A missing engine, or an installed one that fails its check, is "not installed": the download
+ * is offered and is the repair (it reinstalls). Unavailable is only for a machine that cannot
+ * run the engine at all.
  */
 function availabilityOf(engine: EngineLocation): TranscriptionStatus["availability"] {
   if (engine.available) return { status: "available" };
   switch (engine.reason) {
-    case "binary-missing":
-      return { status: "available" };
     case "unsupported-platform":
       return { status: "unavailable", reason: "unsupported-platform" };
+    case "binary-missing":
     case "handshake-failed":
-      return { status: "unavailable", reason: "engine-broken" };
+      return { status: "available" };
   }
 }
 
-const isEngineMissing = (engine: EngineLocation): boolean =>
-  !engine.available && engine.reason === "binary-missing";
+/** The engine has to be (re)installed before a model can be used. */
+const needsEngine = (engine: EngineLocation): boolean =>
+  !engine.available &&
+  (engine.reason === "binary-missing" || engine.reason === "handshake-failed");
 
 /** Minimum gap between engine progress events, as ModelStore's default. */
 const ENGINE_PROGRESS_INTERVAL_MS = 200;
@@ -206,13 +208,9 @@ function toModelStatus(status: ReturnType<ModelStoreApi["status"]>): Transcripti
   return status.state === "ready" ? { state: "ready" } : status;
 }
 
-/**
- * `install-failed` (the bytes verified but would not install) has no code of its own in the
- * renderer contract; the user's remedy is the same as for a failed transfer: try again.
- */
 function toDownloadResult(error: DownloadError): TranscriptionModelDownloadResult {
   if (error.code === "cancelled") return { status: "cancelled" };
-  return { status: "failed", code: error.code === "install-failed" ? "network" : error.code };
+  return { status: "failed", code: error.code };
 }
 
 function toBytes(pcm: ArrayBuffer | Uint8Array): Uint8Array {
@@ -320,7 +318,7 @@ export class TranscriptionService {
 
   async status(): Promise<TranscriptionStatus> {
     const engine = await this.locate();
-    const engineMissing = isEngineMissing(engine);
+    const engineMissing = needsEngine(engine);
     const engineSize = this.engineArchive.sizeBytes;
     return {
       availability: availabilityOf(engine),
@@ -399,9 +397,14 @@ export class TranscriptionService {
   ): Promise<TranscriptionModelDownloadResult> {
     const { signal } = run.controller;
     try {
-      const engineMissing = isEngineMissing(await this.locate());
+      const engine = await this.locate();
+      const engineMissing = needsEngine(engine);
       const modelInstalled = this.deps.modelStore.locate(model.id) !== null;
-      if (engineMissing) await this.installEngine(model, run, modelInstalled);
+      if (engineMissing) {
+        // An engine whose files exist but fail the handshake is reinstalled, not reused.
+        const force = !engine.available && engine.reason === "handshake-failed";
+        await this.installEngine(model, run, modelInstalled, force);
+      }
       if (signal.aborted) return { status: "cancelled" };
       // Engine installed, model already there: nothing left to download.
       if (!(engineMissing && modelInstalled)) {
@@ -428,6 +431,7 @@ export class TranscriptionService {
     model: ModelCatalogEntry,
     run: ModelDownload,
     modelInstalled: boolean,
+    force: boolean,
   ): Promise<void> {
     const archive = this.engineArchive;
     run.phase = "engine";
@@ -446,6 +450,7 @@ export class TranscriptionService {
     };
     try {
       await this.deps.engineStore.install({
+        force,
         signal: run.controller.signal,
         onBytes: (bytes) => {
           run.engineReceived += bytes;

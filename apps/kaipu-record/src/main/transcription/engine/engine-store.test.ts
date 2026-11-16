@@ -212,7 +212,7 @@ describe("EngineStore", () => {
     expect(await rootEntries()).toEqual([]);
   });
 
-  it("maps an extractor failure to install-failed and leaves nothing behind", async () => {
+  it("maps an extractor failure to engine-failed-to-start and leaves nothing behind", async () => {
     const { store, handshake } = makeStore({
       extract: async () => {
         throw new Error("tar exited with 1");
@@ -220,19 +220,19 @@ describe("EngineStore", () => {
     });
     const error = await store.install({}).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(DownloadError);
-    expect(error).toMatchObject({ code: "install-failed" });
+    expect(error).toMatchObject({ code: "engine-failed-to-start" });
     expect(handshake).not.toHaveBeenCalled();
     expect(await rootEntries()).toEqual([]);
   });
 
-  it("fails with install-failed when the archive lacks one of the five files", async () => {
+  it("fails with engine-failed-to-start when the archive lacks one of the five files", async () => {
     const { store, handshake } = makeStore({
       extract: async (_archive, dest) => {
         await writeExtracted(dest);
         await rm(join(dest, "engine-top", "lib", "libonnxruntime.dylib"));
       },
     });
-    await expect(store.install({})).rejects.toMatchObject({ code: "install-failed" });
+    await expect(store.install({})).rejects.toMatchObject({ code: "engine-failed-to-start" });
     expect(handshake).not.toHaveBeenCalled();
     expect(await rootEntries()).toEqual([]);
   });
@@ -246,15 +246,15 @@ describe("EngineStore", () => {
         await symlink("/etc/hosts", target);
       },
     });
-    await expect(store.install({})).rejects.toMatchObject({ code: "install-failed" });
+    await expect(store.install({})).rejects.toMatchObject({ code: "engine-failed-to-start" });
     expect(await rootEntries()).toEqual([]);
   });
 
-  it("fails with install-failed when the handshake fails, leaving the final path untouched", async () => {
+  it("fails with engine-failed-to-start when the handshake fails, leaving the final path untouched", async () => {
     await mkdir(join(finalDir(), "bin"), { recursive: true });
     await writeFile(join(finalDir(), "bin", "older"), "x");
     const { store } = makeStore({ handshake: async () => false });
-    await expect(store.install({})).rejects.toMatchObject({ code: "install-failed" });
+    await expect(store.install({})).rejects.toMatchObject({ code: "engine-failed-to-start" });
     expect(await rootEntries()).toEqual(["9.9.9"]);
     expect(existsSync(join(finalDir(), "bin", "older"))).toBe(true);
     expect(store.locate()).toBeNull();
@@ -290,6 +290,24 @@ describe("EngineStore", () => {
     expect(extract).toHaveBeenCalledTimes(1);
     // Done: a later call starts over (and finds the engine installed).
     expect(store.install({})).not.toBe(first);
+  });
+
+  it("reinstalls over a complete install when forced, and keeps it if the new one fails", async () => {
+    const { store } = makeStore();
+    await store.install({});
+    const marker = join(finalDir(), "bin", "sherpa-onnx-offline");
+    await writeFile(marker, "broken engine");
+
+    await store.install({ force: true });
+    expect(requests).toBe(2);
+    expect(await readFile(marker, "utf8")).toBe("content of bin/sherpa-onnx-offline");
+
+    const failing = makeStore({ handshake: async () => false });
+    await expect(failing.store.install({ force: true })).rejects.toMatchObject({
+      code: "engine-failed-to-start",
+    });
+    expect(await rootEntries()).toEqual(["9.9.9"]);
+    expect(await readFile(marker, "utf8")).toBe("content of bin/sherpa-onnx-offline");
   });
 
   it("does not download again when the engine is already installed", async () => {
