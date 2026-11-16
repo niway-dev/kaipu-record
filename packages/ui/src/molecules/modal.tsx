@@ -69,6 +69,10 @@ const styles = stylex.create({
     flexDirection: "column",
     overflow: "hidden",
   },
+  // The same sheet at 880px, for a two-pane picker (Add from Library, NIW2-790).
+  dialogXWide: {
+    maxWidth: "880px",
+  },
   icon: {
     width: "44px",
     height: "44px",
@@ -166,8 +170,11 @@ export function ModalOverlay({
 }: {
   onCancel: () => void;
   labelledBy?: string;
-  /** "wide": a 620px sheet that lays out its own padding (e.g. the export sheet). */
-  size?: "default" | "wide";
+  /**
+   * "wide": a 620px sheet that lays out its own padding (e.g. the export sheet). "xwide": the
+   * same sheet at 880px, for a list beside a preview.
+   */
+  size?: "default" | "wide" | "xwide";
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -191,7 +198,11 @@ export function ModalOverlay({
       {/* Stops a click inside the card from reaching the backdrop's dismiss. */}
       <div
         onClick={(e) => e.stopPropagation()}
-        {...stylex.props(styles.dialog, size === "wide" && styles.dialogWide)}
+        {...stylex.props(
+          styles.dialog,
+          size !== "default" && styles.dialogWide,
+          size === "xwide" && styles.dialogXWide,
+        )}
       >
         {children}
       </div>

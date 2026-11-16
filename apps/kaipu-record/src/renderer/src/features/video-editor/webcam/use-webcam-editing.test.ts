@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
 import { initialScene, type VideoScene } from "../scene";
+import { joinRecording, sourceAxis } from "../source-axis";
 import { toLayout } from "../timeline";
 import { useVideoScene } from "../use-video-scene";
 import { useWebcamEditing } from "./use-webcam-editing";
@@ -18,7 +19,11 @@ function setup(initial: VideoScene = initialScene(20, TRACK)) {
   return renderHook(() => {
     const controller = useVideoScene(initial);
     const layout = toLayout(controller.scene.items);
-    const webcam = useWebcamEditing({ controller, layout, sourceDuration: 20 });
+    const webcam = useWebcamEditing({
+      controller,
+      layout,
+      axis: sourceAxis(20, controller.scene.sources),
+    });
     return { controller, webcam };
   });
 }
@@ -223,5 +228,29 @@ describe("useWebcamEditing", () => {
       act(() => result.current.webcam.commitTransition("o", { ms: 700 }));
       expect(result.current.controller.canUndo).toBe(false);
     });
+  });
+});
+
+describe("useWebcamEditing with a joined recording (ADR 0058)", () => {
+  const JOIN = { assetId: "asset-b", title: "B", durationSeconds: 20, width: 0, height: 0 };
+  const joined = () => joinRecording(initialScene(20, TRACK), 20, JOIN, 20).scene;
+
+  it("hides from the playhead in B and stops at the end of B's range", () => {
+    const { result } = setup(joined());
+    // 3615 s on the axis: 10 s would run past B's end at 3620.
+    act(() => void result.current.webcam.hideAtPlayhead(35));
+    expect(result.current.controller.scene.webcam!.segments).toEqual([
+      expect.objectContaining({ start: 3615, end: 3620, mode: "hidden" }),
+    ]);
+  });
+
+  it("an edge drag in B stops at B's range", () => {
+    const { result } = setup(joined());
+    act(() => void result.current.webcam.hideAtPlayhead(25));
+    const id = result.current.controller.scene.webcam!.segments[0].id;
+    act(() => result.current.webcam.edgeDrag(id, "start", null, "start"));
+    act(() => result.current.webcam.edgeDrag(id, "start", 5, "move"));
+    act(() => result.current.webcam.edgeDrag(id, "start", null, "end"));
+    expect(result.current.controller.scene.webcam!.segments[0].start).toBe(3600);
   });
 });

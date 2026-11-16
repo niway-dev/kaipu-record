@@ -72,14 +72,39 @@
   transform-origin: 0 0;
 }
 
-/* The video fills a box that already has its exact aspect ratio, so there is nothing to
-   letterbox; object-fit stays `contain` as a guard for the frames decoded before
-   loadedmetadata reports the real size. */
+/* The video fills the frame's box. The opened recording has the frame's exact aspect ratio, so
+   it fills it; a joined recording of another aspect (ADR 0058) is letterboxed by
+   `object-fit: contain`, scaled to fit and centred. `contain` also guards the frames decoded
+   before loadedmetadata reports the real size. */
 .video {
   display: block;
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
+  /* A joined recording of another aspect letterboxes inside the frame; what shows around it is
+     the frame's background (ADR 0051, `.frame` paints it), never the browser's black. */
+  background: transparent;
+}
+
+/* A joined recording whose file is gone (ADR 0058): the picture says so while the playhead is on
+   its clip. Dark and centred, readable at any zoom of the player; above the footage, under the
+   cursor, webcam and chrome layers. */
+.missing {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+  background: #14161a;
+  color: #f2f3f5;
+  font-size: 15px;
+  line-height: 1.4;
+  text-align: center;
+  pointer-events: none;
 }
 
 /* Slide image: covers the video's rendered box exactly (the .stage wrapper shrinks to

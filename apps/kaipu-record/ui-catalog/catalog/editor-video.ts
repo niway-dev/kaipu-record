@@ -44,6 +44,29 @@ const captureFrameButton: Step = {
 const captureListed: Step = {
   waitFor: { area: "editorVideo.capturesPanel", part: { role: "button", name: "Go to" } },
 };
+/** The Add recording button at the left end of the transport bar (`timeline-levels` on). */
+const addRecordingButton: Step = {
+  click: {
+    area: "editorVideo.transport",
+    part: { role: "button", name: "Add recording", exact: true },
+  },
+};
+/** A recording row in the Add from Library list: a button named after the recording. */
+const libraryRow = (title: string) => ({
+  role: "button" as const,
+  name: title,
+  exact: true,
+});
+/** A screenshot card in the Add from Library Screenshots tab: a button named after its title. */
+const libraryShot = (title: string) => ({
+  role: "button" as const,
+  name: title,
+  exact: true,
+});
+/** The modal's Screenshots tab (its name carries the count, so it is not matched exactly). */
+const screenshotsTab: Step = {
+  click: { area: "editorVideo.addFromLibrary", part: { role: "tab", name: "Screenshots" } },
+};
 /**
  * The Audio lane's waveform once the whole recording is decoded. Every seeded recording has
  * audio, so every state that opens one waits for it: a shot must not land before, or while,
@@ -248,6 +271,130 @@ export const editorVideo = catalog(
       // “Saving…” chip.
       after: [{ action: "restoreVault" }],
     },
+    "levels-off": {
+      profile: "default",
+      how: "Open “Walkthrough 1” with the `timeline-levels` flag off: no floating images, no rows above the sequence, no Add recording button, and no Add from Library… in the Captures panel.",
+      steps: [open(ASSETS.walkthrough)],
+      demonstrates: ["editorVideo.page:loaded"],
+      ready: { video: true },
+      gates: [{ flag: "timeline-levels", side: "off" }],
+    },
+    "media-rows": {
+      profile: "timeline-levels",
+      how: "With the `timeline-levels` flag forced on, open “Floating images”: its two overlapping floating images sit on two rows above the sequence, the one in front above.",
+      steps: [open(ASSETS.floatingDemo)],
+      demonstrates: ["editorVideo.timelineMediaRows:twoImages"],
+      ready: { video: true },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "media-selected": {
+      profile: "timeline-levels",
+      how: "With the flag forced on, open “Floating images” and select the front image on the preview (Enter on it, as from the keyboard): it gets an outline with four corner handles and the right column shows its panel.",
+      steps: [
+        open(ASSETS.floatingDemo),
+        loaded,
+        {
+          press: "Enter",
+          target: {
+            area: "editorVideo.mediaLayer",
+            part: { css: '[data-media-id="float-front"]' },
+          },
+        },
+        { waitFor: { area: "editorVideo.mediaPanel" } },
+      ],
+      demonstrates: ["editorVideo.mediaLayer:selected", "editorVideo.mediaPanel:overlapping"],
+      ready: { area: "editorVideo.mediaPanel" },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "media-selected-full": {
+      profile: "timeline-levels",
+      how: "With the flag forced on, open “Floating images” and select the back image, which fills the whole picture (Full): its frame and four corner handles sit inside the picture edge instead of being clipped by it.",
+      steps: [
+        open(ASSETS.floatingDemo),
+        loaded,
+        {
+          press: "Enter",
+          target: {
+            area: "editorVideo.mediaLayer",
+            part: { css: '[data-media-id="float-back"]' },
+          },
+        },
+        { waitFor: { area: "editorVideo.mediaPanel" } },
+      ],
+      demonstrates: ["editorVideo.mediaLayer:selectedFull"],
+      ready: { area: "editorVideo.mediaPanel" },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "slide-sequence": {
+      profile: "slide-sequence",
+      how: "With the `timeline-levels` flag forced on, open “Slide sequence”: its clip and its three slides all sit on the one Clips row, side by side, each slide showing its picture and the slide badge, with nothing pushed down under the lanes below.",
+      // The clip's thumbnails decode after the editor opens; the slides' pictures are there at once.
+      steps: [open(ASSETS.slidesDemo), loaded, { waitMs: 800 }],
+      demonstrates: ["editorVideo.timeline:threeSlides"],
+      ready: { video: true },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "two-recordings": {
+      profile: "two-recordings",
+      how: "Open “Two recordings”, whose edit joined “Checkout bug”: the clips alternate the two recordings, each labelled with its name and length over its own thumbnails, and the Webcam track says “No camera in this recording” under the joined clip.",
+      steps: [open(ASSETS.joinedDemo)],
+      demonstrates: ["editorVideo.timeline:twoRecordings", "editorVideo.webcamLane:noCamera"],
+      ready: { video: true },
+    },
+    "two-recordings-hover": {
+      profile: "two-recordings",
+      how: "Open “Two recordings” and rest the pointer on its first clip: both clips of that recording get a subtle outline, the joined clip between them does not.",
+      steps: [
+        open(ASSETS.joinedDemo),
+        loaded,
+        // The thumbnails decode after the editor opens; the labels are there from the start.
+        { waitMs: 800 },
+        { hover: { area: "editorVideo.timeline", part: { css: '[data-item-id="clip-a1"]' } } },
+        // The other clip of the hovered recording is outlined only once the hover landed, so a
+        // missed hover fails here instead of shooting the un-hovered timeline.
+        {
+          waitFor: {
+            area: "editorVideo.timeline",
+            part: { css: '[data-item-id="clip-a2"][data-same-recording="true"]' },
+          },
+        },
+      ],
+      keepPointer: true,
+      demonstrates: ["editorVideo.timeline:recordingHover"],
+      ready: { video: true },
+    },
+    "different-aspect": {
+      profile: "two-recordings",
+      how: "Open “Different aspect” and put the playhead in its joined clip: the square recording is fitted inside the 16:9 frame with the background on both sides.",
+      steps: [
+        open(ASSETS.differentAspectDemo),
+        loaded,
+        // The clips run 5 s, 7 s (the joined one, 5 s to 12 s), 7 s: 45% of a 19 s ruler is
+        // 8.55 s. A press on the ruler seeks there.
+        {
+          click: { area: "editorVideo.timeline", part: { css: '[data-testid="ruler"]' } },
+          at: { x: 0.45, y: 0.5 },
+        },
+        // The switch shows a recording by setting its element's visibility, only once that
+        // element holds the frame. The joined `<video>` reading visible is the joined picture
+        // on screen, not the opened one.
+        {
+          waitFor: {
+            area: "editorVideo.preview",
+            part: { css: '[data-recording="join-sq"][style*="visibility: visible"]' },
+          },
+        },
+      ],
+      demonstrates: ["editorVideo.preview:differentAspect"],
+      ready: { video: true },
+    },
+    "recording-missing": {
+      profile: "two-recordings",
+      how: "Open “Missing recording”, whose joined recording is not in the vault: its clip is hatched and reads “Recording missing: Old standup”, and the editor goes on working.",
+      steps: [open(ASSETS.joinedMissingDemo)],
+      demonstrates: ["editorVideo.timeline:recordingMissing"],
+      ready: { video: true },
+    },
     "tool-box": {
       profile: "default",
       steps: [open(ASSETS.walkthrough), audioWaveformDrawn, loaded, rail("Box")],
@@ -442,7 +589,7 @@ export const editorVideo = catalog(
     },
     "captures-hover": {
       profile: "default",
-      how: "Open “Weekly sync”, press Capture frame in the top bar and rest the pointer on the new capture's image: a subtle dark veil covers it with the Go to button in its center. Its row below keeps the time, Copy and Delete (Add to timeline is behind the timeline-levels flag).",
+      how: "Open “Weekly sync”, press Capture frame in the top bar and rest the pointer on the new capture's image: a subtle dark veil covers it with the Go to button in its center. Its row below keeps the time, Copy and Delete (Add from Library… is behind the timeline-levels flag).",
       steps: [
         open(ASSETS.weeklySync),
         audioWaveformDrawn,
@@ -508,9 +655,9 @@ export const editorVideo = catalog(
       ready: { area: "editorVideo.capturesPanel" },
       after: [{ action: "restoreVault" }],
     },
-    "captures-add-to-timeline": {
+    "captures-add-from-library": {
       profile: "timeline-levels",
-      how: "With the timeline-levels flag forced on, open “Weekly sync” and press Capture frame in the top bar: the new capture's row shows Add to timeline beside Copy and Delete.",
+      how: "With the timeline-levels flag forced on, open “Weekly sync” and press Capture frame in the top bar: the new capture's row shows Add from Library beside Copy and Delete.",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
@@ -519,12 +666,165 @@ export const editorVideo = catalog(
         {
           waitFor: {
             area: "editorVideo.capturesPanel",
-            part: { role: "button", name: "Add to timeline", exact: true },
+            part: { role: "button", name: "Add from Library…", exact: true },
           },
         },
       ],
-      demonstrates: ["editorVideo.capturesPanel:addToTimeline"],
+      demonstrates: ["editorVideo.capturesPanel:addFromLibrary"],
       ready: { area: "editorVideo.capturesPanel" },
+      after: [{ action: "restoreVault" }],
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "captures-opens-add-from-library": {
+      profile: "timeline-levels",
+      how: "With the timeline-levels flag forced on, open “Weekly sync”, press Capture frame and then Add from Library… on the new capture's row: the Add from Library modal opens on its Screenshots tab with that new capture already selected, its image shown on the right above the destination chooser (Over the video selected) and the Add button.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        captureFrameButton,
+        captureListed,
+        {
+          click: {
+            area: "editorVideo.capturesPanel",
+            part: { role: "button", name: "Add from Library…", exact: true },
+          },
+        },
+        // The radio group exists only while a screenshot is selected, so this waits for the
+        // modal, the Screenshots tab and the new capture's selection together. The new
+        // capture's title ends in its time ("Weekly sync frame 0s"), which the seeded
+        // “Weekly sync frame” card does not, so the title is not matched here.
+        {
+          waitFor: {
+            area: "editorVideo.addFromLibrary",
+            part: { role: "radio", name: "Over the video" },
+          },
+        },
+        // The selected image decodes after the column is drawn.
+        { waitMs: 400 },
+      ],
+      demonstrates: ["editorVideo.addFromLibrary:screenshotSelected"],
+      ready: { area: "editorVideo.addFromLibrary" },
+      after: [{ action: "restoreVault" }],
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "add-from-library": {
+      profile: "add-from-library",
+      how: "With the `timeline-levels` flag forced on, open “Weekly sync” and press Add recording at the left end of the transport bar: the Add from Library modal opens on its Recordings tab, a compact list of the Library's other recordings, newest first, with the first one selected and previewed on the right (paused at its first frame) above the destination chooser (Over the video is greyed out with “Floating videos come later.”, After the clip under the playhead is selected) and the Add button; the transport button stays lit while the modal is open.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        addRecordingButton,
+        // The list is drawn after the Library read lands; “Walkthrough 1” is among its rows.
+        { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        // The preview autoplays: hold every video at 0:00. The wait is met by any video with a
+        // frame (the editor's too), so the preview may still show its poster, the same picture.
+        { waitFor: { video: "paused-at-start" } },
+        // The row thumbnails decode after the list is drawn.
+        { waitMs: 400 },
+      ],
+      demonstrates: [
+        "editorVideo.addFromLibrary:recordings",
+        "editorVideo.transport:addRecordingOpen",
+      ],
+      ready: { area: "editorVideo.addFromLibrary" },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "add-from-library-screenshots": {
+      profile: "add-from-library",
+      how: "With the flag forced on, open “Weekly sync”, press Add recording and open the Screenshots tab: a grid of the Library's screenshots (GIFs are not listed), newest first, “Weekly sync frame” tagged “From this recording”, none selected yet, with the right column asking to select a screenshot.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        addRecordingButton,
+        { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        screenshotsTab,
+        { waitFor: { area: "editorVideo.addFromLibrary", part: libraryShot("Weekly sync frame") } },
+        // The card thumbnails decode after the grid is drawn.
+        { waitMs: 400 },
+      ],
+      demonstrates: ["editorVideo.addFromLibrary:screenshots"],
+      ready: { area: "editorVideo.addFromLibrary" },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "add-from-library-screenshot-selected": {
+      profile: "add-from-library",
+      how: "With the flag forced on, open “Weekly sync”, press Add recording, open the Screenshots tab and click “Weekly sync frame”: the card is outlined as selected and the right column shows its title above the destination chooser, with Over the video selected and every place in the sequence listed under “In the sequence”, and the Add button.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        addRecordingButton,
+        { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        screenshotsTab,
+        { waitFor: { area: "editorVideo.addFromLibrary", part: libraryShot("Weekly sync frame") } },
+        { click: { area: "editorVideo.addFromLibrary", part: libraryShot("Weekly sync frame") } },
+        {
+          waitFor: {
+            area: "editorVideo.addFromLibrary",
+            part: { role: "radio", name: "Over the video" },
+          },
+        },
+        // The card thumbnails decode after the grid is drawn.
+        { waitMs: 400 },
+      ],
+      demonstrates: ["editorVideo.addFromLibrary:screenshotSelected"],
+      ready: { area: "editorVideo.addFromLibrary" },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "add-from-library-no-match": {
+      profile: "add-from-library",
+      how: "With the flag forced on, open “Weekly sync”, press Add recording and type a title no recording has: the list gives way to “No recordings match” with a hint to try another title.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        addRecordingButton,
+        { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        {
+          fill: {
+            area: "editorVideo.addFromLibrary",
+            part: { role: "searchbox", name: "Search recordings", exact: true },
+          },
+          value: "no such recording",
+        },
+        {
+          waitFor: {
+            area: "editorVideo.addFromLibrary",
+            part: { text: "No recordings match" },
+          },
+        },
+      ],
+      demonstrates: ["editorVideo.addFromLibrary:noMatch"],
+      ready: { area: "editorVideo.addFromLibrary" },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "add-from-library-added": {
+      profile: "add-from-library",
+      how: "With the flag forced on, open “Weekly sync”, press Add recording and click Add with “Walkthrough 1” selected and the default destination (After the clip under the playhead): the playhead is at 0:00, so the recording is inserted after the clip under it, and the sequence shows the clips labelled “Weekly sync” and “Walkthrough 1” (the modal is closed for the shot).",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        addRecordingButton,
+        { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        // The first row (the newest, “Floating images”) is selected by default: pick this one.
+        { click: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        {
+          click: {
+            area: "editorVideo.addFromLibrary",
+            part: { role: "button", name: "Add", exact: true },
+          },
+        },
+        // The modal stays open after an add, so close it with Escape to see the sequence.
+        { press: "Escape" },
+        { waitFor: { area: "editorVideo.addFromLibrary", state: "hidden" } },
+        // Both recordings now label a clip.
+        { waitFor: { area: "editorVideo.timeline", part: { text: "Walkthrough 1" } } },
+        { waitFor: { area: "editorVideo.timeline", part: { text: "Weekly sync" } } },
+        saved,
+        // The joined clip's thumbnails decode after the labels are there.
+        { waitMs: 800 },
+      ],
+      demonstrates: ["editorVideo.timeline:recordingAdded"],
+      ready: { area: "editorVideo.timeline" },
+      // The join autosaved into the vault: put it back for the next state that opens this one.
       after: [{ action: "restoreVault" }],
       gates: [{ flag: "timeline-levels", side: "on" }],
     },
@@ -552,6 +852,10 @@ export const editorVideo = catalog(
   },
   {
     notCapturable: {
+      "editorVideo.insertIndicator:visible": nc(
+        "transient",
+        "drawn only while a recording is dragged over the Clips row, and nothing drags one today (the Add from Library modal adds from its buttons); the target stays for NIW2-789",
+      ),
       "editorVideo.audioLane:empty": nc(
         "needsSetup",
         "the empty-state text shows only for a recording without an audio track, and every seeded recording has one; audio-lane.test.tsx covers it",

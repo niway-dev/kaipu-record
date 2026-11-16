@@ -503,3 +503,66 @@ describe("fillWebcamGap durations (C1: the last fill reaches the gap's end)", ()
     expectContiguous(frames, 10);
   });
 });
+
+describe("fillWebcamGap with a floating image on screen (live)", () => {
+  const run = async (opts: { live: (t: number) => boolean; refuse?: (t: number) => boolean }) => {
+    const emitted: number[] = [];
+    const state = await fillWebcamGap({
+      state: { from: 0, face: null },
+      nextFrame: 1,
+      segmentEnd: 10,
+      fps: 10,
+      visible: () => false,
+      frameAt: () => Promise.resolve(null),
+      live: opts.live,
+      emit: async (t) => {
+        if (opts.refuse?.(t)) return false;
+        emitted.push(Math.round(t * 10) / 10);
+        return true;
+      },
+    });
+    return { emitted, state };
+  };
+
+  it("fills at every time the image is on screen and once more to remove it, without a webcam", async () => {
+    const { emitted, state } = await run({ live: (t) => t >= 0.19 && t < 0.49 });
+    expect(emitted).toEqual([0.2, 0.3, 0.4, 0.5]);
+    expect(state.live).toBe(false);
+  });
+
+  it("adds nothing when no image is ever on screen", async () => {
+    const { emitted } = await run({ live: () => false });
+    expect(emitted).toEqual([]);
+  });
+
+  it("retries the removal at the next fill when the emit that should have removed the image is refused", async () => {
+    const { emitted, state } = await run({
+      live: (t) => t >= 0.19 && t < 0.49,
+      refuse: (t) => Math.abs(t - 0.5) < 1e-6,
+    });
+    expect(emitted).toEqual([0.2, 0.3, 0.4, 0.6]);
+    expect(state.live).toBe(false);
+  });
+
+  it("draws both a slide and a floating image over the same still gap, each with its last fill", async () => {
+    const emitted: number[] = [];
+    const face = { index: 0 };
+    await fillWebcamGap({
+      state: { from: 0, face },
+      nextFrame: 1,
+      segmentEnd: 10,
+      fps: 10,
+      visible: () => true,
+      // The same webcam frame the whole gap: only the slide and the image call for fills.
+      frameAt: () => Promise.resolve(face),
+      moving: (t) => t >= 0.09 && t < 0.29,
+      live: (t) => t >= 0.49 && t < 0.69,
+      emit: async (t) => {
+        emitted.push(Math.round(t * 10) / 10);
+        return true;
+      },
+    });
+    // 0.3 draws the place the slide settled on; 0.7 removes the image.
+    expect(emitted).toEqual([0.1, 0.2, 0.3, 0.5, 0.6, 0.7]);
+  });
+});
