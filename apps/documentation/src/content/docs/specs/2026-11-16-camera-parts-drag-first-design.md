@@ -47,7 +47,9 @@ default camera position the **original position**; the code keeps `WebcamSegment
 | 14  | While the bubble is dragged, only the bubble element moves. The scene is written once, on the drop or on the card's answer, as one undo step                                                                          | Owner's mock: "it must feel like dragging a real object". Today every pointer move writes the scene and re-renders the editor                                                                          | none                                                                                                      |
 
 Decisions 1 to 9 and 14 are the owner's, through the mock and the chat. Decisions 10 to 13
-are proposals the owner has not seen.
+are proposals, shown to the owner in chat on 2026-11-16. Decision 10 is open: the owner asked
+to see both size controls before choosing. Decisions 11 to 13 have not been approved or
+rejected.
 
 ## Open questions
 
