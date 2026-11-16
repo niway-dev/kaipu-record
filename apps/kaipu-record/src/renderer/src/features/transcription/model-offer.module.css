@@ -1,0 +1,163 @@
+/*
+ * The speech model offer: one bordered block whose body changes with the model's state. Every
+ * colour and space comes from the design tokens; the badge carries the state's colour, so a
+ * glance tells missing, downloading, installed, failed and unavailable apart.
+ */
+
+.offer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--line);
+}
+
+.offer:last-child {
+  border-bottom: none;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.badge {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+}
+
+.badge[data-state="downloading"] {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.badge[data-state="ready"] {
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
+.badge[data-state="failed"] {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+
+.badge[data-state="unavailable"] {
+  color: var(--text-muted);
+}
+
+.lead,
+.note,
+.license,
+.confirmTitle {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.note {
+  color: var(--text-muted);
+}
+
+.license a {
+  color: var(--accent-primary);
+}
+
+.facts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.fact {
+  display: flex;
+  gap: var(--space-md);
+  font-size: var(--font-size-sm);
+}
+
+.fact dt {
+  flex: 0 0 110px;
+  color: var(--text-muted);
+}
+
+.fact dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--text-primary);
+}
+
+.path {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  overflow-wrap: anywhere;
+}
+
+.track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--border);
+}
+
+.fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent-primary);
+  transition: width 300ms ease;
+}
+
+.progressLine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.error {
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--accent-red);
+  border-radius: 6px;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--accent-red);
+  border-radius: 6px;
+}
+
+.confirmTitle {
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
