@@ -264,11 +264,12 @@ describe("fillWebcamGap", () => {
         return true;
       },
     });
-    // Every 1/30 s inside the slide, and only the new webcam frames (1/15 s) outside it.
+    // Every 1/30 s inside the slide, and only the new webcam frames (1/15 s) outside it,
+    // plus one more at 0.5 s: the fill that draws the place the slide settled on.
     const inside = emitted.filter((t) => t >= 0.2 && t < 0.5);
     expect(inside).toHaveLength(9);
     const outside = emitted.filter((t) => t < 0.2 || t >= 0.5);
-    expect(outside).toHaveLength(9);
+    expect(outside).toHaveLength(10);
     // 15 fps frames start every 2nd fill time: 0.2 s (frame 3) is already due.
     expect(emitted).toEqual([...emitted].sort((a, b) => a - b));
   });
@@ -290,6 +291,30 @@ describe("fillWebcamGap", () => {
       },
     });
     expect(emitted).toHaveLength(14);
+  });
+
+  it("draws the place a slide settled on, even when no webcam frame is new after it", async () => {
+    const emitted: number[] = [];
+    const source = frames(15);
+    await fillWebcamGap({
+      state: { from: 0, face: await source(0) },
+      nextFrame: 2,
+      segmentEnd: 10,
+      fps: 30,
+      visible: () => true,
+      // The slide runs to 0.7 s; at 0.7 and after, the bubble no longer moves.
+      moving: (t) => t < 0.7 - 1e-9,
+      frameAt: async () => source(0),
+      emit: async (t) => {
+        emitted.push(t);
+        return true;
+      },
+    });
+    // The same webcam frame the whole time: only the slide (and its settle) is drawn.
+    const last = emitted.at(-1)!;
+    expect(last).toBeGreaterThanOrEqual(0.7 - 1e-9);
+    expect(last).toBeLessThan(0.7 + 1 / 30 + 1e-9);
+    expect(emitted.filter((t) => t < 0.7 - 1e-9)).toHaveLength(20);
   });
 
   it("does not re-compose a moving slide where no webcam frame exists (the screen is unchanged)", async () => {

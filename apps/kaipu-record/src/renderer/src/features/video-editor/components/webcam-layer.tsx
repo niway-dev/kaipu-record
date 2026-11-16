@@ -108,6 +108,9 @@ function useWebcamSync({
   const lastSeekSeconds = useRef(0);
   // The main video is playing but out of data (`waiting`); cleared on `playing`.
   const mainWaiting = useRef(false);
+  // A drag is in progress: the bubble shows the place being set, not the slide toward it,
+  // so it stays under the pointer (the drag saves the pointer's place as the block's).
+  const holdSettled = useRef(false);
 
   const apply = (t: number): void => {
     lastTime.current = t;
@@ -118,7 +121,8 @@ function useWebcamSync({
     // A faster or slower main video would otherwise drift past the resync threshold on
     // every frame and turn the face into a series of seeks.
     if (main && cam.playbackRate !== main.playbackRate) cam.playbackRate = main.playbackRate;
-    const state = hidden ? null : webcamStateAt({ webcam }, t, webcamEndSeconds(endSeconds));
+    const slid = hidden ? null : webcamStateAt({ webcam }, t, webcamEndSeconds(endSeconds));
+    const state = slid && holdSettled.current ? { ...slid, progress: 1 } : slid;
     const webcamTime = webcamTimeFor(t, startOffsetMs);
     const scale = cameraEnabled && path ? cameraAt(path, t).scale : 1;
     const rect =
@@ -178,6 +182,10 @@ function useWebcamSync({
   // so mirror them as they happen. A play outside the file is undone by the next apply().
   const applyRef = useRef(apply);
   applyRef.current = apply;
+  // Whether a slide is under way at `t`, for the tick below (read through a ref, like apply).
+  const slidingRef = useRef((_t: number): boolean => false);
+  slidingRef.current = (t) =>
+    !hidden && !!webcamStateAt({ webcam }, t, webcamEndSeconds(endSeconds))?.from;
   useEffect(() => {
     const main = videoRef.current;
     if (!main) return;
@@ -197,6 +205,27 @@ function useWebcamSync({
       mainWaiting.current = false;
       sync();
     };
+    // The main video presents a frame only when the picture changes, so over a still screen
+    // a slide would move once per `timeupdate`. While one is under way, tick on every display
+    // frame from the media clock instead; nothing runs outside a slide.
+    let raf = 0;
+    const tick = (): void => {
+      raf = requestAnimationFrame(tick);
+      const t = main.currentTime;
+      if (!main.paused && slidingRef.current(t)) applyRef.current(t);
+    };
+    const startTicking = (): void => {
+      if (typeof requestAnimationFrame !== "function") return;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(tick);
+    };
+    const stopTicking = (): void => {
+      if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(raf);
+    };
+    if (!main.paused) startTicking();
+    main.addEventListener("play", startTicking);
+    main.addEventListener("pause", stopTicking);
+    main.addEventListener("ended", stopTicking);
     main.addEventListener("play", sync);
     main.addEventListener("pause", sync);
     main.addEventListener("ratechange", sync);
@@ -204,6 +233,10 @@ function useWebcamSync({
     main.addEventListener("stalled", stalled);
     main.addEventListener("playing", resume);
     return () => {
+      stopTicking();
+      main.removeEventListener("play", startTicking);
+      main.removeEventListener("pause", stopTicking);
+      main.removeEventListener("ended", stopTicking);
       main.removeEventListener("play", sync);
       main.removeEventListener("pause", sync);
       main.removeEventListener("ratechange", sync);
@@ -221,7 +254,7 @@ function useWebcamSync({
     }
     resync();
   };
-  return { boxRef, clipRef, camRef, lastTime, drawn, resync, onSeeked };
+  return { boxRef, clipRef, camRef, lastTime, drawn, holdSettled, resync, onSeeked };
 }
 
 /** The webcam file inside the bubble's shape: the part both layers render the same way. */
@@ -318,7 +351,7 @@ export function WebcamLayer({
     frame,
     hidden,
   });
-  const { boxRef, lastTime, drawn } = sync;
+  const { boxRef, lastTime, drawn, holdSettled, resync } = sync;
   const drag = useRef<{ x: number; y: number; from: Point; w: number; h: number } | null>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -326,8 +359,10 @@ export function WebcamLayer({
   const abort = (): void => {
     if (!drag.current) return;
     drag.current = null;
+    holdSettled.current = false;
     setDragging(false);
     onEnd();
+    resync();
   };
 
   return (
@@ -369,6 +404,7 @@ export function WebcamLayer({
             w: slot.width,
             h: slot.height,
           };
+          holdSettled.current = true;
           setDragging(true);
           onBegin();
         }}

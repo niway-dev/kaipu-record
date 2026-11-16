@@ -163,12 +163,17 @@ export async function fillWebcamGap<T>(opts: {
 }): Promise<WebcamFillState<T>> {
   let { from, face } = opts.state;
   const gapEnd = Math.min(opts.nextFrame, opts.segmentEnd);
+  // The previous fill drew the bubble mid-slide: the next one is due even if nothing else
+  // changed, because it draws the place the slide settled on.
+  let settling = false;
   for (const t of webcamFillTimes(from, opts.nextFrame, opts.segmentEnd, opts.fps)) {
     from = t;
     const due = opts.visible(t) ? await opts.frameAt(t) : null;
     // A slide only needs fills where a bubble is drawn: without a webcam frame the screen
     // is the same as the one before.
-    if (due === face && !(due !== null && opts.moving?.(t))) continue;
+    const moving = due !== null && !!opts.moving?.(t);
+    if (due === face && !moving && !settling) continue;
+    settling = moving;
     if (await opts.emit(t, due, gapEnd - t)) face = due;
   }
   return { from, face };

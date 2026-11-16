@@ -521,6 +521,75 @@ describe("WebcamLayer — a camera block's slide", () => {
     expect(center.y).toBeCloseTo((rect.y + rect.height / 2) / FRAME.height, 6);
   });
 
+  it("keeps the bubble under the pointer during a drag mid-slide, not sliding toward the new place", () => {
+    const { ref, el } = mainVideo(1);
+    const base = sliding();
+    const props = {
+      src: "kaipu-media://webcam/rec-1",
+      startOffsetMs: 0,
+      path: flatPath,
+      cameraEnabled: true,
+      frame: FRAME,
+      hidden: false,
+      interactive: true,
+      selected: false,
+      videoRef: ref,
+    };
+    const onMove = vi.fn();
+    const handlers = { onSelect: vi.fn(), onBegin: vi.fn(), onMove, onEnd: vi.fn() };
+    const { container, rerender } = render(<WebcamLayer {...props} webcam={base} {...handlers} />);
+    loadWebcam(30);
+    act(() => setTime(el, 2.25));
+    const slot = container.querySelector('[data-testid="webcam-slot"]') as HTMLElement;
+    slot.getBoundingClientRect = () => ({ width: 1000, height: 1000 }) as DOMRect;
+    fireEvent.pointerDown(bubble(), { clientX: 500, clientY: 500, pointerId: 1 });
+    // The pointer moves 50 px right: the block takes that place as its own.
+    fireEvent.pointerMove(bubble(), { clientX: 550, clientY: 500, pointerId: 1 });
+    const [center] = onMove.mock.calls[0]!;
+    const moved = scene({
+      segments: [{ ...base.segments[0]!, layout: { position: center } }],
+    });
+    rerender(<WebcamLayer {...props} webcam={moved} {...handlers} />);
+    // Drawn where the pointer put it, not partway between the slide's start and that place.
+    const shown = box();
+    expect((shown.left + shown.width / 2) / 100).toBeCloseTo(center.x, 6);
+    expect((shown.top + shown.height / 2) / 100).toBeCloseTo(center.y, 6);
+  });
+
+  it("moves a slide on every display frame while the screen is still, and stops when paused", () => {
+    const queue: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => queue.push(cb));
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    const { ref, el } = mainVideo(2.1);
+    renderLayer({ videoRef: ref, webcam: sliding() });
+    loadWebcam(30);
+    let paused = true;
+    Object.defineProperty(el, "paused", { configurable: true, get: () => paused });
+    paused = false;
+    act(() => void fireEvent(el, new Event("play")));
+    // No presented frame and no `timeupdate`: only the media clock moves.
+    const leftAt = (t: number): number => {
+      el.currentTime = t;
+      const next = queue.splice(0);
+      act(() => next.forEach((cb) => cb(0)));
+      return box().left;
+    };
+    const a = leftAt(2.2);
+    const b = leftAt(2.3);
+    const rect = (t: number) =>
+      webcamStateRect(webcamStateAt({ webcam: sliding() }, t)!, FRAME, 1)!;
+    expect(a).toBeCloseTo((rect(2.2).x / FRAME.width) * 100, 6);
+    expect(b).toBeCloseTo((rect(2.3).x / FRAME.width) * 100, 6);
+    expect(a).not.toBe(b);
+    // Paused: the tick stops asking for frames.
+    paused = true;
+    act(() => void fireEvent(el, new Event("pause")));
+    queue.length = 0;
+    act(() => void fireEvent(el, new Event("pause")));
+    expect(queue).toHaveLength(0);
+    vi.unstubAllGlobals();
+  });
+
   it("caps the last return by the recording's end when it is given", () => {
     const back = (): WebcamScene =>
       scene({
