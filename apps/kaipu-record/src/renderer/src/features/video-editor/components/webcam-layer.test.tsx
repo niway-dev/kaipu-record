@@ -147,15 +147,44 @@ describe("WebcamLayer", () => {
   );
 
   it("holds the webcam paused on its first frame while playing through the lead-in, then plays it", () => {
-    const { ref, el } = mainVideo(0);
+    const { ref, el } = mainVideo(3);
     renderLayer({ videoRef: ref, startOffsetMs: 500 });
     const cam = loadWebcam(30);
+    let camTime = 0;
+    let camPaused = false;
+    let seeking = false;
+    const writes: number[] = [];
+    Object.defineProperty(cam, "currentTime", {
+      configurable: true,
+      get: () => camTime,
+      set: (v: number) => {
+        writes.push(v);
+        camTime = v;
+        seeking = true;
+      },
+    });
+    Object.defineProperty(cam, "seeking", { configurable: true, get: () => seeking });
+    Object.defineProperty(cam, "paused", { configurable: true, get: () => camPaused });
     Object.defineProperty(el, "paused", { configurable: true, get: () => false });
-    Object.defineProperty(cam, "paused", { configurable: true, get: () => true });
-    act(() => void fireEvent(el, new Event("play")));
+    vi.mocked(HTMLMediaElement.prototype.pause).mockImplementation(() => {
+      camPaused = true;
+    });
+    const now = vi.spyOn(performance, "now").mockReturnValue(1_000);
+    act(() => setTime(el, 4));
+    // A 400 ms seek: during playback the next one would lead by 400 ms.
+    now.mockReturnValue(1_400);
+    seeking = false;
+    act(() => void fireEvent(cam, new Event("seeked")));
+    vi.mocked(HTMLMediaElement.prototype.play).mockClear();
+    // Playing, the user scrubs back into the lead-in: the first frame is held, not played,
+    // and the seek to it gets no lead (a lead would land past the frame that is meant to show).
+    writes.length = 0;
     act(() => setTime(el, 0.3));
+    expect(writes).toEqual([0]);
+    expect(camPaused).toBe(true);
+    seeking = false;
+    act(() => void fireEvent(cam, new Event("seeked")));
     expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
-    expect(cam.currentTime).toBe(0);
     expect(bubble().style.display).toBe("");
     act(() => setTime(el, 0.6));
     expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
