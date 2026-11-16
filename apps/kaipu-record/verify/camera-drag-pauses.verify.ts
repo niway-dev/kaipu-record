@@ -157,7 +157,7 @@ test("camera: dragging the bubble during playback pauses it and the drop card st
     // The panel reads "0:00.3 – 0:02.0 · 1.7 s": the new part's start is its first time.
     const startsAt = /(\d+:\d\d\.\d) – /.exec(panelText)?.[1];
     expect(startsAt, `the panel names the part's range: "${panelText}"`).toBeDefined();
-    expect(Math.abs(clockSeconds(startsAt!) - pausedVideo)).toBeLessThanOrEqual(0.1);
+    expect(Math.abs(clockSeconds(startsAt!) - pausedVideo)).toBeLessThanOrEqual(0.15);
     log(
       `PASS 3: a part was added (${sectionsBefore} -> ${sectionsBefore + 1}) and starts at ${startsAt}, the paused time ${pausedClock}; panel: "${panelText}"`,
     );

@@ -1619,7 +1619,7 @@ describe("VideoEditorPage — dropping the camera bubble", () => {
       const { footer } = await playThenDrop(1.03);
       expect(await screen.findByRole("group", { name: "Where to keep the camera" })).toBeVisible();
       expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
-      // The new part starts at the moment the video stopped on, not further on.
+      // Answering the card still makes the part; where it starts is checked by the verify scenario.
       fireEvent.click(screen.getByRole("button", { name: /Only for this part/ }));
       await waitFor(() =>
         expect(footer.querySelector('[data-webcam-id][data-mode="override"]')).not.toBeNull(),

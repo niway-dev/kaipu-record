@@ -31,9 +31,10 @@ type Point = { x: number; y: number };
 /**
  * How far the playhead may sit from the card's moment, in seconds, and still count as being on
  * it. The pause that picking the bubble up causes reports the frame the video stopped on, up
- * to one rendered frame away from the time the drop recorded; a real seek is further than that.
+ * to one rendered frame away from the time the drop recorded (a tenth of a second covers a
+ * source down to 10 fps); a real seek is further than that.
  */
-export const CARD_MOMENT_TOLERANCE_SECONDS = 0.05;
+export const CARD_MOMENT_TOLERANCE_SECONDS = 0.1;
 
 export interface WebcamPendingDrop {
   /** The dropped centre, normalized and clamped inside the frame. */

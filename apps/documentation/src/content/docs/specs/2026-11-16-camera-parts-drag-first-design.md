@@ -116,7 +116,7 @@ None. Answered by the owner on 2026-11-16:
   answer; it never resumes by itself. This holds for a drop inside a part too. The pause lands
   before the drop is recorded, so a last time update that arrives after the pause does not
   move the pending part or close the card: the card closes only when the playhead is more than
-  0.05 s away from the moment it was dropped on. Pressing play, or seeking further than that,
+  0.1 s away from the moment it was dropped on. Pressing play, or seeking further than that,
   with the card open behaves as before: it closes the card.
 
 ### The card
@@ -340,7 +340,7 @@ Header "Camera", tabs "This part" and "Whole video".
     the catalog gain the card and a part narrower than its glyph, selected, with its handles.
 16. Dragging the bubble during playback pauses it. After the drop outside a part, one time
     update later the card is still open and the pending part starts at the paused time.
-17. Double-click zoom, if built: the part's drawn width after the zoom is about 40 % of the
+17. Double-click zoom: the part's drawn width after the zoom is about 40 % of the
     visible lane, or the zoom is at its maximum.
 
 ## What the code has today

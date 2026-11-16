@@ -61,8 +61,9 @@
   outline-offset: 1px;
 }
 
-/* No padding and a 1 px border: nothing here may make the box wider than its time. What does
-   not fit is not rendered (the lane decides); overflow is clipped. */
+/* No padding and a 1 px border: nothing here makes the box wider than its time, except that a
+   box under 2 px is drawn 2 px for its border. What does not fit is not rendered (the lane
+   decides); overflow is clipped. */
 .block {
   position: absolute;
   top: 0;
