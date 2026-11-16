@@ -3,7 +3,7 @@ import type { LibraryVideo } from "@renderer/features/library/types";
 import { initialScene, type VideoScene } from "../scene";
 import { parseSession, serializeSession } from "../session";
 import { encodeFingerprint, normalizeExportPresetId } from "./export-presets";
-import { seedWebcamScene } from "../webcam/webcam-model";
+import { seedWebcamScene, type WebcamTransition } from "../webcam/webcam-model";
 import {
   facelessFingerprint,
   WHOLE_RECORDING_FINGERPRINT,
@@ -74,6 +74,61 @@ describe("editFingerprint — webcam", () => {
     // Before NIW2-575 a webcam scene fingerprinted as `edit:<hash>` and its file had no face.
     expect(editFingerprint(fixed(track))).toMatch(/^edit:wc2:[0-9a-z]+$/);
     expect(editFingerprint(fixed(null))).not.toMatch(/wc2/);
+  });
+});
+
+describe("editFingerprint — camera block transitions (ADR 0039)", () => {
+  const track = {
+    startOffsetMs: 0,
+    offsetQuality: "exact",
+    width: 1280,
+    height: 720,
+    fps: 30,
+  } as const;
+  const withBlock = (transition?: WebcamTransition): VideoScene => {
+    const scene = initialScene(10, track);
+    return {
+      ...scene,
+      items: [{ ...scene.items[0]!, id: "clip" }],
+      webcam: {
+        layout: scene.webcam!.layout,
+        segments: [
+          {
+            id: "o",
+            start: 2,
+            end: 5,
+            mode: "override",
+            layout: { position: { x: 0.8, y: 0.2 } },
+            ...(transition ? { transition } : {}),
+          },
+          { id: "h", start: 6, end: 7, mode: "hidden" },
+        ],
+      },
+    };
+  };
+  const slide: WebcamTransition = { kind: "slide", ms: 700, easing: "back" };
+
+  it("changes with the kind, then the duration, then the easing (the fingerprint covers the field)", () => {
+    const prints = [
+      editFingerprint(withBlock(slide)),
+      editFingerprint(withBlock({ ...slide, kind: "cut" })),
+      editFingerprint(withBlock({ ...slide, ms: 900 })),
+      editFingerprint(withBlock({ ...slide, easing: "linear" })),
+    ];
+    expect(new Set(prints).size).toBe(4);
+  });
+
+  it("is the same after a session save and reload with a transition", () => {
+    const scene = withBlock(slide);
+    const reopened = parseSession(serializeSession(scene))!.scene;
+    expect(editFingerprint(reopened)).toBe(editFingerprint(scene));
+  });
+
+  it("keeps the fingerprint a scene without transitions had before them (pinned)", () => {
+    // Pinned: computed on the commit before transitions existed, for this very scene, so the
+    // export of every older edit with a camera block stays reusable. No revision bump.
+    expect(editFingerprint(withBlock())).toBe("edit:wc2:7c4qtu5ih5");
+    expect(serializeSession(withBlock())).not.toContain("transition");
   });
 });
 
