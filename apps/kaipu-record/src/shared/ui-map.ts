@@ -152,7 +152,9 @@ export const UI_MAP = {
       list: { states: ["items"] },
       emptyState: { states: ["empty", "noMatch", "error", "loading"] },
       readyCopyCard: { states: ["ready"] },
-      videoCard: { states: ["recording", "screenshot", "gif", "selected", "cloudOnly"] },
+      videoCard: {
+        states: ["recording", "webcam", "screenshot", "gif", "selected", "cloudOnly"],
+      },
       videoRow: { states: ["recording", "screenshot", "selected"] },
       selectionBar: { states: ["selecting", "moving"] },
       tagPanel: { states: ["item", "all"] },

@@ -42,6 +42,28 @@ describe("VideoCard", () => {
     expect(screen.queryByText(/FRAME|SCREEN|WINDOW/)).toBeNull();
   });
 
+  it("marks a webcam recording's thumbnail pending until the bubble is composited (NIW2-845)", () => {
+    const cam = { ...video, webcam: { startOffsetMs: 0 } } as LibraryVideo;
+    const { container, rerender } = render(
+      <VideoCard
+        video={{ ...cam, thumbnailNeedsWebcam: true }}
+        onNavigate={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(container.querySelector("[data-webcam-thumbnail=pending]")).not.toBeNull();
+    rerender(
+      <VideoCard
+        video={{ ...cam, thumbnailNeedsWebcam: false }}
+        onNavigate={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(container.querySelector("[data-webcam-thumbnail=done]")).not.toBeNull();
+    rerender(<VideoCard video={video} onNavigate={vi.fn()} onDelete={vi.fn()} />);
+    expect(container.querySelector("[data-webcam-thumbnail]")).toBeNull();
+  });
+
   it("Export a copy opens Export without opening the card (NIW2-578, NIW2-585)", async () => {
     const onNavigate = vi.fn();
     const onPrepare = vi.fn();
