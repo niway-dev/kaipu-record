@@ -297,20 +297,6 @@ export const editorVideo = catalog(
       // The edit saved into the vault: without this the second shot finds the section hidden.
       after: [{ action: "restoreVault" }],
     },
-    "webcam-block": {
-      profile: "default",
-      how: "Open “Release demo” and press Change camera from here: a camera block with the striped band of its slide appears on the webcam lane, selected, and the inspector shows its time range with Slide or Cut, duration and motion.",
-      steps: [
-        open(ASSETS.releaseDemo),
-        audioWaveformDrawn,
-        loaded,
-        rail("Change camera from here"),
-        saved,
-      ],
-      demonstrates: ["editorVideo.webcamLane:cameraBlock", "editorVideo.inspector:webcamBlock"],
-      // The edit saved into the vault: without this the second shot finds the block there.
-      after: [{ action: "restoreVault" }],
-    },
     "audio-menu": {
       profile: "default",
       how: "Open “Bug report” and press Audio in the tool rail: a menu offers Mute a section and Mute the whole recording.",
@@ -569,6 +555,14 @@ export const editorVideo = catalog(
       "editorVideo.audioLane:empty": nc(
         "needsSetup",
         "the empty-state text shows only for a recording without an audio track, and every seeded recording has one; audio-lane.test.tsx covers it",
+      ),
+      "editorVideo.webcamLane:cameraBlock": nc(
+        "needsSetup",
+        "no control creates a camera block any more (the rail button was removed) and no seeded recording has one; the drag-first layers bring a way to make one and a catalog state with it",
+      ),
+      "editorVideo.inspector:webcamBlock": nc(
+        "needsSetup",
+        "a camera block is selected from the webcam lane, and no seeded recording has one now that no control creates it; the drag-first layers bring a catalog state with it",
       ),
       "editorVideo.toolbar:saving": nc(
         "transient",

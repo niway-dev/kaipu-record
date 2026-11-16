@@ -227,8 +227,8 @@ describe("webcamAt", () => {
 });
 
 describe("clampWebcamTransition", () => {
-  it("defaults to a 700 ms slide with the back preset", () => {
-    expect(WEBCAM_TRANSITION_DEFAULTS).toEqual({ kind: "slide", ms: 700, easing: "back" });
+  it("defaults to a 700 ms slide with the Smooth preset", () => {
+    expect(WEBCAM_TRANSITION_DEFAULTS).toEqual({ kind: "slide", ms: 700, easing: "ease-in-out" });
     expect(clampWebcamTransition({})).toEqual(WEBCAM_TRANSITION_DEFAULTS);
   });
 

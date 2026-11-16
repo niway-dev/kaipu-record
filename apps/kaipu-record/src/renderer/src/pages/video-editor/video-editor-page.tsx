@@ -1408,25 +1408,6 @@ function VideoEditor({
     else if (result.reason === "no-room") showToast({ message: t("webcamHideNoRoom") });
   }, [webcamEdits, playback.timelineTime, selectKind, t]);
 
-  // "Change camera from here": a block from the playhead on, or a split of the block under it;
-  // the new block is selected so the inspector shows its scope and transition at once. When it
-  // cannot apply the control is disabled and `changeCameraBlocked` says why.
-  const handleChangeCamera = useCallback(() => {
-    const result = webcamEdits.changeAtPlayhead(playback.timelineTime);
-    if (result.ok) selectKind("webcam", result.id);
-  }, [webcamEdits, playback.timelineTime, selectKind]);
-  const changeCameraReason = hasWebcam
-    ? webcamEdits.changeBlockedReason(playback.timelineTime)
-    : null;
-  const changeCameraBlocked =
-    changeCameraReason === "hidden"
-      ? t("webcamChangeHidden")
-      : changeCameraReason === "on-slide"
-        ? t("webcamChangeOnSlide")
-        : changeCameraReason === "no-room"
-          ? t("webcamChangeNoRoom")
-          : null;
-
   const handleRemoveWebcamSegment = useCallback(
     (id: string) => {
       webcamEdits.remove(id);
@@ -2006,8 +1987,6 @@ function VideoEditor({
           onAddZoom={handleAddZoom}
           privacyDisabled={onSlide}
           onHideWebcam={hasWebcam ? handleHideWebcam : undefined}
-          onChangeCamera={hasWebcam ? handleChangeCamera : undefined}
-          changeCameraBlocked={changeCameraBlocked}
           onOpenCursor={
             cursorData
               ? () => (cursorInspectorOpen ? setCursorInspectorOpen(false) : openCursorInspector())
@@ -2120,8 +2099,6 @@ function VideoEditor({
                   edits={webcamEdits}
                   frame={frameSize}
                   onHideHere={handleHideWebcam}
-                  onChangeHere={handleChangeCamera}
-                  changeBlocked={changeCameraBlocked}
                 />
               ) : selectedWebcamSegment ? (
                 <WebcamSegmentInspector

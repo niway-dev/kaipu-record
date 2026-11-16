@@ -82,11 +82,21 @@ export const WEBCAM_LIMITS = {
   maxScaleDuringZoom: 1,
 } as const;
 
+/**
+ * What a new camera part starts with, and what a saved transition with a missing field falls
+ * back to. The owner's mock defaults to Smooth (`ease-in-out`), so a part glides without
+ * overshooting; it is ONE constant, so flipping the default back to `back` (Bounce) is a
+ * one-word change. A block SAVED with another easing or duration keeps it: this only fills
+ * what is absent.
+ */
 export const WEBCAM_TRANSITION_DEFAULTS: WebcamTransition = {
   kind: "slide",
   ms: 700,
-  easing: "back",
+  easing: "ease-in-out",
 };
+
+/** How long a new camera part (or a "hide the camera here" range) lasts, at most. */
+export const WEBCAM_PART_SECONDS = 10;
 
 export const WEBCAM_TRANSITION_LIMITS = { minMs: 100, maxMs: 2000 } as const;
 

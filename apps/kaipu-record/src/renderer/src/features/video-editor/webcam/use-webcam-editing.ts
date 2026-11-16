@@ -16,7 +16,6 @@ import type { VideoScene } from "../scene";
 import type { VideoSceneController } from "../use-video-scene";
 import {
   addWebcamSegment,
-  changeWebcamFrom,
   dragWebcamSegmentEdge,
   removeWebcamSegment,
   setWebcamLayout,
@@ -25,6 +24,7 @@ import {
 } from "./webcam-edits";
 import {
   WEBCAM_MIN_SEGMENT_SECONDS,
+  WEBCAM_PART_SECONDS,
   webcamOverrideAt,
   type WebcamLayout,
   type WebcamScene,
@@ -36,29 +36,17 @@ export type HideWebcamResult =
   | { ok: true; id: string }
   | { ok: false; reason: "on-slide" | "no-room" | "busy" };
 
-export type ChangeCameraBlockedReason = "on-slide" | "hidden" | "no-room";
-
-export type ChangeCameraResult =
-  | { ok: true; id: string; kind: "create" | "split" }
-  | { ok: false; reason: ChangeCameraBlockedReason | "busy" };
-
 export interface WebcamEditing {
   /** The scene's webcam, or null when the recording has none (nothing below applies then). */
   webcam: WebcamScene | null;
   /** Segments with at least one visible piece — what the lane and inspector use. */
   visibleSegments: WebcamSegment[];
   /**
-   * "Hide webcam here": a hidden segment from the playhead to the next segment (or the end of
-   * the recording). Inside an existing segment it returns that one instead of adding another.
+   * "Hide webcam here": a hidden segment from the playhead for {@link WEBCAM_PART_SECONDS}, or
+   * up to the next segment or the end of the recording, whichever comes first. Inside an
+   * existing segment it returns that one instead of adding another.
    */
   hideAtPlayhead(timelineTime: number): HideWebcamResult;
-  /**
-   * "Change camera from here": a block from the playhead to the next block or the end of the
-   * recording, or, inside a block, a split of that block at the playhead. One undo step.
-   */
-  changeAtPlayhead(timelineTime: number): ChangeCameraResult;
-  /** Why "Change camera from here" would do nothing at the playhead; null when it can. */
-  changeBlockedReason(timelineTime: number): ChangeCameraBlockedReason | null;
   /** A discrete change of a block's Slide or Cut, duration or easing. */
   commitTransition(id: string, patch: Partial<WebcamTransition>): void;
   /** A live transition change during a gesture; `end()` makes it one undo step. */
@@ -121,7 +109,7 @@ export function useWebcamEditing({
       const window = freeWindowAt(
         current.segments,
         at,
-        Number.POSITIVE_INFINITY,
+        WEBCAM_PART_SECONDS,
         sourceDuration,
         WEBCAM_MIN_SEGMENT_SECONDS,
       );
@@ -134,29 +122,6 @@ export function useWebcamEditing({
       if (!id) return { ok: false, reason: "no-room" };
       controller.commit(next);
       return { ok: true, id };
-    },
-    [controller, layout, sourceDuration],
-  );
-
-  const changeAtPlayhead = useCallback(
-    (timelineTime: number): ChangeCameraResult => {
-      if (controller.interacting) return { ok: false, reason: "busy" };
-      const at = sourceTimeAtTimeline(layout, timelineTime);
-      if (at === null) return { ok: false, reason: "on-slide" };
-      const result = changeWebcamFrom(controller.scene, at, sourceDuration);
-      if (!result.ok) return { ok: false, reason: result.reason };
-      controller.commit(result.scene);
-      return { ok: true, id: result.id, kind: result.kind };
-    },
-    [controller, layout, sourceDuration],
-  );
-
-  const changeBlockedReason = useCallback(
-    (timelineTime: number): ChangeCameraBlockedReason | null => {
-      const at = sourceTimeAtTimeline(layout, timelineTime);
-      if (at === null) return "on-slide";
-      const result = changeWebcamFrom(controller.scene, at, sourceDuration);
-      return result.ok ? null : result.reason;
     },
     [controller, layout, sourceDuration],
   );
@@ -220,8 +185,6 @@ export function useWebcamEditing({
     webcam,
     visibleSegments,
     hideAtPlayhead,
-    changeAtPlayhead,
-    changeBlockedReason,
     commitTransition,
     liveTransition,
     remove,

@@ -9,7 +9,7 @@
  * sliders run begin → live… → end. `target` is the source time the edit applies at: null
  * for the global layout, a time inside the segment for an override.
  */
-import { EyeOff, Move, Trash2 } from "lucide-react";
+import { EyeOff, Trash2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import {
   CAMERA_BUBBLE_SHAPES,
@@ -280,25 +280,17 @@ function WebcamTransitionControls({
   );
 }
 
-/**
- * The global layout: what the webcam looks like everywhere no segment says otherwise.
- * `changeBlocked` is the reason, already translated, that "Change camera from here" does
- * nothing at the playhead; null when it can.
- */
+/** The global layout: what the webcam looks like everywhere no segment says otherwise. */
 export function WebcamInspector({
   layout,
   edits,
   frame,
   onHideHere,
-  onChangeHere,
-  changeBlocked,
 }: {
   layout: WebcamLayout;
   edits: WebcamEditing;
   frame: FrameSize;
   onHideHere(): void;
-  onChangeHere(): void;
-  changeBlocked: string | null;
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
   return (
@@ -310,16 +302,6 @@ export function WebcamInspector({
         {t("webcamScopeDefault")}
       </p>
       <WebcamControls layout={layout} target={null} edits={edits} frame={frame} />
-      <button
-        type="button"
-        className={styles.secondaryButton}
-        disabled={changeBlocked !== null}
-        title={changeBlocked ?? t("hintChangeCamera")}
-        onClick={onChangeHere}
-      >
-        <Move size={14} />
-        {t("webcamChangeHere")}
-      </button>
       <button type="button" className={styles.secondaryButton} onClick={onHideHere}>
         <EyeOff size={14} />
         {t("webcamHideHere")}

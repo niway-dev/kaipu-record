@@ -8,10 +8,10 @@ import { newId, type VideoScene } from "../scene";
 import { dragRangeEdge, freeWindowAt } from "../source-time";
 import {
   WEBCAM_MIN_SEGMENT_SECONDS,
+  WEBCAM_PART_SECONDS,
   WEBCAM_TRANSITION_DEFAULTS,
   clampWebcamPatch,
   clampWebcamTransition,
-  webcamAt,
   type WebcamLayout,
   type WebcamScene,
   type WebcamSegment,
@@ -150,108 +150,51 @@ export function removeWebcamSegment(scene: VideoScene, id: string): VideoScene {
 }
 
 /**
- * "Change camera from here" outside every block: a block from the playhead to the next block
- * or the end of the recording, holding the position the bubble has there. The position is
- * stored explicitly, so a later change of the default position does not move the block, and
- * the transition starts as the default slide. Refused (the scene back, `id: null`) inside a
- * block or with less than the minimum length before the next block or the end.
+ * The free window a camera part (or a hidden range) can take at source time `at`:
+ * {@link WEBCAM_PART_SECONDS}, or less when another block or the end of the recording comes
+ * first. Null inside any block, or when under the minimum length is left, so the UI can say
+ * "10 s from 0:24" and disable the choice with the same rule the edit uses.
  */
-export function createWebcamBlock(
+export function webcamPartRoom(
   scene: VideoScene,
   at: number,
   sourceDurationSeconds: number,
-): { scene: VideoScene; id: string | null } {
+): { start: number; end: number } | null {
   const webcam = scene.webcam;
-  if (!webcam) return { scene, id: null };
-  const window = freeWindowAt(
+  if (!webcam) return null;
+  return freeWindowAt(
     webcam.segments,
     at,
-    Number.POSITIVE_INFINITY,
+    WEBCAM_PART_SECONDS,
     sourceDurationSeconds,
     WEBCAM_MIN_SEGMENT_SECONDS,
   );
+}
+
+/**
+ * Create a camera part at `at`: an override block of {@link WEBCAM_PART_SECONDS} (or up to
+ * the next block or the end of the recording) holding `position`, with the default slide.
+ * The position is stored explicitly, so a later change of the default position does not move
+ * the part. Refused (the SAME scene back, `id: null`) with no webcam, inside any block, or
+ * with less than the minimum length of room.
+ */
+export function createWebcamPart(
+  scene: VideoScene,
+  input: { at: number; position: { x: number; y: number } },
+  sourceDurationSeconds: number,
+): { scene: VideoScene; id: string | null } {
+  const window = webcamPartRoom(scene, input.at, sourceDurationSeconds);
   if (!window) return { scene, id: null };
-  const { position } = webcamAt(scene, at) ?? webcam.layout;
   return addWebcamSegment(
     scene,
     {
       ...window,
       mode: "override",
-      layout: { position: { ...position } },
-      transition: WEBCAM_TRANSITION_DEFAULTS,
+      layout: { position: { ...input.position } },
+      transition: { ...WEBCAM_TRANSITION_DEFAULTS },
     },
     sourceDurationSeconds,
   );
-}
-
-/**
- * "Change camera from here" inside a block: the block ends at the playhead and a new block
- * runs from there to the old end. The new block starts with the same position and fields
- * (its own copy, so editing one never edits the other) and the default transition; the
- * left part keeps the id and the transition. Refused when either part would be shorter than
- * the minimum, so blocks keep never overlapping and never vanish on reload.
- */
-export function splitWebcamBlock(
-  scene: VideoScene,
-  at: number,
-): { scene: VideoScene; id: string | null } {
-  const webcam = scene.webcam;
-  const block = webcam?.segments.find((s) => s.mode === "override" && at > s.start && at < s.end);
-  if (
-    !webcam ||
-    !block ||
-    at - block.start < WEBCAM_MIN_SEGMENT_SECONDS ||
-    block.end - at < WEBCAM_MIN_SEGMENT_SECONDS
-  ) {
-    return { scene, id: null };
-  }
-  const copy = block.layout
-    ? (JSON.parse(JSON.stringify(block.layout)) as typeof block.layout)
-    : {};
-  const position = block.layout?.position ?? webcam.layout.position;
-  const right: WebcamSegment = {
-    id: newId(),
-    start: at,
-    end: block.end,
-    mode: "override",
-    layout: { ...copy, position: { ...position } },
-    transition: { ...WEBCAM_TRANSITION_DEFAULTS },
-  };
-  return {
-    scene: withWebcam(scene, {
-      ...webcam,
-      segments: webcam.segments.flatMap((s) =>
-        s.id === block.id ? [{ ...s, end: at }, right] : [s],
-      ),
-    }),
-    id: right.id,
-  };
-}
-
-export type ChangeWebcamResult =
-  | { ok: true; kind: "create" | "split"; id: string; scene: VideoScene }
-  | { ok: false; reason: "hidden" | "no-room"; id: null; scene: VideoScene };
-
-/**
- * What "Change camera from here" does at source time `at`: split the block under the
- * playhead, or create one outside every block. A hidden range has no camera to move, so it is
- * refused with its own reason; every other refusal is "no-room".
- */
-export function changeWebcamFrom(
-  scene: VideoScene,
-  at: number,
-  sourceDurationSeconds: number,
-): ChangeWebcamResult {
-  const webcam = scene.webcam;
-  if (!webcam) return { ok: false, reason: "no-room", id: null, scene };
-  const inside = webcam.segments.find((s) => at >= s.start && at < s.end);
-  if (inside?.mode === "hidden") return { ok: false, reason: "hidden", id: null, scene };
-  const result = inside
-    ? splitWebcamBlock(scene, at)
-    : createWebcamBlock(scene, at, sourceDurationSeconds);
-  return result.id
-    ? { ok: true, kind: inside ? "split" : "create", id: result.id, scene: result.scene }
-    : { ok: false, reason: "no-room", id: null, scene };
 }
 
 /**

@@ -16,8 +16,6 @@ function makeEdits(): WebcamEditing {
     webcam: null,
     visibleSegments: [],
     hideAtPlayhead: vi.fn(),
-    changeAtPlayhead: vi.fn(),
-    changeBlockedReason: vi.fn(() => null),
     commitTransition: vi.fn(),
     liveTransition: vi.fn(),
     remove: vi.fn(),
@@ -29,24 +27,9 @@ function makeEdits(): WebcamEditing {
   };
 }
 
-function renderGlobal(
-  l = layout(),
-  edits = makeEdits(),
-  onHideHere = vi.fn(),
-  changeBlocked: string | null = null,
-) {
-  const onChangeHere = vi.fn();
-  render(
-    <WebcamInspector
-      layout={l}
-      edits={edits}
-      frame={FRAME}
-      onHideHere={onHideHere}
-      onChangeHere={onChangeHere}
-      changeBlocked={changeBlocked}
-    />,
-  );
-  return { edits, onHideHere, onChangeHere };
+function renderGlobal(l = layout(), edits = makeEdits(), onHideHere = vi.fn()) {
+  render(<WebcamInspector layout={l} edits={edits} frame={FRAME} onHideHere={onHideHere} />);
+  return { edits, onHideHere };
 }
 
 describe("WebcamInspector", () => {
@@ -121,14 +104,7 @@ describe("WebcamInspector", () => {
   it("shrink during zoom: off is 1, on restores 0.7 and shows its slider", () => {
     const edits = makeEdits();
     const { unmount } = render(
-      <WebcamInspector
-        layout={layout()}
-        edits={edits}
-        frame={FRAME}
-        onHideHere={vi.fn()}
-        onChangeHere={vi.fn()}
-        changeBlocked={null}
-      />,
+      <WebcamInspector layout={layout()} edits={edits} frame={FRAME} onHideHere={vi.fn()} />,
     );
     expect(screen.getByRole("slider", { name: "Size during zoom" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox", { name: "Shrink during zoom" }));
@@ -153,19 +129,9 @@ describe("WebcamInspector", () => {
     expect(screen.queryByRole("slider", { name: "Duration" })).toBeNull();
   });
 
-  it("changes the camera from the playhead", () => {
-    const { onChangeHere } = renderGlobal();
-    fireEvent.click(screen.getByRole("button", { name: "Change camera from here" }));
-    expect(onChangeHere).toHaveBeenCalledOnce();
-  });
-
-  it("disables Change camera from here and says why when it cannot apply", () => {
-    const { onChangeHere } = renderGlobal(layout(), makeEdits(), vi.fn(), "No room left.");
-    const button = screen.getByRole("button", { name: "Change camera from here" });
-    expect(button).toBeDisabled();
-    expect(button).toHaveAttribute("title", "No room left.");
-    fireEvent.click(button);
-    expect(onChangeHere).not.toHaveBeenCalled();
+  it("has no button that changes the camera from the playhead", () => {
+    renderGlobal();
+    expect(screen.queryByRole("button", { name: "Change camera from here" })).toBeNull();
   });
 });
 

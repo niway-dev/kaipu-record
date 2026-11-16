@@ -24,7 +24,7 @@ function setup(initial: VideoScene = initialScene(20, TRACK)) {
 }
 
 describe("useWebcamEditing", () => {
-  it("hides the webcam from the playhead to the end as one undo step", () => {
+  it("hides the webcam for 10 seconds from the playhead as one undo step", () => {
     const { result } = setup();
     let added: ReturnType<typeof result.current.webcam.hideAtPlayhead> | undefined;
     act(() => {
@@ -32,10 +32,18 @@ describe("useWebcamEditing", () => {
     });
     expect(added).toMatchObject({ ok: true });
     expect(result.current.controller.scene.webcam!.segments).toEqual([
-      expect.objectContaining({ start: 4, end: 20, mode: "hidden" }),
+      expect.objectContaining({ start: 4, end: 14, mode: "hidden" }),
     ]);
     act(() => result.current.controller.undo());
     expect(result.current.controller.scene.webcam!.segments).toEqual([]);
+  });
+
+  it("hides up to the end of the recording when that comes within 10 seconds", () => {
+    const { result } = setup();
+    act(() => void result.current.webcam.hideAtPlayhead(15));
+    expect(result.current.controller.scene.webcam!.segments.map((s) => [s.start, s.end])).toEqual([
+      [15, 20],
+    ]);
   });
 
   it("stops the hidden segment at the next one", () => {
@@ -131,7 +139,7 @@ describe("useWebcamEditing", () => {
     expect(result.current.webcam.visibleSegments).toEqual([]);
   });
 
-  describe("change camera from here", () => {
+  describe("dragging inside a block", () => {
     const withBlock = (): VideoScene => {
       const base = initialScene(20, TRACK);
       return {
@@ -150,78 +158,6 @@ describe("useWebcamEditing", () => {
         },
       };
     };
-
-    it("creates a block from the playhead as one undo step, and undo removes it", () => {
-      const { result } = setup();
-      let added: ReturnType<typeof result.current.webcam.changeAtPlayhead> | undefined;
-      act(() => {
-        added = result.current.webcam.changeAtPlayhead(4);
-      });
-      expect(added).toMatchObject({ ok: true, kind: "create" });
-      expect(result.current.controller.scene.webcam!.segments).toEqual([
-        expect.objectContaining({ start: 4, end: 20, mode: "override" }),
-      ]);
-      act(() => result.current.controller.undo());
-      expect(result.current.controller.scene.webcam!.segments).toEqual([]);
-      expect(result.current.controller.canUndo).toBe(false);
-    });
-
-    it("splits the block under the playhead as one undo step", () => {
-      const { result } = setup(withBlock());
-      let added: ReturnType<typeof result.current.webcam.changeAtPlayhead> | undefined;
-      act(() => {
-        added = result.current.webcam.changeAtPlayhead(9);
-      });
-      expect(added).toMatchObject({ ok: true, kind: "split" });
-      expect(result.current.controller.scene.webcam!.segments.map((s) => [s.start, s.end])).toEqual(
-        [
-          [5, 9],
-          [9, 15],
-        ],
-      );
-      act(() => result.current.controller.undo());
-      expect(result.current.controller.scene.webcam!.segments.map((s) => [s.start, s.end])).toEqual(
-        [[5, 15]],
-      );
-    });
-
-    it("is unavailable inside a hidden range and with no room, and adds nothing", () => {
-      const base = initialScene(20, TRACK);
-      const hiddenScene: VideoScene = {
-        ...base,
-        webcam: {
-          ...base.webcam!,
-          segments: [{ id: "h", start: 5, end: 10, mode: "hidden" }],
-        },
-      };
-      const { result } = setup(hiddenScene);
-      expect(result.current.webcam.changeBlockedReason(7)).toBe("hidden");
-      expect(result.current.webcam.changeBlockedReason(4.5)).toBe("no-room");
-      expect(result.current.webcam.changeBlockedReason(19.5)).toBe("no-room");
-      expect(result.current.webcam.changeBlockedReason(2)).toBeNull();
-      let refused: ReturnType<typeof result.current.webcam.changeAtPlayhead> | undefined;
-      act(() => {
-        refused = result.current.webcam.changeAtPlayhead(7);
-      });
-      expect(refused).toEqual({ ok: false, reason: "hidden" });
-      expect(result.current.controller.canUndo).toBe(false);
-    });
-
-    it("is unavailable over a slide", () => {
-      const base = initialScene(20, TRACK);
-      const slide = {
-        id: "s",
-        kind: "slide" as const,
-        assetId: "a",
-        duration: 3,
-        naturalWidth: 10,
-        naturalHeight: 10,
-      };
-      const { result } = setup({ ...base, items: [slide, ...base.items] });
-      expect(result.current.webcam.changeBlockedReason(1)).toBe("on-slide");
-      // The recording starts at timeline 3.
-      expect(result.current.webcam.changeBlockedReason(4)).toBeNull();
-    });
 
     it("a drag inside a block moves that block only, and undo restores its position in one step", () => {
       const { result } = setup(withBlock());

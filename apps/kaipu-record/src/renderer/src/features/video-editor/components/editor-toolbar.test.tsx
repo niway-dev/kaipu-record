@@ -664,29 +664,9 @@ describe("EditorToolRail — Captures (NIW2-764)", () => {
     expect(screen.queryByRole("button", { name: "Hide webcam here" })).toBeNull();
   });
 
-  it("changes the camera from the playhead, beside Hide webcam here", () => {
-    const props = renderRail({ onHideWebcam: vi.fn(), onChangeCamera: vi.fn() });
-    const change = screen.getByRole("button", { name: "Change camera from here" });
-    const hide = screen.getByRole("button", { name: "Hide webcam here" });
-    expect(change.nextElementSibling ?? change.previousElementSibling).toBe(hide);
-    expect(change).toBeEnabled();
-    fireEvent.click(change);
-    expect(props.onChangeCamera).toHaveBeenCalledOnce();
-  });
-
-  it("disables Change camera from here and says why when it cannot apply", () => {
-    const props = renderRail({
-      onHideWebcam: vi.fn(),
-      onChangeCamera: vi.fn(),
-      changeCameraBlocked: "The camera is hidden here, so there is nothing to move.",
-    });
-    const change = screen.getByRole("button", { name: "Change camera from here" });
-    expect(change).toBeDisabled();
-    expect(change).toHaveAttribute(
-      "title",
-      "The camera is hidden here, so there is nothing to move.",
-    );
-    fireEvent.click(change);
-    expect(props.onChangeCamera).not.toHaveBeenCalled();
+  it("offers Hide webcam here but no button that changes the camera", () => {
+    renderRail({ onHideWebcam: vi.fn() });
+    expect(screen.getByRole("button", { name: "Hide webcam here" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Change camera from here" })).toBeNull();
   });
 });
