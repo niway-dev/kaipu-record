@@ -213,6 +213,22 @@ describe("webcamLaneBlockWidths (the 56 px rule)", () => {
     expect(mine).toEqual({ left: 580, width: 20 });
   });
 
+  it("does not widen a part past the end of its clip, where a slide or another clip follows", () => {
+    // 20 px at 480-500; the clip ends at 500 and nothing in the lane limits the part.
+    const [mine] = webcamLaneBlockWidths([{ ...piece("part", 480, 500), clipRight: 500 }], 1800);
+    expect(mine).toEqual({ left: 480, width: 20 });
+    // With room left inside the clip the 56 px minimum still applies, up to the clip's end.
+    const [roomy, tight] = webcamLaneBlockWidths(
+      [
+        { ...piece("part", 100, 110), clipRight: 500 },
+        { ...piece("part", 460, 470), clipRight: 500 },
+      ],
+      1800,
+    );
+    expect(roomy).toEqual({ left: 100, width: 56 });
+    expect(tight).toEqual({ left: 460, width: 40 });
+  });
+
   it("draws no original stretch a wider part covers entirely", () => {
     const result = webcamLaneBlockWidths(
       [piece("part", 0, 10), piece("original", 10, 30), piece("hidden", 60, 90)],

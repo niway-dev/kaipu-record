@@ -157,6 +157,11 @@ export interface LanePiece {
   kind: WebcamStretch["kind"];
   left: number;
   right: number;
+  /**
+   * Where the clip holding this piece ends, in the same pixels. A slide or the next clip
+   * follows it, and there is no webcam there, so a part is never widened past it.
+   */
+  clipRight?: number;
 }
 
 /** Where a piece is really drawn. A `width` of 0 is not drawn at all. */
@@ -171,7 +176,9 @@ export interface LanePlacement {
  * starts (or at the lane's end). With less room than that it is as wide as the room, and it
  * is still the same part. Original stretches are only fill, so a wider part covers the start
  * of the original after it: that stretch is drawn from where the part now ends (and not at all
- * when the part covers it). `pieces` are in order, left to right; the result is index by index.
+ * when the part covers it). A part is not widened past the end of its own clip either: a
+ * slide or another clip follows there, and no webcam exists on it. A part flush against that
+ * end stays as wide as it really is. `pieces` are in order, left to right; the result is index by index.
  */
 export function webcamLaneBlockWidths(
   pieces: LanePiece[],
@@ -187,7 +194,7 @@ export function webcamLaneBlockWidths(
     const natural = Math.max(0, piece.right - piece.left);
     if (piece.kind === "part") {
       const next = pieces.slice(i + 1).find((p) => p.kind !== "original");
-      const limit = next ? next.left : laneWidth;
+      const limit = Math.min(next ? next.left : laneWidth, piece.clipRight ?? Infinity);
       const room = Math.max(0, limit - piece.left);
       placements[i] = { left: piece.left, width: Math.max(natural, Math.min(minPartWidth, room)) };
     } else if (piece.kind === "original") {
