@@ -409,3 +409,48 @@ describe("WebcamLane: selecting", () => {
 function handleCentre(el: HTMLElement): number {
   return (parseFloat(el.style.left) / 100) * LANE_PX + parseFloat(el.style.marginLeft) + 3;
 }
+
+describe("WebcamLane: a short part at the end of its clip", () => {
+  // Clip a (source 0-5, timeline 0-5), a 3 s slide (timeline 5-8), clip b (source 10-20,
+  // timeline 8-18). A 1500 px lane over 18 s: a second is 83.33 px.
+  const slideLayout = toLayout([
+    { id: "a", kind: "clip", sourceStart: 0, sourceEnd: 5 },
+    {
+      id: "s",
+      kind: "slide",
+      assetId: "asset",
+      duration: 3,
+      naturalWidth: 100,
+      naturalHeight: 100,
+    },
+    { id: "b", kind: "clip", sourceStart: 10, sourceEnd: 20 },
+  ] satisfies TrackItem[]);
+  const PX_PER_SECOND = LANE_PX / 18;
+
+  function renderOverSlide(segments: WebcamSegment[]) {
+    return render(
+      <TimelineViewContext.Provider value={fitView(LANE_PX, 18)}>
+        <WebcamLane
+          layout={slideLayout}
+          segments={segments}
+          selectedId={null}
+          onSelect={vi.fn()}
+          onEdgeDrag={vi.fn()}
+        />
+      </TimelineViewContext.Provider>,
+    );
+  }
+
+  it("never draws the box over the slide that follows its clip", () => {
+    // Source 4.99-5.0 is under a pixel at the end of clip a; the 3 px floor would reach the slide.
+    const { container } = renderOverSlide([part("p", 4.99, 5)]);
+    const box = drawn(block(container, "p"));
+    expect(box.left).toBeCloseTo(4.99 * PX_PER_SECOND, 3);
+    expect(box.left + box.width).toBeLessThanOrEqual(5 * PX_PER_SECOND + 1e-6);
+  });
+
+  it("still widens a short part to the 3 px floor when there is room inside its clip", () => {
+    const { container } = renderOverSlide([part("p", 2, 2.01)]);
+    expect(drawn(block(container, "p")).width).toBeCloseTo(3, 3);
+  });
+});

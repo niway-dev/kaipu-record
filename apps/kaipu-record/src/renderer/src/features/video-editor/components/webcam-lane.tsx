@@ -302,10 +302,16 @@ export const WebcamLane = memo(function WebcamLane({
       })),
     )
     .sort((a, b) => a.block.timelineStart - b.block.timelineStart);
+  // Where each clip ends on the timeline: a part's floor width is never drawn past it.
+  const clipEnds = new Map<string, number>();
+  for (const entry of layout) {
+    if (entry.kind === "clip") clipEnds.set(entry.itemId, entry.timelineEnd * pxPerSecond);
+  }
   const lanePieces = pieces.map((piece) => ({
     kind: piece.stretch.kind,
     left: piece.block.timelineStart * pxPerSecond,
     right: piece.block.timelineEnd * pxPerSecond,
+    clipRight: clipEnds.get(piece.block.itemId),
   }));
   const placements = webcamLanePlacements(lanePieces, totalPx);
   const targets = webcamLaneTargets(lanePieces, placements, totalPx);

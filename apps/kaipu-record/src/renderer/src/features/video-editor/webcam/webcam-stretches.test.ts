@@ -14,7 +14,14 @@ import {
   webcamStretchName,
   type LanePiece,
 } from "./webcam-stretches";
-import { WEBCAM_DEFAULTS, type WebcamScene, type WebcamSegment } from "./webcam-model";
+import {
+  WEBCAM_DEFAULTS,
+  webcamStateAt,
+  type WebcamScene,
+  type WebcamSegment,
+} from "./webcam-model";
+import { webcamMarks } from "./webcam-marks";
+import { webcamRect } from "./webcam-layout";
 
 const part = (id: string, start: number, end: number, extra: Partial<WebcamSegment> = {}) =>
   ({
@@ -314,6 +321,15 @@ describe("the Camera lane's true widths (spec decision 12)", () => {
       }
     });
   });
+
+  it("does not widen a part past the end of its clip, where a slide or another clip follows", () => {
+    // Half a pixel at 499.5-500; the clip ends at 500, so the 3 px floor stops there.
+    const [mine] = webcamLanePlacements([{ ...piece("part", 499.5, 500), clipRight: 500 }], 1800);
+    expect(mine).toEqual({ left: 499.5, width: 0.5 });
+    // With room left inside the clip the floor still applies.
+    const [roomy] = webcamLanePlacements([{ ...piece("part", 100, 101), clipRight: 500 }], 1800);
+    expect(roomy).toEqual({ left: 100, width: 3 });
+  });
 });
 
 describe("the panel's frame helpers", () => {
@@ -416,4 +432,79 @@ describe("webcamStretchCard (the hover card's facts)", () => {
       arrives: null,
     });
   });
+});
+
+describe("where a part's slide starts: the three rules agree", () => {
+  // The slide's origin is decided in three places: `webcamStateAt` (the slide that plays),
+  // `webcamMarks` (the route and ghost in the preview) and `webcamPartOrigin` (the panel's
+  // "before" dot). There is no shared helper, so this pins that they stay in step.
+  const FRAME = { width: 1920, height: 1080 };
+  const DEFAULT = { x: 0.12, y: 0.82 };
+  const BEFORE = { x: 0.5, y: 0.5 };
+  const scene = (segments: WebcamSegment[]): WebcamScene => ({
+    layout: { ...WEBCAM_DEFAULTS, position: DEFAULT },
+    segments,
+  });
+  const first = part("a", 1, 5, { layout: { position: BEFORE } });
+  // Illustrative layouts: gaps around one epsilon (1e-6), a hidden range, a chain, no layout.
+  const layouts: Record<string, WebcamScene> = {
+    "touching exactly": scene([first, part("b", 5, 10)]),
+    "gap of float noise": scene([first, part("b", 5 + 1e-9, 10)]),
+    "gap of one epsilon": scene([first, part("b", 5 + 1e-6, 10)]),
+    "gap just over an epsilon": scene([first, part("b", 5 + 2e-6, 10)]),
+    "gap of a millisecond": scene([first, part("b", 5 + 1e-3, 10)]),
+    "a real gap": scene([first, part("b", 5.5, 10)]),
+    "overlap of float noise": scene([first, part("b", 5 - 1e-9, 10)]),
+    "hidden range between": scene([first, hiddenRange("h", 5, 7), part("b", 7, 12)]),
+    "hidden range before": scene([hiddenRange("h", 1, 5), part("b", 5, 10)]),
+    "hidden range after": scene([first, hiddenRange("h", 5, 7)]),
+    "a chain of three": scene([
+      first,
+      part("b", 5, 8),
+      part("c", 8, 12, { layout: { position: DEFAULT } }),
+    ]),
+    "a part with no layout before": scene([
+      part("a", 1, 5, { layout: undefined }),
+      part("b", 5, 10),
+    ]),
+    "a cut before": scene([
+      part("a", 1, 5, { layout: { position: BEFORE }, transition: undefined }),
+      part("b", 5, 10),
+    ]),
+  };
+
+  for (const [name, webcam] of Object.entries(layouts)) {
+    it(`${name}: the slide that plays, the route and the panel start from the same place`, () => {
+      for (const segment of webcam.segments.filter((s) => s.mode === "override")) {
+        const origin = webcamPartOrigin(webcam, segment);
+        const own = { ...webcam.layout, ...segment.layout };
+
+        // The slide that plays, just after the part starts: `from` is null when nothing moves.
+        // A Cut plays no slide, so only its panel and preview marks have an origin to compare.
+        if (segment.transition?.kind === "slide") {
+          const state = webcamStateAt({ webcam }, segment.start + 0.001, 60);
+          expect(state?.from?.position ?? own.position).toEqual(origin.position);
+        }
+
+        // The preview's route and ghost, read once the slide has settled.
+        const marks = webcamMarks({
+          webcam,
+          sourceTime: segment.end - 0.5,
+          selectedId: segment.id,
+          frame: FRAME,
+          endSeconds: 60,
+        });
+        const rect = webcamRect(origin, FRAME)!;
+        expect(marks?.from?.route.start).toEqual({
+          x: rect.x + rect.width / 2,
+          y: rect.y + rect.height / 2,
+        });
+        // The ghost says "before" exactly when an override part ends where this one starts.
+        const previous = webcam.segments[webcam.segments.indexOf(segment) - 1];
+        const touching =
+          previous?.mode === "override" && Math.abs(previous.end - segment.start) <= 1e-6;
+        expect(marks?.from?.ghost).toBe(touching ? "before" : "original");
+      }
+    });
+  }
 });

@@ -24,6 +24,14 @@ const PART: WebcamSegment = {
 };
 const HIDDEN: WebcamSegment = { id: "hidden-1", start: 10, end: 12, mode: "hidden" };
 
+const WEBCAM_TRACK = {
+  startOffsetMs: 0,
+  offsetQuality: "exact",
+  width: 1280,
+  height: 720,
+  fps: 30,
+} as const;
+
 const sceneOf = (
   layout: Partial<WebcamLayout> = {},
   segments: WebcamSegment[] = [],
@@ -85,6 +93,47 @@ describe("the Camera panel's tabs", () => {
     );
     fireEvent.click(screen.getByRole("tab", { name: "This part" }));
     expect(screen.getByRole("tab", { name: "This part" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("only the selected tab is a tab stop", () => {
+    renderPanel();
+    expect(screen.getByRole("tab", { name: "This part" })).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("tab", { name: "Whole video" })).toHaveAttribute("tabindex", "-1");
+    openWholeVideo();
+    expect(screen.getByRole("tab", { name: "This part" })).toHaveAttribute("tabindex", "-1");
+    expect(screen.getByRole("tab", { name: "Whole video" })).toHaveAttribute("tabindex", "0");
+  });
+
+  it("the arrow keys move between the tabs, wrapping, and focus follows the selection", () => {
+    renderPanel();
+    const part = screen.getByRole("tab", { name: "This part" });
+    const whole = screen.getByRole("tab", { name: "Whole video" });
+    part.focus();
+    fireEvent.keyDown(part, { key: "ArrowRight" });
+    expect(whole).toHaveAttribute("aria-selected", "true");
+    expect(whole).toHaveFocus();
+    fireEvent.keyDown(whole, { key: "ArrowRight" });
+    expect(part).toHaveAttribute("aria-selected", "true");
+    expect(part).toHaveFocus();
+    fireEvent.keyDown(part, { key: "ArrowLeft" });
+    expect(whole).toHaveAttribute("aria-selected", "true");
+    expect(whole).toHaveFocus();
+  });
+
+  it("Space on a tab stays with the tab: the page's playback shortcut never sees it", () => {
+    renderPanel();
+    const onWindowKey = vi.fn();
+    window.addEventListener("keydown", onWindowKey);
+    try {
+      const tab = screen.getByRole("tab", { name: "Whole video" });
+      tab.focus();
+      const notPrevented = fireEvent.keyDown(tab, { key: " " });
+      expect(onWindowKey).not.toHaveBeenCalled();
+      // Not cancelled either: the browser still turns Space into the click that selects the tab.
+      expect(notPrevented).toBe(true);
+    } finally {
+      window.removeEventListener("keydown", onWindowKey);
+    }
   });
 
   it("This part shows how the part arrives and ends, and none of the whole-video look", () => {
@@ -594,11 +643,3 @@ describe("a hidden range", () => {
     expect(onRemoved).toHaveBeenCalledOnce();
   });
 });
-
-const WEBCAM_TRACK = {
-  startOffsetMs: 0,
-  offsetQuality: "exact",
-  width: 1280,
-  height: 720,
-  fps: 30,
-} as const;

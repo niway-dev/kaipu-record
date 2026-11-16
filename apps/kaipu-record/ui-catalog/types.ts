@@ -140,7 +140,11 @@ export type WaitTarget =
   | { readonly video: true | "paused-at-start" }
   | { readonly window: WindowKind };
 
-/** A point in a target's box, as fractions of its width and height. */
+/**
+ * A point relative to a target's box, as fractions of its width and height: 0 is the left or top
+ * edge and 1 the right or bottom edge. A value outside 0–1 is outside the box (`x: 3.5` is three
+ * widths right of the left edge), and the pointer goes there too: `run.ts` does not clamp it.
+ */
 export interface DragPoint {
   readonly x: number;
   readonly y: number;
@@ -168,8 +172,9 @@ export type Step =
       readonly times?: number;
     } & On)
   /**
-   * Press at `from`, move to `to` and release. Both points are fractions (0-1) of the target's
-   * box, so a drag does not depend on the window size.
+   * Press at `from`, move to `to` and release. Both points are fractions of the target's box
+   * (see `DragPoint`), so a drag does not depend on the window size. Values outside 0–1 are
+   * allowed: the pointer may end outside the box, as long as it stays inside the window.
    */
   | ({ readonly drag: Target; readonly from: DragPoint; readonly to: DragPoint } & On)
   | ({ readonly press: string; readonly target?: Target } & On)

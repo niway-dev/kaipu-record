@@ -198,6 +198,11 @@ export interface LanePiece {
   kind: WebcamStretch["kind"];
   left: number;
   right: number;
+  /**
+   * Where the clip holding this piece ends, in the same pixels. A slide or the next clip
+   * follows it, and there is no webcam there, so a part is never widened past it.
+   */
+  clipRight?: number;
 }
 
 /** A box in pixels from the lane's left edge. */
@@ -217,7 +222,8 @@ const isTargetable = (piece: LanePiece): boolean => piece.kind !== "original";
  * original stretch is never displaced and a part never borrows width from what follows it.
  * The one exception is the floor: a part or hidden range narrower than {@link LANE_FLOOR_PX}
  * is drawn that wide so it stays visible, and never past the start of the next part or hidden
- * range (or the lane's end). `pieces` are in order, left to right; the result is index by index.
+ * range, the lane's end, or the end of its own clip (a slide or another clip follows there,
+ * and no webcam exists on it). `pieces` are in order, left to right; the result is index by index.
  */
 export function webcamLanePlacements(pieces: LanePiece[], laneWidth: number): LanePlacement[] {
   return pieces.map((piece, i) => {
@@ -226,7 +232,7 @@ export function webcamLanePlacements(pieces: LanePiece[], laneWidth: number): La
       return { left: piece.left, width: natural };
     }
     const next = pieces.slice(i + 1).find(isTargetable);
-    const limit = next ? next.left : laneWidth;
+    const limit = Math.min(next ? next.left : laneWidth, piece.clipRight ?? Infinity);
     const room = Math.max(0, limit - piece.left);
     return { left: piece.left, width: Math.max(natural, Math.min(LANE_FLOOR_PX, room)) };
   });

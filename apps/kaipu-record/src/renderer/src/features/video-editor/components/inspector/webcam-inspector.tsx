@@ -13,7 +13,7 @@
  * on the video is dragged to move it. Every control edits through WebcamEditing with the
  * history contract: buttons commit, sliders run begin → live… → end.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Eye, EyeOff, Play, Trash2, Webcam } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { uiArea } from "@renderer/lib/ui-area";
@@ -43,6 +43,7 @@ import {
   type WebcamLayout,
   type WebcamScene,
   type WebcamSegment,
+  type WebcamSizePreset,
 } from "../../webcam/webcam-model";
 import { webcamLayoutDot, webcamLayoutName, webcamPartOrigin } from "../../webcam/webcam-stretches";
 import styles from "./inspector.module.css";
@@ -55,6 +56,13 @@ const SHAPE_LABEL: Record<
   circle: "webcamShapeCircle",
   rounded: "webcamShapeRounded",
   rectangle: "webcamShapeRectangle",
+};
+
+// The buttons read S, M and L; the tooltip says what each letter is.
+const SIZE_TITLE: Record<WebcamSizePreset, "webcamSizeS" | "webcamSizeM" | "webcamSizeL"> = {
+  S: "webcamSizeS",
+  M: "webcamSizeM",
+  L: "webcamSizeL",
 };
 
 const EASING_LABEL: Record<
@@ -175,7 +183,7 @@ function Choices<T extends string | number>({
   onPick,
 }: {
   label: string;
-  options: readonly { value: T; text: string }[];
+  options: readonly { value: T; text: string; title?: string }[];
   current: T | null;
   onPick(value: T): void;
 }): React.JSX.Element {
@@ -188,6 +196,7 @@ function Choices<T extends string | number>({
             key={option.value}
             type="button"
             aria-pressed={current === option.value}
+            title={option.title}
             className={current === option.value ? styles.segmentActive : styles.segment}
             onClick={() => onPick(option.value)}
           >
@@ -239,7 +248,11 @@ function WholeVideoControls({
       {/* A size saved outside the three keeps playing and shows no button pressed. */}
       <Choices
         label={t("webcamSize")}
-        options={WEBCAM_SIZE_PRESET_IDS.map((id) => ({ value: id, text: id }))}
+        options={WEBCAM_SIZE_PRESET_IDS.map((id) => ({
+          value: id,
+          text: id,
+          title: t(SIZE_TITLE[id]),
+        }))}
         current={webcamSizePreset(layout.size)}
         onPick={(id) => commit({ size: WEBCAM_SIZE_PRESETS[id] })}
       />
@@ -533,6 +546,7 @@ export function WebcamPanel({
 }: WebcamPanelProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const [tab, setTab] = useState<Tab>("part");
+  const tabButtons = useRef<Record<Tab, HTMLButtonElement | null>>({ part: null, whole: null });
   if (segment?.mode === "hidden" && range) {
     return <HiddenRangePanel segment={segment} range={range} edits={edits} onRemoved={onRemoved} />;
   }
@@ -540,6 +554,19 @@ export function WebcamPanel({
     { id: "part", text: t("webcamTabPart") },
     { id: "whole", text: t("webcamTabWhole") },
   ];
+  // Arrows move along the strip, wrapping at the ends, and focus follows the selection.
+  const onTabKeyDown = (event: React.KeyboardEvent): void => {
+    // Space activates the focused tab (the browser turns it into a click). The page listens on
+    // `window` and treats Space as play/pause, so it must not travel past the tab strip.
+    if (event.key === " ") event.stopPropagation();
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const step = event.key === "ArrowRight" ? 1 : -1;
+    const at = tabs.findIndex((entry) => entry.id === tab);
+    const next = tabs[(at + step + tabs.length) % tabs.length].id;
+    setTab(next);
+    tabButtons.current[next]?.focus();
+  };
   return (
     <section
       {...uiArea("editorVideo.webcamPanel")}
@@ -550,15 +577,24 @@ export function WebcamPanel({
       <header className={styles.header}>
         <h2 className={styles.title}>{t("webcamTitle")}</h2>
       </header>
-      <div className={webcamStyles.tabs} role="tablist" aria-label={t("webcamTabsAria")}>
+      <div
+        className={webcamStyles.tabs}
+        role="tablist"
+        aria-label={t("webcamTabsAria")}
+        onKeyDown={onTabKeyDown}
+      >
         {tabs.map((entry) => (
           <button
             key={entry.id}
+            ref={(node) => {
+              tabButtons.current[entry.id] = node;
+            }}
             type="button"
             role="tab"
             id={`webcam-tab-${entry.id}`}
             aria-selected={tab === entry.id}
             aria-controls="webcam-tabpanel"
+            tabIndex={tab === entry.id ? 0 : -1}
             className={tab === entry.id ? webcamStyles.tabActive : webcamStyles.tab}
             onClick={() => setTab(entry.id)}
           >
