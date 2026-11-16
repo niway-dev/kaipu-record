@@ -213,6 +213,12 @@ describe("useWebcamDrop — what closes the card like Close does", () => {
     expect(t.segments()[0]?.start).toBe(24);
   });
 
+  it("a source at 10 fps stops up to a tenth of a second from the drop and keeps it open", () => {
+    const t = open();
+    t.rerender({ timelineTime: 24.08, playing: false, selection: null });
+    expect(t.result.current.drop.card).not.toBeNull();
+  });
+
   it("a seek further than a frame from the moment closes it", () => {
     const t = open();
     t.rerender({ timelineTime: 24.2, playing: false, selection: null });
