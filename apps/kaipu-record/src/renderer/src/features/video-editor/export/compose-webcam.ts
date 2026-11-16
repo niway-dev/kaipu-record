@@ -3,9 +3,10 @@
  * the OUTPUT canvas after the camera path's crop and, for fixed-canvas presets, after the
  * framer, so the zoom moves the content under it and Fill never crops it.
  *
- * The geometry is the preview's own (`webcam-layout.ts`): `webcamAt` picks the layout in
- * force at the frame's source time, `webcamRect` places it in the output frame with the
- * camera path's scale for "shrink during zoom", and `webcamSourceRect` is the window of the
+ * The geometry is the preview's own (`webcam-layout.ts`): `webcamStateAt` picks the layout
+ * in force at the frame's source time and the slide in progress (ADR 0039), `webcamStateRect`
+ * places it in the output frame with the camera path's scale for "shrink during zoom", and
+ * `webcamSourceRect` is the window of the
  * webcam image that the preview's `object-fit: cover` + `framingTransform` shows.
  *
  *   shadow (the shape filled, shadowed) → clip(shape) → (mirror) → drawImage(window → box)
@@ -21,10 +22,10 @@ import {
   type FrameSize,
   WEBCAM_SHADOW,
   type WebcamRect,
-  webcamRect,
   webcamSourceRect,
+  webcamStateRect,
 } from "../webcam/webcam-layout";
-import { webcamAt, type WebcamScene } from "../webcam/webcam-model";
+import { webcamStateAt, type WebcamScene } from "../webcam/webcam-model";
 
 /** A decoded webcam frame and its size in pixels. */
 export interface WebcamImage {
@@ -101,9 +102,13 @@ export function planWebcamDraw(
   image: FrameSize | null,
 ): WebcamDrawPlan | null {
   if (!webcam || !image || !(image.width > 0) || !(image.height > 0)) return null;
-  const layout = webcamAt({ webcam }, sourceTs);
-  if (!layout) return null;
-  const rect = webcamRect(layout, frame, cameraScale);
+  // The state, not the bare layout: the same function and rectangle the preview reads, so
+  // the two agree on where the bubble is at this source time. Every field but the position
+  // comes from the layout in force (it applies at once, ADR 0039).
+  const state = webcamStateAt({ webcam }, sourceTs);
+  if (!state) return null;
+  const layout = state.layout;
+  const rect = webcamStateRect(state, frame, cameraScale);
   if (!rect || !(rect.width > 0) || !(rect.height > 0)) return null;
   return {
     rect,
