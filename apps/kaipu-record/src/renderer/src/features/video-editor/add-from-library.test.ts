@@ -392,6 +392,20 @@ describe("insertSlideAtBoundary", () => {
     expect(idsOf(insertSlideAtBoundary(moved, slide, resolve))).toEqual(["j", "p", "new", "q"]);
   });
 
+  it("maps the boundary onto items when a zero-length item is skipped by the layout", () => {
+    const withEmpty: VideoScene = {
+      ...scene,
+      items: [
+        { id: "p", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+        { id: "z", kind: "clip", sourceStart: 10, sourceEnd: 10 },
+        { id: "q", kind: "clip", sourceStart: 10, sourceEnd: 30 },
+      ],
+    };
+    const layout = toLayout(withEmpty.items);
+    const atEnd = anchoredBoundary(layout, boundaryAtEnd(layout));
+    expect(idsOf(insertSlideAtBoundary(withEmpty, slide, atEnd))).toEqual(["p", "z", "q", "new"]);
+  });
+
   it("an empty scene takes the slide first", () => {
     const empty: VideoScene = { ...scene, items: [] };
     const next = insertSlideAtBoundary(empty, slide, anchoredBoundary([], boundaryAtEnd([])));

@@ -155,7 +155,7 @@ export function joinRecording(
 }
 
 /** `boundaryIndexAt` counts layout entries, which skip empty items: map it back onto `items`. */
-function itemsIndexOfBoundary(items: TrackItem[], layout: LayoutEntry[], t: number): number {
+export function itemsIndexOfBoundary(items: TrackItem[], layout: LayoutEntry[], t: number): number {
   const boundary = boundaryIndexAt(layout, t);
   if (boundary === 0) return 0;
   const after = items.findIndex((item) => item.id === layout[boundary - 1].itemId);

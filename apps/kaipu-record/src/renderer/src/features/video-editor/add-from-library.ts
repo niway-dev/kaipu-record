@@ -1,5 +1,6 @@
 import type { LibraryVideo } from "@renderer/features/library/types";
 import type { SlideItem, VideoScene } from "./scene";
+import { itemsIndexOfBoundary } from "./source-axis";
 import {
   boundaryIndexAt,
   insertItemAt,
@@ -155,16 +156,15 @@ export const SEQUENCE_IMAGE_SECONDS = 5;
  * The scene with `slide` inserted at the boundary `resolve` names for it (an `anchoredBoundary`
  * result: a timeline time). The index is read from the scene given, not from the one the
  * boundary was chosen on, because the image is decoded asynchronously and the sequence may have
- * changed meanwhile. Boundary times are unique (items last at least `MIN_ITEM_DURATION`), so
- * `boundaryIndexAt` finds that boundary exactly, and `layout[i]` is `items[i]` because
- * `toLayout` skips only zero-length items, which the editor never keeps.
+ * changed meanwhile. The layout skips empty items, so the boundary is mapped back onto `items`
+ * with `itemsIndexOfBoundary`, the same mapping `joinRecording` uses.
  */
 export function insertSlideAtBoundary(
   scene: VideoScene,
   slide: SlideItem,
   resolve: (scene: VideoScene) => number,
 ): VideoScene {
-  const index = boundaryIndexAt(toLayout(scene.items), resolve(scene));
+  const index = itemsIndexOfBoundary(scene.items, toLayout(scene.items), resolve(scene));
   return { ...scene, items: insertItemAt(scene.items, index, slide) };
 }
 
