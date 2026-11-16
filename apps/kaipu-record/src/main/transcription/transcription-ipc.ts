@@ -86,6 +86,7 @@ function createService(deps: TranscriptionIpcDeps): TranscriptionService {
   const engineStore = new EngineStore({ rootDir: deps.engineRoot });
   return new TranscriptionService({
     locateEngine: () => locateEngine({ engineDir: engineStore.installDir }),
+    engineStore,
     modelStore: new ModelStore({ rootDir: deps.modelsRoot }),
     openVault: openTranscriptionVault,
     runBatch,

@@ -24,10 +24,11 @@ import type {
   TranscriptionModelProgress,
   TranscriptionModelStatus,
   TranscriptionStatus,
-  TranscriptionUnavailableReason,
 } from "@shared/types/transcription";
 import { atomicWriteFile } from "../library/atomic-write";
-import type { EngineLocation, EngineUnavailableReason } from "./engine/engine-locator";
+import { ENGINE_ARCHIVE, type EngineArchive } from "./engine/engine-catalog";
+import type { EngineStore } from "./engine/engine-store";
+import type { EngineLocation } from "./engine/engine-locator";
 import { SherpaError, type CliResult, type RunBatchOptions } from "./engine/sherpa-supervisor";
 import { DEFAULT_MODEL_ID, listModels, type ModelCatalogEntry } from "./models/catalog";
 import { DownloadError } from "./download-file";
@@ -80,8 +81,14 @@ type ModelStoreApi = Pick<
   "status" | "locate" | "destination" | "download" | "cancel" | "remove"
 >;
 
+type EngineStoreApi = Pick<EngineStore, "install">;
+
 export interface TranscriptionServiceDeps {
   locateEngine: () => Promise<EngineLocation>;
+  /** Installs the engine the first time a model is downloaded (ADR 0062, amendment). */
+  engineStore: EngineStoreApi;
+  /** Defaults to the pinned release; its size is part of the first download's size. */
+  engineArchive?: Pick<EngineArchive, "archiveName" | "sizeBytes">;
   modelStore: ModelStoreApi;
   /** The vault of the active workspace. Called from `begin`, inside the workspace gate. */
   openVault: () => TranscriptionVault;
@@ -156,15 +163,43 @@ interface Job {
   receivedBytes: number;
 }
 
-function toUnavailableReason(reason: EngineUnavailableReason): TranscriptionUnavailableReason {
-  switch (reason) {
-    case "unsupported-platform":
-      return "unsupported-platform";
+/**
+ * A missing engine is "not installed", not "unavailable": the download is offered. Unavailable
+ * stays for a machine that cannot run the engine and for an installed one that fails its check.
+ */
+function availabilityOf(engine: EngineLocation): TranscriptionStatus["availability"] {
+  if (engine.available) return { status: "available" };
+  switch (engine.reason) {
     case "binary-missing":
-      return "engine-missing";
+      return { status: "available" };
+    case "unsupported-platform":
+      return { status: "unavailable", reason: "unsupported-platform" };
     case "handshake-failed":
-      return "engine-broken";
+      return { status: "unavailable", reason: "engine-broken" };
   }
+}
+
+const isEngineMissing = (engine: EngineLocation): boolean =>
+  !engine.available && engine.reason === "binary-missing";
+
+/** Minimum gap between engine progress events, as ModelStore's default. */
+const ENGINE_PROGRESS_INTERVAL_MS = 200;
+
+/**
+ * One `downloadModel` call, from its first await to its result. It owns the abort signal for
+ * both phases (engine, then model) and the numbers `status` shows while it runs.
+ */
+interface ModelDownload {
+  id: string;
+  controller: AbortController;
+  promise: Promise<TranscriptionModelDownloadResult>;
+  phase: "checking" | "engine" | "model";
+  /** Bytes of the engine archive received so far. */
+  engineReceived: number;
+  /** Engine plus model bytes this call will download. */
+  totalBytes: number;
+  /** The engine's bytes once it is installed in this call: added to every model byte. */
+  engineBytes: number;
 }
 
 function toModelStatus(status: ReturnType<ModelStoreApi["status"]>): TranscriptionModelStatus {
@@ -262,6 +297,8 @@ export class TranscriptionService {
   private readonly catalog: readonly ModelCatalogEntry[];
   private readonly setTimer: NonNullable<TranscriptionServiceDeps["setTimer"]>;
   private readonly newJobId: () => string;
+  private readonly engineArchive: NonNullable<TranscriptionServiceDeps["engineArchive"]>;
+  private download: ModelDownload | null = null;
   private engineCache: EngineLocation | null = null;
   private engineInflight: Promise<EngineLocation> | null = null;
   private job: Job | null = null;
@@ -278,36 +315,107 @@ export class TranscriptionService {
         return () => clearTimeout(handle);
       });
     this.newJobId = deps.newJobId ?? randomUUID;
+    this.engineArchive = deps.engineArchive ?? ENGINE_ARCHIVE;
   }
 
   async status(): Promise<TranscriptionStatus> {
     const engine = await this.locate();
+    const engineMissing = isEngineMissing(engine);
+    const engineSize = this.engineArchive.sizeBytes;
     return {
-      availability: engine.available
-        ? { status: "available" }
-        : { status: "unavailable", reason: toUnavailableReason(engine.reason) },
+      availability: availabilityOf(engine),
       defaultModelId: DEFAULT_MODEL_ID,
-      models: this.catalog.map(
-        (model): TranscriptionModelInfo => ({
+      models: this.catalog.map((model): TranscriptionModelInfo => {
+        const own = toModelStatus(this.deps.modelStore.status(model.id));
+        const download = this.download?.id === model.id ? this.download : null;
+        let status = own;
+        if (download?.phase === "engine") {
+          status = {
+            state: "downloading",
+            receivedBytes: download.engineReceived,
+            totalBytes: download.totalBytes,
+          };
+        } else if (own.state === "downloading" && download) {
+          status = {
+            state: "downloading",
+            receivedBytes: own.receivedBytes + download.engineBytes,
+            totalBytes: own.totalBytes + download.engineBytes,
+          };
+        } else if (engineMissing && (own.state === "ready" || own.state === "missing")) {
+          status = { state: "missing" };
+        }
+        // What the consent prompt shows: only what will actually be downloaded.
+        const sizeBytes = !engineMissing
+          ? model.sizeBytes
+          : own.state === "ready"
+            ? engineSize
+            : model.sizeBytes + engineSize;
+        return {
           id: model.id,
           label: model.label,
           languages: model.languages,
-          sizeBytes: model.sizeBytes,
+          sizeBytes,
           location: this.deps.modelStore.destination(model.id),
           license: model.license,
-          status: toModelStatus(this.deps.modelStore.status(model.id)),
-        }),
-      ),
+          status,
+        };
+      }),
       job: this.job ? this.progressOf(this.job) : null,
     };
   }
 
-  async downloadModel(id: string): Promise<TranscriptionModelDownloadResult> {
-    if (!this.catalog.some((model) => model.id === id)) {
-      return { status: "failed", code: "unknown-model" };
+  /**
+   * Installs the engine when it is missing, then the model: one call, one progress stream (the
+   * engine's bytes first, then the model's), one cancel. A call for the model already
+   * downloading returns the same promise; a call for another one is `busy`.
+   */
+  downloadModel(id: string): Promise<TranscriptionModelDownloadResult> {
+    const model = this.catalog.find((entry) => entry.id === id);
+    if (!model) return Promise.resolve({ status: "failed", code: "unknown-model" });
+    if (this.download) {
+      return this.download.id === id
+        ? this.download.promise
+        : Promise.resolve({ status: "failed", code: "busy" });
     }
+    const run: ModelDownload = {
+      id,
+      controller: new AbortController(),
+      promise: undefined as unknown as Promise<TranscriptionModelDownloadResult>,
+      phase: "checking",
+      engineReceived: 0,
+      totalBytes: 0,
+      engineBytes: 0,
+    };
+    this.download = run;
+    run.promise = this.runDownload(model, run).finally(() => {
+      if (this.download === run) this.download = null;
+    });
+    return run.promise;
+  }
+
+  private async runDownload(
+    model: ModelCatalogEntry,
+    run: ModelDownload,
+  ): Promise<TranscriptionModelDownloadResult> {
+    const { signal } = run.controller;
     try {
-      await this.deps.modelStore.download(id, (progress) => this.deps.broadcastModel(progress));
+      const engineMissing = isEngineMissing(await this.locate());
+      const modelInstalled = this.deps.modelStore.locate(model.id) !== null;
+      if (engineMissing) await this.installEngine(model, run, modelInstalled);
+      if (signal.aborted) return { status: "cancelled" };
+      // Engine installed, model already there: nothing left to download.
+      if (!(engineMissing && modelInstalled)) {
+        await this.deps.modelStore.download(
+          model.id,
+          (progress) =>
+            this.deps.broadcastModel({
+              ...progress,
+              receivedBytes: progress.receivedBytes + run.engineBytes,
+              totalBytes: progress.totalBytes + run.engineBytes,
+            }),
+          signal,
+        );
+      }
       return { status: "ready" };
     } catch (error) {
       if (!(error instanceof DownloadError)) throw error;
@@ -315,13 +423,58 @@ export class TranscriptionService {
     }
   }
 
+  /** The engine phase: progress is the archive's bytes out of the engine plus the model. */
+  private async installEngine(
+    model: ModelCatalogEntry,
+    run: ModelDownload,
+    modelInstalled: boolean,
+  ): Promise<void> {
+    const archive = this.engineArchive;
+    run.phase = "engine";
+    run.totalBytes = archive.sizeBytes + (modelInstalled ? 0 : model.sizeBytes);
+    let lastEmitAt = Number.NEGATIVE_INFINITY;
+    let lastEmittedBytes = -1;
+    const emit = () => {
+      lastEmitAt = this.deps.now().getTime();
+      lastEmittedBytes = run.engineReceived;
+      this.deps.broadcastModel({
+        id: model.id,
+        receivedBytes: run.engineReceived,
+        totalBytes: run.totalBytes,
+        fileName: archive.archiveName,
+      });
+    };
+    try {
+      await this.deps.engineStore.install({
+        signal: run.controller.signal,
+        onBytes: (bytes) => {
+          run.engineReceived += bytes;
+          if (this.deps.now().getTime() - lastEmitAt >= ENGINE_PROGRESS_INTERVAL_MS) emit();
+        },
+      });
+    } finally {
+      // Whatever happened, the next `locate` looks at the disk again.
+      this.engineCache = null;
+    }
+    run.engineBytes = archive.sizeBytes;
+    run.engineReceived = archive.sizeBytes;
+    if (lastEmittedBytes !== run.engineReceived) emit();
+    run.phase = "model";
+  }
+
   cancelModel(id: string): void {
+    if (this.download?.id === id) this.download.controller.abort();
     this.deps.modelStore.cancel(id);
   }
 
   async removeModel(id: string): Promise<void> {
     if (this.job?.request.modelId === id || this.opening === id) {
       throw new Error("The speech model is in use by a transcription job");
+    }
+    const running = this.download;
+    if (running?.id === id) {
+      running.controller.abort();
+      await running.promise.catch(() => undefined);
     }
     await this.deps.modelStore.remove(id);
   }
