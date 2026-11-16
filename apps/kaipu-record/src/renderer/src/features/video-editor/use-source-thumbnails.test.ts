@@ -7,6 +7,8 @@ import {
   companionCoveredRange,
   companionSampleTimes,
   useCompanionThumbnails,
+  useRecordingCompanionThumbnails,
+  useRecordingThumbnails,
   useSourceThumbnails,
 } from "./use-source-thumbnails";
 
@@ -248,5 +250,93 @@ describe("useCompanionThumbnails (the webcam)", () => {
     await waitFor(() => expect(b.result.current.thumbnails.length).toBeGreaterThan(0));
 
     expect(openMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("useRecordingThumbnails (recordings joined into a scene)", () => {
+  const URL_B = "kaipu-media://recording/joined-b";
+  const requestB = { key: "src-b", mediaUrl: URL_B, durationSeconds: 14 };
+
+  it("decodes each joined recording from ITS OWN file at the recording's local seconds", async () => {
+    const { result } = renderHook(() => useRecordingThumbnails([requestB]));
+    await waitFor(() => expect(result.current.get("src-b")).toHaveLength(24));
+
+    expect(openMock).toHaveBeenCalledTimes(1);
+    expect(openMock).toHaveBeenCalledWith(URL_B);
+    const sink = CanvasSinkMock.mock.results[0]!.value as {
+      canvasesAtTimestamps: ReturnType<typeof vi.fn>;
+    };
+    const times = sink.canvasesAtTimestamps.mock.calls[0]![0] as number[];
+    // Local time: spread over 0..14 s, never the axis offset (3600+).
+    expect(times[0]).toBeCloseTo((0.5 / 24) * 14);
+    expect(Math.max(...times)).toBeLessThan(14);
+  });
+
+  it("decodes nothing for no requests, and stops a recording that is no longer requested", async () => {
+    const idle = renderHook(() => useRecordingThumbnails([]));
+    expect(openMock).not.toHaveBeenCalled();
+    idle.unmount();
+
+    const { result, rerender } = renderHook(({ requests }) => useRecordingThumbnails(requests), {
+      initialProps: { requests: [requestB] },
+    });
+    await waitFor(() => expect(result.current.get("src-b")).toHaveLength(24));
+    rerender({ requests: [] });
+    await waitFor(() => expect(result.current.has("src-b")).toBe(false));
+    expect(vi.mocked(URL.revokeObjectURL)).toHaveBeenCalled();
+  });
+
+  it("leaves a recording that is already decoded alone when another is added", async () => {
+    const { result, rerender } = renderHook(({ requests }) => useRecordingThumbnails(requests), {
+      initialProps: { requests: [requestB] },
+    });
+    await waitFor(() => expect(result.current.get("src-b")).toHaveLength(24));
+    rerender({
+      requests: [
+        requestB,
+        { key: "src-c", mediaUrl: "kaipu-media://recording/joined-c", durationSeconds: 9 },
+      ],
+    });
+    await waitFor(() => expect(result.current.get("src-c")).toHaveLength(24));
+
+    expect(openMock).toHaveBeenCalledTimes(2);
+    expect(result.current.get("src-b")).toHaveLength(24);
+  });
+});
+
+describe("useRecordingCompanionThumbnails (joined recordings' webcams)", () => {
+  const URL_CAM_B = "kaipu-media://webcam/joined-b";
+
+  it("decodes each webcam at its own time, reports at recording time plus its offset, and keeps covered", async () => {
+    stubInput({ computeDuration: vi.fn(async () => 10) });
+    CanvasSinkMock.mockImplementation(function () {
+      return {
+        canvasesAtTimestamps: vi.fn((times: number[]) =>
+          asyncIterableOf(times.map((timestamp) => ({ canvas: fakeCanvas(), timestamp }))),
+        ),
+      };
+    } as never);
+    const { result } = renderHook(() =>
+      useRecordingCompanionThumbnails([
+        { key: "src-b", mediaUrl: URL_CAM_B, durationSeconds: 14, companionOffsetSeconds: 1 },
+      ]),
+    );
+    await waitFor(() => expect(result.current.get("src-b")?.thumbnails.length).toBeGreaterThan(0));
+
+    expect(openMock).toHaveBeenCalledWith(URL_CAM_B);
+    const strip = result.current.get("src-b")!;
+    // A 10 s webcam that starts 1 s into the recording has footage over local 1-11 s.
+    expect(strip.covered).toEqual({ start: 1, end: 11 });
+    expect(strip.thumbnails[0]!.sourceTime).toBeGreaterThanOrEqual(1);
+    expect(strip.thumbnails.every((t) => t.sourceTime < 11)).toBe(true);
+  });
+
+  it("decodes nothing for a request without a file", () => {
+    renderHook(() =>
+      useRecordingCompanionThumbnails([
+        { key: "src-b", mediaUrl: "", durationSeconds: 14, companionOffsetSeconds: 0 },
+      ]),
+    );
+    expect(openMock).not.toHaveBeenCalled();
   });
 });

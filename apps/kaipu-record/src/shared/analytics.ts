@@ -39,10 +39,10 @@ export const FLAG_DEFAULTS: Record<FlagName, boolean> = {
   "image-inspect": false,
   // Text recognition in the image editor, macOS only for now (NIW2-705): off until owner QA.
   "image-text": false,
-  // The video editor's Captures panel Add to timeline button (NIW2-772). The redesign of the
-  // Clips section into levels (NIW2-770) builds on this flag: NIW2-771 puts floating images
-  // on levels above the clips. Off until that redesign replaces the 3 s slide the button
-  // inserts today.
+  // Clips levels (NIW2-770). With the flag off nothing adds media (NIW2-772), so 0.19.0 does not
+  // ship the 3 s slide; with it on, Add from Library sends a recording or a screenshot into the
+  // sequence or over it (NIW2-771, NIW2-829). A scene that already has floating items still shows
+  // and exports them with the flag off.
   "timeline-levels": false,
 };
 
