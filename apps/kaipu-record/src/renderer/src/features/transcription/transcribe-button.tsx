@@ -101,6 +101,11 @@ function TranscribeButtonView({ control, variant, ui }: ViewProps): React.JSX.El
   const { state } = control;
   const [offerOpen, setOfferOpen] = useState(false);
   const iconSize = ICON_SIZE[variant];
+  const defaultModelId = control.offer.status?.defaultModelId;
+  const downloadFailed =
+    state.kind === "needs-model" &&
+    defaultModelId !== undefined &&
+    control.offer.failures[defaultModelId] !== undefined;
   const showLabel = variant === "detail" || variant === "editor";
 
   // The offer belongs to the "needs a model" state: once the download has started (or the
@@ -199,8 +204,11 @@ function TranscribeButtonView({ control, variant, ui }: ViewProps): React.JSX.El
   }
 
   // idle, needs-model, failed, stale, invalid: a button that does something.
+  // The offer closes when its download starts, so a download that then fails would leave the
+  // button looking as it did before; the hint says it failed, and the click reopens the offer,
+  // whose dialog shows the reason.
   const label = state.kind === "stale" ? t("transcribeAgain") : t("transcribe");
-  const hint = hintOf(t, state);
+  const hint = hintOf(t, state, downloadFailed);
   const onClick = (): void => {
     if (state.kind === "needs-model") setOfferOpen(true);
     else void control.start();
@@ -213,7 +221,7 @@ function TranscribeButtonView({ control, variant, ui }: ViewProps): React.JSX.El
         onClick={onClick}
         title={hint ?? label}
         aria-label={hint && !showLabel ? `${label}. ${hint}` : label}
-        data-failed={state.kind === "failed" || undefined}
+        data-failed={state.kind === "failed" || downloadFailed || undefined}
       >
         <Captions size={iconSize} strokeWidth={1.8} aria-hidden />
         {showLabel && <span className={styles.label}>{label}</span>}
@@ -245,7 +253,12 @@ function runningLabel(
   return t("transcribePreparing");
 }
 
-function hintOf(t: Translator<"transcription">, state: TranscribeControlState): string | null {
+function hintOf(
+  t: Translator<"transcription">,
+  state: TranscribeControlState,
+  downloadFailed: boolean,
+): string | null {
+  if (state.kind === "needs-model" && downloadFailed) return t("transcribeModelDownloadFailedHint");
   if (state.kind === "failed") return failureText(t, state.failure);
   if (state.kind === "invalid") return t("transcribeInvalidHint");
   return null;

@@ -3491,6 +3491,7 @@
     "transcribeDialogTitle": "Download the speech model first",
     "transcribeDialogBody": "Transcribing needs a speech model on this Mac. It downloads once, in the background, and you can keep working.",
     "transcribeDialogClose": "Not now",
+    "transcribeModelDownloadFailedHint": "The speech model download failed. Click to see why and try again.",
     "transcribeInvalidHint": "The saved transcript could not be read. Transcribe the video again.",
     "transcribeFailed_no-audio": "This video has no audio to transcribe.",
     "transcribeFailed_engine-unavailable": "The transcription engine is not available.",

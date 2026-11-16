@@ -3491,6 +3491,7 @@
     "transcribeDialogTitle": "Primero descarga el modelo de voz",
     "transcribeDialogBody": "Para transcribir hace falta un modelo de voz en este Mac. Se descarga una sola vez, en segundo plano, y puedes seguir trabajando.",
     "transcribeDialogClose": "Ahora no",
+    "transcribeModelDownloadFailedHint": "La descarga del modelo de voz falló. Haz clic para ver el motivo y volver a intentarlo.",
     "transcribeInvalidHint": "No se pudo leer la transcripción guardada. Vuelve a transcribir el video.",
     "transcribeFailed_no-audio": "Este video no tiene audio para transcribir.",
     "transcribeFailed_engine-unavailable": "El motor de transcripción no está disponible.",

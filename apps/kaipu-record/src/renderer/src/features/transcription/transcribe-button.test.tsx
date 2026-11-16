@@ -41,6 +41,7 @@ interface Fns {
 function setControl(
   state: TranscribeControlState,
   model: TranscriptionModelInfo = modelOf({ state: "missing" }),
+  failures: TranscribeControl["offer"]["failures"] = {},
 ): Fns {
   const fns: Fns = {
     start: vi.fn<TranscribeControl["start"]>(async () => null),
@@ -54,7 +55,7 @@ function setControl(
     cancel: fns.cancel,
     offer: {
       status: statusOf(model),
-      failures: {},
+      failures,
       refresh: fns.refresh,
       download: fns.download,
       cancel: vi.fn(async () => {}),
@@ -190,6 +191,43 @@ describe("TranscribeButton", () => {
     view.rerender(<TranscribeButton item={ITEM} variant="detail" />);
 
     expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("needs-model: a failed download shows a hint, and a click reopens the offer with the reason", () => {
+    setControl({ kind: "needs-model" }, modelOf({ state: "missing" }), {
+      [MODEL_ID]: "hash-mismatch",
+    });
+    mount("detail");
+
+    const hint = "The speech model download failed. Click to see why and try again.";
+    expect(screen.getByRole("status")).toHaveTextContent(hint);
+    const button = screen.getByRole("button", { name: "Transcribe" });
+    expect(button).toHaveAttribute("title", hint);
+    expect(button).toHaveAttribute("data-failed", "true");
+
+    fireEvent.click(button);
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+  });
+
+  it("needs-model: on a compact variant the failed-download hint is the tooltip and the name", () => {
+    setControl({ kind: "needs-model" }, modelOf({ state: "missing" }), {
+      [MODEL_ID]: "unknown",
+    });
+    mount("card");
+
+    const button = screen.getByRole("button", {
+      name: /Transcribe\. The speech model download failed/,
+    });
+    expect(button).toHaveAttribute("title", expect.stringContaining("download failed"));
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("needs-model: with no failure there is no hint", () => {
+    setControl({ kind: "needs-model" });
+    mount("detail");
+
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("button", { name: "Transcribe" })).not.toHaveAttribute("data-failed");
   });
 
   it("model-downloading: a disabled button with the percent", () => {
