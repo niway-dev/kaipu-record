@@ -97,7 +97,7 @@ test("Add in the Add from Library modal inserts the recording and undoes in one 
 
     // 3. Add with the default destination (after the clip under the playhead). The playhead is at
     // 0:00, so "after the clip under it" is 0:03.0.
-    await modal.getByRole("button", { name: "Add", exact: true }).click();
+    await modal.getByRole("button", { name: "Add after this clip", exact: true }).click();
 
     // 4. 3 s + 12 s, the opened recording first.
     await expect.poll(() => durationLabel(page), { timeout: 20_000 }).not.toBe(before);

@@ -175,7 +175,10 @@ export type LibraryItemKind = "recording" | "screenshot";
 /** Where a Library item can go (NIW2-829): over the video, or at one of four sequence boundaries. */
 export type LibraryDestination = "over" | "before-clip" | "after-clip" | "start" | "end";
 
-/** The destinations in the order the chooser lists them. */
+/**
+ * The destinations in the order the Add button's menu lists them (`add-destination-button.tsx`).
+ * The menu relies on `over` being first: it draws its separator after index 0.
+ */
 export const LIBRARY_DESTINATIONS: readonly LibraryDestination[] = [
   "over",
   "before-clip",
@@ -184,7 +187,7 @@ export const LIBRARY_DESTINATIONS: readonly LibraryDestination[] = [
   "end",
 ];
 
-/** What each kind of item selects before the user touches the chooser. */
+/** What each kind of item selects before the user touches the Add button's menu. */
 export function defaultDestination(kind: LibraryItemKind): LibraryDestination {
   return kind === "screenshot" ? "over" : "after-clip";
 }

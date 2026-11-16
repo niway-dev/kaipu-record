@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { toLayout } from "../timeline";
@@ -412,14 +413,13 @@ describe("AddFromLibraryModal", () => {
       it("the Add button says where it adds, following the chosen destination", () => {
         renderModal({ videos: list });
         const labels: Array<[RegExp, string]> = [
-          [OVER, "Add over the video"],
           [BEFORE, "Add before this clip"],
           [AFTER, "Add after this clip"],
           [START, "Add at the start"],
           [END, "Add at the end"],
         ];
         // Over is for screenshots, so a recording walks the four sequence places.
-        for (const [label, name] of labels.filter(([label]) => label !== OVER)) {
+        for (const [label, name] of labels) {
           choose(label);
           expect(screen.getByRole("button", { name })).toBeInTheDocument();
         }
@@ -518,13 +518,12 @@ describe("AddFromLibraryModal", () => {
           expect(item(END)).toHaveFocus();
         });
 
-        it("Enter on a focused option chooses it", () => {
+        it("Enter on a focused option chooses it", async () => {
           renderModal({ videos: list });
           fireEvent.click(arrow());
           fireEvent.keyDown(item(AFTER), { key: "ArrowUp" });
           expect(item(BEFORE)).toHaveFocus();
-          // A native button turns Enter into a click, which jsdom does not; click is that.
-          fireEvent.click(item(BEFORE));
+          await userEvent.keyboard("{Enter}");
           expect(screen.getByRole("button", { name: "Add before this clip" })).toBeInTheDocument();
         });
 
