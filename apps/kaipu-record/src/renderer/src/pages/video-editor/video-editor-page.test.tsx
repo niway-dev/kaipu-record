@@ -1494,8 +1494,11 @@ describe("VideoEditorPage — dropping the camera bubble", () => {
     webcam: { startOffsetMs: 0, offsetQuality: "exact", width: 1280, height: 720, fps: 30 },
   };
 
-  /** The editor with the bubble drawn at 1 s, then the bubble dragged 100 px to the right. */
-  async function dropBubble(): Promise<HTMLElement> {
+  /**
+   * The editor with the bubble drawn at 1 s, then the bubble dragged 100 px to the right.
+   * `selectFirst`: a click on the bubble first, which selects it (a pointer-down alone does not).
+   */
+  async function dropBubble({ selectFirst = false } = {}): Promise<HTMLElement> {
     renderEditor(WITH_WEBCAM);
     const footer = await waitForEditorLoaded();
     const main = Array.from(document.querySelectorAll("video")).find(
@@ -1510,6 +1513,10 @@ describe("VideoEditorPage — dropping the camera bubble", () => {
     screen.getByTestId("webcam-slot").getBoundingClientRect = () =>
       ({ width: 1000, height: 1000 }) as DOMRect;
     const bubble = screen.getByTestId("webcam-layer");
+    if (selectFirst) {
+      fireEvent.pointerDown(bubble, { clientX: 500, clientY: 500, pointerId: 1 });
+      fireEvent.pointerUp(bubble, { clientX: 500, clientY: 500, pointerId: 1 });
+    }
     fireEvent.pointerDown(bubble, { clientX: 500, clientY: 500, pointerId: 1 });
     fireEvent.pointerMove(bubble, { clientX: 300, clientY: 500, pointerId: 1 });
     fireEvent.pointerUp(bubble, { clientX: 300, clientY: 500, pointerId: 1 });
@@ -1576,13 +1583,18 @@ describe("VideoEditorPage — dropping the camera bubble", () => {
   it("Escape closes the card and the lane stays empty", async () => {
     stubDecodedVideoSize(1280, 720);
     try {
-      const footer = await dropBubble();
+      // Selected by a click first, so the Camera panel is open when the drop asks.
+      const footer = await dropBubble({ selectFirst: true });
       await screen.findByRole("group", { name: "Where to keep the camera" });
+      expect(screen.getByRole("heading", { name: "Camera" })).toBeInTheDocument();
       fireEvent.keyDown(window, { key: "Escape" });
       await waitFor(() =>
         expect(screen.queryByRole("group", { name: "Where to keep the camera" })).toBeNull(),
       );
       expect(footer.querySelector("[data-webcam-id]")).toBeNull();
+      // The page's own Escape clears the selection. The card's Escape must not, so the bubble
+      // stays selected and the Camera panel stays open.
+      expect(screen.getByRole("heading", { name: "Camera" })).toBeInTheDocument();
     } finally {
       stubDecodedVideoSize(0, 0);
     }
