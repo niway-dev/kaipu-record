@@ -9,7 +9,7 @@ import {
   type StartOutcome,
 } from "./transcription-job-store";
 import { useTranscriptionJob } from "./use-transcription-job";
-import { useTranscriptionStatus } from "./use-transcription-status";
+import { useTranscriptionStatus, type TranscriptionStatusApi } from "./use-transcription-status";
 
 export interface TranscribeControlItem {
   id: string;
@@ -26,6 +26,11 @@ export interface TranscribeControl {
   /** Starts a job when the control allows it; resolves `null` and does nothing otherwise. */
   start(): Promise<StartOutcome | null>;
   cancel(): void;
+  /**
+   * The model status this control reads, with its download, cancel and refresh calls, so the
+   * download offer a control opens changes the same state the control shows.
+   */
+  offer: TranscriptionStatusApi;
 }
 
 const STARTABLE: ReadonlySet<TranscribeControlState["kind"]> = new Set([
@@ -43,7 +48,8 @@ const STARTABLE: ReadonlySet<TranscribeControlState["kind"]> = new Set([
  */
 export function useTranscribeControl(item: TranscribeControlItem): TranscribeControl {
   const flagOn = useFlag("transcription");
-  const { status } = useTranscriptionStatus({ enabled: flagOn });
+  const offer = useTranscriptionStatus({ enabled: flagOn });
+  const { status } = offer;
   const { running, busyElsewhere, failure } = useTranscriptionJob(item.id);
   const doneThisSession = useSyncExternalStore(
     subscribe,
@@ -84,5 +90,5 @@ export function useTranscribeControl(item: TranscribeControlItem): TranscribeCon
     if (latest.current.state.kind === "running") cancelRunningTranscription();
   }, []);
 
-  return { state, start, cancel };
+  return { state, start, cancel, offer };
 }
