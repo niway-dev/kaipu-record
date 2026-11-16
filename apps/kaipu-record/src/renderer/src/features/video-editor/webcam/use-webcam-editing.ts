@@ -41,8 +41,8 @@ export interface WebcamEditing {
   /** Segments with at least one visible piece — what the lane and inspector use. */
   visibleSegments: WebcamSegment[];
   /**
-   * "Hide webcam here": a hidden segment from the playhead for {@link WEBCAM_PART_SECONDS}, or
-   * up to the next segment or the end of the recording, whichever comes first. Inside an
+   * "Hide webcam here": a hidden segment from the playhead for 10 seconds (what
+   * {@link webcamPartRoom} gives), or up to the next segment or the end of the recording, whichever comes first. Inside an
    * existing segment it returns that one instead of adding another.
    */
   hideAtPlayhead(timelineTime: number): HideWebcamResult;
