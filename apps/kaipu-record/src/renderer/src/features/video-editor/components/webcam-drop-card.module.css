@@ -1,0 +1,97 @@
+/* The drop card and the route it previews (camera parts, drag-first). It fills the preview's
+   chrome and lets every pointer through; only the card takes them. Above the webcam layer
+   (z-index 3) and the other chrome (4-5). */
+.root {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.card {
+  position: absolute;
+  box-sizing: border-box;
+  padding: var(--space-md) 14px;
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-popover);
+  pointer-events: auto;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+}
+
+.title {
+  flex: 1;
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+}
+
+.close {
+  display: flex;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.choices {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: 10px;
+}
+
+.choice {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--space-sm) 10px;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--bg-active);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.choice:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.primary {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+}
+
+.choice:disabled {
+  background: var(--bg-active);
+  color: var(--text-4);
+  cursor: default;
+}
+
+.choiceTitle {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+}
+
+.choiceDetail {
+  font-size: 10.5px;
+  opacity: 0.85;
+}

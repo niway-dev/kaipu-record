@@ -271,6 +271,21 @@ export const UI_MAP = {
       // exists only during the drag, and nothing drags a recording today (NIW2-789 reuses it).
       insertIndicator: { states: ["visible"], gatedBy: [{ flag: "timeline-levels" }] },
       webcam: { states: ["visible"] },
+      // The card that asks where a dropped camera bubble belongs: `asking` offers a new part,
+      // `noRoom` has less than a second before the next block or the end, so that choice is off.
+      webcamDrop: { states: ["asking", "noRoom"] },
+      // The paused preview's marks around the bubble: `originalLabel` is the label on the bubble
+      // in the original position; `partRoute` is a part's ghost bubble, dotted route and chip;
+      // `hiddenOutline` is the dashed outline where a hidden range would show the camera.
+      webcamMarks: { states: ["originalLabel", "partRoute", "hiddenOutline"] },
+      // The Camera panel in the inspector (camera parts, drag-first): `thisPart` is the tab with
+      // a part selected, `noPart` the same tab with no part under the playhead (a sentence and
+      // no button), `wholeVideo` the other tab (the original position, shape, size as S, M or L,
+      // mirror, shadow, shrink), `sizeCustom` that tab on a size no button has (none pressed),
+      // `hiddenRange` the panel for a selected hidden range.
+      webcamPanel: {
+        states: ["thisPart", "noPart", "wholeVideo", "sizeCustom", "hiddenRange"],
+      },
       // Floating images over the Clips sequence (ADR 0057, NIW2-771), behind the
       // `timeline-levels` flag. mediaLayer: the images drawn in the preview, `selected` adds the
       // frame with its four corner handles, `selectedFull` the same on a Full image. mediaPanel: the inspector of a selected image
@@ -291,7 +306,11 @@ export const UI_MAP = {
       // The Timeline guide (NIW2-679): a dialog over the editor, one tab per lane.
       trackGuide: { states: ["clips", "zooms", "webcam"] },
       toolbar: { states: ["default", "saving", "saved"] },
-      inspector: { states: ["detection", "zoom", "mute", "webcam", "annotation", "privacy"] },
+      // webcamBlock: a camera part or hidden range selected; `webcam` is the bubble selected
+      // (the Camera panel opens on it, see `webcamPanel`).
+      inspector: {
+        states: ["detection", "zoom", "mute", "webcam", "webcamBlock", "annotation", "privacy"],
+      },
       // The Background section at the top of the inspector with nothing selected (ADR 0051):
       // `default` is none with the sliders disabled, `set` is a preset with padding, corners, shadow.
       background: { states: ["default", "set"] },
@@ -313,8 +332,18 @@ export const UI_MAP = {
         ],
       },
       zoomLane: { states: ["empty", "segments"] },
+      // cameraBlock: a part, with its small frame, name and the wedge of its slide at its start;
+      // originalStretch: the dashed stretch where the camera stays in its original position;
+      // narrowSelected: a selected part drawn narrower than its glyph (a few pixels, on a long
+      // recording), with its two edge handles spread apart so both can be grabbed.
       // noCamera: the span over a clip whose recording has no webcam while another one has.
-      webcamLane: { states: ["segments", "noCamera"] },
+      webcamLane: {
+        states: ["segments", "cameraBlock", "originalStretch", "narrowSelected", "noCamera"],
+      },
+      // The card over a Camera-lane stretch after about 120 ms of hovering: a part, a hidden
+      // range or the original stretch, with its range, length and how it arrives. A tooltip
+      // drawn in the page's top layer, so it is its own area and not part of the lane.
+      webcamLaneCard: { states: ["hover"] },
       privacyLane: { states: ["empty", "regions"] },
       // `waveform` draws the loudness bars; `waveformMuted` is a hatched block over dimmed bars
       // (NIW2-775). `empty` (the empty-state text) is left only for a recording without an

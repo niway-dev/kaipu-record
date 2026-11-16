@@ -25,6 +25,14 @@
   cursor: grabbing;
 }
 
+/* Held bubbles get a thicker ring and a deeper shadow, selected or not. data-selected and
+   data-interactive are always rendered as "true" or "false", so this selector matches either
+   value; they only raise specificity so this rule outranks the selected and shadow rules below. */
+.bubble[data-dragging="true"][data-selected][data-interactive] {
+  filter: drop-shadow(0 0 2px var(--text-primary)) drop-shadow(0 0 2px var(--text-primary))
+    drop-shadow(0 0 3px var(--accent-primary)) drop-shadow(0 18px 20px rgba(0, 0, 0, 0.6));
+}
+
 /* filter, not box-shadow: the clip-path below would cut a box-shadow off with the corners. */
 .bubble[data-shadow="true"] {
   filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35));

@@ -1231,6 +1231,7 @@ async function runProfile(name: ProfileName, entries: CatalogEntry[]): Promise<v
           joinedRecordings: profile.joinedRecordings,
           slideSequence: profile.slideSequence,
           frameCaptures: profile.frameCaptures,
+          cameraRecordings: profile.cameraRecordings,
           textScreenshot: profile.textScreenshot,
           colorsScreenshots: profile.colorsScreenshots,
           lockedRedaction: profile.lockedRedaction,

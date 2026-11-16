@@ -11,23 +11,26 @@
 import { useCallback, useMemo } from "react";
 import { useLatest } from "../use-latest";
 import { clipBounds, type SourceAxis } from "../source-axis";
-import { freeWindowAt, isSourceRangeVisible, sourceTimeAtTimeline } from "../source-time";
+import { isSourceRangeVisible, sourceTimeAtTimeline } from "../source-time";
 import type { LayoutEntry } from "../timeline";
 import type { VideoScene } from "../scene";
 import type { VideoSceneController } from "../use-video-scene";
 import {
   addWebcamSegment,
+  clearWebcamPartLook,
   dragWebcamSegmentEdge,
   removeWebcamSegment,
   setWebcamLayout,
+  setWebcamTransition,
   updateWebcamSegment,
+  webcamPartRoom,
 } from "./webcam-edits";
 import {
-  WEBCAM_MIN_SEGMENT_SECONDS,
   webcamOverrideAt,
   type WebcamLayout,
   type WebcamScene,
   type WebcamSegment,
+  type WebcamTransition,
 } from "./webcam-model";
 
 export type HideWebcamResult =
@@ -40,11 +43,18 @@ export interface WebcamEditing {
   /** Segments with at least one visible piece — what the lane and inspector use. */
   visibleSegments: WebcamSegment[];
   /**
-   * "Hide webcam here": a hidden segment from the playhead to the next segment (or the end of
-   * the recording). Inside an existing segment it returns that one instead of adding another.
+   * "Hide webcam here": a hidden segment from the playhead for 10 seconds (what
+   * {@link webcamPartRoom} gives), or up to the next segment or the end of the recording, whichever comes first. Inside an
+   * existing segment it returns that one instead of adding another.
    */
   hideAtPlayhead(timelineTime: number): HideWebcamResult;
+  /** A discrete change of a block's Slide or Cut, duration or easing. */
+  commitTransition(id: string, patch: Partial<WebcamTransition>): void;
+  /** A live transition change during a gesture; `end()` makes it one undo step. */
+  liveTransition(id: string, patch: Partial<WebcamTransition>): void;
   remove(id: string): void;
+  /** "Use the whole-video look": drops a part's own shape, size and corners, as one undo step. */
+  takeWholeLook(id: string): void;
   edgeDrag(
     id: string,
     edge: "start" | "end",
@@ -100,13 +110,7 @@ export function useWebcamEditing({
       const existing = current.segments.find((s) => at >= s.start && at < s.end);
       if (existing) return { ok: true, id: existing.id };
       const bounds = clipBounds(axis, { sourceStart: at });
-      const window = freeWindowAt(
-        current.segments,
-        at,
-        Number.POSITIVE_INFINITY,
-        bounds,
-        WEBCAM_MIN_SEGMENT_SECONDS,
-      );
+      const window = webcamPartRoom(controller.scene, at, bounds);
       if (!window) return { ok: false, reason: "no-room" };
       const { scene: next, id } = addWebcamSegment(
         controller.scene,
@@ -120,10 +124,32 @@ export function useWebcamEditing({
     [controller, layout, axis],
   );
 
+  const commitTransition = useCallback(
+    (id: string, patch: Partial<WebcamTransition>) => {
+      if (controller.interacting) return;
+      controller.commit(setWebcamTransition(controller.scene, id, patch));
+    },
+    [controller],
+  );
+
+  const liveTransition = useCallback(
+    (id: string, patch: Partial<WebcamTransition>) =>
+      controller.updateLive(setWebcamTransition(controller.scene, id, patch)),
+    [controller],
+  );
+
   const remove = useCallback(
     (id: string) => {
       if (controller.interacting) return;
       controller.commit(removeWebcamSegment(controller.scene, id));
+    },
+    [controller],
+  );
+
+  const takeWholeLook = useCallback(
+    (id: string) => {
+      if (controller.interacting) return;
+      controller.commit(clearWebcamPartLook(controller.scene, id));
     },
     [controller],
   );
@@ -170,7 +196,10 @@ export function useWebcamEditing({
     webcam,
     visibleSegments,
     hideAtPlayhead,
+    commitTransition,
+    liveTransition,
     remove,
+    takeWholeLook,
     edgeDrag,
     commitLayout,
     begin: controller.beginInteract,

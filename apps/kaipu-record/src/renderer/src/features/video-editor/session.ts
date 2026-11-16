@@ -37,6 +37,8 @@ import {
   WEBCAM_DEFAULTS,
   WEBCAM_MIN_SEGMENT_SECONDS,
   clampWebcamPatch,
+  clampWebcamTransition,
+  WEBCAM_SAVED_EASING_FALLBACK,
   type WebcamLayout,
   type WebcamScene,
   type WebcamSegment,
@@ -588,6 +590,12 @@ function validateWebcamSegment(raw: unknown): WebcamSegment | null {
     if (!layout) return null;
     segment.layout = layout;
   }
+  // Not an object (absent included) is a Cut, which is also what a session saved before
+  // transitions existed gets. An object is read field by field, so one bad field costs only
+  // itself.
+  const transition = Array.isArray(g["transition"]) ? null : obj(g["transition"]);
+  if (transition)
+    segment.transition = clampWebcamTransition(transition, WEBCAM_SAVED_EASING_FALLBACK);
   return segment;
 }
 

@@ -4,6 +4,8 @@ import { parseSession, serializeSession } from "./session";
 import { PADDING_RANGE, RADIUS_RANGE, SHADOW_RANGE } from "../screenshots/beautify/backgrounds";
 import { DEFAULT_BACKGROUND } from "./background";
 import { SESSION_BEFORE_WEBCAM } from "./session-before-webcam.fixture";
+import { easeValue } from "./webcam/easing";
+import { webcamSizePreset, webcamStateAt } from "./webcam/webcam-model";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -470,6 +472,18 @@ describe("webcam layer", () => {
     expect(parseSession(serializeSession(scene))!.scene.webcam).toEqual(scene.webcam);
   });
 
+  it("opens a camera size no S, M or L button has at that size, and saving never rewrites it", () => {
+    // 0.27 sits between M (0.22) and L (0.33): no button is pressed for it, and it stays 0.27.
+    const scene: VideoScene = {
+      ...initialScene(10),
+      webcam: { layout: { ...LAYOUT, size: 0.27 } as never, segments: [] },
+    };
+    const first = parseSession(serializeSession(scene))!.scene;
+    expect(first.webcam!.layout.size).toBe(0.27);
+    expect(parseSession(serializeSession(first))!.scene.webcam!.layout.size).toBe(0.27);
+    expect(webcamSizePreset(first.webcam!.layout.size)).toBeNull();
+  });
+
   it("opens a layer saved before the corner slider with today's 18 % corner", () => {
     const { cornerRadius: _cornerRadius, ...before } = LAYOUT as Record<string, unknown>;
     const scene: VideoScene = {
@@ -592,6 +606,175 @@ describe("webcam layer", () => {
     const layer = segments([bad, { id: "ok", start: 30, end: 33, mode: "hidden" }])!.scene.webcam!;
     expect(layer.layout).toMatchObject({ size: 0.25 });
     expect(layer.segments.map((s) => s.id)).toEqual(["ok"]);
+  });
+
+  describe("transition", () => {
+    const withTransition = (transition: unknown) =>
+      segments([{ ...OVERRIDE, transition }])!.scene.webcam!.segments[0]!;
+
+    it("round-trips kind, duration and easing", () => {
+      const transition = { kind: "slide", ms: 900, easing: "ease-out" } as const;
+      const scene: VideoScene = {
+        ...initialScene(10),
+        webcam: {
+          layout: LAYOUT as never,
+          segments: [{ ...OVERRIDE, transition }] as never,
+        },
+      };
+      const loaded = parseSession(serializeSession(scene))!.scene.webcam!.segments[0]!;
+      expect(loaded.transition).toEqual(transition);
+      const cut = { kind: "cut", ms: 300, easing: "linear" } as const;
+      expect(withTransition(cut).transition).toEqual(cut);
+    });
+
+    it.each([
+      ["a bad kind", { kind: "wipe", ms: 900, easing: "linear" }, { kind: "slide" }],
+      ["a non-numeric duration", { kind: "cut", ms: "slow", easing: "linear" }, { ms: 700 }],
+      [
+        "a null duration (NaN saved as JSON)",
+        { kind: "cut", ms: null, easing: "linear" },
+        { ms: 700 },
+      ],
+      ["an unknown easing", { kind: "cut", ms: 900, easing: "bounce" }, { easing: "back" }],
+    ])("loads %s as the default for that field only", (_label, raw, expected) => {
+      const loaded = withTransition(raw).transition!;
+      expect(loaded).toMatchObject(expected);
+      expect(loaded).toEqual({ kind: "cut", ms: 900, easing: "linear", ...expected });
+    });
+
+    it("clamps the duration to the limits", () => {
+      expect(withTransition({ kind: "slide", ms: 20, easing: "back" }).transition!.ms).toBe(100);
+      expect(withTransition({ kind: "slide", ms: 90000, easing: "back" }).transition!.ms).toBe(
+        2000,
+      );
+    });
+
+    it("ignores a transition that is not an object, so the block is a Cut", () => {
+      for (const bad of ["slide", 7, null, true, []]) {
+        expect(withTransition(bad).transition).toBeUndefined();
+      }
+    });
+
+    it("never gives a hidden segment a transition", () => {
+      const hidden = segments([
+        { ...HIDDEN, transition: { kind: "slide", ms: 700, easing: "back" } },
+      ])!.scene.webcam!.segments[0]!;
+      expect(hidden).toEqual(HIDDEN);
+    });
+
+    it("opens a session saved before transitions with every block as a Cut, other fields intact", () => {
+      const layer = segments([HIDDEN, OVERRIDE])!.scene.webcam!;
+      expect(layer.segments).toEqual([HIDDEN, OVERRIDE]);
+      expect(layer.segments.every((s) => s.transition === undefined)).toBe(true);
+      expect(
+        parseSession(
+          serializeSession(
+            parseSession(
+              JSON.stringify({
+                version: 1,
+                scene: {
+                  items: [CLIP_ITEM],
+                  overlays: [],
+                  webcam: { layout: LAYOUT, segments: [HIDDEN, OVERRIDE] },
+                },
+              }),
+            )!.scene,
+          ),
+        )!.scene.webcam!.segments,
+      ).toEqual([HIDDEN, OVERRIDE]);
+    });
+
+    it("keeps a block's size and shape through load and save, next to its transition", () => {
+      const block = {
+        ...OVERRIDE,
+        layout: { position: { x: 0.8, y: 0.2 }, size: 0.4, shape: "rounded", cornerRadius: 0.3 },
+        transition: { kind: "slide", ms: 700, easing: "back" },
+      };
+      const scene = segments([block])!.scene;
+      const reopened = parseSession(serializeSession(scene))!.scene.webcam!.segments[0]!;
+      expect(reopened).toEqual(block);
+    });
+  });
+
+  describe("sessions saved before camera parts", () => {
+    const POSITION = { x: 0.8, y: 0.2 };
+    const reopen = (list: unknown[]) => {
+      const scene = segments(list)!.scene;
+      return parseSession(serializeSession(scene))!.scene;
+    };
+
+    it("opens a session from the first version, a block with a 700 ms back slide, unchanged", () => {
+      const block = {
+        ...OVERRIDE,
+        layout: { position: POSITION },
+        transition: { kind: "slide", ms: 700, easing: "back" },
+      };
+      const scene = reopen([HIDDEN, block]);
+      expect(scene.webcam!.segments).toEqual([HIDDEN, block]);
+      expect(scene.webcam!.layout).toMatchObject({ size: 0.25 });
+    });
+
+    it("opens a session from a released version, blocks with their own shape and size, untouched", () => {
+      const custom = {
+        id: "c",
+        start: 12,
+        end: 16,
+        mode: "override",
+        layout: { shape: "rounded", size: 0.5, cornerRadius: 0.3, position: POSITION },
+      };
+      const other = {
+        id: "d",
+        start: 20,
+        end: 24,
+        mode: "override",
+        layout: { shape: "rectangle", size: 0.3 },
+      };
+      const scene = reopen([HIDDEN, OVERRIDE, custom, other]);
+      expect(scene.webcam!.segments.map((s) => s.id)).toEqual(["h", "o", "c", "d"]);
+      expect(scene.webcam!.segments).toEqual([HIDDEN, OVERRIDE, custom, other]);
+    });
+
+    it("a saved slide without an easing plays as Bounce (back), not as the new default", () => {
+      const block = {
+        ...OVERRIDE,
+        layout: { position: POSITION },
+        transition: { kind: "slide", ms: 700 },
+      };
+      const scene = reopen([block]);
+      expect(scene.webcam!.segments[0]!.transition).toEqual({
+        kind: "slide",
+        ms: 700,
+        easing: "back",
+      });
+      // The block starts at 6 s: the middle of its 700 ms window is 6.35 s.
+      const midway = webcamStateAt(scene, 6.35)!;
+      expect(midway.easing).toBe("back");
+      expect(midway.progress).toBeCloseTo(easeValue("back", 0.5), 10);
+      expect(midway.progress).toBeGreaterThan(1);
+    });
+
+    it("a block with a 500 ms ease-out slide opens unchanged and plays with that window and curve", () => {
+      const block = {
+        ...OVERRIDE,
+        layout: { position: POSITION },
+        transition: { kind: "slide", ms: 500, easing: "ease-out" },
+      };
+      const scene = reopen([block]);
+      expect(scene.webcam!.segments[0]!.transition).toEqual({
+        kind: "slide",
+        ms: 500,
+        easing: "ease-out",
+      });
+      // The block starts at 6 s: the middle of its 500 ms window is 6.25 s.
+      const midway = webcamStateAt(scene, 6.25)!;
+      expect(midway.from).not.toBeNull();
+      expect(midway.easing).toBe("ease-out");
+      expect(midway.progress).toBeCloseTo(easeValue("ease-out", 0.5), 10);
+      // Past 500 ms it has settled, which a 700 ms window would not have.
+      const settled = webcamStateAt(scene, 6.55)!;
+      expect(settled.from).toBeNull();
+      expect(settled.progress).toBe(1);
+    });
   });
 
   it("accepts a segment a float short of the minimum, as the edge drag produces", () => {

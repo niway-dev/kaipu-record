@@ -150,6 +150,7 @@ function createFrameRenderer(
     overlayWindows: plan.overlayWindows,
     overlayBitmaps: new Map(msg.overlays.map((o) => [o.overlayId, o.bitmap])),
     webcam: plan.webcam,
+    sourceEndSeconds: plan.sourceDurationSeconds,
     // Floating images (spec 2026-11-13): the sliced plan's clock is offset to the timeline's.
     floating: {
       plan: plan.floating,

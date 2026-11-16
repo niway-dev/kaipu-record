@@ -56,8 +56,12 @@ function hash53(text: string): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
-/** The composer revision that draws the webcam layer; bump it when that drawing changes. */
-export const WEBCAM_COMPOSE_REVISION = "wc2";
+/**
+ * The composer revision that draws the webcam layer; bump it when that drawing changes.
+ * wc3: a camera part's bubble slides along a curved route (it was a straight line), so an
+ * export made before this one has the bubble in other places in the middle of a slide.
+ */
+export const WEBCAM_COMPOSE_REVISION = "wc3";
 /**
  * The composer revision that draws the background (ADR 0051); bump it when that drawing
  * changes. Tagged only when a background is set: with `none` the scene is the plain picture.
@@ -107,8 +111,15 @@ export function editFingerprint(scene: VideoScene, editableCursor = false): stri
   // so a pre-overlay export can never be reused as an export containing the pointer.
   const { cursor, ...rest } = saved;
   const normalized = stableStringify(cursor) === stableStringify(DEFAULT_CURSOR) ? rest : saved;
-  if (editableCursor) return fingerprint(CURSOR_COMPOSE_REVISION, normalized);
   const { webcam, ...withoutWebcam } = normalized;
+  // The editable-cursor export draws the webcam layer too, so with one it carries the webcam
+  // revision next to the cursor's: a bump of either makes an older file not reusable.
+  if (editableCursor) {
+    return fingerprint(
+      webcam ? `${CURSOR_COMPOSE_REVISION}:${WEBCAM_COMPOSE_REVISION}` : CURSOR_COMPOSE_REVISION,
+      normalized,
+    );
+  }
   return webcam
     ? fingerprint(WEBCAM_COMPOSE_REVISION, normalized)
     : fingerprint(null, withoutWebcam);

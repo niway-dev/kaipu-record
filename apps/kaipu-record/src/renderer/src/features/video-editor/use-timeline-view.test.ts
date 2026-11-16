@@ -474,3 +474,18 @@ describe("the hooks", () => {
     expect(result.current).toEqual({ zoom: 4, scroll: 500, laneWidth: 1000 });
   });
 });
+
+describe("showRange", () => {
+  it("zooms to the range and takes the view out of the playhead's hands", () => {
+    const store = makeStore();
+    store.showRange(40, 45);
+    expect(store.getState().zoom).toBeCloseTo(8, 9);
+    const scrolled = store.getState().scroll;
+    // Playback far from the range does not turn the page: the user placed this view.
+    store.follow(90);
+    expect(store.getState().scroll).toBe(scrolled);
+    store.resumeFollow();
+    store.follow(90);
+    expect(store.getState().scroll).not.toBe(scrolled);
+  });
+});

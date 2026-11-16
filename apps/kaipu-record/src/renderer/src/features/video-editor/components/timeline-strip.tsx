@@ -42,6 +42,7 @@ import {
 } from "./timeline-geometry";
 import {
   TimelinePointerContext,
+  TimelineShowRangeContext,
   TimelineViewContext,
   type TimelinePointer,
 } from "./timeline-pointer";
@@ -202,6 +203,10 @@ export const TimelineStrip = memo(function TimelineStrip({
   const ownStore = useTimelineViewStore(duration);
   const store = timelineView ?? ownStore;
   const viewState = useTimelineViewState(store);
+  const showRange = useCallback(
+    (start: number, end: number) => store.showRange(start, end),
+    [store],
+  );
   // `viewState` is a stable snapshot: a new object only when zoom, scroll or lane changed.
   const view = useMemo(() => clampView({ ...viewState, duration }), [viewState, duration]);
 
@@ -519,136 +524,138 @@ export const TimelineStrip = memo(function TimelineStrip({
           playhead lives in its own layer spanning column 2 across every row (see
           .playheadLayer) and scrolls with them. */}
       <TimelinePointerContext.Provider value={pointer}>
-        <TimelineViewContext.Provider value={view}>
-          <div
-            ref={bodyRef}
-            data-testid="timeline-scroller"
-            data-zoom={view.zoom}
-            data-scrolled={view.scroll > 0 ? "true" : "false"}
-            className={styles.timelineBody}
-            style={{ "--zoom": view.zoom } as CSSProperties}
-            onScroll={onScroll}
-          >
-            <span ref={cornerRef} data-testid="lane-corner" className={styles.laneLabel} />
+        <TimelineShowRangeContext.Provider value={showRange}>
+          <TimelineViewContext.Provider value={view}>
             <div
-              data-testid="ruler"
-              className={styles.ruler}
-              onPointerDown={startScrub}
-              onPointerMove={onRulerPointerMove}
-              onPointerUp={endScrub}
-              onPointerCancel={endScrub}
-              onLostPointerCapture={endScrub}
-              onPointerLeave={hideHover}
+              ref={bodyRef}
+              data-testid="timeline-scroller"
+              data-zoom={view.zoom}
+              data-scrolled={view.scroll > 0 ? "true" : "false"}
+              className={styles.timelineBody}
+              style={{ "--zoom": view.zoom } as CSSProperties}
+              onScroll={onScroll}
             >
-              {rulerMarks}
-            </div>
-            {/* The Clips section opens with the floating images, on rows above the sequence
+              <span ref={cornerRef} data-testid="lane-corner" className={styles.laneLabel} />
+              <div
+                data-testid="ruler"
+                className={styles.ruler}
+                onPointerDown={startScrub}
+                onPointerMove={onRulerPointerMove}
+                onPointerUp={endScrub}
+                onPointerCancel={endScrub}
+                onLostPointerCapture={endScrub}
+                onPointerLeave={hideHover}
+              >
+                {rulerMarks}
+              </div>
+              {/* The Clips section opens with the floating images, on rows above the sequence
                 (row 1 nearest it). One label cell and one lane cell, so the label/lane pairing
                 of every row below is untouched; the lane stacks its own rows. */}
-            {media && media.placed.length > 0 && (
-              <>
-                <span className={styles.laneLabel} aria-hidden />
-                <div className={styles.laneCell}>
-                  <MediaLane media={media} duration={duration} />
-                </div>
-              </>
-            )}
-            {/* Clips lead: the recording is what every other lane edits. */}
-            <LaneLabel
-              icon={Film}
-              label={t("laneClips")}
-              guideTab="clips"
-              onOpenGuide={onOpenGuide}
-            />
-            <div
-              className={styles.track}
-              onPointerDown={startScrub}
-              onPointerMove={onTrackPointerMove}
-              onPointerUp={endScrub}
-              onPointerCancel={endScrub}
-              onLostPointerCapture={endScrub}
-              onDragOver={onDropRecording ? onTrackDragOver : undefined}
-              onDragLeave={onDropRecording ? onTrackDragLeave : undefined}
-              onDrop={onDropRecording ? onTrackDrop : undefined}
-            >
-              {insertAt !== null && (
-                <InsertIndicator time={insertAt} fraction={timeToFraction(insertAt, duration)} />
+              {media && media.placed.length > 0 && (
+                <>
+                  <span className={styles.laneLabel} aria-hidden />
+                  <div className={styles.laneCell}>
+                    <MediaLane media={media} duration={duration} />
+                  </div>
+                </>
               )}
-              {layout.map((entry) => {
-                const recording = clipRecordings?.get(entry.itemId);
-                return (
-                  <TrackBlock
-                    key={entry.itemId}
-                    entry={entry}
-                    duration={duration}
-                    thumbnails={
-                      recording && recording.sourceId !== null
-                        ? (recordingThumbnails?.get(recording.sourceId) ?? NO_THUMBNAILS)
-                        : thumbnails
-                    }
-                    recording={recording}
-                    sameRecording={sameRecording.has(entry.itemId)}
-                    onHover={clipRecordings ? setHoveredItemId : undefined}
-                    scale={scale}
-                    shown={shown}
-                    selected={entry.itemId === selectedItemId}
-                    onSelect={onSelectItem}
-                    freezeMapping={freezeMapping}
-                    onDragActive={setEditDrag}
-                    onTrim={onTrim}
-                    slideUrlFor={slideUrlFor}
-                    onSlideDuration={onSlideDuration}
-                  />
-                );
-              })}
-            </div>
-            {/* Annotations are made with the drawing tools on the preview, never on this lane,
-                so an empty lane would only be a blank row: it appears with the first one. */}
-            {showOverlays && overlays.length > 0 && (
-              <LaneRow
-                icon={PenLine}
-                label={t("laneAnnotations")}
-                guideTab="annotations"
+              {/* Clips lead: the recording is what every other lane edits. */}
+              <LaneLabel
+                icon={Film}
+                label={t("laneClips")}
+                guideTab="clips"
                 onOpenGuide={onOpenGuide}
+              />
+              <div
+                className={styles.track}
+                onPointerDown={startScrub}
+                onPointerMove={onTrackPointerMove}
+                onPointerUp={endScrub}
+                onPointerCancel={endScrub}
+                onLostPointerCapture={endScrub}
+                onDragOver={onDropRecording ? onTrackDragOver : undefined}
+                onDragLeave={onDropRecording ? onTrackDragLeave : undefined}
+                onDrop={onDropRecording ? onTrackDrop : undefined}
               >
-                <OverlayLane
-                  overlays={overlays}
-                  duration={duration}
-                  selectedOverlayId={selectedOverlayId}
-                  onSelectOverlay={onSelectOverlay}
-                  onWindowChange={handleWindowChange}
-                />
-              </LaneRow>
-            )}
-            {extraLanes.map((lane) => (
-              <LaneRow
-                key={lane.key}
-                icon={lane.icon}
-                label={lane.label}
-                guideTab={isGuideTab(lane.key) ? lane.key : undefined}
-                onOpenGuide={onOpenGuide}
-              >
-                {lane.node}
-              </LaneRow>
-            ))}
-            {/* Positioned via direct DOM mutation in the subscribeTime callback (avoid React
-                re-renders at 60fps). The layer spans every row of the lanes column. */}
-            <div className={styles.playheadLayer}>
-              {boundaries.map((at) => (
-                <div
-                  key={at}
-                  className={styles.recordingDivider}
-                  data-testid="recording-divider"
-                  style={{ left: `${timeToFraction(at, duration) * 100}%` }}
-                />
-              ))}
-              <div ref={hoverRef} className={styles.hoverLine}>
-                <span ref={hoverLabelRef} className={styles.hoverTime} />
+                {insertAt !== null && (
+                  <InsertIndicator time={insertAt} fraction={timeToFraction(insertAt, duration)} />
+                )}
+                {layout.map((entry) => {
+                  const recording = clipRecordings?.get(entry.itemId);
+                  return (
+                    <TrackBlock
+                      key={entry.itemId}
+                      entry={entry}
+                      duration={duration}
+                      thumbnails={
+                        recording && recording.sourceId !== null
+                          ? (recordingThumbnails?.get(recording.sourceId) ?? NO_THUMBNAILS)
+                          : thumbnails
+                      }
+                      recording={recording}
+                      sameRecording={sameRecording.has(entry.itemId)}
+                      onHover={clipRecordings ? setHoveredItemId : undefined}
+                      scale={scale}
+                      shown={shown}
+                      selected={entry.itemId === selectedItemId}
+                      onSelect={onSelectItem}
+                      freezeMapping={freezeMapping}
+                      onDragActive={setEditDrag}
+                      onTrim={onTrim}
+                      slideUrlFor={slideUrlFor}
+                      onSlideDuration={onSlideDuration}
+                    />
+                  );
+                })}
               </div>
-              <div ref={playheadRef} className={styles.playhead} />
+              {/* Annotations are made with the drawing tools on the preview, never on this lane,
+                so an empty lane would only be a blank row: it appears with the first one. */}
+              {showOverlays && overlays.length > 0 && (
+                <LaneRow
+                  icon={PenLine}
+                  label={t("laneAnnotations")}
+                  guideTab="annotations"
+                  onOpenGuide={onOpenGuide}
+                >
+                  <OverlayLane
+                    overlays={overlays}
+                    duration={duration}
+                    selectedOverlayId={selectedOverlayId}
+                    onSelectOverlay={onSelectOverlay}
+                    onWindowChange={handleWindowChange}
+                  />
+                </LaneRow>
+              )}
+              {extraLanes.map((lane) => (
+                <LaneRow
+                  key={lane.key}
+                  icon={lane.icon}
+                  label={lane.label}
+                  guideTab={isGuideTab(lane.key) ? lane.key : undefined}
+                  onOpenGuide={onOpenGuide}
+                >
+                  {lane.node}
+                </LaneRow>
+              ))}
+              {/* Positioned via direct DOM mutation in the subscribeTime callback (avoid React
+                re-renders at 60fps). The layer spans every row of the lanes column. */}
+              <div className={styles.playheadLayer}>
+                {boundaries.map((at) => (
+                  <div
+                    key={at}
+                    className={styles.recordingDivider}
+                    data-testid="recording-divider"
+                    style={{ left: `${timeToFraction(at, duration) * 100}%` }}
+                  />
+                ))}
+                <div ref={hoverRef} className={styles.hoverLine}>
+                  <span ref={hoverLabelRef} className={styles.hoverTime} />
+                </div>
+                <div ref={playheadRef} className={styles.playhead} />
+              </div>
             </div>
-          </div>
-        </TimelineViewContext.Provider>
+          </TimelineViewContext.Provider>
+        </TimelineShowRangeContext.Provider>
       </TimelinePointerContext.Provider>
     </div>
   );

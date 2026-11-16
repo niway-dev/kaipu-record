@@ -40,6 +40,7 @@ import {
   layoutDuration,
   removeItem,
   setSlideDuration,
+  sourceToTimeline,
   splitClipAt,
   toLayout,
   trimClip,
@@ -86,16 +87,22 @@ import { focusInspectorFirstControl } from "@renderer/features/video-editor/focu
 import { ZoomLane } from "@renderer/features/video-editor/components/zoom-lane";
 import { WebcamLane } from "@renderer/features/video-editor/components/webcam-lane";
 import { WebcamLayer } from "@renderer/features/video-editor/components/webcam-layer";
-import {
-  WebcamInspector,
-  WebcamSegmentInspector,
-} from "@renderer/features/video-editor/components/inspector/webcam-inspector";
+import { WebcamDropCard } from "@renderer/features/video-editor/components/webcam-drop-card";
+import { WebcamMarks } from "@renderer/features/video-editor/components/webcam-marks";
+import { WebcamPanel } from "@renderer/features/video-editor/components/inspector/webcam-inspector";
 import { useWebcamEditing } from "@renderer/features/video-editor/webcam/use-webcam-editing";
-import { webcamAt, webcamOverrideAt } from "@renderer/features/video-editor/webcam/webcam-model";
+import { useWebcamDrop } from "@renderer/features/video-editor/webcam/use-webcam-drop";
+import {
+  webcamOverrideAt,
+  type WebcamSegment,
+} from "@renderer/features/video-editor/webcam/webcam-model";
+import { webcamHideBlock } from "@renderer/features/video-editor/webcam/webcam-edits";
 import type { WebcamRecordings } from "@renderer/features/video-editor/webcam/webcam-sync";
 import {
   webcamInspectorTarget,
   webcamOutlined,
+  webcamPlaySlideTarget,
+  webcamSelectSeekTarget,
 } from "@renderer/features/video-editor/webcam/webcam-selection";
 import {
   EditorInspector,
@@ -111,6 +118,7 @@ import {
 import { boxCenterAt, CameraBox } from "@renderer/features/video-editor/components/camera-box";
 import { HoldOriginalButton } from "@renderer/features/video-editor/components/hold-original-button";
 import { useCameraPath } from "@renderer/features/video-editor/zoom/use-camera-path";
+import { cameraAt } from "@renderer/features/video-editor/zoom/camera-path";
 import { useCameraPreview } from "@renderer/features/video-editor/zoom/use-camera-preview";
 import {
   isPrivacyTool,
@@ -1261,6 +1269,7 @@ function VideoEditor({
         .map((a) => ({ assetId: a.assetId, bytes: a.bytes }));
       void videoExport.start({
         scene,
+        sourceDurationSeconds: source.durationSeconds,
         sourceId: source.id,
         title: source.title,
         derivedFromAssetId: source.assetId,
@@ -1382,6 +1391,7 @@ function VideoEditor({
       if (frameSize.width === 0 || frameSize.height === 0) return null;
       return {
         scene,
+        sourceDurationSeconds: source.durationSeconds,
         sourceId: source.id,
         videoWidth: frameSize.width,
         videoHeight: frameSize.height,
@@ -1401,6 +1411,7 @@ function VideoEditor({
       scene,
       source.id,
       source.webcam,
+      source.durationSeconds,
       exportJoined,
       assetStoreRef,
       cameraPath,
@@ -1528,6 +1539,7 @@ function VideoEditor({
       setHighlightedCaptureId(null);
       const frame = await captureFrame({
         scene,
+        sourceDurationSeconds: source.durationSeconds,
         sourceId: source.id,
         videoWidth: frameSize.width,
         videoHeight: frameSize.height,
@@ -1915,8 +1927,10 @@ function VideoEditor({
     else if (result.reason === "no-room") showToast({ message: t("muteNoRoom") });
   }, [mutes, playback.timelineTime, selectKind, t]);
 
-  // "Hide webcam here": a hidden segment from the playhead to the next one, selected so its
-  // edges can be dragged straight away; inside a segment, that segment is selected instead.
+  // "Hide camera from here": a hidden range from the playhead for up to 10 seconds, selected so
+  // its edges can be dragged straight away. The rail disables the button inside a part, a hidden
+  // range, over a slide and with under 1 s of room (`webcamHideBlock`, the same rule); the
+  // reasons below are what a click that slips through reports.
   const handleHideWebcam = useCallback(() => {
     const result = webcamEdits.hideAtPlayhead(playback.timelineTime);
     if (result.ok) selectKind("webcam", result.id);
@@ -1930,6 +1944,21 @@ function VideoEditor({
       selectKind("webcam", null);
     },
     [webcamEdits, selectKind],
+  );
+
+  // "Play the slide": the playhead goes a little before the part and plays. `play()` reads the
+  // playhead from the render after the seek, so it starts on the next frame; a preview that is
+  // already playing keeps playing from the new place.
+  const handlePlayWebcamSlide = useCallback(
+    (part: WebcamSegment) => {
+      const target = webcamPlaySlideTarget(layoutRef.current, part);
+      if (target === null) return;
+      playbackRef.current.seek(target);
+      requestAnimationFrame(() => {
+        if (!playbackRef.current.playing) playbackRef.current.play();
+      });
+    },
+    [layoutRef, playbackRef],
   );
 
   const handleRemoveZoom = useCallback(
@@ -1962,6 +1991,11 @@ function VideoEditor({
         )
       : null;
   const selectedWebcamSegment = webcamTarget?.kind === "segment" ? webcamTarget.segment : null;
+  // The rail's "Hide camera from here" is disabled where it cannot hide, and says why.
+  const hideAt = sourceTimeAtTimeline(layout, playback.timelineTime);
+  const hideWebcamBlock = hasWebcam
+    ? webcamHideBlock(scene, hideAt, clipBounds(axis, { sourceStart: hideAt ?? 0 }))
+    : null;
 
   // Privacy (doc 10). While a privacy tool is active or a region is selected the preview
   // shows the unzoomed original frame, so drawing/editing maps 1:1 to frame coordinates.
@@ -2059,6 +2093,41 @@ function VideoEditor({
     privacyTool === null &&
     !onSlide;
   useCameraPreview(playback.videoRef, contentRef, cameraPath, cameraApplied);
+  // The bubble is being dragged: the paused marks step aside until it is dropped.
+  const [webcamHeld, setWebcamHeld] = useState(false);
+  // Picking the bubble up pauses a playing video: the drop answers for ONE moment, and the
+  // card closes when the playhead moves, so a drop during playback would vanish.
+  const handleWebcamHeld = useCallback(
+    (held: boolean) => {
+      setWebcamHeld(held);
+      if (held && playbackRef.current.playing) playbackRef.current.pause();
+    },
+    [playbackRef],
+  );
+  // A drop outside every camera part asks before the scene changes (camera parts, drag-first).
+  const webcamDrop = useWebcamDrop({
+    controller,
+    edits: webcamEdits,
+    sourceDuration: source.durationSeconds,
+    axis,
+    frame: frameSize,
+    cameraScaleAt: (t) => (cameraApplied ? cameraAt(cameraPath, t).scale : 1),
+    select: selectKind,
+    // The new part starts at the playhead, where the bubble is still in its old place: move just
+    // past its slide so the preview shows the bubble where it was dropped.
+    seekToPart: (part) => {
+      const target = webcamSelectSeekTarget(
+        layoutRef.current,
+        playbackRef.current.timelineTime,
+        part,
+      );
+      if (target !== null) playbackRef.current.seek(target);
+    },
+    timelineOf: (t) => sourceToTimeline(layoutRef.current, t),
+    timelineTime: playback.timelineTime,
+    playing: playback.playing,
+    selection: selection.selection,
+  });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -2180,7 +2249,19 @@ function VideoEditor({
 
   // Lane inputs that used to be inline closures/literals: with stable identities the memoised
   // lanes skip the re-render a slider drag would otherwise force on every one of them (NIW2-662).
-  const handleSelectWebcam = useCallback((id: string) => selectKind("webcam", id), [selectKind]);
+  // Selecting a part moves the playhead just past its slide, so the preview shows it settled
+  // (a hidden range: the zoom lane's rule). The marks and the panel read the playhead.
+  const handleSelectWebcam = useCallback(
+    (id: string) => {
+      selectKind("webcam", id);
+      const segment = controllerRef.current.scene.webcam?.segments.find((s) => s.id === id);
+      if (!segment) return;
+      const live = playbackRef.current;
+      const target = webcamSelectSeekTarget(layoutRef.current, live.timelineTime, segment);
+      if (target !== null) live.seek(target);
+    },
+    [selectKind, controllerRef, layoutRef, playbackRef],
+  );
   const handleSelectMute = useCallback((id: string) => selectKind("mute", id), [selectKind]);
   const slideUrlFor = useCallback(
     (assetId: string) => assetStoreRef.current.get(assetId)?.url ?? null,
@@ -2257,10 +2338,13 @@ function VideoEditor({
                     layout={layout}
                     thumbnails={webcamStrip.thumbnails}
                     covered={webcamStrip.covered}
+                    defaultLayout={scene.webcam?.layout}
+                    frame={frameSize}
                     noCameraItemIds={noCameraClips}
                     clipRecordings={clipRecordingMap}
                     recordingStrips={webcamRecordingStrips}
                     selectedId={webcamSelectedId}
+                    pendingPart={webcamDrop.card?.room ?? null}
                     onSelect={handleSelectWebcam}
                     onEdgeDrag={webcamEdits.edgeDrag}
                   />
@@ -2315,10 +2399,13 @@ function VideoEditor({
       webcamEdits.edgeDrag,
       webcamStrip.thumbnails,
       webcamStrip.covered,
+      scene.webcam?.layout,
+      frameSize,
       noCameraClips,
       clipRecordingMap,
       webcamRecordingStrips,
       webcamSelectedId,
+      webcamDrop.card?.room,
       handleSelectWebcam,
       redactionEdits.visibleRedactions,
       redactionEdits.edgeDrag,
@@ -2384,6 +2471,7 @@ function VideoEditor({
                     startOffsetMs={webcamTrack?.startOffsetMs ?? 0}
                     recordings={webcamRecordings}
                     webcam={scene.webcam}
+                    endSeconds={source.durationSeconds}
                     path={cameraPath}
                     cameraEnabled={cameraApplied}
                     frame={frameSize}
@@ -2398,11 +2486,9 @@ function VideoEditor({
                       const override = scene.webcam && webcamOverrideAt(scene.webcam, sourceTime);
                       selectKind("webcam", override?.id ?? WEBCAM_LAYER_SELECTION);
                     }}
-                    onBegin={webcamEdits.begin}
-                    onMove={(position, sourceTime) =>
-                      webcamEdits.liveLayout({ position }, sourceTime)
-                    }
-                    onEnd={webcamEdits.end}
+                    dropAt={webcamDrop.card?.position ?? null}
+                    onDrop={webcamDrop.drop}
+                    onHeldChange={handleWebcamHeld}
                   />
                 )
               }
@@ -2466,6 +2552,33 @@ function VideoEditor({
                       }
                       onDraft={setDraftRegion}
                       onCreate={handleCreateRegion}
+                    />
+                  )}
+                  {hasWebcam && scene.webcam && !holdingOriginal && !onSlide && (
+                    <WebcamMarks
+                      webcam={scene.webcam}
+                      sourceTime={playheadSource}
+                      selectedId={webcamSelectedId}
+                      frame={frameSize}
+                      cameraScale={
+                        cameraApplied && playheadSource !== null
+                          ? cameraAt(cameraPath, playheadSource).scale
+                          : 1
+                      }
+                      endSeconds={source.durationSeconds}
+                      playing={playback.playing}
+                      // The held bubble (a drag, or the card asking) is not where the scene has
+                      // it, so the scene's marks would point at the wrong place.
+                      suppressed={webcamHeld || webcamDrop.card !== null}
+                    />
+                  )}
+                  {webcamDrop.card && !holdingOriginal && !onSlide && (
+                    <WebcamDropCard
+                      card={webcamDrop.card}
+                      frame={frameSize}
+                      onPart={webcamDrop.answerPart}
+                      onWhole={webcamDrop.answerWhole}
+                      onClose={webcamDrop.close}
                     />
                   )}
                   <HoldOriginalButton holding={holdingOriginal} onHoldChange={setHoldingOriginal} />
@@ -2565,6 +2678,7 @@ function VideoEditor({
           onAddZoom={handleAddZoom}
           privacyDisabled={onSlide}
           onHideWebcam={hasWebcam ? handleHideWebcam : undefined}
+          hideWebcamBlock={hideWebcamBlock}
           onOpenCursor={
             cursorData
               ? () => (cursorInspectorOpen ? setCursorInspectorOpen(false) : openCursorInspector())
@@ -2713,21 +2827,20 @@ function VideoEditor({
                   }
                   onRemoved={() => selectKind("zoom", null)}
                 />
-              ) : scene.webcam && webcamTarget?.kind === "layer" ? (
-                <WebcamInspector
-                  layout={scene.webcam.layout}
-                  edits={webcamEdits}
-                  frame={frameSize}
-                  onHideHere={handleHideWebcam}
-                />
-              ) : selectedWebcamSegment ? (
-                <WebcamSegmentInspector
+              ) : scene.webcam && webcamTarget ? (
+                <WebcamPanel
+                  key={selectedWebcamId}
+                  webcam={scene.webcam}
                   segment={selectedWebcamSegment}
-                  index={webcamEdits.visibleSegments.indexOf(selectedWebcamSegment) + 1}
-                  range={timelineRangeOf(selectedWebcamSegment.start, selectedWebcamSegment.end)}
-                  layout={webcamAt(scene, selectedWebcamSegment.start) ?? scene.webcam!.layout}
+                  range={
+                    selectedWebcamSegment
+                      ? timelineRangeOf(selectedWebcamSegment.start, selectedWebcamSegment.end)
+                      : null
+                  }
+                  playhead={playback.timelineTime}
                   edits={webcamEdits}
                   frame={frameSize}
+                  onPlaySlide={handlePlayWebcamSlide}
                   onRemoved={() => selectKind("webcam", null)}
                 />
               ) : selectedOverlay ? (

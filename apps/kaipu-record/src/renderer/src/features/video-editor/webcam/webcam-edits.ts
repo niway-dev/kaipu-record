@@ -5,13 +5,17 @@
  * A recording without a webcam has no layer to edit, so every edit passes the scene through.
  */
 import { newId, type VideoScene } from "../scene";
-import { dragRangeEdge, type SourceBounds } from "../source-time";
+import { dragRangeEdge, freeWindowAt, type SourceBounds } from "../source-time";
 import {
   WEBCAM_MIN_SEGMENT_SECONDS,
+  WEBCAM_PART_SECONDS,
+  WEBCAM_TRANSITION_DEFAULTS,
   clampWebcamPatch,
+  clampWebcamTransition,
   type WebcamLayout,
   type WebcamScene,
   type WebcamSegment,
+  type WebcamTransition,
 } from "./webcam-model";
 
 function sameValue(a: unknown, b: unknown): boolean {
@@ -51,6 +55,8 @@ export function addWebcamSegment(
     end: number;
     mode: WebcamSegment["mode"];
     layout?: Partial<WebcamLayout>;
+    /** `override` only. Absent is a Cut. */
+    transition?: Partial<WebcamTransition>;
   },
   bounds: SourceBounds,
 ): { scene: VideoScene; id: string | null } {
@@ -67,6 +73,9 @@ export function addWebcamSegment(
   if (!valid) return { scene, id: null };
   const segment: WebcamSegment = { id: newId(), start, end, mode: input.mode };
   if (input.mode === "override" && input.layout) segment.layout = clampWebcamPatch(input.layout);
+  if (input.mode === "override" && input.transition) {
+    segment.transition = clampWebcamTransition(input.transition);
+  }
   return {
     scene: withWebcam(scene, {
       ...webcam,
@@ -139,4 +148,132 @@ export function removeWebcamSegment(scene: VideoScene, id: string): VideoScene {
   const webcam = scene.webcam;
   if (!webcam?.segments.some((s) => s.id === id)) return scene;
   return withWebcam(scene, { ...webcam, segments: webcam.segments.filter((s) => s.id !== id) });
+}
+
+/**
+ * The free window a camera part (or a hidden range) can take at source time `at`:
+ * {@link WEBCAM_PART_SECONDS}, or less when another block or the end of `bounds` (the
+ * recording under `at`) comes first. Null inside any block, or when under the minimum length is left, so the UI can say
+ * "10 s from 0:24" and disable the choice with the same rule the edit uses.
+ */
+export function webcamPartRoom(
+  scene: VideoScene,
+  at: number,
+  bounds: SourceBounds,
+): { start: number; end: number } | null {
+  const webcam = scene.webcam;
+  if (!webcam) return null;
+  return freeWindowAt(webcam.segments, at, WEBCAM_PART_SECONDS, bounds, WEBCAM_MIN_SEGMENT_SECONDS);
+}
+
+/** Why "Hide camera from here" cannot hide at a moment, or null when it can. */
+export type WebcamHideBlock = "on-slide" | "in-part" | "in-hidden" | "no-room";
+
+/**
+ * Whether the rail's "Hide camera from here" can hide at source time `at` (null over a slide
+ * clip, where there is no camera). It hides outside every block only: inside a part or a hidden
+ * range it is blocked, and with under the minimum length of room before the next block or the
+ * end of `bounds` (the recording under `at`). The rail disables the button with the reason as its tooltip.
+ * `hideAtPlayhead` repeats the slide, existing-block and room checks for a click that slips
+ * through (it returns the block it finds instead of adding one), so a change to this rule
+ * changes both; the tests of the two pin the same cases.
+ */
+export function webcamHideBlock(
+  scene: VideoScene,
+  at: number | null,
+  bounds: SourceBounds,
+): WebcamHideBlock | null {
+  const webcam = scene.webcam;
+  if (!webcam) return "no-room";
+  if (at === null) return "on-slide";
+  const inside = webcam.segments.find((s) => at >= s.start && at < s.end);
+  if (inside) return inside.mode === "hidden" ? "in-hidden" : "in-part";
+  return webcamPartRoom(scene, at, bounds) ? null : "no-room";
+}
+
+/**
+ * Create a camera part at `at`: an override block of {@link WEBCAM_PART_SECONDS} (or up to
+ * the next block or the end of the recording) holding `position`, with the default slide.
+ * The position is stored explicitly, so a later change of the default position does not move
+ * the part. Refused (the SAME scene back, `id: null`) with no webcam, inside any block, or
+ * with less than the minimum length of room.
+ */
+export function createWebcamPart(
+  scene: VideoScene,
+  input: { at: number; position: { x: number; y: number } },
+  bounds: SourceBounds,
+): { scene: VideoScene; id: string | null } {
+  const window = webcamPartRoom(scene, input.at, bounds);
+  if (!window) return { scene, id: null };
+  return addWebcamSegment(
+    scene,
+    {
+      ...window,
+      mode: "override",
+      layout: { position: { ...input.position } },
+      transition: { ...WEBCAM_TRANSITION_DEFAULTS },
+    },
+    bounds,
+  );
+}
+
+/**
+ * Change a block's transition: kind, duration or easing, over what it has now (a block with
+ * none is a Cut with the default duration and easing, so switching it to Slide gives the
+ * defaults). The duration is clamped to its limits. Duration and easing stay stored while the
+ * block is a Cut, so switching back restores them. Hidden blocks have no transition.
+ */
+export function setWebcamTransition(
+  scene: VideoScene,
+  id: string,
+  patch: Partial<WebcamTransition>,
+): VideoScene {
+  const webcam = scene.webcam;
+  const block = webcam?.segments.find((s) => s.id === id);
+  if (!webcam || !block || block.mode !== "override") return scene;
+  const current = block.transition ?? { ...WEBCAM_TRANSITION_DEFAULTS, kind: "cut" as const };
+  const next = clampWebcamTransition({ ...current, ...patch });
+  if (sameValue(next, current)) return scene;
+  return withWebcam(scene, {
+    ...webcam,
+    segments: webcam.segments.map((s) => (s.id === id ? { ...s, transition: next } : s)),
+  });
+}
+
+/** The layout fields a part can carry of its own that the panel has no control for. */
+const OWN_LOOK_KEYS = ["shape", "size", "cornerRadius"] as const;
+
+/**
+ * Which of shape, size and corners a part keeps of its own (older sessions saved them in the
+ * part). Empty for a hidden range, a part with no layout patch and a part that only holds a
+ * position, so the panel shows its note and button for the non-empty answer only.
+ */
+export function webcamOwnLook(part: WebcamSegment): Array<"shape" | "size" | "corners"> {
+  if (part.mode !== "override" || !part.layout) return [];
+  const own = part.layout;
+  const found: Array<"shape" | "size" | "corners"> = [];
+  if (own.shape !== undefined) found.push("shape");
+  if (own.size !== undefined) found.push("size");
+  if (own.cornerRadius !== undefined) found.push("corners");
+  return found;
+}
+
+/**
+ * "Use the whole-video look": drop a part's own shape, size and corner radius so it takes the
+ * whole video's, keeping its position, transition, mirror and every other field. The part stays
+ * even when nothing is left in its layout patch. The SAME scene back when it has none of the
+ * three, so an unneeded click never pushes an undo step.
+ */
+export function clearWebcamPartLook(scene: VideoScene, id: string): VideoScene {
+  const webcam = scene.webcam;
+  const part = webcam?.segments.find((s) => s.id === id);
+  if (!webcam || !part || webcamOwnLook(part).length === 0) return scene;
+  const kept: Partial<WebcamLayout> = { ...part.layout };
+  for (const key of OWN_LOOK_KEYS) delete kept[key];
+  const next: WebcamSegment = { ...part, layout: kept };
+  if (Object.keys(kept).length === 0) delete next.layout;
+  return withWebcam(scene, {
+    ...webcam,
+    segments: webcam.segments.map((s) => (s.id === id ? next : s)),
+  });
 }

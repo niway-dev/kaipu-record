@@ -246,6 +246,121 @@ describe("fillWebcamGap", () => {
     expect(emitted).toHaveLength(14);
   });
 
+  // Camera sections (ADR 0039): the bubble moves between webcam frames, so a fill is due
+  // even when the webcam frame due is the one already drawn.
+  it("also emits while the bubble is moving, even when the webcam frame did not change", async () => {
+    const emitted: number[] = [];
+    const source = frames(15);
+    await fillWebcamGap({
+      state: { from: 0, face: await source(0) },
+      nextFrame: 1,
+      segmentEnd: 10,
+      fps: 30,
+      visible: () => true,
+      moving: (t) => t >= 0.2 && t < 0.5,
+      frameAt: source,
+      emit: async (t) => {
+        emitted.push(t);
+        return true;
+      },
+    });
+    // Every 1/30 s inside the slide, and only the new webcam frames (1/15 s) outside it,
+    // plus one more at 0.5 s: the fill that draws the place the slide settled on.
+    const inside = emitted.filter((t) => t >= 0.2 && t < 0.5);
+    expect(inside).toHaveLength(9);
+    const outside = emitted.filter((t) => t < 0.2 || t >= 0.5);
+    expect(outside).toHaveLength(10);
+    // 15 fps frames start every 2nd fill time: 0.2 s (frame 3) is already due.
+    expect(emitted).toEqual([...emitted].sort((a, b) => a - b));
+  });
+
+  it("keeps the skip when nothing moves: moving false changes nothing", async () => {
+    const emitted: number[] = [];
+    const source = frames(15);
+    await fillWebcamGap({
+      state: { from: 0, face: await source(0) },
+      nextFrame: 1,
+      segmentEnd: 10,
+      fps: 30,
+      visible: () => true,
+      moving: () => false,
+      frameAt: source,
+      emit: async (t) => {
+        emitted.push(t);
+        return true;
+      },
+    });
+    expect(emitted).toHaveLength(14);
+  });
+
+  it("draws the place a slide settled on, even when no webcam frame is new after it", async () => {
+    const emitted: number[] = [];
+    const source = frames(15);
+    await fillWebcamGap({
+      state: { from: 0, face: await source(0) },
+      nextFrame: 2,
+      segmentEnd: 10,
+      fps: 30,
+      visible: () => true,
+      // The slide runs to 0.7 s; at 0.7 and after, the bubble no longer moves.
+      moving: (t) => t < 0.7 - 1e-9,
+      frameAt: async () => source(0),
+      emit: async (t) => {
+        emitted.push(t);
+        return true;
+      },
+    });
+    // The same webcam frame the whole time: only the slide (and its settle) is drawn.
+    const last = emitted.at(-1)!;
+    expect(last).toBeGreaterThanOrEqual(0.7 - 1e-9);
+    expect(last).toBeLessThan(0.7 + 1 / 30 + 1e-9);
+    expect(emitted.filter((t) => t < 0.7 - 1e-9)).toHaveLength(20);
+  });
+
+  it("tries the settle fill again when the cap dropped it", async () => {
+    const emitted: number[] = [];
+    const source = frames(15);
+    let dropped = false;
+    await fillWebcamGap({
+      state: { from: 0, face: await source(0) },
+      nextFrame: 2,
+      segmentEnd: 10,
+      fps: 30,
+      visible: () => true,
+      moving: (t) => t < 0.7 - 1e-9,
+      frameAt: async () => source(0),
+      emit: async (t) => {
+        emitted.push(t);
+        // The first fill after the slide is dropped by the cap.
+        if (t >= 0.7 - 1e-9 && !dropped) {
+          dropped = true;
+          return false;
+        }
+        return true;
+      },
+    });
+    const after = emitted.filter((t) => t >= 0.7 - 1e-9);
+    expect(after).toHaveLength(2);
+  });
+
+  it("does not re-compose a moving slide where no webcam frame exists (the screen is unchanged)", async () => {
+    const emitted: number[] = [];
+    await fillWebcamGap({
+      state: { from: 0, face: null },
+      nextFrame: 1,
+      segmentEnd: 10,
+      fps: 30,
+      visible: () => true,
+      moving: () => true,
+      frameAt: async () => null,
+      emit: async (t) => {
+        emitted.push(t);
+        return true;
+      },
+    });
+    expect(emitted).toEqual([]);
+  });
+
   it("emits nothing while the layer is hidden, except the one frame that removes the face", async () => {
     const emitted: Array<[number, unknown]> = [];
     await fillWebcamGap({
@@ -427,5 +542,27 @@ describe("fillWebcamGap with a floating image on screen (live)", () => {
     });
     expect(emitted).toEqual([0.2, 0.3, 0.4, 0.6]);
     expect(state.live).toBe(false);
+  });
+
+  it("draws both a slide and a floating image over the same still gap, each with its last fill", async () => {
+    const emitted: number[] = [];
+    const face = { index: 0 };
+    await fillWebcamGap({
+      state: { from: 0, face },
+      nextFrame: 1,
+      segmentEnd: 10,
+      fps: 10,
+      visible: () => true,
+      // The same webcam frame the whole gap: only the slide and the image call for fills.
+      frameAt: () => Promise.resolve(face),
+      moving: (t) => t >= 0.09 && t < 0.29,
+      live: (t) => t >= 0.49 && t < 0.69,
+      emit: async (t) => {
+        emitted.push(Math.round(t * 10) / 10);
+        return true;
+      },
+    });
+    // 0.3 draws the place the slide settled on; 0.7 removes the image.
+    expect(emitted).toEqual([0.1, 0.2, 0.3, 0.5, 0.6, 0.7]);
   });
 });

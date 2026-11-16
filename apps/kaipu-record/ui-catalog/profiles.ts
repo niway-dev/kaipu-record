@@ -26,6 +26,8 @@ export interface Profile {
   readonly slideSequence?: boolean;
   /** Add one screenshot taken from “Weekly sync” (`seed-vault.ts`), for the “From this recording” tag. */
   readonly frameCaptures?: boolean;
+  /** Add the two webcam recordings the editor's camera panel states open (`seed-vault.ts`). */
+  readonly cameraRecordings?: boolean;
   /** Add the screenshot that draws real text (`fixtures/text/`), for the Select text states. */
   readonly textScreenshot?: boolean;
   /** Add the screenshots the Colors panel states open (`fixtures/make-fixtures.ts`). */
@@ -144,6 +146,12 @@ export const PROFILES = {
     seed: "demo",
     flags: { "image-canvas": true },
     corruptCanvas: true,
+  },
+  "camera-parts": {
+    description:
+      "The vault adds “Camera parts” (a camera part and a hidden range) and “Camera size” (a camera size no S, M or L button has) and “Camera long” (20 minutes declared, a 5 s part): the editor's camera panel and Camera lane states.",
+    seed: "demo",
+    cameraRecordings: true,
   },
   "image-inspect": {
     description:

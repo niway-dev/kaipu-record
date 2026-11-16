@@ -12,7 +12,7 @@ import type { AudioEdits } from "../audio-edits";
 import type { Redaction } from "../privacy/redaction";
 import { recordingOfClip } from "./export-recordings";
 import { isSourceRangeVisible } from "../source-time";
-import type { WebcamScene } from "../webcam/webcam-model";
+import { webcamEndSeconds, type WebcamScene } from "../webcam/webcam-model";
 import { DEFAULT_BACKGROUND, type VideoBackground } from "../background";
 
 export interface RenderClipSegment {
@@ -67,6 +67,13 @@ export interface ExportPlan {
    * cheap, and the layer is decided per frame by `webcamAt`.
    */
   webcam: WebcamScene | null;
+  /**
+   * The recording's length in SOURCE seconds, when the caller knows it: the last camera
+   * block's return to the default layout settles before it, in the preview and in the
+   * export alike (ADR 0039). Not a clip's end: a cut never moves a block. Absent means no
+   * end is known, and the return keeps its whole duration.
+   */
+  sourceDurationSeconds?: number;
   /**
    * The picture's background (ADR 0051), drawn last by the composer; the worker reads
    * `hasBackground` — with `none` the padding, radius and shadow are never drawn.
@@ -149,6 +156,17 @@ export function buildExportPlan(scene: VideoScene): ExportPlan {
     background: scene.background ?? DEFAULT_BACKGROUND,
     ...(floating ? { floating } : {}),
   };
+}
+
+/**
+ * `plan` with the recording's length in source seconds, when it is usable: a missing, zero,
+ * NaN or infinite one returns the plan as it was. A separate step rather than a parameter of
+ * `buildExportPlan`, whose arity is pinned so nothing about the view can travel into it: the
+ * recording's length is a fact of the source, not of the view.
+ */
+export function withSourceDuration(plan: ExportPlan, seconds: number | undefined): ExportPlan {
+  const usable = webcamEndSeconds(seconds);
+  return usable === undefined ? plan : { ...plan, sourceDurationSeconds: usable };
 }
 
 /**

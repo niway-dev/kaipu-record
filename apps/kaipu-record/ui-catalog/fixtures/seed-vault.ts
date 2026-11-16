@@ -55,6 +55,12 @@ export const ASSETS = {
   squareSecond: "c0a1a10c-0000-4000-8000-00000000000e",
   /** Seeded only where `slideSequence` is on: a saved edit of one clip followed by three slides. */
   slidesDemo: "c0a1a10c-0000-4000-8000-00000000000f",
+  /** Seeded only where `cameraRecordings` is on: a webcam recording with a part and a hidden range. */
+  cameraParts: "c0a1a10c-0000-4000-8000-000000000010",
+  /** Seeded with `cameraParts`: a webcam recording saved at a camera size no S, M or L button has. */
+  cameraSize: "c0a1a10c-0000-4000-8000-000000000011",
+  /** Seeded with `cameraParts`: a recording that declares 20 minutes, with a 5 s camera part. */
+  cameraLong: "c0a1a10c-0000-4000-8000-000000000012",
   settingsShot: "c0a1a10c-0000-4000-8000-000000000101",
   dashboardShot: "c0a1a10c-0000-4000-8000-000000000102",
   dialogShot: "c0a1a10c-0000-4000-8000-000000000103",
@@ -176,6 +182,12 @@ interface RecordingFixture {
   assetId: string;
   title: string;
   cut: RecordingCut;
+  /**
+   * The length the sidecar and the saved edit declare, when it is longer than the media file
+   * (a long recording: under a pixel per second on the timeline at fit zoom). The media is still the `cut`; the editor sizes
+   * its lanes from the declared length.
+   */
+  declaredSeconds?: number;
   ago: number;
   tags?: TagName[];
   /** A saved edit session (a zoom and a muted range): the "edited" look in the library. */
@@ -194,6 +206,12 @@ interface RecordingFixture {
   joinedVideo?: boolean;
   /** The media is `FIXTURE_FILES.joinedSquareCut` (1080x1080) and the capture is 1080x1080. */
   square?: boolean;
+  /**
+   * A saved edit session with nothing but a webcam layer (the camera panel's states): `size` is
+   * the whole-video camera size, `segments` are camera parts and hidden ranges in source seconds.
+   * Needs `webcam`.
+   */
+  cameraScene?: { size: number; segments: readonly Record<string, unknown>[] };
   /** An export: the asset it was made from. */
   derivedFrom?: string;
   /** An export: the preset it was made with (the sidecar's `exportPreset`). */
@@ -483,6 +501,66 @@ export function slideScene(seconds: number): unknown {
     webcam: null,
   };
 }
+/** Seeded only where `cameraRecordings` is on: the recordings the camera panel's states open. */
+const CAMERA_RECORDINGS: readonly RecordingFixture[] = [
+  {
+    // A part (2 s to 6 s, up in the top right, sliding in) and a hidden range (8 s to 10 s).
+    stem: "Camera parts",
+    assetId: ASSETS.cameraParts,
+    title: "Camera parts",
+    cut: 12,
+    ago: 20 * 60_000,
+    webcam: true,
+    cameraScene: {
+      size: 0.22,
+      segments: [
+        {
+          id: "part-1",
+          start: 2,
+          end: 6,
+          mode: "override",
+          layout: { position: { x: 0.88, y: 0.18 } },
+          transition: { kind: "slide", ms: 700, easing: "ease-in-out" },
+        },
+        { id: "hidden-1", start: 8, end: 10, mode: "hidden" },
+      ],
+    },
+  },
+  {
+    // The camera size is 0.27: between S (0.15) and M (0.22) and L (0.33), so no button is pressed.
+    stem: "Camera size",
+    assetId: ASSETS.cameraSize,
+    title: "Camera size",
+    cut: 9,
+    ago: 25 * 60_000,
+    webcam: true,
+    cameraScene: { size: 0.27, segments: [] },
+  },
+  {
+    // Declares 20 minutes, so at fit zoom a 1000 px lane gives a second under a pixel: the
+    // part (2 s to 7 s) is about 4 px wide, narrower than its glyph and its 10 px handle limit.
+    stem: "Camera long",
+    assetId: ASSETS.cameraLong,
+    title: "Camera long",
+    cut: 12,
+    declaredSeconds: 1200,
+    ago: 27 * 60_000,
+    webcam: true,
+    cameraScene: {
+      size: 0.22,
+      segments: [
+        {
+          id: "part-1",
+          start: 2,
+          end: 7,
+          mode: "override",
+          layout: { position: { x: 0.88, y: 0.18 } },
+          transition: { kind: "slide", ms: 700, easing: "ease-in-out" },
+        },
+      ],
+    },
+  },
+];
 
 const SCREENSHOTS = [
   {
@@ -531,6 +609,8 @@ export interface SeedOptions {
    * other states' Captures shots stay as they were.
    */
   frameCaptures?: boolean;
+  /** Add the webcam recordings the editor's camera panel and lane states open. */
+  cameraRecordings?: boolean;
   /** Add the screenshot that draws real text (profiles that exercise text recognition). */
   textScreenshot?: boolean;
   /** Add the two screenshots the Colors panel states open (profiles that exercise it). */
@@ -689,7 +769,7 @@ async function seedRecording(
     sidecarVersion: 2,
     assetId: item.assetId,
     title: item.title,
-    durationSeconds: item.cut,
+    durationSeconds: item.declaredSeconds ?? item.cut,
     createdAt,
     ...(item.derivedFrom ? { derivedFromAssetId: item.derivedFrom } : {}),
     ...(item.exportPreset ? { exportPreset: item.exportPreset } : {}),
@@ -862,15 +942,60 @@ async function seedRecording(
         webcam: null,
       },
     });
-    const source = await stat(media);
-    await writeJson(path.join(meta, `${item.stem}.edit.meta.json`), {
-      sourceSizeBytes: source.size,
-      sourceMtimeMs: source.mtimeMs,
-      assetIds: [],
-      savedAt,
-      exportedSavedAt: null,
-    });
+    await writeEditMeta(meta, media, item.stem, savedAt);
   }
+  if (item.cameraScene) {
+    await writeJson(path.join(meta, `${item.stem}.edit.json`), {
+      version: 1,
+      scene: {
+        items: [
+          {
+            id: "clip-1",
+            kind: "clip",
+            sourceStart: 0,
+            sourceEnd: item.declaredSeconds ?? item.cut,
+          },
+        ],
+        overlays: [],
+        zoomSegments: [],
+        redactions: [],
+        zoomSensitivity: 55,
+        audioMuted: false,
+        mutedRanges: [],
+        webcam: {
+          layout: {
+            shape: "circle",
+            size: item.cameraScene.size,
+            cornerRadius: 0.18,
+            position: { x: 0.12, y: 0.82 },
+            mirrored: true,
+            framing: { zoom: 1, x: 0, y: 0 },
+            scaleDuringZoom: 0.7,
+            shadow: true,
+          },
+          segments: item.cameraScene.segments,
+        },
+      },
+    });
+    await writeEditMeta(meta, media, item.stem, createdAt + HOUR);
+  }
+}
+
+/** The sidecar next to a saved edit session: it says the session matches the media on disk. */
+async function writeEditMeta(
+  meta: string,
+  media: string,
+  stem: string,
+  savedAt: number,
+): Promise<void> {
+  const source = await stat(media);
+  await writeJson(path.join(meta, `${stem}.edit.meta.json`), {
+    sourceSizeBytes: source.size,
+    sourceMtimeMs: source.mtimeMs,
+    assetIds: [],
+    savedAt,
+    exportedSavedAt: null,
+  });
 }
 
 /** Build the catalog's workspace in `vaultDir` (an empty, throwaway folder). */
@@ -915,6 +1040,7 @@ export async function seedCatalogVault(vaultDir: string, options: SeedOptions): 
     ...(options.joinedRecordings ? JOINED_RECORDINGS : []),
     ...(options.slideSequence ? [SLIDES_RECORDING] : []),
     ...(options.cursorRecording ? [CURSOR_RECORDING] : []),
+    ...(options.cameraRecordings ? CAMERA_RECORDINGS : []),
     ...RECORDINGS,
   ];
   for (const item of recordings) await seedRecording(vaultDir, meta, fixtures, now, item);

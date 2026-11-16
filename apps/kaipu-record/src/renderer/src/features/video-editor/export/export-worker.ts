@@ -352,6 +352,7 @@ async function runExportWithInput(
     overlayWindows: plan.overlayWindows,
     overlayBitmaps: new Map(msg.overlays.map((o) => [o.overlayId, o.bitmap])),
     webcam: plan.webcam,
+    sourceEndSeconds: plan.sourceDurationSeconds,
     // Floating images (spec 2026-11-13): drawn whenever the plan has them, no flag.
     floating: {
       plan: plan.floating,
@@ -424,6 +425,7 @@ async function runExportWithInput(
             frames: clipFramesOf(src, readers),
             webcamCursor,
             layer: plan.webcam,
+            sourceEndSeconds: plan.sourceDurationSeconds,
             webcamImageOf,
             fillFps,
             cap,

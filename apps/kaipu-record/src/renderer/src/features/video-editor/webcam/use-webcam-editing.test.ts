@@ -29,7 +29,7 @@ function setup(initial: VideoScene = initialScene(20, TRACK)) {
 }
 
 describe("useWebcamEditing", () => {
-  it("hides the webcam from the playhead to the end as one undo step", () => {
+  it("hides the webcam for 10 seconds from the playhead as one undo step", () => {
     const { result } = setup();
     let added: ReturnType<typeof result.current.webcam.hideAtPlayhead> | undefined;
     act(() => {
@@ -37,10 +37,18 @@ describe("useWebcamEditing", () => {
     });
     expect(added).toMatchObject({ ok: true });
     expect(result.current.controller.scene.webcam!.segments).toEqual([
-      expect.objectContaining({ start: 4, end: 20, mode: "hidden" }),
+      expect.objectContaining({ start: 4, end: 14, mode: "hidden" }),
     ]);
     act(() => result.current.controller.undo());
     expect(result.current.controller.scene.webcam!.segments).toEqual([]);
+  });
+
+  it("hides up to the end of the recording when that comes within 10 seconds", () => {
+    const { result } = setup();
+    act(() => void result.current.webcam.hideAtPlayhead(15));
+    expect(result.current.controller.scene.webcam!.segments.map((s) => [s.start, s.end])).toEqual([
+      [15, 20],
+    ]);
   });
 
   it("stops the hidden segment at the next one", () => {
@@ -135,17 +143,104 @@ describe("useWebcamEditing", () => {
     expect(result.current.controller.canUndo).toBe(false);
     expect(result.current.webcam.visibleSegments).toEqual([]);
   });
+
+  describe("dragging inside a block", () => {
+    const withBlock = (): VideoScene => {
+      const base = initialScene(20, TRACK);
+      return {
+        ...base,
+        webcam: {
+          ...base.webcam!,
+          segments: [
+            {
+              id: "o",
+              start: 5,
+              end: 15,
+              mode: "override",
+              layout: { position: { x: 0.8, y: 0.2 } },
+            },
+          ],
+        },
+      };
+    };
+
+    it("a drag inside a block moves that block only, and undo restores its position in one step", () => {
+      const { result } = setup(withBlock());
+      const globalBefore = result.current.controller.scene.webcam!.layout.position;
+      act(() => result.current.webcam.begin());
+      act(() => result.current.webcam.liveLayout({ position: { x: 0.3, y: 0.3 } }, 6));
+      act(() => result.current.webcam.liveLayout({ position: { x: 0.2, y: 0.6 } }, 6));
+      act(() => result.current.webcam.end());
+      const webcam = result.current.controller.scene.webcam!;
+      expect(webcam.segments[0].layout!.position).toEqual({ x: 0.2, y: 0.6 });
+      expect(webcam.layout.position).toEqual(globalBefore);
+      act(() => result.current.controller.undo());
+      expect(result.current.controller.scene.webcam!.segments[0].layout!.position).toEqual({
+        x: 0.8,
+        y: 0.2,
+      });
+    });
+  });
+
+  describe("transition edits", () => {
+    const withSlideBlock = (): VideoScene => {
+      const base = initialScene(20, TRACK);
+      return {
+        ...base,
+        webcam: {
+          ...base.webcam!,
+          segments: [
+            {
+              id: "o",
+              start: 5,
+              end: 15,
+              mode: "override",
+              transition: { kind: "slide", ms: 700, easing: "back" },
+            },
+          ],
+        },
+      };
+    };
+
+    it("a discrete change is one undo step", () => {
+      const { result } = setup(withSlideBlock());
+      act(() => result.current.webcam.commitTransition("o", { kind: "cut" }));
+      expect(result.current.controller.scene.webcam!.segments[0].transition?.kind).toBe("cut");
+      act(() => result.current.controller.undo());
+      expect(result.current.controller.scene.webcam!.segments[0].transition?.kind).toBe("slide");
+      expect(result.current.controller.canUndo).toBe(false);
+    });
+
+    it("a duration drag is one undo step", () => {
+      const { result } = setup(withSlideBlock());
+      act(() => result.current.webcam.begin());
+      act(() => result.current.webcam.liveTransition("o", { ms: 900 }));
+      act(() => result.current.webcam.liveTransition("o", { ms: 1200 }));
+      act(() => result.current.webcam.end());
+      expect(result.current.controller.scene.webcam!.segments[0].transition?.ms).toBe(1200);
+      act(() => result.current.controller.undo());
+      expect(result.current.controller.scene.webcam!.segments[0].transition?.ms).toBe(700);
+      expect(result.current.controller.canUndo).toBe(false);
+    });
+
+    it("an unchanged value pushes no undo step", () => {
+      const { result } = setup(withSlideBlock());
+      act(() => result.current.webcam.commitTransition("o", { ms: 700 }));
+      expect(result.current.controller.canUndo).toBe(false);
+    });
+  });
 });
 
 describe("useWebcamEditing with a joined recording (ADR 0058)", () => {
   const JOIN = { assetId: "asset-b", title: "B", durationSeconds: 20, width: 0, height: 0 };
   const joined = () => joinRecording(initialScene(20, TRACK), 20, JOIN, 20).scene;
 
-  it("hides from the playhead in B to the end of B's range", () => {
+  it("hides from the playhead in B and stops at the end of B's range", () => {
     const { result } = setup(joined());
-    act(() => void result.current.webcam.hideAtPlayhead(25));
+    // 3615 s on the axis: 10 s would run past B's end at 3620.
+    act(() => void result.current.webcam.hideAtPlayhead(35));
     expect(result.current.controller.scene.webcam!.segments).toEqual([
-      expect.objectContaining({ start: 3605, end: 3620, mode: "hidden" }),
+      expect.objectContaining({ start: 3615, end: 3620, mode: "hidden" }),
     ]);
   });
 

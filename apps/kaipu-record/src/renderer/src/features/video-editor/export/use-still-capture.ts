@@ -34,6 +34,8 @@ export interface StillCapture {
 
 export interface StillCaptureArgs {
   scene: VideoScene;
+  /** The recording's length in source seconds, for the last camera block's return. */
+  sourceDurationSeconds?: number;
   /** The recording id the editor is open on (`mediaUrl("recording", sourceId)`). */
   sourceId: string;
   /** Native size of the source video: the PNG's size. */
@@ -72,7 +74,7 @@ export async function buildStillMessage(
   transfer: Transferable[];
   still: ReturnType<typeof planStill>;
 }> {
-  const still = planStill(args.scene, args.playhead);
+  const still = planStill(args.scene, args.playhead, args.sourceDurationSeconds);
   const { overlays, slides, mediaImages, camera, transfer } = await prepareWorkerInputs(
     args,
     still.plan,

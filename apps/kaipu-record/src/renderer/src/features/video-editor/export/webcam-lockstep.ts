@@ -136,7 +136,9 @@ export interface WebcamFillState<T> {
 /**
  * Fills one gap (see {@link webcamFillTimes}): for each fill time, the webcam frame due
  * then (none while the layer is hidden), emitted only when it changes what is on screen —
- * a new webcam frame, or the face disappearing. `emit` re-composes the held screen frame
+ * a new webcam frame, the face disappearing, or the bubble moving (`moving`: a camera
+ * section's slide is playing, so the same webcam frame sits in a new place, ADR 0039).
+ * `emit` re-composes the held screen frame
  * with it and returns false when it could not add the frame (the timestamp did not
  * advance, or the fps cap took the slot). Returns the new state.
  *
@@ -152,6 +154,12 @@ export async function fillWebcamGap<T>(opts: {
   segmentEnd: number;
   fps: number;
   visible(sourceTime: number): boolean;
+  /**
+   * Whether the bubble is between two places at `sourceTime`. A fill is then due even when
+   * the webcam frame is the one already drawn; without it a slide over a still screen would
+   * freeze. Absent means nothing ever moves.
+   */
+  moving?(sourceTime: number): boolean;
   frameAt(sourceTime: number): Promise<T | null>;
   /**
    * A floating image is on screen at `sourceTime`: its fades change every frame, so a fill is
@@ -164,15 +172,24 @@ export async function fillWebcamGap<T>(opts: {
   let { from, face } = opts.state;
   let wasLive = opts.state.live ?? false;
   const gapEnd = Math.min(opts.nextFrame, opts.segmentEnd);
+  // The previous fill drew the bubble mid-slide: the next one is due even if nothing else
+  // changed, because it draws the place the slide settled on.
+  let settling = false;
   for (const t of webcamFillTimes(from, opts.nextFrame, opts.segmentEnd, opts.fps)) {
     from = t;
     const due = opts.visible(t) ? await opts.frameAt(t) : null;
+    // A slide only needs fills where a bubble is drawn: without a webcam frame the screen
+    // is the same as the one before.
+    const moving = due !== null && !!opts.moving?.(t);
     const isLive = opts.live?.(t) ?? false;
-    if (due === face && !isLive && !wasLive) continue;
-    if (await opts.emit(t, due, gapEnd - t)) {
+    if (due === face && !moving && !settling && !isLive && !wasLive) continue;
+    const drawn = await opts.emit(t, due, gapEnd - t);
+    if (drawn) {
       face = due;
       wasLive = isLive;
     }
+    // A fill the cap dropped did not draw the settled place: the next one tries again.
+    settling = moving || !drawn;
   }
   return { from, face, live: wasLive };
 }

@@ -1,14 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { WEBCAM_DEFAULTS, type WebcamLayout } from "./webcam-model";
+import { EASING_PEAK_OVERSHOOT, easeValue } from "./easing";
 import {
-  WEBCAM_POSITION_PRESETS,
+  WEBCAM_DEFAULTS,
+  webcamStateAt,
+  type WebcamLayout,
+  type WebcamScene,
+  type WebcamState,
+} from "./webcam-model";
+import {
   clampWebcamCenter,
   webcamClipPath,
-  webcamPresetActive,
   webcamRect,
+  webcamStateRect,
   webcamSourceRect,
   webcamZoomFactor,
 } from "./webcam-layout";
+import { webcamRoute, webcamRoutePoint } from "./webcam-route";
 
 const FRAME = { width: 1920, height: 1080 };
 const layout = (patch: Partial<WebcamLayout>): WebcamLayout => ({ ...WEBCAM_DEFAULTS, ...patch });
@@ -152,32 +159,10 @@ describe("webcamClipPath", () => {
   });
 });
 
-describe("webcam presets", () => {
-  it("offers nine positions", () => {
-    expect(WEBCAM_POSITION_PRESETS).toHaveLength(9);
-  });
-
-  it("reports a preset active for the raw edge and for a centre clamped to it", () => {
-    const l = { shape: "rectangle", size: 0.42 } as const;
-    const left = WEBCAM_POSITION_PRESETS.find((p) => p.id === "left")!;
-    const right = WEBCAM_POSITION_PRESETS.find((p) => p.id === "right")!;
-    expect(webcamPresetActive(left, { ...l, position: { x: 0, y: 0.5 } }, FRAME)).toBe(true);
-    // half of the shrunk box (0.7 x 0.42 x 1080 x 3/4 / 2) over the frame width: also the edge
-    expect(webcamPresetActive(left, { ...l, position: { x: 0.0775, y: 0.5 } }, FRAME)).toBe(true);
-    expect(webcamPresetActive(right, { ...l, position: { x: 0.0775, y: 0.5 } }, FRAME)).toBe(false);
-    expect(webcamPresetActive(left, { ...l, position: { x: 0.3, y: 0.5 } }, FRAME)).toBe(false);
-  });
-
-  it("is never active before the frame size is known", () => {
-    const l = { shape: "circle", size: 0.2, position: { x: 1, y: 0 } } as const;
-    expect(webcamPresetActive({ x: 1, y: 0 }, l, { width: 0, height: 0 })).toBe(false);
-  });
-});
-
-describe("edge presets (NIW2-636)", () => {
-  // The bug: the Left/Right presets stored a centre with a margin computed for the
-  // un-shrunk bubble, so under "shrink during zoom" the smaller bubble sat ~94 px
-  // (output pixels) away from the edge it was snapped to.
+describe("a bubble dragged to the left or right edge (NIW2-636)", () => {
+  // The bug: an edge position stored a centre with a margin computed for the un-shrunk
+  // bubble, so under "shrink during zoom" the smaller bubble sat ~94 px (output pixels) away
+  // from the edge it was snapped to. A drag to the edge stores the raw 0 or 1 the same way.
   const rectangle = { shape: "rectangle", size: 0.42, scaleDuringZoom: 0.7 } as const;
 
   it.each([
@@ -185,9 +170,8 @@ describe("edge presets (NIW2-636)", () => {
     ["right", 1],
     ["left", 2],
     ["right", 2],
-  ] as const)("puts the %s preset flush with the frame edge at camera scale %s", (id, scale) => {
-    const preset = WEBCAM_POSITION_PRESETS.find((p) => p.id === id)!;
-    const position = { x: preset.x, y: preset.y };
+  ] as const)("puts the %s edge flush with the frame edge at camera scale %s", (id, scale) => {
+    const position = { x: id === "left" ? 0 : 1, y: 0.5 };
     const rect = webcamRect({ ...rectangle, position }, FRAME, scale)!;
     if (id === "left") expect(rect.x).toBeCloseTo(0, 3);
     else expect(rect.x + rect.width).toBeCloseTo(FRAME.width, 3);
@@ -290,5 +274,158 @@ describe("webcamRect on a portrait output", () => {
     expect(rect.width).toBe(1080);
     expect(rect.x).toBe(0);
     expect(rect.y + rect.height).toBe(1920);
+  });
+});
+
+describe("webcamStateRect", () => {
+  const sceneWith = (
+    position: { x: number; y: number },
+    easing: "back" | "linear",
+    from: { x: number; y: number },
+  ) => {
+    const webcam: WebcamScene = {
+      layout: { ...WEBCAM_DEFAULTS, position: from, size: 0.2 },
+      segments: [
+        {
+          id: "a",
+          start: 10,
+          end: 20,
+          mode: "override",
+          layout: { position },
+          transition: { kind: "slide", ms: 1000, easing },
+        },
+      ],
+    };
+    return { webcam };
+  };
+  /** The rect at 101 evenly spaced instants of the slide, from its start to its end. */
+  const run = (scene: ReturnType<typeof sceneWith>) =>
+    Array.from({ length: 101 }, (_, i) =>
+      webcamStateRect(webcamStateAt(scene, 10 + i / 100)!, FRAME),
+    );
+  const inside = (r: { x: number; y: number; width: number; height: number }): boolean =>
+    r.x >= -1e-6 &&
+    r.y >= -1e-6 &&
+    r.x + r.width <= FRAME.width + 1e-6 &&
+    r.y + r.height <= FRAME.height + 1e-6;
+
+  it("is webcamRect when nothing moves", () => {
+    const state: WebcamState = {
+      layout: layout({ position: { x: 0.3, y: 0.4 } }),
+      from: null,
+      progress: 1,
+      easing: "linear",
+    };
+    expect(webcamStateRect(state, FRAME)).toEqual(webcamRect(state.layout, FRAME));
+    expect(webcamStateRect(state, { width: 0, height: 0 })).toBeNull();
+  });
+
+  it("starts on the previous position and ends on the target", () => {
+    const rects = run(sceneWith({ x: 0.5, y: 0.5 }, "back", { x: 0.1, y: 0.1 }));
+    const origin = webcamRect(layout({ position: { x: 0.1, y: 0.1 }, size: 0.2 }), FRAME)!;
+    const target = webcamRect(layout({ position: { x: 0.5, y: 0.5 }, size: 0.2 }), FRAME)!;
+    expect(rects[0]).toEqual(origin);
+    expect(rects[100]).toEqual(target);
+  });
+
+  it("moves along the curved route: off the straight line by 9 % of the distance at the middle", () => {
+    const scene = sceneWith({ x: 0.5, y: 0.5 }, "linear", { x: 0.1, y: 0.1 });
+    const mid = webcamStateRect(webcamStateAt(scene, 10.5)!, FRAME)!;
+    const a = webcamRect(layout({ position: { x: 0.1, y: 0.1 }, size: 0.2 }), FRAME)!;
+    const b = webcamRect(layout({ position: { x: 0.5, y: 0.5 }, size: 0.2 }), FRAME)!;
+    // A quadratic curve's middle is half way from the straight middle to the control point,
+    // and the control point is 18 % of the distance to the side: 9 % of the distance.
+    const distance = Math.hypot(b.x - a.x, b.y - a.y);
+    const offset = Math.hypot(mid.x - (a.x + b.x) / 2, mid.y - (a.y + b.y) / 2);
+    expect(offset).toBeCloseTo(0.09 * distance, 3);
+    // It is the route function's point, not an approximation of it: the one function the
+    // preview and the export read.
+    const w = a.width;
+    const h = a.height;
+    const reach = {
+      minX: w / 2,
+      maxX: FRAME.width - w / 2,
+      minY: h / 2,
+      maxY: FRAME.height - h / 2,
+    };
+    const route = webcamRoute(
+      { x: a.x + w / 2, y: a.y + h / 2 },
+      { x: b.x + w / 2, y: b.y + h / 2 },
+      FRAME,
+      reach,
+    );
+    const point = webcamRoutePoint(route, 0.5, EASING_PEAK_OVERSHOOT.linear, reach);
+    expect(mid.x + w / 2).toBeCloseTo(point.x, 6);
+    expect(mid.y + h / 2).toBeCloseTo(point.y, 6);
+  });
+
+  it("bends a slide along the top edge toward the frame centre and keeps it inside the frame", () => {
+    const there = run(sceneWith({ x: 0.9, y: 0.1 }, "linear", { x: 0.1, y: 0.1 }));
+    const mid = there[50]!;
+    const start = there[0]!;
+    // Along the top edge, the arc bends toward the frame centre (down), not off the frame.
+    expect(mid.y).toBeGreaterThan(start.y);
+    expect(there.every((r) => r && inside(r))).toBe(true);
+  });
+
+  it("stays inside the frame at every sampled time of a back slide toward a corner", () => {
+    const corners = [
+      { x: 1, y: 1 },
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 0, y: 1 },
+    ];
+    for (const corner of corners) {
+      const rects = run(sceneWith(corner, "back", { x: 0.5, y: 0.5 }));
+      expect(rects.every((r) => r && inside(r))).toBe(true);
+    }
+  });
+
+  it("never overshoots a target that touches the edge", () => {
+    const rects = run(sceneWith({ x: 1, y: 1 }, "back", { x: 0.2, y: 0.2 }));
+    const target = webcamRect(layout({ position: { x: 1, y: 1 }, size: 0.2 }), FRAME)!;
+    for (const r of rects) {
+      expect(r!.x).toBeLessThanOrEqual(target.x + 1e-6);
+      expect(r!.y).toBeLessThanOrEqual(target.y + 1e-6);
+    }
+  });
+
+  it("keeps a visible overshoot toward a target with room, inside the frame", () => {
+    const rects = run(sceneWith({ x: 0.5, y: 0.5 }, "back", { x: 0.1, y: 0.5 }));
+    const target = webcamRect(layout({ position: { x: 0.5, y: 0.5 }, size: 0.2 }), FRAME)!;
+    const farthest = Math.max(...rects.map((r) => r!.x));
+    const distance =
+      target.x - webcamRect(layout({ position: { x: 0.1, y: 0.5 }, size: 0.2 }), FRAME)!.x;
+    expect(farthest).toBeGreaterThan(target.x + 1);
+    // The full back curve fits in this room, so the peak is the curve's own.
+    expect(farthest - target.x).toBeCloseTo(EASING_PEAK_OVERSHOOT.back * distance, 0);
+    expect(rects.every((r) => r && inside(r))).toBe(true);
+  });
+
+  it("overshoots on x only when y has no room", () => {
+    const rects = run(sceneWith({ x: 0.5, y: 1 }, "back", { x: 0.1, y: 0.3 }));
+    const target = webcamRect(layout({ position: { x: 0.5, y: 1 }, size: 0.2 }), FRAME)!;
+    expect(Math.max(...rects.map((r) => r!.x))).toBeGreaterThan(target.x + 1);
+    expect(Math.max(...rects.map((r) => r!.y))).toBeLessThanOrEqual(target.y + 1e-6);
+    expect(rects.every((r) => r && inside(r))).toBe(true);
+  });
+
+  it("scales the whole peak down to the room instead of flattening it", () => {
+    // Centre 0.9 on a 216 px bubble leaves 84 px to the edge, less than the curve's 10 % peak.
+    const target = layout({ position: { x: 0.9, y: 0.5 }, size: 0.2 });
+    const targetRect = webcamRect(target, FRAME)!;
+    const room = FRAME.width - (targetRect.x + targetRect.width);
+    const from = layout({ position: { x: 0.1, y: 0.5 }, size: 0.2 });
+    const distance = targetRect.x - webcamRect(from, FRAME)!.x;
+    expect(EASING_PEAK_OVERSHOOT.back * distance).toBeGreaterThan(room);
+    const samples = Array.from({ length: 1001 }, (_, i) => {
+      const progress = easeValue("back", i / 1000);
+      return webcamStateRect({ layout: target, from, progress, easing: "back" }, FRAME)!;
+    });
+    const peak = Math.max(...samples.map((r) => r.x + r.width));
+    expect(peak).toBeCloseTo(FRAME.width, 3);
+    const flat = samples.filter((r) => r.x + r.width > FRAME.width - 1e-3);
+    expect(flat.length).toBeLessThan(5);
+    expect(samples.every(inside)).toBe(true);
   });
 });

@@ -354,6 +354,12 @@ describe("every lane's edge drag at 4x, scrolled", () => {
   const lanes: {
     name: string;
     handle: string;
+    /**
+     * Where the pointer takes the handle, px into the lane. The webcam lane keeps the offset
+     * between the pointer and the edge it grabbed (a handle can be drawn off its edge), so its
+     * grab is on the edge: 50 s at 4x scrolled 1200 is 800 px. The others map the pointer.
+     */
+    grabX?: number;
     build: (spy: Mock<EdgeSpy>) => ExtraLane;
   }[] = [
     {
@@ -377,6 +383,7 @@ describe("every lane's edge drag at 4x, scrolled", () => {
     {
       name: "webcam",
       handle: '[data-webcam-handle="end"]',
+      grabX: 800,
       build: (spy) => ({
         key: "webcam",
         label: "Webcam",
@@ -436,7 +443,7 @@ describe("every lane's edge drag at 4x, scrolled", () => {
     const spy = vi.fn<EdgeSpy>();
     const { container } = renderZoomed({ extraLanes: [lane.build(spy)] });
     const handle = captureStubs(container.querySelector(lane.handle) as HTMLElement);
-    fireEvent.pointerDown(handle, { pointerId: 1, clientX: LANE_LEFT + 320 });
+    fireEvent.pointerDown(handle, { pointerId: 1, clientX: LANE_LEFT + (lane.grabX ?? 320) });
     // 700 px into the lane: (700 + 1200) / 40 = 47.5 s. At 1x it would have been 70 s.
     fireEvent.pointerMove(handle, { pointerId: 1, clientX: LANE_LEFT + 700 });
     expect(spy).toHaveBeenLastCalledWith(expect.any(String), "end", 47.5, "move");

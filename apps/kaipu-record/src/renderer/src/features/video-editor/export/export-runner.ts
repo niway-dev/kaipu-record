@@ -8,7 +8,7 @@ import { showToast } from "@renderer/ui/toast-store";
 import type { SlideAssetStore } from "../slide-assets";
 import type { VideoScene } from "../scene";
 import type { CameraPath } from "../zoom/camera-path";
-import { buildExportPlan, EmptyTimelineError } from "./export-plan";
+import { buildExportPlan, EmptyTimelineError, withSourceDuration } from "./export-plan";
 import { recordingsUsed } from "./export-recordings";
 import { audioPlan } from "./joined-audio";
 import { probeSource } from "./probe-source";
@@ -55,6 +55,8 @@ export interface ExportJoinedRecording {
 
 export interface StartExportArgs {
   scene: VideoScene;
+  /** The recording's length in source seconds, for the last camera block's return. */
+  sourceDurationSeconds?: number;
   sourceId: string;
   title: string;
   /** The source asset's identity; persisted on the exported file. */
@@ -326,7 +328,7 @@ export async function startVideoExport(
 
   let plan;
   try {
-    plan = buildExportPlan(args.scene);
+    plan = withSourceDuration(buildExportPlan(args.scene), args.sourceDurationSeconds);
   } catch (error) {
     lastStart = { args, t };
     // Only an empty timeline reads as one; a broken scene (a clip straddling a recording's
