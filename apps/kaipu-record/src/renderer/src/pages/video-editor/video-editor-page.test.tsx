@@ -123,6 +123,14 @@ vi.mock("@renderer/features/transcription/use-transcribe-control", () => ({
     state: { kind: "idle" },
     start: async () => null,
     cancel: () => {},
+    offer: {
+      status: null,
+      failures: {},
+      refresh: async () => {},
+      download: async () => {},
+      cancel: async () => {},
+      remove: async () => {},
+    },
   }),
 }));
 
