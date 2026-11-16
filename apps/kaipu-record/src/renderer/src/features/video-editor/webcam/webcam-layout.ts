@@ -13,7 +13,8 @@ import {
   clampCameraPan,
   clampCameraZoom,
 } from "@shared/camera-bubble";
-import { WEBCAM_LIMITS, type WebcamLayout } from "./webcam-model";
+import { EASING_PEAK_OVERSHOOT } from "./easing";
+import { WEBCAM_LIMITS, type WebcamLayout, type WebcamState } from "./webcam-model";
 
 export interface WebcamRect {
   /** Left edge, in the frame's units (pixels for a pixel frame). */
@@ -105,6 +106,55 @@ export function webcamRect(
   );
   const width = height * aspect;
   const center = clampWebcamCenter(layout.position, { width, height }, frame);
+  return {
+    x: center.x * frame.width - width / 2,
+    y: center.y * frame.height - height / 2,
+    width,
+    height,
+  };
+}
+
+/**
+ * One axis of a slide: the centre (pixels) at `progress` between `from` and `to`. Up to 1 it
+ * is a plain interpolation. Beyond 1 the bubble goes past `to` in the direction of motion, by
+ * `(progress - 1) * |to - from|` scaled so that the curve's PEAK uses at most `room`, the
+ * space between the target and the frame edge that way (spec decision 10). Scaling the
+ * amplitude keeps the whole curve; clamping the raw overshoot would flatten its top.
+ */
+function slideAxis(from: number, to: number, progress: number, peak: number, room: number): number {
+  const distance = to - from;
+  if (progress <= 1) return from + distance * progress;
+  const reach = peak * Math.abs(distance);
+  const factor = reach > 0 ? Math.min(1, Math.max(0, room) / reach) : 1;
+  return to + (progress - 1) * distance * factor;
+}
+
+/**
+ * The bubble's box for a {@link WebcamState}: {@link webcamRect} of the layout when nothing
+ * moves, otherwise the centre slid between the two layouts' clamped centres (their boxes are
+ * the same size: only the position differs). `state.easing` gives the peak the overshoot is
+ * fitted by. The result never leaves the frame at any progress, whatever its value.
+ */
+export function webcamStateRect(
+  state: WebcamState,
+  frame: FrameSize,
+  cameraScale = 1,
+): WebcamRect | null {
+  const target = webcamRect(state.layout, frame, cameraScale);
+  if (!target || !state.from) return target;
+  const origin = webcamRect(state.from, frame, cameraScale);
+  if (!origin) return target;
+  const { width, height } = target;
+  const peak = EASING_PEAK_OVERSHOOT[state.easing];
+  const to = { x: target.x + width / 2, y: target.y + height / 2 };
+  const start = { x: origin.x + width / 2, y: origin.y + height / 2 };
+  // The room is what is left between the target's box and the edge the bubble moves toward.
+  const roomX = to.x >= start.x ? frame.width - (to.x + width / 2) : to.x - width / 2;
+  const roomY = to.y >= start.y ? frame.height - (to.y + height / 2) : to.y - height / 2;
+  const x = slideAxis(start.x, to.x, state.progress, peak, roomX);
+  const y = slideAxis(start.y, to.y, state.progress, peak, roomY);
+  // Safety net for a progress beyond the easing's own peak: the frame always wins.
+  const center = clampWebcamCenter({ x: x / frame.width, y: y / frame.height }, target, frame);
   return {
     x: center.x * frame.width - width / 2,
     y: center.y * frame.height - height / 2,

@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { WEBCAM_DEFAULTS, type WebcamLayout } from "./webcam-model";
+import { EASING_PEAK_OVERSHOOT, easeValue } from "./easing";
+import {
+  WEBCAM_DEFAULTS,
+  webcamStateAt,
+  type WebcamLayout,
+  type WebcamScene,
+  type WebcamState,
+} from "./webcam-model";
 import {
   WEBCAM_POSITION_PRESETS,
   clampWebcamCenter,
   webcamClipPath,
   webcamPresetActive,
   webcamRect,
+  webcamStateRect,
   webcamSourceRect,
   webcamZoomFactor,
 } from "./webcam-layout";
@@ -290,5 +298,127 @@ describe("webcamRect on a portrait output", () => {
     expect(rect.width).toBe(1080);
     expect(rect.x).toBe(0);
     expect(rect.y + rect.height).toBe(1920);
+  });
+});
+
+describe("webcamStateRect", () => {
+  const sceneWith = (
+    position: { x: number; y: number },
+    easing: "back" | "linear",
+    from: { x: number; y: number },
+  ) => {
+    const webcam: WebcamScene = {
+      layout: { ...WEBCAM_DEFAULTS, position: from, size: 0.2 },
+      segments: [
+        {
+          id: "a",
+          start: 10,
+          end: 20,
+          mode: "override",
+          layout: { position },
+          transition: { kind: "slide", ms: 1000, easing },
+        },
+      ],
+    };
+    return { webcam };
+  };
+  /** The rect at 101 evenly spaced instants of the slide, from its start to its end. */
+  const run = (scene: ReturnType<typeof sceneWith>) =>
+    Array.from({ length: 101 }, (_, i) =>
+      webcamStateRect(webcamStateAt(scene, 10 + i / 100)!, FRAME),
+    );
+  const inside = (r: { x: number; y: number; width: number; height: number }): boolean =>
+    r.x >= -1e-6 &&
+    r.y >= -1e-6 &&
+    r.x + r.width <= FRAME.width + 1e-6 &&
+    r.y + r.height <= FRAME.height + 1e-6;
+
+  it("is webcamRect when nothing moves", () => {
+    const state: WebcamState = {
+      layout: layout({ position: { x: 0.3, y: 0.4 } }),
+      from: null,
+      progress: 1,
+      easing: "linear",
+    };
+    expect(webcamStateRect(state, FRAME)).toEqual(webcamRect(state.layout, FRAME));
+    expect(webcamStateRect(state, { width: 0, height: 0 })).toBeNull();
+  });
+
+  it("starts on the previous position and ends on the target", () => {
+    const rects = run(sceneWith({ x: 0.5, y: 0.5 }, "back", { x: 0.1, y: 0.1 }));
+    const origin = webcamRect(layout({ position: { x: 0.1, y: 0.1 }, size: 0.2 }), FRAME)!;
+    const target = webcamRect(layout({ position: { x: 0.5, y: 0.5 }, size: 0.2 }), FRAME)!;
+    expect(rects[0]).toEqual(origin);
+    expect(rects[100]).toEqual(target);
+  });
+
+  it("interpolates the centre linearly while the progress is at most 1", () => {
+    const scene = sceneWith({ x: 0.5, y: 0.5 }, "linear", { x: 0.1, y: 0.1 });
+    const mid = webcamStateRect(webcamStateAt(scene, 10.5)!, FRAME)!;
+    const a = webcamRect(layout({ position: { x: 0.1, y: 0.1 }, size: 0.2 }), FRAME)!;
+    const b = webcamRect(layout({ position: { x: 0.5, y: 0.5 }, size: 0.2 }), FRAME)!;
+    expect(mid.x).toBeCloseTo((a.x + b.x) / 2);
+    expect(mid.y).toBeCloseTo((a.y + b.y) / 2);
+  });
+
+  it("stays inside the frame at every sampled time of a back slide toward a corner", () => {
+    const corners = [
+      { x: 1, y: 1 },
+      { x: 0, y: 0 },
+      { x: 1, y: 0 },
+      { x: 0, y: 1 },
+    ];
+    for (const corner of corners) {
+      const rects = run(sceneWith(corner, "back", { x: 0.5, y: 0.5 }));
+      expect(rects.every((r) => r && inside(r))).toBe(true);
+    }
+  });
+
+  it("never overshoots a target that touches the edge", () => {
+    const rects = run(sceneWith({ x: 1, y: 1 }, "back", { x: 0.2, y: 0.2 }));
+    const target = webcamRect(layout({ position: { x: 1, y: 1 }, size: 0.2 }), FRAME)!;
+    for (const r of rects) {
+      expect(r!.x).toBeLessThanOrEqual(target.x + 1e-6);
+      expect(r!.y).toBeLessThanOrEqual(target.y + 1e-6);
+    }
+  });
+
+  it("keeps a visible overshoot toward a target with room, inside the frame", () => {
+    const rects = run(sceneWith({ x: 0.5, y: 0.5 }, "back", { x: 0.1, y: 0.5 }));
+    const target = webcamRect(layout({ position: { x: 0.5, y: 0.5 }, size: 0.2 }), FRAME)!;
+    const farthest = Math.max(...rects.map((r) => r!.x));
+    const distance =
+      target.x - webcamRect(layout({ position: { x: 0.1, y: 0.5 }, size: 0.2 }), FRAME)!.x;
+    expect(farthest).toBeGreaterThan(target.x + 1);
+    // The full back curve fits in this room, so the peak is the curve's own.
+    expect(farthest - target.x).toBeCloseTo(EASING_PEAK_OVERSHOOT.back * distance, 0);
+    expect(rects.every((r) => r && inside(r))).toBe(true);
+  });
+
+  it("overshoots on x only when y has no room", () => {
+    const rects = run(sceneWith({ x: 0.5, y: 1 }, "back", { x: 0.1, y: 0.3 }));
+    const target = webcamRect(layout({ position: { x: 0.5, y: 1 }, size: 0.2 }), FRAME)!;
+    expect(Math.max(...rects.map((r) => r!.x))).toBeGreaterThan(target.x + 1);
+    expect(Math.max(...rects.map((r) => r!.y))).toBeLessThanOrEqual(target.y + 1e-6);
+    expect(rects.every((r) => r && inside(r))).toBe(true);
+  });
+
+  it("scales the whole peak down to the room instead of flattening it", () => {
+    // Centre 0.9 on a 216 px bubble leaves 84 px to the edge, less than the curve's 10 % peak.
+    const target = layout({ position: { x: 0.9, y: 0.5 }, size: 0.2 });
+    const targetRect = webcamRect(target, FRAME)!;
+    const room = FRAME.width - (targetRect.x + targetRect.width);
+    const from = layout({ position: { x: 0.1, y: 0.5 }, size: 0.2 });
+    const distance = targetRect.x - webcamRect(from, FRAME)!.x;
+    expect(EASING_PEAK_OVERSHOOT.back * distance).toBeGreaterThan(room);
+    const samples = Array.from({ length: 1001 }, (_, i) => {
+      const progress = easeValue("back", i / 1000);
+      return webcamStateRect({ layout: target, from, progress, easing: "back" }, FRAME)!;
+    });
+    const peak = Math.max(...samples.map((r) => r.x + r.width));
+    expect(peak).toBeCloseTo(FRAME.width, 3);
+    const flat = samples.filter((r) => r.x + r.width > FRAME.width - 1e-3);
+    expect(flat.length).toBeLessThan(5);
+    expect(samples.every(inside)).toBe(true);
   });
 });
