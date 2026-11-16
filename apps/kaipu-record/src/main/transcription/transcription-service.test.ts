@@ -700,7 +700,7 @@ describe("the engine downloads with the model", () => {
     },
   );
 
-  it("does not keep an engine failure after the next download succeeds or is cancelled", async () => {
+  it("does not keep an engine failure after the next download succeeds", async () => {
     const h = makeHarness();
     h.engine.missing = true;
     h.modelStatus.set(MODEL_ID, { state: "missing" });
