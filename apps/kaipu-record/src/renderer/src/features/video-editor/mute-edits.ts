@@ -1,5 +1,6 @@
 import { newId, type VideoScene } from "./scene";
 import type { MutedRange } from "./audio-edits";
+import type { SourceBounds } from "./source-time";
 
 export const MUTE_LIMITS = {
   /** Length of a range added by hand at the playhead. */
@@ -21,16 +22,17 @@ export const MUTE_LIMITS = {
  */
 
 /**
- * Add a range starting at `sourceTime`. Returns null when the playhead sits too
- * close to the end for even the minimum length to fit.
+ * Add a range starting at `sourceTime`, inside `bounds` (the range of the recording under the
+ * playhead, ADR 0058). Returns null when the playhead sits too close to the end of that
+ * recording for even the minimum length to fit.
  */
 export function addMuteAt(
   scene: VideoScene,
   sourceTime: number,
-  sourceDurationSeconds: number,
+  bounds: SourceBounds,
 ): { scene: VideoScene; id: string } | null {
-  const start = Math.max(0, Math.min(sourceTime, sourceDurationSeconds));
-  const end = Math.min(start + MUTE_LIMITS.defaultSeconds, sourceDurationSeconds);
+  const start = Math.max(bounds.start, Math.min(sourceTime, bounds.end));
+  const end = Math.min(start + MUTE_LIMITS.defaultSeconds, bounds.end);
   if (end - start < MUTE_LIMITS.minSeconds) return null;
 
   const range: MutedRange = { id: newId(), sourceStart: start, sourceEnd: end };
@@ -44,20 +46,20 @@ export function addMuteAt(
 }
 
 /**
- * Move one edge of a range to `to`, clamped to the recording and to the minimum
- * length. Neighbours are ignored: a range may be dragged across another.
+ * Move one edge of a range to `to`, clamped to the recording's range (`bounds`) and to the
+ * minimum length. Neighbours are ignored: a range may be dragged across another.
  */
 export function dragMuteEdge(
   scene: VideoScene,
   id: string,
   edge: "start" | "end",
   to: number,
-  sourceDurationSeconds: number,
+  bounds: SourceBounds,
 ): VideoScene {
   const target = scene.mutedRanges.find((r) => r.id === id);
   if (!target) return scene;
 
-  const clamped = Math.max(0, Math.min(to, sourceDurationSeconds));
+  const clamped = Math.max(bounds.start, Math.min(to, bounds.end));
   const next =
     edge === "start"
       ? {

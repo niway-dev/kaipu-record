@@ -4,6 +4,7 @@ import type { WebcamTrackMeta } from "@shared/webcam-track";
 import type { EditorSelection } from "../editor-selection";
 import { WEBCAM_LAYER_SELECTION } from "../editor-selection";
 import { initialScene } from "../scene";
+import { sourceAxis } from "../source-axis";
 import { toLayout } from "../timeline";
 import { useVideoScene } from "../use-video-scene";
 import { createWebcamPart } from "./webcam-edits";
@@ -28,11 +29,12 @@ function setup(duration = 40) {
     (inputs: { timelineTime: number; playing: boolean; selection: EditorSelection }) => {
       const controller = useVideoScene(initialScene(duration, TRACK));
       const layout = toLayout(controller.scene.items);
-      const edits = useWebcamEditing({ controller, layout, sourceDuration: duration });
+      const edits = useWebcamEditing({ controller, layout, axis: sourceAxis(duration) });
       const drop = useWebcamDrop({
         controller,
         edits,
         sourceDuration: duration,
+        axis: sourceAxis(duration),
         frame: FRAME,
         cameraScaleAt: () => 1,
         select,
@@ -50,7 +52,7 @@ function setup(duration = 40) {
   const addPart = (at: number, position: { x: number; y: number }) => {
     act(() => {
       const c = hook.result.current.controller;
-      c.commit(createWebcamPart(c.scene, { at, position }, duration).scene);
+      c.commit(createWebcamPart(c.scene, { at, position }, { start: 0, end: duration }).scene);
     });
   };
   return { ...hook, select, seekToPart, segments, addPart };

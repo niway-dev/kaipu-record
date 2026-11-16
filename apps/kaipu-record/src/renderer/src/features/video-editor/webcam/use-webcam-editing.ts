@@ -10,6 +10,7 @@
  */
 import { useCallback, useMemo } from "react";
 import { useLatest } from "../use-latest";
+import { clipBounds, type SourceAxis } from "../source-axis";
 import { isSourceRangeVisible, sourceTimeAtTimeline } from "../source-time";
 import type { LayoutEntry } from "../timeline";
 import type { VideoScene } from "../scene";
@@ -85,11 +86,11 @@ export function patchWebcamAt(
 export function useWebcamEditing({
   controller,
   layout,
-  sourceDuration,
+  axis,
 }: {
   controller: VideoSceneController;
   layout: LayoutEntry[];
-  sourceDuration: number;
+  axis: SourceAxis;
 }): WebcamEditing {
   const webcam = controller.scene.webcam;
 
@@ -108,18 +109,19 @@ export function useWebcamEditing({
       if (at === null) return { ok: false, reason: "on-slide" };
       const existing = current.segments.find((s) => at >= s.start && at < s.end);
       if (existing) return { ok: true, id: existing.id };
-      const window = webcamPartRoom(controller.scene, at, sourceDuration);
+      const bounds = clipBounds(axis, { sourceStart: at });
+      const window = webcamPartRoom(controller.scene, at, bounds);
       if (!window) return { ok: false, reason: "no-room" };
       const { scene: next, id } = addWebcamSegment(
         controller.scene,
         { ...window, mode: "hidden" },
-        sourceDuration,
+        bounds,
       );
       if (!id) return { ok: false, reason: "no-room" };
       controller.commit(next);
       return { ok: true, id };
     },
-    [controller, layout, sourceDuration],
+    [controller, layout, axis],
   );
 
   const commitTransition = useCallback(
@@ -162,13 +164,18 @@ export function useWebcamEditing({
     ) => {
       if (phase === "start") controllerRef.current.beginInteract();
       if (phase === "move" && sourceTime !== null) {
-        controllerRef.current.updateLive(
-          dragWebcamSegmentEdge(controllerRef.current.scene, id, edge, sourceTime, sourceDuration),
-        );
+        const scene = controllerRef.current.scene;
+        const segment = scene.webcam?.segments.find((s) => s.id === id);
+        if (segment) {
+          const bounds = clipBounds(axis, { sourceStart: segment.start });
+          controllerRef.current.updateLive(
+            dragWebcamSegmentEdge(scene, id, edge, sourceTime, bounds),
+          );
+        }
       }
       if (phase === "end") controllerRef.current.endInteract();
     },
-    [controllerRef, sourceDuration],
+    [controllerRef, axis],
   );
 
   const commitLayout = useCallback(

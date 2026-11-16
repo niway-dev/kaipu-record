@@ -304,3 +304,141 @@ describe("WebcamLane", () => {
     expect(container.querySelectorAll("button[data-webcam-id]")).toHaveLength(0);
   });
 });
+
+describe("WebcamLane across recordings", () => {
+  it("covers the clips without a camera with a labelled span", () => {
+    const { container } = render(
+      <WebcamLane
+        layout={layout}
+        segments={[]}
+        noCameraItemIds={new Set(["b"])}
+        selectedId={null}
+        onSelect={vi.fn()}
+        onEdgeDrag={vi.fn()}
+      />,
+    );
+    const spans = container.querySelectorAll<HTMLElement>('[data-testid="no-camera-span"]');
+    expect(spans).toHaveLength(1);
+    expect(spans[0]).toHaveTextContent("No camera in this recording");
+    // Clip b runs 5 s to 15 s of the 15 s timeline.
+    expect(spans[0].style.left).toBe(`${(5 / 15) * 100}%`);
+  });
+
+  it("draws no span without clips to cover", () => {
+    const { container } = render(
+      <WebcamLane
+        layout={layout}
+        segments={[]}
+        selectedId={null}
+        onSelect={vi.fn()}
+        onEdgeDrag={vi.fn()}
+      />,
+    );
+    expect(container.querySelector('[data-testid="no-camera-span"]')).toBeNull();
+  });
+});
+
+describe("WebcamLane filmstrip across joined recordings", () => {
+  // Opened recording A: axis 0-10; joined B: axis 10-20 (offset 10), joined B again: axis 20-30.
+  const joinedLayout = toLayout([
+    { id: "a", kind: "clip", sourceStart: 0, sourceEnd: 4 },
+    { id: "b", kind: "clip", sourceStart: 10, sourceEnd: 14 },
+    { id: "b2", kind: "clip", sourceStart: 20, sourceEnd: 24 },
+  ]);
+  const clip = (sourceId: string | null, offset: number) => ({
+    sourceId,
+    title: "t",
+    status: "ready" as const,
+    hasWebcam: true,
+    offset,
+  });
+  const clips = new Map([
+    ["a", clip(null, 0)],
+    ["b", clip("src-b", 10)],
+    ["b2", clip("src-b2", 20)],
+  ]);
+  const own = (prefix: string) =>
+    Array.from({ length: 10 }, (_, i) => ({ sourceTime: i + 0.5, url: `${prefix}-${i}` }));
+  const recordingStrips = new Map([
+    ["src-b", { thumbnails: own("b"), covered: { start: 0, end: 10 } }],
+    ["src-b2", { thumbnails: own("c"), covered: { start: 0, end: 10 } }],
+  ]);
+  const urlsByClip = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll("[data-webcam-filmstrip] > *")).map((strip) =>
+      Array.from(strip.querySelectorAll("img")).map((img) => img.getAttribute("src")!),
+    );
+  const base = {
+    segments: [],
+    selectedId: null,
+    onSelect: vi.fn(),
+    onEdgeDrag: vi.fn(),
+  };
+
+  it("draws each clip from its own recording's strip at the recording's local time", () => {
+    const { container } = render(
+      <WebcamLane
+        {...base}
+        layout={joinedLayout}
+        thumbnails={Array.from({ length: 10 }, (_, i) => ({ sourceTime: i + 0.5, url: `a-${i}` }))}
+        covered={{ start: 0, end: 10 }}
+        clipRecordings={clips}
+        recordingStrips={recordingStrips}
+      />,
+    );
+    const [a, b, b2] = urlsByClip(container);
+    expect(a.length).toBeGreaterThan(0);
+    expect(a.every((u) => u.startsWith("a-"))).toBe(true);
+    // Clip b reads axis 10-14 = local 0-4 of B's webcam: frames b-0..b-3, nothing later.
+    expect(b.length).toBeGreaterThan(0);
+    expect(b.every((u) => u.startsWith("b-") && Number(u.slice(2)) <= 4)).toBe(true);
+    // The second copy of B has its own range and its own strip.
+    expect(b2.length).toBeGreaterThan(0);
+    expect(b2.every((u) => u.startsWith("c-") && Number(u.slice(2)) <= 4)).toBe(true);
+  });
+
+  it("draws a joined clip when the opened recording is not first", () => {
+    const joinedFirst = toLayout([
+      { id: "b", kind: "clip", sourceStart: 10, sourceEnd: 14 },
+      { id: "a", kind: "clip", sourceStart: 0, sourceEnd: 4 },
+    ]);
+    const { container } = render(
+      <WebcamLane
+        {...base}
+        layout={joinedFirst}
+        thumbnails={Array.from({ length: 10 }, (_, i) => ({ sourceTime: i + 0.5, url: `a-${i}` }))}
+        covered={{ start: 0, end: 10 }}
+        clipRecordings={
+          new Map([
+            ["a", clip(null, 0)],
+            ["b", clip("src-b", 10)],
+          ])
+        }
+        recordingStrips={recordingStrips}
+      />,
+    );
+    const [first, second] = urlsByClip(container);
+    expect(first.every((u) => u.startsWith("b-"))).toBe(true);
+    expect(second.every((u) => u.startsWith("a-"))).toBe(true);
+    expect(first.length).toBeGreaterThan(0);
+    expect(second.length).toBeGreaterThan(0);
+  });
+
+  it("leaves a joined clip empty until its strip is decoded or where its camera has no footage", () => {
+    const { container } = render(
+      <WebcamLane
+        {...base}
+        layout={joinedLayout}
+        clipRecordings={clips}
+        recordingStrips={
+          new Map([["src-b2", { thumbnails: own("c"), covered: { start: 5, end: 10 } }]])
+        }
+        thumbnails={Array.from({ length: 10 }, (_, i) => ({ sourceTime: i + 0.5, url: `a-${i}` }))}
+        covered={{ start: 0, end: 10 }}
+      />,
+    );
+    const [, b, b2] = urlsByClip(container);
+    expect(b).toEqual([]); // src-b not decoded yet: never borrows the opened recording's frames
+    // B again: local 0-4 is before its camera starts (covered from 5).
+    expect(b2).toEqual([]);
+  });
+});

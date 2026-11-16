@@ -23,6 +23,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { framingTransform } from "@shared/camera-bubble";
+import type { PreviewMedia } from "../playback-media";
 import { useVideoFrameClock } from "../use-video-frame-clock";
 import { type CameraPath, cameraAt } from "../zoom/camera-path";
 import {
@@ -33,6 +34,8 @@ import {
 } from "../webcam/webcam-layout";
 import { webcamEndSeconds, webcamStateAt, type WebcamScene } from "../webcam/webcam-model";
 import {
+  type WebcamRecordings,
+  webcamFileAt,
   webcamHasFrameAt,
   webcamResyncTarget,
   webcamSeekLead,
@@ -65,10 +68,22 @@ function safePause(video: HTMLVideoElement): void {
 
 /** What both layers draw from: the main video's clock and the webcam's layout over time. */
 interface WebcamSyncInput {
-  /** The MAIN video: its frame clock drives the layer and its play/pause/rate the webcam's. */
-  videoRef: React.RefObject<HTMLVideoElement | null>;
-  /** Webcam time 0 − screen time 0 (ADR 0037): webcam time = t − startOffsetMs / 1000. */
+  /** The MAIN video: its frame clock drives the layer and its play/pause/rate the webcam's.
+   *  With joined recordings it is the preview's `MediaSwitch`, and every time here is an
+   *  AXIS second (ADR 0058). */
+  videoRef: React.RefObject<PreviewMedia | null>;
+  /** The opened recording's webcam URL; null when it was recorded without one. */
+  src: string | null;
+  /** Webcam time 0 − screen time 0 (ADR 0037): webcam time = t − startOffsetMs / 1000. This is
+   *  the OPENED recording's; a joined recording brings its own through `recordings`. */
   startOffsetMs: number;
+  /**
+   * The webcam file of every recording, for a scene with joined ones. Each file plays against
+   * its own recording's clock (the LOCAL second), so the layer swaps files when the playhead
+   * crosses into another recording and hides during clips of one that has none. Absent with a
+   * single recording, where `src` and `startOffsetMs` serve every second.
+   */
+  recordings?: WebcamRecordings;
   webcam: WebcamScene;
   /**
    * The recording's length in source seconds: the last block's return to the default layout
@@ -92,7 +107,9 @@ interface WebcamSyncInput {
  */
 function useWebcamSync({
   videoRef,
+  src,
   startOffsetMs,
+  recordings,
   webcam,
   endSeconds,
   path,
@@ -125,11 +142,16 @@ function useWebcamSync({
     // A faster or slower main video would otherwise drift past the resync threshold on
     // every frame and turn the face into a series of seeks.
     if (main && cam.playbackRate !== main.playbackRate) cam.playbackRate = main.playbackRate;
+    // Layout, hide segments and the camera path are axis seconds; the file and its clock are
+    // the recording's own, so the webcam time comes from the LOCAL second.
+    const file = webcamFileAt(recordings, { src, startOffsetMs }, t);
+    if (file.src !== null && cam.getAttribute("src") !== file.src)
+      cam.setAttribute("src", file.src);
     const state = hidden ? null : webcamStateAt({ webcam }, t, webcamEndSeconds(endSeconds));
-    const webcamTime = webcamTimeFor(t, startOffsetMs);
+    const webcamTime = webcamTimeFor(file.localTime, file.startOffsetMs);
     const scale = cameraEnabled && path ? cameraAt(path, t).scale : 1;
     let rect =
-      state && webcamHasFrameAt(webcamTime, cam.duration)
+      state && file.src !== null && webcamHasFrameAt(webcamTime, cam.duration)
         ? webcamStateRect(state, frame, scale)
         : null;
     if (rect && held.current) {
@@ -184,8 +206,18 @@ function useWebcamSync({
   };
 
   const trigger = useMemo(
-    () => ({ webcam, endSeconds, path, cameraEnabled, frame, hidden, startOffsetMs }),
-    [webcam, endSeconds, path, cameraEnabled, frame, hidden, startOffsetMs],
+    () => ({
+      webcam,
+      endSeconds,
+      path,
+      cameraEnabled,
+      frame,
+      hidden,
+      src,
+      startOffsetMs,
+      recordings,
+    }),
+    [webcam, endSeconds, path, cameraEnabled, frame, hidden, src, startOffsetMs, recordings],
   );
   useVideoFrameClock(videoRef, apply, trigger);
 
@@ -274,14 +306,14 @@ function WebcamMedia({
   src,
 }: {
   sync: ReturnType<typeof useWebcamSync>;
-  src: string;
+  src: string | null;
 }): React.JSX.Element {
   return (
     <div ref={sync.clipRef} className={styles.clip}>
       <video
         ref={sync.camRef}
         className={styles.video}
-        src={src}
+        src={src ?? undefined}
         muted
         playsInline
         preload="auto"
@@ -299,12 +331,9 @@ function WebcamMedia({
  * through to the player's controls.
  */
 export function WebcamPlaybackLayer({
-  src,
   ...input
-}: Omit<WebcamSyncInput, "path" | "cameraEnabled" | "hidden"> & {
-  /** The take's webcam URL, built with `mediaUrl("webcam", id)`. */
-  src: string;
-}): React.JSX.Element {
+}: Omit<WebcamSyncInput, "path" | "cameraEnabled" | "hidden" | "recordings">): React.JSX.Element {
+  const { src } = input;
   const sync = useWebcamSync({ ...input, path: null, cameraEnabled: false, hidden: false });
   return (
     <div className={styles.slot} data-testid="webcam-slot" aria-hidden>
@@ -325,6 +354,7 @@ export function WebcamLayer({
   videoRef,
   src,
   startOffsetMs,
+  recordings,
   webcam,
   endSeconds,
   path,
@@ -338,8 +368,6 @@ export function WebcamLayer({
   onDrop,
   onHeldChange,
 }: Omit<WebcamSyncInput, "path"> & {
-  /** The take's webcam URL, built with `mediaUrl("webcam", id)`. */
-  src: string;
   path: CameraPath;
   /** False while a drawing tool is armed, so a stroke can start over the bubble. */
   interactive: boolean;
@@ -359,7 +387,9 @@ export function WebcamLayer({
   const t = useTranslations("videoEditor");
   const sync = useWebcamSync({
     videoRef,
+    src,
     startOffsetMs,
+    recordings,
     webcam,
     endSeconds,
     path,

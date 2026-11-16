@@ -1,0 +1,93 @@
+/*
+ * Media lane — the floating images of the Clips section, drawn on rows above the sequence
+ * (NIW2-771). Row 1 is nearest the sequence, higher rows further up. Same tokens as the
+ * other lanes; the height is set inline from the number of rows (--media-row-h, --media-row-gap).
+ */
+
+.lane {
+  --media-row-h: 28px;
+  --media-row-gap: 2px;
+  position: relative;
+  min-width: 0;
+}
+
+/* Every slab, block and handle sets --row-pos (0 = the top row on screen) and is placed by it. */
+.row,
+.block,
+.handle {
+  top: calc(var(--row-pos, 0) * (var(--media-row-h) + var(--media-row-gap)));
+}
+
+/* A row's slab: the same raised surface as the other lanes, so the stack reads as one
+   timeline. Blocks are siblings placed on top by `top`, not children, so an item that
+   changes row while it is dragged keeps its element (and its pointer capture). */
+.row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--media-row-h);
+  border-radius: 3px;
+  background: var(--bg-raised);
+  pointer-events: none;
+}
+
+.block {
+  position: absolute;
+  height: var(--media-row-h);
+  min-width: 12px;
+  display: flex;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: var(--bg-card-hover);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.block:focus-visible {
+  outline: 2px solid var(--accent-primary-ring);
+  outline-offset: 1px;
+}
+
+.blockSelected {
+  border-color: var(--accent-primary);
+  /* Above the unselected blocks, below the handles. */
+  z-index: 1;
+}
+
+.thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+/* Edge handles: 8 px hit area (the clip trim handles' size), a thin visible bar in its
+   middle. Siblings of the block, not children: the block clips its picture with overflow
+   and the handle sits half outside the edge. */
+.handle {
+  position: absolute;
+  width: 8px;
+  height: var(--media-row-h);
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 2;
+}
+
+.handle::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--text-primary) 70%, transparent);
+}
+
+.handle:hover::after {
+  background: var(--accent-primary);
+}

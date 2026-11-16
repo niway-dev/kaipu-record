@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { initialScene } from "../../scene";
 import { toLayout } from "../../timeline";
+import { sourceAxis } from "../../source-axis";
 import { useVideoScene, type VideoSceneController } from "../../use-video-scene";
 import { useWebcamEditing, type WebcamEditing } from "../../webcam/use-webcam-editing";
 import {
@@ -400,7 +401,7 @@ describe("a part saved with its own look", () => {
       const edits = useWebcamEditing({
         controller,
         layout: toLayout(controller.scene.items),
-        sourceDuration: 20,
+        axis: sourceAxis(20),
       });
       const webcam = controller.scene.webcam!;
       const segment = webcam.segments[0] ?? null;
@@ -595,7 +596,7 @@ describe("the S, M and L size buttons", () => {
       const edits = useWebcamEditing({
         controller,
         layout: toLayout(controller.scene.items),
-        sourceDuration: 20,
+        axis: sourceAxis(20),
       });
       return (
         <WebcamPanel

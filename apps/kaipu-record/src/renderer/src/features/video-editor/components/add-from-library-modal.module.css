@@ -1,0 +1,564 @@
+/* The Add from Library modal (NIW2-790). It fills the xwide sheet at a fixed height, so
+   switching tabs does not resize it; only the lists scroll. Hairlines and small radii, as in
+   Captures; pink only on the active tab, the selected row's outline and the primary button. */
+.sheet {
+  display: flex;
+  flex-direction: column;
+  /* Basis auto, not 0: the dialog's height is indefinite, so a 0 basis made the sheet as tall
+     as its content and an empty search collapsed it to the header. It may still shrink to the
+     dialog's max-height on a short window. */
+  flex: 0 1 auto;
+  min-height: 0;
+  height: min(600px, calc(100vh - 64px));
+  background: var(--bg-modal);
+  color: var(--text-primary);
+}
+
+.header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 20px;
+  height: 48px;
+  padding: 0 12px 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* ModalTitle brings its own bottom margin for a stacked dialog; here it sits in a row. */
+.title h3 {
+  margin: 0;
+  font-size: var(--font-size-md);
+  letter-spacing: -0.01em;
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  height: 100%;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  margin-top: 2px;
+  padding: 0 10px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--font-size-base);
+  cursor: pointer;
+  transition: color var(--transition);
+}
+
+.tab:hover {
+  color: var(--text-primary);
+}
+
+.tab[data-active="true"] {
+  border-bottom-color: var(--accent-primary);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--accent-primary-ring);
+  outline-offset: -2px;
+}
+
+.count {
+  margin-left: 2px;
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.close:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+/* The tab panel: everything under the header, filling the sheet's fixed height. */
+.panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.searchRow {
+  flex: none;
+  padding: 12px 16px 0;
+}
+
+.search {
+  position: relative;
+  display: block;
+}
+
+.searchIcon {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  transform: translateY(-50%);
+  color: var(--text-4);
+  pointer-events: none;
+}
+
+.searchInput {
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px 0 32px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  outline: none;
+}
+
+.searchInput::placeholder {
+  color: var(--text-4);
+}
+
+.searchInput:focus {
+  border-color: var(--accent-primary);
+}
+
+/* ---- Notes: loading, empty, no match, read failure ---- */
+.note {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+  text-align: center;
+}
+
+.note p {
+  margin: 0;
+}
+
+.noteTitle {
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.noteHint {
+  color: var(--text-4);
+  font-size: var(--font-size-sm);
+}
+
+/* ---- Recordings: list + preview ---- */
+.split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  margin-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.list {
+  flex: none;
+  width: 45%;
+  margin: 0;
+  padding: 8px;
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 3px 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    border-color var(--transition);
+}
+
+.row:hover {
+  background: var(--bg-card-hover);
+}
+
+.row[data-selected="true"] {
+  background: var(--bg-card-hover);
+  border-color: var(--accent-primary);
+}
+
+.row:focus-visible {
+  outline: 2px solid var(--accent-primary-ring);
+  outline-offset: 1px;
+}
+
+.thumb {
+  position: relative;
+  flex: none;
+  width: 96px;
+  height: 54px;
+  overflow: hidden;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.thumbImage {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--text-muted);
+}
+
+.duration {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.78);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  line-height: 14px;
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.name {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The preview takes whatever height is left and gives it up first on a short window, so the
+   chooser and the Add button below it stay on screen. Only when the window is shorter than the
+   fixed rows alone does the column scroll, so Add is never clipped out of reach. */
+.detail {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px 16px 16px;
+  overflow-y: auto;
+}
+
+.detailTitle {
+  flex: none;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.facts {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+}
+
+/* ---- The quick look ---- */
+.preview {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+/* Sized by the height the column has left, not by its width: the picture inside is contained,
+   so it keeps its own 16:9 (or any) shape with bars around it instead of being cropped. */
+.previewFrame {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.previewVideo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.previewImage {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.previewHidden {
+  visibility: hidden;
+}
+
+.previewPlaceholder,
+.previewUnavailable {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  pointer-events: none;
+}
+
+.previewBadge {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.78);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  letter-spacing: 0.02em;
+}
+
+.transport {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+}
+
+.playButton {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.playButton:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.playButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.scrub {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  accent-color: var(--text-secondary);
+  cursor: pointer;
+}
+
+/* ---- Screenshots: card grid ---- */
+.grid {
+  min-width: 0;
+  display: grid;
+  flex: 1;
+  /* Beside the chooser column the grid has room for two or three cards, by width. */
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  align-content: start;
+  gap: 14px 12px;
+  min-height: 0;
+  margin: 0;
+  padding: 14px 16px 8px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 6px 6px 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    transform var(--transition);
+}
+
+.card:hover,
+.card:focus-visible,
+.card[data-selected="true"] {
+  background: var(--bg-card-hover);
+  border-color: var(--accent-primary);
+  outline: none;
+  transform: translateY(-2px);
+}
+
+/* The card that is selected keeps its outline and lift when the pointer leaves. */
+.card[data-selected="true"] {
+  box-shadow: 0 0 0 1px var(--accent-primary);
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--accent-primary-ring);
+  outline-offset: 1px;
+}
+
+.poster {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+}
+
+.poster img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tag {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  padding: 1px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.78);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.cardTitle {
+  margin: 8px 2px 0;
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardMeta {
+  margin: 3px 2px 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The Screenshots tab's right column: the chooser for the selected card, narrower than the
+   recordings' detail because the grid needs the width. */
+.shotSide {
+  flex: none;
+  width: 290px;
+  border-left: 1px solid var(--line);
+}
+
+.pickHint {
+  margin: auto 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+  text-align: center;
+}

@@ -21,6 +21,7 @@ describe("flag model", () => {
     expect(FLAG_DEFAULTS["image-canvas"]).toBe(false);
     expect(FLAG_DEFAULTS["image-inspect"]).toBe(false);
     expect(FLAG_DEFAULTS["image-text"]).toBe(false);
+    expect(FLAG_DEFAULTS["timeline-levels"]).toBe(false);
   });
 
   it("uses stable identity defaults", () => {
