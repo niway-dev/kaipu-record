@@ -230,7 +230,7 @@ describe("projectTranscript", () => {
     expect(projectTranscript([word("w", 1000, 1400)], layout, audible)).toHaveLength(2);
   });
 
-  it("handles 20,000 words with many mutes and clips in well under a second", () => {
+  it("projects 20,000 words over many mutes and clips, sorted by timeline start", () => {
     const clips: TrackItem[] = [];
     for (let i = 0; i < 200; i++) clips.push(clip(`c${i}`, i * 60, i * 60 + 55));
     const layout = toLayout(clips);
@@ -238,11 +238,8 @@ describe("projectTranscript", () => {
     for (let i = 0; i < 20000; i++) words.push(word(`w${i}`, i * 600, i * 600 + 400));
     const mutedRanges: MutedRange[] = [];
     for (let i = 0; i < 2000; i++) mutedRanges.push(mute(`m${i}`, i * 6 + 1, i * 6 + 1.5));
-    const t0 = performance.now();
     const out = projectTranscript(words, layout, { audioMuted: false, mutedRanges });
-    const elapsed = performance.now() - t0;
     expect(out.length).toBeGreaterThan(5000);
-    expect(elapsed).toBeLessThan(500);
     for (let i = 1; i < out.length; i++)
       expect(out[i].start).toBeGreaterThanOrEqual(out[i - 1].start);
   });

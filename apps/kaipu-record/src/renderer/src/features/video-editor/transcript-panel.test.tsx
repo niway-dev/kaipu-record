@@ -11,6 +11,12 @@ import type { TranscriptApi } from "@renderer/features/transcription/use-transcr
 import type { LayoutEntry } from "./timeline";
 import { TranscriptPanel, type TranscriptPanelProps } from "./transcript-panel";
 
+const analytics = vi.hoisted(() => ({ reportError: vi.fn() }));
+vi.mock("@renderer/features/analytics", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@renderer/features/analytics")>()),
+  reportError: analytics.reportError,
+}));
+
 const hooks = vi.hoisted(() => ({
   transcript: vi.fn(),
   control: vi.fn(),
@@ -541,7 +547,7 @@ describe("TranscriptPanel — search", () => {
     expect(props.onSeek).toHaveBeenLastCalledWith(1);
   });
 
-  it("ignores case and accents, and says when nothing matches", () => {
+  it("ignores case, and says when nothing matches", () => {
     setup();
     const input = screen.getByRole("searchbox");
     fireEvent.change(input, { target: { value: "HELLO" } });
@@ -550,6 +556,18 @@ describe("TranscriptPanel — search", () => {
     expect(screen.getByText("No matches")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next match" })).toBeDisabled();
     expect(document.querySelectorAll("[data-match]")).toHaveLength(0);
+  });
+
+  it("ignores accents: cancion finds Canción", () => {
+    hooks.transcript.mockReturnValue(
+      READY({
+        words: [word("w1", "La", 1000, 1200), word("w2", "Canción,", 1300, 1800)],
+      }),
+    );
+    setup();
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "cancion" } });
+    expect(screen.getByText("1 of 1")).toBeInTheDocument();
+    expect(document.querySelector("[data-match]")).toHaveTextContent("Canción,");
   });
 
   it("clears the marks when the query is emptied", () => {
@@ -577,6 +595,21 @@ describe("TranscriptPanel — copy", () => {
     });
     expect(writeText).toHaveBeenCalledExactlyOnceWith("Hello brave new world.\n\nHello again");
     expect(screen.getByText("Copied")).toBeInTheDocument();
+  });
+
+  it("reports a clipboard that refuses, and does not say Copied", async () => {
+    const failure = new Error("denied");
+    writeText.mockRejectedValueOnce(failure);
+    setup();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Copy all text/ }));
+    });
+    expect(analytics.reportError).toHaveBeenCalledExactlyOnceWith(
+      expect.any(String),
+      failure,
+      expect.objectContaining({ context: { phase: "copy-transcript" } }),
+    );
+    expect(screen.queryByText("Copied")).toBeNull();
   });
 
   it("copies only what the edit keeps", async () => {
