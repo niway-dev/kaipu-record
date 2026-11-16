@@ -246,7 +246,7 @@ function runningLabel(
 }
 
 function hintOf(t: Translator<"transcription">, state: TranscribeControlState): string | null {
-  if (state.kind === "failed") return failureText(t, state.failure as StartFailure);
+  if (state.kind === "failed") return failureText(t, state.failure);
   if (state.kind === "invalid") return t("transcribeInvalidHint");
   return null;
 }

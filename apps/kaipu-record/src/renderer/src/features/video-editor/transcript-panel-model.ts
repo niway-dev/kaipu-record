@@ -83,7 +83,7 @@ export function panelView(input: PanelViewInput): PanelView {
       kind: "words",
       stale: transcript.stale,
       unresolved: transcript.unresolvedCount > 0,
-      failure: control.kind === "failed" ? (control.failure as StartFailure) : null,
+      failure: control.kind === "failed" ? control.failure : null,
     };
   }
   if (transcript.state === "invalid") return { kind: "failed", reason: "invalid" };
@@ -92,7 +92,7 @@ export function panelView(input: PanelViewInput): PanelView {
     case "failed":
       return control.failure === "no-audio"
         ? { kind: "noAudio" }
-        : { kind: "failed", reason: control.failure as StartFailure };
+        : { kind: "failed", reason: control.failure };
     case "unavailable":
     case "hidden":
       return { kind: "unavailable" };

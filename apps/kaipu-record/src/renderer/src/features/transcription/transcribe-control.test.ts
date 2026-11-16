@@ -127,7 +127,7 @@ describe("transcribeControlState precedence", () => {
     ],
     [
       "loading over failed",
-      { availability: null, defaultModelReady: null, failure: "x" },
+      { availability: null, defaultModelReady: null, failure: "unknown" },
       "loading",
     ],
     [
@@ -135,11 +135,11 @@ describe("transcribeControlState precedence", () => {
       { defaultModelReady: null, transcript: "ready" },
       "loading",
     ],
-    ["failed over busy elsewhere", { failure: "x", busyElsewhere: true }, "failed"],
-    ["failed over needs-model", { failure: "x", defaultModelReady: false }, "failed"],
-    ["done over a failure", { failure: "x", transcript: "ready" }, "done"],
-    ["stale over a failure", { failure: "x", transcript: "stale" }, "stale"],
-    ["invalid over a failure", { failure: "x", transcript: "invalid" }, "invalid"],
+    ["failed over busy elsewhere", { failure: "unknown", busyElsewhere: true }, "failed"],
+    ["failed over needs-model", { failure: "unknown", defaultModelReady: false }, "failed"],
+    ["done over a failure", { failure: "unknown", transcript: "ready" }, "done"],
+    ["stale over a failure", { failure: "unknown", transcript: "stale" }, "stale"],
+    ["invalid over a failure", { failure: "unknown", transcript: "invalid" }, "invalid"],
     ["done over busy elsewhere", { transcript: "ready", busyElsewhere: true }, "done"],
     ["stale over needs-model", { transcript: "stale", defaultModelReady: false }, "stale"],
     [

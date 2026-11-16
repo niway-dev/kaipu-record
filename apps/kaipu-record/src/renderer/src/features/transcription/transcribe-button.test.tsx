@@ -129,7 +129,7 @@ describe("TranscribeButton", () => {
   });
 
   it("failed: an unknown failure code gets the generic hint", () => {
-    setControl({ kind: "failed", failure: "something-new" });
+    setControl({ kind: "failed", failure: "something-new" as never });
     mount();
     expect(screen.getByRole("status")).toHaveTextContent("Transcription failed. Try again.");
   });

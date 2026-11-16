@@ -1,5 +1,5 @@
 import type { TranscriptionStatus } from "@shared/types/transcription";
-import type { RunningTranscription } from "./transcription-job-store";
+import type { RunningTranscription, StartFailure } from "./transcription-job-store";
 
 export interface TranscribeControlInput {
   flagOn: boolean;
@@ -16,7 +16,7 @@ export interface TranscribeControlInput {
   /** A job for another item runs. */
   busyElsewhere: boolean;
   /** The last failure of this item in this session. */
-  failure: string | null;
+  failure: StartFailure | null;
 }
 
 export type TranscribeControlState =
@@ -33,7 +33,7 @@ export type TranscribeControlState =
       segmentsTotal: number;
     }
   | { kind: "busy-elsewhere" }
-  | { kind: "failed"; failure: string }
+  | { kind: "failed"; failure: StartFailure }
   | { kind: "done" }
   | { kind: "stale" }
   | { kind: "invalid" };
