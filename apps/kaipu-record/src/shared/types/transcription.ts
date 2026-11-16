@@ -9,13 +9,11 @@
  * batches, writes `.kaipu/<id>.transcript.json` and broadcasts `TranscriptionJobProgress`.
  */
 
-/** Why the engine cannot run. The panel and the settings entry say "unavailable" for all three. */
+/** Why the engine cannot run. The panel and the settings entry say "unavailable" for both. */
 export type TranscriptionUnavailableReason =
   /** Not macOS arm64 (the first supported target). */
   | "unsupported-platform"
-  /** The `sherpa-onnx-offline` binary or its library is not in the app bundle. */
-  | "engine-missing"
-  /** The binary is there but its `--version` handshake failed. */
+  /** The downloaded `sherpa-onnx-offline` binary is installed but its `--version` handshake failed. */
   | "engine-broken";
 
 export type TranscriptionAvailability =

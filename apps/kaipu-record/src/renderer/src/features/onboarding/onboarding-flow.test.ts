@@ -115,7 +115,7 @@ describe("onboarding flow", () => {
       transcriptionOfferModel(
         transcriptionStatus(
           { state: "missing" },
-          { availability: { status: "unavailable", reason: "engine-missing" } },
+          { availability: { status: "unavailable", reason: "unsupported-platform" } },
         ),
       ),
     ).toBeNull();

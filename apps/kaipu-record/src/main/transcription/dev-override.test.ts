@@ -147,7 +147,7 @@ const OTHER = {
   status: { state: "ready" as const },
 };
 const REAL: TranscriptionStatus = {
-  availability: { status: "unavailable", reason: "engine-missing" },
+  availability: { status: "unavailable", reason: "unsupported-platform" },
   defaultModelId: "default-model",
   models: [DEFAULT, OTHER],
   job: null,

@@ -3488,7 +3488,6 @@
     "failed_busy": "Ya hay otra descarga de un modelo en curso. Espera a que termine e inténtalo de nuevo.",
     "failed_unknown": "No se pudo descargar el modelo. Inténtalo de nuevo.",
     "unavailable_unsupported-platform": "La transcripción local todavía no está disponible en este Mac ni en esta plataforma.",
-    "unavailable_engine-missing": "Falta el motor de transcripción en esta instalación. Vuelve a instalar Kaipu Record para recuperarlo.",
     "unavailable_engine-broken": "El motor de transcripción no pudo iniciar. Reinicia Kaipu Record y, si sigue fallando, vuelve a instalarlo.",
     "downloadInBackground": "Descargar en segundo plano",
     "transcribe": "Transcribir",

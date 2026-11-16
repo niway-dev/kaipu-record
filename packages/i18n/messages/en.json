@@ -3488,7 +3488,6 @@
     "failed_busy": "Another model download is already running. Wait for it to finish, then try again.",
     "failed_unknown": "The model could not be downloaded. Try again.",
     "unavailable_unsupported-platform": "Local transcription is not available on this Mac or this platform yet.",
-    "unavailable_engine-missing": "The transcription engine is missing from this installation. Reinstall Kaipu Record to get it back.",
     "unavailable_engine-broken": "The transcription engine did not start. Restart Kaipu Record, and if it keeps failing, reinstall it.",
     "downloadInBackground": "Download in background",
     "transcribe": "Transcribe",
