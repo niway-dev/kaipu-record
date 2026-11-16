@@ -3,7 +3,7 @@ import type { CursorLayerData } from "../cursor/cursor-model";
  * Message contracts between the renderer (`use-gif-export.ts`) and `gif-worker.ts`
  * (NIW2-217). Mirrors export-messages.ts; cancellation is `worker.terminate()`.
  */
-import type { CameraPathMessage, WebcamTrackMessage } from "./export-messages";
+import type { CameraPathMessage, ExportStartMessage, WebcamTrackMessage } from "./export-messages";
 import type { ExportPlan } from "./export-plan";
 
 /** GIF frame rates offered in the export sheet. 30 fps is ruled out (browser delay clamp). */
@@ -36,12 +36,15 @@ export interface GifStartMessage {
   mode: "estimate" | "export" | "still";
   /** Still mode only: the timeline time of the frame, inside the (unsliced) `plan`. */
   stillTime?: number;
-  sourceBlob: Blob;
+  /** The opened recording's file; null when no frame reads it (a still over a joined clip). */
+  sourceBlob: Blob | null;
   /** The plan already sliced to the range and rebased to 0 (`sliceExportPlan`). */
   plan: ExportPlan;
   /** Overlay bitmaps rasterized at SOURCE size, like the MP4 export. */
   overlays: Array<{ overlayId: string; bitmap: ImageBitmap }>;
   slides: Array<{ assetId: string; bitmap: ImageBitmap }>;
+  /** Floating-image bitmaps (`plan.floating`), separate from `slides`; absent: none. */
+  mediaImages?: Array<{ assetId: string; bitmap: ImageBitmap }>;
   /** Frames are composed at source size (identical geometry to the MP4)… */
   source: { width: number; height: number };
   /** …then downsampled once to the GIF size. */
@@ -51,6 +54,11 @@ export interface GifStartMessage {
   cursor?: CursorLayerData | null;
   /** The webcam file, as for the MP4 export; null without a webcam layer. */
   webcam: WebcamTrackMessage | null;
+  /**
+   * The joined recordings (ADR 0058) the plan's clips read, each with its start on the source
+   * axis; `[]` for a scene without joins. Same shape as the MP4 export's.
+   */
+  joined: ExportStartMessage["joined"];
 }
 
 export type GifWorkerMessage =

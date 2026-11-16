@@ -1,0 +1,89 @@
+/* The floating images' slot (ADR 0057): a sibling of the zoomed content layer, so the camera
+   path's transform never reaches it, and below the webcam (z-index 3) and the chrome (4-5). The
+   slot lets every pointer through; only an image and a handle take them. */
+.slot {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.item {
+  position: absolute;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+}
+
+/* A drawing tool is armed: an image must not swallow the stroke that starts over it. */
+.item[data-interactive="false"] {
+  pointer-events: none;
+}
+
+.image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Above every image, so the handles are reachable even under a later one; the body of the
+   selection takes no pointer, so an image in front of the selected one can still be clicked. */
+.selection {
+  position: absolute;
+  pointer-events: none;
+  /* Drawn inside the box: the picture clips at its edge (overflow hidden), so an outline, which
+     sits outside the box, vanished whenever the image filled the picture (Full). The thin white
+     ring keeps the accent frame visible over footage of the same colour. */
+  box-shadow:
+    inset 0 0 0 2px var(--accent-primary),
+    inset 0 0 0 3px rgb(255 255 255 / 85%);
+}
+
+/* Inside the box corners, never centred on them, so the picture's edge cannot cut a handle in
+   half. The pointer arithmetic uses the box and the press delta, not the handle's position. */
+.handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 2px solid var(--accent-primary);
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 45%);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+/* A 26px grab area around the 14px square. The pseudo-element is placed against the handle's
+   padding box, 10px once the 2px border is taken off, so 8px each side makes 26px. */
+.handle::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+
+.handle[data-corner="nw"] {
+  top: 2px;
+  left: 2px;
+  cursor: nwse-resize;
+}
+
+.handle[data-corner="ne"] {
+  top: 2px;
+  right: 2px;
+  cursor: nesw-resize;
+}
+
+.handle[data-corner="sw"] {
+  bottom: 2px;
+  left: 2px;
+  cursor: nesw-resize;
+}
+
+.handle[data-corner="se"] {
+  bottom: 2px;
+  right: 2px;
+  cursor: nwse-resize;
+}

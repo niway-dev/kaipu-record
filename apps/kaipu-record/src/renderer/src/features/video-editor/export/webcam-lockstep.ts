@@ -129,6 +129,8 @@ export function webcamFillTimes(
 export interface WebcamFillState<T> {
   from: number;
   face: T | null;
+  /** Whether a floating image was drawn on the last frame added (see `live` below). */
+  live?: boolean;
 }
 
 /**
@@ -159,9 +161,16 @@ export async function fillWebcamGap<T>(opts: {
    */
   moving?(sourceTime: number): boolean;
   frameAt(sourceTime: number): Promise<T | null>;
+  /**
+   * A floating image is on screen at `sourceTime`: its fades change every frame, so a fill is
+   * added at each time it is, and once more on the first time it is not (to remove it) —
+   * with or without a webcam.
+   */
+  live?(sourceTime: number): boolean;
   emit(sourceTime: number, face: T | null, duration: number): Promise<boolean>;
 }): Promise<WebcamFillState<T>> {
   let { from, face } = opts.state;
+  let wasLive = opts.state.live ?? false;
   const gapEnd = Math.min(opts.nextFrame, opts.segmentEnd);
   // The previous fill drew the bubble mid-slide: the next one is due even if nothing else
   // changed, because it draws the place the slide settled on.
@@ -172,11 +181,15 @@ export async function fillWebcamGap<T>(opts: {
     // A slide only needs fills where a bubble is drawn: without a webcam frame the screen
     // is the same as the one before.
     const moving = due !== null && !!opts.moving?.(t);
-    if (due === face && !moving && !settling) continue;
+    const isLive = opts.live?.(t) ?? false;
+    if (due === face && !moving && !settling && !isLive && !wasLive) continue;
     const drawn = await opts.emit(t, due, gapEnd - t);
-    if (drawn) face = due;
+    if (drawn) {
+      face = due;
+      wasLive = isLive;
+    }
     // A fill the cap dropped did not draw the settled place: the next one tries again.
     settling = moving || !drawn;
   }
-  return { from, face };
+  return { from, face, live: wasLive };
 }

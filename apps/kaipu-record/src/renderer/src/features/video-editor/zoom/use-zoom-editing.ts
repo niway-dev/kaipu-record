@@ -15,14 +15,15 @@
  */
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useLatest } from "../use-latest";
-import type { CursorTrack } from "@shared/cursor-track";
+import { clipBounds, type SourceAxis } from "../source-axis";
 import { freeWindowAt, isSourceRangeVisible, sourceTimeAtTimeline } from "../source-time";
 import type { LayoutEntry } from "../timeline";
 import type { VideoScene } from "../scene";
+import type { RecordingZoomInput } from "./recording-zooms";
 import type { VideoSceneController } from "../use-video-scene";
 import {
   addManualZoom,
-  applySensitivity,
+  applySensitivityToRecordings,
   dragZoomEdge,
   lockZoomAt,
   removeZoom,
@@ -91,14 +92,20 @@ export function useZoomEditing({
   controller,
   layout,
   timelineDuration,
-  sourceDuration,
-  cursorTrack,
+  axis,
+  recordings,
 }: {
   controller: VideoSceneController;
   layout: LayoutEntry[];
   timelineDuration: number;
-  sourceDuration: number;
-  cursorTrack: CursorTrack | null;
+  /** The source axis: a zoom is clamped to the range of the recording it is in (ADR 0058). */
+  axis: SourceAxis;
+  /**
+   * Every recording whose zooms can be re-detected: the opened one and each READY joined one,
+   * with its own cursor track. A loading or missing recording is simply not listed, and its
+   * zooms are left as they are.
+   */
+  recordings: readonly RecordingZoomInput[];
 }): ZoomEditing {
   const { scene } = controller;
 
@@ -121,7 +128,7 @@ export function useZoomEditing({
         controller.scene.zoomSegments,
         at,
         ZOOM_LIMITS.manualSeconds,
-        sourceDuration,
+        clipBounds(axis, { sourceStart: at }),
         ZOOM_LIMITS.minSeconds,
       );
       if (!window) return { ok: false, reason: "no-room" };
@@ -129,7 +136,7 @@ export function useZoomEditing({
       controller.commit(next);
       return { ok: true, id };
     },
-    [controller, layout, sourceDuration],
+    [controller, layout, axis],
   );
 
   const remove = useCallback(
@@ -178,12 +185,15 @@ export function useZoomEditing({
     if (!pending) return;
     const controller = controllerRef.current;
     const base = lastEdgeScene.current ?? controller.scene;
-    const next = dragZoomEdge(base, pending.id, pending.edge, pending.sourceTime, sourceDuration);
+    const zoom = base.zoomSegments.find((z) => z.id === pending.id);
+    if (!zoom) return;
+    const bounds = clipBounds(axis, { sourceStart: zoom.start });
+    const next = dragZoomEdge(base, pending.id, pending.edge, pending.sourceTime, bounds);
     // A move that lands on the same range changes nothing: keep the scene (and every lane) as is.
     if (sameZoomRange(base, next, pending.id)) return;
     lastEdgeScene.current = next;
     controller.updateLive(next);
-  }, [controllerRef, sourceDuration]);
+  }, [controllerRef, axis]);
   useEffect(
     () => () => {
       if (edgeFrame.current !== 0) cancelAnimationFrame(edgeFrame.current);
@@ -223,24 +233,26 @@ export function useZoomEditing({
     [controller],
   );
 
+  const canDetect = useMemo(() => recordings.some((r) => r.track !== null), [recordings]);
+
   const sensitivityPreview = useCallback(
     (value: number) => {
-      if (!cursorTrack) return { count: visibleZooms.length, coverage };
-      const next = applySensitivity(controller.scene, cursorTrack, sourceDuration, value);
+      if (!canDetect) return { count: visibleZooms.length, coverage };
+      const next = applySensitivityToRecordings(controller.scene, recordings, value);
       return {
         count: next.zoomSegments.filter((z) => isSourceRangeVisible(layout, z.start, z.end)).length,
         coverage: coverageOf(next.zoomSegments, layout, timelineDuration),
       };
     },
-    [controller, cursorTrack, sourceDuration, layout, timelineDuration, visibleZooms, coverage],
+    [controller, canDetect, recordings, layout, timelineDuration, visibleZooms, coverage],
   );
 
   const sensitivityCommit = useCallback(
     (value: number) => {
-      if (!cursorTrack || controller.interacting) return;
-      controller.commit(applySensitivity(controller.scene, cursorTrack, sourceDuration, value));
+      if (!canDetect || controller.interacting) return;
+      controller.commit(applySensitivityToRecordings(controller.scene, recordings, value));
     },
-    [controller, cursorTrack, sourceDuration],
+    [controller, canDetect, recordings],
   );
 
   // Re-run detection at the current sensitivity. Free when nothing changes:
@@ -264,7 +276,7 @@ export function useZoomEditing({
     sensitivityPreview,
     sensitivityCommit,
     reanalyse,
-    canDetect: cursorTrack !== null,
+    canDetect,
   };
 }
 
