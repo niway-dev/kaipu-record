@@ -24,6 +24,7 @@ interface Captured {
   numberOfFrames: number;
   numberOfChannels: number;
   sampleRate: number;
+  format: string;
   hash: string;
 }
 
@@ -36,6 +37,7 @@ const capture = (sample: AudioSample): Captured => {
     numberOfFrames: sample.numberOfFrames,
     numberOfChannels: sample.numberOfChannels,
     sampleRate: sample.sampleRate,
+    format: sample.format ?? "",
     hash: createHash("sha256").update(new Uint8Array(data.buffer)).digest("hex"),
   };
 };
@@ -167,18 +169,55 @@ async function interleaved(options?: { downmix?: boolean }) {
   return { ...r, videoAdds };
 }
 
-describe("createAudioPump: the same samples in either order", () => {
-  it("hands the audio source an identical sequence when it is interleaved with the video", async () => {
-    const old = await allAtOnce();
-    const next = await interleaved();
-    expect(old.samples.length).toBeGreaterThan(200);
-    expect(next.samples).toEqual(old.samples);
+/**
+ * The sequence the audio source received BEFORE the pump existed, per preset variant, as
+ * `[timestamp, duration, numberOfFrames, numberOfChannels, sampleRate, format, sha256 of the
+ * interleaved f32 data]`. Both pump orders must reproduce it exactly.
+ *
+ * HOW IT WAS PRODUCED (NIW2-806): the audio pass of `export-worker.ts` as it was on origin/main
+ * at 8df7b90cb (`git show 8df7b90cb:apps/kaipu-record/src/renderer/src/features/video-editor/
+ * export/export-worker.ts`, the block from `if (audioReference && audioSource) {` to
+ * `audioSource.close()` plus its helpers trimAudioSample, zeroedLike, downmixToMono,
+ * toReferenceFormat and planesToSample) was copied unchanged into a throwaway module, run
+ * on this file's `fixture()` readers with and without `downmix`, and every `AudioSample` it
+ * handed to the source was recorded with `capture()` below. That script is not committed: it
+ * imports a copy of the old worker body, which no longer exists in the tree.
+ *
+ * Regenerate ONLY from that pre-refactor code, never from `createAudioPump`: a golden taken
+ * from the pump would pass whatever the pump does. Change the fixture or the expected audio
+ * on purpose only, and say why in the commit.
+ */
+type GoldenRow = [number, number, number, number, number, string, string];
+const GOLDEN = JSON.parse(
+  readFileSync(resolve(__dirname, "__fixtures__/audio-pump.golden.json"), "utf8"),
+) as { stereo: GoldenRow[]; downmix: GoldenRow[] };
+
+const asGolden = (samples: Captured[]): GoldenRow[] =>
+  samples.map((s) => [
+    s.timestamp,
+    s.duration,
+    s.numberOfFrames,
+    s.numberOfChannels,
+    s.sampleRate,
+    s.format,
+    s.hash,
+  ]);
+
+describe("createAudioPump: the samples the pre-refactor audio pass produced", () => {
+  it("drain() alone reproduces them exactly", async () => {
+    const { samples } = await allAtOnce();
+    expect(GOLDEN.stereo.length).toBeGreaterThan(200);
+    expect(asGolden(samples)).toEqual(GOLDEN.stereo);
   });
 
-  it("does the same with the mono downmix of the Light preset", async () => {
-    const old = await allAtOnce({ downmix: true });
-    const next = await interleaved({ downmix: true });
-    expect(next.samples).toEqual(old.samples);
+  it("interleaved with the video reproduces them exactly", async () => {
+    const { samples } = await interleaved();
+    expect(asGolden(samples)).toEqual(GOLDEN.stereo);
+  });
+
+  it("does the same with the mono downmix of the Light preset, in both orders", async () => {
+    expect(asGolden((await allAtOnce({ downmix: true })).samples)).toEqual(GOLDEN.downmix);
+    expect(asGolden((await interleaved({ downmix: true })).samples)).toEqual(GOLDEN.downmix);
   });
 
   it("keeps the cursor contiguous from 0 and the whole timeline's length", async () => {
