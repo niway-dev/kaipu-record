@@ -3194,7 +3194,7 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
       expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(3);
     });
 
-    it("a failed first Add does not stall the next one in the queue", async () => {
+    it("an Add whose image cannot be read leaves the next Add working", async () => {
       window.electronAPI.readScreenshotBytes = vi
         .fn(async () => PNG_BYTES.buffer.slice(0) as ArrayBuffer)
         .mockRejectedValueOnce(new Error("gone")) as never;
