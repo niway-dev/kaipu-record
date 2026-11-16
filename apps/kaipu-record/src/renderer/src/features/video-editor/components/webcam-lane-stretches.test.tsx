@@ -56,8 +56,18 @@ const px = (el: HTMLElement, side: "left" | "width"): number =>
   (parseFloat(el.style[side]) / 100) * LANE_PX;
 const originals = (c: HTMLElement) =>
   Array.from(c.querySelectorAll<HTMLElement>("[data-webcam-original]"));
+/** A part's or hidden range's click target (the button), in percent of the lane. */
 const block = (c: HTMLElement, id: string) =>
   c.querySelector<HTMLElement>(`button[data-webcam-id="${id}"]`)!;
+/** Where the box is really DRAWN, in lane px: the fill sits inside the target, in percent of it. */
+const drawn = (el: HTMLElement): { left: number; width: number } => {
+  const fill = el.querySelector<HTMLElement>("[data-webcam-fill]")!;
+  const target = { left: px(el, "left"), width: px(el, "width") };
+  return {
+    left: target.left + (parseFloat(fill.style.left) / 100) * target.width,
+    width: (parseFloat(fill.style.width) / 100) * target.width,
+  };
+};
 
 describe("WebcamLane: the original stretches", () => {
   it("draws the whole recording as original with no parts, one piece per clip", () => {
@@ -182,34 +192,93 @@ describe("WebcamLane: parts", () => {
   });
 });
 
-describe("WebcamLane: the 56 px rule", () => {
-  it("draws a 10 px part 56 px wide, with the original after it starting where it ends", () => {
+describe("WebcamLane: true width (decision 12)", () => {
+  it("draws a 10 px part 10 px wide and leaves the original after it where it is", () => {
     const { container } = renderLane([part("p", 12, 12.1)]);
-    const el = block(container, "p");
-    expect(px(el, "left")).toBeCloseTo(700, 3);
-    expect(px(el, "width")).toBeCloseTo(56, 3);
-    // The original that follows (source 12.1-20, timeline 7.1-15) is drawn from 756, to 1500.
+    const mine = drawn(block(container, "p"));
+    expect(mine.left).toBeCloseTo(700, 3);
+    expect(mine.width).toBeCloseTo(10, 3);
+    // The original that follows (source 12.1-20, timeline 7.1-15) starts where the part ends.
     const after = originals(container).at(-1)!;
-    expect(px(after, "left")).toBeCloseTo(756, 3);
-    expect(px(after, "width")).toBeCloseTo(744, 3);
+    expect(px(after, "left")).toBeCloseTo(710, 3);
+    expect(px(after, "width")).toBeCloseTo(790, 3);
   });
 
-  it("never draws a part over the one next to it", () => {
-    // Two parts 0.2 s each, 0.3 s apart: room for the first is 50 px, less than 56.
-    const { container } = renderLane([part("p", 12, 12.2), part("q", 12.5, 12.7)]);
-    expect(px(block(container, "p"), "width")).toBeCloseTo(50, 3);
-    expect(px(block(container, "q"), "width")).toBeCloseTo(56, 3);
+  it("never moves or drops the short original between two parts", () => {
+    // Source 2-2.01 and 2.2-2.21 are timeline 2-2.01 and 2.2-2.21: the 0.19 s between them is 19 px.
+    const { container } = renderLane([part("p", 2, 2.01), part("q", 2.2, 2.21)]);
+    const gap = originals(container).find((o) => Math.abs(px(o, "left") - 201) < 0.01)!;
+    expect(gap).toBeDefined();
+    expect(px(gap, "width")).toBeCloseTo(19, 3);
   });
 
-  it("keeps two touching parts as wide as they are when the first has no room", () => {
-    const { container } = renderLane([part("p", 12, 12.2), part("q", 12.2, 14)]);
-    expect(px(block(container, "p"), "width")).toBeCloseTo(20, 3);
-    expect(px(block(container, "q"), "left")).toBeCloseTo(720, 3);
+  it("draws a lone part of 0.01 s 3 px wide", () => {
+    const { container } = renderLane([part("p", 12, 12.01)]);
+    expect(drawn(block(container, "p")).width).toBeCloseTo(3, 3);
   });
 
-  it("leaves a part wider than 56 px exactly as wide as its time", () => {
+  it("does not let the 3 px floor cover the next part", () => {
+    const { container } = renderLane([part("p", 12, 12.01), part("q", 12.02, 14)]);
+    const p = drawn(block(container, "p"));
+    expect(p.left).toBeCloseTo(700, 3);
+    expect(p.width).toBeCloseTo(2, 3); // room before q (at 702 px) is 2 px
+    expect(drawn(block(container, "q")).left).toBeCloseTo(702, 3);
+  });
+
+  it("gives a 3 px part a 12 px click target centred on it, and selects it from the target", () => {
+    const { container, onSelect } = renderLane([part("p", 12, 12.03)]);
+    const target = block(container, "p");
+    expect(px(target, "width")).toBeCloseTo(12, 3);
+    expect(px(target, "left") + px(target, "width") / 2).toBeCloseTo(701.5, 3);
+    expect(drawn(target).width).toBeCloseTo(3, 3);
+    fireEvent.click(target);
+    expect(onSelect).toHaveBeenCalledWith("p");
+  });
+
+  it("gives two adjacent short parts a target each, never overlapping", () => {
+    const { container } = renderLane([part("p", 12, 12.03), part("q", 12.03, 12.06)]);
+    const p = block(container, "p");
+    const q = block(container, "q");
+    expect(px(p, "left") + px(p, "width")).toBeLessThanOrEqual(px(q, "left") + 1e-6);
+    expect(drawn(p).width).toBeCloseTo(3, 3);
+    expect(drawn(q).width).toBeCloseTo(3, 3);
+  });
+
+  it("leaves a part that is 12 px wide or more as its own target", () => {
     const { container } = renderLane([part("p", 12, 14)]);
-    expect(px(block(container, "p"), "width")).toBeCloseTo(200, 3);
+    const el = block(container, "p");
+    expect(px(el, "width")).toBeCloseTo(200, 3);
+    expect(drawn(el).width).toBeCloseTo(200, 3);
+  });
+
+  it("draws the plain accent block below the glyph threshold: no frame, name or word", () => {
+    const { container } = renderLane([part("p", 12, 12.3)]);
+    const el = block(container, "p");
+    expect(el.querySelector("[data-webcam-glyph]")).toBeNull();
+    expect(el.textContent).toBe("");
+  });
+
+  it("keeps the slide's wedge inside the part, and drops it when it cannot be told from the block", () => {
+    // A 1 s part slides at most half of it (50 px): the wedge fits inside the 100 px part.
+    const wide = renderLane([part("w", 12, 13)]);
+    const wedge = wide.container.querySelector<HTMLElement>("[data-webcam-transition]")!;
+    expect(parseFloat(wedge.style.width)).toBeCloseTo(50, 3);
+    expect(parseFloat(wedge.style.width)).toBeLessThanOrEqual(
+      drawn(block(wide.container, "w")).width,
+    );
+    wide.unmount();
+    // A 0.08 s part is 8 px; its slide is 4 px: too narrow to be a wedge, so none is drawn.
+    const narrow = renderLane([part("n", 12, 12.08)]);
+    expect(narrow.container.querySelector("[data-webcam-transition]")).toBeNull();
+  });
+
+  it("draws a cut's bar only where there is room for it", () => {
+    const cut = { transition: { kind: "cut", ms: 700, easing: "back" } } as const;
+    const room = renderLane([part("c", 12, 12.1, cut)]);
+    expect(room.container.querySelector("[data-webcam-cut]")).not.toBeNull();
+    room.unmount();
+    const none = renderLane([part("c", 12, 12.04, cut)]);
+    expect(none.container.querySelector("[data-webcam-cut]")).toBeNull();
   });
 });
 
@@ -285,12 +354,58 @@ describe("WebcamLane: selecting", () => {
     expect(onSelect).toHaveBeenLastCalledWith("p");
   });
 
-  it("puts the handles at the part's real edges, not at its widened edge", () => {
+  it("puts the handles at the part's real edges when it is 10 px wide or more", () => {
     const { container } = renderLane([part("p", 12, 12.1)], { selectedId: "p" });
+    const start = container.querySelector<HTMLElement>('[data-webcam-handle="start"]')!;
     const end = container.querySelector<HTMLElement>('[data-webcam-handle="end"]')!;
-    // The block is drawn 56 px wide, but the part ends 10 px after it starts (710 px). The
-    // owner asked (2026-11-16) to keep the handles at the real edges for now.
-    const percent = parseFloat(/calc\(([\d.]+)%/.exec(end.style.left)![1]!);
-    expect((percent / 100) * LANE_PX).toBeCloseTo(710, 3);
+    // 10 px: the real edges are 700 and 710, and the 6 px handles are centred on them.
+    expect(handleCentre(start)).toBeCloseTo(700, 3);
+    expect(handleCentre(end)).toBeCloseTo(710, 3);
+  });
+
+  it("moves the handles of a part narrower than 10 px apart, symmetrically", () => {
+    const { container } = renderLane([part("p", 12, 12.03)], { selectedId: "p" });
+    const start = container.querySelector<HTMLElement>('[data-webcam-handle="start"]')!;
+    const end = container.querySelector<HTMLElement>('[data-webcam-handle="end"]')!;
+    // 3 px wide: real edges at 700 and 703, each handle moved out by (10 - 3) / 2 = 3.5 px.
+    expect(handleCentre(start)).toBeCloseTo(696.5, 3);
+    expect(handleCentre(end)).toBeCloseTo(706.5, 3);
+    expect(handleCentre(end) - handleCentre(start)).toBeGreaterThanOrEqual(10 - 1e-6);
+  });
+
+  it("changes the handle distance continuously with the width: no jump at 10 px", () => {
+    const gap = (end: number): number => {
+      const { container, unmount } = renderLane([part("p", 12, end)], { selectedId: "p" });
+      const start = container.querySelector<HTMLElement>('[data-webcam-handle="start"]')!;
+      const stop = container.querySelector<HTMLElement>('[data-webcam-handle="end"]')!;
+      const result = handleCentre(stop) - handleCentre(start);
+      unmount();
+      return result;
+    };
+    // 9.9 px against 10.1 px: the handles of the narrower one are 0.05 px further out each,
+    // so the distance moves by 0.1 px, not by a step.
+    expect(gap(12.101) - gap(12.099)).toBeCloseTo(0.1, 3);
+    expect(gap(12.05)).toBeCloseTo(10, 3);
+  });
+
+  it("keeps the grab offset: a handle drawn off its edge does not move the edge until the pointer does", () => {
+    const { container, onEdgeDrag } = renderLane([part("p", 12, 12.03)], { selectedId: "p" });
+    const lane = container.querySelector<HTMLElement>('[data-testid="webcam-lane"]')!;
+    lane.getBoundingClientRect = () =>
+      ({ left: 0, width: LANE_PX, top: 0, height: 44, right: LANE_PX, bottom: 44 }) as DOMRect;
+    const start = container.querySelector<HTMLElement>('[data-webcam-handle="start"]')!;
+    // The start handle is drawn at 696.5 px; the real edge (source 12 s) is at 700 px.
+    const grab = handleCentre(start);
+    fireEvent.pointerDown(start, { pointerId: 1, clientX: grab });
+    fireEvent.pointerMove(start, { pointerId: 1, clientX: grab });
+    expect(onEdgeDrag).toHaveBeenLastCalledWith("p", "start", expect.closeTo(12, 6), "move");
+    // 100 px further right moves the edge by exactly one second.
+    fireEvent.pointerMove(start, { pointerId: 1, clientX: grab + 100 });
+    expect(onEdgeDrag).toHaveBeenLastCalledWith("p", "start", expect.closeTo(13, 6), "move");
   });
 });
+
+/** A handle's centre in lane px: `left` is a percent of the lane, the margin is -3 px + its shift. */
+function handleCentre(el: HTMLElement): number {
+  return (parseFloat(el.style.left) / 100) * LANE_PX + parseFloat(el.style.marginLeft) + 3;
+}

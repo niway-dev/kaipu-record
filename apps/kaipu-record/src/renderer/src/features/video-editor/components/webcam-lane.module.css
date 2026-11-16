@@ -33,27 +33,56 @@
   object-fit: cover;
 }
 
-.block {
+/* A part or hidden range is a button (the click target: its drawn box, or 12 px around it
+   when narrower) holding the box that is drawn (.block), placed by the lane as a percent of
+   the target. The button itself draws nothing. */
+.target {
   position: absolute;
   top: 3px;
   bottom: 3px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.targetSelected {
+  z-index: 2;
+}
+
+.target:focus-visible {
+  outline: none;
+}
+
+.target:focus-visible .block {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+/* No padding and a 1 px border: nothing here may make the box wider than its time. What does
+   not fit is not rendered (the lane decides); overflow is clipped. */
+.block {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 3px;
-  padding: 0 4px;
+  padding: 0;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--accent-primary) 35%, transparent);
   border-radius: 3px;
   background: color-mix(in srgb, var(--accent-primary) 15%, transparent);
   color: var(--text-primary);
-  cursor: pointer;
 }
 
 /* Hidden = striped (spec § 6): the stretch where the face is gone reads as a gap. The
    stripes sit on a near-opaque scrim, so the face under them is covered, not just tinted. */
 .hidden {
-  min-width: 10px;
   background:
     repeating-linear-gradient(
       -45deg,
@@ -84,7 +113,6 @@
 
 .selected {
   border-color: var(--accent-primary);
-  z-index: 1;
 }
 
 .block.selected:not(.hidden) {
@@ -208,5 +236,5 @@
   background: var(--accent-primary);
   cursor: ew-resize;
   touch-action: none;
-  z-index: 2;
+  z-index: 3;
 }

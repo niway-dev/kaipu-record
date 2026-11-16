@@ -8,12 +8,16 @@
  * is visible, and edge drags report SOURCE time (null over a slide) with the start/move/end
  * phase contract. Deleting goes through the inspector or the Delete key, like every other lane.
  *
- * A part is drawn at least 56 px wide, never over its neighbour (`webcamLaneBlockWidths`).
+ * Every stretch is drawn as wide as it lasts (spec decision 12): a part never borrows width
+ * from what follows it. Below 3 px a part is drawn 3 px so it never vanishes; what does not fit
+ * is not drawn (the frame, the name and the arrival word drop out as the part narrows). A part
+ * or hidden range under 12 px keeps a 12 px click target around it, and hovering any stretch
+ * shows a card with its details (decision 16).
  *
  * Under the stretches runs a filmstrip of the webcam file's own frames, laid out per clip
  * like the clips lane, so the row reads as "the face" even with no segment on it.
  */
-import { memo, useRef } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { EyeOff } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { sourceRangeToTimelineBlocks, sourceTimeAtTimeline } from "../source-time";
@@ -21,18 +25,27 @@ import { type LayoutEntry, layoutDuration } from "../timeline";
 import type { CoveredRange, SourceThumbnail } from "../use-source-thumbnails";
 import {
   NOMINAL_LANE_FRAME,
-  webcamLaneBlockWidths,
+  webcamHandleShift,
+  webcamLanePieceAt,
+  webcamLanePlacements,
   webcamLaneStretches,
+  webcamLaneTargets,
   webcamPartSlideSeconds,
+  webcamStretchCard,
   webcamStretchDot,
   webcamStretchName,
   type WebcamStretch,
 } from "../webcam/webcam-stretches";
 import type { FrameSize } from "../webcam/webcam-layout";
 import { NAME_LABEL } from "./webcam-name-label";
+import { WebcamLaneCard, type CardAnchor } from "./webcam-lane-card";
 import { WEBCAM_DEFAULTS, type WebcamLayout, type WebcamSegment } from "../webcam/webcam-model";
 import { thumbnailAt, thumbnailTiles, timeToFraction } from "./timeline-geometry";
-import { useTimelinePointer, useTimelineViewContext } from "./timeline-pointer";
+import {
+  useTimelinePointer,
+  useTimelineShowRange,
+  useTimelineViewContext,
+} from "./timeline-pointer";
 import { scaleOf, visibleRange } from "./timeline-view";
 import type { EdgePhase } from "./zoom-lane";
 import styles from "./webcam-lane.module.css";
@@ -70,8 +83,33 @@ const ROOM_ORIGINAL_WORD_PX = 190;
 const ROOM_HOW_PX = 200;
 /** The lane's width when nothing measures it (a test, the first paint): only proportions matter. */
 const UNMEASURED_LANE_PX = 800;
-/** The wedge of a slide is at least this wide, so a short slide still reads. */
-const WEDGE_MIN_PX = 10;
+/**
+ * Narrower than this (px) a slide's wedge cannot be told from the block, so it is not drawn;
+ * a cut's bar and a hidden range's icon follow the same idea (the icon needs its own 16 px).
+ */
+const WEDGE_MIN_PX = 6;
+const ICON_ROOM_PX = 16;
+/** The pointer rests this long (ms) on the lane before its card appears. */
+const CARD_DELAY_MS = 120;
+
+/** What the card is showing: which piece, where, and since when the pointer has rested. */
+interface Hover {
+  /** The piece's key: a part's or hidden range's id, `original-<start>` for an original. */
+  key: string;
+  anchor: CardAnchor;
+  /** The view the anchor was measured in: a scroll or a zoom makes the card stale. */
+  viewKey: string;
+  shown: boolean;
+}
+
+/** Keyboard focus, not the focus a mouse click leaves behind (an engine without the selector: any). */
+function focusIsVisible(el: Element): boolean {
+  try {
+    return el.matches(":focus-visible");
+  } catch {
+    return true;
+  }
+}
 
 /** 0.7, 1.2, 0.35: the seconds as short as they can be written. */
 const seconds = (value: number): string => String(Number(value.toFixed(2)));
@@ -110,18 +148,39 @@ export const WebcamLane = memo(function WebcamLane({
 }: WebcamLaneProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const laneRef = useRef<HTMLDivElement | null>(null);
-  const dragEdge = useRef<{ id: string; edge: "start" | "end" } | null>(null);
+  // `offset` is the seconds between the pointer and the edge when it was grabbed: a handle
+  // drawn shifted off its edge must not move the edge until the pointer does.
+  const dragEdge = useRef<{ id: string; edge: "start" | "end"; offset: number } | null>(null);
+  const [hover, setHover] = useState<Hover | null>(null);
+  const cardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearHover = (): void => {
+    if (cardTimer.current) clearTimeout(cardTimer.current);
+    cardTimer.current = null;
+    setHover(null);
+  };
+  useEffect(
+    () => () => {
+      if (cardTimer.current) clearTimeout(cardTimer.current);
+    },
+    [],
+  );
   const duration = layoutDuration(layout);
 
   // The pointer's SOURCE time, through the strip's one pixel-to-time conversion (it knows
   // the zoom and the scroll; this lane does not). Null over a slide or while unmeasured.
   const timeAtPointer = useTimelinePointer(laneRef, duration);
-  const sourceFromPointer = (clientX: number): number | null => {
+  const sourceFromPointer = (clientX: number, offset = 0): number | null => {
     const at = timeAtPointer(clientX);
-    return at === null ? null : sourceTimeAtTimeline(layout, at);
+    if (at === null) return null;
+    return sourceTimeAtTimeline(layout, Math.min(duration, Math.max(0, at + offset)));
   };
 
-  const handle = (segment: WebcamSegment, edge: "start" | "end", timelineAt: number) => {
+  const handle = (
+    segment: WebcamSegment,
+    edge: "start" | "end",
+    timelineAt: number,
+    shiftPx: number,
+  ) => {
     // Same abort contract as ZoomLane: a gesture can end without a pointerup.
     const abort = (): void => {
       if (!dragEdge.current) return;
@@ -132,19 +191,30 @@ export const WebcamLane = memo(function WebcamLane({
       <div
         key={`${segment.id}-${edge}`}
         className={styles.handle}
-        style={{ left: `calc(${timeToFraction(timelineAt, duration) * 100}% - 3px)` }}
+        style={{
+          // Centred on the real edge (the 6 px handle's own half-width), or moved outward so a
+          // narrow part's two handles stay apart: the shift is a margin, in px, whatever the zoom.
+          left: `${timeToFraction(timelineAt, duration) * 100}%`,
+          marginLeft: -3 + (edge === "start" ? -shiftPx : shiftPx),
+        }}
         data-webcam-handle={edge}
         onPointerDown={(event) => {
           event.stopPropagation();
           event.currentTarget.setPointerCapture?.(event.pointerId);
-          dragEdge.current = { id: segment.id, edge };
+          const at = timeAtPointer(event.clientX);
+          dragEdge.current = { id: segment.id, edge, offset: at === null ? 0 : timelineAt - at };
+          clearHover();
           onEdgeDrag(segment.id, edge, edge === "start" ? segment.start : segment.end, "start");
         }}
         onPointerMove={(event) => {
           event.stopPropagation();
           const drag = dragEdge.current;
-          if (!drag || drag.id !== segment.id || drag.edge !== edge) return;
-          onEdgeDrag(segment.id, edge, sourceFromPointer(event.clientX), "move");
+          if (!drag) {
+            trackHover(event.clientX); // a handle is part of the lane: the card follows over it
+            return;
+          }
+          if (drag.id !== segment.id || drag.edge !== edge) return;
+          onEdgeDrag(segment.id, edge, sourceFromPointer(event.clientX, drag.offset), "move");
         }}
         onPointerUp={(event) => {
           event.stopPropagation();
@@ -161,6 +231,7 @@ export const WebcamLane = memo(function WebcamLane({
   // The filmstrip is windowed like the clips lane's: only the tiles on screen exist. Under
   // a strip the scale and the window come from its view; alone (a test) from this box.
   const view = useTimelineViewContext();
+  const showRange = useTimelineShowRange();
   const scale = view
     ? scaleOf(view)
     : duration > 0
@@ -213,7 +284,7 @@ export const WebcamLane = memo(function WebcamLane({
     ) : null;
 
   // The stretches of the whole recording, cut into the pieces the layout shows, left to right,
-  // and where each is really drawn: a part is at least 56 px wide, never over its neighbour.
+  // and where each is really drawn (as wide as it lasts) and clicked (a 12 px target at least).
   const sourceDuration = layout.reduce(
     (end, entry) => (entry.kind === "clip" ? Math.max(end, entry.sourceEnd) : end),
     0,
@@ -231,16 +302,57 @@ export const WebcamLane = memo(function WebcamLane({
       })),
     )
     .sort((a, b) => a.block.timelineStart - b.block.timelineStart);
-  const placements = webcamLaneBlockWidths(
-    pieces.map((piece) => ({
-      kind: piece.stretch.kind,
-      left: piece.block.timelineStart * pxPerSecond,
-      right: piece.block.timelineEnd * pxPerSecond,
-    })),
-    totalPx,
-  );
+  const lanePieces = pieces.map((piece) => ({
+    kind: piece.stretch.kind,
+    left: piece.block.timelineStart * pxPerSecond,
+    right: piece.block.timelineEnd * pxPerSecond,
+  }));
+  const placements = webcamLanePlacements(lanePieces, totalPx);
+  const targets = webcamLaneTargets(lanePieces, placements, totalPx);
+  const pieceKey = (stretch: WebcamStretch, i: number): string =>
+    stretch.kind === "original" ? `original-${stretch.start}-${i}` : stretch.id;
+  const viewKey = view ? `${view.zoom}:${view.scroll}` : "";
+
+  /** The card follows the pointer over the lane; the stretch is found by the click rule. */
+  const showCardFor = (index: number, clientX: number, now: boolean): void => {
+    const rect = laneRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const piece = pieces[index]!;
+    const left = view && scale > 0 ? rect.left + shown.start * scale : 0;
+    const right = view && scale > 0 ? rect.left + shown.end * scale : window.innerWidth;
+    const next: Hover = {
+      key: pieceKey(piece.stretch, index),
+      anchor: { clientX, laneTop: rect.top, laneBottom: rect.bottom, left, right },
+      viewKey,
+      shown: now,
+    };
+    setHover((current) => {
+      // Already showing: moving to another stretch swaps the card at once.
+      const keep = current !== null && current.shown && current.viewKey === viewKey;
+      return { ...next, shown: now || keep };
+    });
+    if (!now && !cardTimer.current) {
+      cardTimer.current = setTimeout(() => {
+        cardTimer.current = null;
+        setHover((current) => (current ? { ...current, shown: true } : current));
+      }, CARD_DELAY_MS);
+    }
+  };
+  const trackHover = (clientX: number): void => {
+    if (dragEdge.current) return;
+    const rect = laneRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const at = webcamLanePieceAt(lanePieces, placements, targets, clientX - rect.left);
+    if (at === null) clearHover();
+    else showCardFor(at, clientX, false);
+  };
   const selectedSegment: WebcamSegment | null =
     segments.find((segment) => segment.id === selectedId) ?? null;
+
+  const hovered =
+    hover && hover.shown && hover.viewKey === viewKey
+      ? pieces.findIndex((piece, i) => pieceKey(piece.stretch, i) === hover.key)
+      : -1;
 
   return (
     <div
@@ -248,6 +360,8 @@ export const WebcamLane = memo(function WebcamLane({
       {...uiArea("editorVideo.webcamLane")}
       className={styles.lane}
       data-testid="webcam-lane"
+      onPointerMove={(event) => trackHover(event.clientX)}
+      onPointerLeave={clearHover}
     >
       {filmstrip}
       {pieces.map((piece, i) => {
@@ -292,13 +406,29 @@ export const WebcamLane = memo(function WebcamLane({
         const slide = webcamPartSlideSeconds(segment);
         // The slide or the cut belongs to the part's real start, on the piece that holds it.
         const atStart = first && piece.block.sourceStart === segment.start;
-        const wedgePx = slide === null ? 0 : Math.max(WEDGE_MIN_PX, slide * pxPerSecond);
+        // A slide's wedge is as long as the slide and never longer than the part; too short to
+        // be told from the block, it is not drawn (and neither is a cut's bar).
+        const wedgePx = slide === null ? 0 : Math.min(slide * pxPerSecond, place.width);
+        const wedge = slide !== null && wedgePx >= WEDGE_MIN_PX;
+        const cutBar = slide === null && place.width >= WEDGE_MIN_PX;
+        // The click target: the drawn box, or 12 px around it when it is narrower. The drawn
+        // box sits inside it, placed in percent of the target.
+        const target = targets[i]!;
+        const targetStyle = {
+          left: `${(target.left / totalPx) * 100}%`,
+          width: `${(target.width / totalPx) * 100}%`,
+        };
+        const fillStyle = {
+          left: `${((place.left - target.left) / target.width) * 100}%`,
+          width: `${(place.width / target.width) * 100}%`,
+        };
+        const key = pieceKey(stretch, i);
         return (
           <button
             key={`${segment.id}-${piece.index}`}
             type="button"
-            className={className}
-            style={style}
+            className={`${styles.target} ${selected ? styles.targetSelected : ""}`}
+            style={targetStyle}
             data-webcam-id={segment.id}
             data-mode={segment.mode}
             aria-label={t("webcamSegmentTitle", { n: index + 1 })}
@@ -308,41 +438,62 @@ export const WebcamLane = memo(function WebcamLane({
               event.stopPropagation();
               onSelect(segment.id);
             }}
+            onDoubleClick={(event) => {
+              // The first click already selected it; this one zooms to the whole part (or hidden
+              // range), across the cuts that split it into several pieces.
+              event.stopPropagation();
+              const mine = pieces.filter(
+                (p) => p.stretch.kind !== "original" && p.stretch.id === segment.id,
+              );
+              showRange?.(
+                Math.min(...mine.map((p) => p.block.timelineStart)),
+                Math.max(...mine.map((p) => p.block.timelineEnd)),
+              );
+            }}
+            onFocus={(event) => {
+              // Keyboard focus shows the same card at once, over the middle of the target.
+              if (!focusIsVisible(event.currentTarget)) return;
+              const box = event.currentTarget.getBoundingClientRect();
+              showCardFor(i, box.left + box.width / 2, true);
+            }}
+            onBlur={() => setHover((current) => (current?.key === key ? null : current))}
           >
-            {!hidden && atStart && slide !== null && (
-              <span
-                className={styles.wedge}
-                data-webcam-transition
-                style={{ width: wedgePx }}
-                aria-hidden="true"
-              />
-            )}
-            {!hidden && atStart && slide === null && (
-              <span className={styles.cutBar} data-webcam-cut aria-hidden="true" />
-            )}
-            {hidden ? (
-              <>
-                <EyeOff size={12} className={styles.icon} />
-                {place.width > ROOM_GLYPH_PX && (
-                  <span className={styles.label}>{t("webcamHidden")}</span>
-                )}
-              </>
-            ) : (
-              <span
-                className={styles.partContent}
-                style={{ paddingLeft: atStart ? (slide === null ? 7 : wedgePx + 7) : 7 }}
-              >
-                {place.width > ROOM_GLYPH_PX && <Glyph dot={dot} on />}
-                {place.width > ROOM_NAME_PX && <span className={styles.name}>{nameText}</span>}
-                {place.width > ROOM_HOW_PX && (
-                  <span className={styles.word}>
-                    {slide === null
-                      ? t("webcamLaneCut")
-                      : t("webcamLaneSlide", { seconds: seconds(slide) })}
-                  </span>
-                )}
-              </span>
-            )}
+            <span className={className} style={fillStyle} data-webcam-fill>
+              {!hidden && atStart && wedge && (
+                <span
+                  className={styles.wedge}
+                  data-webcam-transition
+                  style={{ width: wedgePx }}
+                  aria-hidden="true"
+                />
+              )}
+              {!hidden && atStart && cutBar && (
+                <span className={styles.cutBar} data-webcam-cut aria-hidden="true" />
+              )}
+              {hidden ? (
+                <>
+                  {place.width >= ICON_ROOM_PX && <EyeOff size={12} className={styles.icon} />}
+                  {place.width > ROOM_GLYPH_PX && (
+                    <span className={styles.label}>{t("webcamHidden")}</span>
+                  )}
+                </>
+              ) : (
+                <span
+                  className={styles.partContent}
+                  style={{ paddingLeft: atStart && wedge ? wedgePx + 7 : 7 }}
+                >
+                  {place.width > ROOM_GLYPH_PX && <Glyph dot={dot} on />}
+                  {place.width > ROOM_NAME_PX && <span className={styles.name}>{nameText}</span>}
+                  {place.width > ROOM_HOW_PX && (
+                    <span className={styles.word}>
+                      {slide === null
+                        ? t("webcamLaneCut")
+                        : t("webcamLaneSlide", { seconds: seconds(slide) })}
+                    </span>
+                  )}
+                </span>
+              )}
+            </span>
           </button>
         );
       })}
@@ -356,12 +507,14 @@ export const WebcamLane = memo(function WebcamLane({
           if (blocks.length === 0) return null;
           const first = blocks[0]!;
           const last = blocks[blocks.length - 1]!;
+          // The handles drag the real edges; a part under 10 px wide has them drawn apart.
+          const shift = webcamHandleShift((last.timelineEnd - first.timelineStart) * pxPerSecond);
           return (
             <>
               {first.sourceStart === selectedSegment.start &&
-                handle(selectedSegment, "start", first.timelineStart)}
+                handle(selectedSegment, "start", first.timelineStart, shift)}
               {last.sourceEnd === selectedSegment.end &&
-                handle(selectedSegment, "end", last.timelineEnd)}
+                handle(selectedSegment, "end", last.timelineEnd, shift)}
             </>
           );
         })()}
@@ -386,6 +539,18 @@ export const WebcamLane = memo(function WebcamLane({
             )}
           </span>
         ))}
+      {hovered >= 0 && hover && (
+        <WebcamLaneCard
+          card={webcamStretchCard(webcam, pieces[hovered]!.stretch, frame)}
+          glyph={
+            <Glyph
+              dot={webcamStretchDot(webcam, pieces[hovered]!.stretch, frame)}
+              on={pieces[hovered]!.stretch.kind === "part"}
+            />
+          }
+          anchor={hover.anchor}
+        />
+      )}
     </div>
   );
 });

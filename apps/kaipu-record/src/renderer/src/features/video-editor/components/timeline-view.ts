@@ -41,6 +41,9 @@ export const FOLLOW_EDGE = 0.8;
 /** …and puts the playhead back at this share of the lane (a page turn, not a crawl). */
 export const FOLLOW_LANDING = 0.2;
 
+/** Double-clicking a camera part zooms until it fills this share of the visible lane. */
+export const RANGE_FILL = 0.4;
+
 /** A wheel event moves the zoom by at most e^0.4 (about 1.49x). */
 const WHEEL_MAX_DELTA_PX = 40;
 const WHEEL_SENSITIVITY = 0.01;
@@ -179,6 +182,26 @@ export function zoomAt(
   const zoom = clamp(view.zoom * factor, 1, maxZoom(view.laneWidth, view.duration));
   const nextScale = fitScale(view.laneWidth, view.duration) * zoom;
   return clampView({ ...view, zoom, scroll: anchorTime * nextScale - anchorX });
+}
+
+/**
+ * The view that shows the timeline range `[start, end]` filling {@link RANGE_FILL} of the
+ * lane, centred. The zoom is capped at the deepest one (a very short range then fills less)
+ * and floored at fit; the scroll is clamped, so a range near an end sits off-centre rather
+ * than past the content. An empty range or an unmeasured lane returns the view as it is.
+ */
+export function viewForRange(view: TimelineView, start: number, end: number): TimelineView {
+  const base = fitScale(view.laneWidth, view.duration);
+  const length = end - start;
+  if (base <= 0 || !(length > 0)) return view;
+  const zoom = clamp(
+    (RANGE_FILL * view.laneWidth) / (length * base),
+    1,
+    maxZoom(view.laneWidth, view.duration),
+  );
+  const scale = base * zoom;
+  const middle = (start + end) / 2;
+  return clampView({ ...view, zoom, scroll: middle * scale - view.laneWidth / 2 });
 }
 
 /** Scroll by `dx` pixels, clamped. */

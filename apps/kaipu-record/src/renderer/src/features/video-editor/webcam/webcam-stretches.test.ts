@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
-  webcamLaneBlockWidths,
+  webcamHandleShift,
+  webcamLanePieceAt,
+  webcamLanePlacements,
+  webcamLaneTargets,
   webcamLaneStretches,
   webcamLayoutDot,
   webcamLayoutName,
   webcamPartOrigin,
   webcamPartSlideSeconds,
   webcamStretchDot,
+  webcamStretchCard,
   webcamStretchName,
   type LanePiece,
 } from "./webcam-stretches";
@@ -155,73 +159,160 @@ describe("webcamPartSlideSeconds", () => {
   });
 });
 
-describe("webcamLaneBlockWidths (the 56 px rule)", () => {
+describe("the Camera lane's true widths (spec decision 12)", () => {
   const piece = (kind: LanePiece["kind"], left: number, right: number): LanePiece => ({
     kind,
     left,
     right,
   });
 
-  it("draws a narrow part 56 px wide when its neighbour is far enough", () => {
-    const [original, mine, rest] = webcamLaneBlockWidths(
-      [piece("original", 0, 100), piece("part", 100, 110), piece("original", 110, 600)],
-      600,
-    );
-    expect(mine).toEqual({ left: 100, width: 56 });
-    // The original after it is drawn from where the wider part now ends.
-    expect(original).toEqual({ left: 0, width: 100 });
-    expect(rest).toEqual({ left: 156, width: 444 });
+  describe("webcamLanePlacements", () => {
+    it("draws every piece from its real start to its real end, originals never displaced", () => {
+      const result = webcamLanePlacements(
+        [piece("original", 0, 100), piece("part", 100, 110), piece("original", 110, 600)],
+        600,
+      );
+      expect(result).toEqual([
+        { left: 0, width: 100 },
+        { left: 100, width: 10 },
+        { left: 110, width: 490 },
+      ]);
+    });
+
+    it("draws a part or hidden range narrower than 3 px 3 px wide, so it never vanishes", () => {
+      const [a, b] = webcamLanePlacements(
+        [piece("part", 100, 100.5), piece("hidden", 200, 201)],
+        600,
+      );
+      expect(a).toEqual({ left: 100, width: 3 });
+      expect(b).toEqual({ left: 200, width: 3 });
+    });
+
+    it("does not draw the floor past the start of the next part or hidden range", () => {
+      const result = webcamLanePlacements(
+        [piece("part", 100, 100.5), piece("hidden", 101, 150)],
+        600,
+      );
+      expect(result[0]).toEqual({ left: 100, width: 1 });
+      expect(result[1]).toEqual({ left: 101, width: 49 });
+    });
+
+    it("lets the floor cover the start of an original stretch, which stays where it is", () => {
+      const result = webcamLanePlacements(
+        [piece("part", 100, 101), piece("original", 101, 600)],
+        600,
+      );
+      expect(result[0]).toEqual({ left: 100, width: 3 });
+      expect(result[1]).toEqual({ left: 101, width: 499 });
+    });
+
+    it("stops the floor at the lane's end", () => {
+      const [mine] = webcamLanePlacements([piece("part", 599, 599.2)], 600);
+      expect(mine).toEqual({ left: 599, width: 1 });
+    });
+
+    it("keeps a part of 3 px or more exactly as wide as its time", () => {
+      const [mine] = webcamLanePlacements([piece("part", 10, 13)], 600);
+      expect(mine).toEqual({ left: 10, width: 3 });
+      const [wider] = webcamLanePlacements([piece("part", 10, 210)], 600);
+      expect(wider).toEqual({ left: 10, width: 200 });
+    });
   });
 
-  it("leaves a part that is already wider than 56 px as it is", () => {
-    const [mine] = webcamLaneBlockWidths([piece("part", 10, 210)], 600);
-    expect(mine).toEqual({ left: 10, width: 200 });
+  describe("webcamLaneTargets", () => {
+    const targetsOf = (pieces: LanePiece[], laneWidth = 600) =>
+      webcamLaneTargets(pieces, webcamLanePlacements(pieces, laneWidth), laneWidth);
+
+    it("gives a 3 px part a 12 px target centred on it, and leaves what is drawn alone", () => {
+      const pieces = [
+        piece("original", 0, 100),
+        piece("part", 100, 103),
+        piece("original", 103, 600),
+      ];
+      const [original, mine] = targetsOf(pieces);
+      expect(original).toBeNull();
+      expect(mine).toEqual({ left: 95.5, width: 12 });
+      expect(webcamLanePlacements(pieces, 600)[1]).toEqual({ left: 100, width: 3 });
+    });
+
+    it("keeps a part of 12 px or more as its own target", () => {
+      const [mine] = targetsOf([piece("part", 100, 112)]);
+      expect(mine).toEqual({ left: 100, width: 12 });
+      const [wider] = targetsOf([piece("hidden", 100, 180)]);
+      expect(wider).toEqual({ left: 100, width: 80 });
+    });
+
+    it("stops each of two short neighbours at the midpoint of the gap between them", () => {
+      // 3 px parts at 100 and 108: the gap is 5 px, so each target reaches 2.5 px into it.
+      const [a, b] = targetsOf([piece("part", 100, 103), piece("part", 108, 111)]);
+      expect(a).toEqual({ left: 95.5, width: 3 + 4.5 + 2.5 });
+      expect(b).toEqual({ left: 105.5, width: 3 + 2.5 + 4.5 });
+      expect(a!.left + a!.width).toBeLessThanOrEqual(b!.left);
+    });
+
+    it("gives two touching short parts a target each that never overlap", () => {
+      const [a, b] = targetsOf([piece("part", 100, 103), piece("part", 103, 106)]);
+      expect(a!.left + a!.width).toBe(103);
+      expect(b!.left).toBe(103);
+    });
+
+    it("does not reach past the lane's edges", () => {
+      const [first] = targetsOf([piece("part", 0, 3)]);
+      expect(first!.left).toBe(0);
+      const [last] = targetsOf([piece("part", 597, 600)]);
+      expect(last!.left + last!.width).toBe(600);
+    });
+
+    it("lets a target reach over an original stretch, which is only fill", () => {
+      const [, mine] = targetsOf([
+        piece("original", 0, 100),
+        piece("part", 100, 103),
+        piece("original", 103, 600),
+      ]);
+      expect(mine!.left).toBeLessThan(100);
+      expect(mine!.left + mine!.width).toBeGreaterThan(103);
+    });
   });
 
-  it("never draws a part over the next part or hidden range", () => {
-    const result = webcamLaneBlockWidths([piece("part", 100, 110), piece("hidden", 130, 180)], 600);
-    // 30 px of room before the hidden range: the part is as wide as that room, not 56.
-    expect(result[0]).toEqual({ left: 100, width: 30 });
-    expect(result[1]).toEqual({ left: 130, width: 50 });
+  describe("webcamLanePieceAt (the click rule, used by the hover card)", () => {
+    const pieces = [
+      piece("original", 0, 100),
+      piece("part", 100, 103),
+      piece("original", 103, 600),
+    ];
+    const placements = webcamLanePlacements(pieces, 600);
+    const targets = webcamLaneTargets(pieces, placements, 600);
+    const at = (x: number) => webcamLanePieceAt(pieces, placements, targets, x);
+
+    it("hits a 3 px part anywhere in its 12 px target, and an original anywhere it is drawn", () => {
+      expect(at(96)).toBe(1);
+      expect(at(101.5)).toBe(1);
+      expect(at(106)).toBe(1);
+      expect(at(94)).toBe(0);
+      expect(at(108)).toBe(2);
+      expect(at(599)).toBe(2);
+    });
+
+    it("hits nothing past the last piece", () => {
+      expect(at(600)).toBeNull();
+      expect(at(-1)).toBeNull();
+    });
   });
 
-  it("keeps a part with no room as wide as it is, when the next block starts at its end", () => {
-    const result = webcamLaneBlockWidths([piece("part", 100, 104), piece("part", 104, 300)], 600);
-    expect(result[0]).toEqual({ left: 100, width: 4 });
-    expect(result[1]).toEqual({ left: 104, width: 196 });
-  });
+  describe("webcamHandleShift", () => {
+    it("is 0 for a part 10 px or wider and grows continuously as it narrows", () => {
+      expect(webcamHandleShift(300)).toBe(0);
+      expect(webcamHandleShift(10)).toBe(0);
+      expect(webcamHandleShift(9)).toBeCloseTo(0.5, 9);
+      expect(webcamHandleShift(3)).toBeCloseTo(3.5, 9);
+      expect(webcamHandleShift(0)).toBe(5);
+    });
 
-  it("widens each of two adjacent narrow parts only up to the one after it", () => {
-    const result = webcamLaneBlockWidths(
-      [piece("part", 0, 10), piece("part", 10, 20), piece("original", 20, 500)],
-      500,
-    );
-    expect(result[0]).toEqual({ left: 0, width: 10 });
-    expect(result[1]).toEqual({ left: 10, width: 56 });
-    expect(result[2]).toEqual({ left: 66, width: 434 });
-  });
-
-  it("stops at the lane's end when nothing follows", () => {
-    const [mine] = webcamLaneBlockWidths([piece("part", 580, 590)], 600);
-    expect(mine).toEqual({ left: 580, width: 20 });
-  });
-
-  it("draws no original stretch a wider part covers entirely", () => {
-    const result = webcamLaneBlockWidths(
-      [piece("part", 0, 10), piece("original", 10, 30), piece("hidden", 60, 90)],
-      600,
-    );
-    // The part reaches 56 px and the original only had 10-30: nothing is left of it.
-    expect(result[0]).toEqual({ left: 0, width: 56 });
-    expect(result[1]!.width).toBe(0);
-  });
-
-  it("starts an original after a widened part where the part ends, and keeps its right edge", () => {
-    const result = webcamLaneBlockWidths(
-      [piece("part", 0, 10), piece("original", 10, 200), piece("hidden", 200, 260)],
-      600,
-    );
-    expect(result[1]).toEqual({ left: 56, width: 144 });
+    it("keeps the two handles at least 10 px apart, centre to centre, at any width", () => {
+      for (const width of [0, 0.4, 1, 3, 6, 9.99, 10, 14, 100]) {
+        expect(width + 2 * webcamHandleShift(width)).toBeGreaterThanOrEqual(10 - 1e-9);
+      }
+    });
   });
 });
 
@@ -271,5 +362,58 @@ describe("the panel's frame helpers", () => {
       part("p", 4, 8, { layout: { position: { x: 0.8, y: 0.2 }, size: 0.33 } }),
     ]);
     expect(webcamPartOrigin(webcam, webcam.segments[0]!)).toMatchObject({ size: 0.33 });
+  });
+});
+
+describe("webcamStretchCard (the hover card's facts)", () => {
+  const FRAME = { width: 1920, height: 1080 };
+  const scene = (segments: WebcamSegment[]): WebcamScene => ({
+    layout: { ...WEBCAM_DEFAULTS, position: { x: 0.12, y: 0.82 } },
+    segments,
+  });
+
+  it("describes a part with its place, range and how it arrives", () => {
+    const webcam = scene([part("p", 4, 8)]);
+    const stretch = webcamLaneStretches(webcam, 20)[1]!;
+    expect(webcamStretchCard(webcam, stretch, FRAME)).toEqual({
+      kind: "part",
+      name: "topRight",
+      start: 4,
+      end: 8,
+      arrives: { kind: "slide", seconds: 0.7, easing: "ease-in-out" },
+    });
+  });
+
+  it("describes a cut, and a part saved without a transition, as a cut", () => {
+    const cut = part("c", 4, 8, { transition: { kind: "cut", ms: 700, easing: "back" } });
+    const none = part("n", 12, 16, { transition: undefined });
+    const webcam = scene([cut, none]);
+    const [, first, , second] = webcamLaneStretches(webcam, 20);
+    expect(webcamStretchCard(webcam, first!, FRAME).arrives).toEqual({ kind: "cut" });
+    expect(webcamStretchCard(webcam, second!, FRAME).arrives).toEqual({ kind: "cut" });
+  });
+
+  it("describes a hidden range with no place and no arrival", () => {
+    const webcam = scene([hiddenRange("h", 4, 8)]);
+    const stretch = webcamLaneStretches(webcam, 20)[1]!;
+    expect(webcamStretchCard(webcam, stretch, FRAME)).toEqual({
+      kind: "hidden",
+      name: null,
+      start: 4,
+      end: 8,
+      arrives: null,
+    });
+  });
+
+  it("describes an original stretch with the default's place and no arrival", () => {
+    const webcam = scene([part("p", 4, 8)]);
+    const stretch = webcamLaneStretches(webcam, 20)[0]!;
+    expect(webcamStretchCard(webcam, stretch, FRAME)).toEqual({
+      kind: "original",
+      name: "bottomLeft",
+      start: 0,
+      end: 4,
+      arrives: null,
+    });
   });
 });
