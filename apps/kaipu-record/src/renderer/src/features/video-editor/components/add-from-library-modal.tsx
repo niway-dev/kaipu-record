@@ -384,6 +384,22 @@ export function AddFromLibraryModal({
               <section className={`${styles.detail} ${styles.shotSide}`}>
                 {selectedShot ? (
                   <>
+                    <div className={styles.preview}>
+                      <div className={styles.previewFrame}>
+                        {selectedShot.thumbnailUrl ? (
+                          <img
+                            className={styles.previewImage}
+                            data-testid="add-from-library-shot-preview"
+                            src={selectedShot.thumbnailUrl}
+                            alt=""
+                          />
+                        ) : (
+                          <span className={styles.previewPlaceholder} aria-hidden>
+                            <ImagePlus size={28} />
+                          </span>
+                        )}
+                      </div>
+                    </div>
                     <h4 className={styles.detailTitle}>{selectedShot.title}</h4>
                     {chooser}
                   </>

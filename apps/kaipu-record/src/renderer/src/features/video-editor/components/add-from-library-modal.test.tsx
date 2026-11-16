@@ -489,6 +489,31 @@ describe("AddFromLibraryModal", () => {
       expect(props.onAddScreenshotToSequence).not.toHaveBeenCalled();
     });
 
+    it("shows the selected screenshot's image in the right column, none before a selection", () => {
+      renderModal({ videos: shots });
+      openScreenshots();
+      expect(screen.queryByTestId("add-from-library-shot-preview")).toBeNull();
+      fireEvent.click(cards()[1]);
+      expect(screen.getByTestId("add-from-library-shot-preview")).toHaveAttribute(
+        "src",
+        "kaipu-media://thumb/s2",
+      );
+      fireEvent.click(cards()[0]);
+      expect(screen.getByTestId("add-from-library-shot-preview")).toHaveAttribute(
+        "src",
+        "kaipu-media://thumb/s1",
+      );
+    });
+
+    it("keeps the chooser and Add beside the image when the screenshot has no thumbnail", () => {
+      renderModal({ videos: [shot({ assetId: "bare", title: "Bare", thumbnailUrl: null })] });
+      openScreenshots();
+      fireEvent.click(cards()[0]);
+      expect(screen.queryByTestId("add-from-library-shot-preview")).toBeNull();
+      expect(screen.getByTestId("add-destination-chooser")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Add" })).toBeInTheDocument();
+    });
+
     it("a card is a native button that takes focus and a click selects it", () => {
       renderModal({ videos: shots });
       openScreenshots();
