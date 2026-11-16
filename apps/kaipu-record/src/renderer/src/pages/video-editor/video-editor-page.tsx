@@ -1817,6 +1817,7 @@ function VideoEditor({
                     src={mediaUrl("webcam", source.id)}
                     startOffsetMs={webcamTrack.startOffsetMs}
                     webcam={scene.webcam}
+                    endSeconds={source.durationSeconds}
                     path={cameraPath}
                     cameraEnabled={cameraApplied}
                     frame={frameSize}

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { buildCameraPath, type CameraPath } from "../zoom/camera-path";
-import { WEBCAM_DEFAULTS, type WebcamScene } from "../webcam/webcam-model";
+import { WEBCAM_DEFAULTS, webcamStateAt, type WebcamScene } from "../webcam/webcam-model";
+import { webcamStateRect } from "../webcam/webcam-layout";
 import { WebcamLayer } from "./webcam-layer";
 import { PreviewStage } from "./preview-stage";
 import type { PreviewPlayback } from "../use-preview-playback";
@@ -418,6 +419,139 @@ describe("WebcamLayer", () => {
     // Far right: held so the 200 px bubble stays inside the frame.
     expect(handlers.onMove).toHaveBeenNthCalledWith(2, { x: 0.9, y: 0.5 }, 1);
     expect(handlers.onEnd).toHaveBeenCalledOnce();
+  });
+});
+
+// Camera sections (ADR 0039): the preview reads the export's state function at the media
+// time, with no CSS transition, so a slide is drawn frame by frame and seeking is exact.
+describe("WebcamLayer — a camera block's slide", () => {
+  const TARGET = { x: 0.8, y: 0.2 };
+  const sliding = (): WebcamScene =>
+    scene({
+      segments: [
+        {
+          id: "b",
+          start: 2,
+          end: 8,
+          mode: "override",
+          layout: { position: TARGET },
+          transition: { kind: "slide", ms: 700, easing: "back" },
+        },
+      ],
+    });
+  const box = () => ({
+    left: parseFloat(bubble().style.left),
+    top: parseFloat(bubble().style.top),
+    width: parseFloat(bubble().style.width),
+    height: parseFloat(bubble().style.height),
+  });
+
+  it("places the box where webcamStateRect puts it at each source time, inside the frame", () => {
+    const { ref, el } = mainVideo(1);
+    renderLayer({ videoRef: ref, webcam: sliding() });
+    loadWebcam(30);
+    const lefts: number[] = [];
+    for (const t of [2.1, 2.25, 2.4]) {
+      act(() => setTime(el, t));
+      const state = webcamStateAt({ webcam: sliding() }, t)!;
+      const rect = webcamStateRect(state, FRAME, 1)!;
+      const placed = box();
+      expect(placed.left).toBeCloseTo((rect.x / FRAME.width) * 100, 4);
+      expect(placed.top).toBeCloseTo((rect.y / FRAME.height) * 100, 4);
+      expect(placed.left).toBeGreaterThanOrEqual(0);
+      expect(placed.left + placed.width).toBeLessThanOrEqual(100 + 1e-9);
+      expect(placed.top).toBeGreaterThanOrEqual(0);
+      expect(placed.top + placed.height).toBeLessThanOrEqual(100 + 1e-9);
+      lefts.push(placed.left);
+    }
+    expect(new Set(lefts.map((l) => l.toFixed(3))).size).toBe(3);
+    // No CSS transition animates it: the box is exactly what the function says.
+    expect(bubble().style.transition).toBe("");
+  });
+
+  it("is where it was at the same time after seeking backwards", () => {
+    const { ref, el } = mainVideo(1);
+    renderLayer({ videoRef: ref, webcam: sliding() });
+    loadWebcam(30);
+    act(() => setTime(el, 2.25));
+    const forwards = box();
+    act(() => setTime(el, 5));
+    act(() => setTime(el, 1));
+    act(() => setTime(el, 2.25));
+    expect(box()).toEqual(forwards);
+  });
+
+  it("takes the non-position fields of the layout in force at once, not eased", () => {
+    const { ref, el } = mainVideo(1);
+    const webcam = scene({
+      segments: [
+        {
+          id: "b",
+          start: 2,
+          end: 8,
+          mode: "override",
+          layout: { position: TARGET, shape: "rounded", mirrored: false },
+          transition: { kind: "slide", ms: 700, easing: "back" },
+        },
+      ],
+    });
+    const { container } = renderLayer({ videoRef: ref, webcam });
+    const cam = loadWebcam(30);
+    act(() => setTime(el, 2.05));
+    expect(
+      (container.querySelector("[data-testid=webcam-layer]")!.firstElementChild as HTMLElement)
+        .style.clipPath,
+    ).toBe("inset(0 round 18% / 18%)");
+    expect(cam.style.transform).not.toContain("scaleX(-1)");
+  });
+
+  it("a drag grabbed mid-slide starts from where the bubble is drawn now", () => {
+    const { ref, el } = mainVideo(1);
+    const { handlers, container } = renderLayer({ videoRef: ref, webcam: sliding() });
+    loadWebcam(30);
+    act(() => setTime(el, 2.25));
+    const state = webcamStateAt({ webcam: sliding() }, 2.25)!;
+    const rect = webcamStateRect(state, FRAME, 1)!;
+    const slot = container.querySelector('[data-testid="webcam-slot"]') as HTMLElement;
+    slot.getBoundingClientRect = () => ({ width: 1000, height: 1000 }) as DOMRect;
+    fireEvent.pointerDown(bubble(), { clientX: 500, clientY: 500, pointerId: 1 });
+    fireEvent.pointerMove(bubble(), { clientX: 500, clientY: 500, pointerId: 1 });
+    const [center] = handlers.onMove.mock.calls[0]!;
+    expect(center.x).toBeCloseTo((rect.x + rect.width / 2) / FRAME.width, 6);
+    expect(center.y).toBeCloseTo((rect.y + rect.height / 2) / FRAME.height, 6);
+  });
+
+  it("caps the last return by the recording's end when it is given", () => {
+    const back = (): WebcamScene =>
+      scene({
+        segments: [
+          {
+            id: "b",
+            start: 2,
+            end: 5,
+            mode: "override",
+            layout: { position: TARGET },
+            transition: { kind: "slide", ms: 700, easing: "linear" },
+          },
+        ],
+      });
+    const settledLeft = (() => {
+      const { ref, el } = mainVideo(1);
+      const view = renderLayer({ videoRef: ref, webcam: back(), endSeconds: 6 });
+      loadWebcam(30);
+      // 1 s are left after the block: its return takes 0.5 s, so it is settled at 5.6.
+      act(() => setTime(el, 5.6));
+      const left = parseFloat(bubble().style.left);
+      view.unmount();
+      return left;
+    })();
+    expect(settledLeft).toBeCloseTo(40, 3);
+    const { ref, el } = mainVideo(1);
+    renderLayer({ videoRef: ref, webcam: back() });
+    loadWebcam(30);
+    // Without the end the return takes its whole 0.7 s: still moving at 5.6.
+    act(() => setTime(el, 5.6));
+    expect(parseFloat(bubble().style.left)).not.toBeCloseTo(40, 1);
   });
 });
 

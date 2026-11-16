@@ -4,9 +4,10 @@
  * zoom active the face stays in its corner — and kept in step with the main video.
  *
  * Per frame, from the main video's frame clock and without React re-renders (like the
- * camera box): `webcamAt` picks the layout in force (null inside a hidden segment),
- * `webcamRect` places it in the output frame with the camera path's scale for "shrink
- * during zoom", and `webcam-sync` decides visibility (the file's own first and last frame)
+ * camera box): `webcamStateAt` picks the layout in force and the slide in progress (null
+ * inside a hidden segment), `webcamStateRect` places it in the output frame with the camera
+ * path's scale for "shrink during zoom" (the export reads the same pair, so the two agree at
+ * one source time; no CSS transition moves the box), and `webcam-sync` decides visibility (the file's own first and last frame)
  * and whether the element drifted past 80 ms and needs a seek. While the main video plays, a
  * seek aims ahead by the last seek's measured duration, so it lands where the screen will be.
  * Play/pause/rate mirror the main element, and the webcam also pauses while the main one
@@ -27,9 +28,9 @@ import {
   clampWebcamCenter,
   type FrameSize,
   webcamClipPath,
-  webcamRect,
+  webcamStateRect,
 } from "../webcam/webcam-layout";
-import { webcamAt, type WebcamScene } from "../webcam/webcam-model";
+import { webcamStateAt, type WebcamScene } from "../webcam/webcam-model";
 import {
   webcamHasFrameAt,
   webcamResyncTarget,
@@ -65,6 +66,11 @@ interface WebcamSyncInput {
   /** Webcam time 0 − screen time 0 (ADR 0037): webcam time = t − startOffsetMs / 1000. */
   startOffsetMs: number;
   webcam: WebcamScene;
+  /**
+   * The recording's length in source seconds: the last block's return to the default layout
+   * settles before it (`webcamStateAt`). Absent or unusable means no end is known.
+   */
+  endSeconds?: number;
   /** The camera path, for "shrink during zoom"; null where nothing zooms (the Library). */
   path: CameraPath | null;
   /** False when the preview shows the unzoomed frame (zoom-edit view, privacy editing). */
@@ -84,6 +90,7 @@ function useWebcamSync({
   videoRef,
   startOffsetMs,
   webcam,
+  endSeconds,
   path,
   cameraEnabled,
   frame,
@@ -111,19 +118,24 @@ function useWebcamSync({
     // A faster or slower main video would otherwise drift past the resync threshold on
     // every frame and turn the face into a series of seeks.
     if (main && cam.playbackRate !== main.playbackRate) cam.playbackRate = main.playbackRate;
-    const layout = hidden ? null : webcamAt({ webcam }, t);
+    // An unknown end (a missing, zero or NaN duration) is no end: `undefined` takes the default.
+    const end =
+      endSeconds && Number.isFinite(endSeconds) && endSeconds > 0 ? endSeconds : undefined;
+    const state = hidden ? null : webcamStateAt({ webcam }, t, end);
     const webcamTime = webcamTimeFor(t, startOffsetMs);
     const scale = cameraEnabled && path ? cameraAt(path, t).scale : 1;
     const rect =
-      layout && webcamHasFrameAt(webcamTime, cam.duration)
-        ? webcamRect(layout, frame, scale)
+      state && webcamHasFrameAt(webcamTime, cam.duration)
+        ? webcamStateRect(state, frame, scale)
         : null;
-    if (!layout || !rect) {
+    if (!state || !rect) {
       box.style.display = "none";
       drawn.current = null;
       if (!cam.paused) safePause(cam);
       return;
     }
+    // Everything but the position comes from the layout in force and applies at once.
+    const layout = state.layout;
     box.style.display = "";
     box.style.left = `${(rect.x / frame.width) * 100}%`;
     box.style.top = `${(rect.y / frame.height) * 100}%`;
@@ -133,6 +145,7 @@ function useWebcamSync({
     if (clipRef.current)
       clipRef.current.style.clipPath = webcamClipPath(layout.shape, layout.cornerRadius);
     cam.style.transform = framingTransform(layout.framing, layout.mirrored);
+    // Where the bubble is drawn right now, mid-slide included: a drag starts from it.
     drawn.current = {
       center: {
         x: (rect.x + rect.width / 2) / frame.width,
@@ -159,8 +172,8 @@ function useWebcamSync({
   };
 
   const trigger = useMemo(
-    () => ({ webcam, path, cameraEnabled, frame, hidden, startOffsetMs }),
-    [webcam, path, cameraEnabled, frame, hidden, startOffsetMs],
+    () => ({ webcam, endSeconds, path, cameraEnabled, frame, hidden, startOffsetMs }),
+    [webcam, endSeconds, path, cameraEnabled, frame, hidden, startOffsetMs],
   );
   useVideoFrameClock(videoRef, apply, trigger);
 
@@ -272,6 +285,7 @@ export function WebcamLayer({
   src,
   startOffsetMs,
   webcam,
+  endSeconds,
   path,
   cameraEnabled,
   frame,
@@ -301,6 +315,7 @@ export function WebcamLayer({
     videoRef,
     startOffsetMs,
     webcam,
+    endSeconds,
     path,
     cameraEnabled,
     frame,
