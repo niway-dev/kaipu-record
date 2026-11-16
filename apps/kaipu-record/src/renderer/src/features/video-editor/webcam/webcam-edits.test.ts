@@ -14,6 +14,7 @@ import {
 import { WEBCAM_TRANSITION_DEFAULTS, webcamAt, type WebcamScene } from "./webcam-model";
 
 const DURATION = 60;
+const WHOLE = { start: 0, end: DURATION };
 const withWebcam = (): VideoScene =>
   initialScene(DURATION, {
     startOffsetMs: 0,
@@ -52,8 +53,8 @@ describe("setWebcamLayout", () => {
 describe("addWebcamSegment", () => {
   it("adds a hidden segment, sorted among the others", () => {
     let scene = withWebcam();
-    ({ scene } = addWebcamSegment(scene, { start: 20, end: 25, mode: "hidden" }, DURATION));
-    const added = addWebcamSegment(scene, { start: 5, end: 8, mode: "hidden" }, DURATION);
+    ({ scene } = addWebcamSegment(scene, { start: 20, end: 25, mode: "hidden" }, WHOLE));
+    const added = addWebcamSegment(scene, { start: 5, end: 8, mode: "hidden" }, WHOLE);
     expect(added.id).toEqual(expect.any(String));
     expect(added.scene.webcam?.segments.map((s) => s.start)).toEqual([5, 20]);
   });
@@ -62,7 +63,7 @@ describe("addWebcamSegment", () => {
     const { scene, id } = addWebcamSegment(
       withWebcam(),
       { start: 5, end: 9, mode: "override", layout: { size: 0.9 } },
-      DURATION,
+      WHOLE,
     );
     expect(scene.webcam?.segments.find((s) => s.id === id)).toMatchObject({
       mode: "override",
@@ -74,7 +75,7 @@ describe("addWebcamSegment", () => {
     const base = addWebcamSegment(
       withWebcam(),
       { start: 10, end: 15, mode: "hidden" },
-      DURATION,
+      WHOLE,
     ).scene;
     for (const window of [
       { start: 1, end: 1.5 },
@@ -83,7 +84,7 @@ describe("addWebcamSegment", () => {
       { start: 59.5, end: 62 },
       { start: -2, end: 1 },
     ]) {
-      const result = addWebcamSegment(base, { ...window, mode: "hidden" }, DURATION);
+      const result = addWebcamSegment(base, { ...window, mode: "hidden" }, WHOLE);
       expect(result.scene).toBe(base);
       expect(result.id).toBeNull();
     }
@@ -91,7 +92,7 @@ describe("addWebcamSegment", () => {
 
   it("refuses on a recording without a webcam", () => {
     const scene = initialScene(DURATION);
-    expect(addWebcamSegment(scene, { start: 1, end: 3, mode: "hidden" }, DURATION)).toEqual({
+    expect(addWebcamSegment(scene, { start: 1, end: 3, mode: "hidden" }, WHOLE)).toEqual({
       scene,
       id: null,
     });
@@ -103,7 +104,7 @@ describe("updateWebcamSegment", () => {
     const { scene, id } = addWebcamSegment(
       withWebcam(),
       { start: 10, end: 20, mode: "override", layout: { size: 0.4 } },
-      DURATION,
+      WHOLE,
     );
     return { scene, id: id! };
   };
@@ -134,17 +135,46 @@ describe("updateWebcamSegment", () => {
   });
 });
 
+describe("webcam segments in a joined recording (ADR 0058)", () => {
+  const rangeB = { start: 3600, end: 3630 };
+
+  it("adds a segment inside B's range and refuses one outside it", () => {
+    const ok = addWebcamSegment(withWebcam(), { start: 3610, end: 3615, mode: "hidden" }, rangeB);
+    expect(ok.id).toEqual(expect.any(String));
+    const past = addWebcamSegment(withWebcam(), { start: 3625, end: 3640, mode: "hidden" }, rangeB);
+    expect(past.id).toBeNull();
+    const before = addWebcamSegment(
+      withWebcam(),
+      { start: 3590, end: 3601, mode: "hidden" },
+      rangeB,
+    );
+    expect(before.id).toBeNull();
+  });
+
+  it("drags an edge inside B's range", () => {
+    const { scene, id } = addWebcamSegment(
+      withWebcam(),
+      { start: 3610, end: 3615, mode: "hidden" },
+      rangeB,
+    );
+    const end = dragWebcamSegmentEdge(scene, id!, "end", 99999, rangeB);
+    expect(end.webcam?.segments[0]?.end).toBe(3630);
+    const start = dragWebcamSegmentEdge(scene, id!, "start", 10, rangeB);
+    expect(start.webcam?.segments[0]?.start).toBe(3600);
+  });
+});
+
 describe("dragWebcamSegmentEdge", () => {
   it("moves an edge but never into a neighbour or under the minimum", () => {
     let scene = withWebcam();
-    ({ scene } = addWebcamSegment(scene, { start: 10, end: 20, mode: "hidden" }, DURATION));
+    ({ scene } = addWebcamSegment(scene, { start: 10, end: 20, mode: "hidden" }, WHOLE));
     let id: string | null;
-    ({ scene, id } = addWebcamSegment(scene, { start: 25, end: 30, mode: "hidden" }, DURATION));
-    const dragStart = dragWebcamSegmentEdge(scene, id!, "start", 5, DURATION);
+    ({ scene, id } = addWebcamSegment(scene, { start: 25, end: 30, mode: "hidden" }, WHOLE));
+    const dragStart = dragWebcamSegmentEdge(scene, id!, "start", 5, WHOLE);
     expect(dragStart.webcam?.segments[1]?.start).toBe(20);
-    const dragEnd = dragWebcamSegmentEdge(scene, id!, "end", 25.2, DURATION);
+    const dragEnd = dragWebcamSegmentEdge(scene, id!, "end", 25.2, WHOLE);
     expect(dragEnd.webcam?.segments[1]?.end).toBe(26);
-    expect(dragWebcamSegmentEdge(scene, "nope", "end", 40, DURATION)).toBe(scene);
+    expect(dragWebcamSegmentEdge(scene, "nope", "end", 40, WHOLE)).toBe(scene);
   });
 });
 
@@ -153,7 +183,7 @@ describe("removeWebcamSegment", () => {
     const { scene, id } = addWebcamSegment(
       withWebcam(),
       { start: 10, end: 20, mode: "hidden" },
-      DURATION,
+      WHOLE,
     );
     expect(removeWebcamSegment(scene, id!).webcam?.segments).toEqual([]);
     expect(removeWebcamSegment(scene, "nope")).toBe(scene);
@@ -162,11 +192,7 @@ describe("removeWebcamSegment", () => {
 
 describe("the edits through webcamAt", () => {
   it("a hidden segment hides the layer only inside its window", () => {
-    const { scene } = addWebcamSegment(
-      withWebcam(),
-      { start: 10, end: 20, mode: "hidden" },
-      DURATION,
-    );
+    const { scene } = addWebcamSegment(withWebcam(), { start: 10, end: 20, mode: "hidden" }, WHOLE);
     expect(webcamAt(scene, 15)).toBeNull();
     expect(webcamAt(scene, 25)).toEqual(scene.webcam?.layout);
   });
@@ -181,7 +207,7 @@ describe("createWebcamPart", () => {
   const at = (t: number) => ({ at: t, position: { x: 0.8, y: 0.2 } });
 
   it("a part at 24 s in a free 60 s recording ends at 34", () => {
-    const { scene, id } = createWebcamPart(withWebcam(), at(24), DURATION);
+    const { scene, id } = createWebcamPart(withWebcam(), at(24), WHOLE);
     expect(id).toEqual(expect.any(String));
     expect(scene.webcam?.segments).toEqual([
       expect.objectContaining({ id, start: 24, end: 34, mode: "override" }),
@@ -190,7 +216,7 @@ describe("createWebcamPart", () => {
 
   it("stops at the next block", () => {
     const base = withSegments([{ id: "n", start: 30, end: 40, mode: "override" }]);
-    const { scene } = createWebcamPart(base, at(24), DURATION);
+    const { scene } = createWebcamPart(base, at(24), WHOLE);
     expect(scene.webcam?.segments.map((s) => [s.start, s.end])).toEqual([
       [24, 30],
       [30, 40],
@@ -199,13 +225,13 @@ describe("createWebcamPart", () => {
 
   it("is refused with a block starting at 24.5, under the minimum, and returns the same scene", () => {
     const base = withSegments([{ id: "n", start: 24.5, end: 40, mode: "override" }]);
-    const result = createWebcamPart(base, at(24), DURATION);
+    const result = createWebcamPart(base, at(24), WHOLE);
     expect(result.id).toBeNull();
     expect(result.scene).toBe(base);
   });
 
   it("ends at the end of the recording when that comes first", () => {
-    const { scene } = createWebcamPart(withWebcam(), at(24), 28);
+    const { scene } = createWebcamPart(withWebcam(), at(24), { start: 0, end: 28 });
     expect(scene.webcam?.segments.map((s) => [s.start, s.end])).toEqual([[24, 28]]);
   });
 
@@ -215,7 +241,7 @@ describe("createWebcamPart", () => {
       { id: "h", start: 30, end: 35, mode: "hidden" },
     ]);
     for (const t of [12, 32]) {
-      const result = createWebcamPart(base, at(t), DURATION);
+      const result = createWebcamPart(base, at(t), WHOLE);
       expect(result.id).toBeNull();
       expect(result.scene).toBe(base);
     }
@@ -223,20 +249,20 @@ describe("createWebcamPart", () => {
 
   it("is refused with less than the minimum before the end of the recording", () => {
     const base = withWebcam();
-    const result = createWebcamPart(base, at(DURATION - 0.5), DURATION);
+    const result = createWebcamPart(base, at(DURATION - 0.5), WHOLE);
     expect(result.id).toBeNull();
     expect(result.scene).toBe(base);
   });
 
   it("does nothing on a recording without a webcam", () => {
     const scene = initialScene(DURATION);
-    const result = createWebcamPart(scene, at(5), DURATION);
+    const result = createWebcamPart(scene, at(5), WHOLE);
     expect(result.id).toBeNull();
     expect(result.scene).toBe(scene);
   });
 
   it("stores the dropped position explicitly, and a copy of the default transition", () => {
-    const { scene } = createWebcamPart(withWebcam(), at(20), DURATION);
+    const { scene } = createWebcamPart(withWebcam(), at(20), WHOLE);
     const block = scene.webcam!.segments[0];
     expect(block.layout).toEqual({ position: { x: 0.8, y: 0.2 } });
     expect(block.transition).toEqual(WEBCAM_TRANSITION_DEFAULTS);
@@ -244,11 +270,7 @@ describe("createWebcamPart", () => {
   });
 
   it("clamps a dropped position outside the frame", () => {
-    const { scene } = createWebcamPart(
-      withWebcam(),
-      { at: 20, position: { x: 4, y: -3 } },
-      DURATION,
-    );
+    const { scene } = createWebcamPart(withWebcam(), { at: 20, position: { x: 4, y: -3 } }, WHOLE);
     const { x, y } = scene.webcam!.segments[0].layout!.position!;
     expect(x).toBeGreaterThanOrEqual(0);
     expect(x).toBeLessThanOrEqual(1);
@@ -257,7 +279,7 @@ describe("createWebcamPart", () => {
   });
 
   it("does not move when the default position changes afterwards", () => {
-    const { scene } = createWebcamPart(withWebcam(), at(20), DURATION);
+    const { scene } = createWebcamPart(withWebcam(), at(20), WHOLE);
     const before = webcamAt(scene, 25)!.position;
     const moved = setWebcamLayout(scene, { position: { x: 0.9, y: 0.1 } });
     expect(webcamAt(moved, 25)!.position).toEqual(before);
@@ -268,12 +290,12 @@ describe("createWebcamPart", () => {
 describe("webcamPartRoom", () => {
   it("gives the window the part would take, and null when there is no room", () => {
     const base = withSegments([{ id: "n", start: 30, end: 40, mode: "override" }]);
-    expect(webcamPartRoom(base, 10, DURATION)).toEqual({ start: 10, end: 20 });
-    expect(webcamPartRoom(base, 24, DURATION)).toEqual({ start: 24, end: 30 });
-    expect(webcamPartRoom(base, 29.5, DURATION)).toBeNull();
-    expect(webcamPartRoom(base, 35, DURATION)).toBeNull();
-    expect(webcamPartRoom(withWebcam(), 55, DURATION)).toEqual({ start: 55, end: 60 });
-    expect(webcamPartRoom(initialScene(DURATION), 5, DURATION)).toBeNull();
+    expect(webcamPartRoom(base, 10, WHOLE)).toEqual({ start: 10, end: 20 });
+    expect(webcamPartRoom(base, 24, WHOLE)).toEqual({ start: 24, end: 30 });
+    expect(webcamPartRoom(base, 29.5, WHOLE)).toBeNull();
+    expect(webcamPartRoom(base, 35, WHOLE)).toBeNull();
+    expect(webcamPartRoom(withWebcam(), 55, WHOLE)).toEqual({ start: 55, end: 60 });
+    expect(webcamPartRoom(initialScene(DURATION), 5, WHOLE)).toBeNull();
   });
 });
 

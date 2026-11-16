@@ -1,0 +1,19 @@
+/* The floating image panel (NIW2-771): the shared inspector looks, plus a disabled button. */
+.button {
+  composes: secondaryButton from "./inspector.module.css";
+}
+
+.button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pair {
+  composes: segmented from "./inspector.module.css";
+}
+
+.fades {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
+}

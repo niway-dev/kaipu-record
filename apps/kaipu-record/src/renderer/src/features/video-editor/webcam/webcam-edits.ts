@@ -5,7 +5,7 @@
  * A recording without a webcam has no layer to edit, so every edit passes the scene through.
  */
 import { newId, type VideoScene } from "../scene";
-import { dragRangeEdge, freeWindowAt } from "../source-time";
+import { dragRangeEdge, freeWindowAt, type SourceBounds } from "../source-time";
 import {
   WEBCAM_MIN_SEGMENT_SECONDS,
   WEBCAM_PART_SECONDS,
@@ -44,9 +44,9 @@ export function setWebcamLayout(scene: VideoScene, patch: Partial<WebcamLayout>)
 
 /**
  * Add a segment over source seconds [start, end). Refused (the scene back, `id: null`) when
- * there is no webcam, the window is under the minimum length, leaves [0, duration] or overlaps
- * a segment: the caller finds a free window with `freeWindowAt`. A `hidden` segment keeps no
- * layout.
+ * there is no webcam, the window is under the minimum length, leaves `bounds` (the range of one
+ * recording) or overlaps a segment: the caller finds a free window with `freeWindowAt`. A
+ * `hidden` segment keeps no layout.
  */
 export function addWebcamSegment(
   scene: VideoScene,
@@ -58,7 +58,7 @@ export function addWebcamSegment(
     /** `override` only. Absent is a Cut. */
     transition?: Partial<WebcamTransition>;
   },
-  sourceDurationSeconds: number,
+  bounds: SourceBounds,
 ): { scene: VideoScene; id: string | null } {
   const webcam = scene.webcam;
   const { start, end } = input;
@@ -66,8 +66,8 @@ export function addWebcamSegment(
     webcam !== null &&
     Number.isFinite(start) &&
     Number.isFinite(end) &&
-    start >= 0 &&
-    end <= sourceDurationSeconds &&
+    start >= bounds.start &&
+    end <= bounds.end &&
     end - start >= WEBCAM_MIN_SEGMENT_SECONDS &&
     !webcam.segments.some((s) => start < s.end && end > s.start);
   if (!valid) return { scene, id: null };
@@ -116,14 +116,15 @@ export function updateWebcamSegment(
 
 /**
  * Timeline edge drag. The same rule as zooms (`dragRangeEdge`): stay inside
- * [0, sourceDuration], keep the minimum length, never cross a neighbouring segment.
+ * `bounds` (the range of the recording the segment is in), keep the minimum length, never cross a
+ * neighbouring segment.
  */
 export function dragWebcamSegmentEdge(
   scene: VideoScene,
   id: string,
   edge: "start" | "end",
   to: number,
-  sourceDurationSeconds: number,
+  bounds: SourceBounds,
 ): VideoScene {
   const webcam = scene.webcam;
   if (!webcam?.segments.some((s) => s.id === id)) return scene;
@@ -132,7 +133,7 @@ export function dragWebcamSegmentEdge(
     id,
     edge,
     to,
-    sourceDurationSeconds,
+    bounds,
     WEBCAM_MIN_SEGMENT_SECONDS,
   );
   const current = webcam.segments.find((s) => s.id === id)!;
@@ -151,24 +152,18 @@ export function removeWebcamSegment(scene: VideoScene, id: string): VideoScene {
 
 /**
  * The free window a camera part (or a hidden range) can take at source time `at`:
- * {@link WEBCAM_PART_SECONDS}, or less when another block or the end of the recording comes
- * first. Null inside any block, or when under the minimum length is left, so the UI can say
+ * {@link WEBCAM_PART_SECONDS}, or less when another block or the end of `bounds` (the
+ * recording under `at`) comes first. Null inside any block, or when under the minimum length is left, so the UI can say
  * "10 s from 0:24" and disable the choice with the same rule the edit uses.
  */
 export function webcamPartRoom(
   scene: VideoScene,
   at: number,
-  sourceDurationSeconds: number,
+  bounds: SourceBounds,
 ): { start: number; end: number } | null {
   const webcam = scene.webcam;
   if (!webcam) return null;
-  return freeWindowAt(
-    webcam.segments,
-    at,
-    WEBCAM_PART_SECONDS,
-    sourceDurationSeconds,
-    WEBCAM_MIN_SEGMENT_SECONDS,
-  );
+  return freeWindowAt(webcam.segments, at, WEBCAM_PART_SECONDS, bounds, WEBCAM_MIN_SEGMENT_SECONDS);
 }
 
 /**
@@ -181,9 +176,9 @@ export function webcamPartRoom(
 export function createWebcamPart(
   scene: VideoScene,
   input: { at: number; position: { x: number; y: number } },
-  sourceDurationSeconds: number,
+  bounds: SourceBounds,
 ): { scene: VideoScene; id: string | null } {
-  const window = webcamPartRoom(scene, input.at, sourceDurationSeconds);
+  const window = webcamPartRoom(scene, input.at, bounds);
   if (!window) return { scene, id: null };
   return addWebcamSegment(
     scene,
@@ -193,7 +188,7 @@ export function createWebcamPart(
       layout: { position: { ...input.position } },
       transition: { ...WEBCAM_TRANSITION_DEFAULTS },
     },
-    sourceDurationSeconds,
+    bounds,
   );
 }
 

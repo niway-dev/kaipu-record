@@ -71,6 +71,7 @@ export function trackForSelection(kind: SelectionKind): TrackKey | null {
     case "webcam":
       return "webcam";
     case "item":
+    case "media":
       return null;
   }
 }

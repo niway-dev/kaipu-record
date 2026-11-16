@@ -664,7 +664,7 @@ export function EditorToolbar({
         </button>
         <span className={styles.divider} />
         {/* A still of the frame on screen, saved into the library and tied to this video
-            (NIW2-764). Inserting a capture into the timeline is the panel's Add to timeline. */}
+            (NIW2-764). Adding a capture to the video is the panel's Add from Library button. */}
         <button
           type="button"
           className={styles.iconBtn}
