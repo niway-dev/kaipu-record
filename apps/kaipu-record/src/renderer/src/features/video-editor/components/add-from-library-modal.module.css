@@ -551,8 +551,8 @@
   overflow: hidden;
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.02em;
+  /* The design's 9.5 px: a three-across card fits "Nov 16, 2026 · 18:20" whole. */
+  font-size: 9.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
