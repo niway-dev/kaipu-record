@@ -1367,6 +1367,9 @@ describe("VideoEditorPage — webcam track", () => {
       fireEvent.loadedMetadata(cam);
       // Main video at 0 s, webcam started 120 ms later: no webcam frame yet.
       expect(screen.getByTestId("webcam-layer").style.display).toBe("none");
+      // The webcam decodes its first frame; the bubble may now show.
+      Object.defineProperty(cam, "readyState", { configurable: true, get: () => 2 });
+      fireEvent.loadedData(cam);
       main.currentTime = 1;
       fireEvent(main, new Event("seeked"));
       expect(screen.getByTestId("webcam-layer").style.display).toBe("");
@@ -1546,7 +1549,9 @@ describe("VideoEditorPage — dropping the camera bubble", () => {
     fireEvent.loadedMetadata(main);
     const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
     Object.defineProperty(cam, "duration", { configurable: true, get: () => 60 });
+    Object.defineProperty(cam, "readyState", { configurable: true, get: () => 2 });
     fireEvent.loadedMetadata(cam);
+    fireEvent.loadedData(cam);
     main.currentTime = 1;
     fireEvent(main, new Event("seeked"));
     screen.getByTestId("webcam-slot").getBoundingClientRect = () =>
@@ -1604,7 +1609,9 @@ describe("VideoEditorPage — dropping the camera bubble", () => {
       fireEvent.loadedMetadata(main);
       const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
       Object.defineProperty(cam, "duration", { configurable: true, get: () => 60 });
+      Object.defineProperty(cam, "readyState", { configurable: true, get: () => 2 });
       fireEvent.loadedMetadata(cam);
+      fireEvent.loadedData(cam);
       fireEvent.keyDown(window, { key: " " });
       expect(await screen.findByRole("button", { name: "Pause" })).toBeInTheDocument();
       screen.getByTestId("webcam-slot").getBoundingClientRect = () =>
@@ -1634,7 +1641,9 @@ describe("VideoEditorPage — dropping the camera bubble", () => {
     fireEvent.loadedMetadata(main);
     const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
     Object.defineProperty(cam, "duration", { configurable: true, get: () => 60 });
+    Object.defineProperty(cam, "readyState", { configurable: true, get: () => 2 });
     fireEvent.loadedMetadata(cam);
+    fireEvent.loadedData(cam);
     fireEvent.keyDown(window, { key: " " });
     expect(await screen.findByRole("button", { name: "Pause" })).toBeInTheDocument();
     main.currentTime = 1;
