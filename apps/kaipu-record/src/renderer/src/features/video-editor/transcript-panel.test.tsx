@@ -779,14 +779,19 @@ describe("TranscriptPanel — export", () => {
   });
 
   it("tells the user when the save call itself fails", async () => {
-    saveTextFile.mockRejectedValue(new Error("boom"));
+    const failure = new Error("boom");
+    saveTextFile.mockRejectedValue(failure);
     setup();
     openMenu();
     await act(async () => {
       fireEvent.click(screen.getByRole("menuitem", { name: "WebVTT (.vtt)" }));
     });
-    expect(getToasts()).toHaveLength(1);
-    expect(getToasts()[0].message).toMatch(/Couldn't save the transcript file/);
+    // `reportError` is mocked here; the real one shows the user message as a toast.
+    expect(analytics.reportError).toHaveBeenCalledExactlyOnceWith(
+      expect.stringMatching(/Couldn't save the transcript file/),
+      failure,
+      expect.objectContaining({ context: { phase: "export-transcript", format: "vtt" } }),
+    );
   });
 
   it("is disabled, with the reason, when no spoken word is left", () => {
