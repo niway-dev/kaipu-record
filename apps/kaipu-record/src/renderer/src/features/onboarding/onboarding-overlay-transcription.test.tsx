@@ -154,4 +154,39 @@ describe("OnboardingOverlay: the Transcription step", () => {
     render(<OnboardingOverlay onClose={vi.fn()} />);
     await waitFor(() => expect(dots()).toHaveLength(5));
   });
+
+  it("stays on You're set when the offer arrives late, instead of being moved to the new step", async () => {
+    let answer: (status: TranscriptionStatus) => void = () => {};
+    mockApi(transcriptionStatus(), {
+      getTranscriptionStatus: vi.fn(
+        () => new Promise<TranscriptionStatus>((resolve) => (answer = resolve)),
+      ),
+    });
+    render(<OnboardingOverlay onClose={vi.fn()} />);
+    await toShortcuts();
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /you're set/i });
+    expect(dots()).toHaveLength(4);
+
+    answer(transcriptionStatus());
+
+    await waitFor(() => expect(dots()).toHaveLength(5));
+    expect(screen.getByRole("heading", { name: /you're set/i })).toBeInTheDocument();
+  });
+
+  it("stays on You're set when the flag turns off after the offer was shown", async () => {
+    mockApi(transcriptionStatus());
+    const { rerender } = render(<OnboardingOverlay onClose={vi.fn()} />);
+    await waitFor(() => expect(dots()).toHaveLength(5));
+    await toShortcuts();
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Not now" }));
+    await screen.findByRole("heading", { name: /you're set/i });
+
+    flags.transcription = false;
+    rerender(<OnboardingOverlay onClose={vi.fn()} />);
+
+    expect(screen.getByRole("heading", { name: /you're set/i })).toBeInTheDocument();
+    expect(dots()).toHaveLength(4);
+  });
 });

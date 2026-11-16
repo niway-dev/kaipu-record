@@ -58,7 +58,9 @@ interface OnboardingOverlayProps {
  */
 export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JSX.Element {
   const t = useTranslations("onboarding");
-  const [step, setStep] = useState(0);
+  // The step is kept as an id, not an index: the list grows or shrinks when the transcription
+  // offer arrives or goes away, and an index would then land on a different step.
+  const [currentStep, setCurrentStep] = useState<StepId>("welcome");
   const [demo, setDemo] = useState<DemoId | null>(null);
   const [tried, setTried] = useState<ReadonlySet<ShortcutAction>>(() => new Set());
   const [pending, setPending] = useState<ReadonlySet<PendingGrant>>(() => new Set());
@@ -75,7 +77,9 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
     return () => window.electronAPI.setOnboardingWindowMode(false);
   }, []);
 
-  const stepId = steps[step];
+  const found = steps.indexOf(currentStep);
+  const step = found === -1 ? steps.length - 1 : found;
+  const stepId = steps[step]!;
   const requiredMet = requiredPermissionsMet(status);
   const canAdvance = canAdvanceFrom(stepId, requiredMet);
   const isLastStep = step === steps.length - 1;
@@ -98,9 +102,9 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
     (to: number) => {
       if (to < 0 || to >= steps.length || !canJumpTo(step, to, requiredMet)) return;
       setDemo(null);
-      setStep(to);
+      setCurrentStep(steps[to]!);
     },
-    [step, steps.length, requiredMet],
+    [step, steps, requiredMet],
   );
 
   const advance = useCallback(() => {
