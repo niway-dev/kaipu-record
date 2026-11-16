@@ -165,6 +165,16 @@ describe("WebcamLayer", () => {
     expect(bubble().style.display).toBe("");
   });
 
+  it("keeps a painted bubble through a seek, when Chromium drops readyState until the frame lands", () => {
+    const { ref, el } = mainVideo(1);
+    renderLayer({ videoRef: ref });
+    const cam = loadWebcam(30);
+    expect(bubble().style.display).toBe("");
+    Object.defineProperty(cam, "readyState", { configurable: true, get: () => 1 });
+    act(() => setTime(el, 5));
+    expect(bubble().style.display).toBe("");
+  });
+
   it("shrinks during a zoom from the camera path's scale, and not in the unzoomed view", () => {
     const zoomed = buildCameraPath(
       [

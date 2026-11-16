@@ -121,6 +121,8 @@ function useWebcamSync({
   const clipRef = useRef<HTMLDivElement | null>(null);
   const camRef = useRef<HTMLVideoElement | null>(null);
   const lastTime = useRef(0);
+  // The webcam file that has decoded a frame: the box shows from then on, through seeks.
+  const paintedSrc = useRef<string | null>(null);
   // Where the bubble is drawn right now: the editor's drag starts from it.
   const drawn = useRef<{ center: Point; box: { width: number; height: number } } | null>(null);
   // When the webcam's seek in flight started (performance.now()), and how long the last one
@@ -150,11 +152,16 @@ function useWebcamSync({
     const state = hidden ? null : webcamStateAt({ webcam }, t, webcamEndSeconds(endSeconds));
     const webcamTime = webcamTimeFor(file.localTime, file.startOffsetMs);
     const scale = cameraEnabled && path ? cameraAt(path, t).scale : 1;
+    // No empty box: nothing shows until the file has decoded a frame (`loadeddata`). Latched
+    // per file, because Chromium drops readyState below HAVE_CURRENT_DATA while a seek is in
+    // flight, and the drift resync seeks during playback: the stale frame stays up meanwhile.
+    // A new src resets readyState to HAVE_NOTHING at once, so the next file waits its turn.
+    if (file.src !== null && cam.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA)
+      paintedSrc.current = file.src;
     let rect =
       state &&
       file.src !== null &&
-      // No empty box: nothing shows until the element has decoded a frame (`loadeddata`).
-      cam.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+      paintedSrc.current === file.src &&
       webcamHasFrameAt(webcamTime, cam.duration)
         ? webcamStateRect(state, frame, scale)
         : null;
