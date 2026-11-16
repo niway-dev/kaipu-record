@@ -168,6 +168,9 @@ export function insertSlideAtBoundary(
   return { ...scene, items: insertItemAt(scene.items, index, slide) };
 }
 
+/** The two kinds of Library item the modal adds. */
+export type LibraryItemKind = "recording" | "screenshot";
+
 /** Where a Library item can go (NIW2-829): over the video, or at one of four sequence boundaries. */
 export type LibraryDestination = "over" | "before-clip" | "after-clip" | "start" | "end";
 
@@ -181,13 +184,13 @@ export const LIBRARY_DESTINATIONS: readonly LibraryDestination[] = [
 ];
 
 /** What each kind of item selects before the user touches the chooser. */
-export function defaultDestination(kind: "recording" | "screenshot"): LibraryDestination {
+export function defaultDestination(kind: LibraryItemKind): LibraryDestination {
   return kind === "screenshot" ? "over" : "after-clip";
 }
 
 /** A recording cannot float over the video yet (floating videos are a later stage). */
 export function destinationAllowed(
-  kind: "recording" | "screenshot",
+  kind: LibraryItemKind,
   destination: LibraryDestination,
 ): boolean {
   return !(kind === "recording" && destination === "over");

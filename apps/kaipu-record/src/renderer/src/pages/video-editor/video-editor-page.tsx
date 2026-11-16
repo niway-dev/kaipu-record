@@ -181,8 +181,18 @@ import {
   formatClock,
 } from "@renderer/features/video-editor/capture-time";
 import { CapturesPanel } from "@renderer/features/video-editor/components/captures-panel";
-import { anchoredBoundary } from "@renderer/features/video-editor/add-from-library";
-import { AddFromLibraryModal } from "@renderer/features/video-editor/components/add-from-library-modal";
+import {
+  anchoredBoundary,
+  insertSlideAtBoundary,
+  SEQUENCE_IMAGE_SECONDS,
+  type LibraryDestination,
+  type LibraryItemKind,
+} from "@renderer/features/video-editor/add-from-library";
+import {
+  AddFromLibraryModal,
+  type AddBoundary,
+  type Tab as AddFromLibraryTab,
+} from "@renderer/features/video-editor/components/add-from-library-modal";
 import { probeSource, type SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import { useHiddenTracks } from "@renderer/features/video-editor/use-hidden-tracks";
@@ -703,6 +713,17 @@ function VideoEditor({
   // `addRecordingShown`, so with the flag off the modal cannot open whatever the state holds.
   const [addRecordingOpen, setAddRecordingOpen] = useState(false);
   const addRecordingShown = levelsOn && addRecordingOpen;
+  // Where the modal opens: a capture's add button opens it on Screenshots with that capture
+  // selected (NIW2-829); the transport's button leaves this null (Recordings, nothing preselected).
+  const [addLibraryStart, setAddLibraryStart] = useState<{
+    tab: AddFromLibraryTab;
+    selectedId: string;
+  } | null>(null);
+  // The destination last used per kind, for the rest of this editor session: the modal itself is
+  // unmounted on close, so the page keeps it for the next open.
+  const [addDestinations, setAddDestinations] = useState<
+    Partial<Record<LibraryItemKind, LibraryDestination>>
+  >({});
   const libraryRecordings = useLibraryRecordings(addRecordingShown);
   // Writes the session ~800 ms after every commit/endInteract, and flushes on unmount
   // and beforeunload. See plans/video-editor-v2/07: before this, closing the window
@@ -1160,11 +1181,47 @@ function VideoEditor({
     [controller, controllerRef, playbackRef, pictureSize, selectKind, t],
   );
 
-  // A capture's Add to timeline: main reads the vault PNG by id (fetch on the media scheme
-  // returns no bytes here), then it goes in as a floating image (flag on) or as any image slide.
-  const addCaptureToTimeline = useCallback(
-    // True when a floating image went in (flag on); an image slide reports nothing back.
-    async (capture: LibraryVideo): Promise<boolean> => {
+  // Add from Library with a sequence destination (NIW2-829): the image is stored as a slide's is,
+  // then goes into the sequence as a 5 s slide at the chosen boundary (the spec's decision 8; a
+  // floating image is 10 s). The scene is read after the decode, not from the click, and the
+  // boundary is pinned to the clip after it (`anchoredBoundary`), so a join that landed meanwhile
+  // does not move the slide. A boundary's index counts clips and slides alike, and so does
+  // `scene.items`, which is what `insertItemAt` splices (see `insertSlideAtBoundary`). True once
+  // it is in.
+  const insertSequenceImage = useCallback(
+    async (bytes: ArrayBuffer, mime: string, boundary: AddBoundary): Promise<boolean> => {
+      if (controller.interacting) return false;
+      let asset: SlideAsset;
+      try {
+        asset = await assetStoreRef.current.put(bytes, mime);
+      } catch {
+        showToast({ message: t("imageLoadError") });
+        return false;
+      }
+      const current = controllerRef.current;
+      if (current.interacting) return false;
+      const slide: SlideItem = {
+        id: newId(),
+        kind: "slide",
+        assetId: asset.assetId,
+        duration: SEQUENCE_IMAGE_SECONDS,
+        naturalWidth: asset.naturalWidth,
+        naturalHeight: asset.naturalHeight,
+      };
+      current.commit(
+        insertSlideAtBoundary(current.scene, slide, anchoredBoundary(layout, boundary)),
+      );
+      return true;
+    },
+    [controller, controllerRef, layout, t],
+  );
+
+  // A Library screenshot (Add from Library): main reads the vault PNG by id (fetch on the media
+  // scheme returns no bytes here), then it goes into the sequence at `boundary`, or floats over
+  // the video with no boundary (flag on), or, with the flag off, is the old 3 s image slide.
+  const addLibraryScreenshot = useCallback(
+    // True when the image went in as something the modal confirms with a toast.
+    async (capture: LibraryVideo, boundary: AddBoundary | null = null): Promise<boolean> => {
       const id = capture.id;
       if (!id) return false;
       let bytes: ArrayBuffer;
@@ -1174,11 +1231,12 @@ function VideoEditor({
         showToast({ message: t("imageLoadError") });
         return false;
       }
+      if (boundary) return insertSequenceImage(bytes, "image/png", boundary);
       if (levelsOn) return insertFloatingImage(bytes, "image/png");
       await insertImageSlide(bytes, "image/png");
       return false;
     },
-    [insertImageSlide, insertFloatingImage, levelsOn, t],
+    [insertImageSlide, insertFloatingImage, insertSequenceImage, levelsOn, t],
   );
 
   // Reads the live preview <video>'s native/displayed size at click time (not
@@ -1591,8 +1649,19 @@ function VideoEditor({
   // would follow a playhead still moving under the modal.
   const toggleAddRecording = useCallback(() => {
     if (!addRecordingOpen) playbackRef.current.pause();
+    setAddLibraryStart(null);
     setAddRecordingOpen(!addRecordingOpen);
   }, [addRecordingOpen, playbackRef]);
+  // A capture's add button: the same modal, on Screenshots, with that capture picked. It pauses
+  // playback for the same reason the transport's button does.
+  const openAddFromLibraryFor = useCallback(
+    (capture: LibraryVideo) => {
+      playbackRef.current.pause();
+      setAddLibraryStart({ tab: "screenshots", selectedId: capture.assetId });
+      setAddRecordingOpen(true);
+    },
+    [playbackRef],
+  );
   const addRecording = useCallback(
     async (video: LibraryVideo, boundary: { index: number; time: number }): Promise<void> => {
       // The modal chose the boundary at click time (after the clip under the playhead, the start
@@ -1608,6 +1677,18 @@ function VideoEditor({
       }
     },
     [joinRecordingAt, layout, t],
+  );
+
+  // The modal stays open over the timeline, so an image that went in says so, as a recording does.
+  const confirmScreenshotAdded = useCallback(
+    (shot: LibraryVideo, added: Promise<boolean>): void => {
+      void added.then((ok) => {
+        if (ok) {
+          showToast({ message: t("addFromLibraryAdded", { title: shot.title }), tone: "success" });
+        }
+      });
+    },
+    [t],
   );
 
   /** A capture's image: move the playhead to its moment, if that moment is still on the timeline. */
@@ -2561,7 +2642,7 @@ function VideoEditor({
               captures={sourceCaptures.captures}
               loaded={sourceCaptures.loaded}
               onSeek={seekToCapture}
-              onAddToTimeline={(capture) => void addCaptureToTimeline(capture)}
+              onAddFromLibrary={openAddFromLibraryFor}
               onDelete={deleteCapture}
               highlightedId={highlightedCaptureId}
               onClose={() => setCapturesOpen(false)}
@@ -2805,15 +2886,15 @@ function VideoEditor({
           loaded={libraryRecordings.loaded}
           failed={libraryRecordings.failed}
           onAddRecording={(video, boundary) => void addRecording(video, boundary)}
-          onAddScreenshot={(shot) =>
-            void addCaptureToTimeline(shot).then((added) => {
-              if (added) {
-                showToast({
-                  message: t("addFromLibraryAdded", { title: shot.title }),
-                  tone: "success",
-                });
-              }
-            })
+          onAddScreenshot={(shot) => confirmScreenshotAdded(shot, addLibraryScreenshot(shot))}
+          onAddScreenshotToSequence={(shot, boundary) =>
+            confirmScreenshotAdded(shot, addLibraryScreenshot(shot, boundary))
+          }
+          initialTab={addLibraryStart?.tab}
+          initialSelectedId={addLibraryStart?.selectedId}
+          rememberedDestinations={addDestinations}
+          onRememberDestination={(kind, destination) =>
+            setAddDestinations((prev) => ({ ...prev, [kind]: destination }))
           }
           onClose={() => setAddRecordingOpen(false)}
         />

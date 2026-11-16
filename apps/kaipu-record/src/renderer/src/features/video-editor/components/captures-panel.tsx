@@ -21,8 +21,11 @@ export interface CapturesPanelProps {
    * `assetId`: the recording the capture links to; the list holds every recording the scene joins.
    */
   onSeek(sourceSeconds: number, sceneSourceId?: string | null, assetId?: string | null): void;
-  /** Insert a capture's image into the timeline as an image slide. */
-  onAddToTimeline(capture: LibraryVideo): void;
+  /**
+   * Open Add from Library on its Screenshots tab with this capture selected. The modal's one
+   * chooser decides where it goes, so this adds nothing itself (NIW2-829).
+   */
+  onAddFromLibrary(capture: LibraryVideo): void;
   /** Delete one capture from the library (called only after the user confirms). */
   onDelete(capture: LibraryVideo): Promise<void>;
   /** The capture that already exists at the playhead: outlined and scrolled into view. */
@@ -34,21 +37,20 @@ export interface CapturesPanelProps {
  * The editor's right column while Captures is open (NIW2-764): it takes the inspector's
  * place, the way the cursor settings do. Lists this video's frame captures, newest first.
  * Capture frame itself is in the top bar. Hovering a capture's image shows a Go to button
- * that moves the playhead to that moment; with the `timeline-levels` flag on, each row can add
- * the image to the timeline.
+ * that moves the playhead to that moment; with the `timeline-levels` flag on, each row opens
+ * Add from Library with its image selected.
  */
 export function CapturesPanel({
   captures,
   loaded,
   onSeek,
-  onAddToTimeline,
+  onAddFromLibrary,
   onDelete,
   highlightedId = null,
   onClose,
 }: CapturesPanelProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
-  // Add to timeline inserts a 3 s slide, which the Clips levels redesign (NIW2-770) replaces:
-  // the button exists only with the flag on (NIW2-772).
+  // The button opens Add from Library, which exists only with the flag on (NIW2-772).
   const timelineLevels = useFlag("timeline-levels");
   const tLibrary = useTranslations("library");
   const [pendingDelete, setPendingDelete] = useState<LibraryVideo | null>(null);
@@ -119,8 +121,8 @@ export function CapturesPanel({
                   ? undefined
                   : t("captureSeek", { time: formatClock(capture.sourceTimeSeconds) })
               }
-              onAddToTimeline={timelineLevels ? () => onAddToTimeline(capture) : undefined}
-              addToTimelineLabel={t("captureAddToTimeline")}
+              onAddFromLibrary={timelineLevels ? () => onAddFromLibrary(capture) : undefined}
+              addFromLibraryLabel={t("captureAddFromLibrary")}
               onDelete={() => setPendingDelete(capture)}
               deleteLabel={t("captureDelete")}
             />

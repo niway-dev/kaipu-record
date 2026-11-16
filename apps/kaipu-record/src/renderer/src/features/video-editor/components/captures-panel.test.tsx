@@ -34,7 +34,7 @@ function renderPanel(over: Partial<CapturesPanelProps> = {}): CapturesPanelProps
     captures: [],
     loaded: true,
     onSeek: vi.fn(),
-    onAddToTimeline: vi.fn(),
+    onAddFromLibrary: vi.fn(),
     onDelete: vi.fn(async () => {}),
     onClose: vi.fn(),
     ...over,
@@ -114,9 +114,9 @@ describe("CapturesPanel", () => {
   });
 
   describe("with timeline-levels off (the default)", () => {
-    it("has no Add to timeline button, and keeps Go to, Copy and Delete", () => {
+    it("has no add button, and keeps Go to, Copy and Delete", () => {
       renderPanel({ captures: [capture({ id: "a" }), capture({ id: "b", assetId: "b" })] });
-      expect(screen.queryByRole("button", { name: "Add to timeline" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Add from Library…" })).toBeNull();
       expect(screen.getAllByRole("button", { name: "Go to 1:23.4" })).toHaveLength(2);
       expect(screen.getAllByRole("button", { name: "Copy image" })).toHaveLength(2);
       expect(screen.getAllByRole("button", { name: "Delete capture" })).toHaveLength(2);
@@ -124,7 +124,7 @@ describe("CapturesPanel", () => {
 
     it("has none on a slide capture either", () => {
       renderPanel({ captures: [capture({ sourceTimeSeconds: null })] });
-      expect(screen.queryByRole("button", { name: "Add to timeline" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Add from Library…" })).toBeNull();
     });
   });
 
@@ -133,17 +133,17 @@ describe("CapturesPanel", () => {
       flags["timeline-levels"] = true;
     });
 
-    it("adds a capture to the timeline from its Add to timeline button", () => {
+    it("the add button opens Add from Library with that capture, and adds nothing itself", () => {
       const target = capture({ id: "frame-3" });
       const props = renderPanel({ captures: [capture({ id: "other", assetId: "o" }), target] });
-      fireEvent.click(screen.getAllByRole("button", { name: "Add to timeline" })[1]);
-      expect(props.onAddToTimeline).toHaveBeenCalledOnce();
-      expect(props.onAddToTimeline).toHaveBeenCalledWith(target);
+      fireEvent.click(screen.getAllByRole("button", { name: "Add from Library…" })[1]);
+      expect(props.onAddFromLibrary).toHaveBeenCalledOnce();
+      expect(props.onAddFromLibrary).toHaveBeenCalledWith(target);
     });
 
-    it("offers Add to timeline on a slide capture too", () => {
+    it("offers the add button on a slide capture too", () => {
       renderPanel({ captures: [capture({ sourceTimeSeconds: null })] });
-      expect(screen.getByRole("button", { name: "Add to timeline" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Add from Library…" })).toBeInTheDocument();
     });
   });
 

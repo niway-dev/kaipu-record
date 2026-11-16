@@ -326,45 +326,6 @@
   font-size: var(--font-size-sm);
 }
 
-.actions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: auto;
-}
-
-/* ModalButton takes no class: the glow reaches it from here. */
-.cta button {
-  box-shadow: var(--glow-accent);
-}
-
-.alternatives {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-}
-
-.textButton {
-  padding: 2px 4px;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  font-family: inherit;
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  transition: color var(--transition);
-}
-
-.textButton:hover {
-  color: var(--text-primary);
-}
-
-.textButton:focus-visible {
-  outline: 2px solid var(--accent-primary-ring);
-  outline-offset: 1px;
-}
-
 /* ---- The quick look ---- */
 .preview {
   display: flex;
@@ -464,9 +425,11 @@
 
 /* ---- Screenshots: card grid ---- */
 .grid {
+  min-width: 0;
   display: grid;
   flex: 1;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Beside the chooser column the grid has room for two or three cards, by width. */
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   align-content: start;
   gap: 14px 12px;
   min-height: 0;
@@ -495,11 +458,22 @@
 }
 
 .card:hover,
-.card:focus-visible {
+.card:focus-visible,
+.card[data-selected="true"] {
   background: var(--bg-card-hover);
   border-color: var(--accent-primary);
   outline: none;
   transform: translateY(-2px);
+}
+
+/* The card that is selected keeps its outline and lift when the pointer leaves. */
+.card[data-selected="true"] {
+  box-shadow: 0 0 0 1px var(--accent-primary);
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--accent-primary-ring);
+  outline-offset: 1px;
 }
 
 .poster {
@@ -554,19 +528,17 @@
   white-space: nowrap;
 }
 
-.footer {
-  display: flex;
+/* The Screenshots tab's right column: the chooser for the selected card, narrower than the
+   recordings' detail because the grid needs the width. */
+.shotSide {
   flex: none;
-  align-items: center;
-  gap: 12px;
-  height: 44px;
-  padding: 0 16px;
-  border-top: 1px solid var(--line);
-  color: var(--text-muted);
-  font-size: var(--font-size-sm);
+  width: 290px;
+  border-left: 1px solid var(--line);
 }
 
-.mono {
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
+.pickHint {
+  margin: auto 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+  text-align: center;
 }

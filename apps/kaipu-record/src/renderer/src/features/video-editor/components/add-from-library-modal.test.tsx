@@ -37,6 +37,7 @@ function renderModal(over: Partial<AddFromLibraryModalProps> = {}): AddFromLibra
     loaded: true,
     onAddRecording: vi.fn(),
     onAddScreenshot: vi.fn(),
+    onAddScreenshotToSequence: vi.fn(),
     onClose: vi.fn(),
     ...over,
   };
@@ -48,6 +49,17 @@ const rows = (): HTMLElement[] => screen.queryAllByTestId("add-from-library-row"
 const cards = (): HTMLElement[] => screen.queryAllByTestId("add-from-library-screenshot");
 const openScreenshots = (): void => {
   fireEvent.click(screen.getByRole("tab", { name: /Screenshots/ }));
+};
+// The chooser: radios are named by their label plus its hint, so match the label's start.
+const radio = (label: RegExp): HTMLInputElement =>
+  screen.getByRole("radio", { name: label }) as HTMLInputElement;
+const OVER = /^Over the video/;
+const BEFORE = /^Before the clip under the playhead/;
+const AFTER = /^After the clip under the playhead/;
+const START = /^At the start/;
+const END = /^At the end/;
+const add = (): void => {
+  fireEvent.click(screen.getByRole("button", { name: "Add" }));
 };
 
 beforeEach(() => {
@@ -243,11 +255,27 @@ describe("AddFromLibraryModal", () => {
         video({ assetId: "b", title: "Older", createdAt: 1 }),
       ];
 
-      it("Add after current clip lands after the clip under the playhead", () => {
+      it("the chooser lists every destination, with Over the video disabled and a hint why", () => {
+        renderModal({ videos: list });
+        expect(radio(OVER)).toBeDisabled();
+        expect(screen.getByText("Floating videos come later.")).toBeInTheDocument();
+        for (const label of [BEFORE, AFTER, START, END]) expect(radio(label)).toBeEnabled();
+        expect(screen.getByText("In the sequence")).toBeInTheDocument();
+        expect(screen.getByText("Pushes everything after it later.")).toBeInTheDocument();
+        expect(screen.getAllByRole("radio")).toHaveLength(5);
+      });
+
+      it("selects after the clip under the playhead by default, never the disabled option", () => {
+        renderModal({ videos: list });
+        expect(radio(AFTER)).toBeChecked();
+        expect(radio(OVER)).not.toBeChecked();
+      });
+
+      it("Add lands after the clip under the playhead by default", () => {
         // 12 s is inside the second clip (10 to 30), so after it is the end, index 2, at 30 s.
         const props = renderModal({ videos: list, playhead: 12 });
         fireEvent.click(rows()[1]);
-        fireEvent.click(screen.getByRole("button", { name: "Add after current clip" }));
+        add();
         expect(props.onAddRecording).toHaveBeenCalledOnce();
         expect(props.onAddRecording).toHaveBeenCalledWith(
           expect.objectContaining({ assetId: "b" }),
@@ -257,32 +285,44 @@ describe("AddFromLibraryModal", () => {
 
       it("after the clip under the playhead means index 1 while the playhead is in the first clip", () => {
         const props = renderModal({ videos: list, playhead: 3 });
-        fireEvent.click(screen.getByRole("button", { name: "Add after current clip" }));
+        add();
         expect(props.onAddRecording).toHaveBeenCalledWith(
           expect.objectContaining({ assetId: "a" }),
           { index: 1, time: 10 },
         );
       });
 
-      it("Add at start lands at index 0", () => {
+      it("Before the clip under the playhead lands where that clip starts", () => {
+        const props = renderModal({ videos: list, playhead: 12 });
+        fireEvent.click(radio(BEFORE));
+        add();
+        expect(props.onAddRecording).toHaveBeenCalledWith(
+          expect.objectContaining({ assetId: "a" }),
+          { index: 1, time: 10 },
+        );
+      });
+
+      it("At the start lands at index 0", () => {
         const props = renderModal({ videos: list, playhead: 25 });
-        fireEvent.click(screen.getByRole("button", { name: "Add at start" }));
+        fireEvent.click(radio(START));
+        add();
         expect(props.onAddRecording).toHaveBeenCalledWith(
           expect.objectContaining({ assetId: "a" }),
           { index: 0, time: 0 },
         );
       });
 
-      it("Add at end lands at the layout length", () => {
+      it("At the end lands at the layout length", () => {
         const props = renderModal({ videos: list, playhead: 1 });
-        fireEvent.click(screen.getByRole("button", { name: "Add at end" }));
+        fireEvent.click(radio(END));
+        add();
         expect(props.onAddRecording).toHaveBeenCalledWith(
           expect.objectContaining({ assetId: "a" }),
           { index: 2, time: 30 },
         );
       });
 
-      it("a double click on a row adds that recording after the current clip", () => {
+      it("a double click on a row adds it at the chosen destination", () => {
         const props = renderModal({ videos: list, playhead: 3 });
         fireEvent.doubleClick(rows()[1]);
         expect(props.onAddRecording).toHaveBeenCalledOnce();
@@ -294,9 +334,40 @@ describe("AddFromLibraryModal", () => {
 
       it("stays open after an add, for the next one", () => {
         const props = renderModal({ videos: list });
-        fireEvent.click(screen.getByRole("button", { name: "Add at end" }));
+        add();
         expect(props.onClose).not.toHaveBeenCalled();
         expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+      });
+
+      it("reports the destination used so the page can remember it", () => {
+        const onRememberDestination = vi.fn();
+        renderModal({ videos: list, onRememberDestination });
+        fireEvent.click(radio(END));
+        expect(onRememberDestination).not.toHaveBeenCalled();
+        add();
+        expect(onRememberDestination).toHaveBeenCalledWith("recording", "end");
+      });
+
+      it("starts at the destination remembered for recordings, and keeps the choice on a second add", () => {
+        const props = renderModal({
+          videos: list,
+          playhead: 3,
+          rememberedDestinations: { recording: "start" },
+        });
+        expect(radio(START)).toBeChecked();
+        add();
+        add();
+        expect(props.onAddRecording).toHaveBeenCalledTimes(2);
+        expect(props.onAddRecording).toHaveBeenLastCalledWith(
+          expect.objectContaining({ assetId: "a" }),
+          { index: 0, time: 0 },
+        );
+      });
+
+      it("ignores a remembered Over the video for a recording", () => {
+        renderModal({ videos: list, rememberedDestinations: { recording: "over" } });
+        expect(radio(AFTER)).toBeChecked();
+        expect(radio(OVER)).toBeDisabled();
       });
     });
 
@@ -379,9 +450,9 @@ describe("AddFromLibraryModal", () => {
       });
       openScreenshots();
       expect(cards().map((card) => card.getAttribute("aria-label"))).toEqual([
-        "Add Pricing page",
-        "Add Login",
-        "Add Other",
+        "Pricing page",
+        "Login",
+        "Other",
       ]);
       expect(within(cards()[0]).getByText(/\d{4} · \d{2}:\d{2} · 1440 × 1080/)).toBeInTheDocument();
       expect(cards()[0].querySelector("img")).toHaveAttribute("src", "kaipu-media://thumb/s1");
@@ -402,16 +473,137 @@ describe("AddFromLibraryModal", () => {
       expect(within(cards()[2]).queryByText("From this recording")).toBeNull();
     });
 
-    it("a click adds that screenshot, once, and leaves the modal open", () => {
+    it("a click only selects the card: nothing is added and the chooser appears for it", () => {
+      const props = renderModal({ videos: shots });
+      openScreenshots();
+      expect(screen.queryByTestId("add-destination-chooser")).toBeNull();
+      expect(screen.getByText("Select a screenshot to choose where it goes.")).toBeInTheDocument();
+      fireEvent.click(cards()[1]);
+      expect(cards()[1]).toHaveAttribute("aria-pressed", "true");
+      expect(cards()[1]).toHaveAttribute("data-selected", "true");
+      expect(cards()[0]).toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByTestId("add-destination-chooser")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Login" })).toBeInTheDocument();
+      expect(props.onAddScreenshot).not.toHaveBeenCalled();
+      expect(props.onAddScreenshotToSequence).not.toHaveBeenCalled();
+    });
+
+    it("a card is a native button, so it takes focus and Enter or Space activates it", () => {
+      renderModal({ videos: shots });
+      openScreenshots();
+      cards()[0].focus();
+      expect(cards()[0]).toHaveFocus();
+      expect(cards()[0].tagName).toBe("BUTTON");
+      fireEvent.click(cards()[0]);
+      expect(cards()[0]).toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("selects Over the video by default, with every option enabled", () => {
+      renderModal({ videos: shots });
+      openScreenshots();
+      fireEvent.click(cards()[1]);
+      expect(radio(OVER)).toBeChecked();
+      expect(
+        screen.getAllByRole("radio").every((input) => !(input as HTMLInputElement).disabled),
+      ).toBe(true);
+      expect(
+        screen.getByText("Floats at the playhead, 0:12.0. The video keeps playing."),
+      ).toBeInTheDocument();
+    });
+
+    it("Add with Over the video calls the floating callback once and leaves the modal open", () => {
       const props = renderModal({ videos: shots });
       openScreenshots();
       fireEvent.click(cards()[1]);
+      add();
       expect(props.onAddScreenshot).toHaveBeenCalledOnce();
       expect(props.onAddScreenshot).toHaveBeenCalledWith(
         expect.objectContaining({ assetId: "s2" }),
       );
+      expect(props.onAddScreenshotToSequence).not.toHaveBeenCalled();
       expect(props.onClose).not.toHaveBeenCalled();
       expect(props.onAddRecording).not.toHaveBeenCalled();
+    });
+
+    it("a sequence destination calls the sequence callback with that boundary", () => {
+      // playhead 12 is inside the second clip (10 to 30)
+      const props = renderModal({ videos: shots, playhead: 12 });
+      openScreenshots();
+      fireEvent.click(cards()[0]);
+      const expected: Array<[RegExp, { index: number; time: number }]> = [
+        [BEFORE, { index: 1, time: 10 }],
+        [AFTER, { index: 2, time: 30 }],
+        [START, { index: 0, time: 0 }],
+        [END, { index: 2, time: 30 }],
+      ];
+      for (const [label, boundary] of expected) {
+        fireEvent.click(radio(label));
+        add();
+        expect(props.onAddScreenshotToSequence).toHaveBeenLastCalledWith(
+          expect.objectContaining({ assetId: "s1" }),
+          boundary,
+        );
+      }
+      expect(props.onAddScreenshotToSequence).toHaveBeenCalledTimes(4);
+      expect(props.onAddScreenshot).not.toHaveBeenCalled();
+    });
+
+    it("remembers the destination per kind: a screenshot's choice does not move a recording's", () => {
+      const onRememberDestination = vi.fn();
+      renderModal({
+        videos: [...shots, video({ assetId: "r", title: "Take" })],
+        onRememberDestination,
+      });
+      openScreenshots();
+      fireEvent.click(cards()[0]);
+      fireEvent.click(radio(END));
+      add();
+      expect(onRememberDestination).toHaveBeenCalledWith("screenshot", "end");
+      // another screenshot starts at the same place
+      fireEvent.click(cards()[1]);
+      expect(radio(END)).toBeChecked();
+      // the recording still defaults to after the clip
+      fireEvent.click(screen.getByRole("tab", { name: /Recordings/ }));
+      expect(radio(AFTER)).toBeChecked();
+    });
+
+    it("starts at the remembered screenshot destination", () => {
+      renderModal({
+        videos: shots,
+        initialTab: "screenshots",
+        initialSelectedId: "s1",
+        rememberedDestinations: { screenshot: "before-clip" },
+      });
+      expect(radio(BEFORE)).toBeChecked();
+    });
+
+    it("opens on the tab and selection the Captures panel asks for", () => {
+      renderModal({
+        videos: [...shots, video({ assetId: "r", title: "Take" })],
+        initialTab: "screenshots",
+        initialSelectedId: "s2",
+      });
+      expect(screen.getByRole("tab", { name: /Screenshots/ })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(cards()[1]).toHaveAttribute("aria-pressed", "true");
+      expect(radio(OVER)).toBeChecked();
+    });
+
+    it("opens on Recordings with the first row selected when nothing is asked for", () => {
+      renderModal({ videos: [video({ assetId: "r", title: "Take" }), ...shots] });
+      expect(screen.getByRole("tab", { name: /Recordings/ })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(rows()[0]).toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("selects nothing when the asked-for id is not a listed screenshot", () => {
+      renderModal({ videos: shots, initialTab: "screenshots", initialSelectedId: "gone" });
+      expect(cards().every((card) => card.getAttribute("aria-pressed") === "false")).toBe(true);
+      expect(screen.queryByTestId("add-destination-chooser")).toBeNull();
     });
 
     it("searches its own field, by title, apart from the recordings search", () => {
@@ -444,6 +636,7 @@ describe("AddFromLibraryModal", () => {
           loaded={false}
           onAddRecording={vi.fn()}
           onAddScreenshot={vi.fn()}
+          onAddScreenshotToSequence={vi.fn()}
           onClose={vi.fn()}
         />,
       );
@@ -456,6 +649,7 @@ describe("AddFromLibraryModal", () => {
         playhead: 0,
         onAddRecording: vi.fn(),
         onAddScreenshot: vi.fn(),
+        onAddScreenshotToSequence: vi.fn(),
         onClose: vi.fn(),
       };
       rerender(<AddFromLibraryModal {...props} loaded />);
@@ -464,19 +658,6 @@ describe("AddFromLibraryModal", () => {
       expect(
         screen.getByText("Couldn't read the Library. It will try again when it changes."),
       ).toBeInTheDocument();
-    });
-
-    it("hints that it adds at the playhead, with the time", () => {
-      renderModal({ videos: shots, playhead: 169.4 });
-      openScreenshots();
-      expect(screen.getByText("2:49.4")).toBeInTheDocument();
-      expect(screen.getByText(/Adds at the playhead/)).toBeInTheDocument();
-      expect(screen.getByText("Click to add")).toBeInTheDocument();
-    });
-
-    it("the recordings tab shows no playhead footer", () => {
-      renderModal({ videos: [video({ assetId: "a" })] });
-      expect(screen.queryByText("Click to add")).toBeNull();
     });
   });
 
