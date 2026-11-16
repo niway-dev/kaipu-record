@@ -2924,7 +2924,7 @@
       },
       "checkFiles": {
         "title": "Revisar y reparar archivos",
-        "body": "Concilia tu biblioteca con su carpeta. Los nombres que no coinciden con un título se corrigen, y no se borra nada."
+        "body": "Kaipu compara tu biblioteca con su carpeta y luego renombra los archivos que no coinciden, agrega los nuevos a la biblioteca o los aparta. No se borra nada."
       }
     },
     "private": {

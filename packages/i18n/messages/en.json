@@ -2924,7 +2924,7 @@
       },
       "checkFiles": {
         "title": "Check and fix files",
-        "body": "Reconcile your library with its folder. Names that don’t match a title get fixed, and nothing is deleted."
+        "body": "Kaipu compares your library with its folder, then renames mismatched files, adds new ones to the library or sets them aside. Nothing is deleted."
       }
     },
     "private": {
