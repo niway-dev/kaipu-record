@@ -166,7 +166,9 @@ export async function fillWebcamGap<T>(opts: {
   for (const t of webcamFillTimes(from, opts.nextFrame, opts.segmentEnd, opts.fps)) {
     from = t;
     const due = opts.visible(t) ? await opts.frameAt(t) : null;
-    if (due === face && !opts.moving?.(t)) continue;
+    // A slide only needs fills where a bubble is drawn: without a webcam frame the screen
+    // is the same as the one before.
+    if (due === face && !(due !== null && opts.moving?.(t))) continue;
     if (await opts.emit(t, due, gapEnd - t)) face = due;
   }
   return { from, face };

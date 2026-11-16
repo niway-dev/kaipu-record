@@ -25,7 +25,7 @@ import {
   webcamSourceRect,
   webcamStateRect,
 } from "../webcam/webcam-layout";
-import { webcamStateAt, type WebcamScene } from "../webcam/webcam-model";
+import { webcamEndSeconds, webcamStateAt, type WebcamScene } from "../webcam/webcam-model";
 
 /** A decoded webcam frame and its size in pixels. */
 export interface WebcamImage {
@@ -87,14 +87,6 @@ export interface WebcamCtx {
     dw: number,
     dh: number,
   ): void;
-}
-
-/**
- * The recording's end as `webcamStateAt` takes it: a missing, zero or NaN length is no end
- * (`undefined` takes the function's default), the same rule the preview applies.
- */
-export function webcamEndSeconds(seconds: number | undefined): number | undefined {
-  return seconds && Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
 }
 
 /**

@@ -292,6 +292,24 @@ describe("fillWebcamGap", () => {
     expect(emitted).toHaveLength(14);
   });
 
+  it("does not re-compose a moving slide where no webcam frame exists (the screen is unchanged)", async () => {
+    const emitted: number[] = [];
+    await fillWebcamGap({
+      state: { from: 0, face: null },
+      nextFrame: 1,
+      segmentEnd: 10,
+      fps: 30,
+      visible: () => true,
+      moving: () => true,
+      frameAt: async () => null,
+      emit: async (t) => {
+        emitted.push(t);
+        return true;
+      },
+    });
+    expect(emitted).toEqual([]);
+  });
+
   it("emits nothing while the layer is hidden, except the one frame that removes the face", async () => {
     const emitted: Array<[number, unknown]> = [];
     await fillWebcamGap({

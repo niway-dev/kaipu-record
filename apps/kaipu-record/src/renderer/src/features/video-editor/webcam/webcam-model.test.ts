@@ -11,6 +11,7 @@ import {
   seedWebcamScene,
   webcamAt,
   webcamEffectiveTransitionMs,
+  webcamEndSeconds,
   webcamSizeLabel,
   webcamStateAt,
   type WebcamLayout,
@@ -456,5 +457,18 @@ describe("webcamStateAt", () => {
     expect(sliver.layout.position).toEqual(CENTER);
     expect(sliver.from?.position).toEqual(TOP_RIGHT);
     expect(sliver.progress).toBe(0);
+  });
+});
+
+describe("webcamEndSeconds", () => {
+  it("passes a usable recording length through", () => {
+    expect(webcamEndSeconds(20)).toBe(20);
+    expect(webcamEndSeconds(0.5)).toBe(0.5);
+  });
+
+  it("reads a missing, zero, negative, NaN or infinite length as no end", () => {
+    for (const v of [undefined, 0, -3, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(webcamEndSeconds(v)).toBeUndefined();
+    }
   });
 });

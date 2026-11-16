@@ -9,7 +9,7 @@ import type { VideoScene } from "../scene";
 import type { AudioEdits } from "../audio-edits";
 import type { Redaction } from "../privacy/redaction";
 import { isSourceRangeVisible } from "../source-time";
-import type { WebcamScene } from "../webcam/webcam-model";
+import { webcamEndSeconds, type WebcamScene } from "../webcam/webcam-model";
 import { DEFAULT_BACKGROUND, type VideoBackground } from "../background";
 
 export interface RenderClipSegment {
@@ -132,9 +132,8 @@ export function buildExportPlan(scene: VideoScene): ExportPlan {
  * recording's length is a fact of the source, not of the view.
  */
 export function withSourceDuration(plan: ExportPlan, seconds: number | undefined): ExportPlan {
-  return seconds && Number.isFinite(seconds) && seconds > 0
-    ? { ...plan, sourceDurationSeconds: seconds }
-    : plan;
+  const usable = webcamEndSeconds(seconds);
+  return usable === undefined ? plan : { ...plan, sourceDurationSeconds: usable };
 }
 
 /**

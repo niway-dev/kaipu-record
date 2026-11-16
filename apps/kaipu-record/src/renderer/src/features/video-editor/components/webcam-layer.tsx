@@ -30,7 +30,7 @@ import {
   webcamClipPath,
   webcamStateRect,
 } from "../webcam/webcam-layout";
-import { webcamStateAt, type WebcamScene } from "../webcam/webcam-model";
+import { webcamEndSeconds, webcamStateAt, type WebcamScene } from "../webcam/webcam-model";
 import {
   webcamHasFrameAt,
   webcamResyncTarget,
@@ -118,10 +118,7 @@ function useWebcamSync({
     // A faster or slower main video would otherwise drift past the resync threshold on
     // every frame and turn the face into a series of seeks.
     if (main && cam.playbackRate !== main.playbackRate) cam.playbackRate = main.playbackRate;
-    // An unknown end (a missing, zero or NaN duration) is no end: `undefined` takes the default.
-    const end =
-      endSeconds && Number.isFinite(endSeconds) && endSeconds > 0 ? endSeconds : undefined;
-    const state = hidden ? null : webcamStateAt({ webcam }, t, end);
+    const state = hidden ? null : webcamStateAt({ webcam }, t, webcamEndSeconds(endSeconds));
     const webcamTime = webcamTimeFor(t, startOffsetMs);
     const scale = cameraEnabled && path ? cameraAt(path, t).scale : 1;
     const rect =

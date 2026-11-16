@@ -315,6 +315,16 @@ function slideState(
 }
 
 /**
+ * The recording's end as {@link webcamStateAt} takes it: a missing, zero, negative, NaN or
+ * infinite length is no end (`undefined` takes the function's default). The preview, the
+ * export and the export plan all read the length through this one rule, so they cannot
+ * disagree about the last block's return.
+ */
+export function webcamEndSeconds(seconds: number | undefined): number | undefined {
+  return seconds && Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
+}
+
+/**
  * The bubble at SOURCE time `t`: {@link webcamAt}'s layout plus the slide in progress, if
  * any. A pure function of `t`, so scrubbing backwards shows what playing forwards did (ADR
  * 0039). Null when there is no webcam or a hidden segment covers `t`.

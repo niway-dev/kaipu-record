@@ -12,9 +12,9 @@
  *
  * WORKER-BUNDLE INVARIANT, like compose-frame.ts: pure and DOM-free; no mediabunny import.
  */
-import { webcamStateAt, type WebcamScene } from "../webcam/webcam-model";
+import { webcamEndSeconds, webcamStateAt, type WebcamScene } from "../webcam/webcam-model";
 import type { OutputComposer } from "./compose-output-frame";
-import { type WebcamImage, webcamEndSeconds } from "./compose-webcam";
+import type { WebcamImage } from "./compose-webcam";
 import type { RenderClipSegment } from "./export-plan";
 import type { FrameRateCap } from "./frame-rate-cap";
 import { rebaseVideoTimestamp } from "./rebase-timestamp";
