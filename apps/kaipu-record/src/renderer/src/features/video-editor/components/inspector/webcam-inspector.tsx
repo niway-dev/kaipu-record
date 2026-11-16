@@ -9,7 +9,7 @@
  * sliders run begin → live… → end. `target` is the source time the edit applies at: null
  * for the global layout, a time inside the segment for an override.
  */
-import { EyeOff, Trash2 } from "lucide-react";
+import { EyeOff, Move, Trash2 } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import {
   CAMERA_BUBBLE_SHAPES,
@@ -23,8 +23,12 @@ import { HistorySlider } from "../history-slider";
 import type { WebcamEditing } from "../../webcam/use-webcam-editing";
 import {
   WEBCAM_DEFAULTS,
+  WEBCAM_EASINGS,
   WEBCAM_LIMITS,
+  WEBCAM_TRANSITION_DEFAULTS,
+  WEBCAM_TRANSITION_LIMITS,
   webcamSizeLabel,
+  type WebcamEasing,
   type WebcamLayout,
   type WebcamSegment,
 } from "../../webcam/webcam-model";
@@ -67,6 +71,16 @@ const SHAPE_LABEL: Record<
   circle: "webcamShapeCircle",
   rounded: "webcamShapeRounded",
   rectangle: "webcamShapeRectangle",
+};
+
+const EASING_LABEL: Record<
+  WebcamEasing,
+  "webcamEasingEaseInOut" | "webcamEasingLinear" | "webcamEasingEaseOut" | "webcamEasingBack"
+> = {
+  "ease-in-out": "webcamEasingEaseInOut",
+  linear: "webcamEasingLinear",
+  "ease-out": "webcamEasingEaseOut",
+  back: "webcamEasingBack",
 };
 
 /** The highest shrink the slider offers while the toggle is on; 1 means "off". */
@@ -195,17 +209,96 @@ function WebcamControls({
   );
 }
 
-/** The global layout: what the webcam looks like everywhere no segment says otherwise. */
+/**
+ * How a selected block's start plays (the camera-sections design): Slide or Cut, and for a
+ * Slide its duration and easing. A block with no transition is a Cut, so a session saved
+ * before transitions existed reads as what it always did. Duration and easing stay stored
+ * while the block is a Cut, but are only offered for a Slide.
+ */
+function WebcamTransitionControls({
+  segment,
+  edits,
+}: {
+  segment: WebcamSegment;
+  edits: WebcamEditing;
+}): React.JSX.Element {
+  const t = useTranslations("videoEditor");
+  const kind = segment.transition?.kind ?? "cut";
+  const ms = segment.transition?.ms ?? WEBCAM_TRANSITION_DEFAULTS.ms;
+  const easing = segment.transition?.easing ?? WEBCAM_TRANSITION_DEFAULTS.easing;
+  const kinds = [
+    { kind: "slide", label: t("webcamTransitionSlide") },
+    { kind: "cut", label: t("webcamTransitionCut") },
+  ] as const;
+  return (
+    <>
+      <p className={styles.sectionLabel}>{t("webcamTransition")}</p>
+      <div className={styles.segmented} role="group" aria-label={t("webcamTransition")}>
+        {kinds.map((option) => (
+          <button
+            key={option.kind}
+            type="button"
+            aria-pressed={kind === option.kind}
+            className={kind === option.kind ? styles.segmentActive : styles.segment}
+            onClick={() => edits.commitTransition(segment.id, { kind: option.kind })}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      {kind === "slide" && (
+        <>
+          <HistorySlider
+            label={t("webcamTransitionDuration")}
+            value={ms}
+            min={WEBCAM_TRANSITION_LIMITS.minMs}
+            max={WEBCAM_TRANSITION_LIMITS.maxMs}
+            step={50}
+            format={(v) => `${v} ms`}
+            onBegin={edits.begin}
+            onLive={(value) => edits.liveTransition(segment.id, { ms: value })}
+            onEnd={edits.end}
+            onCommit={(value) => edits.commitTransition(segment.id, { ms: value })}
+          />
+          <p className={styles.sectionLabel}>{t("webcamEasing")}</p>
+          <div className={styles.segmented} role="group" aria-label={t("webcamEasing")}>
+            {WEBCAM_EASINGS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                aria-pressed={easing === preset}
+                className={easing === preset ? styles.segmentActive : styles.segment}
+                onClick={() => edits.commitTransition(segment.id, { easing: preset })}
+              >
+                {t(EASING_LABEL[preset])}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * The global layout: what the webcam looks like everywhere no segment says otherwise.
+ * `changeBlocked` is the reason, already translated, that "Change camera from here" does
+ * nothing at the playhead; null when it can.
+ */
 export function WebcamInspector({
   layout,
   edits,
   frame,
   onHideHere,
+  onChangeHere,
+  changeBlocked,
 }: {
   layout: WebcamLayout;
   edits: WebcamEditing;
   frame: FrameSize;
   onHideHere(): void;
+  onChangeHere(): void;
+  changeBlocked: string | null;
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
   return (
@@ -213,7 +306,20 @@ export function WebcamInspector({
       <header className={styles.header}>
         <h2 className={styles.title}>{t("webcamTitle")}</h2>
       </header>
+      <p className={styles.range} data-webcam-scope="default">
+        {t("webcamScopeDefault")}
+      </p>
       <WebcamControls layout={layout} target={null} edits={edits} frame={frame} />
+      <button
+        type="button"
+        className={styles.secondaryButton}
+        disabled={changeBlocked !== null}
+        title={changeBlocked ?? t("hintChangeCamera")}
+        onClick={onChangeHere}
+      >
+        <Move size={14} />
+        {t("webcamChangeHere")}
+      </button>
       <button type="button" className={styles.secondaryButton} onClick={onHideHere}>
         <EyeOff size={14} />
         {t("webcamHideHere")}
@@ -251,12 +357,15 @@ export function WebcamSegmentInspector({
         <h2 className={styles.title}>{t("webcamSegmentTitle", { n: index })}</h2>
         <span className={styles.badge}>{hidden ? t("webcamHidden") : t("webcamOverride")}</span>
       </header>
-      <p className={styles.range}>
+      <p className={styles.range} data-webcam-scope="block">
         {formatPrecise(range.from)} → {formatPrecise(range.to)}
       </p>
       <p className={styles.note}>{hidden ? t("webcamHiddenNote") : t("webcamOverrideNote")}</p>
       {!hidden && (
-        <WebcamControls layout={layout} target={segment.start} edits={edits} frame={frame} />
+        <>
+          <WebcamControls layout={layout} target={segment.start} edits={edits} frame={frame} />
+          <WebcamTransitionControls segment={segment} edits={edits} />
+        </>
       )}
       <button
         type="button"

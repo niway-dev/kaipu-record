@@ -112,6 +112,11 @@
   cursor: pointer;
 }
 
+.secondaryButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .segmentActive {
   border-color: var(--accent-primary);
   background: var(--accent-primary);

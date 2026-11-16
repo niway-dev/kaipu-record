@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { WebcamEditing } from "../../webcam/use-webcam-editing";
-import { WEBCAM_DEFAULTS, type WebcamLayout } from "../../webcam/webcam-model";
+import { WEBCAM_DEFAULTS, type WebcamLayout, type WebcamSegment } from "../../webcam/webcam-model";
 import { webcamRect } from "../../webcam/webcam-layout";
 import { WebcamInspector, WebcamSegmentInspector } from "./webcam-inspector";
 
@@ -29,9 +29,24 @@ function makeEdits(): WebcamEditing {
   };
 }
 
-function renderGlobal(l = layout(), edits = makeEdits(), onHideHere = vi.fn()) {
-  render(<WebcamInspector layout={l} edits={edits} frame={FRAME} onHideHere={onHideHere} />);
-  return { edits, onHideHere };
+function renderGlobal(
+  l = layout(),
+  edits = makeEdits(),
+  onHideHere = vi.fn(),
+  changeBlocked: string | null = null,
+) {
+  const onChangeHere = vi.fn();
+  render(
+    <WebcamInspector
+      layout={l}
+      edits={edits}
+      frame={FRAME}
+      onHideHere={onHideHere}
+      onChangeHere={onChangeHere}
+      changeBlocked={changeBlocked}
+    />,
+  );
+  return { edits, onHideHere, onChangeHere };
 }
 
 describe("WebcamInspector", () => {
@@ -106,7 +121,14 @@ describe("WebcamInspector", () => {
   it("shrink during zoom: off is 1, on restores 0.7 and shows its slider", () => {
     const edits = makeEdits();
     const { unmount } = render(
-      <WebcamInspector layout={layout()} edits={edits} frame={FRAME} onHideHere={vi.fn()} />,
+      <WebcamInspector
+        layout={layout()}
+        edits={edits}
+        frame={FRAME}
+        onHideHere={vi.fn()}
+        onChangeHere={vi.fn()}
+        changeBlocked={null}
+      />,
     );
     expect(screen.getByRole("slider", { name: "Size during zoom" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("checkbox", { name: "Shrink during zoom" }));
@@ -122,6 +144,28 @@ describe("WebcamInspector", () => {
     const { onHideHere } = renderGlobal();
     fireEvent.click(screen.getByRole("button", { name: "Hide webcam here" }));
     expect(onHideHere).toHaveBeenCalledOnce();
+  });
+
+  it("names the scope: the default camera, with no transition controls", () => {
+    renderGlobal();
+    expect(screen.getByText("Default camera")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Transition" })).toBeNull();
+    expect(screen.queryByRole("slider", { name: "Duration" })).toBeNull();
+  });
+
+  it("changes the camera from the playhead", () => {
+    const { onChangeHere } = renderGlobal();
+    fireEvent.click(screen.getByRole("button", { name: "Change camera from here" }));
+    expect(onChangeHere).toHaveBeenCalledOnce();
+  });
+
+  it("disables Change camera from here and says why when it cannot apply", () => {
+    const { onChangeHere } = renderGlobal(layout(), makeEdits(), vi.fn(), "No room left.");
+    const button = screen.getByRole("button", { name: "Change camera from here" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", "No room left.");
+    fireEvent.click(button);
+    expect(onChangeHere).not.toHaveBeenCalled();
   });
 });
 
@@ -163,5 +207,98 @@ describe("WebcamSegmentInspector", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Circle" }));
     expect(edits.commitLayout).toHaveBeenCalledWith({ shape: "circle" }, 4);
+  });
+
+  describe("a block's transition", () => {
+    const block = (transition?: WebcamSegment["transition"]): WebcamSegment => ({
+      id: "o",
+      start: 4,
+      end: 8,
+      mode: "override",
+      layout: { position: { x: 0.8, y: 0.2 } },
+      transition,
+    });
+    function renderBlock(segment: WebcamSegment, edits = makeEdits()) {
+      render(
+        <WebcamSegmentInspector
+          segment={segment}
+          index={1}
+          range={{ from: 4, to: 8 }}
+          layout={layout()}
+          edits={edits}
+          frame={FRAME}
+          onRemoved={vi.fn()}
+        />,
+      );
+      return edits;
+    }
+
+    it("names the scope as the block's time range", () => {
+      renderBlock(block());
+      expect(screen.getByText(/0:04.*→.*0:08/)).toBeInTheDocument();
+      expect(screen.queryByText("Default camera")).toBeNull();
+    });
+
+    it("shows a block with no transition as a Cut, without duration or easing", () => {
+      renderBlock(block());
+      expect(screen.getByRole("button", { name: "Cut" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Slide" })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+      expect(screen.queryByRole("slider", { name: "Duration" })).toBeNull();
+      expect(screen.queryByRole("group", { name: "Motion" })).toBeNull();
+    });
+
+    it("switches to Slide and to Cut on the block", () => {
+      const edits = renderBlock(block());
+      fireEvent.click(screen.getByRole("button", { name: "Slide" }));
+      expect(edits.commitTransition).toHaveBeenCalledWith("o", { kind: "slide" });
+      fireEvent.click(screen.getByRole("button", { name: "Cut" }));
+      expect(edits.commitTransition).toHaveBeenLastCalledWith("o", { kind: "cut" });
+    });
+
+    it("a Slide offers a 100 to 2000 ms duration, one undo step per drag", () => {
+      const edits = renderBlock(block({ kind: "slide", ms: 700, easing: "back" }));
+      const slider = screen.getByRole("slider", { name: "Duration" });
+      expect(slider.getAttribute("min")).toBe("100");
+      expect(slider.getAttribute("max")).toBe("2000");
+      expect(screen.getByText("700 ms")).toBeInTheDocument();
+      fireEvent.change(slider, { target: { value: "900" } });
+      expect(edits.commitTransition).toHaveBeenCalledWith("o", { ms: 900 });
+      fireEvent.pointerDown(slider);
+      fireEvent.change(slider, { target: { value: "1200" } });
+      fireEvent.pointerUp(slider);
+      expect(edits.begin).toHaveBeenCalledOnce();
+      expect(edits.liveTransition).toHaveBeenCalledWith("o", { ms: 1200 });
+      expect(edits.end).toHaveBeenCalledOnce();
+    });
+
+    it("offers the four easing presets and marks the one in use", () => {
+      const edits = renderBlock(block({ kind: "slide", ms: 700, easing: "back" }));
+      const group = screen.getByRole("group", { name: "Motion" });
+      expect(group.querySelectorAll("button")).toHaveLength(4);
+      expect(screen.getByRole("button", { name: "Bounce" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Linear" }));
+      expect(edits.commitTransition).toHaveBeenCalledWith("o", { easing: "linear" });
+      fireEvent.click(screen.getByRole("button", { name: "Smooth" }));
+      expect(edits.commitTransition).toHaveBeenLastCalledWith("o", { easing: "ease-in-out" });
+      fireEvent.click(screen.getByRole("button", { name: "Ease out" }));
+      expect(edits.commitTransition).toHaveBeenLastCalledWith("o", { easing: "ease-out" });
+    });
+
+    it("a Cut that keeps a duration and easing still hides their controls", () => {
+      renderBlock(block({ kind: "cut", ms: 900, easing: "linear" }));
+      expect(screen.getByRole("button", { name: "Cut" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.queryByRole("slider", { name: "Duration" })).toBeNull();
+    });
+
+    it("a hidden block has no transition controls", () => {
+      renderBlock({ id: "h", start: 4, end: 8, mode: "hidden" });
+      expect(screen.queryByRole("group", { name: "Transition" })).toBeNull();
+    });
   });
 });
