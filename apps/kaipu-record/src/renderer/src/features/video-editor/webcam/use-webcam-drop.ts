@@ -51,16 +51,28 @@ export interface WebcamDrop {
   close(): void;
 }
 
-/** The bubble's centre and box at `t` in frame pixels, as the preview draws it. */
+/**
+ * Where the card's route starts, in frame pixels: the bubble's centre and box as "Only for this
+ * part" will begin its slide. That is NOT always where the bubble is drawn at `t`: a drop
+ * during the return slide of the part before finds the bubble halfway back, but a new part
+ * that does not touch it slides from the whole-video position. So the origin is read from the
+ * scene the answer would commit, at its first instant, and from the drawn bubble only when no
+ * part fits here.
+ */
 function bubbleAt(
   scene: VideoScene,
   t: number,
+  position: Point,
   frame: FrameSize,
   scale: number,
   endSeconds: number | undefined,
 ): { now: Point; box: { width: number; height: number } } | null {
-  const state = webcamStateAt(scene, t, webcamEndSeconds(endSeconds));
-  const rect = state && webcamStateRect(state, frame, scale);
+  const end = webcamEndSeconds(endSeconds);
+  const created = end === undefined ? null : createWebcamPart(scene, { at: t, position }, end);
+  const hypothetical = created?.id ? created.scene : scene;
+  const state = webcamStateAt(hypothetical, t, end);
+  const rect =
+    state && webcamStateRect(created?.id ? { ...state, progress: 0 } : state, frame, scale);
   if (!rect) return null;
   return {
     now: { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 },
@@ -137,7 +149,14 @@ export function useWebcamDrop({
         select("webcam", part.id);
         return;
       }
-      const where = bubbleAt(scene, sourceTime, frame, cameraScaleAt(sourceTime), sourceDuration);
+      const where = bubbleAt(
+        scene,
+        sourceTime,
+        position,
+        frame,
+        cameraScaleAt(sourceTime),
+        sourceDuration,
+      );
       if (!where) return;
       setCard({
         position,

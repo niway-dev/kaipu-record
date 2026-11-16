@@ -3,7 +3,11 @@
  * page's two rules are pinned by tests instead of living inline in JSX.
  */
 import { WEBCAM_LAYER_SELECTION } from "../editor-selection";
-import { sourceTimeAtTimeline, timelineTimeAtSource } from "../source-time";
+import {
+  sourceRangeToTimelineBlocks,
+  sourceTimeAtTimeline,
+  timelineTimeAtSource,
+} from "../source-time";
 import type { LayoutEntry } from "../timeline";
 import { seekTargetForSegment } from "../zoom/select-seek";
 import { webcamOverrideAt, type WebcamScene, type WebcamSegment } from "./webcam-model";
@@ -51,8 +55,9 @@ const PAST_SLIDE_SECONDS = 0.1;
  * Camera lane. A part: just past its slide, so the preview shows the bubble settled in the
  * part's place; it stays put when it already sits in the part past the slide, so a frame the
  * user scrubbed to is not thrown away. A hidden range: the zoom lane's rule, the middle of its
- * first visible piece unless the playhead is already inside it; the same when the moment
- * past a part's slide was cut out. Null when the stretch is cut away entirely or no move is
+ * first visible piece unless the playhead is already inside it. When the moment past a part's
+ * slide was cut out, the first footage of the part that survives past the slide; a part with
+ * none left falls back to the hidden range's rule. Null when the stretch is cut away entirely or no move is
  * needed.
  */
 export function webcamSelectSeekTarget(
@@ -65,10 +70,13 @@ export function webcamSelectSeekTarget(
   const settled = Math.min(segment.start + slide + PAST_SLIDE_SECONDS, segment.end - 0.01);
   const now = sourceTimeAtTimeline(layout, timelineTime);
   if (now !== null && now >= settled && now < segment.end) return null;
-  // Past the slide is cut out of the timeline: fall back to the zoom lane's rule.
-  return (
-    timelineTimeAtSource(layout, settled) ?? seekTargetForSegment(layout, timelineTime, segment)
-  );
+  const settledAt = timelineTimeAtSource(layout, settled);
+  if (settledAt !== null) return settledAt;
+  // Just past the slide is cut out: the first footage of the part that survives, still past
+  // the slide, shows the bubble settled. Only a part with none left falls back to the zoom
+  // lane's rule (the middle of its first visible piece).
+  const [firstSettled] = sourceRangeToTimelineBlocks(layout, settled, segment.end);
+  return firstSettled?.timelineStart ?? seekTargetForSegment(layout, timelineTime, segment);
 }
 
 /** "Play the slide" starts this far (seconds) before the part, so the bubble is seen waiting. */

@@ -60,8 +60,6 @@ export function WebcamDropCard({
           ? previous
           : { w: rect.width, h: rect.height },
       );
-      const height = cardRef.current?.offsetHeight ?? 0;
-      if (height > 0) setCardHeight(height);
     };
     measure();
     const observer = new ResizeObserver(measure);

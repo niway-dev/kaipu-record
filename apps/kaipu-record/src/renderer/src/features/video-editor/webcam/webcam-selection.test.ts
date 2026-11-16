@@ -115,11 +115,19 @@ describe("webcamSelectSeekTarget", () => {
     expect(target).toBeGreaterThan(7);
   });
 
-  it("falls back to the stretch that is left when the moment past the slide is cut out", () => {
-    // The part starts at source 4.9: 4.9 + slide + 0.1 = 5.7 is in the cut-out gap. Its first
-    // visible block is source 4.9-5 (timeline 4.9-5), and the fallback is that block's middle.
+  it("goes to the first footage of the part that survives when the moment past the slide is cut out", () => {
+    // The part is source 4.9-12: 4.9 + slide + 0.1 = 5.7 is in the cut-out gap, but source 10-12
+    // survives (timeline 5-7) and shows the bubble settled, so the playhead goes to its start.
     const cutOut = { ...part, start: 4.9, end: 12 };
-    expect(webcamSelectSeekTarget(layout, 10, cutOut)).toBeCloseTo(4.95, 6);
+    expect(webcamSelectSeekTarget(layout, 10, cutOut)).toBeCloseTo(5, 6);
+    // From inside the slide too: the old rule did nothing there or picked the middle of 4.9-5.
+    expect(webcamSelectSeekTarget(layout, 4.95, cutOut)).toBeCloseTo(5, 6);
+  });
+
+  it("falls back to the stretch that is left when nothing past the slide survives", () => {
+    // The part is source 4.9-5.5 and only 4.9-5 is on the timeline: its middle is 4.95.
+    const short = { ...part, start: 4.9, end: 5.5 };
+    expect(webcamSelectSeekTarget(layout, 10, short)).toBeCloseTo(4.95, 6);
   });
 
   it("moves into a hidden range like the zoom lane does: to the middle of its first piece", () => {

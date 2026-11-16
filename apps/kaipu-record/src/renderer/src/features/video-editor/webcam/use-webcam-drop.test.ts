@@ -71,6 +71,17 @@ describe("useWebcamDrop — a drop outside every part", () => {
     expect(t.select).not.toHaveBeenCalled();
   });
 
+  it("starts the card's route where the new part will slide from, not where the bubble is drawn", () => {
+    // A part over [10, 20) ends with a return slide. A drop at 20.2 s is not touching it, so the
+    // new part slides from the whole-video position even though the bubble is drawn mid-return.
+    const t = setup();
+    t.addPart(10, { x: 0.2, y: 0.8 });
+    act(() => t.result.current.drop.drop(DROP, 20.2));
+    const card = t.result.current.drop.card!;
+    expect(card.now.x).toBeCloseTo(WEBCAM_DEFAULTS.position.x * FRAME.width, 3);
+    expect(card.now.y).toBeCloseTo(WEBCAM_DEFAULTS.position.y * FRAME.height, 3);
+  });
+
   it("gives the real room, and none when under a second is left", () => {
     const t = setup();
     t.addPart(30, { x: 0.2, y: 0.2 });
