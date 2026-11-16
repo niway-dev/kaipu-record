@@ -21,7 +21,7 @@ export interface AddDestinationChooserProps {
 
 /**
  * The one place an Add from Library item is sent (NIW2-829): a radio list of every destination
- * and one Add button. "Over the video" keeps the recording playing; the four sequence places
+ * and one Add button. "Over the video" leaves the sequence as it is; the four sequence places
  * push what comes after. A radio group, so the arrow keys move the choice and Tab leaves it.
  */
 export function AddDestinationChooser({

@@ -1505,7 +1505,7 @@
     "addFromLibraryAdd": "Agregar",
     "addFromLibraryDestinationLegend": "Dónde agregarlo",
     "addFromLibraryDestOver": "Sobre el video",
-    "addFromLibraryDestOverHint": "Flota en el cabezal, {time}. El video sigue reproduciéndose.",
+    "addFromLibraryDestOverHint": "Flota en el cabezal, {time}. Los clips no se mueven.",
     "addFromLibraryDestOverLater": "Los videos flotantes llegarán más adelante.",
     "addFromLibraryDestSequence": "En la secuencia",
     "addFromLibraryDestSequenceHint": "Desplaza hacia adelante todo lo que viene después.",

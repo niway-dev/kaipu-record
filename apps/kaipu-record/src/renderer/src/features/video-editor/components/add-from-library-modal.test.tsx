@@ -533,7 +533,7 @@ describe("AddFromLibraryModal", () => {
         screen.getAllByRole("radio").every((input) => !(input as HTMLInputElement).disabled),
       ).toBe(true);
       expect(
-        screen.getByText("Floats at the playhead, 0:12.0. The video keeps playing."),
+        screen.getByText("Floats at the playhead, 0:12.0. The clips do not move."),
       ).toBeInTheDocument();
     });
 
