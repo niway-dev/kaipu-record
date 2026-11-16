@@ -227,6 +227,81 @@ describe("LibraryVault", () => {
       expect((await vault.describe("rec"))?.webcam ?? null).toBeNull();
     });
 
+    describe("thumbnail with the bubble (NIW2-845)", () => {
+      const jpg = (): Buffer => Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+      const writeScreenThumb = async (id: string): Promise<void> => {
+        await mkdir(join(directory, ".kaipu"), { recursive: true });
+        await writeFile(vault.thumbnailPath(id), Buffer.from([0xff, 0xd8, 0xff]));
+      };
+
+      it("describe says a webcam recording's thumbnail still needs the bubble", async () => {
+        await writeRecording("rec");
+        await writeSidecar("rec", { webcam: webcamMeta });
+        await writeWebcamFile("rec");
+        await writeScreenThumb("rec");
+        expect((await vault.describe("rec"))?.thumbnailNeedsWebcam).toBe(true);
+      });
+
+      it("describe does not ask for it on a plain recording, or when the webcam file is gone", async () => {
+        await writeRecording("plain");
+        await writeSidecar("plain", {});
+        await writeScreenThumb("plain");
+        expect((await vault.describe("plain"))?.thumbnailNeedsWebcam ?? false).toBe(false);
+
+        await writeRecording("gone");
+        await writeSidecar("gone", { webcam: webcamMeta });
+        await writeScreenThumb("gone");
+        expect((await vault.describe("gone"))?.thumbnailNeedsWebcam ?? false).toBe(false);
+      });
+
+      it("writeWebcamThumbnail replaces the jpg and sets the marker in one step", async () => {
+        await writeRecording("rec");
+        await writeSidecar("rec", { assetId: "asset-rec", title: "Keep", webcam: webcamMeta });
+        await writeWebcamFile("rec");
+        await writeScreenThumb("rec");
+
+        const updated = await vault.writeWebcamThumbnail("rec", jpg());
+
+        expect(updated?.thumbnailNeedsWebcam).toBe(false);
+        expect((await readFile(vault.thumbnailPath("rec"))).equals(jpg())).toBe(true);
+        const sidecar = JSON.parse(await readFile(vault.sidecarPath("rec"), "utf-8"));
+        expect(sidecar.thumbnailWebcam).toBe(1);
+        expect(sidecar).toMatchObject({ assetId: "asset-rec", title: "Keep" });
+        expect((await vault.describe("rec"))?.thumbnailNeedsWebcam).toBe(false);
+      });
+
+      it("a later plain thumbnail write clears the marker, so the bubble is asked for again", async () => {
+        await writeRecording("rec");
+        await writeSidecar("rec", { webcam: webcamMeta });
+        await writeWebcamFile("rec");
+        await vault.writeWebcamThumbnail("rec", jpg());
+        expect((await vault.describe("rec"))?.thumbnailNeedsWebcam).toBe(false);
+
+        await vault.writeThumbnail("rec", Buffer.from([0xff, 0xd8, 0xff]));
+
+        expect((await vault.describe("rec"))?.thumbnailNeedsWebcam).toBe(true);
+      });
+
+      it("the thumbnail URL carries the jpg's mtime, so a rewritten jpg is not served from cache", async () => {
+        await writeRecording("rec");
+        await writeSidecar("rec", { webcam: webcamMeta });
+        await writeWebcamFile("rec");
+        await writeScreenThumb("rec");
+        const url = (await vault.describe("rec"))?.thumbnailUrl ?? "";
+        expect(url).toMatch(/^kaipu-media:\/\/thumb\/rec\?v=\d+$/);
+        expect(parseMediaUrl(url)).toMatchObject({ kind: "thumb", id: "rec" });
+      });
+
+      it("refuses a recording without a webcam track and leaves its thumbnail alone", async () => {
+        await writeRecording("plain");
+        await writeSidecar("plain", {});
+        await writeScreenThumb("plain");
+        const before = await readFile(vault.thumbnailPath("plain"));
+        await expect(vault.writeWebcamThumbnail("plain", jpg())).resolves.toBeNull();
+        expect((await readFile(vault.thumbnailPath("plain"))).equals(before)).toBe(true);
+      });
+    });
+
     it("rename moves the webcam file with the item, still paired (ADR 0035)", async () => {
       await writeRecording("rec");
       await writeSidecar("rec", { assetId: "asset-rec", webcam: webcamMeta });
