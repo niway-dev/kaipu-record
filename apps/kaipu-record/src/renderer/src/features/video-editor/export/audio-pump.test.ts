@@ -162,12 +162,15 @@ async function allAtOnce(options?: { downmix?: boolean }) {
 /** The new order: audio asked for ahead of every video frame, the rest drained at the end. */
 async function interleaved(options?: { downmix?: boolean }) {
   const r = run(options);
-  const videoAdds: { t: number; cursor: number; done: boolean }[] = [];
+  // `last`: the duration of the last audio sample added before this frame, the most the
+  // pump can overshoot the lead by (it stops at the first sample that reaches it).
+  const videoAdds: { t: number; cursor: number; done: boolean; last: number }[] = [];
   const frames = Math.floor(r.totalDuration * FPS);
   for (let i = 0; i < frames; i++) {
     const t = i / FPS;
     await r.pump.advanceTo(t + AUDIO_LEAD_SECONDS);
-    videoAdds.push({ t, cursor: r.pump.cursor, done: r.pump.done });
+    const last = r.samples.at(-1)?.duration ?? 0;
+    videoAdds.push({ t, cursor: r.pump.cursor, done: r.pump.done, last });
     r.log.push("video");
   }
   await r.pump.drain();
@@ -259,20 +262,25 @@ describe("createAudioPump: the samples the pre-refactor audio pass produced", ()
 
 describe("createAudioPump: interleaving", () => {
   it("has the audio reach each video frame, and no further than the lead plus one sample", async () => {
-    const { videoAdds, samples } = await interleaved();
-    const widest = Math.max(...samples.map((s) => s.duration));
+    const { videoAdds } = await interleaved();
     expect(videoAdds.length).toBeGreaterThan(200);
+    // Most frames fall in decoded clips, whose blocks are 1024 frames (~21 ms), so the bound
+    // below pins the lead there; only silence pieces (1 s) allow a wider overshoot.
+    expect(videoAdds.filter((a) => a.last < 0.05).length).toBeGreaterThan(videoAdds.length / 2);
     for (const add of videoAdds) {
       // The audio already added covers this frame, unless the audio timeline had ended.
       if (!add.done) expect(add.cursor).toBeGreaterThanOrEqual(add.t);
       // And it never ran further ahead than the lead allows.
-      expect(add.cursor).toBeLessThanOrEqual(add.t + AUDIO_LEAD_SECONDS + widest + 1e-9);
+      expect(add.cursor).toBeLessThanOrEqual(add.t + AUDIO_LEAD_SECONDS + add.last + 1e-9);
     }
   });
 
   it("does not produce the audio ahead of the video (the first frame sees about one second)", async () => {
     const { videoAdds, totalDuration } = await interleaved();
-    expect(videoAdds[0]!.cursor).toBeLessThan(AUDIO_LEAD_SECONDS + 1.01);
+    expect(videoAdds[0]!.cursor).toBeGreaterThanOrEqual(AUDIO_LEAD_SECONDS);
+    expect(videoAdds[0]!.cursor).toBeLessThanOrEqual(
+      AUDIO_LEAD_SECONDS + videoAdds[0]!.last + 1e-9,
+    );
     expect(videoAdds[0]!.cursor).toBeLessThan(totalDuration / 2);
   });
 
@@ -387,7 +395,9 @@ describe("createInterleavedFeed: the order the muxer is fed in", () => {
 
 describe("export-worker.ts goes through the interleaved feed", () => {
   // The worker needs WebCodecs and cannot run here. The order itself is tested above; this only
-  // pins that the worker never reaches the video source except through the feed.
+  // pins that the worker never reaches the video source except through the feed. The comment
+  // stripper is a plain regex: a string literal holding `//` or `/*` would be cut too, so keep
+  // such literals out of the worker or make these checks parse it.
   const worker = readFileSync(resolve(__dirname, "export-worker.ts"), "utf8").replace(
     /\/\/.*$|\/\*[\s\S]*?\*\//gm,
     "",
