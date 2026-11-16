@@ -456,13 +456,14 @@
   flex: none;
   /* Three cards across at the design's 470 px; fewer on a narrow window. */
   width: min(470px, 45%);
-  /* Beside the Add column the grid has room for two or three cards, by width. */
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  /* Three cards across at 470 px (the design's 8 px gaps and 12 px padding); two once the
+     window narrows the column below that. */
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   align-content: start;
-  gap: 14px 12px;
+  gap: 8px;
   min-height: 0;
   margin: 0;
-  padding: 14px 16px 8px;
+  padding: 12px;
   overflow-y: auto;
   list-style: none;
 }
