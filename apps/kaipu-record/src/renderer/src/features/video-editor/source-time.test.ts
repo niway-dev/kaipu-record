@@ -67,32 +67,91 @@ describe("timelineTimeAtSource", () => {
   });
 });
 
+const WHOLE = { start: 0, end: 30 };
+
 describe("dragRangeEdge", () => {
   const ranges = [
     { id: "x", start: 2, end: 5 },
     { id: "y", start: 8, end: 12 },
   ];
   it("stops at the neighbour", () => {
-    expect(dragRangeEdge(ranges, "y", "start", 3, 30, 1)).toEqual({ start: 5, end: 12 });
-    expect(dragRangeEdge(ranges, "x", "end", 10, 30, 1)).toEqual({ start: 2, end: 8 });
+    expect(dragRangeEdge(ranges, "y", "start", 3, WHOLE, 1)).toEqual({ start: 5, end: 12 });
+    expect(dragRangeEdge(ranges, "x", "end", 10, WHOLE, 1)).toEqual({ start: 2, end: 8 });
   });
   it("keeps the minimum length", () => {
-    expect(dragRangeEdge(ranges, "x", "start", 4.9, 30, 1)).toEqual({ start: 4, end: 5 });
-    expect(dragRangeEdge(ranges, "y", "end", 8.2, 30, 1)).toEqual({ start: 8, end: 9 });
+    expect(dragRangeEdge(ranges, "x", "start", 4.9, WHOLE, 1)).toEqual({ start: 4, end: 5 });
+    expect(dragRangeEdge(ranges, "y", "end", 8.2, WHOLE, 1)).toEqual({ start: 8, end: 9 });
   });
   it("stays inside the source", () => {
-    expect(dragRangeEdge(ranges, "x", "start", -3, 30, 1)).toEqual({ start: 0, end: 5 });
-    expect(dragRangeEdge(ranges, "y", "end", 99, 30, 1)).toEqual({ start: 8, end: 30 });
+    expect(dragRangeEdge(ranges, "x", "start", -3, WHOLE, 1)).toEqual({ start: 0, end: 5 });
+    expect(dragRangeEdge(ranges, "y", "end", 99, WHOLE, 1)).toEqual({ start: 8, end: 30 });
+  });
+  it("stays inside a joined recording's range, not [0, duration] (ADR 0058)", () => {
+    const joined = [{ id: "b", start: 3610, end: 3615 }];
+    const rangeB = { start: 3600, end: 3630 };
+    expect(dragRangeEdge(joined, "b", "end", 99999, rangeB, 1)).toEqual({ start: 3610, end: 3630 });
+    expect(dragRangeEdge(joined, "b", "start", 10, rangeB, 1)).toEqual({ start: 3600, end: 3615 });
+    // The old duration clamp would have pinned the end at 30 and crushed the span.
+    expect(dragRangeEdge(joined, "b", "end", 3620, rangeB, 1)).toEqual({ start: 3610, end: 3620 });
+  });
+  it("does not let a span in A grow into B's range", () => {
+    expect(dragRangeEdge(ranges, "x", "end", 3700, WHOLE, 1)).toEqual({ start: 2, end: 8 });
+    expect(dragRangeEdge([{ id: "x", start: 2, end: 5 }], "x", "end", 3700, WHOLE, 1)).toEqual({
+      start: 2,
+      end: 30,
+    });
   });
 });
 
 describe("freeWindowAt", () => {
   const ranges = [{ id: "x", start: 5, end: 8 }];
   it("fits before the next range", () => {
-    expect(freeWindowAt(ranges, 3, 3, 30, 1)).toEqual({ start: 3, end: 5 });
+    expect(freeWindowAt(ranges, 3, 3, WHOLE, 1)).toEqual({ start: 3, end: 5 });
   });
   it("refuses inside a range or when less than the minimum fits", () => {
-    expect(freeWindowAt(ranges, 6, 3, 30, 1)).toBeNull();
-    expect(freeWindowAt(ranges, 4.5, 3, 30, 1)).toBeNull();
+    expect(freeWindowAt(ranges, 6, 3, WHOLE, 1)).toBeNull();
+    expect(freeWindowAt(ranges, 4.5, 3, WHOLE, 1)).toBeNull();
+  });
+  it("is clipped to the range of the joined recording it starts in (ADR 0058)", () => {
+    const rangeB = { start: 3600, end: 3630 };
+    expect(freeWindowAt([], 3620, 3, rangeB, 1)).toEqual({ start: 3620, end: 3623 });
+    expect(freeWindowAt([], 3628.5, 3, rangeB, 1)).toEqual({ start: 3628.5, end: 3630 });
+    expect(freeWindowAt([], 3629.9, 3, rangeB, 1)).toBeNull();
+  });
+});
+
+describe("per-recording lookups on one source axis (ADR 0058)", () => {
+  // Opened recording A is [0, 100]; joined B is [3600, 3620]. Sequence: A 0–10, B 3605–3615,
+  // A 10–20, so on the timeline A1 is 0–10, B 10–20, A2 20–30.
+  const joined = toLayout([
+    { id: "a1", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+    { id: "b", kind: "clip", sourceStart: 3605, sourceEnd: 3615 },
+    { id: "a2", kind: "clip", sourceStart: 10, sourceEnd: 20 },
+  ]);
+
+  it("a range inside B maps only onto B's clip", () => {
+    expect(sourceRangeToTimelineBlocks(joined, 3607, 3612)).toEqual([
+      { itemId: "b", timelineStart: 12, timelineEnd: 17, sourceStart: 3607, sourceEnd: 3612 },
+    ]);
+  });
+
+  it("a range inside A maps only onto A's clips, never onto B's", () => {
+    const blocks = sourceRangeToTimelineBlocks(joined, 8, 12);
+    expect(blocks.map((b) => b.itemId)).toEqual(["a1", "a2"]);
+  });
+
+  it("a range in B's trimmed-away head is hidden, and one in the gap too", () => {
+    expect(isSourceRangeVisible(joined, 3600, 3604)).toBe(false);
+    expect(isSourceRangeVisible(joined, 200, 300)).toBe(false);
+    expect(isSourceRangeVisible(joined, 3606, 3608)).toBe(true);
+  });
+
+  it("the source time under the playhead tells which recording the playhead is on", () => {
+    expect(sourceTimeAtTimeline(joined, 12)).toBe(3607);
+    expect(sourceTimeAtTimeline(joined, 25)).toBe(15);
+  });
+
+  it("a range that runs past A's footage over the gap does not pick up B's clip", () => {
+    expect(sourceRangeToTimelineBlocks(joined, 15, 3000).map((b) => b.itemId)).toEqual(["a2"]);
   });
 });

@@ -5,10 +5,11 @@ description: The Clips section of the video editor becomes a section with levels
 
 # Clips levels: added images and videos on the timeline — design
 
-**Status: 🔵 Proposed · approved by the owner 2026-11-14.** Owner decisions taken in chat on
-2026-11-13 over a sketch of four timelines; the owner approved the design on 2026-11-14 with the
-defaults of open questions 1 and 4, and Add to timeline hidden in 0.19.0. Nothing in this design is
-implemented; stage 1 is NIW2-771 and the flag NIW2-772. Ticket:
+**Status: 🟢 Stage 1 ready to validate · approved by the owner 2026-11-14** (floating images,
+behind the release flag `timeline-levels`, NIW2-771; the flag is NIW2-772). Stages 2 and 3 are 🔵
+Proposed and not started. Owner decisions taken in chat on 2026-11-13 over a sketch of four
+timelines; the owner approved the design on 2026-11-14 with the defaults of open questions 1 and 4,
+and Add to timeline hidden in 0.19.0. Ticket:
 [NIW2-770](https://linear.app/niway/issue/NIW2-770/video-editor-clips-becomes-a-section-with-levels-added-images-and).
 ADR: [0057](/architecture/decisions/0057-clips-is-one-section-with-levels-a-sequence-below-floating-items-above/)
 (new; supersedes part of [0040](/architecture/decisions/0040-typed-tracks-on-demand-and-stackable-media-lanes/)).
@@ -84,9 +85,11 @@ it stays over the same moment when the sequence changes. It is built in three st
 Stage 1, [NIW2-771](https://linear.app/niway/issue/NIW2-771/video-editor-floating-images-on-levels-above-the-clips-sequence-stage) — floating images. With the flag
 `timeline-levels` on:
 
-- [ ] **Add to timeline** on a capture adds a floating image that starts at the playhead, lasts
-      10 s (or to the end of the video), is fitted to the whole frame and is in front of every
-      other floating item. The sequence does not change length.
+- [ ] Adding a screenshot with **Over the video** (Captures panel's **Add from Library…**, which
+      opens the Add from Library modal on Screenshots; superseded wording "Add to timeline",
+      NIW2-829) adds a floating image that starts at the playhead, lasts 10 s (or to the end of
+      the video), is fitted to the whole frame and is in front of every other floating item. The
+      sequence does not change length.
 - [ ] The Clips section draws the image on a row above the sequence. Two images that do not
       overlap in time share one row; two that overlap are on two rows, the one in front above.
 - [ ] Dragging the item along the timeline moves it; dragging either edge changes its duration
@@ -110,9 +113,12 @@ Stage 1, [NIW2-771](https://linear.app/niway/issue/NIW2-771/video-editor-floatin
 
 Release flag, [NIW2-772](https://linear.app/niway/issue/NIW2-772/video-editor-hide-add-to-timeline-behind-the-release-flag-timeline):
 
-- [ ] With `timeline-levels` off, the Captures panel shows no **Add to timeline** button.
-- [ ] With it on, the button is there. Until stage 1 lands it does what it does on `main` today
-      (it inserts a slide in the sequence); stage 1 replaces that with a floating image.
+- [ ] With `timeline-levels` off, the Captures panel shows no **Add from Library…** button
+      (originally **Add to timeline**; renamed by NIW2-829).
+- [ ] With it on, the button is there and opens the Add from Library modal on Screenshots with
+      that capture selected. Originally it inserted a slide in the sequence and stage 1 was to
+      replace that with a floating image; NIW2-829 superseded both with one destination
+      chooser (Over the video, or a sequence boundary).
 
 ## Sources and unverified claims
 
@@ -190,21 +196,61 @@ background of ADR 0051 around all of it. Over a slide of the sequence the order 
 picture and the webcam layer; in the export they are drawn in `compose-output-frame.ts` before the
 webcam.
 
+With a fixed-canvas framing preset (Vertical, Square) the export canvas is not the preview's
+picture: the preview never shows the preset, so a box is a share of the OUTPUT frame there, bars
+included, the way the webcam is placed (ADR 0038). The image keeps its own aspect, so a `Full`
+image still spans the output's width. A composer test pins this; it has not been compared against
+a preview, because the preview cannot show the preset.
+
 ## 3. The stages
 
 1. **Floating images** (NIW2-771). Sections 1 and 2, the Clips rows, the preview handles, the
    small panel (duration, Full, Box, fades, forward, backward, delete), **Add to timeline** adding
    a floating image. Behind `timeline-levels`.
-2. **A second video in the sequence.** Clips and source anchors get a source id; the preview and
-   the export open more than one recording; zooms, privacy, mutes, cursor and webcam are scoped
-   to their source; an image dropped on the sequence is a 5 s slide; fade through the background
-   between sequence items. Depends on the compose design's import path for files from disk.
+2. **A second video in the sequence.** Each joined recording gets its own range on the scene's
+   source axis, so clips and source anchors need no source id
+   ([ADR 0058](/architecture/decisions/0058-joined-recordings-share-one-source-axis-each-on-its-own-range/));
+   the preview and the export open more than one recording; zooms, privacy, mutes, cursor and
+   webcam are scoped to their source; an image added to the sequence through the Add from Library
+   chooser (see "Choosing the destination") is a 5 s slide; fade through the background between
+   sequence items. The second recording comes from the Library only (owner,
+   2026-11-14); a file from disk is later. Milestone 1 (joining a Library recording, cuts only) is
+   [NIW2-778](https://linear.app/niway/issue/NIW2-778).
 3. **Floating videos and the crossfade.** A second decoder in the same window, per-item mute,
    audio mixed at export, the two-videos limit measured first; the crossfade overlaps two sequence
    items and shortens the video by its length.
 
 Stage 1 leaves the item model, the anchor, the rows and `mediaAt` for the later stages. Stage 2's
 multi-source work is its own; nothing in stage 1 does it in advance.
+
+## Choosing the destination (NIW2-829)
+
+Owner decision, 2026-11-16: Add from Library has one add flow. The user selects an item (a
+recording or a screenshot), one chooser lists every place it can go, and one **Add** button applies
+it. Before this the type decided silently (a recording always joined the sequence, a screenshot
+always floated) and the Captures panel had a second Add to timeline button that did the same as the
+modal's screenshot add. Everything is behind `timeline-levels`.
+
+The destinations, as a radio list with one selected:
+
+- **Over the video**: floats at the playhead and the clips do not move. A screenshot becomes
+  the floating image of stage 1 (10 s). A recording shows this option disabled, with a hint that
+  floating videos come later (stage 3).
+- **In the sequence**, which pushes everything after it later: before the clip under the playhead,
+  after the clip under the playhead, at the start, at the end. A recording joins at that boundary.
+  A screenshot becomes an image slide of 5 s there (decision 8).
+
+Defaults: a screenshot starts at Over the video, a recording at after the clip under the playhead.
+After an add, the destination is remembered per type (screenshot, recording) for the rest of the
+editor session, and a recording never starts on the disabled option. The modal stays open after an
+add and confirms with a toast. On the Screenshots tab a click selects a card; it no longer adds.
+
+The Captures panel keeps Go to and Delete. Its add button no longer adds: it opens Add from
+Library on the Screenshots tab with that capture already selected, and the chooser takes it from
+there. With the flag off nothing changes, because neither the modal nor that button exists.
+
+Slide insertion reads the scene after the image decodes, and pins the chosen boundary to the clip
+that follows it, so a join that lands in the meantime does not move the slide.
 
 ## 4. What the parked design keeps and loses
 

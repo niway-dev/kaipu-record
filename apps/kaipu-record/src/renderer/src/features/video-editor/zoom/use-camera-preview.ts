@@ -5,12 +5,13 @@
  * clears the transform so the full original frame is visible.
  */
 import { useMemo } from "react";
+import type { FrameSource } from "../playback-media";
 import { useVideoFrameClock } from "../use-video-frame-clock";
 import { type CameraPath, cameraAt, isIdentity } from "./camera-path";
 import { cameraTransform } from "./camera-css";
 
 export function useCameraPreview(
-  videoRef: React.RefObject<HTMLVideoElement | null>,
+  videoRef: React.RefObject<FrameSource | null>,
   contentRef: React.RefObject<HTMLElement | null>,
   path: CameraPath,
   enabled: boolean,

@@ -5,9 +5,11 @@
  *   fill black → planClipFrame → direct draw, or (work canvas: frame → redactions →
  *   content-pinned overlays → camera crop) → overlays on the output for direct frames
  *   → framing (fixed-canvas presets: the composed view onto the target canvas, Fit/Fill)
+ *   → floating images (spec 2026-11-13), on the final canvas, inside the picture
  *   → webcam layer (ADR 0038), on the final canvas, at its size.
  *
- * Slides: fill black → contained bitmap → overlays → framing (always Fit). No webcam.
+ * Slides: fill black → contained bitmap → overlays → framing (always Fit) → floating images.
+ * No webcam.
  *
  * The webcam is drawn last and on the FINAL canvas so the zoom moves the content under it
  * and Fill never crops it. A frame with no zoom and no region still takes the "direct"
@@ -37,6 +39,7 @@ import {
 import { backgroundPaint, type BackgroundPaint } from "../../screenshots/beautify/backgrounds";
 import type { CameraPathMessage } from "./export-messages";
 import type { OverlayWindow } from "./export-plan";
+import { floatingFrame, type FloatingMediaPlan } from "./floating-frame";
 import type { Redaction } from "../privacy/redaction";
 import type { WebcamScene } from "../webcam/webcam-model";
 import { cameraAt } from "../zoom/camera-path";
@@ -77,6 +80,15 @@ export interface OutputComposerOptions {
    * `none` composes exactly as before (stored padding, radius and shadow are never drawn).
    */
   background?: VideoBackground | null;
+  /**
+   * The floating images (spec 2026-11-13): drawn from `mediaAt` over the finished picture,
+   * under the webcam, not zoomed. Null or absent draws nothing. `bitmaps` are keyed by asset
+   * id; an item whose bitmap is missing is skipped, never drawn black.
+   */
+  floating?: {
+    plan: FloatingMediaPlan | null | undefined;
+    bitmaps: Map<string, ImageBitmap>;
+  } | null;
 }
 
 export interface OutputFraming {
@@ -268,6 +280,7 @@ export function createOutputComposer(opts: OutputComposerOptions): OutputCompose
   const { width, height, camera, redactions, overlayWindows, overlayBitmaps } = opts;
   const framing = opts.framing ?? null;
   const webcam = opts.webcam ?? null;
+  const floating = opts.floating ?? null;
   const cursorAt = opts.cursor ? prepareCursor(opts.cursor.track, opts.cursor.settings) : null;
   // The canvas the finished frame is written to: the target for fixed-canvas presets, else
   // the output `opts.ctx` itself.
@@ -420,6 +433,23 @@ export function createOutputComposer(opts: OutputComposerOptions): OutputCompose
     );
     return surface;
   };
+  // The floating images, on the final canvas and in its coordinates (the picture: the same
+  // space the webcam is laid out in), back to front with their fade opacity. The caller has
+  // composed everything under them; the zoom crop is already behind us, so they never zoom.
+  const drawFloating = (target: typeof final, outTs: number): void => {
+    if (!floating) return;
+    for (const draw of floatingFrame(floating.plan, outTs, target)) {
+      const bitmap = floating.bitmaps.get(draw.item.assetId);
+      if (!bitmap) continue;
+      target.ctx.save();
+      target.ctx.globalAlpha = draw.opacity;
+      // Same high-quality resampling as the slide path: an image is usually not drawn 1:1.
+      target.ctx.imageSmoothingEnabled = true;
+      target.ctx.imageSmoothingQuality = "high";
+      target.ctx.drawImage(bitmap, draw.rect.x, draw.rect.y, draw.rect.width, draw.rect.height);
+      target.ctx.restore();
+    }
+  };
   // The last step (ADR 0051): the background fills the output and the finished picture goes on
   // it, inset. A plain scene has no `frame` and nothing happens.
   const placePicture = (mode: "fit" | "fill"): void => {
@@ -460,6 +490,8 @@ export function createOutputComposer(opts: OutputComposerOptions): OutputCompose
           target.ctx.restore();
         } else drawCursor(target.ctx, pointer);
       }
+      // Floating images: after the crop and the framer, before the webcam.
+      drawFloating(target, outTs);
       // Last, on the final canvas: after the crop and after the framer (ADR 0038).
       if (webcamFrame) {
         const at = webcamFrame.sourceTs;
@@ -483,7 +515,7 @@ export function createOutputComposer(opts: OutputComposerOptions): OutputCompose
       if (bitmap) drawContained(ctx, bitmap, width, height);
       stampOverlays(outTs, ctx);
       // Slides are always contained ("fit"), never cropped, whatever the clip framing.
-      frameInto("fit");
+      drawFloating(frameInto("fit"), outTs);
       placePicture("fit");
     },
   };

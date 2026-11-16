@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
+import type { FrameSource } from "../playback-media";
 import { useVideoFrameClock } from "../use-video-frame-clock";
 import { cameraAt, type CameraPath } from "../zoom/camera-path";
 import type { Redaction } from "../privacy/redaction";
@@ -18,7 +19,7 @@ export function CursorLayer({
   selected = false,
 }: {
   data: CursorLayerData;
-  videoRef: React.RefObject<HTMLVideoElement | null>;
+  videoRef: React.RefObject<FrameSource | null>;
   path: CameraPath;
   cameraEnabled: boolean;
   hidden: boolean;
