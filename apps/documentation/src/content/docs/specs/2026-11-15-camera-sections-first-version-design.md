@@ -12,7 +12,8 @@ for this workspace", so this page is the build's starting point.
 **Refined on 2026-11-16** by the
 [drag-first design](/specs/2026-11-16-camera-parts-drag-first-design/), after the owner tested
 this version: the button of decisions 1 and 11 is removed, a new block lasts 10 seconds, the
-default motion is Smooth, and the overshoot rule of decision 10 is replaced. Where the two
+default motion is Smooth, and the overshoot rule of decision 10 now applies to the travel past the target on a curved
+route. Where the two
 pages differ, the drag-first design wins.
 
 ## Summary (one minute)
