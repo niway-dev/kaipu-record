@@ -86,8 +86,9 @@ function withoutKey<T>(record: Readonly<Record<string, T>>, key: string): Record
 /**
  * Runs one transcription and mirrors its progress into the store. Resolves with how it ended;
  * never rejects. A job already running answers `refused: busy` without calling main and records
- * nothing: the controls already show that state. A refusal from main is recorded as the item's
- * failure, so the click that was refused says why.
+ * nothing: the controls already show that state. Main's `busy` and `invalid-item` refusals are
+ * recorded as the item's failure, so the click that was refused says why; its `unavailable` and
+ * `model-missing` refusals mean the model status is stale, so they refresh it instead.
  */
 export async function startTranscription(args: {
   itemId: string;
