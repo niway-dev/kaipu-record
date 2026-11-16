@@ -1599,6 +1599,28 @@ describe("VideoEditorPage — dropping the camera bubble", () => {
       stubDecodedVideoSize(0, 0);
     }
   });
+
+  it("Space on a drop card choice does not toggle playback and the card stays open", async () => {
+    stubDecodedVideoSize(1280, 720);
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    try {
+      await dropBubble({ selectFirst: true });
+      const card = await screen.findByRole("group", { name: "Where to keep the camera" });
+      const part = within(card).getByRole("button", { name: /Only for this part/ });
+      part.focus();
+      playSpy.mockClear();
+      const notPrevented = fireEvent.keyDown(part, { key: " " });
+      await act(async () => {});
+      // The page's Space shortcut would start playback, and the card would close with it.
+      expect(playSpy).not.toHaveBeenCalled();
+      expect(screen.getByRole("group", { name: "Where to keep the camera" })).toBeInTheDocument();
+      // Not cancelled: the browser still turns Space on a button into the click that applies it.
+      expect(notPrevented).toBe(true);
+    } finally {
+      playSpy.mockRestore();
+      stubDecodedVideoSize(0, 0);
+    }
+  });
 });
 
 describe("VideoEditorPage — Tracks popover (NIW2-665)", () => {
