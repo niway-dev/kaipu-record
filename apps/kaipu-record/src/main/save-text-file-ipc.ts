@@ -17,17 +17,13 @@ import {
   type SaveTextFileResult,
 } from "@shared/types/save-text-file";
 import { getAppSettings } from "./infrastructure/settings-store";
+import { exportFileName } from "./screenshots/export-file-name";
 
 const MAX_NAME_LENGTH = 512;
 
 /** A video title carries dates and colons: every character a file name refuses becomes a dash. */
 export function saveTextFileName(title: string, extension: SaveTextExtension): string {
-  const base = title
-    .replace(/[\\/:*?"<>|]/g, "-")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/^\.+/, "");
-  return `${base || "transcript"}.${extension}`;
+  return exportFileName(title, extension, "transcript");
 }
 
 /** Throws on anything the renderer should never send. Pure; exported for tests. */

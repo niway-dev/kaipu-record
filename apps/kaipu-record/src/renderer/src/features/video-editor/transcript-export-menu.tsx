@@ -70,6 +70,8 @@ export function TranscriptExportMenu({
           anchor={anchor}
           onPick={(format) => {
             setOpen(false);
+            // The focused item unmounts with the menu: keep the keyboard user on the button.
+            anchor.focus();
             onExport(format);
           }}
           onClose={close}

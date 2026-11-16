@@ -716,6 +716,14 @@ describe("TranscriptPanel — export", () => {
     window.electronAPI.saveTextFile = originalSaveTextFile;
   });
 
+  it("returns focus to the Export button after a format is picked with the keyboard", () => {
+    setup();
+    openMenu();
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Enter" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByRole("button", { name: "Export the transcript" })).toHaveFocus();
+  });
+
   it("opens the menu with ArrowDown on the button, and Space on it does not reach the editor", () => {
     setup();
     const button = screen.getByRole("button", { name: "Export the transcript" });
@@ -776,7 +784,7 @@ describe("TranscriptPanel — export", () => {
     });
     const sent = saveTextFile.mock.calls[0][0];
     expect(sent.extension).toBe("srt");
-    expect(sent.text).toMatch(/^1\n00:00:00,000 --> 00:00:0\d,\d{3}\nHello again\n$/);
+    expect(sent.text).toBe("1\n00:00:00,000 --> 00:00:00,900\nHello again\n");
   });
 
   it("says nothing when the user cancels the save dialog", async () => {

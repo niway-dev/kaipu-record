@@ -129,7 +129,9 @@ describe("buildTranscriptExport", () => {
     const blocks = srtBlocks(buildTranscriptExport(occurrences, "srt"));
     const texts = blocks.map((b) => b.text);
     const withBienvenidos = texts.find((t) => t.includes("bienvenidos")) ?? "";
-    expect(withBienvenidos).not.toContain("al");
+    // The cue ends at the cut: the word after it ("al") starts the next cue.
+    expect(withBienvenidos.endsWith("bienvenidos")).toBe(true);
+    expect(withBienvenidos).not.toMatch(/\bal\b/);
     expect(texts.some((t) => t.startsWith("al"))).toBe(true);
   });
 
