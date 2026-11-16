@@ -16,9 +16,11 @@ import type { VideoScene } from "../scene";
 import type { VideoSceneController } from "../use-video-scene";
 import {
   addWebcamSegment,
+  changeWebcamFrom,
   dragWebcamSegmentEdge,
   removeWebcamSegment,
   setWebcamLayout,
+  setWebcamTransition,
   updateWebcamSegment,
 } from "./webcam-edits";
 import {
@@ -27,11 +29,18 @@ import {
   type WebcamLayout,
   type WebcamScene,
   type WebcamSegment,
+  type WebcamTransition,
 } from "./webcam-model";
 
 export type HideWebcamResult =
   | { ok: true; id: string }
   | { ok: false; reason: "on-slide" | "no-room" | "busy" };
+
+export type ChangeCameraBlockedReason = "on-slide" | "hidden" | "no-room";
+
+export type ChangeCameraResult =
+  | { ok: true; id: string; kind: "create" | "split" }
+  | { ok: false; reason: ChangeCameraBlockedReason | "busy" };
 
 export interface WebcamEditing {
   /** The scene's webcam, or null when the recording has none (nothing below applies then). */
@@ -43,6 +52,17 @@ export interface WebcamEditing {
    * the recording). Inside an existing segment it returns that one instead of adding another.
    */
   hideAtPlayhead(timelineTime: number): HideWebcamResult;
+  /**
+   * "Change camera from here": a block from the playhead to the next block or the end of the
+   * recording, or, inside a block, a split of that block at the playhead. One undo step.
+   */
+  changeAtPlayhead(timelineTime: number): ChangeCameraResult;
+  /** Why "Change camera from here" would do nothing at the playhead; null when it can. */
+  changeBlockedReason(timelineTime: number): ChangeCameraBlockedReason | null;
+  /** A discrete change of a block's Slide or Cut, duration or easing. */
+  commitTransition(id: string, patch: Partial<WebcamTransition>): void;
+  /** A live transition change during a gesture; `end()` makes it one undo step. */
+  liveTransition(id: string, patch: Partial<WebcamTransition>): void;
   remove(id: string): void;
   edgeDrag(
     id: string,
@@ -118,6 +138,43 @@ export function useWebcamEditing({
     [controller, layout, sourceDuration],
   );
 
+  const changeAtPlayhead = useCallback(
+    (timelineTime: number): ChangeCameraResult => {
+      if (controller.interacting) return { ok: false, reason: "busy" };
+      const at = sourceTimeAtTimeline(layout, timelineTime);
+      if (at === null) return { ok: false, reason: "on-slide" };
+      const result = changeWebcamFrom(controller.scene, at, sourceDuration);
+      if (!result.ok) return { ok: false, reason: result.reason };
+      controller.commit(result.scene);
+      return { ok: true, id: result.id, kind: result.kind };
+    },
+    [controller, layout, sourceDuration],
+  );
+
+  const changeBlockedReason = useCallback(
+    (timelineTime: number): ChangeCameraBlockedReason | null => {
+      const at = sourceTimeAtTimeline(layout, timelineTime);
+      if (at === null) return "on-slide";
+      const result = changeWebcamFrom(controller.scene, at, sourceDuration);
+      return result.ok ? null : result.reason;
+    },
+    [controller, layout, sourceDuration],
+  );
+
+  const commitTransition = useCallback(
+    (id: string, patch: Partial<WebcamTransition>) => {
+      if (controller.interacting) return;
+      controller.commit(setWebcamTransition(controller.scene, id, patch));
+    },
+    [controller],
+  );
+
+  const liveTransition = useCallback(
+    (id: string, patch: Partial<WebcamTransition>) =>
+      controller.updateLive(setWebcamTransition(controller.scene, id, patch)),
+    [controller],
+  );
+
   const remove = useCallback(
     (id: string) => {
       if (controller.interacting) return;
@@ -163,6 +220,10 @@ export function useWebcamEditing({
     webcam,
     visibleSegments,
     hideAtPlayhead,
+    changeAtPlayhead,
+    changeBlockedReason,
+    commitTransition,
+    liveTransition,
     remove,
     edgeDrag,
     commitLayout,
