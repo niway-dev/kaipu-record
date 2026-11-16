@@ -675,6 +675,38 @@ export const editorVideo = catalog(
       after: [{ action: "restoreVault" }],
       gates: [{ flag: "timeline-levels", side: "on" }],
     },
+    "captures-opens-add-from-library": {
+      profile: "timeline-levels",
+      how: "With the timeline-levels flag forced on, open “Weekly sync”, press Capture frame and then Add from Library… on the new capture's row: the Add from Library modal opens on its Screenshots tab with that new capture already selected, its image shown on the right above the destination chooser (Over the video selected) and the Add button.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        captureFrameButton,
+        captureListed,
+        {
+          click: {
+            area: "editorVideo.capturesPanel",
+            part: { role: "button", name: "Add from Library…", exact: true },
+          },
+        },
+        // The radio group exists only while a screenshot is selected, so this waits for the
+        // modal, the Screenshots tab and the new capture's selection together. The new
+        // capture's title ends in its time ("Weekly sync frame 0s"), which the seeded
+        // “Weekly sync frame” card does not, so the title is not matched here.
+        {
+          waitFor: {
+            area: "editorVideo.addFromLibrary",
+            part: { role: "radio", name: "Over the video" },
+          },
+        },
+        // The selected image decodes after the column is drawn.
+        { waitMs: 400 },
+      ],
+      demonstrates: ["editorVideo.addFromLibrary:screenshotSelected"],
+      ready: { area: "editorVideo.addFromLibrary" },
+      after: [{ action: "restoreVault" }],
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
     "add-from-library": {
       profile: "add-from-library",
       how: "With the `timeline-levels` flag forced on, open “Weekly sync” and press Add recording at the left end of the transport bar: the Add from Library modal opens on its Recordings tab, a compact list of the Library's other recordings, newest first, with the first one selected and previewed on the right (paused at its first frame) above the destination chooser (Over the video is greyed out with “Floating videos come later.”, After the clip under the playhead is selected) and the Add button; the transport button stays lit while the modal is open.",
