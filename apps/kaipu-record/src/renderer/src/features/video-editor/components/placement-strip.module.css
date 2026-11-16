@@ -1,0 +1,203 @@
+/* The placement strip of Add from Library (NIW2-829): a mini timeline drawn from the real
+   sequence. Two sizes share one structure: a thin row on top for "Over the video" and the
+   clips' row under it. The grey of a clip is the text colour at low alpha, so it follows the
+   theme; pink is the accent. */
+.strip {
+  --strip-clip: color-mix(in srgb, var(--text-primary) 28%, transparent);
+  --strip-clip-band: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  --strip-track: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  position: relative;
+  width: 100%;
+}
+
+.large {
+  height: 47px;
+  /* Room for the playhead's flag above and the line's tail below. */
+  margin: 7px 0 4px;
+}
+
+.small {
+  height: 16px;
+}
+
+.track {
+  position: absolute;
+  right: 0;
+  left: 0;
+  background: var(--strip-track);
+}
+
+.trackTop {
+  top: 0;
+  height: 16px;
+  border-radius: 4px;
+}
+
+.trackMain {
+  top: 21px;
+  height: 26px;
+  border-radius: 5px;
+}
+
+/* A slot is the block's proportional span; the block inside it leaves a gap on each side. */
+.slot {
+  position: absolute;
+  display: block;
+  min-width: 2px;
+}
+
+.large .main {
+  top: 21px;
+  height: 26px;
+}
+
+.large .top {
+  top: 0;
+  height: 16px;
+}
+
+.small .main {
+  top: 7px;
+  height: 9px;
+}
+
+.small .top {
+  top: 0;
+  height: 5px;
+}
+
+.block {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 100%;
+  margin: 0 0.5px;
+  overflow: hidden;
+  color: #fff;
+  border-radius: 2px;
+}
+
+.large .block {
+  margin: 0 1px;
+}
+
+.large .main .block {
+  border-radius: 5px;
+}
+
+.large .top .block {
+  border-radius: 4px;
+}
+
+.clip {
+  background: var(--strip-clip);
+}
+
+.large .clip {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--strip-clip) 0 18px,
+    var(--strip-clip-band) 18px 19px
+  );
+}
+
+.fresh {
+  background: var(--accent-primary);
+}
+
+.large .main .fresh {
+  box-shadow: 0 0 0 2px var(--accent-primary-ring);
+}
+
+.newLabel {
+  font-size: 10.5px;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.floatLabel {
+  font-size: 9.5px;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
+
+.moved {
+  flex: none;
+  color: color-mix(in srgb, var(--accent-primary) 40%, var(--text-primary));
+}
+
+.playhead {
+  position: absolute;
+  top: -4px;
+  width: 1.5px;
+  height: 55px;
+  margin-left: -0.75px;
+  border-radius: 1px;
+  background: var(--text-primary);
+  pointer-events: none;
+}
+
+.flag {
+  position: absolute;
+  top: -3px;
+  left: -3.75px;
+  border-top: 6px solid var(--text-primary);
+  border-right: 4.5px solid transparent;
+  border-left: 4.5px solid transparent;
+}
+
+/* ---- The card that holds the large strip and its sentence ---- */
+.card {
+  flex: none;
+  padding: 12px 14px 11px;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.label {
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+.swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+.swatchNew {
+  background: var(--accent-primary);
+}
+
+.swatchClips {
+  margin-left: 8px;
+  background: color-mix(in srgb, var(--text-primary) 28%, transparent);
+}
+
+.sentence {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
