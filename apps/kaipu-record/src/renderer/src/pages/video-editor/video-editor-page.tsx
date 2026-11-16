@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { generatePath, Navigate, useBlocker, useLocation, useNavigate } from "react-router-dom";
 import { ROUTES } from "@shared/routes";
 import { AudioLines, Shield, Trash2, TriangleAlert, Webcam, ZoomIn } from "lucide-react";
@@ -1151,34 +1151,74 @@ function VideoEditor({
   // click: they may have moved while the image was being decoded. The playhead comes from
   // `readTimelineTime`, not the `timelineTime` state: while playing, the state lags the frame
   // on screen (as in Capture frame).
+  const insertSequenceImageRef = useRef<Promise<unknown>>(Promise.resolve());
+  const insertAfterCommitRef = useRef<Promise<void> | null>(null);
+  const insertRenderWaitersRef = useRef<Array<() => void>>([]);
+  // Declared after `useLatest(controller)`: its layout effect has already refreshed `controllerRef`
+  // when this one runs, so a waiting insert resumes on the scene the commit produced.
+  useLayoutEffect(() => {
+    for (const resolve of insertRenderWaitersRef.current.splice(0)) resolve();
+  });
+  useLayoutEffect(
+    () => () => {
+      for (const resolve of insertRenderWaitersRef.current.splice(0)) resolve();
+    },
+    [],
+  );
+  // Runs image inserts one after another. An insert reads the scene after its decode, and the
+  // previous insert's commit only reaches `controllerRef.current.scene` once React has rendered
+  // it, so the next one waits for that render (as `useJoinRecording` does) instead of composing
+  // from the old scene and replacing the first image. `run` calls `armRenderWait` right after it
+  // commits.
+  const serializeInsert = useCallback(
+    <T,>(run: (armRenderWait: () => void) => Promise<T>): Promise<T> => {
+      const job = insertSequenceImageRef.current.then(() => {
+        insertAfterCommitRef.current = null;
+        return run(() => {
+          insertAfterCommitRef.current = new Promise<void>((resolve) => {
+            insertRenderWaitersRef.current.push(resolve);
+          });
+        });
+      });
+      insertSequenceImageRef.current = job.then(
+        () => insertAfterCommitRef.current,
+        () => undefined,
+      );
+      return job;
+    },
+    [],
+  );
+
   const insertFloatingImage = useCallback(
     // True once the image is on the timeline: Add from Library confirms it with a toast.
-    async (bytes: ArrayBuffer, mime: string): Promise<boolean> => {
-      if (controller.interacting) return false;
-      let asset: SlideAsset;
-      try {
-        asset = await assetStoreRef.current.put(bytes, mime);
-      } catch {
-        showToast({ message: t("imageLoadError") });
-        return false;
-      }
-      const current = controllerRef.current;
-      if (current.interacting) return false;
-      const id = newId();
-      const next = addFloatingImage(current.scene, {
-        id,
-        assetId: asset.assetId,
-        naturalWidth: asset.naturalWidth,
-        naturalHeight: asset.naturalHeight,
-        playhead: playbackRef.current.readTimelineTime(),
-        picture: pictureSize,
-      });
-      if (next === current.scene) return false;
-      current.commit(next);
-      selectKind("media", id);
-      return true;
-    },
-    [controller, controllerRef, playbackRef, pictureSize, selectKind, t],
+    (bytes: ArrayBuffer, mime: string): Promise<boolean> =>
+      serializeInsert(async (armRenderWait) => {
+        if (controller.interacting) return false;
+        let asset: SlideAsset;
+        try {
+          asset = await assetStoreRef.current.put(bytes, mime);
+        } catch {
+          showToast({ message: t("imageLoadError") });
+          return false;
+        }
+        const current = controllerRef.current;
+        if (current.interacting) return false;
+        const id = newId();
+        const next = addFloatingImage(current.scene, {
+          id,
+          assetId: asset.assetId,
+          naturalWidth: asset.naturalWidth,
+          naturalHeight: asset.naturalHeight,
+          playhead: playbackRef.current.readTimelineTime(),
+          picture: pictureSize,
+        });
+        if (next === current.scene) return false;
+        current.commit(next);
+        armRenderWait();
+        selectKind("media", id);
+        return true;
+      }),
+    [controller, controllerRef, playbackRef, pictureSize, selectKind, serializeInsert, t],
   );
 
   // Add from Library with a sequence destination (NIW2-829): the image is stored as a slide's is,
@@ -1189,31 +1229,33 @@ function VideoEditor({
   // `scene.items`, which is what `insertItemAt` splices (see `insertSlideAtBoundary`). True once
   // it is in.
   const insertSequenceImage = useCallback(
-    async (bytes: ArrayBuffer, mime: string, boundary: AddBoundary): Promise<boolean> => {
-      if (controller.interacting) return false;
-      let asset: SlideAsset;
-      try {
-        asset = await assetStoreRef.current.put(bytes, mime);
-      } catch {
-        showToast({ message: t("imageLoadError") });
-        return false;
-      }
-      const current = controllerRef.current;
-      if (current.interacting) return false;
-      const slide: SlideItem = {
-        id: newId(),
-        kind: "slide",
-        assetId: asset.assetId,
-        duration: SEQUENCE_IMAGE_SECONDS,
-        naturalWidth: asset.naturalWidth,
-        naturalHeight: asset.naturalHeight,
-      };
-      current.commit(
-        insertSlideAtBoundary(current.scene, slide, anchoredBoundary(layout, boundary)),
-      );
-      return true;
-    },
-    [controller, controllerRef, layout, t],
+    (bytes: ArrayBuffer, mime: string, boundary: AddBoundary): Promise<boolean> =>
+      serializeInsert(async (armRenderWait) => {
+        if (controller.interacting) return false;
+        let asset: SlideAsset;
+        try {
+          asset = await assetStoreRef.current.put(bytes, mime);
+        } catch {
+          showToast({ message: t("imageLoadError") });
+          return false;
+        }
+        const current = controllerRef.current;
+        if (current.interacting) return false;
+        const slide: SlideItem = {
+          id: newId(),
+          kind: "slide",
+          assetId: asset.assetId,
+          duration: SEQUENCE_IMAGE_SECONDS,
+          naturalWidth: asset.naturalWidth,
+          naturalHeight: asset.naturalHeight,
+        };
+        current.commit(
+          insertSlideAtBoundary(current.scene, slide, anchoredBoundary(layout, boundary)),
+        );
+        armRenderWait();
+        return true;
+      }),
+    [controller, controllerRef, layout, serializeInsert, t],
   );
 
   // A Library screenshot (Add from Library): main reads the vault PNG by id (fetch on the media
