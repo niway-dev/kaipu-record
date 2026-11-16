@@ -160,6 +160,8 @@
 }
 
 .dialog {
+  /* The editor mounts the button in the title bar, which sets nowrap on everything inside it. */
+  white-space: normal;
   display: flex;
   flex-direction: column;
   gap: var(--space-md);

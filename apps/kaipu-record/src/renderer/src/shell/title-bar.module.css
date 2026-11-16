@@ -135,7 +135,9 @@
   }
 }
 
-@container titlebar (max-width: 1260px) {
+/* The word follows the pill: with the banner showing, "Transcribed" is still cut by Export at
+   1440 px, and the icon keeps its tooltip and accessible name. */
+@container titlebar (max-width: 1500px) {
   .bar:has(.actions:not(:empty)) [data-collapse~="transcribe-label"] {
     display: none;
   }
