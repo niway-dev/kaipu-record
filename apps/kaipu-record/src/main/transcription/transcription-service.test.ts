@@ -647,6 +647,27 @@ describe("the engine downloads with the model", () => {
     expect(await pending).toEqual({ status: "ready" });
   });
 
+  it("reports the model's own progress while only the model downloads", async () => {
+    const h = makeHarness();
+    h.modelStatus.set(MODEL_ID, { state: "missing" });
+    const reached = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    h.modelStore.download.mockImplementationOnce(async () => {
+      h.modelStatus.set(MODEL_ID, { state: "downloading", receivedBytes: 50, totalBytes: MODEL });
+      reached.resolve();
+      await finish.promise;
+      return `/models/${MODEL_ID}`;
+    });
+
+    const pending = h.service.downloadModel(MODEL_ID);
+    await reached.promise;
+    const info = (await h.service.status()).models.find((m) => m.id === MODEL_ID)!;
+    // The engine is installed, so nothing leaves the "checking" phase except the model's own state.
+    expect(info.status).toEqual({ state: "downloading", receivedBytes: 50, totalBytes: MODEL });
+    finish.resolve();
+    await pending;
+  });
+
   it("installs only the engine when the model is already installed", async () => {
     const h = makeHarness({ now: steppingClock() });
     h.engine.missing = true;

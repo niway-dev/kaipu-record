@@ -411,6 +411,8 @@ export class TranscriptionService {
       const engine = await this.locate();
       const engineMissing = needsEngine(engine);
       const modelInstalled = this.deps.modelStore.locate(model.id) !== null;
+      // The check is over: the model's own status now reports the progress (an install moves on first).
+      run.phase = "model";
       if (engineMissing) {
         // An engine whose files exist but fail the handshake is reinstalled, not reused.
         const force = !engine.available && engine.reason === "handshake-failed";
