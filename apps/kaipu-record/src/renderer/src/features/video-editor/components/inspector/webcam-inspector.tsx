@@ -43,6 +43,7 @@ import {
   type WebcamLayout,
   type WebcamScene,
   type WebcamSegment,
+  type WebcamSizePreset,
 } from "../../webcam/webcam-model";
 import { webcamLayoutDot, webcamLayoutName, webcamPartOrigin } from "../../webcam/webcam-stretches";
 import styles from "./inspector.module.css";
@@ -55,6 +56,13 @@ const SHAPE_LABEL: Record<
   circle: "webcamShapeCircle",
   rounded: "webcamShapeRounded",
   rectangle: "webcamShapeRectangle",
+};
+
+// The buttons read S, M and L; the tooltip says what each letter is.
+const SIZE_TITLE: Record<WebcamSizePreset, "webcamSizeS" | "webcamSizeM" | "webcamSizeL"> = {
+  S: "webcamSizeS",
+  M: "webcamSizeM",
+  L: "webcamSizeL",
 };
 
 const EASING_LABEL: Record<
@@ -175,7 +183,7 @@ function Choices<T extends string | number>({
   onPick,
 }: {
   label: string;
-  options: readonly { value: T; text: string }[];
+  options: readonly { value: T; text: string; title?: string }[];
   current: T | null;
   onPick(value: T): void;
 }): React.JSX.Element {
@@ -188,6 +196,7 @@ function Choices<T extends string | number>({
             key={option.value}
             type="button"
             aria-pressed={current === option.value}
+            title={option.title}
             className={current === option.value ? styles.segmentActive : styles.segment}
             onClick={() => onPick(option.value)}
           >
@@ -239,7 +248,11 @@ function WholeVideoControls({
       {/* A size saved outside the three keeps playing and shows no button pressed. */}
       <Choices
         label={t("webcamSize")}
-        options={WEBCAM_SIZE_PRESET_IDS.map((id) => ({ value: id, text: id }))}
+        options={WEBCAM_SIZE_PRESET_IDS.map((id) => ({
+          value: id,
+          text: id,
+          title: t(SIZE_TITLE[id]),
+        }))}
         current={webcamSizePreset(layout.size)}
         onPick={(id) => commit({ size: WEBCAM_SIZE_PRESETS[id] })}
       />
