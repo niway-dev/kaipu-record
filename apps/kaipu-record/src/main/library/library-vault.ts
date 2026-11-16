@@ -104,7 +104,16 @@ export interface Sidecar {
   capture?: RecordingCapture;
   /** New recordings with the webcam on: the webcam file's offset and size (ADR 0037). */
   webcam?: WebcamTrackMeta;
+  /**
+   * The revision of the webcam composite the thumbnail carries (NIW2-845): set with the
+   * composite JPEG, cleared when a plain screen frame replaces it. Absent = the bare screen
+   * frame. A future change to the composite bumps {@link WEBCAM_THUMBNAIL_REVISION}.
+   */
+  thumbnailWebcam?: number;
 }
+
+/** What a thumbnail with the webcam bubble composited in is stamped with (`Sidecar.thumbnailWebcam`). */
+export const WEBCAM_THUMBNAIL_REVISION = 1;
 
 /**
  * Module-level `withLock` key that serializes every operation choosing or changing an
@@ -375,6 +384,22 @@ async function exists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** The file's mtime in ms, or null when it is not there. */
+async function mtimeOf(path: string): Promise<number | null> {
+  try {
+    return (await stat(path)).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+/** The sidecar says the thumbnail carries today's webcam composite. */
+function hasWebcamThumbnail(meta: Sidecar): boolean {
+  return (
+    typeof meta.thumbnailWebcam === "number" && meta.thumbnailWebcam >= WEBCAM_THUMBNAIL_REVISION
+  );
 }
 
 /**
@@ -1025,6 +1050,13 @@ export class LibraryVault {
       meta.contentSha256 !== undefined &&
       meta.hashedSizeBytes === info.size &&
       meta.hashedMtimeMs === info.mtimeMs;
+    // Only while the file is there (`webcamTrackState`, the rule `probeWebcam` shares): a
+    // sidecar field without its file is a missing track. No field, no file check.
+    const webcam =
+      isImage || isGif || !meta.webcam
+        ? null
+        : webcamTrackState(await exists(this.webcamFilePath(id)), meta.webcam).meta;
+    const thumbnailMtime = isImage ? null : await mtimeOf(this.thumbnailPath(id));
     return {
       id,
       assetId: meta.assetId,
@@ -1059,20 +1091,19 @@ export class LibraryVault {
       editorOpenedAt: typeof meta.editorOpenedAt === "number" ? meta.editorOpenedAt : null,
       editorSavedAt: typeof meta.editorSavedAt === "number" ? meta.editorSavedAt : null,
       capture: isImage || isGif ? null : sanitizeRecordingCapture(meta.capture),
-      // Only while the file is there (`webcamTrackState`, the rule `probeWebcam` shares): a
-      // sidecar field without its file is a missing track. No field, no file check.
-      webcam:
-        isImage || isGif || !meta.webcam
-          ? null
-          : webcamTrackState(await exists(this.webcamFilePath(id)), meta.webcam).meta,
+      webcam,
       thumbnailUrl: isImage
         ? // `?v=<mtime>` busts the renderer image cache when a screenshot is
           // overwritten in place (same id/URL) — only the changed item, so the
           // rest stay cacheable.
           mediaUrl("screenshot", id, this.mediaParams({ v: String(Math.round(info.mtimeMs)) }))
-        : (await exists(this.thumbnailPath(id)))
-          ? mediaUrl("thumb", id, this.mediaParams({}))
-          : null,
+        : thumbnailMtime === null
+          ? null
+          : // Same for a poster: the webcam composite rewrites it in place (NIW2-845).
+            mediaUrl("thumb", id, this.mediaParams({ v: String(Math.round(thumbnailMtime)) })),
+      // Only a webcam recording (`webcam` is null without its file) whose poster is not yet
+      // the composite. Absent for everything else, so older callers see no field.
+      ...(webcam ? { thumbnailNeedsWebcam: !hasWebcamThumbnail(meta) } : {}),
     };
   }
 
@@ -1330,9 +1361,46 @@ export class LibraryVault {
     throw new Error(`File "${id}" changed while hashing`);
   }
 
+  /**
+   * A plain screen frame as the poster (recorder, backfill, GIF export). It replaces any
+   * webcam composite, so a marker left by one is cleared and the Library composites again.
+   */
   async writeThumbnail(id: string, jpg: Buffer): Promise<void> {
     await mkdir(this.metaDirectory(), { recursive: true });
-    await atomicWriteFile(this.thumbnailPath(id), jpg);
+    await withLock(this.sidecarPath(id), async () => {
+      await atomicWriteFile(this.thumbnailPath(id), jpg);
+      await this.clearWebcamThumbnailMarker(id);
+    });
+  }
+
+  /**
+   * Drops `thumbnailWebcam` from a readable sidecar that has it; anything else (no sidecar,
+   * no marker, an unreadable record) is left exactly as it is. Caller holds the sidecar lock.
+   */
+  private async clearWebcamThumbnailMarker(id: string): Promise<void> {
+    const read = await this.readRecord(id);
+    if (read.status !== "ok" || read.sidecar.thumbnailWebcam === undefined) return;
+    await this.writeMetaLocked(id, { thumbnailWebcam: undefined });
+  }
+
+  /**
+   * NIW2-845: replaces a webcam recording's poster with the composite the Library drew (the
+   * screen frame plus the bubble) and stamps it done, under one sidecar lock so the picture
+   * and its marker are never apart for another writer. Refuses (null, nothing written) a
+   * recording without a webcam track or whose webcam file is gone, and one that vanished.
+   * An unreadable record throws, like every other write.
+   */
+  async writeWebcamThumbnail(id: string, jpg: Buffer): Promise<LocalRecording | null> {
+    const written = await withLock(this.sidecarPath(id), async () => {
+      const sidecar = await this.writableSidecar(id);
+      const webcam = webcamTrackState(await exists(this.webcamFilePath(id)), sidecar.webcam);
+      if (!webcam.meta || !(await this.hasMedia(id))) return false;
+      await mkdir(this.metaDirectory(), { recursive: true });
+      await atomicWriteFile(this.thumbnailPath(id), jpg);
+      await this.writeMetaLocked(id, { thumbnailWebcam: WEBCAM_THUMBNAIL_REVISION });
+      return true;
+    });
+    return written ? this.describe(id) : null;
   }
 
   /** Atomic (unique temp + rename): a crash mid-write never leaves a truncated track. */

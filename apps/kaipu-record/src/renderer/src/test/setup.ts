@@ -182,6 +182,7 @@ window.electronAPI = {
   deleteTag: async () => undefined,
   setItemTags: async (_itemId, tagIds) => [...tagIds],
   backfillLocalRecordingMeta: async () => null,
+  writeWebcamThumbnail: async () => null,
   deleteLocalRecording: async () => {},
   revealLocalRecording: async () => {},
   openLocalRecording: async () => {},

@@ -120,7 +120,10 @@ stands; plan B (native exclusion by window id) stays unscheduled.
   webcam file is missing, so the layout is lost if the file comes back.
 - "Check and fix files" does not recognize a stray `.kaipu/<id>.webcam.mp4`: it stays in place
   instead of moving to orphans. Safe, but untidy.
-- The Library thumbnail is grabbed from the screen stream, so it has no face.
+- The Library thumbnail is grabbed from the screen stream, so it had no face. Fixed by NIW2-845:
+  the Library composites the bubble (recorded layout, webcam frame ~150 ms into the take) into
+  the thumbnail of every webcam recording, new and existing, and marks it in the sidecar
+  (`thumbnailWebcam`). Unit-tested only; owner QA on a real take is pending.
 - The spec and ADR 0037 still say "Share" for what is now the Prepare copy.
 - Camera sections with transitions, tracks on demand and media overlays: the
   [editor timeline v2](/specs/2026-10-31-editor-timeline-v2-design/) design (#469).

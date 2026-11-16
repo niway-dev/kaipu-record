@@ -23,13 +23,13 @@ const meta = (patch: Partial<WebcamTrackMeta> = {}): WebcamTrackMeta => ({
   fps: 30,
   recordedLayout: {
     shape: "circle",
-    size: "medium",
+    size: 240,
     cornerRadius: 18,
     mirrored: false,
-    framing: { enabled: false, zoom: 1, centerX: 0.5, centerY: 0.5 },
+    framing: { enabled: false, zoom: 1, x: 0, y: 0 },
     position: { x: 0.5, y: 0.5 },
     sizeFraction: 0.25,
-  } as WebcamTrackMeta["recordedLayout"],
+  },
   ...patch,
 });
 
@@ -81,7 +81,7 @@ describe("composeWebcamThumbnail", () => {
     const draws = h.log.filter(([name]) => name === "drawImage");
     expect(draws[0]).toEqual(["drawImage", SCREEN.image, 0, 0, 1000, 500]);
     // The bubble: 25 % of the 500 px height, square for a circle, centred at (0.5, 0.5).
-    expect(draws[1]).toEqual(["drawImage", FACE.image, 160, 0, 720, 720, 437.5, 187.5, 125, 125]);
+    expect(draws[1]).toEqual(["drawImage", FACE.image, 280, 0, 720, 720, 437.5, 187.5, 125, 125]);
     expect(h.source.dispose).toHaveBeenCalledOnce();
   });
 

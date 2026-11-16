@@ -63,7 +63,7 @@ describe("LibraryVault", () => {
     expect(byId.get("shot")?.thumbnailUrl).toMatch(
       /^kaipu-media:\/\/screenshot\/shot\?v=\d+&w=ws-1$/,
     );
-    expect(byId.get("take")?.thumbnailUrl).toBe("kaipu-media://thumb/take?w=ws-1");
+    expect(byId.get("take")?.thumbnailUrl).toMatch(/^kaipu-media:\/\/thumb\/take\?v=\d+&w=ws-1$/);
     expect(await scoped.countMedia()).toBe(2);
   });
 
@@ -647,7 +647,7 @@ describe("LibraryVault — mp4 + thumbnails", () => {
       title: "Demo",
       durationSeconds: 12,
       createdAt: 111,
-      thumbnailUrl: "kaipu-media://thumb/rec-2",
+      thumbnailUrl: expect.stringMatching(/^kaipu-media:\/\/thumb\/rec-2\?v=\d+$/),
     });
   });
 
@@ -666,12 +666,12 @@ describe("LibraryVault — mp4 + thumbnails", () => {
 
     expect(updated).toMatchObject({
       durationSeconds: 54,
-      thumbnailUrl: "kaipu-media://thumb/orphan-1",
+      thumbnailUrl: expect.stringMatching(/^kaipu-media:\/\/thumb\/orphan-1\?v=\d+$/),
     });
     // A fresh describe re-reads the sidecar + thumbnail file, proving persistence.
     expect(await vault.describe("orphan-1")).toMatchObject({
       durationSeconds: 54,
-      thumbnailUrl: "kaipu-media://thumb/orphan-1",
+      thumbnailUrl: expect.stringMatching(/^kaipu-media:\/\/thumb\/orphan-1\?v=\d+$/),
     });
   });
 

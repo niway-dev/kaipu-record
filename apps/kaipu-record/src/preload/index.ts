@@ -167,6 +167,7 @@ const kaipuApi: KaipuElectronAPI = {
   setItemTags: (itemId, tagIds) => scopedInvoke(IPC_CHANNELS.setItemTags, itemId, tagIds),
   backfillLocalRecordingMeta: (id, meta) =>
     scopedInvoke(IPC_CHANNELS.backfillLocalRecordingMeta, id, meta),
+  writeWebcamThumbnail: (id, jpeg) => scopedInvoke(IPC_CHANNELS.writeWebcamThumbnail, id, jpeg),
   deleteLocalRecording: (id) => scopedInvoke(IPC_CHANNELS.deleteLocalRecording, id),
   revealLocalRecording: (id) => scopedInvoke(IPC_CHANNELS.revealLocalRecording, id),
   openLocalRecording: (id) => scopedInvoke(IPC_CHANNELS.openLocalRecording, id),
