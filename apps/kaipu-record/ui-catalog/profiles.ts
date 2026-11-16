@@ -18,6 +18,8 @@ export interface Profile {
   readonly seed: "demo" | "empty" | "missing";
   /** Add the recording that carries a native cursor track (a take made with the flag on). */
   readonly cursorRecording?: boolean;
+  /** Add the two webcam recordings the editor's camera panel states open (`seed-vault.ts`). */
+  readonly cameraRecordings?: boolean;
   /** Add the screenshot that draws real text (`fixtures/text/`), for the Select text states. */
   readonly textScreenshot?: boolean;
   /** Add the screenshots the Colors panel states open (`fixtures/make-fixtures.ts`). */
@@ -114,6 +116,12 @@ export const PROFILES = {
       "Flag timeline-levels forced on: the video editor's Captures panel shows Add to timeline on each capture.",
     seed: "demo",
     flags: { "timeline-levels": true },
+  },
+  "camera-parts": {
+    description:
+      "The vault adds “Camera parts” (a camera part and a hidden range) and “Camera size” (a camera size no S, M or L button has): the editor's camera panel states.",
+    seed: "demo",
+    cameraRecordings: true,
   },
   "image-inspect": {
     description:

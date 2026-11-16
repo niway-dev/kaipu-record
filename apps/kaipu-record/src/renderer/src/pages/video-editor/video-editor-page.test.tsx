@@ -1268,7 +1268,7 @@ describe("VideoEditorPage — webcam track", () => {
     expect(footer.querySelector('[data-testid="webcam-lane"]')).toBeNull();
     expect(screen.queryByTestId("webcam-layer")).toBeNull();
     expect(document.querySelectorAll("video")).toHaveLength(1);
-    expect(screen.queryByRole("button", { name: "Hide webcam here" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Hide camera from here" })).toBeNull();
     // No webcam file to decode: the webcam filmstrip is asked for nothing.
     expect(thumbnailCalls.some((args) => String(args[0]).startsWith("kaipu-media://webcam"))).toBe(
       false,
@@ -1294,20 +1294,20 @@ describe("VideoEditorPage — webcam track", () => {
     const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
     expect(cam.getAttribute("src")).toBe("kaipu-media://webcam/rec-1");
     expect(cam.muted).toBe(true);
-    expect(screen.getByRole("button", { name: "Hide webcam here" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide camera from here" })).toBeInTheDocument();
   });
 
-  it("Hide webcam here adds a selected hidden section; Delete removes it", async () => {
+  it("Hide camera from here adds a selected hidden section; Delete removes it", async () => {
     renderEditor(WITH_WEBCAM);
     const footer = await waitForEditorLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "Hide webcam here" }));
+    fireEvent.click(screen.getByRole("button", { name: "Hide camera from here" }));
     const block = await waitFor(() => {
       const found = footer.querySelector('[data-webcam-id][data-mode="hidden"]');
       expect(found).not.toBeNull();
       return found as HTMLElement;
     });
     expect(block).toHaveAttribute("aria-pressed", "true");
-    expect(await screen.findByRole("heading", { name: "Webcam section 1" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Camera hidden" })).toBeInTheDocument();
     await waitFor(() => {
       fireEvent.keyDown(window, { key: "Delete" });
       expect(footer.querySelector("[data-webcam-id]")).toBeNull();
@@ -1341,10 +1341,10 @@ describe("VideoEditorPage — webcam track", () => {
     }
   });
 
-  // Review S1: with the layer selected the inspector follows the playhead into an override.
-  // A slider drag that crossed that boundary used to swap the inspector, unmount the slider
-  // mid-gesture and leave the scene's drag open — every later commit and undo was dropped.
-  it("a slider drag survives the playhead entering an override; commits and undo still land", async () => {
+  // Review S1: a slider drag must outlive the playhead entering an override. The Camera panel
+  // keeps its Whole video tab when that happens (the tab edits the whole video's look, never
+  // the part under the playhead), so the slider stays mounted and the scene's drag closes.
+  it("a slider drag survives the playhead entering a part; commits and undo still land", async () => {
     const scene = JSON.parse(SESSION_BEFORE_WEBCAM).scene;
     const original = window.electronAPI.loadVideoEditSession;
     window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
@@ -1366,22 +1366,21 @@ describe("VideoEditorPage — webcam track", () => {
       const bubble = screen.getByTestId("webcam-layer");
       fireEvent.pointerDown(bubble, { pointerId: 1 });
       fireEvent.pointerUp(bubble, { pointerId: 1 });
-      expect(await screen.findByRole("heading", { name: "Webcam" })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "Camera" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("tab", { name: "Whole video" }));
 
-      const size = screen.getByRole("slider", { name: "Size" });
-      fireEvent.pointerDown(size, { pointerId: 2 });
-      fireEvent.change(size, { target: { value: "0.3" } });
+      const shrink = screen.getByRole("slider", { name: "Size during zoom" });
+      fireEvent.pointerDown(shrink, { pointerId: 2 });
+      fireEvent.change(shrink, { target: { value: "0.5" } });
       const main = Array.from(document.querySelectorAll("video")).find(
         (v) => v.dataset.testid !== "webcam-video",
       )!;
       main.currentTime = 6;
       fireEvent.timeUpdate(main);
-      // The drag owns the inspector: it does not swap to the override under the playhead.
-      expect(screen.getByRole("heading", { name: "Webcam" })).toBeInTheDocument();
-      fireEvent.pointerUp(size, { pointerId: 2 });
+      expect(screen.getByRole("slider", { name: "Size during zoom" })).toBe(shrink);
+      fireEvent.pointerUp(shrink, { pointerId: 2 });
 
-      // Drag over, the playhead's override takes the inspector — and a commit lands.
-      expect(await screen.findByRole("heading", { name: "Webcam section 1" })).toBeInTheDocument();
+      // Drag over: a commit lands on the whole video's look, and one undo takes it back.
       fireEvent.click(screen.getByRole("button", { name: "Square" }));
       expect(screen.getByRole("button", { name: "Square" })).toHaveAttribute(
         "aria-pressed",
@@ -1399,12 +1398,92 @@ describe("VideoEditorPage — webcam track", () => {
     }
   });
 
-  it("grabbing the bubble opens the Webcam section of the inspector", async () => {
+  // A part (source 5 to 8, sliding in) and a hidden range (source 14 to 18) on the webcam layer.
+  async function openWithCameraBlocks(): Promise<{ footer: HTMLElement; main: HTMLVideoElement }> {
+    const scene = JSON.parse(SESSION_BEFORE_WEBCAM).scene;
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
+      sessionJson: JSON.stringify({
+        version: 1,
+        scene: {
+          ...scene,
+          webcam: {
+            layout: { ...WEBCAM_DEFAULTS },
+            segments: [
+              {
+                id: "cam-ov",
+                start: 5,
+                end: 8,
+                mode: "override",
+                layout: { position: { x: 0.88, y: 0.18 } },
+                transition: { kind: "slide", ms: 700, easing: "ease-in-out" },
+              },
+              { id: "cam-h", start: 14, end: 18, mode: "hidden" },
+            ],
+          },
+        },
+      }),
+      assets: [],
+    }));
+    renderEditor(WITH_WEBCAM);
+    const footer = await waitForEditorLoaded();
+    const main = Array.from(document.querySelectorAll("video")).find(
+      (v) => v.dataset.testid !== "webcam-video",
+    )!;
+    return { footer, main };
+  }
+  const moveTo = (main: HTMLVideoElement, seconds: number): void => {
+    main.currentTime = seconds;
+    fireEvent.timeUpdate(main);
+  };
+
+  it("the rail's Hide camera from here is disabled inside a part, inside a hidden range and with under a second of room, and says why", async () => {
+    const original = window.electronAPI.loadVideoEditSession;
+    try {
+      const { main } = await openWithCameraBlocks();
+      const hide = (): HTMLElement => screen.getByRole("button", { name: "Hide camera from here" });
+      // Source 0: outside every block, with room.
+      expect(hide()).toBeEnabled();
+      moveTo(main, 6);
+      await waitFor(() => expect(hide()).toBeDisabled());
+      expect(hide().title).toMatch(/Inside a part the camera cannot be hidden/);
+      moveTo(main, 15);
+      await waitFor(() => expect(hide().title).toMatch(/already hidden here/));
+      expect(hide()).toBeDisabled();
+      moveTo(main, 13.5);
+      await waitFor(() => expect(hide().title).toMatch(/under 1 second is left/));
+      expect(hide()).toBeDisabled();
+      moveTo(main, 1);
+      await waitFor(() => expect(hide()).toBeEnabled());
+    } finally {
+      window.electronAPI.loadVideoEditSession = original;
+    }
+  });
+
+  it("Play the slide goes half a second before the part and plays from there", async () => {
+    const original = window.electronAPI.loadVideoEditSession;
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    try {
+      const { footer, main } = await openWithCameraBlocks();
+      fireEvent.click(footer.querySelector('[data-webcam-id="cam-ov"]')!);
+      const play = await screen.findByRole("button", { name: "Play the slide" });
+      playSpy.mockClear();
+      fireEvent.click(play);
+      // Source 5 - 0.5 s: the slide starts from where the camera was.
+      await waitFor(() => expect(main.currentTime).toBeCloseTo(4.5, 1));
+      await waitFor(() => expect(playSpy).toHaveBeenCalled());
+    } finally {
+      playSpy.mockRestore();
+      window.electronAPI.loadVideoEditSession = original;
+    }
+  });
+
+  it("grabbing the bubble opens the Camera panel, with no Position grid", async () => {
     renderEditor(WITH_WEBCAM);
     await waitForEditorLoaded();
     fireEvent.pointerDown(screen.getByTestId("webcam-layer"), { pointerId: 1 });
-    expect(await screen.findByRole("heading", { name: "Webcam" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Position" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Camera" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "This part" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Position" })).toBeNull();
   });
 });
 

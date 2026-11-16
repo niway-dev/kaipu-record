@@ -63,16 +63,18 @@ import { WebcamLane } from "@renderer/features/video-editor/components/webcam-la
 import { WebcamLayer } from "@renderer/features/video-editor/components/webcam-layer";
 import { WebcamDropCard } from "@renderer/features/video-editor/components/webcam-drop-card";
 import { WebcamMarks } from "@renderer/features/video-editor/components/webcam-marks";
-import {
-  WebcamInspector,
-  WebcamSegmentInspector,
-} from "@renderer/features/video-editor/components/inspector/webcam-inspector";
+import { WebcamPanel } from "@renderer/features/video-editor/components/inspector/webcam-inspector";
 import { useWebcamEditing } from "@renderer/features/video-editor/webcam/use-webcam-editing";
 import { useWebcamDrop } from "@renderer/features/video-editor/webcam/use-webcam-drop";
-import { webcamAt, webcamOverrideAt } from "@renderer/features/video-editor/webcam/webcam-model";
+import {
+  webcamOverrideAt,
+  type WebcamSegment,
+} from "@renderer/features/video-editor/webcam/webcam-model";
+import { webcamHideBlock } from "@renderer/features/video-editor/webcam/webcam-edits";
 import {
   webcamInspectorTarget,
   webcamOutlined,
+  webcamPlaySlideTarget,
   webcamSelectSeekTarget,
 } from "@renderer/features/video-editor/webcam/webcam-selection";
 import {
@@ -1421,6 +1423,21 @@ function VideoEditor({
     [webcamEdits, selectKind],
   );
 
+  // "Play the slide": the playhead goes a little before the part and plays. `play()` reads the
+  // playhead from the render after the seek, so it starts on the next frame; a preview that is
+  // already playing keeps playing from the new place.
+  const handlePlayWebcamSlide = useCallback(
+    (part: WebcamSegment) => {
+      const target = webcamPlaySlideTarget(layoutRef.current, part);
+      if (target === null) return;
+      playbackRef.current.seek(target);
+      requestAnimationFrame(() => {
+        if (!playbackRef.current.playing) playbackRef.current.play();
+      });
+    },
+    [layoutRef, playbackRef],
+  );
+
   const handleRemoveZoom = useCallback(
     (id: string) => {
       zooms.remove(id);
@@ -1451,6 +1468,14 @@ function VideoEditor({
         )
       : null;
   const selectedWebcamSegment = webcamTarget?.kind === "segment" ? webcamTarget.segment : null;
+  // The rail's "Hide camera from here" is disabled where it cannot hide, and says why.
+  const hideWebcamBlock = hasWebcam
+    ? webcamHideBlock(
+        scene,
+        sourceTimeAtTimeline(layout, playback.timelineTime),
+        source.durationSeconds,
+      )
+    : null;
 
   // Privacy (doc 10). While a privacy tool is active or a region is selected the preview
   // shows the unzoomed original frame, so drawing/editing maps 1:1 to frame coordinates.
@@ -2049,6 +2074,7 @@ function VideoEditor({
           onAddZoom={handleAddZoom}
           privacyDisabled={onSlide}
           onHideWebcam={hasWebcam ? handleHideWebcam : undefined}
+          hideWebcamBlock={hideWebcamBlock}
           onOpenCursor={
             cursorData
               ? () => (cursorInspectorOpen ? setCursorInspectorOpen(false) : openCursorInspector())
@@ -2155,21 +2181,20 @@ function VideoEditor({
                   }
                   onRemoved={() => selectKind("zoom", null)}
                 />
-              ) : scene.webcam && webcamTarget?.kind === "layer" ? (
-                <WebcamInspector
-                  layout={scene.webcam.layout}
-                  edits={webcamEdits}
-                  frame={frameSize}
-                  onHideHere={handleHideWebcam}
-                />
-              ) : selectedWebcamSegment ? (
-                <WebcamSegmentInspector
+              ) : scene.webcam && webcamTarget ? (
+                <WebcamPanel
+                  key={selectedWebcamId}
+                  webcam={scene.webcam}
                   segment={selectedWebcamSegment}
-                  index={webcamEdits.visibleSegments.indexOf(selectedWebcamSegment) + 1}
-                  range={timelineRangeOf(selectedWebcamSegment.start, selectedWebcamSegment.end)}
-                  layout={webcamAt(scene, selectedWebcamSegment.start) ?? scene.webcam!.layout}
+                  range={
+                    selectedWebcamSegment
+                      ? timelineRangeOf(selectedWebcamSegment.start, selectedWebcamSegment.end)
+                      : null
+                  }
+                  playhead={playback.timelineTime}
                   edits={webcamEdits}
                   frame={frameSize}
+                  onPlaySlide={handlePlayWebcamSlide}
                   onRemoved={() => selectKind("webcam", null)}
                 />
               ) : selectedOverlay ? (

@@ -29,7 +29,7 @@ import {
   type WebcamStretch,
 } from "../webcam/webcam-stretches";
 import type { FrameSize } from "../webcam/webcam-layout";
-import type { WebcamPositionName } from "../webcam/webcam-names";
+import { NAME_LABEL } from "./webcam-name-label";
 import { WEBCAM_DEFAULTS, type WebcamLayout, type WebcamSegment } from "../webcam/webcam-model";
 import { thumbnailAt, thumbnailTiles, timeToFraction } from "./timeline-geometry";
 import { useTimelinePointer, useTimelineViewContext } from "./timeline-pointer";
@@ -72,18 +72,6 @@ const ROOM_HOW_PX = 200;
 const UNMEASURED_LANE_PX = 800;
 /** The wedge of a slide is at least this wide, so a short slide still reads. */
 const WEDGE_MIN_PX = 10;
-
-const NAME_LABEL = {
-  topLeft: "webcamNameTopLeft",
-  topMiddle: "webcamNameTopMiddle",
-  topRight: "webcamNameTopRight",
-  middleLeft: "webcamNameMiddleLeft",
-  center: "webcamNameCenter",
-  middleRight: "webcamNameMiddleRight",
-  bottomLeft: "webcamNameBottomLeft",
-  bottomMiddle: "webcamNameBottomMiddle",
-  bottomRight: "webcamNameBottomRight",
-} as const satisfies Record<WebcamPositionName, string>;
 
 /** 0.7, 1.2, 0.35: the seconds as short as they can be written. */
 const seconds = (value: number): string => String(Number(value.toFixed(2)));

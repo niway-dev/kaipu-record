@@ -5,7 +5,7 @@ import { PADDING_RANGE, RADIUS_RANGE, SHADOW_RANGE } from "../screenshots/beauti
 import { DEFAULT_BACKGROUND } from "./background";
 import { SESSION_BEFORE_WEBCAM } from "./session-before-webcam.fixture";
 import { easeValue } from "./webcam/easing";
-import { webcamStateAt } from "./webcam/webcam-model";
+import { webcamSizePreset, webcamStateAt } from "./webcam/webcam-model";
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -470,6 +470,18 @@ describe("webcam layer", () => {
       webcam: { layout: LAYOUT as never, segments: [HIDDEN, OVERRIDE] as never },
     };
     expect(parseSession(serializeSession(scene))!.scene.webcam).toEqual(scene.webcam);
+  });
+
+  it("opens a camera size no S, M or L button has at that size, and saving never rewrites it", () => {
+    // 0.27 sits between M (0.22) and L (0.33): no button is pressed for it, and it stays 0.27.
+    const scene: VideoScene = {
+      ...initialScene(10),
+      webcam: { layout: { ...LAYOUT, size: 0.27 } as never, segments: [] },
+    };
+    const first = parseSession(serializeSession(scene))!.scene;
+    expect(first.webcam!.layout.size).toBe(0.27);
+    expect(parseSession(serializeSession(first))!.scene.webcam!.layout.size).toBe(0.27);
+    expect(webcamSizePreset(first.webcam!.layout.size)).toBeNull();
   });
 
   it("opens a layer saved before the corner slider with today's 18 % corner", () => {

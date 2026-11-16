@@ -70,3 +70,19 @@ export function webcamSelectSeekTarget(
     timelineTimeAtSource(layout, settled) ?? seekTargetForSegment(layout, timelineTime, segment)
   );
 }
+
+/** "Play the slide" starts this far (seconds) before the part, so the bubble is seen waiting. */
+const SLIDE_LEAD_SECONDS = 0.5;
+
+/**
+ * Where the playhead goes (timeline seconds) for "Play the slide": a little before the part,
+ * so the slide plays from the bubble's old place. When that moment was cut out of the timeline
+ * it is the part's own start; null when neither is on the timeline.
+ */
+export function webcamPlaySlideTarget(
+  layout: LayoutEntry[],
+  segment: WebcamSegment,
+): number | null {
+  const lead = Math.max(0, segment.start - SLIDE_LEAD_SECONDS);
+  return timelineTimeAtSource(layout, lead) ?? timelineTimeAtSource(layout, segment.start);
+}

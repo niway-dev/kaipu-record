@@ -262,6 +262,14 @@ export const UI_MAP = {
       // in the original position; `partRoute` is a part's ghost bubble, dotted route and chip;
       // `hiddenOutline` is the dashed outline where a hidden range would show the camera.
       webcamMarks: { states: ["originalLabel", "partRoute", "hiddenOutline"] },
+      // The Camera panel in the inspector (camera parts, drag-first): `thisPart` is the tab with
+      // a part selected, `noPart` the same tab with no part under the playhead (a sentence and
+      // no button), `wholeVideo` the other tab (the original position, shape, size as S, M or L,
+      // mirror, shadow, shrink), `sizeCustom` that tab on a size no button has (none pressed),
+      // `hiddenRange` the panel for a selected hidden range.
+      webcamPanel: {
+        states: ["thisPart", "noPart", "wholeVideo", "sizeCustom", "hiddenRange"],
+      },
       transport: { states: ["paused", "playing", "withCounts", "speedChanged", "zoomed"] },
       toolRail: { states: ["default", "annotate", "privacy"] },
       toolFlyout: { states: ["audio"] },
@@ -269,8 +277,8 @@ export const UI_MAP = {
       // The Timeline guide (NIW2-679): a dialog over the editor, one tab per lane.
       trackGuide: { states: ["clips", "zooms", "webcam"] },
       toolbar: { states: ["default", "saving", "saved"] },
-      // webcamBlock: a camera block selected, with its scope (the time range) and its transition
-      // controls; `webcam` is the bubble selected, which edits the default camera.
+      // webcamBlock: a camera part or hidden range selected; `webcam` is the bubble selected
+      // (the Camera panel opens on it, see `webcamPanel`).
       inspector: {
         states: ["detection", "zoom", "mute", "webcam", "webcamBlock", "annotation", "privacy"],
       },

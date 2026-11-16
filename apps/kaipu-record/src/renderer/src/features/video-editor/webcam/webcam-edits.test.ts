@@ -9,6 +9,7 @@ import {
   setWebcamLayout,
   setWebcamTransition,
   updateWebcamSegment,
+  webcamHideBlock,
   webcamPartRoom,
 } from "./webcam-edits";
 import { WEBCAM_TRANSITION_DEFAULTS, webcamAt, type WebcamScene } from "./webcam-model";
@@ -337,5 +338,45 @@ describe("setWebcamTransition", () => {
     expect(setWebcamTransition(base, "zzz", { kind: "slide" })).toBe(base);
     const none = initialScene(DURATION);
     expect(setWebcamTransition(none, "o", { kind: "slide" })).toBe(none);
+  });
+});
+
+describe("webcamHideBlock", () => {
+  const scene = () =>
+    withSegments([
+      { id: "p", start: 10, end: 20, mode: "override" },
+      { id: "h", start: 30, end: 40, mode: "hidden" },
+    ]);
+
+  it("is null where the camera can be hidden: outside every block with room", () => {
+    expect(webcamHideBlock(scene(), 2, DURATION)).toBeNull();
+    expect(webcamHideBlock(scene(), 25, DURATION)).toBeNull();
+    expect(webcamHideBlock(scene(), 45, DURATION)).toBeNull();
+  });
+
+  it("blocks inside a part and inside a hidden range, each with its own reason", () => {
+    expect(webcamHideBlock(scene(), 12, DURATION)).toBe("in-part");
+    expect(webcamHideBlock(scene(), 10, DURATION)).toBe("in-part");
+    expect(webcamHideBlock(scene(), 35, DURATION)).toBe("in-hidden");
+  });
+
+  it("blocks with under a second before the next block or the end", () => {
+    expect(webcamHideBlock(scene(), 29.5, DURATION)).toBe("no-room");
+    expect(webcamHideBlock(scene(), 59.5, DURATION)).toBe("no-room");
+    expect(webcamHideBlock(scene(), 28.9, DURATION)).toBeNull();
+  });
+
+  it("blocks over a slide clip (no source time) and with no webcam", () => {
+    expect(webcamHideBlock(scene(), null, DURATION)).toBe("on-slide");
+    expect(webcamHideBlock(initialScene(DURATION), 5, DURATION)).toBe("no-room");
+  });
+
+  it("agrees with where hiding really adds a range", () => {
+    const base = scene();
+    for (const at of [2, 12, 25, 29.5, 35, 59.5]) {
+      const added = addWebcamSegment(base, { start: at, end: at + 1, mode: "hidden" }, DURATION);
+      const room = webcamPartRoom(base, at, DURATION) !== null;
+      expect(webcamHideBlock(base, at, DURATION) === null).toBe(room && added.id !== null);
+    }
   });
 });

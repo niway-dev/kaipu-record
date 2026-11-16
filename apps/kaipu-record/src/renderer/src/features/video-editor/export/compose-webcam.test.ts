@@ -6,10 +6,22 @@ import {
   type WebcamScene,
   type WebcamTransition,
 } from "../webcam/webcam-model";
-import { WEBCAM_POSITION_PRESETS, webcamStateRect } from "../webcam/webcam-layout";
+import { webcamStateRect } from "../webcam/webcam-layout";
 import { drawWebcamLayer, planWebcamDraw, type WebcamCtx } from "./compose-webcam";
 
 const IMAGE = { width: 1280, height: 720 };
+/** The four corners, four edge middles and the centre: where a dragged bubble most often lands. */
+const EDGE_AND_CENTER_POSITIONS = [
+  { id: "top-left", x: 0, y: 0 },
+  { id: "top", x: 0.5, y: 0 },
+  { id: "top-right", x: 1, y: 0 },
+  { id: "left", x: 0, y: 0.5 },
+  { id: "center", x: 0.5, y: 0.5 },
+  { id: "right", x: 1, y: 0.5 },
+  { id: "bottom-left", x: 0, y: 1 },
+  { id: "bottom", x: 0.5, y: 1 },
+  { id: "bottom-right", x: 1, y: 1 },
+] as const;
 const layout = (patch: Partial<WebcamLayout> = {}): WebcamLayout => ({
   ...WEBCAM_DEFAULTS,
   ...patch,
@@ -201,12 +213,12 @@ describe("planWebcamDraw", () => {
     ["Square (Fit)", { width: 1080, height: 1080 }],
   ])("%s keeps the whole bubble inside the output", (_name, frame) => {
     it.each(
-      WEBCAM_POSITION_PRESETS.flatMap((p) =>
+      EDGE_AND_CENTER_POSITIONS.flatMap((p) =>
         (["circle", "rectangle"] as const).map((shape) => [p.id, shape, p] as const),
       ),
-    )("at %s (%s)", (_id, shape, preset) => {
+    )("at %s (%s)", (_id, shape, point) => {
       const size = 0.6; // the largest bubble
-      const position = { x: preset.x, y: preset.y };
+      const position = { x: point.x, y: point.y };
       const plan = planWebcamDraw(scene({ shape, size, position }), 0, frame, 1, IMAGE)!;
       expect(inside(plan.rect, frame)).toBe(true);
     });

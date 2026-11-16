@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CAMERA_BUBBLE } from "@shared/camera-bubble";
+import { CAMERA_BUBBLE_PRESETS, DEFAULT_CAMERA_BUBBLE } from "@shared/camera-bubble";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
 import {
   WEBCAM_DEFAULTS,
@@ -13,7 +13,9 @@ import {
   webcamAt,
   webcamEffectiveTransitionMs,
   webcamEndSeconds,
-  webcamSizeLabel,
+  WEBCAM_SIZE_PRESETS,
+  WEBCAM_SIZE_PRESET_IDS,
+  webcamSizePreset,
   webcamStateAt,
   type WebcamLayout,
   type WebcamScene,
@@ -169,11 +171,40 @@ describe("WEBCAM_LIMITS size range", () => {
   });
 });
 
-describe("webcamSizeLabel", () => {
-  it("maps the stored range linearly onto 10 to 90", () => {
-    expect(webcamSizeLabel(0.12)).toBe(10);
-    expect(webcamSizeLabel(0.51)).toBe(50);
-    expect(webcamSizeLabel(0.9)).toBe(90);
+describe("the S, M and L sizes", () => {
+  it("are 0.15, 0.22 and 0.33 of the frame's height", () => {
+    expect(WEBCAM_SIZE_PRESETS).toEqual({ S: 0.15, M: 0.22, L: 0.33 });
+  });
+
+  it("keep the proportions of the recorder bubble's presets around M", () => {
+    expect(WEBCAM_SIZE_PRESETS.S / WEBCAM_SIZE_PRESETS.M).toBeCloseTo(
+      CAMERA_BUBBLE_PRESETS.S / CAMERA_BUBBLE_PRESETS.M,
+      1,
+    );
+    expect(WEBCAM_SIZE_PRESETS.L / WEBCAM_SIZE_PRESETS.M).toBeCloseTo(
+      CAMERA_BUBBLE_PRESETS.L / CAMERA_BUBBLE_PRESETS.M,
+      1,
+    );
+  });
+
+  it("make M the default size", () => {
+    expect(WEBCAM_DEFAULTS.size).toBe(WEBCAM_SIZE_PRESETS.M);
+  });
+
+  it("are named by the preset helper, and any other size has no name", () => {
+    expect(webcamSizePreset(0.15)).toBe("S");
+    expect(webcamSizePreset(0.22)).toBe("M");
+    expect(webcamSizePreset(0.33)).toBe("L");
+    expect(webcamSizePreset(0.27)).toBeNull();
+    expect(webcamSizePreset(0.2200001)).toBeNull();
+    expect(webcamSizePreset(Number.NaN)).toBeNull();
+  });
+
+  it("all sit inside the size limits, so a stored preset is never clamped", () => {
+    for (const id of WEBCAM_SIZE_PRESET_IDS) {
+      const size = WEBCAM_SIZE_PRESETS[id];
+      expect(clampWebcamPatch({ size }).size).toBe(size);
+    }
   });
 });
 

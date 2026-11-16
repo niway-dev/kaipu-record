@@ -15,14 +15,9 @@ import { uiArea } from "@renderer/lib/ui-area";
 import type { FrameSize } from "../webcam/webcam-layout";
 import { webcamMarks, type WebcamMarkLabel } from "../webcam/webcam-marks";
 import type { WebcamScene } from "../webcam/webcam-model";
+import { formatClock } from "./inspector/format";
 import { WebcamRouteOverlay } from "./webcam-route-overlay";
 import styles from "./webcam-marks.module.css";
-
-/** "0:24": minutes and whole seconds. */
-function clock(seconds: number): string {
-  const whole = Math.max(0, Math.floor(seconds + 1e-6));
-  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
-}
 
 /** 0.7, 1.2, 0.35: the seconds as short as they can be written. */
 const seconds = (value: number): string => String(Number(value.toFixed(2)));
@@ -89,7 +84,7 @@ function PausedMarks({
     label.kind === "sliding"
       ? t("webcamMarkSliding")
       : label.kind === "part"
-        ? t("webcamMarkPart", { from: clock(label.start), to: clock(label.end) })
+        ? t("webcamMarkPart", { from: formatClock(label.start), to: formatClock(label.end) })
         : t("webcamMarkOriginal");
 
   return (

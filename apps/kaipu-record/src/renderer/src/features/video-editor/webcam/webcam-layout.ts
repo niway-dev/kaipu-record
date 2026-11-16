@@ -213,39 +213,3 @@ export function webcamSourceRect(
  * on a ~400 px tall stage). Relative, so a 4K export does not get a hairline shadow.
  */
 export const WEBCAM_SHADOW = { blur: 0.09, offsetY: 0.022, color: "rgba(0, 0, 0, 0.35)" } as const;
-
-/** The nine inspector presets, as normalized centres; the clamp pulls them to the edges. */
-export const WEBCAM_POSITION_PRESETS = [
-  { id: "top-left", x: 0, y: 0 },
-  { id: "top", x: 0.5, y: 0 },
-  { id: "top-right", x: 1, y: 0 },
-  { id: "left", x: 0, y: 0.5 },
-  { id: "center", x: 0.5, y: 0.5 },
-  { id: "right", x: 1, y: 0.5 },
-  { id: "bottom-left", x: 0, y: 1 },
-  { id: "bottom", x: 0.5, y: 1 },
-  { id: "bottom-right", x: 1, y: 1 },
-] as const;
-
-export type WebcamPositionPresetId = (typeof WEBCAM_POSITION_PRESETS)[number]["id"];
-
-/**
- * Whether `position` is where `preset` puts a bubble of this shape and size. A preset stores
- * its raw edge (0, 0.5 or 1) and relies on {@link clampWebcamCenter}, so the bubble is flush
- * with the edge whatever its drawn size is at that instant (a shrink during zoom, another
- * shape, a new size). A centre stored for the full-size box, or one dragged to the edge,
- * therefore counts as the same preset: both clamp to the same place.
- */
-export function webcamPresetActive(
-  preset: { x: number; y: number },
-  layout: Pick<WebcamLayout, "shape" | "size" | "position">,
-  frame: FrameSize,
-): boolean {
-  if (!(frame.width > 0) || !(frame.height > 0)) return false;
-  const aspect = cameraShapeAspect(layout.shape);
-  const height = Math.min(layout.size * frame.height, frame.width / aspect, frame.height);
-  const box = { width: height * aspect, height };
-  const here = clampWebcamCenter(layout.position, box, frame);
-  const there = clampWebcamCenter(preset, box, frame);
-  return Math.abs(here.x - there.x) < 0.005 && Math.abs(here.y - there.y) < 0.005;
-}

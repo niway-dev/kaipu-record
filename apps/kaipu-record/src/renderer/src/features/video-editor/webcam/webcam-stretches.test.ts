@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   webcamLaneBlockWidths,
   webcamLaneStretches,
+  webcamLayoutDot,
+  webcamLayoutName,
+  webcamPartOrigin,
   webcamPartSlideSeconds,
   webcamStretchDot,
   webcamStretchName,
@@ -219,5 +222,54 @@ describe("webcamLaneBlockWidths (the 56 px rule)", () => {
       600,
     );
     expect(result[1]).toEqual({ left: 56, width: 144 });
+  });
+});
+
+describe("the panel's frame helpers", () => {
+  const FRAME = { width: 1920, height: 1080 };
+  const scene = (segments: WebcamSegment[]): WebcamScene => ({
+    layout: { ...WEBCAM_DEFAULTS, position: { x: 0.12, y: 0.82 } },
+    segments,
+  });
+
+  it("names and places a layout like the lane does for the same stretch", () => {
+    const webcam = scene([part("p", 4, 8)]);
+    const stretch = webcamLaneStretches(webcam, 20)[1]!;
+    const layout = { ...webcam.layout, ...webcam.segments[0]!.layout };
+    expect(webcamLayoutName(layout, FRAME)).toBe(webcamStretchName(webcam, stretch, FRAME));
+    expect(webcamLayoutDot(layout, FRAME)).toEqual(webcamStretchDot(webcam, stretch, FRAME));
+  });
+
+  it("a part comes from the original position when nothing touches its start", () => {
+    const webcam = scene([part("p", 4, 8)]);
+    expect(webcamPartOrigin(webcam, webcam.segments[0]!).position).toEqual({ x: 0.12, y: 0.82 });
+  });
+
+  it("a part comes from the part that ends exactly where it starts", () => {
+    const webcam = scene([
+      part("a", 1, 4, { layout: { position: { x: 0.5, y: 0.5 } } }),
+      part("b", 4, 8),
+    ]);
+    expect(webcamPartOrigin(webcam, webcam.segments[1]!).position).toEqual({ x: 0.5, y: 0.5 });
+  });
+
+  it("a gap or a hidden range before a part means it comes from the original position", () => {
+    const gap = scene([
+      part("a", 1, 3, { layout: { position: { x: 0.5, y: 0.5 } } }),
+      part("b", 4, 8),
+    ]);
+    expect(webcamPartOrigin(gap, gap.segments[1]!).position).toEqual({ x: 0.12, y: 0.82 });
+    const hiddenBefore = scene([hiddenRange("h", 1, 4), part("b", 4, 8)]);
+    expect(webcamPartOrigin(hiddenBefore, hiddenBefore.segments[1]!).position).toEqual({
+      x: 0.12,
+      y: 0.82,
+    });
+  });
+
+  it("keeps the part's own size and shape, so both dots are measured on the same box", () => {
+    const webcam = scene([
+      part("p", 4, 8, { layout: { position: { x: 0.8, y: 0.2 }, size: 0.33 } }),
+    ]);
+    expect(webcamPartOrigin(webcam, webcam.segments[0]!)).toMatchObject({ size: 0.33 });
   });
 });

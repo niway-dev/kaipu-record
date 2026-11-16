@@ -30,6 +30,7 @@ import {
 } from "../annotations/video-tools";
 import { formatAccelerator } from "@renderer/features/shortcuts/keyboard-accelerator";
 import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
+import type { WebcamHideBlock } from "../webcam/webcam-edits";
 import styles from "./editor-toolbar.module.css";
 import { uiArea } from "@renderer/lib/ui-area";
 
@@ -321,6 +322,10 @@ export interface EditorToolRailProps {
   privacyDisabled: boolean;
   /** "Hide webcam here" (ADR 0038). Absent for a recording without a webcam: no button. */
   onHideWebcam?(): void;
+  /** Why "Hide camera from here" cannot hide at the playhead (inside a part or a hidden
+   *  range, no room, over a slide), or null/absent when it can. The button is disabled and
+   *  the reason is its tooltip. */
+  hideWebcamBlock?: WebcamHideBlock | null;
   /** Open the recorded cursor's settings. Absent when the recording cannot redraw its
    *  cursor (it is baked into the video): no button. */
   onOpenCursor?(): void;
@@ -346,6 +351,20 @@ function toolIcon(tool: EditorTool): typeof Square {
   return isPrivacyTool(tool) ? PRIVACY_META[tool].Icon : TOOL_META[tool].Icon;
 }
 
+/** The tooltip of the disabled "Hide camera from here", by why it cannot hide. */
+const HIDE_WEBCAM_BLOCK_REASON: Record<
+  WebcamHideBlock,
+  | "webcamHideOnSlide"
+  | "webcamHideBlockedPart"
+  | "webcamHideBlockedHidden"
+  | "webcamHideBlockedNoRoom"
+> = {
+  "on-slide": "webcamHideOnSlide",
+  "in-part": "webcamHideBlockedPart",
+  "in-hidden": "webcamHideBlockedHidden",
+  "no-room": "webcamHideBlockedNoRoom",
+};
+
 export function EditorToolRail({
   tool,
   onToolChange,
@@ -355,6 +374,7 @@ export function EditorToolRail({
   onToggleMuteAll,
   audioMuted,
   onHideWebcam,
+  hideWebcamBlock,
   onOpenCursor,
   cursorSelected = false,
   onToggleCaptures,
@@ -575,9 +595,12 @@ export function EditorToolRail({
       {onHideWebcam && (
         <button
           type="button"
-          title={t("hintHideWebcam")}
+          title={
+            hideWebcamBlock ? t(HIDE_WEBCAM_BLOCK_REASON[hideWebcamBlock]) : t("hintHideWebcam")
+          }
           aria-label={t("webcamHideHere")}
           className={styles.tool}
+          disabled={Boolean(hideWebcamBlock)}
           onClick={onHideWebcam}
         >
           <EyeOff size={19} />

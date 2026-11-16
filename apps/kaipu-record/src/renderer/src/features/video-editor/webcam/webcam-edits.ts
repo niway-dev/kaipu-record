@@ -171,6 +171,29 @@ export function webcamPartRoom(
   );
 }
 
+/** Why "Hide camera from here" cannot hide at a moment, or null when it can. */
+export type WebcamHideBlock = "on-slide" | "in-part" | "in-hidden" | "no-room";
+
+/**
+ * Whether the rail's "Hide camera from here" can hide at source time `at` (null over a slide
+ * clip, where there is no camera). It hides outside every block only: inside a part or a hidden
+ * range it is blocked, and with under the minimum length of room before the next block or the
+ * end of the recording. The rail disables the button with the reason as its tooltip, and the
+ * click handler applies the same rule.
+ */
+export function webcamHideBlock(
+  scene: VideoScene,
+  at: number | null,
+  sourceDurationSeconds: number,
+): WebcamHideBlock | null {
+  const webcam = scene.webcam;
+  if (!webcam) return "no-room";
+  if (at === null) return "on-slide";
+  const inside = webcam.segments.find((s) => at >= s.start && at < s.end);
+  if (inside) return inside.mode === "hidden" ? "in-hidden" : "in-part";
+  return webcamPartRoom(scene, at, sourceDurationSeconds) ? null : "no-room";
+}
+
 /**
  * Create a camera part at `at`: an override block of {@link WEBCAM_PART_SECONDS} (or up to
  * the next block or the end of the recording) holding `position`, with the default slide.

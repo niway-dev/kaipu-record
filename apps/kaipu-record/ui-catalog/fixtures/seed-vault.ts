@@ -32,6 +32,10 @@ export const ASSETS = {
   weeklySync: "c0a1a10c-0000-4000-8000-000000000006",
   cursorDemo: "c0a1a10c-0000-4000-8000-000000000007",
   lightCopy: "c0a1a10c-0000-4000-8000-000000000008",
+  /** Seeded only where `cameraRecordings` is on: a webcam recording with a part and a hidden range. */
+  cameraParts: "c0a1a10c-0000-4000-8000-000000000009",
+  /** Seeded with `cameraParts`: a webcam recording saved at a camera size no S, M or L button has. */
+  cameraSize: "c0a1a10c-0000-4000-8000-00000000000a",
   settingsShot: "c0a1a10c-0000-4000-8000-000000000101",
   dashboardShot: "c0a1a10c-0000-4000-8000-000000000102",
   dialogShot: "c0a1a10c-0000-4000-8000-000000000103",
@@ -155,6 +159,12 @@ interface RecordingFixture {
   webcam?: boolean;
   /** A native cursor track: what a take recorded with `native-cursor-capture` on carries. */
   cursorTrack?: boolean;
+  /**
+   * A saved edit session with nothing but a webcam layer (the camera panel's states): `size` is
+   * the whole-video camera size, `segments` are camera parts and hidden ranges in source seconds.
+   * Needs `webcam`.
+   */
+  cameraScene?: { size: number; segments: readonly Record<string, unknown>[] };
   /** An export: the asset it was made from. */
   derivedFrom?: string;
   /** An export: the preset it was made with (the sidecar's `exportPreset`). */
@@ -219,6 +229,43 @@ const CURSOR_RECORDING: RecordingFixture = {
   cursorTrack: true,
 };
 
+/** Seeded only where `cameraRecordings` is on: the recordings the camera panel's states open. */
+const CAMERA_RECORDINGS: readonly RecordingFixture[] = [
+  {
+    // A part (2 s to 6 s, up in the top right, sliding in) and a hidden range (8 s to 10 s).
+    stem: "Camera parts",
+    assetId: ASSETS.cameraParts,
+    title: "Camera parts",
+    cut: 12,
+    ago: 20 * 60_000,
+    webcam: true,
+    cameraScene: {
+      size: 0.22,
+      segments: [
+        {
+          id: "part-1",
+          start: 2,
+          end: 6,
+          mode: "override",
+          layout: { position: { x: 0.88, y: 0.18 } },
+          transition: { kind: "slide", ms: 700, easing: "ease-in-out" },
+        },
+        { id: "hidden-1", start: 8, end: 10, mode: "hidden" },
+      ],
+    },
+  },
+  {
+    // The camera size is 0.27: between S (0.15) and M (0.22) and L (0.33), so no button is pressed.
+    stem: "Camera size",
+    assetId: ASSETS.cameraSize,
+    title: "Camera size",
+    cut: 9,
+    ago: 25 * 60_000,
+    webcam: true,
+    cameraScene: { size: 0.27, segments: [] },
+  },
+];
+
 const SCREENSHOTS = [
   {
     stem: "Settings page",
@@ -254,6 +301,8 @@ export interface SeedOptions {
   content: "demo" | "empty" | "missing";
   /** Add the native-cursor recording (profiles with the cursor flag on). */
   cursorRecording?: boolean;
+  /** Add the two webcam recordings the editor's camera panel states open. */
+  cameraRecordings?: boolean;
   /** Add the screenshot that draws real text (profiles that exercise text recognition). */
   textScreenshot?: boolean;
   /** Add the two screenshots the Colors panel states open (profiles that exercise it). */
@@ -493,15 +542,53 @@ async function seedRecording(
         webcam: null,
       },
     });
-    const source = await stat(media);
-    await writeJson(path.join(meta, `${item.stem}.edit.meta.json`), {
-      sourceSizeBytes: source.size,
-      sourceMtimeMs: source.mtimeMs,
-      assetIds: [],
-      savedAt,
-      exportedSavedAt: null,
-    });
+    await writeEditMeta(meta, media, item.stem, savedAt);
   }
+  if (item.cameraScene) {
+    await writeJson(path.join(meta, `${item.stem}.edit.json`), {
+      version: 1,
+      scene: {
+        items: [{ id: "clip-1", kind: "clip", sourceStart: 0, sourceEnd: item.cut }],
+        overlays: [],
+        zoomSegments: [],
+        redactions: [],
+        zoomSensitivity: 55,
+        audioMuted: false,
+        mutedRanges: [],
+        webcam: {
+          layout: {
+            shape: "circle",
+            size: item.cameraScene.size,
+            cornerRadius: 0.18,
+            position: { x: 0.12, y: 0.82 },
+            mirrored: true,
+            framing: { zoom: 1, x: 0, y: 0 },
+            scaleDuringZoom: 0.7,
+            shadow: true,
+          },
+          segments: item.cameraScene.segments,
+        },
+      },
+    });
+    await writeEditMeta(meta, media, item.stem, createdAt + HOUR);
+  }
+}
+
+/** The sidecar next to a saved edit session: it says the session matches the media on disk. */
+async function writeEditMeta(
+  meta: string,
+  media: string,
+  stem: string,
+  savedAt: number,
+): Promise<void> {
+  const source = await stat(media);
+  await writeJson(path.join(meta, `${stem}.edit.meta.json`), {
+    sourceSizeBytes: source.size,
+    sourceMtimeMs: source.mtimeMs,
+    assetIds: [],
+    savedAt,
+    exportedSavedAt: null,
+  });
 }
 
 /** Build the catalog's workspace in `vaultDir` (an empty, throwaway folder). */
@@ -541,7 +628,11 @@ export async function seedCatalogVault(vaultDir: string, options: SeedOptions): 
     })),
   });
 
-  const recordings = options.cursorRecording ? [CURSOR_RECORDING, ...RECORDINGS] : RECORDINGS;
+  const recordings = [
+    ...(options.cursorRecording ? [CURSOR_RECORDING] : []),
+    ...(options.cameraRecordings ? CAMERA_RECORDINGS : []),
+    ...RECORDINGS,
+  ];
   for (const item of recordings) await seedRecording(vaultDir, meta, fixtures, now, item);
 
   for (const shot of SCREENSHOTS) {

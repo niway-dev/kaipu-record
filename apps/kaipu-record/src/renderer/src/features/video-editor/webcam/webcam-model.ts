@@ -137,18 +137,47 @@ export function clampWebcamTransition(
 }
 
 /**
- * The inspector's Size label: the stored range 0.12–0.90 shown as 10–90, so the owner's
- * wording stays while the slider moves linearly over the stored size.
+ * The three sizes the panel's S, M and L buttons store, as a share of the output frame's
+ * height. They keep the proportions of the recorder bubble's presets (160, 240 and 360 DIP,
+ * `CAMERA_BUBBLE_PRESETS`) around M, today's default: 0.22 × 160 / 240 and × 360 / 240,
+ * rounded to the hundredth.
  */
-export function webcamSizeLabel(size: number): number {
-  const { minSize, maxSize } = WEBCAM_LIMITS;
-  return Math.round(10 + ((size - minSize) / (maxSize - minSize)) * 80);
+export const WEBCAM_SIZE_PRESETS = { S: 0.15, M: 0.22, L: 0.33 } as const;
+export type WebcamSizePreset = keyof typeof WEBCAM_SIZE_PRESETS;
+export const WEBCAM_SIZE_PRESET_IDS = [
+  "S",
+  "M",
+  "L",
+] as const satisfies readonly WebcamSizePreset[];
+
+/**
+ * The preset a size equals exactly, or `null` for any other size. A session saved at 0.27
+ * keeps playing at 0.27 and the panel shows no button selected: nothing here rounds it.
+ */
+export function webcamSizePreset(size: number): WebcamSizePreset | null {
+  for (const id of WEBCAM_SIZE_PRESET_IDS) {
+    if (WEBCAM_SIZE_PRESETS[id] === size) return id;
+  }
+  return null;
 }
+
+/** The durations (ms) the panel offers for a slide; a saved one outside them keeps playing. */
+export const WEBCAM_SLIDE_MS_PRESETS = [400, 700, 1200] as const;
+
+/**
+ * The motions the panel has a button for, in its order: Smooth, Bounce, Linear. `ease-out` stays
+ * in the model for the sessions that saved it, with no button.
+ */
+export const WEBCAM_MOTION_BUTTONS = [
+  "ease-in-out",
+  "back",
+  "linear",
+] as const satisfies readonly WebcamEasing[];
 
 /** The bubble's default look: bottom-left, where the recorder starts it. */
 export const WEBCAM_DEFAULTS: WebcamLayout = {
   shape: "circle",
-  size: 0.22,
+  size: WEBCAM_SIZE_PRESETS.M,
   cornerRadius: DEFAULT_CAMERA_CORNER_RADIUS,
   position: { x: 0.12, y: 0.82 },
   mirrored: true,

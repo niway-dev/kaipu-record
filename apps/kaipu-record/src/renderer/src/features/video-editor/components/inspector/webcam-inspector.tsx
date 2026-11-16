@@ -1,16 +1,22 @@
 /**
- * The Webcam section of the inspector (ADR 0038, spec § 6): Shape, Corners (square and
- * rectangle, ADR 0041), Size, nine position
- * presets, Mirror, Shadow and Shrink during zoom, for the global layout — or, when a lane
- * block is selected, for that segment: a hidden one shows its range and Delete, an override
- * the same controls over its own fields. A recording without a webcam never renders it.
+ * The Camera panel of the inspector (camera parts, drag-first). Two tabs:
  *
- * Every control edits through WebcamEditing with the history contract: buttons commit,
- * sliders run begin → live… → end. `target` is the source time the edit applies at: null
- * for the global layout, a time inside the segment for an override.
+ * - "This part": the part under the playhead or selected on the Camera lane (its range, where
+ *   the camera comes from and goes to, how it arrives, when it ends, "Remove this part"), or,
+ *   with no part there, a sentence and no button: a part is made by dragging the bubble.
+ * - "Whole video": the original position and the look every stretch shares (shape, corners,
+ *   size as S, M or L, mirror, shadow, shrink during a zoom).
+ *
+ * A selected hidden range has no tabs: what it is, and "Show the camera again".
+ *
+ * The bubble's place is never a control here: the small frame only shows it, and the bubble
+ * on the video is dragged to move it. Every control edits through WebcamEditing with the
+ * history contract: buttons commit, sliders run begin → live… → end.
  */
-import { EyeOff, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Eye, EyeOff, Play, Trash2, Webcam } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
+import { uiArea } from "@renderer/lib/ui-area";
 import {
   CAMERA_BUBBLE_SHAPES,
   CAMERA_CORNER_RADIUS_MAX,
@@ -18,51 +24,28 @@ import {
   CAMERA_CORNER_RADIUS_STEP,
   type CameraBubbleShape,
 } from "@shared/camera-bubble";
-import { formatPrecise } from "./format";
+import { formatClock, formatPrecise } from "./format";
 import { HistorySlider } from "../history-slider";
+import { NAME_LABEL } from "../webcam-name-label";
 import type { WebcamEditing } from "../../webcam/use-webcam-editing";
+import type { FrameSize } from "../../webcam/webcam-layout";
 import {
   WEBCAM_DEFAULTS,
-  WEBCAM_EASINGS,
   WEBCAM_LIMITS,
+  WEBCAM_MOTION_BUTTONS,
+  WEBCAM_SIZE_PRESETS,
+  WEBCAM_SIZE_PRESET_IDS,
+  WEBCAM_SLIDE_MS_PRESETS,
   WEBCAM_TRANSITION_DEFAULTS,
-  WEBCAM_TRANSITION_LIMITS,
-  webcamSizeLabel,
+  webcamSizePreset,
   type WebcamEasing,
   type WebcamLayout,
+  type WebcamScene,
   type WebcamSegment,
 } from "../../webcam/webcam-model";
-import {
-  type FrameSize,
-  WEBCAM_POSITION_PRESETS,
-  type WebcamPositionPresetId,
-  webcamPresetActive,
-} from "../../webcam/webcam-layout";
+import { webcamLayoutDot, webcamLayoutName, webcamPartOrigin } from "../../webcam/webcam-stretches";
 import styles from "./inspector.module.css";
 import webcamStyles from "./webcam-inspector.module.css";
-
-type PresetLabelKey =
-  | "webcamPosTopLeft"
-  | "webcamPosTop"
-  | "webcamPosTopRight"
-  | "webcamPosLeft"
-  | "webcamPosCenter"
-  | "webcamPosRight"
-  | "webcamPosBottomLeft"
-  | "webcamPosBottom"
-  | "webcamPosBottomRight";
-
-const PRESET_LABEL: Record<WebcamPositionPresetId, PresetLabelKey> = {
-  "top-left": "webcamPosTopLeft",
-  top: "webcamPosTop",
-  "top-right": "webcamPosTopRight",
-  left: "webcamPosLeft",
-  center: "webcamPosCenter",
-  right: "webcamPosRight",
-  "bottom-left": "webcamPosBottomLeft",
-  bottom: "webcamPosBottom",
-  "bottom-right": "webcamPosBottomRight",
-};
 
 const SHAPE_LABEL: Record<
   CameraBubbleShape,
@@ -86,37 +69,158 @@ const EASING_LABEL: Record<
 /** The highest shrink the slider offers while the toggle is on; 1 means "off". */
 const MAX_SHRINK_WHILE_ON = 0.95;
 
-function WebcamControls({
-  layout,
-  target,
-  edits,
-  frame,
+/**
+ * The small frame that shows where the camera is: a solid dot for now and, for a part, a
+ * dashed dot for where it comes from with the line between them. It is a picture, never a
+ * control: the bubble on the video is what moves.
+ */
+function PlaceFrame({
+  now,
+  before,
+  name,
 }: {
-  layout: WebcamLayout;
-  target: number | null;
-  edits: WebcamEditing;
-  frame: FrameSize;
+  /** Each axis's share (0 to 1) of the range the bubble's centre can reach. */
+  now: { x: number; y: number } | null;
+  before?: { x: number; y: number } | null;
+  name: string;
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
-  const commit = (patch: Partial<WebcamLayout>): void => edits.commitLayout(patch, target);
-  const live = (patch: Partial<WebcamLayout>): void => edits.liveLayout(patch, target);
-  const shrinking = layout.scaleDuringZoom < 1;
+  const percent = (share: number): string => `${share * 100}%`;
+  return (
+    <div
+      className={webcamStyles.placeFrame}
+      role="img"
+      aria-label={t("webcamFrameAria", { name })}
+      data-testid="webcam-panel-frame"
+    >
+      <div className={webcamStyles.placeTrack}>
+        {now && before && (
+          <svg className={webcamStyles.placeLine} aria-hidden="true">
+            <line
+              x1={percent(before.x)}
+              y1={percent(before.y)}
+              x2={percent(now.x)}
+              y2={percent(now.y)}
+            />
+          </svg>
+        )}
+        {before && (
+          <span
+            className={webcamStyles.placeBefore}
+            data-dot="before"
+            title={t("webcamFrameBefore")}
+            style={{ left: percent(before.x), top: percent(before.y) }}
+          />
+        )}
+        {now && (
+          <span
+            className={webcamStyles.placeNow}
+            data-dot="now"
+            title={t("webcamFrameNow")}
+            style={{ left: percent(now.x), top: percent(now.y) }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The place's name and the sentence that says the bubble is dragged on the video. */
+function PlaceBlock({
+  layout,
+  before,
+  frame,
+  label,
+  trailing,
+}: {
+  layout: WebcamLayout;
+  before?: WebcamLayout;
+  frame: FrameSize;
+  label: string;
+  /** Right-aligned text on the label's row (the part's range and length). */
+  trailing?: string;
+}): React.JSX.Element {
+  const t = useTranslations("videoEditor");
+  const name = webcamLayoutName(layout, frame);
+  const nameText = name ? t(NAME_LABEL[name]) : "";
   return (
     <>
-      <p className={styles.sectionLabel}>{t("webcamShape")}</p>
-      <div className={styles.segmented} role="group" aria-label={t("webcamShape")}>
-        {CAMERA_BUBBLE_SHAPES.map((shape) => (
+      <div className={webcamStyles.labelRow}>
+        <p className={styles.sectionLabel}>{label}</p>
+        {trailing && <span className={webcamStyles.trailing}>{trailing}</span>}
+      </div>
+      <div className={webcamStyles.placeBlock}>
+        <PlaceFrame
+          now={webcamLayoutDot(layout, frame)}
+          before={before ? webcamLayoutDot(before, frame) : null}
+          name={nameText}
+        />
+        <div className={webcamStyles.placeText}>
+          <p className={webcamStyles.placeName} data-testid="webcam-panel-name">
+            {nameText}
+          </p>
+          <p className={styles.note}>{t("webcamMoveHint")}</p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** Buttons in a row that pick one of a few values; none is pressed when `current` is null. */
+function Choices<T extends string | number>({
+  label,
+  options,
+  current,
+  onPick,
+}: {
+  label: string;
+  options: readonly { value: T; text: string }[];
+  current: T | null;
+  onPick(value: T): void;
+}): React.JSX.Element {
+  return (
+    <>
+      <p className={styles.sectionLabel}>{label}</p>
+      <div className={webcamStyles.choices} role="group" aria-label={label}>
+        {options.map((option) => (
           <button
-            key={shape}
+            key={option.value}
             type="button"
-            aria-pressed={layout.shape === shape}
-            className={layout.shape === shape ? styles.segmentActive : styles.segment}
-            onClick={() => commit({ shape })}
+            aria-pressed={current === option.value}
+            className={current === option.value ? styles.segmentActive : styles.segment}
+            onClick={() => onPick(option.value)}
           >
-            {t(SHAPE_LABEL[shape])}
+            {option.text}
           </button>
         ))}
       </div>
+    </>
+  );
+}
+
+/** The look every stretch shares: it always edits the whole video's layout. */
+function WholeVideoControls({
+  layout,
+  edits,
+}: {
+  layout: WebcamLayout;
+  edits: WebcamEditing;
+}): React.JSX.Element {
+  const t = useTranslations("videoEditor");
+  const commit = (patch: Partial<WebcamLayout>): void => edits.commitLayout(patch, null);
+  const live = (patch: Partial<WebcamLayout>): void => edits.liveLayout(patch, null);
+  const shrinking = layout.scaleDuringZoom < 1;
+  return (
+    <>
+      <Choices
+        label={t("webcamShape")}
+        options={CAMERA_BUBBLE_SHAPES.map((shape) => ({
+          value: shape,
+          text: t(SHAPE_LABEL[shape]),
+        }))}
+        current={layout.shape}
+        onPick={(shape) => commit({ shape })}
+      />
       {layout.shape !== "circle" && (
         <HistorySlider
           label={t("webcamCorners")}
@@ -131,37 +235,13 @@ function WebcamControls({
           onCommit={(cornerRadius) => commit({ cornerRadius })}
         />
       )}
-      <HistorySlider
+      {/* A size saved outside the three keeps playing and shows no button pressed. */}
+      <Choices
         label={t("webcamSize")}
-        value={layout.size}
-        min={WEBCAM_LIMITS.minSize}
-        max={WEBCAM_LIMITS.maxSize}
-        step={0.01}
-        format={(v) => `${webcamSizeLabel(v)}%`}
-        onBegin={edits.begin}
-        onLive={(size) => live({ size })}
-        onEnd={edits.end}
-        onCommit={(size) => commit({ size })}
+        options={WEBCAM_SIZE_PRESET_IDS.map((id) => ({ value: id, text: id }))}
+        current={webcamSizePreset(layout.size)}
+        onPick={(id) => commit({ size: WEBCAM_SIZE_PRESETS[id] })}
       />
-      <p className={styles.sectionLabel}>{t("webcamPosition")}</p>
-      <div className={webcamStyles.positions} role="group" aria-label={t("webcamPosition")}>
-        {WEBCAM_POSITION_PRESETS.map((preset) => {
-          const active = webcamPresetActive(preset, layout, frame);
-          return (
-            <button
-              key={preset.id}
-              type="button"
-              title={t(PRESET_LABEL[preset.id])}
-              aria-label={t(PRESET_LABEL[preset.id])}
-              aria-pressed={active}
-              className={active ? webcamStyles.positionActive : webcamStyles.position}
-              onClick={() => commit({ position: { x: preset.x, y: preset.y } })}
-            >
-              <span className={webcamStyles.dot} aria-hidden />
-            </button>
-          );
-        })}
-      </div>
       <label className={webcamStyles.toggle}>
         <input
           type="checkbox"
@@ -210,156 +290,264 @@ function WebcamControls({
 }
 
 /**
- * How a selected block's start plays (the camera-sections design): Slide or Cut, and for a
- * Slide its duration and easing. A block with no transition is a Cut, so a session saved
- * before transitions existed reads as what it always did. Duration and easing stay stored
- * while the block is a Cut, but are only offered for a Slide.
+ * How a part arrives: Slide or Cut, and for a Slide its duration (0.4, 0.7 or 1.2 s) and motion
+ * (Smooth, Bounce or Linear). A part with no transition is a Cut. One saved with a duration or
+ * motion no button offers (500 ms, ease out) keeps and plays it, and shows nothing pressed
+ * until the user picks one; the panel never rewrites a saved value by being opened.
  */
-function WebcamTransitionControls({
-  segment,
+function ArrivalControls({
+  part,
   edits,
 }: {
-  segment: WebcamSegment;
+  part: WebcamSegment;
   edits: WebcamEditing;
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
-  const kind = segment.transition?.kind ?? "cut";
-  const ms = segment.transition?.ms ?? WEBCAM_TRANSITION_DEFAULTS.ms;
-  const easing = segment.transition?.easing ?? WEBCAM_TRANSITION_DEFAULTS.easing;
-  const kinds = [
-    { kind: "slide", label: t("webcamTransitionSlide") },
-    { kind: "cut", label: t("webcamTransitionCut") },
-  ] as const;
+  const kind = part.transition?.kind ?? "cut";
+  const ms = part.transition?.ms ?? WEBCAM_TRANSITION_DEFAULTS.ms;
+  const easing = part.transition?.easing ?? WEBCAM_TRANSITION_DEFAULTS.easing;
   return (
     <>
-      <p className={styles.sectionLabel}>{t("webcamTransition")}</p>
-      <div className={styles.segmented} role="group" aria-label={t("webcamTransition")}>
-        {kinds.map((option) => (
-          <button
-            key={option.kind}
-            type="button"
-            aria-pressed={kind === option.kind}
-            className={kind === option.kind ? styles.segmentActive : styles.segment}
-            onClick={() => edits.commitTransition(segment.id, { kind: option.kind })}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
+      <Choices
+        label={t("webcamTransition")}
+        options={[
+          { value: "slide", text: t("webcamTransitionSlide") },
+          { value: "cut", text: t("webcamTransitionCut") },
+        ]}
+        current={kind}
+        onPick={(next) => edits.commitTransition(part.id, { kind: next })}
+      />
       {kind === "slide" && (
         <>
-          <HistorySlider
+          <Choices
             label={t("webcamTransitionDuration")}
-            value={ms}
-            min={WEBCAM_TRANSITION_LIMITS.minMs}
-            max={WEBCAM_TRANSITION_LIMITS.maxMs}
-            step={50}
-            format={(v) => `${v} ms`}
-            onBegin={edits.begin}
-            onLive={(value) => edits.liveTransition(segment.id, { ms: value })}
-            onEnd={edits.end}
-            onCommit={(value) => edits.commitTransition(segment.id, { ms: value })}
+            options={WEBCAM_SLIDE_MS_PRESETS.map((value) => ({
+              value,
+              text: `${value / 1000} s`,
+            }))}
+            current={ms}
+            onPick={(value) => edits.commitTransition(part.id, { ms: value })}
           />
-          <p className={styles.sectionLabel}>{t("webcamEasing")}</p>
-          <div className={styles.segmented} role="group" aria-label={t("webcamEasing")}>
-            {WEBCAM_EASINGS.map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                aria-pressed={easing === preset}
-                className={easing === preset ? styles.segmentActive : styles.segment}
-                onClick={() => edits.commitTransition(segment.id, { easing: preset })}
-              >
-                {t(EASING_LABEL[preset])}
-              </button>
-            ))}
-          </div>
+          <Choices
+            label={t("webcamEasing")}
+            options={WEBCAM_MOTION_BUTTONS.map((value) => ({
+              value,
+              text: t(EASING_LABEL[value]),
+            }))}
+            current={easing}
+            onPick={(value) => edits.commitTransition(part.id, { easing: value })}
+          />
         </>
       )}
     </>
   );
 }
 
-/** The global layout: what the webcam looks like everywhere no segment says otherwise. */
-export function WebcamInspector({
-  layout,
-  edits,
-  frame,
-  onHideHere,
-}: {
-  layout: WebcamLayout;
-  edits: WebcamEditing;
-  frame: FrameSize;
-  onHideHere(): void;
-}): React.JSX.Element {
-  const t = useTranslations("videoEditor");
-  return (
-    <section className={styles.panel} aria-label={t("webcamTitle")}>
-      <header className={styles.header}>
-        <h2 className={styles.title}>{t("webcamTitle")}</h2>
-      </header>
-      <p className={styles.range} data-webcam-scope="default">
-        {t("webcamScopeDefault")}
-      </p>
-      <WebcamControls layout={layout} target={null} edits={edits} frame={frame} />
-      <button type="button" className={styles.secondaryButton} onClick={onHideHere}>
-        <EyeOff size={14} />
-        {t("webcamHideHere")}
-      </button>
-    </section>
-  );
-}
-
-/** A selected lane block: a hidden stretch, or an override with its own controls. */
-export function WebcamSegmentInspector({
-  segment,
-  index,
+/** "This part" with a part there: its place, how it arrives, when it ends, and removing it. */
+function PartTab({
+  webcam,
+  part,
   range,
-  layout,
   edits,
   frame,
+  onPlaySlide,
   onRemoved,
 }: {
-  segment: WebcamSegment;
-  /** 1-based position among the visible segments, for the header. */
-  index: number;
-  /** Timeline range of the segment's visible pieces. */
+  webcam: WebcamScene;
+  part: WebcamSegment;
   range: { from: number; to: number };
-  /** The layout in force inside the segment (global + the override's fields). */
-  layout: WebcamLayout;
   edits: WebcamEditing;
   frame: FrameSize;
+  onPlaySlide(part: WebcamSegment): void;
   onRemoved(): void;
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
-  const hidden = segment.mode === "hidden";
+  const own: WebcamLayout = part.layout ? { ...webcam.layout, ...part.layout } : webcam.layout;
+  const sliding = part.transition?.kind === "slide";
   return (
-    <section className={styles.panel} aria-label={t("webcamSegmentTitle", { n: index })}>
-      <header className={styles.header}>
-        <h2 className={styles.title}>{t("webcamSegmentTitle", { n: index })}</h2>
-        <span className={styles.badge}>{hidden ? t("webcamHidden") : t("webcamOverride")}</span>
-      </header>
-      <p className={styles.range} data-webcam-scope="block">
-        {formatPrecise(range.from)} → {formatPrecise(range.to)}
-      </p>
-      <p className={styles.note}>{hidden ? t("webcamHiddenNote") : t("webcamOverrideNote")}</p>
-      {!hidden && (
-        <>
-          <WebcamControls layout={layout} target={segment.start} edits={edits} frame={frame} />
-          <WebcamTransitionControls segment={segment} edits={edits} />
-        </>
+    <>
+      <PlaceBlock
+        layout={own}
+        before={webcamPartOrigin(webcam, part)}
+        frame={frame}
+        label={t("webcamPosition")}
+        trailing={`${formatPrecise(range.from)} – ${formatPrecise(range.to)} · ${t("webcamPartLength", { seconds: (part.end - part.start).toFixed(1) })}`}
+      />
+      <ArrivalControls part={part} edits={edits} />
+      {sliding && (
+        <button type="button" className={webcamStyles.playButton} onClick={() => onPlaySlide(part)}>
+          <Play size={12} aria-hidden />
+          {t("webcamPlaySlide")}
+        </button>
       )}
+      <p className={styles.sectionLabel}>{t("webcamWhenEnds")}</p>
+      <p className={styles.text}>{sliding ? t("webcamEndsSlide") : t("webcamEndsCut")}</p>
       <button
         type="button"
         className={styles.dangerButton}
         onClick={() => {
-          edits.remove(segment.id);
+          edits.remove(part.id);
           onRemoved();
         }}
       >
         <Trash2 size={14} />
         {t("webcamRemoveSegment")}
       </button>
+    </>
+  );
+}
+
+/** "This part" with no part at the playhead: what is there and how a part gets made. No button. */
+function NoPartTab({ playhead }: { playhead: number }): React.JSX.Element {
+  const t = useTranslations("videoEditor");
+  return (
+    <div className={webcamStyles.empty} data-testid="webcam-panel-empty">
+      <span className={webcamStyles.emptyIcon} aria-hidden>
+        <Webcam size={18} />
+      </span>
+      <p className={webcamStyles.emptyTitle}>
+        {t("webcamNoChange", { time: formatClock(playhead) })}
+      </p>
+      <p className={styles.note}>{t("webcamNoChangeBody")}</p>
+    </div>
+  );
+}
+
+/** A selected hidden range: what it is and how to bring the camera back. */
+function HiddenRangePanel({
+  segment,
+  range,
+  edits,
+  onRemoved,
+}: {
+  segment: WebcamSegment;
+  range: { from: number; to: number };
+  edits: WebcamEditing;
+  onRemoved(): void;
+}): React.JSX.Element {
+  const t = useTranslations("videoEditor");
+  return (
+    <section
+      {...uiArea("editorVideo.webcamPanel")}
+      className={styles.panel}
+      aria-label={t("webcamHiddenTitle")}
+      data-webcam-panel="hidden"
+    >
+      <header className={styles.header}>
+        <h2 className={styles.title}>{t("webcamHiddenTitle")}</h2>
+        <EyeOff size={14} aria-hidden />
+      </header>
+      <p className={styles.range} data-webcam-scope="block">
+        {formatPrecise(range.from)} → {formatPrecise(range.to)}
+      </p>
+      <p className={styles.note}>{t("webcamHiddenNote")}</p>
+      <button
+        type="button"
+        className={styles.secondaryButton}
+        onClick={() => {
+          edits.remove(segment.id);
+          onRemoved();
+        }}
+      >
+        <Eye size={14} />
+        {t("webcamShowAgain")}
+      </button>
+    </section>
+  );
+}
+
+type Tab = "part" | "whole";
+
+export interface WebcamPanelProps {
+  webcam: WebcamScene;
+  /** The part under the playhead or selected, or a selected hidden range; null with none. */
+  segment: WebcamSegment | null;
+  /** Timeline range of the segment's visible pieces (null with no segment). */
+  range: { from: number; to: number } | null;
+  /** The playhead, in timeline seconds: "No change at 0:04". */
+  playhead: number;
+  edits: WebcamEditing;
+  frame: FrameSize;
+  /** Starts a little before the part and plays it. */
+  onPlaySlide(part: WebcamSegment): void;
+  /** The segment the panel was showing is gone: the page clears its selection. */
+  onRemoved(): void;
+}
+
+/**
+ * The panel. The page keys it by the selection, so picking another part on the lane opens it on
+ * "This part" again; the tab the user chose stays while the playhead crosses parts.
+ */
+export function WebcamPanel({
+  webcam,
+  segment,
+  range,
+  playhead,
+  edits,
+  frame,
+  onPlaySlide,
+  onRemoved,
+}: WebcamPanelProps): React.JSX.Element {
+  const t = useTranslations("videoEditor");
+  const [tab, setTab] = useState<Tab>("part");
+  if (segment?.mode === "hidden" && range) {
+    return <HiddenRangePanel segment={segment} range={range} edits={edits} onRemoved={onRemoved} />;
+  }
+  const tabs: readonly { id: Tab; text: string }[] = [
+    { id: "part", text: t("webcamTabPart") },
+    { id: "whole", text: t("webcamTabWhole") },
+  ];
+  return (
+    <section
+      {...uiArea("editorVideo.webcamPanel")}
+      className={styles.panel}
+      aria-label={t("webcamTitle")}
+      data-webcam-panel={tab}
+    >
+      <header className={styles.header}>
+        <h2 className={styles.title}>{t("webcamTitle")}</h2>
+      </header>
+      <div className={webcamStyles.tabs} role="tablist" aria-label={t("webcamTabsAria")}>
+        {tabs.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            role="tab"
+            id={`webcam-tab-${entry.id}`}
+            aria-selected={tab === entry.id}
+            aria-controls="webcam-tabpanel"
+            className={tab === entry.id ? webcamStyles.tabActive : webcamStyles.tab}
+            onClick={() => setTab(entry.id)}
+          >
+            {entry.text}
+          </button>
+        ))}
+      </div>
+      <div
+        id="webcam-tabpanel"
+        role="tabpanel"
+        aria-labelledby={`webcam-tab-${tab}`}
+        className={webcamStyles.tabBody}
+      >
+        {tab === "whole" ? (
+          <>
+            <PlaceBlock layout={webcam.layout} frame={frame} label={t("webcamMarkOriginal")} />
+            <WholeVideoControls layout={webcam.layout} edits={edits} />
+          </>
+        ) : segment && range ? (
+          <PartTab
+            webcam={webcam}
+            part={segment}
+            range={range}
+            edits={edits}
+            frame={frame}
+            onPlaySlide={onPlaySlide}
+            onRemoved={onRemoved}
+          />
+        ) : (
+          <NoPartTab playhead={playhead} />
+        )}
+      </div>
     </section>
   );
 }

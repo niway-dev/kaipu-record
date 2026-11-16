@@ -8,10 +8,8 @@ import {
   type WebcamState,
 } from "./webcam-model";
 import {
-  WEBCAM_POSITION_PRESETS,
   clampWebcamCenter,
   webcamClipPath,
-  webcamPresetActive,
   webcamRect,
   webcamStateRect,
   webcamSourceRect,
@@ -161,32 +159,10 @@ describe("webcamClipPath", () => {
   });
 });
 
-describe("webcam presets", () => {
-  it("offers nine positions", () => {
-    expect(WEBCAM_POSITION_PRESETS).toHaveLength(9);
-  });
-
-  it("reports a preset active for the raw edge and for a centre clamped to it", () => {
-    const l = { shape: "rectangle", size: 0.42 } as const;
-    const left = WEBCAM_POSITION_PRESETS.find((p) => p.id === "left")!;
-    const right = WEBCAM_POSITION_PRESETS.find((p) => p.id === "right")!;
-    expect(webcamPresetActive(left, { ...l, position: { x: 0, y: 0.5 } }, FRAME)).toBe(true);
-    // half of the shrunk box (0.7 x 0.42 x 1080 x 3/4 / 2) over the frame width: also the edge
-    expect(webcamPresetActive(left, { ...l, position: { x: 0.0775, y: 0.5 } }, FRAME)).toBe(true);
-    expect(webcamPresetActive(right, { ...l, position: { x: 0.0775, y: 0.5 } }, FRAME)).toBe(false);
-    expect(webcamPresetActive(left, { ...l, position: { x: 0.3, y: 0.5 } }, FRAME)).toBe(false);
-  });
-
-  it("is never active before the frame size is known", () => {
-    const l = { shape: "circle", size: 0.2, position: { x: 1, y: 0 } } as const;
-    expect(webcamPresetActive({ x: 1, y: 0 }, l, { width: 0, height: 0 })).toBe(false);
-  });
-});
-
-describe("edge presets (NIW2-636)", () => {
-  // The bug: the Left/Right presets stored a centre with a margin computed for the
-  // un-shrunk bubble, so under "shrink during zoom" the smaller bubble sat ~94 px
-  // (output pixels) away from the edge it was snapped to.
+describe("a bubble dragged to the left or right edge (NIW2-636)", () => {
+  // The bug: an edge position stored a centre with a margin computed for the un-shrunk
+  // bubble, so under "shrink during zoom" the smaller bubble sat ~94 px (output pixels) away
+  // from the edge it was snapped to. A drag to the edge stores the raw 0 or 1 the same way.
   const rectangle = { shape: "rectangle", size: 0.42, scaleDuringZoom: 0.7 } as const;
 
   it.each([
@@ -194,9 +170,8 @@ describe("edge presets (NIW2-636)", () => {
     ["right", 1],
     ["left", 2],
     ["right", 2],
-  ] as const)("puts the %s preset flush with the frame edge at camera scale %s", (id, scale) => {
-    const preset = WEBCAM_POSITION_PRESETS.find((p) => p.id === id)!;
-    const position = { x: preset.x, y: preset.y };
+  ] as const)("puts the %s edge flush with the frame edge at camera scale %s", (id, scale) => {
+    const position = { x: id === "left" ? 0 : 1, y: 0.5 };
     const rect = webcamRect({ ...rectangle, position }, FRAME, scale)!;
     if (id === "left") expect(rect.x).toBeCloseTo(0, 3);
     else expect(rect.x + rect.width).toBeCloseTo(FRAME.width, 3);

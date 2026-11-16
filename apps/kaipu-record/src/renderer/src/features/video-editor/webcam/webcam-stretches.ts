@@ -67,16 +67,13 @@ export function webcamStretchLayout(
 export const NOMINAL_LANE_FRAME: FrameSize = { width: 1920, height: 1080 };
 
 /**
- * The name of the place a stretch holds the camera at (null for a hidden range). The box is
- * the one the bubble is drawn with, so the thirds are over the range its centre can reach.
+ * The name of the place a layout holds the camera at. The box is the one the bubble is drawn
+ * with, so the thirds are over the range its centre can reach. Null for a frame with no room.
  */
-export function webcamStretchName(
-  webcam: Pick<WebcamScene, "layout">,
-  stretch: WebcamStretch,
+export function webcamLayoutName(
+  layout: WebcamLayout,
   frame: FrameSize,
 ): WebcamPositionName | null {
-  const layout = webcamStretchLayout(webcam, stretch);
-  if (!layout) return null;
   const usable = frame.width > 0 && frame.height > 0 ? frame : NOMINAL_LANE_FRAME;
   const rect = webcamRect(layout, usable);
   if (!rect) return null;
@@ -84,17 +81,13 @@ export function webcamStretchName(
 }
 
 /**
- * Where the small frame's dot goes: the bubble centre's share (0 to 1) of the range it can
- * reach on each axis. Null for a hidden range. A bubble as big as the frame has no range and
- * sits in the middle.
+ * Where a small frame's dot goes: the bubble centre's share (0 to 1) of the range it can reach
+ * on each axis. A bubble as big as the frame has no range and sits in the middle.
  */
-export function webcamStretchDot(
-  webcam: Pick<WebcamScene, "layout">,
-  stretch: WebcamStretch,
+export function webcamLayoutDot(
+  layout: WebcamLayout,
   frame: FrameSize,
 ): { x: number; y: number } | null {
-  const layout = webcamStretchLayout(webcam, stretch);
-  if (!layout) return null;
   const usable = frame.width > 0 && frame.height > 0 ? frame : NOMINAL_LANE_FRAME;
   const rect = webcamRect(layout, usable);
   if (!rect) return null;
@@ -106,6 +99,44 @@ export function webcamStretchDot(
     x: share(rect.x + rect.width / 2, rect.width, usable.width),
     y: share(rect.y + rect.height / 2, rect.height, usable.height),
   };
+}
+
+/** The name of the place a stretch holds the camera at (null for a hidden range). */
+export function webcamStretchName(
+  webcam: Pick<WebcamScene, "layout">,
+  stretch: WebcamStretch,
+  frame: FrameSize,
+): WebcamPositionName | null {
+  const layout = webcamStretchLayout(webcam, stretch);
+  return layout ? webcamLayoutName(layout, frame) : null;
+}
+
+/** The small frame's dot for a stretch (null for a hidden range). */
+export function webcamStretchDot(
+  webcam: Pick<WebcamScene, "layout">,
+  stretch: WebcamStretch,
+  frame: FrameSize,
+): { x: number; y: number } | null {
+  const layout = webcamStretchLayout(webcam, stretch);
+  return layout ? webcamLayoutDot(layout, frame) : null;
+}
+
+/** A part ends where another starts within this many seconds: the camera comes from "Before". */
+const TOUCH_EPSILON = 1e-6;
+
+/**
+ * Where a part's camera comes from, as a layout: the previous part's when it ends exactly
+ * where this one starts, otherwise the original position. The part's own size and shape are
+ * kept, because only the position slides, so the panel's "before" dot is measured on the same
+ * box as its "now" dot.
+ */
+export function webcamPartOrigin(webcam: WebcamScene, part: WebcamSegment): WebcamLayout {
+  const own: WebcamLayout = part.layout ? { ...webcam.layout, ...part.layout } : webcam.layout;
+  const previous = webcam.segments.find(
+    (s) => s.mode === "override" && Math.abs(s.end - part.start) <= TOUCH_EPSILON,
+  );
+  const position = previous?.layout?.position ?? webcam.layout.position;
+  return { ...own, position: { ...position } };
 }
 
 /**

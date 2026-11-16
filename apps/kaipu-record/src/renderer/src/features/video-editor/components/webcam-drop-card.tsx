@@ -13,6 +13,7 @@ import { uiArea } from "@renderer/lib/ui-area";
 import type { WebcamPendingDrop } from "../webcam/use-webcam-drop";
 import type { FrameSize } from "../webcam/webcam-layout";
 import { webcamRoute } from "../webcam/webcam-route";
+import { formatClock } from "./inspector/format";
 import { WebcamRouteOverlay } from "./webcam-route-overlay";
 import styles from "./webcam-drop-card.module.css";
 
@@ -21,12 +22,6 @@ const CARD_WIDTH = 360;
 const CARD_HEIGHT_GUESS = 108;
 /** Space kept between the card, the bubble and the preview's edge, in px. */
 const GAP = 12;
-
-/** "0:24": minutes and whole seconds. */
-function clock(seconds: number): string {
-  const whole = Math.max(0, Math.floor(seconds + 1e-6));
-  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
-}
 
 interface Size {
   w: number;
@@ -148,7 +143,7 @@ export function WebcamDropCard({
               {room
                 ? t("webcamDropPartDetail", {
                     seconds: Math.round(room.end - room.start),
-                    time: clock(room.start),
+                    time: formatClock(room.start),
                   })
                 : t("webcamDropNoRoom")}
             </span>

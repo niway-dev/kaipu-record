@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import { WEBCAM_LAYER_SELECTION } from "../editor-selection";
 import { WEBCAM_DEFAULTS, type WebcamScene, type WebcamSegment } from "./webcam-model";
 import { toLayout } from "../timeline";
-import { webcamInspectorTarget, webcamOutlined, webcamSelectSeekTarget } from "./webcam-selection";
+import {
+  webcamInspectorTarget,
+  webcamOutlined,
+  webcamPlaySlideTarget,
+  webcamSelectSeekTarget,
+} from "./webcam-selection";
 
 const hidden: WebcamSegment = { id: "h", start: 2, end: 4, mode: "hidden" };
 const custom: WebcamSegment = {
@@ -128,5 +133,38 @@ describe("webcamSelectSeekTarget", () => {
 
   it("is null for a stretch cut away entirely", () => {
     expect(webcamSelectSeekTarget(layout, 0, { ...part, start: 6, end: 9 })).toBeNull();
+  });
+});
+
+describe("webcamPlaySlideTarget", () => {
+  // Source 0-5 sits at timeline 0-5; source 10-20 at timeline 5-15. Source 5-10 is cut out.
+  const layout = toLayout([
+    { id: "a", kind: "clip", sourceStart: 0, sourceEnd: 5 },
+    { id: "b", kind: "clip", sourceStart: 10, sourceEnd: 20 },
+  ]);
+  const part = (start: number): WebcamSegment => ({
+    id: "p",
+    start,
+    end: start + 4,
+    mode: "override",
+    transition: { kind: "slide", ms: 700, easing: "ease-in-out" },
+  });
+
+  it("starts half a second before the part, so the slide plays from the old place", () => {
+    // Source 14 - 0.5 = 13.5 is timeline 8.5.
+    expect(webcamPlaySlideTarget(layout, part(14))).toBeCloseTo(8.5, 6);
+  });
+
+  it("never goes before the start of the recording", () => {
+    expect(webcamPlaySlideTarget(layout, part(0.2))).toBe(0);
+  });
+
+  it("starts at the part itself when the moment before it was cut out", () => {
+    // Source 10.2 - 0.5 = 9.7 is in the cut-out gap: the part's own start is timeline 5.2.
+    expect(webcamPlaySlideTarget(layout, part(10.2))).toBeCloseTo(5.2, 6);
+  });
+
+  it("is null when neither moment is on the timeline", () => {
+    expect(webcamPlaySlideTarget(layout, { ...part(6), end: 9 })).toBeNull();
   });
 });

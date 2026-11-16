@@ -52,6 +52,19 @@ const captureListed: Step = {
 const audioWaveformDrawn: Step = {
   waitFor: { area: "editorVideo.audioLane", part: { css: '[data-audio-waveform="complete"]' } },
 };
+/** The Nth block on the Camera lane (a part or a hidden range, in order): selects it. */
+const cameraSection = (n: number): Step => ({
+  click: {
+    area: "editorVideo.webcamLane",
+    part: { role: "button", name: `Webcam section ${n}`, exact: true },
+  },
+});
+/** The webcam bubble, selected from the keyboard: it re-places itself every frame, so a click may miss. */
+const selectBubble: Step = { press: "Enter", target: { area: "editorVideo.webcam" } };
+/** A tab of the Camera panel. */
+const cameraTab = (name: string): Step => ({
+  click: { area: "editorVideo.webcamPanel", part: { role: "tab", name, exact: true } },
+});
 const exportSheet: Step = {
   click: { area: "editorVideo.toolbar", part: { role: "button", name: "Export", exact: true } },
 };
@@ -267,7 +280,7 @@ export const editorVideo = catalog(
     },
     "webcam-selected": {
       profile: "default",
-      how: "Open “Release demo” and select the webcam bubble: the inspector shows its shape, size and position.",
+      how: "Open “Release demo” and select the webcam bubble: the Camera panel opens.",
       // The bubble re-places itself every frame, so a click may never see it stable; Enter on
       // it selects it, as it does from the keyboard.
       steps: [
@@ -285,17 +298,97 @@ export const editorVideo = catalog(
     },
     "webcam-hidden": {
       profile: "default",
-      how: "Open “Release demo” and press Hide webcam here: a hidden section appears on the webcam lane.",
+      how: "Open “Release demo” and press Hide camera from here: a hidden section appears on the webcam lane.",
       steps: [
         open(ASSETS.releaseDemo),
         audioWaveformDrawn,
         loaded,
-        rail("Hide webcam here"),
+        rail("Hide camera from here"),
         saved,
       ],
       demonstrates: ["editorVideo.webcamLane:segments"],
       // The edit saved into the vault: without this the second shot finds the section hidden.
       after: [{ action: "restoreVault" }],
+    },
+    // The Camera panel's states. They open recordings a profile of their own seeds with a saved
+    // camera part and hidden range; selecting never edits, so nothing needs restoring.
+    "camera-part": {
+      profile: "camera-parts",
+      how: "Open “Camera parts” and select its first camera section on the lane: the Camera panel shows This part, with its range, small frame, name, how it arrives and Remove this part.",
+      steps: [open(ASSETS.cameraParts), audioWaveformDrawn, loaded, cameraSection(1)],
+      demonstrates: [
+        "editorVideo.webcamPanel:thisPart",
+        "editorVideo.inspector:webcamBlock",
+        "editorVideo.webcamLane:cameraBlock",
+        "editorVideo.webcamMarks:partRoute",
+      ],
+      ready: { area: "editorVideo.webcamPanel" },
+    },
+    "camera-no-part": {
+      profile: "camera-parts",
+      how: "Open “Camera parts” and select the bubble at the start, where no part is: This part says No change and has no button.",
+      steps: [open(ASSETS.cameraParts), audioWaveformDrawn, loaded, selectBubble],
+      demonstrates: [
+        "editorVideo.webcamPanel:noPart",
+        "editorVideo.webcamLane:originalStretch",
+        "editorVideo.webcamMarks:originalLabel",
+      ],
+      ready: { area: "editorVideo.webcamPanel" },
+    },
+    "camera-whole-video": {
+      profile: "camera-parts",
+      how: "Open “Camera parts”, select the bubble and open the Whole video tab: the original position, shape, size as S, M or L with M pressed, mirror, shadow and shrink.",
+      steps: [
+        open(ASSETS.cameraParts),
+        audioWaveformDrawn,
+        loaded,
+        selectBubble,
+        cameraTab("Whole video"),
+      ],
+      demonstrates: ["editorVideo.webcamPanel:wholeVideo"],
+      ready: { area: "editorVideo.webcamPanel" },
+    },
+    "camera-size-custom": {
+      profile: "camera-parts",
+      how: "Open “Camera size”, saved at a camera size no button has (27% of the frame), select the bubble and open Whole video: S, M and L, none pressed.",
+      steps: [
+        open(ASSETS.cameraSize),
+        audioWaveformDrawn,
+        loaded,
+        selectBubble,
+        cameraTab("Whole video"),
+      ],
+      demonstrates: ["editorVideo.webcamPanel:sizeCustom"],
+      ready: { area: "editorVideo.webcamPanel" },
+    },
+    "camera-drop-card": {
+      profile: "camera-parts",
+      how: "Open “Camera parts” at its start, where no part is, and drag the bubble from the bottom left to the top right: the card asks whether the bubble belongs to a new part.",
+      // The bubble follows the pointer 1:1, so the end point is a few bubble widths from where it
+      // starts, inside the preview. The drop is not answered, so nothing is saved.
+      steps: [
+        open(ASSETS.cameraParts),
+        audioWaveformDrawn,
+        loaded,
+        {
+          drag: { area: "editorVideo.webcam" },
+          from: { x: 0.5, y: 0.5 },
+          to: { x: 3.5, y: -2.5 },
+        },
+        { waitFor: { area: "editorVideo.webcamDrop" } },
+      ],
+      demonstrates: ["editorVideo.webcamDrop:asking"],
+      ready: { area: "editorVideo.webcamDrop" },
+    },
+    "camera-hidden-range": {
+      profile: "camera-parts",
+      how: "Open “Camera parts” and select its hidden range on the lane: Camera hidden, its range, the sentence and Show the camera again.",
+      steps: [open(ASSETS.cameraParts), audioWaveformDrawn, loaded, cameraSection(2)],
+      demonstrates: [
+        "editorVideo.webcamPanel:hiddenRange",
+        "editorVideo.webcamMarks:hiddenOutline",
+      ],
+      ready: { area: "editorVideo.webcamPanel" },
     },
     "audio-menu": {
       profile: "default",
@@ -556,37 +649,9 @@ export const editorVideo = catalog(
         "needsSetup",
         "the empty-state text shows only for a recording without an audio track, and every seeded recording has one; audio-lane.test.tsx covers it",
       ),
-      "editorVideo.webcamLane:cameraBlock": nc(
-        "needsSetup",
-        "a part is made by a real pointer drag of the bubble and an answer on the drop card, which a catalog step cannot perform, and no seeded recording has one; webcam-lane.test.tsx covers its look",
-      ),
-      "editorVideo.webcamLane:originalStretch": nc(
-        "needsSetup",
-        "every recording with a webcam track draws it, but no catalog scenario claims the lane in its shot yet; webcam-lane.test.tsx covers it",
-      ),
-      "editorVideo.webcamMarks:originalLabel": nc(
-        "needsSetup",
-        "the marks show only with the editor paused on a webcam recording, and no catalog scenario frames the bubble's label; webcam-marks.test.tsx covers it",
-      ),
-      "editorVideo.webcamMarks:partRoute": nc(
-        "needsSetup",
-        "a part's ghost bubble and route need a part, which a catalog step cannot create (it takes a real pointer drag); webcam-marks.test.tsx covers it",
-      ),
-      "editorVideo.webcamMarks:hiddenOutline": nc(
-        "needsSetup",
-        "the outline shows with the playhead inside a hidden range of a webcam recording; webcam-marks.test.tsx covers it",
-      ),
-      "editorVideo.inspector:webcamBlock": nc(
-        "needsSetup",
-        "a camera block is selected from the webcam lane, and no seeded recording has one now that no control creates it; the drag-first layers bring a catalog state with it",
-      ),
-      "editorVideo.webcamDrop:asking": nc(
-        "needsSetup",
-        "the card opens after a real pointer drag of the bubble outside every camera part, which a catalog step cannot perform; webcam-drop-card.test.tsx and use-webcam-drop.test.ts cover it",
-      ),
       "editorVideo.webcamDrop:noRoom": nc(
         "needsSetup",
-        "the same drag, in a place with under a second before the next block or the end; the card's tests cover it",
+        "the camera-drop-card drag with the playhead in a gap of under a second before the next block or the end, and no seeded recording has such a gap; webcam-drop-card.test.tsx covers it",
       ),
       "editorVideo.toolbar:saving": nc(
         "transient",
