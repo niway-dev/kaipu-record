@@ -85,17 +85,24 @@ export function webcamRoute(
 }
 
 /**
- * The centre at EASED `progress` (the model's `WebcamState.progress`). Up to 1 it is the
- * Bézier with `progress` as its parameter: exactly `start` at 0 and exactly `end` at 1. Below
- * 0 it is `start`; a non-finite progress counts as 1.
+ * The centre at EASED `progress` before the last-guard clamp into `reach`: what the curve itself
+ * gives. Up to 1 it is the Bézier with `progress` as its parameter: exactly `start` at 0 and
+ * exactly `end` at 1. Below 0 it is `start`; a non-finite progress counts as 1.
  *
- * Beyond 1 (Bounce) the bubble travels past `end` along the curve's end tangent, by
- * `(progress - 1) * |end - start|`. Each axis is scaled on its own so the easing's PEAK uses at
- * most the room before the frame edge that way (the first version's rule): the motion keeps
- * its shape instead of stopping flat against the edge. A clamp into `reach` stays only as the
- * last guard. `peak` is `EASING_PEAK_OVERSHOOT[easing]`.
+ * Above 1 (Bounce) the curve is NOT extrapolated: the centre is `end + (progress - 1) * T`,
+ * where `T = 2 * (end - control)` is the curve's direction and speed as it arrives, so the
+ * bubble leaves `end` the way it came in, in a straight line, and comes back along it. The
+ * first version's per-axis limit applies with `T` in the place of the straight distance: on
+ * each axis the farthest it would go is `peak * |T axis|`; the room is the space between `end`
+ * and the edge of `reach` that axis of `T` points to (the sign of `T`'s axis picks the edge,
+ * not the sign of end - start). When the farthest point does not fit, that axis's whole travel
+ * is multiplied by room / farthest, so the peak lands on the edge and the motion keeps its
+ * shape instead of stopping flat. An axis with no room does not go past `end`; the other
+ * still does. `peak` is `EASING_PEAK_OVERSHOOT[easing]`.
+ *
+ * Exported so a test can read the points the curve gives without the clamp.
  */
-export function webcamRoutePoint(
+export function webcamRoutePointBeforeClamp(
   route: WebcamRoute,
   progress: number,
   peak: number,
@@ -116,30 +123,36 @@ export function webcamRoutePoint(
     };
   }
 
-  const distance = Math.hypot(end.x - start.x, end.y - start.y);
-  let tx = end.x - control.x;
-  let ty = end.y - control.y;
-  let length = Math.hypot(tx, ty);
-  if (length === 0) {
-    tx = end.x - start.x;
-    ty = end.y - start.y;
-    length = Math.hypot(tx, ty);
+  let tx = 2 * (end.x - control.x);
+  let ty = 2 * (end.y - control.y);
+  if (tx === 0 && ty === 0) {
+    // The control point sits on `end` (a clamp can do it): a straight route arrives with 2 * (B - A).
+    tx = 2 * (end.x - start.x);
+    ty = 2 * (end.y - start.y);
   }
-  if (length === 0 || distance === 0) return clampToReach(end, reach);
-  const ux = tx / length;
-  const uy = ty / length;
   const safePeak = Math.max(0, finiteOr(peak, 0));
-  const axis = (endValue: number, u: number, min: number, max: number): number => {
-    const room = Math.max(0, u >= 0 ? max - endValue : endValue - min);
-    const reachPeak = safePeak * distance * Math.abs(u);
-    const factor = reachPeak > 0 ? Math.min(1, room / reachPeak) : 1;
-    return endValue + (p - 1) * distance * u * factor;
+  const axis = (endValue: number, t: number, min: number, max: number): number => {
+    const room = Math.max(0, t >= 0 ? max - endValue : endValue - min);
+    const farthest = safePeak * Math.abs(t);
+    const factor = farthest > 0 ? Math.min(1, room / farthest) : 1;
+    return endValue + (p - 1) * t * factor;
   };
-  return clampToReach(
-    {
-      x: axis(end.x, ux, reach.minX, reach.maxX),
-      y: axis(end.y, uy, reach.minY, reach.maxY),
-    },
-    reach,
-  );
+  return {
+    x: axis(end.x, tx, reach.minX, reach.maxX),
+    y: axis(end.y, ty, reach.minY, reach.maxY),
+  };
+}
+
+/**
+ * The centre at EASED `progress` (the model's `WebcamState.progress`): the curve's own point
+ * ({@link webcamRoutePointBeforeClamp}) held inside `reach`. The clamp is only the last guard;
+ * for Smooth, Bounce and Linear it changes no point.
+ */
+export function webcamRoutePoint(
+  route: WebcamRoute,
+  progress: number,
+  peak: number,
+  reach: WebcamRouteReach,
+): RoutePoint {
+  return clampToReach(webcamRoutePointBeforeClamp(route, progress, peak, reach), reach);
 }

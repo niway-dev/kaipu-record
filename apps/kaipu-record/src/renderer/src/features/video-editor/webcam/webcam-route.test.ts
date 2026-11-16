@@ -5,6 +5,7 @@ import {
   WEBCAM_ROUTE_BEND,
   webcamRoute,
   webcamRoutePoint,
+  webcamRoutePointBeforeClamp,
   type RoutePoint,
   type WebcamRouteReach,
 } from "./webcam-route";
@@ -237,6 +238,10 @@ describe("webcamRoutePoint stays inside reach", () => {
               const point = webcamRoutePoint(route, progress, peak, reach);
               expect(Number.isFinite(point.x) && Number.isFinite(point.y)).toBe(true);
               expect(inside(point, reach), `${name} at ${i}/${SAMPLES}`).toBe(true);
+              // The clamp is only the last guard: the curve is already inside, so it changes nothing.
+              const raw = webcamRoutePointBeforeClamp(route, progress, peak, reach);
+              expect(inside(raw, reach), `${name} before the clamp at ${i}/${SAMPLES}`).toBe(true);
+              expect(raw, `${name}: the clamp changed a point at ${i}/${SAMPLES}`).toEqual(point);
             }
           }
         });
@@ -250,95 +255,134 @@ describe("webcamRoutePoint beyond 1 (Bounce)", () => {
   const frame = LANDSCAPE;
   const reach = fullReach(frame);
 
-  const tangent = (control: RoutePoint, end: RoutePoint): RoutePoint => {
-    const length = distance(control, end);
-    return { x: (end.x - control.x) / length, y: (end.y - control.y) / length };
-  };
-
-  it("goes past end along the end tangent when there is room", () => {
-    const route = webcamRoute({ x: 400, y: 400 }, { x: 900, y: 600 }, frame, reach);
-    const u = tangent(route.control, route.end);
-    const point = webcamRoutePoint(route, 1.05, peak, reach);
-    const past = (point.x - route.end.x) * u.x + (point.y - route.end.y) * u.y;
-    expect(past).toBeGreaterThan(0);
-    // 0.05 of the travel, along each axis, with no scaling because the room is large.
-    const travel = distance(route.start, route.end);
-    expect(point.x).toBeCloseTo(route.end.x + 0.05 * travel * u.x);
-    expect(point.y).toBeCloseTo(route.end.y + 0.05 * travel * u.y);
+  /** The curve's direction and speed as it arrives: twice the vector from the control point to B. */
+  const arrival = (route: { control: RoutePoint; end: RoutePoint }): RoutePoint => ({
+    x: 2 * (route.end.x - route.control.x),
+    y: 2 * (route.end.y - route.control.y),
   });
 
-  it("is continuous with end just past 1", () => {
+  it("is B + (p - 1) x T, with T = 2 x (B - control), when there is room", () => {
+    const route = webcamRoute({ x: 400, y: 400 }, { x: 900, y: 600 }, frame, reach);
+    const t = arrival(route);
+    const point = webcamRoutePoint(route, 1.05, peak, reach);
+    expect(point.x).toBeCloseTo(route.end.x + 0.05 * t.x);
+    expect(point.y).toBeCloseTo(route.end.y + 0.05 * t.y);
+  });
+
+  it("does not extrapolate the quadratic: it leaves B in a straight line along T", () => {
+    const route = webcamRoute({ x: 400, y: 400 }, { x: 900, y: 600 }, frame, reach);
+    const t = arrival(route);
+    const near = webcamRoutePoint(route, 1.02, peak, reach);
+    const far = webcamRoutePoint(route, 1.08, peak, reach);
+    // Both points lie on the line through B with direction T: the cross product is zero.
+    const cross = (p: RoutePoint): number => (p.x - route.end.x) * t.y - (p.y - route.end.y) * t.x;
+    expect(cross(near)).toBeCloseTo(0, 6);
+    expect(cross(far)).toBeCloseTo(0, 6);
+  });
+
+  it("is continuous with B just past 1", () => {
     const route = webcamRoute({ x: 400, y: 400 }, { x: 900, y: 600 }, frame, reach);
     const point = webcamRoutePoint(route, 1 + 1e-9, peak, reach);
     expect(distance(point, route.end)).toBeLessThan(1e-3);
   });
 
-  it("scales the overshoot down, still moving, when the room is small", () => {
-    // End is 12 px from the right edge and the move heads right.
-    const start = { x: 1000, y: 540 };
-    const end = { x: 1908, y: 540 };
-    const route = webcamRoute(start, end, frame, reach);
-    const early = webcamRoutePoint(route, 1.03, peak, reach);
-    const late = webcamRoutePoint(route, 1.06, peak, reach);
+  it("scales each axis to the room, so the peak lands on the edge and the motion keeps its shape", () => {
+    // End is 12 px from the right edge and the move heads right; y has plenty of room.
+    const route = webcamRoute({ x: 1000, y: 540 }, { x: 1908, y: 540 }, frame, reach);
+    const t = arrival(route);
+    expect(t.x).toBeGreaterThan(0);
+    const half = webcamRoutePoint(route, 1 + peak / 2, peak, reach);
     const top = webcamRoutePoint(route, 1 + peak, peak, reach);
-    expect(early.x).toBeGreaterThan(route.end.x);
-    expect(late.x).toBeGreaterThan(early.x);
-    // The peak uses the room, and not more.
-    expect(top.x).toBeLessThanOrEqual(reach.maxX + 1e-6);
-    expect(top.x).toBeGreaterThan(late.x);
-    // It was scaled, not clamped: the early point is nowhere near the edge.
-    expect(early.x).toBeLessThan(reach.maxX - 1);
+    // The peak uses the room exactly: on the edge, not flat against it before the peak.
+    expect(top.x).toBeCloseTo(reach.maxX, 6);
+    expect(half.x).toBeGreaterThan(route.end.x);
+    expect(half.x).toBeLessThan(reach.maxX - 1);
+    // y fits whole, so it keeps its full travel (no scaling on that axis).
+    expect(top.y).toBeCloseTo(route.end.y + peak * t.y, 6);
   });
 
-  it("scales each axis on its own", () => {
-    // Plenty of room in y, almost none in x.
-    const route = webcamRoute({ x: 1000, y: 300 }, { x: 1900, y: 700 }, frame, reach);
-    const u = tangent(route.control, route.end);
-    const point = webcamRoutePoint(route, 1 + peak, peak, reach);
-    const travel = distance(route.start, route.end);
-    const rawY = peak * travel * u.y;
-    expect(point.x).toBeLessThanOrEqual(reach.maxX + 1e-6);
-    expect(point.x).toBeGreaterThan(route.end.x);
-    // y has room, so it keeps its full overshoot.
-    expect(point.y - route.end.y).toBeCloseTo(rawY);
-  });
-
-  it("does not move past an end that is against the edge", () => {
-    const route = webcamRoute({ x: 100, y: 100 }, { x: 1000, y: 100 }, frame, {
+  it("picks the edge by the sign of T's axis, not by the sign of B - A", () => {
+    // A -> B heads right by 20 px, but the curve arrives heading LEFT on x (T.x < 0).
+    const route = webcamRoute({ x: 500, y: 500 }, { x: 520, y: 900 }, frame, {
       ...reach,
-      minY: 100,
-      maxY: 980,
+      minX: 519.9,
     });
+    const limited = { ...reach, minX: 519.9 };
+    const t = arrival(route);
+    expect(route.end.x - route.start.x).toBeGreaterThan(0);
+    expect(t.x).toBeLessThan(0);
+    const top = webcamRoutePoint(route, 1 + peak, peak, limited);
+    // The room on the left is 0.1 px: the peak lands there, and it does not run right.
+    expect(top.x).toBeCloseTo(limited.minX, 6);
+    expect(top.x).toBeLessThan(route.end.x);
+  });
+
+  it("does not go past B on an axis with no room, while the other axis still does", () => {
+    // B is on the right edge and T points right; y has room.
+    const route = webcamRoute({ x: 1000, y: 200 }, { x: 1920, y: 300 }, frame, reach);
+    const t = arrival(route);
+    expect(t.x).toBeGreaterThan(0);
+    expect(t.y).not.toBe(0);
     for (const progress of [1.02, 1.05, 1 + peak]) {
-      expect(
-        inside(webcamRoutePoint(route, progress, peak, { ...reach, minY: 100, maxY: 980 }), {
-          ...reach,
-          minY: 100,
-          maxY: 980,
-        }),
-      ).toBe(true);
+      const point = webcamRoutePointBeforeClamp(route, progress, peak, reach);
+      expect(point.x).toBe(route.end.x);
+      expect(Math.abs(point.y - route.end.y)).toBeGreaterThan(0);
     }
   });
 
-  it("returns end when start equals end", () => {
+  for (const [name, start, end] of [
+    ["a corner", { x: 400, y: 300 }, { x: 1820, y: 980 }],
+    ["the top edge", { x: 200, y: 100 }, { x: 1700, y: 100 }],
+    ["the right edge", { x: 1820, y: 200 }, { x: 1820, y: 900 }],
+    ["a short move into an edge", { x: 1700, y: 540 }, { x: 1815, y: 520 }],
+  ] as Array<[string, RoutePoint, RoutePoint]>) {
+    it(`Bounce into ${name} is inside before the last-guard clamp and is past B on every axis with room`, () => {
+      const inset = insetReach(frame);
+      const route = webcamRoute(start, end, frame, inset);
+      const t = arrival(route);
+      for (let i = 0; i <= 80; i += 1) {
+        const progress = easeValue("back", i / 80);
+        const raw = webcamRoutePointBeforeClamp(route, progress, peak, inset);
+        expect(inside(raw, inset), `${name} at ${i}/80`).toBe(true);
+        expect(webcamRoutePoint(route, progress, peak, inset)).toEqual(raw);
+      }
+      // Around the peak: past B, in T's direction, on each axis that has room.
+      const around = webcamRoutePointBeforeClamp(route, 1 + peak, peak, inset);
+      const roomX = t.x >= 0 ? inset.maxX - route.end.x : route.end.x - inset.minX;
+      const roomY = t.y >= 0 ? inset.maxY - route.end.y : route.end.y - inset.minY;
+      if (roomX > 1e-6 && t.x !== 0) {
+        expect(Math.sign(around.x - route.end.x)).toBe(Math.sign(t.x));
+      } else {
+        expect(around.x).toBe(route.end.x);
+      }
+      if (roomY > 1e-6 && t.y !== 0) {
+        expect(Math.sign(around.y - route.end.y)).toBe(Math.sign(t.y));
+      } else {
+        expect(around.y).toBe(route.end.y);
+      }
+    });
+  }
+
+  it("returns B when start equals end", () => {
     const route = webcamRoute({ x: 500, y: 500 }, { x: 500, y: 500 }, frame, reach);
     expect(webcamRoutePoint(route, 1.05, peak, reach)).toEqual({ x: 500, y: 500 });
   });
 
-  it("falls back to the start-to-end direction when control equals end", () => {
+  it("falls back to 2 x (B - A) when the control point sits on B", () => {
     const route = {
       start: { x: 100, y: 500 },
       control: { x: 600, y: 500 },
       end: { x: 600, y: 500 },
     };
     const point = webcamRoutePoint(route, 1.05, peak, reach);
-    expect(point.x).toBeCloseTo(600 + 0.05 * 500);
+    expect(point.x).toBeCloseTo(600 + 0.05 * 1000);
     expect(point.y).toBeCloseTo(500);
   });
 
   it("guards a progress far beyond the peak with the clamp", () => {
     const route = webcamRoute({ x: 400, y: 400 }, { x: 900, y: 600 }, frame, reach);
     expect(inside(webcamRoutePoint(route, 50, peak, reach), reach)).toBe(true);
+    expect(inside(webcamRoutePointBeforeClamp(route, 50, peak, reach), reach)).toBe(false);
   });
 });
 
