@@ -6,12 +6,14 @@ import { usePermissions, useAccessibility } from "@renderer/features/permissions
 import { uiArea } from "@renderer/lib/ui-area";
 import { requiredPermissionsMet } from "./permissions";
 import { markPrivacySeen } from "./onboarding-store";
-import { canAdvanceFrom, canJumpTo, skipActionFor, STEPS, type StepId } from "./onboarding-flow";
+import { canAdvanceFrom, canJumpTo, skipActionFor, stepsFor, type StepId } from "./onboarding-flow";
+import { useTranscriptionOffer } from "./use-transcription-offer";
 import type { DemoId } from "./demos";
 import { WelcomeStep } from "./steps/welcome-step";
 import { PermissionsStep, type PendingGrant } from "./steps/permissions-step";
 import { ShortcutsStep } from "./steps/shortcuts-step";
 import { PrivacyStep } from "./steps/privacy-step";
+import { TranscriptionStep } from "./steps/transcription-step";
 import { DoneStep } from "./steps/done-step";
 import styles from "./onboarding-overlay.module.css";
 
@@ -21,16 +23,19 @@ const STEP_LABEL_KEY: Record<
   | "stepLabelPermissions"
   | "stepLabelShortcuts"
   | "stepLabelPrivacy"
+  | "stepLabelTranscription"
   | "stepLabelDone"
 > = {
   welcome: "stepLabelWelcome",
   permissions: "stepLabelPermissions",
   shortcuts: "stepLabelShortcuts",
   privacy: "stepLabelPrivacy",
+  transcription: "stepLabelTranscription",
   done: "stepLabelDone",
 };
 
-const PERMISSIONS_STEP = STEPS.indexOf("permissions");
+// Permissions is the second step whichever steps are on offer.
+const PERMISSIONS_STEP = stepsFor({ offerTranscription: false }).indexOf("permissions");
 
 /** Buttons and fields keep their own Enter, so a focused card opens instead of advancing. */
 function ownsEnter(target: EventTarget | null): boolean {
@@ -46,7 +51,8 @@ interface OnboardingOverlayProps {
 }
 
 /**
- * Full-window onboarding takeover: Welcome → Permissions → Shortcuts → Privacy → You're set.
+ * Full-window onboarding takeover: Welcome → Permissions → Shortcuts → (Transcription) →
+ * Privacy → You're set. Transcription is there only while the speech model is on offer.
  * Owns the step, the demo playing on Welcome, the shortcuts tried and the grants in
  * flight. Only Permissions blocks: Continue there waits for screen and microphone.
  */
@@ -58,6 +64,8 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
   const [pending, setPending] = useState<ReadonlySet<PendingGrant>>(() => new Set());
   const { status, denied, request, openSettings } = usePermissions();
   const accessibility = useAccessibility();
+  const transcription = useTranscriptionOffer();
+  const steps = stepsFor({ offerTranscription: transcription !== null });
 
   // The takeover cannot reflow below a point (see ONBOARDING_MIN_HEIGHT in main):
   // raise the window's minimum while it is up, and release it on unmount so the
@@ -67,10 +75,10 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
     return () => window.electronAPI.setOnboardingWindowMode(false);
   }, []);
 
-  const stepId = STEPS[step];
+  const stepId = steps[step];
   const requiredMet = requiredPermissionsMet(status);
   const canAdvance = canAdvanceFrom(stepId, requiredMet);
-  const isLastStep = step === STEPS.length - 1;
+  const isLastStep = step === steps.length - 1;
 
   // Once the privacy step has been on screen, the one-time notice has nothing left to say.
   useEffect(() => {
@@ -88,11 +96,11 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
 
   const goTo = useCallback(
     (to: number) => {
-      if (to < 0 || to >= STEPS.length || !canJumpTo(step, to, requiredMet)) return;
+      if (to < 0 || to >= steps.length || !canJumpTo(step, to, requiredMet)) return;
       setDemo(null);
       setStep(to);
     },
-    [step, requiredMet],
+    [step, steps.length, requiredMet],
   );
 
   const advance = useCallback(() => {
@@ -184,6 +192,13 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
             />
           )}
           {stepId === "shortcuts" && <ShortcutsStep tried={tried} />}
+          {stepId === "transcription" && transcription && (
+            <TranscriptionStep
+              model={transcription.model}
+              onDownload={transcription.download}
+              onAdvance={advance}
+            />
+          )}
           {stepId === "privacy" && <PrivacyStep />}
           {stepId === "done" && (
             <DoneStep onRecord={finishAndRecord} onScreenshot={finishAndScreenshot} />
@@ -201,7 +216,7 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
 
           <div className={styles.progress}>
             <div className={styles.dots}>
-              {STEPS.map((id, i) => (
+              {steps.map((id, i) => (
                 <button
                   key={id}
                   type="button"
@@ -217,7 +232,7 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
           </div>
 
           <div className={`${styles.side} ${styles.advance}`}>
-            {!isLastStep && (
+            {!isLastStep && stepId !== "transcription" && (
               <button type="button" className={styles.cta} onClick={advance} disabled={!canAdvance}>
                 {step === 0 ? t("ctaGetStarted") : t("ctaContinue")}
               </button>
