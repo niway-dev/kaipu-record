@@ -91,8 +91,6 @@ export interface TranscriptionJobRequest {
   modelId: string;
   /** Duration of the decoded audio in ms, for progress and the segment plan. */
   durationMs: number;
-  /** The recording's content hash (sha256 base64) the transcript will be tied to. */
-  mediaHash: string;
 }
 
 export type TranscriptionBeginResult =
