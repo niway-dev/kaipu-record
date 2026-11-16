@@ -13,7 +13,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { chromium } from "@playwright/test";
+import { type BrowserContext, chromium } from "@playwright/test";
 import { startServer } from "./server";
 
 function arg(name: string, fallback?: string): string {
@@ -84,76 +84,83 @@ const results: unknown[] = [];
 try {
   for (let run = 1; run <= runs; run++) {
     const profileDir = mkdtempSync(join(tmpdir(), "niw2-818-profile-"));
-    const context = await chromium.launchPersistentContext(profileDir, {
-      channel: "chrome",
-      headless: true,
-      args: ["--headless=new", "--js-flags=--expose-gc"],
-    });
-    const browser = context.browser()!;
-    const page = context.pages()[0] ?? (await context.newPage());
-    await page.goto(`http://127.0.0.1:${server.port}/`);
+    let context: BrowserContext | undefined;
+    let sampler: ReturnType<typeof setInterval> | undefined;
+    try {
+      context = await chromium.launchPersistentContext(profileDir, {
+        channel: "chrome",
+        headless: true,
+        args: ["--headless=new", "--js-flags=--expose-gc"],
+      });
+      const browser = context.browser()!;
+      const page = context.pages()[0] ?? (await context.newPage());
+      await page.goto(`http://127.0.0.1:${server.port}/`);
 
-    const cdp = await browser.newBrowserCDPSession();
-    const info2 = (await cdp.send("SystemInfo.getProcessInfo")) as {
-      processInfo: { type: string; id: number }[];
-    };
-    const renderers = info2.processInfo.filter((p) => p.type === "renderer").map((p) => p.id);
+      const cdp = await browser.newBrowserCDPSession();
+      const info2 = (await cdp.send("SystemInfo.getProcessInfo")) as {
+        processInfo: { type: string; id: number }[];
+      };
+      const renderers = info2.processInfo.filter((p) => p.type === "renderer").map((p) => p.id);
 
-    let peakRendererKb = 0;
-    let peakTreeKb = 0;
-    const timelineMb: number[] = [];
-    const sampler = setInterval(() => {
-      let now = 0;
-      for (const pid of renderers) now = Math.max(now, rssKb(pid));
-      peakRendererKb = Math.max(peakRendererKb, now);
-      timelineMb.push(Math.round(now / 1024));
-      peakTreeKb = Math.max(peakTreeKb, treeRssKb(profileDir));
-    }, 100);
-    const baselineRendererKb = Math.max(...renderers.map(rssKb));
-    const baselineTreeKb = treeRssKb(profileDir);
+      let peakRendererKb = 0;
+      let peakTreeKb = 0;
+      const timelineMb: number[] = [];
+      sampler = setInterval(() => {
+        let now = 0;
+        for (const pid of renderers) now = Math.max(now, rssKb(pid));
+        peakRendererKb = Math.max(peakRendererKb, now);
+        timelineMb.push(Math.round(now / 1024));
+        peakTreeKb = Math.max(peakTreeKb, treeRssKb(profileDir));
+      }, 100);
+      const baselineRendererKb = Math.max(...renderers.map(rssKb));
+      const baselineTreeKb = treeRssKb(profileDir);
 
-    const result = await page.evaluate(
-      (url) => (window as any).runDecode(url),
-      `http://127.0.0.1:${server.port}/media.mp4`,
-    );
-    clearInterval(sampler);
-    // Diagnostic after the timed part: does the memory go away once V8 collects (lazy GC), or
-    // stay (retained)? Not part of the timing or the peak.
-    const rssBeforeGcKb = Math.max(...renderers.map(rssKb));
-    await page.evaluate(() => (globalThis as any).gc?.());
-    await new Promise((done) => setTimeout(done, 1500));
-    const rssAfterGcKb = Math.max(...renderers.map(rssKb));
-    const r = result as {
-      wallMs: number;
-      decodedMs: number;
-      bytes: number;
-      peakJsHeapBytes: number | null;
-    };
-    results.push({
-      run,
-      chromeVersion: browser.version(),
-      rendererPidCount: renderers.length,
-      inputDurationS: durationS,
-      inputSizeBytes: sizeBytes,
-      audio,
-      wallSeconds: r.wallMs / 1000,
-      decodedAudioSeconds: r.decodedMs / 1000,
-      realTimeFactor: durationS / (r.wallMs / 1000),
-      pcmBytes: r.bytes,
-      expectedPcmBytes: durationS * 32000,
-      pcmBytesOffSeconds: (r.bytes - durationS * 32000) / 32000,
-      baselineRendererRssMb: baselineRendererKb / 1024,
-      peakRendererRssMb: peakRendererKb / 1024,
-      baselineChromeTreeRssMb: baselineTreeKb / 1024,
-      peakChromeTreeRssMb: peakTreeKb / 1024,
-      rendererRssAfterDecodeMb: rssBeforeGcKb / 1024,
-      rendererRssAfterForcedGcMb: rssAfterGcKb / 1024,
-      /** Renderer RSS in MB every 100 ms, thinned to one point per second. */
-      rendererRssPerSecondMb: timelineMb.filter((_, i) => i % 10 === 0),
-      ...(result as object),
-    });
-    await context.close();
-    rmSync(profileDir, { recursive: true, force: true });
+      const result = await page.evaluate(
+        (url) => (window as any).runDecode(url),
+        `http://127.0.0.1:${server.port}/media.mp4`,
+      );
+      clearInterval(sampler);
+      // Diagnostic after the timed part: does the memory go away once V8 collects (lazy GC), or
+      // stay (retained)? Not part of the timing or the peak.
+      const rssBeforeGcKb = Math.max(...renderers.map(rssKb));
+      await page.evaluate(() => (globalThis as any).gc?.());
+      await new Promise((done) => setTimeout(done, 1500));
+      const rssAfterGcKb = Math.max(...renderers.map(rssKb));
+      const r = result as {
+        wallMs: number;
+        decodedMs: number;
+        bytes: number;
+        peakJsHeapBytes: number | null;
+      };
+      results.push({
+        run,
+        chromeVersion: browser.version(),
+        rendererPidCount: renderers.length,
+        inputDurationS: durationS,
+        inputSizeBytes: sizeBytes,
+        audio,
+        wallSeconds: r.wallMs / 1000,
+        decodedAudioSeconds: r.decodedMs / 1000,
+        speedupVsRealTime: durationS / (r.wallMs / 1000),
+        pcmBytes: r.bytes,
+        expectedPcmBytes: durationS * 32000,
+        pcmBytesOffSeconds: (r.bytes - durationS * 32000) / 32000,
+        baselineRendererRssMb: baselineRendererKb / 1024,
+        peakRendererRssMb: peakRendererKb / 1024,
+        baselineChromeTreeRssMb: baselineTreeKb / 1024,
+        peakChromeTreeRssMb: peakTreeKb / 1024,
+        rendererRssAfterDecodeMb: rssBeforeGcKb / 1024,
+        rendererRssAfterForcedGcMb: rssAfterGcKb / 1024,
+        /** Renderer RSS in MB every 100 ms, thinned to one point per second. */
+        rendererRssPerSecondMb: timelineMb.filter((_, i) => i % 10 === 0),
+        ...(result as object),
+      });
+    } finally {
+      // A failed run must not leave the sampler ticking or the Chrome profile behind.
+      if (sampler) clearInterval(sampler);
+      await context?.close();
+      rmSync(profileDir, { recursive: true, force: true });
+    }
   }
 } finally {
   void server.stop(true);

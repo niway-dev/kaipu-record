@@ -1,7 +1,7 @@
 /**
  * Segmentation strategies under test. A segment is a time range of the PCM file; segments may
  * overlap. `seam` records, for each pair of overlapping neighbours, the overlap range and the
- * cut point chosen inside it (the quietest frame), which `reconcile.ts` uses.
+ * cut point chosen inside it (the quietest frame), which `words.ts` uses.
  */
 import { SAMPLE_RATE, frameLevelsDb } from "./audio";
 
@@ -62,7 +62,8 @@ export function deriveSeams(segments: Segment[], levels: Float32Array): Seam[] {
 
 /** The quietest 100 ms window whose centre lies inside [fromMs, toMs]. */
 export function quietestCut(levels: Float32Array, fromMs: number, toMs: number): number {
-  const half = Math.round(50 / FRAME_MS);
+  // 50 / 20 = 2.5 frames; floor gives 2, so the window is 2 * 2 + 1 = 5 frames = 100 ms.
+  const half = Math.floor(50 / FRAME_MS);
   const lo = Math.max(half, Math.floor(fromMs / FRAME_MS));
   const hi = Math.min(levels.length - half - 1, Math.floor(toMs / FRAME_MS));
   let best = lo;
@@ -107,6 +108,12 @@ export function speechRegions(samples: Int16Array, o: EnergyOptions): [number, n
 }
 
 export function planEnergy(samples: Int16Array, o: EnergyOptions = ENERGY_DEFAULTS): Plan {
+  // The split loop advances by maxSegmentMs - overlapMs; a non-positive step never ends.
+  if (!(o.maxSegmentMs > o.overlapMs)) {
+    throw new Error(
+      `energy plan needs maxSegmentMs (${o.maxSegmentMs}) > overlapMs (${o.overlapMs})`,
+    );
+  }
   const durationMs = (samples.length / SAMPLE_RATE) * 1000;
   const levels = frameLevelsDb(samples, FRAME_MS);
   const segments: Segment[] = [];
@@ -132,6 +139,10 @@ export function planEnergy(samples: Int16Array, o: EnergyOptions = ENERGY_DEFAUL
 }
 
 export function planFixed(samples: Int16Array, o: FixedOptions = FIXED_DEFAULTS): Plan {
+  // The window loop advances by windowMs - overlapMs; a non-positive step never ends.
+  if (!(o.overlapMs < o.windowMs)) {
+    throw new Error(`fixed plan needs overlapMs (${o.overlapMs}) < windowMs (${o.windowMs})`);
+  }
   const durationMs = (samples.length / SAMPLE_RATE) * 1000;
   const levels = frameLevelsDb(samples, FRAME_MS);
   const segments: Segment[] = [];

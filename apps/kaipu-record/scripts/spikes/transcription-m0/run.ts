@@ -4,8 +4,11 @@
  * unless `--save-words` names a file, which must stay outside the repository.
  *
  *   bun run.ts --audio r20.wav --runtime <sherpa dir> --model <model dir> \
- *     --strategy energy|fixed|single --batch 8 [--rule midpoint|spec] \
+ *     --strategy single|fixed|energy --batch 4 [--rule spec|midpoint|midpoint-dedupe] \
  *     [--reference words.json] [--save-words words.json]
+ *
+ * Defaults are the configuration the ADR chose: --strategy fixed --batch 4 --rule midpoint-dedupe.
+ * An unknown --strategy or --rule value is an error.
  *
  * See README.md for how the 5, 20 and 60 minute inputs were made.
  */
@@ -25,13 +28,26 @@ function arg(name: string, fallback?: string): string {
   return value;
 }
 
+const STRATEGIES = ["single", "fixed", "energy"];
+const RULES: string[] = ["spec", "midpoint", "midpoint-dedupe"];
+
+// Validated before anything else is read, so a typo fails here and never falls through to
+// another strategy or rule.
+const strategy = arg("strategy", "fixed");
+if (!STRATEGIES.includes(strategy)) {
+  throw new Error(`unknown --strategy "${strategy}"; allowed: ${STRATEGIES.join(", ")}`);
+}
+const ruleArg = arg("rule", "midpoint-dedupe");
+if (!RULES.includes(ruleArg)) {
+  throw new Error(`unknown --rule "${ruleArg}"; allowed: ${RULES.join(", ")}`);
+}
+const rule = ruleArg as ReconcileRule;
+
 const audioPath = arg("audio");
 const runtime = arg("runtime");
 const model = arg("model");
-const strategy = arg("strategy", "energy");
-const batchSize = Number(arg("batch", "8"));
+const batchSize = Number(arg("batch", "4"));
 const threads = Number(arg("threads", "4"));
-const rule = arg("rule", "midpoint") as ReconcileRule;
 const referencePath = process.argv.includes("--reference") ? arg("reference") : null;
 const saveWords = process.argv.includes("--save-words") ? arg("save-words") : null;
 const truthPath = process.argv.includes("--truth") ? arg("truth") : null;

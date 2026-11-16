@@ -38,7 +38,7 @@ the repo's Playwright test runner; it is a plain script.
 ## What is measured
 
 - Wall time of the whole `decodeAudioToPcm` loop, audio seconds decoded, real-time factor
-  (audio duration / wall time), chunk count and sizes, total PCM bytes against
+  (audio duration / wall time, JSON field `speedupVsRealTime`; higher is faster), chunk count and sizes, total PCM bytes against
   `duration * 32000`.
 - Main-thread stalls: gaps between rAF callbacks and between 16 ms timer ticks during the
   decode (count, p50, p99, max, how many exceed 100 ms).

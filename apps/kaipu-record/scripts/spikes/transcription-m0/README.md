@@ -42,6 +42,9 @@ bun run.ts --audio r20.wav --runtime <sherpa dir> --model <model dir> \
   --strategy fixed --batch 4 --rule midpoint-dedupe
 ```
 
+These are also the defaults. An unknown `--strategy` or `--rule` value stops the run with an error
+that lists the allowed values.
+
 | Flag                                        | Meaning                                                                 |
 | ------------------------------------------- | ----------------------------------------------------------------------- |
 | `--strategy single`                         | the whole file in one CLI call (reference)                              |
