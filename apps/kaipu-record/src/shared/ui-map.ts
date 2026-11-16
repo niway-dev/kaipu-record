@@ -262,13 +262,18 @@ export const UI_MAP = {
       // The Timeline guide (NIW2-679): a dialog over the editor, one tab per lane.
       trackGuide: { states: ["clips", "zooms", "webcam"] },
       toolbar: { states: ["default", "saving", "saved"] },
-      inspector: { states: ["detection", "zoom", "mute", "webcam", "annotation", "privacy"] },
+      // webcamBlock: a camera block selected, with its scope (the time range) and its transition
+      // controls; `webcam` is the bubble selected, which edits the default camera.
+      inspector: {
+        states: ["detection", "zoom", "mute", "webcam", "webcamBlock", "annotation", "privacy"],
+      },
       // The Background section at the top of the inspector with nothing selected (ADR 0051):
       // `default` is none with the sliders disabled, `set` is a preset with padding, corners, shadow.
       background: { states: ["default", "set"] },
       timeline: { states: ["default", "zoomed"] },
       zoomLane: { states: ["empty", "segments"] },
-      webcamLane: { states: ["segments"] },
+      // cameraBlock: a block that changes the camera, with the striped band of its slide at its start.
+      webcamLane: { states: ["segments", "cameraBlock"] },
       privacyLane: { states: ["empty", "regions"] },
       // `waveform` draws the loudness bars; `waveformMuted` is a hatched block over dimmed bars
       // (NIW2-775). `empty` (the empty-state text) is left only for a recording without an

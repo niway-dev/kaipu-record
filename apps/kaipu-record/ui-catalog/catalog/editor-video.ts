@@ -297,6 +297,20 @@ export const editorVideo = catalog(
       // The edit saved into the vault: without this the second shot finds the section hidden.
       after: [{ action: "restoreVault" }],
     },
+    "webcam-block": {
+      profile: "default",
+      how: "Open “Release demo” and press Change camera from here: a camera block with the striped band of its slide appears on the webcam lane, selected, and the inspector shows its time range with Slide or Cut, duration and motion.",
+      steps: [
+        open(ASSETS.releaseDemo),
+        audioWaveformDrawn,
+        loaded,
+        rail("Change camera from here"),
+        saved,
+      ],
+      demonstrates: ["editorVideo.webcamLane:cameraBlock", "editorVideo.inspector:webcamBlock"],
+      // The edit saved into the vault: without this the second shot finds the block there.
+      after: [{ action: "restoreVault" }],
+    },
     "audio-menu": {
       profile: "default",
       how: "Open “Bug report” and press Audio in the tool rail: a menu offers Mute a section and Mute the whole recording.",
