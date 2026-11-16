@@ -622,6 +622,31 @@ describe("the engine downloads with the model", () => {
     });
   });
 
+  it("reports the model as downloading, not missing, to a poll that resumes during the engine check", async () => {
+    const h = makeHarness({ now: steppingClock() });
+    h.engine.missing = true;
+    h.modelStatus.set(MODEL_ID, { state: "missing" });
+    const install = pausedInstall(h);
+    // A poll is already waiting on the engine probe when the download starts and joins it.
+    const probe = Promise.withResolvers<EngineLocation>();
+    vi.mocked(h.deps.locateEngine).mockImplementationOnce(() => probe.promise);
+    const poll = h.service.status();
+    const pending = h.service.downloadModel(MODEL_ID);
+    probe.resolve({ available: false, reason: "binary-missing" });
+
+    // The poll resumes before the download leaves its "checking" phase.
+    const status = await poll;
+    expect(status.models.find((m) => m.id === MODEL_ID)!.status).toEqual({
+      state: "downloading",
+      receivedBytes: 0,
+      totalBytes: MODEL + ENGINE,
+    });
+
+    await install.started;
+    install.release();
+    expect(await pending).toEqual({ status: "ready" });
+  });
+
   it("installs only the engine when the model is already installed", async () => {
     const h = makeHarness({ now: steppingClock() });
     h.engine.missing = true;

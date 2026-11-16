@@ -329,8 +329,18 @@ export class TranscriptionService {
       models: this.catalog.map((model): TranscriptionModelInfo => {
         const own = toModelStatus(this.deps.modelStore.status(model.id));
         const download = this.download?.id === model.id ? this.download : null;
+        // What the consent prompt shows: only what will actually be downloaded.
+        const sizeBytes = !engineMissing
+          ? model.sizeBytes
+          : own.state === "ready"
+            ? engineSize
+            : model.sizeBytes + engineSize;
         let status = own;
-        if (download?.phase === "engine") {
+        if (download?.phase === "checking") {
+          // The run has not looked at the engine yet, but it is running: a poll that lands here
+          // must not read it as missing, or the renderer stops polling.
+          status = { state: "downloading", receivedBytes: 0, totalBytes: sizeBytes };
+        } else if (download?.phase === "engine") {
           status = {
             state: "downloading",
             receivedBytes: download.engineReceived,
@@ -348,12 +358,6 @@ export class TranscriptionService {
           status =
             failure === undefined ? { state: "missing" } : { state: "failed", reason: failure };
         }
-        // What the consent prompt shows: only what will actually be downloaded.
-        const sizeBytes = !engineMissing
-          ? model.sizeBytes
-          : own.state === "ready"
-            ? engineSize
-            : model.sizeBytes + engineSize;
         return {
           id: model.id,
           label: model.label,
