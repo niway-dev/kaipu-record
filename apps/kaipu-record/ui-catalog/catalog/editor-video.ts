@@ -363,9 +363,12 @@ export const editorVideo = catalog(
     },
     "camera-drop-card": {
       profile: "camera-parts",
-      how: "Open “Camera parts” at its start, where no part is, and drag the bubble from the bottom left to the top right: the card asks whether the bubble belongs to a new part.",
-      // The bubble follows the pointer 1:1, so the end point is a few bubble widths from where it
-      // starts, inside the preview. The drop is not answered, so nothing is saved.
+      how: "Open “Camera parts” at its start, where no part is, and drag the bubble from the bottom left to the top middle of the frame, its centre about 16% down from the top: the card asks whether the bubble belongs to a new part.",
+      // `to` is measured from the bubble's own box, so 3.5 and -2.5 are outside it: the pointer
+      // moves three bubble widths right and three bubble heights up. The bubble follows the pointer
+      // 1:1, so it lands at x 0.49, y 0.16 of a 1920×1080 frame (the default centre is 0.12, 0.82;
+      // a bubble is 0.22 of the frame height), inside the frame. The drop is not answered, so
+      // nothing is saved.
       steps: [
         open(ASSETS.cameraParts),
         audioWaveformDrawn,
