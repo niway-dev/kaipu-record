@@ -1,6 +1,12 @@
 import type { LibraryVideo } from "@renderer/features/library/types";
-import type { VideoScene } from "./scene";
-import { boundaryIndexAt, MIN_ITEM_DURATION, toLayout, type LayoutEntry } from "./timeline";
+import type { SlideItem, VideoScene } from "./scene";
+import {
+  boundaryIndexAt,
+  insertItemAt,
+  MIN_ITEM_DURATION,
+  toLayout,
+  type LayoutEntry,
+} from "./timeline";
 
 /**
  * The recordings the Add from Library modal offers (NIW2-782, NIW2-790): the Library's own recordings, other
@@ -92,6 +98,21 @@ export function boundaryAfterClipAt(
   return { index, time: index === 0 ? 0 : layout[index - 1].timelineEnd };
 }
 
+/**
+ * The mirror of `boundaryAfterClipAt` (NIW2-829): before the clip under the playhead, which is
+ * the same clip that rule picks (inside it, or exactly at its end, so a playhead exactly on a
+ * cut means the clip before the cut). Past the end of the sequence there is no clip under the
+ * playhead, so it is the end, as for "after"; an empty sequence, 0.
+ */
+export function boundaryBeforeClipAt(
+  layout: LayoutEntry[],
+  t: number,
+): { index: number; time: number } {
+  const found = layout.findIndex((entry) => t <= entry.timelineEnd);
+  const index = found === -1 ? layout.length : found;
+  return { index, time: index === 0 ? 0 : layout[index - 1].timelineEnd };
+}
+
 /** Add at start: before the first clip. */
 export function boundaryAtStart(): { index: number; time: number } {
   return { index: 0, time: 0 };
@@ -125,4 +146,72 @@ export function anchoredBoundary(
     if (anchor === null) return current.length === 0 ? 0 : current[current.length - 1].timelineEnd;
     return current.find((entry) => entry.itemId === anchor)?.timelineStart ?? time;
   };
+}
+
+/** How long a screenshot added to the sequence is shown (the spec's decision 8; floating is 10 s). */
+export const SEQUENCE_IMAGE_SECONDS = 5;
+
+/**
+ * The scene with `slide` inserted at the boundary `resolve` names for it (an `anchoredBoundary`
+ * result: a timeline time). The index is read from the scene given, not from the one the
+ * boundary was chosen on, because the image is decoded asynchronously and the sequence may have
+ * changed meanwhile. Boundary times are unique (items last at least `MIN_ITEM_DURATION`), so
+ * `boundaryIndexAt` finds that boundary exactly, and `layout[i]` is `items[i]` because
+ * `toLayout` skips only zero-length items, which the editor never keeps.
+ */
+export function insertSlideAtBoundary(
+  scene: VideoScene,
+  slide: SlideItem,
+  resolve: (scene: VideoScene) => number,
+): VideoScene {
+  const index = boundaryIndexAt(toLayout(scene.items), resolve(scene));
+  return { ...scene, items: insertItemAt(scene.items, index, slide) };
+}
+
+/** Where a Library item can go (NIW2-829): over the video, or at one of four sequence boundaries. */
+export type LibraryDestination = "over" | "before-clip" | "after-clip" | "start" | "end";
+
+/** The destinations in the order the chooser lists them. */
+export const LIBRARY_DESTINATIONS: readonly LibraryDestination[] = [
+  "over",
+  "before-clip",
+  "after-clip",
+  "start",
+  "end",
+];
+
+/** What each kind of item selects before the user touches the chooser. */
+export function defaultDestination(kind: "recording" | "screenshot"): LibraryDestination {
+  return kind === "screenshot" ? "over" : "after-clip";
+}
+
+/** A recording cannot float over the video yet (floating videos are a later stage). */
+export function destinationAllowed(
+  kind: "recording" | "screenshot",
+  destination: LibraryDestination,
+): boolean {
+  return !(kind === "recording" && destination === "over");
+}
+
+/**
+ * The sequence boundary a destination means for the sequence and playhead as they are now; null
+ * for "over", which has no boundary because it never touches the sequence.
+ */
+export function boundaryForDestination(
+  destination: LibraryDestination,
+  layout: LayoutEntry[],
+  playhead: number,
+): { index: number; time: number } | null {
+  switch (destination) {
+    case "over":
+      return null;
+    case "before-clip":
+      return boundaryBeforeClipAt(layout, playhead);
+    case "after-clip":
+      return boundaryAfterClipAt(layout, playhead);
+    case "start":
+      return boundaryAtStart();
+    case "end":
+      return boundaryAtEnd(layout);
+  }
 }

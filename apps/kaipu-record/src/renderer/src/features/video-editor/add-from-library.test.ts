@@ -1,16 +1,23 @@
 import { describe, expect, it } from "vitest";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { boundaryIndexAt, toLayout, type LayoutEntry } from "./timeline";
-import { initialScene, type VideoScene } from "./scene";
+import { initialScene, type SlideItem, type VideoScene } from "./scene";
 import {
   anchoredBoundary,
   joinableRecordings,
   resolutionLabel,
   insertBoundaryAt,
   boundaryAfterClipAt,
+  boundaryBeforeClipAt,
   boundaryAtStart,
   boundaryAtEnd,
   libraryScreenshots,
+  boundaryForDestination,
+  defaultDestination,
+  destinationAllowed,
+  insertSlideAtBoundary,
+  LIBRARY_DESTINATIONS,
+  SEQUENCE_IMAGE_SECONDS,
 } from "./add-from-library";
 
 function video(over: Partial<LibraryVideo> & { assetId: string }): LibraryVideo {
@@ -260,6 +267,135 @@ describe("boundaryAfterClipAt", () => {
       { id: "c", kind: "clip", sourceStart: 10, sourceEnd: 20 },
     ]);
     expect(boundaryAfterClipAt(withSlide, 12)).toEqual({ index: 2, time: 14 });
+  });
+});
+
+describe("boundaryBeforeClipAt", () => {
+  // illustrative: three clips of 10 s, 20 s and 5 s, ending at 10, 30 and 35
+  const three = toLayout([
+    { id: "a", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+    { id: "b", kind: "clip", sourceStart: 10, sourceEnd: 30 },
+    { id: "c", kind: "clip", sourceStart: 30, sourceEnd: 35 },
+  ]);
+
+  it("inside the first clip lands at the start", () => {
+    expect(boundaryBeforeClipAt(three, 4)).toEqual({ index: 0, time: 0 });
+    expect(boundaryBeforeClipAt(three, 0)).toEqual({ index: 0, time: 0 });
+    expect(boundaryBeforeClipAt(three, -2)).toEqual({ index: 0, time: 0 });
+  });
+
+  it("inside a later clip lands where that clip starts", () => {
+    expect(boundaryBeforeClipAt(three, 11)).toEqual({ index: 1, time: 10 });
+    expect(boundaryBeforeClipAt(three, 29)).toEqual({ index: 1, time: 10 });
+    expect(boundaryBeforeClipAt(three, 32)).toEqual({ index: 2, time: 30 });
+  });
+
+  it("exactly on a cut means the clip that ends there, like after", () => {
+    expect(boundaryBeforeClipAt(three, 10)).toEqual({ index: 0, time: 0 });
+    expect(boundaryBeforeClipAt(three, 30)).toEqual({ index: 1, time: 10 });
+    // after for the same playhead: the pair brackets that one clip
+    expect(boundaryAfterClipAt(three, 30)).toEqual({ index: 2, time: 30 });
+  });
+
+  it("at the end of the sequence means the last clip; past it there is no clip, so the end", () => {
+    expect(boundaryBeforeClipAt(three, 35)).toEqual({ index: 2, time: 30 });
+    expect(boundaryBeforeClipAt(three, 99)).toEqual({ index: 3, time: 35 });
+  });
+
+  it("an empty sequence lands at 0, and a one-clip one at its start", () => {
+    expect(boundaryBeforeClipAt([], 5)).toEqual({ index: 0, time: 0 });
+    const one = toLayout([{ id: "p", kind: "clip", sourceStart: 0, sourceEnd: 40 }]);
+    expect(boundaryBeforeClipAt(one, 20)).toEqual({ index: 0, time: 0 });
+  });
+
+  it("a slide counts as the clip under the playhead", () => {
+    const withSlide = toLayout([
+      { id: "a", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+      { id: "s", kind: "slide", assetId: "img", duration: 4, naturalWidth: 8, naturalHeight: 6 },
+      { id: "c", kind: "clip", sourceStart: 10, sourceEnd: 20 },
+    ]);
+    expect(boundaryBeforeClipAt(withSlide, 12)).toEqual({ index: 1, time: 10 });
+  });
+});
+
+describe("destinations", () => {
+  const layout = toLayout([
+    { id: "a", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+    { id: "b", kind: "clip", sourceStart: 10, sourceEnd: 30 },
+  ]);
+
+  it("maps each sequence destination to its boundary and 'over' to none", () => {
+    expect(boundaryForDestination("over", layout, 12)).toBeNull();
+    expect(boundaryForDestination("before-clip", layout, 12)).toEqual({ index: 1, time: 10 });
+    expect(boundaryForDestination("after-clip", layout, 12)).toEqual({ index: 2, time: 30 });
+    expect(boundaryForDestination("start", layout, 12)).toEqual({ index: 0, time: 0 });
+    expect(boundaryForDestination("end", layout, 12)).toEqual({ index: 2, time: 30 });
+  });
+
+  it("a screenshot defaults to over the video, a recording to after the clip", () => {
+    expect(defaultDestination("screenshot")).toBe("over");
+    expect(defaultDestination("recording")).toBe("after-clip");
+  });
+
+  it("a recording can never go over the video; a screenshot can go anywhere", () => {
+    expect(destinationAllowed("recording", "over")).toBe(false);
+    for (const destination of LIBRARY_DESTINATIONS) {
+      expect(destinationAllowed("screenshot", destination)).toBe(true);
+      if (destination !== "over") expect(destinationAllowed("recording", destination)).toBe(true);
+    }
+  });
+});
+
+describe("insertSlideAtBoundary", () => {
+  const slide: SlideItem = {
+    id: "new",
+    kind: "slide",
+    assetId: "img",
+    duration: SEQUENCE_IMAGE_SECONDS,
+    naturalWidth: 8,
+    naturalHeight: 6,
+  };
+  const scene: VideoScene = {
+    ...initialScene(30),
+    items: [
+      { id: "p", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+      { id: "q", kind: "clip", sourceStart: 10, sourceEnd: 30 },
+    ],
+  };
+  const idsOf = (s: VideoScene): string[] => s.items.map((item) => item.id);
+
+  it("is 5 s in the sequence, not the 3 s of the old Add to timeline", () => {
+    expect(SEQUENCE_IMAGE_SECONDS).toBe(5);
+  });
+
+  it("puts the slide at the item index the chosen boundary names", () => {
+    const layout = toLayout(scene.items);
+    for (const [boundary, expected] of [
+      [boundaryAtStart(), ["new", "p", "q"]],
+      [boundaryAfterClipAt(layout, 3), ["p", "new", "q"]],
+      [boundaryBeforeClipAt(layout, 12), ["p", "new", "q"]],
+      [boundaryAtEnd(layout), ["p", "q", "new"]],
+    ] as const) {
+      const next = insertSlideAtBoundary(scene, slide, anchoredBoundary(layout, boundary));
+      expect(idsOf(next)).toEqual(expected);
+    }
+  });
+
+  it("follows the clip after the boundary when the scene changed during the decode", () => {
+    const layout = toLayout(scene.items);
+    const resolve = anchoredBoundary(layout, boundaryAfterClipAt(layout, 3));
+    // a join landed at the start while the image was decoding
+    const moved: VideoScene = {
+      ...scene,
+      items: [{ id: "j", kind: "clip", sourceStart: 0, sourceEnd: 20 }, ...scene.items],
+    };
+    expect(idsOf(insertSlideAtBoundary(moved, slide, resolve))).toEqual(["j", "p", "new", "q"]);
+  });
+
+  it("an empty scene takes the slide first", () => {
+    const empty: VideoScene = { ...scene, items: [] };
+    const next = insertSlideAtBoundary(empty, slide, anchoredBoundary([], boundaryAtEnd([])));
+    expect(idsOf(next)).toEqual(["new"]);
   });
 });
 
