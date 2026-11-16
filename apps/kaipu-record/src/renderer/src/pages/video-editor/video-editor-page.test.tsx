@@ -1365,7 +1365,7 @@ describe("VideoEditorPage — webcam track", () => {
       const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
       Object.defineProperty(cam, "duration", { configurable: true, get: () => 60 });
       fireEvent.loadedMetadata(cam);
-      // Main video at 0 s, webcam started 120 ms later: no webcam frame yet.
+      // Main video at 0 s; the webcam has not decoded a frame yet, so nothing shows.
       expect(screen.getByTestId("webcam-layer").style.display).toBe("none");
       // The webcam decodes its first frame; the bubble may now show.
       Object.defineProperty(cam, "readyState", { configurable: true, get: () => 2 });

@@ -112,7 +112,12 @@ export interface Sidecar {
   thumbnailWebcam?: number;
 }
 
-/** What a thumbnail with the webcam bubble composited in is stamped with (`Sidecar.thumbnailWebcam`). */
+/**
+ * What a thumbnail with the webcam bubble composited in is stamped with (`Sidecar.thumbnailWebcam`).
+ * Bumping it re-composites every webcam recording, and the composer draws on the JPEG on disk:
+ * after a bump that JPEG already carries the old bubble, so a bump must also make the composer
+ * start from the recording's own screen frame.
+ */
 export const WEBCAM_THUMBNAIL_REVISION = 1;
 
 /**
