@@ -13,9 +13,9 @@ import { startScenario } from "./helpers";
  *      says Play;
  *   3. the part the card offers starts at the paused time.
  * The recording is the catalog's "Camera parts" (12 s, a webcam track, a part from 2 s to 6 s
- * and a hidden range from 8 s to 10 s); the playhead starts at 0.3 s, in the original
- * stretch, so the drop lands where no part is. No camera device is involved: the webcam is
- * the recording's own track.
+ * and a hidden range from 8 s to 10 s); the script parks the playhead at 0 and plays, so the
+ * bubble is picked up in the original stretch and the drop lands where no part is. No camera
+ * device is involved: the webcam is the recording's own track.
  */
 const NAME = "camera-drag-pauses";
 const CLOCK = /^\d+:\d\d\.\d \/ \d+:\d\d\.\d$/;
@@ -143,12 +143,14 @@ test("camera: dragging the bubble during playback pauses it and the drop card st
       log(`lane: "${label}" -> "${text}"`);
     }
     const panel = page.locator("[data-ui-area='editorVideo.webcamPanel']");
-    const panelText = (await panel.innerText().catch(() => "")).replace(/\s+/g, " ");
+    await expect(panel).toBeVisible();
+    const panelText = (await panel.innerText()).replace(/\s+/g, " ");
+    // The panel reads "0:00.3 – 0:02.0 · 1.7 s": the new part's start is its first time.
+    const startsAt = /(\d+:\d\d\.\d) – /.exec(panelText)?.[1];
+    expect(startsAt, `the panel names the part's range: "${panelText}"`).toBeDefined();
+    expect(startsAt).toBe(pausedClock);
     log(
-      `PASS 3: a part was added (${sectionsBefore} -> ${sectionsBefore + 1}); panel: "${panelText}"`,
-    );
-    log(
-      `new part starts at ${/(\d+:\d\d\.\d)/.exec(panelText)?.[1] ?? "?"} vs paused ${pausedClock}`,
+      `PASS 3: a part was added (${sectionsBefore} -> ${sectionsBefore + 1}) and starts at ${startsAt}, the paused time ${pausedClock}; panel: "${panelText}"`,
     );
     await shot("part-added");
   } finally {
