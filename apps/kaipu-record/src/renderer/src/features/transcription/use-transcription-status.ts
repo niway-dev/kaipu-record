@@ -35,11 +35,22 @@ export interface TranscriptionStatusApi {
 /** How often a visible download's state is re-read, for the settle that no event announces. */
 const DOWNLOAD_POLL_MS = 2000;
 
+export interface TranscriptionStatusOptions {
+  /**
+   * `false` keeps the hook idle: no IPC call and no progress listener, `status` stays `null`.
+   * For a host that shows the offer only behind the `transcription` flag and must not wake
+   * the engine's status check with the flag off. Default `true`.
+   */
+  enabled?: boolean;
+}
+
 /**
  * The speech model's state for the offer UI: loaded once, kept live by the progress events
  * main pushes during a download, and refreshed whenever a call changes it.
  */
-export function useTranscriptionStatus(): TranscriptionStatusApi {
+export function useTranscriptionStatus({
+  enabled = true,
+}: TranscriptionStatusOptions = {}): TranscriptionStatusApi {
   const [status, setStatus] = useState<TranscriptionStatus | null>(null);
   const [failures, setFailures] = useState<Record<string, ModelDownloadFailure>>({});
   const mounted = useRef(true);
@@ -50,6 +61,7 @@ export function useTranscriptionStatus(): TranscriptionStatusApi {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     mounted.current = true;
     void refresh();
     const unsubscribe = window.electronAPI.onTranscriptionModelProgress((progress) => {
@@ -76,7 +88,7 @@ export function useTranscriptionStatus(): TranscriptionStatusApi {
       mounted.current = false;
       unsubscribe();
     };
-  }, [refresh]);
+  }, [enabled, refresh]);
 
   // A download started elsewhere (another mount of this hook, an earlier visit to the page) ends
   // with no event this mount hears, so while one runs the status is re-read until it settles.

@@ -90,6 +90,18 @@ describe("useTranscriptionStatus", () => {
     }
   });
 
+  it("stays idle with enabled false: no status call, no progress listener", async () => {
+    const getTranscriptionStatus = vi.fn(async () => statusOf({ state: "missing" }));
+    const onTranscriptionModelProgress = vi.fn(() => () => {});
+    stubApi({ getTranscriptionStatus, onTranscriptionModelProgress });
+    const { result } = renderHook(() => useTranscriptionStatus({ enabled: false }));
+
+    await act(async () => {});
+    expect(result.current.status).toBeNull();
+    expect(getTranscriptionStatus).not.toHaveBeenCalled();
+    expect(onTranscriptionModelProgress).not.toHaveBeenCalled();
+  });
+
   it("treats a rejected status call as unavailable instead of crashing", async () => {
     stubApi({
       getTranscriptionStatus: async () => {
