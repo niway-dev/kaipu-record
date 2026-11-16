@@ -250,17 +250,21 @@ export const UI_MAP = {
       // at a moment already captured outlines the saved one; confirmDelete: the confirmation
       // dialog a capture's Delete button opens.
       capturesPanel: {
-        states: ["empty", "list", "hover", "duplicate", "confirmDelete", "addToTimeline"],
-        // addToTimeline: the row's Add to timeline button, which exists only with the flag on.
+        states: ["empty", "list", "hover", "duplicate", "confirmDelete", "addFromLibrary"],
+        // addFromLibrary: the row's Add from Library button, which exists only with the flag on;
+        // it opens that modal on Screenshots with the capture selected and adds nothing itself.
         gatedBy: [{ flag: "timeline-levels" }],
       },
       // The Add from Library modal (NIW2-790), behind the `timeline-levels` flag: a sheet over the
-      // editor opened by the transport's Add recording button. recordings: the Recordings tab,
-      // a compact list with the first row selected and previewed, and the Add after current clip /
-      // Add at start / Add at end actions; screenshots: the Screenshots tab, a card grid with the
-      // "From this recording" tag; noMatch: a search that matches no recording.
+      // editor opened by the transport's Add recording button, or by a capture's Add from Library
+      // button. One chooser lists every destination for the selected item and one Add applies it
+      // (NIW2-829). recordings: the Recordings tab, a compact list with the first row selected
+      // and previewed, and the chooser with "Over the video" disabled for a recording;
+      // screenshots: the Screenshots tab, a card grid with the "From this recording" tag and no
+      // card selected yet; screenshotSelected: a card selected, with the chooser at "Over the
+      // video"; noMatch: a search that matches no recording.
       addFromLibrary: {
-        states: ["recordings", "screenshots", "noMatch"],
+        states: ["recordings", "screenshots", "screenshotSelected", "noMatch"],
         gatedBy: [{ flag: "timeline-levels" }],
       },
       // The "Insert here" bar and pill on the Clips row while a recording is dragged over it: it
