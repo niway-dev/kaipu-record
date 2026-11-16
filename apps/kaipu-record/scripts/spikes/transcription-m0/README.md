@@ -32,8 +32,8 @@ bun make-fixtures.ts /tmp/m0-fixtures <prose files...>
 ```
 
 It writes a continuous English passage and a Spanish passage with their true words, and two
-word-by-word files with the true start and end of every word (marks by construction, exact, no ear
-needed; the spec's "hand-marked words" is replaced by this).
+word-by-word files with the true start and end of every word (marks by construction, not by ear, so
+they carry the trimming bias ADR 0062 describes; the spec's "hand-marked words" is replaced by this).
 
 ## Run
 
