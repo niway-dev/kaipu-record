@@ -44,9 +44,9 @@ import type { WordOccurrence } from "../transcript-occurrence";
  * it, to the duration it needs, never past `maxDuration`, never past the next cue's start minus
  * `CUE_GAP`. When the room is not there the shorter cue is kept. A cue followed by a cut (the
  * next word plays in another clip) is not extended: where its clip ends is unknown, and a stale
- * caption over the next clip's footage is worse than a short one. The last cue is extended with no room limit:
- * nothing follows it, and a cue that outlasts the video is harmless. Cues never overlap: if the
- * recognizer's words overlap, the later cue starts when the earlier one ends.
+ * caption over the next clip's footage is worse than a short one. The last cue is extended with
+ * no room limit: nothing follows it, and a cue that outlasts the video is harmless. Cues never
+ * overlap: if the recognizer's words overlap, the later cue starts when the earlier one ends.
  */
 export interface CueLimits {
   maxLineChars: number;
