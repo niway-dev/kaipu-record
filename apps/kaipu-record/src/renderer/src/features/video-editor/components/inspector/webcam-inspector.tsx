@@ -556,6 +556,9 @@ export function WebcamPanel({
   ];
   // Arrows move along the strip, wrapping at the ends, and focus follows the selection.
   const onTabKeyDown = (event: React.KeyboardEvent): void => {
+    // Space activates the focused tab (the browser turns it into a click). The page listens on
+    // `window` and treats Space as play/pause, so it must not travel past the tab strip.
+    if (event.key === " ") event.stopPropagation();
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
     const step = event.key === "ArrowRight" ? 1 : -1;

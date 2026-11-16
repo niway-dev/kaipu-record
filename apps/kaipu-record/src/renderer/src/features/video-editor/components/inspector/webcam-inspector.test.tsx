@@ -120,6 +120,22 @@ describe("the Camera panel's tabs", () => {
     expect(whole).toHaveFocus();
   });
 
+  it("Space on a tab stays with the tab: the page's playback shortcut never sees it", () => {
+    renderPanel();
+    const onWindowKey = vi.fn();
+    window.addEventListener("keydown", onWindowKey);
+    try {
+      const tab = screen.getByRole("tab", { name: "Whole video" });
+      tab.focus();
+      const notPrevented = fireEvent.keyDown(tab, { key: " " });
+      expect(onWindowKey).not.toHaveBeenCalled();
+      // Not cancelled either: the browser still turns Space into the click that selects the tab.
+      expect(notPrevented).toBe(true);
+    } finally {
+      window.removeEventListener("keydown", onWindowKey);
+    }
+  });
+
   it("This part shows how the part arrives and ends, and none of the whole-video look", () => {
     renderPanel();
     expect(screen.getByRole("group", { name: "How it arrives" })).toBeInTheDocument();
