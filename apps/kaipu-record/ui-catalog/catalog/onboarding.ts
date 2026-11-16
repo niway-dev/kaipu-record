@@ -115,7 +115,7 @@ export const onboarding = catalog(
       requires: { screen: true, microphone: true },
     },
     transcription: {
-      profile: "transcription-missing",
+      profile: "onboarding-transcription-missing",
       how: "Shortcuts, Continue: the offer to download the speech model (flag on, model not installed).",
       steps: toTranscription,
       demonstrates: ["onboarding.root:transcription", "onboarding.transcriptionStep:offer"],
