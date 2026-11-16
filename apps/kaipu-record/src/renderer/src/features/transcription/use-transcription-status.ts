@@ -83,9 +83,24 @@ export function useTranscriptionStatus(): TranscriptionStatusApi {
   const downloading = status?.models.some((m) => m.status.state === "downloading") ?? false;
   useEffect(() => {
     if (!downloading) return;
-    const timer = setInterval(() => void refresh(), DOWNLOAD_POLL_MS);
+    let inFlight = false;
+    const timer = setInterval(() => {
+      if (inFlight) return;
+      inFlight = true;
+      // A failed background read keeps what is on screen: only the first load and a user's own
+      // call may report the engine as unreachable.
+      void window.electronAPI
+        .getTranscriptionStatus()
+        .then((next) => {
+          if (mounted.current) setStatus(next);
+        })
+        .catch(() => {})
+        .finally(() => {
+          inFlight = false;
+        });
+    }, DOWNLOAD_POLL_MS);
     return () => clearInterval(timer);
-  }, [downloading, refresh]);
+  }, [downloading]);
 
   const download = useCallback(
     async (id: string) => {

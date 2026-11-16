@@ -5,7 +5,6 @@ import type {
 } from "@shared/types/transcription";
 import { NoAudioError, decodeAudioToPcm } from "./decode-audio";
 
-/** Silence from main, once there is nothing left for the renderer to send, that ends the wait. */
 /**
  * Main reports progress only between batches, and one batch may take up to 270 s (its deadline:
  * 30 s plus twice the batch's audio). The renderer must outwait that or it cancels a job that is

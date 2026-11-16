@@ -51,6 +51,45 @@ describe("useTranscriptionStatus", () => {
     expect(result.current.status?.models[0].status).toEqual({ state: "missing" });
   });
 
+  it("re-reads a download it did not start until it settles, and survives a failed read", async () => {
+    vi.useFakeTimers();
+    try {
+      const reads: Array<() => TranscriptionStatus> = [
+        () => statusOf({ state: "downloading", receivedBytes: 10, totalBytes: 100 }), // first load
+        () => {
+          throw new Error("one bad read"); // a failed poll keeps what is on screen
+        },
+        () => statusOf({ state: "ready" }),
+      ];
+      let call = 0;
+      stubApi({ getTranscriptionStatus: async () => reads[Math.min(call++, reads.length - 1)]!() });
+      const { result, unmount } = renderHook(() => useTranscriptionStatus());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(result.current.status?.models[0].status.state).toBe("downloading");
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      expect(result.current.status?.models[0].status.state).toBe("downloading");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      expect(result.current.status?.models[0].status).toEqual({ state: "ready" });
+
+      // Settled: no more polling, and unmounting leaves nothing running.
+      const callsWhenSettled = call;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(call).toBe(callsWhenSettled);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("treats a rejected status call as unavailable instead of crashing", async () => {
     stubApi({
       getTranscriptionStatus: async () => {
