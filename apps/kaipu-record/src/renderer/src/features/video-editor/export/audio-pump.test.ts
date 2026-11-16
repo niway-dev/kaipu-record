@@ -148,7 +148,6 @@ function run(options: { downmix?: boolean } = {}) {
 /** The old order: no video at all, the whole audio produced in one go. */
 async function allAtOnce(options?: { downmix?: boolean }) {
   const r = run(options);
-  await r.pump.advanceTo(Infinity);
   await r.pump.drain();
   return r;
 }
