@@ -13,7 +13,7 @@
  * on the video is dragged to move it. Every control edits through WebcamEditing with the
  * history contract: buttons commit, sliders run begin → live… → end.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Eye, EyeOff, Play, Trash2, Webcam } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { uiArea } from "@renderer/lib/ui-area";
@@ -546,6 +546,7 @@ export function WebcamPanel({
 }: WebcamPanelProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const [tab, setTab] = useState<Tab>("part");
+  const tabButtons = useRef<Record<Tab, HTMLButtonElement | null>>({ part: null, whole: null });
   if (segment?.mode === "hidden" && range) {
     return <HiddenRangePanel segment={segment} range={range} edits={edits} onRemoved={onRemoved} />;
   }
@@ -553,6 +554,16 @@ export function WebcamPanel({
     { id: "part", text: t("webcamTabPart") },
     { id: "whole", text: t("webcamTabWhole") },
   ];
+  // Arrows move along the strip, wrapping at the ends, and focus follows the selection.
+  const onTabKeyDown = (event: React.KeyboardEvent): void => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    const step = event.key === "ArrowRight" ? 1 : -1;
+    const at = tabs.findIndex((entry) => entry.id === tab);
+    const next = tabs[(at + step + tabs.length) % tabs.length].id;
+    setTab(next);
+    tabButtons.current[next]?.focus();
+  };
   return (
     <section
       {...uiArea("editorVideo.webcamPanel")}
@@ -563,15 +574,24 @@ export function WebcamPanel({
       <header className={styles.header}>
         <h2 className={styles.title}>{t("webcamTitle")}</h2>
       </header>
-      <div className={webcamStyles.tabs} role="tablist" aria-label={t("webcamTabsAria")}>
+      <div
+        className={webcamStyles.tabs}
+        role="tablist"
+        aria-label={t("webcamTabsAria")}
+        onKeyDown={onTabKeyDown}
+      >
         {tabs.map((entry) => (
           <button
             key={entry.id}
+            ref={(node) => {
+              tabButtons.current[entry.id] = node;
+            }}
             type="button"
             role="tab"
             id={`webcam-tab-${entry.id}`}
             aria-selected={tab === entry.id}
             aria-controls="webcam-tabpanel"
+            tabIndex={tab === entry.id ? 0 : -1}
             className={tab === entry.id ? webcamStyles.tabActive : webcamStyles.tab}
             onClick={() => setTab(entry.id)}
           >

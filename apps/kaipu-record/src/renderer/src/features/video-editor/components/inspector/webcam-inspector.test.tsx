@@ -95,6 +95,31 @@ describe("the Camera panel's tabs", () => {
     expect(screen.getByRole("tab", { name: "This part" })).toHaveAttribute("aria-selected", "true");
   });
 
+  it("only the selected tab is a tab stop", () => {
+    renderPanel();
+    expect(screen.getByRole("tab", { name: "This part" })).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("tab", { name: "Whole video" })).toHaveAttribute("tabindex", "-1");
+    openWholeVideo();
+    expect(screen.getByRole("tab", { name: "This part" })).toHaveAttribute("tabindex", "-1");
+    expect(screen.getByRole("tab", { name: "Whole video" })).toHaveAttribute("tabindex", "0");
+  });
+
+  it("the arrow keys move between the tabs, wrapping, and focus follows the selection", () => {
+    renderPanel();
+    const part = screen.getByRole("tab", { name: "This part" });
+    const whole = screen.getByRole("tab", { name: "Whole video" });
+    part.focus();
+    fireEvent.keyDown(part, { key: "ArrowRight" });
+    expect(whole).toHaveAttribute("aria-selected", "true");
+    expect(whole).toHaveFocus();
+    fireEvent.keyDown(whole, { key: "ArrowRight" });
+    expect(part).toHaveAttribute("aria-selected", "true");
+    expect(part).toHaveFocus();
+    fireEvent.keyDown(part, { key: "ArrowLeft" });
+    expect(whole).toHaveAttribute("aria-selected", "true");
+    expect(whole).toHaveFocus();
+  });
+
   it("This part shows how the part arrives and ends, and none of the whole-video look", () => {
     renderPanel();
     expect(screen.getByRole("group", { name: "How it arrives" })).toBeInTheDocument();
