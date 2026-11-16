@@ -42,8 +42,10 @@ import type { WordOccurrence } from "../transcript-occurrence";
  * Timing: a cue starts with its first word and ends with its last word. A cue that reads faster
  * than `maxCharsPerSecond`, or is shorter than `minDuration`, is extended into the silence after
  * it, to the duration it needs, never past `maxDuration`, never past the next cue's start minus
- * `CUE_GAP`. When the room is not there the shorter cue is kept. The last cue is not extended:
- * the silence after it is unknown (it may be the end of the video). Cues never overlap: if the
+ * `CUE_GAP`. When the room is not there the shorter cue is kept. A cue followed by a cut (the
+ * next word plays in another clip) is not extended: where its clip ends is unknown, and a stale
+ * caption over the next clip's footage is worse than a short one. The last cue is extended with no room limit:
+ * nothing follows it, and a cue that outlasts the video is harmless. Cues never overlap: if the
  * recognizer's words overlap, the later cue starts when the earlier one ends.
  */
 export interface CueLimits {
@@ -195,15 +197,18 @@ function time(groups: Word[][], limits: CueLimits): Cue[] {
     let end = Math.max(group[group.length - 1]!.end, start);
 
     const next = groups[i + 1];
-    if (next) {
-      const characters = lines.join(" ").length;
-      const needed = Math.min(
-        limits.maxDuration,
-        Math.max(limits.minDuration, characters / limits.maxCharsPerSecond),
-      );
-      const room = next[0]!.start - CUE_GAP;
-      end = Math.max(end, Math.min(start + needed, room));
-    }
+    const characters = lines.join(" ").length;
+    const needed = Math.min(
+      limits.maxDuration,
+      Math.max(limits.minDuration, characters / limits.maxCharsPerSecond),
+    );
+    const last = group[group.length - 1]!;
+    const room = !next
+      ? Infinity
+      : next[0]!.clipId !== last.clipId
+        ? end
+        : next[0]!.start - CUE_GAP;
+    end = Math.max(end, Math.min(start + needed, room));
     cues.push({ index: i + 1, start, end, lines });
     previousEnd = end;
   });

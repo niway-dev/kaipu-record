@@ -298,8 +298,32 @@ describe("buildCues", () => {
       expect(cues[0]!.end - cues[0]!.start).toBeCloseTo(1, 6);
     });
 
-    it("does not extend the last cue, whose following silence is unknown", () => {
+    it("extends the last cue to the minimum duration: nothing follows it", () => {
       const cues = buildCues(words([["hi", 0, 0.2]]));
+      expect(cues[0]!.end).toBeCloseTo(0.8, 6);
+    });
+
+    it("gives a last word that overlaps the one before a visible duration", () => {
+      const cues = buildCues(
+        words([
+          ["Hello.", 0, 1],
+          ["Yes!", 0.5, 0.7],
+        ]),
+      );
+      expect(cues[1]!.start).toBe(1);
+      expect(cues[1]!.end - cues[1]!.start).toBeCloseTo(0.8, 6);
+    });
+
+    it("does not extend a cue into the footage after a cut", () => {
+      const cues = buildCues(
+        words(
+          [
+            ["Hi.", 0, 0.2],
+            ["Later", 1, 1.4],
+          ],
+          (i) => (i === 1 ? { clipId: "clip-b" } : {}),
+        ),
+      );
       expect(cues[0]!.end).toBeCloseTo(0.2, 6);
     });
 
