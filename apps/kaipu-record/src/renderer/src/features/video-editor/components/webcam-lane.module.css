@@ -88,7 +88,7 @@
 }
 
 .block.selected:not(.hidden) {
-  background: color-mix(in srgb, var(--accent-primary) 32%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 48%, transparent);
 }
 
 /* A part: the accent block. Its content starts at the left, after the slide's wedge. */
