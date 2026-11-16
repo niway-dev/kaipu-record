@@ -29,26 +29,39 @@ this part" or "For the whole video". The interface calls a camera section a **pa
 default camera position the **original position**; the code keeps `WebcamSegment` and
 `layout`.
 
-| #   | Decision                                                                                                                                                                                                              | Why                                                                                                                                                                                                    | Record                                                                                                    |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| 1   | No button creates a part. The rail's "Change camera from here", its copy in the inspector and the split it performs are removed                                                                                       | Owner, 2026-11-16, confirmed the same day for the mock's "Move camera from here" too: moving the camera is a deliberate drag. A click that writes a part before anything moved is what filled the lane | [ADR 0039, amendment of 2026-11-16](/architecture/decisions/0039-camera-sections-with-eased-transitions/) |
-| 2   | Dropping the bubble outside every part asks "Only for this part" or "For the whole video". Closing the card, Escape or any other action puts the bubble back. Dropping inside a part updates that part without asking | Owner's mock. Today the same drag silently moves the camera for the whole video                                                                                                                        | [ADR 0039, amendment of 2026-11-16](/architecture/decisions/0039-camera-sections-with-eased-transitions/) |
-| 3   | A new part lasts 10 seconds, or less if another block or the end of the recording comes sooner. "Hide camera from here" also hides 10 seconds                                                                         | Owner's mock. A part to the end of the video made every later drag edit that part                                                                                                                      | [ADR 0039, amendment of 2026-11-16](/architecture/decisions/0039-camera-sections-with-eased-transitions/) |
-| 4   | The slide follows a curved route. One function gives the route the preview draws and the path the preview, the MP4 and the GIF play                                                                                   | Owner's mock: "what you see drawn is what plays"                                                                                                                                                       | [ADR 0039, amendment of 2026-11-16](/architecture/decisions/0039-camera-sections-with-eased-transitions/) |
-| 5   | A new part is Slide, 0.7 s, Smooth. The panel offers 0.4, 0.7 and 1.2 s, and Smooth, Bounce and Linear                                                                                                                | Owner's mock, confirmed by the owner on 2026-11-16: Smooth by default, with Bounce (it moves and bounces at the end) as an option. The first version defaulted to Bounce                               | [ADR 0039, amendment of 2026-11-16](/architecture/decisions/0039-camera-sections-with-eased-transitions/) |
-| 6   | When a part ends and nothing starts there, the camera returns to the original position with that part's own slide                                                                                                     | Already how the first version works; the mock's text agrees                                                                                                                                            | none                                                                                                      |
-| 7   | The Camera lane draws every stretch, original ones included, with a small frame showing where the camera is and a name computed from that place                                                                       | Owner's mock. Today a block says "Custom" and nothing about where the camera is                                                                                                                        | none                                                                                                      |
-| 8   | The bubble carries a label saying what a drag will edit. A part shows where the camera comes from: a ghost bubble, a dotted route and a chip. These show only while paused and are never exported                     | Owner's mock                                                                                                                                                                                           | none                                                                                                      |
-| 9   | The panel has two tabs. "This part" holds the part's place, how it arrives, and "Remove this part". "Whole video" holds the controls the inspector has today, except the two that decisions 10 and 15 change          | Owner's mock for the layout                                                                                                                                                                            | none                                                                                                      |
-| 10  | Size is three buttons, S, M and L, in place of the slider. M is today's default size (0.22 of the frame's height), S is 0.15 and L is 0.33. A size saved outside the three keeps playing and shows no button selected | Owner, 2026-11-16, after seeing both controls. The mock gives the letters no values: S and L keep the proportions of the recorder bubble's S, M, L (`CAMERA_BUBBLE_PRESETS`: 160, 240, 360)            | none                                                                                                      |
-| 11  | The route bends toward the centre of the frame. Bounce's travel past the target leaves along the curve's end tangent, with the first version's per-axis limit applied to it                                           | Proposal. The mock bends to a fixed side, so a move along an edge presses against that edge one way and arcs the other                                                                                 | [ADR 0039, amendment of 2026-11-16](/architecture/decisions/0039-camera-sections-with-eased-transitions/) |
-| 12  | The 56 px minimum width of a part on the lane never covers the next block; with less room the part is narrower and the timeline zoom is how its edges are dragged                                                     | Proposal. On a long video a 10-second part is a few pixels wide; a fixed 56 px would hide its neighbour                                                                                                | none                                                                                                      |
-| 13  | A part saved earlier with its own shape or size keeps them. "This part" says so and offers "Use the whole-video look"                                                                                                 | Proposal. Released sessions have such blocks, and the new tab has no shape or size controls                                                                                                            | none                                                                                                      |
-| 14  | While the bubble is dragged, only the bubble element moves. The scene is written once, on the drop or on the card's answer, as one undo step                                                                          | Owner's mock: "it must feel like dragging a real object". Today every pointer move writes the scene and re-renders the editor                                                                          | none                                                                                                      |
-| 15  | The panel has no Position grid. The nine preset positions are removed from both tabs; the bubble's place is set only by dragging it on the video                                                                      | Owner, 2026-11-16: "la posición tiene más rango que solo 9 puntos". The grid was what the owner disliked, and the mock already left it out                                                             | none                                                                                                      |
+A later round, on 2026-11-16, fixes how the Camera lane reads. The owner saw that a short
+part's box was wider than the space between its two handles, because the lane gave every part
+a minimum width and pushed the next stretch to make room. Now every stretch is drawn as wide
+as it lasts, and the detail a narrow box cannot show comes from a hover card (decisions 12 and
+16 to 18).
 
-Decisions 1 to 10, 14 and 15 are the owner's, through the mock and the chat. Decisions 11 to
-13 are proposals, shown to the owner in chat on 2026-11-16 and neither approved nor rejected.
+| #   | Decision                                                                                                                                                                                                                                                                                       | Why                                                                                                                                                                                                                                                                                                                                                                  | Record                                                                                                    |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| 1   | No button creates a part. The rail's "Change camera from here", its copy in the inspector and the split it performs are removed                                                                                                                                                                | Owner, 2026-11-16, confirmed the same day for the mock's "Move camera from here" too: moving the camera is a deliberate drag. A click that writes a part before anything moved is what filled the lane                                                                                                                                                               | [ADR 0039, amendment of 2026-11-16](/architecture/decisions/0039-camera-sections-with-eased-transitions/) |
+| 2   | Dropping the bubble outside every part asks "Only for this part" or "For the whole video". Closing the card, Escape or any other action puts the bubble back. Dropping inside a part updates that part without asking                                                                          | Owner's mock. Today the same drag silently moves the camera for the whole video                                                                                                                                                                                                                                                                                      | [ADR 0039, amendment of 2026-11-16](/architecture/decisions/0039-camera-sections-with-eased-transitions/) |
+| 3   | A new part lasts 10 seconds, or less if another block or the end of the recording comes sooner. "Hide camera from here" also hides 10 seconds                                                                                                                                                  | Owner's mock. A part to the end of the video made every later drag edit that part                                                                                                                                                                                                                                                                                    | [ADR 0039, amendment of 2026-11-16](/architecture/decisions/0039-camera-sections-with-eased-transitions/) |
+| 4   | The slide follows a curved route. One function gives the route the preview draws and the path the preview, the MP4 and the GIF play                                                                                                                                                            | Owner's mock: "what you see drawn is what plays"                                                                                                                                                                                                                                                                                                                     | [ADR 0039, amendment of 2026-11-16](/architecture/decisions/0039-camera-sections-with-eased-transitions/) |
+| 5   | A new part is Slide, 0.7 s, Smooth. The panel offers 0.4, 0.7 and 1.2 s, and Smooth, Bounce and Linear                                                                                                                                                                                         | Owner's mock, confirmed by the owner on 2026-11-16: Smooth by default, with Bounce (it moves and bounces at the end) as an option. The first version defaulted to Bounce                                                                                                                                                                                             | [ADR 0039, amendment of 2026-11-16](/architecture/decisions/0039-camera-sections-with-eased-transitions/) |
+| 6   | When a part ends and nothing starts there, the camera returns to the original position with that part's own slide                                                                                                                                                                              | Already how the first version works; the mock's text agrees                                                                                                                                                                                                                                                                                                          | none                                                                                                      |
+| 7   | The Camera lane draws every stretch, original ones included, with a small frame showing where the camera is and a name computed from that place                                                                                                                                                | Owner's mock. Today a block says "Custom" and nothing about where the camera is                                                                                                                                                                                                                                                                                      | none                                                                                                      |
+| 8   | The bubble carries a label saying what a drag will edit. A part shows where the camera comes from: a ghost bubble, a dotted route and a chip. These show only while paused and are never exported                                                                                              | Owner's mock                                                                                                                                                                                                                                                                                                                                                         | none                                                                                                      |
+| 9   | The panel has two tabs. "This part" holds the part's place, how it arrives, and "Remove this part". "Whole video" holds the controls the inspector has today, except the two that decisions 10 and 15 change                                                                                   | Owner's mock for the layout                                                                                                                                                                                                                                                                                                                                          | none                                                                                                      |
+| 10  | Size is three buttons, S, M and L, in place of the slider. M is today's default size (0.22 of the frame's height), S is 0.15 and L is 0.33. A size saved outside the three keeps playing and shows no button selected                                                                          | Owner, 2026-11-16, after seeing both controls. The mock gives the letters no values: S and L keep the proportions of the recorder bubble's S, M, L (`CAMERA_BUBBLE_PRESETS`: 160, 240, 360)                                                                                                                                                                          | none                                                                                                      |
+| 11  | The route bends toward the centre of the frame. Bounce's travel past the target leaves along the curve's end tangent, with the first version's per-axis limit applied to it                                                                                                                    | Proposal. The mock bends to a fixed side, so a move along an edge presses against that edge one way and arcs the other                                                                                                                                                                                                                                               | [ADR 0039, amendment of 2026-11-16](/architecture/decisions/0039-camera-sections-with-eased-transitions/) |
+| 12  | Every stretch in the Camera lane is drawn as wide as it lasts. A part never borrows width from the stretch after it. What does not fit is not drawn: the glyph, the name and the arrival word drop out in steps as the part narrows, and the hover card (decision 16) says what the box cannot | Owner, 2026-11-16. Width in a timeline means duration; the 56 px minimum made a short part claim time it did not have. Rejected: keeping 56 px with a duration rail inside; a floating name badge above the lane; a magnified loupe                                                                                                                                  | none                                                                                                      |
+| 13  | A part saved earlier with its own shape or size keeps them. "This part" says so and offers "Use the whole-video look"                                                                                                                                                                          | Proposal. Released sessions have such blocks, and the new tab has no shape or size controls                                                                                                                                                                                                                                                                          | none                                                                                                      |
+| 14  | While the bubble is dragged, only the bubble element moves. The scene is written once, on the drop or on the card's answer, as one undo step                                                                                                                                                   | Owner's mock: "it must feel like dragging a real object". Today every pointer move writes the scene and re-renders the editor                                                                                                                                                                                                                                        | none                                                                                                      |
+| 15  | The panel has no Position grid. The nine preset positions are removed from both tabs; the bubble's place is set only by dragging it on the video                                                                                                                                               | Owner, 2026-11-16: "la posición tiene más rango que solo 9 puntos". The grid was what the owner disliked, and the mock already left it out                                                                                                                                                                                                                           | none                                                                                                      |
+| 16  | Hovering the Camera lane shows a card with the details of the stretch under the pointer                                                                                                                                                                                                        | Owner, 2026-11-16: "que al pasar el mouse veamos qué dice con una especie de box tipo tooltip que dé detalles". On a 50-minute recording a 10-second part is about 3 px wide, so nothing can be read in the lane and the detail has to come from hovering                                                                                                            | none                                                                                                      |
+| 17  | Dragging the camera bubble while the video plays pauses playback                                                                                                                                                                                                                               | Owner, 2026-11-16: "quiero que al mover la cámara y soltar la selección pausemos para que no desaparezca la caja". He said "on release"; pausing when the drag starts is the design thread's choice, so the part starts at the frame he grabbed and the pointer cannot move in or out of a part under the bubble during the drag. He may prefer the pause at release | none                                                                                                      |
+| 18  | Double-clicking a part or a hidden range zooms the timeline to it                                                                                                                                                                                                                              | Proposal, shown in the option-A sketch the owner approved. At fit zoom on a long recording a short part cannot be dragged by its edges; zooming to it makes the edges reachable                                                                                                                                                                                      | none                                                                                                      |
+
+Decisions 1 to 10, 12, 14, 15, 16 and 17 are the owner's, through the mock and the chat. Two
+details inside them are the design thread's choice and the owner can change them: that the
+pause of decision 17 starts with the drag (he said "on release"), and the numbers listed
+under [The Camera lane](#the-camera-lane). Decisions 11, 13 and 18 are proposals: 11 and 13
+were shown to the owner in chat on 2026-11-16 and neither approved nor rejected, and 18 was
+shown in the option-A sketch he approved but he has not decided it on its own.
 
 ## Open questions
 
@@ -96,6 +109,12 @@ None. Answered by the owner on 2026-11-16:
 - Playhead outside every part: the drop opens the card. Until it is answered the scene is
   unchanged.
 - No drag in a hidden range or over a slide clip, as today.
+- **While the video plays**, a drag that has passed the 3 px click slop pauses playback
+  (decision 17). It stays paused through the drop, while the card is open and after the
+  answer; it never resumes by itself. This holds for a drop inside a part too. The pause lands
+  before the drop is recorded, so a last time update that arrives after the pause does not
+  move the pending part or close the card. Pressing play or seeking with the card open
+  behaves as before: it closes the card.
 
 ### The card
 
@@ -182,13 +201,55 @@ Shown only while paused, never in an export:
 - **Name**: Top, Middle or Bottom with left, middle or right, and "Center" for the middle of
   both. It comes from which third the bubble's centre is in, over the range the centre can
   reach. It is a description, never a choice.
-- A part is drawn at least 56 px wide on the lane, so its name fits and it is easy to grab,
-  but never wider than the room before the next block. With less than 56 px of room the part
-  is drawn as wide as that room, and it is still the same part: a click on it selects it, and
-  moving the playhead into it and clicking the bubble opens the panel on it. "Remove this part" and the
-  panel's controls work at any width. To drag its edges the user zooms the timeline in with
-  the transport bar's zoom, which widens every block. A part too narrow to grab at the
-  current zoom is an accepted limit; nothing else is built for it.
+
+#### True width
+
+- Every stretch, original ones included, is drawn from its real start to its real end at the
+  current zoom (decision 12). A part never borrows width from the stretch after it, so no
+  Original stretch is moved or dropped, and no border or padding makes a box wider than its
+  time. A hidden range has no minimum width either.
+- One exception, a floor of **3 px**: a part or hidden range narrower than that is drawn 3 px
+  wide so it never vanishes, and never past the start of the next part or hidden range.
+- Content steps out as the box narrows: the arrival word, then the name, then the glyph. Below
+  the glyph's width the part is the plain accent block. The widths where each drops out are
+  the ones the lane already uses.
+- The slide wedge is never wider than its part. Below the width where a wedge can be told
+  from the block, it is not drawn.
+
+#### Handles and click targets
+
+- A selected part's handles still drag its real edges. When the part is narrower than **10 px**
+  the two handles move apart symmetrically so there are always at least **4 px** between them:
+  each is shifted outward by `max(0, (10 − width) / 2)` px. The change is continuous while the
+  edge is dragged, with no jump. Grabbing a handle that is drawn shifted does not move the
+  edge until the pointer moves: the drag keeps the offset between the pointer and the drawn
+  handle.
+- A part or hidden range drawn narrower than **12 px** has a click target 12 px wide, centred
+  on it. Two targets never overlap: each stops at the midpoint of the gap to its neighbour.
+  What is drawn stays the real width.
+
+#### The hover card
+
+- Moving the pointer over the lane shows a small card above it for the stretch under the
+  pointer, of any kind. It uses the same target rule as the click, so a 3 px part is hit
+  within its 12 px target. Keyboard focus on a part or hidden range shows the same card.
+- A part: its position glyph and name ("Bottom left"), its range and length ("12:04.0 –
+  12:14.0 · 10.0 s", the formatter the panel uses), and how it arrives ("Slide 0.7 s ·
+  Smooth" or "Cut"). A hidden range: the eye-off icon, "Camera hidden", range and length. An
+  original stretch: the glyph, the name, "Original", range and length.
+- It appears after about **120 ms**, follows the pointer horizontally, stays inside the
+  timeline's visible area and never takes pointer events. It is gone when the pointer leaves,
+  while a handle is being dragged, and when the timeline scrolls or zooms. It reuses the
+  editor's tooltip look; no new visual language.
+
+#### Zoom to a part
+
+- Double-clicking a part or a hidden range (decision 18) sets the timeline zoom so it fills
+  about **40 %** of the visible lane, capped at the maximum zoom, and scrolls so it is
+  centred. The first click still selects it.
+
+The numbers 3 px, 4 px, 10 px, 12 px, 120 ms and 40 % are the design thread's choices, not
+the owner's. The owner can change any of them.
 
 ### The rail
 
@@ -231,7 +292,7 @@ Header "Camera", tabs "This part" and "Whole video".
 | "Move camera from here" in the rail and the panel creates a 10 s part at the playhead, or splits a part | Not built                                    | Owner's decision 1. It is the same click that fills the lane |
 | S, M and L have no values                                                                               | S 0.15, M 0.22, L 0.33 of the frame's height | Decision 10                                                  |
 | The route always bends to the same side                                                                 | Toward the centre of the frame               | Decision 11                                                  |
-| A part is always 56 px wide                                                                             | Never over its neighbour                     | Decision 12                                                  |
+| A part is always 56 px wide                                                                             | As wide as it lasts, with a 3 px floor       | Decision 12                                                  |
 | The return to the original position is always 0.7 s, Smooth                                             | The ended part's own slide                   | The mock's own text says "the same slide"                    |
 | Hidden blocks have no handles; no keyboard                                                              | Handles, Delete, Backspace and Escape work   | Kept from today; the mock's text names Escape                |
 | "Whole video" controls do nothing                                                                       | They work as today                           | The mock's author had not seen the inspector                 |
@@ -265,6 +326,19 @@ Header "Camera", tabs "This part" and "Whole video".
 11. Neither tab has a Position grid, and its strings and tests are removed. Size shows S, M
     and L: picking one stores 0.15, 0.22 or 0.33. A session saved at another size opens at
     that size with no button selected.
+12. For every part and hidden range, the drawn left and right equal its real start and end at
+    the current zoom, except the 3 px floor. No Original stretch is moved or dropped.
+13. The handles of a selected part of any width are at least 4 px apart, and each drags its
+    own real edge with no jump on grab.
+14. A part drawn 3 px wide is selected by a click anywhere in its 12 px target. Two adjacent
+    short parts each get their own target.
+15. Hovering each kind of stretch (part, hidden range, Original) shows the card with the
+    content under "The hover card". It is absent while a handle is dragged. The UI map and
+    the catalog gain the card and a part narrower than its glyph, selected, with its handles.
+16. Dragging the bubble during playback pauses it. After the drop outside a part, one time
+    update later the card is still open and the pending part starts at the paused time.
+17. Double-click zoom, if built: the part's drawn width after the zoom is about 40 % of the
+    visible lane, or the zoom is at its maximum.
 
 ## What the code has today
 
@@ -286,7 +360,7 @@ On the stack's top branch, `feature/camera-sections-3-editor-ui`. `VE` is
 
 ## Shape of the change
 
-Three layers on top of the stack, in this order, each its own pull request:
+Four layers on top of the stack, in this order, each its own pull request:
 
 1. **Model and route.** The route function and its tests; the 10-second window for a new part
    and a new hidden range; the new defaults; `changeWebcamFrom` and the split removed.
@@ -294,11 +368,14 @@ Three layers on top of the stack, in this order, each its own pull request:
    moves.
 3. **Editor.** The drag without scene writes, the card, the preview's marks, the lane, the
    rail and the panel, with strings, UI map and catalog.
+4. **Lane detail.** True width, the handles and click targets of narrow parts, the hover card,
+   the pause while a drag plays, and double-click zoom (decisions 12 and 16 to 18). It goes in
+   its own pull request on top of the editor layer, which the owner has already tested.
 
 ## Sources and unverified claims
 
 - The mock and its text were read from the file, not run. Its numbers (0.18, the 3 px click,
-  the 56 px width, the name thresholds) come from its code.
+  its old minimum part width, the name thresholds) come from its code.
 - "Every pointer move writes the scene" is read from `webcam-layer.tsx` and
   `use-video-scene.ts`; how much of the editor re-renders was not measured.
 - That released sessions hold blocks with their own shape or size is inferred from the
