@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { ENGINE_ARCHIVE, ENGINE_LIBRARIES } from "./engine-catalog";
 import {
-  engineDir,
+  inspectEngineDir,
   locateEngine,
   parseEngineVersion,
   PINNED_ENGINE_VERSION,
@@ -17,15 +17,20 @@ afterEach(async () => {
   );
 });
 
-/** A packaged-style tree under `resources/app.asar.unpacked` with scripted stand-in binaries. */
+/** An install-style tree (`bin/` and `lib/`) with scripted stand-in binaries; returns its root. */
 async function fakeEngine(options: {
   versionScript?: string | null;
   cliScript?: string | null;
+  skipLibrary?: string;
 }): Promise<string> {
-  const resourcesPath = await mkdtemp(join(tmpdir(), "kaipu-engine-locator-"));
-  directories.push(resourcesPath);
-  const bin = join(resourcesPath, "app.asar.unpacked", "resources", "native", "sherpa-onnx", "bin");
+  const dir = await mkdtemp(join(tmpdir(), "kaipu-engine-locator-"));
+  directories.push(dir);
+  const bin = join(dir, "bin");
   await mkdir(bin, { recursive: true });
+  await mkdir(join(dir, "lib"), { recursive: true });
+  for (const library of ENGINE_LIBRARIES) {
+    if (library !== options.skipLibrary) await writeFile(join(dir, library), "");
+  }
   const write = async (name: string, script: string | null | undefined, fallback: string) => {
     if (script === null) return;
     await writeFile(join(bin, name), `#!/bin/sh\n${script ?? fallback}\n`);
@@ -37,7 +42,7 @@ async function fakeEngine(options: {
     `echo "sherpa-onnx version : ${PINNED_ENGINE_VERSION}"`,
   );
   await write("sherpa-onnx-offline", options.cliScript, "echo usage >&2");
-  return resourcesPath;
+  return dir;
 }
 
 /** Whether a process still exists. */
@@ -62,7 +67,7 @@ describe("locateEngine", () => {
       { platform: "linux", arch: "arm64" },
       { platform: "darwin", arch: "x64" },
     ] as const) {
-      expect(await locateEngine({ resourcesPath: "/Res", ...target, existsSync })).toEqual({
+      expect(await locateEngine({ engineDir: "/Res", ...target, existsSync })).toEqual({
         available: false,
         reason: "unsupported-platform",
       });
@@ -70,53 +75,45 @@ describe("locateEngine", () => {
   });
 
   it("reports binary-missing when the CLI or the version tool is absent", async () => {
-    expect(await locateEngine({ resourcesPath: "/nowhere", ...arm })).toEqual({
+    expect(await locateEngine({ engineDir: "/nowhere", ...arm })).toEqual({
       available: false,
       reason: "binary-missing",
     });
     const noVersionTool = await fakeEngine({ versionScript: null });
-    expect(await locateEngine({ resourcesPath: noVersionTool, ...arm })).toEqual({
+    expect(await locateEngine({ engineDir: noVersionTool, ...arm })).toEqual({
       available: false,
       reason: "binary-missing",
     });
     const noCli = await fakeEngine({ cliScript: null });
-    expect(await locateEngine({ resourcesPath: noCli, ...arm })).toEqual({
+    expect(await locateEngine({ engineDir: noCli, ...arm })).toEqual({
       available: false,
       reason: "binary-missing",
     });
   });
 
   it("returns the CLI path, lib dir and version when the handshake passes", async () => {
-    const resourcesPath = await fakeEngine({});
-    const root = join(resourcesPath, "app.asar.unpacked", "resources", "native", "sherpa-onnx");
-    expect(await locateEngine({ resourcesPath, ...arm })).toEqual({
+    const engineDir = await fakeEngine({});
+    expect(await locateEngine({ engineDir, ...arm })).toEqual({
       available: true,
-      cliPath: join(root, "bin", "sherpa-onnx-offline"),
-      libDir: join(root, "lib"),
+      cliPath: join(engineDir, "bin", "sherpa-onnx-offline"),
+      libDir: join(engineDir, "lib"),
       version: PINNED_ENGINE_VERSION,
     });
   });
 
-  it("prefers the dev tree under the app path over asar.unpacked", async () => {
-    const appPath = await mkdtemp(join(tmpdir(), "kaipu-engine-app-"));
-    directories.push(appPath);
-    const dev = join(appPath, "resources", "native", "sherpa-onnx");
-    await mkdir(join(dev, "bin"), { recursive: true });
-    await writeFile(join(dev, "bin", "sherpa-onnx-offline"), "");
-    expect(engineDir("/Res", appPath)).toBe(dev);
-    expect(engineDir("/Res", "/nowhere/app")).toBe(
-      join("/Res", "app.asar.unpacked", "resources", "native", "sherpa-onnx"),
-    );
-    expect(engineDir("/Res", undefined)).toBe(
-      join("/Res", "app.asar.unpacked", "resources", "native", "sherpa-onnx"),
-    );
+  it("reports binary-missing when a library is absent, so a damaged install can be redone", async () => {
+    const engineDir = await fakeEngine({ skipLibrary: "lib/libonnxruntime.dylib" });
+    expect(await locateEngine({ engineDir, ...arm })).toEqual({
+      available: false,
+      reason: "binary-missing",
+    });
   });
 
   it("fails the handshake on another release", async () => {
-    const resourcesPath = await fakeEngine({
+    const engineDir = await fakeEngine({
       versionScript: 'echo "sherpa-onnx version : 0.0.1"',
     });
-    expect(await locateEngine({ resourcesPath, ...arm })).toEqual({
+    expect(await locateEngine({ engineDir, ...arm })).toEqual({
       available: false,
       reason: "handshake-failed",
     });
@@ -127,8 +124,8 @@ describe("locateEngine", () => {
       `echo "sherpa-onnx version : ${PINNED_ENGINE_VERSION}"; exit 1`,
       "echo hello",
     ]) {
-      const resourcesPath = await fakeEngine({ versionScript });
-      expect(await locateEngine({ resourcesPath, ...arm })).toEqual({
+      const engineDir = await fakeEngine({ versionScript });
+      expect(await locateEngine({ engineDir, ...arm })).toEqual({
         available: false,
         reason: "handshake-failed",
       });
@@ -136,8 +133,8 @@ describe("locateEngine", () => {
   });
 
   it("fails the handshake when the CLI itself does not start", async () => {
-    const resourcesPath = await fakeEngine({ cliScript: "exit 9" });
-    expect(await locateEngine({ resourcesPath, ...arm })).toEqual({
+    const engineDir = await fakeEngine({ cliScript: "exit 9" });
+    expect(await locateEngine({ engineDir, ...arm })).toEqual({
       available: false,
       reason: "handshake-failed",
     });
@@ -146,11 +143,11 @@ describe("locateEngine", () => {
   it("fails the handshake, and kills the probe, when a binary hangs", async () => {
     const pidFile = join(await mkdtemp(join(tmpdir(), "kaipu-engine-pid-")), "pid");
     directories.push(dirname(pidFile));
-    const resourcesPath = await fakeEngine({
+    const engineDir = await fakeEngine({
       versionScript: `echo $$ > "${pidFile}"\nexec sleep 30`,
     });
     const started = Date.now();
-    expect(await locateEngine({ resourcesPath, ...arm, handshakeTimeoutMs: 1500 })).toEqual({
+    expect(await locateEngine({ engineDir, ...arm, handshakeTimeoutMs: 1500 })).toEqual({
       available: false,
       reason: "handshake-failed",
     });
@@ -163,11 +160,11 @@ describe("locateEngine", () => {
   });
 
   it("fails the handshake when spawning throws", async () => {
-    const resourcesPath = await fakeEngine({});
+    const engineDir = await fakeEngine({});
     const spawn = (() => {
       throw new Error("EACCES");
     }) as never;
-    expect(await locateEngine({ resourcesPath, ...arm, spawn })).toEqual({
+    expect(await locateEngine({ engineDir, ...arm, spawn })).toEqual({
       available: false,
       reason: "handshake-failed",
     });
@@ -184,22 +181,35 @@ describe("parseEngineVersion", () => {
 });
 
 describe("the pinned release", () => {
-  it("matches scripts/speech-engine.lock", async () => {
-    const lock = await readFile(join(__dirname, "../../../../scripts/speech-engine.lock"), "utf8");
-    const version = /^SHERPA_VERSION=(.+)$/m.exec(lock)?.[1];
-    expect(version).toBe(`v${PINNED_ENGINE_VERSION}`);
+  it("is the version the engine catalog pins, and the archive agrees with it", () => {
+    expect(PINNED_ENGINE_VERSION).toBe(ENGINE_ARCHIVE.version);
+    expect(ENGINE_ARCHIVE.url).toContain(`/download/v${ENGINE_ARCHIVE.version}/`);
+    expect(ENGINE_ARCHIVE.url.endsWith(`/${ENGINE_ARCHIVE.archiveName}`)).toBe(true);
+    expect(ENGINE_ARCHIVE.archiveName).toBe(`${ENGINE_ARCHIVE.topDir}.tar.bz2`);
+    expect(ENGINE_ARCHIVE.topDir).toContain(`v${ENGINE_ARCHIVE.version}-`);
+    expect(ENGINE_ARCHIVE.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(ENGINE_ARCHIVE.url.startsWith("https://")).toBe(true);
   });
 });
 
-const devTree = join(__dirname, "../../../..");
-const fetched =
-  process.platform === "darwin" &&
-  process.arch === "arm64" &&
-  existsSync(join(devTree, "resources", "native", "sherpa-onnx", "bin", "sherpa-onnx-offline"));
+describe("inspectEngineDir", () => {
+  it("runs the handshake without a platform check", async () => {
+    const engineDir = await fakeEngine({});
+    expect(await inspectEngineDir(engineDir)).toMatchObject({
+      available: true,
+      version: PINNED_ENGINE_VERSION,
+    });
+  });
+});
 
-describe("the real engine from the fetch script", () => {
-  it.skipIf(!fetched)("passes the handshake", async () => {
-    const found = await locateEngine({ resourcesPath: "/nowhere", appPath: devTree });
-    expect(found).toMatchObject({ available: true, version: PINNED_ENGINE_VERSION });
+/** An engine unpacked by hand: KAIPU_SPEECH_ENGINE_DIR is the root holding `bin/` and `lib/`. */
+const handmadeEngineDir = process.env.KAIPU_SPEECH_ENGINE_DIR;
+
+describe("a real engine directory", () => {
+  it.skipIf(!handmadeEngineDir)("passes the handshake", async () => {
+    expect(await inspectEngineDir(handmadeEngineDir!)).toMatchObject({
+      available: true,
+      version: PINNED_ENGINE_VERSION,
+    });
   });
 });

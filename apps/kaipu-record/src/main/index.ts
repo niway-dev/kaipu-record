@@ -1095,8 +1095,7 @@ app.whenReady().then(async () => {
   registerCloudStorageHandlers({ auth, serverUrl: authServerUrl });
   registerSaveTextFileIpc();
   transcription = registerTranscriptionIpc({
-    resourcesPath: process.resourcesPath,
-    appPath: app.isPackaged ? undefined : app.getAppPath(),
+    engineRoot: join(app.getPath("userData"), "speech-engine"),
     modelsRoot: join(app.getPath("userData"), "models"),
     override: resolveTranscriptionOverride(process.env.KAIPU_TRANSCRIPTION, {
       isPackaged: app.isPackaged,

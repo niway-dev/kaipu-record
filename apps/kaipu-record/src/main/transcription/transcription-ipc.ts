@@ -23,6 +23,7 @@ import { activeWorkspace } from "../workspaces";
 import { PinnedJobs } from "./dev-job-pin";
 import { applyTranscriptionOverride, type TranscriptionOverride } from "./dev-override";
 import { locateEngine } from "./engine/engine-locator";
+import { EngineStore } from "./engine/engine-store";
 import { runBatch } from "./engine/sherpa-supervisor";
 import { ModelStore } from "./models/model-store";
 import { readTranscriptFile } from "./transcript-file";
@@ -37,10 +38,8 @@ const MAX_DURATION_MS = 12 * 60 * 60 * 1000;
 const MAX_ID_LENGTH = 512;
 
 export interface TranscriptionIpcDeps {
-  /** `process.resourcesPath`. */
-  resourcesPath: string;
-  /** Set in dev (`app.getAppPath()`), so the engine is found in the source tree. */
-  appPath?: string;
+  /** `userData/speech-engine`: where the downloaded engine installs. */
+  engineRoot: string;
   /** `userData/models`. */
   modelsRoot: string;
   /** Test seam: the service the handlers drive. */
@@ -84,8 +83,9 @@ export function broadcastJobProgress(progress: TranscriptionJobProgress): void {
 }
 
 function createService(deps: TranscriptionIpcDeps): TranscriptionService {
+  const engineStore = new EngineStore({ rootDir: deps.engineRoot });
   return new TranscriptionService({
-    locateEngine: () => locateEngine({ resourcesPath: deps.resourcesPath, appPath: deps.appPath }),
+    locateEngine: () => locateEngine({ engineDir: engineStore.installDir }),
     modelStore: new ModelStore({ rootDir: deps.modelsRoot }),
     openVault: openTranscriptionVault,
     runBatch,
