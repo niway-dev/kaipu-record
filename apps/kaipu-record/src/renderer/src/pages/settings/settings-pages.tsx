@@ -1,5 +1,5 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { Cloud, FolderSync, Mic, Monitor, MousePointerClick, Video } from "lucide-react";
 import { openReconcileDialog } from "@renderer/features/library/reconcile/reconcile-store";
 import { useTranslations } from "@kaipu/i18n";
@@ -8,6 +8,7 @@ import { ModalActions, ModalButton, ModalOverlay, ModalText, ModalTitle, Row } f
 import { Button } from "@kaipu/ui";
 import { Toggle } from "@kaipu/ui";
 import { Select } from "@renderer/ui/select";
+import { useFlag } from "@renderer/features/analytics/use-flag";
 import { useOnboarding } from "@renderer/features/onboarding";
 import { usePermissions, useAccessibility } from "@renderer/features/permissions";
 import { useWorkspaces } from "@renderer/features/workspaces/workspaces-context";
@@ -27,6 +28,7 @@ import {
   writeDevUpdateScenario,
 } from "@renderer/features/updater/dev-update-simulator";
 import { DEFAULT_QUALITY } from "@shared/recording-quality";
+import { ROUTES } from "@shared/routes";
 import { DEFAULT_EXPORT_QUALITY, type PermissionKind } from "@shared/types";
 import { useAppSettings } from "./use-app-settings";
 import { LanguageSettings } from "./language-settings";
@@ -39,6 +41,7 @@ import { ScreenshotCopySettings } from "./screenshot-copy-settings";
 import { BrandBadgeSettings } from "./brand-badge-settings";
 import { AppWideBadge, OverrideBlock } from "./scope/scope-controls";
 import { CountdownSettings } from "./countdown-settings";
+import { TranscriptionSettings } from "./transcription-settings";
 import { DiagnosticsSettings } from "./diagnostics-settings";
 import { DeveloperFlagsSection } from "./developer-flags-section";
 import { Section, SettingsPanel } from "./settings-panel";
@@ -52,6 +55,7 @@ import { uiArea } from "@renderer/lib/ui-area";
  *   • Recording quality → AppSettings.recordingQuality → encoder
  *                         + AppSettings.exportQuality → export sheet's preselected row
  *   • Recording         → AppSettings.showBarInRecording / recordingCountdownSeconds / showBrandBadge
+ *   • Transcription    → the speech model's download, install and removal (flag `transcription`)
  *   • Files             → the real on-disk recordings vault
  *   • App               → Dock policy, replay the first-run flow, diagnostics opt-out
  *   • Developer         → dev-only overrides (stripped from production)
@@ -451,6 +455,29 @@ export function ScreenshotsSettingsPage(): React.JSX.Element {
         <ScreenshotCopySettings />
       </Section>
       <p className={styles.sectionNote}>{t("screenshotQuietNote")}</p>
+    </SettingsPanel>
+  );
+}
+
+/**
+ * Transcription — the speech model for local transcription. Behind the `transcription` flag:
+ * the nav entry is hidden with it off, and a direct visit goes back to General.
+ */
+export function TranscriptionSettingsPage(): React.JSX.Element {
+  const t = useTranslations("settings");
+  const tt = useTranslations("transcription");
+  const enabled = useFlag("transcription");
+  if (!enabled) return <Navigate to={`${ROUTES.settings}/general`} replace />;
+  return (
+    <SettingsPanel
+      ui={uiArea("settingsTranscription.page")}
+      title={t("transcription")}
+      subtitle={t("transcriptionDescription")}
+      scope="global"
+    >
+      <Section title={tt("modelSection")}>
+        <TranscriptionSettings />
+      </Section>
     </SettingsPanel>
   );
 }

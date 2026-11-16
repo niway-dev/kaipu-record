@@ -629,6 +629,18 @@ export const UI_MAP = {
       },
     },
   },
+  settingsTranscription: {
+    kind: "route",
+    route: "/settings/transcription",
+    areas: {
+      // Behind the `transcription` flag: with it off the nav entry is not drawn and the route
+      // goes back to General.
+      page: { states: ["default"], gatedBy: [{ flag: "transcription" }] },
+      // The speech model offer. Its look follows the model's state on this machine, and
+      // `unavailable` is the engine that cannot run here, whatever the model's own state.
+      model: { states: ["missing", "downloading", "ready", "failed", "unavailable"] },
+    },
+  },
   settingsWorkspaces: {
     kind: "route",
     route: "/settings/workspaces",

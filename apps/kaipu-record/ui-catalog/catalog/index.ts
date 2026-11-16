@@ -17,6 +17,7 @@ import { settingsPermissions } from "./settings-permissions";
 import { settingsRecording } from "./settings-recording";
 import { settingsRecordingQuality } from "./settings-recording-quality";
 import { settingsScreenshots } from "./settings-screenshots";
+import { settingsTranscription } from "./settings-transcription";
 import { settingsWorkspaces } from "./settings-workspaces";
 import { shell } from "./shell";
 import { shortcuts } from "./shortcuts";
@@ -54,6 +55,7 @@ export const CATALOGS: readonly AnyScreenCatalog[] = [
   settingsRecordingQuality,
   settingsRecording,
   settingsScreenshots,
+  settingsTranscription,
   settingsApp,
   capturePanel,
   cameraBubble,

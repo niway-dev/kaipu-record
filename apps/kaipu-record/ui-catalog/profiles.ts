@@ -174,6 +174,12 @@ export const PROFILES = {
     seed: "demo",
     cameraRecordings: true,
   },
+  transcription: {
+    description:
+      "Flag transcription forced on: the Transcription page in Settings and its speech model offer.",
+    seed: "demo",
+    flags: { transcription: true },
+  },
   "image-inspect": {
     description:
       "Flag image-inspect forced on: the image editor's Inspect mode (loupe, live colour, format bar).",
