@@ -205,6 +205,7 @@ import {
   type AddBoundary,
   type Tab as AddFromLibraryTab,
 } from "@renderer/features/video-editor/components/add-from-library-modal";
+import { TranscriptPanel } from "@renderer/features/video-editor/transcript-panel";
 import { probeSource, type SourceProbe } from "@renderer/features/video-editor/export/probe-source";
 import { useAppSettings } from "@renderer/pages/settings/use-app-settings";
 import { useHiddenTracks } from "@renderer/features/video-editor/use-hidden-tracks";
@@ -274,6 +275,13 @@ import { canOverlayRecordedCursor } from "@shared/native-capture";
 import { CursorLayer } from "@renderer/features/video-editor/cursor/cursor-layer";
 import { CursorInspector } from "@renderer/features/video-editor/components/inspector/cursor-inspector";
 import { uiArea } from "@renderer/lib/ui-area";
+
+/**
+ * What the editor's right column holds in place of the inspector: nothing (the inspector),
+ * the Captures panel (NIW2-764), the cursor settings, or the Transcript panel (NIW2-818).
+ * One value, so two panels cannot be open at once.
+ */
+type SidePanel = null | "captures" | "cursor" | "transcript";
 
 export interface VideoEditorSource {
   capture?: RecordingCapture | null;
@@ -721,10 +729,20 @@ function VideoEditor({
     () => overlayLayerData(overlayTrack, scene.cursor ?? DEFAULT_CURSOR),
     [overlayTrack, scene.cursor],
   );
-  const [cursorInspectorOpen, setCursorInspectorOpen] = useState(false);
-  // The Captures panel (NIW2-764) takes the right column like the cursor settings do: one
-  // of the two at a time, and anything that opens another inspector closes it.
-  const [capturesOpen, setCapturesOpen] = useState(false);
+  // The right column holds one panel at a time: the Captures panel (NIW2-764), the cursor
+  // settings or the Transcript panel (NIW2-818). `null` is the inspector. One value, so two
+  // panels can never be open together, and anything that opens another inspector closes it.
+  const [sidePanel, setSidePanel] = useState<SidePanel>(null);
+  const cursorInspectorOpen = sidePanel === "cursor";
+  const capturesOpen = sidePanel === "captures";
+  // The Transcript panel and its rail button exist only with the flag on (NIW2-818).
+  const transcriptionOn = useFlag("transcription");
+  const transcriptOpen = transcriptionOn && sidePanel === "transcript";
+  /** Close `panel` only when it is the open one; another panel stays. */
+  const closeSidePanel = useCallback(
+    (panel: Exclude<SidePanel, null>) => setSidePanel((open) => (open === panel ? null : open)),
+    [],
+  );
   const layout = useMemo(() => toLayout(scene.items), [scene.items]);
   // Floating images over the Clips sequence (ADR 0057). The flag gates ADDING one (while it is
   // off neither the transport nor the Captures panel opens Add from Library, NIW2-772); an edit that already carries
@@ -971,11 +989,12 @@ function VideoEditor({
     const [kind, id] = args;
     const lane = id === null ? null : trackForSelection(kind);
     if (lane) showTrack(lane);
-    setCursorInspectorOpen(false);
-    // Selecting something opens its inspector, which replaces the captures; a deselect
-    // (null id) opens nothing, so the panel stays. Add from Library is a modal: adding a
-    // screenshot from it selects the new image behind it and the modal stays open.
-    if (id !== null) setCapturesOpen(false);
+    // Selecting something opens its inspector, which replaces any side panel (the cursor
+    // settings, the captures, the transcript); a deselect (null id) opens nothing, so the
+    // captures and the transcript stay and only the cursor settings close. Add from Library
+    // is a modal: adding a screenshot from it selects the new image behind it and the modal
+    // stays open.
+    setSidePanel((open) => (id !== null || open === "cursor" ? null : open));
     selectSelection(...args);
   }, [selectSelection, showTrack]);
   // Hiding a lane clears a selection that lives on it: the item would stay selected on a
@@ -1540,8 +1559,7 @@ function VideoEditor({
         : undefined;
       if (existing) {
         clearSelection();
-        setCursorInspectorOpen(false);
-        setCapturesOpen(true);
+        setSidePanel("captures");
         setHighlightedCaptureId(existing.assetId);
         if (highlightTimer.current) clearTimeout(highlightTimer.current);
         highlightTimer.current = setTimeout(() => setHighlightedCaptureId(null), 2000);
@@ -1585,8 +1603,7 @@ function VideoEditor({
       // The panel takes the inspector's place, so the selection goes too (as the cursor
       // inspector does): Delete must never remove an item whose inspector is not on screen.
       clearSelection();
-      setCursorInspectorOpen(false);
-      setCapturesOpen(true);
+      setSidePanel("captures");
       await refreshCaptures();
     } catch (error) {
       // A recording that cannot be read is named; anything else is the generic message.
@@ -1632,12 +1649,11 @@ function VideoEditor({
 
   const toggleCaptures = useCallback(() => {
     if (capturesOpen) {
-      setCapturesOpen(false);
+      setSidePanel(null);
       return;
     }
     clearSelection();
-    setCursorInspectorOpen(false);
-    setCapturesOpen(true);
+    setSidePanel("captures");
   }, [capturesOpen, clearSelection]);
 
   // Add recording (NIW2-782). The join itself is `useJoinRecording`: the clip lands at the
@@ -1695,6 +1711,21 @@ function VideoEditor({
       });
     },
     [t],
+  );
+  // Like Captures, the Transcript panel takes the inspector's place, so the selection goes
+  // too: Delete must never remove an item whose inspector is not on screen.
+  const toggleTranscript = useCallback(() => {
+    if (transcriptOpen) {
+      setSidePanel(null);
+      return;
+    }
+    clearSelection();
+    setSidePanel("transcript");
+  }, [transcriptOpen, clearSelection]);
+  const seekTranscript = useCallback((t: number) => playbackRef.current.seek(t), [playbackRef]);
+  const readTranscriptTime = useCallback(
+    () => playbackRef.current.readTimelineTime(),
+    [playbackRef],
   );
 
   /** A capture's image: move the playhead to its moment, if that moment is still on the timeline. */
@@ -2122,8 +2153,7 @@ function VideoEditor({
   const openCursorInspector = useCallback(() => {
     clearSelection();
     setVideoTool("select");
-    setCapturesOpen(false);
-    setCursorInspectorOpen(true);
+    setSidePanel("cursor");
   }, [clearSelection, setVideoTool]);
   /** Timeline range covered by a source range's visible pieces (inspector + draw badge). */
   const timelineRangeOf = useCallback(
@@ -2143,8 +2173,7 @@ function VideoEditor({
     (tool: EditorTool) => {
       // Drawing a region starts from a clean slate: no zoom/region box competing with it.
       if (isPrivacyTool(tool)) clearSelection();
-      setCursorInspectorOpen(false);
-      setCapturesOpen(false);
+      setSidePanel(null);
       videoTools.setTool(tool);
     },
     [clearSelection, videoTools],
@@ -2299,8 +2328,7 @@ function VideoEditor({
       // action the user never asked for.
       if (e.key === "Escape" && !document.fullscreenElement) {
         clearSelection();
-        setCursorInspectorOpen(false);
-        setCapturesOpen(false);
+        setSidePanel(null);
         return;
       }
       // Annotation selection takes precedence over segment deletion when both exist —
@@ -2712,7 +2740,7 @@ function VideoEditor({
                       if (id !== null) return selectKind("overlay", id);
                       // Deselecting everything includes the drawn cursor.
                       clearSelection();
-                      setCursorInspectorOpen(false);
+                      closeSidePanel("cursor");
                     }}
                     tool={isPrivacyTool(videoTools.tool) ? "select" : videoTools.tool}
                     toolState={{
@@ -2790,12 +2818,14 @@ function VideoEditor({
           hideWebcamBlock={hideWebcamBlock}
           onOpenCursor={
             cursorData
-              ? () => (cursorInspectorOpen ? setCursorInspectorOpen(false) : openCursorInspector())
+              ? () => (cursorInspectorOpen ? closeSidePanel("cursor") : openCursorInspector())
               : undefined
           }
           cursorSelected={cursorInspectorOpen && cursorData !== null}
           onToggleCaptures={toggleCaptures}
           capturesOpen={capturesOpen}
+          onToggleTranscript={transcriptionOn ? toggleTranscript : undefined}
+          transcriptOpen={transcriptOpen}
         />
         {/* The editor's actions live in the title bar's right side (Kaipu Black,
             NIW2-619), mounted and unmounted with this page. */}
@@ -2847,7 +2877,22 @@ function VideoEditor({
               onAddFromLibrary={openAddFromLibraryFor}
               onDelete={deleteCapture}
               highlightedId={highlightedCaptureId}
-              onClose={() => setCapturesOpen(false)}
+              onClose={() => closeSidePanel("captures")}
+            />
+          ) : transcriptOpen ? (
+            <TranscriptPanel
+              itemId={source.id}
+              assetId={source.assetId}
+              mediaUrl={sourceUrl}
+              durationMs={Math.round(source.durationSeconds * 1000)}
+              layout={layout}
+              audioMuted={scene.audioMuted}
+              mutedRanges={scene.mutedRanges}
+              hasAudio={sourceProbe?.hasAudio ?? null}
+              onSeek={seekTranscript}
+              subscribeTime={playback.subscribeTime}
+              readTime={readTranscriptTime}
+              onClose={() => closeSidePanel("transcript")}
             />
           ) : (
             <EditorInspector>
