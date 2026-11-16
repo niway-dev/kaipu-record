@@ -237,6 +237,14 @@ export const PROFILES = {
     flags: { "image-text": true, "image-canvas": true },
     textScreenshot: true,
   },
+  "transcription-missing": {
+    description:
+      "Flag transcription forced on with the speech model reported missing (KAIPU_TRANSCRIPTION=missing, unpackaged builds only), onboarding left up: the Transcription step's offer.",
+    seed: "demo",
+    onboarding: "keep",
+    flags: { transcription: true },
+    env: { KAIPU_TRANSCRIPTION: "missing" },
+  },
   "image-text-slow": {
     description:
       "Like image-text, with text recognition held for 60 s (KAIPU_TEXT_RECOGNITION=delay:60000, unpackaged builds only): the pending states.",
