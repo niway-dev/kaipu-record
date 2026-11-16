@@ -1116,7 +1116,7 @@ function VideoEditor({
   // 0 lands before everything (the intro-card case); mid-clip lands at the closest cut
   // point. Placing a slide mid-clip requires splitting first (predictable, no
   // auto-split). `controller.commit` already no-ops mid-drag, same as every other
-  // discrete action here. The only source of images is a capture's Add to timeline.
+  // discrete action here. The only source of images is a screenshot added from the Add from Library chooser.
   const insertImageSlide = useCallback(
     async (bytes: ArrayBuffer, mime: string) => {
       // Same guard as every other discrete action: don't mutate the scene while a
@@ -1145,7 +1145,7 @@ function VideoEditor({
     [scene, controller, playback.timelineTime],
   );
 
-  // Add to timeline with `timeline-levels` on: the image is stored exactly as a slide's is, then
+  // Add from Library with "Over the video" and `timeline-levels` on: the image is stored exactly as a slide's is, then
   // floats over the sequence at the playhead (10 s, fitted, in front) and is selected. The
   // sequence is untouched. Reads the scene and the playhead after the decode, not from the
   // click: they may have moved while the image was being decoded. The playhead comes from
@@ -1645,8 +1645,8 @@ function VideoEditor({
   // recording's cursor is mapped into.
   const joinRecordingAt = useJoinRecording(controller, source.durationSeconds, frameAspect);
   // Opening the modal pauses playback (NIW2-790): behind it the editor's shortcuts are off, so
-  // Space could not stop the picture, and "Add after current clip" and a screenshot's place
-  // would follow a playhead still moving under the modal.
+  // Space could not stop the picture, and the chooser's playhead-based
+  // destinations (before or after the clip under it, "Over the video") would follow a playhead still moving under the modal.
   const toggleAddRecording = useCallback(() => {
     if (!addRecordingOpen) playbackRef.current.pause();
     setAddLibraryStart(null);

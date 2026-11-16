@@ -85,9 +85,11 @@ it stays over the same moment when the sequence changes. It is built in three st
 Stage 1, [NIW2-771](https://linear.app/niway/issue/NIW2-771/video-editor-floating-images-on-levels-above-the-clips-sequence-stage) — floating images. With the flag
 `timeline-levels` on:
 
-- [ ] **Add to timeline** on a capture adds a floating image that starts at the playhead, lasts
-      10 s (or to the end of the video), is fitted to the whole frame and is in front of every
-      other floating item. The sequence does not change length.
+- [ ] Adding a screenshot with **Over the video** (Captures panel's **Add from Library…**, which
+      opens the Add from Library modal on Screenshots; superseded wording "Add to timeline",
+      NIW2-829) adds a floating image that starts at the playhead, lasts 10 s (or to the end of
+      the video), is fitted to the whole frame and is in front of every other floating item. The
+      sequence does not change length.
 - [ ] The Clips section draws the image on a row above the sequence. Two images that do not
       overlap in time share one row; two that overlap are on two rows, the one in front above.
 - [ ] Dragging the item along the timeline moves it; dragging either edge changes its duration
@@ -111,9 +113,12 @@ Stage 1, [NIW2-771](https://linear.app/niway/issue/NIW2-771/video-editor-floatin
 
 Release flag, [NIW2-772](https://linear.app/niway/issue/NIW2-772/video-editor-hide-add-to-timeline-behind-the-release-flag-timeline):
 
-- [ ] With `timeline-levels` off, the Captures panel shows no **Add to timeline** button.
-- [ ] With it on, the button is there. Until stage 1 lands it does what it does on `main` today
-      (it inserts a slide in the sequence); stage 1 replaces that with a floating image.
+- [ ] With `timeline-levels` off, the Captures panel shows no **Add from Library…** button
+      (originally **Add to timeline**; renamed by NIW2-829).
+- [ ] With it on, the button is there and opens the Add from Library modal on Screenshots with
+      that capture selected. Originally it inserted a slide in the sequence and stage 1 was to
+      replace that with a floating image; NIW2-829 superseded both with one destination
+      chooser (Over the video, or a sequence boundary).
 
 ## Sources and unverified claims
 

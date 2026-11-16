@@ -273,7 +273,7 @@ export const editorVideo = catalog(
     },
     "levels-off": {
       profile: "default",
-      how: "Open “Walkthrough 1” with the `timeline-levels` flag off: no floating images, no rows above the sequence, no Add recording button, and no Add to timeline in the Captures panel.",
+      how: "Open “Walkthrough 1” with the `timeline-levels` flag off: no floating images, no rows above the sequence, no Add recording button, and no Add from Library… in the Captures panel.",
       steps: [open(ASSETS.walkthrough)],
       demonstrates: ["editorVideo.page:loaded"],
       ready: { video: true },
@@ -589,7 +589,7 @@ export const editorVideo = catalog(
     },
     "captures-hover": {
       profile: "default",
-      how: "Open “Weekly sync”, press Capture frame in the top bar and rest the pointer on the new capture's image: a subtle dark veil covers it with the Go to button in its center. Its row below keeps the time, Copy and Delete (Add to timeline is behind the timeline-levels flag).",
+      how: "Open “Weekly sync”, press Capture frame in the top bar and rest the pointer on the new capture's image: a subtle dark veil covers it with the Go to button in its center. Its row below keeps the time, Copy and Delete (Add from Library… is behind the timeline-levels flag).",
       steps: [
         open(ASSETS.weeklySync),
         audioWaveformDrawn,

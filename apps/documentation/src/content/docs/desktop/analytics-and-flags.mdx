@@ -51,14 +51,14 @@ Ventana principal          Ventanas secundarias
 
 ### Flags definidos
 
-| Flag                      | Default | In PostHog         | Purpose                                                                                                                                              |
-| ------------------------- | ------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `native-cursor-capture`   | `true`  | deleted 2026-11-12 | Cursor-free macOS capture with an editable cursor in the editor, for Screen, Frame and Window ([NIW2-660](https://linear.app/niway/issue/NIW2-660)). |
-| `capture-while-recording` | `false` | owner devices only | Screenshots during a take, macOS only (NIW2-688).                                                                                                    |
-| `image-canvas`            | `false` | owner devices only | Image editor canvas (NIW2-698).                                                                                                                      |
-| `image-inspect`           | `false` | owner devices only | Image editor Inspect mode (NIW2-699).                                                                                                                |
-| `image-text`              | `false` | owner devices only | Text recognition in the image editor, macOS only (NIW2-705).                                                                                         |
-| `timeline-levels`         | `false` | owner devices only | Add to timeline in the video editor's Captures panel (NIW2-772); with it on, the button adds a floating image above the Clips sequence (NIW2-771).   |
+| Flag                      | Default | In PostHog         | Purpose                                                                                                                                                                                                      |
+| ------------------------- | ------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `native-cursor-capture`   | `true`  | deleted 2026-11-12 | Cursor-free macOS capture with an editable cursor in the editor, for Screen, Frame and Window ([NIW2-660](https://linear.app/niway/issue/NIW2-660)).                                                         |
+| `capture-while-recording` | `false` | owner devices only | Screenshots during a take, macOS only (NIW2-688).                                                                                                                                                            |
+| `image-canvas`            | `false` | owner devices only | Image editor canvas (NIW2-698).                                                                                                                                                                              |
+| `image-inspect`           | `false` | owner devices only | Image editor Inspect mode (NIW2-699).                                                                                                                                                                        |
+| `image-text`              | `false` | owner devices only | Text recognition in the image editor, macOS only (NIW2-705).                                                                                                                                                 |
+| `timeline-levels`         | `false` | owner devices only | Add from Library… in the video editor's Captures panel (NIW2-772); with it on, the button opens the Add from Library modal, whose destination chooser can add the image over the video (NIW2-771, NIW2-829). |
 
 posthog-js (≥ 1.261.8) returns `undefined` for a **disabled** or missing flag, so the code
 default applies, and `false` for an enabled flag the user does not match. A PostHog value
