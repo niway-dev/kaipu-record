@@ -3194,6 +3194,23 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
       expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(3);
     });
 
+    it("a failed first Add does not stall the next one in the queue", async () => {
+      window.electronAPI.readScreenshotBytes = vi
+        .fn(async () => PNG_BYTES.buffer.slice(0) as ArrayBuffer)
+        .mockRejectedValueOnce(new Error("gone")) as never;
+      renderEditor();
+      const footer = await waitForEditorLoaded();
+      fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+      fireEvent.click(await screen.findByRole("tab", { name: /Screenshots/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Pricing page" }));
+
+      addAt(/^After the clip under the playhead/);
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+      await waitFor(() => expect(screen.getByText(/\/ 0:35\.0$/)).toBeInTheDocument());
+      expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(2);
+    });
+
     it("a screenshot whose bytes cannot be read adds nothing and says so", async () => {
       window.electronAPI.readScreenshotBytes = vi.fn(async () => {
         throw new Error("gone");

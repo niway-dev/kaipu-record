@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { generatePath, Navigate, useBlocker, useLocation, useNavigate } from "react-router-dom";
 import { ROUTES } from "@shared/routes";
 import { AudioLines, Shield, Trash2, TriangleAlert, Webcam, ZoomIn } from "lucide-react";
@@ -172,6 +172,7 @@ import { planStill } from "@renderer/features/video-editor/export/still-plan";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { useSourceCaptures } from "@renderer/features/video-editor/use-source-captures";
 import { useJoinRecording } from "@renderer/features/video-editor/use-join-recording";
+import { useSerializedCommit } from "@renderer/features/video-editor/use-serialized-commit";
 import { useLibraryRecordings } from "@renderer/features/video-editor/use-library-recordings";
 import {
   axisSecondsOfCapture,
@@ -1145,50 +1146,17 @@ function VideoEditor({
     [scene, controller, playback.timelineTime],
   );
 
+  // Image inserts and recording joins commit through one queue (`useSerializedCommit`): each
+  // reads the scene after its own awaits, so two of them in the same render gap would overwrite
+  // each other.
+  const serializeInsert = useSerializedCommit();
+
   // Add from Library with "Over the video" and `timeline-levels` on: the image is stored exactly as a slide's is, then
   // floats over the sequence at the playhead (10 s, fitted, in front) and is selected. The
   // sequence is untouched. Reads the scene and the playhead after the decode, not from the
   // click: they may have moved while the image was being decoded. The playhead comes from
   // `readTimelineTime`, not the `timelineTime` state: while playing, the state lags the frame
   // on screen (as in Capture frame).
-  const insertSequenceImageRef = useRef<Promise<unknown>>(Promise.resolve());
-  const insertAfterCommitRef = useRef<Promise<void> | null>(null);
-  const insertRenderWaitersRef = useRef<Array<() => void>>([]);
-  // Declared after `useLatest(controller)`: its layout effect has already refreshed `controllerRef`
-  // when this one runs, so a waiting insert resumes on the scene the commit produced.
-  useLayoutEffect(() => {
-    for (const resolve of insertRenderWaitersRef.current.splice(0)) resolve();
-  });
-  useLayoutEffect(
-    () => () => {
-      for (const resolve of insertRenderWaitersRef.current.splice(0)) resolve();
-    },
-    [],
-  );
-  // Runs image inserts one after another. An insert reads the scene after its decode, and the
-  // previous insert's commit only reaches `controllerRef.current.scene` once React has rendered
-  // it, so the next one waits for that render (as `useJoinRecording` does) instead of composing
-  // from the old scene and replacing the first image. `run` calls `armRenderWait` right after it
-  // commits.
-  const serializeInsert = useCallback(
-    <T,>(run: (armRenderWait: () => void) => Promise<T>): Promise<T> => {
-      const job = insertSequenceImageRef.current.then(() => {
-        insertAfterCommitRef.current = null;
-        return run(() => {
-          insertAfterCommitRef.current = new Promise<void>((resolve) => {
-            insertRenderWaitersRef.current.push(resolve);
-          });
-        });
-      });
-      insertSequenceImageRef.current = job.then(
-        () => insertAfterCommitRef.current,
-        () => undefined,
-      );
-      return job;
-    },
-    [],
-  );
-
   const insertFloatingImage = useCallback(
     // True once the image is on the timeline: Add from Library confirms it with a toast.
     (bytes: ArrayBuffer, mime: string): Promise<boolean> =>
@@ -1685,7 +1653,12 @@ function VideoEditor({
   // boundary nearest the time it is given, as one undo step. `source.durationSeconds` is the
   // opened recording's span on the shared axis (ADR 0058), `frameAspect` the frame the joined
   // recording's cursor is mapped into.
-  const joinRecordingAt = useJoinRecording(controller, source.durationSeconds, frameAspect);
+  const joinRecordingAt = useJoinRecording(
+    controller,
+    source.durationSeconds,
+    frameAspect,
+    serializeInsert,
+  );
   // Opening the modal pauses playback (NIW2-790): behind it the editor's shortcuts are off, so
   // Space could not stop the picture, and the chooser's playhead-based
   // destinations (before or after the clip under it, "Over the video") would follow a playhead still moving under the modal.

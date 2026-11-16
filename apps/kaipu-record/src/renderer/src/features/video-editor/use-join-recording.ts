@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef } from "react";
+import { useCallback } from "react";
 import type { RecordingCapture } from "@shared/recording-capture";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
 import { composeJoin } from "./compose-join";
@@ -6,6 +6,7 @@ import { frameCursorTrack } from "./cursor/axis-cursor-track";
 import { loadCursorTrackBestEffort } from "./joined-library";
 import type { VideoScene } from "./scene";
 import { useLatest } from "./use-latest";
+import { useSerializedCommit, type SerializedCommit } from "./use-serialized-commit";
 import type { VideoSceneController } from "./use-video-scene";
 
 /** What `joinRecordingAt` needs from a Library recording (a `LibraryVideo` has all of it). */
@@ -51,24 +52,17 @@ export function useJoinRecording(
   controller: VideoSceneController,
   primaryDuration: number,
   frameAspect: number,
+  sharedSerialize?: SerializedCommit,
 ): (recording: JoinableRecording, t: JoinTarget) => Promise<JoinRecordingResult> {
   const controllerRef = useLatest(controller);
-  // End of the joins queued so far, and what the running one waits for after its commit.
-  const tailRef = useRef<Promise<unknown>>(Promise.resolve());
-  const afterCommitRef = useRef<Promise<void> | null>(null);
-  const renderWaitersRef = useRef<Array<() => void>>([]);
-  // Declared after useLatest: its layout effect has already refreshed controllerRef when ours runs.
-  useLayoutEffect(() => {
-    for (const resolve of renderWaitersRef.current.splice(0)) resolve();
-  });
-  useLayoutEffect(
-    () => () => {
-      for (const resolve of renderWaitersRef.current.splice(0)) resolve();
-    },
-    [],
-  );
+  const ownSerialize = useSerializedCommit();
+  const serialize = sharedSerialize ?? ownSerialize;
   const joinNow = useCallback(
-    async (recording: JoinableRecording, t: JoinTarget): Promise<JoinRecordingResult> => {
+    async (
+      recording: JoinableRecording,
+      t: JoinTarget,
+      armRenderWait: () => void,
+    ): Promise<JoinRecordingResult> => {
       if (recording.id === null) return "missing";
       let heldId: string | null;
       try {
@@ -109,28 +103,13 @@ export function useJoinRecording(
         recording.webcam ?? null,
       );
       current.commit(next);
-      if (next !== current.scene) {
-        afterCommitRef.current = new Promise<void>((resolve) => {
-          renderWaitersRef.current.push(resolve);
-        });
-      }
+      if (next !== current.scene) armRenderWait();
       return "joined";
     },
     [controllerRef, primaryDuration, frameAspect],
   );
   return useCallback(
-    (recording, t) => {
-      const run = tailRef.current.then(() => {
-        afterCommitRef.current = null;
-        return joinNow(recording, t);
-      });
-      // The caller gets its result right away; only the next join waits for the render.
-      tailRef.current = run.then(
-        () => afterCommitRef.current,
-        () => undefined,
-      );
-      return run;
-    },
-    [joinNow],
+    (recording, t) => serialize((armRenderWait) => joinNow(recording, t, armRenderWait)),
+    [serialize, joinNow],
   );
 }
