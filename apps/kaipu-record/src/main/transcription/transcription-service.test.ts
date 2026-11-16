@@ -609,7 +609,10 @@ describe("the engine downloads with the model", () => {
     // Asked while the old probe is still running: it must start its own, not join the old one.
     const afterInstall = h.service.status();
     stale.resolve({ available: false, reason: "binary-missing" });
-    await duringInstall;
+    // The call that joined the old probe gets the post-install state, not the old answer.
+    const early = await duringInstall;
+    expect(early.availability).toEqual({ status: "available" });
+    expect(early.models.find((m) => m.id === MODEL_ID)!.status).toEqual({ state: "ready" });
 
     const status = await afterInstall;
     expect(status.models.find((m) => m.id === MODEL_ID)!.status).toEqual({ state: "ready" });

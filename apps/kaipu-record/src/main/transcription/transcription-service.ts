@@ -637,7 +637,18 @@ export class TranscriptionService {
   }
 
   /** The engine is located once; a result of "unavailable" is looked up again on the next ask. */
-  private locate(): Promise<EngineLocation> {
+  /**
+   * A call that joined a probe begun before an engine install ended must not get that probe's
+   * "missing": it looks again once (the new probe is current).
+   */
+  private async locate(): Promise<EngineLocation> {
+    const generation = this.engineGeneration;
+    const location = await this.probe();
+    if (location.available || generation === this.engineGeneration) return location;
+    return this.probe();
+  }
+
+  private probe(): Promise<EngineLocation> {
     if (this.engineCache?.available) return Promise.resolve(this.engineCache);
     if (!this.engineInflight) {
       const generation = this.engineGeneration;
