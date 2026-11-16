@@ -33,8 +33,10 @@ export function EditorTranscribeButton({
   // The editor has no Library item at hand, so it asks the vault whether a transcript file is
   // there: without this a video transcribed in an earlier session would offer Transcribe again.
   const { state } = useTranscript(hasAudio === false ? null : videoId);
-  const transcribedAt = hostTranscribedAt ?? (state === "ready" || state === "invalid" ? 1 : null);
-  if (hasAudio === false) return null;
+  // While the read is out the button cannot tell Transcribe from Transcribed, and a click on the
+  // wrong one would start a job that overwrites the transcript.
+  if (hasAudio === false || state === "loading") return null;
+  const hasTranscript = state === "ready" || state === "invalid";
   return (
     <TranscribeButton
       variant="editor"
@@ -44,7 +46,8 @@ export function EditorTranscribeButton({
         assetId,
         mediaUrl: mediaUrl("recording", videoId),
         durationMs: Math.round(durationSeconds * 1000),
-        transcribedAt,
+        transcribedAt: hostTranscribedAt,
+        hasTranscript,
       }}
     />
   );

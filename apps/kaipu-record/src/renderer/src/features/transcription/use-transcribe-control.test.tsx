@@ -201,6 +201,15 @@ describe("useTranscribeControl", () => {
     expect(run).not.toHaveBeenCalled();
   });
 
+  it("treats hasTranscript like a transcript file, with no timestamp", async () => {
+    stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
+    const { result } = renderHook(() => useTranscribeControl({ ...ITEM, hasTranscript: true }));
+    await waitFor(() => expect(result.current.state.kind).toBe("done"));
+
+    await expect(result.current.start()).resolves.toBeNull();
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it("is busy elsewhere while another item's job runs, and start does nothing", async () => {
     stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
     const job = controlledJob();

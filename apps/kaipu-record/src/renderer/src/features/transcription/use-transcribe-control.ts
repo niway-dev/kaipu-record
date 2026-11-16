@@ -19,6 +19,8 @@ export interface TranscribeControlItem {
   durationMs: number;
   /** Non-null when a transcript file exists; supplied by the Library list. */
   transcribedAt: number | null;
+  /** `true` when the caller has read that a transcript file exists and has no timestamp for it. */
+  hasTranscript?: boolean;
 }
 
 export interface TranscribeControl {
@@ -42,7 +44,7 @@ const STARTABLE: ReadonlySet<TranscribeControlState["kind"]> = new Set([
 
 /**
  * The Transcribe control of one video. Existence of the transcript comes from the item's
- * `transcribedAt` plus jobs finished in this session, never from reading the file: a list of
+ * `transcribedAt` or `hasTranscript` plus jobs finished in this session, never from reading the file: a list of
  * cards must not read one file per card. So this hook never yields `stale` or `invalid`; a
  * caller that has read the transcript passes those to `transcribeControlState` itself.
  */
@@ -63,7 +65,10 @@ export function useTranscribeControl(item: TranscribeControlItem): TranscribeCon
     availability: status?.availability ?? null,
     defaultModelReady: status ? defaultModel?.status.state === "ready" : null,
     downloading: defaultModel?.status.state === "downloading",
-    transcript: item.transcribedAt !== null || doneThisSession ? "ready" : "none",
+    transcript:
+      item.transcribedAt !== null || item.hasTranscript === true || doneThisSession
+        ? "ready"
+        : "none",
     running,
     busyElsewhere,
     failure,

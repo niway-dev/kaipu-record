@@ -105,6 +105,7 @@ describe("EditorTranscribeButton", () => {
       assetId: "asset-1",
       durationMs: 3000,
       transcribedAt: null,
+      hasTranscript: false,
     });
   });
 
@@ -132,9 +133,29 @@ describe("EditorTranscribeButton", () => {
   it("knows a transcript from an earlier session is already there, so it is not offered again", () => {
     transcript.state = "ready";
     render(<EditorTranscribeButton videoId="take-1" assetId="asset-1" durationSeconds={3} />);
-    expect(
-      (seen.props[0] as { item: { transcribedAt: number | null } }).item.transcribedAt,
-    ).not.toBeNull();
+    const item = (
+      seen.props[0] as { item: { transcribedAt: number | null; hasTranscript: boolean } }
+    ).item;
+    expect(item.hasTranscript).toBe(true);
+    // No timestamp is invented for a file the editor only knows exists.
+    expect(item.transcribedAt).toBeNull();
+  });
+
+  it("also counts an unreadable transcript as one that exists", () => {
+    transcript.state = "invalid";
+    render(<EditorTranscribeButton videoId="take-1" assetId="asset-1" durationSeconds={3} />);
+    expect((seen.props[0] as { item: { hasTranscript: boolean } }).item.hasTranscript).toBe(true);
+  });
+
+  it("renders nothing while the transcript read is still loading", () => {
+    transcript.state = "loading";
+    const { queryByTestId, rerender } = render(
+      <EditorTranscribeButton videoId="take-1" assetId="asset-1" durationSeconds={3} />,
+    );
+    expect(queryByTestId("transcribe-button")).toBeNull();
+    transcript.state = "none";
+    rerender(<EditorTranscribeButton videoId="take-1" assetId="asset-1" durationSeconds={3} />);
+    expect(queryByTestId("transcribe-button")).not.toBeNull();
   });
 
   it("does not read the vault for a video without audio", () => {
