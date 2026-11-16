@@ -1,12 +1,12 @@
 /**
  * One selection for the whole editor: a clip/slide, an annotation, a zoom or a privacy
- * region — never two at once. Selecting any kind clears the others, which is what makes
+ * region or a floating image — never two at once. Selecting any kind clears the others, which is what makes
  * the inspector panel, Delete and Esc unambiguous (spec § 7: the panel "changes with the
  * selection").
  */
 import { useCallback, useState } from "react";
 
-export type SelectionKind = "item" | "overlay" | "zoom" | "redaction" | "mute" | "webcam";
+export type SelectionKind = "item" | "overlay" | "zoom" | "redaction" | "mute" | "webcam" | "media";
 export type EditorSelection = { kind: SelectionKind; id: string } | null;
 
 /** The webcam selection that means "the layer itself" (its global layout), not a segment. */
@@ -25,6 +25,8 @@ export interface EditorSelectionController {
   muteId: string | null;
   /** A webcam segment's id, or {@link WEBCAM_LAYER_SELECTION} for the global layout. */
   webcamId: string | null;
+  /** A floating image's id (ADR 0057). */
+  mediaId: string | null;
   /** `id = null` clears the selection only if it currently is of that kind. */
   select(kind: SelectionKind, id: string | null): void;
   clear(): void;
@@ -46,6 +48,7 @@ export function useEditorSelection(): EditorSelectionController {
     redactionId: selectedIdOf(selection, "redaction"),
     muteId: selectedIdOf(selection, "mute"),
     webcamId: selectedIdOf(selection, "webcam"),
+    mediaId: selectedIdOf(selection, "media"),
     select,
     clear,
   };

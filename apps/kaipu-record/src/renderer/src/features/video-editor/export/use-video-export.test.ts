@@ -62,6 +62,7 @@ function startArgs(
     previewWidth: 640,
     slideAssets: createSlideAssetStore(),
     cameraPath: null,
+    joined: () => [],
     onSaved: vi.fn(),
     ...overrides,
   };

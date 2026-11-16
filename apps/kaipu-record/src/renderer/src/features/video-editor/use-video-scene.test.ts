@@ -127,7 +127,7 @@ describe("useVideoScene — webcam edits", () => {
       const added = addWebcamSegment(
         result.current.scene,
         { start: 10, end: 20, mode: "override", layout: { size: 0.4 } },
-        60,
+        { start: 0, end: 60 },
       );
       id = added.id;
       result.current.commit(added.scene);

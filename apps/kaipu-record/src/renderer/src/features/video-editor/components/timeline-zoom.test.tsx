@@ -772,7 +772,8 @@ describe("a layout that changes during a drag", () => {
         onSelectItem={vi.fn()}
         onTrim={(id, edge, sourceTime, phase) => {
           spies.onTrim(id, edge, sourceTime, phase);
-          if (phase === "move") setItems((cur) => trimClip(cur, id, edge, sourceTime, SOURCE));
+          if (phase === "move")
+            setItems((cur) => trimClip(cur, id, edge, sourceTime, { start: 0, end: SOURCE }));
         }}
         slideUrlFor={() => null}
         onSlideDuration={(id, next, phase) => {

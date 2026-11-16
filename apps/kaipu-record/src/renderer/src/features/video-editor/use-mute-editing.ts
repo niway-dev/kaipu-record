@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useLatest } from "./use-latest";
 
+import { clipBounds, type SourceAxis } from "./source-axis";
 import { addMuteAt, dragMuteEdge, removeMute, toggleMuteAll } from "./mute-edits";
 import type { MutedRange } from "./audio-edits";
 import { sourceTimeAtTimeline } from "./source-time";
@@ -39,7 +40,7 @@ export interface MuteEditing {
 export function useMuteEditing(
   controller: VideoSceneController,
   layout: LayoutEntry[],
-  sourceDuration: number,
+  axis: SourceAxis,
 ): MuteEditing {
   const addAtPlayhead = useCallback(
     (timelineTime: number): AddMuteResult => {
@@ -47,12 +48,12 @@ export function useMuteEditing(
       // A slide has no audio of its own, so there is nothing there to silence.
       const at = sourceTimeAtTimeline(layout, timelineTime);
       if (at === null) return { ok: false, reason: "on-slide" };
-      const added = addMuteAt(controller.scene, at, sourceDuration);
+      const added = addMuteAt(controller.scene, at, clipBounds(axis, { sourceStart: at }));
       if (!added) return { ok: false, reason: "no-room" };
       controller.commit(added.scene);
       return { ok: true, id: added.id };
     },
-    [controller, layout, sourceDuration],
+    [controller, layout, axis],
   );
 
   const remove = useCallback(
@@ -78,13 +79,16 @@ export function useMuteEditing(
     ) => {
       if (phase === "start") controllerRef.current.beginInteract();
       if (phase === "move" && sourceTime !== null) {
-        controllerRef.current.updateLive(
-          dragMuteEdge(controllerRef.current.scene, id, edge, sourceTime, sourceDuration),
-        );
+        const scene = controllerRef.current.scene;
+        const target = scene.mutedRanges.find((r) => r.id === id);
+        if (target) {
+          const bounds = clipBounds(axis, { sourceStart: target.sourceStart });
+          controllerRef.current.updateLive(dragMuteEdge(scene, id, edge, sourceTime, bounds));
+        }
       }
       if (phase === "end") controllerRef.current.endInteract();
     },
-    [controllerRef, sourceDuration],
+    [controllerRef, axis],
   );
 
   return {

@@ -35,6 +35,40 @@ export interface SlideItem {
 
 export type TrackItem = ClipItem | SlideItem;
 
+/**
+ * What a floating item is tied to. A join or an insert shifts the recording, so a timeline
+ * time would end up over another moment: the item follows the footage under its start
+ * (ADR 0057). `resolveAnchor` in timeline.ts turns it back into a timeline time.
+ */
+export type MediaAnchor =
+  | { kind: "source"; time: number } // seconds into the recording, inside a clip
+  | { kind: "item"; itemId: string; offset: number }; // seconds into a slide of the sequence
+
+/** Centre and width of a floating item, as 0–1 of the picture (the webcam layer's space). */
+export interface MediaBox {
+  x: number;
+  y: number;
+  width: number;
+}
+
+/** A floating image over the Clips sequence: a box in the frame, a stacking order, fades. */
+export interface ImageMediaItem {
+  id: string;
+  kind: "image";
+  /** Stored exactly as a slide's asset is, in the same asset store. */
+  assetId: string;
+  naturalWidth: number;
+  naturalHeight: number;
+  anchor: MediaAnchor;
+  /** Timeline seconds; the end is clamped to the end of the timeline when drawn. */
+  duration: number;
+  box: MediaBox;
+  /** Unique within the scene; higher is in front. */
+  z: number;
+  fadeInMs: number;
+  fadeOutMs: number;
+}
+
 interface OverlayBase {
   id: string;
   /** Visibility window in timeline seconds. */
@@ -88,6 +122,22 @@ export type VideoOverlay = BoxOverlay | ArrowOverlay | TextOverlay;
 
 export type { MutedRange } from "./audio-edits";
 
+/** A Library recording joined into the sequence after the opened one (ADR 0058). */
+export interface SceneSource {
+  /** Scene-local id (`newId()`). */
+  id: string;
+  /** Library identity; survives renames. */
+  assetId: string;
+  /** Label snapshot; also names the recording when its file is missing. */
+  title: string;
+  /** Start of its range on the source axis; fixed once assigned. */
+  offset: number;
+  durationSeconds: number;
+  /** Capture size in px; 0 = unknown. */
+  width: number;
+  height: number;
+}
+
 export interface VideoScene {
   cursor?: CursorSettings;
   /** The main track in playback order; uncovered source footage is deleted footage. */
@@ -118,6 +168,17 @@ export interface VideoScene {
    * (a scene or a session from before backgrounds) = `DEFAULT_BACKGROUND`, today's picture.
    */
   background?: VideoBackground;
+  /**
+   * Floating images above the Clips sequence (ADR 0057). Absent = none, which is every scene
+   * saved before this field: it opens unchanged.
+   */
+  media?: ImageMediaItem[];
+  /**
+   * Recordings joined after the opened one (ADR 0058), each on its own fixed range of the
+   * source axis (`source-axis.ts`). Absent = only the opened recording, which is every scene
+   * saved before this field: it opens unchanged.
+   */
+  sources?: SceneSource[];
 }
 
 export function newId(): string {
@@ -164,12 +225,49 @@ export function backgroundOf(scene: Pick<VideoScene, "background">): VideoBackgr
  * from the recording, like a fresh scene. A saved layer on a recording that still has its
  * track is the user's edit and stays. Returns the same scene when nothing changes.
  * `durationSeconds` (the recording's) keeps a seeded gap inside it, as `initialScene` does.
+ * `joinedHasWebcam`: a joined recording (ADR 0058) has a track, so the layer stays even though
+ * the opened recording has none; it is dropped only when neither has one.
  */
 export function reconcileWebcam(
   scene: VideoScene,
   webcam: WebcamTrackMeta | null,
   durationSeconds: number,
+  joinedHasWebcam = false,
 ): VideoScene {
-  if (!webcam) return scene.webcam === null ? scene : { ...scene, webcam: null };
+  if (!webcam) return scene.webcam === null || joinedHasWebcam ? scene : { ...scene, webcam: null };
   return scene.webcam ? scene : { ...scene, webcam: seedWebcamScene(webcam, durationSeconds) };
+}
+
+/**
+ * The webcam layer after joining a recording (ADR 0058). The layout stays one per scene: a
+ * scene that already has a layer keeps its shape and position, and only gains this recording's
+ * hidden gaps, shifted into its range. A scene without a layer takes the joined recording's own
+ * layout. Without a track on the joined recording the scene is unchanged.
+ */
+export function withJoinedWebcam(
+  scene: VideoScene,
+  meta: WebcamTrackMeta | null,
+  source: SceneSource,
+): VideoScene {
+  if (!meta) return scene;
+  const seeded = seedWebcamScene(meta, source.durationSeconds);
+  if (!seeded) return scene;
+  // Ids come from where a segment starts (`gap-<ms>`), so a shifted one is renamed to stay
+  // unique against the same gap of another recording.
+  const shifted = seeded.segments.map((segment) => {
+    const start = segment.start + source.offset;
+    return {
+      ...segment,
+      id: `gap-${Math.round(start * 1000)}`,
+      start,
+      end: segment.end + source.offset,
+    };
+  });
+  const webcam = scene.webcam
+    ? {
+        layout: scene.webcam.layout,
+        segments: [...scene.webcam.segments, ...shifted].sort((a, b) => a.start - b.start),
+      }
+    : { layout: seeded.layout, segments: shifted };
+  return { ...scene, webcam };
 }
