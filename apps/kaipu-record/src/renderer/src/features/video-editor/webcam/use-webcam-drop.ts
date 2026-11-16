@@ -5,7 +5,9 @@
  * the dropped place, the original position moved, or nothing (the bubble goes back).
  *
  * The card belongs to one moment: seeking, playing, selecting something else, undo, redo and
- * Escape all close it like its Close button. Every handler reads `controller.scene`, never a
+ * Escape all close it like its Close button. The playhead leaving the moment is what counts as
+ * seeking: the last time update after the pause that picking the bubble up causes lands on
+ * the very frame the drop was made on, and must not close the card. Every handler reads `controller.scene`, never a
  * scene captured at render time.
  */
 import { useCallback, useEffect, useState } from "react";
@@ -25,6 +27,13 @@ import {
 import type { WebcamEditing } from "./use-webcam-editing";
 
 type Point = { x: number; y: number };
+
+/**
+ * How far the playhead may sit from the card's moment, in seconds, and still count as being on
+ * it. The pause that picking the bubble up causes reports the frame the video stopped on, up
+ * to one rendered frame away from the time the drop recorded; a real seek is further than that.
+ */
+export const CARD_MOMENT_TOLERANCE_SECONDS = 0.05;
 
 export interface WebcamPendingDrop {
   /** The dropped centre, normalized and clamped inside the frame. */
@@ -88,6 +97,7 @@ export function useWebcamDrop({
   cameraScaleAt,
   select,
   seekToPart,
+  timelineOf,
   timelineTime,
   playing,
   selection,
@@ -101,6 +111,8 @@ export function useWebcamDrop({
   select(kind: SelectionKind, id: string): void;
   /** A part was just created: the page moves the playhead past its slide, so the bubble shows where it was dropped. */
   seekToPart?(part: WebcamSegment): void;
+  /** The timeline time of a source time (null when no clip shows it): where the card's moment is. */
+  timelineOf?(sourceTime: number): number | null;
   /** What closes the card when it changes. */
   timelineTime: number;
   playing: boolean;
@@ -115,15 +127,27 @@ export function useWebcamDrop({
     cameraScaleAt,
     select,
     seekToPart,
+    timelineOf,
     card,
   });
 
   const close = useCallback(() => setCard(null), []);
 
-  // The card is for this scene, this moment and this selection, and for a paused editor.
+  // The card is for this scene, this selection and a paused editor.
   useEffect(() => {
     setCard(null);
-  }, [timelineTime, playing, selection, controller.scene]);
+  }, [playing, selection, controller.scene]);
+
+  // ...and for this moment: it closes when the playhead leaves it, not on every time update.
+  useEffect(() => {
+    setCard((open) => {
+      if (!open) return open;
+      const moment = latest.current.timelineOf?.(open.sourceTime) ?? null;
+      const onIt =
+        moment !== null && Math.abs(timelineTime - moment) <= CARD_MOMENT_TOLERANCE_SECONDS;
+      return onIt ? open : null;
+    });
+  }, [timelineTime, latest]);
 
   useEffect(() => {
     if (!card) return;

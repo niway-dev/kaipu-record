@@ -34,6 +34,7 @@ import {
   layoutDuration,
   removeItem,
   setSlideDuration,
+  sourceToTimeline,
   splitClipAt,
   toLayout,
   trimClip,
@@ -1607,6 +1608,7 @@ function VideoEditor({
       );
       if (target !== null) playbackRef.current.seek(target);
     },
+    timelineOf: (t) => sourceToTimeline(layoutRef.current, t),
     timelineTime: playback.timelineTime,
     playing: playback.playing,
     selection: selection.selection,

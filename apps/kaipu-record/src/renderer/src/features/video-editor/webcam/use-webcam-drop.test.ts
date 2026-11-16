@@ -37,6 +37,8 @@ function setup(duration = 40) {
         cameraScaleAt: () => 1,
         select,
         seekToPart,
+        // The track is one clip from 0, so a source time is the same timeline time.
+        timelineOf: (sourceTime) => sourceTime,
         ...inputs,
       });
       return { controller, drop };
@@ -198,6 +200,22 @@ describe("useWebcamDrop — what closes the card like Close does", () => {
   it("seeking", () => {
     const t = open();
     t.rerender({ timelineTime: 30, playing: false, selection: null });
+    expect(t.result.current.drop.card).toBeNull();
+  });
+
+  it("the last time update after the pause that picked the bubble up keeps it open", () => {
+    // The drop recorded 24 s; the video stopped one frame later and reports that.
+    const t = open();
+    t.rerender({ timelineTime: 24.03, playing: false, selection: null });
+    expect(t.result.current.drop.card).not.toBeNull();
+    expect(t.result.current.drop.card?.sourceTime).toBe(24);
+    act(() => t.result.current.drop.answerPart());
+    expect(t.segments()[0]?.start).toBe(24);
+  });
+
+  it("a seek further than a frame from the moment closes it", () => {
+    const t = open();
+    t.rerender({ timelineTime: 24.2, playing: false, selection: null });
     expect(t.result.current.drop.card).toBeNull();
   });
 

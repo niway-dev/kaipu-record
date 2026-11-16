@@ -1573,6 +1573,89 @@ describe("VideoEditorPage — dropping the camera bubble", () => {
     }
   });
 
+  /**
+   * Plays, drags the bubble out of every part and drops it. `stoppedAt` is where the
+   * video reports it stopped; a time update then arrives, as the one the pause queues does.
+   */
+  async function playThenDrop(
+    stoppedAt: number,
+  ): Promise<{ footer: HTMLElement; main: HTMLVideoElement }> {
+    renderEditor(WITH_WEBCAM);
+    const footer = await waitForEditorLoaded();
+    const main = Array.from(document.querySelectorAll("video")).find(
+      (v) => v.dataset.testid !== "webcam-video",
+    )! as HTMLVideoElement;
+    fireEvent.loadedMetadata(main);
+    const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
+    Object.defineProperty(cam, "duration", { configurable: true, get: () => 60 });
+    fireEvent.loadedMetadata(cam);
+    fireEvent.keyDown(window, { key: " " });
+    expect(await screen.findByRole("button", { name: "Pause" })).toBeInTheDocument();
+    main.currentTime = 1;
+    fireEvent.timeUpdate(main);
+    screen.getByTestId("webcam-slot").getBoundingClientRect = () =>
+      ({ width: 1000, height: 1000 }) as DOMRect;
+    const bubble = screen.getByTestId("webcam-layer");
+    fireEvent.pointerDown(bubble, { clientX: 500, clientY: 500, pointerId: 1 });
+    fireEvent.pointerMove(bubble, { clientX: 300, clientY: 500, pointerId: 1 });
+    expect(await screen.findByRole("button", { name: "Play" })).toBeInTheDocument();
+    fireEvent.pointerUp(bubble, { clientX: 300, clientY: 500, pointerId: 1 });
+    main.currentTime = stoppedAt;
+    fireEvent.timeUpdate(main);
+    return { footer, main };
+  }
+
+  it("dropping outside a part after a drag during playback keeps the card open one time update later", async () => {
+    stubDecodedVideoSize(1280, 720);
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    try {
+      const { footer } = await playThenDrop(1.03);
+      expect(await screen.findByRole("group", { name: "Where to keep the camera" })).toBeVisible();
+      expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+      // The new part starts at the moment the video stopped on, not further on.
+      fireEvent.click(screen.getByRole("button", { name: /Only for this part/ }));
+      await waitFor(() =>
+        expect(footer.querySelector('[data-webcam-id][data-mode="override"]')).not.toBeNull(),
+      );
+    } finally {
+      playSpy.mockRestore();
+      stubDecodedVideoSize(0, 0);
+    }
+  });
+
+  it("a seek after the drop closes the card, as before", async () => {
+    stubDecodedVideoSize(1280, 720);
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    try {
+      const { main } = await playThenDrop(1);
+      await screen.findByRole("group", { name: "Where to keep the camera" });
+      main.currentTime = 5;
+      fireEvent.timeUpdate(main);
+      await waitFor(() =>
+        expect(screen.queryByRole("group", { name: "Where to keep the camera" })).toBeNull(),
+      );
+    } finally {
+      playSpy.mockRestore();
+      stubDecodedVideoSize(0, 0);
+    }
+  });
+
+  it("pressing play with the card open closes it, as before", async () => {
+    stubDecodedVideoSize(1280, 720);
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    try {
+      await playThenDrop(1);
+      await screen.findByRole("group", { name: "Where to keep the camera" });
+      fireEvent.keyDown(window, { key: " " });
+      await waitFor(() =>
+        expect(screen.queryByRole("group", { name: "Where to keep the camera" })).toBeNull(),
+      );
+    } finally {
+      playSpy.mockRestore();
+      stubDecodedVideoSize(0, 0);
+    }
+  });
+
   it("Escape closes the card and the lane stays empty", async () => {
     stubDecodedVideoSize(1280, 720);
     try {
