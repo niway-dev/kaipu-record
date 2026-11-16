@@ -31,7 +31,7 @@ at capture); a separate mic track, word corrections and burned-in captions are l
 | #   | Decision                                                                                                                                                                                                                                            | Why                                                                                                                                                                                                                               | ADR                                                                                                                             |
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Parakeet TDT 0.6B v3 int8 is the default model; the catalog holds several (Handy-style)                                                                                                                                                             | Measured best on Spanish and fast; v2 is English-only; the owner wants users able to try others                                                                                                                                   | [0062 (new)](/architecture/decisions/0062-speech-recognition-runs-in-a-bundled-sherpa-onnx-cli-with-a-downloaded-pinned-model/) |
-| 2   | Engine: sherpa-onnx `sherpa-onnx-offline` CLI at one pinned release (v1.13.8 verified, M0 also measures v2.0.1), bundled and signed; not the websocket server, not the Node addon                                                                   | Same runtime and model that already work; no listening port (the server binds `*:<port>`, measured); the addon fails inside Electron                                                                                              | 0062 (new)                                                                                                                      |
+| 2   | Engine: sherpa-onnx `sherpa-onnx-offline` CLI at one pinned release (v1.13.8 verified, M0 also measures v2.0.1), downloaded with the model (amended 2026-11-16); not the websocket server, not the Node addon                                       | Same runtime and model that already work; no listening port (the server binds `*:<port>`, measured); the addon fails inside Electron                                                                                              | 0062 (new)                                                                                                                      |
 | 3   | The model is downloaded once after install, with consent, pinned revision and SHA-256 per file; offline afterwards                                                                                                                                  | 640 MB in every installer is too much; the owner accepts one visible download                                                                                                                                                     | 0062 (new)                                                                                                                      |
 | 4   | The renderer decodes to a 16 kHz PCM file once; main owns the job                                                                                                                                                                                   | Decoding needs WebCodecs (renderer); a long job must survive the editor closing and resume without duplicates                                                                                                                     | 0062 (new)                                                                                                                      |
 | 5   | Words stored once per recording, in source time (ms), in a `.kaipu` companion; never rewritten by edits                                                                                                                                             | Edits are cheap and reversible only if the transcript does not depend on them; the companion moves with the recording                                                                                                             | [0065 (new)](/architecture/decisions/0065-a-transcript-is-stored-per-recording-in-source-time-and-projected-through-the-edit/)  |
@@ -107,8 +107,9 @@ real against the repo, with the phase that covers it. None has been observed in 
     for new recordings.
 16. **Download interrupted or tampered.** `.partial` staging, SHA-256 per file, one rename at the
     end; the engine never sees a half-installed model. (M1)
-17. **The bundled binary is missing in a release.** The release workflow fails without the CLI and
-    its library, as it already does for the Swift helpers. (M1)
+17. **The engine is missing.** Since the [ADR 0062 amendment](/architecture/decisions/0062-speech-recognition-runs-in-a-bundled-sherpa-onnx-cli-with-a-downloaded-pinned-model/#amendment-2026-11-16-the-engine-downloads-with-the-model)
+    the engine is not in the installer: a missing engine reads as "model not installed" and the
+    same consented download installs it, pinned by SHA-256. (M4)
 
 ## Acceptance criteria
 
@@ -330,6 +331,19 @@ Criteria:
 - **More models:** Whisper through sherpa-onnx (token timestamps need exports with attention
   outputs, `--whisper-enable-token-timestamps`); a model picker like Handy's.
 - **Windows and Intel Mac:** the same CLI from sherpa-onnx's win-x64 and osx-x64 builds.
+
+### M4 — the engine downloads inside the app
+
+Added on 2026-11-16 after the owner's first QA: without `bun run fetch:speech-engine` the app
+hid every transcription surface. See the [ADR 0062 amendment](/architecture/decisions/0062-speech-recognition-runs-in-a-bundled-sherpa-onnx-cli-with-a-downloaded-pinned-model/#amendment-2026-11-16-the-engine-downloads-with-the-model).
+
+- On macOS arm64 with no engine and no model, Settings > Transcription, the onboarding step and
+  the Transcribe dialog offer the download; the size shown includes the engine.
+- One consented download installs the pinned engine archive (SHA-256 and size checked before
+  extraction, `.partial` staging, version handshake before the final rename) and then the model,
+  with one progress bar and one Cancel. Cancel or a failed check leaves nothing the app runs.
+- With the engine installed and the model removed, the download fetches only the model.
+- `build`, packaging and the release workflow no longer fetch, copy, sign or check the engine.
 
 ## What the repo already says
 
