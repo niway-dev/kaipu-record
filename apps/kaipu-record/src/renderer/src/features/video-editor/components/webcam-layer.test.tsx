@@ -489,6 +489,35 @@ describe("WebcamLayer", () => {
     }
   });
 
+  it("a second drag cancelled while a card waits puts the bubble back at the dropped place", () => {
+    for (const abort of ["pointerCancel", "lostPointerCapture"] as const) {
+      const { rerender, handlers, ref, unmount } = dragSetup();
+      const props = {
+        src: "kaipu-media://webcam/rec-1",
+        startOffsetMs: 0,
+        webcam: scene(),
+        path: flatPath,
+        cameraEnabled: true,
+        frame: FRAME,
+        hidden: false,
+        interactive: true,
+        selected: false,
+        videoRef: ref,
+        ...handlers,
+      };
+      rerender(<WebcamLayer {...props} dropAt={{ x: 0.8, y: 0.3 }} />);
+      fireEvent.pointerDown(bubble(), { clientX: 800, clientY: 300, pointerId: 1 });
+      fireEvent.pointerMove(bubble(), { clientX: 600, clientY: 300, pointerId: 1 });
+      expect(center().x).toBeCloseTo(0.6, 6);
+      fireEvent[abort](bubble(), { pointerId: 1 });
+      // The card is still open on the dropped place, so that is where the bubble stays.
+      expect(center().x).toBeCloseTo(0.8, 6);
+      expect(center().y).toBeCloseTo(0.3, 6);
+      expect(handlers.onDrop).not.toHaveBeenCalled();
+      unmount();
+    }
+  });
+
   describe("onHeldChange", () => {
     /** The layer reports its state once on mount; what matters is what a gesture adds. */
     function heldSetup() {

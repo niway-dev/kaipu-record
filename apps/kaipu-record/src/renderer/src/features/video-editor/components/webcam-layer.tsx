@@ -395,11 +395,12 @@ export function WebcamLayer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dropAt, webcam]);
 
-  // Same abort contract as the camera box: a drag can end without a pointerup.
+  // Same abort contract as the camera box: a drag can end without a pointerup. The bubble
+  // goes back to the card's dropped place when one is open, else to the scene's.
   const abort = (): void => {
     if (!drag.current) return;
     drag.current = null;
-    held.current = null;
+    held.current = dropAt;
     setDragging(false);
     setMoved(false);
     resync();
