@@ -385,3 +385,43 @@ function planesToSample(
     timestamp,
   });
 }
+
+/** The video side of the output, as the feed below needs it: the `VideoSource` in the worker. */
+export interface VideoSink {
+  add(timestamp: number, duration: number): Promise<unknown>;
+  close(): void;
+}
+
+export interface InterleavedFeed {
+  /** Adds one video frame, after the audio has been produced up to AUDIO_LEAD_SECONDS past it. */
+  frame(timestamp: number, duration: number): Promise<void>;
+  /** After the last frame: closes the video, then produces the audio still owed. */
+  finish(): Promise<void>;
+}
+
+/**
+ * The order the muxer is fed in. mediabunny's muxer writes samples in timestamp order across
+ * tracks and keeps whatever is ahead of the slower track in RAM until that track catches up,
+ * so the audio is produced up to AUDIO_LEAD_SECONDS past each frame before the frame is added.
+ * Its guide asks for exactly this ("add media in a somewhat interleaved way to keep memory usage
+ * low", https://mediabunny.dev/guide/writing-media-files). Feeding all the video first held the
+ * whole encoded video in the worker (6.5 GB on a real take) while the file on disk stayed empty.
+ *
+ * Closing the video before the drain lets the muxer write the remaining audio without waiting
+ * for a video sample to pair it with. `audio` is null for an export without an audio track.
+ */
+export function createInterleavedFeed(
+  audio: Pick<AudioPump, "advanceTo" | "drain"> | null,
+  video: VideoSink,
+): InterleavedFeed {
+  return {
+    async frame(timestamp, duration) {
+      await audio?.advanceTo(timestamp + AUDIO_LEAD_SECONDS);
+      await video.add(timestamp, duration);
+    },
+    async finish() {
+      video.close();
+      await audio?.drain();
+    },
+  };
+}

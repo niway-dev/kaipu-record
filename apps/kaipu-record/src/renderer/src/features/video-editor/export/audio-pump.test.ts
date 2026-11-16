@@ -4,7 +4,12 @@ import { resolve } from "node:path";
 import { AudioSample } from "mediabunny";
 import { describe, expect, it, vi } from "vitest";
 import type { AudioEdits } from "../audio-edits";
-import { AUDIO_LEAD_SECONDS, createAudioPump, type AudioPumpOptions } from "./audio-pump";
+import {
+  AUDIO_LEAD_SECONDS,
+  createAudioPump,
+  createInterleavedFeed,
+  type AudioPumpOptions,
+} from "./audio-pump";
 import type { RenderSegment } from "./export-plan";
 
 /**
@@ -237,15 +242,16 @@ describe("createAudioPump: the samples the pre-refactor audio pass produced", ()
       createHash("sha256")
         .update(new Uint8Array(new Float32Array(frames * channels).buffer))
         .digest("hex");
-    // The slide: 2.4 s in 1 s pieces (48000, 48000, 19200 frames), all zero.
-    const slidePieces = samples.filter(
+    // Silence in 1 s pieces, all zero: the 2.4 s slide (48000, 48000, 19200 frames), then the
+    // 2 s clip of a recording without audio (48000, 48000).
+    const silencePieces = samples.filter(
       (s) => s.numberOfFrames === 48000 || s.numberOfFrames === 19200,
     );
-    expect(slidePieces.map((s) => s.numberOfFrames)).toEqual([48000, 48000, 19200, 48000, 48000]);
-    for (const s of slidePieces) expect(s.hash).toBe(silentHash(s.numberOfFrames, 2));
+    expect(silencePieces.map((s) => s.numberOfFrames)).toEqual([48000, 48000, 19200, 48000, 48000]);
+    for (const s of silencePieces) expect(s.hash).toBe(silentHash(s.numberOfFrames, 2));
     // The muted span of the first clip leaves some all-zero blocks among sounding ones.
     const zeroBlocks = samples.filter((s) => s.hash === silentHash(s.numberOfFrames, 2));
-    expect(zeroBlocks.length).toBeGreaterThan(slidePieces.length);
+    expect(zeroBlocks.length).toBeGreaterThan(silencePieces.length);
     // The mono 44.1 kHz clip arrives in the reference format.
     expect(samples.every((s) => s.sampleRate === 48000 && s.numberOfChannels === 2)).toBe(true);
   });
@@ -335,29 +341,66 @@ describe("createAudioPump: interleaving", () => {
   });
 });
 
-describe("export-worker.ts feeds the muxer in step", () => {
-  // The worker needs WebCodecs and cannot run here, so this pins its wiring in the source: the
-  // one place a video frame is added is preceded by the audio pump's advance, and the pump
-  // is drained after the last frame.
-  const worker = readFileSync(resolve(__dirname, "export-worker.ts"), "utf8");
+describe("createInterleavedFeed: the order the muxer is fed in", () => {
+  const recorder = () => {
+    const events: string[] = [];
+    const audio = {
+      advanceTo: vi.fn(async (t: number) => void events.push(`audio to ${t}`)),
+      drain: vi.fn(async () => void events.push("audio drain")),
+    };
+    const video = {
+      add: vi.fn(async (ts: number) => void events.push(`video ${ts}`)),
+      close: vi.fn(() => void events.push("video close")),
+    };
+    return { events, audio, video };
+  };
 
-  it("asks the pump for audio past the frame before every video add", () => {
-    expect(worker.match(/await videoSource\.add\(/g)).toHaveLength(1);
-    const advance = worker.indexOf("audio?.advanceTo(outTs + AUDIO_LEAD_SECONDS)");
-    expect(advance).toBeGreaterThan(-1);
-    expect(advance).toBeLessThan(worker.indexOf("await videoSource.add("));
+  it("produces the audio a lead past each frame before adding the frame", async () => {
+    const { events, audio, video } = recorder();
+    const feed = createInterleavedFeed(audio, video);
+    await feed.frame(0, 0.5);
+    await feed.frame(0.5, 0.5);
+    expect(events).toEqual([
+      `audio to ${AUDIO_LEAD_SECONDS}`,
+      "video 0",
+      `audio to ${0.5 + AUDIO_LEAD_SECONDS}`,
+      "video 0.5",
+    ]);
   });
 
-  it("sends clip frames and slide frames through that one place", () => {
-    expect(worker).toContain("emit: addVideoFrame");
-    expect(worker).toContain("await addVideoFrame(outTs, frameDuration)");
+  it("closes the video before draining the audio still owed", async () => {
+    const { events, audio, video } = recorder();
+    const feed = createInterleavedFeed(audio, video);
+    await feed.frame(0, 1);
+    await feed.finish();
+    expect(events.slice(-2)).toEqual(["video close", "audio drain"]);
   });
 
-  it("drains the pump after the last frame, then finalizes", () => {
-    const close = worker.indexOf("videoSource.close()");
-    const drain = worker.indexOf("await audio?.drain()");
-    expect(close).toBeGreaterThan(worker.lastIndexOf("addVideoFrame"));
-    expect(drain).toBeGreaterThan(close);
-    expect(worker.indexOf("await out.finalize()")).toBeGreaterThan(drain);
+  it("feeds only video when the export has no audio track", async () => {
+    const { events, video } = recorder();
+    const feed = createInterleavedFeed(null, video);
+    await feed.frame(0, 1);
+    await feed.finish();
+    expect(events).toEqual(["video 0", "video close"]);
+  });
+});
+
+describe("export-worker.ts goes through the interleaved feed", () => {
+  // The worker needs WebCodecs and cannot run here. The order itself is tested above; this only
+  // pins that the worker never reaches the video source except through the feed.
+  const worker = readFileSync(resolve(__dirname, "export-worker.ts"), "utf8").replace(
+    /\/\/.*$|\/\*[\s\S]*?\*\//gm,
+    "",
+  );
+
+  it("never adds a frame to, or closes, the video source directly", () => {
+    expect(worker).toMatch(/createInterleavedFeed\(\s*audio\s*,\s*videoSource\s*\)/);
+    expect(worker).not.toMatch(/videoSource\s*\.\s*(add|close)\s*\(/);
+  });
+
+  it("finishes the feed before finalizing the output", () => {
+    const finish = worker.search(/feed\s*\.\s*finish\s*\(/);
+    expect(finish).toBeGreaterThan(-1);
+    expect(worker.search(/out\s*\.\s*finalize\s*\(/)).toBeGreaterThan(finish);
   });
 });

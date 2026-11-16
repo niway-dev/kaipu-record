@@ -93,7 +93,7 @@ import { chooseVideoEncoding, type VideoEncodingChoice } from "./video-encoding"
 import { WEBCAM_FPS } from "@shared/webcam-track";
 import { openWebcamSourceOrNone, webcamImageOf, type WebcamSource } from "./webcam-source";
 import { clipFramesOf, clipSource, clipWebcamCursorOf } from "./joined-media";
-import { AUDIO_LEAD_SECONDS, createAudioPump } from "./audio-pump";
+import { createAudioPump, createInterleavedFeed } from "./audio-pump";
 import { audioPlan, type RecordingAudio } from "./joined-audio";
 
 // ---------------------------------------------------------------------------
@@ -391,18 +391,13 @@ async function runExportWithInput(
     if (data) post({ type: "poster", data }, [data]);
   };
 
-  // Every video frame goes through here. mediabunny's muxer writes samples in timestamp
-  // order across tracks and keeps whatever is ahead of the slower track in RAM until that
-  // track catches up, so the audio is produced up to AUDIO_LEAD_SECONDS past the frame before
-  // the frame is added. Its guide asks for exactly this ("add media in a somewhat interleaved
-  // way to keep memory usage low", https://mediabunny.dev/guide/writing-media-files). Feeding
-  // all the video first held the whole encoded video in the worker (6.5 GB on a real take)
-  // while the file on disk stayed empty. The video `outTs` and the audio cursor are the same
+  // Every video frame goes through here, so the muxer is fed audio in step with the video
+  // (createInterleavedFeed, audio-pump.ts). The video `outTs` and the audio cursor are the same
   // output timeline: segments are contiguous from 0, and the audio of each is its duration.
+  const feed = createInterleavedFeed(audio, videoSource);
   const addVideoFrame = async (outTs: number, duration: number): Promise<void> => {
     await sendPosterOnce();
-    await audio?.advanceTo(outTs + AUDIO_LEAD_SECONDS);
-    await videoSource.add(outTs, duration);
+    await feed.frame(outTs, duration);
     reportProgress(outTs);
   };
 
@@ -473,13 +468,10 @@ async function runExportWithInput(
       }
     }
 
-    // Signal no more video frames — improves encoder flush latency, and lets the muxer write
-    // the audio still to come without waiting for a video sample to pair it with.
-    videoSource.close();
-
-    // The audio still owed after the last video frame: whatever the lead did not reach, and
-    // the resampler's tail. The pump closes the audio source when its timeline ends.
-    await audio?.drain();
+    // No more video frames (which also speeds up the encoder's flush), then the audio still
+    // owed: whatever the lead did not reach, and the resampler's tail. The pump closes the
+    // audio source when its timeline ends.
+    await feed.finish();
 
     await out.finalize();
     finalized = true;
