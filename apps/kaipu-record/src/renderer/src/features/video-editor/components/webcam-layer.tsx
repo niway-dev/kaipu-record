@@ -158,6 +158,9 @@ function useWebcamSync({
     // A new src resets readyState to HAVE_NOTHING at once, so the next file waits its turn.
     if (file.src !== null && cam.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA)
       paintedSrc.current = file.src;
+    // Inside the lead-in hold the first frame stays still: playing it would only be resynced
+    // back to 0 every few frames, a stutter instead of a held frame.
+    const leadIn = webcamTime < 0;
     let rect =
       state &&
       file.src !== null &&
@@ -205,15 +208,16 @@ function useWebcamSync({
       const seekTo = webcamResyncTarget(cam.currentTime, webcamTime, cam.duration);
       if (seekTo !== null) {
         // The lead is for a moving clock: a waiting main video is not paused but holds still.
-        const moving = !!main && !main.paused && !mainWaiting.current;
+        // A held first frame does not move either, so it gets no lead.
+        const moving = !!main && !main.paused && !mainWaiting.current && !leadIn;
         const lead = webcamSeekLead(moving, lastSeekSeconds.current, main?.playbackRate ?? 1);
         const end = Number.isFinite(cam.duration) && cam.duration > 0 ? cam.duration : Infinity;
         seekStartedAt.current = performance.now();
         cam.currentTime = Math.min(seekTo + lead, end);
       }
     }
-    if (main && !main.paused && cam.paused && !mainWaiting.current) safePlay(cam);
-    if (main?.paused && !cam.paused) safePause(cam);
+    if (main && !main.paused && cam.paused && !mainWaiting.current && !leadIn) safePlay(cam);
+    if ((main?.paused || leadIn) && !cam.paused) safePause(cam);
   };
 
   const trigger = useMemo(
