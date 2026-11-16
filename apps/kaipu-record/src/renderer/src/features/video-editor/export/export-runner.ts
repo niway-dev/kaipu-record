@@ -8,7 +8,7 @@ import { showToast } from "@renderer/ui/toast-store";
 import type { SlideAssetStore } from "../slide-assets";
 import type { VideoScene } from "../scene";
 import type { CameraPath } from "../zoom/camera-path";
-import { buildExportPlan } from "./export-plan";
+import { buildExportPlan, withSourceDuration } from "./export-plan";
 import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
 import { rasterizeOverlays } from "./overlay-raster";
 import {
@@ -34,6 +34,8 @@ export interface VideoExportState {
 
 export interface StartExportArgs {
   scene: VideoScene;
+  /** The recording's length in source seconds, for the last camera block's return. */
+  sourceDurationSeconds?: number;
   sourceId: string;
   title: string;
   /** The source asset's identity; persisted on the exported file. */
@@ -281,7 +283,7 @@ export async function startVideoExport(
 
   let plan;
   try {
-    plan = buildExportPlan(args.scene);
+    plan = withSourceDuration(buildExportPlan(args.scene), args.sourceDurationSeconds);
   } catch {
     set({ ...IDLE, ready: snapshot.ready, status: "error", error: t("exportEmptyTimeline") });
     return true;

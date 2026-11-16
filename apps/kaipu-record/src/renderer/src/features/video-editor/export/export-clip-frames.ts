@@ -14,7 +14,7 @@
  */
 import { webcamStateAt, type WebcamScene } from "../webcam/webcam-model";
 import type { OutputComposer } from "./compose-output-frame";
-import type { WebcamImage } from "./compose-webcam";
+import { type WebcamImage, webcamEndSeconds } from "./compose-webcam";
 import type { RenderClipSegment } from "./export-plan";
 import type { FrameRateCap } from "./frame-rate-cap";
 import { rebaseVideoTimestamp } from "./rebase-timestamp";
@@ -40,6 +40,12 @@ export interface ClipFramesOptions<F extends ClipFrame, W> {
   webcamCursor: WebcamCursor<W> | null;
   /** The plan's webcam layer (null: none). */
   layer: WebcamScene | null;
+  /**
+   * The recording's length in source seconds (the plan's `sourceDurationSeconds`), NOT this
+   * clip's end: a cut never moves a camera block (ADR 0039), so the last block's return is
+   * capped by where the recording ends. The composer is given the same value.
+   */
+  sourceEndSeconds?: number;
   webcamImageOf(face: W | null): WebcamImage | null;
   /** Rate of the webcam fills over a still screen (the webcam's, or the preset's cap). */
   fillFps: number;
@@ -64,6 +70,9 @@ export async function exportClipFrames<F extends ClipFrame, W>(
   // (the sink's pool has two slots, see canvas-sink-options.ts).
   let held: F | null = null;
   let fills: WebcamFillState<W> = { from: segment.sourceStart, face: null };
+  const endSeconds = webcamEndSeconds(opts.sourceEndSeconds);
+  const stateAt = (scene: WebcamScene, t: number) =>
+    webcamStateAt({ webcam: scene }, t, endSeconds);
   const fillUntil = async (nextFrame: number): Promise<void> => {
     if (!held || !webcamCursor || !layer) return;
     const frame = held;
@@ -72,12 +81,10 @@ export async function exportClipFrames<F extends ClipFrame, W>(
       nextFrame,
       segmentEnd: segment.sourceEnd,
       fps: opts.fillFps,
-      // The same state function the composer draws from. The recording's end is not known
-      // here, so the last block's return is read at its whole duration; the composer reads
-      // it the same way, so the fills and the drawn frames agree.
-      visible: (t) => webcamStateAt({ webcam: layer }, t) !== null,
+      // The same state function, with the same recording end, the composer draws from.
+      visible: (t) => stateAt(layer, t) !== null,
       // A slide moves the bubble between webcam frames: those fills are due too (ADR 0039).
-      moving: (t) => !!webcamStateAt({ webcam: layer }, t)?.from,
+      moving: (t) => !!stateAt(layer, t)?.from,
       frameAt: (t) => webcamCursor.frameAt(t),
       // `duration` reaches the gap's end: the last fill of a clip must (see fillWebcamGap).
       emit: async (t, face, duration) => {
@@ -135,7 +142,7 @@ export async function exportClipFrames<F extends ClipFrame, W>(
     // What is on screen now, for the next gap's fills.
     fills = {
       ...fills,
-      face: layer && webcamStateAt({ webcam: layer }, webcamTime) ? face : null,
+      face: layer && stateAt(layer, webcamTime) ? face : null,
     };
     // The frame's own decoded duration (at least one cap slot); the muxer stretches it to
     // the next kept frame anyway.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { initialScene, type TrackItem } from "../scene";
 import { WEBCAM_DEFAULTS } from "../webcam/webcam-model";
-import { buildExportPlan, sliceExportPlan } from "./export-plan";
+import { buildExportPlan, sliceExportPlan, withSourceDuration } from "./export-plan";
 
 // Copied from timeline.test.ts — the same fixture factories, kept local so this
 // test file has no cross-test-file coupling.
@@ -19,6 +19,24 @@ const slide = (id: string, duration: number): TrackItem => ({
   duration,
   naturalWidth: 800,
   naturalHeight: 600,
+});
+
+describe("withSourceDuration — the recording's length (camera blocks, ADR 0039)", () => {
+  const scene = { ...initialScene(10), items: [clip("a", 5, 10)] };
+
+  it("carries a usable source duration, through a range slice too", () => {
+    const plan = withSourceDuration(buildExportPlan(scene), 10.4);
+    expect(plan.sourceDurationSeconds).toBe(10.4);
+    expect(sliceExportPlan(plan, 1, 3).sourceDurationSeconds).toBe(10.4);
+  });
+
+  it("carries nothing for a missing, zero or NaN length, so the plan is as it was", () => {
+    for (const length of [undefined, 0, Number.NaN, -1, Infinity]) {
+      expect("sourceDurationSeconds" in withSourceDuration(buildExportPlan(scene), length)).toBe(
+        false,
+      );
+    }
+  });
 });
 
 describe("buildExportPlan", () => {

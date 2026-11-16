@@ -140,6 +140,7 @@ export function usePrepareCopy(): { start(input: PrepareCopyInput): boolean } {
         await startExport({
           cursor,
           scene,
+          sourceDurationSeconds: probe.durationSec,
           // The sidecar's webcam: its file is fetched and composed at the recorded layout.
           webcamTrack: video.webcam ?? null,
           sourceId: video.id,

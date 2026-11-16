@@ -899,6 +899,7 @@ function VideoEditor({
         .map((a) => ({ assetId: a.assetId, bytes: a.bytes }));
       void videoExport.start({
         scene,
+        sourceDurationSeconds: source.durationSeconds,
         sourceId: source.id,
         title: source.title,
         derivedFromAssetId: source.assetId,
@@ -1014,6 +1015,7 @@ function VideoEditor({
       if (!video || video.videoWidth === 0 || video.videoHeight === 0) return null;
       return {
         scene,
+        sourceDurationSeconds: source.durationSeconds,
         sourceId: source.id,
         videoWidth: video.videoWidth,
         videoHeight: video.videoHeight,
@@ -1027,7 +1029,16 @@ function VideoEditor({
         fps: settings.fps,
       };
     },
-    [playback, scene, source.id, source.webcam, assetStoreRef, cameraPath, cursorData],
+    [
+      playback,
+      scene,
+      source.id,
+      source.webcam,
+      source.durationSeconds,
+      assetStoreRef,
+      cameraPath,
+      cursorData,
+    ],
   );
 
   const handleGifSettingsChange = useCallback(
@@ -1133,6 +1144,7 @@ function VideoEditor({
       setHighlightedCaptureId(null);
       const frame = await captureFrame({
         scene,
+        sourceDurationSeconds: source.durationSeconds,
         sourceId: source.id,
         videoWidth: video.videoWidth,
         videoHeight: video.videoHeight,

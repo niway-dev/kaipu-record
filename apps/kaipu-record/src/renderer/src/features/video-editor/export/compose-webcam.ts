@@ -90,9 +90,18 @@ export interface WebcamCtx {
 }
 
 /**
+ * The recording's end as `webcamStateAt` takes it: a missing, zero or NaN length is no end
+ * (`undefined` takes the function's default), the same rule the preview applies.
+ */
+export function webcamEndSeconds(seconds: number | undefined): number | undefined {
+  return seconds && Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
+}
+
+/**
  * What to draw for the webcam at source time `sourceTs` on a `frame`-sized output, or null:
  * no webcam, a hidden segment, no decoded webcam frame there (before its first frame, after
- * its last), or an empty frame.
+ * its last), or an empty frame. `endSeconds` is the recording's end in source seconds, for
+ * the last block's return (see `webcamStateAt`).
  */
 export function planWebcamDraw(
   webcam: WebcamScene | null,
@@ -100,12 +109,13 @@ export function planWebcamDraw(
   frame: FrameSize,
   cameraScale: number,
   image: FrameSize | null,
+  endSeconds?: number,
 ): WebcamDrawPlan | null {
   if (!webcam || !image || !(image.width > 0) || !(image.height > 0)) return null;
   // The state, not the bare layout: the same function and rectangle the preview reads, so
   // the two agree on where the bubble is at this source time. Every field but the position
   // comes from the layout in force (it applies at once, ADR 0039).
-  const state = webcamStateAt({ webcam }, sourceTs);
+  const state = webcamStateAt({ webcam }, sourceTs, webcamEndSeconds(endSeconds));
   if (!state) return null;
   const layout = state.layout;
   const rect = webcamStateRect(state, frame, cameraScale);

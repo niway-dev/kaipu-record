@@ -273,6 +273,7 @@ async function runExportWithInput(
     overlayWindows: plan.overlayWindows,
     overlayBitmaps: new Map(msg.overlays.map((o) => [o.overlayId, o.bitmap])),
     webcam: plan.webcam,
+    sourceEndSeconds: plan.sourceDurationSeconds,
     // ADR 0051: the preset's background around the picture, drawn last; `none` draws nothing.
     background: plan.background,
     framing: view
@@ -340,6 +341,7 @@ async function runExportWithInput(
             frames: sink.canvases(segment.sourceStart, segment.sourceEnd),
             webcamCursor,
             layer: plan.webcam,
+            sourceEndSeconds: plan.sourceDurationSeconds,
             webcamImageOf,
             fillFps,
             cap,

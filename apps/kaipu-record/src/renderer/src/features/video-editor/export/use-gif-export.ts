@@ -6,7 +6,13 @@ import { captureException } from "@renderer/features/analytics";
 import type { SlideAssetStore } from "../slide-assets";
 import type { VideoScene } from "../scene";
 import type { CameraPath } from "../zoom/camera-path";
-import { buildExportPlan, gifOutputSize, sliceExportPlan, type ExportPlan } from "./export-plan";
+import {
+  buildExportPlan,
+  gifOutputSize,
+  sliceExportPlan,
+  withSourceDuration,
+  type ExportPlan,
+} from "./export-plan";
 import type { GifFps, GifStartMessage, GifWorkerMessage } from "./gif-messages";
 import { prepareWorkerInputs } from "./job-inputs";
 import type { WebcamTrackMessage } from "./export-messages";
@@ -15,6 +21,8 @@ import { mediaUrl } from "@renderer/lib/media-url";
 
 export interface GifJobArgs {
   scene: VideoScene;
+  /** The recording's length in source seconds, for the last camera block's return. */
+  sourceDurationSeconds?: number;
   sourceId: string;
   /** Native size of the source video (the MP4 export's output size). */
   videoWidth: number;
@@ -76,7 +84,11 @@ async function buildStartMessage(
   sourceBlob: Blob,
   webcam: WebcamTrackMessage | null,
 ): Promise<{ message: GifStartMessage; transfer: Transferable[]; plan: ExportPlan }> {
-  const plan = sliceExportPlan(buildExportPlan(args.scene), args.range.start, args.range.end);
+  const plan = sliceExportPlan(
+    withSourceDuration(buildExportPlan(args.scene), args.sourceDurationSeconds),
+    args.range.start,
+    args.range.end,
+  );
   const { overlays, slides, camera, transfer } = await prepareWorkerInputs(args, plan);
   const message: GifStartMessage = {
     type: "start",

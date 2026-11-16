@@ -131,6 +131,51 @@ describe("planWebcamDraw", () => {
       expect(during[0]!.x).not.toBeCloseTo(before.x);
     });
 
+    describe("the last block's return, capped by the recording's end", () => {
+      // The block ends 0.3 s before the recording ends (20 s): its 700 ms return gets half
+      // of that gap, 150 ms, so it is settled on the default layout well before the end.
+      const last = (): WebcamScene =>
+        scene({ position: { x: 0.12, y: 0.82 } }, [
+          {
+            id: "b",
+            start: 10,
+            end: 19.7,
+            mode: "override",
+            layout: { position: TARGET },
+            transition: SLIDE,
+          },
+        ]);
+
+      it("agrees with the preview's formula inside the return and is settled at the end", () => {
+        const s = last();
+        const xs: number[] = [];
+        for (const t of [19.72, 19.78, 19.83]) {
+          const state = webcamStateAt({ webcam: s }, t, 20)!;
+          const plan = planWebcamDraw(s, t, frame, 1, IMAGE, 20)!;
+          expect(plan.rect).toEqual(webcamStateRect(state, frame, 1)!);
+          expect(inside(plan.rect, frame)).toBe(true);
+          xs.push(plan.rect.x);
+        }
+        expect(new Set(xs.map((x) => x.toFixed(3))).size).toBe(3);
+        const home = planWebcamDraw(scene({ position: { x: 0.12, y: 0.82 } }), 0, frame, 1, IMAGE)!;
+        for (const t of [19.86, 19.99]) {
+          expect(planWebcamDraw(s, t, frame, 1, IMAGE, 20)!.rect).toEqual(home.rect);
+        }
+      });
+
+      it("without the end the return keeps its whole duration (no end known)", () => {
+        const s = last();
+        const home = planWebcamDraw(scene({ position: { x: 0.12, y: 0.82 } }), 0, frame, 1, IMAGE)!;
+        expect(planWebcamDraw(s, 19.99, frame, 1, IMAGE)!.rect).not.toEqual(home.rect);
+        // A missing, zero or NaN end is no end.
+        for (const end of [undefined, 0, Number.NaN]) {
+          expect(planWebcamDraw(s, 19.99, frame, 1, IMAGE, end)!.rect).toEqual(
+            planWebcamDraw(s, 19.99, frame, 1, IMAGE)!.rect,
+          );
+        }
+      });
+    });
+
     it("takes every other field from the layout in force at once, with no animation", () => {
       const s = scene({}, [
         {

@@ -73,6 +73,11 @@ export interface OutputComposerOptions {
   /** The webcam layer (ADR 0038); null for a recording without a webcam track. */
   webcam?: WebcamScene | null;
   /**
+   * The recording's length in source seconds (the plan's `sourceDurationSeconds`): the last
+   * camera block's return settles before it, as in the preview. Absent means no end known.
+   */
+  sourceEndSeconds?: number;
+  /**
    * The background around the picture (ADR 0051), drawn last on the output. Null, absent or
    * `none` composes exactly as before (stored padding, radius and shadow are never drawn).
    */
@@ -469,6 +474,7 @@ export function createOutputComposer(opts: OutputComposerOptions): OutputCompose
           target,
           camera ? cameraAt(camera, at).scale : 1,
           webcamFrame.image,
+          opts.sourceEndSeconds,
         );
         if (plan) {
           drawWebcamLayer(target.ctx as unknown as WebcamCtx, webcamFrame.image.image, plan);

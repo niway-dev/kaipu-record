@@ -5,7 +5,12 @@
  * exports use, so a capture and an export of the same time never differ.
  */
 import type { VideoScene } from "../scene";
-import { buildExportPlan, locateTimelineTime, type ExportPlan } from "./export-plan";
+import {
+  buildExportPlan,
+  locateTimelineTime,
+  withSourceDuration,
+  type ExportPlan,
+} from "./export-plan";
 
 /**
  * A playhead resting on the very end of the timeline lies past the last frame's span; the
@@ -24,9 +29,13 @@ export interface StillPlan {
   kind: "clip" | "slide";
 }
 
-export function planStill(scene: VideoScene, playheadSeconds: number): StillPlan {
+export function planStill(
+  scene: VideoScene,
+  playheadSeconds: number,
+  sourceDurationSeconds?: number,
+): StillPlan {
   // Throws on an empty timeline: there is nothing to capture.
-  const plan = buildExportPlan(scene);
+  const plan = withSourceDuration(buildExportPlan(scene), sourceDurationSeconds);
   const latest = Math.max(0, plan.totalDuration - STILL_END_MARGIN_S);
   const requested = Number.isFinite(playheadSeconds) ? playheadSeconds : 0;
   const timelineSeconds = Math.min(Math.max(0, requested), latest);

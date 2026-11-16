@@ -53,6 +53,8 @@ function run(opts: {
   webcam?: { layer: WebcamScene; seconds: number; fps?: number } | null;
   maxFps?: number | null;
   prevOutTs?: number | null;
+  /** The recording's end in source seconds (the plan's `sourceDurationSeconds`). */
+  recordingEnd?: number;
 }) {
   const clip = vi.fn();
   const emitted: { outTs: number; duration: number }[] = [];
@@ -66,6 +68,7 @@ function run(opts: {
     cap: createFrameRateCap(opts.maxFps ?? null),
     minFrameGap: opts.maxFps ? 1 / opts.maxFps : 0,
     prevOutTs: opts.prevOutTs ?? null,
+    sourceEndSeconds: opts.recordingEnd,
     compose: { clip },
     emit: async (outTs, duration) => void emitted.push({ outTs, duration }),
   });
@@ -279,5 +282,72 @@ describe("exportClipFrames — a camera section's slide", () => {
     expect(whole).toBeCloseTo(34, 1);
     expect(trimmed).toBeCloseTo(4, 1);
     expect(whole - trimmed).toBeCloseTo(30, 1);
+  });
+
+  describe("the last block's return, capped by the recording's end", () => {
+    // The block ends at 5.7 s and the recording at 6 s: the 700 ms return gets half the
+    // 0.3 s gap, 150 ms, and is settled at 5.85 s.
+    const lastBlock = (): WebcamScene => ({
+      layout: WEBCAM_DEFAULTS,
+      segments: [
+        {
+          id: "b",
+          start: 4.2,
+          end: 5.7,
+          mode: "override",
+          layout: { position: { x: 0.88, y: 0.18 } },
+          transition: SLIDE,
+        },
+      ],
+    });
+    const times = (calls: unknown[][], from: number, to: number): number[] =>
+      calls
+        .map((c) => (c[4] as { sourceTs: number } | null)?.sourceTs ?? -1)
+        .filter((t) => t >= from && t < to);
+
+    it("emits the return's frames only until the capped return finishes, at the preview's places", async () => {
+      const layer = lastBlock();
+      const { result, clip } = run({
+        segment: SEGMENT,
+        screens: [screen(4, 2)],
+        webcam: { layer, seconds: 10, fps: 10 },
+        recordingEnd: 6,
+      });
+      await result;
+      // 150 ms at 30 fps: five fills (5.70 .. 5.83), each in a distinct place.
+      const returning = clip.mock.calls.filter((c) => {
+        const t = (c[4] as { sourceTs: number } | null)?.sourceTs ?? -1;
+        return t >= 5.7 && t < 5.85;
+      });
+      expect(returning.length).toBeGreaterThanOrEqual(4);
+      expect(returning.length).toBeLessThanOrEqual(6);
+      const xs = returning.map(
+        (c) =>
+          planWebcamDraw(layer, (c[4] as { sourceTs: number }).sourceTs, FRAME, 1, IMAGE, 6)!.rect
+            .x,
+      );
+      for (let i = 1; i < xs.length; i++) expect(xs[i]).not.toBeCloseTo(xs[i - 1]!, 3);
+      // After it, only the 10 fps webcam's own frames: at most 2 in the last 0.15 s.
+      expect(times(clip.mock.calls, 5.85 + 1 / 30, 6).length).toBeLessThanOrEqual(2);
+      // Every drawn place is the one the preview's function gives with the same end.
+      for (const c of clip.mock.calls) {
+        const t = (c[4] as { sourceTs: number } | null)?.sourceTs;
+        if (t === undefined) continue;
+        const state = webcamStateAt({ webcam: layer }, t, 6)!;
+        expect(state.from !== null).toBe((t >= 5.7 && t < 5.85) || (t >= 4.2 && t < 4.9));
+      }
+    });
+
+    it("without the recording's end the return keeps its whole 700 ms", async () => {
+      const layer = lastBlock();
+      const { result, clip } = run({
+        segment: SEGMENT,
+        screens: [screen(4, 2)],
+        webcam: { layer, seconds: 10, fps: 10 },
+      });
+      await result;
+      // Still sliding at the clip's end: the fills at 5.90, 5.93 and 5.97 move the bubble.
+      expect(times(clip.mock.calls, 5.85 + 1 / 30, 6).length).toBeGreaterThanOrEqual(3);
+    });
   });
 });

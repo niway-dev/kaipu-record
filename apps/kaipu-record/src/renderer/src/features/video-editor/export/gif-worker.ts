@@ -131,6 +131,7 @@ function createFrameRenderer(
     overlayWindows: plan.overlayWindows,
     overlayBitmaps: new Map(msg.overlays.map((o) => [o.overlayId, o.bitmap])),
     webcam: plan.webcam,
+    sourceEndSeconds: plan.sourceDurationSeconds,
     // ADR 0051: composed on `full` (source size) like the rest, then downscaled by `grab()`.
     background: plan.background,
   });

@@ -62,6 +62,13 @@ export interface ExportPlan {
    */
   webcam: WebcamScene | null;
   /**
+   * The recording's length in SOURCE seconds, when the caller knows it: the last camera
+   * block's return to the default layout settles before it, in the preview and in the
+   * export alike (ADR 0039). Not a clip's end: a cut never moves a block. Absent means no
+   * end is known, and the return keeps its whole duration.
+   */
+  sourceDurationSeconds?: number;
+  /**
    * The picture's background (ADR 0051), drawn last by the composer; the worker reads
    * `hasBackground` — with `none` the padding, radius and shadow are never drawn.
    */
@@ -116,6 +123,18 @@ export function buildExportPlan(scene: VideoScene): ExportPlan {
     webcam: scene.webcam,
     background: scene.background ?? DEFAULT_BACKGROUND,
   };
+}
+
+/**
+ * `plan` with the recording's length in source seconds, when it is usable: a missing, zero,
+ * NaN or infinite one returns the plan as it was. A separate step rather than a parameter of
+ * `buildExportPlan`, whose arity is pinned so nothing about the view can travel into it: the
+ * recording's length is a fact of the source, not of the view.
+ */
+export function withSourceDuration(plan: ExportPlan, seconds: number | undefined): ExportPlan {
+  return seconds && Number.isFinite(seconds) && seconds > 0
+    ? { ...plan, sourceDurationSeconds: seconds }
+    : plan;
 }
 
 /**
