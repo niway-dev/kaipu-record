@@ -284,7 +284,7 @@ describe("with a real vault", () => {
       expect(await readTranscript("no-transcript")).toEqual({ status: "none" });
     });
 
-    it("answers ready, not stale, and maps segment-failed to the shared reason", async () => {
+    it("answers ready, not stale, and keeps the unresolved reason", async () => {
       const item = await addMedia("fresh");
       const hash = await sha256FileBase64(item.filePath);
       await writeFile(
@@ -296,7 +296,7 @@ describe("with a real vault", () => {
       expect(result.stale).toBe(false);
       expect(result.transcript!.words).toHaveLength(1);
       expect(result.transcript!.unresolved).toEqual([
-        { startMs: 500, endMs: 1000, reason: "failed" },
+        { startMs: 500, endMs: 1000, reason: "segment-failed" },
       ]);
     });
 

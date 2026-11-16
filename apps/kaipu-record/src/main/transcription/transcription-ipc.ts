@@ -8,11 +8,7 @@
 import { join } from "node:path";
 import { ipcMain } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
-import type {
-  TranscriptDocument,
-  TranscriptionJobRequest,
-  TranscriptReadResult,
-} from "@shared/types/transcription";
+import type { TranscriptionJobRequest, TranscriptReadResult } from "@shared/types/transcription";
 import { sha256FileBase64 } from "../library/content-hash";
 import { broadcast, currentVault, scopedAdmitted } from "../library";
 import { withItemLock } from "../library/item-lock";
@@ -21,7 +17,7 @@ import { activeWorkspace } from "../workspaces";
 import { locateEngine } from "./engine/engine-locator";
 import { runBatch } from "./engine/sherpa-supervisor";
 import { ModelStore } from "./models/model-store";
-import { readTranscriptFile, type Transcript } from "./transcript-file";
+import { readTranscriptFile } from "./transcript-file";
 import {
   MAX_CHUNK_BYTES,
   TranscriptionService,
@@ -146,19 +142,8 @@ async function readTranscript(id: string): Promise<TranscriptReadResult> {
   }
   return {
     status: "ready",
-    transcript: toDocument(read.transcript),
+    transcript: read.transcript,
     stale: hash !== read.transcript.media.contentHash,
-  };
-}
-
-/** The file says `segment-failed`; the shared contract says `failed`. */
-function toDocument(transcript: Transcript): TranscriptDocument {
-  return {
-    ...transcript,
-    unresolved: transcript.unresolved.map((interval) => ({
-      ...interval,
-      reason: interval.reason === "segment-failed" ? "failed" : interval.reason,
-    })),
   };
 }
 

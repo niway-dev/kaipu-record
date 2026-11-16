@@ -146,7 +146,7 @@ export interface TranscriptSegment {
 export interface TranscriptUnresolvedInterval {
   startMs: number;
   endMs: number;
-  reason: "empty-with-speech" | "failed";
+  reason: "empty-with-speech" | "segment-failed";
 }
 
 /** `.kaipu/<id>.transcript.json`, schema version 1. */
