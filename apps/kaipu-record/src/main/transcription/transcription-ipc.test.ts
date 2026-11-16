@@ -367,3 +367,68 @@ describe("with a real vault", () => {
     });
   });
 });
+
+describe("a dev override", () => {
+  const REAL_STATUS = {
+    availability: { status: "available" },
+    defaultModelId: "m",
+    models: [
+      {
+        id: "m",
+        label: "M",
+        languages: ["en"],
+        sizeBytes: 100,
+        location: "/models/m",
+        license: { name: "L", attribution: "A", url: "https://example.test" },
+        status: { state: "missing" },
+      },
+    ],
+    job: null,
+  };
+
+  beforeAll(() => {
+    service.status.mockImplementation((async () => REAL_STATUS) as never);
+    registerTranscriptionIpc({
+      resourcesPath: state.dir,
+      modelsRoot: join(state.dir, "models"),
+      service: service as unknown as TranscriptionService,
+      override: { kind: "ready" },
+    });
+  });
+  afterAll(() => {
+    // The first registration's handlers are the ones the other tests use.
+    registerTranscriptionIpc({
+      resourcesPath: state.dir,
+      modelsRoot: join(state.dir, "models"),
+      service: service as unknown as TranscriptionService,
+    });
+    service.status.mockImplementation((async () => ({ job: null })) as never);
+  });
+
+  it("answers the status from the override, built on the real one", async () => {
+    const status = (await call(IPC_CHANNELS.transcriptionStatus)) as typeof REAL_STATUS;
+    expect(service.status).toHaveBeenCalled();
+    expect(status.models[0]!.status).toEqual({ state: "ready" });
+    expect(status.models[0]!.location).toBe("/models/m");
+  });
+
+  it("never starts a real download", async () => {
+    expect(await call(IPC_CHANNELS.transcriptionModelDownload, "m")).toEqual({
+      status: "cancelled",
+    });
+    expect(service.downloadModel).not.toHaveBeenCalled();
+  });
+
+  it("removes nothing", async () => {
+    await call(IPC_CHANNELS.transcriptionModelRemove, "m");
+    expect(service.removeModel).not.toHaveBeenCalled();
+  });
+
+  it("refuses a job as unavailable", async () => {
+    expect(await call(IPC_CHANNELS.transcriptionJobBegin, STAMP, REQUEST)).toEqual({
+      status: "refused",
+      reason: "unavailable",
+    });
+    expect(service.begin).not.toHaveBeenCalled();
+  });
+});

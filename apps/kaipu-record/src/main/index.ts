@@ -36,6 +36,7 @@ import { ROUTES } from "@shared/routes";
 import { registerRecordingSourceHandlers } from "./recording-sources";
 import { registerPermissionHandlers } from "./permissions";
 import { broadcastLibraryChanged, currentVault, registerLibraryVaultHandlers } from "./library";
+import { resolveTranscriptionOverride } from "./transcription/dev-override";
 import { registerTranscriptionIpc } from "./transcription/transcription-ipc";
 import type { TranscriptionService } from "./transcription/transcription-service";
 import { vaultActivity, type ActivityLease } from "./library/vault-activity";
@@ -1095,6 +1096,9 @@ app.whenReady().then(async () => {
     resourcesPath: process.resourcesPath,
     appPath: app.isPackaged ? undefined : app.getAppPath(),
     modelsRoot: join(app.getPath("userData"), "models"),
+    override: resolveTranscriptionOverride(process.env.KAIPU_TRANSCRIPTION, {
+      isPackaged: app.isPackaged,
+    }),
   });
 
   // Screenshots: capture/copy/save IPC handlers.

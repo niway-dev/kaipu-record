@@ -8,12 +8,18 @@
 import { join } from "node:path";
 import { ipcMain } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
-import type { TranscriptionJobRequest, TranscriptReadResult } from "@shared/types/transcription";
+import type {
+  TranscriptionBeginResult,
+  TranscriptionJobRequest,
+  TranscriptionModelDownloadResult,
+  TranscriptReadResult,
+} from "@shared/types/transcription";
 import { sha256FileBase64 } from "../library/content-hash";
 import { broadcast, currentVault, scopedAdmitted } from "../library";
 import { withItemLock } from "../library/item-lock";
 import { META_DIR, isPlainItemId } from "../library/library-vault";
 import { activeWorkspace } from "../workspaces";
+import { applyTranscriptionOverride, type TranscriptionOverride } from "./dev-override";
 import { locateEngine } from "./engine/engine-locator";
 import { runBatch } from "./engine/sherpa-supervisor";
 import { ModelStore } from "./models/model-store";
@@ -37,6 +43,12 @@ export interface TranscriptionIpcDeps {
   modelsRoot: string;
   /** Test seam: the service the handlers drive. */
   service?: TranscriptionService;
+  /**
+   * `KAIPU_TRANSCRIPTION` already resolved for this build (`resolveTranscriptionOverride`), for
+   * the UI state catalog. While it is set, main reports the pinned model state and touches
+   * neither the network nor the model folder.
+   */
+  override?: TranscriptionOverride | null;
 }
 
 /** The active workspace's vault, as the job sees it. Called inside the workspace gate. */
@@ -150,20 +162,34 @@ async function readTranscript(id: string): Promise<TranscriptReadResult> {
 export function registerTranscriptionIpc(deps: TranscriptionIpcDeps): TranscriptionService {
   const service = deps.service ?? createService(deps);
 
-  ipcMain.handle(IPC_CHANNELS.transcriptionStatus, () => service.status());
-  ipcMain.handle(IPC_CHANNELS.transcriptionModelDownload, (_event, id: unknown) =>
-    service.downloadModel(parseId(id, "model id")),
+  const { override } = deps;
+
+  ipcMain.handle(IPC_CHANNELS.transcriptionStatus, async () => {
+    const status = await service.status();
+    return override ? applyTranscriptionOverride(override, status) : status;
+  });
+  ipcMain.handle(
+    IPC_CHANNELS.transcriptionModelDownload,
+    async (_event, id: unknown): Promise<TranscriptionModelDownloadResult> => {
+      const modelId = parseId(id, "model id");
+      // A stray click in a shot must not start a 640 MB download.
+      return override ? { status: "cancelled" } : service.downloadModel(modelId);
+    },
   );
   ipcMain.handle(IPC_CHANNELS.transcriptionModelCancel, (_event, id: unknown) =>
     service.cancelModel(parseId(id, "model id")),
   );
-  ipcMain.handle(IPC_CHANNELS.transcriptionModelRemove, (_event, id: unknown) =>
-    service.removeModel(parseId(id, "model id")),
-  );
+  ipcMain.handle(IPC_CHANNELS.transcriptionModelRemove, async (_event, id: unknown) => {
+    const modelId = parseId(id, "model id");
+    if (!override) await service.removeModel(modelId);
+  });
 
   ipcMain.handle(
     IPC_CHANNELS.transcriptionJobBegin,
-    scopedAdmitted("library", (request: unknown) => service.begin(parseRequest(request))),
+    scopedAdmitted("library", async (request: unknown): Promise<TranscriptionBeginResult> => {
+      const parsed = parseRequest(request);
+      return override ? { status: "refused", reason: "unavailable" } : service.begin(parsed);
+    }),
   );
   ipcMain.handle(IPC_CHANNELS.transcriptionJobChunk, (_event, jobId: unknown, pcm: unknown) =>
     service.chunk(parseId(jobId, "job id"), parseChunk(pcm)),
