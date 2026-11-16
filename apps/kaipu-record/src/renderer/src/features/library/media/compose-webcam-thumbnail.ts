@@ -1,19 +1,17 @@
+import { CanvasSink } from "mediabunny";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
 import {
   drawWebcamLayer,
   planWebcamDraw,
   type WebcamCtx,
+  type WebcamImage,
 } from "@renderer/features/video-editor/export/compose-webcam";
-import {
-  openWebcamSource,
-  type WebcamSource,
-} from "@renderer/features/video-editor/export/webcam-source";
 import {
   seedWebcamScene,
   type WebcamScene,
 } from "@renderer/features/video-editor/webcam/webcam-model";
-import { generateThumbnail } from "@renderer/lib/generate-thumbnail";
 import { mediaUrl } from "@renderer/lib/media-url";
+import { openRecordingInput } from "@renderer/lib/open-recording-input";
 
 /**
  * The recorder grabs its screen thumbnail about this long after the take starts
@@ -39,8 +37,15 @@ export interface ThumbnailCanvas {
 export interface ComposeIo {
   /** The screen thumbnail as an image. */
   loadScreen(input: ComposeWebcamThumbnailInput): Promise<ScreenImage>;
-  /** The webcam file's decoder, or null when there is nothing to decode. */
-  openWebcam(input: ComposeWebcamThumbnailInput, scene: WebcamScene): Promise<WebcamSource | null>;
+  /**
+   * ONE frame of the webcam file, the one on screen at `webcamSeconds` of the file's own
+   * timeline (read by range, never the whole file), or null when it has none there or the
+   * file cannot be decoded.
+   */
+  decodeWebcamFrame(
+    input: ComposeWebcamThumbnailInput,
+    webcamSeconds: number,
+  ): Promise<WebcamImage | null>;
   createCanvas(width: number, height: number): ThumbnailCanvas;
 }
 
@@ -81,38 +86,70 @@ export async function composeWebcamThumbnail(
   const scene: WebcamScene = { ...seeded, segments: [] };
 
   const screen = await io.loadScreen(input);
-  const source = await io.openWebcam(input, scene);
-  if (!source) throw new Error("webcam thumbnail: the webcam file has no video");
-  try {
-    const frame =
-      (await firstFrame(source, THUMBNAIL_SOURCE_SECONDS)) ??
-      (await firstFrame(source, input.webcam.startOffsetMs / 1000));
-    if (!frame) throw new Error("webcam thumbnail: no webcam frame to draw");
+  // The webcam file's time for the take's ~150 ms (its time 0 is `startOffsetMs` into the
+  // take, so a webcam that started later has no frame yet and shows its first one).
+  const wanted = webcamFrameSeconds(input.webcam.startOffsetMs);
+  const frame =
+    (await io.decodeWebcamFrame(input, wanted)) ??
+    (wanted > 0 ? await io.decodeWebcamFrame(input, 0) : null);
+  if (!frame) throw new Error("webcam thumbnail: no webcam frame to draw");
 
-    const size = { width: screen.width, height: screen.height };
-    const plan = planWebcamDraw(scene, 0, size, 1, frame);
-    if (!plan) throw new Error("webcam thumbnail: the bubble has no room on the frame");
+  const size = { width: screen.width, height: screen.height };
+  const plan = planWebcamDraw(scene, 0, size, 1, frame);
+  if (!plan) throw new Error("webcam thumbnail: the bubble has no room on the frame");
 
-    const canvas = io.createCanvas(size.width, size.height);
-    canvas.ctx.drawImage(screen.image, 0, 0, size.width, size.height);
-    drawWebcamLayer(canvas.ctx, frame.image, plan);
-    const jpeg = await canvas.encode();
-    if (!jpeg) throw new Error("webcam thumbnail: could not encode the JPEG");
-    return jpeg;
-  } finally {
-    source.dispose();
-  }
+  const canvas = io.createCanvas(size.width, size.height);
+  canvas.ctx.drawImage(screen.image, 0, 0, size.width, size.height);
+  drawWebcamLayer(canvas.ctx, frame.image, plan);
+  const jpeg = await canvas.encode();
+  if (!jpeg) throw new Error("webcam thumbnail: could not encode the JPEG");
+  return jpeg;
 }
 
-/** The webcam frame on screen at `sourceSeconds`, or null when there is none (or no decode). */
-async function firstFrame(source: WebcamSource, sourceSeconds: number) {
-  for await (const image of source.framesAt([sourceSeconds])) return image;
-  return null;
+/** The webcam file's time that shows what the recorder's thumbnail showed: never negative. */
+export function webcamFrameSeconds(startOffsetMs: number): number {
+  return Math.max(0, THUMBNAIL_SOURCE_SECONDS - startOffsetMs / 1000);
+}
+
+/** `seconds` held inside [0, duration): a time past the last frame asks for the last one. */
+export function clampIntoDuration(seconds: number, duration: number): number {
+  if (!(duration > 0)) return 0;
+  return Math.max(0, Math.min(seconds, duration - 0.001));
 }
 
 async function bytesToImage(blob: Blob): Promise<ScreenImage> {
   const bitmap = await createImageBitmap(blob);
   return { image: bitmap, width: bitmap.width, height: bitmap.height };
+}
+
+/** Poster width when the screen frame is decoded from the recording (as `generateThumbnail`). */
+const FALLBACK_POSTER_WIDTH = 640;
+
+/**
+ * One frame of a vault video at `seconds`, by Range requests through `UrlSource`: only the
+ * container metadata and the packets that frame needs are read, so a one-hour take is not
+ * loaded into memory. The Input is disposed as soon as the frame is drawn into its canvas.
+ */
+async function decodeFrameAt(
+  url: string,
+  seconds: number,
+  width?: number,
+): Promise<WebcamImage | null> {
+  const input = openRecordingInput(url);
+  try {
+    const track = await input.getPrimaryVideoTrack();
+    if (!track) return null;
+    const at = clampIntoDuration(seconds, await track.computeDuration());
+    const sink = new CanvasSink(track, width ? { width } : undefined);
+    const wrapped = await sink.getCanvas(at);
+    if (!wrapped) return null;
+    const canvas = wrapped.canvas as HTMLCanvasElement;
+    return { image: canvas, width: canvas.width, height: canvas.height };
+  } catch {
+    return null;
+  } finally {
+    input.dispose();
+  }
 }
 
 const browserIo: ComposeIo = {
@@ -121,20 +158,16 @@ const browserIo: ComposeIo = {
       const response = await fetch(screenUrl);
       if (response.ok) return bytesToImage(await response.blob());
     }
-    // No thumbnail on disk: decode the screen frame from the recording itself.
-    const video = await (await fetch(mediaUrl("recording", id))).blob();
-    const jpeg = await generateThumbnail(video, THUMBNAIL_SOURCE_SECONDS);
-    if (!jpeg) throw new Error("webcam thumbnail: no screen frame");
-    return bytesToImage(new Blob([jpeg], { type: "image/jpeg" }));
+    // No thumbnail on disk: the screen frame comes from the recording, by range as well.
+    const url = mediaUrl("recording", id);
+    const frame =
+      (await decodeFrameAt(url, THUMBNAIL_SOURCE_SECONDS, FALLBACK_POSTER_WIDTH)) ??
+      (await decodeFrameAt(url, 0, FALLBACK_POSTER_WIDTH));
+    if (!frame) throw new Error("webcam thumbnail: no screen frame");
+    return frame;
   },
-  async openWebcam({ id, webcam }, scene) {
-    const response = await fetch(mediaUrl("webcam", id));
-    if (!response.ok) throw new Error(`webcam thumbnail: webcam file ${response.status}`);
-    return openWebcamSource(
-      { blob: await response.blob(), startOffsetMs: webcam.startOffsetMs },
-      scene,
-    );
-  },
+  decodeWebcamFrame: ({ id }, webcamSeconds) =>
+    decodeFrameAt(mediaUrl("webcam", id), webcamSeconds),
   createCanvas(width, height) {
     const canvas = document.createElement("canvas");
     canvas.width = width;
