@@ -594,6 +594,94 @@ describe("webcam layer", () => {
     expect(layer.segments.map((s) => s.id)).toEqual(["ok"]);
   });
 
+  describe("transition", () => {
+    const withTransition = (transition: unknown) =>
+      segments([{ ...OVERRIDE, transition }])!.scene.webcam!.segments[0]!;
+
+    it("round-trips kind, duration and easing", () => {
+      const transition = { kind: "slide", ms: 900, easing: "ease-out" } as const;
+      const scene: VideoScene = {
+        ...initialScene(10),
+        webcam: {
+          layout: LAYOUT as never,
+          segments: [{ ...OVERRIDE, transition }] as never,
+        },
+      };
+      const loaded = parseSession(serializeSession(scene))!.scene.webcam!.segments[0]!;
+      expect(loaded.transition).toEqual(transition);
+      const cut = { kind: "cut", ms: 300, easing: "linear" } as const;
+      expect(withTransition(cut).transition).toEqual(cut);
+    });
+
+    it.each([
+      ["a bad kind", { kind: "wipe", ms: 900, easing: "linear" }, { kind: "slide" }],
+      ["a non-numeric duration", { kind: "cut", ms: "slow", easing: "linear" }, { ms: 700 }],
+      [
+        "a null duration (NaN saved as JSON)",
+        { kind: "cut", ms: null, easing: "linear" },
+        { ms: 700 },
+      ],
+      ["an unknown easing", { kind: "cut", ms: 900, easing: "bounce" }, { easing: "back" }],
+    ])("loads %s as the default for that field only", (_label, raw, expected) => {
+      const loaded = withTransition(raw).transition!;
+      expect(loaded).toMatchObject(expected);
+      expect(loaded).toEqual({ kind: "cut", ms: 900, easing: "linear", ...expected });
+    });
+
+    it("clamps the duration to the limits", () => {
+      expect(withTransition({ kind: "slide", ms: 20, easing: "back" }).transition!.ms).toBe(200);
+      expect(withTransition({ kind: "slide", ms: 90000, easing: "back" }).transition!.ms).toBe(
+        2000,
+      );
+    });
+
+    it("ignores a transition that is not an object, so the block is a Cut", () => {
+      for (const bad of ["slide", 7, null, true]) {
+        expect(withTransition(bad).transition).toBeUndefined();
+      }
+    });
+
+    it("never gives a hidden segment a transition", () => {
+      const hidden = segments([
+        { ...HIDDEN, transition: { kind: "slide", ms: 700, easing: "back" } },
+      ])!.scene.webcam!.segments[0]!;
+      expect(hidden).toEqual(HIDDEN);
+    });
+
+    it("opens a session saved before transitions with every block as a Cut, other fields intact", () => {
+      const layer = segments([HIDDEN, OVERRIDE])!.scene.webcam!;
+      expect(layer.segments).toEqual([HIDDEN, OVERRIDE]);
+      expect(layer.segments.every((s) => s.transition === undefined)).toBe(true);
+      expect(
+        parseSession(
+          serializeSession(
+            parseSession(
+              JSON.stringify({
+                version: 1,
+                scene: {
+                  items: [CLIP_ITEM],
+                  overlays: [],
+                  webcam: { layout: LAYOUT, segments: [HIDDEN, OVERRIDE] },
+                },
+              }),
+            )!.scene,
+          ),
+        )!.scene.webcam!.segments,
+      ).toEqual([HIDDEN, OVERRIDE]);
+    });
+
+    it("keeps a block's size and shape through load and save, next to its transition", () => {
+      const block = {
+        ...OVERRIDE,
+        layout: { position: { x: 0.8, y: 0.2 }, size: 0.4, shape: "rounded", cornerRadius: 0.3 },
+        transition: { kind: "slide", ms: 700, easing: "back" },
+      };
+      const scene = segments([block])!.scene;
+      const reopened = parseSession(serializeSession(scene))!.scene.webcam!.segments[0]!;
+      expect(reopened).toEqual(block);
+    });
+  });
+
   it("accepts a segment a float short of the minimum, as the edge drag produces", () => {
     const start = 15.190612791990477;
     const end = 16.190612791990475;
