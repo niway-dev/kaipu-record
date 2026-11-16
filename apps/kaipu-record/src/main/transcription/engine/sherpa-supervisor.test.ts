@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   buildCliArgs,
   runBatch,
@@ -224,9 +224,20 @@ const timer = setInterval(() => {
   });
 
   it("escalates to SIGKILL when the child ignores SIGTERM", async () => {
-    const cli = await fakeCli(`process.on("SIGTERM", () => {}); setInterval(() => {}, 1000);`);
+    // The child writes `ready` once its SIGTERM handler is installed; aborting earlier would let
+    // the default handler kill it and the test would not reach the SIGKILL path.
+    const cli = await fakeCli(
+      `process.on("SIGTERM", () => {});
+require("fs").writeFileSync(require("path").join(__dirname, "ready"), "1");
+setInterval(() => {}, 1000);`,
+    );
     const { promise, controller, pid } = run(cli);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    const ready = join(dirname(cli), "ready");
+    const waitStart = Date.now();
+    while (!existsSync(ready)) {
+      if (Date.now() - waitStart > 10_000) throw new Error("the fake engine never became ready");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
     const started = Date.now();
     controller.abort();
     const error = await rejection(promise);
@@ -263,7 +274,7 @@ const timer = setInterval(() => {
       `const chunk = "x".repeat(1 << 20);
 (function pump() { while (process.stdout.write(chunk)) {} process.stdout.once("drain", pump); })();`,
     );
-    const { promise, pid } = run(cli);
+    const { promise, pid } = run(cli, { maxStdoutBytes: 1 << 20 });
     const error = await rejection(promise);
     expect(error.code).toBe("output-too-large");
     expect(alive(pid()!)).toBe(false);

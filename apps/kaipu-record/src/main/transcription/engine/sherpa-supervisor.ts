@@ -61,6 +61,8 @@ export interface RunBatchOptions {
   /** The whole batch, model load included. On expiry the child is SIGKILLed. */
   deadlineMs: number;
   signal: AbortSignal;
+  /** More stdout than this rejects `output-too-large`. Default `MAX_STDOUT_BYTES`; a test seam. */
+  maxStdoutBytes?: number;
   /** Called once with the child's pid right after it starts. */
   onSpawn?: (pid: number) => void;
   /** Test seam. */
@@ -112,6 +114,7 @@ export function runBatch(options: RunBatchOptions): Promise<CliResult[]> {
   const { cliPath, libDir, modelDir, wavPaths, deadlineMs, signal, onSpawn } = options;
   const spawnImpl = options.spawnImpl ?? nodeSpawn;
   const threads = options.threads ?? 4;
+  const stdoutLimit = options.maxStdoutBytes ?? MAX_STDOUT_BYTES;
 
   return new Promise<CliResult[]>((resolve, reject) => {
     if (signal.aborted) {
@@ -221,14 +224,12 @@ export function runBatch(options: RunBatchOptions): Promise<CliResult[]> {
     child.stdout?.on("data", (chunk: Buffer) => {
       if (failure) return;
       stdoutBytes += chunk.length;
-      if (stdoutBytes > MAX_STDOUT_BYTES) {
+      if (stdoutBytes > stdoutLimit) {
         pending = "";
         kill(
-          new SherpaError(
-            "output-too-large",
-            `The engine printed more than ${MAX_STDOUT_BYTES} bytes`,
-            { stderrTail: tail() },
-          ),
+          new SherpaError("output-too-large", `The engine printed more than ${stdoutLimit} bytes`, {
+            stderrTail: tail(),
+          }),
           "SIGKILL",
         );
         return;
