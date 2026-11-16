@@ -3,8 +3,8 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { useTranslations, type Translator } from "@kaipu/i18n";
 import { Button } from "@kaipu/ui";
 import { reportError } from "@renderer/features/analytics";
-import type { TranscribeControlState } from "@renderer/features/transcription/transcribe-control";
 import { ModelOffer } from "@renderer/features/transcription/model-offer";
+import { STARTABLE } from "@renderer/features/transcription/transcribe-control";
 import { useTranscribeControl } from "@renderer/features/transcription/use-transcribe-control";
 import { useTranscript } from "@renderer/features/transcription/use-transcript";
 import { useTranscriptionStatus } from "@renderer/features/transcription/use-transcription-status";
@@ -25,17 +25,6 @@ import {
   type UnresolvedMark,
 } from "./transcript-panel-model";
 import styles from "./transcript-panel.module.css";
-
-/**
- * The control states `control.start()` acts on; the same set `useTranscribeControl` uses. In any
- * other state the "Transcribe again" button would do nothing, so it is disabled and says why.
- */
-const CAN_START: ReadonlySet<TranscribeControlState["kind"]> = new Set([
-  "idle",
-  "failed",
-  "stale",
-  "invalid",
-]);
 
 /** After the user scrolls the list by hand, playback stops pulling the current word into view. */
 const FOLLOW_PAUSE_MS = 4000;
@@ -237,7 +226,7 @@ export function TranscriptPanel({
   // The offer for a missing model is a start of its own kind; every other state that cannot
   // start leaves the button disabled, with the reason as its tooltip.
   const canTranscribeAgain =
-    CAN_START.has(control.state.kind) || control.state.kind === "needs-model";
+    STARTABLE.has(control.state.kind) || control.state.kind === "needs-model";
   const transcribeAgainHint = canTranscribeAgain
     ? undefined
     : control.state.kind === "busy-elsewhere"

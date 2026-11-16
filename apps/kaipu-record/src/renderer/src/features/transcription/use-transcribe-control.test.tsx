@@ -264,8 +264,25 @@ describe("useTranscribeControl", () => {
     expect(result.current.state.kind).toBe("done");
   });
 
-  it("shows failed when main refuses the start, so the click leaves a trace", async () => {
+  it("shows failed when main refuses the start because the item changed, so the click leaves a trace", async () => {
     stubApi({ getTranscriptionStatus: async () => statusOf({ state: "ready" }) });
+    run.mockResolvedValueOnce({ status: "refused", reason: "invalid-item" });
+    const { result } = renderHook(() => useTranscribeControl(ITEM));
+    await waitFor(() => expect(result.current.state.kind).toBe("idle"));
+
+    await act(async () => {
+      await result.current.start();
+    });
+    expect(result.current.state).toEqual({ kind: "failed", failure: "item-changed" });
+  });
+
+  it("recovers to needs-model when main says the model is gone and the status was stale", async () => {
+    // The renderer still believes the model is ready; main knows it was removed elsewhere.
+    const reads = [statusOf({ state: "ready" }), statusOf({ state: "missing" })];
+    let call = 0;
+    stubApi({
+      getTranscriptionStatus: async () => reads[Math.min(call++, reads.length - 1)]!,
+    });
     run.mockResolvedValueOnce({ status: "refused", reason: "model-missing" });
     const { result } = renderHook(() => useTranscribeControl(ITEM));
     await waitFor(() => expect(result.current.state.kind).toBe("idle"));
@@ -273,7 +290,9 @@ describe("useTranscribeControl", () => {
     await act(async () => {
       await result.current.start();
     });
-    expect(result.current.state).toEqual({ kind: "failed", failure: "model-missing" });
+
+    // Not a dead-end "failed": a click now opens the model offer instead of repeating the refusal.
+    await waitFor(() => expect(result.current.state.kind).toBe("needs-model"));
   });
 
   it("cancel stops this item's job and does nothing for another item's", async () => {

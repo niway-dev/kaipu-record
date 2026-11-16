@@ -76,3 +76,11 @@ export function transcribeControlState(input: TranscribeControlInput): Transcrib
   if (!input.defaultModelReady) return { kind: "needs-model" };
   return { kind: "idle" };
 }
+
+/** The control states `start()` acts on; a button that offers to start is enabled only in these. */
+export const STARTABLE: ReadonlySet<TranscribeControlState["kind"]> = new Set([
+  "idle",
+  "failed",
+  "stale",
+  "invalid",
+]);

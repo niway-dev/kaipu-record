@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TranscriptionJobProgress } from "@shared/types/transcription";
 import { NoAudioError } from "./audio/decode-audio";
 import { runTranscriptionJob } from "./audio/run-transcription-job";
+import { refreshTranscriptionStatus } from "./use-transcription-status";
 import {
   cancelRunningTranscription,
   getSnapshot,
@@ -11,8 +12,10 @@ import {
 } from "./transcription-job-store";
 
 vi.mock("./audio/run-transcription-job", () => ({ runTranscriptionJob: vi.fn() }));
+vi.mock("./use-transcription-status", () => ({ refreshTranscriptionStatus: vi.fn() }));
 
 const run = vi.mocked(runTranscriptionJob);
+const refreshStatus = vi.mocked(refreshTranscriptionStatus);
 
 const ARGS = {
   itemId: "item-1",
@@ -50,6 +53,7 @@ function controlledJob() {
 }
 
 beforeEach(() => {
+  refreshStatus.mockClear();
   resetTranscriptionJobStore();
   run.mockReset();
 });
@@ -120,8 +124,6 @@ describe("transcription job store", () => {
   });
 
   it.each([
-    ["unavailable", "engine-unavailable"],
-    ["model-missing", "model-missing"],
     ["busy", "busy"],
     ["invalid-item", "item-changed"],
   ] as const)(
@@ -132,11 +134,25 @@ describe("transcription job store", () => {
       await expect(startTranscription(ARGS)).resolves.toEqual({ status: "refused", reason });
       expect(getSnapshot().running).toBeNull();
       expect(getSnapshot().failures).toEqual({ "item-1": failure });
+      expect(refreshStatus).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["unavailable", "model-missing"] as const)(
+    "a %s refusal means the model status is stale: it refreshes the status and records no failure",
+    async (reason) => {
+      run.mockResolvedValueOnce({ status: "refused", reason });
+
+      await expect(startTranscription(ARGS)).resolves.toEqual({ status: "refused", reason });
+      expect(getSnapshot().running).toBeNull();
+      // A stored failure would outrank the corrected control and make every retry hit this again.
+      expect(getSnapshot().failures).toEqual({});
+      expect(refreshStatus).toHaveBeenCalledTimes(1);
     },
   );
 
   it("clears a refusal's failure when the item starts again", async () => {
-    run.mockResolvedValueOnce({ status: "refused", reason: "model-missing" });
+    run.mockResolvedValueOnce({ status: "refused", reason: "invalid-item" });
     await startTranscription(ARGS);
     const job = controlledJob();
     const again = startTranscription(ARGS);

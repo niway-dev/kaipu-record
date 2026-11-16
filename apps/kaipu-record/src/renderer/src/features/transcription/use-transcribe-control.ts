@@ -1,6 +1,10 @@
 import { useCallback, useRef, useSyncExternalStore } from "react";
 import { useFlag } from "@renderer/features/analytics/use-flag";
-import { transcribeControlState, type TranscribeControlState } from "./transcribe-control";
+import {
+  STARTABLE,
+  transcribeControlState,
+  type TranscribeControlState,
+} from "./transcribe-control";
 import {
   cancelRunningTranscription,
   getSnapshot,
@@ -35,18 +39,12 @@ export interface TranscribeControl {
   offer: TranscriptionStatusApi;
 }
 
-const STARTABLE: ReadonlySet<TranscribeControlState["kind"]> = new Set([
-  "idle",
-  "failed",
-  "stale",
-  "invalid",
-]);
-
 /**
- * The Transcribe control of one video. Existence of the transcript comes from the item's
- * `transcribedAt` or `hasTranscript` plus jobs finished in this session, never from reading the file: a list of
- * cards must not read one file per card. So this hook never yields `stale` or `invalid`; a
- * caller that has read the transcript passes those to `transcribeControlState` itself.
+ * The Transcribe control of one video. This hook never reads the transcript file itself: a list
+ * of cards must not read one file per card. Existence comes from the item's `transcribedAt`, or
+ * from `hasTranscript` when the caller has already read the file (the editor does), plus jobs
+ * finished in this session. So it never yields `stale` or `invalid`; a caller that has read the
+ * transcript passes those to `transcribeControlState` itself.
  */
 export function useTranscribeControl(item: TranscribeControlItem): TranscribeControl {
   const flagOn = useFlag("transcription");

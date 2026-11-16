@@ -5,6 +5,7 @@ import type {
 } from "@shared/types/transcription";
 import { NoAudioError } from "./audio/decode-audio";
 import { runTranscriptionJob, type TranscriptionRefusal } from "./audio/run-transcription-job";
+import { refreshTranscriptionStatus } from "./use-transcription-status";
 
 export interface RunningTranscription {
   itemId: string;
@@ -65,10 +66,14 @@ export function resetTranscriptionJobStore(): void {
   snapshot = EMPTY;
 }
 
-/** What the user is told when main refuses to begin a job. */
-const REFUSAL_FAILURE: Record<TranscriptionRefusal, StartFailure> = {
-  unavailable: "engine-unavailable",
-  "model-missing": "model-missing",
+/**
+ * What the user is told when main refuses to begin a job. `unavailable` and `model-missing` are
+ * absent on purpose: they mean the renderer's model status is out of date (the model was removed
+ * in another window or deleted from disk), so a stored failure would rank above the corrected
+ * "needs model" or "unavailable" control and click-retrying would hit the same refusal. Those two
+ * refresh the shared status instead and the control follows it.
+ */
+const REFUSAL_FAILURE: Partial<Record<TranscriptionRefusal, StartFailure>> = {
   busy: "busy",
   "invalid-item": "item-changed",
 };
@@ -139,6 +144,9 @@ export async function startTranscription(args: {
   }
 
   if (controller === own) controller = null;
+  if (outcome.status === "refused" && REFUSAL_FAILURE[outcome.reason] === undefined) {
+    void refreshTranscriptionStatus();
+  }
   // One publish for the end of the job and its result, so a subscriber never sees the job gone
   // before the failure or the done count that explains it.
   publish({
@@ -146,8 +154,8 @@ export async function startTranscription(args: {
     failures:
       outcome.status === "failed"
         ? { ...snapshot.failures, [itemId]: outcome.failure }
-        : outcome.status === "refused"
-          ? { ...snapshot.failures, [itemId]: REFUSAL_FAILURE[outcome.reason] }
+        : outcome.status === "refused" && REFUSAL_FAILURE[outcome.reason] !== undefined
+          ? { ...snapshot.failures, [itemId]: REFUSAL_FAILURE[outcome.reason]! }
           : snapshot.failures,
     doneCounts:
       outcome.status === "done"

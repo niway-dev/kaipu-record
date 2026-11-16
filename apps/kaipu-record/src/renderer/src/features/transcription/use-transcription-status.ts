@@ -103,6 +103,15 @@ function syncPoll(): void {
   }
 }
 
+/**
+ * Re-reads the model status for every consumer. Anything that learns the status changed behind
+ * the store's back (main refusing a job because the model is gone) calls this; with no consumer
+ * mounted it does nothing.
+ */
+export async function refreshTranscriptionStatus(): Promise<void> {
+  await refresh();
+}
+
 async function refresh(): Promise<void> {
   const owner = generation;
   const next = await window.electronAPI.getTranscriptionStatus().catch(() => UNREACHABLE);
