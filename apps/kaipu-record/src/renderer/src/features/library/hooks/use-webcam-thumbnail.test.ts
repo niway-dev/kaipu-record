@@ -4,7 +4,7 @@ import type { LocalRecording } from "@shared/types";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { composeWebcamThumbnail } from "@renderer/features/library/media/compose-webcam-thumbnail";
-import { useWebcamThumbnail } from "./use-webcam-thumbnail";
+import { resetWebcamThumbnailQueue, useWebcamThumbnail } from "./use-webcam-thumbnail";
 
 vi.mock("@renderer/features/library/media/compose-webcam-thumbnail", () => ({
   composeWebcamThumbnail: vi.fn(),
@@ -67,6 +67,7 @@ function written(id: string): LocalRecording {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetWebcamThumbnailQueue();
   composeMock.mockResolvedValue(new ArrayBuffer(3));
   window.electronAPI.writeWebcamThumbnail = vi.fn(async (id: string) => written(id));
 });
@@ -106,6 +107,22 @@ describe("useWebcamThumbnail", () => {
         thumbnailUrl: "kaipu-media://thumb/needs?v=2",
         thumbnailNeedsWebcam: false,
       }),
+    );
+  });
+
+  it("composes a recording once across every page that lists it, and tells each of them", async () => {
+    const library = vi.fn();
+    const detail = vi.fn();
+    const items = [video({ id: "needs" })];
+    const first = renderHook(() => useWebcamThumbnail(items, library));
+    renderHook(() => useWebcamThumbnail(items, detail));
+    first.unmount();
+
+    await waitFor(() => expect(detail).toHaveBeenCalledOnce());
+    expect(composeMock).toHaveBeenCalledTimes(1);
+    expect(library).not.toHaveBeenCalled();
+    expect(detail).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "needs", thumbnailNeedsWebcam: false }),
     );
   });
 
