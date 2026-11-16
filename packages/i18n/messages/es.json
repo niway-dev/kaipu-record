@@ -1735,7 +1735,7 @@
     "webcamShrinkAmount": "Tamaño durante el zoom",
     "webcamShrinkNote": "Deja más espacio al detalle ampliado; la cámara mantiene su posición de todos modos.",
     "webcamHideHere": "Ocultar la cámara aquí",
-    "hintHideWebcam": "Oculta la cámara desde el cabezal hasta el siguiente tramo de cámara.",
+    "hintHideWebcam": "Oculta la cámara durante 10 segundos desde el cabezal, o hasta la siguiente parte de cámara o el final de la grabación.",
     "webcamHideNoRoom": "No queda espacio suficiente para ocultar la cámara.",
     "webcamHideOnSlide": "Una diapositiva no tiene cámara que ocultar.",
     "webcamSegmentTitle": "Tramo de cámara {n}",

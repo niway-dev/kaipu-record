@@ -10,7 +10,7 @@
  */
 import { useCallback, useMemo } from "react";
 import { useLatest } from "../use-latest";
-import { freeWindowAt, isSourceRangeVisible, sourceTimeAtTimeline } from "../source-time";
+import { isSourceRangeVisible, sourceTimeAtTimeline } from "../source-time";
 import type { LayoutEntry } from "../timeline";
 import type { VideoScene } from "../scene";
 import type { VideoSceneController } from "../use-video-scene";
@@ -21,10 +21,9 @@ import {
   setWebcamLayout,
   setWebcamTransition,
   updateWebcamSegment,
+  webcamPartRoom,
 } from "./webcam-edits";
 import {
-  WEBCAM_MIN_SEGMENT_SECONDS,
-  WEBCAM_PART_SECONDS,
   webcamOverrideAt,
   type WebcamLayout,
   type WebcamScene,
@@ -106,13 +105,7 @@ export function useWebcamEditing({
       if (at === null) return { ok: false, reason: "on-slide" };
       const existing = current.segments.find((s) => at >= s.start && at < s.end);
       if (existing) return { ok: true, id: existing.id };
-      const window = freeWindowAt(
-        current.segments,
-        at,
-        WEBCAM_PART_SECONDS,
-        sourceDuration,
-        WEBCAM_MIN_SEGMENT_SECONDS,
-      );
+      const window = webcamPartRoom(controller.scene, at, sourceDuration);
       if (!window) return { ok: false, reason: "no-room" };
       const { scene: next, id } = addWebcamSegment(
         controller.scene,

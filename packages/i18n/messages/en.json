@@ -1735,7 +1735,7 @@
     "webcamShrinkAmount": "Size during zoom",
     "webcamShrinkNote": "Makes room for the zoomed detail; the webcam keeps its position either way.",
     "webcamHideHere": "Hide webcam here",
-    "hintHideWebcam": "Hides the webcam from the playhead to the next webcam section.",
+    "hintHideWebcam": "Hides the webcam for 10 seconds from the playhead, or until the next camera part or the end of the recording.",
     "webcamHideNoRoom": "Not enough room left to hide the webcam.",
     "webcamHideOnSlide": "A slide has no webcam to hide.",
     "webcamSegmentTitle": "Webcam section {n}",
