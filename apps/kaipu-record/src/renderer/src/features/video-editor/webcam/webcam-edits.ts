@@ -242,3 +242,41 @@ export function setWebcamTransition(
     segments: webcam.segments.map((s) => (s.id === id ? { ...s, transition: next } : s)),
   });
 }
+
+/** The layout fields a part can carry of its own that the panel has no control for. */
+const OWN_LOOK_KEYS = ["shape", "size", "cornerRadius"] as const;
+
+/**
+ * Which of shape, size and corners a part keeps of its own (older sessions saved them in the
+ * part). Empty for a hidden range, a part with no layout patch and a part that only holds a
+ * position, so the panel shows its note and button for the non-empty answer only.
+ */
+export function webcamOwnLook(part: WebcamSegment): Array<"shape" | "size" | "corners"> {
+  if (part.mode !== "override" || !part.layout) return [];
+  const own = part.layout;
+  const found: Array<"shape" | "size" | "corners"> = [];
+  if (own.shape !== undefined) found.push("shape");
+  if (own.size !== undefined) found.push("size");
+  if (own.cornerRadius !== undefined) found.push("corners");
+  return found;
+}
+
+/**
+ * "Use the whole-video look": drop a part's own shape, size and corner radius so it takes the
+ * whole video's, keeping its position, transition, mirror and every other field. The part stays
+ * even when nothing is left in its layout patch. The SAME scene back when it has none of the
+ * three, so an unneeded click never pushes an undo step.
+ */
+export function clearWebcamPartLook(scene: VideoScene, id: string): VideoScene {
+  const webcam = scene.webcam;
+  const part = webcam?.segments.find((s) => s.id === id);
+  if (!webcam || !part || webcamOwnLook(part).length === 0) return scene;
+  const kept: Partial<WebcamLayout> = { ...part.layout };
+  for (const key of OWN_LOOK_KEYS) delete kept[key];
+  const next: WebcamSegment = { ...part, layout: kept };
+  if (Object.keys(kept).length === 0) delete next.layout;
+  return withWebcam(scene, {
+    ...webcam,
+    segments: webcam.segments.map((s) => (s.id === id ? next : s)),
+  });
+}

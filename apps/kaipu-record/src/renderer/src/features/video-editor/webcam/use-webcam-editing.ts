@@ -16,6 +16,7 @@ import type { VideoScene } from "../scene";
 import type { VideoSceneController } from "../use-video-scene";
 import {
   addWebcamSegment,
+  clearWebcamPartLook,
   dragWebcamSegmentEdge,
   removeWebcamSegment,
   setWebcamLayout,
@@ -51,6 +52,8 @@ export interface WebcamEditing {
   /** A live transition change during a gesture; `end()` makes it one undo step. */
   liveTransition(id: string, patch: Partial<WebcamTransition>): void;
   remove(id: string): void;
+  /** "Use the whole-video look": drops a part's own shape, size and corners, as one undo step. */
+  takeWholeLook(id: string): void;
   edgeDrag(
     id: string,
     edge: "start" | "end",
@@ -141,6 +144,14 @@ export function useWebcamEditing({
     [controller],
   );
 
+  const takeWholeLook = useCallback(
+    (id: string) => {
+      if (controller.interacting) return;
+      controller.commit(clearWebcamPartLook(controller.scene, id));
+    },
+    [controller],
+  );
+
   const controllerRef = useLatest(controller);
   const edgeDrag = useCallback(
     (
@@ -181,6 +192,7 @@ export function useWebcamEditing({
     commitTransition,
     liveTransition,
     remove,
+    takeWholeLook,
     edgeDrag,
     commitLayout,
     begin: controller.beginInteract,

@@ -28,6 +28,7 @@ import { formatClock, formatPrecise } from "./format";
 import { HistorySlider } from "../history-slider";
 import { NAME_LABEL } from "../webcam-name-label";
 import type { WebcamEditing } from "../../webcam/use-webcam-editing";
+import { webcamOwnLook } from "../../webcam/webcam-edits";
 import type { FrameSize } from "../../webcam/webcam-layout";
 import {
   WEBCAM_DEFAULTS,
@@ -343,6 +344,47 @@ function ArrivalControls({
   );
 }
 
+const OWN_LOOK_LABEL = {
+  shape: "webcamOwnShape",
+  size: "webcamOwnSize",
+  corners: "webcamOwnCorners",
+} as const;
+
+/**
+ * A part saved with its own shape, size or corners (older sessions) keeps playing them; this
+ * says so and offers the whole video's look. Nothing is rewritten by opening the panel.
+ */
+function OwnLookNote({
+  part,
+  edits,
+}: {
+  part: WebcamSegment;
+  edits: WebcamEditing;
+}): React.JSX.Element | null {
+  const t = useTranslations("videoEditor");
+  const own = webcamOwnLook(part);
+  if (own.length === 0) return null;
+  const names = own.map((key) => t(OWN_LOOK_LABEL[key]));
+  const what =
+    names.length > 1
+      ? `${names.slice(0, -1).join(", ")} ${t("webcamOwnAnd")} ${names[names.length - 1]}`
+      : names[0];
+  return (
+    <>
+      <p className={styles.note} data-testid="webcam-own-look">
+        {t("webcamOwnLook", { what })}
+      </p>
+      <button
+        type="button"
+        className={styles.secondaryButton}
+        onClick={() => edits.takeWholeLook(part.id)}
+      >
+        {t("webcamUseWholeLook")}
+      </button>
+    </>
+  );
+}
+
 /** "This part" with a part there: its place, how it arrives, when it ends, and removing it. */
 function PartTab({
   webcam,
@@ -373,6 +415,7 @@ function PartTab({
         label={t("webcamPosition")}
         trailing={`${formatPrecise(range.from)} – ${formatPrecise(range.to)} · ${t("webcamPartLength", { seconds: (part.end - part.start).toFixed(1) })}`}
       />
+      <OwnLookNote part={part} edits={edits} />
       <ArrivalControls part={part} edits={edits} />
       {sliding && (
         <button type="button" className={webcamStyles.playButton} onClick={() => onPlaySlide(part)}>

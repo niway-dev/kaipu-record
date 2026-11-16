@@ -37,6 +37,7 @@ function makeEdits(): WebcamEditing {
     commitTransition: vi.fn(),
     liveTransition: vi.fn(),
     remove: vi.fn(),
+    takeWholeLook: vi.fn(),
     edgeDrag: vi.fn(),
     commitLayout: vi.fn(),
     begin: vi.fn(),
@@ -276,6 +277,100 @@ describe("This part, with a part there", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove this part" }));
     expect(edits.remove).toHaveBeenCalledWith("part-1");
     expect(onRemoved).toHaveBeenCalledOnce();
+  });
+});
+
+describe("a part saved with its own look", () => {
+  const legacy = (layout: Partial<WebcamLayout>): WebcamSegment => ({
+    ...PART,
+    layout: { position: { x: 0.88, y: 0.18 }, ...layout },
+  });
+  const note = (): HTMLElement | null => screen.queryByTestId("webcam-own-look");
+  const button = (): HTMLElement | null =>
+    screen.queryByRole("button", { name: "Use the whole-video look" });
+
+  it("says it has its own shape and size and offers the whole-video look", () => {
+    const part = legacy({ shape: "rectangle", size: 0.33 });
+    const { edits } = renderPanel({ segment: part, webcam: sceneOf({}, [part]) });
+    expect(note()).toHaveTextContent("This part has its own shape and size.");
+    fireEvent.click(button()!);
+    expect(edits.takeWholeLook).toHaveBeenCalledTimes(1);
+    expect(edits.takeWholeLook).toHaveBeenCalledWith("part-1");
+    expect(edits.commitLayout).not.toHaveBeenCalled();
+  });
+
+  it("names a size alone, a shape alone and corners", () => {
+    const sizeOnly = legacy({ size: 0.3 });
+    const { unmount } = render(
+      <WebcamPanel {...panelProps({ segment: sizeOnly, webcam: sceneOf({}, [sizeOnly]) })} />,
+    );
+    expect(note()).toHaveTextContent("This part has its own size.");
+    unmount();
+    const shapeOnly = legacy({ shape: "rounded" });
+    const second = render(
+      <WebcamPanel {...panelProps({ segment: shapeOnly, webcam: sceneOf({}, [shapeOnly]) })} />,
+    );
+    expect(note()).toHaveTextContent("This part has its own shape.");
+    second.unmount();
+    const all = legacy({ shape: "rounded", size: 0.3, cornerRadius: 0.5 });
+    render(<WebcamPanel {...panelProps({ segment: all, webcam: sceneOf({}, [all]) })} />);
+    expect(note()).toHaveTextContent("This part has its own shape, size and corners.");
+  });
+
+  it("shows neither the note nor the button for a part with only a position", () => {
+    renderPanel();
+    expect(note()).toBeNull();
+    expect(button()).toBeNull();
+  });
+
+  it("shows them on This part only, not on Whole video", () => {
+    const part = legacy({ size: 0.3 });
+    renderPanel({ segment: part, webcam: sceneOf({}, [part]) });
+    openWholeVideo();
+    expect(note()).toBeNull();
+    expect(button()).toBeNull();
+  });
+
+  it("is one undo step through the real editing path, and the note then disappears", () => {
+    let controller!: VideoSceneController;
+    function Harness(): React.JSX.Element {
+      controller = useVideoScene(initialScene(20, { ...WEBCAM_TRACK }));
+      const edits = useWebcamEditing({
+        controller,
+        layout: toLayout(controller.scene.items),
+        sourceDuration: 20,
+      });
+      const webcam = controller.scene.webcam!;
+      const segment = webcam.segments[0] ?? null;
+      return (
+        <WebcamPanel
+          webcam={webcam}
+          segment={segment}
+          range={segment ? { from: segment.start, to: segment.end } : null}
+          playhead={4}
+          edits={edits}
+          frame={FRAME}
+          onPlaySlide={vi.fn()}
+          onRemoved={vi.fn()}
+        />
+      );
+    }
+    const first = legacy({ shape: "rectangle", size: 0.33 });
+    render(<Harness />);
+    act(() => {
+      const scene = controller.scene;
+      controller.commit({ ...scene, webcam: { ...scene.webcam!, segments: [first] } });
+    });
+    expect(note()).not.toBeNull();
+    fireEvent.click(button()!);
+    expect(note()).toBeNull();
+    expect(button()).toBeNull();
+    expect(controller.scene.webcam!.segments[0]!.layout).toEqual({
+      position: { x: 0.88, y: 0.18 },
+    });
+    act(() => controller.undo());
+    expect(controller.scene.webcam!.segments[0]!.layout).toEqual(first.layout);
+    expect(note()).not.toBeNull();
   });
 });
 
