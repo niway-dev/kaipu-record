@@ -1256,6 +1256,7 @@ async function runProfile(name: ProfileName, entries: CatalogEntry[]): Promise<v
           mockShots: profile.mockShots,
           inspectShots: profile.inspectShots,
           corruptCanvas: profile.corruptCanvas,
+          transcripts: profile.transcripts,
           reconcile: profile.reconcile,
         }),
       env: {

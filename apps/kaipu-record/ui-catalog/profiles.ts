@@ -44,6 +44,8 @@ export interface Profile {
   readonly inspectShots?: boolean;
   /** Leave an unparseable canvas document beside "Settings page" (`seed-vault.ts`). */
   readonly corruptCanvas?: boolean;
+  /** Add transcript files beside four recordings: complete, unresolved, stale, unreadable. */
+  readonly transcripts?: boolean;
   /** Seed something "Check and fix files" reports (`seed-vault.ts`). */
   readonly reconcile?: "fixable" | "attention";
   /** Forced feature flags, passed as `KAIPU_FLAG_OVERRIDES` (ignored by packaged builds). */
@@ -214,6 +216,28 @@ export const PROFILES = {
     seed: "demo",
     flags: { transcription: true },
     env: { KAIPU_TRANSCRIPTION: "unavailable" },
+  },
+  "transcription-transcripts": {
+    description:
+      "Like transcription-ready (model installed, KAIPU_TRANSCRIPTION=ready), and the vault adds a transcript file beside four recordings: “Walkthrough 1” complete, “Team notes” with stretches that were not recognised, “Release demo” out of date, “Onboarding flow” unreadable. The Library lists those four as Transcribed.",
+    seed: "demo",
+    flags: { transcription: true },
+    env: { KAIPU_TRANSCRIPTION: "ready" },
+    transcripts: true,
+  },
+  "transcription-job-running": {
+    description:
+      "Like transcription-ready, with a job pinned (KAIPU_TRANSCRIPTION=ready,job:running:3/12, unpackaged builds only): the next Transcribe click starts a job that stays at 3 of 12 until it is cancelled. No engine runs and no transcript is written.",
+    seed: "demo",
+    flags: { transcription: true },
+    env: { KAIPU_TRANSCRIPTION: "ready,job:running:3/12" },
+  },
+  "transcription-job-failed": {
+    description:
+      "Like transcription-ready, with a job pinned to fail (KAIPU_TRANSCRIPTION=ready,job:failed:engine-failed, unpackaged builds only): the next Transcribe click ends with the engine stopping. No engine runs.",
+    seed: "demo",
+    flags: { transcription: true },
+    env: { KAIPU_TRANSCRIPTION: "ready,job:failed:engine-failed" },
   },
   "image-inspect": {
     description:
