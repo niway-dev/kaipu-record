@@ -35,10 +35,8 @@ import {
 import { anyJoinedHasWebcam } from "@renderer/features/video-editor/joined-library";
 import { useJoinedRecordings } from "@renderer/features/video-editor/use-joined-recordings";
 import {
-  boundaryIndexAt,
   clampOverlays,
   entryAt,
-  insertItemAt,
   layoutDuration,
   removeItem,
   setSlideDuration,
@@ -1113,39 +1111,6 @@ function VideoEditor({
     pendingSeekRef.current = Math.min(playback.timelineTime, duration);
   }, [scene, controller, selectedItemId, playback]);
 
-  // Inserts a new image slide at the item boundary nearest the playhead — playhead at
-  // 0 lands before everything (the intro-card case); mid-clip lands at the closest cut
-  // point. Placing a slide mid-clip requires splitting first (predictable, no
-  // auto-split). `controller.commit` already no-ops mid-drag, same as every other
-  // discrete action here. The only source of images is a screenshot added from the Add from Library chooser.
-  const insertImageSlide = useCallback(
-    async (bytes: ArrayBuffer, mime: string) => {
-      // Same guard as every other discrete action: don't mutate the scene while a
-      // trim or overlay drag owns it via begin/updateLive/endInteract.
-      if (controller.interacting) return;
-      // Wrap the image decode in a try/catch so a corrupt or unsupported file
-      // surfaces a clear toast rather than an unhandled rejection.
-      let asset: SlideAsset;
-      try {
-        asset = await assetStoreRef.current.put(bytes, mime);
-      } catch {
-        showToast({ message: t("imageLoadError") });
-        return;
-      }
-      const slide: SlideItem = {
-        id: newId(),
-        kind: "slide",
-        assetId: asset.assetId,
-        duration: 3,
-        naturalWidth: asset.naturalWidth,
-        naturalHeight: asset.naturalHeight,
-      };
-      const index = boundaryIndexAt(toLayout(scene.items), playback.timelineTime);
-      controller.commit({ ...scene, items: insertItemAt(scene.items, index, slide) });
-    },
-    [scene, controller, playback.timelineTime],
-  );
-
   // Image inserts and recording joins commit through one queue (`useSerializedCommit`): each
   // reads the scene after its own awaits, so two of them in the same render gap would overwrite
   // each other.
@@ -1194,7 +1159,7 @@ function VideoEditor({
   // floating image is 10 s). The scene is read after the decode, not from the click, and the
   // boundary is pinned to the clip after it (`anchoredBoundary`), so a join that landed meanwhile
   // does not move the slide. A boundary's index counts clips and slides alike, and so does
-  // `scene.items`, which is what `insertItemAt` splices (see `insertSlideAtBoundary`). True once
+  // `scene.items`, which is what `insertSlideAtBoundary` splices (see `insertSlideAtBoundary`). True once
   // it is in.
   const insertSequenceImage = useCallback(
     (bytes: ArrayBuffer, mime: string, boundary: AddBoundary): Promise<boolean> =>
@@ -1228,7 +1193,8 @@ function VideoEditor({
 
   // A Library screenshot (Add from Library): main reads the vault PNG by id (fetch on the media
   // scheme returns no bytes here), then it goes into the sequence at `boundary`, or floats over
-  // the video with no boundary (flag on), or, with the flag off, is the old 3 s image slide.
+  // the video with no boundary. The modal only opens with `timeline-levels` on, so both exist only
+  // with the flag on.
   const addLibraryScreenshot = useCallback(
     // True when the image went in as something the modal confirms with a toast.
     async (capture: LibraryVideo, boundary: AddBoundary | null = null): Promise<boolean> => {
@@ -1242,11 +1208,9 @@ function VideoEditor({
         return false;
       }
       if (boundary) return insertSequenceImage(bytes, "image/png", boundary);
-      if (levelsOn) return insertFloatingImage(bytes, "image/png");
-      await insertImageSlide(bytes, "image/png");
-      return false;
+      return insertFloatingImage(bytes, "image/png");
     },
-    [insertImageSlide, insertFloatingImage, insertSequenceImage, levelsOn, t],
+    [insertFloatingImage, insertSequenceImage, t],
   );
 
   // Reads the live preview <video>'s native/displayed size at click time (not
