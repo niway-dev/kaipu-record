@@ -1,5 +1,5 @@
 import { ASSETS } from "../fixtures/seed-vault";
-import { catalog, type Step } from "../types";
+import { catalog, type Part, type Step } from "../types";
 import { nc } from "./not-capturable";
 
 const open = (assetId: string): Step => ({ navigate: `/editor/video/${assetId}` });
@@ -118,6 +118,25 @@ const selectBubble: Step = { press: "Enter", target: { area: "editorVideo.webcam
 const cameraTab = (name: string): Step => ({
   click: { area: "editorVideo.webcamPanel", part: { role: "tab", name, exact: true } },
 });
+const transcribeOn = { flag: "transcription", side: "on" } as const;
+/** The Transcript button of the tool column: it puts the panel in the inspector's place. */
+const transcriptRail: Step = rail("Transcript");
+/** Something inside the Transcript panel, which draws its look a moment after it opens. */
+const inPanel = (part: Part): Step => ({ waitFor: { area: "editorVideo.transcriptPanel", part } });
+const panelButton = (name: string): Part => ({ role: "button", name, exact: true });
+/** The panel's own Transcribe button, in the idle look. */
+const panelTranscribe: Step = {
+  click: { area: "editorVideo.transcriptPanel", part: panelButton("Transcribe") },
+};
+/** The Transcribe action in the top bar. */
+const topBarTranscribe: Step = {
+  click: { area: "editorVideo.transcribe", part: panelButton("Transcribe") },
+};
+/** Progress in the top bar's Transcribe, once the pinned job has announced itself. */
+const topBarRunning: Step = {
+  waitFor: { area: "editorVideo.transcribe", part: { text: "Transcribing 3/12" } },
+};
+const offer = "editorVideo.transcribeModelDialog" as const;
 const exportSheet: Step = {
   click: { area: "editorVideo.toolbar", part: { role: "button", name: "Export", exact: true } },
 };
@@ -194,6 +213,7 @@ export const editorVideo = catalog(
         "editorVideo.audioLane:waveform",
       ],
       ready: { video: true },
+      gates: [{ flag: "transcription", side: "off" }],
     },
     playing: {
       profile: "default",
@@ -737,6 +757,237 @@ export const editorVideo = catalog(
       ready: { area: "editorVideo.audioLane" },
       after: [{ action: "restoreVault" }],
     },
+    "transcript-idle": {
+      profile: "transcription-ready",
+      how: "With the flag forced on and the speech model pinned as installed, open “Walkthrough 1”, which has no transcript, and press Transcript in the tool column: the right column offers Transcribe, and the top bar carries the same button.",
+      steps: [
+        open(ASSETS.walkthrough),
+        audioWaveformDrawn,
+        loaded,
+        transcriptRail,
+        inPanel(panelButton("Transcribe")),
+        { waitFor: { area: "editorVideo.transcribe" } },
+      ],
+      demonstrates: ["editorVideo.transcriptPanel:idle", "editorVideo.transcribe:ready"],
+      ready: { area: "editorVideo.transcriptPanel" },
+      gates: [transcribeOn],
+    },
+    "transcript-needs-model": {
+      profile: "transcription-missing",
+      how: "With the speech model pinned as not installed, open “Walkthrough 1” and press Transcript in the tool column: the right column explains the speech model and offers to download it, and the top bar's Transcribe is the same offer.",
+      steps: [
+        open(ASSETS.walkthrough),
+        audioWaveformDrawn,
+        loaded,
+        transcriptRail,
+        inPanel(panelButton("Download the speech model")),
+        { waitFor: { area: "editorVideo.transcribe" } },
+      ],
+      demonstrates: ["editorVideo.transcriptPanel:needsModel", "editorVideo.transcribe:needsModel"],
+      ready: { area: "editorVideo.transcriptPanel" },
+      gates: [transcribeOn],
+    },
+    "transcript-downloading": {
+      profile: "transcription-downloading",
+      how: "With the speech model download pinned at 42%, open “Walkthrough 1” and press Transcript in the tool column: the right column says the model is downloading and shows its progress.",
+      steps: [
+        open(ASSETS.walkthrough),
+        audioWaveformDrawn,
+        loaded,
+        transcriptRail,
+        inPanel({ text: "The speech model is downloading" }),
+      ],
+      demonstrates: ["editorVideo.transcriptPanel:downloading"],
+      ready: { area: "editorVideo.transcriptPanel" },
+      gates: [transcribeOn],
+    },
+    "transcript-unavailable": {
+      profile: "transcription-unavailable",
+      how: "With the engine pinned as unable to run here, open “Walkthrough 1” and press Transcript in the tool column: the right column says transcription cannot run on this Mac.",
+      steps: [
+        open(ASSETS.walkthrough),
+        audioWaveformDrawn,
+        loaded,
+        transcriptRail,
+        inPanel({ text: "Transcription cannot run on this Mac" }),
+      ],
+      demonstrates: ["editorVideo.transcriptPanel:unavailable"],
+      ready: { area: "editorVideo.transcriptPanel" },
+      gates: [transcribeOn],
+    },
+    "transcript-running": {
+      profile: "transcription-job-running",
+      how: "With a job pinned at 3 of 12 parts (no engine runs), open “Walkthrough 1”, press Transcript in the tool column and click Transcribe: the right column shows the progress bar with Cancel, and the top bar shows “Transcribing 3/12”. The state cancels the job afterwards.",
+      steps: [
+        open(ASSETS.walkthrough),
+        audioWaveformDrawn,
+        loaded,
+        transcriptRail,
+        inPanel(panelButton("Transcribe")),
+        panelTranscribe,
+        inPanel({ role: "progressbar" }),
+        inPanel({ text: "3 of 12 parts" }),
+        topBarRunning,
+      ],
+      demonstrates: ["editorVideo.transcriptPanel:transcribing", "editorVideo.transcribe:running"],
+      ready: { area: "editorVideo.transcriptPanel" },
+      gates: [transcribeOn],
+      after: [
+        { click: { area: "editorVideo.transcriptPanel", part: panelButton("Cancel") } },
+        inPanel(panelButton("Transcribe")),
+      ],
+    },
+    "transcript-busy": {
+      profile: "transcription-job-running",
+      how: "With a job pinned at 3 of 12 parts (no engine runs), start it on “Walkthrough 1” with the top bar's Transcribe, then open “Weekly sync” and press Transcript in the tool column: the right column says another video is being transcribed. The state cancels the job afterwards.",
+      steps: [
+        open(ASSETS.walkthrough),
+        audioWaveformDrawn,
+        loaded,
+        topBarTranscribe,
+        topBarRunning,
+        // Through the Library, so the first editor is gone before the second one's waits start.
+        { navigate: "/library" },
+        { waitFor: { area: "library.page" } },
+        open(ASSETS.weeklySync),
+        audioWaveformDrawn,
+        loaded,
+        transcriptRail,
+        inPanel({ text: "Another video is being transcribed" }),
+      ],
+      demonstrates: ["editorVideo.transcriptPanel:busy"],
+      ready: { area: "editorVideo.transcriptPanel" },
+      gates: [transcribeOn],
+      // The job belongs to “Walkthrough 1”; its card in the Library has the Cancel button.
+      after: [
+        { navigate: "/library" },
+        {
+          click: {
+            area: "library.videoCardTranscribe",
+            part: panelButton("Cancel transcription"),
+          },
+        },
+        {
+          waitFor: {
+            area: "library.videoCardTranscribe",
+            part: { role: "status" },
+            state: "hidden",
+          },
+        },
+      ],
+    },
+    "transcript-failed": {
+      profile: "transcription-job-failed",
+      how: "With a job pinned to end with the engine stopping (no engine runs), open “Walkthrough 1”, press Transcript in the tool column and click Transcribe: the right column says the transcription did not finish and offers Try again.",
+      steps: [
+        open(ASSETS.walkthrough),
+        audioWaveformDrawn,
+        loaded,
+        transcriptRail,
+        inPanel(panelButton("Transcribe")),
+        panelTranscribe,
+        inPanel({ text: "The transcription did not finish" }),
+      ],
+      demonstrates: ["editorVideo.transcriptPanel:failed"],
+      ready: { area: "editorVideo.transcriptPanel" },
+      gates: [transcribeOn],
+      // The failure is kept per video for the session: start the next state without it.
+      after: [{ action: "reloadMain" }],
+    },
+    "transcript-no-audio": {
+      profile: "transcription-job-no-audio",
+      how: "With a job pinned to end with the no-audio verdict (no engine runs), open “Walkthrough 1”, press Transcript in the tool column and click Transcribe: the right column says the video has no audio track. A video the editor already knows has no audio shows the same text without the click; the seeded recordings all have audio.",
+      steps: [
+        open(ASSETS.walkthrough),
+        audioWaveformDrawn,
+        loaded,
+        transcriptRail,
+        inPanel(panelButton("Transcribe")),
+        panelTranscribe,
+        inPanel({ text: "This video has no audio track" }),
+      ],
+      demonstrates: ["editorVideo.transcriptPanel:noAudio"],
+      ready: { area: "editorVideo.transcriptPanel" },
+      gates: [transcribeOn],
+      after: [{ action: "reloadMain" }],
+    },
+    "transcript-done": {
+      profile: "transcription-transcripts",
+      how: "With a transcript beside “Walkthrough 1”, open it and press Transcript in the tool column: the right column shows the words in two paragraphs with their times, and the top bar shows the Transcribed badge.",
+      steps: [
+        open(ASSETS.walkthrough),
+        audioWaveformDrawn,
+        loaded,
+        transcriptRail,
+        inPanel({ css: "[data-w]" }),
+        { waitFor: { area: "editorVideo.transcribe", part: { text: "Transcribed" } } },
+      ],
+      demonstrates: ["editorVideo.transcriptPanel:done", "editorVideo.transcribe:done"],
+      ready: { area: "editorVideo.transcriptPanel" },
+      gates: [transcribeOn],
+    },
+    "transcript-unresolved": {
+      profile: "transcription-transcripts",
+      how: "With a transcript beside “Release demo” that has two stretches the engine could not recognise, open it and press Transcript in the tool column: the words show with those stretches marked and a note above them.",
+      steps: [
+        open(ASSETS.releaseDemo),
+        audioWaveformDrawn,
+        loaded,
+        transcriptRail,
+        inPanel({ css: "[data-w]" }),
+        inPanel({ text: "not recognised" }),
+      ],
+      demonstrates: ["editorVideo.transcriptPanel:unresolved"],
+      ready: { area: "editorVideo.transcriptPanel" },
+      gates: [transcribeOn],
+    },
+    "transcript-stale": {
+      profile: "transcription-transcripts",
+      how: "With a transcript beside “Onboarding flow” that was written for an earlier version of the recording, open it and press Transcript in the tool column: a banner says the transcript is out of date over the old words.",
+      steps: [
+        open(ASSETS.onboardingFlow),
+        audioWaveformDrawn,
+        loaded,
+        transcriptRail,
+        inPanel({ css: "[data-w]" }),
+        inPanel({ text: "This transcript is out of date" }),
+      ],
+      demonstrates: ["editorVideo.transcriptPanel:stale"],
+      ready: { area: "editorVideo.transcriptPanel" },
+      gates: [transcribeOn],
+    },
+    "transcript-unreadable": {
+      profile: "transcription-transcripts",
+      how: "With a transcript file beside “Team notes” that is not valid, open it and press Transcript in the tool column: the right column says the saved transcript could not be read and offers Try again.",
+      steps: [
+        open(ASSETS.teamNotes),
+        audioWaveformDrawn,
+        loaded,
+        transcriptRail,
+        inPanel({ text: "The saved transcript could not be read" }),
+      ],
+      demonstrates: ["editorVideo.transcriptPanel:failed"],
+      ready: { area: "editorVideo.transcriptPanel" },
+      gates: [transcribeOn],
+    },
+    "transcribe-model-dialog": {
+      profile: "transcription-missing",
+      how: "With the speech model pinned as not installed, open “Walkthrough 1” and click Transcribe in the top bar: the dialog offers the download. The state closes it with Not now.",
+      steps: [
+        open(ASSETS.walkthrough),
+        audioWaveformDrawn,
+        loaded,
+        { waitFor: { area: "editorVideo.transcribe" } },
+        topBarTranscribe,
+      ],
+      demonstrates: ["editorVideo.transcribeModelDialog:open"],
+      ready: { area: offer },
+      gates: [transcribeOn],
+      after: [
+        { click: { area: offer, part: panelButton("Not now") } },
+        { waitFor: { area: offer, state: "hidden" } },
+      ],
+    },
     "captures-empty": {
       profile: "default",
       how: "Open “Walkthrough 1”, which has no captures, and press Captures in the tool column: the right column shows the empty panel, which points to the camera in the top bar.",
@@ -1112,6 +1363,10 @@ export const editorVideo = catalog(
       "editorVideo.webcamDrop:noRoom": nc(
         "needsSetup",
         "the camera-drop-card drag with the playhead in a gap of under a second before the next block or the end, and no seeded recording has such a gap; webcam-drop-card.test.tsx covers it",
+      ),
+      "editorVideo.transcriptPanel:loading": nc(
+        "transient",
+        "drawn only while the transcript file is read, a few milliseconds for a file this size; a shot would race it",
       ),
       "editorVideo.toolbar:saving": nc(
         "transient",
