@@ -115,7 +115,10 @@ describe("planSegments seams", () => {
     // 27 100 to 27 500 is inside the overlap but in its first 20%, so it cannot be the cut.
     const levels = levelsFor(60_000, [[27_100, 27_500]]);
     const { seams } = planSegments({ durationMs: 60_000, levels });
-    expect(seams[0]!.cutMs).toBeGreaterThanOrEqual(27_600);
+    // The seam clamps to 27 600 (the start of the middle 60%). A search over the whole overlap
+    // would pick the gap's centre and be clamped to exactly 27 600; the restricted search ties
+    // to its first frame, 27 610. Strictly greater tells the two apart.
+    expect(seams[0]!.cutMs).toBeGreaterThan(27_600);
   });
 
   it("copes with levels shorter than the audio", () => {

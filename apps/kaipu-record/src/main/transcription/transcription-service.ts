@@ -215,6 +215,13 @@ async function savePartial(
   await atomicWriteFile(path, JSON.stringify(body));
 }
 
+/**
+ * A job's own work folder is named by its job id, a UUID. Other features keep dotless folders in
+ * the same `.kaipu/tmp` (`placed-parts`, `move-<id>`) that must outlive the sweep, so a dotless
+ * name is a leftover only when it looks like a job id.
+ */
+const JOB_FOLDER = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /** Leftovers of a crashed job: audio and WAV files after an hour, partial files after a week. */
 async function sweepStaleTmp(dir: string, nowMs: number): Promise<void> {
   let names: string[];
@@ -225,7 +232,7 @@ async function sweepStaleTmp(dir: string, nowMs: number): Promise<void> {
   }
   for (const name of names) {
     const isPartial = name.endsWith(".partial.json");
-    const isLeftover = name.endsWith(".pcm") || name.endsWith(".wav") || !name.includes(".");
+    const isLeftover = name.endsWith(".pcm") || name.endsWith(".wav") || JOB_FOLDER.test(name);
     if (!isPartial && !isLeftover) continue;
     const path = join(dir, name);
     try {
@@ -388,6 +395,8 @@ export class TranscriptionService {
   /** Completes the audio, or with `failReason` reports that the renderer could not provide it. */
   async end(jobId: string, failReason?: "no-audio" | "decode-failed"): Promise<void> {
     const job = this.liveJob(jobId);
+    // A repeated `end` must not finish the writer twice and fail a job that is already running.
+    if (job.ending) return;
     job.ending = true;
     job.cancelIdle();
     if (failReason !== undefined) {

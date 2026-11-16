@@ -25,7 +25,8 @@ STAMP="$DEST/.engine-stamp"
 
 lock_get() {
   local value
-  value="$(grep -E "^$1=" "$LOCK" | head -n 1 | cut -d= -f2-)"
+  # `|| true`: under pipefail a missing key would abort here, before the message below.
+  value="$(grep -E "^$1=" "$LOCK" | head -n 1 | cut -d= -f2- || true)"
   if [[ -z "$value" ]]; then
     echo "fetch-speech-engine: $1 is missing from $LOCK" >&2
     exit 1

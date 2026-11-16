@@ -185,11 +185,17 @@ export class PcmWriter {
     await this.enqueue(async () => {
       if (this.closed) throw new Error("PcmWriter is closed");
       this.closed = true;
-      this.finished = true;
       this.handle ??= await open(this.path, "w");
-      await this.handle.sync();
-      await this.handle.close();
+      const handle = this.handle;
       this.handle = null;
+      try {
+        await handle.sync();
+      } finally {
+        // Closed even when the flush failed, so `abort` has no handle left to hold the file open.
+        await handle.close();
+      }
+      // Only after a clean close: a failed finish still lets `abort` delete the partial file.
+      this.finished = true;
     });
     return {
       path: this.path,

@@ -19,9 +19,10 @@ const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
  * Stem tails that would make a stem's sidecar another stem's companion: `Demo.edit` +
  * `.json` is `Demo`'s edit session, `Demo.cursor` + `.json` its cursor track,
  * `Demo.edit.meta` + `.json` its session metadata, `Demo.canvas` + `.json` its canvas document,
- * `Demo.text` + `.json` its recognized-text cache. Longest first.
+ * `Demo.text` + `.json` its recognized-text cache, `Demo.transcript` + `.json` its transcript.
+ * Longest first.
  */
-const COMPANION_TAILS = [".edit.meta", ".canvas", ".cursor", ".edit", ".text"];
+const COMPANION_TAILS = [".edit.meta", ".transcript", ".canvas", ".cursor", ".edit", ".text"];
 /** `.kaipu/<name>.json` files the vault itself owns (the tag registry). */
 const VAULT_OWNED = new Set(["tags"]);
 

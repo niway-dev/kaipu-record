@@ -499,6 +499,14 @@ describe("audio that is not there", () => {
     expect(await tmpEntries(h)).toEqual([]);
   });
 
+  it("ignores a second end for a job that is already running", async () => {
+    const h = makeHarness();
+    const jobId = await startJob(h);
+    await h.service.end(jobId);
+    await h.service.end(jobId);
+    expect(await h.settled()).toMatchObject({ phase: "done" });
+  });
+
   it("treats a job that ends with no chunk at all as no audio", async () => {
     const h = makeHarness();
     const result = await h.service.begin(REQUEST);
@@ -824,8 +832,15 @@ describe("stale tmp cleanup", () => {
   it("runs at the first begin: old audio and WAV files go, partial files stay for a week", async () => {
     const h = makeHarness({ now: () => new Date() }); // the files' ages are real
     const tmp = h.vault.tmpDir;
-    await mkdir(join(tmp, "dead-job"), { recursive: true });
-    await writeFile(join(tmp, "dead-job", "s0.wav"), "x");
+    const deadJob = "3f2b8c1e-9d4a-4e6b-8a57-1c0d2e3f4a5b";
+    await mkdir(join(tmp, deadJob), { recursive: true });
+    await writeFile(join(tmp, deadJob, "s0.wav"), "x");
+    // Other features' folders in the same directory are never this job's to delete.
+    for (const other of ["placed-parts", "move-7"]) {
+      await mkdir(join(tmp, other), { recursive: true });
+      await writeFile(join(tmp, other, "keep.bin"), "x");
+      await ago(join(tmp, other), 2 * 3600_000);
+    }
     const files = {
       "old.pcm": 2 * 3600_000,
       "old.wav": 2 * 3600_000,
@@ -838,11 +853,17 @@ describe("stale tmp cleanup", () => {
       await writeFile(join(tmp, name), "x");
       await ago(join(tmp, name), age);
     }
-    await ago(join(tmp, "dead-job"), 2 * 3600_000);
-    expect((await readdir(tmp)).length).toBe(7);
+    await ago(join(tmp, deadJob), 2 * 3600_000);
+    expect((await readdir(tmp)).length).toBe(9);
 
     await h.service.begin(REQUEST);
-    expect((await readdir(tmp)).sort()).toEqual(["fresh.pcm", "keep.txt", "recent.partial.json"]);
+    expect((await readdir(tmp)).sort()).toEqual([
+      "fresh.pcm",
+      "keep.txt",
+      "move-7",
+      "placed-parts",
+      "recent.partial.json",
+    ]);
   });
 
   it("does not run at construction", async () => {

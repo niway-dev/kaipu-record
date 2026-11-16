@@ -107,6 +107,7 @@ describe("reserved stems (NIW2-560 review)", () => {
     ["Demo.edit.meta", "Demo.edit meta"],
     ["Demo.canvas", "Demo canvas"],
     ["Demo.text", "Demo text"],
+    ["Demo.transcript", "Demo transcript"],
     ["tags", "Kaipu tags"],
     ["TAGS", "Kaipu TAGS"],
   ])("projects %j to a stem that owns no other stem's companion (%j)", (title, stem) => {
@@ -121,6 +122,7 @@ describe("reserved stems (NIW2-560 review)", () => {
     expect(isReservedStem("a.canvas")).toBe(true);
     expect(isReservedStem("a.text")).toBe(true);
     expect(isReservedStem("a.TEXT")).toBe(true);
+    expect(isReservedStem("a.transcript")).toBe(true);
     expect(isReservedStem("Tags")).toBe(true);
     expect(isReservedStem("tags list")).toBe(false);
     expect(isReservedStem("edit")).toBe(false);

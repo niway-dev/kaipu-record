@@ -297,7 +297,7 @@ describe("buildTranscript", () => {
   });
 
   it("does not flag a segment with under 1 s of speech", () => {
-    // Only 0.8 s of voiced frames inside s1: everything else quiet.
+    // Only 0.8 s of voiced frames inside s0: everything else quiet.
     const t = buildTranscript({
       ...base,
       segments: [{ id: "s0", startMs: 0, endMs: 30_000 }],

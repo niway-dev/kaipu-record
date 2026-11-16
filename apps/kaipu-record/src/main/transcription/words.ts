@@ -3,16 +3,10 @@
  * segment) into words in integer milliseconds on the recording's own time axis, and joins the
  * words of overlapping segments into one list.
  */
+import type { CliResult } from "./engine/sherpa-supervisor";
 import type { Seam, Segment } from "./segment";
 
-/** The fields of the `sherpa-onnx-offline` JSON result that word grouping reads. */
-export type CliResult = {
-  text: string;
-  tokens: string[];
-  timestamps: number[];
-  durations?: number[];
-  ys_log_probs?: number[];
-};
+export type { CliResult };
 
 export type Word = {
   /** Assigned by `reconcile` (`w1..wn`, in time order); absent on a segment's own words. */

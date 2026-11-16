@@ -84,7 +84,17 @@ describe.skipIf(!engineDir || !modelDir)("transcription with the real engine", (
       );
     }
     await service.end(begin.jobId);
-    await expect.poll(() => events.at(-1)?.phase, { timeout: 120_000, interval: 250 }).toBe("done");
+    const terminal = ["done", "failed", "cancelled"];
+    await expect
+      .poll(() => terminal.includes(events.at(-1)?.phase ?? ""), {
+        timeout: 120_000,
+        interval: 250,
+      })
+      .toBe(true);
+    const last = events.at(-1);
+    if (last?.phase !== "done") {
+      throw new Error(`the job ended as ${last?.phase} (${last?.failure ?? "no failure code"})`);
+    }
 
     return { transcriptPath, events };
   }
