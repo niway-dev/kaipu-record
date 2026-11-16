@@ -48,6 +48,12 @@ export interface ClipFramesOptions<F extends ClipFrame, W> {
   minFrameGap: number;
   /** The last output timestamp of the previous segments, threaded across cuts. */
   prevOutTs: number | null;
+  /**
+   * A floating image is on screen at this OUTPUT time (undefined: none in the plan). Over a
+   * still screen the held frame is re-composed while one is, so it appears, fades and leaves
+   * at its own times, not at the next decoded frame's.
+   */
+  floatingLive?: (outTs: number) => boolean;
   compose: Pick<OutputComposer, "clip">;
   /** Hand the composed canvas to the encoder at `outTs` for `duration` seconds. */
   emit(outTs: number, duration: number): Promise<void>;
@@ -57,7 +63,8 @@ export interface ClipFramesOptions<F extends ClipFrame, W> {
 export async function exportClipFrames<F extends ClipFrame, W>(
   opts: ClipFramesOptions<F, W>,
 ): Promise<number | null> {
-  const { segment, webcamCursor, layer, cap, compose } = opts;
+  const { segment, webcamCursor, layer, cap, compose, floatingLive } = opts;
+  const outTimeOf = (t: number): number => segment.timelineStart + (t - segment.sourceStart);
   let prevOutTs = opts.prevOutTs;
   // The latest screen frame decoded (kept or not): what the source shows until the next
   // one, so the fills re-compose it. Its canvas stays intact while the next is decoded
@@ -65,18 +72,19 @@ export async function exportClipFrames<F extends ClipFrame, W>(
   let held: F | null = null;
   let fills: WebcamFillState<W> = { from: segment.sourceStart, face: null };
   const fillUntil = async (nextFrame: number): Promise<void> => {
-    if (!held || !webcamCursor || !layer) return;
+    if (!held || ((!webcamCursor || !layer) && !floatingLive)) return;
     const frame = held;
     fills = await fillWebcamGap({
       state: fills,
       nextFrame,
       segmentEnd: segment.sourceEnd,
       fps: opts.fillFps,
-      visible: (t) => webcamAt({ webcam: layer }, t) !== null,
-      frameAt: (t) => webcamCursor.frameAt(t),
+      visible: (t) => layer !== null && webcamAt({ webcam: layer }, t) !== null,
+      frameAt: (t) => (webcamCursor ? webcamCursor.frameAt(t) : Promise.resolve(null)),
+      live: floatingLive ? (t) => floatingLive(outTimeOf(t)) : undefined,
       // `duration` reaches the gap's end: the last fill of a clip must (see fillWebcamGap).
       emit: async (t, face, duration) => {
-        const outTs = segment.timelineStart + (t - segment.sourceStart);
+        const outTs = outTimeOf(t);
         if (prevOutTs !== null && outTs <= prevOutTs) return false;
         if (!cap.keep(outTs)) return false;
         const image = opts.webcamImageOf(face);
@@ -131,6 +139,7 @@ export async function exportClipFrames<F extends ClipFrame, W>(
     fills = {
       ...fills,
       face: layer && webcamAt({ webcam: layer }, webcamTime) ? face : null,
+      live: floatingLive?.(outTs) ?? false,
     };
     // The frame's own decoded duration (at least one cap slot); the muxer stretches it to
     // the next kept frame anyway.

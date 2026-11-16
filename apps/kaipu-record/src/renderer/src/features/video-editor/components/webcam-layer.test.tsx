@@ -5,6 +5,8 @@ import { WEBCAM_DEFAULTS, type WebcamScene } from "../webcam/webcam-model";
 import { WebcamLayer } from "./webcam-layer";
 import { PreviewStage } from "./preview-stage";
 import type { PreviewPlayback } from "../use-preview-playback";
+import { sourceAxis } from "../source-axis";
+import type { PreviewMedia } from "../playback-media";
 
 const FRAME = { width: 1000, height: 1000 };
 const flatPath: CameraPath = buildCameraPath([], null, 30);
@@ -49,7 +51,7 @@ const bubble = (): HTMLElement => screen.getByTestId("webcam-layer");
 
 function renderLayer(
   props: Partial<React.ComponentProps<typeof WebcamLayer>> & {
-    videoRef: React.RefObject<HTMLVideoElement | null>;
+    videoRef: React.RefObject<PreviewMedia | null>;
   },
 ) {
   const handlers = { onSelect: vi.fn(), onBegin: vi.fn(), onMove: vi.fn(), onEnd: vi.fn() };
@@ -451,5 +453,73 @@ describe("PreviewStage — webcam slot", () => {
     const children = Array.from(picture.children);
     expect(children.indexOf(webcam)).toBe(children.indexOf(contentRef.current!) + 1);
     expect(children.indexOf(screen.getByTestId("slot-chrome"))).toBe(children.indexOf(webcam) + 1);
+  });
+});
+
+describe("WebcamLayer over joined recordings (ADR 0058)", () => {
+  const source = (id: string, offset: number, durationSeconds: number) => ({
+    id,
+    assetId: `asset-${id}`,
+    title: id,
+    offset,
+    durationSeconds,
+    width: 1280,
+    height: 720,
+  });
+  // Opened [0, 100] (webcam, 500 ms late); B [3600, 3640] (webcam, 200 ms late); C [7200, 7230] has none.
+  const recordings = {
+    axis: sourceAxis(100, [source("B", 3600, 40), source("C", 7200, 30)]),
+    files: new Map([
+      [null, { src: "kaipu-media://webcam/opened", startOffsetMs: 500 }],
+      ["B", { src: "kaipu-media://webcam/b", startOffsetMs: 200 }],
+      ["C", { src: null, startOffsetMs: 0 }],
+    ]),
+  };
+  const layer = (el: HTMLVideoElement) =>
+    renderLayer({
+      videoRef: { current: el },
+      src: "kaipu-media://webcam/opened",
+      startOffsetMs: 500,
+      recordings,
+    });
+
+  it("plays the active recording's own webcam file, swapped when the playhead crosses over", () => {
+    const { el } = mainVideo(5);
+    layer(el);
+    const cam = loadWebcam(100);
+    expect(cam.getAttribute("src")).toBe("kaipu-media://webcam/opened");
+    act(() => setTime(el, 3610));
+    expect(cam.getAttribute("src")).toBe("kaipu-media://webcam/b");
+    act(() => setTime(el, 20));
+    expect(cam.getAttribute("src")).toBe("kaipu-media://webcam/opened");
+  });
+
+  it("aims the webcam at the LOCAL second minus that file's own offset", () => {
+    const { el } = mainVideo(5);
+    layer(el);
+    const cam = loadWebcam(100);
+    act(() => setTime(el, 3610)); // 10 s into B; its webcam started 200 ms late
+    expect(cam.currentTime).toBeCloseTo(9.8, 6);
+  });
+
+  it("hides the face during clips of a recording that has no webcam, and brings it back", () => {
+    const { el } = mainVideo(5);
+    layer(el);
+    loadWebcam(100);
+    expect(bubble().style.display).toBe("");
+    act(() => setTime(el, 7210));
+    expect(bubble().style.display).toBe("none");
+    act(() => setTime(el, 20));
+    expect(bubble().style.display).toBe("");
+  });
+
+  it("applies the scene's one layout to every recording's face", () => {
+    const { el } = mainVideo(5);
+    layer(el);
+    loadWebcam(100);
+    const before = [bubble().style.left, bubble().style.top, bubble().style.width];
+    act(() => setTime(el, 3610));
+    loadWebcam(100);
+    expect([bubble().style.left, bubble().style.top, bubble().style.width]).toEqual(before);
   });
 });
