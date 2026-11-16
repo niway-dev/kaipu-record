@@ -3,6 +3,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { useTranslations, type Translator } from "@kaipu/i18n";
 import { Button } from "@kaipu/ui";
 import { reportError } from "@renderer/features/analytics";
+import type { TranscribeControlState } from "@renderer/features/transcription/transcribe-control";
 import { ModelOffer } from "@renderer/features/transcription/model-offer";
 import { useTranscribeControl } from "@renderer/features/transcription/use-transcribe-control";
 import { useTranscript } from "@renderer/features/transcription/use-transcript";
@@ -24,6 +25,17 @@ import {
   type UnresolvedMark,
 } from "./transcript-panel-model";
 import styles from "./transcript-panel.module.css";
+
+/**
+ * The control states `control.start()` acts on; the same set `useTranscribeControl` uses. In any
+ * other state the "Transcribe again" button would do nothing, so it is disabled and says why.
+ */
+const CAN_START: ReadonlySet<TranscribeControlState["kind"]> = new Set([
+  "idle",
+  "failed",
+  "stale",
+  "invalid",
+]);
 
 /** After the user scrolls the list by hand, playback stops pulling the current word into view. */
 const FOLLOW_PAUSE_MS = 4000;
@@ -107,14 +119,16 @@ export function TranscriptPanel({
   const rows = useMemo(() => buildRows(paragraphs, marks), [paragraphs, marks]);
 
   const listRef = useRef<HTMLDivElement>(null);
-  const wordEls = useRef<HTMLElement[]>([]);
   const lastUserScroll = useRef(0);
 
-  // The word elements by occurrence index, rebuilt whenever the rows are.
+  // The word elements by occurrence index, rebuilt whenever the list is mounted again or its
+  // rows change. It is state, not a ref: the playing-word and search effects below must run
+  // again on the new elements, or they keep marking ones that left the document.
+  const [wordEls, setWordEls] = useState<HTMLElement[]>([]);
   useLayoutEffect(() => {
-    wordEls.current = listRef.current
-      ? Array.from(listRef.current.querySelectorAll<HTMLElement>("[data-w]"))
-      : [];
+    setWordEls(
+      listRef.current ? Array.from(listRef.current.querySelectorAll<HTMLElement>("[data-w]")) : [],
+    );
   }, [rows, view.kind]);
 
   const reveal = useCallback((el: HTMLElement | undefined, force: boolean): void => {
@@ -131,8 +145,7 @@ export function TranscriptPanel({
   // state changes per frame.
   useEffect(() => {
     if (occurrences.length === 0) return;
-    // This render's elements: a cleanup must clear the ones its own effect marked.
-    const els = wordEls.current;
+    const els = wordEls;
     let current = -1;
     const apply = (time: number): void => {
       const next = occurrenceAtTime(occurrences, time);
@@ -149,7 +162,7 @@ export function TranscriptPanel({
       unsubscribe();
       els[current]?.removeAttribute("data-current");
     };
-  }, [occurrences, rows, subscribeTime, readTime, reveal]);
+  }, [occurrences, wordEls, subscribeTime, readTime, reveal]);
 
   // Search.
   const [query, setQuery] = useState("");
@@ -157,7 +170,7 @@ export function TranscriptPanel({
   const matches = useMemo(() => searchOccurrences(occurrences, query), [occurrences, query]);
   const position = matches.length === 0 ? 0 : Math.min(matchPos, matches.length - 1);
   useEffect(() => {
-    const els = wordEls.current;
+    const els = wordEls;
     for (const index of matches) els[index]?.setAttribute("data-match", "");
     const currentEl = els[matches[position]];
     currentEl?.setAttribute("data-match-current", "");
@@ -168,7 +181,7 @@ export function TranscriptPanel({
         els[index]?.removeAttribute("data-match-current");
       }
     };
-  }, [matches, position, rows, reveal]);
+  }, [matches, position, wordEls, reveal]);
 
   const goToMatch = (next: number): void => {
     if (matches.length === 0) return;
@@ -220,6 +233,20 @@ export function TranscriptPanel({
     }
     void control.start();
   };
+
+  // The offer for a missing model is a start of its own kind; every other state that cannot
+  // start leaves the button disabled, with the reason as its tooltip.
+  const canTranscribeAgain =
+    CAN_START.has(control.state.kind) || control.state.kind === "needs-model";
+  const transcribeAgainHint = canTranscribeAgain
+    ? undefined
+    : control.state.kind === "busy-elsewhere"
+      ? t("transcriptBusy")
+      : control.state.kind === "model-downloading"
+        ? t("transcriptDownloadingBody")
+        : control.state.kind === "unavailable" || control.state.kind === "hidden"
+          ? t("transcriptUnavailable")
+          : undefined;
 
   const showWords = view.kind === "words";
   return (
@@ -344,7 +371,13 @@ export function TranscriptPanel({
                 </p>
               )}
               <div className={styles.actions}>
-                <Button variant="outline" size="sm" onClick={transcribe}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={transcribe}
+                  disabled={!canTranscribeAgain}
+                  title={transcribeAgainHint}
+                >
                   {t("transcriptTranscribeAgain")}
                 </Button>
               </div>

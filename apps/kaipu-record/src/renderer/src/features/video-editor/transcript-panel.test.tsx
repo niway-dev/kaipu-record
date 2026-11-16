@@ -114,8 +114,8 @@ let timeListener: ((t: number) => void) | null = null;
 const unsubscribe = vi.fn();
 let playhead = 0;
 
-function setup(over: Partial<TranscriptPanelProps> = {}): TranscriptPanelProps {
-  const props: TranscriptPanelProps = {
+function baseProps(over: Partial<TranscriptPanelProps> = {}): TranscriptPanelProps {
+  return {
     itemId: "item-1",
     assetId: "asset-1",
     mediaUrl: "kaipu-media://recording/item-1",
@@ -133,6 +133,10 @@ function setup(over: Partial<TranscriptPanelProps> = {}): TranscriptPanelProps {
     onClose: vi.fn(),
     ...over,
   };
+}
+
+function setup(over: Partial<TranscriptPanelProps> = {}): TranscriptPanelProps {
+  const props = baseProps(over);
   render(<TranscriptPanel {...props} />);
   return props;
 }
@@ -262,6 +266,34 @@ describe("TranscriptPanel — states", () => {
     expect(screen.getByTestId("transcript-list")).toHaveTextContent("Hello brave new world.");
     fireEvent.click(within(banner).getByRole("button", { name: "Transcribe again" }));
     expect(start).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["busy-elsewhere", { kind: "busy-elsewhere" } as const, /Another video is being transcribed/],
+    ["model-downloading", { kind: "model-downloading" } as const, /speech model is downloading/],
+  ])(
+    "stale while the control is %s: Transcribe again is disabled and says why",
+    (_name, state, why) => {
+      hooks.transcript.mockReturnValue(READY({}, true));
+      control(state);
+      setup();
+      const button = within(screen.getByTestId("transcript-stale")).getByRole("button", {
+        name: "Transcribe again",
+      });
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute("title", expect.stringMatching(why));
+      fireEvent.click(button);
+      expect(start).not.toHaveBeenCalled();
+    },
+  );
+
+  it("stale and startable: Transcribe again is enabled with no tooltip", () => {
+    hooks.transcript.mockReturnValue(READY({}, true));
+    control({ kind: "idle" });
+    setup();
+    const button = screen.getByRole("button", { name: "Transcribe again" });
+    expect(button).toBeEnabled();
+    expect(button).not.toHaveAttribute("title");
   });
 
   it("stale without the model: Transcribe again opens the offer instead of a job", () => {
@@ -432,6 +464,22 @@ describe("TranscriptPanel — seek and the playing word", () => {
     expect(brave).not.toHaveAttribute("data-current");
   });
 
+  it("marks the playing word again after the list is unmounted and mounted back", () => {
+    const props = baseProps();
+    const { rerender } = render(<TranscriptPanel {...props} />);
+    // A job for this video takes the list's place, then the same transcript is shown again.
+    control({ kind: "running", phase: "transcribing", segmentsDone: 1, segmentsTotal: 2 });
+    rerender(<TranscriptPanel {...props} />);
+    expect(screen.queryByTestId("transcript-list")).toBeNull();
+    control({ kind: "done" });
+    rerender(<TranscriptPanel {...props} />);
+
+    act(() => timeListener?.(2.1));
+    expect(
+      Array.from(document.querySelectorAll("[data-current]")).map((el) => el.textContent),
+    ).toEqual(["new"]);
+  });
+
   it("starts from where the playhead is when it opens", () => {
     playhead = 2.45;
     setup();
@@ -466,6 +514,22 @@ describe("TranscriptPanel — search", () => {
     expect(props.onSeek).toHaveBeenLastCalledWith(1);
     fireEvent.keyDown(input, { key: "Enter", shiftKey: true });
     expect(screen.getByText("2 of 2")).toBeInTheDocument();
+  });
+
+  it("marks the matches again after the list is unmounted and mounted back", () => {
+    const props = baseProps();
+    const { rerender } = render(<TranscriptPanel {...props} />);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "hello" } });
+    expect(document.querySelectorAll("[data-match]")).toHaveLength(2);
+    control({ kind: "running", phase: "transcribing", segmentsDone: 1, segmentsTotal: 2 });
+    rerender(<TranscriptPanel {...props} />);
+    control({ kind: "done" });
+    rerender(<TranscriptPanel {...props} />);
+
+    expect(document.querySelectorAll("[data-match]")).toHaveLength(2);
+    expect(document.querySelector("[data-match-current]")).toBe(
+      document.querySelectorAll("[data-match]")[0],
+    );
   });
 
   it("the previous and next buttons move between matches", () => {
