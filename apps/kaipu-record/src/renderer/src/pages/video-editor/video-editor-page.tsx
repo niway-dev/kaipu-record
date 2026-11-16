@@ -2006,6 +2006,8 @@ function VideoEditor({
           onAddZoom={handleAddZoom}
           privacyDisabled={onSlide}
           onHideWebcam={hasWebcam ? handleHideWebcam : undefined}
+          onChangeCamera={hasWebcam ? handleChangeCamera : undefined}
+          changeCameraBlocked={changeCameraBlocked}
           onOpenCursor={
             cursorData
               ? () => (cursorInspectorOpen ? setCursorInspectorOpen(false) : openCursorInspector())

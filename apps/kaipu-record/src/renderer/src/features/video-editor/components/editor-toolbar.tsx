@@ -11,6 +11,7 @@ import {
   Images,
   Mouse,
   MousePointer2,
+  Move,
   Redo2,
   Square,
   RectangleHorizontal,
@@ -321,6 +322,12 @@ export interface EditorToolRailProps {
   privacyDisabled: boolean;
   /** "Hide webcam here" (ADR 0038). Absent for a recording without a webcam: no button. */
   onHideWebcam?(): void;
+  /** "Change camera from here": a camera block from the playhead, or a split of the one
+   *  under it. Absent for a recording without a webcam: no button. */
+  onChangeCamera?(): void;
+  /** Why the change would do nothing at the playhead, already translated: the button is
+   *  disabled and shows it as its title. Null when it can apply. */
+  changeCameraBlocked?: string | null;
   /** Open the recorded cursor's settings. Absent when the recording cannot redraw its
    *  cursor (it is baked into the video): no button. */
   onOpenCursor?(): void;
@@ -355,6 +362,8 @@ export function EditorToolRail({
   onToggleMuteAll,
   audioMuted,
   onHideWebcam,
+  onChangeCamera,
+  changeCameraBlocked = null,
   onOpenCursor,
   cursorSelected = false,
   onToggleCaptures,
@@ -570,7 +579,22 @@ export function EditorToolRail({
         {audioMuted ? <VolumeOff size={19} /> : <Volume2 size={19} />}
       </button>
       {flyoutFor("audio")}
-      {(onHideWebcam || onOpenCursor) && <span className={styles.railSeparator} aria-hidden />}
+      {(onHideWebcam || onChangeCamera || onOpenCursor) && (
+        <span className={styles.railSeparator} aria-hidden />
+      )}
+      {/* An action like Hide: a new camera position from the playhead on. */}
+      {onChangeCamera && (
+        <button
+          type="button"
+          title={changeCameraBlocked ?? t("hintChangeCamera")}
+          aria-label={t("webcamChangeHere")}
+          disabled={changeCameraBlocked !== null}
+          className={styles.tool}
+          onClick={onChangeCamera}
+        >
+          <Move size={19} />
+        </button>
+      )}
       {/* An action like Zoom: a hidden webcam section from the playhead on. */}
       {onHideWebcam && (
         <button
