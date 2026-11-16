@@ -101,21 +101,41 @@ describe("openWebcamSource", () => {
     expect(sinks[0]!.ranges[0]![1]).toBeCloseTo(0.6);
   });
 
-  it("does not decode a clip that sits wholly before the webcam's first frame", async () => {
+  it("a clip inside the lead-in hold shows the webcam's first frame", async () => {
     const source = (await openWebcamSource(MESSAGE, SCENE))!;
+    const cursor = source.cursorFor(0, 0.4);
+    // Source 0.2 s is webcam −0.3 s: held on frame 0.
+    const first = await cursor.frameAt(0.2);
+    expect((first!.canvas as unknown as { frame: number }).frame).toBe(0);
+    await cursor.close();
+  });
+
+  it("does not decode a clip that sits wholly before the webcam's first frame, hold included", async () => {
+    const source = (await openWebcamSource({ ...MESSAGE, startOffsetMs: 2000 }, SCENE))!;
     const cursor = source.cursorFor(0, 0.4);
     expect(await cursor.frameAt(0.2)).toBeNull();
     expect(sinks[0]!.ranges).toEqual([]);
   });
 
-  it("GIF: one webcam frame per sampled time, none before the first frame or after the last", async () => {
+  it("GIF: one webcam frame per sampled time, none beyond the lead-in hold or after the last", async () => {
     const source = (await openWebcamSource(MESSAGE, SCENE))!;
     const frames: Array<number | null> = [];
     for await (const image of source.framesAt([0.2, 1, 2.4, 2.6])) {
       frames.push(image ? (image.image as unknown as { frame: number }).frame : null);
     }
-    // 0.2 → webcam −0.3 (before); 1 → 0.5 (15); 2.4 → 1.9 (57); 2.6 → 2.1 (past its 2 s).
-    expect(frames).toEqual([null, 15, 57, null]);
+    // 0.2 → webcam −0.3 (inside the hold: first frame); 1 → 0.5 (15); 2.4 → 1.9 (57);
+    // 2.6 → 2.1 (past its 2 s).
+    expect(frames).toEqual([0, 15, 57, null]);
+  });
+
+  it("GIF: a time beyond the lead-in hold has no webcam frame", async () => {
+    const source = (await openWebcamSource({ ...MESSAGE, startOffsetMs: 2000 }, SCENE))!;
+    const frames: Array<number | null> = [];
+    for await (const image of source.framesAt([0.5, 3])) {
+      frames.push(image ? (image.image as unknown as { frame: number }).frame : null);
+    }
+    // 0.5 → webcam −1.5 (beyond the hold); 3 → 1 (30).
+    expect(frames).toEqual([null, 30]);
   });
 });
 

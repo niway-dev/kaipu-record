@@ -80,11 +80,17 @@ describe("createWebcamCursor (lockstep, failure 8)", () => {
     ]);
   });
 
-  it("shifts by the start offset: a webcam that started 100 ms late shows nothing before it", async () => {
+  it("shifts by the start offset: a webcam that started 100 ms late holds its first frame until then", async () => {
     const track = webcamTrack(30, 2);
-    // Webcam time = source − 0.1 s: frames before 0.1 s have no webcam frame yet.
+    // Webcam time = source − 0.1 s: before 0.1 s the first frame is held (the startup lag).
     const picked = await lockstep(track, { sourceStart: 0, sourceEnd: 0.2 }, 100, 60);
-    expect(picked).toEqual([null, null, null, null, null, null, 0, 0, 1, 1, 2, 2]);
+    expect(picked).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2]);
+  });
+
+  it("shows nothing for a lead-in longer than the hold (a camera that really started late)", async () => {
+    const track = webcamTrack(30, 20);
+    const picked = await lockstep(track, { sourceStart: 0, sourceEnd: 0.05 }, 11386, 60);
+    expect(picked).toEqual([null, null, null]);
   });
 
   it("never shows a frame before its time (holds the last one whose timestamp + offset ≤ t)", async () => {
@@ -144,8 +150,15 @@ describe("webcamDecodeWindow", () => {
     expect(webcamDecodeWindow(0, 1, 0, 10)).toEqual({ start: 0, end: 1 });
   });
 
-  it("is null for a clip that ends before the webcam's first frame", () => {
-    expect(webcamDecodeWindow(0, 0.4, 500, 10)).toBeNull();
+  it("decodes the first frame for a clip that ends inside the lead-in hold", () => {
+    const window = webcamDecodeWindow(0, 0.4, 500, 10);
+    expect(window).not.toBeNull();
+    expect(window!.start).toBe(0);
+    expect(window!.end).toBeGreaterThan(0);
+  });
+
+  it("is null for a clip that ends before the webcam's first frame, hold included", () => {
+    expect(webcamDecodeWindow(0, 0.4, 2000, 10)).toBeNull();
   });
 
   it("is null for a clip that starts after the webcam's last frame", () => {

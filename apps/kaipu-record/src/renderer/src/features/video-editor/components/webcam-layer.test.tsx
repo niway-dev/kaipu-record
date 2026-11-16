@@ -40,10 +40,14 @@ function setTime(el: HTMLVideoElement, t: number): void {
   fireEvent(el, new Event("seeked"));
 }
 
-/** The webcam file is `duration` seconds long; until then jsdom says NaN. */
-function loadWebcam(duration: number): HTMLVideoElement {
+/**
+ * The webcam file is `duration` seconds long; until then jsdom says NaN. `readyState` is the
+ * element's (2 = HAVE_CURRENT_DATA: a decoded frame is there; jsdom always says 0).
+ */
+function loadWebcam(duration: number, readyState = 2): HTMLVideoElement {
   const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
   Object.defineProperty(cam, "duration", { configurable: true, get: () => duration });
+  Object.defineProperty(cam, "readyState", { configurable: true, get: () => readyState });
   fireEvent.loadedMetadata(cam);
   return cam;
 }
@@ -129,6 +133,36 @@ describe("WebcamLayer", () => {
     expect(bubble().style.display).toBe("");
     act(() => setTime(el, 10.6));
     expect(bubble().style.display).toBe("none");
+  });
+
+  it.each([75, 500])(
+    "shows the bubble at 0:00, paused, when the webcam started %i ms late (first frame held)",
+    (startOffsetMs) => {
+      const { ref } = mainVideo(0);
+      renderLayer({ videoRef: ref, startOffsetMs });
+      const cam = loadWebcam(30);
+      expect(bubble().style.display).toBe("");
+      expect(cam.currentTime).toBe(0);
+    },
+  );
+
+  it("keeps the bubble hidden at 0:00 when the camera really started 11 s late", () => {
+    const { ref, el } = mainVideo(0);
+    renderLayer({ videoRef: ref, startOffsetMs: 11386 });
+    loadWebcam(30);
+    expect(bubble().style.display).toBe("none");
+    act(() => setTime(el, 11.5));
+    expect(bubble().style.display).toBe("");
+  });
+
+  it("does not show an empty box before the webcam has a decoded frame, then paints on loadeddata", () => {
+    const { ref } = mainVideo(0);
+    renderLayer({ videoRef: ref, startOffsetMs: 75 });
+    const cam = loadWebcam(30, 1);
+    expect(bubble().style.display).toBe("none");
+    Object.defineProperty(cam, "readyState", { configurable: true, get: () => 2 });
+    fireEvent.loadedData(cam);
+    expect(bubble().style.display).toBe("");
   });
 
   it("shrinks during a zoom from the camera path's scale, and not in the unzoomed view", () => {
