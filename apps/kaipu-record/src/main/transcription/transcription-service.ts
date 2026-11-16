@@ -640,7 +640,6 @@ export class TranscriptionService {
     return job;
   }
 
-  /** The engine is located once; a result of "unavailable" is looked up again on the next ask. */
   /**
    * A call that joined a probe begun before an engine install ended must not get that probe's
    * "missing": it looks again once (the new probe is current).
@@ -652,6 +651,7 @@ export class TranscriptionService {
     return this.probe();
   }
 
+  /** The engine is located once; a result of "unavailable" is looked up again on the next ask. */
   private probe(): Promise<EngineLocation> {
     if (this.engineCache?.available) return Promise.resolve(this.engineCache);
     if (!this.engineInflight) {
