@@ -166,6 +166,19 @@ describe("ModelOffer", () => {
       expect(screen.getByRole("alert")).toHaveTextContent(message);
     });
 
+    it("explains an engine failure as main reports it, and offers to try again", () => {
+      const { onDownload } = setup(
+        { state: "failed", reason: "The downloaded speech engine did not pass its version check." },
+        { failure: "engine-failed-to-start" },
+      );
+
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "The speech engine downloaded but does not start on this Mac. Try again; if it keeps failing, this Mac may not support it yet.",
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      expect(onDownload).toHaveBeenCalledOnce();
+    });
+
     it("names the space to free when the disk is full", () => {
       setup({ state: "failed", reason: "x" }, { failure: "insufficient-disk-space" });
 

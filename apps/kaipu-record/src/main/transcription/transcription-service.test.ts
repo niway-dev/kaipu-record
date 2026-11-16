@@ -465,9 +465,10 @@ describe("the engine downloads with the model", () => {
       code: "engine-failed-to-start",
     });
     expect(h.modelStore.download).not.toHaveBeenCalled();
-    // Still offered: the install never replaced anything.
+    // The failure stays visible to the offer, as a failed ModelStore download does.
     expect((await h.service.status()).models.find((m) => m.id === MODEL_ID)!.status).toEqual({
-      state: "missing",
+      state: "failed",
+      reason: "did not pass its version check",
     });
   });
 
@@ -591,6 +592,33 @@ describe("the engine downloads with the model", () => {
     expect(h.modelStore.cancel).toHaveBeenCalledWith(MODEL_ID);
   });
 
+  it("does not let a probe that was in flight across the install report the engine as missing", async () => {
+    const h = makeHarness();
+    h.engine.missing = true;
+    const install = pausedInstall(h);
+    const pending = h.service.downloadModel(MODEL_ID);
+    await install.started;
+    // A status call during the install probes the disk and sees no engine, slowly.
+    const stale = Promise.withResolvers<EngineLocation>();
+    vi.mocked(h.deps.locateEngine).mockImplementationOnce(() => stale.promise);
+    const duringInstall = h.service.status();
+    await Promise.resolve();
+
+    install.release();
+    await pending;
+    // Asked while the old probe is still running: it must start its own, not join the old one.
+    const afterInstall = h.service.status();
+    stale.resolve({ available: false, reason: "binary-missing" });
+    await duringInstall;
+
+    const status = await afterInstall;
+    expect(status.models.find((m) => m.id === MODEL_ID)!.status).toEqual({ state: "ready" });
+    expect(await h.service.begin({ ...REQUEST, id: "none" })).not.toEqual({
+      status: "refused",
+      reason: "unavailable",
+    });
+  });
+
   it("installs only the engine when the model is already installed", async () => {
     const h = makeHarness({ now: steppingClock() });
     h.engine.missing = true;
@@ -624,13 +652,39 @@ describe("the engine downloads with the model", () => {
       h.engineStore.install.mockRejectedValueOnce(new DownloadError(code, "x"));
       expect(await h.service.downloadModel(MODEL_ID)).toEqual({ status: "failed", code: expected });
       expect(h.modelStore.download).not.toHaveBeenCalled();
-      // A failed engine download leaves the offer standing: the next try starts clean.
-      expect((await h.service.status()).models.find((m) => m.id === MODEL_ID)!.status).toEqual({
+      // The offer shows the failure until the next try, which starts clean.
+      const model = (await h.service.status()).models.find((m) => m.id === MODEL_ID)!;
+      expect(model.status).toEqual({ state: "failed", reason: "x" });
+      expect((await h.service.status()).models.find((m) => m.id === OTHER_ID)!.status).toEqual({
         state: "missing",
       });
-      expect(await h.service.downloadModel(MODEL_ID)).toEqual({ status: "ready" });
+      const retry = Promise.withResolvers<void>();
+      h.engineStore.install.mockImplementationOnce(async () => {
+        retry.resolve();
+        await new Promise(() => {});
+        return "/engine";
+      });
+      void h.service.downloadModel(MODEL_ID);
+      await retry.promise;
+      expect((await h.service.status()).models.find((m) => m.id === MODEL_ID)!.status.state).toBe(
+        "downloading",
+      );
     },
   );
+
+  it("does not keep an engine failure after the next download succeeds or is cancelled", async () => {
+    const h = makeHarness();
+    h.engine.missing = true;
+    h.modelStatus.set(MODEL_ID, { state: "missing" });
+    h.engineStore.install.mockRejectedValueOnce(new DownloadError("network", "offline"));
+    await h.service.downloadModel(MODEL_ID);
+    expect(await h.service.downloadModel(MODEL_ID)).toEqual({ status: "ready" });
+    h.engine.missing = true;
+    h.modelStatus.set(MODEL_ID, { state: "missing" });
+    expect((await h.service.status()).models.find((m) => m.id === MODEL_ID)!.status).toEqual({
+      state: "missing",
+    });
+  });
 
   it("does not hide an engine error nobody classified", async () => {
     const h = makeHarness();

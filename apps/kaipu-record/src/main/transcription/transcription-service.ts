@@ -181,8 +181,7 @@ function availabilityOf(engine: EngineLocation): TranscriptionStatus["availabili
 
 /** The engine has to be (re)installed before a model can be used. */
 const needsEngine = (engine: EngineLocation): boolean =>
-  !engine.available &&
-  (engine.reason === "binary-missing" || engine.reason === "handshake-failed");
+  !engine.available && (engine.reason === "binary-missing" || engine.reason === "handshake-failed");
 
 /** Minimum gap between engine progress events, as ModelStore's default. */
 const ENGINE_PROGRESS_INTERVAL_MS = 200;
@@ -299,6 +298,10 @@ export class TranscriptionService {
   private download: ModelDownload | null = null;
   private engineCache: EngineLocation | null = null;
   private engineInflight: Promise<EngineLocation> | null = null;
+  /** Bumped when the install ends: a probe started before it must not write its old answer. */
+  private engineGeneration = 0;
+  /** Why the engine phase of the last download of a model failed (a cancel is not recorded). */
+  private readonly engineFailures = new Map<string, string>();
   private job: Job | null = null;
   /** The model id of a `begin` that passed its checks and is still resolving the item. */
   private opening: string | null = null;
@@ -340,7 +343,10 @@ export class TranscriptionService {
             totalBytes: own.totalBytes + download.engineBytes,
           };
         } else if (engineMissing && (own.state === "ready" || own.state === "missing")) {
-          status = { state: "missing" };
+          // Same shape ModelStore gives a failed download, so the offer shows its message.
+          const failure = this.engineFailures.get(model.id);
+          status =
+            failure === undefined ? { state: "missing" } : { state: "failed", reason: failure };
         }
         // What the consent prompt shows: only what will actually be downloaded.
         const sizeBytes = !engineMissing
@@ -375,6 +381,7 @@ export class TranscriptionService {
         ? this.download.promise
         : Promise.resolve({ status: "failed", code: "busy" });
     }
+    this.engineFailures.delete(id);
     const run: ModelDownload = {
       id,
       controller: new AbortController(),
@@ -422,6 +429,9 @@ export class TranscriptionService {
       return { status: "ready" };
     } catch (error) {
       if (!(error instanceof DownloadError)) throw error;
+      if (run.phase === "engine" && error.code !== "cancelled") {
+        this.engineFailures.set(model.id, error.message);
+      }
       return toDownloadResult(error);
     }
   }
@@ -458,9 +468,13 @@ export class TranscriptionService {
         },
       });
     } finally {
-      // Whatever happened, the next `locate` looks at the disk again.
+      // Whatever happened, the next `locate` looks at the disk again, and no probe that began
+      // before this point is joined or believed.
+      this.engineGeneration += 1;
       this.engineCache = null;
+      this.engineInflight = null;
     }
+    this.engineFailures.clear();
     run.engineBytes = archive.sizeBytes;
     run.engineReceived = archive.sizeBytes;
     if (lastEmittedBytes !== run.engineReceived) emit();
@@ -625,10 +639,19 @@ export class TranscriptionService {
   /** The engine is located once; a result of "unavailable" is looked up again on the next ask. */
   private locate(): Promise<EngineLocation> {
     if (this.engineCache?.available) return Promise.resolve(this.engineCache);
-    this.engineInflight ??= this.deps
-      .locateEngine()
-      .then((location) => (this.engineCache = location))
-      .finally(() => (this.engineInflight = null));
+    if (!this.engineInflight) {
+      const generation = this.engineGeneration;
+      const probe: Promise<EngineLocation> = this.deps
+        .locateEngine()
+        .then((location) => {
+          if (generation === this.engineGeneration) this.engineCache = location;
+          return location;
+        })
+        .finally(() => {
+          if (this.engineInflight === probe) this.engineInflight = null;
+        });
+      this.engineInflight = probe;
+    }
     return this.engineInflight;
   }
 
