@@ -1992,23 +1992,13 @@ function VideoEditor({
                     />
                   )}
                   {webcamDrop.card && !holdingOriginal && !onSlide && (
-                    // Space on a focused choice applies it. It must not reach the window
-                    // handler below: that would toggle playback, and playing closes the card.
-                    // `display: contents` keeps the card's absolute layout unchanged.
-                    <div
-                      style={{ display: "contents" }}
-                      onKeyDown={(event) => {
-                        if (event.key === " ") event.stopPropagation();
-                      }}
-                    >
-                      <WebcamDropCard
-                        card={webcamDrop.card}
-                        frame={frameSize}
-                        onPart={webcamDrop.answerPart}
-                        onWhole={webcamDrop.answerWhole}
-                        onClose={webcamDrop.close}
-                      />
-                    </div>
+                    <WebcamDropCard
+                      card={webcamDrop.card}
+                      frame={frameSize}
+                      onPart={webcamDrop.answerPart}
+                      onWhole={webcamDrop.answerWhole}
+                      onClose={webcamDrop.close}
+                    />
                   )}
                   <HoldOriginalButton holding={holdingOriginal} onHoldChange={setHoldingOriginal} />
                 </>

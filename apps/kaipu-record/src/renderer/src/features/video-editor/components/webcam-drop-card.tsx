@@ -123,6 +123,11 @@ export function WebcamDropCard({
         role="group"
         aria-label={t("webcamDropAria")}
         onPointerDown={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          // Space activates the focused choice. It must not reach the page's window handler:
+          // that would toggle playback, and playing closes the card.
+          if (event.key === " ") event.stopPropagation();
+        }}
       >
         <div className={styles.head}>
           <span className={styles.title}>{t("webcamDropTitle")}</span>
