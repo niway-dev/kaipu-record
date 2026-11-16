@@ -80,6 +80,10 @@ vi.mock("@renderer/features/video-editor/export/use-still-capture", () => ({
 // analytics index mocked below). Off by default, so every other test sees the page as shipped;
 // the Add recording tests (NIW2-782) switch it on and put it back.
 const levelsFlag = vi.hoisted(() => ({ on: false }));
+// A test that switches the flag on must not leak it into the next one.
+afterEach(() => {
+  levelsFlag.on = false;
+});
 vi.mock("@renderer/features/analytics/use-flag", () => ({
   useFlag: (name: string) => (name === "timeline-levels" ? levelsFlag.on : false),
 }));
@@ -231,7 +235,7 @@ const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
 
 /**
  * Seed one capture of this video whose PNG bytes are `bytes`. The only way to put an image
- * on the timeline is a capture's Add to timeline (NIW2-768); the editor must be mounted
+ * on the timeline is a capture's Add from Library (NIW2-768, NIW2-829); the editor must be mounted
  * AFTER this runs, because it reads the captures list when it opens.
  */
 function seedCapture(bytes: Uint8Array, id = "cap-1"): ReturnType<typeof vi.fn> {
@@ -259,22 +263,40 @@ function seedCapture(bytes: Uint8Array, id = "cap-1"): ReturnType<typeof vi.fn> 
   return read;
 }
 
-/** Opens Captures (if closed) and presses the first capture's Add to timeline. */
-async function pressAddToTimeline(): Promise<void> {
+/**
+ * Opens Captures (if closed), presses the first capture's Add from Library, and adds it to the
+ * sequence at the start (a 5 s image slide). The button opens the modal on Screenshots with
+ * that capture selected (NIW2-829); the modal exists only with `timeline-levels` on, and the
+ * page reads the flag on its next render, which the click on Captures or the button causes.
+ */
+async function addCaptureAsSlide(): Promise<void> {
+  levelsFlag.on = true;
   if (!screen.queryByTestId("captures-panel")) {
     fireEvent.click(screen.getByRole("button", { name: "Captures" }));
   }
-  fireEvent.click(await screen.findByRole("button", { name: "Add to timeline" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Add from Library…" }));
+  const dialog = await screen.findByRole("alertdialog", { name: "Add from Library" });
+  fireEvent.click(await within(dialog).findByRole("radio", { name: /^At the start/ }));
+  fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+}
+
+/** Closes Add from Library, which stays open after an add. */
+async function closeAddFromLibrary(): Promise<void> {
+  fireEvent.click(screen.getByRole("button", { name: "Close Add from Library" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("alertdialog", { name: "Add from Library" })).toBeNull(),
+  );
 }
 
 /** Adds an image slide through a seeded capture — the simplest way to produce one undoable
  *  commit, which is what makes `controller.dirty` true. The editor must already be mounted
  *  with a capture seeded (`seedCapture` before `renderEditor`). */
 async function makeDirty(footer: HTMLElement): Promise<void> {
-  await pressAddToTimeline();
+  await addCaptureAsSlide();
   await waitFor(() => {
     expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(2);
   });
+  await closeAddFromLibrary();
   // Back to the inspector the tests that follow expect.
   fireEvent.click(screen.getByRole("button", { name: "Close captures" }));
 }
@@ -577,7 +599,7 @@ describe("VideoEditorPage — editable cursor entry", () => {
   });
 });
 
-describe("VideoEditorPage — Add to timeline wiring", () => {
+describe("VideoEditorPage — Add from Library slide wiring", () => {
   beforeEach(() => {
     vi.stubGlobal("Image", FakeImage);
   });
@@ -586,7 +608,7 @@ describe("VideoEditorPage — Add to timeline wiring", () => {
     vi.unstubAllGlobals();
   });
 
-  it("inserts a new image slide at the boundary nearest the playhead (index 0 at t=0)", async () => {
+  it("inserts a new 5 s image slide at the chosen boundary (the start, with the playhead at 0)", async () => {
     seedCapture(PNG_BYTES);
     renderEditor();
     const footer = await waitForEditorLoaded();
@@ -597,13 +619,15 @@ describe("VideoEditorPage — Add to timeline wiring", () => {
     await makeDirty(footer);
 
     const blocks = footer.querySelectorAll(BLOCK_BUTTONS);
-    // Playhead is at 0, so boundaryIndexAt lands the slide at index 0 — the first
-    // block. Only a slide block renders an <img> (its picture) and the ImagePlus
+    // "At the start" is index 0 — the first block — whatever the playhead. Only a slide block
+    // renders an <img> (its picture) and the ImagePlus
     // badge icon; a plain clip block with no decoded thumbnails renders neither.
     expect(blocks[0].querySelector("img")).not.toBeNull();
     expect(blocks[0].querySelector("svg")).not.toBeNull();
     expect(blocks[1].querySelector("img")).toBeNull();
     expect(blocks[1].querySelector("svg")).toBeNull();
+    // The 30 s clip plus a slide of 5 s (not the 3 s the old Add to timeline gave).
+    expect(screen.getByText(/\/ 0:35\.0$/)).toBeInTheDocument();
   });
 });
 
@@ -664,8 +688,9 @@ describe("VideoEditorPage — background export vs. useBlocker", () => {
     await waitFor(() => expect(pending).not.toBeNull());
 
     // Another edit while the export encodes.
-    await pressAddToTimeline();
+    await addCaptureAsSlide();
     await waitFor(() => expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(3));
+    await closeAddFromLibrary();
 
     await act(async () => {
       await pending!.onSaved({
@@ -806,7 +831,7 @@ describe("VideoEditorPage — handleExport metadata guard", () => {
   });
 });
 
-describe("VideoEditorPage — Add to timeline decode failure", () => {
+describe("VideoEditorPage — Add from Library decode failure", () => {
   class FailingImage {
     onload: (() => void) | null = null;
     onerror: (() => void) | null = null;
@@ -832,7 +857,7 @@ describe("VideoEditorPage — Add to timeline decode failure", () => {
     renderEditor();
     const footer = await waitForEditorLoaded();
 
-    await pressAddToTimeline();
+    await addCaptureAsSlide();
 
     await waitFor(() => {
       expect(getToasts()).toContainEqual(
@@ -851,7 +876,7 @@ describe("VideoEditorPage — Add to timeline decode failure", () => {
     renderEditor();
     const footer = await waitForEditorLoaded();
 
-    await pressAddToTimeline();
+    await addCaptureAsSlide();
 
     await waitFor(() => {
       expect(getToasts()).toContainEqual(
@@ -2598,7 +2623,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     expect(within(panel).queryByRole("button", { name: "Capture frame" })).toBeNull();
   });
 
-  it("Add to timeline reads the capture's bytes by id and adds a block to the timeline", async () => {
+  it("a capture's Add from Library opens the modal on it, and Add reads its bytes by id and adds a block", async () => {
     libraryItems = [savedItem("mine", 7), savedItem("other", 9)];
     const read = vi.fn(async () => PNG);
     window.electronAPI.readScreenshotBytes = read as never;
@@ -2607,11 +2632,18 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
       renderEditor();
       const footer = await waitForEditorLoaded();
       const before = footer.querySelectorAll(BLOCK_BUTTONS).length;
+      levelsFlag.on = true;
       fireEvent.click(screen.getByRole("button", { name: "Captures" }));
       // Newest first: "other" (createdAt 9) is the first row, "mine" the second.
-      const buttons = await screen.findAllByRole("button", { name: "Add to timeline" });
+      const buttons = await screen.findAllByRole("button", { name: "Add from Library…" });
       expect(buttons).toHaveLength(2);
       fireEvent.click(buttons[1]);
+      // The button only opens the modal: nothing is added until the chooser's Add.
+      const dialog = await screen.findByRole("alertdialog", { name: "Add from Library" });
+      expect(read).not.toHaveBeenCalled();
+      expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(before);
+      fireEvent.click(await within(dialog).findByRole("radio", { name: /^At the start/ }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
       await waitFor(() => expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(before + 1));
       expect(read).toHaveBeenCalledOnce();
       expect(read).toHaveBeenCalledWith("mine");
@@ -2834,10 +2866,16 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
     for (const toast of getToasts()) dismissToast(toast.id);
   });
 
-  /** The modal's recording rows, by title: a row selects, the buttons below add. */
+  /** The modal's recording rows, by title: a row selects, the chooser and Add below apply. */
   const row = (title: string): Promise<HTMLElement> => screen.findByRole("button", { name: title });
+  // Add applies the chooser's destination, which for a recording starts at after the clip.
   const addAfterCurrentClip = (): void => {
-    fireEvent.click(screen.getByRole("button", { name: "Add after current clip" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+  };
+  /** Picks one of the chooser's places by the start of its label, then presses Add. */
+  const addAt = (label: RegExp): void => {
+    fireEvent.click(screen.getByRole("radio", { name: label }));
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
   };
   const modal = (): HTMLElement => screen.getByRole("alertdialog", { name: "Add from Library" });
 
@@ -2865,7 +2903,7 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
     );
   });
 
-  it("Add after current clip inserts all of the selected recording after the clip under the playhead, as one undo step", async () => {
+  it("Add, with the default after-the-clip destination, inserts all of the selected recording after the clip under the playhead, as one undo step", async () => {
     renderEditor();
     const footer = await waitForEditorLoaded();
     expect(screen.getByText(/\/ 0:30\.0$/)).toBeInTheDocument();
@@ -2896,7 +2934,7 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
     expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
   });
 
-  it("Add at start puts the recording before the opened one, and Add at end after it", async () => {
+  it("At the start puts the recording before the opened one, and At the end after it", async () => {
     renderEditor();
     const footer = await waitForEditorLoaded();
     // The playhead is in the middle of the clip, so neither is the "after current clip" place.
@@ -2904,10 +2942,10 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
 
     fireEvent.click(await row("Checkout bug"));
-    fireEvent.click(screen.getByRole("button", { name: "Add at start" }));
+    addAt(/^At the start/);
     await waitFor(() => expect(screen.getByText(/\/ 0:40\.0$/)).toBeInTheDocument());
     fireEvent.click(await row("Signup flow"));
-    fireEvent.click(screen.getByRole("button", { name: "Add at end" }));
+    addAt(/^At the end/);
     await waitFor(() => expect(screen.getByText(/\/ 0:50\.0$/)).toBeInTheDocument());
 
     const labels = within(footer)
@@ -2938,10 +2976,11 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
     await waitForEditorLoaded();
     fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
     fireEvent.click(await row("Checkout bug"));
-    fireEvent.click(screen.getByRole("button", { name: "Add at end" }));
+    addAt(/^At the end/);
     await waitFor(() => expect(screen.getByText(/\/ 0:40\.0$/)).toBeInTheDocument());
     fireEvent.click(await row("Signup flow"));
-    fireEvent.click(screen.getByRole("button", { name: "Add at end" }));
+    // The chooser keeps the destination of the last add for recordings.
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
     await waitFor(() => expect(screen.getByText(/\/ 0:50\.0$/)).toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
@@ -3082,13 +3121,13 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
 
       fireEvent.click(await screen.findByRole("tab", { name: /Screenshots/ }));
 
-      const card = await screen.findByRole("button", { name: "Add Pricing page" });
+      const card = await screen.findByRole("button", { name: "Pricing page" });
       expect(within(card).getByText("From this recording")).toBeInTheDocument();
       expect(screen.getAllByTestId("add-from-library-screenshot")).toHaveLength(1);
       expect(screen.queryByText("A gif")).toBeNull();
     });
 
-    it("a click adds the screenshot as a floating image, selects it, says so and keeps the modal open", async () => {
+    it("a click only selects the card; Add with Over the video adds a floating image, selects it, says so and keeps the modal open", async () => {
       const read = vi.fn(async () => PNG_BYTES.buffer.slice(0) as ArrayBuffer);
       window.electronAPI.readScreenshotBytes = read as never;
       renderEditor();
@@ -3096,7 +3135,11 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
       fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
       fireEvent.click(await screen.findByRole("tab", { name: /Screenshots/ }));
 
-      fireEvent.click(await screen.findByRole("button", { name: "Add Pricing page" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Pricing page" }));
+      expect(read).not.toHaveBeenCalled();
+      // Over the video is what a screenshot starts at.
+      expect(screen.getByRole("radio", { name: /^Over the video/ })).toBeChecked();
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
 
       await waitFor(() => expect(read).toHaveBeenCalledWith("shot-1-id"));
       // It floats: the sequence is untouched, and the new image's panel is the inspector's.
@@ -3110,6 +3153,28 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
       );
     });
 
+    it("a sequence destination adds the screenshot as a 5 s image slide after the clip under the playhead", async () => {
+      window.electronAPI.readScreenshotBytes = vi.fn(
+        async () => PNG_BYTES.buffer.slice(0) as ArrayBuffer,
+      ) as never;
+      renderEditor();
+      const footer = await waitForEditorLoaded();
+      fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+      fireEvent.click(await screen.findByRole("tab", { name: /Screenshots/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Pricing page" }));
+
+      addAt(/^After the clip under the playhead/);
+
+      // 30 s clip + 5 s slide, and the slide is a block after the clip.
+      await waitFor(() => expect(screen.getByText(/\/ 0:35\.0$/)).toBeInTheDocument());
+      const blocks = footer.querySelectorAll(BLOCK_BUTTONS);
+      expect(blocks).toHaveLength(2);
+      expect(blocks[0].querySelector("img")).toBeNull();
+      expect(blocks[1].querySelector("img")).not.toBeNull();
+      expect(getToasts().map((toast) => toast.message)).toContain("Added “Pricing page”");
+      expect(modal()).toBeInTheDocument();
+    });
+
     it("a screenshot whose bytes cannot be read adds nothing and says so", async () => {
       window.electronAPI.readScreenshotBytes = vi.fn(async () => {
         throw new Error("gone");
@@ -3119,7 +3184,8 @@ describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
       fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
       fireEvent.click(await screen.findByRole("tab", { name: /Screenshots/ }));
 
-      fireEvent.click(await screen.findByRole("button", { name: "Add Pricing page" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Pricing page" }));
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
 
       await waitFor(() =>
         expect(getToasts().map((toast) => toast.message)).toEqual([
