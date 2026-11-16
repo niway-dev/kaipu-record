@@ -11,6 +11,8 @@ import { DEFAULT_MODEL_ID, getModel } from "../../src/main/transcription/models/
  * (`.kaipu/<stem>.transcript.json`, schema v1), so the Transcript panel and the Transcribe
  * buttons have every look to show without an engine. The words are invented, English, about
  * 40 for the main one, and every time is an integer ms inside the recording's real length.
+ * None of them sits on “Team notes” except the unreadable one: its saved edit mutes 6 s to 7.5 s,
+ * which would hide words from the editor's Transcript panel.
  *
  * Which look each recording gets:
  *
@@ -30,9 +32,9 @@ export type SeededTranscriptKind = "ready" | "unresolved" | "stale" | "invalid";
 /** The recordings that get a transcript, by file stem, and what each one's file looks like. */
 export const SEEDED_TRANSCRIPTS: readonly { stem: string; kind: SeededTranscriptKind }[] = [
   { stem: "Walkthrough 1", kind: "ready" },
-  { stem: "Team notes", kind: "unresolved" },
-  { stem: "Release demo", kind: "stale" },
-  { stem: "Onboarding flow", kind: "invalid" },
+  { stem: "Release demo", kind: "unresolved" },
+  { stem: "Onboarding flow", kind: "stale" },
+  { stem: "Team notes", kind: "invalid" },
 ];
 
 /** What an unreadable transcript file holds. */

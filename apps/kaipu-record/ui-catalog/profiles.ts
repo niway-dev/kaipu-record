@@ -219,7 +219,7 @@ export const PROFILES = {
   },
   "transcription-transcripts": {
     description:
-      "Like transcription-ready (model installed, KAIPU_TRANSCRIPTION=ready), and the vault adds a transcript file beside four recordings: “Walkthrough 1” complete, “Team notes” with stretches that were not recognised, “Release demo” out of date, “Onboarding flow” unreadable. The Library lists those four as Transcribed.",
+      "Like transcription-ready (model installed, KAIPU_TRANSCRIPTION=ready), and the vault adds a transcript file beside four recordings: “Walkthrough 1” complete, “Release demo” with stretches that were not recognised, “Onboarding flow” out of date, “Team notes” unreadable.",
     seed: "demo",
     flags: { transcription: true },
     env: { KAIPU_TRANSCRIPTION: "ready" },
@@ -238,6 +238,13 @@ export const PROFILES = {
     seed: "demo",
     flags: { transcription: true },
     env: { KAIPU_TRANSCRIPTION: "ready,job:failed:engine-failed" },
+  },
+  "transcription-job-no-audio": {
+    description:
+      "Like transcription-ready, with a job pinned to end with the no-audio verdict (KAIPU_TRANSCRIPTION=ready,job:failed:no-audio, unpackaged builds only): the next Transcribe click ends as it does for a video whose audio the engine finds empty. No engine runs.",
+    seed: "demo",
+    flags: { transcription: true },
+    env: { KAIPU_TRANSCRIPTION: "ready,job:failed:no-audio" },
   },
   "image-inspect": {
     description:
