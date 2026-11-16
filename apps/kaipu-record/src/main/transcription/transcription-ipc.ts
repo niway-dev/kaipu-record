@@ -213,18 +213,18 @@ export function registerTranscriptionIpc(deps: TranscriptionIpcDeps): Transcript
     const id = parseId(jobId, "job id");
     const bytes = parseChunk(pcm);
     if (!pinned) return service.chunk(id, bytes);
-    pinned.audio(id);
+    return pinned.audio(id);
   });
   ipcMain.handle(IPC_CHANNELS.transcriptionJobEnd, (_event, jobId: unknown, reason?: unknown) => {
     const id = parseId(jobId, "job id");
     const failReason = parseFailReason(reason);
     if (!pinned) return service.end(id, failReason);
-    pinned.audio(id);
+    return pinned.audio(id);
   });
   ipcMain.handle(IPC_CHANNELS.transcriptionJobCancel, (_event, jobId: unknown) => {
     const id = parseId(jobId, "job id");
     if (!pinned) return service.cancel(id);
-    pinned.cancel(id);
+    return pinned.cancel(id);
   });
   ipcMain.handle(
     IPC_CHANNELS.transcriptionReadTranscript,
