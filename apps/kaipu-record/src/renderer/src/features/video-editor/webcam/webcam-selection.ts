@@ -85,12 +85,18 @@ const SLIDE_LEAD_SECONDS = 0.5;
 /**
  * Where the playhead goes (timeline seconds) for "Play the slide": a little before the part,
  * so the slide plays from the bubble's old place. When that moment was cut out of the timeline
- * it is the part's own start; null when neither is on the timeline.
+ * it is the part's own start, and so is a moment that the timeline plays after the part
+ * (reordered clips); null when neither is on the timeline.
  */
 export function webcamPlaySlideTarget(
   layout: LayoutEntry[],
   segment: WebcamSegment,
 ): number | null {
   const lead = Math.max(0, segment.start - SLIDE_LEAD_SECONDS);
-  return timelineTimeAtSource(layout, lead) ?? timelineTimeAtSource(layout, segment.start);
+  const start = timelineTimeAtSource(layout, segment.start);
+  const leadAt = timelineTimeAtSource(layout, lead);
+  // Reordered clips can put the lead after the part in timeline order; playing from there
+  // would run on to the end without showing the slide, so the part's own start is used.
+  if (leadAt !== null && (start === null || leadAt <= start)) return leadAt;
+  return start;
 }

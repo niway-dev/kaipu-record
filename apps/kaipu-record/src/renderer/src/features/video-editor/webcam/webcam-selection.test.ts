@@ -173,4 +173,16 @@ describe("webcamPlaySlideTarget", () => {
   it("is null when neither moment is on the timeline", () => {
     expect(webcamPlaySlideTarget(layout, { ...part(6), end: 9 })).toBeNull();
   });
+
+  it("starts at the part when reordered clips put the lead after the part on the timeline", () => {
+    // Illustrative layout: source 13.8-20 first (timeline 0-6.2), then source 13-13.8 (timeline
+    // 6.2-7.0). The part at source 14 sits at timeline 14 - 13.8 = 0.2. Its lead, source 13.5,
+    // maps into the second clip: 6.2 + (13.5 - 13) = 6.7, after the part, so playing from there
+    // would run to the end and never show the slide. The part's own start, 0.2, is used.
+    const reordered = toLayout([
+      { id: "a", kind: "clip", sourceStart: 13.8, sourceEnd: 20 },
+      { id: "b", kind: "clip", sourceStart: 13, sourceEnd: 13.8 },
+    ]);
+    expect(webcamPlaySlideTarget(reordered, part(14))).toBeCloseTo(0.2, 6);
+  });
 });
