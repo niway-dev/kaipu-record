@@ -1159,7 +1159,7 @@ function VideoEditor({
   // floating image is 10 s). The scene is read after the decode, not from the click, and the
   // boundary is pinned to the clip after it (`anchoredBoundary`), so a join that landed meanwhile
   // does not move the slide. A boundary's index counts clips and slides alike, and so does
-  // `scene.items`, which is what `insertSlideAtBoundary` splices (see `insertSlideAtBoundary`). True once
+  // `scene.items`, which is what `insertSlideAtBoundary` splices. True once
   // it is in.
   const insertSequenceImage = useCallback(
     (bytes: ArrayBuffer, mime: string, boundary: AddBoundary): Promise<boolean> =>
