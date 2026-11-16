@@ -132,8 +132,8 @@ Title "Keep the camera here…", attached to the bubble, kept inside the preview
   `back`, Linear is `linear`. The `ease-out` preset stays in the model with no button.
 - A part saved with a duration or a motion that no button offers (500 ms, `ease-out`) keeps
   it and plays it. The panel shows no option selected until the user picks one.
-- Between A and B the curve stays inside the frame, because A, B and the control point are
-  inside it. Bounce goes past B. That travel past the target keeps the first version's rule
+- The control point is clamped into the range the bubble's centre can reach. Between A and B
+  the curve then stays inside the frame, because A, B and the control point are inside it. Bounce goes past B. That travel past the target keeps the first version's rule
   (its decision 10): it is scaled per axis to the room before the frame edge, so the motion
   keeps its shape instead of stopping flat against the edge. A clamp to the frame, with the
   rule a drag uses, stays only as a last guard.

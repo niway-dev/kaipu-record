@@ -100,8 +100,9 @@ design wins:
   nothing. A section is now written only when the user drops the bubble outside every section
   and answers "Only for this part". The other answer, "For the whole video", moves the global
   layout's position. The split of a section at the playhead is removed with the button.
-- Decision 2: a new section lasts 10 seconds, or less if another block starts sooner, and
-  defaults to Slide, 700 ms, `ease-in-out`.
+- Decision 2: a new section lasts 10 seconds, or less if another block or the end of the
+  recording comes sooner, and defaults to Slide, 700 ms, `ease-in-out`, which the panel calls
+  Smooth.
 - Decision 4: the camera travels on a quadratic curve from the start position to the target,
   bent toward the centre of the frame, and the eased progress is the curve's parameter. The travel
   past the target, which only `back` has, keeps the per-axis limit on the overshoot from the
