@@ -31,6 +31,15 @@ import type { TagColor } from "@kaipu/domain/constants";
 import type { LocalRecording, RenameResult } from "./library-storage";
 import type { CanvasReadResult, CanvasSavePayload } from "./screenshot-canvas";
 import type {
+  TranscriptReadResult,
+  TranscriptionBeginResult,
+  TranscriptionJobProgress,
+  TranscriptionJobRequest,
+  TranscriptionModelDownloadResult,
+  TranscriptionModelProgress,
+  TranscriptionStatus,
+} from "./transcription";
+import type {
   TextCacheSavePayload,
   TextRecognitionRequest,
   TextRecognitionResult,
@@ -774,6 +783,26 @@ export interface KaipuElectronAPI {
    * library call.
    */
   recognizeScreenshotText(request: TextRecognitionRequest): Promise<TextRecognitionResult>;
+  /** NIW2-818: engine availability, the model catalog with its state here, and the running job. */
+  getTranscriptionStatus(): Promise<TranscriptionStatus>;
+  /** Download a model (size and location were shown first). Resolves when it ends. */
+  downloadTranscriptionModel(id: string): Promise<TranscriptionModelDownloadResult>;
+  cancelTranscriptionModelDownload(id: string): Promise<void>;
+  removeTranscriptionModel(id: string): Promise<void>;
+  onTranscriptionModelProgress(
+    callback: (progress: TranscriptionModelProgress) => void,
+  ): () => void;
+  /** Start a job; the audio follows through `sendTranscriptionAudio` and `endTranscriptionAudio`. */
+  beginTranscription(request: TranscriptionJobRequest): Promise<TranscriptionBeginResult>;
+  /** 16 kHz mono signed 16-bit little-endian PCM, in order. Resolves when main has taken it. */
+  sendTranscriptionAudio(jobId: string, pcm: ArrayBuffer): Promise<void>;
+  /** The audio is complete: main starts segmenting. Progress arrives through the event. */
+  endTranscriptionAudio(jobId: string): Promise<void>;
+  /** The decode found no audio, or failed: fail the job with that reason. */
+  failTranscriptionAudio(jobId: string, reason: "no-audio" | "decode-failed"): Promise<void>;
+  cancelTranscription(jobId: string): Promise<void>;
+  onTranscriptionJobProgress(callback: (progress: TranscriptionJobProgress) => void): () => void;
+  readTranscript(id: string): Promise<TranscriptReadResult>;
   /** The image on the system clipboard as PNG, or null when it holds no image. */
   readClipboardImage(): Promise<{ png: ArrayBuffer; width: number; height: number } | null>;
   /** The clipboard image's size, or null when it holds no image. No bytes cross IPC. */

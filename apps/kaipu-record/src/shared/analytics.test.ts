@@ -28,6 +28,7 @@ describe("flag model", () => {
     expect(FLAG_DEFAULTS["image-text"]).toBe(false);
     expect(FLAG_DEFAULTS["timeline-levels"]).toBe(false);
     expect(FLAG_DEFAULTS["zoom-filmstrip"]).toBe(false);
+    expect(FLAG_DEFAULTS["transcription"]).toBe(false);
   });
 
   it("uses stable identity defaults", () => {

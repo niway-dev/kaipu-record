@@ -501,6 +501,21 @@ export const IPC_CHANNELS = {
   // When the canvas document beside a saved screenshot was written (null: there is none).
   screenshotStatCanvas: "screenshot:stat-canvas",
   screenshotRecognizeText: "screenshot:recognize-text",
+  // Local transcription (NIW2-818). Status and model management are app-wide; the job and the
+  // transcript read are item-scoped (workspace-stamped).
+  transcriptionStatus: "transcription:status",
+  transcriptionModelDownload: "transcription:model-download",
+  transcriptionModelCancel: "transcription:model-cancel",
+  transcriptionModelRemove: "transcription:model-remove",
+  /** main → renderer, `TranscriptionModelProgress` while a model downloads. */
+  transcriptionModelProgress: "transcription:model-progress",
+  transcriptionJobBegin: "transcription:job-begin",
+  transcriptionJobChunk: "transcription:job-chunk",
+  transcriptionJobEnd: "transcription:job-end",
+  transcriptionJobCancel: "transcription:job-cancel",
+  /** main → renderer, `TranscriptionJobProgress` on every phase change and finished segment. */
+  transcriptionJobProgress: "transcription:job-progress",
+  transcriptionReadTranscript: "transcription:read-transcript",
   screenshotSave: "screenshot:save",
   // Read the image on the system clipboard as PNG (the Editor's New → Paste).
   clipboardReadImage: "clipboard:read-image",
