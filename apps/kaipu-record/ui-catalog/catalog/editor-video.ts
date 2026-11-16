@@ -52,6 +52,16 @@ const captureListed: Step = {
 const audioWaveformDrawn: Step = {
   waitFor: { area: "editorVideo.audioLane", part: { css: '[data-audio-waveform="complete"]' } },
 };
+/**
+ * For "Camera long", which declares 20 minutes over 12 s of media: its waveform never reaches
+ * `complete` (the audio ends at 12 s), so these states wait for the part on the lane instead.
+ */
+const cameraPartDrawn: Step = {
+  waitFor: {
+    area: "editorVideo.webcamLane",
+    part: { role: "button", name: "Webcam section 1", exact: true },
+  },
+};
 /** The Nth block on the Camera lane (a part or a hidden range, in order): selects it. */
 const cameraSection = (n: number): Step => ({
   click: {
@@ -397,8 +407,8 @@ export const editorVideo = catalog(
       how: "Open “Camera long”, a 20-minute recording whose camera part is about 4 px wide on the lane, and rest the pointer on that part: after a moment a card appears over the lane with the part's range and length, and how it arrives.",
       steps: [
         open(ASSETS.cameraLong),
-        audioWaveformDrawn,
         loaded,
+        cameraPartDrawn,
         // The card opens after about 120 ms of hovering, and the pointer stays on the part.
         {
           hover: {
@@ -416,7 +426,7 @@ export const editorVideo = catalog(
     "camera-lane-narrow-selected": {
       profile: "camera-parts",
       how: "Open “Camera long” and select its camera part on the lane: the part is narrower than its glyph, so its two handles are drawn apart from each other.",
-      steps: [open(ASSETS.cameraLong), audioWaveformDrawn, loaded, cameraSection(1)],
+      steps: [open(ASSETS.cameraLong), loaded, cameraPartDrawn, cameraSection(1)],
       embedsScreen: true,
       demonstrates: ["editorVideo.webcamLane:narrowSelected"],
       ready: { area: "editorVideo.webcamLane" },
