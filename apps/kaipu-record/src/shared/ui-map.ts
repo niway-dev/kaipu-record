@@ -285,6 +285,32 @@ export const UI_MAP = {
       // The "Insert here" bar and pill on the Clips row while a recording is dragged over it: it
       // exists only during the drag, and nothing drags a recording today (NIW2-789 reuses it).
       insertIndicator: { states: ["visible"], gatedBy: [{ flag: "timeline-levels" }] },
+      // The Transcript panel (NIW2-818): the words of the edited video, in the right column in
+      // place of the inspector, behind the `transcription` flag. One state per look: `idle` is a
+      // video with no transcript and the Transcribe button; `needsModel` explains the speech model
+      // and opens its offer; `downloading` shows the offer's progress; `transcribing` the job's
+      // progress with Cancel; `done` the paragraphs; `unresolved` the same with the stretches the
+      // engine could not recognise marked and a note; `stale` a banner over the old words after
+      // the recording changed; `failed` the reason and Try again (also an unreadable file);
+      // `noAudio` a video without an audio track; `unavailable` an engine that cannot run here;
+      // `busy` another video's job holds the engine; `loading` while the file is read.
+      transcriptPanel: {
+        states: [
+          "idle",
+          "needsModel",
+          "downloading",
+          "transcribing",
+          "done",
+          "unresolved",
+          "stale",
+          "failed",
+          "noAudio",
+          "unavailable",
+          "busy",
+          "loading",
+        ],
+        gatedBy: [{ flag: "transcription" }],
+      },
       webcam: { states: ["visible"] },
       // The card that asks where a dropped camera bubble belongs: `asking` offers a new part,
       // `noRoom` has less than a second before the next block or the end, so that choice is off.

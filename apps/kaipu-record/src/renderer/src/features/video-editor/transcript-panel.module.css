@@ -1,0 +1,273 @@
+/* The Transcript panel: the right column's content while it is open. Calm like the Captures
+   panel (hairlines, small radius); the only colour is the playing word and the search hits. */
+.panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-height: 0;
+  padding: var(--space-lg);
+  overflow: hidden;
+  background: var(--bg-panel);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}
+
+.close,
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.close:hover,
+.iconButton:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.iconButton:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-md);
+}
+
+.note,
+.meta {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.meta {
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+  color: var(--danger);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.banner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+}
+
+.track {
+  width: 100%;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-raised);
+}
+
+.fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-primary);
+  transition: width var(--transition);
+}
+
+.fill[data-indeterminate] {
+  width: 35%;
+  animation: slide 1.4s ease-in-out infinite;
+}
+
+@keyframes slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill[data-indeterminate] {
+    width: 100%;
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+.tools {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 var(--space-sm);
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.count {
+  min-width: 3.5em;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.copy {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: var(--space-xs);
+  padding: 2px var(--space-sm);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+
+.copy:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.copy:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* A long transcript is a few hundred paragraphs: the browser skips layout and paint for the
+   ones off screen. */
+.paragraph,
+.gapRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  margin: 0;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px;
+}
+
+.stamp {
+  flex-shrink: 0;
+  width: 3.6em;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+
+button.stamp {
+  cursor: pointer;
+}
+
+button.stamp:hover {
+  color: var(--accent-primary);
+}
+
+.words {
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.words [data-w] {
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.words [data-w]:hover {
+  background: var(--bg-card-hover);
+}
+
+.words [data-w][data-match] {
+  background: color-mix(in srgb, var(--accent-primary) 18%, transparent);
+}
+
+.words [data-w][data-match-current] {
+  outline: 1px solid var(--accent-primary);
+}
+
+.words [data-w][data-current] {
+  background: color-mix(in srgb, var(--accent-primary) 35%, transparent);
+  color: var(--text-primary);
+}
+
+.gap {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: var(--font-size-xs);
+}

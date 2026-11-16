@@ -706,3 +706,30 @@ describe("EditorToolRail — Captures (NIW2-764)", () => {
     expect(onHideWebcam).toHaveBeenCalledOnce();
   });
 });
+
+describe("EditorToolRail — Transcript (NIW2-818)", () => {
+  it("toggles the Transcript panel from the tool column", () => {
+    const props = renderRail({ onToggleTranscript: vi.fn() });
+    fireEvent.click(screen.getByRole("button", { name: "Transcript" }));
+    expect(props.onToggleTranscript).toHaveBeenCalledOnce();
+  });
+
+  it("marks Transcript pressed while open, and Select as not active then", () => {
+    renderRail({ onToggleTranscript: vi.fn(), transcriptOpen: true, tool: "select" });
+    expect(screen.getByRole("button", { name: "Transcript" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Select" }).className).not.toMatch(/toolActive/);
+  });
+
+  it("has no Transcript button without the handler (the flag is off)", () => {
+    renderRail({ onToggleCaptures: vi.fn() });
+    expect(screen.queryByRole("button", { name: "Transcript" })).toBeNull();
+  });
+
+  it("keeps Captures and Transcript under one rule", () => {
+    renderRail({ onToggleCaptures: vi.fn(), onToggleTranscript: vi.fn() });
+    expect(document.querySelectorAll('[class*="railSeparator"]')).toHaveLength(1);
+  });
+});
