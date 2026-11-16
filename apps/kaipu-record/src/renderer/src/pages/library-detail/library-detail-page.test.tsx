@@ -23,6 +23,9 @@ const probe = vi.hoisted(() =>
 );
 vi.mock("@renderer/features/video-editor/export/probe-source", () => ({ probeSource: probe }));
 
+const transcribeFlag = vi.hoisted(() => ({ on: false }));
+vi.mock("@renderer/features/analytics/use-flag", () => ({ useFlag: () => transcribeFlag.on }));
+
 /** A cloud-only screenshot: no local file at all. Exercises the actions that
  *  require a local copy (Reveal, Edit, Copy, Delete) and confirms they are all
  *  hidden — not merely disabled — for such an item. */
@@ -1929,5 +1932,107 @@ describe("LibraryDetailPage — frame captures of a video (NIW2-764)", () => {
     renderDetail("cap-one");
     await waitForLoaded();
     expect(screen.queryByRole("tab", { name: /^Captures/ })).toBeNull();
+  });
+});
+
+describe("LibraryDetailPage Transcribe button (NIW2-818)", () => {
+  const realElectronApi = window.electronAPI;
+
+  function stubStatus(): ReturnType<typeof vi.fn> {
+    const getTranscriptionStatus = vi.fn(async () => ({
+      availability: { status: "available" as const },
+      defaultModelId: "m",
+      models: [
+        {
+          id: "m",
+          label: "Parakeet",
+          languages: ["en"],
+          sizeBytes: 1,
+          location: "/m",
+          license: { name: "l", attribution: "a", url: "u" },
+          status: { state: "ready" as const },
+        },
+      ],
+      job: null,
+    }));
+    window.electronAPI = { ...realElectronApi, getTranscriptionStatus };
+    return getTranscriptionStatus;
+  }
+
+  beforeEach(() => {
+    transcribeFlag.on = false;
+    window.electronAPI.onLibraryChanged = () => () => {};
+  });
+
+  afterEach(() => {
+    window.electronAPI = realElectronApi;
+  });
+
+  function list(...items: LibraryItem[]): void {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items,
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+  }
+
+  it("sits in the header actions of a local recording with the flag on", async () => {
+    transcribeFlag.on = true;
+    stubStatus();
+    list(exportedOnlyItem);
+    renderDetail("asset-b");
+    await waitForLoaded();
+    const button = await screen.findByRole("button", { name: "Transcribe" });
+    expect(button.closest('[data-ui-area="libraryDetail.transcribe"]')).not.toBeNull();
+    expect(button.closest('[data-ui-area="libraryDetail.actions"]')).not.toBeNull();
+  });
+
+  it("shows nothing and reads nothing with the flag off", async () => {
+    const getStatus = stubStatus();
+    list(exportedOnlyItem);
+    renderDetail("asset-b");
+    await waitForLoaded();
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: "Transcribe" })).toBeNull();
+    expect(getStatus).not.toHaveBeenCalled();
+  });
+
+  it("is hidden once the file is read and has no audio track", async () => {
+    transcribeFlag.on = true;
+    stubStatus();
+    probe.mockResolvedValueOnce({
+      width: 1280,
+      height: 720,
+      durationSec: 45,
+      fps: 30,
+      hasAudio: false,
+      sampleRate: 0,
+    });
+    list(exportedOnlyItem);
+    renderDetail("asset-b");
+    await waitForLoaded();
+    await waitFor(() => expect(probe).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Transcribe" })).toBeNull());
+  });
+
+  it("is not offered for a cloud-only screenshot", async () => {
+    transcribeFlag.on = true;
+    stubStatus();
+    list(cloudOnlyItem);
+    renderDetail("cloud-1");
+    await waitForLoaded();
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: "Transcribe" })).toBeNull();
+  });
+
+  it("clicking it stays on the page", async () => {
+    transcribeFlag.on = true;
+    stubStatus();
+    list(exportedOnlyItem);
+    const router = renderDetail("asset-b");
+    await waitForLoaded();
+    fireEvent.click(await screen.findByRole("button", { name: "Transcribe" }));
+    await act(async () => {});
+    expect(router.state.location.pathname).toBe("/library/asset-b");
   });
 });

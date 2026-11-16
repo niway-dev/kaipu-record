@@ -92,6 +92,32 @@
 
 /* ── Actions ──────────────────────────── */
 
+.transcribeSlot {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* The Transcribe button's idle looks wait for the pointer like the other actions; a running
+   job, a model download and the "Transcribed" badge are information and stay visible. */
+.transcribeSlot
+  > :is(
+    [data-state="idle"],
+    [data-state="needs-model"],
+    [data-state="failed"],
+    [data-state="stale"],
+    [data-state="invalid"],
+    [data-state="busy-elsewhere"]
+  ) {
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.row:hover .transcribeSlot > [data-state],
+.row:focus-within .transcribeSlot > [data-state] {
+  opacity: 1;
+}
+
 .actions {
   display: flex;
   align-items: center;

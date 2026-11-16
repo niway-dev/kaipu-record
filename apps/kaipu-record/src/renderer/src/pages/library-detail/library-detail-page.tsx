@@ -60,6 +60,7 @@ import { useLocale, useTranslations, type Messages } from "@kaipu/i18n";
 import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import styles from "./library-detail-page.module.css";
 import { uiArea } from "@renderer/lib/ui-area";
+import { LibraryTranscribeButton } from "@renderer/features/transcription/library-transcribe-button";
 
 type LibraryMessageKey = keyof Messages["library"];
 
@@ -522,6 +523,12 @@ export function LibraryDetailPage(): React.JSX.Element {
                 {t("editVideo")}
               </Button>
             )}
+            <LibraryTranscribeButton
+              video={video}
+              variant="detail"
+              hasAudio={probe ? probe.hasAudio : undefined}
+              ui={uiArea("libraryDetail.transcribe")}
+            />
             {localId && (
               <>
                 <Button
