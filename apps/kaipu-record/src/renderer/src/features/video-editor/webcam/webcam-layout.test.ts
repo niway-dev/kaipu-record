@@ -17,6 +17,7 @@ import {
   webcamSourceRect,
   webcamZoomFactor,
 } from "./webcam-layout";
+import { webcamRoute, webcamRoutePoint } from "./webcam-route";
 
 const FRAME = { width: 1920, height: 1080 };
 const layout = (patch: Partial<WebcamLayout>): WebcamLayout => ({ ...WEBCAM_DEFAULTS, ...patch });
@@ -352,13 +353,44 @@ describe("webcamStateRect", () => {
     expect(rects[100]).toEqual(target);
   });
 
-  it("interpolates the centre linearly while the progress is at most 1", () => {
+  it("moves along the curved route: off the straight line by 9 % of the distance at the middle", () => {
     const scene = sceneWith({ x: 0.5, y: 0.5 }, "linear", { x: 0.1, y: 0.1 });
     const mid = webcamStateRect(webcamStateAt(scene, 10.5)!, FRAME)!;
     const a = webcamRect(layout({ position: { x: 0.1, y: 0.1 }, size: 0.2 }), FRAME)!;
     const b = webcamRect(layout({ position: { x: 0.5, y: 0.5 }, size: 0.2 }), FRAME)!;
-    expect(mid.x).toBeCloseTo((a.x + b.x) / 2);
-    expect(mid.y).toBeCloseTo((a.y + b.y) / 2);
+    // A quadratic curve's middle is half way from the straight middle to the control point,
+    // and the control point is 18 % of the distance to the side: 9 % of the distance.
+    const distance = Math.hypot(b.x - a.x, b.y - a.y);
+    const offset = Math.hypot(mid.x - (a.x + b.x) / 2, mid.y - (a.y + b.y) / 2);
+    expect(offset).toBeCloseTo(0.09 * distance, 3);
+    // It is the route function's point, not an approximation of it: the one function the
+    // preview and the export read.
+    const w = a.width;
+    const h = a.height;
+    const reach = {
+      minX: w / 2,
+      maxX: FRAME.width - w / 2,
+      minY: h / 2,
+      maxY: FRAME.height - h / 2,
+    };
+    const route = webcamRoute(
+      { x: a.x + w / 2, y: a.y + h / 2 },
+      { x: b.x + w / 2, y: b.y + h / 2 },
+      FRAME,
+      reach,
+    );
+    const point = webcamRoutePoint(route, 0.5, EASING_PEAK_OVERSHOOT.linear, reach);
+    expect(mid.x + w / 2).toBeCloseTo(point.x, 6);
+    expect(mid.y + h / 2).toBeCloseTo(point.y, 6);
+  });
+
+  it("slides the same route for two parts that go there and back, bending to the side nearer the centre", () => {
+    const there = run(sceneWith({ x: 0.9, y: 0.1 }, "linear", { x: 0.1, y: 0.1 }));
+    const mid = there[50]!;
+    const start = there[0]!;
+    // Along the top edge, the arc bends toward the frame centre (down), not off the frame.
+    expect(mid.y).toBeGreaterThan(start.y);
+    expect(there.every((r) => r && inside(r))).toBe(true);
   });
 
   it("stays inside the frame at every sampled time of a back slide toward a corner", () => {

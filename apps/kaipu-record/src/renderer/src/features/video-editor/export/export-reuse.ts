@@ -56,8 +56,12 @@ function hash53(text: string): string {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
-/** The composer revision that draws the webcam layer; bump it when that drawing changes. */
-export const WEBCAM_COMPOSE_REVISION = "wc2";
+/**
+ * The composer revision that draws the webcam layer; bump it when that drawing changes.
+ * wc3: a camera part's bubble slides along a curved route (it was a straight line), so an
+ * export made before this one has the bubble in other places in the middle of a slide.
+ */
+export const WEBCAM_COMPOSE_REVISION = "wc3";
 /**
  * The composer revision that draws the background (ADR 0051); bump it when that drawing
  * changes. Tagged only when a background is set: with `none` the scene is the plain picture.

@@ -72,8 +72,8 @@ describe("editFingerprint — webcam", () => {
 
   it("is tagged only with a webcam, so an export made before the layer was drawn never matches", () => {
     // Before NIW2-575 a webcam scene fingerprinted as `edit:<hash>` and its file had no face.
-    expect(editFingerprint(fixed(track))).toMatch(/^edit:wc2:[0-9a-z]+$/);
-    expect(editFingerprint(fixed(null))).not.toMatch(/wc2/);
+    expect(editFingerprint(fixed(track))).toMatch(/^edit:wc3:[0-9a-z]+$/);
+    expect(editFingerprint(fixed(null))).not.toMatch(/wc3/);
   });
 });
 
@@ -127,7 +127,7 @@ describe("editFingerprint — camera block transitions (ADR 0039)", () => {
   it("keeps the fingerprint a scene without transitions had before them (pinned)", () => {
     // Pinned: computed on the commit before transitions existed, for this very scene, so the
     // export of every older edit with a camera block stays reusable. No revision bump.
-    expect(editFingerprint(withBlock())).toBe("edit:wc2:7c4qtu5ih5");
+    expect(editFingerprint(withBlock())).toBe("edit:wc3:7c4qtu5ih5");
     expect(serializeSession(withBlock())).not.toContain("transition");
   });
 });
@@ -151,7 +151,7 @@ describe("editFingerprint — background (NIW2-668)", () => {
     // must still match.
     expect(editFingerprint(fixed(null))).toBe("edit:2bdufz02r20");
     expect(editFingerprint(fixed(null), true)).toBe("edit:cursor3:czrk19yfc6");
-    expect(editFingerprint(fixed(track))).toBe("edit:wc2:3sdivqr4ok");
+    expect(editFingerprint(fixed(track))).toBe("edit:wc3:3sdivqr4ok");
     expect(editFingerprint(fixed(track), true)).toBe("edit:cursor3:3sdivqr4ok");
   });
 
@@ -177,7 +177,7 @@ describe("editFingerprint — background (NIW2-668)", () => {
   it("is tagged bg1 only when a background is set", () => {
     const withBg = (webcam: typeof track | null) => ({ ...fixed(webcam), background: MAGENTA });
     expect(editFingerprint(withBg(null))).toMatch(/^edit:bg1:[0-9a-z]+$/);
-    expect(editFingerprint(withBg(track))).toMatch(/^edit:wc2:bg1:[0-9a-z]+$/);
+    expect(editFingerprint(withBg(track))).toMatch(/^edit:wc3:bg1:[0-9a-z]+$/);
     expect(editFingerprint(withBg(null), true)).toMatch(/^edit:cursor3:bg1:[0-9a-z]+$/);
     expect(editFingerprint(withBg(track), true)).toMatch(/^edit:cursor3:bg1:[0-9a-z]+$/);
     expect(editFingerprint(fixed(null))).not.toMatch(/bg1/);
@@ -429,6 +429,6 @@ describe("facelessFingerprint", () => {
   it("keeps the cursor revision of a cursor-redrawing copy that lost its face", () => {
     expect(facelessFingerprint("whole:abc123:cursor3")).toBe("whole:cursor3");
     expect(facelessFingerprint("whole:abc123")).toBe("whole");
-    expect(facelessFingerprint("edit:wc2:abc")).toBeUndefined();
+    expect(facelessFingerprint("edit:wc3:abc")).toBeUndefined();
   });
 });
