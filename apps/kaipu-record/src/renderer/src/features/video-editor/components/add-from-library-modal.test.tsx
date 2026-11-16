@@ -324,11 +324,12 @@ describe("AddFromLibraryModal", () => {
 
       it("a double click on a row adds it at the chosen destination", () => {
         const props = renderModal({ videos: list, playhead: 3 });
+        fireEvent.click(radio(START));
         fireEvent.doubleClick(rows()[1]);
         expect(props.onAddRecording).toHaveBeenCalledOnce();
         expect(props.onAddRecording).toHaveBeenCalledWith(
           expect.objectContaining({ assetId: "b" }),
-          { index: 1, time: 10 },
+          { index: 0, time: 0 },
         );
       });
 
@@ -488,7 +489,7 @@ describe("AddFromLibraryModal", () => {
       expect(props.onAddScreenshotToSequence).not.toHaveBeenCalled();
     });
 
-    it("a card is a native button, so it takes focus and Enter or Space activates it", () => {
+    it("a card is a native button that takes focus and a click selects it", () => {
       renderModal({ videos: shots });
       openScreenshots();
       cards()[0].focus();

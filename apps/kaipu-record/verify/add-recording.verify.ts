@@ -8,11 +8,11 @@ import { startScenario } from "./helpers";
 
 /*
  * Real-app proof for NIW2-790 (behind the `timeline-levels` flag): the transport's Add recording
- * button opens the Add from Library modal, "Add after current clip" inserts the selected
- * recording after the clip under the playhead, and one Cmd+Z undoes the join.
+ * button opens the Add from Library modal, its Add button (destination "after the clip under the
+ * playhead", the default for a recording) inserts the selected recording after that clip, and one Cmd+Z undoes the join.
  *
  * Opens "Weekly sync" (one 3 s clip) with the flag forced on the way the UI catalog forces it
- * (`KAIPU_FLAG_OVERRIDES`), selects "Walkthrough 1" (12 s) and presses Add after current clip,
+ * (`KAIPU_FLAG_OVERRIDES`), selects "Walkthrough 1" (12 s) and presses Add in the modal,
  * and records the clip order after the add and the durations before, after and after the undo.
  * Screenshots and `result.json` go to `test-results/verify/add-recording/`. The seeded vault is
  * a throwaway one per launch, so nothing needs restoring. The scenario uses `Meta+z`, so it runs
@@ -44,7 +44,7 @@ function clipBlocks(page: Page): Locator {
   return page.locator("[data-ui-area='editorVideo.timeline'] button[data-item-id]");
 }
 
-test("Add after current clip in the Add from Library modal inserts the recording and undoes in one step", async () => {
+test("Add in the Add from Library modal inserts the recording and undoes in one step", async () => {
   test.setTimeout(240_000);
   ensureFixtures();
   const s = await startScenario(NAME, {
@@ -95,8 +95,9 @@ test("Add after current clip in the Add from Library modal inserts the recording
     await page.waitForTimeout(600); // thumbnails decode after the list is drawn
     await s.shot("modal");
 
-    // 3. Add after current clip: the playhead is at 0:00, so "after the clip under it" is 0:03.0.
-    await modal.getByRole("button", { name: "Add after current clip", exact: true }).click();
+    // 3. Add with the default destination (after the clip under the playhead). The playhead is at
+    // 0:00, so "after the clip under it" is 0:03.0.
+    await modal.getByRole("button", { name: "Add", exact: true }).click();
 
     // 4. 3 s + 12 s, the opened recording first.
     await expect.poll(() => durationLabel(page), { timeout: 20_000 }).not.toBe(before);
