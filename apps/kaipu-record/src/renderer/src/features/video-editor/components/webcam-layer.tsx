@@ -7,7 +7,7 @@
  * camera box): `webcamStateAt` picks the layout in force and the slide in progress (null
  * inside a hidden segment), `webcamStateRect` places it in the output frame with the camera
  * path's scale for "shrink during zoom" (the export reads the same pair, so the two agree at
- * one source time; no CSS transition moves the box), and `webcam-sync` decides visibility (the file's own first and last frame)
+ * one source time; no CSS transition moves the box), and `webcam-sync` decides visibility (the file's own first frame, held over its startup lag, and last frame)
  * and whether the element drifted past 80 ms and needs a seek. While the main video plays, a
  * seek aims ahead by the last seek's measured duration, so it lands where the screen will be.
  * Play/pause/rate mirror the main element, and the webcam also pauses while the main one
@@ -151,7 +151,11 @@ function useWebcamSync({
     const webcamTime = webcamTimeFor(file.localTime, file.startOffsetMs);
     const scale = cameraEnabled && path ? cameraAt(path, t).scale : 1;
     let rect =
-      state && file.src !== null && webcamHasFrameAt(webcamTime, cam.duration)
+      state &&
+      file.src !== null &&
+      // No empty box: nothing shows until the element has decoded a frame (`loadeddata`).
+      cam.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+      webcamHasFrameAt(webcamTime, cam.duration)
         ? webcamStateRect(state, frame, scale)
         : null;
     if (rect && held.current) {
@@ -319,6 +323,7 @@ function WebcamMedia({
         preload="auto"
         data-testid="webcam-video"
         onLoadedMetadata={sync.resync}
+        onLoadedData={sync.resync}
         onSeeked={sync.onSeeked}
       />
     </div>

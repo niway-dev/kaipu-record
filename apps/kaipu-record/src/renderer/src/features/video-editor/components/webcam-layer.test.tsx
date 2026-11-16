@@ -124,14 +124,14 @@ describe("WebcamLayer", () => {
     expect(cam.style.transform).toContain("scaleX(-1)");
   });
 
-  it("is hidden before the webcam's first frame and after its last (offset subtracted)", () => {
+  it("is hidden beyond the lead-in hold and after the webcam's last frame (offset subtracted)", () => {
     const { ref, el } = mainVideo(0.2);
-    renderLayer({ videoRef: ref, startOffsetMs: 500 });
+    renderLayer({ videoRef: ref, startOffsetMs: 2000 });
     loadWebcam(10);
     expect(bubble().style.display).toBe("none");
-    act(() => setTime(el, 0.6));
+    act(() => setTime(el, 2.6));
     expect(bubble().style.display).toBe("");
-    act(() => setTime(el, 10.6));
+    act(() => setTime(el, 12.6));
     expect(bubble().style.display).toBe("none");
   });
 
