@@ -389,7 +389,7 @@
     "homeChapter3Sub": "Just enough editing",
     "homeChapter3Title": "A small tweak. A clearer idea.",
     "homeChapter3Serif": "Cut what’s extra. Zoom into what matters.",
-    "homeChapter3Body": "Kaipu suggests zooms from your clicks. Trim the ends, mute a cough, cover an API key. Your original stays untouched.",
+    "homeChapter3Body": "Kaipu suggests zooms from your clicks. Trim the ends, mute a cough, cover an API key, change the cursor after recording, and edit your webcam on its own track. Your original stays untouched.",
     "homeChapter3Pill1": "Auto zoom",
     "homeChapter3Pill2": "Trim",
     "homeChapter3Pill3": "Mute audio",
@@ -405,9 +405,9 @@
     "homeChapter4Pill4": "Badges",
     "homeFilesEyebrow": "Your files",
     "homeFilesTitle": "Your library is a folder.",
-    "homeFilesBody": "Every recording is an MP4 and every screenshot a PNG, in ~/Movies/Kaipu Record. Open them with anything. Move them anywhere.",
+    "homeFilesBody": "Every recording is an MP4 and every screenshot a PNG, in ~/Movies/Kaipu Record. Open them with anything. Move them anywhere. Kaipu only sends crash reports and usage events, never your screen, clicks or files, and you can turn them off in Settings.",
     "homeFilesCheck1": "Standard MP4 and PNG files",
-    "homeFilesCheck2": "Nothing leaves your Mac unless you share it",
+    "homeFilesCheck2": "Your videos, screenshots and files never leave your Mac unless you share them",
     "homeFilesCheck3": "Uninstall Kaipu and your files stay",
     "homeFilesLabel": "Your files",
     "homeCtaLead": "Next time,",
@@ -2583,7 +2583,7 @@
     "items": {
       "screenshotModes": {
         "title": "Screenshot modes: Frame and Screen",
-        "description": "Drag a frame or reuse the last one, or capture a whole display. Pick the mode on the selection itself, then Capture, or Copy to the clipboard without opening the editor; a small card offers Annotate or Open in Library."
+        "description": "Drag a frame or reuse the last one, or capture a whole display. Pick the mode on the selection itself, then Capture, or Copy to the clipboard without opening the editor; a small card then offers Copy, Reveal in Finder and Edit."
       },
       "editorHome": {
         "title": "An Editor that starts where you left off",
@@ -2744,7 +2744,8 @@
         "body": "Your screen, your voice, system audio and a floating camera bubble you can drag anywhere, in high quality.",
         "d1": "Mic, system audio and camera on separate switches",
         "d2": "The camera bubble stays on top while you work",
-        "d3": "Pause and resume without starting over"
+        "d3": "Pause and resume without starting over",
+        "d4": "Camera bubble shape (circle, square or 3:4 portrait), size, corners, mirror and framing"
       },
       "startAnywhere": {
         "title": "Start from anywhere",
@@ -2787,7 +2788,7 @@
       },
       "quietCapture": {
         "title": "Copy and keep going",
-        "body": "Press ⌘C on the selection and the shot lands on the clipboard, no editor in the way. With saving on, Capture files it in your library just as quietly. A small card then offers Annotate, Open in Library or Save to Library."
+        "body": "Press ⌘C on the selection and the shot lands on the clipboard, no editor in the way. With saving on, Capture files it in your library just as quietly."
       },
       "blurFrame": {
         "title": "Blur and frame",
@@ -2839,7 +2840,7 @@
         "body": "Pick where the video is going and get a file that fits, or keep Balanced. Maximum quality is one setting away.",
         "c1": "GitHub · Jira · Linear",
         "c2": "Slack · Discord",
-        "c3": "YouTube",
+        "c3": "YouTube · 1440p or 4K",
         "c4": "Reels · TikTok · Shorts",
         "c5": "Feeds"
       },
@@ -2872,7 +2873,58 @@
       },
       "rename": {
         "title": "Rename anything",
-        "body": "Give anything a better name. An edited video is its own item, linked back to the recording it came from."
+        "body": "Give anything a better name. The file in your folder is renamed to match, so names stay readable outside Kaipu. An edited video is its own item, linked back to the recording it came from."
+      },
+      "audioCleanup": {
+        "title": "Clean up your audio",
+        "body": "Raise a quiet microphone, cut background noise, and let system audio dip while you talk. A level meter shows what you’re sending.",
+        "c1": "Mic level",
+        "c2": "Noise reduction",
+        "c3": "Lower system audio while I talk",
+        "c4": "Level meter"
+      },
+      "readyCard": {
+        "title": "“Your video is ready”",
+        "body": "When you stop, a card offers a copy shaped for YouTube, GitHub or TikTok, or lets you edit first."
+      },
+      "previewCard": {
+        "title": "A preview after every capture",
+        "body": "A small card shows the shot as soon as you take it, with Copy, Reveal in Finder and Edit. Click the image to open it in the editor."
+      },
+      "webcamTrack": {
+        "title": "Your webcam, on its own track",
+        "body": "The camera gets its own lane in the editor, with an inspector for its look. You can hide it for any stretch of the video.",
+        "d1": "Shape, corners, size, position and mirror",
+        "d2": "Hide it for a stretch, or give one stretch its own look"
+      },
+      "editableCursor": {
+        "title": "Change the cursor afterwards",
+        "body": "Kaipu can record without the cursor, so you choose its look after: arrow, dot or spotlight, its size, and a click effect."
+      },
+      "timeline": {
+        "title": "A timeline you can steer",
+        "body": "Zoom the timeline, change the playback speed, hide the lanes you don’t use, and skip 5 seconds or to the next cut.",
+        "d1": "Press H for the Timeline guide, which explains every lane",
+        "d2": "Clicks show as amber ticks on the Zooms lane"
+      },
+      "importVideo": {
+        "title": "Import a video",
+        "body": "Bring in an MP4, MOV, M4V or WebM from anywhere and edit it like any recording."
+      },
+      "editorBackgrounds": {
+        "title": "Backgrounds for your video",
+        "body": "Set a recording on a wallpaper-style gradient with padding, rounded corners and a shadow. Pick one and you start from a ready-made look."
+      },
+      "workspaces": {
+        "title": "Workspaces",
+        "body": "Keep work and personal captures apart. Each workspace is its own folder with a name and a color.",
+        "d1": "Create, color and switch between workspaces",
+        "d2": "Move items from one workspace to another",
+        "d3": "Per-workspace settings that fall back to your defaults"
+      },
+      "checkFiles": {
+        "title": "Check and fix files",
+        "body": "Kaipu compares your library with its folder, then renames mismatched files, adds new ones to the library or sets them aside. Nothing is deleted."
       }
     },
     "private": {
@@ -2890,7 +2942,7 @@
         },
         "analytics": {
           "title": "Analytics never see your screen",
-          "body": "Usage analytics never record your screen or your clicks in the app."
+          "body": "Kaipu only sends crash reports and usage events, never your screen, clicks or files. You can turn them off in Settings."
         },
         "languages": {
           "title": "Light, dark, English, Spanish",
