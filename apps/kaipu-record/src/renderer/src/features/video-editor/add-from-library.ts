@@ -1,5 +1,6 @@
 import type { LibraryVideo } from "@renderer/features/library/types";
 import type { SlideItem, VideoScene } from "./scene";
+import { MEDIA_DEFAULT_DURATION, MEDIA_MIN_DURATION } from "./media";
 import { itemsIndexOfBoundary } from "./source-axis";
 import {
   boundaryIndexAt,
@@ -217,4 +218,117 @@ export function boundaryForDestination(
     case "end":
       return boundaryAtEnd(layout);
   }
+}
+
+/** How long a screenshot added Over the video floats: the floating image's own default. */
+export const FLOATING_IMAGE_SECONDS = MEDIA_DEFAULT_DURATION;
+
+/** One piece of the sequence in a `PlacementPreview`, in timeline seconds. */
+export interface PlacementBlock {
+  /** The layout entry's item id, or "new" for the item being added. */
+  key: string;
+  start: number;
+  end: number;
+  isNew: boolean;
+  /** A clip the add pushes later (it sits after the new item). */
+  moved: boolean;
+}
+
+/** What `placementPreview` draws: the sequence after the add, and where the playhead is in it. */
+export interface PlacementPreview {
+  blocks: PlacementBlock[];
+  /** "Over the video": the floating item's span, drawn above the clips. Null otherwise. */
+  floating: { start: number; end: number } | null;
+  /** The playhead's place in the result; it follows the clip it is on if that clip moves. */
+  playhead: number;
+  /** The length the drawing spans: the sequence after the add, or the floating item's end if later. */
+  total: number;
+  /** How many clips the add pushes later. */
+  moved: number;
+}
+
+/**
+ * The sequence as it would be right after adding an item `newSeconds` long at `destination`:
+ * the picture the placement strip draws. It asks `boundaryForDestination`, the rule the add
+ * itself applies, so the drawing cannot disagree with where the item lands. For a sequence
+ * place the new block sits at the boundary and every clip from there on is pushed by
+ * `newSeconds`; the playhead marker stays on the clip it is on, so it moves with that clip.
+ * "Over" changes nothing in the sequence: the item floats from the playhead for
+ * `newSeconds`, cut at the end of the video exactly as `addImageMedia` does.
+ */
+export function placementPreview(
+  layout: LayoutEntry[],
+  playhead: number,
+  destination: LibraryDestination,
+  newSeconds: number,
+): PlacementPreview {
+  const sequenceEnd = layout.length === 0 ? 0 : layout[layout.length - 1].timelineEnd;
+  const t = Math.max(0, playhead);
+  const boundary = boundaryForDestination(destination, layout, t);
+  const clipUnderPlayhead = layout.findIndex((entry) => t <= entry.timelineEnd);
+
+  if (boundary === null) {
+    const start =
+      layout.length === 0 ? 0 : Math.max(0, Math.min(t, sequenceEnd - MEDIA_MIN_DURATION));
+    const length =
+      layout.length === 0
+        ? newSeconds
+        : Math.max(MEDIA_MIN_DURATION, Math.min(newSeconds, sequenceEnd - start));
+    return {
+      blocks: layout.map((entry) => ({
+        key: entry.itemId,
+        start: entry.timelineStart,
+        end: entry.timelineEnd,
+        isNew: false,
+        moved: false,
+      })),
+      floating: { start, end: start + length },
+      playhead: Math.min(t, sequenceEnd),
+      total: Math.max(sequenceEnd, start + length),
+      moved: 0,
+    };
+  }
+
+  const blocks: PlacementBlock[] = [];
+  layout.forEach((entry, i) => {
+    if (i === boundary.index) {
+      blocks.push({
+        key: "new",
+        start: boundary.time,
+        end: boundary.time + newSeconds,
+        isNew: true,
+        moved: false,
+      });
+    }
+    const moved = i >= boundary.index;
+    const shift = moved ? newSeconds : 0;
+    blocks.push({
+      key: entry.itemId,
+      start: entry.timelineStart + shift,
+      end: entry.timelineEnd + shift,
+      isNew: false,
+      moved,
+    });
+  });
+  if (boundary.index >= layout.length) {
+    blocks.push({
+      key: "new",
+      start: boundary.time,
+      end: boundary.time + newSeconds,
+      isNew: true,
+      moved: false,
+    });
+  }
+
+  // On a clip: its offset into the clip is kept, so the marker rides along if the clip moves.
+  // Past the end there is no clip: the marker waits at the old end of the sequence.
+  const shifted = clipUnderPlayhead !== -1 && clipUnderPlayhead >= boundary.index;
+  const marker = clipUnderPlayhead === -1 ? sequenceEnd : t + (shifted ? newSeconds : 0);
+  return {
+    blocks,
+    floating: null,
+    playhead: marker,
+    total: sequenceEnd + newSeconds,
+    moved: layout.length - Math.min(boundary.index, layout.length),
+  };
 }

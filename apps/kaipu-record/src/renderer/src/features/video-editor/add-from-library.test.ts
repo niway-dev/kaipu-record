@@ -12,6 +12,8 @@ import {
   boundaryAtStart,
   boundaryAtEnd,
   libraryScreenshots,
+  placementPreview,
+  FLOATING_IMAGE_SECONDS,
   boundaryForDestination,
   defaultDestination,
   destinationAllowed,
@@ -495,5 +497,142 @@ describe("libraryScreenshots", () => {
     expect(ids(libraryScreenshots(list, "  PRICING "))).toEqual(["a"]);
     // Same createdAt, so a blank query keeps both.
     expect(libraryScreenshots(list, "   ")).toHaveLength(2);
+  });
+});
+
+describe("placementPreview", () => {
+  // Three clips: a 0-8, b 8-20, c 20-30. The playhead sits in b unless a test says otherwise.
+  const layout = [clip("a", 0, 8), clip("b", 8, 20), clip("c", 20, 30)];
+  const spans = (preview: ReturnType<typeof placementPreview>): Array<[string, number, number]> =>
+    preview.blocks.map((b) => [b.key, b.start, b.end]);
+
+  it("after the clip: the new block follows the clip under the playhead and pushes only what is after", () => {
+    const preview = placementPreview(layout, 12, "after-clip", 7);
+    expect(spans(preview)).toEqual([
+      ["a", 0, 8],
+      ["b", 8, 20],
+      ["new", 20, 27],
+      ["c", 27, 37],
+    ]);
+    expect(preview.blocks.filter((b) => b.moved).map((b) => b.key)).toEqual(["c"]);
+    expect(preview.blocks.find((b) => b.key === "new")?.isNew).toBe(true);
+    expect(preview.moved).toBe(1);
+    expect(preview.total).toBe(37);
+    expect(preview.floating).toBeNull();
+    expect(preview.playhead).toBe(12);
+  });
+
+  it("before the clip: the clip under the playhead moves, and the marker moves with it", () => {
+    const preview = placementPreview(layout, 12, "before-clip", 7);
+    expect(spans(preview)).toEqual([
+      ["a", 0, 8],
+      ["new", 8, 15],
+      ["b", 15, 27],
+      ["c", 27, 37],
+    ]);
+    expect(preview.moved).toBe(2);
+    expect(preview.playhead).toBe(19);
+  });
+
+  it("at the start: everything moves", () => {
+    const preview = placementPreview(layout, 12, "start", 7);
+    expect(spans(preview)).toEqual([
+      ["new", 0, 7],
+      ["a", 7, 15],
+      ["b", 15, 27],
+      ["c", 27, 37],
+    ]);
+    expect(preview.moved).toBe(3);
+    expect(preview.playhead).toBe(19);
+  });
+
+  it("at the end: nothing moves and the marker stays", () => {
+    const preview = placementPreview(layout, 12, "end", 7);
+    expect(spans(preview)).toEqual([
+      ["a", 0, 8],
+      ["b", 8, 20],
+      ["c", 20, 30],
+      ["new", 30, 37],
+    ]);
+    expect(preview.moved).toBe(0);
+    expect(preview.playhead).toBe(12);
+  });
+
+  it("over the video: the clips stay and the item floats from the playhead", () => {
+    const preview = placementPreview(layout, 12, "over", 10);
+    expect(spans(preview)).toEqual([
+      ["a", 0, 8],
+      ["b", 8, 20],
+      ["c", 20, 30],
+    ]);
+    expect(preview.blocks.some((b) => b.isNew || b.moved)).toBe(false);
+    expect(preview.floating).toEqual({ start: 12, end: 22 });
+    expect(preview.moved).toBe(0);
+    expect(preview.total).toBe(30);
+    expect(preview.playhead).toBe(12);
+  });
+
+  it("over the video is cut at the end of the video, as the floating image is", () => {
+    const preview = placementPreview(layout, 27, "over", FLOATING_IMAGE_SECONDS);
+    expect(preview.floating).toEqual({ start: 27, end: 30 });
+    expect(preview.total).toBe(30);
+  });
+
+  it("an empty sequence is just the new block", () => {
+    for (const destination of ["before-clip", "after-clip", "start", "end"] as const) {
+      const preview = placementPreview([], 0, destination, 5);
+      expect(spans(preview)).toEqual([["new", 0, 5]]);
+      expect(preview.moved).toBe(0);
+      expect(preview.total).toBe(5);
+      expect(preview.playhead).toBe(0);
+    }
+  });
+
+  it("a playhead in the last clip with after-clip moves nothing", () => {
+    const preview = placementPreview(layout, 25, "after-clip", 7);
+    expect(spans(preview).map(([key]) => key)).toEqual(["a", "b", "c", "new"]);
+    expect(preview.moved).toBe(0);
+    expect(preview.playhead).toBe(25);
+  });
+
+  it("a playhead past the end waits at the end of the sequence", () => {
+    const preview = placementPreview(layout, 99, "after-clip", 7);
+    expect(spans(preview).at(-1)).toEqual(["new", 30, 37]);
+    expect(preview.playhead).toBe(30);
+  });
+
+  it("slides count as clips", () => {
+    const withSlide: LayoutEntry[] = [
+      clip("a", 0, 8),
+      {
+        itemId: "s",
+        kind: "slide",
+        timelineStart: 8,
+        timelineEnd: 13,
+        sourceStart: 0,
+        sourceEnd: 5,
+      },
+      clip("c", 13, 23),
+    ];
+    const preview = placementPreview(withSlide, 3, "after-clip", 4);
+    expect(spans(preview)).toEqual([
+      ["a", 0, 8],
+      ["new", 8, 12],
+      ["s", 12, 17],
+      ["c", 17, 27],
+    ]);
+    expect(preview.moved).toBe(2);
+  });
+
+  it("lands where the add does: the new block starts at the boundary the add uses", () => {
+    for (const destination of ["before-clip", "after-clip", "start", "end"] as const) {
+      for (const playhead of [0, 8, 12, 20, 29, 30, 50]) {
+        const boundary = boundaryForDestination(destination, layout, playhead);
+        const preview = placementPreview(layout, playhead, destination, 4);
+        const at = preview.blocks.findIndex((b) => b.isNew);
+        expect(at).toBe(boundary?.index);
+        expect(preview.blocks[at].start).toBe(boundary?.time);
+      }
+    }
   });
 });
