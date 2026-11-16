@@ -326,10 +326,15 @@ function slideState(
  *   capped at half the gap. When the next segment starts at its end the next block's start
  *   governs instead, so there is no return.
  * - A Cut, or no transition, changes at once.
+ *
+ * `endSeconds` is the recording's end in source seconds: the last block's return is capped at
+ * half of what is left, so it settles before the video ends. Without it the return takes its
+ * whole duration.
  */
 export function webcamStateAt(
   scene: { webcam: WebcamScene | null },
   t: number,
+  endSeconds = Infinity,
 ): WebcamState | null {
   const webcam = scene.webcam;
   if (!webcam) return null;
@@ -359,8 +364,10 @@ export function webcamStateAt(
     return settled(layout);
   }
   const next = segments[before + 1];
-  const gap = next ? next.start - ended.end : Infinity;
-  if (gap <= ADJACENT_EPSILON) return settled(layout);
+  const gap = (next ? next.start : endSeconds) - ended.end;
+  // A gap of float noise is no gap: the next segment's start governs, as it does when the two
+  // touch, instead of a flash of the default layout between them.
+  if (gap <= ADJACENT_EPSILON) return next ? webcamStateAt(scene, next.start) : settled(layout);
   const windowMs = webcamEffectiveTransitionMs(gap, transition.ms);
   return slideState(layout, segmentPosition(webcam, ended), transition, windowMs, t - ended.end);
 }

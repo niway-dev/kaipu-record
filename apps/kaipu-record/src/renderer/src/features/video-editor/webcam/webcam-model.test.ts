@@ -432,4 +432,29 @@ describe("webcamStateAt", () => {
     const scene = sceneOf(override("a", 10, 20, TOP_RIGHT, { ...slide(), kind: "cut" }));
     expect(webcamStateAt(scene, 20)).toMatchObject({ from: null, progress: 1 });
   });
+
+  it("caps the last return at half of what is left of the recording, so it finishes before the end", () => {
+    const scene = sceneOf(override("a", 10, 20, TOP_RIGHT, slide(700)));
+    // 0.1 s of recording left: the return gets 50 ms and has settled by 20.05.
+    expect(webcamStateAt(scene, 20.025, 20.1)!.progress).toBeCloseTo(0.5);
+    expect(webcamStateAt(scene, 20.05, 20.1)).toMatchObject({ from: null, progress: 1 });
+    expect(webcamStateAt(scene, 20.09, 20.1)).toMatchObject({ from: null, progress: 1 });
+  });
+
+  it("uses the transition's own length for the last return while the recording end is unknown or far", () => {
+    const scene = sceneOf(override("a", 10, 20, TOP_RIGHT, slide(1000)));
+    expect(webcamStateAt(scene, 20.5)!.progress).toBeCloseTo(0.5);
+    expect(webcamStateAt(scene, 20.5, 120)!.progress).toBeCloseTo(0.5);
+  });
+
+  it("starts the next block's slide, not the default layout, across a gap of float noise", () => {
+    const scene = sceneOf(
+      override("a", 10, 20, TOP_RIGHT, slide()),
+      override("b", 20.0000005, 30, CENTER, slide()),
+    );
+    const sliver = webcamStateAt(scene, 20)!;
+    expect(sliver.layout.position).toEqual(CENTER);
+    expect(sliver.from?.position).toEqual(TOP_RIGHT);
+    expect(sliver.progress).toBe(0);
+  });
 });
