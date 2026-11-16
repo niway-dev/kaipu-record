@@ -206,8 +206,9 @@ a preview, because the preview cannot show the preset.
    source axis, so clips and source anchors need no source id
    ([ADR 0058](/architecture/decisions/0058-joined-recordings-share-one-source-axis-each-on-its-own-range/));
    the preview and the export open more than one recording; zooms, privacy, mutes, cursor and
-   webcam are scoped to their source; an image dropped on the sequence is a 5 s slide; fade through
-   the background between sequence items. The second recording comes from the Library only (owner,
+   webcam are scoped to their source; an image added to the sequence through the Add from Library
+   chooser (see "Choosing the destination") is a 5 s slide; fade through the background between
+   sequence items. The second recording comes from the Library only (owner,
    2026-11-14); a file from disk is later. Milestone 1 (joining a Library recording, cuts only) is
    [NIW2-778](https://linear.app/niway/issue/NIW2-778).
 3. **Floating videos and the crossfade.** A second decoder in the same window, per-item mute,
@@ -216,6 +217,35 @@ a preview, because the preview cannot show the preset.
 
 Stage 1 leaves the item model, the anchor, the rows and `mediaAt` for the later stages. Stage 2's
 multi-source work is its own; nothing in stage 1 does it in advance.
+
+## Choosing the destination (NIW2-829)
+
+Owner decision, 2026-11-16: Add from Library has one add flow. The user selects an item (a
+recording or a screenshot), one chooser lists every place it can go, and one **Add** button applies
+it. Before this the type decided silently (a recording always joined the sequence, a screenshot
+always floated) and the Captures panel had a second Add to timeline button that did the same as the
+modal's screenshot add. Everything is behind `timeline-levels`.
+
+The destinations, as a radio list with one selected:
+
+- **Over the video**: floats at the playhead and the recording keeps playing. A screenshot becomes
+  the floating image of stage 1 (10 s). A recording shows this option disabled, with a hint that
+  floating videos come later (stage 3).
+- **In the sequence**, which pushes everything after it later: before the clip under the playhead,
+  after the clip under the playhead, at the start, at the end. A recording joins at that boundary.
+  A screenshot becomes an image slide of 5 s there (decision 8).
+
+Defaults: a screenshot starts at Over the video, a recording at after the clip under the playhead.
+After an add, the destination is remembered per type (screenshot, recording) for the rest of the
+editor session, and a recording never starts on the disabled option. The modal stays open after an
+add and confirms with a toast. On the Screenshots tab a click selects a card; it no longer adds.
+
+The Captures panel keeps Go to and Delete. Its add button no longer adds: it opens Add from
+Library on the Screenshots tab with that capture already selected, and the chooser takes it from
+there. With the flag off nothing changes, because neither the modal nor that button exists.
+
+Slide insertion reads the scene after the image decodes, and pins the chosen boundary to the clip
+that follows it, so a join that lands in the meantime does not move the slide.
 
 ## 4. What the parked design keeps and loses
 
