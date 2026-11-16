@@ -9,7 +9,7 @@
      dialog's max-height on a short window. */
   flex: 0 1 auto;
   min-height: 0;
-  height: min(720px, calc(100vh - 64px));
+  height: min(772px, calc(100vh - 64px));
   background: var(--bg-modal);
   color: var(--text-primary);
 }
@@ -185,7 +185,8 @@
 
 .list {
   flex: none;
-  width: 45%;
+  /* The design's 400 px, giving way first on a narrow window. */
+  width: min(400px, 40%);
   margin: 0;
   padding: 8px;
   overflow-y: auto;
@@ -453,7 +454,8 @@
   min-width: 0;
   display: grid;
   flex: none;
-  width: 48%;
+  /* Three cards across at the design's 470 px; fewer on a narrow window. */
+  width: min(470px, 45%);
   /* Beside the Add column the grid has room for two or three cards, by width. */
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   align-content: start;
