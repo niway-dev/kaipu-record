@@ -165,6 +165,19 @@ describe("This part, with a part there", () => {
     expect(frame.querySelector("line")).not.toBeNull();
   });
 
+  it("shows the length of the part on the timeline, not its length in the source", () => {
+    // A part of 10 source seconds (10 to 20) that spans 4 timeline seconds, e.g. over a cut.
+    const part: WebcamSegment = { ...PART, start: 10, end: 20 };
+    renderPanel({
+      segment: part,
+      webcam: sceneOf({}, [part]),
+      range: { from: 10, to: 14 },
+      playhead: 10,
+    });
+    expect(screen.getByText(/0:10\.0 – 0:14\.0 · 4\.0 s/)).toBeInTheDocument();
+    expect(screen.queryByText(/10\.0 s/)).toBeNull();
+  });
+
   it("the frame is a picture, not a control", () => {
     const { edits } = renderPanel();
     const frame = screen.getByTestId("webcam-panel-frame");
@@ -401,9 +414,18 @@ describe("Whole video", () => {
     openWholeVideo();
     expect(screen.queryByRole("slider", { name: "Corners" })).toBeNull();
     unmount();
-    render(
+    const rectangle = render(
       <WebcamPanel
         {...panelProps({ webcam: sceneOf({ shape: "rectangle" }), segment: null, range: null })}
+      />,
+    );
+    openWholeVideo();
+    expect(screen.getByRole("slider", { name: "Corners" })).toBeInTheDocument();
+    rectangle.unmount();
+    // "rounded" is the Square shape: it has corners too.
+    render(
+      <WebcamPanel
+        {...panelProps({ webcam: sceneOf({ shape: "rounded" }), segment: null, range: null })}
       />,
     );
     openWholeVideo();

@@ -682,7 +682,7 @@ describe("EditorToolRail — Captures (NIW2-764)", () => {
       "in-part": "Inside a part the camera cannot be hidden. Pick a spot outside it.",
       "in-hidden": "The camera is already hidden here.",
       "no-room": "Not enough room here: under 1 second is left before the next block or the end.",
-      "on-slide": "A slide has no webcam to hide.",
+      "on-slide": "A slide has no camera to hide.",
     } as const;
     for (const [block, reason] of Object.entries(reasons)) {
       cleanup();

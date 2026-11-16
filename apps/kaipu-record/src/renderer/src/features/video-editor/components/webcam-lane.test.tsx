@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { TrackItem } from "../scene";
 import { toLayout } from "../timeline";
 import type { WebcamSegment } from "../webcam/webcam-model";
+import { fitView } from "./timeline-view";
+import { TimelineViewContext } from "./timeline-pointer";
 import { WebcamLane } from "./webcam-lane";
 
 const items: TrackItem[] = [
@@ -44,23 +46,32 @@ describe("WebcamLane", () => {
   });
 
   it("labels hidden and override segments", () => {
+    // In a 1500 px lane a second is 100 px, so the 200 px part has room for its name.
     render(
-      <WebcamLane
-        layout={layout}
-        segments={[
-          segment({ id: "h", start: 1, end: 2 }),
-          segment({ id: "o", start: 3, end: 4, mode: "override", layout: { size: 0.3 } }),
-        ]}
-        selectedId={null}
-        onSelect={vi.fn()}
-        onEdgeDrag={vi.fn()}
-      />,
+      <TimelineViewContext.Provider value={fitView(1500, 15)}>
+        <WebcamLane
+          layout={layout}
+          segments={[
+            segment({ id: "h", start: 1, end: 2 }),
+            segment({
+              id: "o",
+              start: 3,
+              end: 5,
+              mode: "override",
+              layout: { position: { x: 0.8, y: 0.2 }, size: 0.3 },
+            }),
+          ]}
+          selectedId={null}
+          onSelect={vi.fn()}
+          onEdgeDrag={vi.fn()}
+        />
+      </TimelineViewContext.Provider>,
     );
     expect(screen.getByRole("button", { name: "Webcam section 1" })).toHaveTextContent("Hidden");
-    // A part no longer says "Custom": it names where the camera is (the text shows with room).
-    expect(screen.getByRole("button", { name: "Webcam section 2" })).not.toHaveTextContent(
-      "Custom",
-    );
+    // A part no longer says "Custom": it names where the camera is.
+    const part = screen.getByRole("button", { name: "Webcam section 2" });
+    expect(part).toHaveTextContent("Top right");
+    expect(part).not.toHaveTextContent("Custom");
   });
 
   it("selects on click and exposes handles only on the real edges", () => {

@@ -147,7 +147,10 @@ export function webcamMarks(input: WebcamMarksInput): WebcamMarks | null {
       previous.mode === "override" &&
       Math.abs(previous.end - shown.start) <= TOUCH_EPSILON;
     const target = webcamRect(layoutOf(webcam, shown), frame, scale);
-    const origin = webcamRect(layoutOf(webcam, touching ? previous : undefined), frame, scale);
+    // The slide starts from the previous place's position inside THIS part's box
+    // (`webcamStateRect` clamps `from` with the part's own size), so the route does the same.
+    const fromPosition = layoutOf(webcam, touching ? previous : undefined).position;
+    const origin = webcamRect({ ...layoutOf(webcam, shown), position: fromPosition }, frame, scale);
     if (target && origin) {
       const { width, height } = target;
       // The reach `webcamStateRect` slides inside: the frame minus half the box.

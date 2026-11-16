@@ -405,9 +405,12 @@ describe("WebcamLayer", () => {
   });
 
   /** A layer in a 1000 px frame whose slot measures 1000 px, with the webcam file loaded. */
-  function dragSetup(webcam: WebcamScene = scene()) {
+  function dragSetup(
+    webcam: WebcamScene = scene(),
+    extra: Partial<React.ComponentProps<typeof WebcamLayer>> = {},
+  ) {
     const { ref, el } = mainVideo(1);
-    const view = renderLayer({ videoRef: ref, webcam });
+    const view = renderLayer({ videoRef: ref, webcam, ...extra });
     loadWebcam(30);
     const slot = view.container.querySelector('[data-testid="webcam-slot"]') as HTMLElement;
     slot.getBoundingClientRect = () => ({ width: 1000, height: 1000 }) as DOMRect;
@@ -484,6 +487,47 @@ describe("WebcamLayer", () => {
       expect(handlers.onSelect).not.toHaveBeenCalled();
       unmount();
     }
+  });
+
+  describe("onHeldChange", () => {
+    /** The layer reports its state once on mount; what matters is what a gesture adds. */
+    function heldSetup() {
+      const onHeldChange = vi.fn();
+      const setup = dragSetup(scene(), { onHeldChange });
+      onHeldChange.mockClear();
+      return { ...setup, onHeldChange };
+    }
+
+    it("is true once the bubble moves past the click slop and false on release", () => {
+      const { onHeldChange } = heldSetup();
+      fireEvent.pointerDown(bubble(), { clientX: 500, clientY: 500, pointerId: 1 });
+      expect(onHeldChange).not.toHaveBeenCalled();
+      fireEvent.pointerMove(bubble(), { clientX: 503, clientY: 500, pointerId: 1 });
+      expect(onHeldChange.mock.calls).toEqual([[true]]);
+      fireEvent.pointerUp(bubble(), { clientX: 503, clientY: 500, pointerId: 1 });
+      expect(onHeldChange.mock.calls).toEqual([[true], [false]]);
+    });
+
+    it("is false when the drag is cancelled or loses the pointer", () => {
+      for (const abort of ["pointerCancel", "lostPointerCapture"] as const) {
+        const { onHeldChange, unmount } = heldSetup();
+        fireEvent.pointerDown(bubble(), { clientX: 500, clientY: 500, pointerId: 1 });
+        fireEvent.pointerMove(bubble(), { clientX: 700, clientY: 500, pointerId: 1 });
+        expect(onHeldChange.mock.calls).toEqual([[true]]);
+        fireEvent[abort](bubble(), { pointerId: 1 });
+        expect(onHeldChange.mock.calls).toEqual([[true], [false]]);
+        unmount();
+      }
+    });
+
+    // In the page, "held" pauses a playing video: a plain click must not.
+    it("is never raised by a press that moves under 3 px", () => {
+      const { onHeldChange } = heldSetup();
+      fireEvent.pointerDown(bubble(), { clientX: 500, clientY: 500, pointerId: 1 });
+      fireEvent.pointerMove(bubble(), { clientX: 502, clientY: 501, pointerId: 1 });
+      fireEvent.pointerUp(bubble(), { clientX: 502, clientY: 501, pointerId: 1 });
+      expect(onHeldChange).not.toHaveBeenCalled();
+    });
   });
 
   it("stays at the dropped place while a card waits, and goes back when it is gone", () => {

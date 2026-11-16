@@ -178,8 +178,10 @@ export type WebcamHideBlock = "on-slide" | "in-part" | "in-hidden" | "no-room";
  * Whether the rail's "Hide camera from here" can hide at source time `at` (null over a slide
  * clip, where there is no camera). It hides outside every block only: inside a part or a hidden
  * range it is blocked, and with under the minimum length of room before the next block or the
- * end of the recording. The rail disables the button with the reason as its tooltip, and the
- * click handler applies the same rule.
+ * end of the recording. The rail disables the button with the reason as its tooltip.
+ * `hideAtPlayhead` repeats the slide, existing-block and room checks for a click that slips
+ * through (it returns the block it finds instead of adding one), so a change to this rule
+ * changes both; the tests of the two pin the same cases.
  */
 export function webcamHideBlock(
   scene: VideoScene,

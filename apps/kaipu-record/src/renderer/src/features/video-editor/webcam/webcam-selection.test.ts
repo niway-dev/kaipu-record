@@ -116,19 +116,17 @@ describe("webcamSelectSeekTarget", () => {
   });
 
   it("falls back to the stretch that is left when the moment past the slide is cut out", () => {
-    // The part starts at source 4.9: 4.9 + slide + 0.1 = 5.7 is in the cut-out gap.
+    // The part starts at source 4.9: 4.9 + slide + 0.1 = 5.7 is in the cut-out gap. Its first
+    // visible block is source 4.9-5 (timeline 4.9-5), and the fallback is that block's middle.
     const cutOut = { ...part, start: 4.9, end: 12 };
-    const target = webcamSelectSeekTarget(layout, 10, cutOut);
-    expect(target).not.toBeNull();
-    // Whatever it picks must be a real timeline time inside the layout.
-    expect(target!).toBeGreaterThanOrEqual(0);
-    expect(target!).toBeLessThanOrEqual(15);
+    expect(webcamSelectSeekTarget(layout, 10, cutOut)).toBeCloseTo(4.95, 6);
   });
 
-  it("moves into a hidden range like the zoom lane does", () => {
+  it("moves into a hidden range like the zoom lane does: to the middle of its first piece", () => {
+    // Source 12-18 is timeline 7-13.
     expect(
       webcamSelectSeekTarget(layout, 0, { id: "h", start: 12, end: 18, mode: "hidden" }),
-    ).not.toBeNull();
+    ).toBeCloseTo(10, 6);
   });
 
   it("is null for a stretch cut away entirely", () => {

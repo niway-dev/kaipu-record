@@ -25,8 +25,9 @@
   cursor: grabbing;
 }
 
-/* Held: a thicker ring and a deeper shadow. The extra attributes outrank the selected and
-   shadow rules below, which would otherwise win and keep the resting look. */
+/* Held bubbles get a thicker ring and a deeper shadow, selected or not. data-selected and
+   data-interactive are always rendered as "true" or "false", so this selector matches either
+   value; they only raise specificity so this rule outranks the selected and shadow rules below. */
 .bubble[data-dragging="true"][data-selected][data-interactive] {
   filter: drop-shadow(0 0 2px var(--text-primary)) drop-shadow(0 0 2px var(--text-primary))
     drop-shadow(0 0 3px var(--accent-primary)) drop-shadow(0 18px 20px rgba(0, 0, 0, 0.6));

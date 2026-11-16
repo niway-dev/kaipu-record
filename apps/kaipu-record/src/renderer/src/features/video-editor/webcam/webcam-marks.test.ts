@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { webcamMarks } from "./webcam-marks";
 import { webcamRoute } from "./webcam-route";
-import { webcamRect } from "./webcam-layout";
-import { WEBCAM_DEFAULTS, type WebcamScene, type WebcamSegment } from "./webcam-model";
+import { webcamRect, webcamStateRect } from "./webcam-layout";
+import {
+  WEBCAM_DEFAULTS,
+  webcamStateAt,
+  type WebcamScene,
+  type WebcamSegment,
+} from "./webcam-model";
 
 const FRAME = { width: 1920, height: 1080 };
 
@@ -102,6 +107,44 @@ describe("webcamMarks: the route, ghost and chip", () => {
     expect(marks.from?.ghost).toBe("before");
     const previous = webcamRect({ ...WEBCAM_DEFAULTS, position: { x: 0.8, y: 0.2 } }, FRAME)!;
     expect(marks.from?.route.start.x).toBeCloseTo(previous.x + previous.width / 2, 6);
+  });
+
+  describe("the route starts where the slide starts, inside THIS part's box", () => {
+    /** The bubble centre the preview and the export draw at the very start of a part's slide. */
+    const slideStart = (webcam: WebcamScene, at: number) => {
+      const state = webcamStateAt({ webcam }, at)!;
+      expect(state.from).not.toBeNull();
+      expect(state.progress).toBe(0);
+      const rect = webcamStateRect(state, FRAME)!;
+      return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+    };
+
+    it("clamps the original position with the part's size, not the original's", () => {
+      // The original (size 0.22 at x 0.12, y 0.82) fits. A part of size 0.5 is a box so big
+      // that the same position has to be pulled inwards: x to 0.1406 and y to 0.75.
+      const webcam = scene(
+        part("big", 10, 20, { layout: { position: { x: 0.8, y: 0.2 }, size: 0.5 } }),
+      );
+      const marks = marksAt(webcam, 15)!;
+      const expected = slideStart(webcam, 10);
+      expect(marks.from?.route.start.x).toBeCloseTo(expected.x, 6);
+      expect(marks.from?.route.start.y).toBeCloseTo(expected.y, 6);
+      // And it really differs from the original's own, unclamped centre.
+      const unclamped = webcamRect(WEBCAM_DEFAULTS, FRAME)!;
+      expect(marks.from!.route.start.y).not.toBeCloseTo(unclamped.y + unclamped.height / 2, 1);
+    });
+
+    it("does the same from a previous part that touches it", () => {
+      const webcam = scene(
+        part("a", 10, 20, { layout: { position: { x: 0.03, y: 0.97 }, size: 0.1 } }),
+        part("b", 20, 30, { layout: { position: { x: 0.8, y: 0.2 }, size: 0.5 } }),
+      );
+      const marks = marksAt(webcam, 25)!;
+      expect(marks.from?.ghost).toBe("before");
+      const expected = slideStart(webcam, 20);
+      expect(marks.from?.route.start.x).toBeCloseTo(expected.x, 6);
+      expect(marks.from?.route.start.y).toBeCloseTo(expected.y, 6);
+    });
   });
 
   it("chips a slide with its real seconds: the duration asked for, at most half the part", () => {

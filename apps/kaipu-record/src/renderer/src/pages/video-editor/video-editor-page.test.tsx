@@ -1546,6 +1546,33 @@ describe("VideoEditorPage — dropping the camera bubble", () => {
     }
   });
 
+  it("picking the bubble up while the video plays pauses it", async () => {
+    stubDecodedVideoSize(1280, 720);
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    try {
+      renderEditor(WITH_WEBCAM);
+      await waitForEditorLoaded();
+      const main = Array.from(document.querySelectorAll("video")).find(
+        (v) => v.dataset.testid !== "webcam-video",
+      )!;
+      fireEvent.loadedMetadata(main);
+      const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
+      Object.defineProperty(cam, "duration", { configurable: true, get: () => 60 });
+      fireEvent.loadedMetadata(cam);
+      fireEvent.keyDown(window, { key: " " });
+      expect(await screen.findByRole("button", { name: "Pause" })).toBeInTheDocument();
+      screen.getByTestId("webcam-slot").getBoundingClientRect = () =>
+        ({ width: 1000, height: 1000 }) as DOMRect;
+      const bubble = screen.getByTestId("webcam-layer");
+      fireEvent.pointerDown(bubble, { clientX: 500, clientY: 500, pointerId: 1 });
+      fireEvent.pointerMove(bubble, { clientX: 300, clientY: 500, pointerId: 1 });
+      expect(await screen.findByRole("button", { name: "Play" })).toBeInTheDocument();
+    } finally {
+      playSpy.mockRestore();
+      stubDecodedVideoSize(0, 0);
+    }
+  });
+
   it("Escape closes the card and the lane stays empty", async () => {
     stubDecodedVideoSize(1280, 720);
     try {

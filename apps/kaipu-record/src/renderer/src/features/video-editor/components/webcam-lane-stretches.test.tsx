@@ -92,8 +92,8 @@ describe("WebcamLane: the original stretches", () => {
   });
 
   it("drops 'ORIGINAL', then the name, then the frame as it narrows", () => {
-    // Clip a's original piece is 0-5 s (500 px) here, but a part at 0.2-4.9 (source) leaves
-    // slivers: 0-0.2 s is 20 px, and 4.9-5 s is 10 px.
+    // Clip a's original piece is 0-5 s (500 px) here. A part starting at 0.5, 1.5 or 0.3 s
+    // (source) cuts the piece before it down to 50, 150 or 30 px.
     const medium = renderLane([part("m", 0.5, 12)]);
     // 0-0.5 s = 50 px: room for the frame (> 46) and nothing else.
     const [sliver] = originals(medium.container);
@@ -258,7 +258,7 @@ describe("WebcamLane: every stretch together", () => {
     expect(kinds).toEqual(["original", "original", "override", "original", "hidden", "original"]);
   });
 
-  it("leaves Unit 1's 'New part' block working next to the stretches", () => {
+  it("draws the pending 'New part' block next to the original stretches", () => {
     const { container } = render(
       <TimelineViewContext.Provider value={fitView(LANE_PX, 15)}>
         <WebcamLane
@@ -288,7 +288,8 @@ describe("WebcamLane: selecting", () => {
   it("puts the handles at the part's real edges, not at its widened edge", () => {
     const { container } = renderLane([part("p", 12, 12.1)], { selectedId: "p" });
     const end = container.querySelector<HTMLElement>('[data-webcam-handle="end"]')!;
-    // The block is drawn 56 px wide, but the part ends 10 px after it starts (710 px).
+    // The block is drawn 56 px wide, but the part ends 10 px after it starts (710 px). The
+    // owner asked (2026-11-16) to keep the handles at the real edges for now.
     const percent = parseFloat(/calc\(([\d.]+)%/.exec(end.style.left)![1]!);
     expect((percent / 100) * LANE_PX).toBeCloseTo(710, 3);
   });

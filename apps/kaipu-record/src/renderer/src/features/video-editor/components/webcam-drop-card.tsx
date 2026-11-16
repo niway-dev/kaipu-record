@@ -69,6 +69,13 @@ export function WebcamDropCard({
     return () => observer.disconnect();
   }, []);
 
+  // The card's own height changes with its width and its text (a narrow preview wraps the
+  // detail; "No room left here." is shorter), so it is read again after every render.
+  useLayoutEffect(() => {
+    const height = cardRef.current?.offsetHeight ?? 0;
+    if (height > 0 && height !== cardHeight) setCardHeight(height);
+  });
+
   const scale = frame.width > 0 ? size.w / frame.width : 0;
   const end = { x: card.position.x * frame.width, y: card.position.y * frame.height };
   const reach = {

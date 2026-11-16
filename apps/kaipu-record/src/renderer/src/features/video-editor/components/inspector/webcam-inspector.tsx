@@ -413,7 +413,7 @@ function PartTab({
         before={webcamPartOrigin(webcam, part)}
         frame={frame}
         label={t("webcamPosition")}
-        trailing={`${formatPrecise(range.from)} – ${formatPrecise(range.to)} · ${t("webcamPartLength", { seconds: (part.end - part.start).toFixed(1) })}`}
+        trailing={`${formatPrecise(range.from)} – ${formatPrecise(range.to)} · ${t("webcamPartLength", { seconds: (range.to - range.from).toFixed(1) })}`}
       />
       <OwnLookNote part={part} edits={edits} />
       <ArrivalControls part={part} edits={edits} />

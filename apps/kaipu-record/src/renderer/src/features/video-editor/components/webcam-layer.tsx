@@ -377,11 +377,14 @@ export function WebcamLayer({
     center: Point;
   } | null>(null);
   const [dragging, setDragging] = useState(false);
+  // The bubble is held for the page once it has moved past the click slop: a plain click
+  // (which only selects) must not pause a playing video or hide the marks.
+  const [moved, setMoved] = useState(false);
   const heldChange = useRef(onHeldChange);
   heldChange.current = onHeldChange;
   useEffect(() => {
-    heldChange.current?.(dragging);
-  }, [dragging]);
+    heldChange.current?.(moved);
+  }, [moved]);
 
   // Before paint, so a drop never shows the old place for a frame: the held place follows
   // the card's, and the scene's own place comes back when the card is gone or answered.
@@ -398,6 +401,7 @@ export function WebcamLayer({
     drag.current = null;
     held.current = null;
     setDragging(false);
+    setMoved(false);
     resync();
   };
 
@@ -459,6 +463,7 @@ export function WebcamLayer({
           );
           d.center = next;
           held.current = next;
+          if (Math.hypot(event.clientX - d.x, event.clientY - d.y) >= CLICK_SLOP_PX) setMoved(true);
           resync();
         }}
         onPointerUp={(event) => {

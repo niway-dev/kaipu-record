@@ -106,6 +106,37 @@ describe("WebcamDropCard", () => {
     expect(top + 108).toBeLessThanOrEqual(PREVIEW.height - 12 + 1e-6);
   });
 
+  it("keeps the card inside the preview vertically when the bubble is so big it fits neither above nor below", () => {
+    // A 900 px box is 450 px tall in the 540 px preview: the card (108 px) has no room on
+    // either side of it, so only the vertical clamp keeps it on screen.
+    const huge = { width: 900, height: 900 };
+    const { unmount } = renderCard(drop({ box: huge, position: { x: 0.5, y: 0.5 } }));
+    // y 0.5 is not in the upper half, so the card wants to sit above: 270 - 225 - 12 - 108 < 0.
+    let top = parseFloat(cardBox().style.top);
+    expect(top).toBeGreaterThanOrEqual(12);
+    expect(top + 108).toBeLessThanOrEqual(PREVIEW.height - 12 + 1e-6);
+    unmount();
+    // y 0.49 is in the upper half, so it wants to sit below: 264.6 + 225 + 12 puts it off the bottom.
+    renderCard(drop({ box: huge, position: { x: 0.5, y: 0.49 } }));
+    top = parseFloat(cardBox().style.top);
+    expect(top).toBeGreaterThanOrEqual(12);
+    expect(top + 108).toBeLessThanOrEqual(PREVIEW.height - 12 + 1e-6);
+  });
+
+  it("reads its own height again after a render instead of keeping the 108 px guess", () => {
+    let height = 120;
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(() => height);
+    const props = { frame: FRAME, onPart: vi.fn(), onWhole: vi.fn(), onClose: vi.fn() };
+    const position = { x: 0.5, y: 0.8 };
+    const view = render(<WebcamDropCard card={drop({ position })} {...props} />);
+    // Above the bubble: y 432, radius 96, gap 12, minus the measured height.
+    expect(parseFloat(cardBox().style.top)).toBeCloseTo(432 - 96 - 12 - 120, 3);
+    // The text changes ("No room left here.") and the card is now taller.
+    height = 160;
+    view.rerender(<WebcamDropCard card={drop({ position, room: null })} {...props} />);
+    expect(parseFloat(cardBox().style.top)).toBeCloseTo(432 - 96 - 12 - 160, 3);
+  });
+
   it("draws the route Now → New position with webcamRoute: the same curve the slide follows", () => {
     renderCard(drop());
     const end = { x: 0.75 * FRAME.width, y: 0.3 * FRAME.height };

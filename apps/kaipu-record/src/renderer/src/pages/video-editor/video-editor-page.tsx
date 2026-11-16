@@ -1406,8 +1406,10 @@ function VideoEditor({
     else if (result.reason === "no-room") showToast({ message: t("muteNoRoom") });
   }, [mutes, playback.timelineTime, selectKind, t]);
 
-  // "Hide webcam here": a hidden segment from the playhead to the next one, selected so its
-  // edges can be dragged straight away; inside a segment, that segment is selected instead.
+  // "Hide camera from here": a hidden range from the playhead for up to 10 seconds, selected so
+  // its edges can be dragged straight away. The rail disables the button inside a part, a hidden
+  // range, over a slide and with under 1 s of room (`webcamHideBlock`, the same rule); the
+  // reasons below are what a click that slips through reports.
   const handleHideWebcam = useCallback(() => {
     const result = webcamEdits.hideAtPlayhead(playback.timelineTime);
     if (result.ok) selectKind("webcam", result.id);
@@ -1578,6 +1580,15 @@ function VideoEditor({
   useCameraPreview(playback.videoRef, contentRef, cameraPath, cameraApplied);
   // The bubble is being dragged: the paused marks step aside until it is dropped.
   const [webcamHeld, setWebcamHeld] = useState(false);
+  // Picking the bubble up pauses a playing video: the drop answers for ONE moment, and the
+  // card closes when the playhead moves, so a drop during playback would vanish.
+  const handleWebcamHeld = useCallback(
+    (held: boolean) => {
+      setWebcamHeld(held);
+      if (held && playbackRef.current.playing) playbackRef.current.pause();
+    },
+    [playbackRef],
+  );
   // A drop outside every camera part asks before the scene changes (camera parts, drag-first).
   const webcamDrop = useWebcamDrop({
     controller,
@@ -1918,7 +1929,7 @@ function VideoEditor({
                     }}
                     dropAt={webcamDrop.card?.position ?? null}
                     onDrop={webcamDrop.drop}
-                    onHeldChange={setWebcamHeld}
+                    onHeldChange={handleWebcamHeld}
                   />
                 )
               }
