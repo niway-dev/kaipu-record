@@ -448,7 +448,7 @@ function validateWebcamSegment(raw: unknown): WebcamSegment | null {
   // Not an object (absent included) is a Cut, which is also what a session saved before
   // transitions existed gets. An object is read field by field, so one bad field costs only
   // itself.
-  const transition = obj(g["transition"]);
+  const transition = Array.isArray(g["transition"]) ? null : obj(g["transition"]);
   if (transition) segment.transition = clampWebcamTransition(transition);
   return segment;
 }

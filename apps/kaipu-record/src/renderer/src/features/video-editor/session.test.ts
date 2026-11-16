@@ -629,14 +629,14 @@ describe("webcam layer", () => {
     });
 
     it("clamps the duration to the limits", () => {
-      expect(withTransition({ kind: "slide", ms: 20, easing: "back" }).transition!.ms).toBe(200);
+      expect(withTransition({ kind: "slide", ms: 20, easing: "back" }).transition!.ms).toBe(100);
       expect(withTransition({ kind: "slide", ms: 90000, easing: "back" }).transition!.ms).toBe(
         2000,
       );
     });
 
     it("ignores a transition that is not an object, so the block is a Cut", () => {
-      for (const bad of ["slide", 7, null, true]) {
+      for (const bad of ["slide", 7, null, true, []]) {
         expect(withTransition(bad).transition).toBeUndefined();
       }
     });

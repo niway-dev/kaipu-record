@@ -88,7 +88,7 @@ export const WEBCAM_TRANSITION_DEFAULTS: WebcamTransition = {
   easing: "back",
 };
 
-export const WEBCAM_TRANSITION_LIMITS = { minMs: 200, maxMs: 2000 } as const;
+export const WEBCAM_TRANSITION_LIMITS = { minMs: 100, maxMs: 2000 } as const;
 
 /**
  * A transition from untrusted fields (a saved session, an inspector control): each field
