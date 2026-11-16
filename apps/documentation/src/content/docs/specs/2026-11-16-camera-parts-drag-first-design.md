@@ -178,8 +178,13 @@ Shown only while paused, never in an export:
 - **Name**: Top, Middle or Bottom with left, middle or right, and "Center" for the middle of
   both. It comes from which third the bubble's centre is in, over the range the centre can
   reach. It is a description, never a choice.
-- A part is at least 56 px wide on the lane so it can be grabbed, but never wider than the
-  room before the next block.
+- A part is drawn at least 56 px wide on the lane, so its name fits and it is easy to grab,
+  but never wider than the room before the next block. With less than 56 px of room the part
+  is drawn as wide as that room, and it is still the same part: a click on it selects it, and
+  moving the playhead into it and clicking the bubble opens the panel on it. "Remove this part" and the
+  panel's controls work at any width. To drag its edges the user zooms the timeline in with
+  the transport bar's zoom, which widens every block. A part too narrow to grab at the
+  current zoom is an accepted limit; nothing else is built for it.
 
 ### The rail
 
