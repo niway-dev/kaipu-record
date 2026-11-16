@@ -107,6 +107,8 @@ function TranscribeButtonView({ control, variant, ui }: ViewProps): React.JSX.El
     defaultModelId !== undefined &&
     control.offer.failures[defaultModelId] !== undefined;
   const showLabel = variant === "detail" || variant === "editor";
+  // In the editor's title bar the word is the first thing a crowded bar drops (title-bar.module.css).
+  const labelProps = variant === "editor" ? { "data-collapse": "transcribe-label" } : {};
 
   // The offer belongs to the "needs a model" state: once the download has started (or the
   // model arrived some other way) it goes away, and never comes back on its own.
@@ -133,7 +135,9 @@ function TranscribeButtonView({ control, variant, ui }: ViewProps): React.JSX.El
       <span {...rootProps}>
         <span className={styles.badge} title={label} data-testid="transcribe-done">
           <Check size={iconSize} strokeWidth={2} aria-hidden />
-          <span className={showLabel ? styles.label : styles.visuallyHidden}>{label}</span>
+          <span className={showLabel ? styles.label : styles.visuallyHidden} {...labelProps}>
+            {label}
+          </span>
         </span>
       </span>
     );
@@ -179,7 +183,11 @@ function TranscribeButtonView({ control, variant, ui }: ViewProps): React.JSX.El
       <span {...rootProps}>
         <button type="button" className={styles.button} disabled title={label} aria-label={label}>
           <Loader2 size={iconSize} strokeWidth={1.8} className={styles.spinner} aria-hidden />
-          {showLabel && <span className={styles.label}>{label}</span>}
+          {showLabel && (
+            <span className={styles.label} {...labelProps}>
+              {label}
+            </span>
+          )}
         </button>
       </span>
     );
@@ -197,7 +205,11 @@ function TranscribeButtonView({ control, variant, ui }: ViewProps): React.JSX.El
           aria-label={`${t("transcribe")}. ${hint}`}
         >
           <Captions size={iconSize} strokeWidth={1.8} aria-hidden />
-          {showLabel && <span className={styles.label}>{t("transcribe")}</span>}
+          {showLabel && (
+            <span className={styles.label} {...labelProps}>
+              {t("transcribe")}
+            </span>
+          )}
         </button>
       </span>
     );
@@ -224,7 +236,11 @@ function TranscribeButtonView({ control, variant, ui }: ViewProps): React.JSX.El
         data-failed={state.kind === "failed" || downloadFailed || undefined}
       >
         <Captions size={iconSize} strokeWidth={1.8} aria-hidden />
-        {showLabel && <span className={styles.label}>{label}</span>}
+        {showLabel && (
+          <span className={styles.label} {...labelProps}>
+            {label}
+          </span>
+        )}
       </button>
       {hint && showLabel && (
         <span className={styles.hint} role="status">

@@ -116,6 +116,8 @@
  * are in it (the video editor): pieces collapse lowest priority first as the window
  * narrows toward its 720 px minimum. Each piece marks itself with data-collapse:
  *
+ *   transcribe-label  the word on the editor's Transcribe button; its icon stays
+ *              (transcribe-button.tsx)
  *   badge      ORIGINAL UNTOUCHED (video-editor-page.tsx)
  *   location   the switcher's "This Mac" (workspace-switcher.tsx)
  *   save       the save state, unless it failed and offers a retry (video-editor-page.tsx)
@@ -124,6 +126,14 @@
  *
  * Export is last and never shrinks (editor-toolbar.module.css).
  */
+/* The Transcribe word goes first: at the default 1440 px window the bar clipped the whole
+   button to a "T" beside Export, so no click could land on it. */
+@container titlebar (max-width: 1500px) {
+  .bar:has(.actions:not(:empty)) [data-collapse~="transcribe-label"] {
+    display: none;
+  }
+}
+
 @container titlebar (max-width: 1260px) {
   .bar:has(.actions:not(:empty)) [data-collapse~="badge"] {
     display: none;
