@@ -77,7 +77,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("WebcamLane double-click zoom (spec decision 17)", () => {
+describe("WebcamLane double-click zoom (spec decision 18)", () => {
   const target = (container: HTMLElement, id: string): HTMLElement =>
     container.querySelector<HTMLElement>(`[data-webcam-id="${id}"]`)!;
 
@@ -110,7 +110,7 @@ describe("WebcamLane double-click zoom (spec decision 17)", () => {
 });
 
 describe("WebcamLane hover card", () => {
-  it("appears after about 120 ms of hovering a part, not before", () => {
+  it("appears 120 ms after the pointer enters the lane, wherever it has moved to since", () => {
     const { lane } = renderLane([part("p", 14, 15)]);
     hoverAt(lane, 700); // source 14-15 is timeline 9-10: 900-1000 px; 700 is an original stretch
     hoverAt(lane, 950);
@@ -250,6 +250,9 @@ describe("WebcamLane hover card", () => {
   });
 
   it("stays inside the timeline's visible area, whatever the pointer does", () => {
+    // jsdom defines these on the prototype: put its own getters back afterwards, not nothing.
+    const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetWidth")!;
+    const height = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight")!;
     Object.defineProperty(HTMLElement.prototype, "offsetWidth", { configurable: true, value: 200 });
     Object.defineProperty(HTMLElement.prototype, "offsetHeight", { configurable: true, value: 60 });
     try {
@@ -261,8 +264,8 @@ describe("WebcamLane hover card", () => {
       hoverAt(lane, 910);
       expect(card()!.style.left).toBe("810px");
     } finally {
-      Reflect.deleteProperty(HTMLElement.prototype, "offsetWidth");
-      Reflect.deleteProperty(HTMLElement.prototype, "offsetHeight");
+      Object.defineProperty(HTMLElement.prototype, "offsetWidth", width);
+      Object.defineProperty(HTMLElement.prototype, "offsetHeight", height);
     }
   });
 });

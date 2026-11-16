@@ -5,10 +5,12 @@ description: Refines the first version of camera sections. No button creates a c
 
 # Camera parts, created by dragging the bubble — design
 
-**Status: 🔵 Proposed · owner decisions taken in chat on 2026-11-16.** Nothing here is
-implemented. It refines the
+**Status: 🟡 In progress · owner decisions taken in chat on 2026-11-16.** Nothing here is
+on `main`. It refines the
 [first testable version](/specs/2026-11-15-camera-sections-first-version-design/), whose code
-sits on a three-pull-request stack that is not merged; this work goes on top of that stack.
+sits on a stack of pull requests that is not merged. The fourth layer of that stack builds the
+Camera lane decisions: the true width (12), the hover card (16), the pause while the bubble is
+dragged (17) and the double-click zoom (18). The rest is built by the layers below it.
 No Linear ticket (free issue limit), so this page is the build's starting point.
 
 The reference is the owner's interactive mock:
@@ -113,8 +115,9 @@ None. Answered by the owner on 2026-11-16:
   (decision 17). It stays paused through the drop, while the card is open and after the
   answer; it never resumes by itself. This holds for a drop inside a part too. The pause lands
   before the drop is recorded, so a last time update that arrives after the pause does not
-  move the pending part or close the card. Pressing play or seeking with the card open
-  behaves as before: it closes the card.
+  move the pending part or close the card: the card closes only when the playhead is more than
+  0.05 s away from the moment it was dropped on. Pressing play, or seeking further than that,
+  with the card open behaves as before: it closes the card.
 
 ### The card
 

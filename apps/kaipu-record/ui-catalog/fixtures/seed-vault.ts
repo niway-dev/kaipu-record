@@ -155,7 +155,7 @@ interface RecordingFixture {
   cut: RecordingCut;
   /**
    * The length the sidecar and the saved edit declare, when it is longer than the media file
-   * (a few pixels per second on the timeline). The media is still the `cut`; the editor sizes
+   * (a long recording: under a pixel per second on the timeline at fit zoom). The media is still the `cut`; the editor sizes
    * its lanes from the declared length.
    */
   declaredSeconds?: number;
