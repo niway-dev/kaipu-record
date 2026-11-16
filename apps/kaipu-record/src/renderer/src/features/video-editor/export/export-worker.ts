@@ -42,19 +42,8 @@
  * only), so `AudioBufferSink`/`AudioBufferSource` throw "AudioBuffer is not defined"
  * here; `AudioSample` wraps `AudioData` and works in workers.
  *
- * Audio timestamps: `AudioSampleSource.add` honors each sample's OWN timestamp (it
- * does NOT auto-advance like `AudioBufferSource`). Every emitted sample is rebased
- * onto a single contiguous `audioCursor` so cuts stay gapless and monotonic.
- *
- * Audio trimming: `AudioSampleSink.samples(start, end)` yields whole decoder samples
- * gated on each sample's OWN timestamp (mediabunny's
- * `BaseMediaSampleSink.mediaSamplesInRange` keeps the last sample with
- * timestamp <= start, then everything up to the first sample with
- * timestamp >= end) — it does not clip a sample's PCM content to the range.
- * Left as-is, the first sample of a clip carries pre-roll before `start` and
- * the last trails past `end`, drifting audio out of sync with the
- * frame-accurate video across cuts. `trimAudioSample` below clips each
- * sample to the segment's exact [sourceStart, sourceEnd).
+ * Audio timestamps, trimming, resampling and silence: audio-pump.ts, which produces the
+ * samples on demand so the muxer is never fed video far ahead of audio (see the video pass).
  *
  * Video timestamp rebasing: `CanvasSink.canvases(start, end)` yields the sample
  * STRADDLING `start` as its first frame, whose own timestamp is usually before
@@ -70,7 +59,6 @@
 
 import {
   ALL_FORMATS,
-  AudioSample,
   AudioSampleSink,
   AudioSampleSource,
   BlobSource,
@@ -87,7 +75,6 @@ import {
 } from "mediabunny";
 import type { StreamTargetChunk } from "mediabunny";
 import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
-import { silencedSpansFor } from "../audio-edits";
 import { exportClipFrames } from "./export-clip-frames";
 import { exportCanvasSinkOptions } from "./canvas-sink-options";
 import { createOutputComposer } from "./compose-output-frame";
@@ -104,20 +91,8 @@ import { chooseVideoEncoding, type VideoEncodingChoice } from "./video-encoding"
 import { WEBCAM_FPS } from "@shared/webcam-track";
 import { openWebcamSourceOrNone, webcamImageOf, type WebcamSource } from "./webcam-source";
 import { clipFramesOf, clipSource, clipWebcamCursorOf } from "./joined-media";
-import { silenceChunkFrames } from "./silence-chunks";
-import {
-  audioPlan,
-  clipAudioOf,
-  createResampler,
-  interleave,
-  mapChannels,
-  needsResampling,
-  overlapsSilence,
-  placeFlushed,
-  type Resampler,
-  type AudioReference,
-  type RecordingAudio,
-} from "./joined-audio";
+import { createAudioPump } from "./audio-pump";
+import { audioPlan, type RecordingAudio } from "./joined-audio";
 
 // ---------------------------------------------------------------------------
 // Typing helper: TypeScript doesn't expose `Worker` on `self` in module workers.
@@ -340,6 +315,23 @@ async function runExportWithInput(
 
   await out.start();
 
+  // The audio, produced on demand (audio-pump.ts); null for an export without an audio track.
+  const audio =
+    audioReference && audioSource
+      ? createAudioPump({
+          segments: plan.segments,
+          perSegment: audioDecision.perSegment,
+          edits: plan.audio,
+          joined: joinedRefs,
+          readers: audioReaders,
+          reference: audioReference,
+          silenceSampleRate,
+          silenceChannelCount,
+          downmix,
+          sink: audioSource,
+        })
+      : null;
+
   // Per-frame composition (fill → zoom/redactions/overlays → framing → webcam) is shared
   // with the GIF worker in compose-output-frame.ts so the two exports can never diverge.
   const compose = createOutputComposer({
@@ -474,117 +466,9 @@ async function runExportWithInput(
     videoSource.close();
 
     // ---------------------------------------------------------------------------
-    // Audio pass — separate second pass; two-pass is fine because audio decode
-    // is cheap relative to encode, and mediabunny accepts interleaved or separate
-    // feeding without backpressure issues.
+    // Audio — everything still owed after the last video frame (see audio-pump.ts).
     // ---------------------------------------------------------------------------
-    if (audioReference && audioSource) {
-      // AudioSampleSource honors each sample's OWN timestamp (unlike AudioBufferSource,
-      // which auto-advances). Rebase every emitted sample onto a single contiguous
-      // output cursor so cut boundaries stay gapless and monotonic — the audio analogue
-      // of `prevOutTs` on the video pass.
-      let audioCursor = 0;
-      const addSilence = async (duration: number): Promise<void> => {
-        // A zeroed interleaved-f32 sample keeps A/V durations aligned so the MP4 muxer
-        // doesn't produce a track-length mismatch.
-        // In bounded pieces: one clip of silence can be half an hour, and as a single array
-        // that is hundreds of megabytes inside the worker.
-        for (const frames of silenceChunkFrames(duration, silenceSampleRate)) {
-          const silence = new AudioSample({
-            data: new Float32Array(frames * silenceChannelCount),
-            format: "f32",
-            numberOfChannels: silenceChannelCount,
-            sampleRate: silenceSampleRate,
-            timestamp: audioCursor,
-          });
-          audioCursor += silence.duration;
-          await audioSource.add(silence);
-          silence.close();
-        }
-      };
-      for (const [index, segment] of plan.segments.entries()) {
-        // Slides, and clips of a recording without audio, are silence of the segment's length.
-        if (segment.kind !== "clip" || audioDecision.perSegment[index] !== "decode") {
-          await addSilence(segment.duration);
-          continue;
-        }
-        // Muted spans of THIS segment, clipped and merged, in AXIS seconds. Walking them in
-        // order lets each decoded sample be zeroed in place rather than
-        // dropped: dropping would shorten the audio and drift it out of sync
-        // with the video, which is silence's whole job to avoid.
-        const silenced = silencedSpansFor(segment.sourceStart, segment.sourceEnd, plan.audio);
-        // The decoder reads the clip's own recording in LOCAL seconds.
-        const src = clipSource(segment, joinedRefs);
-        const decoded = clipAudioOf(src, audioReaders);
-        if (!decoded) {
-          await addSilence(segment.duration);
-          continue;
-        }
-        // One resampler per clip run, created on the first sample whose rate differs from the
-        // reference, so the phase and the total length survive the chunk boundaries. The same
-        // rate never creates one.
-        let resampler: Resampler | null = null;
-        let lastEnd = src.localStart;
-        // Frames the resampler has produced for this run, so its flush stays inside the clip.
-        let resampledFrames = 0;
-        const emitConverted = async (
-          converted: AudioSample,
-          start: number,
-          end: number,
-        ): Promise<void> => {
-          const muted = overlapsSilence(start, end, src.offset, silenced);
-          const shaped = downmix ? downmixToMono(converted) : converted;
-          const emitted = muted ? zeroedLike(shaped) : shaped;
-          emitted.setTimestamp(audioCursor);
-          audioCursor += emitted.duration;
-          await audioSource.add(emitted);
-          if (emitted !== shaped) emitted.close();
-          if (shaped !== converted) shaped.close();
-        };
-        for await (const sample of decoded) {
-          // Clip each decoded sample to the segment's exact (local) range — see the
-          // "Audio trimming" header comment for why this is needed.
-          const trimmed = trimAudioSample(sample, src.localStart, src.localEnd);
-          if (trimmed) {
-            const start = trimmed.timestamp;
-            const end = start + trimmed.duration;
-            lastEnd = end;
-            if (!resampler && needsResampling(trimmed.sampleRate, audioReference.sampleRate)) {
-              resampler = createResampler(
-                trimmed.sampleRate,
-                audioReference.sampleRate,
-                audioReference.channels,
-              );
-            }
-            const converted = toReferenceFormat(trimmed, audioReference, resampler);
-            if (converted) {
-              if (resampler) resampledFrames += converted.numberOfFrames;
-              await emitConverted(converted, start, end);
-              if (converted !== trimmed) converted.close();
-            }
-            if (trimmed !== sample) trimmed.close();
-          }
-          sample.close();
-        }
-        // The frames the resampler still owes, so the clip's audio ends where its video does.
-        const owed = resampler?.flush();
-        const placed =
-          owed &&
-          placeFlushed(owed, {
-            emittedFrames: resampledFrames,
-            lastEnd,
-            localStart: src.localStart,
-            localEnd: src.localEnd,
-            toRate: audioReference.sampleRate,
-          });
-        if (placed) {
-          const tail = planesToSample(placed.planes, audioReference, placed.start);
-          await emitConverted(tail, placed.start, placed.end);
-          tail.close();
-        }
-      }
-      audioSource.close();
-    }
+    await audio?.drain();
 
     await out.finalize();
     finalized = true;
@@ -594,9 +478,15 @@ async function runExportWithInput(
   } finally {
     if (!finalized) {
       // Cancel releases Output encoders and the muxer on any error path;
-      // Input decoders are freed by input.dispose() in the outer runExport finally.
+      // Input decoders are freed by input.dispose() in the outer runExport finally; the
+      // audio pump releases the decoder of the clip it was in the middle of.
       try {
         await out.cancel();
+      } catch {
+        /* already tearing down */
+      }
+      try {
+        await audio?.dispose();
       } catch {
         /* already tearing down */
       }
@@ -612,38 +502,6 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/**
- * Clips a decoded audio sample's data to `[rangeStart, rangeEnd)`.
- * `sample.timestamp` is the sample's own start time, which per the "Audio
- * trimming" header comment may fall before `rangeStart` (pre-roll) or extend
- * past `rangeEnd` (trailing frames) — both need to be dropped so the encoded
- * duration matches the segment's exact source range.
- *
- * Returns the original `AudioSample` unchanged when it needs no trimming (the
- * common case for interior samples), a new trimmed `AudioSample` when it does
- * (the caller closes it), or `null` if trimming leaves nothing to encode.
- */
-/**
- * A silent copy of a sample: same layout, same duration, zeroed data.
- *
- * A copy rather than a mutation because `AudioSample` owns its backing buffer
- * and the caller still has to close the original. Same rate and channel count,
- * so the encoder sees one continuous stream and not a format change mid-file.
- */
-function zeroedLike(sample: AudioSample): AudioSample {
-  return new AudioSample({
-    data: new Float32Array(sample.numberOfFrames * sample.numberOfChannels),
-    format: "f32",
-    numberOfChannels: sample.numberOfChannels,
-    sampleRate: sample.sampleRate,
-    timestamp: sample.timestamp,
-  });
-}
-
-/**
- * Light (NIW2-218): average every channel into one. A mono source passes through
- * unchanged; the caller closes a new sample when one is returned.
- */
 /**
  * Probes the hardware AVC encoder for the preset's rate control and picks per
  * video-encoding.ts. The quantizer probe passes a quantizer-only Quality: with a bitrate
@@ -717,95 +575,6 @@ async function audioFacts(
     sampleRate: track ? (await track.getSampleRate()) || 48000 : 48000,
     channels: track ? (await track.getNumberOfChannels()) || 2 : 2,
   };
-}
-
-/**
- * The sample in the reference recording's channel count and sample rate. The same format
- * returns the sample itself (the common case, and always so without joins); otherwise a new
- * sample, which the caller closes, or null when the resampler has no frame due yet. A
- * differing rate comes with the clip run's `resampler`.
- */
-function toReferenceFormat(
-  sample: AudioSample,
-  reference: AudioReference,
-  resampler: Resampler | null,
-): AudioSample | null {
-  if (
-    sample.sampleRate === reference.sampleRate &&
-    sample.numberOfChannels === reference.channels
-  ) {
-    return sample;
-  }
-  const frames = sample.numberOfFrames;
-  const planes: Float32Array[] = [];
-  for (let c = 0; c < sample.numberOfChannels; c++) {
-    const plane = new Float32Array(frames);
-    sample.copyTo(plane, { planeIndex: c, format: "f32-planar" });
-    planes.push(plane);
-  }
-  const mapped = mapChannels(planes, reference.channels);
-  const converted = resampler ? resampler.push(mapped) : mapped;
-  if ((converted[0]?.length ?? 0) === 0) return null;
-  return planesToSample(converted, reference, sample.timestamp);
-}
-
-function planesToSample(
-  planes: Float32Array[],
-  reference: AudioReference,
-  timestamp: number,
-): AudioSample {
-  return new AudioSample({
-    data: interleave(planes),
-    format: "f32",
-    numberOfChannels: reference.channels,
-    sampleRate: reference.sampleRate,
-    timestamp,
-  });
-}
-
-function downmixToMono(sample: AudioSample): AudioSample {
-  const channels = sample.numberOfChannels;
-  if (channels <= 1) return sample;
-  const frames = sample.numberOfFrames;
-  const mono = new Float32Array(frames);
-  const plane = new Float32Array(frames);
-  for (let c = 0; c < channels; c++) {
-    sample.copyTo(plane, { planeIndex: c, format: "f32-planar" });
-    for (let i = 0; i < frames; i++) mono[i] += plane[i];
-  }
-  for (let i = 0; i < frames; i++) mono[i] /= channels;
-  return new AudioSample({
-    data: mono,
-    format: "f32",
-    numberOfChannels: 1,
-    sampleRate: sample.sampleRate,
-    timestamp: sample.timestamp,
-  });
-}
-
-function trimAudioSample(
-  sample: AudioSample,
-  rangeStart: number,
-  rangeEnd: number,
-): AudioSample | null {
-  const { sampleRate, numberOfFrames, timestamp } = sample;
-  const sampleEnd = timestamp + numberOfFrames / sampleRate;
-
-  const leadTrim = Math.min(
-    numberOfFrames,
-    Math.max(0, Math.round((rangeStart - timestamp) * sampleRate)),
-  );
-  const trailTrim = Math.min(
-    numberOfFrames - leadTrim,
-    Math.max(0, Math.round((sampleEnd - rangeEnd) * sampleRate)),
-  );
-  const keepLength = numberOfFrames - leadTrim - trailTrim;
-  if (keepLength <= 0) return null;
-  if (leadTrim === 0 && trailTrim === 0) return sample;
-
-  // AudioSample.trim takes a [startFrame, endFrame) half-open range and returns a new
-  // sample; the caller is responsible for closing it (and the untrimmed original).
-  return sample.trim(leadTrim, leadTrim + keepLength);
 }
 
 /** Poster width in px; height follows the output aspect (same size generate-thumbnail used). */
