@@ -126,6 +126,7 @@ real against the repo, with the phase that covers it. None has been observed in 
       workspace and library reconcile.
 - [ ] With the binary or model missing, or on an unsupported platform, the panel says
       "unavailable" and nothing crashes.
+      _Superseded by M4: the engine is downloaded with the model, a missing engine reads as a model to download, and the release workflow no longer checks for it._
 - [ ] Onboarding shows the Parakeet download offer with size and location; choosing "Download in
       background" finishes onboarding at once and the download continues.
 - [ ] A video in the Library and in the editor has a Transcribe action; with no model it offers
@@ -217,6 +218,7 @@ Criteria:
   binaries (`lipo -archs`, `release-desktop.yml`). The engine check is per build instead: the
   arm64 app must carry an arm64 CLI and library; the x64 app carries none and shows
   "unavailable". An x64 engine is the later Intel phase.
+  _Superseded by M4: the engine is downloaded with the model, a missing engine reads as a model to download, and the release workflow no longer checks for it._
 - **Job in main:** renderer writes the PCM file to `.kaipu/tmp`; main segments, runs CLI batches,
   reports progress per segment, cancels, resumes after a crash without duplicate segments. One job
   at a time. Segments are fixed 30 s windows with 3 s overlap, four per CLI call. In each overlap
@@ -251,6 +253,7 @@ Criteria:
 - [ ] Killing the CLI mid-job ends failed or resumable, never hung; cancel stops within seconds.
 - [ ] The release workflow fails if the arm64 app lacks the CLI or its library, or if either is not
       arm64.
+      _Superseded by M4: the engine is downloaded with the model, a missing engine reads as a model to download, and the release workflow no longer checks for it._
 - [ ] The download prompt, its progress and the model entry in settings are in the ui-map with a
       catalog state each, with es and en messages.
 
