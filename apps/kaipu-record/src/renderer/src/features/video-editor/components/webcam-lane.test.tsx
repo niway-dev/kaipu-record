@@ -266,4 +266,24 @@ describe("WebcamLane", () => {
       expect(bands(startCut)).toHaveLength(0);
     });
   });
+
+  it("draws a dashed 'New part · N s' block where a part would go, and none otherwise", () => {
+    const props = {
+      layout,
+      segments: [],
+      selectedId: null,
+      onSelect: vi.fn(),
+      onEdgeDrag: vi.fn(),
+    };
+    const { container, rerender } = render(<WebcamLane {...props} />);
+    expect(container.querySelector("[data-webcam-pending]")).toBeNull();
+    rerender(<WebcamLane {...props} pendingPart={{ start: 12, end: 20 }} />);
+    const pending = container.querySelector("[data-webcam-pending]") as HTMLElement;
+    expect(pending).not.toBeNull();
+    expect(pending).toHaveTextContent("New part · 8 s");
+    // Timeline: clip a is 0-5, clip b is 5-15 from source 10: source 12-20 shows only 12-15.
+    expect(parseFloat(pending.style.left)).toBeCloseTo((7 / 15) * 100, 3);
+    // It is not a selectable block and takes no pointer.
+    expect(container.querySelectorAll("button[data-webcam-id]")).toHaveLength(0);
+  });
 });

@@ -255,6 +255,9 @@ export const UI_MAP = {
         gatedBy: [{ flag: "timeline-levels" }],
       },
       webcam: { states: ["visible"] },
+      // The card that asks where a dropped camera bubble belongs: `asking` offers a new part,
+      // `noRoom` has less than a second before the next block or the end, so that choice is off.
+      webcamDrop: { states: ["asking", "noRoom"] },
       transport: { states: ["paused", "playing", "withCounts", "speedChanged", "zoomed"] },
       toolRail: { states: ["default", "annotate", "privacy"] },
       toolFlyout: { states: ["audio"] },

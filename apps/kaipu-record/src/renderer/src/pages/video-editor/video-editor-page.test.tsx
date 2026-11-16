@@ -1408,6 +1408,81 @@ describe("VideoEditorPage — webcam track", () => {
   });
 });
 
+// Camera parts, drag-first: dropping the bubble outside every part asks before the scene changes.
+describe("VideoEditorPage — dropping the camera bubble", () => {
+  const WITH_WEBCAM: VideoEditorSource = {
+    ...SOURCE,
+    webcam: { startOffsetMs: 0, offsetQuality: "exact", width: 1280, height: 720, fps: 30 },
+  };
+
+  /** The editor with the bubble drawn at 1 s, then the bubble dragged 100 px to the right. */
+  async function dropBubble(): Promise<HTMLElement> {
+    renderEditor(WITH_WEBCAM);
+    const footer = await waitForEditorLoaded();
+    const main = Array.from(document.querySelectorAll("video")).find(
+      (v) => v.dataset.testid !== "webcam-video",
+    )!;
+    fireEvent.loadedMetadata(main);
+    const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
+    Object.defineProperty(cam, "duration", { configurable: true, get: () => 60 });
+    fireEvent.loadedMetadata(cam);
+    main.currentTime = 1;
+    fireEvent(main, new Event("seeked"));
+    screen.getByTestId("webcam-slot").getBoundingClientRect = () =>
+      ({ width: 1000, height: 1000 }) as DOMRect;
+    const bubble = screen.getByTestId("webcam-layer");
+    fireEvent.pointerDown(bubble, { clientX: 500, clientY: 500, pointerId: 1 });
+    fireEvent.pointerMove(bubble, { clientX: 300, clientY: 500, pointerId: 1 });
+    fireEvent.pointerUp(bubble, { clientX: 300, clientY: 500, pointerId: 1 });
+    return footer;
+  }
+
+  it("asks where the camera belongs and leaves the lane empty until it is answered", async () => {
+    stubDecodedVideoSize(1280, 720);
+    try {
+      const footer = await dropBubble();
+      expect(await screen.findByRole("group", { name: "Where to keep the camera" })).toBeVisible();
+      expect(footer.querySelector("[data-webcam-id]")).toBeNull();
+      // The lane previews where the part would go.
+      expect(footer.querySelector("[data-webcam-pending]")).not.toBeNull();
+    } finally {
+      stubDecodedVideoSize(0, 0);
+    }
+  });
+
+  it("'Only for this part' puts a selected part on the lane and closes the card", async () => {
+    stubDecodedVideoSize(1280, 720);
+    try {
+      const footer = await dropBubble();
+      fireEvent.click(await screen.findByRole("button", { name: /Only for this part/ }));
+      await waitFor(() => {
+        const part = footer.querySelector('[data-webcam-id][data-mode="override"]');
+        expect(part).not.toBeNull();
+        expect(part).toHaveAttribute("aria-pressed", "true");
+      });
+      expect(screen.queryByRole("group", { name: "Where to keep the camera" })).toBeNull();
+      expect(footer.querySelector("[data-webcam-pending]")).toBeNull();
+    } finally {
+      stubDecodedVideoSize(0, 0);
+    }
+  });
+
+  it("Escape closes the card and the lane stays empty", async () => {
+    stubDecodedVideoSize(1280, 720);
+    try {
+      const footer = await dropBubble();
+      await screen.findByRole("group", { name: "Where to keep the camera" });
+      fireEvent.keyDown(window, { key: "Escape" });
+      await waitFor(() =>
+        expect(screen.queryByRole("group", { name: "Where to keep the camera" })).toBeNull(),
+      );
+      expect(footer.querySelector("[data-webcam-id]")).toBeNull();
+    } finally {
+      stubDecodedVideoSize(0, 0);
+    }
+  });
+});
+
 describe("VideoEditorPage — Tracks popover (NIW2-665)", () => {
   type Settings = Awaited<ReturnType<typeof window.electronAPI.getSettings>>;
   type Patch = Parameters<typeof window.electronAPI.updateSettings>[0];

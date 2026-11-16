@@ -564,6 +564,14 @@ export const editorVideo = catalog(
         "needsSetup",
         "a camera block is selected from the webcam lane, and no seeded recording has one now that no control creates it; the drag-first layers bring a catalog state with it",
       ),
+      "editorVideo.webcamDrop:asking": nc(
+        "needsSetup",
+        "the card opens after a real pointer drag of the bubble outside every camera part, which a catalog step cannot perform; webcam-drop-card.test.tsx and use-webcam-drop.test.ts cover it",
+      ),
+      "editorVideo.webcamDrop:noRoom": nc(
+        "needsSetup",
+        "the same drag, in a place with under a second before the next block or the end; the card's tests cover it",
+      ),
       "editorVideo.toolbar:saving": nc(
         "transient",
         "held for ~800 ms after an edit, until the autosave writes; a shot would race it",

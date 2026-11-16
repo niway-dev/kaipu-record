@@ -64,6 +64,23 @@
   border-color: color-mix(in srgb, var(--text-muted) 45%, transparent);
 }
 
+/* Where a new part would go while the drop card asks: dashed, never a hit target. */
+.pending {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1.5px dashed var(--accent-primary);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  color: var(--text-primary);
+  pointer-events: none;
+  z-index: 2;
+}
+
 .selected {
   border-color: var(--accent-primary);
   z-index: 1;

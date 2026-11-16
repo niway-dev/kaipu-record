@@ -13,13 +13,14 @@
  * Play/pause/rate mirror the main element, and the webcam also pauses while the main one
  * waits for data, so the face does not run ahead of a buffering screen.
  *
- * Dragging the bubble reports normalized centres already clamped inside the frame, with
- * the begin/move/end contract the scene history needs for one undo step per drag.
+ * Dragging the bubble moves ONLY its element (1:1 with the pointer, stopped by the frame
+ * edge); the scene is not touched until the pointer is released, when `onDrop` reports the
+ * normalized centre once. A press that moves under 3 px is a click and selects the bubble.
  *
  * `WebcamPlaybackLayer` is the same drawing without the editing: the Library's original
  * player puts the face where it was recorded with it.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { framingTransform } from "@shared/camera-bubble";
 import { useVideoFrameClock } from "../use-video-frame-clock";
@@ -41,6 +42,9 @@ import styles from "./webcam-layer.module.css";
 import { uiArea } from "@renderer/lib/ui-area";
 
 type Point = { x: number; y: number };
+
+/** A press that moves less than this many screen pixels is a click, not a drag. */
+const CLICK_SLOP_PX = 3;
 
 /** jsdom and a rejected play() (interrupted by a seek) must not surface as errors. */
 function safePlay(video: HTMLVideoElement): void {
@@ -108,9 +112,9 @@ function useWebcamSync({
   const lastSeekSeconds = useRef(0);
   // The main video is playing but out of data (`waiting`); cleared on `playing`.
   const mainWaiting = useRef(false);
-  // A drag is in progress: the bubble shows the place being set, not the slide toward it,
-  // so it stays under the pointer (the drag saves the pointer's place as the block's).
-  const holdSettled = useRef(false);
+  // Where the bubble is held instead of where the scene has it: under the pointer during a
+  // drag, and at the dropped place while the drop card waits for its answer.
+  const held = useRef<Point | null>(null);
 
   const apply = (t: number): void => {
     lastTime.current = t;
@@ -121,14 +125,21 @@ function useWebcamSync({
     // A faster or slower main video would otherwise drift past the resync threshold on
     // every frame and turn the face into a series of seeks.
     if (main && cam.playbackRate !== main.playbackRate) cam.playbackRate = main.playbackRate;
-    const slid = hidden ? null : webcamStateAt({ webcam }, t, webcamEndSeconds(endSeconds));
-    const state = slid && holdSettled.current ? { ...slid, progress: 1 } : slid;
+    const state = hidden ? null : webcamStateAt({ webcam }, t, webcamEndSeconds(endSeconds));
     const webcamTime = webcamTimeFor(t, startOffsetMs);
     const scale = cameraEnabled && path ? cameraAt(path, t).scale : 1;
-    const rect =
+    let rect =
       state && webcamHasFrameAt(webcamTime, cam.duration)
         ? webcamStateRect(state, frame, scale)
         : null;
+    if (rect && held.current) {
+      const center = clampWebcamCenter(held.current, rect, frame);
+      rect = {
+        ...rect,
+        x: center.x * frame.width - rect.width / 2,
+        y: center.y * frame.height - rect.height / 2,
+      };
+    }
     if (!state || !rect) {
       box.style.display = "none";
       drawn.current = null;
@@ -254,7 +265,7 @@ function useWebcamSync({
     }
     resync();
   };
-  return { boxRef, clipRef, camRef, lastTime, drawn, holdSettled, resync, onSeeked };
+  return { boxRef, clipRef, camRef, lastTime, drawn, held, resync, onSeeked };
 }
 
 /** The webcam file inside the bubble's shape: the part both layers render the same way. */
@@ -322,10 +333,9 @@ export function WebcamLayer({
   hidden,
   interactive,
   selected,
+  dropAt,
   onSelect,
-  onBegin,
-  onMove,
-  onEnd,
+  onDrop,
 }: Omit<WebcamSyncInput, "path"> & {
   /** The take's webcam URL, built with `mediaUrl("webcam", id)`. */
   src: string;
@@ -333,12 +343,15 @@ export function WebcamLayer({
   /** False while a drawing tool is armed, so a stroke can start over the bubble. */
   interactive: boolean;
   selected: boolean;
-  /** `sourceTime` is the frame the bubble was grabbed on, to pick the override in force. */
+  /**
+   * The dropped place a card is asking about: the bubble stays there until it is null again,
+   * when it goes back to where the scene has it.
+   */
+  dropAt: Point | null;
+  /** A click. `sourceTime` is the frame it happened on, to pick the override in force. */
   onSelect(sourceTime: number): void;
-  onBegin(): void;
-  /** `sourceTime` is the frame the drag happened over, for an override in force there. */
-  onMove(center: Point, sourceTime: number): void;
-  onEnd(): void;
+  /** The drag ended: the clamped normalized centre, once, over the frame at `sourceTime`. */
+  onDrop(position: Point, sourceTime: number): void;
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const sync = useWebcamSync({
@@ -351,17 +364,32 @@ export function WebcamLayer({
     frame,
     hidden,
   });
-  const { boxRef, lastTime, drawn, holdSettled, resync } = sync;
-  const drag = useRef<{ x: number; y: number; from: Point; w: number; h: number } | null>(null);
+  const { boxRef, lastTime, drawn, held, resync } = sync;
+  const drag = useRef<{
+    x: number;
+    y: number;
+    from: Point;
+    w: number;
+    h: number;
+    center: Point;
+  } | null>(null);
   const [dragging, setDragging] = useState(false);
+
+  // Before paint, so a drop never shows the old place for a frame: the held place follows
+  // the card's, and the scene's own place comes back when the card is gone or answered.
+  useLayoutEffect(() => {
+    held.current = dropAt;
+    resync();
+    // Keyed on what changes the place; `resync` is a fresh closure on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dropAt, webcam]);
 
   // Same abort contract as the camera box: a drag can end without a pointerup.
   const abort = (): void => {
     if (!drag.current) return;
     drag.current = null;
-    holdSettled.current = false;
+    held.current = null;
     setDragging(false);
-    onEnd();
     resync();
   };
 
@@ -392,10 +420,12 @@ export function WebcamLayer({
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => {
           event.stopPropagation();
-          onSelect(lastTime.current);
           const slot = boxRef.current?.parentElement?.getBoundingClientRect();
           const from = drawn.current;
-          if (!slot || slot.width === 0 || slot.height === 0 || !from) return;
+          if (!slot || slot.width === 0 || slot.height === 0 || !from) {
+            onSelect(lastTime.current);
+            return;
+          }
           event.currentTarget.setPointerCapture?.(event.pointerId);
           drag.current = {
             x: event.clientX,
@@ -403,10 +433,9 @@ export function WebcamLayer({
             from: from.center,
             w: slot.width,
             h: slot.height,
+            center: from.center,
           };
-          holdSettled.current = true;
           setDragging(true);
-          onBegin();
         }}
         onPointerMove={(event) => {
           const d = drag.current;
@@ -420,12 +449,18 @@ export function WebcamLayer({
             box,
             frame,
           );
-          onMove(next, lastTime.current);
+          d.center = next;
+          held.current = next;
+          resync();
         }}
         onPointerUp={(event) => {
-          if (!drag.current) return;
+          const d = drag.current;
+          if (!d) return;
           event.currentTarget.releasePointerCapture?.(event.pointerId);
+          const click = Math.hypot(event.clientX - d.x, event.clientY - d.y) < CLICK_SLOP_PX;
           abort();
+          if (click) onSelect(lastTime.current);
+          else onDrop(d.center, lastTime.current);
         }}
         onPointerCancel={abort}
         onLostPointerCapture={abort}

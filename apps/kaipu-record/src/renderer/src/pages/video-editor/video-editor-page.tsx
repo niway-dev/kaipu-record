@@ -61,11 +61,13 @@ import { focusInspectorFirstControl } from "@renderer/features/video-editor/focu
 import { ZoomLane } from "@renderer/features/video-editor/components/zoom-lane";
 import { WebcamLane } from "@renderer/features/video-editor/components/webcam-lane";
 import { WebcamLayer } from "@renderer/features/video-editor/components/webcam-layer";
+import { WebcamDropCard } from "@renderer/features/video-editor/components/webcam-drop-card";
 import {
   WebcamInspector,
   WebcamSegmentInspector,
 } from "@renderer/features/video-editor/components/inspector/webcam-inspector";
 import { useWebcamEditing } from "@renderer/features/video-editor/webcam/use-webcam-editing";
+import { useWebcamDrop } from "@renderer/features/video-editor/webcam/use-webcam-drop";
 import { webcamAt, webcamOverrideAt } from "@renderer/features/video-editor/webcam/webcam-model";
 import {
   webcamInspectorTarget,
@@ -85,6 +87,7 @@ import {
 import { boxCenterAt, CameraBox } from "@renderer/features/video-editor/components/camera-box";
 import { HoldOriginalButton } from "@renderer/features/video-editor/components/hold-original-button";
 import { useCameraPath } from "@renderer/features/video-editor/zoom/use-camera-path";
+import { cameraAt } from "@renderer/features/video-editor/zoom/camera-path";
 import { useCameraPreview } from "@renderer/features/video-editor/zoom/use-camera-preview";
 import {
   isPrivacyTool,
@@ -1546,6 +1549,18 @@ function VideoEditor({
     privacyTool === null &&
     !onSlide;
   useCameraPreview(playback.videoRef, contentRef, cameraPath, cameraApplied);
+  // A drop outside every camera part asks before the scene changes (camera parts, drag-first).
+  const webcamDrop = useWebcamDrop({
+    controller,
+    edits: webcamEdits,
+    sourceDuration: source.durationSeconds,
+    frame: frameSize,
+    cameraScaleAt: (t) => (cameraApplied ? cameraAt(cameraPath, t).scale : 1),
+    select: selectKind,
+    timelineTime: playback.timelineTime,
+    playing: playback.playing,
+    selection: selection.selection,
+  });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -1711,6 +1726,7 @@ function VideoEditor({
                     thumbnails={webcamStrip.thumbnails}
                     covered={webcamStrip.covered}
                     selectedId={webcamSelectedId}
+                    pendingPart={webcamDrop.card?.room ?? null}
                     onSelect={handleSelectWebcam}
                     onEdgeDrag={webcamEdits.edgeDrag}
                   />
@@ -1766,6 +1782,7 @@ function VideoEditor({
       webcamStrip.thumbnails,
       webcamStrip.covered,
       webcamSelectedId,
+      webcamDrop.card?.room,
       handleSelectWebcam,
       redactionEdits.visibleRedactions,
       redactionEdits.edgeDrag,
@@ -1844,11 +1861,8 @@ function VideoEditor({
                       const override = scene.webcam && webcamOverrideAt(scene.webcam, sourceTime);
                       selectKind("webcam", override?.id ?? WEBCAM_LAYER_SELECTION);
                     }}
-                    onBegin={webcamEdits.begin}
-                    onMove={(position, sourceTime) =>
-                      webcamEdits.liveLayout({ position }, sourceTime)
-                    }
-                    onEnd={webcamEdits.end}
+                    dropAt={webcamDrop.card?.position ?? null}
+                    onDrop={webcamDrop.drop}
                   />
                 )
               }
@@ -1890,6 +1904,15 @@ function VideoEditor({
                       }
                       onDraft={setDraftRegion}
                       onCreate={handleCreateRegion}
+                    />
+                  )}
+                  {webcamDrop.card && !holdingOriginal && !onSlide && (
+                    <WebcamDropCard
+                      card={webcamDrop.card}
+                      frame={frameSize}
+                      onPart={webcamDrop.answerPart}
+                      onWhole={webcamDrop.answerWhole}
+                      onClose={webcamDrop.close}
                     />
                   )}
                   <HoldOriginalButton holding={holdingOriginal} onHoldChange={setHoldingOriginal} />

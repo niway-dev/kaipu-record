@@ -35,6 +35,8 @@ export interface WebcamLaneProps {
   /** Where the webcam file has footage, in SOURCE time; a tile outside it stays empty. */
   covered?: CoveredRange | null;
   selectedId: string | null;
+  /** The window a part would take while the drop card is open, in SOURCE time: a dashed block. */
+  pendingPart?: { start: number; end: number } | null;
   onSelect(id: string): void;
   /** `sourceTime` is null when the pointer is over a slide — ignore that move. */
   onEdgeDrag(id: string, edge: "start" | "end", sourceTime: number | null, phase: EdgePhase): void;
@@ -72,6 +74,7 @@ export const WebcamLane = memo(function WebcamLane({
   thumbnails = [],
   covered = null,
   selectedId,
+  pendingPart = null,
   onSelect,
   onEdgeDrag,
 }: WebcamLaneProps): React.JSX.Element {
@@ -231,6 +234,27 @@ export const WebcamLane = memo(function WebcamLane({
         }
         return nodes;
       })}
+      {pendingPart &&
+        sourceRangeToTimelineBlocks(layout, pendingPart.start, pendingPart.end).map((block, i) => (
+          <span
+            key={`pending-${i}`}
+            className={styles.pending}
+            style={{
+              left: `${timeToFraction(block.timelineStart, duration) * 100}%`,
+              width: `${timeToFraction(block.timelineEnd - block.timelineStart, duration) * 100}%`,
+            }}
+            data-webcam-pending
+            aria-hidden="true"
+          >
+            {i === 0 && (
+              <span className={styles.label}>
+                {t("webcamPendingPart", {
+                  seconds: Math.round(pendingPart.end - pendingPart.start),
+                })}
+              </span>
+            )}
+          </span>
+        ))}
     </div>
   );
 });
