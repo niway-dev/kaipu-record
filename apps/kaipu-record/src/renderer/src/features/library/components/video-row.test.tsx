@@ -23,6 +23,7 @@ function makeVideo(overrides: Partial<LibraryVideo> = {}): LibraryVideo {
     sourceTimeSeconds: null,
     editSavedAt: null,
     editExportedSavedAt: null,
+    transcribedAt: null,
     ...overrides,
   };
 }

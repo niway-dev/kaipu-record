@@ -51,6 +51,7 @@ describe("composeLibrary", () => {
       catalog: [cloud("A")],
       editing: {},
       editSession: {},
+      transcribed: {},
     });
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
@@ -68,6 +69,7 @@ describe("composeLibrary", () => {
       catalog: [cloud("B")],
       editing: {},
       editSession: {},
+      transcribed: {},
     });
     expect(items.map((i) => [i.assetId, i.availability])).toEqual([
       ["A", "local"],
@@ -81,6 +83,7 @@ describe("composeLibrary", () => {
       catalog: [cloud("A")],
       editing: {},
       editSession: {},
+      transcribed: {},
     });
     expect(changed.items[0]?.comparison).toBe("local-changes");
     const unknown = composeLibrary({
@@ -88,6 +91,7 @@ describe("composeLibrary", () => {
       catalog: [cloud("A")],
       editing: {},
       editSession: {},
+      transcribed: {},
     });
     expect(unknown.items[0]?.comparison).toBe("pending");
   });
@@ -98,6 +102,7 @@ describe("composeLibrary", () => {
       catalog: [cloud("A", { lastSeenLocalId: "f1" }), cloud("B")],
       editing: {},
       editSession: {},
+      transcribed: {},
     });
     expect(items.map((i) => [i.assetId, i.availability])).toEqual([
       ["A", "local-unavailable"],
@@ -111,6 +116,7 @@ describe("composeLibrary", () => {
       catalog: [cloud("A", { lastSeenLocalId: "f1" })],
       editing: {},
       editSession: {},
+      transcribed: {},
     });
     expect(items[0]?.availability).toBe("cloud");
     expect(items[0]?.editing).toBe("needs-source");
@@ -122,6 +128,7 @@ describe("composeLibrary", () => {
       catalog: [cloud("A", { lastSeenLocalId: "f1" })],
       editing: {},
       editSession: {},
+      transcribed: {},
     });
     expect(catalogUpdates[0]?.lastSeenLocalId).toBeNull();
   });
@@ -132,6 +139,7 @@ describe("composeLibrary", () => {
       catalog: [cloud("OLD", { lastSeenLocalId: "f1" })],
       editing: {},
       editSession: {},
+      transcribed: {},
     });
     expect(items.map((i) => i.assetId).sort()).toEqual(["NEW", "OLD"]);
   });
@@ -142,6 +150,7 @@ describe("composeLibrary", () => {
       catalog: null,
       editing: { src: "project-available", exp: "exported-only" },
       editSession: {},
+      transcribed: {},
     });
     expect(items.map((i) => i.assetId)).toEqual(["E", "S"]); // newest first
     expect(items[0]).toMatchObject({ derivedFromAssetId: "S", editing: "exported-only" });
@@ -158,9 +167,25 @@ describe("composeLibrary", () => {
       catalog: [cloud("B")],
       editing: {},
       editSession: { f1: { savedAt: 1_700_000_000_000, exportedSavedAt: null } },
+      transcribed: {},
     });
     expect(items.find((i) => i.assetId === "A")?.editSavedAt).toBe(1_700_000_000_000);
     expect(items.find((i) => i.assetId === "B")?.editSavedAt).toBeNull();
+  });
+
+  it("carries transcribedAt for local-and-cloud and local-only items, null for cloud-only and untranscribed", () => {
+    const { items } = composeLibrary({
+      local: [local("f1", "A"), local("f2", "C"), local("f3", "D")],
+      catalog: [cloud("A"), cloud("B")],
+      editing: {},
+      editSession: {},
+      transcribed: { f1: 1_700_000_000_000, f2: 1_700_000_005_000 },
+    });
+    const at = (assetId: string) => items.find((i) => i.assetId === assetId)?.transcribedAt;
+    expect(at("A")).toBe(1_700_000_000_000); // local and cloud
+    expect(at("C")).toBe(1_700_000_005_000); // local only
+    expect(at("D")).toBeNull(); // local, no transcript
+    expect(at("B")).toBeNull(); // cloud only
   });
 
   it("carries capture from the local copy; cloud-only and legacy items read null", () => {
@@ -175,6 +200,7 @@ describe("composeLibrary", () => {
       catalog: [cloud("A"), cloud("B")],
       editing: {},
       editSession: {},
+      transcribed: {},
     });
     const byId = (assetId: string) => items.find((i) => i.assetId === assetId)?.capture;
     expect(byId("A")).toEqual(capture); // local + cloud
@@ -189,6 +215,7 @@ describe("composeLibrary", () => {
       catalog: null,
       editing: {},
       editSession: {},
+      transcribed: {},
     });
     expect(items).toHaveLength(1);
     expect(items[0]?.cloud).toBeNull();
@@ -208,6 +235,7 @@ describe("composeLibrary", () => {
         catalog: [],
         editing: {},
         editSession: {},
+        transcribed: {},
       });
       expect(items).toHaveLength(1);
       expect(items[0]).toMatchObject({
@@ -222,6 +250,7 @@ describe("composeLibrary", () => {
         catalog: [cloud("A", { lastSeenLocalId: "f1" })],
         editing: {},
         editSession: {},
+        transcribed: {},
       });
       expect(items).toHaveLength(1);
       expect(items[0]).toMatchObject({

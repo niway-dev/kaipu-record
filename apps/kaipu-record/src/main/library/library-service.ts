@@ -12,6 +12,7 @@ import {
   hasEditSession,
   probeEditing,
   probeEditSession,
+  probeTranscribedAt,
   probeWebcam,
   type EditSessionState,
 } from "./edit-project-probe";
@@ -179,12 +180,21 @@ export class LibraryService {
 
     const editing: Record<string, EditingState> = {};
     const editSession: Record<string, EditSessionState> = {};
+    const transcribed: Record<string, number> = {};
     for (const rec of local ?? []) {
       editing[rec.id] = await probeEditing(this.deps.vaultDir(), rec);
       editSession[rec.id] = await probeEditSession(this.deps.vaultDir(), rec.id);
+      const transcribedAt = await probeTranscribedAt(this.deps.vaultDir(), rec.id);
+      if (transcribedAt !== null) transcribed[rec.id] = transcribedAt;
     }
 
-    const { items, catalogUpdates } = composeLibrary({ local, catalog, editing, editSession });
+    const { items, catalogUpdates } = composeLibrary({
+      local,
+      catalog,
+      editing,
+      editSession,
+      transcribed,
+    });
     if (
       owns &&
       account &&

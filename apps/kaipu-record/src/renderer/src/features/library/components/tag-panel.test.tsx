@@ -24,6 +24,7 @@ const video: LibraryVideo = {
   sourceTimeSeconds: null,
   editSavedAt: null,
   editExportedSavedAt: null,
+  transcribedAt: null,
   tagIds: ["t-cricut"],
 };
 

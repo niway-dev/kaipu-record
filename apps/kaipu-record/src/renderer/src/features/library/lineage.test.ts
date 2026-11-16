@@ -21,6 +21,7 @@ function video(partial: Partial<LibraryVideo> & { assetId: string }): LibraryVid
     sourceTimeSeconds: null,
     editSavedAt: null,
     editExportedSavedAt: null,
+    transcribedAt: null,
     ...partial,
   };
 }

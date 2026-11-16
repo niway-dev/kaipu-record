@@ -37,6 +37,7 @@ function exported(
     sourceTimeSeconds: null,
     editSavedAt: null,
     editExportedSavedAt: null,
+    transcribedAt: null,
     export: exp,
     ...extra,
   };

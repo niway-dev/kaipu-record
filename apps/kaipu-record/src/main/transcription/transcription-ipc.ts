@@ -10,12 +10,13 @@ import { ipcMain } from "electron";
 import { IPC_CHANNELS } from "@shared/types";
 import type {
   TranscriptionBeginResult,
+  TranscriptionJobProgress,
   TranscriptionJobRequest,
   TranscriptionModelDownloadResult,
   TranscriptReadResult,
 } from "@shared/types/transcription";
 import { sha256FileBase64 } from "../library/content-hash";
-import { broadcast, currentVault, scopedAdmitted } from "../library";
+import { broadcast, broadcastLibraryChanged, currentVault, scopedAdmitted } from "../library";
 import { withItemLock } from "../library/item-lock";
 import { META_DIR, isPlainItemId } from "../library/library-vault";
 import { activeWorkspace } from "../workspaces";
@@ -72,6 +73,15 @@ export function openTranscriptionVault(): TranscriptionVault {
   };
 }
 
+/**
+ * A job's last phase is published after its transcript file is written, so "done" is the moment
+ * the library list gains a "Transcribed" item: tell every window to re-list.
+ */
+export function broadcastJobProgress(progress: TranscriptionJobProgress): void {
+  broadcast(IPC_CHANNELS.transcriptionJobProgress, progress);
+  if (progress.phase === "done") broadcastLibraryChanged();
+}
+
 function createService(deps: TranscriptionIpcDeps): TranscriptionService {
   return new TranscriptionService({
     locateEngine: () => locateEngine({ resourcesPath: deps.resourcesPath, appPath: deps.appPath }),
@@ -80,7 +90,7 @@ function createService(deps: TranscriptionIpcDeps): TranscriptionService {
     runBatch,
     hashMedia: sha256FileBase64,
     now: () => new Date(),
-    broadcastJob: (progress) => broadcast(IPC_CHANNELS.transcriptionJobProgress, progress),
+    broadcastJob: broadcastJobProgress,
     broadcastModel: (progress) => broadcast(IPC_CHANNELS.transcriptionModelProgress, progress),
   });
 }

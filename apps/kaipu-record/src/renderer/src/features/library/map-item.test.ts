@@ -13,6 +13,7 @@ const item: LibraryItem = {
   sourceTimeSeconds: null,
   editSavedAt: 123,
   editExportedSavedAt: null,
+  transcribedAt: 456,
   local: {
     id: "f",
     assetId: "A",
@@ -77,6 +78,7 @@ describe("toLibraryVideo", () => {
       thumbnailUrl: "kaipu-media://thumb/f",
       editSavedAt: 123,
       editExportedSavedAt: null,
+      transcribedAt: 456,
     });
   });
 

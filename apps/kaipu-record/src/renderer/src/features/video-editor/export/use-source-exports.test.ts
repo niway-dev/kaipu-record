@@ -15,6 +15,7 @@ function item(assetId: string, derivedFromAssetId: string | null): LibraryItem {
     sourceTimeSeconds: null,
     editSavedAt: null,
     editExportedSavedAt: null,
+    transcribedAt: null,
     local: null,
     cloud: null,
     availability: "local",

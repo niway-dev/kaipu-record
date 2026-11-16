@@ -93,6 +93,12 @@ export interface LibraryItem {
    */
   editExportedSavedAt: number | null;
   /**
+   * Modification time (epoch ms) of `.kaipu/<id>.transcript.json`, or null when the item has
+   * no transcript or no local copy. Only the file's mtime is read, so the list can say
+   * "Transcribed" for every card without opening any transcript.
+   */
+  transcribedAt: number | null;
+  /**
    * How the recording was captured (screen / area / window, output size, ratio), from the
    * local sidecar. The cloud catalog does not carry it, so a cloud-only item reads null,
    * as does any recording made before this metadata existed.

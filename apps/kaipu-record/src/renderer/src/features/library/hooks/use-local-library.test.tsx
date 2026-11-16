@@ -27,6 +27,7 @@ function localItem(
     sourceTimeSeconds: null,
     editSavedAt: null,
     editExportedSavedAt: null,
+    transcribedAt: null,
     cloud: null,
     availability: "local",
     transfer: { state: "idle" },
@@ -88,6 +89,7 @@ const cloudOnlyItem: LibraryItem = {
   sourceTimeSeconds: null,
   editSavedAt: null,
   editExportedSavedAt: null,
+  transcribedAt: null,
   local: null,
   cloud: {
     assetId: "00000000-0000-0000-0000-000000000009",

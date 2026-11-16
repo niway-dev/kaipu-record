@@ -37,6 +37,7 @@ const cloudOnlyItem: LibraryItem = {
   sourceTimeSeconds: null,
   editSavedAt: null,
   editExportedSavedAt: null,
+  transcribedAt: null,
   local: null,
   cloud: {
     assetId: "cloud-1",
@@ -76,6 +77,7 @@ const exportedOnlyItem: LibraryItem = {
   sourceTimeSeconds: null,
   editSavedAt: null,
   editExportedSavedAt: null,
+  transcribedAt: null,
   local: {
     id: "local-b",
     assetId: "asset-b",
@@ -522,6 +524,7 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
     sourceTimeSeconds: null,
     editSavedAt: null,
     editExportedSavedAt: null,
+    transcribedAt: null,
   };
   const local = (id: string) => ({
     id,
@@ -688,6 +691,7 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
           local: local("src"),
           editSavedAt: 9_000,
           editExportedSavedAt: 5_000,
+          transcribedAt: null,
         },
         { ...base, assetId: "exp", title: "Take (edited)", derivedFromAssetId: "src" },
       ],
@@ -711,6 +715,7 @@ describe("LibraryDetailPage — lineage and edit badge", () => {
           createdAt: 9_999,
           editSavedAt: 5_000,
           editExportedSavedAt: 5_000,
+          transcribedAt: null,
         },
         // createdAt BEFORE the session's savedAt — the real shape of every export, and
         // what the old date comparison mistook for a stale export.

@@ -31,6 +31,7 @@ function video(
     sourceTimeSeconds: null,
     editSavedAt: null,
     editExportedSavedAt: null,
+    transcribedAt: null,
     ...over,
   };
 }

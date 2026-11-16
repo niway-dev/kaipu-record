@@ -22,6 +22,7 @@ const videos: LibraryVideo[] = [
     sourceTimeSeconds: null,
     editSavedAt: null,
     editExportedSavedAt: null,
+    transcribedAt: null,
   },
   {
     id: null,
@@ -41,6 +42,7 @@ const videos: LibraryVideo[] = [
     sourceTimeSeconds: null,
     editSavedAt: null,
     editExportedSavedAt: null,
+    transcribedAt: null,
   },
 ];
 

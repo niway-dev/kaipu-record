@@ -38,6 +38,8 @@ export interface LibraryVideo {
   /** Epoch ms of the last edit-session save, null without a session (see LibraryItem). */
   editSavedAt: number | null;
   editExportedSavedAt: number | null;
+  /** Epoch ms of the item's transcript file, null when it has none (see LibraryItem). */
+  transcribedAt: number | null;
   /** Editor home stamps (sidecar): last opened in an editor; last manual image Save. */
   editorOpenedAt?: number | null;
   editorSavedAt?: number | null;

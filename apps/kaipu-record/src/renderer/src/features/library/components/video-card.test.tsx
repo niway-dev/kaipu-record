@@ -23,6 +23,7 @@ const video: LibraryVideo = {
   sourceTimeSeconds: null,
   editSavedAt: null,
   editExportedSavedAt: null,
+  transcribedAt: null,
 };
 
 describe("VideoCard", () => {

@@ -77,6 +77,7 @@ const recording = (overrides: Partial<LibraryItem> = {}): LibraryItem => ({
   sourceTimeSeconds: null,
   editSavedAt: null,
   editExportedSavedAt: null,
+  transcribedAt: null,
   local: {
     id: "rec-1",
     assetId: "asset-1",

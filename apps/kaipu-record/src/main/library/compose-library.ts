@@ -14,6 +14,8 @@ export interface ComposeInput {
   editing: Record<string, EditingState>;
   /** Per local id, from `probeEditSession`. */
   editSession: Record<string, EditSessionState>;
+  /** Per local id, from `probeTranscribedAt`; an id with no transcript is absent. */
+  transcribed: Record<string, number>;
 }
 
 export interface ComposeResult {
@@ -89,6 +91,7 @@ export function composeLibrary(input: ComposeInput): ComposeResult {
         : {}),
       editSavedAt: local ? (input.editSession[local.id]?.savedAt ?? null) : null,
       editExportedSavedAt: local ? (input.editSession[local.id]?.exportedSavedAt ?? null) : null,
+      transcribedAt: local ? (input.transcribed[local.id] ?? null) : null,
       capture: healthy?.capture ?? null,
       local,
       cloud: entry,
@@ -116,6 +119,7 @@ export function composeLibrary(input: ComposeInput): ComposeResult {
         : {}),
       editSavedAt: input.editSession[rec.id]?.savedAt ?? null,
       editExportedSavedAt: input.editSession[rec.id]?.exportedSavedAt ?? null,
+      transcribedAt: input.transcribed[rec.id] ?? null,
       capture: rec.capture ?? null,
       local: rec,
       cloud: null,
