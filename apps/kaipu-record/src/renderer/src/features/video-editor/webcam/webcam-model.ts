@@ -17,6 +17,7 @@ import {
 } from "@shared/camera-bubble";
 import type { WebcamGap, WebcamTrackMeta } from "@shared/webcam-track";
 import { ZOOM_LIMITS } from "../zoom/zoom-model";
+import { EASING_PRESETS, easeValue, type EasingPreset } from "./easing";
 
 export interface WebcamLayout {
   shape: CameraBubbleShape;
@@ -37,6 +38,21 @@ export interface WebcamLayout {
   shadow: boolean;
 }
 
+export const WEBCAM_EASINGS = EASING_PRESETS;
+
+export type WebcamEasing = EasingPreset;
+
+/**
+ * How a block's start (and its return to the default layout) plays (ADR 0039). `cut` is an
+ * instant change. `ms` is the duration before the half-block cap of
+ * {@link webcamEffectiveTransitionMs}.
+ */
+export interface WebcamTransition {
+  kind: "slide" | "cut";
+  ms: number;
+  easing: WebcamEasing;
+}
+
 export interface WebcamSegment {
   id: string;
   /** SOURCE seconds, sorted, non-overlapping, at least `ZOOM_LIMITS.minSeconds` long. */
@@ -46,6 +62,11 @@ export interface WebcamSegment {
   mode: "hidden" | "override";
   /** `override` only: the fields that differ from the global layout. */
   layout?: Partial<WebcamLayout>;
+  /**
+   * `override` only. Absent is a Cut, so a session saved before transitions existed opens
+   * with every block changing at once, as it always did.
+   */
+  transition?: WebcamTransition;
 }
 
 export interface WebcamScene {
@@ -60,6 +81,40 @@ export const WEBCAM_LIMITS = {
   minScaleDuringZoom: 0.3,
   maxScaleDuringZoom: 1,
 } as const;
+
+export const WEBCAM_TRANSITION_DEFAULTS: WebcamTransition = {
+  kind: "slide",
+  ms: 700,
+  easing: "back",
+};
+
+export const WEBCAM_TRANSITION_LIMITS = { minMs: 200, maxMs: 2000 } as const;
+
+/**
+ * A transition from untrusted fields (a saved session, an inspector control): each field
+ * that is missing or invalid takes the default's value, and the duration is rounded and
+ * held inside {@link WEBCAM_TRANSITION_LIMITS}.
+ */
+export function clampWebcamTransition(partial: {
+  kind?: unknown;
+  ms?: unknown;
+  easing?: unknown;
+}): WebcamTransition {
+  const { kind, ms, easing } = partial;
+  return {
+    kind: kind === "slide" || kind === "cut" ? kind : WEBCAM_TRANSITION_DEFAULTS.kind,
+    ms: clamp(
+      Math.round(
+        typeof ms === "number" && Number.isFinite(ms) ? ms : WEBCAM_TRANSITION_DEFAULTS.ms,
+      ),
+      WEBCAM_TRANSITION_LIMITS.minMs,
+      WEBCAM_TRANSITION_LIMITS.maxMs,
+    ),
+    easing: (WEBCAM_EASINGS as readonly unknown[]).includes(easing)
+      ? (easing as WebcamEasing)
+      : WEBCAM_TRANSITION_DEFAULTS.easing,
+  };
+}
 
 /**
  * The inspector's Size label: the stored range 0.12–0.90 shown as 10–90, so the owner's
@@ -197,6 +252,117 @@ export function webcamAt(scene: { webcam: WebcamScene | null }, t: number): Webc
   if (!segment) return webcam.layout;
   if (segment.mode === "hidden") return null;
   return segment.layout ? { ...webcam.layout, ...segment.layout } : webcam.layout;
+}
+
+/**
+ * What the bubble does at one source instant: the layout in force, and while it is moving
+ * there, the layout it moves from. The two differ in `position` only (this version animates
+ * position; every other field applies at once). The module has no frame, so the rectangles
+ * and the overshoot limit belong to `webcamStateRect`.
+ */
+export interface WebcamState {
+  layout: WebcamLayout;
+  /** The layout the bubble slides from; null when no transition is active. */
+  from: WebcamLayout | null;
+  /**
+   * The EASED progress from `from.position` to `layout.position`: 0 at the start of the
+   * transition and 1 at its end. `back` passes 1 in between. 1 when `from` is null.
+   */
+  progress: number;
+  /** The preset behind `progress`; `webcamStateRect` needs its peak to fit the overshoot. */
+  easing: WebcamEasing;
+}
+
+/** Segment ends and starts this close count as touching (float noise from edge drags). */
+const ADJACENT_EPSILON = 1e-6;
+
+/** The part of a block (seconds long, `ms` asked for) a transition may use: half of it. */
+export function webcamEffectiveTransitionMs(segmentLength: number, ms: number): number {
+  return Math.min(ms, (segmentLength * 1000) / 2);
+}
+
+const samePosition = (a: { x: number; y: number }, b: { x: number; y: number }): boolean =>
+  Math.abs(a.x - b.x) < 1e-9 && Math.abs(a.y - b.y) < 1e-9;
+
+/** The position an override segment puts the bubble at (its own, else the default's). */
+const segmentPosition = (webcam: WebcamScene, segment: WebcamSegment) =>
+  segment.layout?.position ?? webcam.layout.position;
+
+function settled(layout: WebcamLayout): WebcamState {
+  return { layout, from: null, progress: 1, easing: "linear" };
+}
+
+/**
+ * The slide from `fromPosition` to `layout`'s, `elapsed` seconds into a window of `windowMs`
+ * (already capped); settled outside the window and when nothing would move.
+ */
+function slideState(
+  layout: WebcamLayout,
+  fromPosition: { x: number; y: number },
+  transition: WebcamTransition,
+  windowMs: number,
+  elapsed: number,
+): WebcamState {
+  const windowSeconds = windowMs / 1000;
+  if (!(windowSeconds > 0) || elapsed >= windowSeconds) return settled(layout);
+  if (samePosition(fromPosition, layout.position)) return settled(layout);
+  return {
+    layout,
+    from: { ...layout, position: { ...fromPosition } },
+    progress: easeValue(transition.easing, elapsed / windowSeconds),
+    easing: transition.easing,
+  };
+}
+
+/**
+ * The bubble at SOURCE time `t`: {@link webcamAt}'s layout plus the slide in progress, if
+ * any. A pure function of `t`, so scrubbing backwards shows what playing forwards did (ADR
+ * 0039). Null when there is no webcam or a hidden segment covers `t`.
+ *
+ * - A block's slide plays at its start, over {@link webcamEffectiveTransitionMs}, from the
+ *   previous block's position when that block ends exactly where this one starts, otherwise
+ *   from the default layout (also after a hidden segment).
+ * - A block that ends into a gap returns to the default layout over its OWN transition,
+ *   capped at half the gap. When the next segment starts at its end the next block's start
+ *   governs instead, so there is no return.
+ * - A Cut, or no transition, changes at once.
+ */
+export function webcamStateAt(
+  scene: { webcam: WebcamScene | null },
+  t: number,
+): WebcamState | null {
+  const webcam = scene.webcam;
+  if (!webcam) return null;
+  const { segments } = webcam;
+  const index = segments.findIndex((s) => t >= s.start && t < s.end);
+  if (index >= 0) {
+    const segment = segments[index]!;
+    if (segment.mode === "hidden") return null;
+    const layout = webcamAt(scene, t)!;
+    const transition = segment.transition;
+    if (!transition || transition.kind !== "slide") return settled(layout);
+    const previous = segments[index - 1];
+    const touching = previous && Math.abs(previous.end - segment.start) <= ADJACENT_EPSILON;
+    const fromPosition =
+      touching && previous.mode === "override"
+        ? segmentPosition(webcam, previous)
+        : webcam.layout.position;
+    const windowMs = webcamEffectiveTransitionMs(segment.end - segment.start, transition.ms);
+    return slideState(layout, fromPosition, transition, windowMs, t - segment.start);
+  }
+  const layout = webcam.layout;
+  let before = -1;
+  for (let i = 0; i < segments.length && segments[i]!.end <= t; i++) before = i;
+  const ended = segments[before];
+  const transition = ended?.transition;
+  if (!ended || ended.mode !== "override" || !transition || transition.kind !== "slide") {
+    return settled(layout);
+  }
+  const next = segments[before + 1];
+  const gap = next ? next.start - ended.end : Infinity;
+  if (gap <= ADJACENT_EPSILON) return settled(layout);
+  const windowMs = webcamEffectiveTransitionMs(gap, transition.ms);
+  return slideState(layout, segmentPosition(webcam, ended), transition, windowMs, t - ended.end);
 }
 
 /** The override segment in force at source time `t` (null `t`: over a slide), if any. */
