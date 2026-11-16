@@ -257,14 +257,17 @@ export const UI_MAP = {
       },
       // The Add from Library modal (NIW2-790), behind the `timeline-levels` flag: a sheet over the
       // editor opened by the transport's Add recording button, or by a capture's Add from Library
-      // button. One chooser lists every destination for the selected item and one Add applies it
-      // (NIW2-829). recordings: the Recordings tab, a compact list with the first row selected
-      // and previewed, and the chooser with "Over the video" disabled for a recording;
-      // screenshots: the Screenshots tab, a card grid with the "From this recording" tag and no
-      // card selected yet; screenshotSelected: a card selected, with the chooser at "Over the
-      // video"; noMatch: a search that matches no recording.
+      // button. The right column is the preview, a placement strip (a mini timeline of the real
+      // sequence with the new item in pink, and one sentence), and a split Add button: its big
+      // part adds at the chosen destination, its arrow opens the menu of them (NIW2-829).
+      // recordings: the Recordings tab, a compact list with the first row selected and previewed,
+      // and the Add button at "After this clip"; screenshots: the Screenshots tab, a card grid
+      // with the "From this recording" tag and no card selected yet; screenshotSelected: a card
+      // selected, with the strip and the Add button at "Over the video"; noMatch: a search that
+      // matches no recording; destinationMenu: the arrow's menu open over the strip, with
+      // "Over the video" disabled for a recording.
       addFromLibrary: {
-        states: ["recordings", "screenshots", "screenshotSelected", "noMatch"],
+        states: ["recordings", "screenshots", "screenshotSelected", "noMatch", "destinationMenu"],
         gatedBy: [{ flag: "timeline-levels" }],
       },
       // The "Insert here" bar and pill on the Clips row while a recording is dragged over it: it

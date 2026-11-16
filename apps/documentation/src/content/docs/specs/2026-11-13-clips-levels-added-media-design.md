@@ -249,6 +249,11 @@ The Captures panel keeps Go to and Delete. Its add button no longer adds: it ope
 Library on the Screenshots tab with that capture already selected, and the chooser takes it from
 there. With the flag off nothing changes, because neither the modal nor that button exists.
 
+Update, 2026-11-16: the radio list above is no longer the UI. The destination now lives in the
+menu of the Add button, a split button whose big part adds at the chosen destination and says it
+("Add after this clip"), with a placement strip above it that draws the real sequence and says in
+one sentence which clips move. The destinations and their rules are unchanged.
+
 Slide insertion reads the scene after the image decodes, and pins the chosen boundary to the clip
 that follows it, so a join that lands in the meantime does not move the slide.
 

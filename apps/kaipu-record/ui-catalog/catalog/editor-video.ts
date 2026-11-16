@@ -815,7 +815,7 @@ export const editorVideo = catalog(
     },
     "captures-opens-add-from-library": {
       profile: "timeline-levels",
-      how: "With the timeline-levels flag forced on, open “Weekly sync”, press Capture frame and then Add from Library… on the new capture's row: the Add from Library modal opens on its Screenshots tab with that new capture already selected, its image shown on the right above the destination chooser (Over the video selected) and the Add button.",
+      how: "With the timeline-levels flag forced on, open “Weekly sync”, press Capture frame and then Add from Library… on the new capture's row: the Add from Library modal opens on its Screenshots tab with that new capture already selected, its image shown on the right above the placement strip and the Add button, which reads “Add over the video”.",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
@@ -827,14 +827,14 @@ export const editorVideo = catalog(
             part: { role: "button", name: "Add from Library…", exact: true },
           },
         },
-        // The radio group exists only while a screenshot is selected, so this waits for the
+        // The Add button exists only while a screenshot is selected, so this waits for the
         // modal, the Screenshots tab and the new capture's selection together. The new
         // capture's title ends in its time ("Weekly sync frame 0s"), which the seeded
         // “Weekly sync frame” card does not, so the title is not matched here.
         {
           waitFor: {
             area: "editorVideo.addFromLibrary",
-            part: { role: "radio", name: "Over the video" },
+            part: { role: "button", name: "Add over the video", exact: true },
           },
         },
         // The selected image decodes after the column is drawn.
@@ -847,7 +847,7 @@ export const editorVideo = catalog(
     },
     "add-from-library": {
       profile: "add-from-library",
-      how: "With the `timeline-levels` flag forced on, open “Weekly sync” and press Add recording at the left end of the transport bar: the Add from Library modal opens on its Recordings tab, a compact list of the Library's other recordings, newest first, with the first one selected and previewed on the right (paused at its first frame) above the destination chooser (Over the video is greyed out with “Floating videos come later.”, After the clip under the playhead is selected) and the Add button; the transport button stays lit while the modal is open.",
+      how: "With the `timeline-levels` flag forced on, open “Weekly sync” and press Add recording at the left end of the transport bar: the Add from Library modal opens on its Recordings tab, a compact list of the Library's other recordings, newest first, with the first one selected and previewed on the right (paused at its first frame) above the placement strip (a mini timeline of the real sequence with the new clip in pink after the clip under the playhead, and one sentence saying how many clips move) and the Add button, a split button that reads “Add after this clip”; the transport button stays lit while the modal is open.",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
@@ -864,6 +864,30 @@ export const editorVideo = catalog(
         "editorVideo.addFromLibrary:recordings",
         "editorVideo.transport:addRecordingOpen",
       ],
+      ready: { area: "editorVideo.addFromLibrary" },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "add-from-library-destination-menu": {
+      profile: "add-from-library",
+      how: "With the flag forced on, open “Weekly sync”, press Add recording and open the arrow at the right end of the Add button: the “Where it goes” menu opens upward from the button with its five destinations, each with a thumbnail of the sequence it makes and a hint. After this clip is checked with a pink tick, Over the video is greyed out with “Floating videos come later.”, and the arrow part of the button is a shade darker and points down.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        addRecordingButton,
+        { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        { waitFor: { video: "paused-at-start" } },
+        { waitMs: 400 },
+        {
+          click: {
+            area: "editorVideo.addFromLibrary",
+            part: { role: "button", name: "Choose where it goes", exact: true },
+          },
+        },
+        { waitFor: { area: "editorVideo.addFromLibrary", part: { role: "menu" } } },
+        // The menu pops in over 150 ms (animations are off in the catalog, so this is margin).
+        { waitMs: 200 },
+      ],
+      demonstrates: ["editorVideo.addFromLibrary:destinationMenu"],
       ready: { area: "editorVideo.addFromLibrary" },
       gates: [{ flag: "timeline-levels", side: "on" }],
     },
@@ -886,7 +910,7 @@ export const editorVideo = catalog(
     },
     "add-from-library-screenshot-selected": {
       profile: "add-from-library",
-      how: "With the flag forced on, open “Weekly sync”, press Add recording, open the Screenshots tab and click “Weekly sync frame”: the card is outlined as selected and the right column shows its title above the destination chooser, with Over the video selected and every place in the sequence listed under “In the sequence”, and the Add button.",
+      how: "With the flag forced on, open “Weekly sync”, press Add recording, open the Screenshots tab and click “Weekly sync frame”: the card is outlined as selected and the right column shows its title above the placement strip, which draws it floating over the video from the playhead, and the Add button, which reads “Add over the video”.",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
@@ -898,7 +922,7 @@ export const editorVideo = catalog(
         {
           waitFor: {
             area: "editorVideo.addFromLibrary",
-            part: { role: "radio", name: "Over the video" },
+            part: { role: "button", name: "Add over the video", exact: true },
           },
         },
         // The card thumbnails decode after the grid is drawn.
@@ -936,7 +960,7 @@ export const editorVideo = catalog(
     },
     "add-from-library-added": {
       profile: "add-from-library",
-      how: "With the flag forced on, open “Weekly sync”, press Add recording and click Add with “Walkthrough 1” selected and the default destination (After the clip under the playhead): the playhead is at 0:00, so the recording is inserted after the clip under it, and the sequence shows the clips labelled “Weekly sync” and “Walkthrough 1” (the modal is closed for the shot).",
+      how: "With the flag forced on, open “Weekly sync”, press Add recording and click “Add after this clip” with “Walkthrough 1” selected and the default destination (After this clip): the playhead is at 0:00, so the recording is inserted after the clip under it, and the sequence shows the clips labelled “Weekly sync” and “Walkthrough 1” (the modal is closed for the shot).",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
@@ -947,7 +971,7 @@ export const editorVideo = catalog(
         {
           click: {
             area: "editorVideo.addFromLibrary",
-            part: { role: "button", name: "Add", exact: true },
+            part: { role: "button", name: "Add after this clip", exact: true },
           },
         },
         // The modal stays open after an add, so close it with Escape to see the sequence.
