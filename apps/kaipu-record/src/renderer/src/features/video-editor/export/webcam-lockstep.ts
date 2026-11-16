@@ -134,7 +134,9 @@ export interface WebcamFillState<T> {
 /**
  * Fills one gap (see {@link webcamFillTimes}): for each fill time, the webcam frame due
  * then (none while the layer is hidden), emitted only when it changes what is on screen —
- * a new webcam frame, or the face disappearing. `emit` re-composes the held screen frame
+ * a new webcam frame, the face disappearing, or the bubble moving (`moving`: a camera
+ * section's slide is playing, so the same webcam frame sits in a new place, ADR 0039).
+ * `emit` re-composes the held screen frame
  * with it and returns false when it could not add the frame (the timestamp did not
  * advance, or the fps cap took the slot). Returns the new state.
  *
@@ -150,6 +152,12 @@ export async function fillWebcamGap<T>(opts: {
   segmentEnd: number;
   fps: number;
   visible(sourceTime: number): boolean;
+  /**
+   * Whether the bubble is between two places at `sourceTime`. A fill is then due even when
+   * the webcam frame is the one already drawn; without it a slide over a still screen would
+   * freeze. Absent means nothing ever moves.
+   */
+  moving?(sourceTime: number): boolean;
   frameAt(sourceTime: number): Promise<T | null>;
   emit(sourceTime: number, face: T | null, duration: number): Promise<boolean>;
 }): Promise<WebcamFillState<T>> {
@@ -158,7 +166,7 @@ export async function fillWebcamGap<T>(opts: {
   for (const t of webcamFillTimes(from, opts.nextFrame, opts.segmentEnd, opts.fps)) {
     from = t;
     const due = opts.visible(t) ? await opts.frameAt(t) : null;
-    if (due === face) continue;
+    if (due === face && !opts.moving?.(t)) continue;
     if (await opts.emit(t, due, gapEnd - t)) face = due;
   }
   return { from, face };

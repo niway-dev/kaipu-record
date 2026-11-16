@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { WEBCAM_DEFAULTS, type WebcamScene } from "../webcam/webcam-model";
-import type { WebcamImage } from "./compose-webcam";
+import {
+  WEBCAM_DEFAULTS,
+  webcamStateAt,
+  type WebcamScene,
+  type WebcamTransition,
+} from "../webcam/webcam-model";
+import { planWebcamDraw, type WebcamImage } from "./compose-webcam";
 import type { RenderClipSegment } from "./export-plan";
 import { exportClipFrames, type ClipFrame } from "./export-clip-frames";
 import { createFrameRateCap } from "./frame-rate-cap";
@@ -25,10 +30,10 @@ async function* frames<T>(items: T[]): AsyncGenerator<T> {
   for (const item of items) yield item;
 }
 
-/** A 30 fps webcam that started with the screen, `seconds` long. */
-function webcamCursor(seconds: number) {
-  const faces: Face[] = Array.from({ length: Math.round(seconds * 30) }, (_, i) => ({
-    timestamp: i / 30,
+/** A webcam (30 fps unless told) that started with the screen, `seconds` long. */
+function webcamCursor(seconds: number, fps = 30) {
+  const faces: Face[] = Array.from({ length: Math.round(seconds * fps) }, (_, i) => ({
+    timestamp: i / fps,
     name: `face#${i}`,
   }));
   return createWebcamCursor(frames(faces), 0, seconds);
@@ -45,7 +50,7 @@ const layer = (segments: WebcamScene["segments"] = []): WebcamScene => ({
 function run(opts: {
   segment: RenderClipSegment;
   screens: ClipFrame[];
-  webcam?: { layer: WebcamScene; seconds: number } | null;
+  webcam?: { layer: WebcamScene; seconds: number; fps?: number } | null;
   maxFps?: number | null;
   prevOutTs?: number | null;
 }) {
@@ -54,7 +59,7 @@ function run(opts: {
   const result = exportClipFrames({
     segment: opts.segment,
     frames: frames(opts.screens),
-    webcamCursor: opts.webcam ? webcamCursor(opts.webcam.seconds) : null,
+    webcamCursor: opts.webcam ? webcamCursor(opts.webcam.seconds, opts.webcam.fps) : null,
     layer: opts.webcam?.layer ?? null,
     webcamImageOf: imageOf,
     fillFps: 30,
@@ -175,5 +180,104 @@ describe("exportClipFrames", () => {
     });
     expect(await result).toBe(10.5);
     expect(emitted.map((e) => e.outTs)).toEqual([10.5]);
+  });
+});
+
+// Camera sections (ADR 0039, spec decision 6): a slide over a still screen must not freeze.
+describe("exportClipFrames — a camera section's slide", () => {
+  const FRAME = { width: 1920, height: 1080 };
+  const IMAGE = { width: 1280, height: 720 };
+  const SLIDE: WebcamTransition = { kind: "slide", ms: 700, easing: "back" };
+  const sceneWithBlock = (start: number): WebcamScene => ({
+    layout: WEBCAM_DEFAULTS,
+    segments: [
+      {
+        id: "b",
+        start,
+        end: start + 5,
+        mode: "override",
+        layout: { position: { x: 0.88, y: 0.18 } },
+        transition: SLIDE,
+      },
+    ],
+  });
+  /** The bubble's box the composer would draw for one `clip` call. */
+  const rectOf = (call: unknown[], layer: WebcamScene) => {
+    const face = call[4] as { sourceTs: number } | null;
+    return face ? planWebcamDraw(layer, face.sourceTs, FRAME, 1, IMAGE)!.rect : null;
+  };
+
+  it("emits a frame per fill with a distinct bubble position while it moves, though the webcam frame is the same", async () => {
+    const layer = sceneWithBlock(4.5);
+    // One screen frame held for the whole 2 s clip, and a 10 fps webcam: it changes only
+    // every 0.1 s, so only a `moving` fill can put a frame in between.
+    const { result, clip } = run({
+      segment: SEGMENT,
+      screens: [screen(4, 2)],
+      webcam: { layer, seconds: 10, fps: 10 },
+    });
+    await result;
+    const sliding = clip.mock.calls.filter((c) => {
+      const t = (c[4] as { sourceTs: number } | null)?.sourceTs ?? -1;
+      return webcamStateAt({ webcam: layer }, t)?.from;
+    });
+    // 0.7 s at 30 fps is about 20 fills, against 7 webcam frames.
+    expect(sliding.length).toBeGreaterThanOrEqual(19);
+    const xs = sliding.map((c) => rectOf(c, layer)!.x);
+    for (let i = 1; i < xs.length; i++) expect(xs[i]).not.toBeCloseTo(xs[i - 1]!, 3);
+  });
+
+  it("outside a transition the skip still holds: no frame when the webcam frame is unchanged", async () => {
+    const layer = sceneWithBlock(4.5);
+    const { result, clip } = run({
+      segment: SEGMENT,
+      screens: [screen(4, 2)],
+      webcam: { layer, seconds: 10, fps: 10 },
+    });
+    await result;
+    const before = clip.mock.calls.filter(
+      (c) => ((c[4] as { sourceTs: number } | null)?.sourceTs ?? 0) < 4.5,
+    );
+    // The screen frame itself, then one fill per new 10 fps webcam frame (4.1 .. 4.4).
+    expect(before.length).toBeLessThanOrEqual(6);
+    const after = clip.mock.calls.filter(
+      (c) => ((c[4] as { sourceTs: number } | null)?.sourceTs ?? 0) >= 5.2 + 1 / 30,
+    );
+    // From 5.23 to 6 at 10 fps: eight new webcam frames at most.
+    expect(after.length).toBeLessThanOrEqual(8);
+  });
+
+  it("trimming 30 s before a block makes its slide start 30 s earlier in the output", async () => {
+    const layer = sceneWithBlock(34);
+    const firstMove = async (segment: RenderClipSegment): Promise<number> => {
+      const { result, clip } = run({
+        segment,
+        screens: [screen(segment.sourceStart, segment.duration)],
+        webcam: { layer, seconds: 50, fps: 10 },
+      });
+      await result;
+      const call = clip.mock.calls.find((c) => {
+        const t = (c[4] as { sourceTs: number } | null)?.sourceTs ?? -1;
+        return webcamStateAt({ webcam: layer }, t)?.from;
+      })!;
+      return call[3] as number;
+    };
+    const whole = await firstMove({
+      kind: "clip",
+      timelineStart: 0,
+      duration: 40,
+      sourceStart: 0,
+      sourceEnd: 40,
+    });
+    const trimmed = await firstMove({
+      kind: "clip",
+      timelineStart: 0,
+      duration: 10,
+      sourceStart: 30,
+      sourceEnd: 40,
+    });
+    expect(whole).toBeCloseTo(34, 1);
+    expect(trimmed).toBeCloseTo(4, 1);
+    expect(whole - trimmed).toBeCloseTo(30, 1);
   });
 });

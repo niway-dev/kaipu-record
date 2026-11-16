@@ -246,6 +246,52 @@ describe("fillWebcamGap", () => {
     expect(emitted).toHaveLength(14);
   });
 
+  // Camera sections (ADR 0039): the bubble moves between webcam frames, so a fill is due
+  // even when the webcam frame due is the one already drawn.
+  it("also emits while the bubble is moving, even when the webcam frame did not change", async () => {
+    const emitted: number[] = [];
+    const source = frames(15);
+    await fillWebcamGap({
+      state: { from: 0, face: await source(0) },
+      nextFrame: 1,
+      segmentEnd: 10,
+      fps: 30,
+      visible: () => true,
+      moving: (t) => t >= 0.2 && t < 0.5,
+      frameAt: source,
+      emit: async (t) => {
+        emitted.push(t);
+        return true;
+      },
+    });
+    // Every 1/30 s inside the slide, and only the new webcam frames (1/15 s) outside it.
+    const inside = emitted.filter((t) => t >= 0.2 && t < 0.5);
+    expect(inside).toHaveLength(9);
+    const outside = emitted.filter((t) => t < 0.2 || t >= 0.5);
+    expect(outside).toHaveLength(9);
+    // 15 fps frames start every 2nd fill time: 0.2 s (frame 3) is already due.
+    expect(emitted).toEqual([...emitted].sort((a, b) => a - b));
+  });
+
+  it("keeps the skip when nothing moves: moving false changes nothing", async () => {
+    const emitted: number[] = [];
+    const source = frames(15);
+    await fillWebcamGap({
+      state: { from: 0, face: await source(0) },
+      nextFrame: 1,
+      segmentEnd: 10,
+      fps: 30,
+      visible: () => true,
+      moving: () => false,
+      frameAt: source,
+      emit: async (t) => {
+        emitted.push(t);
+        return true;
+      },
+    });
+    expect(emitted).toHaveLength(14);
+  });
+
   it("emits nothing while the layer is hidden, except the one frame that removes the face", async () => {
     const emitted: Array<[number, unknown]> = [];
     await fillWebcamGap({

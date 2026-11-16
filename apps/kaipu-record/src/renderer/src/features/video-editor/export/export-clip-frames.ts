@@ -12,7 +12,7 @@
  *
  * WORKER-BUNDLE INVARIANT, like compose-frame.ts: pure and DOM-free; no mediabunny import.
  */
-import { webcamAt, type WebcamScene } from "../webcam/webcam-model";
+import { webcamStateAt, type WebcamScene } from "../webcam/webcam-model";
 import type { OutputComposer } from "./compose-output-frame";
 import type { WebcamImage } from "./compose-webcam";
 import type { RenderClipSegment } from "./export-plan";
@@ -72,7 +72,12 @@ export async function exportClipFrames<F extends ClipFrame, W>(
       nextFrame,
       segmentEnd: segment.sourceEnd,
       fps: opts.fillFps,
-      visible: (t) => webcamAt({ webcam: layer }, t) !== null,
+      // The same state function the composer draws from. The recording's end is not known
+      // here, so the last block's return is read at its whole duration; the composer reads
+      // it the same way, so the fills and the drawn frames agree.
+      visible: (t) => webcamStateAt({ webcam: layer }, t) !== null,
+      // A slide moves the bubble between webcam frames: those fills are due too (ADR 0039).
+      moving: (t) => !!webcamStateAt({ webcam: layer }, t)?.from,
       frameAt: (t) => webcamCursor.frameAt(t),
       // `duration` reaches the gap's end: the last fill of a clip must (see fillWebcamGap).
       emit: async (t, face, duration) => {
@@ -130,7 +135,7 @@ export async function exportClipFrames<F extends ClipFrame, W>(
     // What is on screen now, for the next gap's fills.
     fills = {
       ...fills,
-      face: layer && webcamAt({ webcam: layer }, webcamTime) ? face : null,
+      face: layer && webcamStateAt({ webcam: layer }, webcamTime) ? face : null,
     };
     // The frame's own decoded duration (at least one cap slot); the muxer stretches it to
     // the next kept frame anyway.
