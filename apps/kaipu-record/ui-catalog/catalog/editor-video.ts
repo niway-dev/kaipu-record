@@ -55,6 +55,8 @@ const audioWaveformDrawn: Step = {
 /**
  * For "Camera long", which declares 20 minutes over 12 s of media: its waveform never reaches
  * `complete` (the audio ends at 12 s), so these states wait for the part on the lane instead.
+ * They do not use `loaded` either: it waits for the webcam filmstrip, which never finishes
+ * decoding across 20 declared minutes of a 12 s file.
  */
 const cameraPartDrawn: Step = {
   waitFor: {
@@ -407,7 +409,6 @@ export const editorVideo = catalog(
       how: "Open “Camera long”, a 20-minute recording whose camera part is about 4 px wide on the lane, and rest the pointer on that part: after a moment a card appears over the lane with the part's range and length, and how it arrives.",
       steps: [
         open(ASSETS.cameraLong),
-        loaded,
         cameraPartDrawn,
         // The card opens after about 120 ms of hovering, and the pointer stays on the part.
         {
@@ -426,7 +427,7 @@ export const editorVideo = catalog(
     "camera-lane-narrow-selected": {
       profile: "camera-parts",
       how: "Open “Camera long” and select its camera part on the lane: the part is narrower than its glyph, so its two handles are drawn apart from each other.",
-      steps: [open(ASSETS.cameraLong), loaded, cameraPartDrawn, cameraSection(1)],
+      steps: [open(ASSETS.cameraLong), cameraPartDrawn, cameraSection(1)],
       embedsScreen: true,
       demonstrates: ["editorVideo.webcamLane:narrowSelected"],
       ready: { area: "editorVideo.webcamLane" },
