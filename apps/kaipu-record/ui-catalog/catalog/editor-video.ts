@@ -913,14 +913,20 @@ export const editorVideo = catalog(
     },
     "transcript-done": {
       profile: "transcription-transcripts",
-      how: "With a transcript beside “Walkthrough 1”, open it and press Transcript in the tool column: the right column shows the words in two paragraphs with their times, and the top bar shows the Transcribed badge.",
+      how: "With a transcript beside “Walkthrough 1”, open it and press Transcript in the tool column: the right column shows the words in two paragraphs with their times, and the top bar shows the Transcribed badge (its check mark: the word needs a window wider than 1500 px).",
       steps: [
         open(ASSETS.walkthrough),
         audioWaveformDrawn,
         loaded,
         transcriptRail,
         inPanel({ css: "[data-w]" }),
-        { waitFor: { area: "editorVideo.transcribe", part: { text: "Transcribed" } } },
+        // Icon-only at this window width (the word collapses below 1500 px), so wait for the badge.
+        {
+          waitFor: {
+            area: "editorVideo.transcribe",
+            part: { css: '[data-testid="transcribe-done"]' },
+          },
+        },
       ],
       demonstrates: ["editorVideo.transcriptPanel:done", "editorVideo.transcribe:done"],
       ready: { area: "editorVideo.transcriptPanel" },
