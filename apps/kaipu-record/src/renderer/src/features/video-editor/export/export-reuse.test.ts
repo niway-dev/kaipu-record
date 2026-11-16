@@ -74,6 +74,9 @@ describe("editFingerprint — webcam", () => {
     // Before NIW2-575 a webcam scene fingerprinted as `edit:<hash>` and its file had no face.
     expect(editFingerprint(fixed(track))).toMatch(/^edit:wc3:[0-9a-z]+$/);
     expect(editFingerprint(fixed(null))).not.toMatch(/wc3/);
+    // The editable-cursor export draws the webcam too, so it carries the revision as well.
+    expect(editFingerprint(fixed(track), true)).toMatch(/^edit:cursor3:wc3:[0-9a-z]+$/);
+    expect(editFingerprint(fixed(null), true)).not.toMatch(/wc3/);
   });
 });
 
@@ -152,7 +155,7 @@ describe("editFingerprint — background (NIW2-668)", () => {
     expect(editFingerprint(fixed(null))).toBe("edit:2bdufz02r20");
     expect(editFingerprint(fixed(null), true)).toBe("edit:cursor3:czrk19yfc6");
     expect(editFingerprint(fixed(track))).toBe("edit:wc3:3sdivqr4ok");
-    expect(editFingerprint(fixed(track), true)).toBe("edit:cursor3:3sdivqr4ok");
+    expect(editFingerprint(fixed(track), true)).toBe("edit:cursor3:wc3:3sdivqr4ok");
   });
 
   it("is unchanged by a none background, even with stored padding, radius and shadow", () => {
@@ -179,7 +182,7 @@ describe("editFingerprint — background (NIW2-668)", () => {
     expect(editFingerprint(withBg(null))).toMatch(/^edit:bg1:[0-9a-z]+$/);
     expect(editFingerprint(withBg(track))).toMatch(/^edit:wc3:bg1:[0-9a-z]+$/);
     expect(editFingerprint(withBg(null), true)).toMatch(/^edit:cursor3:bg1:[0-9a-z]+$/);
-    expect(editFingerprint(withBg(track), true)).toMatch(/^edit:cursor3:bg1:[0-9a-z]+$/);
+    expect(editFingerprint(withBg(track), true)).toMatch(/^edit:cursor3:wc3:bg1:[0-9a-z]+$/);
     expect(editFingerprint(fixed(null))).not.toMatch(/bg1/);
   });
 
