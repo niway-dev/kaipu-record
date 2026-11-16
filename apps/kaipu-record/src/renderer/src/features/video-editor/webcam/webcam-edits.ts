@@ -5,7 +5,7 @@
  * A recording without a webcam has no layer to edit, so every edit passes the scene through.
  */
 import { newId, type VideoScene } from "../scene";
-import { dragRangeEdge, freeWindowAt } from "../source-time";
+import { dragRangeEdge, freeWindowAt, type SourceBounds } from "../source-time";
 import {
   WEBCAM_MIN_SEGMENT_SECONDS,
   WEBCAM_TRANSITION_DEFAULTS,
@@ -44,9 +44,9 @@ export function setWebcamLayout(scene: VideoScene, patch: Partial<WebcamLayout>)
 
 /**
  * Add a segment over source seconds [start, end). Refused (the scene back, `id: null`) when
- * there is no webcam, the window is under the minimum length, leaves [0, duration] or overlaps
- * a segment: the caller finds a free window with `freeWindowAt`. A `hidden` segment keeps no
- * layout.
+ * there is no webcam, the window is under the minimum length, leaves `bounds` (the range of one
+ * recording) or overlaps a segment: the caller finds a free window with `freeWindowAt`. A
+ * `hidden` segment keeps no layout.
  */
 export function addWebcamSegment(
   scene: VideoScene,
@@ -58,7 +58,7 @@ export function addWebcamSegment(
     /** `override` only. Absent is a Cut. */
     transition?: Partial<WebcamTransition>;
   },
-  sourceDurationSeconds: number,
+  bounds: SourceBounds,
 ): { scene: VideoScene; id: string | null } {
   const webcam = scene.webcam;
   const { start, end } = input;
@@ -66,8 +66,8 @@ export function addWebcamSegment(
     webcam !== null &&
     Number.isFinite(start) &&
     Number.isFinite(end) &&
-    start >= 0 &&
-    end <= sourceDurationSeconds &&
+    start >= bounds.start &&
+    end <= bounds.end &&
     end - start >= WEBCAM_MIN_SEGMENT_SECONDS &&
     !webcam.segments.some((s) => start < s.end && end > s.start);
   if (!valid) return { scene, id: null };
@@ -116,14 +116,15 @@ export function updateWebcamSegment(
 
 /**
  * Timeline edge drag. The same rule as zooms (`dragRangeEdge`): stay inside
- * [0, sourceDuration], keep the minimum length, never cross a neighbouring segment.
+ * `bounds` (the range of the recording the segment is in), keep the minimum length, never cross a
+ * neighbouring segment.
  */
 export function dragWebcamSegmentEdge(
   scene: VideoScene,
   id: string,
   edge: "start" | "end",
   to: number,
-  sourceDurationSeconds: number,
+  bounds: SourceBounds,
 ): VideoScene {
   const webcam = scene.webcam;
   if (!webcam?.segments.some((s) => s.id === id)) return scene;
@@ -132,7 +133,7 @@ export function dragWebcamSegmentEdge(
     id,
     edge,
     to,
-    sourceDurationSeconds,
+    bounds,
     WEBCAM_MIN_SEGMENT_SECONDS,
   );
   const current = webcam.segments.find((s) => s.id === id)!;
@@ -151,7 +152,7 @@ export function removeWebcamSegment(scene: VideoScene, id: string): VideoScene {
 
 /**
  * "Change camera from here" outside every block: a block from the playhead to the next block
- * or the end of the recording, holding the position the bubble has there. The position is
+ * or the end of `bounds` (the recording under the playhead), holding the position the bubble has there. The position is
  * stored explicitly, so a later change of the default position does not move the block, and
  * the transition starts as the default slide. Refused (the scene back, `id: null`) inside a
  * block or with less than the minimum length before the next block or the end.
@@ -159,7 +160,7 @@ export function removeWebcamSegment(scene: VideoScene, id: string): VideoScene {
 export function createWebcamBlock(
   scene: VideoScene,
   at: number,
-  sourceDurationSeconds: number,
+  bounds: SourceBounds,
 ): { scene: VideoScene; id: string | null } {
   const webcam = scene.webcam;
   if (!webcam) return { scene, id: null };
@@ -167,7 +168,7 @@ export function createWebcamBlock(
     webcam.segments,
     at,
     Number.POSITIVE_INFINITY,
-    sourceDurationSeconds,
+    bounds,
     WEBCAM_MIN_SEGMENT_SECONDS,
   );
   if (!window) return { scene, id: null };
@@ -180,7 +181,7 @@ export function createWebcamBlock(
       layout: { position: { ...position } },
       transition: WEBCAM_TRANSITION_DEFAULTS,
     },
-    sourceDurationSeconds,
+    bounds,
   );
 }
 
@@ -240,15 +241,13 @@ export type ChangeWebcamResult =
 export function changeWebcamFrom(
   scene: VideoScene,
   at: number,
-  sourceDurationSeconds: number,
+  bounds: SourceBounds,
 ): ChangeWebcamResult {
   const webcam = scene.webcam;
   if (!webcam) return { ok: false, reason: "no-room", id: null, scene };
   const inside = webcam.segments.find((s) => at >= s.start && at < s.end);
   if (inside?.mode === "hidden") return { ok: false, reason: "hidden", id: null, scene };
-  const result = inside
-    ? splitWebcamBlock(scene, at)
-    : createWebcamBlock(scene, at, sourceDurationSeconds);
+  const result = inside ? splitWebcamBlock(scene, at) : createWebcamBlock(scene, at, bounds);
   return result.id
     ? { ok: true, kind: inside ? "split" : "create", id: result.id, scene: result.scene }
     : { ok: false, reason: "no-room", id: null, scene };

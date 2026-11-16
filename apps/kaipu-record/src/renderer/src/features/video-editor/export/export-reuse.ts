@@ -75,14 +75,26 @@ export function editFingerprint(scene: VideoScene, editableCursor = false): stri
   // did before the key existed and its old exports stay reusable. With one, the field is
   // hashed and the fingerprint carries the composer revision that first drew it, so an
   // export made before then (which has no frame around the picture) is never offered.
-  const { background, ...saved } = parseSession(serializeSession(scene))?.scene ?? scene;
+  // Joined recordings (ADR 0058) are hashed by what the export reads: which Library recording,
+  // where on the axis and how long. The scene-local id, the title and the capture size are not,
+  // so renaming a recording never invalidates an export; a scene without joins hashes as before.
+  const { background, sources, ...saved } = parseSession(serializeSession(scene))?.scene ?? scene;
+  const joined = sources?.length
+    ? sources.map(({ assetId, offset, durationSeconds }) => ({ assetId, offset, durationSeconds }))
+    : null;
   const drawn = background && hasBackground(background) ? background : null;
   const fingerprint = (revision: string | null, body: object): string =>
     [
       "edit",
       revision,
       drawn ? BACKGROUND_COMPOSE_REVISION : null,
-      hash53(stableStringify(drawn ? { ...body, background: drawn } : body)),
+      hash53(
+        stableStringify({
+          ...body,
+          ...(drawn ? { background: drawn } : {}),
+          ...(joined ? { joined } : {}),
+        }),
+      ),
     ]
       .filter(Boolean)
       .join(":");

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { initialScene, type TrackItem } from "../scene";
+import { joinedSource } from "../media-switch.fixture";
+import { initialScene, type ImageMediaItem, type TrackItem } from "../scene";
 import { planStill, STILL_END_MARGIN_S } from "./still-plan";
 
 const clip = (id: string, sourceStart: number, sourceEnd: number): TrackItem => ({
@@ -78,5 +79,45 @@ describe("planStill", () => {
 
   it("refuses an empty timeline", () => {
     expect(() => planStill({ ...initialScene(1), items: [] }, 0)).toThrow();
+  });
+
+  it("keeps only the floating images on screen at the playhead", () => {
+    const image = (id: string, time: number, z: number): ImageMediaItem => ({
+      id,
+      kind: "image",
+      assetId: `asset-${id}`,
+      naturalWidth: 100,
+      naturalHeight: 100,
+      anchor: { kind: "source", time },
+      duration: 2,
+      box: { x: 0.5, y: 0.5, width: 0.4 },
+      z,
+      fadeInMs: 0,
+      fadeOutMs: 0,
+    });
+    // On the timeline: early 4-6 (source 1-3), late 9-11 (source 6-8).
+    const withMedia = { ...scene, media: [image("early", 1, 0), image("late", 6, 1)] };
+    expect(planStill(withMedia, 5).plan.floating?.items.map((i) => i.id)).toEqual(["early"]);
+    expect(planStill(withMedia, 10).plan.floating?.items.map((i) => i.id)).toEqual(["late"]);
+    expect(planStill(withMedia, 7.5).plan.floating).toBeUndefined();
+  });
+});
+
+describe("planStill with two recordings", () => {
+  const two = {
+    ...initialScene(100),
+    sources: [joinedSource("b", 3600, 40)],
+    items: [clip("a1", 0, 10), clip("b", 3600, 3610), clip("a2", 50, 60)],
+  };
+
+  it("returns the recording under the playhead next to the axis second", () => {
+    const p = planStill(two, 14);
+    expect(p.sourceId).toBe("b");
+    expect(p.sourceSeconds).toBe(3604);
+  });
+
+  it("returns null for the opened recording and for a slide", () => {
+    expect(planStill(two, 5).sourceId).toBeNull();
+    expect(planStill(scene, 1).sourceId).toBeNull();
   });
 });

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { TrackItem, VideoOverlay } from "./scene";
+import { clipBounds, sourceAxis } from "./source-axis";
 import {
+  anchorAt,
   boundaryIndexAt,
   clampOverlays,
   clipAtSource,
@@ -9,6 +11,7 @@ import {
   layoutDuration,
   MIN_ITEM_DURATION,
   removeItem,
+  resolveAnchor,
   setSlideDuration,
   skipTarget,
   SKIP_SECONDS,
@@ -190,8 +193,10 @@ describe("trimClip", () => {
     expect(trimClip(items, "a", "start", -5)[0]).toMatchObject({ sourceStart: 0 });
   });
 
-  it("clamps the end edge to the source duration", () => {
-    expect(trimClip([clip("a", 0, 30)], "a", "end", 90, 60)[0]).toMatchObject({ sourceEnd: 60 });
+  it("clamps the end edge to the end of the clip's range", () => {
+    expect(trimClip([clip("a", 0, 30)], "a", "end", 90, { start: 0, end: 60 })[0]).toMatchObject({
+      sourceEnd: 60,
+    });
   });
 
   it("start edge stops at the previous clip's end in source, or reclaims a deleted gap", () => {
@@ -294,5 +299,180 @@ describe("skipTarget", () => {
   it("returns the playhead unchanged on an empty timeline", () => {
     expect(skipTarget([], 0, 1, false)).toBe(0);
     expect(skipTarget([], 0, -1, true)).toBe(0);
+  });
+});
+
+describe("floating-item anchors", () => {
+  // 0–10 s of the recording, a 4 s slide, then 20–30 s of the recording (10–20 s deleted).
+  const items: TrackItem[] = [clip("a", 0, 10), slide("s", 4), clip("b", 20, 30)];
+  const layout = toLayout(items);
+
+  it("anchors a time inside a clip to the footage under it", () => {
+    expect(anchorAt(layout, 3)).toEqual({ kind: "source", time: 3 });
+    expect(anchorAt(layout, 16)).toEqual({ kind: "source", time: 22 });
+  });
+
+  it("anchors a time inside a slide to that slide and the offset into it", () => {
+    expect(anchorAt(layout, 12)).toEqual({ kind: "item", itemId: "s", offset: 2 });
+  });
+
+  it("resolves a source anchor to the timeline time of that footage", () => {
+    expect(resolveAnchor(layout, { kind: "source", time: 22 })).toBe(16);
+  });
+
+  it("resolves an item anchor to the slide start plus its offset, kept inside the slide", () => {
+    expect(resolveAnchor(layout, { kind: "item", itemId: "s", offset: 2 })).toBe(12);
+    expect(resolveAnchor(layout, { kind: "item", itemId: "s", offset: 99 })).toBe(14);
+  });
+
+  it("resolves to null when the footage or the slide is gone", () => {
+    expect(resolveAnchor(layout, { kind: "source", time: 15 })).toBeNull();
+    expect(resolveAnchor(layout, { kind: "item", itemId: "gone", offset: 0 })).toBeNull();
+    expect(resolveAnchor(layout, { kind: "item", itemId: "a", offset: 0 })).toBeNull();
+  });
+
+  it("keeps the same second of the recording after an insert before it", () => {
+    const anchor = anchorAt(layout, 3);
+    const inserted = toLayout([slide("intro", 3), ...items]);
+    expect(resolveAnchor(inserted, anchor!)).toBe(6);
+  });
+
+  it("resolves the start of a clip to that clip when an earlier clip ends on the same source time", () => {
+    // A split at 5 s with a 3 s slide put between the halves: source 5 is the END of the
+    // first clip (timeline 5) and the START of the second (timeline 8).
+    const apart = toLayout([clip("a", 0, 5), slide("s", 3), clip("b", 5, 10)]);
+    expect(resolveAnchor(apart, { kind: "source", time: 5 })).toBe(8);
+    expect(resolveAnchor(apart, { kind: "source", time: 2 })).toBe(2);
+    expect(resolveAnchor(apart, { kind: "source", time: 7 })).toBe(10);
+  });
+
+  it("an anchor on the end of a clip belongs to no clip: the footage under it is gone", () => {
+    // Source 10 is where clip a ends, before the deleted 10-20 s gap.
+    expect(resolveAnchor(layout, { kind: "source", time: 10 })).toBeNull();
+    expect(resolveAnchor(layout, { kind: "source", time: 30 })).toBeNull();
+  });
+
+  describe("anchors in a joined recording", () => {
+    // A 0–5 s of the opened recording, B 3600–3607 s of the joined one, then A 5–10 s.
+    const a = clip("a", 0, 5);
+    const b = clip("b", 3600, 3607);
+    const a2 = clip("a2", 5, 10);
+
+    it("resolves a source anchor in B to the timeline time of its footage", () => {
+      const layout = toLayout([a, b, a2]);
+      expect(resolveAnchor(layout, { kind: "source", time: 3602 })).toBe(7);
+      expect(resolveAnchor(layout, { kind: "source", time: 2 })).toBe(2);
+      expect(resolveAnchor(layout, { kind: "source", time: 5 })).toBe(12);
+      // Source 7 is 2 s into A2, which starts at timeline 12 after B's 7 s.
+      expect(resolveAnchor(layout, { kind: "source", time: 7 })).toBe(14);
+    });
+
+    it("a floating image anchored in a joined recording follows that recording's footage when the clips are reordered", () => {
+      const reordered = toLayout([b, a, a2]);
+      expect(resolveAnchor(reordered, { kind: "source", time: 3602 })).toBe(2);
+      expect(resolveAnchor(reordered, { kind: "source", time: 2 })).toBe(9);
+    });
+
+    it("resolves to null in the gap between the recordings and past the end of B", () => {
+      const layout = toLayout([a, b, a2]);
+      expect(resolveAnchor(layout, { kind: "source", time: 1000 })).toBeNull();
+      expect(resolveAnchor(layout, { kind: "source", time: 3607.5 })).toBeNull();
+    });
+  });
+
+  it("deleting the footage that starts at the anchor drops it, even when the clip before ends there", () => {
+    // Clips [0,5) [5,10) [20,30); the image sits at source 5, then the middle clip is deleted.
+    const before = toLayout([clip("a", 0, 5), clip("m", 5, 10), clip("b", 20, 30)]);
+    const anchor = { kind: "source" as const, time: 5 };
+    expect(resolveAnchor(before, anchor)).toBe(5);
+    expect(resolveAnchor(toLayout([clip("a", 0, 5), clip("b", 20, 30)]), anchor)).toBeNull();
+  });
+
+  it("clamps a time past the end onto the last entry", () => {
+    expect(anchorAt(layout, 999)).toEqual({ kind: "source", time: 30 });
+  });
+
+  it("is null on an empty layout", () => {
+    expect(anchorAt([], 1)).toBeNull();
+  });
+});
+
+describe("joined recordings on one source axis (ADR 0058)", () => {
+  // A is the opened recording [0, 100]; B is joined at [3600, 3620].
+  const axis = sourceAxis(100, [
+    {
+      id: "src-b",
+      assetId: "lib-b",
+      title: "B",
+      offset: 3600,
+      durationSeconds: 20,
+      width: 0,
+      height: 0,
+    },
+  ]);
+  const boundsOf = (items: TrackItem[], id: string) =>
+    clipBounds(axis, items.find((i) => i.id === id) as { sourceStart: number });
+  // Sequence: A 0–10, B 3605–3615 (trimmed), A 10–20.
+  const items = [clip("a1", 0, 10), clip("b", 3605, 3615), clip("a2", 10, 20)];
+
+  it("trimClip stops a joined clip at both ends of its range", () => {
+    const b = boundsOf(items, "b");
+    expect(trimClip(items, "b", "end", 4000, b)[1]).toMatchObject({ sourceEnd: 3620 });
+    expect(trimClip(items, "b", "start", 100, b)[1]).toMatchObject({ sourceStart: 3600 });
+  });
+
+  it("trimClip cannot pull a joined clip's start back into A", () => {
+    expect(trimClip(items, "b", "start", 20, boundsOf(items, "b"))[1]).toMatchObject({
+      sourceStart: 3600,
+    });
+  });
+
+  it("trimClip keeps A's clips out of B's range", () => {
+    expect(trimClip(items, "a2", "end", 3610, boundsOf(items, "a2"))[2]).toMatchObject({
+      sourceEnd: 100,
+    });
+  });
+
+  it("splitting a joined clip leaves both halves inside its range", () => {
+    // B plays on the timeline at 10–20; cut at 13 → source 3608.
+    const next = splitClipAt(items, 13);
+    const halves = next.filter((i) => i.kind === "clip" && i.sourceStart >= 3600) as {
+      sourceStart: number;
+      sourceEnd: number;
+    }[];
+    expect(halves.map((h) => [h.sourceStart, h.sourceEnd])).toEqual([
+      [3605, 3608],
+      [3608, 3615],
+    ]);
+    for (const h of halves) {
+      expect(h.sourceStart).toBeGreaterThanOrEqual(3600);
+      expect(h.sourceEnd).toBeLessThanOrEqual(3620);
+    }
+  });
+
+  it("reordering and deleting keep a joined clip's source range unchanged", () => {
+    const moved = insertItemAt(removeItem(items, "b"), 0, items[1]);
+    expect(moved.map((i) => i.id)).toEqual(["b", "a1", "a2"]);
+    expect(moved[0]).toMatchObject({ sourceStart: 3605, sourceEnd: 3615 });
+    expect(removeItem(items, "b").map((i) => i.id)).toEqual(["a1", "a2"]);
+  });
+
+  it("a source anchor inside B's range follows B's clip after a reorder", () => {
+    const anchor = { kind: "source" as const, time: 3607 };
+    expect(resolveAnchor(toLayout(items), anchor)).toBeCloseTo(12);
+    const reordered = [items[1], items[0], items[2]];
+    expect(resolveAnchor(toLayout(reordered), anchor)).toBeCloseTo(2);
+  });
+
+  it("a source anchor inside B's range resolves to null once B's clip is deleted", () => {
+    expect(
+      resolveAnchor(toLayout(removeItem(items, "b")), { kind: "source", time: 3607 }),
+    ).toBeNull();
+  });
+
+  it("an anchor on A does not follow B", () => {
+    expect(
+      resolveAnchor(toLayout(removeItem(items, "b")), { kind: "source", time: 12 }),
+    ).toBeCloseTo(12);
   });
 });

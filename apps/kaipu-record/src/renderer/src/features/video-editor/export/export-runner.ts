@@ -8,8 +8,16 @@ import { showToast } from "@renderer/ui/toast-store";
 import type { SlideAssetStore } from "../slide-assets";
 import type { VideoScene } from "../scene";
 import type { CameraPath } from "../zoom/camera-path";
-import { buildExportPlan, withSourceDuration } from "./export-plan";
-import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
+import { buildExportPlan, EmptyTimelineError, withSourceDuration } from "./export-plan";
+import { recordingsUsed } from "./export-recordings";
+import { audioPlan } from "./joined-audio";
+import { probeSource } from "./probe-source";
+import { floatingAssetIds } from "./floating-frame";
+import type {
+  ExportStartMessage,
+  ExportWorkerMessage,
+  WebcamTrackMessage,
+} from "./export-messages";
 import { rasterizeOverlays } from "./overlay-raster";
 import {
   type ExportFraming,
@@ -32,6 +40,19 @@ export interface VideoExportState {
   error: string | null;
 }
 
+/**
+ * One recording joined into the scene (ADR 0058), as the editor holds it: `id` is the CURRENT
+ * vault id (never the asset id: a rename changes it), `status` says whether it can be read.
+ */
+export interface ExportJoinedRecording {
+  /** `SceneSource.id`: what a plan clip's `sourceId` names. */
+  sourceId: string;
+  id: string | null;
+  title: string;
+  status: "loading" | "ready" | "missing";
+  webcam: ExportWebcamTrack | null;
+}
+
 export interface StartExportArgs {
   scene: VideoScene;
   /** The recording's length in source seconds, for the last camera block's return. */
@@ -52,10 +73,23 @@ export interface StartExportArgs {
   cameraPath: CameraPath | null;
   cursor?: CursorLayerData | null;
   /**
+   * The camera path and cursor as the editor holds them NOW, read when the export launches
+   * (Retry included) and taking the place of `cameraPath` and `cursor` above. A refusal while a
+   * joined recording loaded leaves those two built without it; once it is ready the preview's
+   * differ, and a Retry would otherwise export the stale ones.
+   */
+  live?: () => { cameraPath: CameraPath | null; cursor: CursorLayerData | null };
+  /**
    * The recording's webcam track (the sidecar's `webcam`), when it has one: with a webcam
    * layer in the scene, its file is fetched and composed (ADR 0038).
    */
   webcamTrack?: ExportWebcamTrack | null;
+  /**
+   * One per `scene.sources` entry; empty for a scene without joined recordings. A function,
+   * read at every start (Retry included): a recording that was still loading when an export
+   * was refused is ready by the time the user retries, and the editor holds a new object for it.
+   */
+  joined: () => readonly ExportJoinedRecording[];
   /** NIW2-218: destination preset; Balanced (the Settings default) when omitted. */
   presetId?: ExportPresetId;
   /** Fit/Fill for Vertical and Square; the preset's default when omitted. */
@@ -171,6 +205,13 @@ let sessionId: string | null = null;
 // (the worker is terminated synchronously, but a message already queued on the event loop
 // could still be delivered first).
 let active = false;
+// Which `startVideoExport` call owns the running export. Every await in a call can outlive a
+// cancel(), and by then another call may be exporting: a continuation acts only while its own
+// number is still the current one (`isCurrent`), so a cancelled export's late failure, session
+// or fetch can never tear down or replace the export that took its place.
+let runCounter = 0;
+/** Counts cancels, so a start still awaiting its probes can tell it was cancelled. */
+let cancelCounter = 0;
 // What Retry re-runs.
 let lastStart: { args: StartExportArgs; t: Translator<"videoEditor"> } | null = null;
 
@@ -219,6 +260,7 @@ function teardown(id: string | null): void {
  * the resets are idempotent, so one function covers both. A Ready card stays.
  */
 export function cancelVideoExport(): void {
+  cancelCounter += 1;
   active = false;
   const id = sessionId;
   sessionId = null;
@@ -277,26 +319,98 @@ export async function startVideoExport(
   t: Translator<"videoEditor">,
 ): Promise<boolean> {
   if (active) return false;
-  lastStart = { args, t };
+  // What this call saw when it began: a cancel, or another export starting (even one that has
+  // already finished), while the joined probes are awaited makes this call stale.
+  const cancelsAtStart = cancelCounter;
+  const runsAtStart = runCounter;
   const GENERIC_ERROR = t("exportGenericError");
   const presetId: ExportPresetId = args.presetId ?? "balanced";
 
   let plan;
   try {
     plan = withSourceDuration(buildExportPlan(args.scene), args.sourceDurationSeconds);
-  } catch {
-    set({ ...IDLE, ready: snapshot.ready, status: "error", error: t("exportEmptyTimeline") });
+  } catch (error) {
+    lastStart = { args, t };
+    // Only an empty timeline reads as one; a broken scene (a clip straddling a recording's
+    // end) is a defect to report, with the generic message.
+    if (!(error instanceof EmptyTimelineError))
+      captureException(error, { context: "video-export" });
+    const message = error instanceof EmptyTimelineError ? t("exportEmptyTimeline") : GENERIC_ERROR;
+    set({ ...IDLE, ready: snapshot.ready, status: "error", error: message });
     return true;
   }
 
+  // The editor's slide store is disposed when the editor unmounts, and the export may
+  // outlive it, and the joined probes below wait long enough for it to unmount: take the slides
+  // before any await.
+  const usedAssetIds = new Set(
+    plan.segments.filter((s) => s.kind === "slide").map((s) => s.assetId),
+  );
+  const storedAssets = args.slideAssets.entries();
+  const slideAssets = storedAssets.filter((asset) => usedAssetIds.has(asset.assetId));
+  // Floating images (spec 2026-11-13) are used by no slide: their assets are taken the same way.
+  const mediaIds = floatingAssetIds(plan.floating);
+  const mediaAssets = storedAssets.filter((asset) => mediaIds.has(asset.assetId));
+
+  // A joined recording a clip reads must be readable before anything is taken: no lease, no
+  // writer session, no worker (a joined recording no clip uses never blocks). The refusal is
+  // shown once the job is known, because the export card only renders for a job.
+  const joined = args.joined();
+  const usedJoined: Array<{ entry: ExportJoinedRecording; offset: number }> = [];
+  let refusal: string | null = null;
+  for (const sourceId of recordingsUsed(plan)) {
+    if (sourceId === null) continue;
+    const entry = joined.find((j) => j.sourceId === sourceId);
+    const sceneSource = args.scene.sources?.find((s) => s.id === sourceId);
+    if (!entry || entry.status === "missing" || !sceneSource) {
+      const title = entry?.title ?? sceneSource?.title ?? sourceId;
+      refusal = t("exportRecordingMissing", { title });
+      break;
+    }
+    if (entry.status === "loading" || entry.id === null) {
+      refusal = t("exportRecordingLoading");
+      break;
+    }
+    usedJoined.push({ entry, offset: sceneSource.offset });
+  }
+
+  // Whether the MP4 carries audio, for the preset's size estimate: the scene is not muted and
+  // a recording a clip reads has audio. The worker reaches the same decision from the opened
+  // files (`audioPlan`) and is the one that counts. A joined recording that cannot be probed
+  // counts as without audio here.
+  // No await for a scene without joins: the start stays synchronous up to the first fetch.
+  const probes =
+    usedJoined.length > 0 && refusal === null
+      ? await Promise.all(usedJoined.map(({ entry }) => probeSource(entry.id!)))
+      : [];
+  // Another export may have started (and even finished), or this call may have been cancelled,
+  // while the probes ran: a stale call does nothing.
+  if (active || runCounter !== runsAtStart || cancelCounter !== cancelsAtStart) return false;
+  // Retry re-runs the last call that got this far (a refusal below stays retryable). A call
+  // turned away just above must not replace the one that is running.
+  lastStart = { args, t };
+  const audioDecision = audioPlan(plan, [
+    {
+      sourceId: null,
+      hasAudio: args.sourceInfo?.hasAudio ?? true,
+      sampleRate: args.sourceInfo?.sampleRate ?? 48000,
+      channels: 2,
+    },
+    ...usedJoined.map(({ entry }, i) => ({
+      sourceId: entry.sourceId,
+      hasAudio: probes[i]?.hasAudio ?? false,
+      sampleRate: probes[i]?.sampleRate ?? 48000,
+      channels: 2,
+    })),
+  ]);
   const target = resolveExportTarget(
     presetId,
     {
       width: args.videoWidth,
       height: args.videoHeight,
       fps: args.sourceInfo?.fps ?? 30,
-      hasAudio: (args.sourceInfo?.hasAudio ?? true) && !plan.audio.audioMuted,
-      sampleRate: args.sourceInfo?.sampleRate,
+      hasAudio: audioDecision.reference !== null,
+      sampleRate: audioDecision.reference?.sampleRate,
     },
     plan.totalDuration,
     {
@@ -316,7 +430,14 @@ export async function startVideoExport(
     wholeRecording: isWholeFingerprint(args.fingerprint),
   };
 
+  if (refusal !== null) {
+    set({ ...IDLE, ready: snapshot.ready, status: "error", error: refusal, job });
+    return true;
+  }
+
   active = true;
+  const run = ++runCounter;
+  const isCurrent = (): boolean => active && runCounter === run;
   // A new export replaces the previous one's Ready card.
   set({
     status: "exporting",
@@ -328,6 +449,9 @@ export async function startVideoExport(
   });
 
   const fail = (message: string, error?: unknown): void => {
+    // A cancelled export failing late: cancel() already released what it held, and the global
+    // session and worker now belong to the export that replaced it.
+    if (!isCurrent()) return;
     if (error !== undefined) captureException(error, { context: "video-export" });
     const id = sessionId;
     sessionId = null;
@@ -341,13 +465,6 @@ export async function startVideoExport(
     });
   };
 
-  // The editor's slide store is disposed when the editor unmounts, and the export may
-  // outlive it: take the slides now.
-  const usedAssetIds = new Set(
-    plan.segments.filter((s) => s.kind === "slide").map((s) => s.assetId),
-  );
-  const slideAssets = args.slideAssets.entries().filter((asset) => usedAssetIds.has(asset.assetId));
-
   // Main takes the export's vault lease before the source is read; refused while
   // "Check and fix files" runs (NIW2-561).
   try {
@@ -357,6 +474,9 @@ export async function startVideoExport(
     else fail(GENERIC_ERROR, error);
     return true;
   }
+  // Cancelled while main decided on the lease: cancel() reported "not exporting" after this
+  // call's `export:begin` reached main, and main released the lease then. Read nothing.
+  if (!isCurrent()) return true;
 
   let sourceBlob: Blob;
   let webcam: Awaited<ReturnType<typeof fetchWebcamTrack>>;
@@ -369,6 +489,30 @@ export async function startVideoExport(
   } catch (error) {
     fail(GENERIC_ERROR, error);
     return true;
+  }
+  if (!isCurrent()) return true;
+  // Each joined recording a clip reads, in `recordingsUsed` order. A file that cannot be read
+  // fails the export by name (`fail` ends the lease and the session); a joined webcam that
+  // cannot be read only loses that recording's face.
+  const joinedFiles: ExportStartMessage["joined"] = [];
+  for (const { entry, offset } of usedJoined) {
+    if (!isCurrent()) return true;
+    try {
+      const response = await fetch(mediaUrl("recording", entry.id!));
+      if (!response.ok) throw new Error(`joined recording ${entry.sourceId}: ${response.status}`);
+      const blob = await response.blob();
+      const joinedWebcam: WebcamTrackMessage | null = await fetchWebcamTrack(
+        entry.id!,
+        plan.webcam,
+        entry.webcam,
+        (error) => captureException(error, { context: "video-export-webcam" }),
+      );
+      if (!isCurrent()) return true;
+      joinedFiles.push({ sourceId: entry.sourceId, offset, blob, webcam: joinedWebcam });
+    } catch (error) {
+      fail(t("exportRecordingMissing", { title: entry.title }), error);
+      return true;
+    }
   }
   /**
    * The scene has a webcam layer the file will not carry: no webcam file to send, or (set
@@ -406,16 +550,30 @@ export async function startVideoExport(
       })),
     );
 
-    if (!active) return; // cancelled while the above was in flight
+    // Their own bitmaps: an asset used by a slide AND a floating item cannot ride twice in
+    // one transfer list.
+    const mediaImages = await Promise.all(
+      mediaAssets.map(async (asset) => ({
+        assetId: asset.assetId,
+        bitmap: await createImageBitmap(new Blob([asset.bytes], { type: asset.mimeType })),
+      })),
+    );
+
+    if (!isCurrent()) {
+      for (const m of mediaImages) m.bitmap.close();
+      return; // cancelled while the above was in flight
+    }
 
     const id = `export-${crypto.randomUUID()}`;
     sessionId = id;
     // An export, not a take: main keeps the camera bubble's protection on the live take.
     await window.electronAPI.recordingCreate(id, "export");
 
-    if (!active) {
-      teardown(id);
-      sessionId = null;
+    if (!isCurrent()) {
+      // Cancelled while main opened the session (cancel() aborted it, maybe before it
+      // existed). Abort only this call's id: the worker and `sessionId` may be the new
+      // export's.
+      void window.electronAPI.recordingAbort(id).catch(() => {});
       return;
     }
 
@@ -426,7 +584,7 @@ export async function startVideoExport(
 
     runWorker.onmessage = (event: MessageEvent<ExportWorkerMessage>) => {
       const msg = event.data;
-      if (!active || worker !== runWorker) return;
+      if (!isCurrent() || worker !== runWorker) return;
       if (msg.type === "chunk") {
         window.electronAPI.recordingWrite(id, msg.data, msg.position);
       } else if (msg.type === "poster") {
@@ -449,7 +607,7 @@ export async function startVideoExport(
           sessionId = null;
           if (snapshot.status === "exporting") set({ fraction: 0, attemptStartedAt: Date.now() });
           void launch({ ...runTarget, fastStart: false }).catch((error: unknown) => {
-            if (active) fail(GENERIC_ERROR, error);
+            fail(GENERIC_ERROR, error);
           });
           return;
         }
@@ -461,7 +619,7 @@ export async function startVideoExport(
           // writer session aborted, `active` flipped false) — finalizing or calling
           // onSaved past that point would resurrect a cancelled export.
           await Promise.resolve();
-          if (!active) return;
+          if (!isCurrent()) return;
           const fingerprint =
             args.fingerprint && faceDropped
               ? facelessFingerprint(args.fingerprint)
@@ -484,7 +642,7 @@ export async function startVideoExport(
               ...(args.destination ? { exportDestination: args.destination } : {}),
             });
             // Re-check again: cancel() could have run during the finalize await too.
-            if (!active) return;
+            if (!isCurrent()) return;
             worker?.terminate();
             worker = null;
             sessionId = null;
@@ -503,7 +661,6 @@ export async function startVideoExport(
               captureException(error, { context: "video-export-saved" });
             }
           } catch (error) {
-            if (!active) return;
             fail(GENERIC_ERROR, error);
           }
         })();
@@ -515,13 +672,15 @@ export async function startVideoExport(
 
     // COPIES of the camera arrays: transferring the preview's own buffers would detach
     // them and break the live preview (and undo) after the export starts.
+    const live = args.live?.();
+    const cameraPath = live ? live.cameraPath : args.cameraPath;
     const camera =
-      plan.hasZoom && args.cameraPath
+      plan.hasZoom && cameraPath
         ? {
-            fps: args.cameraPath.fps,
-            cx: args.cameraPath.cx.slice(),
-            cy: args.cameraPath.cy.slice(),
-            scale: args.cameraPath.scale.slice(),
+            fps: cameraPath.fps,
+            cx: cameraPath.cx.slice(),
+            cy: cameraPath.cy.slice(),
+            scale: cameraPath.scale.slice(),
           }
         : null;
     const startMessage: ExportStartMessage = {
@@ -530,16 +689,19 @@ export async function startVideoExport(
       plan,
       overlays,
       slides,
+      mediaImages,
       output: { width: runTarget.width, height: runTarget.height },
       source: { width: args.videoWidth, height: args.videoHeight },
       target: runTarget,
       camera,
-      cursor: args.cursor ?? null,
+      cursor: (live ? live.cursor : args.cursor) ?? null,
       webcam,
+      joined: joinedFiles,
     };
     runWorker.postMessage(startMessage, [
       ...overlays.map((o) => o.bitmap),
       ...slides.map((s) => s.bitmap),
+      ...mediaImages.map((m) => m.bitmap),
       ...(camera ? [camera.cx.buffer, camera.cy.buffer, camera.scale.buffer] : []),
     ]);
   };

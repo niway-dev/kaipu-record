@@ -3,9 +3,10 @@ import { initialScene, type VideoScene } from "./scene";
 import { addMuteAt, dragMuteEdge, MUTE_LIMITS, removeMute, toggleMuteAll } from "./mute-edits";
 
 const SOURCE = 30;
+const WHOLE = { start: 0, end: SOURCE };
 /** addMuteAt returns null when there is no room; these cases expect success. */
 const added = (scene: VideoScene, at: number) => {
-  const result = addMuteAt(scene, at, SOURCE);
+  const result = addMuteAt(scene, at, WHOLE);
   if (!result) throw new Error(`addMuteAt unexpectedly refused at ${at}`);
   return result;
 };
@@ -42,7 +43,19 @@ describe("addMuteAt", () => {
 
   it("refuses when there is no room left for the minimum length", () => {
     // At the very last instant there is nothing to silence.
-    expect(addMuteAt(initialScene(SOURCE), SOURCE, SOURCE)).toBeNull();
+    expect(addMuteAt(initialScene(SOURCE), SOURCE, WHOLE)).toBeNull();
+  });
+
+  it("clamps to a joined recording's range, not to [0, duration] (ADR 0058)", () => {
+    const rangeB = { start: 3600, end: 3630 };
+    const inside = addMuteAt(initialScene(SOURCE), 3610, rangeB)!;
+    expect(inside.scene.mutedRanges[0]).toMatchObject({
+      sourceStart: 3610,
+      sourceEnd: 3610 + MUTE_LIMITS.defaultSeconds,
+    });
+    const nearEnd = addMuteAt(initialScene(SOURCE), 3629, rangeB)!;
+    expect(nearEnd.scene.mutedRanges[0]).toMatchObject({ sourceStart: 3629, sourceEnd: 3630 });
+    expect(addMuteAt(initialScene(SOURCE), 3630, rangeB)).toBeNull();
   });
 
   it("keeps ranges sorted by start", () => {
@@ -55,27 +68,35 @@ describe("dragMuteEdge", () => {
   const base = sceneWith([{ id: "a", sourceStart: 10, sourceEnd: 15 }]);
 
   it("moves the start edge", () => {
-    expect(dragMuteEdge(base, "a", "start", 12, SOURCE).mutedRanges[0]).toMatchObject({
+    expect(dragMuteEdge(base, "a", "start", 12, WHOLE).mutedRanges[0]).toMatchObject({
       sourceStart: 12,
       sourceEnd: 15,
     });
   });
 
   it("moves the end edge", () => {
-    expect(dragMuteEdge(base, "a", "end", 20, SOURCE).mutedRanges[0]).toMatchObject({
+    expect(dragMuteEdge(base, "a", "end", 20, WHOLE).mutedRanges[0]).toMatchObject({
       sourceStart: 10,
       sourceEnd: 20,
     });
   });
 
   it("never lets an edge cross the other — the minimum length holds", () => {
-    const dragged = dragMuteEdge(base, "a", "start", 99, SOURCE).mutedRanges[0]!;
+    const dragged = dragMuteEdge(base, "a", "start", 99, WHOLE).mutedRanges[0]!;
     expect(dragged.sourceEnd - dragged.sourceStart).toBeGreaterThanOrEqual(MUTE_LIMITS.minSeconds);
   });
 
   it("clamps to the recording's bounds", () => {
-    expect(dragMuteEdge(base, "a", "start", -5, SOURCE).mutedRanges[0]!.sourceStart).toBe(0);
-    expect(dragMuteEdge(base, "a", "end", 999, SOURCE).mutedRanges[0]!.sourceEnd).toBe(SOURCE);
+    expect(dragMuteEdge(base, "a", "start", -5, WHOLE).mutedRanges[0]!.sourceStart).toBe(0);
+    expect(dragMuteEdge(base, "a", "end", 999, WHOLE).mutedRanges[0]!.sourceEnd).toBe(SOURCE);
+  });
+
+  it("clamps a drag in a joined recording to that recording's range (ADR 0058)", () => {
+    const rangeB = { start: 3600, end: 3630 };
+    const inB = sceneWith([{ id: "b", sourceStart: 3610, sourceEnd: 3615 }]);
+    expect(dragMuteEdge(inB, "b", "end", 99999, rangeB).mutedRanges[0]!.sourceEnd).toBe(3630);
+    expect(dragMuteEdge(inB, "b", "start", 10, rangeB).mutedRanges[0]!.sourceStart).toBe(3600);
+    expect(dragMuteEdge(inB, "b", "end", 3620, rangeB).mutedRanges[0]!.sourceEnd).toBe(3620);
   });
 
   it("lets a drag push a range over its neighbour", () => {
@@ -83,11 +104,11 @@ describe("dragMuteEdge", () => {
       { id: "a", sourceStart: 5, sourceEnd: 10 },
       { id: "b", sourceStart: 20, sourceEnd: 25 },
     ]);
-    expect(dragMuteEdge(two, "a", "end", 22, SOURCE).mutedRanges[0]!.sourceEnd).toBe(22);
+    expect(dragMuteEdge(two, "a", "end", 22, WHOLE).mutedRanges[0]!.sourceEnd).toBe(22);
   });
 
   it("ignores an unknown id instead of throwing", () => {
-    expect(dragMuteEdge(base, "nope", "end", 20, SOURCE)).toBe(base);
+    expect(dragMuteEdge(base, "nope", "end", 20, WHOLE)).toBe(base);
   });
 });
 
