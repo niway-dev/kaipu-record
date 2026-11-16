@@ -83,17 +83,23 @@ export const WEBCAM_LIMITS = {
 } as const;
 
 /**
- * What a new camera part starts with, and what a saved transition with a missing field falls
- * back to. The owner's mock defaults to Smooth (`ease-in-out`), so a part glides without
- * overshooting; it is ONE constant, so flipping the default back to `back` (Bounce) is a
- * one-word change. A block SAVED with another easing or duration keeps it: this only fills
- * what is absent.
+ * What a new camera part starts with. The owner's mock defaults to Smooth (`ease-in-out`), so a
+ * part glides without overshooting; it is ONE constant, so flipping the default back to `back`
+ * (Bounce) is a one-word change. A block SAVED with another easing or duration keeps it.
+ * A saved transition that lacks an easing is read with {@link WEBCAM_SAVED_EASING_FALLBACK}
+ * instead, so a new default never changes how an old session plays.
  */
 export const WEBCAM_TRANSITION_DEFAULTS: WebcamTransition = {
   kind: "slide",
   ms: 700,
   easing: "ease-in-out",
 };
+
+/**
+ * The easing a SAVED transition without a valid one plays with: `back`, the default when the
+ * first version wrote those sessions. Fixed on purpose: it is not the default for new parts.
+ */
+export const WEBCAM_SAVED_EASING_FALLBACK: WebcamEasing = "back";
 
 /** How long a new camera part (or a "hide the camera here" range) lasts, at most. */
 export const WEBCAM_PART_SECONDS = 10;
@@ -102,14 +108,18 @@ export const WEBCAM_TRANSITION_LIMITS = { minMs: 100, maxMs: 2000 } as const;
 
 /**
  * A transition from untrusted fields (a saved session, an inspector control): each field
- * that is missing or invalid takes the default's value, and the duration is rounded and
- * held inside {@link WEBCAM_TRANSITION_LIMITS}.
+ * that is missing or invalid takes the default's value (the easing takes `fallbackEasing`,
+ * which a session being opened sets to {@link WEBCAM_SAVED_EASING_FALLBACK}), and the duration
+ * is rounded and held inside {@link WEBCAM_TRANSITION_LIMITS}.
  */
-export function clampWebcamTransition(partial: {
-  kind?: unknown;
-  ms?: unknown;
-  easing?: unknown;
-}): WebcamTransition {
+export function clampWebcamTransition(
+  partial: {
+    kind?: unknown;
+    ms?: unknown;
+    easing?: unknown;
+  },
+  fallbackEasing: WebcamEasing = WEBCAM_TRANSITION_DEFAULTS.easing,
+): WebcamTransition {
   const { kind, ms, easing } = partial;
   return {
     kind: kind === "slide" || kind === "cut" ? kind : WEBCAM_TRANSITION_DEFAULTS.kind,
@@ -122,7 +132,7 @@ export function clampWebcamTransition(partial: {
     ),
     easing: (WEBCAM_EASINGS as readonly unknown[]).includes(easing)
       ? (easing as WebcamEasing)
-      : WEBCAM_TRANSITION_DEFAULTS.easing,
+      : fallbackEasing,
   };
 }
 

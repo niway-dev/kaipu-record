@@ -623,7 +623,7 @@ describe("webcam layer", () => {
         { kind: "cut", ms: null, easing: "linear" },
         { ms: 700 },
       ],
-      ["an unknown easing", { kind: "cut", ms: 900, easing: "bounce" }, { easing: "ease-in-out" }],
+      ["an unknown easing", { kind: "cut", ms: 900, easing: "bounce" }, { easing: "back" }],
     ])("loads %s as the default for that field only", (_label, raw, expected) => {
       const loaded = withTransition(raw).transition!;
       expect(loaded).toMatchObject(expected);
@@ -720,6 +720,25 @@ describe("webcam layer", () => {
       const scene = reopen([HIDDEN, OVERRIDE, custom, other]);
       expect(scene.webcam!.segments.map((s) => s.id)).toEqual(["h", "o", "c", "d"]);
       expect(scene.webcam!.segments).toEqual([HIDDEN, OVERRIDE, custom, other]);
+    });
+
+    it("a saved slide without an easing plays as Bounce (back), not as the new default", () => {
+      const block = {
+        ...OVERRIDE,
+        layout: { position: POSITION },
+        transition: { kind: "slide", ms: 700 },
+      };
+      const scene = reopen([block]);
+      expect(scene.webcam!.segments[0]!.transition).toEqual({
+        kind: "slide",
+        ms: 700,
+        easing: "back",
+      });
+      // The block starts at 6 s: the middle of its 700 ms window is 6.35 s.
+      const midway = webcamStateAt(scene, 6.35)!;
+      expect(midway.easing).toBe("back");
+      expect(midway.progress).toBeCloseTo(easeValue("back", 0.5), 10);
+      expect(midway.progress).toBeGreaterThan(1);
     });
 
     it("a block with a 500 ms ease-out slide opens unchanged and plays with that window and curve", () => {

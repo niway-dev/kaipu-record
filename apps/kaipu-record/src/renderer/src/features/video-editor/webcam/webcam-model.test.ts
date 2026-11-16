@@ -8,6 +8,7 @@ import {
   WEBCAM_TRANSITION_LIMITS,
   clampWebcamPatch,
   clampWebcamTransition,
+  WEBCAM_SAVED_EASING_FALLBACK,
   seedWebcamScene,
   webcamAt,
   webcamEffectiveTransitionMs,
@@ -230,6 +231,14 @@ describe("clampWebcamTransition", () => {
   it("defaults to a 700 ms slide with the Smooth preset", () => {
     expect(WEBCAM_TRANSITION_DEFAULTS).toEqual({ kind: "slide", ms: 700, easing: "ease-in-out" });
     expect(clampWebcamTransition({})).toEqual(WEBCAM_TRANSITION_DEFAULTS);
+  });
+
+  it("takes the fallback easing for a missing or invalid one, and keeps a valid one", () => {
+    expect(clampWebcamTransition({ ms: 700 }, "back").easing).toBe("back");
+    expect(clampWebcamTransition({ easing: "bounce" }, WEBCAM_SAVED_EASING_FALLBACK).easing).toBe(
+      "back",
+    );
+    expect(clampWebcamTransition({ easing: "linear" }, "back").easing).toBe("linear");
   });
 
   it("keeps a valid transition as given, rounding the duration", () => {
