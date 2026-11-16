@@ -389,7 +389,7 @@
     "homeChapter3Sub": "Lo justo y necesario",
     "homeChapter3Title": "Un ajuste pequeño. Una idea más clara.",
     "homeChapter3Serif": "Corta lo que sobra. Acerca lo que importa.",
-    "homeChapter3Body": "Kaipu sugiere zooms a partir de tus clics. Recorta las puntas, silencia una tos, cubre una API key. Tu original queda intacto.",
+    "homeChapter3Body": "Kaipu sugiere zooms a partir de tus clics. Recorta las puntas, silencia una tos, cubre una API key, cambia el cursor después de grabar y edita tu webcam en su propia pista. Tu original queda intacto.",
     "homeChapter3Pill1": "Zoom automático",
     "homeChapter3Pill2": "Recorte",
     "homeChapter3Pill3": "Silenciar audio",
@@ -405,9 +405,9 @@
     "homeChapter4Pill4": "Etiquetas",
     "homeFilesEyebrow": "Tus archivos",
     "homeFilesTitle": "Tu biblioteca es una carpeta.",
-    "homeFilesBody": "Cada grabación es un MP4 y cada captura un PNG, en ~/Movies/Kaipu Record. Ábrelos con lo que quieras. Muévelos a donde quieras.",
+    "homeFilesBody": "Cada grabación es un MP4 y cada captura un PNG, en ~/Movies/Kaipu Record. Ábrelos con lo que quieras. Muévelos a donde quieras. Kaipu solo envía reportes de fallos y eventos de uso, nunca tu pantalla, tus clics ni tus archivos, y puedes desactivarlos en Ajustes.",
     "homeFilesCheck1": "Archivos MP4 y PNG estándar",
-    "homeFilesCheck2": "Nada sale de tu Mac a menos que lo compartas",
+    "homeFilesCheck2": "Tus videos, capturas y archivos nunca salen de tu Mac a menos que los compartas",
     "homeFilesCheck3": "Desinstala Kaipu y tus archivos siguen ahí",
     "homeFilesLabel": "Tus archivos",
     "homeCtaLead": "La próxima vez,",
@@ -2744,7 +2744,8 @@
         "body": "Tu pantalla, tu voz, el audio del sistema y una burbuja de cámara flotante que puedes mover a donde quieras, en alta calidad.",
         "d1": "Micrófono, audio del sistema y cámara con interruptores separados",
         "d2": "La burbuja de cámara queda encima mientras trabajas",
-        "d3": "Pausa y reanuda sin empezar de nuevo"
+        "d3": "Pausa y reanuda sin empezar de nuevo",
+        "d4": "Forma de la burbuja (círculo, cuadrado o vertical 3:4), tamaño, esquinas, espejo y encuadre"
       },
       "startAnywhere": {
         "title": "Empieza desde cualquier lugar",
@@ -2787,7 +2788,7 @@
       },
       "quietCapture": {
         "title": "Copia y sigue",
-        "body": "Pulsa ⌘C sobre la selección y la captura va directo al portapapeles, sin que el editor se interponga. Con el guardado automático activo, Capturar la guarda en tu biblioteca igual de discreto. Luego, una pequeña tarjeta te ofrece Anotar, Abrir en la Biblioteca o Guardar en la Biblioteca."
+        "body": "Pulsa ⌘C sobre la selección y la captura va directo al portapapeles, sin que el editor se interponga. Con el guardado automático activo, Capturar la guarda en tu biblioteca igual de discreto."
       },
       "blurFrame": {
         "title": "Difumina y enmarca",
@@ -2839,7 +2840,7 @@
         "body": "Elige a dónde va el video y obtén un archivo que cabe, o deja Equilibrada. La calidad máxima está a un ajuste de distancia.",
         "c1": "GitHub · Jira · Linear",
         "c2": "Slack · Discord",
-        "c3": "YouTube",
+        "c3": "YouTube · 1440p o 4K",
         "c4": "Reels · TikTok · Shorts",
         "c5": "Feeds"
       },
@@ -2872,7 +2873,58 @@
       },
       "rename": {
         "title": "Renombra lo que sea",
-        "body": "Dale a cualquier cosa un mejor nombre. Un video editado es su propio elemento, enlazado a la grabación de la que salió."
+        "body": "Dale a cualquier cosa un mejor nombre. El archivo en tu carpeta se renombra para coincidir, así los nombres se leen bien fuera de Kaipu. Un video editado es su propio elemento, enlazado a la grabación de la que salió."
+      },
+      "audioCleanup": {
+        "title": "Limpia tu audio",
+        "body": "Sube un micrófono bajo, reduce el ruido de fondo y deja que el audio del sistema baje mientras hablas. Un medidor de nivel muestra lo que envías.",
+        "c1": "Nivel del micrófono",
+        "c2": "Reducción de ruido",
+        "c3": "Bajar el audio del sistema al hablar",
+        "c4": "Medidor de nivel"
+      },
+      "readyCard": {
+        "title": "“Tu video está listo”",
+        "body": "Al detener la grabación, una tarjeta te ofrece una copia pensada para YouTube, GitHub o TikTok, o te deja editar primero."
+      },
+      "previewCard": {
+        "title": "Una vista previa tras cada captura",
+        "body": "Una pequeña tarjeta muestra la captura al instante, con Copiar, Mostrar en Finder y Editar. Haz clic en la imagen para abrirla en el editor."
+      },
+      "webcamTrack": {
+        "title": "Tu webcam, en su propia pista",
+        "body": "La cámara tiene su propio carril en el editor, con un inspector para su aspecto. Usa Ocultar webcam aquí para quitarla por un tramo.",
+        "d1": "Forma, esquinas, tamaño, posición y espejo",
+        "d2": "Ocúltala por un tramo, o dale a un tramo su propio aspecto"
+      },
+      "editableCursor": {
+        "title": "Cambia el cursor después",
+        "body": "Kaipu puede grabar sin el cursor, así que eliges su aspecto después: flecha, punto o foco, su tamaño y un efecto de clic."
+      },
+      "timeline": {
+        "title": "Una línea de tiempo a tu medida",
+        "body": "Acerca o aleja la línea de tiempo, cambia la velocidad de reproducción, oculta los carriles que no uses y salta 5 segundos o al siguiente corte.",
+        "d1": "Pulsa H para abrir la guía de la línea de tiempo, que explica cada carril",
+        "d2": "Los clics aparecen como marcas ámbar en el carril de zooms"
+      },
+      "importVideo": {
+        "title": "Importa un video",
+        "body": "Trae un MP4, MOV, M4V o WebM de donde sea y edítalo como cualquier grabación."
+      },
+      "editorBackgrounds": {
+        "title": "Fondos para tu video",
+        "body": "Pon una grabación sobre un degradado tipo fondo de pantalla, con margen, esquinas redondeadas y sombra. Elige uno y partes de un aspecto ya armado."
+      },
+      "workspaces": {
+        "title": "Espacios de trabajo",
+        "body": "Mantén separadas tus capturas de trabajo y personales. Cada espacio es su propia carpeta, con un nombre y un color.",
+        "d1": "Crea, colorea y cambia entre espacios de trabajo",
+        "d2": "Mueve elementos de un espacio a otro",
+        "d3": "Ajustes por espacio que vuelven a tus valores por defecto"
+      },
+      "checkFiles": {
+        "title": "Revisar y reparar archivos",
+        "body": "Concilia tu biblioteca con su carpeta. Los nombres que no coinciden con un título se corrigen, y no se borra nada."
       }
     },
     "private": {
@@ -2890,7 +2942,7 @@
         },
         "analytics": {
           "title": "Las analíticas nunca ven tu pantalla",
-          "body": "Las analíticas de uso nunca graban tu pantalla ni tus clics en la app."
+          "body": "Kaipu solo envía reportes de fallos y eventos de uso, nunca tu pantalla, tus clics ni tus archivos. Puedes desactivarlos en Ajustes."
         },
         "languages": {
           "title": "Claro, oscuro, inglés, español",
