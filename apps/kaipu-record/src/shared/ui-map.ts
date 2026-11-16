@@ -258,6 +258,10 @@ export const UI_MAP = {
       // The card that asks where a dropped camera bubble belongs: `asking` offers a new part,
       // `noRoom` has less than a second before the next block or the end, so that choice is off.
       webcamDrop: { states: ["asking", "noRoom"] },
+      // The paused preview's marks around the bubble: `originalLabel` is the label on the bubble
+      // in the original position; `partRoute` is a part's ghost bubble, dotted route and chip;
+      // `hiddenOutline` is the dashed outline where a hidden range would show the camera.
+      webcamMarks: { states: ["originalLabel", "partRoute", "hiddenOutline"] },
       transport: { states: ["paused", "playing", "withCounts", "speedChanged", "zoomed"] },
       toolRail: { states: ["default", "annotate", "privacy"] },
       toolFlyout: { states: ["audio"] },
@@ -275,8 +279,9 @@ export const UI_MAP = {
       background: { states: ["default", "set"] },
       timeline: { states: ["default", "zoomed"] },
       zoomLane: { states: ["empty", "segments"] },
-      // cameraBlock: a block that changes the camera, with the striped band of its slide at its start.
-      webcamLane: { states: ["segments", "cameraBlock"] },
+      // cameraBlock: a part, with its small frame, name and the wedge of its slide at its start;
+      // originalStretch: the dashed stretch where the camera stays in its original position.
+      webcamLane: { states: ["segments", "cameraBlock", "originalStretch"] },
       privacyLane: { states: ["empty", "regions"] },
       // `waveform` draws the loudness bars; `waveformMuted` is a hatched block over dimmed bars
       // (NIW2-775). `empty` (the empty-state text) is left only for a recording without an

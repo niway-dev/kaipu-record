@@ -13,6 +13,7 @@ import { uiArea } from "@renderer/lib/ui-area";
 import type { WebcamPendingDrop } from "../webcam/use-webcam-drop";
 import type { FrameSize } from "../webcam/webcam-layout";
 import { webcamRoute } from "../webcam/webcam-route";
+import { WebcamRouteOverlay } from "./webcam-route-overlay";
 import styles from "./webcam-drop-card.module.css";
 
 const CARD_WIDTH = 360;
@@ -20,8 +21,6 @@ const CARD_WIDTH = 360;
 const CARD_HEIGHT_GUESS = 108;
 /** Space kept between the card, the bubble and the preview's edge, in px. */
 const GAP = 12;
-/** A route shorter than this (px) draws nothing: the bubble would not move. */
-const MIN_ROUTE_PX = 10;
 
 /** "0:24": minutes and whole seconds. */
 function clock(seconds: number): string {
@@ -84,21 +83,8 @@ export function WebcamDropCard({
     maxY: frame.height - card.box.height / 2,
   };
   const route = webcamRoute(card.now, end, frame, reach);
-  const start = { x: route.start.x * scale, y: route.start.y * scale };
-  const control = { x: route.control.x * scale, y: route.control.y * scale };
-  const target = { x: route.end.x * scale, y: route.end.y * scale };
   const radius = (card.box.height / 2) * scale;
-  const drawRoute = Math.hypot(target.x - start.x, target.y - start.y) >= MIN_ROUTE_PX;
-  const middle = {
-    x: 0.25 * start.x + 0.5 * control.x + 0.25 * target.x,
-    y: 0.25 * start.y + 0.5 * control.y + 0.25 * target.y,
-  };
-  const angle = Math.atan2(target.y - control.y, target.x - control.x);
-  // The arrowhead stops short of the new bubble, which would cover it.
-  const tip = {
-    x: target.x - Math.cos(angle) * (radius + 8),
-    y: target.y - Math.sin(angle) * (radius + 8),
-  };
+  const target = { x: route.end.x * scale, y: route.end.y * scale };
 
   // Below the bubble when it sits in the upper half, above otherwise; shifted so the whole
   // card stays inside the preview.
@@ -116,40 +102,20 @@ export function WebcamDropCard({
       className={styles.root}
       data-testid="webcam-drop"
     >
-      {drawRoute && size.w > 0 && (
-        <>
-          <svg className={styles.route} width={size.w} height={size.h} aria-hidden="true">
-            <path
-              className={styles.routeShadow}
-              d={`M${start.x} ${start.y} Q ${control.x} ${control.y} ${target.x} ${target.y}`}
-            />
-            <path
-              className={styles.routeLine}
-              d={`M${start.x} ${start.y} Q ${control.x} ${control.y} ${target.x} ${target.y}`}
-            />
-            <path
-              className={styles.routeLine}
-              d="M-9 -6 L0 0 L-9 6"
-              transform={`translate(${tip.x} ${tip.y}) rotate(${(angle * 180) / Math.PI})`}
-              data-testid="webcam-drop-arrow"
-            />
-          </svg>
-          <span
-            className={styles.tag}
-            style={{
-              left: start.x,
-              top: start.y > size.h / 2 ? start.y - radius - 26 : start.y + radius + 6,
-            }}
-            data-testid="webcam-drop-now"
-          >
-            {t("webcamDropNow")}
-          </span>
-          <span className={styles.chip} style={{ left: middle.x, top: middle.y - 13 }}>
+      <WebcamRouteOverlay
+        route={route}
+        frame={frame}
+        size={size}
+        boxHeight={card.box.height}
+        fromTag={t("webcamDropNow")}
+        chip={
+          <>
             <ArrowRight size={12} strokeWidth={2.2} />
             {t("webcamDropNew")}
-          </span>
-        </>
-      )}
+          </>
+        }
+        testId="webcam-drop"
+      />
       <div
         ref={cardRef}
         className={styles.card}

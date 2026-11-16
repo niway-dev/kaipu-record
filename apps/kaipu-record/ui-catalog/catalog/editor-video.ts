@@ -558,7 +558,23 @@ export const editorVideo = catalog(
       ),
       "editorVideo.webcamLane:cameraBlock": nc(
         "needsSetup",
-        "no control creates a camera block any more (the rail button was removed) and no seeded recording has one; the drag-first layers bring a way to make one and a catalog state with it",
+        "a part is made by a real pointer drag of the bubble and an answer on the drop card, which a catalog step cannot perform, and no seeded recording has one; webcam-lane.test.tsx covers its look",
+      ),
+      "editorVideo.webcamLane:originalStretch": nc(
+        "needsSetup",
+        "every recording with a webcam track draws it, but no catalog scenario claims the lane in its shot yet; webcam-lane.test.tsx covers it",
+      ),
+      "editorVideo.webcamMarks:originalLabel": nc(
+        "needsSetup",
+        "the marks show only with the editor paused on a webcam recording, and no catalog scenario frames the bubble's label; webcam-marks.test.tsx covers it",
+      ),
+      "editorVideo.webcamMarks:partRoute": nc(
+        "needsSetup",
+        "a part's ghost bubble and route need a part, which a catalog step cannot create (it takes a real pointer drag); webcam-marks.test.tsx covers it",
+      ),
+      "editorVideo.webcamMarks:hiddenOutline": nc(
+        "needsSetup",
+        "the outline shows with the playhead inside a hidden range of a webcam recording; webcam-marks.test.tsx covers it",
       ),
       "editorVideo.inspector:webcamBlock": nc(
         "needsSetup",

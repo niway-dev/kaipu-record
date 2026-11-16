@@ -3,7 +3,11 @@
  * page's two rules are pinned by tests instead of living inline in JSX.
  */
 import { WEBCAM_LAYER_SELECTION } from "../editor-selection";
+import { sourceTimeAtTimeline, timelineTimeAtSource } from "../source-time";
+import type { LayoutEntry } from "../timeline";
+import { seekTargetForSegment } from "../zoom/select-seek";
 import { webcamOverrideAt, type WebcamScene, type WebcamSegment } from "./webcam-model";
+import { webcamPartSlideSeconds } from "./webcam-stretches";
 
 /**
  * Whether the preview outlines the bubble: for the layer and for an override (both are the
@@ -37,4 +41,32 @@ export function webcamInspectorTarget(
   return override && visibleSegments.includes(override)
     ? { kind: "segment", segment: override }
     : { kind: "layer" };
+}
+
+/** The playhead lands this far (seconds) past the end of a part's slide: settled, not at the edge. */
+const PAST_SLIDE_SECONDS = 0.1;
+
+/**
+ * Where the playhead goes (timeline seconds), if anywhere, when a stretch is selected on the
+ * Camera lane. A part: just past its slide, so the preview shows the bubble settled in the
+ * part's place; it stays put when it already sits in the part past the slide, so a frame the
+ * user scrubbed to is not thrown away. A hidden range: the zoom lane's rule, the middle of its
+ * first visible piece unless the playhead is already inside it; the same when the moment
+ * past a part's slide was cut out. Null when the stretch is cut away entirely or no move is
+ * needed.
+ */
+export function webcamSelectSeekTarget(
+  layout: LayoutEntry[],
+  timelineTime: number,
+  segment: WebcamSegment,
+): number | null {
+  if (segment.mode === "hidden") return seekTargetForSegment(layout, timelineTime, segment);
+  const slide = webcamPartSlideSeconds(segment) ?? 0;
+  const settled = Math.min(segment.start + slide + PAST_SLIDE_SECONDS, segment.end - 0.01);
+  const now = sourceTimeAtTimeline(layout, timelineTime);
+  if (now !== null && now >= settled && now < segment.end) return null;
+  // Past the slide is cut out of the timeline: fall back to the zoom lane's rule.
+  return (
+    timelineTimeAtSource(layout, settled) ?? seekTargetForSegment(layout, timelineTime, segment)
+  );
 }

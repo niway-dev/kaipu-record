@@ -62,6 +62,7 @@ import { ZoomLane } from "@renderer/features/video-editor/components/zoom-lane";
 import { WebcamLane } from "@renderer/features/video-editor/components/webcam-lane";
 import { WebcamLayer } from "@renderer/features/video-editor/components/webcam-layer";
 import { WebcamDropCard } from "@renderer/features/video-editor/components/webcam-drop-card";
+import { WebcamMarks } from "@renderer/features/video-editor/components/webcam-marks";
 import {
   WebcamInspector,
   WebcamSegmentInspector,
@@ -72,6 +73,7 @@ import { webcamAt, webcamOverrideAt } from "@renderer/features/video-editor/webc
 import {
   webcamInspectorTarget,
   webcamOutlined,
+  webcamSelectSeekTarget,
 } from "@renderer/features/video-editor/webcam/webcam-selection";
 import {
   EditorInspector,
@@ -1549,6 +1551,8 @@ function VideoEditor({
     privacyTool === null &&
     !onSlide;
   useCameraPreview(playback.videoRef, contentRef, cameraPath, cameraApplied);
+  // The bubble is being dragged: the paused marks step aside until it is dropped.
+  const [webcamHeld, setWebcamHeld] = useState(false);
   // A drop outside every camera part asks before the scene changes (camera parts, drag-first).
   const webcamDrop = useWebcamDrop({
     controller,
@@ -1679,7 +1683,19 @@ function VideoEditor({
 
   // Lane inputs that used to be inline closures/literals: with stable identities the memoised
   // lanes skip the re-render a slider drag would otherwise force on every one of them (NIW2-662).
-  const handleSelectWebcam = useCallback((id: string) => selectKind("webcam", id), [selectKind]);
+  // Selecting a part moves the playhead just past its slide, so the preview shows it settled
+  // (a hidden range: the zoom lane's rule). The marks and the panel read the playhead.
+  const handleSelectWebcam = useCallback(
+    (id: string) => {
+      selectKind("webcam", id);
+      const segment = controllerRef.current.scene.webcam?.segments.find((s) => s.id === id);
+      if (!segment) return;
+      const live = playbackRef.current;
+      const target = webcamSelectSeekTarget(layoutRef.current, live.timelineTime, segment);
+      if (target !== null) live.seek(target);
+    },
+    [selectKind, controllerRef, layoutRef, playbackRef],
+  );
   const handleSelectMute = useCallback((id: string) => selectKind("mute", id), [selectKind]);
   const slideUrlFor = useCallback(
     (assetId: string) => assetStoreRef.current.get(assetId)?.url ?? null,
@@ -1725,6 +1741,8 @@ function VideoEditor({
                     layout={layout}
                     thumbnails={webcamStrip.thumbnails}
                     covered={webcamStrip.covered}
+                    defaultLayout={scene.webcam?.layout}
+                    frame={frameSize}
                     selectedId={webcamSelectedId}
                     pendingPart={webcamDrop.card?.room ?? null}
                     onSelect={handleSelectWebcam}
@@ -1781,6 +1799,8 @@ function VideoEditor({
       webcamEdits.edgeDrag,
       webcamStrip.thumbnails,
       webcamStrip.covered,
+      scene.webcam?.layout,
+      frameSize,
       webcamSelectedId,
       webcamDrop.card?.room,
       handleSelectWebcam,
@@ -1863,6 +1883,7 @@ function VideoEditor({
                     }}
                     dropAt={webcamDrop.card?.position ?? null}
                     onDrop={webcamDrop.drop}
+                    onHeldChange={setWebcamHeld}
                   />
                 )
               }
@@ -1904,6 +1925,24 @@ function VideoEditor({
                       }
                       onDraft={setDraftRegion}
                       onCreate={handleCreateRegion}
+                    />
+                  )}
+                  {hasWebcam && scene.webcam && !holdingOriginal && !onSlide && (
+                    <WebcamMarks
+                      webcam={scene.webcam}
+                      sourceTime={playheadSource}
+                      selectedId={webcamSelectedId}
+                      frame={frameSize}
+                      cameraScale={
+                        cameraApplied && playheadSource !== null
+                          ? cameraAt(cameraPath, playheadSource).scale
+                          : 1
+                      }
+                      endSeconds={source.durationSeconds}
+                      playing={playback.playing}
+                      // The held bubble (a drag, or the card asking) is not where the scene has
+                      // it, so the scene's marks would point at the wrong place.
+                      suppressed={webcamHeld || webcamDrop.card !== null}
                     />
                   )}
                   {webcamDrop.card && !holdingOriginal && !onSlide && (

@@ -8,63 +8,6 @@
   pointer-events: none;
 }
 
-.route {
-  position: absolute;
-  left: 0;
-  top: 0;
-  overflow: visible;
-}
-
-.routeShadow {
-  fill: none;
-  stroke: rgba(0, 0, 0, 0.45);
-  stroke-width: 6;
-  stroke-linecap: round;
-}
-
-/* Dotted: a 1 px dash with round caps, spaced out. */
-.routeLine {
-  fill: none;
-  stroke: var(--text-primary);
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 1 9;
-}
-
-.routeLine[data-testid="webcam-drop-arrow"] {
-  stroke-dasharray: none;
-}
-
-.tag,
-.chip {
-  position: absolute;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  transform: translateX(-50%);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-sidebar) 92%, transparent);
-  color: var(--text-primary);
-  font-weight: 600;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.tag {
-  height: 20px;
-  padding: 0 8px;
-  border: 1px dashed var(--border-light);
-  font-size: 10.5px;
-}
-
-.chip {
-  height: 26px;
-  padding: 0 10px;
-  border: 1px solid var(--border-light);
-  font-size: var(--font-size-xs);
-}
-
 .card {
   position: absolute;
   box-sizing: border-box;

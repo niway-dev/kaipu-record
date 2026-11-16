@@ -1,13 +1,16 @@
 /**
- * Webcam lane (ADR 0038): one block per VISIBLE piece of each hide/override segment,
- * source-anchored like the zoom lane, whose patterns it follows — click selects the whole
- * segment, the selected segment shows an edge handle only where its real start/end is
- * visible, and edge drags report SOURCE time (null over a slide) with the start/move/end
- * phase contract. Hidden segments are striped; overrides read "Custom", and an override that
- * slides carries a striped band at its start as long as the slide. Deleting goes through the
- * inspector or the Delete key, like every other lane.
+ * Webcam lane (ADR 0038, camera parts): EVERY stretch of the recording is drawn, source-anchored
+ * like the zoom lane, whose patterns it follows. The default position fills the gaps as dashed
+ * "original" stretches that cannot be selected; a part is an accent block with a small frame
+ * showing where the camera is, its name and how it arrives (a light wedge as long as its slide,
+ * or a thin bar for a cut); a hidden range is striped with an eye-off icon. Clicking a part or a
+ * hidden range selects it; the selected one shows an edge handle only where its real start/end
+ * is visible, and edge drags report SOURCE time (null over a slide) with the start/move/end
+ * phase contract. Deleting goes through the inspector or the Delete key, like every other lane.
  *
- * Under the segments runs a filmstrip of the webcam file's own frames, laid out per clip
+ * A part is drawn at least 56 px wide, never over its neighbour (`webcamLaneBlockWidths`).
+ *
+ * Under the stretches runs a filmstrip of the webcam file's own frames, laid out per clip
  * like the clips lane, so the row reads as "the face" even with no segment on it.
  */
 import { memo, useRef } from "react";
@@ -16,7 +19,18 @@ import { useTranslations } from "@kaipu/i18n";
 import { sourceRangeToTimelineBlocks, sourceTimeAtTimeline } from "../source-time";
 import { type LayoutEntry, layoutDuration } from "../timeline";
 import type { CoveredRange, SourceThumbnail } from "../use-source-thumbnails";
-import { webcamEffectiveTransitionMs, type WebcamSegment } from "../webcam/webcam-model";
+import {
+  NOMINAL_LANE_FRAME,
+  webcamLaneBlockWidths,
+  webcamLaneStretches,
+  webcamPartSlideSeconds,
+  webcamStretchDot,
+  webcamStretchName,
+  type WebcamStretch,
+} from "../webcam/webcam-stretches";
+import type { FrameSize } from "../webcam/webcam-layout";
+import type { WebcamPositionName } from "../webcam/webcam-names";
+import { WEBCAM_DEFAULTS, type WebcamLayout, type WebcamSegment } from "../webcam/webcam-model";
 import { thumbnailAt, thumbnailTiles, timeToFraction } from "./timeline-geometry";
 import { useTimelinePointer, useTimelineViewContext } from "./timeline-pointer";
 import { scaleOf, visibleRange } from "./timeline-view";
@@ -34,6 +48,13 @@ export interface WebcamLaneProps {
   thumbnails?: SourceThumbnail[];
   /** Where the webcam file has footage, in SOURCE time; a tile outside it stays empty. */
   covered?: CoveredRange | null;
+  /**
+   * The default layout: the original stretches show its position and every part its own over
+   * it. Absent, the built-in defaults (a lane drawn with no scene, as the guide does).
+   */
+  defaultLayout?: WebcamLayout;
+  /** The output frame the places are in, for the names; a 16:9 frame until it is measured. */
+  frame?: FrameSize;
   selectedId: string | null;
   /** The window a part would take while the drop card is open, in SOURCE time: a dashed block. */
   pendingPart?: { start: number; end: number } | null;
@@ -42,29 +63,48 @@ export interface WebcamLaneProps {
   onEdgeDrag(id: string, edge: "start" | "end", sourceTime: number | null, phase: EdgePhase): void;
 }
 
-/**
- * The striped band at the start of a block, as long as its EFFECTIVE slide (the duration
- * asked for, at most half the block), drawn inside the block. Only the piece that holds the
- * block's real start gets one, and a Cut, a missing transition or a hidden block gets none.
- * Source and timeline seconds are the same length inside a block: there is no speed change.
- */
-function transitionBand(
-  segment: WebcamSegment,
-  block: { sourceStart: number; timelineStart: number; timelineEnd: number },
-  firstPiece: boolean,
-): React.JSX.Element | null {
-  const transition = segment.transition;
-  if (segment.mode !== "override" || transition?.kind !== "slide") return null;
-  if (!firstPiece || block.sourceStart !== segment.start) return null;
-  const seconds = webcamEffectiveTransitionMs(segment.end - segment.start, transition.ms) / 1000;
-  const share = Math.min(1, seconds / (block.timelineEnd - block.timelineStart));
+/** A block this wide (px) has room for the small frame, the name, and the words. */
+const ROOM_GLYPH_PX = 46;
+const ROOM_NAME_PX = 110;
+const ROOM_ORIGINAL_WORD_PX = 190;
+const ROOM_HOW_PX = 200;
+/** The lane's width when nothing measures it (a test, the first paint): only proportions matter. */
+const UNMEASURED_LANE_PX = 800;
+/** The wedge of a slide is at least this wide, so a short slide still reads. */
+const WEDGE_MIN_PX = 10;
+
+const NAME_LABEL = {
+  topLeft: "webcamNameTopLeft",
+  topMiddle: "webcamNameTopMiddle",
+  topRight: "webcamNameTopRight",
+  middleLeft: "webcamNameMiddleLeft",
+  center: "webcamNameCenter",
+  middleRight: "webcamNameMiddleRight",
+  bottomLeft: "webcamNameBottomLeft",
+  bottomMiddle: "webcamNameBottomMiddle",
+  bottomRight: "webcamNameBottomRight",
+} as const satisfies Record<WebcamPositionName, string>;
+
+/** 0.7, 1.2, 0.35: the seconds as short as they can be written. */
+const seconds = (value: number): string => String(Number(value.toFixed(2)));
+
+/** The small frame with a dot where the camera is. `dot` is each axis's share, 0 to 1. */
+function Glyph({
+  dot,
+  on,
+}: {
+  dot: { x: number; y: number } | null;
+  on: boolean;
+}): React.JSX.Element | null {
+  if (!dot) return null;
   return (
     <span
-      className={styles.transition}
-      data-webcam-transition
-      style={{ width: `${share * 100}%` }}
+      className={`${styles.glyph} ${on ? styles.glyphOn : ""}`}
+      data-webcam-glyph
       aria-hidden="true"
-    />
+    >
+      <span className={styles.glyphDot} style={{ left: 2 + dot.x * 16, top: 2 + dot.y * 6 }} />
+    </span>
   );
 }
 
@@ -73,6 +113,8 @@ export const WebcamLane = memo(function WebcamLane({
   layout,
   thumbnails = [],
   covered = null,
+  defaultLayout = WEBCAM_DEFAULTS,
+  frame = NOMINAL_LANE_FRAME,
   selectedId,
   pendingPart = null,
   onSelect,
@@ -182,6 +224,36 @@ export const WebcamLane = memo(function WebcamLane({
       </div>
     ) : null;
 
+  // The stretches of the whole recording, cut into the pieces the layout shows, left to right,
+  // and where each is really drawn: a part is at least 56 px wide, never over its neighbour.
+  const sourceDuration = layout.reduce(
+    (end, entry) => (entry.kind === "clip" ? Math.max(end, entry.sourceEnd) : end),
+    0,
+  );
+  const webcam = { layout: defaultLayout, segments };
+  const pxPerSecond = scale > 0 ? scale : duration > 0 ? UNMEASURED_LANE_PX / duration : 0;
+  const totalPx = duration * pxPerSecond;
+  const pieces = webcamLaneStretches(webcam, sourceDuration)
+    .flatMap((stretch: WebcamStretch) =>
+      sourceRangeToTimelineBlocks(layout, stretch.start, stretch.end).map((block, index) => ({
+        stretch,
+        block,
+        index,
+        first: index === 0,
+      })),
+    )
+    .sort((a, b) => a.block.timelineStart - b.block.timelineStart);
+  const placements = webcamLaneBlockWidths(
+    pieces.map((piece) => ({
+      kind: piece.stretch.kind,
+      left: piece.block.timelineStart * pxPerSecond,
+      right: piece.block.timelineEnd * pxPerSecond,
+    })),
+    totalPx,
+  );
+  const selectedSegment: WebcamSegment | null =
+    segments.find((segment) => segment.id === selectedId) ?? null;
+
   return (
     <div
       ref={laneRef}
@@ -190,26 +262,55 @@ export const WebcamLane = memo(function WebcamLane({
       data-testid="webcam-lane"
     >
       {filmstrip}
-      {segments.flatMap((segment, index) => {
-        const blocks = sourceRangeToTimelineBlocks(layout, segment.start, segment.end);
+      {pieces.map((piece, i) => {
+        const place = placements[i]!;
+        if (place.width <= 0) return null;
+        const { stretch, first } = piece;
+        const style = {
+          left: `${(place.left / totalPx) * 100}%`,
+          width: `${(place.width / totalPx) * 100}%`,
+        };
+        const name = webcamStretchName(webcam, stretch, frame);
+        const nameText = name ? t(NAME_LABEL[name]) : null;
+        const dot = webcamStretchDot(webcam, stretch, frame);
+        if (stretch.kind === "original") {
+          return (
+            <span
+              key={`original-${stretch.start}-${i}`}
+              className={styles.original}
+              style={style}
+              data-webcam-original
+              aria-hidden="true"
+            >
+              {place.width > ROOM_GLYPH_PX && <Glyph dot={dot} on={false} />}
+              {place.width > ROOM_NAME_PX && <span className={styles.name}>{nameText}</span>}
+              {place.width > ROOM_ORIGINAL_WORD_PX && (
+                <span className={styles.word}>{t("webcamLaneOriginal")}</span>
+              )}
+            </span>
+          );
+        }
+        const segment = segments.find((s) => s.id === stretch.id)!;
+        const index = segments.indexOf(segment);
         const selected = segment.id === selectedId;
-        const hidden = segment.mode === "hidden";
+        const hidden = stretch.kind === "hidden";
         const className = [
           styles.block,
-          hidden ? styles.hidden : "",
+          hidden ? styles.hidden : styles.part,
           selected ? styles.selected : "",
         ]
           .filter(Boolean)
           .join(" ");
-        const nodes = blocks.map((block, i) => (
+        const slide = webcamPartSlideSeconds(segment);
+        // The slide or the cut belongs to the part's real start, on the piece that holds it.
+        const atStart = first && piece.block.sourceStart === segment.start;
+        const wedgePx = slide === null ? 0 : Math.max(WEDGE_MIN_PX, slide * pxPerSecond);
+        return (
           <button
-            key={`${segment.id}-${i}`}
+            key={`${segment.id}-${piece.index}`}
             type="button"
             className={className}
-            style={{
-              left: `${timeToFraction(block.timelineStart, duration) * 100}%`,
-              width: `${timeToFraction(block.timelineEnd - block.timelineStart, duration) * 100}%`,
-            }}
+            style={style}
             data-webcam-id={segment.id}
             data-mode={segment.mode}
             aria-label={t("webcamSegmentTitle", { n: index + 1 })}
@@ -220,20 +321,62 @@ export const WebcamLane = memo(function WebcamLane({
               onSelect(segment.id);
             }}
           >
-            {transitionBand(segment, block, i === 0)}
-            {hidden && <EyeOff size={10} className={styles.icon} />}
-            <span className={styles.label}>{hidden ? t("webcamHidden") : t("webcamOverride")}</span>
+            {!hidden && atStart && slide !== null && (
+              <span
+                className={styles.wedge}
+                data-webcam-transition
+                style={{ width: wedgePx }}
+                aria-hidden="true"
+              />
+            )}
+            {!hidden && atStart && slide === null && (
+              <span className={styles.cutBar} data-webcam-cut aria-hidden="true" />
+            )}
+            {hidden ? (
+              <>
+                <EyeOff size={12} className={styles.icon} />
+                {place.width > ROOM_GLYPH_PX && (
+                  <span className={styles.label}>{t("webcamHidden")}</span>
+                )}
+              </>
+            ) : (
+              <span
+                className={styles.partContent}
+                style={{ paddingLeft: atStart ? (slide === null ? 7 : wedgePx + 7) : 7 }}
+              >
+                {place.width > ROOM_GLYPH_PX && <Glyph dot={dot} on />}
+                {place.width > ROOM_NAME_PX && <span className={styles.name}>{nameText}</span>}
+                {place.width > ROOM_HOW_PX && (
+                  <span className={styles.word}>
+                    {slide === null
+                      ? t("webcamLaneCut")
+                      : t("webcamLaneSlide", { seconds: seconds(slide) })}
+                  </span>
+                )}
+              </span>
+            )}
           </button>
-        ));
-        if (selected && blocks.length > 0) {
-          const first = blocks[0];
-          const last = blocks[blocks.length - 1];
-          if (first.sourceStart === segment.start)
-            nodes.push(handle(segment, "start", first.timelineStart));
-          if (last.sourceEnd === segment.end) nodes.push(handle(segment, "end", last.timelineEnd));
-        }
-        return nodes;
+        );
       })}
+      {selectedSegment &&
+        (() => {
+          const blocks = sourceRangeToTimelineBlocks(
+            layout,
+            selectedSegment.start,
+            selectedSegment.end,
+          );
+          if (blocks.length === 0) return null;
+          const first = blocks[0]!;
+          const last = blocks[blocks.length - 1]!;
+          return (
+            <>
+              {first.sourceStart === selectedSegment.start &&
+                handle(selectedSegment, "start", first.timelineStart)}
+              {last.sourceEnd === selectedSegment.end &&
+                handle(selectedSegment, "end", last.timelineEnd)}
+            </>
+          );
+        })()}
       {pendingPart &&
         sourceRangeToTimelineBlocks(layout, pendingPart.start, pendingPart.end).map((block, i) => (
           <span

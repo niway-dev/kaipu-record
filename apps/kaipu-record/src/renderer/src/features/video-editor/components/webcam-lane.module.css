@@ -37,7 +37,6 @@
   position: absolute;
   top: 3px;
   bottom: 3px;
-  min-width: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -54,6 +53,7 @@
 /* Hidden = striped (spec § 6): the stretch where the face is gone reads as a gap. The
    stripes sit on a near-opaque scrim, so the face under them is covered, not just tinted. */
 .hidden {
+  min-width: 10px;
   background:
     repeating-linear-gradient(
       -45deg,
@@ -90,20 +90,98 @@
   background: color-mix(in srgb, var(--accent-primary) 32%, transparent);
 }
 
-/* The slide at a block's start: stripes as long as the transition, over the block's own
-   colour, so the stretch where the bubble is still moving reads apart from where it rests. */
-.transition {
+/* A part: the accent block. Its content starts at the left, after the slide's wedge. */
+.part {
+  justify-content: flex-start;
+  padding: 0;
+  background: color-mix(in srgb, var(--accent-primary) 34%, transparent);
+  border-color: var(--accent-primary);
+}
+
+.partContent {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+/* The slide at a part's start: a light diagonal wedge as wide as the slide lasts. */
+.wedge {
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
-  background: repeating-linear-gradient(
-    -45deg,
-    color-mix(in srgb, var(--accent-primary) 55%, transparent) 0 3px,
-    transparent 3px 6px
+  background: linear-gradient(
+    to bottom right,
+    color-mix(in srgb, var(--text-primary) 75%, transparent) 0 49%,
+    transparent 51% 100%
   );
-  border-right: 1px solid color-mix(in srgb, var(--accent-primary) 70%, transparent);
   pointer-events: none;
+}
+
+/* A cut has no travel: a thin white bar marks the instant. */
+.cutBar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: var(--text-primary);
+  pointer-events: none;
+}
+
+/* Stretches where the camera sits in its original position: dashed, only a description. */
+.original {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px dashed color-mix(in srgb, var(--text-primary) 22%, transparent);
+  border-radius: 3px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+/* The small frame with a dot where the camera is. */
+.glyph {
+  position: relative;
+  flex-shrink: 0;
+  width: 26px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 45%, transparent);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.glyphOn {
+  border-color: color-mix(in srgb, var(--text-primary) 90%, transparent);
+}
+
+.glyphDot {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-primary) 80%, transparent);
+}
+
+.name {
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.word {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  opacity: 0.75;
 }
 
 /* A chip behind the text keeps "Custom" legible over the face. */

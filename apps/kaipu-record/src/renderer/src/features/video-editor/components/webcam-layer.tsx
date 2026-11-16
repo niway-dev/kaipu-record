@@ -336,6 +336,7 @@ export function WebcamLayer({
   dropAt,
   onSelect,
   onDrop,
+  onHeldChange,
 }: Omit<WebcamSyncInput, "path"> & {
   /** The take's webcam URL, built with `mediaUrl("webcam", id)`. */
   src: string;
@@ -352,6 +353,8 @@ export function WebcamLayer({
   onSelect(sourceTime: number): void;
   /** The drag ended: the clamped normalized centre, once, over the frame at `sourceTime`. */
   onDrop(position: Point, sourceTime: number): void;
+  /** The bubble is held (a drag started) or let go: the editor's paused marks step aside. */
+  onHeldChange?(held: boolean): void;
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
   const sync = useWebcamSync({
@@ -374,6 +377,11 @@ export function WebcamLayer({
     center: Point;
   } | null>(null);
   const [dragging, setDragging] = useState(false);
+  const heldChange = useRef(onHeldChange);
+  heldChange.current = onHeldChange;
+  useEffect(() => {
+    heldChange.current?.(dragging);
+  }, [dragging]);
 
   // Before paint, so a drop never shows the old place for a frame: the held place follows
   // the card's, and the scene's own place comes back when the card is gone or answered.

@@ -57,7 +57,10 @@ describe("WebcamLane", () => {
       />,
     );
     expect(screen.getByRole("button", { name: "Webcam section 1" })).toHaveTextContent("Hidden");
-    expect(screen.getByRole("button", { name: "Webcam section 2" })).toHaveTextContent("Custom");
+    // A part no longer says "Custom": it names where the camera is (the text shows with room).
+    expect(screen.getByRole("button", { name: "Webcam section 2" })).not.toHaveTextContent(
+      "Custom",
+    );
   });
 
   it("selects on click and exposes handles only on the real edges", () => {
@@ -197,7 +200,9 @@ describe("WebcamLane", () => {
     });
   });
 
-  describe("transition band", () => {
+  describe("transition wedge", () => {
+    // No view and no measured lane: 800 px over the 15 s timeline, so a second is 800 / 15 px.
+    const perSecond = 800 / 15;
     const block = (partial: Partial<WebcamSegment>): WebcamSegment =>
       segment({
         id: "o",
@@ -219,16 +224,16 @@ describe("WebcamLane", () => {
     const bands = (container: HTMLElement) =>
       Array.from(container.querySelectorAll<HTMLElement>("[data-webcam-transition]"));
 
-    it("draws a band at the block's start as long as the transition, inside the block", () => {
-      // Source 10 to 14 is timeline 5 to 9: 1000 ms of a 4 s block is a quarter of it.
+    it("draws a wedge at the part's start as wide as the slide lasts, inside the part", () => {
+      // Source 10 to 14 is timeline 5 to 9: a slide of 1000 ms is one second wide.
       const container = renderLane([block({ start: 10, end: 14 })]);
       const [band] = bands(container);
       expect(band).toBeDefined();
-      expect(band.style.width).toBe("25%");
+      expect(parseFloat(band.style.width)).toBeCloseTo(perSecond, 6);
       expect(band.closest('[data-webcam-id="o"]')).not.toBeNull();
     });
 
-    it("shows the effective duration: at most half of a short block", () => {
+    it("shows the effective duration: at most half of a short part", () => {
       const short = renderLane([
         block({
           id: "s",
@@ -237,10 +242,11 @@ describe("WebcamLane", () => {
           transition: { kind: "slide", ms: 2000, easing: "back" },
         }),
       ]);
-      expect(bands(short)[0].style.width).toBe("50%");
+      // 2000 ms asked of a 2 s part: one second is all the slide may take.
+      expect(parseFloat(bands(short)[0].style.width)).toBeCloseTo(perSecond, 6);
     });
 
-    it("draws no band for a Cut, for no transition or for a hidden block", () => {
+    it("draws no wedge for a Cut, for no transition or for a hidden range", () => {
       const container = renderLane([
         block({
           id: "cut",
@@ -254,13 +260,13 @@ describe("WebcamLane", () => {
       expect(bands(container)).toHaveLength(0);
     });
 
-    it("draws the band on the first piece only, and not when the start is cut away", () => {
+    it("draws the wedge on the first piece only, and not when the start is cut away", () => {
       // Source 4 to 12 is two pieces (timeline 4 to 5, then 5 to 7); the start is in the first.
       const spanning = renderLane([
         block({ start: 4, end: 12, transition: { kind: "slide", ms: 700, easing: "back" } }),
       ]);
       expect(bands(spanning)).toHaveLength(1);
-      expect(bands(spanning)[0].style.width).toBe("70%");
+      expect(parseFloat(bands(spanning)[0].style.width)).toBeCloseTo(0.7 * perSecond, 6);
       // Source 7 to 12: the part before 10 is deleted, so the start is not on screen.
       const startCut = renderLane([block({ id: "c", start: 7, end: 12 })]);
       expect(bands(startCut)).toHaveLength(0);
