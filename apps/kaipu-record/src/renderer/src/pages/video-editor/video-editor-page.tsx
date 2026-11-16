@@ -1723,7 +1723,10 @@ function VideoEditor({
     clearSelection();
     setSidePanel("transcript");
   }, [transcriptOpen, clearSelection]);
-  const seekTranscript = useCallback((t: number) => playbackRef.current.seek(t), [playbackRef]);
+  const seekTranscript = useCallback(
+    (seconds: number) => playbackRef.current.seek(seconds),
+    [playbackRef],
+  );
   const readTranscriptTime = useCallback(
     () => playbackRef.current.readTimelineTime(),
     [playbackRef],
