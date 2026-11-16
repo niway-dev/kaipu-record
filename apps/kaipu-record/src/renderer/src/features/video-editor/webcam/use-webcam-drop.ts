@@ -16,7 +16,12 @@ import type { VideoScene } from "../scene";
 import type { VideoSceneController } from "../use-video-scene";
 import { createWebcamPart, setWebcamLayout, webcamPartRoom } from "./webcam-edits";
 import { type FrameSize, webcamStateRect } from "./webcam-layout";
-import { webcamEndSeconds, webcamOverrideAt, webcamStateAt } from "./webcam-model";
+import {
+  type WebcamSegment,
+  webcamEndSeconds,
+  webcamOverrideAt,
+  webcamStateAt,
+} from "./webcam-model";
 import type { WebcamEditing } from "./use-webcam-editing";
 
 type Point = { x: number; y: number };
@@ -70,6 +75,7 @@ export function useWebcamDrop({
   frame,
   cameraScaleAt,
   select,
+  seekToPart,
   timelineTime,
   playing,
   selection,
@@ -81,6 +87,8 @@ export function useWebcamDrop({
   /** The camera path's scale at a source time: the bubble's size follows "shrink during zoom". */
   cameraScaleAt(t: number): number;
   select(kind: SelectionKind, id: string): void;
+  /** A part was just created: the page moves the playhead past its slide, so the bubble shows where it was dropped. */
+  seekToPart?(part: WebcamSegment): void;
   /** What closes the card when it changes. */
   timelineTime: number;
   playing: boolean;
@@ -94,6 +102,7 @@ export function useWebcamDrop({
     frame,
     cameraScaleAt,
     select,
+    seekToPart,
     card,
   });
 
@@ -141,7 +150,7 @@ export function useWebcamDrop({
   );
 
   const answerPart = useCallback(() => {
-    const { controller, sourceDuration, select, card } = latest.current;
+    const { controller, sourceDuration, select, seekToPart, card } = latest.current;
     if (!card || controller.interacting) return;
     const { scene, id } = createWebcamPart(
       controller.scene,
@@ -152,6 +161,8 @@ export function useWebcamDrop({
     if (!id) return;
     controller.commit(scene);
     select("webcam", id);
+    const part = scene.webcam?.segments.find((s) => s.id === id);
+    if (part) seekToPart?.(part);
   }, [latest]);
 
   const answerWhole = useCallback(() => {

@@ -46,14 +46,14 @@ describe("WebcamDropCard", () => {
     renderCard(drop());
     expect(screen.getByText("Keep the camera here…")).toBeInTheDocument();
     expect(screen.getByText("Only for this part")).toBeInTheDocument();
-    expect(screen.getByText("10 s from 0:24. You can stretch it.")).toBeInTheDocument();
+    expect(screen.getByText("10 s from 0:24, resizable.")).toBeInTheDocument();
     expect(screen.getByText("For the whole video")).toBeInTheDocument();
     expect(screen.getByText("Becomes the original position.")).toBeInTheDocument();
   });
 
   it("says the real length when the room is shorter than 10 s", () => {
     renderCard(drop({ sourceTime: 83, room: { start: 83, end: 91 } }));
-    expect(screen.getByText("8 s from 1:23. You can stretch it.")).toBeInTheDocument();
+    expect(screen.getByText("8 s from 1:23, resizable.")).toBeInTheDocument();
   });
 
   it("each choice and Close call their handler, Close with the 'Put it back (Esc)' tooltip", () => {

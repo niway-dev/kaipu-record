@@ -1586,6 +1586,16 @@ function VideoEditor({
     frame: frameSize,
     cameraScaleAt: (t) => (cameraApplied ? cameraAt(cameraPath, t).scale : 1),
     select: selectKind,
+    // The new part starts at the playhead, where the bubble is still in its old place: move just
+    // past its slide so the preview shows the bubble where it was dropped.
+    seekToPart: (part) => {
+      const target = webcamSelectSeekTarget(
+        layoutRef.current,
+        playbackRef.current.timelineTime,
+        part,
+      );
+      if (target !== null) playbackRef.current.seek(target);
+    },
     timelineTime: playback.timelineTime,
     playing: playback.playing,
     selection: selection.selection,

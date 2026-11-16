@@ -23,6 +23,7 @@ const DROP = { x: 0.8, y: 0.3 };
 
 function setup(duration = 40) {
   const select = vi.fn();
+  const seekToPart = vi.fn();
   const hook = renderHook(
     (inputs: { timelineTime: number; playing: boolean; selection: EditorSelection }) => {
       const controller = useVideoScene(initialScene(duration, TRACK));
@@ -35,6 +36,7 @@ function setup(duration = 40) {
         frame: FRAME,
         cameraScaleAt: () => 1,
         select,
+        seekToPart,
         ...inputs,
       });
       return { controller, drop };
@@ -49,7 +51,7 @@ function setup(duration = 40) {
       c.commit(createWebcamPart(c.scene, { at, position }, duration).scene);
     });
   };
-  return { ...hook, select, segments, addPart };
+  return { ...hook, select, seekToPart, segments, addPart };
 }
 
 describe("useWebcamDrop — a drop outside every part", () => {
@@ -99,6 +101,8 @@ describe("useWebcamDrop — the three answers", () => {
     expect(made.transition).toEqual(WEBCAM_TRANSITION_DEFAULTS);
     expect(t.segments()[0]).toBe(other);
     expect(t.select).toHaveBeenCalledExactlyOnceWith("webcam", made.id);
+    // The page moves the playhead past the new part's slide, so the bubble shows where it was dropped.
+    expect(t.seekToPart).toHaveBeenCalledExactlyOnceWith(made);
     expect(t.result.current.drop.card).toBeNull();
     act(() => t.result.current.controller.undo());
     expect(t.segments()).toEqual([other]);
@@ -111,6 +115,7 @@ describe("useWebcamDrop — the three answers", () => {
     expect(t.segments()).toEqual([]);
     expect(t.result.current.controller.scene.webcam!.layout.position).toEqual(DROP);
     expect(t.select).toHaveBeenCalledExactlyOnceWith("webcam", WEBCAM_LAYER_SELECTION);
+    expect(t.seekToPart).not.toHaveBeenCalled();
     expect(t.result.current.drop.card).toBeNull();
     act(() => t.result.current.controller.undo());
     expect(t.result.current.controller.scene.webcam!.layout.position).toEqual(

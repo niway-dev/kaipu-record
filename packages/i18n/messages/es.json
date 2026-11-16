@@ -1771,7 +1771,7 @@
     "webcamDropAria": "Dónde dejar la cámara",
     "webcamDropTitle": "Dejar la cámara aquí…",
     "webcamDropPart": "Solo para esta parte",
-    "webcamDropPartDetail": "{seconds} s desde {time}. Puedes estirarla.",
+    "webcamDropPartDetail": "{seconds} s desde {time}, ajustable.",
     "webcamDropNoRoom": "Aquí ya no queda espacio.",
     "webcamDropWhole": "Para todo el video",
     "webcamDropWholeDetail": "Pasa a ser la posición original.",

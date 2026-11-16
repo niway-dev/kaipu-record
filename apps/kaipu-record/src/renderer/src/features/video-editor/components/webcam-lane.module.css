@@ -75,7 +75,8 @@
   overflow: hidden;
   border: 1.5px dashed var(--accent-primary);
   border-radius: 3px;
-  background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  /* An opaque base, so the name of the stretch it covers does not show through. */
+  background: color-mix(in srgb, var(--accent-primary) 14%, var(--bg-input));
   color: var(--text-primary);
   pointer-events: none;
   z-index: 2;

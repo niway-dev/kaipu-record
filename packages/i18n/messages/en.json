@@ -1771,7 +1771,7 @@
     "webcamDropAria": "Where to keep the camera",
     "webcamDropTitle": "Keep the camera here…",
     "webcamDropPart": "Only for this part",
-    "webcamDropPartDetail": "{seconds} s from {time}. You can stretch it.",
+    "webcamDropPartDetail": "{seconds} s from {time}, resizable.",
     "webcamDropNoRoom": "No room left here.",
     "webcamDropWhole": "For the whole video",
     "webcamDropWholeDetail": "Becomes the original position.",
