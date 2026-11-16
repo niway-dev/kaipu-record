@@ -3,10 +3,12 @@ title: Local transcription with Parakeet — transcript panel and subtitle expor
 description: Kaipu transcribes a recording on the user's machine with NVIDIA Parakeet through sherpa-onnx, stores the words once per recording in source time, shows them in an editor side panel that follows the edit, and exports SRT, VTT and TXT.
 ---
 
-> 🔵 Proposed: [NIW2-818](https://linear.app/niway/issue/NIW2-818/local-transcription-with-parakeet-transcript-panel-and-subtitle-export).
+> 🟡 In progress: [NIW2-818](https://linear.app/niway/issue/NIW2-818/local-transcription-with-parakeet-transcript-panel-and-subtitle-export).
 > Design agreed with the owner in chat on 2026-11-15. This page is the build's source; the
 > phases below replace sub-issues (the Linear workspace hit its free issue limit).
 > Research, kept verbatim: [backlog/local-transcription](/backlog/local-transcription/).
+> Amended the same day with the owner's two additions (an onboarding offer and Transcribe
+> buttons on videos) and the M0 outcomes; the build is a stack of five PRs: M0, M1, M1b, M2, M3.
 
 ## Summary (one minute)
 
@@ -26,18 +28,21 @@ recordings — and both the editor's **Transcript panel** and the **SRT / VTT / 
 from it. The first version transcribes the existing mixed track (mic and system audio are mixed
 at capture); a separate mic track, word corrections and burned-in captions are later phases.
 
-| #   | Decision                                                                                                                                                                          | Why                                                                                                                                                                                                | ADR                                                                                                                             |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Parakeet TDT 0.6B v3 int8 is the default model; the catalog holds several (Handy-style)                                                                                           | Measured best on Spanish and fast; v2 is English-only; the owner wants users able to try others                                                                                                    | [0062 (new)](/architecture/decisions/0062-speech-recognition-runs-in-a-bundled-sherpa-onnx-cli-with-a-downloaded-pinned-model/) |
-| 2   | Engine: sherpa-onnx `sherpa-onnx-offline` CLI at one pinned release (v1.13.8 verified, M0 also measures v2.0.1), bundled and signed; not the websocket server, not the Node addon | Same runtime and model that already work; no listening port (the server binds `*:<port>`, measured); the addon fails inside Electron                                                               | 0062 (new)                                                                                                                      |
-| 3   | The model is downloaded once after install, with consent, pinned revision and SHA-256 per file; offline afterwards                                                                | 640 MB in every installer is too much; the owner accepts one visible download                                                                                                                      | 0062 (new)                                                                                                                      |
-| 4   | The renderer decodes to a 16 kHz PCM file once; main owns the job                                                                                                                 | Decoding needs WebCodecs (renderer); a long job must survive the editor closing and resume without duplicates                                                                                      | 0062 (new)                                                                                                                      |
-| 5   | Words stored once per recording, in source time (ms), in a `.kaipu` companion; never rewritten by edits                                                                           | Edits are cheap and reversible only if the transcript does not depend on them; the companion moves with the recording                                                                              | [0065 (new)](/architecture/decisions/0065-a-transcript-is-stored-per-recording-in-source-time-and-projected-through-the-edit/)  |
-| 6   | One projection (word → 0..n timeline occurrences) feeds the panel and every export                                                                                                | Cuts, mutes and repeats must behave the same everywhere; a muted word must never leak into text                                                                                                    | 0065 (new)                                                                                                                      |
-| 7   | First version transcribes the single mixed track                                                                                                                                  | It is what the file has; works for voice-over recordings; a mic-only track is its own phase                                                                                                        | —                                                                                                                               |
-| 8   | The transcript panel is a fourth state of the right column, replacing three booleans with one `sidePanel` value                                                                   | Three hand-cleared booleans already need ~9 call sites; a fourth would make two panels open at once likely                                                                                         | —                                                                                                                               |
-| 9   | Exports in M3: SRT, VTT, TXT from the projection; burned-in captions later                                                                                                        | SRT is accepted everywhere; burn-in needs caption-driven frame scheduling the exporter lacks                                                                                                       | —                                                                                                                               |
+| #   | Decision                                                                                                                                                                                                                                            | Why                                                                                                                                                                                                                               | ADR                                                                                                                             |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Parakeet TDT 0.6B v3 int8 is the default model; the catalog holds several (Handy-style)                                                                                                                                                             | Measured best on Spanish and fast; v2 is English-only; the owner wants users able to try others                                                                                                                                   | [0062 (new)](/architecture/decisions/0062-speech-recognition-runs-in-a-bundled-sherpa-onnx-cli-with-a-downloaded-pinned-model/) |
+| 2   | Engine: sherpa-onnx `sherpa-onnx-offline` CLI at one pinned release (v1.13.8 verified, M0 also measures v2.0.1), bundled and signed; not the websocket server, not the Node addon                                                                   | Same runtime and model that already work; no listening port (the server binds `*:<port>`, measured); the addon fails inside Electron                                                                                              | 0062 (new)                                                                                                                      |
+| 3   | The model is downloaded once after install, with consent, pinned revision and SHA-256 per file; offline afterwards                                                                                                                                  | 640 MB in every installer is too much; the owner accepts one visible download                                                                                                                                                     | 0062 (new)                                                                                                                      |
+| 4   | The renderer decodes to a 16 kHz PCM file once; main owns the job                                                                                                                                                                                   | Decoding needs WebCodecs (renderer); a long job must survive the editor closing and resume without duplicates                                                                                                                     | 0062 (new)                                                                                                                      |
+| 5   | Words stored once per recording, in source time (ms), in a `.kaipu` companion; never rewritten by edits                                                                                                                                             | Edits are cheap and reversible only if the transcript does not depend on them; the companion moves with the recording                                                                                                             | [0065 (new)](/architecture/decisions/0065-a-transcript-is-stored-per-recording-in-source-time-and-projected-through-the-edit/)  |
+| 6   | One projection (word → 0..n timeline occurrences) feeds the panel and every export                                                                                                                                                                  | Cuts, mutes and repeats must behave the same everywhere; a muted word must never leak into text                                                                                                                                   | 0065 (new)                                                                                                                      |
+| 7   | First version transcribes the single mixed track                                                                                                                                                                                                    | It is what the file has; works for voice-over recordings; a mic-only track is its own phase                                                                                                                                       | —                                                                                                                               |
+| 8   | The transcript panel is a new state of the right column; the open flags (`cursorInspectorOpen`, `capturesOpen`) become one `sidePanel` value. The export sheet (`exportSheetOpen`) is a sheet over the page, not a column panel, and stays as it is | Hand-cleared booleans already need ~9 call sites; a third would make two panels open at once likely                                                                                                                               | —                                                                                                                               |
+| 9   | Exports in M3: SRT, VTT, TXT from the projection; burned-in captions later                                                                                                                                                                          | SRT is accepted everywhere; burn-in needs caption-driven frame scheduling the exporter lacks                                                                                                                                      | —                                                                                                                               |
 | 10  | Free, behind the `transcription` flag; macOS arm64 first, "unavailable" elsewhere                                                                                                 | Local features are never charged ([filesystem-first monetization](/desktop/filesystem-first-monetization/)); M1 stages an arm64-only CLI and the x64 app carries none, so nothing ships on x64 yet | —                                                                                                                               |
+| 11  | Onboarding offers the model in its own step (after Shortcuts, before Done) with size and location; "Download in background" starts the download and moves on, "Not now" moves on                                                                    | The owner wants the model offered at the first run; onboarding must never wait for 640 MB                                                                                                                                         | —                                                                                                                               |
+| 12  | Each video gets a "Transcribe" action (Library card and detail, and the editor); no model → it offers the download first; a transcribed video shows as done                                                                                         | One entry point where the user already is; the label says what Parakeet does (it transcribes, it does not translate)                                                                                                              | —                                                                                                                               |
+| 13  | Segmentation is fixed 30 s windows with 3 s overlap, `midpoint-dedupe` at the overlap, four segments per CLI call                                                                                                                                   | Measured in M0: faster, fewer empty-with-speech and lower word error than energy VAD ([ADR 0062 "M0 results"](/architecture/decisions/0062-speech-recognition-runs-in-a-bundled-sherpa-onnx-cli-with-a-downloaded-pinned-model/)) | 0062 (new)                                                                                                                      |
 
 ## Open questions
 
@@ -47,7 +52,9 @@ at capture); a separate mic track, word corrections and burned-in captions are l
    line should become "cloud transcription / AI summary" when someone next edits it.
 2. **"Traducciones" in the owner's reply.** The owner wrote that the download "is for the
    automatic translations". Read here as transcriptions; translation is out of scope until the
-   owner says otherwise.
+   owner says otherwise. The same message asked for a "translate" button on videos. Parakeet
+   only transcribes, so the action is labelled **Transcribe** (es "Transcribir"). Renaming it is
+   a copy change in the `transcription` message namespace; nothing else depends on the word.
 
 ## Out of scope
 
@@ -118,6 +125,10 @@ real against the repo, with the phase that covers it. None has been observed in 
       workspace and library reconcile.
 - [ ] With the binary or model missing, or on an unsupported platform, the panel says
       "unavailable" and nothing crashes.
+- [ ] Onboarding shows the Parakeet download offer with size and location; choosing "Download in
+      background" finishes onboarding at once and the download continues.
+- [ ] A video in the Library and in the editor has a Transcribe action; with no model it offers
+      the download, with the model it starts the job, and a transcribed video shows as done.
 
 ## Pipeline
 
@@ -168,6 +179,11 @@ One PR each, in order; each PR names NIW2-818 and its phase.
 
 ### M0 — spike on long recordings (no product code)
 
+**Outcome (2026-11-15).** Fixed 30 s windows with 3 s overlap, `midpoint-dedupe`, four segments
+per CLI call, stay on sherpa-onnx v1.13.8 (v2.0.1 gives nothing on speed, memory or timing). The
+60-minute input is a 54-minute and a 6-minute recording joined, one run each, under load; the
+numbers and what they do not show are in ADR 0062 "M0 results". Silero VAD was not measured.
+
 Measure Parakeet v3 through `sherpa-onnx-offline` on whole Kaipu recordings and record the
 numbers in [ADR 0062](/architecture/decisions/0062-speech-recognition-runs-in-a-bundled-sherpa-onnx-cli-with-a-downloaded-pinned-model/) "M0 results".
 
@@ -202,12 +218,11 @@ Criteria:
   "unavailable". An x64 engine is the later Intel phase.
 - **Job in main:** renderer writes the PCM file to `.kaipu/tmp`; main segments, runs CLI batches,
   reports progress per segment, cancels, resumes after a crash without duplicate segments. One job
-  at a time. Where segments overlap (the M0 strategy, at least 2 s, longer than any spoken word,
-  so every word lies whole in at least one segment), one cut point is chosen inside each overlap
-  (the quietest frame M0 finds usable) and each side keeps only the words that end before it
-  (earlier segment) or start after it (later segment); a word that straddles the cut is taken from
-  the segment where it lies whole. M0 measures how often this still loses or doubles a word. The job has its own supervisor,
-  because `runHelperProcess` is one-shot with a 16 MB stdout cap.
+  at a time. Segments are fixed 30 s windows with 3 s overlap, four per CLI call. In each overlap
+  the cut is the midpoint (`midpoint-dedupe`): the earlier segment keeps the words that start
+  before it, the later one the words that start after it, so a word on the boundary appears
+  exactly once. M0 counted 93 adjacent duplicate words in 8,490 at 60 minutes. The job has its
+  own supervisor, because `runHelperProcess` is one-shot with a 16 MB stdout cap.
 - **Words:** token grouping at a leading space or `▁`; start = first token start; end = last token
   start + duration; offset by segment start; integer ms.
 - **File:** schema above, validated on read; registered in every companion path (rename, move,
@@ -233,9 +248,36 @@ Criteria:
 - [ ] The download prompt, its progress and the model entry in settings are in the ui-map with a
       catalog state each, with es and en messages.
 
-### M2 — Transcript panel
+### M1b — onboarding offers the model
 
-- `sidePanel` replaces the three right-column booleans; `transcript` is the fourth value.
+A step `transcription` between Shortcuts and Done in the onboarding
+(`apps/kaipu-record/src/renderer/src/features/onboarding/`). It exists only when the
+`transcription` flag is on, the engine is available and the default model is not installed; in
+every other case the onboarding is unchanged.
+
+- Shows the model label, its size and the folder it installs to, and the CC-BY-4.0 credit.
+- **"Download in background"** starts the download and moves to Done at once; **"Not now"** moves
+  to Done. Neither waits: the download continues after onboarding closes, and the Settings >
+  Transcription page shows its progress and any failure.
+- ui-map area `onboarding.transcription` with a catalog state, es and en messages.
+
+Criteria:
+
+- [ ] With the flag on, the engine available and no model, the step appears with size and
+      location; with the flag off, an unavailable engine or an installed model it does not.
+- [ ] "Download in background" calls the download once and advances without waiting for it;
+      "Not now" advances and never calls it.
+- [ ] The step is in the ui-map with a catalog state; the i18n parity test passes.
+
+### M2 — Transcript panel and Transcribe buttons
+
+- **Transcribe buttons.** A "Transcribe" action on a video in the Library (the card and the item
+  detail) and in the editor. With no model it opens the download offer first; with the model it
+  starts the job. While a job runs the control shows progress; a video with a transcript shows as
+  done (a "Transcript" affordance instead of "Transcribe"). The label is a copy decision, see open
+  question 2.
+- `sidePanel` replaces the right-column open flags (`cursorInspectorOpen`, `capturesOpen`);
+  `transcript` is a new value. The export sheet is not part of it.
 - Projection module beside `source-time.ts`: word → 0..n occurrences; mute overlap rule;
   whole-audio mute; repeats; joined recordings by offset when the base has `source-axis.ts`.
 - Panel: paragraphs with start time, click to seek to an occurrence, current word highlighted via
@@ -244,10 +286,13 @@ Criteria:
   done; done with unresolved intervals; stale (the recording's media hash no longer matches: the
   old words stay readable, marked out of date, with a re-transcribe action); failed; no audio;
   unavailable.
-- ui-map area, a catalog state per panel state, es and en messages.
+- ui-map area, a catalog state per panel state, es and en messages; ui-map areas and catalog
+  states for the Transcribe control in each place it lives (no model, ready, running, done).
 
 Criteria:
 
+- [ ] Transcribe on a Library video and in the editor: no model → the download offer; model →
+      the job starts; a transcribed video shows as done.
 - [ ] Projection tests: cut footage, partial mute, whole mute, repeated footage (two occurrences,
       two seek targets), slides, joined recordings when present.
 - [ ] Click seeks; playback highlight follows the audio.
