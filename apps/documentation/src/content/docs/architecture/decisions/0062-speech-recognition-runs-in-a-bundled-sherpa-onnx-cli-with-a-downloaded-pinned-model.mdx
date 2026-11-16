@@ -110,11 +110,18 @@ explicit script":
 - **Nothing in the installer.** `build` no longer fetches the engine, `fetch-speech-engine.sh`
   and its lock are removed, `afterPack` and the release workflow no longer copy, sign or check it.
 - **A missing engine is "not installed", not "unavailable".** On macOS arm64 a missing engine
-  makes the model read as missing, so every surface offers the download. "Unavailable" stays for
-  other platforms and for an installed engine whose handshake fails.
+  makes the model read as missing, so every surface offers the download. An installed engine whose
+  handshake fails reads the same way, and the download reinstalls it; if the fresh engine still
+  does not start, the download fails with `engine-failed-to-start`. "Unavailable" is only
+  `unsupported-platform`.
 - **The source is one constant.** Today the archive comes from the sherpa-onnx GitHub release.
   Serving it (and the model) from Kaipu's own server later changes the URL in the catalog, not
   the code; the hash pins the bytes either way.
+
+Superseded by this amendment: the Consequences bullet "One more signed binary and a ~25 MB
+library in the macOS app; the release workflow checks them", and the "a missing binary" case in
+point 7 (a missing engine is now a download to offer, not "unavailable"). The original sections
+stay as written.
 
 Consequences that change: the installer does not grow; the release workflow has nothing to check;
 the first download needs about 18 MB more; a downloaded binary is ad-hoc signed by its publisher,
