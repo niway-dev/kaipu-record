@@ -233,7 +233,7 @@ modal's screenshot add. Everything is behind `timeline-levels`.
 
 The destinations, as a radio list with one selected:
 
-- **Over the video**: floats at the playhead and the recording keeps playing. A screenshot becomes
+- **Over the video**: floats at the playhead and the clips do not move. A screenshot becomes
   the floating image of stage 1 (10 s). A recording shows this option disabled, with a hint that
   floating videos come later (stage 3).
 - **In the sequence**, which pushes everything after it later: before the clip under the playhead,
