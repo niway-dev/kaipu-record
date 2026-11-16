@@ -78,6 +78,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   document.body.innerHTML = "";
 });
 
@@ -557,9 +558,14 @@ describe("WebcamLayer — a camera block's slide", () => {
   });
 
   it("moves a slide on every display frame while the screen is still, and stops when paused", () => {
-    const queue: FrameRequestCallback[] = [];
-    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => queue.push(cb));
-    vi.stubGlobal("cancelAnimationFrame", () => {});
+    // A queue of pending frames by id, so a cancel really removes one.
+    const queue = new Map<number, FrameRequestCallback>();
+    let nextId = 1;
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      queue.set(nextId, cb);
+      return nextId++;
+    });
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => void queue.delete(id));
     const { ref, el } = mainVideo(2.1);
     renderLayer({ videoRef: ref, webcam: sliding() });
     loadWebcam(30);
@@ -570,7 +576,8 @@ describe("WebcamLayer — a camera block's slide", () => {
     // No presented frame and no `timeupdate`: only the media clock moves.
     const leftAt = (t: number): number => {
       el.currentTime = t;
-      const next = queue.splice(0);
+      const next = [...queue.values()];
+      queue.clear();
       act(() => next.forEach((cb) => cb(0)));
       return box().left;
     };
@@ -581,13 +588,11 @@ describe("WebcamLayer — a camera block's slide", () => {
     expect(a).toBeCloseTo((rect(2.2).x / FRAME.width) * 100, 6);
     expect(b).toBeCloseTo((rect(2.3).x / FRAME.width) * 100, 6);
     expect(a).not.toBe(b);
-    // Paused: the tick stops asking for frames.
+    // Paused: the frame the loop had queued is cancelled, so nothing keeps asking for more.
+    expect(queue.size).toBe(1);
     paused = true;
     act(() => void fireEvent(el, new Event("pause")));
-    queue.length = 0;
-    act(() => void fireEvent(el, new Event("pause")));
-    expect(queue).toHaveLength(0);
-    vi.unstubAllGlobals();
+    expect(queue.size).toBe(0);
   });
 
   it("caps the last return by the recording's end when it is given", () => {

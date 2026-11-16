@@ -206,8 +206,8 @@ function useWebcamSync({
       sync();
     };
     // The main video presents a frame only when the picture changes, so over a still screen
-    // a slide would move once per `timeupdate`. While one is under way, tick on every display
-    // frame from the media clock instead; nothing runs outside a slide.
+    // a slide would move once per `timeupdate`. The tick runs while the main video plays, but
+    // only a slide under way calls `apply`, from the media clock on every display frame.
     let raf = 0;
     const tick = (): void => {
       raf = requestAnimationFrame(tick);

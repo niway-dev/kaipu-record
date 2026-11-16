@@ -317,6 +317,32 @@ describe("fillWebcamGap", () => {
     expect(emitted.filter((t) => t < 0.7 - 1e-9)).toHaveLength(20);
   });
 
+  it("tries the settle fill again when the cap dropped it", async () => {
+    const emitted: number[] = [];
+    const source = frames(15);
+    let dropped = false;
+    await fillWebcamGap({
+      state: { from: 0, face: await source(0) },
+      nextFrame: 2,
+      segmentEnd: 10,
+      fps: 30,
+      visible: () => true,
+      moving: (t) => t < 0.7 - 1e-9,
+      frameAt: async () => source(0),
+      emit: async (t) => {
+        emitted.push(t);
+        // The first fill after the slide is dropped by the cap.
+        if (t >= 0.7 - 1e-9 && !dropped) {
+          dropped = true;
+          return false;
+        }
+        return true;
+      },
+    });
+    const after = emitted.filter((t) => t >= 0.7 - 1e-9);
+    expect(after).toHaveLength(2);
+  });
+
   it("does not re-compose a moving slide where no webcam frame exists (the screen is unchanged)", async () => {
     const emitted: number[] = [];
     await fillWebcamGap({

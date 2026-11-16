@@ -173,8 +173,10 @@ export async function fillWebcamGap<T>(opts: {
     // is the same as the one before.
     const moving = due !== null && !!opts.moving?.(t);
     if (due === face && !moving && !settling) continue;
-    settling = moving;
-    if (await opts.emit(t, due, gapEnd - t)) face = due;
+    const drawn = await opts.emit(t, due, gapEnd - t);
+    if (drawn) face = due;
+    // A fill the cap dropped did not draw the settled place: the next one tries again.
+    settling = moving || !drawn;
   }
   return { from, face };
 }
