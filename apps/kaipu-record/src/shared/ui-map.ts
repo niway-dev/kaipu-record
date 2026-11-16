@@ -241,7 +241,7 @@ export const UI_MAP = {
     route: ROUTES.editorVideo,
     areas: {
       page: { states: ["loaded"] },
-      preview: { states: ["frame", "zoomSelected", "overlaySelected"] },
+      preview: { states: ["frame", "zoomSelected", "overlaySelected", "differentAspect"] },
       cursor: { states: ["visible"], gatedBy: [{ flag: "native-cursor-capture" }] },
       cursorInspector: { states: ["open"], gatedBy: [{ flag: "native-cursor-capture" }] },
       // The Captures panel (NIW2-764): this video's frame captures, in the right column in
@@ -250,10 +250,26 @@ export const UI_MAP = {
       // at a moment already captured outlines the saved one; confirmDelete: the confirmation
       // dialog a capture's Delete button opens.
       capturesPanel: {
-        states: ["empty", "list", "hover", "duplicate", "confirmDelete", "addToTimeline"],
-        // addToTimeline: the row's Add to timeline button, which exists only with the flag on.
+        states: ["empty", "list", "hover", "duplicate", "confirmDelete", "addFromLibrary"],
+        // addFromLibrary: the row's Add from Library button, which exists only with the flag on;
+        // it opens that modal on Screenshots with the capture selected and adds nothing itself.
         gatedBy: [{ flag: "timeline-levels" }],
       },
+      // The Add from Library modal (NIW2-790), behind the `timeline-levels` flag: a sheet over the
+      // editor opened by the transport's Add recording button, or by a capture's Add from Library
+      // button. One chooser lists every destination for the selected item and one Add applies it
+      // (NIW2-829). recordings: the Recordings tab, a compact list with the first row selected
+      // and previewed, and the chooser with "Over the video" disabled for a recording;
+      // screenshots: the Screenshots tab, a card grid with the "From this recording" tag and no
+      // card selected yet; screenshotSelected: a card selected, with the chooser at "Over the
+      // video"; noMatch: a search that matches no recording.
+      addFromLibrary: {
+        states: ["recordings", "screenshots", "screenshotSelected", "noMatch"],
+        gatedBy: [{ flag: "timeline-levels" }],
+      },
+      // The "Insert here" bar and pill on the Clips row while a recording is dragged over it: it
+      // exists only during the drag, and nothing drags a recording today (NIW2-789 reuses it).
+      insertIndicator: { states: ["visible"], gatedBy: [{ flag: "timeline-levels" }] },
       webcam: { states: ["visible"] },
       // The card that asks where a dropped camera bubble belongs: `asking` offers a new part,
       // `noRoom` has less than a second before the next block or the end, so that choice is off.
@@ -270,7 +286,20 @@ export const UI_MAP = {
       webcamPanel: {
         states: ["thisPart", "noPart", "wholeVideo", "sizeCustom", "hiddenRange"],
       },
-      transport: { states: ["paused", "playing", "withCounts", "speedChanged", "zoomed"] },
+      // Floating images over the Clips sequence (ADR 0057, NIW2-771), behind the
+      // `timeline-levels` flag. mediaLayer: the images drawn in the preview, `selected` adds the
+      // frame with its four corner handles, `selectedFull` the same on a Full image. mediaPanel: the inspector of a selected image
+      // (Full, Box, forward/backward, fades, Delete), here with an overlapping pair.
+      // timelineMediaRows: the rows above the sequence in the Clips section (drawn by the
+      // timeline strip), here with two overlapping images.
+      mediaLayer: { states: ["selected", "selectedFull"], gatedBy: [{ flag: "timeline-levels" }] },
+      mediaPanel: { states: ["overlapping"], gatedBy: [{ flag: "timeline-levels" }] },
+      timelineMediaRows: { states: ["twoImages"], gatedBy: [{ flag: "timeline-levels" }] },
+      // addRecordingOpen: the Add recording button at the left end, lit while its modal is open
+      // (it exists only with `timeline-levels` on).
+      transport: {
+        states: ["paused", "playing", "withCounts", "speedChanged", "zoomed", "addRecordingOpen"],
+      },
       toolRail: { states: ["default", "annotate", "privacy"] },
       toolFlyout: { states: ["audio"] },
       tracksPopover: { states: ["open"] },
@@ -285,11 +314,28 @@ export const UI_MAP = {
       // The Background section at the top of the inspector with nothing selected (ADR 0051):
       // `default` is none with the sliders disabled, `set` is a preset with padding, corners, shadow.
       background: { states: ["default", "set"] },
-      timeline: { states: ["default", "zoomed"] },
+      // A scene with recordings joined into it (ADR 0058, NIW2-780): twoRecordings labels each clip
+      // with its recording's name and length and draws a joined clip from its own file;
+      // recordingHover outlines every clip of the hovered clip's recording; recordingMissing is a
+      // clip whose joined recording is gone (hatched, "Recording missing: <title>");
+      // recordingAdded: the sequence right after Add from Library added a recording (NIW2-782);
+      // threeSlides: a clip followed by three slides, all on the one Clips row (NIW2-817).
+      timeline: {
+        states: [
+          "default",
+          "zoomed",
+          "twoRecordings",
+          "recordingHover",
+          "recordingMissing",
+          "recordingAdded",
+          "threeSlides",
+        ],
+      },
       zoomLane: { states: ["empty", "segments"] },
       // cameraBlock: a part, with its small frame, name and the wedge of its slide at its start;
-      // originalStretch: the dashed stretch where the camera stays in its original position.
-      webcamLane: { states: ["segments", "cameraBlock", "originalStretch"] },
+      // originalStretch: the dashed stretch where the camera stays in its original position;
+      // noCamera: the span over a clip whose recording has no webcam while another one has.
+      webcamLane: { states: ["segments", "cameraBlock", "originalStretch", "noCamera"] },
       privacyLane: { states: ["empty", "regions"] },
       // `waveform` draws the loudness bars; `waveformMuted` is a hatched block over dimmed bars
       // (NIW2-775). `empty` (the empty-state text) is left only for a recording without an

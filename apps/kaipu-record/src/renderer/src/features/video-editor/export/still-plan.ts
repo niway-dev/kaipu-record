@@ -4,6 +4,7 @@
  * itself is composed by `gif-worker.ts` in "still" mode through the same composer the
  * exports use, so a capture and an export of the same time never differ.
  */
+import { placeMedia } from "../media";
 import type { VideoScene } from "../scene";
 import {
   buildExportPlan,
@@ -26,6 +27,8 @@ export interface StillPlan {
   timelineSeconds: number;
   /** Source video time of that frame; null on a slide. */
   sourceSeconds: number | null;
+  /** The recording under the playhead: null = the opened one (and on a slide). */
+  sourceId: string | null;
   kind: "clip" | "slide";
 }
 
@@ -42,10 +45,21 @@ export function planStill(
   const located = locateTimelineTime(plan, timelineSeconds);
   if (!located) throw new Error(`no segment at ${timelineSeconds}`);
   const isClip = located.segment.kind === "clip";
+  if (plan.floating) {
+    // One frame is drawn: only the floating images on screen at it are decoded and sent.
+    const { items, layout, timeOffset } = plan.floating;
+    const at = timelineSeconds + timeOffset;
+    const kept = placeMedia(items, layout)
+      .filter((p) => p.start <= at && at < p.end)
+      .map((p) => p.item);
+    if (kept.length > 0) plan.floating = { items: kept, layout, timeOffset };
+    else delete plan.floating;
+  }
   return {
     plan,
     timelineSeconds,
     sourceSeconds: isClip ? located.sourceTime : null,
+    sourceId: located.segment.kind === "clip" ? located.segment.sourceId : null,
     kind: isClip ? "clip" : "slide",
   };
 }

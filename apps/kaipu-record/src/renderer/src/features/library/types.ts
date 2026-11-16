@@ -33,6 +33,8 @@ export interface LibraryVideo {
   /** Frame captures: the video this shot was taken from and the second on screen. */
   sourceVideoAssetId: string | null;
   sourceTimeSeconds: number | null;
+  /** The joined copy a frame came from (`SceneSource.id`); null = opened recording; absent = older link. */
+  sourceSceneSourceId?: string | null;
   /** Epoch ms of the last edit-session save, null without a session (see LibraryItem). */
   editSavedAt: number | null;
   editExportedSavedAt: number | null;

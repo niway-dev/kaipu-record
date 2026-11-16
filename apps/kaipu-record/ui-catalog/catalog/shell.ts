@@ -178,10 +178,36 @@ export const shell = catalog(
         { action: "restoreVault" },
       ],
     },
+    "export-error": {
+      profile: "two-recordings",
+      how: "Open “Missing recording” in the editor, press Export and confirm: its joined recording “Old standup” is not in the vault, so the export stops before it encodes anything and the card names the recording.",
+      steps: [
+        { navigate: `/editor/video/${ASSETS.joinedMissingDemo}` },
+        { waitFor: { video: true } },
+        {
+          click: {
+            area: "editorVideo.toolbar",
+            part: { role: "button", name: "Export", exact: true },
+          },
+        },
+        { click: { area: "editorVideo.exportSheet", part: { role: "button", name: "Export" } } },
+        { waitFor: { area: "shell.exportCard", part: { text: "Old standup" } } },
+      ],
+      demonstrates: ["shell.exportCard:error"],
+      ready: { area: "shell.exportCard" },
+      after: [
+        {
+          click: {
+            area: "shell.exportCard",
+            part: { role: "button", name: "Close", exact: true },
+          },
+        },
+        { waitFor: { area: "shell.exportCard", state: "hidden" } },
+      ],
+    },
   },
   {
     notCapturable: {
-      "shell.exportCard:error": nc("inducedFailure", "needs an export that fails"),
       "shell.updateBanner:ready": nc(
         "needsApi",
         "needs a downloaded update; an unpackaged build has no update feed",

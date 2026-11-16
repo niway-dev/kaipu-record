@@ -18,7 +18,8 @@ import { EyeOff } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import { sourceRangeToTimelineBlocks, sourceTimeAtTimeline } from "../source-time";
 import { type LayoutEntry, layoutDuration } from "../timeline";
-import type { CoveredRange, SourceThumbnail } from "../use-source-thumbnails";
+import type { ClipRecordings } from "../clip-recordings";
+import type { CompanionThumbnails, CoveredRange, SourceThumbnail } from "../use-source-thumbnails";
 import {
   NOMINAL_LANE_FRAME,
   webcamLaneBlockWidths,
@@ -55,6 +56,14 @@ export interface WebcamLaneProps {
   defaultLayout?: WebcamLayout;
   /** The output frame the places are in, for the names; a 16:9 frame until it is measured. */
   frame?: FrameSize;
+  /** Clips (by item id) whose recording has no camera while another recording of the scene does
+   *  (ADR 0058): their stretch of the lane reads "No camera in this recording". */
+  noCameraItemIds?: ReadonlySet<string>;
+  /** Which recording each clip reads (ADR 0058); null/absent without joined recordings. */
+  clipRecordings?: ClipRecordings | null;
+  /** Each JOINED recording's webcam frames by `SceneSource.id`, at the recording's own time. A
+   *  joined clip draws from its recording's strip only: never from `thumbnails`. */
+  recordingStrips?: ReadonlyMap<string, CompanionThumbnails>;
   selectedId: string | null;
   /** The window a part would take while the drop card is open, in SOURCE time: a dashed block. */
   pendingPart?: { start: number; end: number } | null;
@@ -103,6 +112,9 @@ export const WebcamLane = memo(function WebcamLane({
   covered = null,
   defaultLayout = WEBCAM_DEFAULTS,
   frame = NOMINAL_LANE_FRAME,
+  noCameraItemIds,
+  clipRecordings = null,
+  recordingStrips,
   selectedId,
   pendingPart = null,
   onSelect,
@@ -169,11 +181,19 @@ export const WebcamLane = memo(function WebcamLane({
   const shown = view && scale > 0 ? visibleRange(view) : { start: 0, end: duration };
   const range = covered ?? ALL_SOURCE;
   const filmstrip =
-    thumbnails.length > 0 ? (
+    thumbnails.length > 0 || (recordingStrips?.size ?? 0) > 0 ? (
       // Decoration only: the segments above carry every interaction and accessible name.
       <div className={styles.filmstrip} data-webcam-filmstrip aria-hidden="true">
         {layout.map((entry) => {
           if (entry.kind !== "clip") return null; // a slide has no webcam
+          // A joined clip reads its own recording's camera at the recording's local time
+          // (axis time - its range offset); the opened recording's clips read `thumbnails`.
+          const recording = clipRecordings?.get(entry.itemId);
+          const joined = recording && recording.sourceId !== null;
+          const strip = joined ? recordingStrips?.get(recording.sourceId!) : undefined;
+          const frames = joined ? (strip?.thumbnails ?? []) : thumbnails;
+          const frameRange = joined ? (strip?.covered ?? ALL_SOURCE) : range;
+          const shift = joined ? recording.offset : 0;
           const width = timeToFraction(entry.timelineEnd - entry.timelineStart, duration);
           const { tiles } = thumbnailTiles({
             timelineStart: entry.timelineStart,
@@ -194,7 +214,7 @@ export const WebcamLane = memo(function WebcamLane({
             >
               {tiles.map((tile) => {
                 // A tile outside the file's footage stays empty: it must not borrow a frame.
-                const thumb = thumbnailAt(thumbnails, tile.sourceTime, range);
+                const thumb = thumbnailAt(frames, tile.sourceTime - shift, frameRange);
                 return thumb ? (
                   <img
                     key={tile.index}
@@ -256,6 +276,22 @@ export const WebcamLane = memo(function WebcamLane({
       data-testid="webcam-lane"
     >
       {filmstrip}
+      {noCameraItemIds &&
+        layout
+          .filter((entry) => noCameraItemIds.has(entry.itemId))
+          .map((entry) => (
+            <div
+              key={entry.itemId}
+              className={styles.noCamera}
+              data-testid="no-camera-span"
+              style={{
+                left: `${timeToFraction(entry.timelineStart, duration) * 100}%`,
+                width: `${timeToFraction(entry.timelineEnd - entry.timelineStart, duration) * 100}%`,
+              }}
+            >
+              <span className={styles.noCameraLabel}>{t("noCameraInRecording")}</span>
+            </div>
+          ))}
       {pieces.map((piece, i) => {
         const place = placements[i]!;
         if (place.width <= 0) return null;

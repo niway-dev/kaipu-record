@@ -13,6 +13,7 @@ import { useLatest } from "../use-latest";
 import type { EditorSelection, SelectionKind } from "../editor-selection";
 import { WEBCAM_LAYER_SELECTION } from "../editor-selection";
 import type { VideoScene } from "../scene";
+import { clipBounds, type SourceAxis } from "../source-axis";
 import type { VideoSceneController } from "../use-video-scene";
 import { createWebcamPart, setWebcamLayout, webcamPartRoom } from "./webcam-edits";
 import { type FrameSize, webcamStateRect } from "./webcam-layout";
@@ -66,9 +67,13 @@ function bubbleAt(
   frame: FrameSize,
   scale: number,
   endSeconds: number | undefined,
+  axis: SourceAxis,
 ): { now: Point; box: { width: number; height: number } } | null {
   const end = webcamEndSeconds(endSeconds);
-  const created = end === undefined ? null : createWebcamPart(scene, { at: t, position }, end);
+  const created =
+    end === undefined
+      ? null
+      : createWebcamPart(scene, { at: t, position }, clipBounds(axis, { sourceStart: t }));
   const hypothetical = created?.id ? created.scene : scene;
   const state = webcamStateAt(hypothetical, t, end);
   const rect =
@@ -84,6 +89,7 @@ export function useWebcamDrop({
   controller,
   edits,
   sourceDuration,
+  axis,
   frame,
   cameraScaleAt,
   select,
@@ -95,6 +101,8 @@ export function useWebcamDrop({
   controller: VideoSceneController;
   edits: Pick<WebcamEditing, "commitLayout">;
   sourceDuration: number;
+  /** The scene's source axis: a new part stays inside the recording it is dropped in (ADR 0058). */
+  axis: SourceAxis;
   frame: FrameSize;
   /** The camera path's scale at a source time: the bubble's size follows "shrink during zoom". */
   cameraScaleAt(t: number): number;
@@ -111,6 +119,7 @@ export function useWebcamDrop({
     controller,
     edits,
     sourceDuration,
+    axis,
     frame,
     cameraScaleAt,
     select,
@@ -140,7 +149,8 @@ export function useWebcamDrop({
 
   const drop = useCallback(
     (position: Point, sourceTime: number) => {
-      const { controller, edits, sourceDuration, frame, cameraScaleAt, select } = latest.current;
+      const { controller, edits, sourceDuration, axis, frame, cameraScaleAt, select } =
+        latest.current;
       if (controller.interacting) return;
       const scene = controller.scene;
       const part = scene.webcam && webcamOverrideAt(scene.webcam, sourceTime);
@@ -156,25 +166,26 @@ export function useWebcamDrop({
         frame,
         cameraScaleAt(sourceTime),
         sourceDuration,
+        axis,
       );
       if (!where) return;
       setCard({
         position,
         sourceTime,
         ...where,
-        room: webcamPartRoom(scene, sourceTime, sourceDuration),
+        room: webcamPartRoom(scene, sourceTime, clipBounds(axis, { sourceStart: sourceTime })),
       });
     },
     [latest],
   );
 
   const answerPart = useCallback(() => {
-    const { controller, sourceDuration, select, seekToPart, card } = latest.current;
+    const { controller, axis, select, seekToPart, card } = latest.current;
     if (!card || controller.interacting) return;
     const { scene, id } = createWebcamPart(
       controller.scene,
       { at: card.sourceTime, position: card.position },
-      sourceDuration,
+      clipBounds(axis, { sourceStart: card.sourceTime }),
     );
     setCard(null);
     if (!id) return;

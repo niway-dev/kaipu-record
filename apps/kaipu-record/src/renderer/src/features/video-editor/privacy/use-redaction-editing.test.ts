@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { initialScene } from "../scene";
+import { joinRecording, sourceAxis } from "../source-axis";
 import { toLayout } from "../timeline";
 import { useVideoScene } from "../use-video-scene";
 import { useRedactionEditing } from "./use-redaction-editing";
@@ -13,7 +14,7 @@ function setup() {
     const redactions = useRedactionEditing({
       controller,
       layout: toLayout(controller.scene.items),
-      sourceDuration: 20,
+      axis: sourceAxis(20),
     });
     return { controller, redactions };
   });
@@ -60,5 +61,42 @@ describe("useRedactionEditing", () => {
     expect(result.current.controller.scene.redactions[0]).toMatchObject({ intensity: 40 });
     act(() => result.current.controller.undo());
     expect(result.current.controller.scene.redactions[0]).toMatchObject({ intensity: 70 });
+  });
+});
+
+describe("useRedactionEditing with a joined recording (ADR 0058)", () => {
+  const JOIN = { assetId: "asset-b", title: "B", durationSeconds: 20, width: 0, height: 0 };
+  function setupJoined() {
+    return renderHook(() => {
+      const controller = useVideoScene(joinRecording(initialScene(20), 20, JOIN, 20).scene);
+      const redactions = useRedactionEditing({
+        controller,
+        layout: toLayout(controller.scene.items),
+        axis: sourceAxis(20, controller.scene.sources),
+      });
+      return { controller, redactions };
+    });
+  }
+
+  it("a region drawn in B gets B's axis seconds", () => {
+    const { result } = setupJoined();
+    expect(result.current.redactions.windowAt(25)).toEqual({ start: 3605, end: 3610 });
+  });
+
+  it("near the end of B the window is clamped to B's range, not to A's duration", () => {
+    const { result } = setupJoined();
+    expect(result.current.redactions.windowAt(39.8)).toEqual({ start: 3619, end: 3620 });
+  });
+
+  it("an edge drag in B stops at B's range", () => {
+    const { result } = setupJoined();
+    act(() => {
+      result.current.redactions.add("blur", RECT, 25);
+    });
+    const id = result.current.controller.scene.redactions[0].id;
+    act(() => result.current.redactions.edgeDrag(id, "end", null, "start"));
+    act(() => result.current.redactions.edgeDrag(id, "end", 99999, "move"));
+    act(() => result.current.redactions.edgeDrag(id, "end", null, "end"));
+    expect(result.current.controller.scene.redactions[0]).toMatchObject({ start: 3605, end: 3620 });
   });
 });
