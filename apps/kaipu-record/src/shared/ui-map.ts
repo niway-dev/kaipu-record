@@ -288,8 +288,16 @@ export const UI_MAP = {
       timeline: { states: ["default", "zoomed"] },
       zoomLane: { states: ["empty", "segments"] },
       // cameraBlock: a part, with its small frame, name and the wedge of its slide at its start;
-      // originalStretch: the dashed stretch where the camera stays in its original position.
-      webcamLane: { states: ["segments", "cameraBlock", "originalStretch"] },
+      // originalStretch: the dashed stretch where the camera stays in its original position;
+      // narrowSelected: a selected part drawn narrower than its glyph (a few pixels, on a long
+      // recording), with its two edge handles spread apart so both can be grabbed.
+      webcamLane: {
+        states: ["segments", "cameraBlock", "originalStretch", "narrowSelected"],
+      },
+      // The card over a Camera-lane stretch after about 120 ms of hovering: a part, a hidden
+      // range or the original stretch, with its range, length and how it arrives. A tooltip
+      // drawn in the page's top layer, so it is its own area and not part of the lane.
+      webcamLaneCard: { states: ["hover"] },
       privacyLane: { states: ["empty", "regions"] },
       // `waveform` draws the loudness bars; `waveformMuted` is a hatched block over dimmed bars
       // (NIW2-775). `empty` (the empty-state text) is left only for a recording without an

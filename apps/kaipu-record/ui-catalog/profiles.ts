@@ -119,7 +119,7 @@ export const PROFILES = {
   },
   "camera-parts": {
     description:
-      "The vault adds “Camera parts” (a camera part and a hidden range) and “Camera size” (a camera size no S, M or L button has): the editor's camera panel states.",
+      "The vault adds “Camera parts” (a camera part and a hidden range) and “Camera size” (a camera size no S, M or L button has) and “Camera long” (20 minutes declared, a 5 s part): the editor's camera panel and Camera lane states.",
     seed: "demo",
     cameraRecordings: true,
   },

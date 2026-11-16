@@ -390,6 +390,37 @@ export const editorVideo = catalog(
       ],
       ready: { area: "editorVideo.webcamPanel" },
     },
+    // The Camera lane's two looks on a recording long enough that a part is a few pixels wide:
+    // the card the hover opens, and a selected part with its handles spread apart. Both only read.
+    "camera-lane-hover": {
+      profile: "camera-parts",
+      how: "Open “Camera long”, a 20-minute recording whose camera part is about 4 px wide on the lane, and rest the pointer on that part: after a moment a card appears over the lane with the part's range and length, and how it arrives.",
+      steps: [
+        open(ASSETS.cameraLong),
+        audioWaveformDrawn,
+        loaded,
+        // The card opens after about 120 ms of hovering, and the pointer stays on the part.
+        {
+          hover: {
+            area: "editorVideo.webcamLane",
+            part: { role: "button", name: "Webcam section 1", exact: true },
+          },
+        },
+        { waitFor: { area: "editorVideo.webcamLaneCard" } },
+      ],
+      keepPointer: true,
+      embedsScreen: true,
+      demonstrates: ["editorVideo.webcamLaneCard:hover"],
+      ready: { area: "editorVideo.webcamLaneCard" },
+    },
+    "camera-lane-narrow-selected": {
+      profile: "camera-parts",
+      how: "Open “Camera long” and select its camera part on the lane: the part is narrower than its glyph, so its two handles are drawn apart from each other.",
+      steps: [open(ASSETS.cameraLong), audioWaveformDrawn, loaded, cameraSection(1)],
+      embedsScreen: true,
+      demonstrates: ["editorVideo.webcamLane:narrowSelected"],
+      ready: { area: "editorVideo.webcamLane" },
+    },
     "audio-menu": {
       profile: "default",
       how: "Open “Bug report” and press Audio in the tool rail: a menu offers Mute a section and Mute the whole recording.",

@@ -13,6 +13,7 @@ import { createPortal } from "react-dom";
 import { EyeOff } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import type { WebcamStretchCard } from "../webcam/webcam-stretches";
+import { uiArea } from "@renderer/lib/ui-area";
 import { formatPrecise } from "./inspector/format";
 import { EASING_LABEL, NAME_LABEL } from "./webcam-name-label";
 import styles from "./webcam-lane-card.module.css";
@@ -84,6 +85,7 @@ export function WebcamLaneCard({
 
   return createPortal(
     <div
+      {...uiArea("editorVideo.webcamLaneCard")}
       ref={ref}
       role="tooltip"
       className={styles.card}

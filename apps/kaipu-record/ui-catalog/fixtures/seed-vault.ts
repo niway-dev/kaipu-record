@@ -36,6 +36,8 @@ export const ASSETS = {
   cameraParts: "c0a1a10c-0000-4000-8000-000000000009",
   /** Seeded with `cameraParts`: a webcam recording saved at a camera size no S, M or L button has. */
   cameraSize: "c0a1a10c-0000-4000-8000-00000000000a",
+  /** Seeded with `cameraParts`: a recording that declares 20 minutes, with a 5 s camera part. */
+  cameraLong: "c0a1a10c-0000-4000-8000-00000000000b",
   settingsShot: "c0a1a10c-0000-4000-8000-000000000101",
   dashboardShot: "c0a1a10c-0000-4000-8000-000000000102",
   dialogShot: "c0a1a10c-0000-4000-8000-000000000103",
@@ -151,6 +153,12 @@ interface RecordingFixture {
   assetId: string;
   title: string;
   cut: RecordingCut;
+  /**
+   * The length the sidecar and the saved edit declare, when it is longer than the media file
+   * (a few pixels per second on the timeline). The media is still the `cut`; the editor sizes
+   * its lanes from the declared length.
+   */
+  declaredSeconds?: number;
   ago: number;
   tags?: TagName[];
   /** A saved edit session (a zoom and a muted range): the "edited" look in the library. */
@@ -264,6 +272,30 @@ const CAMERA_RECORDINGS: readonly RecordingFixture[] = [
     webcam: true,
     cameraScene: { size: 0.27, segments: [] },
   },
+  {
+    // Declares 20 minutes, so at fit zoom a 1000 px lane gives a second under a pixel: the
+    // part (2 s to 7 s) is about 4 px wide, narrower than its glyph and its 10 px handle limit.
+    stem: "Camera long",
+    assetId: ASSETS.cameraLong,
+    title: "Camera long",
+    cut: 12,
+    declaredSeconds: 1200,
+    ago: 27 * 60_000,
+    webcam: true,
+    cameraScene: {
+      size: 0.22,
+      segments: [
+        {
+          id: "part-1",
+          start: 2,
+          end: 7,
+          mode: "override",
+          layout: { position: { x: 0.88, y: 0.18 } },
+          transition: { kind: "slide", ms: 700, easing: "ease-in-out" },
+        },
+      ],
+    },
+  },
 ];
 
 const SCREENSHOTS = [
@@ -301,7 +333,7 @@ export interface SeedOptions {
   content: "demo" | "empty" | "missing";
   /** Add the native-cursor recording (profiles with the cursor flag on). */
   cursorRecording?: boolean;
-  /** Add the two webcam recordings the editor's camera panel states open. */
+  /** Add the webcam recordings the editor's camera panel and lane states open. */
   cameraRecordings?: boolean;
   /** Add the screenshot that draws real text (profiles that exercise text recognition). */
   textScreenshot?: boolean;
@@ -456,7 +488,7 @@ async function seedRecording(
     sidecarVersion: 2,
     assetId: item.assetId,
     title: item.title,
-    durationSeconds: item.cut,
+    durationSeconds: item.declaredSeconds ?? item.cut,
     createdAt,
     ...(item.derivedFrom ? { derivedFromAssetId: item.derivedFrom } : {}),
     ...(item.exportPreset ? { exportPreset: item.exportPreset } : {}),
@@ -548,7 +580,14 @@ async function seedRecording(
     await writeJson(path.join(meta, `${item.stem}.edit.json`), {
       version: 1,
       scene: {
-        items: [{ id: "clip-1", kind: "clip", sourceStart: 0, sourceEnd: item.cut }],
+        items: [
+          {
+            id: "clip-1",
+            kind: "clip",
+            sourceStart: 0,
+            sourceEnd: item.declaredSeconds ?? item.cut,
+          },
+        ],
         overlays: [],
         zoomSegments: [],
         redactions: [],
