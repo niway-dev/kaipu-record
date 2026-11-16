@@ -104,14 +104,14 @@ design wins:
   recording comes sooner, and defaults to Slide, 700 ms, `ease-in-out`, which the panel calls
   Smooth.
 - Decision 4: the camera travels on a quadratic curve from the start position to the target,
-  bent toward the centre of the frame, and the eased progress is the curve's parameter up to
-  1. Past the target, which only `back` reaches, the camera leaves the curve along its end
-     tangent (twice the vector from the control point to the target, times the progress above
-     1). The per-axis limit on the overshoot from the amendment of 2026-11-15 applies to that
-     tangent instead of the straight distance: each axis is scaled so the easing's peak fits
-     in the room before the frame edge. A clamp to the frame stays as a last guard and changes
-     no point for the offered motions. Decision 3 stands: the start is static and the state is
-     still a pure function of the webcam scene and the source time.
+  bent toward the centre of the frame. While the eased progress is at most one, it is the
+  curve's parameter. Past the target, which only `back` reaches, the camera leaves the curve
+  along its end tangent: twice the vector from the control point to the target, times how
+  far the progress is above one. The per-axis limit on the overshoot from the amendment of
+  2026-11-15 applies to that tangent instead of the straight distance: each axis is scaled
+  so the easing's peak fits in the room before the frame edge. A clamp to the frame stays as
+  a last guard and changes no point for the offered motions. Decision 3 stands: the start is
+  static and the state is still a pure function of the webcam scene and the source time.
 - Decision 7: the composer revision moves to its next value, because the same scene now draws
   different frames.
 
