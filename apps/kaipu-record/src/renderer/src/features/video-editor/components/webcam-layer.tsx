@@ -375,6 +375,8 @@ export function WebcamLayer({
     w: number;
     h: number;
     center: Point;
+    /** Past the click slop at some point: coming back to the start does not undo the drag. */
+    crossed: boolean;
   } | null>(null);
   const [dragging, setDragging] = useState(false);
   // The bubble is held for the page once it has moved past the click slop: a plain click
@@ -447,6 +449,7 @@ export function WebcamLayer({
             w: slot.width,
             h: slot.height,
             center: from.center,
+            crossed: false,
           };
           setDragging(true);
         }}
@@ -464,14 +467,18 @@ export function WebcamLayer({
           );
           d.center = next;
           held.current = next;
-          if (Math.hypot(event.clientX - d.x, event.clientY - d.y) >= CLICK_SLOP_PX) setMoved(true);
+          if (Math.hypot(event.clientX - d.x, event.clientY - d.y) >= CLICK_SLOP_PX) {
+            d.crossed = true;
+            setMoved(true);
+          }
           resync();
         }}
         onPointerUp={(event) => {
           const d = drag.current;
           if (!d) return;
           event.currentTarget.releasePointerCapture?.(event.pointerId);
-          const click = Math.hypot(event.clientX - d.x, event.clientY - d.y) < CLICK_SLOP_PX;
+          const click =
+            !d.crossed && Math.hypot(event.clientX - d.x, event.clientY - d.y) < CLICK_SLOP_PX;
           abort();
           if (click) onSelect(lastTime.current);
           else onDrop(d.center, lastTime.current);

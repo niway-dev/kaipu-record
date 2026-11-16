@@ -474,6 +474,17 @@ describe("WebcamLayer", () => {
     expect(handlers.onSelect).not.toHaveBeenCalled();
   });
 
+  it("a press that went out past 3 px and came back is still a drag: it drops and selects nothing", () => {
+    const { handlers } = dragSetup();
+    fireEvent.pointerDown(bubble(), { clientX: 500, clientY: 500, pointerId: 1 });
+    fireEvent.pointerMove(bubble(), { clientX: 600, clientY: 500, pointerId: 1 });
+    fireEvent.pointerMove(bubble(), { clientX: 501, clientY: 500, pointerId: 1 });
+    fireEvent.pointerUp(bubble(), { clientX: 501, clientY: 500, pointerId: 1 });
+    expect(handlers.onDrop).toHaveBeenCalledOnce();
+    expect(handlers.onDrop.mock.calls[0]![0].x).toBeCloseTo(0.501, 6);
+    expect(handlers.onSelect).not.toHaveBeenCalled();
+  });
+
   it("an aborted drag puts the bubble back and calls nothing", () => {
     for (const abort of ["pointerCancel", "lostPointerCapture"] as const) {
       const { handlers, unmount } = dragSetup();
