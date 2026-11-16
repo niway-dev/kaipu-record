@@ -156,6 +156,21 @@ export const UI_MAP = {
         states: ["recording", "webcam", "screenshot", "gif", "selected", "cloudOnly"],
       },
       videoRow: { states: ["recording", "screenshot", "selected"] },
+      // The Transcribe action on a card and on a row (NIW2-818): an icon button on a local
+      // recording, behind the `transcription` flag. needsModel is the same button, whose click
+      // opens the download dialog; running shows "Transcribing 3/12" with a Cancel; done is the
+      // non-clickable "Transcribed" badge.
+      videoCardTranscribe: {
+        states: ["needsModel", "ready", "running", "done"],
+        gatedBy: [{ flag: "transcription" }],
+      },
+      videoRowTranscribe: {
+        states: ["needsModel", "ready", "running", "done"],
+        gatedBy: [{ flag: "transcription" }],
+      },
+      // The speech model offer a Transcribe click opens when the model is missing. It is a
+      // dialog over the whole window, so its own area, not part of the button's box.
+      transcribeModelDialog: { states: ["open"], gatedBy: [{ flag: "transcription" }] },
       selectionBar: { states: ["selecting", "moving"] },
       tagPanel: { states: ["item", "all"] },
     },
@@ -173,6 +188,13 @@ export const UI_MAP = {
       // imageHover: the pointer over a screenshot shows the copy button in its corner.
       preview: { states: ["video", "image", "imageHover", "gif", "unavailable"] },
       actions: { states: ["recording", "screenshot", "gif", "cloudOnly"] },
+      // The Transcribe action beside Edit video (NIW2-818), icon and word, behind the
+      // `transcription` flag; the states are the same looks as on a Library card.
+      transcribe: {
+        states: ["needsModel", "ready", "running", "done"],
+        gatedBy: [{ flag: "transcription" }],
+      },
+      transcribeModelDialog: { states: ["open"], gatedBy: [{ flag: "transcription" }] },
       tabs: { states: ["destinations", "versions", "details", "captures"] },
       // VersionsList: the original alone; with its edited project; with the copies made from
       // it; a copy viewed on its own page (the Viewing pill sits on that row); a copy being
@@ -347,6 +369,13 @@ export const UI_MAP = {
       // The Timeline guide (NIW2-679): a dialog over the editor, one tab per lane.
       trackGuide: { states: ["clips", "zooms", "webcam"] },
       toolbar: { states: ["default", "saving", "saved"] },
+      // The Transcribe action in the top bar (NIW2-818), icon and word, behind the
+      // `transcription` flag; the states are the same looks as on a Library card.
+      transcribe: {
+        states: ["needsModel", "ready", "running", "done"],
+        gatedBy: [{ flag: "transcription" }],
+      },
+      transcribeModelDialog: { states: ["open"], gatedBy: [{ flag: "transcription" }] },
       // webcamBlock: a camera part or hidden range selected; `webcam` is the bubble selected
       // (the Camera panel opens on it, see `webcamPanel`).
       inspector: {
