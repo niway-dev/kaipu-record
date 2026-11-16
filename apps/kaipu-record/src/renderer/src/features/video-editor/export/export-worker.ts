@@ -6,7 +6,9 @@
  *   2. For each ClipSegment: decode frames → composite overlays → encode.
  *   3. For each SlideSegment: draw the slide bitmap at plan.slideFps → composite overlays → encode.
  *   4. Audio (if present): per-clip decoded AudioSamples, trimmed to the exact
- *      source range → re-encode; silence for slides.
+ *      source range → re-encode; silence for slides. Produced in step with the video
+ *      (each frame asks the audio pump for audio up to a second past it), never as a pass
+ *      of its own after the video.
  *   5. Finalize the MP4 and notify the renderer.
  *
  * Chunks are posted via transferable ArrayBuffers so the renderer can write them to
@@ -91,7 +93,7 @@ import { chooseVideoEncoding, type VideoEncodingChoice } from "./video-encoding"
 import { WEBCAM_FPS } from "@shared/webcam-track";
 import { openWebcamSourceOrNone, webcamImageOf, type WebcamSource } from "./webcam-source";
 import { clipFramesOf, clipSource, clipWebcamCursorOf } from "./joined-media";
-import { createAudioPump } from "./audio-pump";
+import { AUDIO_LEAD_SECONDS, createAudioPump } from "./audio-pump";
 import { audioPlan, type RecordingAudio } from "./joined-audio";
 
 // ---------------------------------------------------------------------------
@@ -389,6 +391,21 @@ async function runExportWithInput(
     if (data) post({ type: "poster", data }, [data]);
   };
 
+  // Every video frame goes through here. mediabunny's muxer writes samples in timestamp
+  // order across tracks and keeps whatever is ahead of the slower track in RAM until that
+  // track catches up, so the audio is produced up to AUDIO_LEAD_SECONDS past the frame before
+  // the frame is added. Its guide asks for exactly this ("add media in a somewhat interleaved
+  // way to keep memory usage low", https://mediabunny.dev/guide/writing-media-files). Feeding
+  // all the video first held the whole encoded video in the worker (6.5 GB on a real take)
+  // while the file on disk stayed empty. The video `outTs` and the audio cursor are the same
+  // output timeline: segments are contiguous from 0, and the audio of each is its duration.
+  const addVideoFrame = async (outTs: number, duration: number): Promise<void> => {
+    await sendPosterOnce();
+    await audio?.advanceTo(outTs + AUDIO_LEAD_SECONDS);
+    await videoSource.add(outTs, duration);
+    reportProgress(outTs);
+  };
+
   // Release Output encoders on any error path. Do NOT cancel on the success
   // path — finalize already seals the output and canceling after is an error.
   let finalized = false;
@@ -429,11 +446,7 @@ async function runExportWithInput(
               ? (outTs) => floatingLiveAt(plan.floating, outTs)
               : undefined,
             compose,
-            emit: async (outTs, duration) => {
-              await sendPosterOnce();
-              await videoSource.add(outTs, duration);
-              reportProgress(outTs);
-            },
+            emit: addVideoFrame,
           });
         } finally {
           await webcamCursor?.close();
@@ -454,20 +467,18 @@ async function runExportWithInput(
           if (!cap.keep(outTs)) continue;
           // Slides are always contained ("fit"), never cropped, and carry no webcam.
           compose.slide(bitmap, outTs);
-          await sendPosterOnce();
-          await videoSource.add(outTs, frameDuration);
-          reportProgress(outTs);
+          await addVideoFrame(outTs, frameDuration);
           prevOutTs = outTs;
         }
       }
     }
 
-    // Signal no more video frames — improves encoder flush latency.
+    // Signal no more video frames — improves encoder flush latency, and lets the muxer write
+    // the audio still to come without waiting for a video sample to pair it with.
     videoSource.close();
 
-    // ---------------------------------------------------------------------------
-    // Audio — everything still owed after the last video frame (see audio-pump.ts).
-    // ---------------------------------------------------------------------------
+    // The audio still owed after the last video frame: whatever the lead did not reach, and
+    // the resampler's tail. The pump closes the audio source when its timeline ends.
     await audio?.drain();
 
     await out.finalize();

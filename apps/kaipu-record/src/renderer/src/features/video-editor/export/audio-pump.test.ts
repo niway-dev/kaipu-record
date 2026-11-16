@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { AudioSample } from "mediabunny";
 import { describe, expect, it, vi } from "vitest";
 import type { AudioEdits } from "../audio-edits";
@@ -292,5 +294,32 @@ describe("createAudioPump: interleaving", () => {
     expect(returned).not.toHaveBeenCalled();
     await pump.dispose();
     expect(returned).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("export-worker.ts feeds the muxer in step", () => {
+  // The worker needs WebCodecs and cannot run here, so this pins its wiring in the source: the
+  // one place a video frame is added is preceded by the audio pump's advance, and the pump
+  // is drained after the last frame.
+  const worker = readFileSync(resolve(__dirname, "export-worker.ts"), "utf8");
+
+  it("asks the pump for audio past the frame before every video add", () => {
+    expect(worker.match(/await videoSource\.add\(/g)).toHaveLength(1);
+    const advance = worker.indexOf("audio?.advanceTo(outTs + AUDIO_LEAD_SECONDS)");
+    expect(advance).toBeGreaterThan(-1);
+    expect(advance).toBeLessThan(worker.indexOf("await videoSource.add("));
+  });
+
+  it("sends clip frames and slide frames through that one place", () => {
+    expect(worker).toContain("emit: addVideoFrame");
+    expect(worker).toContain("await addVideoFrame(outTs, frameDuration)");
+  });
+
+  it("drains the pump after the last frame, then finalizes", () => {
+    const close = worker.indexOf("videoSource.close()");
+    const drain = worker.indexOf("await audio?.drain()");
+    expect(close).toBeGreaterThan(worker.lastIndexOf("addVideoFrame"));
+    expect(drain).toBeGreaterThan(close);
+    expect(worker.indexOf("await out.finalize()")).toBeGreaterThan(drain);
   });
 });
