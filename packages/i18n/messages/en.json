@@ -2893,7 +2893,7 @@
       },
       "webcamTrack": {
         "title": "Your webcam, on its own track",
-        "body": "The camera gets its own lane in the editor, with an inspector for its look. Use Hide webcam here to drop it for a stretch.",
+        "body": "The camera gets its own lane in the editor, with an inspector for its look. You can hide it for any stretch of the video.",
         "d1": "Shape, corners, size, position and mirror",
         "d2": "Hide it for a stretch, or give one stretch its own look"
       },

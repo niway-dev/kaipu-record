@@ -2893,7 +2893,7 @@
       },
       "webcamTrack": {
         "title": "Tu webcam, en su propia pista",
-        "body": "La cámara tiene su propio carril en el editor, con un inspector para su aspecto. Usa Ocultar webcam aquí para quitarla por un tramo.",
+        "body": "La cámara tiene su propio carril en el editor, con un inspector para su aspecto. Puedes ocultarla en cualquier tramo del video.",
         "d1": "Forma, esquinas, tamaño, posición y espejo",
         "d2": "Ocúltala por un tramo, o dale a un tramo su propio aspecto"
       },
