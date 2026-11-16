@@ -6,7 +6,12 @@ import type {
 import { NoAudioError, decodeAudioToPcm } from "./decode-audio";
 
 /** Silence from main, once there is nothing left for the renderer to send, that ends the wait. */
-export const TRANSCRIPTION_PROGRESS_TIMEOUT_MS = 120_000;
+/**
+ * Main reports progress only between batches, and one batch may take up to 270 s (its deadline:
+ * 30 s plus twice the batch's audio). The renderer must outwait that or it cancels a job that is
+ * still inside its allowed time.
+ */
+export const TRANSCRIPTION_PROGRESS_TIMEOUT_MS = 330_000;
 
 const TERMINAL_PHASES: ReadonlySet<TranscriptionJobPhase> = new Set([
   "done",

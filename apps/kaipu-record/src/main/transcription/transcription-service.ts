@@ -132,6 +132,8 @@ interface Job {
   request: TranscriptionJobRequest;
   vault: TranscriptionVault;
   item: ResolvedItem;
+  /** The recording's hash taken at `begin`, before the renderer reads the file to decode it. */
+  contentHash: string;
   modelDir: string;
   model: ModelCatalogEntry;
   engine: { cliPath: string; libDir: string; version: string };
@@ -329,6 +331,15 @@ export class TranscriptionService {
       const vault = this.deps.openVault();
       const item = await this.resolve(vault, request);
       if (!item) return { status: "refused", reason: "invalid-item" };
+      let contentHash: string;
+      try {
+        contentHash = await this.deps.hashMedia(item.mediaPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          return { status: "refused", reason: "invalid-item" };
+        }
+        throw error;
+      }
       if (!this.sweptDirs.has(vault.tmpDir)) {
         this.sweptDirs.add(vault.tmpDir);
         await sweepStaleTmp(vault.tmpDir, this.deps.now().getTime());
@@ -343,6 +354,7 @@ export class TranscriptionService {
         request,
         vault,
         item,
+        contentHash,
         modelDir,
         model,
         engine: { cliPath: engine.cliPath, libDir: engine.libDir, version: engine.version },
@@ -538,13 +550,9 @@ export class TranscriptionService {
     if (!start || start.id !== job.item.id || start.mediaPath !== job.item.mediaPath) {
       throw new JobFailure("item-changed");
     }
-    let contentHash: string;
-    try {
-      contentHash = await this.deps.hashMedia(start.mediaPath);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new JobFailure("item-changed");
-      throw error;
-    }
+    // The hash from `begin`, not one taken now: the audio was decoded from the file as it was
+    // then, so a file replaced since must read as stale, never as the file that was transcribed.
+    const { contentHash } = job;
     this.ensureLive(job);
 
     const levels = await computeFrameLevelsDb(job.pcmPath);

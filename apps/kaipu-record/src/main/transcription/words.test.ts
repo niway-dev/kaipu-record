@@ -165,6 +165,33 @@ describe("reconcile", () => {
     expect(out[1]!.segmentId).toBe("s1"); // after the cut: the later one does
   });
 
+  it("keeps one copy of a word the two runs time on opposite sides of the cut (40 ms apart)", () => {
+    // s0 puts the word just after the cut (mid 28 520), s1 just before it (mid 28 480): a plain
+    // side rule would drop both copies.
+    const out = reconcile(
+      segments,
+      seams,
+      new Map([
+        ["s0", [word("s0", "sí", 28_450, 28_590)]],
+        ["s1", [word("s1", "sí", 28_410, 28_550)]],
+      ]),
+    );
+    expect(out.map((w) => w.text)).toEqual(["sí"]);
+  });
+
+  it("keeps both of two real repeats at the cut when both runs heard both", () => {
+    const both = (id: string) => [word(id, "no", 28_300, 28_450), word(id, "no", 28_500, 28_650)];
+    const out = reconcile(
+      segments,
+      seams,
+      new Map([
+        ["s0", both("s0")],
+        ["s1", both("s1")],
+      ]),
+    );
+    expect(out.map((w) => w.text)).toEqual(["no", "no"]);
+  });
+
   it("keeps a word that only one side heard", () => {
     const out = reconcile(
       segments,

@@ -32,6 +32,9 @@ export interface TranscriptionStatusApi {
   remove(id: string): Promise<void>;
 }
 
+/** How often a visible download's state is re-read, for the settle that no event announces. */
+const DOWNLOAD_POLL_MS = 2000;
+
 /**
  * The speech model's state for the offer UI: loaded once, kept live by the progress events
  * main pushes during a download, and refreshed whenever a call changes it.
@@ -74,6 +77,15 @@ export function useTranscriptionStatus(): TranscriptionStatusApi {
       unsubscribe();
     };
   }, [refresh]);
+
+  // A download started elsewhere (another mount of this hook, an earlier visit to the page) ends
+  // with no event this mount hears, so while one runs the status is re-read until it settles.
+  const downloading = status?.models.some((m) => m.status.state === "downloading") ?? false;
+  useEffect(() => {
+    if (!downloading) return;
+    const timer = setInterval(() => void refresh(), DOWNLOAD_POLL_MS);
+    return () => clearInterval(timer);
+  }, [downloading, refresh]);
 
   const download = useCallback(
     async (id: string) => {

@@ -117,17 +117,19 @@ export function normalizeWord(text: string): string {
   return text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
-/** A repeat of the previous word this close to it (ms) is the same word timed twice. */
-const DUPLICATE_GAP_MS = 250;
-/** Only words this close to a cut (ms) can be duplicates created by the overlap. */
-const DUPLICATE_NEAR_CUT_MS = 600;
+/** The same word timed by two runs starts this close (ms) in both. */
+const SAME_WORD_START_MS = 250;
 
 /**
  * Joins the words of overlapping segments ("midpoint-dedupe", chosen in M0). Each seam has one
  * cut: the earlier segment keeps the words whose midpoint lies before it, the later one the rest.
- * A word timed a few frames apart by the two runs can still land on both sides of the cut, so a
- * word that repeats its predecessor from another segment, within 250 ms and within 600 ms of a
- * cut, is dropped. Ids `w1..wn` are assigned last, in time order.
+ *
+ * That rule alone breaks at the cut: a word the two runs time a few frames apart can land on
+ * both sides (kept twice) or on the wrong side of each (dropped twice). So inside each overlap
+ * the two runs' words are first paired in order, same text and starts within 250 ms, and a pair
+ * yields exactly one word, from the run whose side of the cut the pair's midpoint is on. Two
+ * real repeats ("no no") pair one to one and both survive. Words with no partner follow the cut
+ * rule. Ids `w1..wn` are assigned last, in time order.
  */
 export function reconcile(
   segments: Segment[],
@@ -136,39 +138,69 @@ export function reconcile(
 ): IdentifiedWord[] {
   const seamAfter = new Map(seams.map((s) => [s.afterId, s])); // shared with the previous segment
   const seamBefore = new Map(seams.map((s) => [s.beforeId, s])); // shared with the next segment
+  const forced = new Set<Word>(); // a pair's chosen word: kept whatever side it is on
+  const dropped = new Set<Word>(); // a pair's other word
+  for (const seam of seams) {
+    for (const [earlier, later] of pairOverlapWords(seam, wordsBySegment)) {
+      const middle = (earlier.startMs + earlier.endMs + later.startMs + later.endMs) / 4;
+      const [chosen, other] = middle < seam.cutMs ? [earlier, later] : [later, earlier];
+      forced.add(chosen);
+      dropped.add(other);
+    }
+  }
   const kept: Word[] = [];
   for (const segment of segments) {
     const previous = seamAfter.get(segment.id);
     const next = seamBefore.get(segment.id);
     for (const word of wordsBySegment.get(segment.id) ?? []) {
-      if (previous && !onLaterSide(previous, word)) continue;
-      if (next && onLaterSide(next, word)) continue;
+      if (dropped.has(word)) continue;
+      if (!forced.has(word)) {
+        if (previous && !onLaterSide(previous, word)) continue;
+        if (next && onLaterSide(next, word)) continue;
+      }
       kept.push(word);
     }
   }
   kept.sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
-  return dedupeAtSeams(kept, seams).map((word, index) => ({ ...word, id: `w${index + 1}` }));
+  return kept.map((word, index) => ({ ...word, id: `w${index + 1}` }));
+}
+
+/** The words both runs heard in a seam's overlap, matched in order. */
+function pairOverlapWords(
+  seam: Seam,
+  wordsBySegment: Map<string, Word[]>,
+): Array<[earlier: Word, later: Word]> {
+  const inOverlap = (id: string): Word[] =>
+    (wordsBySegment.get(id) ?? [])
+      .filter((w) => {
+        const middle = (w.startMs + w.endMs) / 2;
+        return middle >= seam.overlapStartMs && middle <= seam.overlapEndMs;
+      })
+      .sort((x, y) => x.startMs - y.startMs);
+  const earlier = inOverlap(seam.beforeId);
+  const later = inOverlap(seam.afterId);
+  const pairs: Array<[Word, Word]> = [];
+  let i = 0;
+  let j = 0;
+  while (i < earlier.length && j < later.length) {
+    const a = earlier[i]!;
+    const b = later[j]!;
+    if (
+      normalizeWord(a.text) === normalizeWord(b.text) &&
+      Math.abs(a.startMs - b.startMs) < SAME_WORD_START_MS
+    ) {
+      pairs.push([a, b]);
+      i++;
+      j++;
+    } else if (a.startMs <= b.startMs) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+  return pairs;
 }
 
 function onLaterSide(seam: Seam, word: Word): boolean {
   return (word.startMs + word.endMs) / 2 >= seam.cutMs;
-}
-
-function dedupeAtSeams(words: Word[], seams: Seam[]): Word[] {
-  const out: Word[] = [];
-  for (const word of words) {
-    const previous = out[out.length - 1];
-    const nearCut = seams.some((s) => Math.abs(word.startMs - s.cutMs) < DUPLICATE_NEAR_CUT_MS);
-    if (
-      previous &&
-      nearCut &&
-      previous.segmentId !== word.segmentId &&
-      normalizeWord(previous.text) === normalizeWord(word.text) &&
-      word.startMs - previous.endMs < DUPLICATE_GAP_MS
-    ) {
-      continue;
-    }
-    out.push(word);
-  }
-  return out;
 }

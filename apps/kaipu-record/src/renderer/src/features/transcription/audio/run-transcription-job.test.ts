@@ -358,8 +358,8 @@ describe("runTranscriptionJob", () => {
       vi.useFakeTimers();
     });
 
-    it("defaults to 120 seconds", () => {
-      expect(TRANSCRIPTION_PROGRESS_TIMEOUT_MS).toBe(120_000);
+    it("defaults to 330 seconds, longer than main's longest batch deadline", () => {
+      expect(TRANSCRIPTION_PROGRESS_TIMEOUT_MS).toBe(330_000);
     });
 
     it("rejects after the default silence once the audio is sent, then unsubscribes and cancels", async () => {
@@ -376,7 +376,7 @@ describe("runTranscriptionJob", () => {
       await vi.advanceTimersByTimeAsync(1);
 
       expect(outcome).toBeInstanceOf(Error);
-      expect((outcome as Error).message).toMatch(/120 s/);
+      expect((outcome as Error).message).toMatch(/330 s/);
       expect(harness.unsubscribe).toHaveBeenCalledTimes(1);
       expect(harness.api.cancelTranscription).toHaveBeenCalledWith(JOB);
     });

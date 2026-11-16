@@ -759,13 +759,25 @@ describe("commit", () => {
     expect(await runToEnd(h)).toMatchObject({ phase: "failed", failure: "item-changed" });
   });
 
-  it("fails with item-changed when the media vanished before it could be hashed", async () => {
+  it("refuses to begin when the media vanished before it could be hashed", async () => {
     const h = makeHarness();
     vi.mocked(h.deps.hashMedia).mockRejectedValue(
       Object.assign(new Error("gone"), { code: "ENOENT" }),
     );
-    expect(await runToEnd(h)).toMatchObject({ phase: "failed", failure: "item-changed" });
+    expect(await h.service.begin(REQUEST)).toEqual({ status: "refused", reason: "invalid-item" });
     expect(h.runBatch).not.toHaveBeenCalled();
+  });
+
+  it("stores the hash taken at begin, so a file replaced during the job reads as stale", async () => {
+    const h = makeHarness();
+    const jobId = await startJob(h);
+    // The recording is replaced after the audio was decoded from the old one.
+    vi.mocked(h.deps.hashMedia).mockResolvedValue("hash-replaced");
+    await h.service.end(jobId);
+    expect(await h.settled()).toMatchObject({ phase: "done" });
+    const parsed = parseTranscript(JSON.parse(await readFile(h.state.transcriptPath, "utf8")));
+    if (!parsed.ok) throw new Error(parsed.message);
+    expect(parsed.transcript.media.contentHash).toBe("hash-1");
   });
 
   it("waits for a rename holding the item lock, then sees the new name and writes nothing", async () => {
