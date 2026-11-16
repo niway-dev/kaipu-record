@@ -56,6 +56,7 @@ function edgeCaseVault(): Record<string, Parameters<typeof makeVault>[0][string]
     }),
     ".kaipu/recording-2026-10-30-00-57-30.jpg": "payload:legacy-a-poster",
     ".kaipu/recording-2026-10-30-00-57-30.edit.json": "payload:legacy-a-session",
+    ".kaipu/recording-2026-10-30-00-57-30.transcript.json": "payload:legacy-a-transcript",
     "recording-2026-10-30-00-57-30-b.mp4": "payload:legacy-b",
     ".kaipu/recording-2026-10-30-00-57-30-b.json": sidecar({
       assetId: "legacy-b",
@@ -159,6 +160,10 @@ describe("fixVault — every edge case at once", () => {
     expect(await read(`${name}.mp4`)).toBe("payload:legacy-a");
     expect(await read(`.kaipu/${name}.jpg`)).toBe("payload:legacy-a-poster");
     expect(await read(`.kaipu/${name}.edit.json`)).toBe("payload:legacy-a-session");
+    expect(await read(`.kaipu/${name}.transcript.json`)).toBe("payload:legacy-a-transcript");
+    expect(await readdir(join(vaultDir, ".kaipu"))).not.toContain(
+      "recording-2026-10-30-00-57-30.transcript.json",
+    );
     expect((await readJson(`.kaipu/${name} (2).json`)).assetId).toBe("legacy-b");
   });
 

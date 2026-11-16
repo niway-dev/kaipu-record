@@ -134,6 +134,7 @@ const COMPANION_SUFFIXES: { suffix: string; role: keyof CompanionPaths }[] = [
   { suffix: ".edit.json", role: "editSession" },
   { suffix: ".canvas.json", role: "canvasDoc" },
   { suffix: ".text.json", role: "textCache" },
+  { suffix: ".transcript.json", role: "transcript" },
   { suffix: ".cursor.json", role: "cursorTrack" },
   { suffix: ".json", role: "sidecar" },
   { suffix: ".jpg", role: "thumbnail" },

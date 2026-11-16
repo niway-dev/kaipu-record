@@ -136,6 +136,7 @@ const COMPANION_FILES = [
   "editMeta",
   "canvasDoc",
   "textCache",
+  "transcript",
   "webcam",
 ] as const;
 
@@ -795,6 +796,8 @@ async function removeOrphanRecords(to: LibraryVault, assetId: string): Promise<v
   }
   for (const name of names) {
     if (!name.endsWith(".json") || name.includes(".edit") || name.includes(".cursor")) continue;
+    // A transcript is a companion, not a record: it can never be an interrupted reservation.
+    if (name.endsWith(".transcript.json")) continue;
     const stem = name.slice(0, -".json".length);
     const read = await readSidecarStrict(to.sidecarPath(stem));
     if (read.status !== "ok" || read.sidecar.assetId !== assetId) continue;
