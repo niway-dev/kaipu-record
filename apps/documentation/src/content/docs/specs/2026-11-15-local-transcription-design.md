@@ -221,7 +221,11 @@ Criteria:
   at a time. Segments are fixed 30 s windows with 3 s overlap, four per CLI call. In each overlap
   the cut is the midpoint (`midpoint-dedupe`): the earlier segment keeps the words that start
   before it, the later one the words that start after it, so a word on the boundary appears
-  exactly once. M0 counted 93 adjacent duplicate words in 8,490 at 60 minutes. The job has its
+  exactly once. M0 counted 93 adjacent duplicate words in 8,490 at 60 minutes. A plain cut loses
+  a word the two runs time on opposite sides of it and cannot tell a duplicate from a real
+  repeat ("no no"), so M1 first pairs the two runs' words in each overlap (same text, starts
+  within 250 ms, in order) and keeps one word per pair from the side its midpoint is on; unpaired
+  words follow the cut. The job has its
   own supervisor, because `runHelperProcess` is one-shot with a 16 MB stdout cap.
 - **Words:** token grouping at a leading space or `▁`; start = first token start; end = last token
   start + duration; offset by segment start; integer ms.
