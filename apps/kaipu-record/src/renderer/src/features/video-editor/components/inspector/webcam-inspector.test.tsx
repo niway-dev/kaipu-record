@@ -24,6 +24,14 @@ const PART: WebcamSegment = {
 };
 const HIDDEN: WebcamSegment = { id: "hidden-1", start: 10, end: 12, mode: "hidden" };
 
+const WEBCAM_TRACK = {
+  startOffsetMs: 0,
+  offsetQuality: "exact",
+  width: 1280,
+  height: 720,
+  fps: 30,
+} as const;
+
 const sceneOf = (
   layout: Partial<WebcamLayout> = {},
   segments: WebcamSegment[] = [],
@@ -594,11 +602,3 @@ describe("a hidden range", () => {
     expect(onRemoved).toHaveBeenCalledOnce();
   });
 });
-
-const WEBCAM_TRACK = {
-  startOffsetMs: 0,
-  offsetQuality: "exact",
-  width: 1280,
-  height: 720,
-  fps: 30,
-} as const;
