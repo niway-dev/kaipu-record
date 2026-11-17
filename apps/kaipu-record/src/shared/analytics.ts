@@ -208,33 +208,49 @@ export function buildEditorOpenedProperties(input: EditorOpenedProperties): Edit
   return { editor: input.editor };
 }
 
+/**
+ * Where a personal path starts: a home folder (`/Users/<name>/…` on macOS, `/home/<name>/…`
+ * on Linux), a mounted volume where a custom recordings folder usually lives (`/Volumes/…`,
+ * `/mnt/…`, `/media/…`), or any Windows drive path except the system folders (`C:\Users\…`,
+ * `D:\Recordings\…`, not `C:\Program Files\…`). Also behind `file://`.
+ */
+const PATH_ROOT =
+  "(?:[A-Za-z]:[\\\\/](?!(?:Windows|Program Files|ProgramData)\\b)|[\\\\/](?:Users|home|Volumes|mnt|media)[\\\\/])";
+
+/**
+ * Two shapes, tried at each position. A path right after a quote runs to the matching closing
+ * quote, one not followed by a letter or digit, so the apostrophe in `Ana's Videos` and the
+ * brackets in `Screen Recording (2).mov` stay inside it. Any other path runs to the end of the
+ * line, except that a closing `)` of a stack frame (`at f (/Users/…:1:1)`) is kept. The lookbehind
+ * keeps URLs such as `https://site/home/x` and app paths such as `/Applications/…` out.
+ */
+const PERSONAL_PATH = new RegExp(
+  `(?<q>['"\`])${PATH_ROOT}[^\\r\\n]*?(?=\\k<q>(?![A-Za-z0-9]))` +
+    `|(?<![A-Za-z0-9.])${PATH_ROOT}[^\\r\\n]*?(?=\\)?[ \\t]*$)`,
+  "gm",
+);
+
 /** What replaces a personal path in an exception message, stack frame or context value. */
 export const REDACTED_USER_PATH = "<user-path>";
 
 /**
- * A path under a user's home folder: `/Users/<name>/…` (macOS), `/home/<name>/…` (Linux),
- * `C:\Users\<name>\…` (Windows), also behind `file://`. The match runs to the next quote,
- * backtick, closing parenthesis, angle bracket or line end, so a name with spaces
- * ("Kaipu Record/Q3 board call.mp4") goes with it. The lookbehind keeps URLs such as
- * `https://site/home/x` and app paths such as `/Applications/…` out.
- */
-const PERSONAL_PATH = /(?<![A-Za-z0-9.])(?:[A-Za-z]:)?[\\/](?:Users|home)[\\/][^'"`)<>\r\n]*/g;
-
-/**
  * Replaces every personal path in `text` with `<user-path>`. Recordings live in the home
- * folder and are named by the user, so the whole path goes, file name included, not just
- * the account name. An unquoted path inside a sentence also takes the rest of that line
- * with it: losing a few words of a message beats leaking a name.
+ * folder or on a volume and are named by the user, so the whole path goes, file name
+ * included, not just the account name. An unquoted path inside a sentence also takes the rest
+ * of that line with it: losing a few words of a message beats leaking a name. A recordings
+ * folder outside these roots (say `/data/clips`) is not recognised.
  */
 export function scrubPersonalPaths(text: string): string {
-  return text.replace(PERSONAL_PATH, REDACTED_USER_PATH);
+  return text.replace(PERSONAL_PATH, (_match, quote?: string) =>
+    quote ? `${quote}${REDACTED_USER_PATH}` : REDACTED_USER_PATH,
+  );
 }
 
 /**
  * A copy of `value` with {@link scrubPersonalPaths} applied to every string inside it,
  * through objects and arrays. Used on whatever leaves the app as an exception or event, so
- * a path in a message, a stack frame or a context value never travels. Cycles and very deep
- * values are cut instead of followed.
+ * a path in a message, a stack frame or a context value never travels. A cycle and a very deep
+ * value are cut instead of followed.
  */
 export function scrubPersonalPathsDeep<T>(value: T): T {
   return scrubDeep(value, new WeakSet(), 0) as T;
@@ -247,8 +263,15 @@ function scrubDeep(value: unknown, seen: WeakSet<object>, depth: number): unknow
   if (value === null || typeof value !== "object") return value;
   if (seen.has(value) || depth > SCRUB_MAX_DEPTH) return undefined;
   seen.add(value);
-  if (Array.isArray(value)) return value.map((item) => scrubDeep(item, seen, depth + 1));
-  const out: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value)) out[key] = scrubDeep(item, seen, depth + 1);
+  let out: unknown;
+  if (Array.isArray(value)) {
+    out = value.map((item) => scrubDeep(item, seen, depth + 1));
+  } else {
+    const copy: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) copy[key] = scrubDeep(item, seen, depth + 1);
+    out = copy;
+  }
+  // Only the objects on the way down count as a cycle: one referenced twice is not one.
+  seen.delete(value);
   return out;
 }

@@ -334,7 +334,8 @@ function ScreenshotEditorBody({
     [doc, source],
   );
   const image = useImageSource(imageSource);
-  // The editor counts as opened once its image has resolved, not while it is still loading.
+  // The editor counts as opened once its image source has resolved to a URL, not while it is
+  // still resolving. A file that is missing or fails to decode afterwards is still counted.
   useEditorOpened("image", image !== null);
   // A re-opened saved shot is already framed/flattened — start it unframed so the
   // editor doesn't beautify it twice; a fresh capture gets the default frame.

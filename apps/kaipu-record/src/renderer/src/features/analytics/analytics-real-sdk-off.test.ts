@@ -26,6 +26,11 @@ describe("real posthog-js, preference off (NIW2-849)", () => {
       await allowJsdomUserAgent();
       client.captureEvent("recording_started", { mode: "screen" });
       client.captureException(new Error("open '/Users/ana/Movies/a.mp4' failed"), { origin: "t" });
+      // What the SDK emits on its own, past the app's guard: an uncaught error.
+      // The SDK hooks `window.onerror`; calling it is what the browser does for an uncaught error,
+      // without jsdom reporting that error to the test runner.
+      const message = "open '/Users/ana/Movies/a.mp4' failed";
+      window.onerror?.(message, "", 1, 1, new Error(message));
       await settle();
 
       const flags = sent.filter(isFlags);

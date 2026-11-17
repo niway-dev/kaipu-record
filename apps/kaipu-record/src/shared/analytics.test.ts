@@ -194,6 +194,32 @@ describe("scrubPersonalPaths", () => {
     expect(scrubPersonalPaths("file:///Users/ana/Movies/a.mp4")).toBe(`file://${REDACTED}`);
   });
 
+  it("takes a file name that contains brackets or an apostrophe, whole", () => {
+    expect(scrubPersonalPaths("open '/Users/ana/Movies/Foo (draft) Q3 board.mp4' failed")).toBe(
+      `open '${REDACTED}' failed`,
+    );
+    expect(scrubPersonalPaths("ENOENT '/Users/ana/Screen Recording (2) final.mov'")).toBe(
+      `ENOENT '${REDACTED}'`,
+    );
+    expect(scrubPersonalPaths("'/Users/ana/Ana's Videos/clip.mp4' is gone")).toBe(
+      `'${REDACTED}' is gone`,
+    );
+    const unquoted = scrubPersonalPaths("cannot read /Users/ana/Ana's Videos/clip.mp4");
+    expect(unquoted).toBe(`cannot read ${REDACTED}`);
+    // Two quoted paths on one line are both removed, and the words between them stay.
+    expect(scrubPersonalPaths(`"/Users/ana/a.mp4" and "/Users/bob/b (1).mp4"`)).toBe(
+      `"${REDACTED}" and "${REDACTED}"`,
+    );
+  });
+
+  it("removes a recordings folder on a volume or another drive", () => {
+    expect(scrubPersonalPaths("open '/Volumes/Work/Kaipu/Q3 call.mp4'")).toBe(`open '${REDACTED}'`);
+    expect(scrubPersonalPaths("open D:\\Recordings\\Q3 call.mp4")).toBe(`open ${REDACTED}`);
+    // App and system folders are not personal.
+    const system = "at x (C:\\Program Files\\Kaipu Record\\resources\\app.asar\\main.js:1:1)";
+    expect(scrubPersonalPaths(system)).toBe(system);
+  });
+
   it("keeps app paths and URLs that merely contain /Users or /home", () => {
     const appPath =
       "at x (/Applications/Kaipu Record.app/Contents/Resources/app.asar/out/main.js:1:1)";
@@ -229,6 +255,18 @@ describe("scrubPersonalPathsDeep", () => {
     expect(out.$exception_list[0].stacktrace.frames[0].lineno).toBe(4);
     expect(out.count).toBe(3);
     expect(input).toEqual(copy);
+  });
+
+  it("keeps an object that is referenced twice, and cuts only a real cycle", () => {
+    const shared = { path: "/Users/ana/a.mp4", n: 1 };
+    const out = scrubPersonalPathsDeep({ first: shared, second: shared, list: [shared] }) as {
+      first: { path: string; n: number };
+      second: { path: string; n: number };
+      list: { path: string; n: number }[];
+    };
+    expect(out.first).toEqual({ path: "<user-path>", n: 1 });
+    expect(out.second).toEqual({ path: "<user-path>", n: 1 });
+    expect(out.list[0]).toEqual({ path: "<user-path>", n: 1 });
   });
 
   it("survives a cyclic object", () => {

@@ -88,6 +88,23 @@ describe("OnboardingProvider — privacy notice", () => {
     expect(hasSeenPrivacyNotice()).toBe(true);
   });
 
+  it("a click on the backdrop dismisses it for good, a click inside the card does not", async () => {
+    markOnboardingComplete();
+    render(
+      <OnboardingProvider>
+        <p>app</p>
+      </OnboardingProvider>,
+    );
+    const heading = await screen.findByRole("heading", { name: NOTICE });
+    const dialog = heading.closest('[role="alertdialog"]') as HTMLElement;
+    fireEvent.click(heading);
+    expect(screen.getByRole("heading", { name: NOTICE })).toBeInTheDocument();
+    expect(hasSeenPrivacyNotice()).toBe(false);
+    fireEvent.click(dialog);
+    expect(screen.queryByRole("heading", { name: NOTICE })).toBeNull();
+    expect(hasSeenPrivacyNotice()).toBe(true);
+  });
+
   it("the toggle in the notice writes the setting", async () => {
     markOnboardingComplete();
     const { updateSettings } = mockApi();

@@ -25,6 +25,9 @@ describe("real posthog-js, preference on (NIW2-849)", () => {
       await allowJsdomUserAgent();
       client.captureEvent("recording_started", { mode: "screen" });
       client.captureException(new Error("open '/Users/ana/Movies/a.mp4' failed"), { origin: "t" });
+      // The same uncaught error the "off" test sends through the SDK's own hook.
+      const message = "open '/Users/ana/Movies/b.mp4' failed";
+      window.onerror?.(message, "", 1, 1, new Error(message));
       await settle();
 
       const events = sent
@@ -33,6 +36,8 @@ describe("real posthog-js, preference on (NIW2-849)", () => {
         .join("");
       expect(events).toContain("recording_started");
       expect(events).toContain("$exception");
+      // The uncaught error reaches PostHog on its own, so the "off" test can fail on it.
+      expect(events).toContain('"handled":false');
       expect(events).not.toContain("/Users/ana");
       expect(events).toContain("<user-path>");
     },

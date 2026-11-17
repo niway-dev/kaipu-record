@@ -51,7 +51,7 @@ function mockElectronAPI(overrides: Partial<KaipuElectronAPI> = {}): {
       return () => shortcutListeners.delete(callback);
     }),
     // The Privacy step writes the share-usage toggle through the same call as Settings.
-    updateSettings: vi.fn().mockResolvedValue(undefined),
+    updateSettings: vi.fn(async (patch: object) => ({ ...patch })),
     requestRecordSelector: vi.fn(),
     requestCaptureScreenshot: vi.fn(),
     ...overrides,
@@ -310,6 +310,40 @@ describe("OnboardingOverlay", () => {
     fireEvent.click(toggle);
     expect(updateSettings).toHaveBeenCalledWith({ diagnosticsEnabled: true });
     expect(toggle).toBeChecked();
+  });
+
+  it("Privacy: the toggle shows what main saved, so a failed write does not leave it lying", async () => {
+    mockElectronAPI({
+      checkPermissions: vi.fn().mockResolvedValue(granted),
+      getSettings: vi.fn().mockResolvedValue({
+        shortcuts: defaultShortcutsFor("darwin"),
+        diagnosticsEnabled: false,
+      }),
+      updateSettings: vi.fn().mockRejectedValue(new Error("ipc down")),
+    });
+    render(<OnboardingOverlay onClose={vi.fn()} />);
+    await toPrivacy();
+    const toggle = screen.getByRole("switch", { name: /share usage and crash reports/i });
+    await waitFor(() => expect(toggle).not.toBeChecked());
+    fireEvent.click(toggle);
+    // Main still holds Off, and the switch goes back to it.
+    await waitFor(() => expect(toggle).not.toBeChecked());
+  });
+
+  it("Privacy: the toggle settles on the value main returns", async () => {
+    mockElectronAPI({
+      checkPermissions: vi.fn().mockResolvedValue(granted),
+      getSettings: vi.fn().mockResolvedValue({
+        shortcuts: defaultShortcutsFor("darwin"),
+        diagnosticsEnabled: true,
+      }),
+      updateSettings: vi.fn().mockResolvedValue({ diagnosticsEnabled: true }),
+    });
+    render(<OnboardingOverlay onClose={vi.fn()} />);
+    await toPrivacy();
+    const toggle = screen.getByRole("switch", { name: /share usage and crash reports/i });
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggle).toBeChecked());
   });
 
   it("Privacy marks the notice as seen, so the step is not shown twice", async () => {

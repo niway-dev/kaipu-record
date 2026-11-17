@@ -10,9 +10,13 @@ export function useShareUsagePreference(): { enabled: boolean; setEnabled: (v: b
 
   useEffect(() => {
     let cancelled = false;
-    void window.electronAPI.getSettings().then((settings) => {
-      if (!cancelled) setEnabledState(settings.diagnosticsEnabled ?? true);
-    });
+    // A failed read keeps the default (on), which is also what main holds until the user turns it off.
+    void window.electronAPI
+      .getSettings()
+      .then((settings) => {
+        if (!cancelled) setEnabledState(settings.diagnosticsEnabled ?? true);
+      })
+      .catch(() => {});
     const stop = window.electronAPI.onSettingsChanged((settings) =>
       setEnabledState(settings.diagnosticsEnabled ?? true),
     );
@@ -22,9 +26,17 @@ export function useShareUsagePreference(): { enabled: boolean; setEnabled: (v: b
     };
   }, []);
 
+  // The switch moves at once, then settles on what main saved: this control decides whether data
+  // leaves the Mac, so a failed write must not leave it showing a value main does not hold.
   const setEnabled = useCallback((value: boolean) => {
     setEnabledState(value);
-    void window.electronAPI.updateSettings({ diagnosticsEnabled: value });
+    void window.electronAPI
+      .updateSettings({ diagnosticsEnabled: value })
+      .then((saved) => setEnabledState(saved.diagnosticsEnabled ?? true))
+      .catch(() =>
+        window.electronAPI.getSettings().then((s) => setEnabledState(s.diagnosticsEnabled ?? true)),
+      )
+      .catch(() => {});
   }, []);
 
   return { enabled, setEnabled };

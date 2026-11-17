@@ -30,8 +30,8 @@ is asked to rely on it.
   breaks), what never is (recordings, screen, files), and that with it off Kaipu still checks
   which features are on for this Mac. It never says "nothing is sent".
 - **What is sent, with it on:** `recording_started`, `screenshot_captured`,
-  `editor_speed_changed`, `library-detail-missing` (an opaque asset UUID and two counts, sent
-  when a library page cannot find its item) and `editor_opened` with
+  `editor_speed_changed`, `library-detail-missing` (an opaque asset UUID, the list size and whether
+  it came from a recording, sent when a library page cannot find its item) and `editor_opened` with
   `{ editor: "video" | "image" }` once per loaded editor session (the hook is
   `useEditorOpened`). Plus crash reports. Identity is the random per-install `deviceId`; there
   is no account, name or email. No call site sends keystrokes, pixels or file names, which is
@@ -52,14 +52,18 @@ is asked to rely on it.
   exception exits the app. Exceptions forwarded from secondary windows go through the main
   client, so they stop too.
 - **Personal paths are removed before sending.** `scrubPersonalPaths` (`src/shared/analytics.ts`)
-  replaces `/Users/<name>/…`, `/home/<name>/…`, `C:\Users\<name>\…` and `file://` forms, file
-  name included, with `<user-path>`. It runs in `before_send` in both SDKs, over every string
-  in the event, so a path in an exception message, a stack frame or a context value never
-  travels.
+  replaces `/Users/<name>/…`, `/home/<name>/…`, `/Volumes/…`, `/mnt/…`, `/media/…`, any Windows
+  drive path except `Windows`, `Program Files` and `ProgramData`, and `file://` forms, file name
+  included, with `<user-path>`. A path inside quotes goes to its closing quote, so a name such as
+  `Screen Recording (2).mov` or `Ana's Videos` goes whole. It runs in `before_send` in both SDKs,
+  over every string in the event, so a path in an exception message, a stack frame or a context
+  value never travels. A recordings folder outside those roots (say `/data/clips`) is not
+  recognised: the settings folder offers the home folder and volumes, which are covered.
 - **Onboarding**: a **Privacy** step sits between Shortcuts and You're set, with the approved
   copy and the toggle on. It informs and never blocks. Whoever finished onboarding before the
   step existed, or left the tour before reaching it, sees the same content once as a notice
-  over the app (`PrivacyNotice`); **Got it** or Esc dismisses it for good. The flag
+  over the app (`PrivacyNotice`); **Got it**, Esc or a click outside the card dismisses it for good
+  (a stray click counts: the notice informs and never blocks). The flag
   `kaipu.onboarding.privacySeen` is separate from the completion flag, which is what lets the
   two groups differ, and survives a replay of the tour from Settings.
 - **Windows installer**: `nsis.license` shows `build/installer-privacy-notice.txt` (English
