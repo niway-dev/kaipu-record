@@ -150,5 +150,10 @@ export const PASS_SLOTS = 8;
 export const THUMBNAIL_WIDTH = 160;
 export const THUMBNAIL_JPEG_QUALITY = 0.6;
 
-/** The decoder thumbnails use until the measurement says otherwise. */
-export const DEFAULT_DECODER: DecoderPreference = "software";
+/**
+ * The decoder thumbnails use (decision 15). Measured on the Mac mini, 2560x1440 H.264 at 60 fps,
+ * 62 thumbnails per request: hardware 1.05 s and 0.33 s of renderer CPU; software 1.87 s and
+ * 2.45 s of renderer CPU. Hardware costs the GPU process 0.2 s and a 186 ms start-up on the
+ * first frame of a file.
+ */
+export const DEFAULT_DECODER: DecoderPreference = "hardware";

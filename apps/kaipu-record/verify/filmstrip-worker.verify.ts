@@ -34,7 +34,7 @@ const TAKE_SMALL =
   process.env.KAIPU_PROBE_TAKE_SMALL ?? path.join(EVIDENCE, "take", "take-1080p.mp4");
 const ONE_KEY = process.env.KAIPU_PROBE_ONE_KEY ?? path.join(EVIDENCE, "one-keyframe-60s.mp4");
 /** The decoder the explore, AC13, AC5 and AC8 parts run with. */
-const PROBE_DECODER = (process.env.KAIPU_PROBE_DECODER ?? "software") as "software" | "hardware";
+const PROBE_DECODER = (process.env.KAIPU_PROBE_DECODER ?? "hardware") as "software" | "hardware";
 const OUT = process.env.KAIPU_PROBE_OUT ?? path.join(EVIDENCE, "results");
 const APP_ROOT = path.resolve(__dirname, "..");
 const WORKER_BUNDLE = path.join(APP_ROOT, "out", "renderer", "assets", "filmstrip-probe.js");
@@ -603,6 +603,20 @@ test("a worker reads the take by Range, and what it costs", async () => {
       failed: oneDone.failed,
       elapsedMs: round(oneDone.elapsedMs as number),
     };
+
+    // Is the memory the worker's? Terminate it and look again.
+    await waitFor(
+      page,
+      (all) => all.some((m) => m.type === "file" && m.event === "closed" && m.reason === "idle"),
+      30_000,
+      "idle close before terminate",
+    );
+    const beforeTerminate = await usage(s);
+    await page.evaluate(() =>
+      (window as unknown as { __probe: { worker: Worker } }).__probe.worker.terminate(),
+    );
+    await page.waitForTimeout(3000);
+    result.memoryTerminate = { before: beforeTerminate.byTypeMb, after: (await usage(s)).byTypeMb };
 
     await s.shot("done");
   } finally {

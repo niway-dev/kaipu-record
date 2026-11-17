@@ -6,6 +6,7 @@
  * rule here (AC8, AC13, AC14, one file open, cancel) is tested with fakes.
  */
 import {
+  DEFAULT_DECODER,
   FILE_IDLE_MS,
   MAX_REQUEST_SLOTS,
   PACE_MAX_FRAMES,
@@ -146,7 +147,7 @@ export class FilmstripEngine {
     this.clock = options.clock ?? realClock;
     this.pacer = new FramePacer(this.clock);
     this.idleMs = options.idleMs ?? FILE_IDLE_MS;
-    this.decoder = options.decoder ?? "software";
+    this.decoder = options.decoder ?? DEFAULT_DECODER;
   }
 
   /** Handles one message. Never throws: a failure is reported as an `error` message. */

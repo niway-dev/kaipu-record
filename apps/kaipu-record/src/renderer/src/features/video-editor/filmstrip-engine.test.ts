@@ -9,6 +9,7 @@ import {
 } from "./filmstrip-engine";
 import type { Slot } from "./filmstrip-frames";
 import {
+  DEFAULT_DECODER,
   FILE_IDLE_MS,
   PASS_SLOTS,
   MAX_REQUEST_SLOTS,
@@ -181,6 +182,7 @@ function setup(
   const engine = new FilmstripEngine({
     opener,
     clock,
+    decoder: "software",
     idleMs: options.idleMs,
     post: (message) => {
       posted.push(message);
@@ -531,6 +533,15 @@ describe("AC13 and AC5: one file open, kept for 10 s, then closed", () => {
     expect(t.opener.closes).toEqual([A]);
     await t.run(request([slot(1)], { url: A }));
     expect(t.opener.opens.map((o) => o.decoder)).toEqual(["software", "hardware"]);
+  });
+
+  it("an engine told nothing about the decoder uses the measured default", async () => {
+    const opener = new FakeOpener();
+    const engine = new FilmstripEngine({ opener, post: () => undefined });
+    engine.handle(request([slot(0)], { url: A }));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(opener.opens.map((o) => o.decoder)).toEqual([DEFAULT_DECODER]);
+    engine.dispose();
   });
 
   it("configuring the decoder it already has does nothing", async () => {
