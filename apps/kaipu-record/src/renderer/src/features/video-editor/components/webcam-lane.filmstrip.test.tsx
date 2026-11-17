@@ -98,3 +98,25 @@ describe("WebcamLane filmstrip (NIW2-844, flag zoom-filmstrip)", () => {
     }
   });
 });
+
+it("mounts worker-backed webcam tiles without any legacy strip", async () => {
+  const props = {
+    layout,
+    segments: [],
+    thumbnails: [],
+    recordingStrips: new Map(),
+    selectedId: null,
+    onSelect: vi.fn(),
+    onEdgeDrag: vi.fn(),
+  };
+  const { container, rerender } = render(
+    <WebcamLane
+      {...props}
+      filmstripFiles={new Map([[null, { fileKey: WEBCAM_KEY, companionOffset: COMPANION_OFFSET }]])}
+    />,
+  );
+  await storeFrames(0, 20);
+  expect(decoded(container).length).toBeGreaterThan(0);
+  rerender(<WebcamLane {...props} />);
+  expect(container.querySelector("[data-webcam-filmstrip]")).toBeNull();
+});

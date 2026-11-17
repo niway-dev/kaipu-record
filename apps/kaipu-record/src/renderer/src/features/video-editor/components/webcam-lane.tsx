@@ -264,7 +264,7 @@ export const WebcamLane = memo(function WebcamLane({
   const shown = view && scale > 0 ? visibleRange(view) : { start: 0, end: duration };
   const range = covered ?? ALL_SOURCE;
   const filmstrip =
-    thumbnails.length > 0 || (recordingStrips?.size ?? 0) > 0 ? (
+    thumbnails.length > 0 || (recordingStrips?.size ?? 0) > 0 || (filmstripFiles?.size ?? 0) > 0 ? (
       // Decoration only: the segments above carry every interaction and accessible name.
       <div className={styles.filmstrip} data-webcam-filmstrip aria-hidden="true">
         {layout.map((entry) => {
