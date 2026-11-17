@@ -16,6 +16,19 @@ const TAKE = process.env.TAKE;
 const PROBE = process.env.PROBE_BUNDLE;
 const DRIVER = process.env.DRIVER_BUNDLE;
 const CHECKPOINTS = (process.env.CHECKPOINTS || "1,3,50,150").split(",").map(Number);
+const TIMEOUT_MS = Number(process.env.TIMEOUT_MS || 30 * 60 * 1000);
+
+// A hung driver or a thrown error must end the run with a code, never hang the shell script.
+const fail = (error) => {
+  // Not the `[mode/decoder]` prefix: run.sh keeps only those lines in the results file.
+  console.error(`FAILED (${MODE}/${DECODER}):`, error);
+  app.exit(1);
+};
+
+// Armed first, so a bad take path, a busy port or a hung driver all end the run.
+setTimeout(() => fail(new Error(`no result after ${TIMEOUT_MS} ms`)), TIMEOUT_MS).unref();
+process.on("uncaughtException", fail);
+
 const size = fs.statSync(TAKE).size;
 
 const server = http.createServer((req, res) => {
@@ -59,17 +72,10 @@ async function sample(label) {
   console.log(`[${MODE}/${DECODER}] ${label}: ${parts.join(" ")}`);
 }
 
-const TIMEOUT_MS = Number(process.env.TIMEOUT_MS || 30 * 60 * 1000);
-
-// A hung driver or a thrown error must end the run with a code, never hang the shell script.
-const fail = (error) => {
-  console.error(`[${MODE}/${DECODER}] FAILED:`, error);
-  app.exit(1);
-};
+server.on("error", fail);
 
 app.whenReady().then(() =>
   server.listen(process.env.PORT || 8766, "127.0.0.1", async () => {
-    setTimeout(() => fail(new Error(`no result after ${TIMEOUT_MS} ms`)), TIMEOUT_MS).unref();
     try {
       const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
       await win.loadURL(`http://127.0.0.1:${process.env.PORT || 8766}/page.html`);
