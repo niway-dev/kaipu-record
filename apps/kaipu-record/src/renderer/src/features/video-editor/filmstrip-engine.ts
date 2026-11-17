@@ -8,6 +8,7 @@
 import {
   DEFAULT_DECODER,
   FILE_IDLE_MS,
+  MAX_FAILED_IN_A_ROW,
   MAX_REQUEST_SLOTS,
   PACE_MAX_FRAMES,
   PACE_WINDOW_MS,
@@ -255,20 +256,40 @@ export class FilmstripEngine {
       }
     }
 
-    for (const pass of batchIntoPasses(groupByKeyframe(planned), PASS_SLOTS)) {
+    // Single-slot retries that failed one after another: the cause is then the decoder or the
+    // file, not a slot, and trying the rest only pays one more decoder start-up each.
+    let failedInARow = 0;
+    const passes = batchIntoPasses(groupByKeyframe(planned), PASS_SLOTS);
+    for (const [passIndex, pass] of passes.entries()) {
       if (job.cancelled) break;
+      if (failedInARow >= MAX_FAILED_IN_A_ROW) {
+        counts.failed += passes.slice(passIndex).reduce((n, p) => n + p.items.length, 0);
+        break;
+      }
+      const postedBefore = counts.frames;
       const left = await this.decodePass(job, file, pass, counts);
+      if (counts.frames > postedBefore) failedInARow = 0;
       // A pass that threw keeps what it posted; the slots after the failure are tried one by one,
       // so one bad slot costs that slot and not the rest of the pass.
-      for (const item of left) {
+      for (const [position, item] of left.entries()) {
         if (job.cancelled) break;
+        if (failedInARow >= MAX_FAILED_IN_A_ROW) {
+          counts.failed += left.length - position;
+          break;
+        }
+        const postedAlone = counts.frames;
         const rest = await this.decodePass(
           job,
           file,
           { keyTimestamp: item.keyTimestamp, items: [item] },
           counts,
         );
-        if (rest.length > 0) counts.failed += 1;
+        if (rest.length > 0) {
+          counts.failed += 1;
+          failedInARow += 1;
+        } else if (counts.frames > postedAlone) {
+          failedInARow = 0;
+        }
       }
     }
     finish(opened, openMs);
@@ -282,7 +303,7 @@ export class FilmstripEngine {
     job: Job,
     file: FilmstripFile,
     pass: DecodeGroup,
-    counts: { frames: number },
+    counts: { frames: number; skippedNoFrame: number },
   ): Promise<PlannedSlot[]> {
     const { request } = job;
     const posted = new Set<PlannedSlot>();
@@ -291,7 +312,12 @@ export class FilmstripEngine {
       for (;;) {
         if (job.cancelled) return [];
         const next = await generator.next();
-        if (next.done) return [];
+        if (next.done) {
+          // The decoder had no frame for these (it returns nothing for a timestamp outside the
+          // track): counted, so frames + skipped + failed adds up to the slots planned.
+          counts.skippedNoFrame += pass.items.length - posted.size;
+          return [];
+        }
         if (job.cancelled) return [];
         await this.pacer.acquire();
         if (job.cancelled) return [];

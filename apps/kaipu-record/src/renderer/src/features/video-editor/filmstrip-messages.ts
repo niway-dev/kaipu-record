@@ -129,6 +129,9 @@ export const MAX_REQUEST_SLOTS = 192;
 /** An exact decode above this many packets is skipped (AC8, decision 4). */
 export const MAX_EXACT_PACKETS = 300;
 
+/** After this many single-slot retries fail in a row, a request gives up on its remaining slots. */
+export const MAX_FAILED_IN_A_ROW = 3;
+
 /** The worker closes its file after this long without a request (AC13, decision 12). */
 export const FILE_IDLE_MS = 10_000;
 

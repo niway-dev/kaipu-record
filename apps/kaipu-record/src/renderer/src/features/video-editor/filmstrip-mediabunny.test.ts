@@ -84,12 +84,14 @@ describe("the packet index on a real container with a keyframe every 2 s", () =>
 });
 
 describe("AC8: a file with a single keyframe", () => {
-  it("never plans an exact decode of more than 300 packets, and a tile 301 packets away is skipped", async () => {
+  it("plans a slot a few dozen packets from the keyframe, and skips one far past the cap", async () => {
     const index = await indexOf("filmstrip-one-keyframe.mp4");
-    // Packet 300 from the keyframe is at about 10 s (30 fps): a slot there needs ~300 packets.
+    // 30 fps: a slot at 5 s is about packet 150 from the one keyframe, under the cap of 300.
     const near = (await planSlot(index, slot(2, 2.5))) as PlannedSlot;
     expect(near.kind).toBe("plan");
-    const far = await planSlot(index, slot(11, 11.5)); // ~ packet 330 from the one keyframe
+    // A slot at 11 s is about packet 330. The exact boundary (300 passes, 301 does not) is pinned
+    // on a fake index in filmstrip-plan.test.ts; this one proves it on a real container.
+    const far = await planSlot(index, slot(11, 11.5));
     expect(far).toEqual({ kind: "skip", reason: "over-cap" });
   });
 

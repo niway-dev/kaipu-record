@@ -1,7 +1,8 @@
 /**
  * Probe only (NIW2-844 layer 2): the filmstrip worker plus a `bench` message that times the two
- * ways to decode a set of slots on one open file: one decoder pass per slot (what the engine does
- * today) and a single forward pass over all of them. Built with `bun build` by
+ * ways to decode a set of slots on one open file: one decoder pass per keyframe group (how the
+ * engine worked before it batched slots into passes of `PASS_SLOTS`) and a single forward pass
+ * over all of them. Built with `bun build` by
  * `verify/filmstrip-worker.verify.ts`; never shipped.
  */
 import "./fetch-patch";

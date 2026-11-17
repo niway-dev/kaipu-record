@@ -9,7 +9,8 @@ import { startScenario } from "./helpers";
 
 /*
  * Real-app probe and measurements for NIW2-844 layer 2 (the filmstrip worker). Run on the Mac
- * mini only, against the owner's 54-minute 2560x1440 take (about 10 GB, moov at the END).
+ * mini only, against the owner's 54-minute 2560x1440 take (about 10 GB; its moov box is at the START)
+ * and a real recording whose moov box is at the END (the 1080p take).
  *
  * 1. PROBE: a dedicated worker opens the take through the media protocol URL
  *    (`kaipu-media://recording/<id>`) and the scenario records every Range request the worker
@@ -103,7 +104,9 @@ async function waitFor(
   const start = Date.now();
   for (;;) {
     const all = await messages(page);
-    const error = all.find((m) => m.type === "worker-error" || m.type === "bench-error");
+    const error = all.find(
+      (m) => m.type === "worker-error" || m.type === "bench-error" || m.type === "error",
+    );
     if (error) throw new Error(`${label}: ${JSON.stringify(error)}`);
     if (predicate(all)) return all;
     if (Date.now() - start > timeoutMs) {
@@ -163,7 +166,7 @@ interface Usage {
   cpuByType: Record<string, number>;
 }
 
-/** Cumulative CPU and memory of every process the app owns that is not the main one. */
+/** Cumulative CPU and memory of every process the app owns, the main one (`Browser`) included. */
 async function usage(s: { app: import("@playwright/test").ElectronApplication }): Promise<Usage> {
   return s.app.evaluate(({ app }) => {
     let cpu = 0;
@@ -468,6 +471,10 @@ test("a worker reads the take by Range, and what it costs", async () => {
 
     // 3b. Explore: 25 requests over the file, then memory with the file still open, then idle.
     const memorySamples: unknown[] = [];
+    // The page keeps every message it gets; clear it after each request so the memory measured
+    // is the app's and not the probe's log. The file events are kept apart for AC13.
+    const exploreFileEvents: Message[] = [];
+    let lastFrameWorkerTime = 0;
     const exploreStart = Date.now();
     for (let i = 0; i < 25; i++) {
       const centre = (duration * (i + 1)) / 27;
@@ -480,12 +487,16 @@ test("a worker reads the take by Range, and what it costs", async () => {
         playhead: centre,
         direction: i % 2 === 0 ? 1 : -1,
       });
-      await waitFor(
+      const got = await waitFor(
         page,
         (all) => all.some((m) => m.type === "done" && m.requestId === 100 + i),
         600_000,
         `explore ${i}`,
       );
+      exploreFileEvents.push(...got.filter((m) => m.type === "file"));
+      const frameTimes = got.filter((m) => m.type === "frame").map((m) => m._workerTime as number);
+      if (frameTimes.length > 0) lastFrameWorkerTime = Math.max(...frameTimes);
+      await clearMessages(page);
       if (i % 6 === 5) memorySamples.push({ afterRequests: i + 1, ...(await usage(s)) });
     }
     const memoryOpen = await usage(s);
@@ -497,27 +508,31 @@ test("a worker reads the take by Range, and what it costs", async () => {
       memorySamples,
     };
 
-    // AC13: the file is still open (one `opened`, no `closed`) and closes by itself after 10 s.
-    const sinceOpen = (await messages(page)).filter((m) => m.type === "file");
-    const idleStart = Date.now();
-    await waitFor(
-      page,
-      (all) => all.some((m) => m.type === "file" && m.event === "closed" && m.reason === "idle"),
-      30_000,
-      "idle close",
-    );
-    const idleMs = Date.now() - idleStart;
-    const allFile = (await messages(page)).filter((m) => m.type === "file");
-    const opened = allFile.filter((m) => m.event === "opened").length;
+    // AC13: the file is still open (one `opened`, no `closed`) and closes by itself 10 s after
+    // the last frame, measured on the worker's own clock.
+    const closedMessage = (
+      await waitFor(
+        page,
+        (all) => all.some((m) => m.type === "file" && m.event === "closed" && m.reason === "idle"),
+        30_000,
+        "idle close",
+      )
+    ).find((m) => m.type === "file" && m.event === "closed" && m.reason === "idle")!;
+    const idleMs = (closedMessage._workerTime as number) - lastFrameWorkerTime;
     await page.waitForTimeout(1500);
     const memoryClosed = await usage(s);
     result.ac13 = {
-      openedEventsDuring26Requests: sinceOpen.filter((m) => m.event === "opened").length,
-      closedEventsBeforeIdle: sinceOpen.filter((m) => m.event === "closed").length,
-      idleCloseAfterLastFrameMs: idleMs,
-      totalOpened: opened,
+      openedEventsDuring25Requests: exploreFileEvents.filter((m) => m.event === "opened").length,
+      closedEventsBeforeIdle: exploreFileEvents.filter((m) => m.event === "closed").length,
+      idleCloseAfterLastFrameMs: round(idleMs, 0),
       memoryAfterIdleClose: memoryClosed,
     };
+    expect(result.ac13).toMatchObject({
+      openedEventsDuring25Requests: 1,
+      closedEventsBeforeIdle: 0,
+    });
+    expect(idleMs, "the idle close came before 10 s").toBeGreaterThanOrEqual(10_000);
+    expect(idleMs, "the idle close came long after 10 s").toBeLessThan(12_000);
 
     // AC5 (one open file): request the small take while the big one is open, then the big one.
     await clearMessages(page);
@@ -537,13 +552,20 @@ test("a worker reads the take by Range, and what it costs", async () => {
       "ac5 first",
     );
     const smallUrl = await mediaUrl(page, "take-small");
+    const smallDuration = smallInfo.duration as number;
+    const smallSlots = planSlots({
+      duration: smallDuration,
+      visible: { start: smallDuration / 2 - 81, end: smallDuration / 2 + 81 },
+      tileSpan: 163 / 17,
+      frames: [],
+    }).slice(0, 6);
     await post(page, {
       type: "request",
       requestId: 501,
       fileKey: "take-small",
       url: smallUrl,
-      slots: slotsAt(600, 163).slice(0, 6),
-      playhead: 600,
+      slots: smallSlots,
+      playhead: smallDuration / 2,
       direction: 0,
     });
     await waitFor(
@@ -562,6 +584,8 @@ test("a worker reads the take by Range, and what it costs", async () => {
       maxOpen = Math.max(maxOpen, open);
     }
     result.ac5 = { fileEvents, maxFilesOpenAtOnce: maxOpen };
+    expect(maxOpen, "more than one file was open at once").toBe(1);
+    expect(fileEvents).toEqual(["opened", "closed:other-file", "opened"]);
 
     // ---------------------------------------------------------------- AC8: one keyframe, 60 s
     await clearMessages(page);
@@ -618,11 +642,22 @@ test("a worker reads the take by Range, and what it costs", async () => {
     await page.waitForTimeout(3000);
     result.memoryTerminate = { before: beforeTerminate.byTypeMb, after: (await usage(s)).byTypeMb };
 
+    // AC8: a file with one keyframe is never decoded past the packet cap: the far slots are skipped.
+    expect(result.ac8).toMatchObject({ failed: 0 });
+    expect((result.ac8 as { skippedOverCap: number }).skippedOverCap).toBeGreaterThan(0);
+    // AC14: never more than 60 frames in any 1 s window, with either decoder.
+    const pace = result.ac14 as {
+      limit: number;
+      maxFramesInAny1sWindowSoftware: number;
+      maxFramesInAny1sWindowHardware: number;
+    };
+    expect(pace.maxFramesInAny1sWindowSoftware).toBeLessThanOrEqual(pace.limit);
+    expect(pace.maxFramesInAny1sWindowHardware).toBeLessThanOrEqual(pace.limit);
+
     await s.shot("done");
   } finally {
     await writeFile(path.join(OUT, "result.json"), JSON.stringify(result, null, 2));
     console.log(`[verify] ${NAME}: ${JSON.stringify(result)}`);
     await s.finish();
   }
-  expect(result.ac5).toBeTruthy();
 });

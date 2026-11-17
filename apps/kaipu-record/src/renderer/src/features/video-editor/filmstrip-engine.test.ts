@@ -11,6 +11,7 @@ import type { Slot } from "./filmstrip-frames";
 import {
   DEFAULT_DECODER,
   FILE_IDLE_MS,
+  MAX_FAILED_IN_A_ROW,
   PASS_SLOTS,
   MAX_REQUEST_SLOTS,
   type DecoderPreference,
@@ -92,6 +93,8 @@ class FakeClock implements Clock {
 interface FakeFileOptions {
   /** What the planner says per slot; default: the key packet at the slot start. */
   plan?: (slot: Slot) => PlannedSlot | SkippedSlot;
+  /** Slots the decoder has no frame for: it yields nothing for them, as mediabunny does. */
+  noFrameFor?: (slot: Slot) => boolean;
 }
 
 class FakeOpener implements FilmstripFileOpener {
@@ -132,6 +135,7 @@ class FakeOpener implements FilmstripFileOpener {
         onPass(group);
         for (const item of group.items) {
           onDecode(item.slot);
+          if (options.noFrameFor?.(item.slot)) continue;
           const decoded: DecodedSlot = {
             item,
             timestamp: item.targetTimestamp,
@@ -275,15 +279,22 @@ describe("the request queue: decision 14", () => {
 
   it("posts the margin last, and only the side the view moves toward", async () => {
     const t = setup();
+    // 16 visible slots (two passes), a margin of two slots before them and two after; the view
+    // moves backwards. The margin is earlier in time than the view, so only its rank puts it last.
     await t.run(
-      request([slot(0, 2, false), slot(1), slot(2), slot(3, 2, false)], {
-        playhead: 3,
-        direction: 1,
-      }),
+      request(
+        [
+          ...[0, 1].map((n) => slot(n, 2, false)),
+          ...Array.from({ length: 16 }, (_, n) => slot(n + 2)),
+          ...[18, 19].map((n) => slot(n, 2, false)),
+        ],
+        { playhead: 20, direction: -1 },
+      ),
     );
     const order = t.frames().map((f) => f.slotIndex);
-    expect(order.slice(0, 2).sort()).toEqual([1, 2]);
-    expect(order.slice(2)).toEqual([3]);
+    expect(order).toHaveLength(18);
+    expect(order.slice(0, 16).every((n) => n >= 2 && n <= 17)).toBe(true);
+    expect(order.slice(16)).toEqual([0, 1]);
   });
 
   it("keeps the frame's true timestamp, not the slot's", async () => {
@@ -437,8 +448,18 @@ describe("AC7: a new request cancels the job in flight", () => {
     t.engine.handle(c);
     await t.clock.until(t.engine.idle());
     expect(t.opener.opens.map((o) => o.url)).toEqual(["kaipu-media://recording/one"]);
+    expect(t.done(a.requestId)).toMatchObject({
+      outcome: "cancelled",
+      frames: 0,
+      openedFile: false,
+    });
     expect(t.done(b.requestId)).toMatchObject({ outcome: "cancelled", frames: 0 });
-    expect(t.done(c.requestId)).toMatchObject({ outcome: "complete", frames: 1 });
+    // `c` is the only request that touched the file: it opened it, so `a` (same URL) did not.
+    expect(t.done(c.requestId)).toMatchObject({
+      outcome: "complete",
+      frames: 1,
+      openedFile: true,
+    });
   });
 });
 
@@ -516,7 +537,25 @@ describe("AC13 and AC5: one file open, kept for 10 s, then closed", () => {
     expect(order).toEqual([`opened:${A}`, `closed:${A}`, `opened:${B}`]);
   });
 
-  it("closes the file now on a close message, and cancels the running job", async () => {
+  it("a close message sent while a request runs cancels it and closes the file", async () => {
+    const t = setup();
+    const message = request(
+      Array.from({ length: 12 }, (_, n) => slot(n)),
+      { url: A },
+    );
+    // The editor needs the decoder while the third slot is being decoded.
+    t.opener.onDecode = (s) => {
+      if (s.index === 2) t.engine.handle({ type: "close" });
+    };
+    await t.run(message);
+    await t.clock.advance(0);
+    expect(t.done(message.requestId)).toMatchObject({ outcome: "cancelled" });
+    expect(t.frames().length).toBeLessThan(12);
+    expect(t.opener.closes).toEqual([A]);
+    expect(t.posted).toContainEqual({ type: "file", event: "closed", url: A, reason: "close" });
+  });
+
+  it("closes the file now on a close message when nothing is running", async () => {
     const t = setup();
     await t.run(request([slot(0)], { url: A }));
     t.engine.handle({ type: "close" });
@@ -567,6 +606,35 @@ describe("failures", () => {
     const second = request([slot(0)]);
     await t.run(second);
     expect(t.done(second.requestId)).toMatchObject({ outcome: "complete", frames: 1 });
+  });
+
+  it("counts a slot the decoder has no frame for, so the numbers add up", async () => {
+    const t = setup();
+    t.opener.fileOptions.noFrameFor = (s) => s.index === 1;
+    const message = request([slot(0), slot(1), slot(2)]);
+    await t.run(message);
+    expect(t.frames().map((f) => f.slotIndex)).toEqual([0, 2]);
+    expect(t.done(message.requestId)).toMatchObject({
+      frames: 2,
+      skippedNoFrame: 1,
+      skippedOverCap: 0,
+      failed: 0,
+    });
+  });
+
+  it("gives up on a request whose decodes keep failing, instead of retrying every slot", async () => {
+    const t = setup();
+    const passes: number[][] = [];
+    t.opener.onPass = (g) => passes.push(g.items.map((i) => i.slot.index));
+    t.opener.onDecode = () => {
+      throw new Error("the decoder cannot start");
+    };
+    const message = request(Array.from({ length: 24 }, (_, n) => slot(n)));
+    await t.run(message);
+    expect(t.frames()).toHaveLength(0);
+    expect(t.done(message.requestId)).toMatchObject({ outcome: "complete", frames: 0, failed: 24 });
+    // One pass of 8 plus MAX_FAILED_IN_A_ROW single-slot retries; nothing after that is tried.
+    expect(passes).toHaveLength(1 + MAX_FAILED_IN_A_ROW);
   });
 
   it("a decode that throws costs that slot only, not the rest of its pass", async () => {
