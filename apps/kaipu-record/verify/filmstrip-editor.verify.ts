@@ -34,6 +34,14 @@ const TAKE = process.env.KAIPU_VERIFY_TAKE ?? path.join(EVIDENCE, "take", "take-
 const OUT = process.env.KAIPU_VERIFY_OUT ?? path.join(EVIDENCE, "layer-3");
 const ASSET_ID = "e2e0a5e7-0000-4000-8000-00000000d844";
 const NAME = `filmstrip-editor-${SIDE}`;
+/** Only the `on` side has frames of its own time to wait for; the others read the row as it is. */
+const WAIT_MS = SIDE === "on" ? 30_000 : 1_000;
+
+declare global {
+  interface Window {
+    lanesRect(body: HTMLElement): DOMRect;
+  }
+}
 
 const TILES = "[data-ui-area='editorVideo.timeline'] img";
 
@@ -56,9 +64,11 @@ interface TileReading {
 
 async function readTiles(page: Page): Promise<TileReading> {
   return page.evaluate((selector) => {
+    const body = document.querySelector<HTMLElement>('[data-testid="timeline-scroller"]')!;
+    const view = window.lanesRect(body);
     const imgs = [...document.querySelectorAll<HTMLImageElement>(selector)].filter((img) => {
       const r = img.getBoundingClientRect();
-      return r.width > 0 && r.right > 0 && r.left < window.innerWidth;
+      return r.width > 0 && r.right > view.left && r.left < view.right;
     });
     return {
       count: imgs.length,
@@ -74,9 +84,12 @@ async function msUntilAllOwn(page: Page, from: number, timeoutMs: number): Promi
     ({ selector, from, timeoutMs }) =>
       new Promise<number | null>((resolve) => {
         const check = (): void => {
+          const view = window.lanesRect(
+            document.querySelector<HTMLElement>('[data-testid="timeline-scroller"]')!,
+          );
           const imgs = [...document.querySelectorAll<HTMLImageElement>(selector)].filter((img) => {
             const r = img.getBoundingClientRect();
-            return r.width > 0 && r.right > 0 && r.left < window.innerWidth;
+            return r.width > 0 && r.right > view.left && r.left < view.right;
           });
           if (imgs.length > 0 && imgs.every((i) => i.dataset.filmstripOwn === "true")) {
             resolve(Math.round(performance.now() - from));
@@ -94,8 +107,54 @@ async function msUntilAllOwn(page: Page, from: number, timeoutMs: number): Promi
   );
 }
 
-const minted = (page: Page): Promise<number> =>
-  page.evaluate(() => (window as unknown as { __minted: number }).__minted);
+/** Waits until nothing has been minted for `quietMs`: no decode is still delivering frames. */
+async function settled(page: Page, quietMs = 800): Promise<void> {
+  await page.waitForFunction(
+    (quiet) => {
+      const times = (window as unknown as { __mintTimes: number[] }).__mintTimes;
+      return times.length === 0 || performance.now() - times[times.length - 1] > quiet;
+    },
+    quietMs,
+    { timeout: 60_000, polling: 100 },
+  );
+}
+
+/** Mint times in `[from, to]`, as offsets from `from` (ms). */
+async function mintsBetween(page: Page, from: number, to: number): Promise<number[]> {
+  const times = await page.evaluate(
+    () => (window as unknown as { __mintTimes: number[] }).__mintTimes,
+  );
+  return times.filter((t) => t >= from && t <= to).map((t) => Math.round(t - from));
+}
+
+/** The visible tiles that do not read a frame of their own time, with where they sit. */
+async function notOwnTiles(page: Page): Promise<Record<string, unknown>[]> {
+  return page.evaluate((selector) => {
+    const body = document.querySelector<HTMLElement>('[data-testid="timeline-scroller"]')!;
+    const view = window.lanesRect(body);
+    const lane = document
+      .querySelector<HTMLElement>("[data-ui-area='editorVideo.timeline'] img")
+      ?.parentElement?.getBoundingClientRect();
+    return [...document.querySelectorAll<HTMLImageElement>(selector)]
+      .filter((img) => {
+        const r = img.getBoundingClientRect();
+        return r.width > 0 && r.right > view.left && r.left < view.right;
+      })
+      .filter((img) => img.dataset.filmstripOwn !== "true")
+      .map((img) => {
+        const r = img.getBoundingClientRect();
+        return {
+          leftInScroller: Math.round(r.left - view.left),
+          rightInScroller: Math.round(r.right - view.left),
+          widthPx: Math.round(r.width),
+          scrollerWidth: Math.round(view.width),
+          laneLeftInScroller: lane ? Math.round(lane.left - view.left) : null,
+          span: img.dataset.filmstripSpan ?? null,
+          frame: img.dataset.filmstripFrame ?? null,
+        };
+      });
+  }, TILES);
+}
 
 /** Outline every tile (green: its own frame, red: not), for the marked shots. */
 async function markTiles(page: Page, on: boolean): Promise<void> {
@@ -140,11 +199,20 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
   const result: Record<string, unknown> = { side: SIDE, take: TAKE, durationSeconds: duration };
   try {
     await page.addInitScript(() => {
-      const w = window as unknown as { __minted: number };
+      // The part of the scroller that shows tiles: right of the label column.
+      (window as unknown as { lanesRect: (body: HTMLElement) => DOMRect }).lanesRect = (body) => {
+        const rect = body.getBoundingClientRect();
+        const corner = document.querySelector<HTMLElement>('[data-testid="lane-corner"]');
+        const left = corner ? corner.getBoundingClientRect().right : rect.left;
+        return new DOMRect(left, rect.top, rect.right - left, rect.height);
+      };
+      const w = window as unknown as { __minted: number; __mintTimes: number[] };
       w.__minted = 0;
+      w.__mintTimes = [];
       const original = URL.createObjectURL.bind(URL);
       URL.createObjectURL = (obj: Blob | MediaSource) => {
         w.__minted += 1;
+        w.__mintTimes.push(performance.now());
         return original(obj);
       };
     });
@@ -182,8 +250,12 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
       () => document.querySelector("[data-ui-area='editorVideo.transport']")?.textContent ?? "",
     );
     result.zoomLabel = /2000\s*%|2\s?000\s*%/.exec(zoomed)?.[0] ?? zoomed.slice(0, 80);
-    const restZoom = await msUntilAllOwn(page, restFrom, 30_000);
-    result.ac1ac2Zoom = { msUntilAllOwn: restZoom, tiles: await readTiles(page) };
+    const restZoom = await msUntilAllOwn(page, restFrom, WAIT_MS);
+    result.ac1ac2Zoom = {
+      msUntilAllOwn: restZoom,
+      tiles: await readTiles(page),
+      notOwn: await notOwnTiles(page),
+    };
     await s.shot("zoom-2000");
     await markTiles(page, true);
     await s.shot("zoom-2000-marked");
@@ -192,89 +264,127 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
     // ---- AC1/AC2 again at three places in the take, each one a jump the view then rests on
     const scroller = page.getByTestId("timeline-scroller");
     const jumps: Record<string, unknown>[] = [];
-    for (const fraction of [0.5, 0.9, 0.1]) {
+    for (const fraction of [0.25, 0.75, 0.97, 0.03]) {
       await scroller.evaluate(
         (el, f) => (el.scrollLeft = (el.scrollWidth - el.clientWidth) * f),
         fraction,
       );
       const from = await page.evaluate(() => performance.now());
-      const ms = await msUntilAllOwn(page, from, 30_000);
-      jumps.push({ fraction, msUntilAllOwn: ms, tiles: await readTiles(page) });
-      if (fraction === 0.5) {
-        await s.shot("jump-50");
+      const ms = await msUntilAllOwn(page, from, WAIT_MS);
+      const offsets = await mintsBetween(page, from, from + 5_000);
+      jumps.push({
+        fraction,
+        msUntilAllOwn: ms,
+        framesMinted: offsets.length,
+        firstFrameAtMs: offsets[0] ?? null,
+        lastFrameAtMs: offsets[offsets.length - 1] ?? null,
+        tiles: await readTiles(page),
+        notOwn: await notOwnTiles(page),
+      });
+      if (fraction === 0.25) {
+        await s.shot("jump-25");
         await markTiles(page, true);
-        await s.shot("jump-50-marked");
+        await s.shot("jump-25-marked");
         await markTiles(page, false);
       }
     }
     result.ac1ac2Jumps = jumps;
 
-    // ---- AC7: a scroll step every 60 ms mints no image while it lasts
+    // ---- AC7: a scroll step every 60 ms (under the 120 ms rest) starts no decode while it lasts
     await scroller.evaluate((el) => (el.scrollLeft = (el.scrollWidth - el.clientWidth) * 0.3));
-    await msUntilAllOwn(page, await page.evaluate(() => performance.now()), 30_000);
-    const mintedBeforeScroll = await minted(page);
-    const scrollStart = await page.evaluate(() => performance.now());
-    for (let i = 0; i < 25; i++) {
-      await scroller.evaluate((el) => (el.scrollLeft += 400));
-      await page.waitForTimeout(60);
-    }
-    const mintedAfterScroll = await minted(page);
-    const scrollEnd = await page.evaluate(() => performance.now());
-    const restAfterScroll = await msUntilAllOwn(page, scrollEnd, 30_000);
+    await msUntilAllOwn(page, await page.evaluate(() => performance.now()), WAIT_MS);
+    await settled(page);
+    const scrollRun = await page.evaluate(
+      () =>
+        new Promise<{ start: number; end: number; maxGapMs: number }>((resolve) => {
+          const body = document.querySelector<HTMLElement>('[data-testid="timeline-scroller"]')!;
+          const start = performance.now();
+          let last = start;
+          let maxGap = 0;
+          let i = 0;
+          const timer = setInterval(() => {
+            const now = performance.now();
+            maxGap = Math.max(maxGap, now - last);
+            last = now;
+            body.scrollLeft += 400;
+            i += 1;
+            if (i >= 25) {
+              clearInterval(timer);
+              resolve({ start, end: performance.now(), maxGapMs: Math.round(maxGap) });
+            }
+          }, 60);
+        }),
+    );
+    const mintTimes = await page.evaluate(
+      () => (window as unknown as { __mintTimes: number[] }).__mintTimes,
+    );
+    const during = mintTimes.filter((t) => t >= scrollRun.start && t <= scrollRun.end);
+    const restAfterScroll = await msUntilAllOwn(page, scrollRun.end, WAIT_MS);
     result.ac7 = {
-      scrollMs: Math.round(scrollEnd - scrollStart),
+      scrollMs: Math.round(scrollRun.end - scrollRun.start),
       stepMs: 60,
-      mintedDuringScroll: mintedAfterScroll - mintedBeforeScroll,
+      maxGapBetweenStepsMs: scrollRun.maxGapMs,
+      mintedDuringScroll: during.length,
+      // A frame already in flight when the first step cancelled its request still arrives.
+      mintedAfterFirstStepsMsOffsets: during.map((t) => Math.round(t - scrollRun.start)),
       msUntilAllOwnAfterRest: restAfterScroll,
     };
 
-    // ---- AC12: no tile ever shows an image that is not decoded
-    const swaps = await page.evaluate(
-      ({ selector }) =>
-        new Promise<{ srcChanges: number; notDecoded: number }>((resolve) => {
-          let srcChanges = 0;
-          let notDecoded = 0;
-          const observer = new MutationObserver((records) => {
-            for (const r of records) {
-              if (r.attributeName !== "src") continue;
-              srcChanges += 1;
-              const img = r.target as HTMLImageElement;
-              if (!(img.complete && img.naturalWidth > 0)) {
-                // A src change is painted on the next frame; give it that frame to decode.
-                requestAnimationFrame(() => {
-                  if (!(img.complete && img.naturalWidth > 0)) notDecoded += 1;
-                });
+    // ---- AC12: a tile that showed an image never goes blank while the view moves and zooms
+    result.ac12 = await page.evaluate(
+      () =>
+        new Promise<{ samples: number; srcChanges: number; blankTileSamples: number }>(
+          (resolve) => {
+            const root = document.querySelector("[data-ui-area='editorVideo.timeline']")!;
+            const body = document.querySelector<HTMLElement>('[data-testid="timeline-scroller"]')!;
+            const had = new WeakSet<HTMLImageElement>();
+            let samples = 0;
+            let blankTileSamples = 0;
+            let srcChanges = 0;
+            new MutationObserver((records) => {
+              srcChanges += records.filter((r) => r.attributeName === "src").length;
+            }).observe(root, { subtree: true, attributes: true, attributeFilter: ["src"] });
+            let running = true;
+            const sample = (): void => {
+              for (const img of root.querySelectorAll<HTMLImageElement>("img")) {
+                if (img.complete && img.naturalWidth > 0) had.add(img);
+                else if (had.has(img)) blankTileSamples += 1;
               }
-            }
-          });
-          for (const img of document.querySelectorAll(selector)) {
-            observer.observe(img, { attributes: true, attributeFilter: ["src"] });
-          }
-          const scroller = document.querySelector<HTMLElement>(
-            '[data-testid="timeline-scroller"]',
-          )!;
-          let i = 0;
-          const step = (): void => {
-            scroller.scrollLeft += i % 2 === 0 ? 900 : -500;
-            i += 1;
-            if (i < 12) setTimeout(step, 350);
-            else setTimeout(() => resolve({ srcChanges, notDecoded }), 2500);
-          };
-          step();
-        }),
-      { selector: TILES },
+              samples += 1;
+              if (running) requestAnimationFrame(sample);
+            };
+            requestAnimationFrame(sample);
+            let i = 0;
+            const step = (): void => {
+              body.scrollLeft += i % 2 === 0 ? 900 : -500;
+              i += 1;
+              if (i < 12) setTimeout(step, 350);
+              else
+                setTimeout(() => {
+                  running = false;
+                  resolve({ samples, srcChanges, blankTileSamples });
+                }, 2500);
+            };
+            step();
+          },
+        ),
     );
-    result.ac12 = swaps;
 
     // ---- AC6: play, and nothing is minted while it plays
     await scroller.evaluate((el) => (el.scrollLeft = 0));
-    await msUntilAllOwn(page, await page.evaluate(() => performance.now()), 30_000);
-    const mintedBeforePlay = await minted(page);
+    await msUntilAllOwn(page, await page.evaluate(() => performance.now()), WAIT_MS);
+    await settled(page);
+    const playFrom = await page.evaluate(() => performance.now());
     await page.getByRole("button", { name: "Play", exact: true }).click();
     await page.waitForTimeout(4_000);
-    const mintedDuringPlay = (await minted(page)) - mintedBeforePlay;
+    const playTo = await page.evaluate(() => performance.now());
+    const playMints = await mintsBetween(page, playFrom, playTo);
     await page.getByRole("button", { name: "Pause", exact: true }).click();
-    result.ac6 = { playMs: 4_000, mintedDuringPlay };
+    result.ac6 = {
+      playMs: Math.round(playTo - playFrom),
+      mintedDuringPlay: playMints.length,
+      offsetsMs: playMints,
+    };
     await s.shot("after-play");
 
     // ---- AC11 (off) and the tile count in every side
@@ -287,7 +397,7 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
     const handle = await s.app.browserWindow(page);
     await handle.evaluate((w) => w.setSize(1800, 1100));
     await page.waitForFunction(() => window.innerWidth === 1800);
-    await msUntilAllOwn(page, await page.evaluate(() => performance.now()), 30_000);
+    await msUntilAllOwn(page, await page.evaluate(() => performance.now()), WAIT_MS);
     await s.shot("wide");
     await markTiles(page, true);
     await s.shot("wide-marked");
