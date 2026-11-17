@@ -520,9 +520,15 @@ async function pauseVideosAtStart(page: Page, within?: AreaId): Promise<void> {
 
 async function waitFor(ctx: Ctx, page: Page, target: WaitTarget, timeoutMs: number): Promise<void> {
   if ("video" in target) {
+    // With `within`, the video that counts is the one inside that area: a wait met by the
+    // editor's own video would pause nothing there.
+    const videos = target.within ? `[data-ui-area="${target.within}"] video` : "video";
     await page.waitForFunction(
-      () => {
-        if (![...document.querySelectorAll("video")].some((v) => v.readyState >= 2)) return false;
+      (videos) => {
+        if (
+          ![...document.querySelectorAll<HTMLVideoElement>(videos)].some((v) => v.readyState >= 2)
+        )
+          return false;
         // The editor decodes its thumbnails after the video is ready and publishes them all
         // at once: the timeline's, and the webcam lane's when the recording has a webcam.
         if (!document.querySelector('[data-testid="ruler"]')) return true;
@@ -532,7 +538,7 @@ async function waitFor(ctx: Ctx, page: Page, target: WaitTarget, timeoutMs: numb
           document.querySelector('[data-testid="webcam-lane"]');
         return !webcam || !!document.querySelector("[data-webcam-filmstrip] img");
       },
-      undefined,
+      videos,
       { timeout: timeoutMs, polling: 100 },
     );
     if (target.video === "paused-at-start") await pauseVideosAtStart(page, target.within);
