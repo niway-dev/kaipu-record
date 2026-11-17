@@ -10,6 +10,7 @@ import {
 import type { Slot } from "./filmstrip-frames";
 import {
   FILE_IDLE_MS,
+  PASS_SLOTS,
   MAX_REQUEST_SLOTS,
   type DecoderPreference,
   type FilmstripDoneMessage,
@@ -101,6 +102,8 @@ class FakeOpener implements FilmstripFileOpener {
   fileOptions: FakeFileOptions = {};
   /** Called with every decoded slot, before it is yielded: where a test injects a message. */
   onDecode: (slot: Slot) => void = () => undefined;
+  /** Called with every pass handed to the decoder. */
+  onPass: (group: DecodeGroup) => void = () => undefined;
 
   async open(url: string, decoder: DecoderPreference): Promise<FilmstripFile> {
     this.opens.push({ url, decoder });
@@ -113,6 +116,7 @@ class FakeOpener implements FilmstripFileOpener {
     this.maxOpenAtOnce = Math.max(this.maxOpenAtOnce, this.openNow.size);
     const options = this.fileOptions;
     const onDecode = (slot: Slot) => this.onDecode(slot);
+    const onPass = (group: DecodeGroup) => this.onPass(group);
     return {
       plan: async (slot) =>
         options.plan?.(slot) ?? {
@@ -124,6 +128,7 @@ class FakeOpener implements FilmstripFileOpener {
           rank: 0,
         },
       decode: async function* (group: DecodeGroup) {
+        onPass(group);
         for (const item of group.items) {
           onDecode(item.slot);
           const decoded: DecodedSlot = {
@@ -234,16 +239,36 @@ describe("FramePacer: AC14 at most 60 frames in any one-second window", () => {
 });
 
 describe("the request queue: decision 14", () => {
-  it("posts the frame nearest the playhead first, then the rest of the visible slots", async () => {
+  it("posts the slots nearest the playhead first, then the rest of the visible slots", async () => {
     const t = setup();
+    // 20 visible slots of 2 s; the playhead (5 s) is in slot 2.
     await t.run(
       request(
-        [0, 1, 2, 3, 4].map((n) => slot(n)),
+        Array.from({ length: 20 }, (_, n) => slot(n)),
         { playhead: 5, direction: 0 },
       ),
     );
-    // The playhead (5 s) is in slot 2 ([4, 6)); then slots 1 and 3 (distance 0 and 1).
-    expect(t.frames().map((f) => f.slotIndex)).toEqual([2, 1, 3, 0, 4]);
+    const order = t.frames().map((f) => f.slotIndex);
+    expect(order).toHaveLength(20);
+    // The first pass holds the PASS_SLOTS slots nearest the playhead (slots 0..7 here), in time
+    // order inside the pass; the farthest slots come in the last pass.
+    const first = order.slice(0, PASS_SLOTS);
+    expect([...first].sort((a, b) => a - b)).toEqual(first);
+    expect(first).toContain(2);
+    expect(Math.max(...first)).toBeLessThan(Math.min(...order.slice(PASS_SLOTS * 2)));
+  });
+
+  it("decodes slots with their own keyframes in passes of PASS_SLOTS, not one pass each", async () => {
+    const t = setup();
+    const passes: number[][] = [];
+    t.opener.onPass = (group) => passes.push(group.items.map((i) => i.slot.index));
+    await t.run(
+      request(
+        Array.from({ length: 20 }, (_, n) => slot(n)),
+        { playhead: 0 },
+      ),
+    );
+    expect(passes.map((p) => p.length)).toEqual([8, 8, 4]);
   });
 
   it("posts the margin last, and only the side the view moves toward", async () => {
@@ -533,7 +558,7 @@ describe("failures", () => {
     expect(t.done(second.requestId)).toMatchObject({ outcome: "complete", frames: 1 });
   });
 
-  it("a decode that throws costs that group only", async () => {
+  it("a decode that throws costs that slot only, not the rest of its pass", async () => {
     const t = setup();
     t.opener.onDecode = (s) => {
       if (s.index === 1) throw new Error("decoder error");

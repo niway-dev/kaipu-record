@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { Slot } from "./filmstrip-frames";
 import { MAX_EXACT_PACKETS } from "./filmstrip-messages";
 import {
+  batchIntoPasses,
   countPacketsTo,
   groupByKeyframe,
   orderSlots,
   planSlot,
+  type DecodeGroup,
   type PacketIndex,
   type PlannedSlot,
 } from "./filmstrip-plan";
@@ -274,5 +276,46 @@ describe("groupByKeyframe: a packet is never decoded twice", () => {
 
   it("is empty for nothing", () => {
     expect(groupByKeyframe([])).toEqual([]);
+  });
+});
+
+describe("batchIntoPasses: one decoder start-up for many slots", () => {
+  const group = (key: number, ...ranks: number[]): DecodeGroup => ({
+    keyTimestamp: key,
+    items: ranks.map((rank) => ({
+      kind: "plan",
+      slot: slot(rank, 0.5),
+      keyframe: true,
+      keyTimestamp: key,
+      targetTimestamp: key,
+      rank,
+    })),
+  });
+
+  it("merges slots that each have their own keyframe into passes of at most the size", () => {
+    const groups = Array.from({ length: 20 }, (_, n) => group(n * 2, n));
+    const passes = batchIntoPasses(groups, 8);
+    expect(passes.map((p) => p.items.length)).toEqual([8, 8, 4]);
+  });
+
+  it("sorts a pass by target timestamp and keeps passes in served order", () => {
+    // Served order: 6 s, 2 s, 4 s | 0 s, 8 s (a pass of 3, then the rest).
+    const passes = batchIntoPasses(
+      [group(6, 0), group(2, 1), group(4, 2), group(0, 3), group(8, 4)],
+      3,
+    );
+    expect(passes.map((p) => p.items.map((i) => i.targetTimestamp))).toEqual([
+      [2, 4, 6],
+      [0, 8],
+    ]);
+  });
+
+  it("never splits a group, so a pass may pass the size by one group", () => {
+    const passes = batchIntoPasses([group(0, 0, 1, 2, 3, 4), group(10, 5)], 3);
+    expect(passes.map((p) => p.items.length)).toEqual([5, 1]);
+  });
+
+  it("is empty for nothing", () => {
+    expect(batchIntoPasses([], 8)).toEqual([]);
   });
 });

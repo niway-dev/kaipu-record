@@ -201,3 +201,32 @@ export function groupByKeyframe(plans: readonly PlannedSlot[]): DecodeGroup[] {
       items: items.sort((a, b) => a.targetTimestamp - b.targetTimestamp),
     }));
 }
+
+/**
+ * Merges groups, in served order, into passes of about `maxSlots` slots, each sorted by target
+ * timestamp. One pass costs one decoder start-up however many keyframes it crosses, so a batch
+ * of slots that each have their own keyframe (a zoomed-in strip: one slot every few seconds)
+ * is decoded in one forward sweep instead of one start-up per slot. A group is never split, so
+ * a pass can pass `maxSlots` by what its last group holds. Order between passes is the served
+ * order; inside a pass it is time order.
+ */
+export function batchIntoPasses(groups: readonly DecodeGroup[], maxSlots: number): DecodeGroup[] {
+  const passes: DecodeGroup[] = [];
+  let current: PlannedSlot[] = [];
+  let key = 0;
+  const flush = () => {
+    if (current.length === 0) return;
+    passes.push({
+      keyTimestamp: key,
+      items: [...current].sort((a, b) => a.targetTimestamp - b.targetTimestamp),
+    });
+    current = [];
+  };
+  for (const group of groups) {
+    if (current.length === 0) key = group.keyTimestamp;
+    current.push(...group.items);
+    if (current.length >= maxSlots) flush();
+  }
+  flush();
+  return passes;
+}

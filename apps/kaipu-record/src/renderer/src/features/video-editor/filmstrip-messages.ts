@@ -139,6 +139,13 @@ export const READ_CACHE_BYTES = 8 * 1024 * 1024;
 export const PACE_MAX_FRAMES = 60;
 export const PACE_WINDOW_MS = 1000;
 
+/**
+ * Slots decoded in one forward pass. A decoder pass has a start-up cost (measured on the Mac
+ * mini: 17 frames took 520 ms hardware / 823 ms software as one pass each, 184 ms / 439 ms as
+ * one pass), so slots are batched; a small batch keeps the playhead's slots arriving first.
+ */
+export const PASS_SLOTS = 8;
+
 /** Thumbnail width in px, as today's 24-frame strip (`use-source-thumbnails.ts`). */
 export const THUMBNAIL_WIDTH = 160;
 export const THUMBNAIL_JPEG_QUALITY = 0.6;

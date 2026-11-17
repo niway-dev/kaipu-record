@@ -10,6 +10,7 @@ import {
   MAX_REQUEST_SLOTS,
   PACE_MAX_FRAMES,
   PACE_WINDOW_MS,
+  PASS_SLOTS,
   type DecoderPreference,
   type FilmstripDoneMessage,
   type FilmstripRequestMessage,
@@ -17,6 +18,7 @@ import {
   type FilmstripWorkerOutput,
 } from "./filmstrip-messages";
 import {
+  batchIntoPasses,
   groupByKeyframe,
   orderSlots,
   type DecodeGroup,
@@ -252,38 +254,66 @@ export class FilmstripEngine {
       }
     }
 
-    for (const group of groupByKeyframe(planned)) {
+    for (const pass of batchIntoPasses(groupByKeyframe(planned), PASS_SLOTS)) {
       if (job.cancelled) break;
-      const generator = file.decode(group);
-      try {
-        for (;;) {
-          if (job.cancelled) break;
-          const next = await generator.next();
-          if (next.done) break;
-          if (job.cancelled) break;
-          await this.pacer.acquire();
-          if (job.cancelled) break;
-          const decoded = next.value;
-          this.post({
-            type: "frame",
-            requestId: request.requestId,
-            fileKey: request.fileKey,
-            slotIndex: decoded.item.slot.index,
-            timestamp: decoded.timestamp,
-            blob: decoded.blob,
-            bytes: decoded.blob.size,
-            decodeMs: decoded.decodeMs,
-            encodeMs: decoded.encodeMs,
-          });
-          counts.frames += 1;
-        }
-      } catch {
-        counts.failed += 1;
-      } finally {
-        await generator.return(undefined).catch(() => undefined);
+      const left = await this.decodePass(job, file, pass, counts);
+      // A pass that threw keeps what it posted; the slots after the failure are tried one by one,
+      // so one bad slot costs that slot and not the rest of the pass.
+      for (const item of left) {
+        if (job.cancelled) break;
+        const rest = await this.decodePass(
+          job,
+          file,
+          { keyTimestamp: item.keyTimestamp, items: [item] },
+          counts,
+        );
+        if (rest.length > 0) counts.failed += 1;
       }
     }
     finish(opened, openMs);
+  }
+
+  /**
+   * Decodes one pass and posts its frames, paced. Returns the slots of the pass that were not
+   * posted because the decode threw (none when it finished or the job was cancelled).
+   */
+  private async decodePass(
+    job: Job,
+    file: FilmstripFile,
+    pass: DecodeGroup,
+    counts: { frames: number },
+  ): Promise<PlannedSlot[]> {
+    const { request } = job;
+    const posted = new Set<PlannedSlot>();
+    const generator = file.decode(pass);
+    try {
+      for (;;) {
+        if (job.cancelled) return [];
+        const next = await generator.next();
+        if (next.done) return [];
+        if (job.cancelled) return [];
+        await this.pacer.acquire();
+        if (job.cancelled) return [];
+        const decoded = next.value;
+        posted.add(decoded.item);
+        this.post({
+          type: "frame",
+          requestId: request.requestId,
+          fileKey: request.fileKey,
+          slotIndex: decoded.item.slot.index,
+          timestamp: decoded.timestamp,
+          blob: decoded.blob,
+          bytes: decoded.blob.size,
+          decodeMs: decoded.decodeMs,
+          encodeMs: decoded.encodeMs,
+        });
+        counts.frames += 1;
+      }
+    } catch {
+      return pass.items.filter((item) => !posted.has(item));
+    } finally {
+      await generator.return(undefined).catch(() => undefined);
+    }
   }
 
   private count(counts: { skippedNoFrame: number; skippedOverCap: number }, reason: SkipReason) {
