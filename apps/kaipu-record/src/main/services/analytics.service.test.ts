@@ -3,6 +3,7 @@ import {
   buildExceptionProperties,
   initMainAnalytics,
   resolvePosthogHost,
+  scrubMainEvent,
 } from "./analytics.service";
 
 const constructed = vi.hoisted(() => ({ count: 0 }));
@@ -21,6 +22,34 @@ describe("buildExceptionProperties", () => {
     expect(props.surface).toBe("desktop");
     expect(props.origin).toBe("main-process");
     expect(props.foo).toBe("bar");
+  });
+});
+
+describe("scrubMainEvent", () => {
+  it("removes personal paths from an exception's message, frames and context", () => {
+    const event = {
+      distinctId: "device-1",
+      event: "$exception",
+      properties: {
+        $exception_list: [
+          {
+            value: "ENOENT: open '/Users/ana/Movies/Kaipu Record/Q3 call.mp4'",
+            stacktrace: { frames: [{ filename: "/Users/ana/dev/kaipu/src/a.ts", lineno: 7 }] },
+          },
+        ],
+        origin: "main-process",
+        path: "C:\\Users\\Ana\\Videos\\a.mp4",
+      },
+    };
+    const sent = scrubMainEvent(event);
+
+    expect(JSON.stringify(sent)).not.toMatch(/ana|Ana/);
+    expect(sent?.properties?.origin).toBe("main-process");
+    expect(sent?.distinctId).toBe("device-1");
+  });
+
+  it("passes a dropped event through", () => {
+    expect(scrubMainEvent(null)).toBeNull();
   });
 });
 

@@ -185,3 +185,70 @@ export function buildEditorSpeedChangedProperties(
 ): EditorSpeedChangedProperties {
   return { speed: input.speed };
 }
+
+/** Event name for an editor that finished loading (NIW2-849). */
+export const EDITOR_OPENED_EVENT = "editor_opened";
+
+/** The two editors people can open. */
+export const EDITOR_KINDS = ["video", "image"] as const;
+export type EditorKind = (typeof EDITOR_KINDS)[number];
+
+/**
+ * The whole payload of `editor_opened`: which editor loaded, the video editor or the image
+ * editor. It tells the team which of the two people actually use. No recording id, title,
+ * path or duration, and nothing about what is on screen.
+ */
+// A type alias, not an interface: `captureEvent` takes a `Record<string, unknown>`.
+export type EditorOpenedProperties = {
+  editor: EditorKind;
+};
+
+/** Copies exactly the allowed field, so a caller cannot leak an extra one. */
+export function buildEditorOpenedProperties(input: EditorOpenedProperties): EditorOpenedProperties {
+  return { editor: input.editor };
+}
+
+/** What replaces a personal path in an exception message, stack frame or context value. */
+export const REDACTED_USER_PATH = "<user-path>";
+
+/**
+ * A path under a user's home folder: `/Users/<name>/…` (macOS), `/home/<name>/…` (Linux),
+ * `C:\Users\<name>\…` (Windows), also behind `file://`. The match runs to the next quote,
+ * backtick, closing parenthesis, angle bracket or line end, so a name with spaces
+ * ("Kaipu Record/Q3 board call.mp4") goes with it. The lookbehind keeps URLs such as
+ * `https://site/home/x` and app paths such as `/Applications/…` out.
+ */
+const PERSONAL_PATH = /(?<![A-Za-z0-9.])(?:[A-Za-z]:)?[\\/](?:Users|home)[\\/][^'"`)<>\r\n]*/g;
+
+/**
+ * Replaces every personal path in `text` with `<user-path>`. Recordings live in the home
+ * folder and are named by the user, so the whole path goes, file name included, not just
+ * the account name. An unquoted path inside a sentence also takes the rest of that line
+ * with it: losing a few words of a message beats leaking a name.
+ */
+export function scrubPersonalPaths(text: string): string {
+  return text.replace(PERSONAL_PATH, REDACTED_USER_PATH);
+}
+
+/**
+ * A copy of `value` with {@link scrubPersonalPaths} applied to every string inside it,
+ * through objects and arrays. Used on whatever leaves the app as an exception or event, so
+ * a path in a message, a stack frame or a context value never travels. Cycles and very deep
+ * values are cut instead of followed.
+ */
+export function scrubPersonalPathsDeep<T>(value: T): T {
+  return scrubDeep(value, new WeakSet(), 0) as T;
+}
+
+const SCRUB_MAX_DEPTH = 12;
+
+function scrubDeep(value: unknown, seen: WeakSet<object>, depth: number): unknown {
+  if (typeof value === "string") return scrubPersonalPaths(value);
+  if (value === null || typeof value !== "object") return value;
+  if (seen.has(value) || depth > SCRUB_MAX_DEPTH) return undefined;
+  seen.add(value);
+  if (Array.isArray(value)) return value.map((item) => scrubDeep(item, seen, depth + 1));
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) out[key] = scrubDeep(item, seen, depth + 1);
+  return out;
+}

@@ -4,11 +4,15 @@ import {
   DEFAULT_SURFACE,
   FLAG_DEFAULTS,
   FLAG_NAMES,
+  EDITOR_OPENED_EVENT,
   EDITOR_SPEED_CHANGED_EVENT,
   SCREENSHOT_CAPTURED_EVENT,
+  buildEditorOpenedProperties,
   buildEditorSpeedChangedProperties,
   buildRecordingStartedProperties,
   buildScreenshotCapturedProperties,
+  scrubPersonalPaths,
+  scrubPersonalPathsDeep,
   serializeError,
 } from "./analytics";
 
@@ -149,5 +153,87 @@ describe("editor_speed_changed", () => {
     // A caller cannot smuggle an extra field through (a title, a time, a path).
     const sneaky = { speed: 2, title: "Q3 board call", timelineTime: 41 } as never;
     expect(Object.keys(buildEditorSpeedChangedProperties(sneaky))).toEqual(["speed"]);
+  });
+});
+
+describe("editor_opened", () => {
+  it("keeps a stable event name", () => {
+    expect(EDITOR_OPENED_EVENT).toBe("editor_opened");
+  });
+
+  it("carries exactly which editor opened, nothing else", () => {
+    expect(buildEditorOpenedProperties({ editor: "video" })).toEqual({ editor: "video" });
+    expect(buildEditorOpenedProperties({ editor: "image" })).toEqual({ editor: "image" });
+    // A caller cannot smuggle an extra field through (a recording id, a title, a path).
+    const sneaky = { editor: "image", recordingId: "r-1", title: "Q3 board call" } as never;
+    expect(Object.keys(buildEditorOpenedProperties(sneaky))).toEqual(["editor"]);
+  });
+});
+
+describe("scrubPersonalPaths", () => {
+  const REDACTED = "<user-path>";
+
+  it("removes a macOS home path, file name included", () => {
+    expect(
+      scrubPersonalPaths("ENOENT: open '/Users/ana/Movies/Kaipu Record/Q3 board call.mp4'"),
+    ).toBe(`ENOENT: open '${REDACTED}'`);
+  });
+
+  it("removes a path inside a stack frame and keeps the frame's shape", () => {
+    expect(scrubPersonalPaths("    at load (/Users/ana/dev/kaipu/src/a.ts:12:3)")).toBe(
+      `    at load (${REDACTED})`,
+    );
+  });
+
+  it("removes Windows and Linux home paths and file URLs", () => {
+    expect(scrubPersonalPaths("open C:\\Users\\Ana Perez\\Videos\\clip.mp4 failed")).not.toContain(
+      "Ana",
+    );
+    expect(scrubPersonalPaths("c:/Users/ana/Videos/clip.mp4")).toBe(REDACTED);
+    expect(scrubPersonalPaths("/home/ana/clips/a.mp4")).toBe(REDACTED);
+    expect(scrubPersonalPaths("file:///Users/ana/Movies/a.mp4")).toBe(`file://${REDACTED}`);
+  });
+
+  it("keeps app paths and URLs that merely contain /Users or /home", () => {
+    const appPath =
+      "at x (/Applications/Kaipu Record.app/Contents/Resources/app.asar/out/main.js:1:1)";
+    expect(scrubPersonalPaths(appPath)).toBe(appPath);
+    expect(scrubPersonalPaths("GET https://kaipu.app/home/Users/ana")).toBe(
+      "GET https://kaipu.app/home/Users/ana",
+    );
+  });
+
+  it("leaves text without a personal path untouched", () => {
+    expect(scrubPersonalPaths("Cannot read properties of undefined")).toBe(
+      "Cannot read properties of undefined",
+    );
+  });
+});
+
+describe("scrubPersonalPathsDeep", () => {
+  it("scrubs every string in nested objects and arrays without mutating the input", () => {
+    const input = {
+      $exception_list: [
+        {
+          value: "open '/Users/ana/Movies/a.mp4' failed",
+          stacktrace: { frames: [{ filename: "/Users/ana/dev/a.ts", lineno: 4 }] },
+        },
+      ],
+      count: 3,
+      flag: true,
+      nothing: null,
+    };
+    const copy = JSON.parse(JSON.stringify(input));
+    const out = scrubPersonalPathsDeep(input) as typeof input;
+    expect(JSON.stringify(out)).not.toContain("ana");
+    expect(out.$exception_list[0].stacktrace.frames[0].lineno).toBe(4);
+    expect(out.count).toBe(3);
+    expect(input).toEqual(copy);
+  });
+
+  it("survives a cyclic object", () => {
+    const loop: Record<string, unknown> = { path: "/Users/ana/a.mp4" };
+    loop.self = loop;
+    expect(() => scrubPersonalPathsDeep(loop)).not.toThrow();
   });
 });
