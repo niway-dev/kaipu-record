@@ -288,7 +288,9 @@ describe("OnboardingOverlay", () => {
     expect(
       screen.getByText(/a random id for this mac\. no account, name or email/i),
     ).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: /share usage and crash reports/i })).toBeChecked();
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: /share usage and crash reports/i })).toBeChecked(),
+    );
     // Never claims nothing is sent, or that it needs permission.
     expect(screen.queryByText(/nothing is sent|only with your permission/i)).toBeNull();
     // Informs, never blocks: Continue is on.
@@ -306,7 +308,8 @@ describe("OnboardingOverlay", () => {
     render(<OnboardingOverlay onClose={vi.fn()} />);
     await toPrivacy();
     const toggle = screen.getByRole("switch", { name: /share usage and crash reports/i });
-    await waitFor(() => expect(toggle).not.toBeChecked());
+    await waitFor(() => expect(toggle).toBeEnabled());
+    expect(toggle).not.toBeChecked();
     fireEvent.click(toggle);
     expect(updateSettings).toHaveBeenCalledWith({ diagnosticsEnabled: true });
     expect(toggle).toBeChecked();
@@ -324,7 +327,8 @@ describe("OnboardingOverlay", () => {
     render(<OnboardingOverlay onClose={vi.fn()} />);
     await toPrivacy();
     const toggle = screen.getByRole("switch", { name: /share usage and crash reports/i });
-    await waitFor(() => expect(toggle).not.toBeChecked());
+    await waitFor(() => expect(toggle).toBeEnabled());
+    expect(toggle).not.toBeChecked();
     fireEvent.click(toggle);
     // Main still holds Off, and the switch goes back to it.
     await waitFor(() => expect(toggle).not.toBeChecked());
@@ -342,8 +346,55 @@ describe("OnboardingOverlay", () => {
     render(<OnboardingOverlay onClose={vi.fn()} />);
     await toPrivacy();
     const toggle = screen.getByRole("switch", { name: /share usage and crash reports/i });
+    await waitFor(() => expect(toggle).toBeEnabled());
     fireEvent.click(toggle);
     await waitFor(() => expect(toggle).toBeChecked());
+  });
+
+  it("Privacy: the toggle waits for the saved value instead of showing On first", async () => {
+    type Settings = Awaited<ReturnType<KaipuElectronAPI["getSettings"]>>;
+    let settle: (value: Settings) => void = () => {};
+    let pending = false;
+    const base = { shortcuts: defaultShortcutsFor("darwin") } as Settings;
+    mockElectronAPI({
+      checkPermissions: vi.fn().mockResolvedValue(granted),
+      getSettings: vi.fn(() =>
+        pending ? new Promise<Settings>((resolve) => (settle = resolve)) : Promise.resolve(base),
+      ),
+    });
+    render(<OnboardingOverlay onClose={vi.fn()} />);
+    await toShortcuts();
+    pending = true;
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /your recordings are yours/i });
+    const toggle = screen.getByRole("switch", { name: /share usage and crash reports/i });
+    expect(toggle).toBeDisabled();
+    expect(toggle).not.toBeChecked();
+
+    settle({ ...base, diagnosticsEnabled: false } as Settings);
+    await waitFor(() => expect(toggle).toBeEnabled());
+    expect(toggle).not.toBeChecked();
+  });
+
+  it("Privacy: the toggle stays disabled when the saved value cannot be read", async () => {
+    let failing = false;
+    const base = { shortcuts: defaultShortcutsFor("darwin") };
+    mockElectronAPI({
+      checkPermissions: vi.fn().mockResolvedValue(granted),
+      getSettings: vi.fn(() =>
+        failing ? Promise.reject(new Error("ipc down")) : Promise.resolve(base),
+      ) as unknown as KaipuElectronAPI["getSettings"],
+    });
+    render(<OnboardingOverlay onClose={vi.fn()} />);
+    await toShortcuts();
+    failing = true;
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /your recordings are yours/i });
+    const toggle = screen.getByRole("switch", { name: /share usage and crash reports/i });
+    // Give the failed read time to settle: it must not turn the switch on.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(toggle).toBeDisabled();
+    expect(toggle).not.toBeChecked();
   });
 
   it("Privacy marks the notice as seen, so the step is not shown twice", async () => {

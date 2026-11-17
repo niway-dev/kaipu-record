@@ -52,7 +52,9 @@ describe("OnboardingProvider — privacy notice", () => {
       </OnboardingProvider>,
     );
     expect(await screen.findByRole("heading", { name: NOTICE })).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: /share usage and crash reports/i })).toBeChecked();
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: /share usage and crash reports/i })).toBeChecked(),
+    );
     // Not the full-window tour: the app is still behind it.
     expect(screen.getByText("app")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /get started/i })).toBeNull();
@@ -113,7 +115,9 @@ describe("OnboardingProvider — privacy notice", () => {
         <p>app</p>
       </OnboardingProvider>,
     );
-    fireEvent.click(await screen.findByRole("switch", { name: /share usage and crash reports/i }));
+    const toggle = await screen.findByRole("switch", { name: /share usage and crash reports/i });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    fireEvent.click(toggle);
     expect(updateSettings).toHaveBeenCalledWith({ diagnosticsEnabled: false });
   });
 

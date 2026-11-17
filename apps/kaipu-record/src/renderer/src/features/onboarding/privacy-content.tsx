@@ -33,7 +33,12 @@ export function PrivacyContent(): React.JSX.Element {
       </dl>
       <div className={`${common.card} ${styles.toggleRow}`}>
         <span className={styles.toggleLabel}>{t("privacyToggle")}</span>
-        <Toggle aria-label={t("privacyToggle")} checked={enabled} onChange={setEnabled} />
+        <Toggle
+          aria-label={t("privacyToggle")}
+          checked={enabled ?? false}
+          disabled={enabled === null}
+          onChange={setEnabled}
+        />
       </div>
       <p className={common.note}>{t("privacyLater")}</p>
     </>

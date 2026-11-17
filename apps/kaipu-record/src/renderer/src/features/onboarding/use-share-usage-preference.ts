@@ -4,13 +4,21 @@ import { useCallback, useEffect, useState } from "react";
  * Settings → App → Share usage and crash reports, for the onboarding's privacy step and
  * notice: reads `AppSettings.diagnosticsEnabled` (on until the user turns it off) and writes
  * it through the same IPC as Settings, so both processes follow it without a restart.
+ *
+ * `enabled` is `null` until the first read settles, and stays `null` if that read fails: the
+ * control decides whether data leaves the Mac, so it must not show a value main has not
+ * confirmed (a returning user who already turned sharing off would first see it On).
  */
-export function useShareUsagePreference(): { enabled: boolean; setEnabled: (v: boolean) => void } {
-  const [enabled, setEnabledState] = useState(true);
+export function useShareUsagePreference(): {
+  enabled: boolean | null;
+  setEnabled: (v: boolean) => void;
+} {
+  const [enabled, setEnabledState] = useState<boolean | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    // A failed read keeps the default (on), which is also what main holds until the user turns it off.
+    // A failed read leaves the value unknown (the control stays disabled); a later settings
+    // change from main still fills it in.
     void window.electronAPI
       .getSettings()
       .then((settings) => {
