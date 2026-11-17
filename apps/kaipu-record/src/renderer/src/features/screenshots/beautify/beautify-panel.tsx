@@ -125,8 +125,9 @@ function Slider({
         onKeyDown={(e) => {
           // Only a key that moves the thumb opens an edit. Any other key (Tab, or the Undo chord)
           // would open one that no key-up on this slider closes, and an open edit blocks Undo.
-          if (SLIDER_KEYS.has(e.key) && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey)
-            onBegin();
+          // Modifiers do not matter: a modified arrow may still move the thumb, and that change
+          // needs its history entry. The Undo chord is excluded already (Z is not a slider key).
+          if (SLIDER_KEYS.has(e.key) && !e.repeat) onBegin();
         }}
         onKeyUp={(e) => {
           if (SLIDER_KEYS.has(e.key)) onEnd();

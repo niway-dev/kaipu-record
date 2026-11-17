@@ -217,4 +217,18 @@ describe("ScreenshotEditorPage — Undo / Redo keys (NIW2-847)", () => {
     await drawBox();
     expect(undoKey()).toBe(false);
   });
+
+  it("a modified arrow on a slider is still one undoable edit", async () => {
+    mount();
+    await loadImage();
+    await drawBox();
+    const range = padding();
+    const before = range.value;
+    fireEvent.keyDown(range, { key: "ArrowRight", ctrlKey: true });
+    fireEvent.change(range, { target: { value: "40" } });
+    fireEvent.keyUp(range, { key: "ArrowRight", ctrlKey: true });
+    undoKey(range);
+    await waitFor(() => expect(padding().value).toBe(before));
+    expect(annotations()).toBe(1);
+  });
 });
