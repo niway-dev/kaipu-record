@@ -119,12 +119,13 @@ describe("ScreenshotEditorPage — export box (mock A1)", () => {
     expect(boxLabel()).toHaveTextContent("400 × 400 px");
   });
 
-  it("with no background the box is filled with the stage colour, under the content", async () => {
+  it("with no background the box is filled with the transparent checker, under the content", async () => {
     mount();
     await loadImage();
     await waitFor(() => expect(box()).not.toBeNull());
     const fill = screen.getByTestId("export-box-fill");
     expect(box()).toContainElement(fill);
+    expect(fill.style.background).toContain("repeating-conic-gradient");
     // First in the box, so the dashed outline and label draw over it.
     expect(box()!.firstElementChild).toBe(fill);
   });

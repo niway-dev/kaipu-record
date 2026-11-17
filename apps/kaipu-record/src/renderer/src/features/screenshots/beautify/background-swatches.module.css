@@ -1,5 +1,5 @@
 /*
- * The background swatches (seventeen presets, five per row, wrapping onto new rows), shared by the screenshot editor's Beautify panel and the
+ * The background swatches (eighteen presets, five per row, wrapping onto new rows), shared by the screenshot editor's Beautify panel and the
  * video editor's Background section (NIW2-668). Colours and spacing use base.css tokens; the
  * only literals are the preset gradients (feature-specific, defined once in backgrounds.ts).
  */

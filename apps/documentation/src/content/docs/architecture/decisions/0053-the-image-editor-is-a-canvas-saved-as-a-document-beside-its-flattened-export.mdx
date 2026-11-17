@@ -32,7 +32,11 @@ whose coordinates belong to one image and whose only saved artifact is a flatten
    alike, positioned in world units. One world unit is one source pixel of an image at scale 1.
 2. **The export is the content box.** Copy and Save render the union of all item bounds plus
    the beautify padding, which behaves as it does today at every background. A gap between
-   items is filled with the background, or with a neutral solid when the background is `none`.
+   items is filled with the background. With `none` it stays transparent, in the PNG, the
+   clipboard and the PDF; a solid White swatch covers the case where an app flattens alpha to
+   black. (Amended 2026-11-16, NIW2-851: this first filled the gap with a neutral white when the
+   background was `none`; the owner reversed it after testing, because the transparent swatch
+   exported white.)
    A manual export frame overrides the content box; the crop tool becomes that frame.
    A canvas holding one untouched image exports what the current editor exports.
 3. **Three artifacts.** `<id>.png` (flattened, always valid), `.kaipu/<id>.canvas.json` (the
@@ -131,3 +135,4 @@ Cloud sync of the document, layout helpers, layers UI, multi-page documents, col
 - One-image parity cannot be kept without special cases in the compositor.
 - The document needs a second breaking schema change within its first three versions.
 - Cloud sync of editable items is scheduled: the asset and document transport needs its own decision.
+- Apps that flatten a transparent export to black become a common complaint despite the White swatch: reconsider a default fill for the gap. (The owner reversed the first neutral-white decision on 2026-11-16 after testing; that reversal is why this condition is written.)

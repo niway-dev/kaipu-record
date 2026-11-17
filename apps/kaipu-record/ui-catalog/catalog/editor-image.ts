@@ -493,6 +493,32 @@ export const editorImage = catalog(
       demonstrates: ["editorImage.exportBox:labeled"],
       gates: [{ flag: "image-canvas", side: "on" }],
     },
+    "canvas-transparent-gap": {
+      profile: "image-canvas",
+      how: "NIW2-851: with the flag forced on and the transparent background (the default), open “Settings page”, press Add image, choose From Library, click “Dashboard draft” and nudge it right: the gap between the two images inside the export box shows the dark checker, because it exports as transparent.",
+      steps: [
+        open(ASSETS.settingsShot),
+        addImageButton,
+        fromLibrary,
+        {
+          click: {
+            area: "editorImage.libraryPicker",
+            part: { role: "button", name: "Dashboard draft", exact: true },
+          },
+        },
+        { waitFor: { area: "editorImage.libraryPicker", state: "hidden" } },
+        { waitFor: { area: "editorImage.canvas", part: { text: "Just added" } } },
+        {
+          drag: { area: "editorImage.canvas", part: { css: '[data-testid="image-selection"]' } },
+          from: { x: 0.5, y: 0.5 },
+          to: { x: 0.56, y: 0.5 },
+        },
+        { waitFor: { area: "editorImage.exportBox" } },
+      ],
+      demonstrates: ["editorImage.exportBox:transparentGap"],
+      stillOnScreen: { area: "editorImage.canvas", part: { text: "Drag to move" } },
+      after: leaveAndRestore,
+    },
     "canvas-export-box-quiet": {
       profile: "image-canvas",
       how: "Mock A1: with the flag forced on, open “Settings page” and pick the Redact tool: the dashed export box stays, its label is hidden.",
