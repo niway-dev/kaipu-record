@@ -326,10 +326,11 @@ export function registerLibraryVaultHandlers(deps: {
   );
   // NIW2-845: the Library composites the webcam bubble into the poster; main validates the
   // bytes as a JPEG and writes them with the marker. A non-webcam item is refused (null).
-  handleVault(IPC_CHANNELS.writeWebcamThumbnail, (id: string, jpeg: unknown) => {
+  handleVault(IPC_CHANNELS.writeWebcamThumbnail, (id: string, assetId: unknown, jpeg: unknown) => {
+    if (typeof assetId !== "string" || !assetId) throw new Error("webcam thumbnail: no asset id");
     const bytes = jpeg instanceof ArrayBuffer ? Buffer.from(jpeg) : null;
     if (!bytes || !isJpeg(bytes)) throw new Error("webcam thumbnail: not a JPEG");
-    return currentVault().writeWebcamThumbnail(id, bytes);
+    return currentVault().writeWebcamThumbnail(id, assetId, bytes);
   });
   // remove() deletes every companion, the edit session and its assets included.
   handleVault(IPC_CHANNELS.deleteLocalRecording, (id: string) =>

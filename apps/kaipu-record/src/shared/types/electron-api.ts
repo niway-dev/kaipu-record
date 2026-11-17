@@ -424,10 +424,14 @@ export interface KaipuElectronAPI {
   /**
    * NIW2-845: replace a webcam recording's thumbnail with the JPEG the Library composited
    * (the screen frame plus the bubble) and mark it done, in one step. Returns the
-   * re-described recording, or null when the recording has no webcam track (nothing is
-   * written) or its file vanished.
+   * re-described recording, or null when nothing is written: the recording has no webcam
+   * track, its file vanished, or `id` no longer carries `assetId` (the one composited).
    */
-  writeWebcamThumbnail(id: string, jpeg: ArrayBuffer): Promise<LocalRecording | null>;
+  writeWebcamThumbnail(
+    id: string,
+    assetId: string,
+    jpeg: ArrayBuffer,
+  ): Promise<LocalRecording | null>;
   /** Delete a local recording from disk. */
   deleteLocalRecording(id: string): Promise<void>;
   /** Reveal a local recording in the OS file manager. */

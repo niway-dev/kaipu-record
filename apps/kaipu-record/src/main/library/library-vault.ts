@@ -1395,9 +1395,16 @@ export class LibraryVault {
    * recording without a webcam track or whose webcam file is gone, and one that vanished.
    * An unreadable record throws, like every other write.
    */
-  async writeWebcamThumbnail(id: string, jpg: Buffer): Promise<LocalRecording | null> {
+  async writeWebcamThumbnail(
+    id: string,
+    assetId: string,
+    jpg: Buffer,
+  ): Promise<LocalRecording | null> {
     const written = await withLock(this.sidecarPath(id), async () => {
       const sidecar = await this.writableSidecar(id);
+      // The compose ran for a while: the id may name another recording now (another
+      // workspace, or a file put back under the same name). Only the one it was drawn for.
+      if (sidecar.assetId !== assetId) return false;
       const webcam = webcamTrackState(await exists(this.webcamFilePath(id)), sidecar.webcam);
       if (!webcam.meta || !(await this.hasMedia(id))) return false;
       await mkdir(this.metaDirectory(), { recursive: true });

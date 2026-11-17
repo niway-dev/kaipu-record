@@ -260,7 +260,7 @@ describe("LibraryVault", () => {
         await writeWebcamFile("rec");
         await writeScreenThumb("rec");
 
-        const updated = await vault.writeWebcamThumbnail("rec", jpg());
+        const updated = await vault.writeWebcamThumbnail("rec", "asset-rec", jpg());
 
         expect(updated?.thumbnailNeedsWebcam).toBe(false);
         expect((await readFile(vault.thumbnailPath("rec"))).equals(jpg())).toBe(true);
@@ -272,9 +272,9 @@ describe("LibraryVault", () => {
 
       it("a later plain thumbnail write clears the marker, so the bubble is asked for again", async () => {
         await writeRecording("rec");
-        await writeSidecar("rec", { webcam: webcamMeta });
+        await writeSidecar("rec", { assetId: "asset-rec", webcam: webcamMeta });
         await writeWebcamFile("rec");
-        await vault.writeWebcamThumbnail("rec", jpg());
+        await vault.writeWebcamThumbnail("rec", "asset-rec", jpg());
         expect((await vault.describe("rec"))?.thumbnailNeedsWebcam).toBe(false);
 
         await vault.writeThumbnail("rec", Buffer.from([0xff, 0xd8, 0xff]));
@@ -294,11 +294,26 @@ describe("LibraryVault", () => {
 
       it("refuses a recording without a webcam track and leaves its thumbnail alone", async () => {
         await writeRecording("plain");
-        await writeSidecar("plain", {});
+        await writeSidecar("plain", { assetId: "asset-plain" });
         await writeScreenThumb("plain");
         const before = await readFile(vault.thumbnailPath("plain"));
-        await expect(vault.writeWebcamThumbnail("plain", jpg())).resolves.toBeNull();
+        await expect(vault.writeWebcamThumbnail("plain", "asset-plain", jpg())).resolves.toBeNull();
         expect((await readFile(vault.thumbnailPath("plain"))).equals(before)).toBe(true);
+      });
+
+      it("refuses when the id now carries another recording, and leaves its thumbnail alone", async () => {
+        // Composited for one recording; by the time it is written, the id names another
+        // (a workspace switch, or a file put back under the same name).
+        await writeRecording("rec");
+        await writeSidecar("rec", { assetId: "asset-other", webcam: webcamMeta });
+        await writeWebcamFile("rec");
+        await writeScreenThumb("rec");
+        const before = await readFile(vault.thumbnailPath("rec"));
+
+        await expect(vault.writeWebcamThumbnail("rec", "asset-rec", jpg())).resolves.toBeNull();
+
+        expect((await readFile(vault.thumbnailPath("rec"))).equals(before)).toBe(true);
+        expect((await vault.describe("rec"))?.thumbnailNeedsWebcam).toBe(true);
       });
     });
 
