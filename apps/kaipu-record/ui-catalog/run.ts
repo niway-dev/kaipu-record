@@ -951,7 +951,10 @@ async function shoot(
     if (screenSpec.kind === "overlay") {
       // Escape would close the takeover for good; a reload brings it back at its first step.
       await run.main.reload();
-      await waitForArea(run.main, `${screen}.root`, timeoutMs);
+      // The notice profile has no takeover to come back: what returns is the notice.
+      const back =
+        run.profile.onboarding === "notice" ? `${screen}.privacyNotice` : `${screen}.root`;
+      await waitForArea(run.main, back, timeoutMs);
     } else if (!target) {
       await navigate(run.main, RESET_ROUTE);
       if (route) await navigate(run.main, route);
