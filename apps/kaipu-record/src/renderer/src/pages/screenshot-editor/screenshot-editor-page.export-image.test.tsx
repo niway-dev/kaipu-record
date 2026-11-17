@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
@@ -213,7 +213,13 @@ describe("ScreenshotEditorPage — Export popover (image-canvas)", () => {
     openPopover();
     fireEvent.click(screen.getByRole("button", { name: "Export…" }));
     await waitFor(() => expect(window.electronAPI.exportScreenshotFile).toHaveBeenCalled());
+    // The cancelled result is handled one microtask later; let the queue drain before asserting.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
     expect(getToasts()).toHaveLength(0);
+    expect(screen.queryByText("Exported")).toBeNull();
   });
 
   it("reports a failed encode with a retry", async () => {
@@ -225,5 +231,17 @@ describe("ScreenshotEditorPage — Export popover (image-canvas)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Export…" }));
     await waitFor(() => expect(getToasts().length).toBeGreaterThan(0));
     expect(window.electronAPI.exportScreenshotFile).not.toHaveBeenCalled();
+    expect(exportImage).toHaveBeenCalledTimes(1);
+
+    // Retry runs the export again with the same settings; this time it encodes and writes.
+    exportImage.mockResolvedValue(encoded("png"));
+    const retry = getToasts()[0].action;
+    expect(retry).toBeDefined();
+    await act(async () => {
+      retry!.onClick();
+    });
+    await waitFor(() => expect(window.electronAPI.exportScreenshotFile).toHaveBeenCalledTimes(1));
+    expect(exportImage).toHaveBeenCalledTimes(2);
+    expect(exportImage.mock.calls[1][0]).toEqual(exportImage.mock.calls[0][0]);
   });
 });

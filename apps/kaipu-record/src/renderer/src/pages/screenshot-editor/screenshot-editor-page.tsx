@@ -1291,11 +1291,23 @@ function ScreenshotEditorBody({
   // The export frame's 1× size, from the export box's own computation: the popover's pixel size
   // and the encode both start from it, so the size shown is the size written.
   const exportFrame = exportSize ? { w: exportSize.w, h: exportSize.h } : null;
+  // A fresh object whenever the scene changes: an open popover measures again after an edit that
+  // keeps the frame's size (undo, redo, a moved annotation).
+  const exportSceneKey = useMemo(
+    () => ({}),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the deps are the point
+    [scene.beautify.state, scene.annotations, scene.crop, scene.exportFrame],
+  );
+  // The queued job and a Retry run after the click's render: they read the frame from this ref,
+  // assigned in the same render as `latest.current.scene`, so the size always matches the scene.
+  const exportFrameRef = useRef(exportFrame);
+  exportFrameRef.current = exportFrame;
 
   /** The real size of the file these settings would write: one encode, nothing is saved. */
   const measureImageExport = async (settings: ImageExportSettings): Promise<number> => {
-    if (!exportFrame) throw new Error("export: the frame size is not known yet");
-    const out = await exportImage(settings, exportFrame, await exportInput(latest.current.scene));
+    const frame = exportFrameRef.current;
+    if (!frame) throw new Error("export: the frame size is not known yet");
+    const out = await exportImage(settings, frame, await exportInput(latest.current.scene));
     return out.bytes.byteLength;
   };
 
@@ -1310,11 +1322,9 @@ function ScreenshotEditorBody({
     void enqueue(async () => {
       if (!alive.current) return;
       try {
-        const out = await exportImage(
-          settings,
-          exportFrame,
-          await exportInput(latest.current.scene),
-        );
+        const frame = exportFrameRef.current;
+        if (!frame) throw new Error("export: the frame size is not known yet");
+        const out = await exportImage(settings, frame, await exportInput(latest.current.scene));
         const written = await window.electronAPI.exportScreenshotFile(out.bytes, {
           suggestedName: resolveCaptureTitle(latest.current.draft, captureTitle.autoTitle),
           extension: out.plan.extension,
@@ -1748,6 +1758,7 @@ function ScreenshotEditorBody({
               exportedName={exportedImageName}
               measure={measureImageExport}
               onExport={onExportImage}
+              sceneRevision={exportSceneKey}
             />
           )}
           {!compact && (

@@ -47,6 +47,11 @@ interface ExportImageControlProps {
   measure(settings: ImageExportSettings): Promise<number>;
   /** Write the file: the save dialog follows. */
   onExport(settings: ImageExportSettings): void;
+  /**
+   * Changes whenever the scene does (a new object per edit, undo and redo included), so an open
+   * popover measures again even when the frame keeps its size.
+   */
+  sceneRevision: object;
 }
 
 /**
@@ -65,6 +70,7 @@ export function ExportImageControl({
   exportedName,
   measure,
   onExport,
+  sceneRevision,
 }: ExportImageControlProps): React.JSX.Element {
   const t = useTranslations("screenshots");
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -93,7 +99,7 @@ export function ExportImageControl({
     };
     // `settings` is covered by `key`; `frame` by its sides.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, key, frame?.w, frame?.h]);
+  }, [open, key, frame?.w, frame?.h, sceneRevision]);
 
   // Esc closes the popover only, ahead of the crop overlay's own listener (as the Add image menu does).
   useEffect(() => {
