@@ -393,7 +393,10 @@ export interface VideoSink {
 }
 
 export interface InterleavedFeed {
-  /** Adds one video frame, after the audio has been produced up to AUDIO_LEAD_SECONDS past it. */
+  /**
+   * Adds one video frame, then produces the audio up to AUDIO_LEAD_SECONDS past it. The frame goes
+   * first so it is already queued while the audio crosses the gap to the next frame.
+   */
   frame(timestamp: number, duration: number): Promise<void>;
   /** After the last frame: closes the video, then produces the audio still owed. */
   finish(): Promise<void>;
@@ -402,10 +405,17 @@ export interface InterleavedFeed {
 /**
  * The order the muxer is fed in. mediabunny's muxer writes samples in timestamp order across
  * tracks and keeps whatever is ahead of the slower track in RAM until that track catches up,
- * so the audio is produced up to AUDIO_LEAD_SECONDS past each frame before the frame is added.
+ * so each frame is added first and the audio is then produced up to AUDIO_LEAD_SECONDS past it.
  * Its guide asks for exactly this ("add media in a somewhat interleaved way to keep memory usage
  * low", https://mediabunny.dev/guide/writing-media-files). Feeding all the video first held the
  * whole encoded video in the worker (6.5 GB on a real take) while the file on disk stayed empty.
+ *
+ * The frame must be queued BEFORE the audio crosses the gap to the next frame. The muxer holds
+ * a track's samples while another open track has nothing queued, and frames can be far apart
+ * (a still screen with no webcam or floating images emits none in between: frames at 0 s and
+ * 600 s). Advancing the audio to 601 s first would leave the video queue empty while 600 s of
+ * encoded audio arrive and wait in RAM. With the frame at t queued, each audio sample below t is
+ * written as it arrives, so memory follows the lead, not the gap.
  *
  * Closing the video before the drain lets the muxer write the remaining audio without waiting
  * for a video sample to pair it with. `audio` is null for an export without an audio track.
@@ -416,8 +426,8 @@ export function createInterleavedFeed(
 ): InterleavedFeed {
   return {
     async frame(timestamp, duration) {
-      await audio?.advanceTo(timestamp + AUDIO_LEAD_SECONDS);
       await video.add(timestamp, duration);
+      await audio?.advanceTo(timestamp + AUDIO_LEAD_SECONDS);
     },
     async finish() {
       video.close();

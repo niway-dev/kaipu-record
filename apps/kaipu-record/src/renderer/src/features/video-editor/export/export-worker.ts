@@ -392,8 +392,10 @@ async function runExportWithInput(
   };
 
   // Every video frame goes through here, so the muxer is fed audio in step with the video
-  // (createInterleavedFeed, audio-pump.ts). The video `outTs` and the audio cursor are the same
-  // output timeline: segments are contiguous from 0, and the audio of each is its duration.
+  // (createInterleavedFeed, audio-pump.ts: frame first, then the audio a lead past it, so the
+  // frame is queued before the audio crosses a gap between frames). The video `outTs` and the
+  // audio cursor are the same output timeline: segments are contiguous from 0, and the audio of
+  // each is its duration.
   const feed = createInterleavedFeed(audio, videoSource);
   const addVideoFrame = async (outTs: number, duration: number): Promise<void> => {
     await sendPosterOnce();

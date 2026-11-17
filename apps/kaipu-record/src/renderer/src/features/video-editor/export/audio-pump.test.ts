@@ -120,7 +120,7 @@ function fixture() {
   return { segments, perSegment, edits, totalDuration };
 }
 
-function run(options: { downmix?: boolean } = {}) {
+function run(options: { downmix?: boolean; onAudio?: (sample: Captured) => void } = {}) {
   const { segments, perSegment, edits, totalDuration } = fixture();
   const samples: Captured[] = [];
   const log: string[] = [];
@@ -143,7 +143,9 @@ function run(options: { downmix?: boolean } = {}) {
     downmix: options.downmix ?? false,
     sink: {
       add: async (sample) => {
-        samples.push(capture(sample));
+        const captured = capture(sample);
+        options.onAudio?.(captured);
+        samples.push(captured);
         log.push("audio");
       },
       close: closed,
@@ -159,7 +161,7 @@ async function allAtOnce(options?: { downmix?: boolean }) {
   return r;
 }
 
-/** The new order: audio asked for ahead of every video frame, the rest drained at the end. */
+/** The new order: every video frame added first, then the audio a lead past it; the rest drained at the end. */
 async function interleaved(options?: { downmix?: boolean }) {
   const r = run(options);
   // `last`: the duration of the last audio sample added before this frame, the most the
@@ -168,10 +170,10 @@ async function interleaved(options?: { downmix?: boolean }) {
   const frames = Math.floor(r.totalDuration * FPS);
   for (let i = 0; i < frames; i++) {
     const t = i / FPS;
+    r.log.push("video");
     await r.pump.advanceTo(t + AUDIO_LEAD_SECONDS);
     const last = r.samples.at(-1)?.duration ?? 0;
     videoAdds.push({ t, cursor: r.pump.cursor, done: r.pump.done, last });
-    r.log.push("video");
   }
   await r.pump.drain();
   return { ...r, videoAdds };
@@ -363,16 +365,16 @@ describe("createInterleavedFeed: the order the muxer is fed in", () => {
     return { events, audio, video };
   };
 
-  it("produces the audio a lead past each frame before adding the frame", async () => {
+  it("adds each frame first, then produces the audio a lead past it", async () => {
     const { events, audio, video } = recorder();
     const feed = createInterleavedFeed(audio, video);
     await feed.frame(0, 0.5);
     await feed.frame(0.5, 0.5);
     expect(events).toEqual([
-      `audio to ${AUDIO_LEAD_SECONDS}`,
       "video 0",
-      `audio to ${0.5 + AUDIO_LEAD_SECONDS}`,
+      `audio to ${AUDIO_LEAD_SECONDS}`,
       "video 0.5",
+      `audio to ${0.5 + AUDIO_LEAD_SECONDS}`,
     ]);
   });
 
@@ -390,6 +392,37 @@ describe("createInterleavedFeed: the order the muxer is fed in", () => {
     await feed.frame(0, 1);
     await feed.finish();
     expect(events).toEqual(["video 0", "video close"]);
+  });
+});
+
+describe("createInterleavedFeed: sparse video frames", () => {
+  it("never lets the audio get more than the lead past the latest queued frame", async () => {
+    // Two frames as far apart as the fixture timeline allows, nothing in between: a still
+    // screen with no webcam or floating images emits no fill frames.
+    let latestFrame = -Infinity;
+    let videoClosed = false;
+    const violations: string[] = [];
+    // At every audio sample the pump adds, the video must already reach it, less the lead and
+    // one sample (the pump stops at the first sample past the lead). That is what bounds the
+    // muxer's RAM: it holds audio while the video queue has nothing at or past it.
+    const r = run({
+      onAudio: (a) => {
+        const floor = a.timestamp - AUDIO_LEAD_SECONDS - a.duration - 1e-9;
+        if (!videoClosed && latestFrame < floor) {
+          violations.push(`audio at ${a.timestamp} with latest frame ${latestFrame}`);
+        }
+      },
+    });
+    const lastFrame = r.totalDuration - 0.1;
+    const feed = createInterleavedFeed(r.pump, {
+      add: async (t) => void (latestFrame = t),
+      close: () => void (videoClosed = true),
+    });
+    await feed.frame(0, 0.1);
+    await feed.frame(lastFrame, 0.1);
+    await feed.finish();
+    expect(violations).toEqual([]);
+    expect(r.samples.length).toBeGreaterThan(100);
   });
 });
 
