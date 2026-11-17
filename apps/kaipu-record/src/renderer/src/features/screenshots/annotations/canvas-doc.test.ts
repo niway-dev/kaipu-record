@@ -617,6 +617,7 @@ describe("canvas document — base crop, scale and corners (v3)", () => {
   it("falls back to the flattened PNG for a base asked to be absurdly large, small or far away", () => {
     for (const patch of [
       { w: 8e11, h: 6e11 }, // scale 1e9
+      { w: 80800, h: 60600 }, // uniform scale 101: past the 100x ceiling
       { w: 8e-9, h: 6e-9 }, // scale 1e-11
       { x: 1e300 },
       { y: -1e12 },

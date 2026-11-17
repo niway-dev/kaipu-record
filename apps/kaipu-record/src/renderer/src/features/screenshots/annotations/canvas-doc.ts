@@ -337,10 +337,12 @@ function parseFrame(v: unknown): BeautifyState | null {
   return v as unknown as BeautifyState;
 }
 
-/** The base may be resized between a thousandth and a thousand times its natural size, and its
- * corner may sit at most this many base widths away: anything else is a corrupt file. */
+/** The base may be resized between a thousandth and a hundred times its natural size, and its
+ * corner may sit at most this many base widths away: anything else is a corrupt file. This is a
+ * sanity bound on the file, not a cap on the export size (`clampRasterScale` never shrinks a
+ * frame, it only limits the extra multiplier). */
 const MIN_BASE_SCALE = 1e-3;
-const MAX_BASE_SCALE = 1e3;
+const MAX_BASE_SCALE = 1e2;
 const MAX_BASE_OFFSET = 1e4;
 
 /**

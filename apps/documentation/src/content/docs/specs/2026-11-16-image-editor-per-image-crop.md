@@ -50,8 +50,7 @@ without loss:
 
 ### Out of scope
 
-- Any user-facing UI in this PR (units 4 and 5).
-- Cropping the base (unit 3): `baseCrop`, `baseRadius`, signed extents.
+- Any user-facing UI before units 4 and 5. Unit 3 (NIW2-853) builds the base crop, radius and resize in the model and the export, and nothing a user can reach writes them yet.
 - Non-uniform stretch, rotation or skew of an image. Proportional resize is in scope (unit 3 for the base, unit 4 for the handles).
 - A rotation, a freeform shape or a mask other than a rounded rectangle.
 - Changing the Export frame or the classic (non-canvas) crop.
@@ -124,9 +123,12 @@ Consequences, all in `canvas-geometry.ts`, `compositor.ts` and `content-box.ts`:
   on an invalid placement by treating the whole image as redacted).
 - `baseVisibleRect` throws on an invalid `baseCrop`, like `fullRect` does for an image, so a save
   or an export stops instead of writing a NaN rect.
-- The reader refuses a placement outside sane bounds (scale under 1/1000 or over 1000, a corner
+- The reader refuses a placement outside sane bounds (scale under 1/1000 or over 100, a corner
   more than 10 000 base widths away): a corrupt file opens the flattened PNG instead of asking for
-  a 1e12 px export.
+  a 1e12 px export. This is a sanity bound on the file, not an export-size cap: a base at the 100x
+  ceiling is still a very large frame, and `clampRasterScale` only limits the extra multiplier
+  (it never shrinks a frame). Capping the export area belongs to unit 4, with the resize handles
+  that will decide the user-facing limit.
 
 ### Canvas document v3
 

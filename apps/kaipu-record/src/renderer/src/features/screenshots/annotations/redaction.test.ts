@@ -9,7 +9,8 @@ import {
   withoutRedactedText,
   type PixelRegion,
 } from "./redaction";
-import type { Annotation } from "./scene";
+import { buildCanvasDoc, parseCanvasDoc } from "./canvas-doc";
+import type { Annotation, Scene } from "./scene";
 
 function region(
   width: number,
@@ -340,17 +341,30 @@ describe("bakeCanvasRedactions", () => {
     expect(dec(out.base).rects).toEqual([{ x: 0, y: 75, w: 125, h: 150 }]);
   });
 
-  it("privacy: redact, crop out, save, expand the crop: the saved pixels stay redacted", async () => {
+  it("privacy: redact over a cropped-out part, save, reopen and widen the crop: the pixels stay redacted", async () => {
     fakeBrowser();
     const hidden = blur({ x: 0, y: 0.125, w: 0.125, h: 0.25 });
-    // Save 1: the redaction is baked into the base asset while the crop hides that part.
-    const first = await bakeCanvasRedactions(base, assets, [hidden]);
+    // The base is shown through its right half, so the blur sits over the part the crop hides.
+    const cropped: Scene = {
+      beautify: { bg: "ocean", padding: 24, radius: 8, shadow: 30 },
+      annotations: [hidden],
+      baseCrop: { x: 0.5, y: 0, w: 0.5, h: 1 },
+    };
+    // Save 1: the blur is baked into the whole asset even though the crop hides it.
+    const first = await bakeCanvasRedactions(base, assets, cropped.annotations);
     expect(dec(first.base).rects).toEqual([{ x: 0, y: 75, w: 125, h: 150 }]);
-    // Save 2: the crop is widened. The document stored the blur as locked, so it is not baked
-    // again and the asset keeps the pixels of save 1: nothing brings the original back.
-    const second = await bakeCanvasRedactions(first.base, assets, [
-      blur({ x: 0, y: 0.125, w: 0.125, h: 0.25, locked: true }),
+    // The saved document marks the blur locked and keeps the crop.
+    const reopened = parseCanvasDoc(
+      JSON.stringify(buildCanvasDoc(cropped, { pixelWidth: 1000, pixelHeight: 600 })),
+    )!;
+    expect(reopened.scene.baseCrop).toEqual(cropped.baseCrop);
+    expect(reopened.scene.annotations).toEqual([
+      expect.objectContaining({ kind: "blur", locked: true }),
     ]);
+    // Save 2, after the user widened the crop to the whole asset: the locked blur is not baked
+    // again and the asset keeps the pixels of save 1, so nothing brings the original back.
+    const widened = { ...reopened.scene, baseCrop: undefined };
+    const second = await bakeCanvasRedactions(first.base, assets, widened.annotations);
     expect(second.base).toBe(first.base);
     expect(dec(second.base).rects).toEqual([{ x: 0, y: 75, w: 125, h: 150 }]);
   });

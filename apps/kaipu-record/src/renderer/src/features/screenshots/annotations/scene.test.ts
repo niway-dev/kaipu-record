@@ -137,7 +137,8 @@ describe("the base's rects (per-image crop, unit 3)", () => {
   it("is the unit rect without a placement, whatever the crop says", () => {
     expect(baseFullRect({})).toEqual({ x: 0, y: 0, w: 1, h: 1 });
     // The whole-asset rect never reads the crop: baking a redaction relies on it.
-    expect(baseFullRect({ baseCrop: { x: 0.5, y: 0, w: 0.5, h: 1 } } as never)).toEqual({
+    const cropped: Scene = { ...base, baseCrop: { x: 0.5, y: 0, w: 0.5, h: 1 } };
+    expect(baseFullRect(cropped)).toEqual({
       x: 0,
       y: 0,
       w: 1,
