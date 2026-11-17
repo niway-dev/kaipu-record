@@ -53,6 +53,8 @@ export const libraryCatalog = catalog(
           },
           timeoutMs: 30_000,
         },
+        // Below the fold at the catalog's window size: a crop is clipped to the window.
+        { scrollTo: { area: "library.videoCard", hasText: "Release demo" } },
       ],
       demonstrates: ["library.videoCard:webcam"],
       embedsScreen: true,
