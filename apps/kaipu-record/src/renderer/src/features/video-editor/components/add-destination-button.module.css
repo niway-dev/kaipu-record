@@ -130,12 +130,13 @@
   content: "";
 }
 
-.item[data-active="true"] {
-  background: var(--bg-card-hover);
-}
-
 .item[data-checked="true"] {
   background: var(--accent-primary-tint);
+}
+
+/* After the checked rule, so the item being pointed at shows even when it is the checked one. */
+.item[data-active="true"] {
+  background: var(--bg-card-hover);
 }
 
 .item[aria-disabled="true"] {

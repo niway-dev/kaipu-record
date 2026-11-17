@@ -454,7 +454,6 @@
   min-width: 0;
   display: grid;
   flex: none;
-  /* Three cards across at the design's 470 px; fewer on a narrow window. */
   width: min(470px, 45%);
   /* Three cards across at 470 px (the design's 8 px gaps and 12 px padding); two once the
      window narrows the column below that. */

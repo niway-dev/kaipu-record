@@ -231,7 +231,7 @@ it. Before this the type decided silently (a recording always joined the sequenc
 always floated) and the Captures panel had a second Add to timeline button that did the same as the
 modal's screenshot add. Everything is behind `timeline-levels`.
 
-The destinations, as a radio list with one selected:
+The destinations (first built as a radio list; now the Add button's menu, see the update below):
 
 - **Over the video**: floats at the playhead and the clips do not move. A screenshot becomes
   the floating image of stage 1 (10 s). A recording shows this option disabled, with a hint that

@@ -578,6 +578,15 @@ describe("AddFromLibraryModal", () => {
           expect(sentence()).toBe("Goes last. No clip moves.");
         });
 
+        it("a key press wins over the pointer resting on another option", () => {
+          renderModal({ videos: list, playhead: 3 });
+          fireEvent.click(arrow());
+          fireEvent.mouseEnter(item(START));
+          fireEvent.keyDown(item(AFTER), { key: "End" });
+          expect(item(END)).toHaveFocus();
+          expect(sentence()).toBe("Goes last. No clip moves.");
+        });
+
         it("a disabled option does not preview", () => {
           renderModal({ videos: list, playhead: 3 });
           fireEvent.click(arrow());
@@ -689,7 +698,7 @@ describe("AddFromLibraryModal", () => {
       expect(within(cards()[2]).queryByText("From this recording")).toBeNull();
     });
 
-    it("a click only selects the card: nothing is added and the chooser appears for it", () => {
+    it("a click only selects the card: nothing is added and the Add button appears for it", () => {
       const props = renderModal({ videos: shots });
       openScreenshots();
       expect(screen.queryByTestId("add-destination-button")).toBeNull();

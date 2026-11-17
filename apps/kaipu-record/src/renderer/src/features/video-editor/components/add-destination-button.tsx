@@ -115,6 +115,8 @@ export function AddDestinationButton({
     closeToArrow();
   };
   const moveFocus = (to: LibraryDestination): void => {
+    // The last input wins: a key press moves the preview even while the pointer rests on an item.
+    setHovered(null);
     setFocused(to);
     itemRefs.current[to]?.focus();
   };
