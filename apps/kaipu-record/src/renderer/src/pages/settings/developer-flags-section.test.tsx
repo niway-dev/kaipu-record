@@ -1,7 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FLAG_NAMES } from "@shared/analytics";
+import { reportError } from "@renderer/features/analytics/report-error";
 import { DeveloperFlagsSection } from "./developer-flags-section";
+
+vi.mock("@renderer/features/analytics/report-error", () => ({ reportError: vi.fn() }));
 
 describe("DeveloperFlagsSection", () => {
   const api = window.electronAPI as unknown as {
@@ -41,5 +44,19 @@ describe("DeveloperFlagsSection", () => {
     expect(screen.getAllByRole("button", { name: "Reset" })).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
     expect(set).toHaveBeenCalledWith("image-canvas", null);
+  });
+
+  it("reports a refused change instead of dropping it", async () => {
+    const refusal = new Error("refused");
+    api.setFlagOverride = vi.fn(async () => {
+      throw refusal;
+    });
+    render(<DeveloperFlagsSection />);
+    fireEvent.click(screen.getByRole("switch", { name: "image-canvas" }));
+    await waitFor(() =>
+      expect(reportError).toHaveBeenCalledWith("Could not change image-canvas", refusal, {
+        context: { flag: "image-canvas" },
+      }),
+    );
   });
 });

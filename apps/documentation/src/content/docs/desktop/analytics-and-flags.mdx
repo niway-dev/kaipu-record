@@ -94,13 +94,15 @@ launch variable is ignored there too.
 - **While running:** Settings → Developer → Feature flags. Each flag shows its effective value
   and where it comes from (pinned here, PostHog, or default) and has a toggle; "Reset" hands a
   pinned flag back to PostHog or its default. A toggle goes to every open window at once
-  (`flags:overrides-changed`), so nothing needs a relaunch.
+  (`flags:overrides-changed`), so the app itself needs no relaunch.
 - **Lifetime:** a toggle lasts until the app quits. The launch variable seeds the starting set
   on every start; nothing is written to disk, so a forgotten pin cannot outlive a restart and
   hide a real PostHog value.
 - The "LOCAL ENV · FLAGS OVERRIDDEN" badge shows while any flag is pinned, by either route.
-- **Reads that are not reactive:** a component that reads a flag once (the recorder asks for
-  `native-cursor-capture` at the start of a take) sees the new value the next time it reads.
+- **Reads that are not reactive:** a toggle reaches every window at once, but a component that
+  reads a flag once keeps that value. The recorder asks for `native-cursor-capture` at the start
+  of a take, and the screenshot editor fixes `image-canvas`, `image-inspect` and `image-text` when
+  it opens: an editor that is already open keeps its old value until you reopen it.
 
 ### Comportamiento offline
 

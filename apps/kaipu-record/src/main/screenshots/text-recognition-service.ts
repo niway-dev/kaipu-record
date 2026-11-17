@@ -60,8 +60,9 @@ export function reportImageTextFlag(enabled: boolean): void {
 }
 
 /**
- * The Developer page pinned `image-text` (`true`/`false`) or cleared it (`undefined`). A pin
- * starts or stops the warm-up now; a cleared pin leaves it to the renderer's next report.
+ * The Developer page pinned `image-text` (`true`/`false`) or cleared it (`undefined`). Pinning
+ * `true` starts the warm-up if it has not run yet; `false` only stops a later start (a warm-up
+ * that began keeps going). A cleared pin leaves it to the renderer's next report.
  */
 export function applyImageTextOverride(override: boolean | undefined): void {
   if (override !== undefined) getTextRecognitionService().warmUp.setEnabled(override);

@@ -1,6 +1,7 @@
 import React from "react";
 import { Button, Row, Toggle } from "@kaipu/ui";
 import type { FlagName } from "@shared/analytics";
+import { reportError } from "@renderer/features/analytics/report-error";
 import { useFlagRows } from "@renderer/features/analytics/use-flag-states";
 import type { FlagSource } from "@renderer/features/analytics/analytics-client";
 import { Section } from "./settings-panel";
@@ -21,7 +22,10 @@ const SOURCE_COPY: Record<FlagSource, string> = {
 export function DeveloperFlagsSection(): React.JSX.Element {
   const rows = useFlagRows();
   const pin = (name: FlagName, value: boolean | null): void => {
-    void window.electronAPI.setFlagOverride(name, value);
+    // The row only moves when main broadcasts the change, so a refusal must not be silent.
+    window.electronAPI.setFlagOverride(name, value).catch((error: unknown) => {
+      reportError(`Could not change ${name}`, error, { context: { flag: name } });
+    });
   };
   return (
     <>
@@ -49,8 +53,9 @@ export function DeveloperFlagsSection(): React.JSX.Element {
         ))}
       </Section>
       <p className={styles.sectionNote}>
-        A toggle applies to every open window at once and lasts until the app quits.{" "}
-        <code>KAIPU_FLAG_OVERRIDES</code> still seeds the starting values.
+        A toggle reaches every open window at once and lasts until the app quits. An editor that is
+        already open keeps the value it opened with. <code>KAIPU_FLAG_OVERRIDES</code> still seeds
+        the starting values.
       </p>
     </>
   );

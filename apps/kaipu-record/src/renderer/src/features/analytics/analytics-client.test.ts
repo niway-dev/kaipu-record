@@ -1,13 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  buildPosthogConfig,
-  flagState,
-  isFlagEnabled,
-  onFlagsChanged,
-  scrubEventBeforeSend,
-} from "./analytics-client";
+import { buildPosthogConfig, isFlagEnabled, scrubEventBeforeSend } from "./analytics-client";
 
 const ANY = { deviceId: "device-1", capturing: true };
 
@@ -102,7 +96,11 @@ describe("isFlagEnabled overrides", () => {
 });
 
 describe("live flag overrides (Developer page)", () => {
-  it("a change from main wins over the launch overrides and tells subscribers", () => {
+  it("a change from main wins over the launch overrides and tells subscribers", async () => {
+    // A fresh copy of the module: the live overrides are module state, and the tests above
+    // depend on them being unset.
+    vi.resetModules();
+    const { flagState, isFlagEnabled, onFlagsChanged } = await import("./analytics-client");
     const api = window.electronAPI as unknown as {
       flagOverrides: unknown;
       onFlagOverridesChanged: unknown;
