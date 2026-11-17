@@ -26,11 +26,15 @@ import {
   contentExtents,
   hasExtents,
   intersectFrame,
+  visibleBaseBounds,
   worldToFrame,
+  type Bounds,
   type Extents,
 } from "./canvas-geometry";
 import { bakeCanvasRedactions, type CanvasAssets } from "./redaction";
 import {
+  baseFullRect,
+  baseVisibleRect,
   stepNumbers,
   type Annotation,
   type BlurAnnotation,
@@ -134,7 +138,7 @@ export async function compositeSceneAt(
         throw new Error(`compositor: missing asset ${a.assetId}`);
       }
     }
-    const baked = await bakeCanvasRedactions(bytes, assets, scene.annotations);
+    const baked = await bakeCanvasRedactions(bytes, assets, scene.annotations, scene.basePlacement);
     base = baked.base;
     assetHrefs = {};
     for (const a of scene.annotations) {
@@ -146,17 +150,19 @@ export async function compositeSceneAt(
   const href = await bytesToDataUrl(base);
   // Decode the PNG for its TRUE pixel size (Retina-safe — `getSize` can differ).
   const { width: naturalW, height: naturalH } = await imageSize(href);
-  const { scale, pad, radius, extents } = canvasExportGeometry(
-    scene,
-    naturalW,
-    naturalH,
-    displayedW,
-  );
+  const {
+    scale,
+    pad,
+    radius,
+    extents,
+    base: baseBounds,
+  } = canvasExportGeometry(scene, naturalW, naturalH, displayedW);
   // The crop is a window of the fully-composed frame (bg + padding + shot), normalized
   // 0–1 of that frame. The raster size is that window in native px; no crop = the whole frame.
   const geom: Geom = { href, naturalW, naturalH, pad, radius, scale };
   if (options.canvas) {
     geom.extents = extents;
+    geom.base = baseBounds;
     geom.assets = assetHrefs;
   }
   const { outW, outH } = frameWindow(scene, geom);
@@ -177,13 +183,16 @@ export function canvasExportGeometry(
   naturalW: number,
   naturalH: number,
   displayedW: number,
-): { scale: number; pad: number; radius: number; extents: Extents } {
+): { scale: number; pad: number; radius: number; extents: Extents; base: Bounds } {
   const scale = displayedW > 0 ? naturalW / displayedW : 1;
+  // The VISIBLE base (cropped / resized) is what the content box is measured from.
+  const base = visibleBaseBounds(scene, naturalW, naturalH);
   return {
     scale,
     pad: Math.round(scene.beautify.padding * scale),
     radius: Math.round(scene.beautify.radius * scale),
-    extents: contentExtents(scene.annotations, naturalW, naturalH, scale),
+    extents: contentExtents(scene.annotations, naturalW, naturalH, scale, undefined, base),
+    base,
   };
 }
 
@@ -253,6 +262,11 @@ export interface Geom {
    * image (natural px). All zero + no `exportFrame` yields the exact non-canvas SVG.
    */
   extents?: Extents;
+  /**
+   * Canvas mode: the visible base rect in natural px from the world origin (the whole image
+   * unless the base is cropped or resized). `extents` are measured from it. Absent = the whole image.
+   */
+  base?: Bounds;
   /** Canvas mode: data URL of each added image's (already redacted) PNG, by asset id. */
   assets?: Record<string, string>;
 }
@@ -272,6 +286,7 @@ export function frameWindow(
       naturalH: g.naturalH,
       pad: g.pad,
       extents: g.extents,
+      base: g.base,
     });
     const whole = { vbX: 0, vbY: 0, outW: l.fullW, outH: l.fullH, fullW: l.fullW, fullH: l.fullH };
     if (!scene.exportFrame) return whole;
@@ -284,6 +299,7 @@ export function frameWindow(
         naturalH: g.naturalH,
         pad: g.pad,
         extents: g.extents,
+        base: g.base,
       }),
     );
     if (!c) return whole;
@@ -330,20 +346,32 @@ export function buildSvg(scene: Scene, g: Geom): string {
   // whole frame. Padding is never re-added around the crop; the crop is a window of the
   // already-padded frame, so it can span into the background/padding.
   const { vbX, vbY, outW, outH, fullW, fullH } = frameWindow(scene, g);
-  // Where the image's top-left sits in the frame: the padding, plus (canvas mode) how far
-  // the content box sticks out left/top. Everything drawn in shot space is placed from here.
+  // Where the WORLD ORIGIN sits in the frame: the padding, plus (canvas mode) how far the
+  // content box sticks out left/top of the visible base, minus where the visible base starts
+  // (0 unless the base is cropped or resized). Everything drawn in shot space is placed from here.
   const ext = g.extents;
-  const ox = g.pad + (ext?.left ?? 0);
-  const oy = g.pad + (ext?.top ?? 0);
+  const ox = g.pad + (ext?.left ?? 0) - (ext ? (g.base?.x1 ?? 0) : 0);
+  const oy = g.pad + (ext?.top ?? 0) - (ext ? (g.base?.y1 ?? 0) : 0);
+  // The base: its whole asset rect (where the pixels are drawn) and the part that shows (the
+  // clip). Canvas mode only; the classic path never crops or resizes the base.
+  const baseScene = ext ? scene : {};
+  const full = baseFullRect(baseScene);
+  const vis = baseVisibleRect(baseScene);
+  const baseR = (ext ? scene.baseRadius : undefined) ?? g.radius;
+  const vx = ox + vis.x * g.naturalW;
+  const vy = oy + vis.y * g.naturalH;
+  const vw = vis.w * g.naturalW;
+  const vh = vis.h * g.naturalH;
 
   defs.push(
-    `<clipPath id="rc"><rect x="${ox}" y="${oy}" width="${g.naturalW}" height="${g.naturalH}" rx="${g.radius}"/></clipPath>`,
+    `<clipPath id="rc"><rect x="${vx}" y="${vy}" width="${vw}" height="${vh}" rx="${baseR}"/></clipPath>`,
   );
   // The base image, defined ONCE and referenced by <use> for the base + every blur box,
   // so a redacted export doesn't re-embed the (huge) data URL per blur (which blew up
-  // the SVG and could fail rasterization with a few blurs).
+  // the SVG and could fail rasterization with a few blurs). It is the WHOLE asset at the size
+  // it has on the canvas; a crop is the clip above, a resize is this size.
   defs.push(
-    `<image id="shot" href="${g.href}" width="${g.naturalW}" height="${g.naturalH}" preserveAspectRatio="none"/>`,
+    `<image id="shot" href="${g.href}" width="${full.w * g.naturalW}" height="${full.h * g.naturalH}" preserveAspectRatio="none"/>`,
   );
 
   // Each added image (canvas mode), defined ONCE per asset and pixel size like #shot, however
@@ -378,13 +406,13 @@ export function buildSvg(scene: Scene, g: Geom): string {
       : "";
   const shadow =
     sv > 0
-      ? `<rect x="${ox}" y="${oy}" width="${g.naturalW}" height="${g.naturalH}" rx="${g.radius}" fill="#000" filter="url(#sh)"/>`
+      ? `<rect x="${vx}" y="${vy}" width="${vw}" height="${vh}" rx="${baseR}" fill="#000" filter="url(#sh)"/>`
       : "";
   // Clip via a wrapping <g>, NOT on the translated <use>: a clip-path on an element that
   // also carries an x/y translation is resolved in the translated user space, so `rc`
   // (authored at (pad,pad)) would land at (2·pad,2·pad) and shear the shot's top-left off.
   // The group has no transform, so `rc` clips in root space where the shot actually is.
-  const image = `<g clip-path="url(#rc)"><use href="#shot" x="${ox}" y="${oy}"/></g>`;
+  const image = `<g clip-path="url(#rc)"><use href="#shot" x="${ox + full.x * g.naturalW}" y="${oy + full.y * g.naturalH}"/></g>`;
   // Annotations are NOT clipped to the shot rect: the live preview renders them
   // with overflow visible, so an arrow head / pen stroke / text that lands in the
   // beautify padding is shown there — clipping to the shot truncated it in the
@@ -399,7 +427,7 @@ export function buildSvg(scene: Scene, g: Geom): string {
   const anno = `<g transform="translate(${ox},${oy})">${scene.annotations
     .map((a, i) => {
       if (a.kind === "image") return imageSvg(a, g, sv > 0);
-      if (a.kind === "blur" && ext) return bakedBlurSvg(a, scene.annotations.slice(0, i), g);
+      if (a.kind === "blur" && ext) return bakedBlurSvg(a, scene.annotations.slice(0, i), g, scene);
       const drawn = annotationSvg(a, g.naturalW, g.naturalH, g.scale, steps);
       if (!ext) return drawn;
       // Redrawing the baked images over a later redaction hides this annotation only where
@@ -483,7 +511,12 @@ function redactionCutMask(id: string, covers: readonly BlurAnnotation[], g: Geom
  * Their pixels already hold the redaction, so no filter is drawn; redrawing them covers
  * any annotation stacked between those images and the blur.
  */
-function bakedBlurSvg(a: BlurAnnotation, below: readonly Annotation[], g: Geom): string {
+function bakedBlurSvg(
+  a: BlurAnnotation,
+  below: readonly Annotation[],
+  g: Geom,
+  scene: Scene,
+): string {
   const clip = `bclip-${a.id}`;
   const images = below
     .filter((b): b is ImageAnnotation => b.kind === "image")
@@ -491,7 +524,28 @@ function bakedBlurSvg(a: BlurAnnotation, below: readonly Annotation[], g: Geom):
     .join("");
   return (
     `<defs><clipPath id="${clip}"><rect x="${a.x * g.naturalW}" y="${a.y * g.naturalH}" width="${a.w * g.naturalW}" height="${a.h * g.naturalH}"/></clipPath></defs>` +
-    `<g clip-path="url(#${clip})"><use href="#shot"/>${images}</g>`
+    `<g clip-path="url(#${clip})">${baseUnderBlurSvg(a, g, scene)}${images}</g>`
+  );
+}
+
+/**
+ * The base's pixels redrawn under a redaction, in the annotation group's space (translated to
+ * the world origin). A base at its natural place and size is the plain `<use>` it always was.
+ * A resized base is drawn from its own corner. A CROPPED base is clipped to its visible rect
+ * (with its radius), like an added image: the redraw must not paint the cropped-out pixels.
+ */
+function baseUnderBlurSvg(a: BlurAnnotation, g: Geom, scene: Scene): string {
+  const full = baseFullRect(scene);
+  const at =
+    full.x === 0 && full.y === 0 ? "" : ` x="${full.x * g.naturalW}" y="${full.y * g.naturalH}"`;
+  const use = `<use href="#shot"${at}/>`;
+  if (!scene.baseCrop) return use;
+  const vis = baseVisibleRect(scene);
+  const id = `bbase-${a.id}`;
+  const r = scene.baseRadius ?? g.radius;
+  return (
+    `<defs><clipPath id="${id}"><rect x="${vis.x * g.naturalW}" y="${vis.y * g.naturalH}" width="${vis.w * g.naturalW}" height="${vis.h * g.naturalH}" rx="${r}"/></clipPath></defs>` +
+    `<g clip-path="url(#${id})">${use}</g>`
   );
 }
 

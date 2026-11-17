@@ -33,6 +33,7 @@ import {
   moveMeasure,
 } from "./measure";
 import {
+  fullRect,
   nextAnnotationId,
   stepNumbers,
   type Annotation,
@@ -1356,6 +1357,9 @@ const ImageShape = React.memo(function ImageShape({
   const y = a.y * size.h;
   const w = a.w * size.w;
   const h = a.h * size.h;
+  // The asset is drawn WHOLE from its own top-left (`fullRect`), left of / above the visible
+  // rect when the image is cropped; the clip (the visible rect) is what shows. Same as the export.
+  const full = fullRect(a);
   const clip = `iclip-${a.id}`;
   const sh = shadow > 0 ? shadowFilter(shadow) : null;
   return (
@@ -1393,14 +1397,20 @@ const ImageShape = React.memo(function ImageShape({
         <image
           data-testid="canvas-image"
           href={url}
-          x={x}
-          y={y}
-          width={w}
-          height={h}
+          x={full.x * size.w}
+          y={full.y * size.h}
+          width={full.w * size.w}
+          height={full.h * size.h}
           preserveAspectRatio="none"
         />
         {redactions
-          .filter((b) => b.x < a.x + a.w && b.x + b.w > a.x && b.y < a.y + a.h && b.y + b.h > a.y)
+          .filter(
+            (b) =>
+              b.x < full.x + full.w &&
+              b.x + b.w > full.x &&
+              b.y < full.y + full.h &&
+              b.y + b.h > full.y,
+          )
           .map((b) => (
             <ImageRedactionTile key={b.id} a={a} blur={b} url={url} size={size} />
           ))}
@@ -1433,27 +1443,30 @@ function ImageRedactionTile({
   url: string;
   size: Size;
 }): React.JSX.Element | null {
+  // In the WHOLE asset's local units, as `bakeCanvasRedactions` maps them (a blur over a
+  // cropped-out part still previews the pixels the save bakes).
+  const full = fullRect(a);
   const tile = useRedactionTile(
     url,
     {
-      x: (blur.x - a.x) / a.w,
-      y: (blur.y - a.y) / a.h,
-      w: blur.w / a.w,
-      h: blur.h / a.h,
+      x: (blur.x - full.x) / full.w,
+      y: (blur.y - full.y) / full.h,
+      w: blur.w / full.w,
+      h: blur.h / full.h,
     },
     blur.style ?? "blur",
     true,
   );
   if (!tile) return null;
-  const w = a.w * size.w;
-  const h = a.h * size.h;
+  const w = full.w * size.w;
+  const h = full.h * size.h;
   return (
     <image
       data-testid="image-redaction-tile"
       data-blur={blur.id}
       href={tile.url}
-      x={a.x * size.w + (tile.rect.x / tile.naturalW) * w}
-      y={a.y * size.h + (tile.rect.y / tile.naturalH) * h}
+      x={full.x * size.w + (tile.rect.x / tile.naturalW) * w}
+      y={full.y * size.h + (tile.rect.y / tile.naturalH) * h}
       width={(tile.rect.w / tile.naturalW) * w}
       height={(tile.rect.h / tile.naturalH) * h}
       preserveAspectRatio="none"
@@ -1503,16 +1516,17 @@ function BlurOverImagesBelow({
       <g clipPath={`url(#${clip})`}>
         {hits.map((b) => {
           const url = imageUrls![b.assetId]!;
+          const full = fullRect(b);
           // Inside the image's own rounded clip (drawn by its ImageShape), as the export does.
           return (
             <g key={b.id} clipPath={`url(#iclip-${b.id})`}>
               {blur.locked ? (
                 <image
                   href={url}
-                  x={b.x * size.w}
-                  y={b.y * size.h}
-                  width={b.w * size.w}
-                  height={b.h * size.h}
+                  x={full.x * size.w}
+                  y={full.y * size.h}
+                  width={full.w * size.w}
+                  height={full.h * size.h}
                   preserveAspectRatio="none"
                 />
               ) : (

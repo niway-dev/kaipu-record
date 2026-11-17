@@ -327,6 +327,72 @@ describe("bakeCanvasRedactions", () => {
     expect(out.base).toBe(base);
     expect(out.assets).toBe(assets);
   });
+
+  // The base, per-image crop unit 3. Illustrative: the 1000x600 base shown through a crop of
+  // its right half. `bakeCanvasRedactions` never reads the crop, only where the whole asset sits.
+  it("privacy: bakes a blur over the cropped-out part of the BASE (the crop is not an input)", async () => {
+    fakeBrowser();
+    // World x 0..125 (normalized 0..0.125) is the left half, which the base crop hides.
+    const out = await bakeCanvasRedactions(base, assets, [
+      blur({ x: 0, y: 0.125, w: 0.125, h: 0.25 }),
+    ]);
+    expect(out.base).not.toBe(base);
+    expect(dec(out.base).rects).toEqual([{ x: 0, y: 75, w: 125, h: 150 }]);
+  });
+
+  it("privacy: redact, crop out, save, expand the crop: the saved pixels stay redacted", async () => {
+    fakeBrowser();
+    const hidden = blur({ x: 0, y: 0.125, w: 0.125, h: 0.25 });
+    // Save 1: the redaction is baked into the base asset while the crop hides that part.
+    const first = await bakeCanvasRedactions(base, assets, [hidden]);
+    expect(dec(first.base).rects).toEqual([{ x: 0, y: 75, w: 125, h: 150 }]);
+    // Save 2: the crop is widened. The document stored the blur as locked, so it is not baked
+    // again and the asset keeps the pixels of save 1: nothing brings the original back.
+    const second = await bakeCanvasRedactions(first.base, assets, [
+      blur({ x: 0, y: 0.125, w: 0.125, h: 0.25, locked: true }),
+    ]);
+    expect(second.base).toBe(first.base);
+    expect(dec(second.base).rects).toEqual([{ x: 0, y: 75, w: 125, h: 150 }]);
+  });
+
+  it("bakes a blur into a resized base through the whole asset's placed rect", async () => {
+    fakeBrowser();
+    // The 1000x600 base at half size with its corner at normalized (1, 0): it covers x 1..1.5,
+    // y 0..0.5. The blur at x 1.125..1.25, y 0.125..0.25 is a quarter of the way in, a quarter wide.
+    const out = await bakeCanvasRedactions(
+      base,
+      assets,
+      [blur({ x: 1.125, y: 0.125, w: 0.125, h: 0.125 })],
+      { x: 1, y: 0, scale: 0.5 },
+    );
+    expect(dec(out.base).rects).toEqual([{ x: 250, y: 150, w: 250, h: 150 }]);
+  });
+
+  it("does not bake a blur that misses the resized base, even where the unmoved base was", async () => {
+    fakeBrowser();
+    // Normalized 0..0.125 lies over the base's ORIGINAL place; it now sits at x 1..1.5.
+    const out = await bakeCanvasRedactions(
+      base,
+      assets,
+      [blur({ x: 0, y: 0.125, w: 0.125, h: 0.125 })],
+      { x: 1, y: 0, scale: 0.5 },
+    );
+    expect(out.base).toBe(base);
+  });
+
+  it("fails closed on an invalid base placement instead of guessing where the asset is", async () => {
+    fakeBrowser();
+    const hidden = [blur({ x: 0, y: 0.125, w: 0.125, h: 0.25 })];
+    for (const placement of [
+      { x: 0, y: 0, scale: 0 },
+      { x: 0, y: 0, scale: -1 },
+      { x: Number.NaN, y: 0, scale: 1 },
+    ]) {
+      await expect(bakeCanvasRedactions(base, assets, hidden, placement)).rejects.toThrow(
+        /invalid placement/,
+      );
+    }
+  });
 });
 
 describe("withoutRedactedText (NIW2-799)", () => {

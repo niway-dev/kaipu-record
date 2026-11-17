@@ -4,6 +4,8 @@ import {
   nextAnnotationId,
   reserveAnnotationIds,
   sameScene,
+  baseFullRect,
+  baseVisibleRect,
   fullRect,
   stepNumbers,
   type Annotation,
@@ -128,5 +130,49 @@ describe("fullRect", () => {
     ]) {
       expect(() => fullRect({ ...image, crop })).toThrow(RangeError);
     }
+  });
+});
+
+describe("the base's rects (per-image crop, unit 3)", () => {
+  it("is the unit rect without a placement, whatever the crop says", () => {
+    expect(baseFullRect({})).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+    // The whole-asset rect never reads the crop: baking a redaction relies on it.
+    expect(baseFullRect({ baseCrop: { x: 0.5, y: 0, w: 0.5, h: 1 } } as never)).toEqual({
+      x: 0,
+      y: 0,
+      w: 1,
+      h: 1,
+    });
+  });
+  it("a placement moves and scales the whole asset uniformly", () => {
+    expect(baseFullRect({ basePlacement: { x: 1, y: 0.25, scale: 0.5 } })).toEqual({
+      x: 1,
+      y: 0.25,
+      w: 0.5,
+      h: 0.5,
+    });
+  });
+  it("the visible rect is the crop window of the whole rect", () => {
+    expect(baseVisibleRect({})).toEqual({ x: 0, y: 0, w: 1, h: 1 });
+    expect(
+      baseVisibleRect({
+        basePlacement: { x: 1, y: 0.25, scale: 0.5 },
+        baseCrop: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 },
+      }),
+    ).toEqual({ x: 1.125, y: 0.375, w: 0.25, h: 0.25 });
+  });
+  it("an invalid placement throws instead of guessing where the asset is", () => {
+    for (const scale of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => baseFullRect({ basePlacement: { x: 0, y: 0, scale } })).toThrow(RangeError);
+    }
+    expect(() => baseFullRect({ basePlacement: { x: Number.NaN, y: 0, scale: 1 } })).toThrow(
+      RangeError,
+    );
+  });
+  it("sameScene sees a change of any base field", () => {
+    const s: Scene = { ...base };
+    expect(sameScene(s, { ...s, baseCrop: { x: 0, y: 0, w: 1, h: 1 } })).toBe(false);
+    expect(sameScene(s, { ...s, baseRadius: 4 })).toBe(false);
+    expect(sameScene(s, { ...s, basePlacement: { x: 0, y: 0, scale: 1 } })).toBe(false);
   });
 });

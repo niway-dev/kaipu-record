@@ -412,6 +412,44 @@ describe("an added image resizes from its corners, ratio locked", () => {
   });
 });
 
+describe("a cropped image resizes without stretching and keeps its crop", () => {
+  // Illustrative: a 200 x 100 asset showing its right half (100 x 100 source px, a square),
+  // drawn as 0.2 x 0.2 of a 1000 x 1000 layer: 200 x 200 layer px.
+  const cropped: Annotation = {
+    id: "c",
+    kind: "image",
+    assetId: "img-aaaaaaaaaaaa",
+    x: 0.2,
+    y: 0.3,
+    w: 0.2,
+    h: 0.2,
+    pixelWidth: 200,
+    pixelHeight: 100,
+    crop: { x: 0.5, y: 0, w: 0.5, h: 1 },
+  };
+  type Patch = { x: number; y: number; w: number; h: number };
+  const patch = (handle: "se" | "nw", p: { x: number; y: number }) =>
+    resizeAnnotation(cropped, handle, p, size, true) as Patch & { crop?: unknown };
+
+  it("locks the aspect of what shows (a square), not the asset's 2:1", () => {
+    const out = patch("se", { x: 0.8, y: 0.4 }); // anchor x 0.2: width leads at 600 px
+    expect(out.w).toBeCloseTo(0.6);
+    expect(out.h).toBeCloseTo(0.6); // 2:1 would give 0.3
+    expect((out.w * 1000) / (out.h * 1000)).toBeCloseTo(1);
+  });
+  it("the patch holds no crop, so applying it keeps the crop window", () => {
+    expect("crop" in patch("se", { x: 0.8, y: 0.4 })).toBe(false);
+    expect({ ...cropped, ...patch("se", { x: 0.8, y: 0.4 }) }).toMatchObject({
+      crop: { x: 0.5, y: 0, w: 0.5, h: 1 },
+    });
+  });
+  it("keeps the opposite corner fixed", () => {
+    const out = patch("nw", { x: 0.1, y: 0.2 });
+    expect(out.x + out.w).toBeCloseTo(0.4);
+    expect(out.y + out.h).toBeCloseTo(0.5);
+  });
+});
+
 describe("step badge", () => {
   const step: Annotation = { id: "s", kind: "step", x: 0.5, y: 0.5, color: "#fff", size: 1 };
   it("has no resize handles", () => {

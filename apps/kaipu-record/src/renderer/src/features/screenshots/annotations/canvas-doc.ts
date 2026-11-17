@@ -6,7 +6,14 @@ import {
   SHADOW_RANGE,
   type BeautifyState,
 } from "../beautify/backgrounds";
-import type { Annotation, CropRect, Scene } from "./scene";
+import {
+  baseFullRect,
+  baseVisibleRect,
+  type Annotation,
+  type BasePlacement,
+  type CropRect,
+  type Scene,
+} from "./scene";
 import { STEP_PX, STROKE_WIDTHS, TEXT_SIZES } from "./tools";
 
 /** A stored preset index (stroke level, text size): an integer inside its table. Anything
@@ -26,10 +33,16 @@ const level = (v: unknown, table: readonly unknown[]): boolean =>
  * never held an added image, so it is read as it is.
  *
  * Version 3 (per-image crop) adds optional `crop` (visible window inside the asset,
- * 0–1 of the asset) and `radius` (source px) to an added image item. Both are unitless
- * or asset-relative, so the world conversion leaves them alone, and `x/y/w/h` stay the
- * visible rect. A build that only knows 1 and 2 rejects v3 on purpose: it would stretch
- * the whole asset into the cropped rect instead of showing the window.
+ * 0–1 of the asset) and `radius` (source px) to an image item, the base (item 0) included.
+ * Both are unitless or asset-relative, so the world conversion leaves them alone, and
+ * `x/y/w/h` stay the visible rect. A build that only knows 1 and 2 rejects v3 on purpose: it
+ * would stretch the whole asset into the cropped rect instead of showing the window.
+ *
+ * The base item in v3 is an image item like any other: `x/y/w/h` is its visible rect and may
+ * differ from `0,0,pixelWidth,pixelHeight` once the base is cropped or resized (uniformly:
+ * `w / crop.w` over `pixelWidth` must equal `h / crop.h` over `pixelHeight`). The world
+ * origin and unit stay the base asset at scale 1, so no other item's number depends on how
+ * the base was cropped or resized. Versions 1 and 2 convert by the base item's rect, as before.
  */
 export const CANVAS_DOC_VERSION = 3;
 /** Asset id of the base image. */
@@ -157,7 +170,7 @@ const toNormMaps = (b: WorldBase) =>
  * Builds the document for a save (always the current version, in world units). Every
  * redaction is written `locked`: this save bakes its pixels into every image it touches.
  * The scene-level `crop` is not stored (canvas mode exports by `exportFrame`); an image's own
- * `crop` and `radius` are (v3). An image annotation is
+ * `crop` and `radius` are (v3), and so are the base's (`baseCrop`, `baseRadius`, `basePlacement`). An image annotation is
  * written as an image item at its z-position, after the base.
  *
  * `lockedAt(id)` (epoch ms) is asked for each redaction that is not yet locked in memory:
@@ -170,18 +183,31 @@ export function buildCanvasDoc(
   base: { pixelWidth: number; pixelHeight: number; assetId?: string },
   opts: { lockedAt?: (annotationId: string) => number } = {},
 ): CanvasDocV2 {
+  // The base's VISIBLE rect in world px (the whole asset at 0,0 unless it was cropped or
+  // resized), with its crop and radius like any image item. Throws on an invalid placement:
+  // better no save than a document that places the asset wrongly.
+  baseFullRect(scene);
+  const vis = baseVisibleRect(scene);
   const image: CanvasImageItem = {
     id: "image-base",
     kind: "image",
     assetId: base.assetId ?? BASE_ASSET_ID,
+    x: vis.x * base.pixelWidth,
+    y: vis.y * base.pixelHeight,
+    w: vis.w * base.pixelWidth,
+    h: vis.h * base.pixelHeight,
+    pixelWidth: base.pixelWidth,
+    pixelHeight: base.pixelHeight,
+    ...(scene.baseCrop ? { crop: scene.baseCrop } : {}),
+    ...(scene.baseRadius !== undefined ? { radius: scene.baseRadius } : {}),
+  };
+  // Geometry converts by the base ASSET at scale 1, not by its visible rect.
+  const maps = toWorldMaps({
     x: 0,
     y: 0,
     w: base.pixelWidth,
     h: base.pixelHeight,
-    pixelWidth: base.pixelWidth,
-    pixelHeight: base.pixelHeight,
-  };
-  const maps = toWorldMaps(image);
+  });
   const annotations = scene.annotations.map((a): Annotation => {
     const world = mapGeometry(a, ...maps, true);
     if (world.kind !== "blur") return world;
@@ -204,7 +230,7 @@ export interface ParsedCanvasDoc {
    * here: they are `ImageAnnotation`s in `scene.annotations`, at their z-position.
    */
   base: CanvasImageItem;
-  /** Base-normalized, whatever the stored version. the scene-level `crop` is always undefined (canvas mode exports by `exportFrame`); an image's own `crop`/`radius` are kept. */
+  /** Base-normalized, whatever the stored version. the scene-level `crop` is always undefined (canvas mode exports by `exportFrame`); an image's own `crop`/`radius` are kept, and a v3 base's crop, radius and placement become `baseCrop`, `baseRadius` and `basePlacement`. */
   scene: Scene;
 }
 
@@ -311,6 +337,30 @@ function parseFrame(v: unknown): BeautifyState | null {
   return v as unknown as BeautifyState;
 }
 
+/**
+ * The placement of the whole base asset that a v3 base item implies: its visible rect divided
+ * by its crop window gives the asset's rect, and a uniform resize needs the same scale on both
+ * axes. `undefined` = the base sits at the origin at natural size (what every document written
+ * before the base could be moved says). `null` = the item stretches the asset, which no editor
+ * writes: unreadable.
+ */
+function placementOf(item: CanvasImageItem): BasePlacement | undefined | null {
+  const c = item.crop ?? { x: 0, y: 0, w: 1, h: 1 };
+  const fullW = item.w / c.w;
+  const fullH = item.h / c.h;
+  const sx = fullW / item.pixelWidth;
+  const sy = fullH / item.pixelHeight;
+  if (!Number.isFinite(sx) || !Number.isFinite(sy) || sx <= 0 || sy <= 0) return null;
+  if (Math.abs(sx - sy) > 1e-6 * Math.max(sx, sy)) return null;
+  const x = (item.x - c.x * fullW) / item.pixelWidth;
+  const y = (item.y - c.y * fullH) / item.pixelHeight;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  // Float noise from the divide-and-multiply round trip is the identity, not a placement.
+  const near = (v: number, to: number): boolean => Math.abs(v - to) < 1e-9;
+  if (near(x, 0) && near(y, 0) && near(sx, 1)) return undefined;
+  return { x, y, scale: sx };
+}
+
 /** Parses a stored document. Null means "fall back to the flattened PNG": never guess. */
 export function parseCanvasDoc(json: string): ParsedCanvasDoc | null {
   let raw: unknown;
@@ -338,9 +388,14 @@ export function parseCanvasDoc(json: string): ParsedCanvasDoc | null {
   const first: unknown = items[0];
   if (!isObj(first) || first.kind !== "image") return null; // item 0 must be the base image
   base = parseImage(first, version === 3);
-  // The base has no crop or radius yet: reading one as the base's world rect would be silently wrong.
-  if (!base || base.crop || base.radius !== undefined) return null;
-  const [px, py, sw, sh] = version !== 1 ? toNormMaps(base) : [null, null, null, null];
+  if (!base) return null;
+  // v3: the base item is its visible rect (an image item like any other); the world unit is the
+  // asset at scale 1. A v2 base is its own unit rect, as before (it never carried a crop).
+  const basePlacement = version === 3 ? placementOf(base) : undefined;
+  if (version === 3 && basePlacement === null) return null; // not a uniform resize: unreadable
+  const unit: WorldBase =
+    version === 3 ? { x: 0, y: 0, w: base.pixelWidth, h: base.pixelHeight } : base;
+  const [px, py, sw, sh] = version !== 1 ? toNormMaps(unit) : [null, null, null, null];
   const convert = (a: Annotation): Annotation => (px ? mapGeometry(a, px, py, sw, sh, false) : a);
   for (let i = 1; i < items.length; i++) {
     const item: unknown = items[i];
@@ -373,6 +428,11 @@ export function parseCanvasDoc(json: string): ParsedCanvasDoc | null {
     annotations.push(convert(annotation));
   }
   const scene: Scene = { beautify: frame, annotations };
+  if (version === 3) {
+    if (base.crop) scene.baseCrop = base.crop;
+    if (base.radius !== undefined) scene.baseRadius = base.radius;
+    if (basePlacement) scene.basePlacement = basePlacement;
+  }
   if (exportFrame) scene.exportFrame = px ? rectMap(exportFrame, px, py, sw, sh) : exportFrame;
   return { base, scene };
 }

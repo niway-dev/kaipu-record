@@ -18,7 +18,8 @@ export {
   type CompositeResult,
 } from "./compositor";
 export type { Scene, Annotation, CropRect, ImageAnnotation, MeasureAnnotation } from "./scene";
-export { nextAnnotationId, fullRect } from "./scene";
+export { nextAnnotationId, fullRect, baseFullRect, baseVisibleRect } from "./scene";
+export type { BasePlacement, NormalizedRect } from "./scene";
 export { measureLabel, measureLength } from "./measure";
 export {
   annotationBounds,

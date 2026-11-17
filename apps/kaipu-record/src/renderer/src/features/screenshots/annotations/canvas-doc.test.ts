@@ -527,12 +527,107 @@ describe("canvas document — per-image crop (v3)", () => {
     expect(bad((i) => (i.radius = "12"))).toBeNull();
     expect(bad(() => {})).not.toBeNull();
   });
+});
 
-  it("refuses a base item that carries a crop or a radius (not supported yet)", () => {
-    for (const patch of [{ crop: { x: 0, y: 0, w: 0.5, h: 0.5 } }, { radius: 8 }]) {
-      const d = JSON.parse(JSON.stringify(buildCanvasDoc(withImages, base)));
+describe("canvas document — base crop, scale and corners (v3)", () => {
+  // Illustrative: the 800x600 base shown through the middle of its asset, resized to 0.5x with
+  // the whole asset's corner at normalized (1, 0.25), and a 10 px corner of its own.
+  const placed: Scene = {
+    ...scene,
+    baseCrop: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 },
+    baseRadius: 10,
+    basePlacement: { x: 1, y: 0.25, scale: 0.5 },
+  };
+
+  it("writes the base item as its VISIBLE rect with crop and radius", () => {
+    const [item] = buildCanvasDoc(placed, base).items as any[];
+    // whole asset: x 800, y 150, 400x300 -> visible window = middle half: x 900, y 225, 200x150.
+    expect(item).toMatchObject({
+      assetId: "base",
+      x: 900,
+      y: 225,
+      w: 200,
+      h: 150,
+      pixelWidth: 800,
+      pixelHeight: 600,
+      crop: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 },
+      radius: 10,
+    });
+  });
+
+  it("round-trips baseCrop, baseRadius and basePlacement and keeps every other item's coordinates", () => {
+    const parsed = parseCanvasDoc(JSON.stringify(buildCanvasDoc(placed, base)));
+    expect(parsed).not.toBeNull();
+    expectClose(parsed!.scene.baseCrop, placed.baseCrop);
+    expectClose(parsed!.scene.basePlacement, placed.basePlacement);
+    expect(parsed!.scene.baseRadius).toBe(10);
+    // The world unit is the base asset at scale 1: the base's crop and resize do not move the
+    // other items' numbers, so the geometry reads back exactly as it went in.
+    const plainParsed = parseCanvasDoc(JSON.stringify(buildCanvasDoc(scene, base)))!;
+    const unlock = (list: Annotation[]) => list.map((a) => ({ ...a, lockedAt: undefined }));
+    expectClose(unlock(parsed!.scene.annotations), unlock(plainParsed.scene.annotations));
+  });
+
+  it("writes nothing extra for an untouched base: the item is the unit rect with no crop or radius", () => {
+    const [item] = buildCanvasDoc(scene, base).items as any[];
+    expect(item).toEqual({
+      id: "image-base",
+      kind: "image",
+      assetId: "base",
+      x: 0,
+      y: 0,
+      w: 800,
+      h: 600,
+      pixelWidth: 800,
+      pixelHeight: 600,
+    });
+    const parsed = parseCanvasDoc(JSON.stringify(buildCanvasDoc(scene, base)))!;
+    expect(parsed.scene.baseCrop).toBeUndefined();
+    expect(parsed.scene.baseRadius).toBeUndefined();
+    expect(parsed.scene.basePlacement).toBeUndefined();
+  });
+
+  it("reads a base crop alone (placement stays the identity)", () => {
+    const only: Scene = { ...scene, baseCrop: { x: 0.5, y: 0, w: 0.5, h: 1 } };
+    const [item] = buildCanvasDoc(only, base).items as any[];
+    expect(item).toMatchObject({ x: 400, y: 0, w: 400, h: 600 });
+    const parsed = parseCanvasDoc(JSON.stringify(buildCanvasDoc(only, base)))!;
+    expectClose(parsed.scene.baseCrop, only.baseCrop);
+    expect(parsed.scene.basePlacement).toBeUndefined();
+  });
+
+  it("falls back to the flattened PNG for a base that stretches the asset", () => {
+    const d = JSON.parse(JSON.stringify(buildCanvasDoc(placed, base)));
+    d.items[0].w *= 2; // wider only: not a uniform resize
+    expect(parseCanvasDoc(JSON.stringify(d))).toBeNull();
+  });
+
+  it("falls back to the flattened PNG for an invalid base crop or radius", () => {
+    for (const patch of [
+      { crop: { x: 0.5, y: 0, w: 0.75, h: 1 } },
+      { crop: { x: 0, y: 0, w: 0, h: 1 } },
+      { radius: -1 },
+    ]) {
+      const d = JSON.parse(JSON.stringify(buildCanvasDoc(placed, base)));
       Object.assign(d.items[0], patch);
-      expect(parseCanvasDoc(JSON.stringify(d))).toBeNull();
+      expect(parseCanvasDoc(JSON.stringify(d)), JSON.stringify(patch)).toBeNull();
     }
+  });
+
+  it("refuses to build a document for an invalid placement instead of placing the asset wrongly", () => {
+    expect(() =>
+      buildCanvasDoc({ ...scene, basePlacement: { x: 0, y: 0, scale: 0 } }, base),
+    ).toThrow(/invalid placement/);
+  });
+
+  it("ignores base crop and radius on a v2 file: that version never wrote them", () => {
+    const d = JSON.parse(JSON.stringify(buildCanvasDoc(scene, base)));
+    d.schemaVersion = 2;
+    d.items[0].crop = { x: 0, y: 0, w: 0.5, h: 0.5 };
+    d.items[0].radius = 8;
+    const parsed = parseCanvasDoc(JSON.stringify(d));
+    expect(parsed).not.toBeNull();
+    expect(parsed!.scene.baseCrop).toBeUndefined();
+    expect(parsed!.scene.baseRadius).toBeUndefined();
   });
 });

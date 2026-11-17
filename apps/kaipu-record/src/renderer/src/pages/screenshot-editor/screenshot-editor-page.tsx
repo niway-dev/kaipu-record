@@ -604,6 +604,10 @@ function ScreenshotEditorBody({
     annotations: scene.annotations,
     crop: scene.crop,
     exportFrame: scene.exportFrame,
+    // Per-image crop, unit 3: carried through, never written by this editor yet.
+    ...(scene.baseCrop ? { baseCrop: scene.baseCrop } : {}),
+    ...(scene.baseRadius !== undefined ? { baseRadius: scene.baseRadius } : {}),
+    ...(scene.basePlacement ? { basePlacement: scene.basePlacement } : {}),
   });
   // The scene and title field as of the latest render, for queued jobs to read.
   const latest = useRef({ scene: currentScene(), draft: captureTitle.draft });

@@ -213,7 +213,12 @@ function resizeImage(
   if (!((west || east) && (north || south))) return {}; // an edge or an endpoint: inactive
   const W = size.w || 1;
   const H = size.h || 1;
-  const ratio = a.pixelWidth / a.pixelHeight;
+  // The aspect that stays locked is the one of what SHOWS: the crop window of the asset, so a
+  // cropped image resizes without stretching and keeps its crop (the patch holds no `crop`).
+  // Uncropped, it is the asset's own, as ever.
+  const ratio = a.crop
+    ? (a.pixelWidth * a.crop.w) / (a.pixelHeight * a.crop.h)
+    : a.pixelWidth / a.pixelHeight;
   const anchor = { x: east ? a.x : a.x + a.w, y: south ? a.y : a.y + a.h };
   const dx = Math.max(0, east ? p.x - anchor.x : anchor.x - p.x) * W;
   const dy = Math.max(0, south ? p.y - anchor.y : anchor.y - p.y) * H;

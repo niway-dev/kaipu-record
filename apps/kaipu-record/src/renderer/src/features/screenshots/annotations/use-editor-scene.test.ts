@@ -138,4 +138,29 @@ describe("useEditorScene", () => {
     act(() => result.current.undo());
     expect(result.current.exportFrame).toEqual({ x: 0, y: 0, w: 2, h: 2 });
   });
+
+  it("carries a reopened document's base crop, radius and placement, and an edit keeps them", () => {
+    const baseCrop = { x: 0.25, y: 0.25, w: 0.5, h: 0.5 };
+    const basePlacement = { x: 1, y: 0.25, scale: 0.5 };
+    const { result } = renderHook(() =>
+      useEditorScene(undefined, { annotations: [], baseCrop, baseRadius: 10, basePlacement }),
+    );
+    expect(result.current.baseCrop).toEqual(baseCrop);
+    expect(result.current.baseRadius).toBe(10);
+    expect(result.current.basePlacement).toEqual(basePlacement);
+    // Nothing in the editor writes them yet: any edit, undo and redo must leave them as saved.
+    act(() => result.current.setExportFrame({ x: 0, y: 0, w: 2, h: 2 }));
+    act(() => result.current.undo());
+    act(() => result.current.redo());
+    expect(result.current.baseCrop).toEqual(baseCrop);
+    expect(result.current.baseRadius).toBe(10);
+    expect(result.current.basePlacement).toEqual(basePlacement);
+  });
+
+  it("a scene with no base fields exposes none", () => {
+    const { result } = renderHook(() => useEditorScene());
+    expect(result.current.baseCrop).toBeUndefined();
+    expect(result.current.baseRadius).toBeUndefined();
+    expect(result.current.basePlacement).toBeUndefined();
+  });
 });

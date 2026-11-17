@@ -251,13 +251,27 @@ describe("compositor canvas mode", () => {
     await expect(compositeSceneAt(scene(inside), bytes, 100, { canvas: true })).rejects.toThrow(
       "baked",
     );
-    expect(bakeMock).toHaveBeenCalledWith(bytes, {}, inside);
+    expect(bakeMock).toHaveBeenCalledWith(bytes, {}, inside, undefined);
     // Flag off: the export goes straight to decoding the bytes, which never settles for
     // these fake bytes in jsdom; the bake would have run before that, so one tick is enough.
     bakeMock.mockClear();
     void compositeSceneAt(scene(inside), bytes, 100).catch(() => undefined);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(bakeMock).not.toHaveBeenCalled();
+  });
+
+  it("hands the base's placement (never its crop) to the bake, so the whole asset is what gets redacted", async () => {
+    bakeMock.mockReset();
+    bakeMock.mockRejectedValue(new Error("baked"));
+    const bytes = new ArrayBuffer(4);
+    const basePlacement = { x: 1, y: 0, scale: 0.5 };
+    const s = {
+      ...scene(inside),
+      basePlacement,
+      baseCrop: { x: 0.5, y: 0, w: 0.5, h: 1 },
+    };
+    await expect(compositeSceneAt(s, bytes, 100, { canvas: true })).rejects.toThrow("baked");
+    expect(bakeMock).toHaveBeenCalledWith(bytes, {}, inside, basePlacement);
   });
 
   it("grows the frame for a text outside the image and keeps the shot at the padding", () => {

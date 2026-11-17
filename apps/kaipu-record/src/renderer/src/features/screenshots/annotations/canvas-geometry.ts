@@ -10,13 +10,16 @@ import {
 } from "./tools";
 import { pathControlPoints } from "./smooth";
 import { measureShape } from "./measure";
-import type { Annotation, CropRect } from "./scene";
+import { baseVisibleRect, type Annotation, type BasePlacement, type CropRect } from "./scene";
 
 /**
  * Canvas-mode geometry (NIW2-698). Annotations keep their stored shape and units
  * (normalized 0–1 of the base image) but may lie outside [0,1]. The "content box" is the
- * union of the image rect and every annotation's bounds; it is expressed as EXTENTS: how
- * far it sticks out past each side of the image, in natural px. Pure: no React, no DOM.
+ * union of the VISIBLE base rect and every annotation's bounds; it is expressed as EXTENTS:
+ * how far it sticks out past each side of that rect, in natural px, never negative. The
+ * visible base rect (`CanvasGeom.base`) is the whole image unless the base is cropped or
+ * resized (per-image crop, unit 3): the world origin and the units never move, only this rect.
+ * Pure: no React, no DOM.
  */
 
 /** An axis-aligned rect in natural px, relative to the image's top-left corner. */
@@ -36,6 +39,38 @@ export interface Extents {
 }
 
 export const ZERO_EXTENTS: Extents = { left: 0, top: 0, right: 0, bottom: 0 };
+
+/** Float noise must not turn an exactly-fitting bound into a whole extra pixel. */
+const EPS = 1e-6;
+
+/** What the base shows, as the geometry sees it (the part of the base inside its crop). */
+export interface BaseView {
+  basePlacement?: BasePlacement;
+  baseCrop?: CropRect;
+}
+
+/**
+ * The VISIBLE base rect in natural px relative to the world origin (the whole image's
+ * top-left at scale 1), snapped OUTWARD to whole px: the export frame is a whole number of px,
+ * and a visible rect that was snapped inward would leave the base's edge outside the content
+ * box. Without a crop or resize it is `0,0,naturalW,naturalH`, so everything is unchanged.
+ */
+export function visibleBaseBounds(view: BaseView, naturalW: number, naturalH: number): Bounds {
+  const r = baseVisibleRect(view);
+  return {
+    x1: Math.floor(r.x * naturalW + EPS),
+    y1: Math.floor(r.y * naturalH + EPS),
+    x2: Math.ceil((r.x + r.w) * naturalW - EPS),
+    y2: Math.ceil((r.y + r.h) * naturalH - EPS),
+  };
+}
+
+const wholeBase = (naturalW: number, naturalH: number): Bounds => ({
+  x1: 0,
+  y1: 0,
+  x2: naturalW,
+  y2: naturalH,
+});
 
 /** Width in px of one line of text at a font size. */
 export type TextMeasure = (text: string, fontPx: number) => number;
@@ -106,13 +141,15 @@ export function annotationBounds(
   naturalH: number,
   scale: number,
   measure: TextMeasure = defaultTextMeasure,
+  base: Bounds = wholeBase(naturalW, naturalH),
 ): Bounds | null {
   if (a.kind === "blur") {
-    // A blur only paints over the image, so the part outside it adds nothing.
-    const x1 = Math.max(0, a.x * naturalW);
-    const y1 = Math.max(0, a.y * naturalH);
-    const x2 = Math.min(naturalW, (a.x + a.w) * naturalW);
-    const y2 = Math.min(naturalH, (a.y + a.h) * naturalH);
+    // A blur only paints over the visible base, so the part outside it adds nothing (a part
+    // of the base that is cropped out is not drawn, whatever the blur covers there).
+    const x1 = Math.max(base.x1, a.x * naturalW);
+    const y1 = Math.max(base.y1, a.y * naturalH);
+    const x2 = Math.min(base.x2, (a.x + a.w) * naturalW);
+    const y2 = Math.min(base.y2, (a.y + a.h) * naturalH);
     return x2 > x1 && y2 > y1 ? { x1, y1, x2, y2 } : null;
   }
   if (a.kind === "image") {
@@ -223,14 +260,14 @@ export function annotationBounds(
   return { x1: x, y1: y, x2: x + w, y2: y + h };
 }
 
-/** Float noise must not turn an exactly-fitting bound into a whole extra pixel. */
-const EPS = 1e-6;
 const over = (n: number): number => Math.max(0, Math.ceil(n - EPS));
 
 /**
- * The content-box extents: how far the union of the image rect and every annotation's
- * bounds sticks out past each side of the image, rounded up to whole natural px.
- * All zero when everything lies inside the image.
+ * The content-box extents: how far the union of the visible base rect (`base`, default the
+ * whole image) and every annotation's bounds sticks out past each side of that rect, rounded
+ * up to whole natural px. Never negative: the box always contains the visible base, so a base
+ * cropped smaller than the content around it still reads the content's overhang, not a
+ * negative one. All zero when everything lies inside the visible base.
  */
 export function contentExtents(
   annotations: readonly Annotation[],
@@ -238,18 +275,19 @@ export function contentExtents(
   naturalH: number,
   scale: number,
   measure: TextMeasure = defaultTextMeasure,
+  base: Bounds = wholeBase(naturalW, naturalH),
 ): Extents {
   let left = 0;
   let top = 0;
   let right = 0;
   let bottom = 0;
   for (const a of annotations) {
-    const b = annotationBounds(a, naturalW, naturalH, scale, measure);
+    const b = annotationBounds(a, naturalW, naturalH, scale, measure, base);
     if (!b) continue;
-    left = Math.max(left, over(-b.x1));
-    top = Math.max(top, over(-b.y1));
-    right = Math.max(right, over(b.x2 - naturalW));
-    bottom = Math.max(bottom, over(b.y2 - naturalH));
+    left = Math.max(left, over(base.x1 - b.x1));
+    top = Math.max(top, over(base.y1 - b.y1));
+    right = Math.max(right, over(b.x2 - base.x2));
+    bottom = Math.max(bottom, over(b.y2 - base.y2));
   }
   return { left, top, right, bottom };
 }
@@ -269,14 +307,21 @@ export interface CanvasGeom {
   naturalH: number;
   /** Beautify padding in natural px. */
   pad: number;
+  /** How far the content box sticks out past the visible base rect (`base`). */
   extents: Extents;
+  /**
+   * The visible base rect in natural px relative to the world origin (`visibleBaseBounds`).
+   * Absent = the whole image at the origin, as before a base could be cropped or resized.
+   */
+  base?: Bounds;
 }
 
 export interface CanvasLayout {
   /** Whole composed frame, natural px. */
   fullW: number;
   fullH: number;
-  /** Where the image's top-left sits in the frame (annotations translate by this). */
+  /** Where the WORLD ORIGIN (the whole image's top-left at scale 1) sits in the frame:
+   * annotations translate by this. With a cropped or moved base it is not the base's corner. */
   originX: number;
   originY: number;
   /** The union box (content, excluding the padding ring) in frame px. */
@@ -285,13 +330,14 @@ export interface CanvasLayout {
 
 export function canvasLayout(g: CanvasGeom): CanvasLayout {
   const { naturalW, naturalH, pad, extents: e } = g;
-  const boxW = e.left + naturalW + e.right;
-  const boxH = e.top + naturalH + e.bottom;
+  const b = g.base ?? wholeBase(naturalW, naturalH);
+  const boxW = e.left + (b.x2 - b.x1) + e.right;
+  const boxH = e.top + (b.y2 - b.y1) + e.bottom;
   return {
     fullW: boxW + 2 * pad,
     fullH: boxH + 2 * pad,
-    originX: pad + e.left,
-    originY: pad + e.top,
+    originX: pad + e.left - b.x1,
+    originY: pad + e.top - b.y1,
     box: { x: pad, y: pad, w: boxW, h: boxH },
   };
 }
