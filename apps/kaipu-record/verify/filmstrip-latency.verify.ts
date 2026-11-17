@@ -7,8 +7,8 @@ import { startScenario } from "./helpers";
 
 /*
  * Where the 500 ms of AC1 goes (NIW2-844 layer 3). Run on the Mac mini only, against the owner's
- * 54-minute take, with `zoom-filmstrip` on. It opens the take, zooms to 2,000% (the COLD request:
- * the worker is not started, the file is not open), then jumps to ten places in the take, each one
+ * 54-minute take, with `zoom-filmstrip` on. It opens the take, zooms to 2,000% (the first zoom
+ * after editor-open prewarming), then jumps to ten places in the take, each one
  * waiting for the previous request to settle (WARM requests), then once more after the file has
  * closed for being idle.
  *
@@ -23,12 +23,14 @@ import { startScenario } from "./helpers";
  * slots planned, pass start) and stamps each frame with the worker's clock; without it those
  * stages are reported as null. The patch is not part of the product.
  *
- * Output: $KAIPU_VERIFY_OUT/latency.json (outside the worktree: `gh pr create` removes it).
+ * Output: $KAIPU_VERIFY_OUT/<label>.json (default latency.json) (outside the worktree: `gh pr create` removes it).
  */
 const EVIDENCE = path.join(homedir(), "kaipu-evidence", "niw2-844");
 const TAKE = process.env.KAIPU_VERIFY_TAKE ?? path.join(EVIDENCE, "take", "take-1440p-10gb.mp4");
 const OUT = process.env.KAIPU_VERIFY_OUT ?? path.join(EVIDENCE, "layer-3");
 const LABEL = process.env.KAIPU_VERIFY_LABEL ?? "latency";
+const WEBCAM = process.env.KAIPU_VERIFY_WEBCAM === "1";
+const WEBCAM_FILE = process.env.KAIPU_VERIFY_WEBCAM_FILE ?? TAKE;
 const ASSET_ID = "e2e0a5e7-0000-4000-8000-00000000d844";
 const JUMPS = [0.12, 0.31, 0.47, 0.58, 0.66, 0.83, 0.9, 0.18, 0.4, 0.72];
 const BUDGET_MS = 500;
@@ -220,15 +222,23 @@ async function mark(page: Page, label: string): Promise<void> {
 
 /** Waits until nothing has arrived or been swapped for `quietMs`. */
 async function settled(page: Page, quietMs = 900): Promise<void> {
+  const since = await page.evaluate(() => performance.now());
   await page.waitForFunction(
-    (quiet) => {
+    ({ quiet, since }) => {
       const evs = (window as unknown as { __ev: { t: number; k: string }[] }).__ev;
       const last = [...evs]
         .reverse()
         .find((e) => e.k === "msg" || e.k === "swap" || e.k === "post");
-      return !last || performance.now() - last.t > quiet;
+      const now = performance.now();
+      const pending = new Set<number>();
+      for (const e of evs as Ev[]) {
+        if (e.k === "post" && e.type === "request") pending.add(e.requestId as number);
+        if (e.k === "msg" && (e.type === "done" || e.type === "error"))
+          pending.delete(e.requestId as number);
+      }
+      return now - since > quiet && pending.size === 0 && (!last || now - last.t > quiet);
     },
-    quietMs,
+    { quiet: quietMs, since },
     { timeout: 120_000, polling: 100 },
   );
 }
@@ -243,12 +253,25 @@ test(`NIW2-844 layer 3: where the 500 ms of AC1 goes (${LABEL})`, async () => {
       const meta = path.join(dir, ".kaipu");
       await mkdir(meta, { recursive: true });
       await symlink(TAKE, path.join(dir, "Long take.mp4"));
+      // A real media file stands in for the camera, with a nonzero start offset.
+      if (WEBCAM) await symlink(WEBCAM_FILE, path.join(meta, "Long take.webcam.mp4"));
       await writeFile(
         path.join(meta, "Long take.json"),
         JSON.stringify({
           sidecarVersion: 2,
           assetId: ASSET_ID,
           title: "Long take",
+          ...(WEBCAM
+            ? {
+                webcam: {
+                  startOffsetMs: 5000,
+                  offsetQuality: "exact",
+                  width: WEBCAM_FILE === TAKE ? 2560 : 1280,
+                  height: WEBCAM_FILE === TAKE ? 1440 : 720,
+                  fps: WEBCAM_FILE === TAKE ? 60 : 30,
+                },
+              }
+            : {}),
           durationSeconds: duration,
           createdAt: 1_700_000_000_000,
         }),
@@ -256,7 +279,13 @@ test(`NIW2-844 layer 3: where the 500 ms of AC1 goes (${LABEL})`, async () => {
     },
   });
   const page = s.page;
-  const result: Record<string, unknown> = { label: LABEL, take: TAKE, durationSeconds: duration };
+  const result: Record<string, unknown> = {
+    label: LABEL,
+    take: TAKE,
+    durationSeconds: duration,
+    webcamOffsetMs: WEBCAM ? 5000 : null,
+    webcamFile: WEBCAM ? WEBCAM_FILE : null,
+  };
   try {
     await page.addInitScript(() => {
       const w = window as unknown as Record<string, unknown> & { __ev: Record<string, unknown>[] };
@@ -400,11 +429,12 @@ test(`NIW2-844 layer 3: where the 500 ms of AC1 goes (${LABEL})`, async () => {
     const timeOrigin = await page.evaluate(() => performance.timeOrigin);
     result.pageTimeOrigin = timeOrigin;
 
-    // ---- COLD: the first request after the editor opened (no worker yet, no file open)
+    // ---- First zoom after editor opening; prewarming is reported separately below.
     await mark(page, "cold");
     const zoomIn = page.getByRole("button", { name: "Zoom in the timeline", exact: true });
     for (let i = 0; i < 5; i++) await zoomIn.click();
     await settled(page);
+    await s.shot("first-zoom");
     const cases: string[] = ["cold"];
     const ids: Record<string, number[]> = { cold: await visibleIds(page) };
     const finalTiles: Record<string, unknown> = { cold: await tilesNow(page) };
@@ -422,6 +452,7 @@ test(`NIW2-844 layer 3: where the 500 ms of AC1 goes (${LABEL})`, async () => {
       cases.push(label);
       ids[label] = await visibleIds(page);
       finalTiles[label] = await tilesNow(page);
+      if (i === 5) await s.shot("jump-83-percent");
     }
 
     // ---- after idle: the file has closed (10 s), the worker is still there
@@ -435,6 +466,16 @@ test(`NIW2-844 layer 3: where the 500 ms of AC1 goes (${LABEL})`, async () => {
     const evs = await page.evaluate(() => (window as unknown as { __ev: Ev[] }).__ev);
     const rows = cases.map((c) => analyse(evs, c, timeOrigin, ids[c]));
     result.cases = rows;
+    const firstMark = evs.find((e) => e.k === "mark");
+    result.editorPrewarm = evs
+      .filter(
+        (e) =>
+          e.t < (firstMark?.t ?? Infinity) &&
+          (e.k === "worker" ||
+            (e.k === "post" && e.type === "prepare") ||
+            (e.k === "msg" && e.type === "file")),
+      )
+      .map((e) => ({ ...e }));
     result.finalTiles = finalTiles;
     const warm = rows.filter((r) => r.label?.toString().startsWith("warm"));
     const pick = <T>(fn: (r: (typeof rows)[number]) => T | null | undefined): T[] =>
@@ -448,7 +489,17 @@ test(`NIW2-844 layer 3: where the 500 ms of AC1 goes (${LABEL})`, async () => {
       ),
     };
     console.log(`[verify] ${LABEL}: ${JSON.stringify(result.warmSummary)}`);
+    for (const row of rows) {
+      expect(row.allOwnAtMs, `${row.label}: every visible tile must be own-time`).not.toBeNull();
+      expect(row.allOwnAtMs!, `${row.label}: AC1/2 must remain within 500 ms`).toBeLessThanOrEqual(
+        BUDGET_MS,
+      );
+    }
+  } catch (error) {
+    result.error = error instanceof Error ? error.message : String(error);
+    throw error;
   } finally {
+    result.error ??= null;
     await writeFile(path.join(OUT, `${LABEL}.json`), JSON.stringify(result, null, 2));
     await s.finish();
   }

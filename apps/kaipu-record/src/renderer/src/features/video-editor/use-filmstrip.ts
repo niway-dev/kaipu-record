@@ -39,6 +39,7 @@ export function useFilmstrip({
     if (!enabled) return;
     const controller = new FilmstripController({
       store: getFilmstripStore(),
+      prewarm: true,
       createWorker: createFilmstripWorker,
       getView: () => viewStore.getView(),
       terminateOnIdleClose: TERMINATE_WORKER_ON_IDLE_CLOSE,

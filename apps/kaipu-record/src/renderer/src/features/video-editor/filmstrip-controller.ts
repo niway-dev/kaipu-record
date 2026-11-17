@@ -70,6 +70,8 @@ export interface FilmstripControllerOptions {
    * whose GPU memory stays held until the worker ends (layer 2 measured about 290 MB).
    */
   terminateOnIdleClose?: boolean;
+  /** Start the worker and read the first visible file's index when the editor opens. */
+  prewarm?: boolean;
 }
 
 interface QueuedRequest {
@@ -102,6 +104,7 @@ export class FilmstripController {
   private readonly timers: FilmstripTimers;
   private readonly restMs: number;
   private readonly terminateOnIdleClose: boolean;
+  private readonly prewarm: boolean;
 
   private worker: FilmstripWorkerPort | null = null;
   private targets: readonly FilmstripTarget[] = [];
@@ -115,6 +118,7 @@ export class FilmstripController {
     fileKey: string;
     view: TimeRange;
     cancelled: boolean;
+    remaining: number;
   } | null = null;
   private nextRequestId = 1;
   /** Frames of a request older than this are dropped (a workspace switch emptied the store). */
@@ -129,6 +133,7 @@ export class FilmstripController {
     this.timers = options.timers ?? realTimers;
     this.restMs = options.restMs ?? REST_MS;
     this.terminateOnIdleClose = options.terminateOnIdleClose ?? false;
+    this.prewarm = options.prewarm ?? false;
   }
 
   // ---- inputs -------------------------------------------------------------------------
@@ -136,6 +141,12 @@ export class FilmstripController {
   /** The files of the visible lanes (hidden lanes are left out by the caller). */
   setTargets(targets: readonly FilmstripTarget[]): void {
     this.targets = targets;
+    if (this.prewarm && !this.worker && !this.paused && !this.disposed) {
+      const first = targets.find(
+        (target) => Number.isFinite(target.duration) && target.duration > 0,
+      );
+      if (first) this.ensureWorker().postMessage({ type: "prepare", url: first.fileKey });
+    }
     this.touch();
   }
 
@@ -301,7 +312,13 @@ export class FilmstripController {
     if (!next) return;
     const worker = this.ensureWorker();
     const requestId = this.nextRequestId++;
-    this.inFlight = { requestId, fileKey: next.target.fileKey, view: next.view, cancelled: false };
+    this.inFlight = {
+      requestId,
+      fileKey: next.target.fileKey,
+      view: next.view,
+      cancelled: false,
+      remaining: next.slots.length,
+    };
     worker.postMessage({
       type: "request",
       requestId,
@@ -354,6 +371,11 @@ export class FilmstripController {
           { timestamp: message.timestamp, blob: message.blob, bytes: message.bytes },
           view,
         );
+        if (this.inFlight?.requestId === message.requestId) {
+          this.inFlight.remaining--;
+          // Publish the final visible frame before the decoder tears its pass down.
+          if (this.inFlight.remaining === 0) this.store.flush();
+        }
         return;
       }
       case "done":

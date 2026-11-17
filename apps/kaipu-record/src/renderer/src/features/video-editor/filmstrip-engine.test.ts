@@ -468,6 +468,18 @@ describe("AC7: a new request cancels the job in flight", () => {
 });
 
 describe("AC13 and AC5: one file open, kept for 10 s, then closed", () => {
+  it("prepares the file without decoding and reuses it for the first frame", async () => {
+    const { engine, clock, opener, frames, run } = setup();
+    const first = request([slot(0)]);
+    engine.handle({ type: "prepare", url: first.url });
+    await clock.until(engine.idle());
+    expect(frames()).toHaveLength(0);
+    await run(first);
+    expect(opener.opens).toHaveLength(1);
+    expect(frames()).toHaveLength(1);
+    await engine.dispose();
+  });
+
   const A = "kaipu-media://recording/a?w=ws";
   const B = "kaipu-media://recording/b?w=ws";
 

@@ -86,7 +86,9 @@ function target(overrides: Partial<FilmstripTarget> = {}): FilmstripTarget {
   };
 }
 
-function setup(options: { view?: () => TimelineView; terminateOnIdleClose?: boolean } = {}) {
+function setup(
+  options: { view?: () => TimelineView; terminateOnIdleClose?: boolean; prewarm?: boolean } = {},
+) {
   const clock = fakeTimers();
   const workers: FakeWorker[] = [];
   const store = new FilmstripStore({
@@ -105,6 +107,7 @@ function setup(options: { view?: () => TimelineView; terminateOnIdleClose?: bool
     getView: options.view ?? (() => view),
     timers: clock.timers,
     terminateOnIdleClose: options.terminateOnIdleClose,
+    prewarm: options.prewarm,
   });
   return {
     controller,
@@ -134,6 +137,18 @@ function setup(options: { view?: () => TimelineView; terminateOnIdleClose?: bool
 }
 
 describe("FilmstripController", () => {
+  it("prewarms at editor open without requesting frames, and never prewarms while paused", () => {
+    const { controller, workers } = setup({ prewarm: true });
+    controller.setPaused(true);
+    controller.setTargets([target()]);
+    expect(workers).toHaveLength(0);
+    controller.setPaused(false);
+    controller.setTargets([target()]);
+    expect(workers[0].sent).toEqual([{ type: "prepare", url: URL_A }]);
+    controller.setTargets([target()]);
+    expect(workers[0].sent).toHaveLength(1);
+  });
+
   it("asks for nothing until the view has rested for 120 ms, then asks once", () => {
     const { controller, clock, workers } = setup();
     controller.setTargets([target()]);
@@ -340,13 +355,14 @@ describe("FilmstripController", () => {
     expect(store.liveFrames(URL_A)).toHaveLength(0);
   });
 
-  it("AC1: publishes the frames of a finished request at once, not at the next 150 ms batch", () => {
+  it("AC1: publishes the final requested frame before decoder teardown reports done", () => {
     const { controller, clock, workers, store, done } = setup();
     controller.setTargets([target()]);
     clock.advance(REST_MS);
     const worker = workers[0];
     const id = worker.requests[0].requestId;
-    for (const timestamp of [2, 8, 15]) {
+    const timestamps = worker.requests[0].slots.map((slot) => (slot.start + slot.end) / 2);
+    for (const timestamp of timestamps) {
       worker.emit({
         type: "frame",
         requestId: id,
@@ -359,9 +375,9 @@ describe("FilmstripController", () => {
         encodeMs: 1,
       });
     }
-    expect(store.frames(URL_A)).toHaveLength(1); // the first frame published, the rest wait
+    expect(store.frames(URL_A)).toHaveLength(timestamps.length); // no done message yet
     done(worker, id, URL_A);
-    expect(store.frames(URL_A)).toHaveLength(3);
+    expect(store.frames(URL_A)).toHaveLength(timestamps.length);
   });
 
   it("terminates the worker when its file closes for being idle, if told to, and starts a new one next time", () => {

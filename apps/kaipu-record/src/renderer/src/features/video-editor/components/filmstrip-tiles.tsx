@@ -12,7 +12,7 @@
  *
  * With the flag off none of this renders: the callers keep today's `img` map.
  */
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { CoveredRange } from "../use-source-thumbnails";
 import type { StoredFrame } from "../filmstrip-store";
 import { getFilmstripStore } from "../filmstrip-service";
@@ -44,7 +44,7 @@ export function useFileFrames(fileKey: string | null): readonly StoredFrame[] {
 }
 
 /** One tile image that changes its `src` only once the new image is decoded (AC12). */
-function FilmstripTileImage({
+const FilmstripTileImage = memo(function FilmstripTileImage({
   url,
   timestamp,
   spanStart,
@@ -98,7 +98,7 @@ function FilmstripTileImage({
       data-filmstrip-own={shown.timestamp >= spanStart && shown.timestamp <= spanEnd}
     />
   );
-}
+});
 
 export interface FilmstripTilesProps {
   tiles: readonly ThumbnailTile[];

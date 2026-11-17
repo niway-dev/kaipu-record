@@ -34,6 +34,8 @@ const SIDE = (process.env.KAIPU_VERIFY_SIDE ?? "on") as "before" | "off" | "on";
 const EVIDENCE = path.join(homedir(), "kaipu-evidence", "niw2-844");
 const TAKE = process.env.KAIPU_VERIFY_TAKE ?? path.join(EVIDENCE, "take", "take-1440p-10gb.mp4");
 const OUT = process.env.KAIPU_VERIFY_OUT ?? path.join(EVIDENCE, "layer-3");
+const WEBCAM = process.env.KAIPU_VERIFY_WEBCAM === "1";
+const WEBCAM_FILE = process.env.KAIPU_VERIFY_WEBCAM_FILE ?? TAKE;
 const ASSET_ID = "e2e0a5e7-0000-4000-8000-00000000d844";
 const NAME = `filmstrip-editor-${SIDE}`;
 /** Only the `on` side has frames of its own time to wait for; the others read the row as it is. */
@@ -185,12 +187,25 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
       const meta = path.join(dir, ".kaipu");
       await mkdir(meta, { recursive: true });
       await symlink(TAKE, path.join(dir, "Long take.mp4"));
+      // A real media file stands in for the camera, with a nonzero start offset.
+      if (WEBCAM) await symlink(WEBCAM_FILE, path.join(meta, "Long take.webcam.mp4"));
       await writeFile(
         path.join(meta, "Long take.json"),
         JSON.stringify({
           sidecarVersion: 2,
           assetId: ASSET_ID,
           title: "Long take",
+          ...(WEBCAM
+            ? {
+                webcam: {
+                  startOffsetMs: 5000,
+                  offsetQuality: "exact",
+                  width: WEBCAM_FILE === TAKE ? 2560 : 1280,
+                  height: WEBCAM_FILE === TAKE ? 1440 : 720,
+                  fps: WEBCAM_FILE === TAKE ? 60 : 30,
+                },
+              }
+            : {}),
           durationSeconds: duration,
           createdAt: 1_700_000_000_000,
         }),
@@ -198,7 +213,13 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
     },
   });
   const page = s.page;
-  const result: Record<string, unknown> = { side: SIDE, take: TAKE, durationSeconds: duration };
+  const result: Record<string, unknown> = {
+    side: SIDE,
+    take: TAKE,
+    durationSeconds: duration,
+    webcamOffsetMs: WEBCAM ? 5000 : null,
+    webcamFile: WEBCAM ? WEBCAM_FILE : null,
+  };
   try {
     await page.addInitScript(() => {
       // The part of the scroller that shows tiles: right of the label column.
@@ -327,7 +348,7 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
       stepMs: 60,
       maxGapBetweenStepsMs: scrollRun.maxGapMs,
       mintedDuringScroll: during.length,
-      // A frame already in flight when the first step cancelled its request still arrives.
+      // Record any unexpected arrivals as offsets for diagnosis.
       mintedAfterFirstStepsMsOffsets: during.map((t) => Math.round(t - scrollRun.start)),
       msUntilAllOwnAfterRest: restAfterScroll,
     };
