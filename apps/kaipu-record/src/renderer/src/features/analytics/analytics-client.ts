@@ -5,6 +5,7 @@ import "posthog-js/dist/exception-autocapture";
 import {
   DEFAULT_PRODUCT,
   DEFAULT_SURFACE,
+  scrubEventProperties,
   scrubPersonalPathsDeep,
   type FlagName,
 } from "@shared/analytics";
@@ -33,11 +34,35 @@ export interface PosthogConfigInput {
 
 /**
  * Runs on every event just before it is sent. Strips personal file paths (`/Users/<name>/…`)
- * from everything inside: an exception message, a stack frame, a context value.
+ * from everything inside (an exception message, a stack frame, a context value) and drops the
+ * item-id properties, which can spell a recording's name.
  */
 export function scrubEventBeforeSend(event: CaptureResult | null): CaptureResult | null {
   if (!event) return event;
-  return { ...event, properties: scrubPersonalPathsDeep(event.properties) };
+  return { ...event, properties: scrubEventProperties(event.properties) };
+}
+
+/** Where PostHog keeps the first page's URL and referrer, and the two older shapes it replaced. */
+const INITIAL_INFO_KEYS = [
+  "$initial_person_info",
+  "$initial_campaign_params",
+  "$initial_referrer_info",
+];
+
+/**
+ * PostHog stores the URL of the first page it saw and sends it with every flags request as
+ * `$initial_current_url`, `$initial_pathname` and so on. `before_send` never sees that request,
+ * and in a packaged build the URL can sit under the user's home folder (a per-user install on
+ * Windows), so with the preference off it would send the install path. Called right after
+ * `init`, before the first flags request, so what is stored and what is sent are scrubbed.
+ */
+export function scrubStoredInitialInfo(): void {
+  const persistence = posthog.persistence;
+  if (!persistence) return;
+  for (const key of INITIAL_INFO_KEYS) {
+    const stored = persistence.props?.[key];
+    if (stored) persistence.register({ [key]: scrubPersonalPathsDeep(stored) });
+  }
 }
 
 /** Privacy-locked config. Pure + exported so the privacy guarantees are tested. */
@@ -81,6 +106,7 @@ export function setAnalyticsEnabled(enabled: boolean, deviceId: string): void {
       key,
       buildPosthogConfig(import.meta.env.VITE_POSTHOG_HOST, { deviceId, capturing: enabled }),
     );
+    scrubStoredInitialInfo();
     posthog.onFeatureFlags(() => flagListeners.forEach((listener) => listener()));
     posthog.register({
       product: import.meta.env.VITE_POSTHOG_PRODUCT ?? DEFAULT_PRODUCT,

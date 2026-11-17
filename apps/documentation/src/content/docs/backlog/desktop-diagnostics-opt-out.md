@@ -30,8 +30,8 @@ is asked to rely on it.
   breaks), what never is (recordings, screen, files), and that with it off Kaipu still checks
   which features are on for this Mac. It never says "nothing is sent".
 - **What is sent, with it on:** `recording_started`, `screenshot_captured`,
-  `editor_speed_changed`, `library-detail-missing` (an opaque asset UUID, the list size and whether
-  it came from a recording, sent when a library page cannot find its item) and `editor_opened` with
+  `editor_speed_changed`, `library-detail-missing` (the list size and whether it came from a recording,
+  sent when a library page cannot find its item) and `editor_opened` with
   `{ editor: "video" | "image" }` once per editor session (the hook is
   `useEditorOpened`): the video editor counts once its session loads, the image editor once its
   file resolves to a URL, so a missing or undecodable image is still counted. Plus crash reports. Identity is the random per-install `deviceId`; there
@@ -54,11 +54,17 @@ is asked to rely on it.
   client, so they stop too.
 - **Personal paths are removed before sending.** `scrubPersonalPaths` (`src/shared/analytics.ts`)
   replaces `/Users/<name>/…`, `/home/<name>/…`, `/Volumes/…`, `/mnt/…`, `/media/…`, any Windows
-  drive path except `Windows`, `Program Files` and `ProgramData`, and `file://` forms, file name
-  included, with `<user-path>`. A path inside quotes goes to its closing quote, so a name such as
-  `Screen Recording (2).mov` or `Ana's Videos` goes whole. It runs in `before_send` in both SDKs,
+  drive path except `Windows`, `Program Files` and `ProgramData`, network shares (`\\server\share`) and
+  `file://` forms, file name
+  included, with `<user-path>`. A path inside quotes goes to the last closing quote on its line, so a name such as
+  `Screen Recording (2).mov`, `Ana's Videos` or `Clients' Archive` goes whole (a few words after a
+  second quoted value may go with it). It runs in `before_send` in both SDKs,
   over every string in the event, so a path in an exception message, a stack frame or a context
-  value never travels. A recordings folder outside those roots (say `/data/clips`) is not
+  value never travels. The properties `id`, `assetId` and `localId` are dropped from every event: a
+  local item's id is a file-name stem projected from its title (ADR 0035), so it can spell the
+  recording's name. PostHog also stores the first page's URL and sends it with every flags
+  request, which `before_send` never sees; `scrubStoredInitialInfo` removes personal paths from
+  that stored value right after the SDK starts. A recordings folder outside those roots (say `/data/clips`) is not
   recognised: the settings folder offers the home folder and volumes, which are covered.
 - **Onboarding**: a **Privacy** step sits between Shortcuts and You're set, with the approved
   copy and the toggle on. It informs and never blocks. Whoever finished onboarding before the

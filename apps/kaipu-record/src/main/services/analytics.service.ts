@@ -2,7 +2,7 @@ import { PostHog, type EventMessage } from "posthog-node";
 import {
   DEFAULT_PRODUCT,
   DEFAULT_SURFACE,
-  scrubPersonalPathsDeep,
+  scrubEventProperties,
   type SerializedError,
 } from "@shared/analytics";
 
@@ -34,7 +34,7 @@ export function resolvePosthogHost(host: string | undefined): string {
  */
 export function scrubMainEvent(event: EventMessage | null): EventMessage | null {
   if (!event?.properties) return event;
-  return { ...event, properties: scrubPersonalPathsDeep(event.properties) };
+  return { ...event, properties: scrubEventProperties(event.properties) };
 }
 
 function startClient(key: string): void {

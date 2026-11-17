@@ -48,6 +48,15 @@ describe("scrubMainEvent", () => {
     expect(sent?.distinctId).toBe("device-1");
   });
 
+  it("drops the item id from the context: a local id is a file-name stem", () => {
+    const sent = scrubMainEvent({
+      distinctId: "device-1",
+      event: "$exception",
+      properties: { id: "Q3 board call", phase: "rename" },
+    });
+    expect(sent?.properties).toEqual({ phase: "rename" });
+  });
+
   it("passes a dropped event through", () => {
     expect(scrubMainEvent(null)).toBeNull();
   });

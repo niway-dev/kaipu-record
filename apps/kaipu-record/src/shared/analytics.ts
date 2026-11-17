@@ -212,20 +212,21 @@ export function buildEditorOpenedProperties(input: EditorOpenedProperties): Edit
  * Where a personal path starts: a home folder (`/Users/<name>/…` on macOS, `/home/<name>/…`
  * on Linux), a mounted volume where a custom recordings folder usually lives (`/Volumes/…`,
  * `/mnt/…`, `/media/…`), or any Windows drive path except the system folders (`C:\Users\…`,
- * `D:\Recordings\…`, not `C:\Program Files\…`). Also behind `file://`.
+ * `D:\Recordings\…`, not `C:\Program Files\…`), or a network share (`\\server\share\…`). Also
+ * behind `file://`.
  */
-const PATH_ROOT =
-  "(?:[A-Za-z]:[\\\\/](?!(?:Windows|Program Files|ProgramData)\\b)|[\\\\/](?:Users|home|Volumes|mnt|media)[\\\\/])";
+const PATH_ROOT = String.raw`(?:[A-Za-z]:[\\/](?!(?:Windows|Program Files|ProgramData)\b)|\\\\[^\\/\r\n]+[\\/]|[\\/](?:Users|home|Volumes|mnt|media)[\\/])`;
 
 /**
- * Two shapes, tried at each position. A path right after a quote runs to the matching closing
- * quote, one not followed by a letter or digit, so the apostrophe in `Ana's Videos` and the
- * brackets in `Screen Recording (2).mov` stay inside it. Any other path runs to the end of the
+ * Two shapes, tried at each position. A path right after a quote runs to the LAST matching quote
+ * on the line that is not followed by a letter or digit, so an apostrophe in `Ana's Videos` or
+ * `Clients' Archive` and the brackets in `Screen Recording (2).mov` stay inside it. That can take
+ * a few words after a second quoted value: safer than leaving a name. Any other path runs to the end of the
  * line, except that a closing `)` of a stack frame (`at f (/Users/…:1:1)`) is kept. The lookbehind
  * keeps URLs such as `https://site/home/x` and app paths such as `/Applications/…` out.
  */
 const PERSONAL_PATH = new RegExp(
-  `(?<q>['"\`])${PATH_ROOT}[^\\r\\n]*?(?=\\k<q>(?![A-Za-z0-9]))` +
+  `(?<q>['"\`])${PATH_ROOT}[^\\r\\n]*(?=\\k<q>(?![A-Za-z0-9]))` +
     `|(?<![A-Za-z0-9.])${PATH_ROOT}[^\\r\\n]*?(?=\\)?[ \\t]*$)`,
   "gm",
 );
@@ -254,6 +255,23 @@ export function scrubPersonalPaths(text: string): string {
  */
 export function scrubPersonalPathsDeep<T>(value: T): T {
   return scrubDeep(value, new WeakSet(), 0) as T;
+}
+
+/**
+ * Property names that carry a library item's id. A local item's id is a file-name stem
+ * projected from its title (ADR 0035), so it can spell the recording's name: it never leaves
+ * the app, whatever event or crash report it sat in.
+ */
+export const ITEM_ID_PROPERTIES = ["id", "assetId", "localId"] as const;
+
+/**
+ * What `before_send` does to every event, in both processes: scrub personal paths inside the
+ * values, and drop the item-id properties. A copy; the input is untouched.
+ */
+export function scrubEventProperties<T extends Record<string, unknown>>(properties: T): T {
+  const scrubbed = scrubPersonalPathsDeep(properties) as Record<string, unknown>;
+  for (const key of ITEM_ID_PROPERTIES) delete scrubbed[key];
+  return scrubbed as T;
 }
 
 const SCRUB_MAX_DEPTH = 12;

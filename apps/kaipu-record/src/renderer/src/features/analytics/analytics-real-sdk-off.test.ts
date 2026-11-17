@@ -21,6 +21,16 @@ describe("real posthog-js, preference off (NIW2-849)", () => {
     "loads flags under the device id and sends no event and no crash report",
     async () => {
       const sent = installNetwork();
+      // An earlier run left the first page's URL in PostHog's storage, under a home folder.
+      localStorage.setItem(
+        "ph_phc_test_posthog",
+        JSON.stringify({
+          $initial_person_info: {
+            r: "$direct",
+            u: "file:///C:/Users/Ana%20Perez/AppData/Local/Programs/Kaipu%20Record/index.html",
+          },
+        }),
+      );
       const client = await loadClient();
       client.setAnalyticsEnabled(false, "device-abc");
       await allowJsdomUserAgent();
@@ -36,6 +46,9 @@ describe("real posthog-js, preference off (NIW2-849)", () => {
       const flags = sent.filter(isFlags);
       expect(flags.length).toBeGreaterThan(0);
       expect(decode(flags[0])).toContain("device-abc");
+      // The flags request carries the stored first-page URL, with the home folder removed.
+      expect(decode(flags[0])).toContain("$initial_current_url");
+      expect(decode(flags[0])).not.toContain("Ana");
       expect(sent.filter(isCapture)).toEqual([]);
       expect(sent.map(decode).join("")).not.toContain("recording_started");
       expect(sent.map(decode).join("")).not.toContain("$exception");

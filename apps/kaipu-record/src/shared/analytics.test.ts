@@ -11,6 +11,7 @@ import {
   buildEditorSpeedChangedProperties,
   buildRecordingStartedProperties,
   buildScreenshotCapturedProperties,
+  scrubEventProperties,
   scrubPersonalPaths,
   scrubPersonalPathsDeep,
   serializeError,
@@ -206,15 +207,23 @@ describe("scrubPersonalPaths", () => {
     );
     const unquoted = scrubPersonalPaths("cannot read /Users/ana/Ana's Videos/clip.mp4");
     expect(unquoted).toBe(`cannot read ${REDACTED}`);
-    // Two quoted paths on one line are both removed, and the words between them stay.
-    expect(scrubPersonalPaths(`"/Users/ana/a.mp4" and "/Users/bob/b (1).mp4"`)).toBe(
-      `"${REDACTED}" and "${REDACTED}"`,
+    // A name can hold its own quote followed by a space: the path runs to the last closing quote.
+    expect(scrubPersonalPaths("open '/Users/ana/Clients' Archive/secret.mp4' failed")).toBe(
+      `open '${REDACTED}' failed`,
+    );
+    // Two quoted paths on one line: both are gone, and so may be the words between them.
+    expect(scrubPersonalPaths(`"/Users/ana/a.mp4" and "/Users/bob/b (1).mp4"`)).not.toMatch(
+      /ana|bob|b \(1\)/,
     );
   });
 
   it("removes a recordings folder on a volume or another drive", () => {
     expect(scrubPersonalPaths("open '/Volumes/Work/Kaipu/Q3 call.mp4'")).toBe(`open '${REDACTED}'`);
     expect(scrubPersonalPaths("open D:\\Recordings\\Q3 call.mp4")).toBe(`open ${REDACTED}`);
+    // A network share names a server, its folders and the file.
+    expect(scrubPersonalPaths("open '\\\\NAS\\Ana\\Q3 board call.mp4' failed")).toBe(
+      `open '${REDACTED}' failed`,
+    );
     // App and system folders are not personal.
     const system = "at x (C:\\Program Files\\Kaipu Record\\resources\\app.asar\\main.js:1:1)";
     expect(scrubPersonalPaths(system)).toBe(system);
@@ -273,5 +282,21 @@ describe("scrubPersonalPathsDeep", () => {
     const loop: Record<string, unknown> = { path: "/Users/ana/a.mp4" };
     loop.self = loop;
     expect(() => scrubPersonalPathsDeep(loop)).not.toThrow();
+  });
+});
+
+describe("scrubEventProperties", () => {
+  it("drops the item ids, which can spell a recording's name, and scrubs the rest", () => {
+    const input = {
+      id: "Q3 board call",
+      assetId: "Q3 board call",
+      localId: "Q3 board call",
+      phase: "rename",
+      message: "open '/Users/ana/a.mp4' failed",
+    };
+    const out = scrubEventProperties(input);
+    expect(out).toEqual({ phase: "rename", message: `open '<user-path>' failed` });
+    // The input is left as it was.
+    expect(input.id).toBe("Q3 board call");
   });
 });
