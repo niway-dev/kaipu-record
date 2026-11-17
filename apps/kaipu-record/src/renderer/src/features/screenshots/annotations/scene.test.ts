@@ -119,12 +119,14 @@ describe("fullRect", () => {
     });
   });
 
-  it("falls back to the visible rect for a degenerate crop instead of dividing by zero", () => {
-    expect(fullRect({ ...image, crop: { x: 0, y: 0, w: 0, h: 1 } })).toEqual({
-      x: 1,
-      y: 0.5,
-      w: 0.25,
-      h: 0.25,
-    });
+  it("throws for a crop that is not a window, instead of guessing the visible rect", () => {
+    for (const crop of [
+      { x: 0, y: 0, w: 0, h: 1 },
+      { x: 0, y: 0, w: 1, h: -1 },
+      { x: Number.NaN, y: 0, w: 1, h: 1 },
+      { x: 0, y: 0, w: Number.POSITIVE_INFINITY, h: 1 },
+    ]) {
+      expect(() => fullRect({ ...image, crop })).toThrow(RangeError);
+    }
   });
 });

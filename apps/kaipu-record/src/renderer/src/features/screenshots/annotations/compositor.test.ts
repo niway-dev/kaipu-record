@@ -463,6 +463,20 @@ describe("compositor image annotations (canvas mode)", () => {
     expect(svg).toContain(`<image id="asset-img-abc123def456-2000x1200"`);
   });
 
+  it("gives two crops of the same full size one def, even when float noise differs", () => {
+    // 0.1 + 0.2 vs 0.3 are the same width mathematically, not in floating point.
+    const a: Annotation = { ...second, w: 0.1 + 0.2, crop: { x: 0, y: 0, w: 0.5, h: 0.5 } };
+    const b: Annotation = {
+      ...second,
+      id: "a10",
+      y: 1,
+      w: 0.3,
+      crop: { x: 0.5, y: 0, w: 0.5, h: 0.5 },
+    };
+    const svg = buildSvg(scene([a, b]), g);
+    expect(svg.match(/<image id="asset-/g)).toHaveLength(1);
+  });
+
   it("uses an image's own radius, in source px, for its clip and shadow; else the global one", () => {
     const own: Annotation = { ...second, radius: 40 };
     const svg = buildSvg(scene([own]), g);

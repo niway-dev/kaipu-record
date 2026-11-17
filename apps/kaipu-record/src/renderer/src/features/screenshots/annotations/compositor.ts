@@ -425,7 +425,10 @@ function assetDefId(a: ImageAnnotation, g: Geom): string {
   // enters the id through that size: two placements share a def only when the asset is
   // drawn at the same size, whatever window each one shows.
   const f = fullRect(a);
-  return `asset-${a.assetId}-${f.w * g.naturalW}x${f.h * g.naturalH}`;
+  // A crop divides by a float, so equal sizes reached two ways differ by noise: round them to
+  // 1/1000 px (only with a crop, so an uncropped id is what it always was).
+  const size = (v: number) => (a.crop ? Math.round(v * 1000) / 1000 : v);
+  return `asset-${a.assetId}-${size(f.w * g.naturalW)}x${size(f.h * g.naturalH)}`;
 }
 
 /**

@@ -103,11 +103,17 @@ export interface ImageAnnotation {
  * The rect the WHOLE asset covers on the canvas, in the same base-normalized units as
  * `x/y/w/h`. Without a crop it is the visible rect. With one, the visible rect is the
  * `crop` window of it, so the full rect is larger and may start left of / above the visible
- * rect. Anything that works on the asset's pixels (redaction baking, drawing) uses this.
+ * rect. An invalid crop (non-finite, zero or negative size) throws. Anything that works on the asset's pixels (redaction baking, drawing) uses this.
  */
 export function fullRect(a: ImageAnnotation): { x: number; y: number; w: number; h: number } {
   const c = a.crop;
-  if (!c || c.w <= 0 || c.h <= 0) return { x: a.x, y: a.y, w: a.w, h: a.h };
+  if (!c) return { x: a.x, y: a.y, w: a.w, h: a.h };
+  // Fail closed: a crop that is not a real window cannot say where the hidden pixels are, and
+  // guessing the visible rect would let a redaction over them skip the bake. Throwing stops
+  // the save/export instead of writing an asset that still holds the secret.
+  if (![c.x, c.y, c.w, c.h].every(Number.isFinite) || c.w <= 0 || c.h <= 0) {
+    throw new RangeError(`image ${a.id}: invalid crop`);
+  }
   const w = a.w / c.w;
   const h = a.h / c.h;
   return { x: a.x - c.x * w, y: a.y - c.y * h, w, h };

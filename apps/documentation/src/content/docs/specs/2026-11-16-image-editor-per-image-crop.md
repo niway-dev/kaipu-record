@@ -66,8 +66,10 @@ fullRect(a) // the whole asset's rect on the canvas, same units as x/y/w/h
 ```
 
 `fullRect`: with `crop = {x: cx, y: cy, w: cw, h: ch}`, the whole asset is `a.w / cw` wide and
-`a.h / ch` tall and starts at `a.x − cx · (a.w / cw)`, `a.y − cy · (a.h / ch)`. No crop (or a
-degenerate crop with zero size) gives the visible rect.
+`a.h / ch` tall and starts at `a.x − cx · (a.w / cw)`, `a.y − cy · (a.h / ch)`. No crop gives the
+visible rect. A crop that is not a window (non-finite, zero or negative size) **throws**: it fails
+closed, because guessing the visible rect would let a redaction over the hidden pixels skip the
+bake.
 
 Example (illustrative): a visible rect of 0.25 × 0.25 at (1, 0.5) that shows the middle half of its
 asset on both axes. The whole asset is 0.5 × 0.5 and starts at (0.875, 0.375).
@@ -88,9 +90,12 @@ needs either signed extents or a "visible base rect", and then the compositor or
   alone.
 - Read 1, 2 and 3. A v1 or v2 document has neither field and opens as before. A v2 file that
   somehow carries them has them ignored: that version never wrote them.
-- A crop outside the asset (any edge beyond 0–1, a zero size) or a negative or non-numeric radius
+- A crop outside the asset (any edge beyond 0–1, a side under 1/1000 of the asset) or a negative or
+  non-numeric radius
   makes the document unreadable, so the editor opens the flattened PNG (ADR 0053 point 4) rather
   than guess.
+- The base item (item 0) must not carry `crop` or `radius` yet; a document that does is unreadable
+  until unit 3 defines them, rather than read as the base's world rect.
 - **An older build rejects v3 on purpose.** It would draw the whole asset stretched into the
   cropped rect and show the wrong picture with no warning.
 
@@ -126,9 +131,19 @@ This is the same class of problem as the redaction privacy fix
 requirement and has tests: a redaction cropped out and saved stays redacted when the crop is
 widened, and a blur that misses the whole asset still does not touch it.
 
-Consequences for later units: OCR text and any "copy text" must only offer words inside the
-**visible** rect (unit 5), and the Inspect panels must not read colors or sizes from cropped-out
-pixels.
+Consequences for later units. Found in review of unit 1 and 2, they are latent until a crop can be
+written, so they are **blocking for unit 4**:
+
+- The live preview still treats the visible rect as the asset rect: `ImageRedactionTile`, the
+  locked branch of `BlurOverImagesBelow` and `ImageShape` in `annotations/annotation-layer.tsx`
+  must draw the asset from `fullRect` and clip to the visible rect, or the preview shows a
+  redaction at different pixels than the export bakes.
+- `resizeImage` in `annotations/handles.ts` locks the aspect ratio to the whole asset
+  (`pixelWidth / pixelHeight`) while resizing the visible rect, which distorts a cropped image;
+  it must lock to the crop window's aspect.
+- Also: OCR text and any "copy text" must only offer words inside the
+  **visible** rect (unit 5), and the Inspect panels must not read colors or sizes from cropped-out
+  pixels.
 
 ## Interaction (units 4 and 5)
 

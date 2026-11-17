@@ -210,6 +210,8 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
 const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const str = (v: unknown): v is string => typeof v === "string";
+/** Smallest crop side, as a fraction of the asset. */
+const MIN_CROP = 1e-3;
 const nums = (o: Obj, keys: string[]): boolean => keys.every((k) => num(o[k]));
 
 function parseImage(o: Obj): CanvasImageItem | null {
@@ -233,7 +235,9 @@ function parseImage(o: Obj): CanvasImageItem | null {
     // A window inside the asset: a crop outside 0–1 would read pixels that do not exist.
     if (!isObj(c) || !nums(c, ["x", "y", "w", "h"])) return null;
     const { x, y, w, h } = c as unknown as CropRect;
-    if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > 1 + 1e-9 || y + h > 1 + 1e-9) return null;
+    // A sliver (1e-12) would make the whole asset 1e12 times the visible rect.
+    if (w < MIN_CROP || h < MIN_CROP || x < 0 || y < 0 || x + w > 1 + 1e-9 || y + h > 1 + 1e-9)
+      return null;
     item.crop = { x, y, w, h };
   }
   if (o.radius !== undefined) {
@@ -331,7 +335,8 @@ export function parseCanvasDoc(json: string): ParsedCanvasDoc | null {
   const first: unknown = items[0];
   if (!isObj(first) || first.kind !== "image") return null; // item 0 must be the base image
   base = parseImage(first);
-  if (!base) return null;
+  // The base has no crop or radius yet: reading one as the base's world rect would be silently wrong.
+  if (!base || base.crop || base.radius !== undefined) return null;
   const [px, py, sw, sh] = version !== 1 ? toNormMaps(base) : [null, null, null, null];
   const convert = (a: Annotation): Annotation => (px ? mapGeometry(a, px, py, sw, sh, false) : a);
   for (let i = 1; i < items.length; i++) {

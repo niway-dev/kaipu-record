@@ -235,25 +235,42 @@ describe("bakeCanvasRedactions", () => {
     expect(dec(out.assets["img-aaaaaaaaaaaa"]).rects).toEqual([{ x: 0, y: 75, w: 125, h: 150 }]);
   });
 
-  it("privacy: a redaction cropped out and saved is still redacted when the crop widens", async () => {
+  it("bakes the hidden part of a blur that straddles the crop edge", async () => {
     fakeBrowser();
-    // Same cropped image and cropped-out blur. After the bake the asset bytes hold the
-    // redaction; widening the crop only changes which part of THOSE bytes is shown.
-    const narrow: Annotation = { ...image, x: 1.25, w: 0.25, crop: { x: 0.5, y: 0, w: 0.5, h: 1 } };
-    const first = await bakeCanvasRedactions(base, assets, [
-      narrow,
+    const cropped: Annotation = {
+      ...image,
+      x: 1.25,
+      w: 0.25,
+      crop: { x: 0.5, y: 0, w: 0.5, h: 1 },
+    };
+    // World 1125..1375: hidden 1125..1250 and visible 1250..1375. Asset spans 1000..1500.
+    const out = await bakeCanvasRedactions(base, assets, [
+      cropped,
+      blur({ x: 1.125, y: 0.125, w: 0.25, h: 0.25 }),
+    ]);
+    // Local: x (1.125-1)/.5 = .25 of 500 = 125, w .25/.5 = .5 of 500 = 250.
+    expect(dec(out.assets["img-aaaaaaaaaaaa"]).rects).toEqual([{ x: 125, y: 75, w: 250, h: 150 }]);
+  });
+
+  it("privacy: one asset placed twice with different crops gets the blur of the hidden part once", async () => {
+    fakeBrowser();
+    // Placement A shows only the right half; placement B shows the whole asset elsewhere.
+    // The blur is over A's hidden half (world 1000..1125) and misses B (1750..2250), so the
+    // asset's bytes must be redacted through A's full rect: B alone would never touch them.
+    const a: Annotation = {
+      ...image,
+      id: "A",
+      x: 1.25,
+      w: 0.25,
+      crop: { x: 0.5, y: 0, w: 0.5, h: 1 },
+    };
+    const b: Annotation = { ...image, id: "B", x: 1.75, w: 0.5 };
+    const out = await bakeCanvasRedactions(base, assets, [
+      a,
+      b,
       blur({ x: 1, y: 0.125, w: 0.125, h: 0.25 }),
     ]);
-    const baked = first.assets["img-aaaaaaaaaaaa"];
-    expect(baked).not.toBe(picture);
-    // The saved blur is locked; the next bake must not redact again and must keep the bytes.
-    const wide: Annotation = { ...image, x: 1, w: 0.5 };
-    const second = await bakeCanvasRedactions(first.base, first.assets, [
-      wide,
-      blur({ x: 1, y: 0.125, w: 0.125, h: 0.25, locked: true }),
-    ]);
-    expect(second.assets["img-aaaaaaaaaaaa"]).toBe(baked);
-    expect(dec(second.assets["img-aaaaaaaaaaaa"]).rects).toEqual([{ x: 0, y: 75, w: 125, h: 150 }]);
+    expect(dec(out.assets["img-aaaaaaaaaaaa"]).rects).toEqual([{ x: 0, y: 75, w: 125, h: 150 }]);
   });
 
   it("does not bake a blur that misses the whole asset even when the crop is narrow", async () => {

@@ -511,9 +511,18 @@ describe("canvas document — per-image crop (v3)", () => {
     expect(bad((i) => (i.crop = { x: 0.6, y: 0, w: 0.5, h: 1 }))).toBeNull();
     expect(bad((i) => (i.crop = { x: -0.1, y: 0, w: 0.5, h: 1 }))).toBeNull();
     expect(bad((i) => (i.crop = { x: 0, y: 0, w: 0, h: 1 }))).toBeNull();
+    expect(bad((i) => (i.crop = { x: 0, y: 0, w: 1e-12, h: 1 }))).toBeNull();
     expect(bad((i) => (i.crop = { x: "0", y: 0, w: 1, h: 1 }))).toBeNull();
     expect(bad((i) => (i.radius = -1))).toBeNull();
     expect(bad((i) => (i.radius = "12"))).toBeNull();
     expect(bad(() => {})).not.toBeNull();
+  });
+
+  it("refuses a base item that carries a crop or a radius (not supported yet)", () => {
+    for (const patch of [{ crop: { x: 0, y: 0, w: 0.5, h: 0.5 } }, { radius: 8 }]) {
+      const d = JSON.parse(JSON.stringify(buildCanvasDoc(withImages, base)));
+      Object.assign(d.items[0], patch);
+      expect(parseCanvasDoc(JSON.stringify(d))).toBeNull();
+    }
   });
 });
