@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import { composeWebcamThumbnail } from "@renderer/features/library/media/compose-webcam-thumbnail";
+import { isOrphan } from "./use-orphan-heal";
 
 /** A library video with a local copy, the only kind with files to compose from. */
 type LocalLibraryVideo = LibraryVideo & { id: string };
@@ -9,10 +10,12 @@ type LocalLibraryVideo = LibraryVideo & { id: string };
  * A recording that used the webcam whose thumbnail is still the bare screen frame
  * (`thumbnailNeedsWebcam`, from the vault). Excluded: items whose sidecar cannot be read
  * (main refuses the write) and anything without a webcam track, whose files and thumbnail
- * stay as they are.
+ * stay as they are. An orphan waits for its heal (`useOrphanHeal`): the heal writes a plain
+ * poster, which would replace a bubble composed before it; once it lands the item comes back
+ * changed and is composed then.
  */
 function needsComposite(video: LocalLibraryVideo): boolean {
-  if (video.metadataIssue) return false;
+  if (video.metadataIssue || isOrphan(video)) return false;
   return video.kind === "recording" && !!video.webcam && video.thumbnailNeedsWebcam === true;
 }
 
@@ -71,7 +74,9 @@ export function useWebcamThumbnail(
             screenUrl: v.thumbnailUrl ?? null,
             webcam: v.webcam!,
           });
-          const updated = await window.electronAPI.writeWebcamThumbnail(v.id, jpeg);
+          // The asset id pins the write to this recording: across a workspace switch, or with
+          // another file put back under the id, main refuses it.
+          const updated = await window.electronAPI.writeWebcamThumbnail(v.id, v.assetId, jpeg);
           if (!updated) return;
           const patched: LibraryVideo = {
             ...v,

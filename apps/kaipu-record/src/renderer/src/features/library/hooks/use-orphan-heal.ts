@@ -15,7 +15,7 @@ type LocalLibraryVideo = LibraryVideo & { id: string };
  * zero duration, so they are explicitly excluded, and so is an item whose sidecar
  * cannot be read (main refuses to write it).
  */
-function isOrphan(video: LocalLibraryVideo): boolean {
+export function isOrphan(video: LocalLibraryVideo): boolean {
   // Unreadable metadata is not "never derived": the sidecar exists, and a backfill would be refused.
   if (video.metadataIssue) return false;
   return video.kind === "recording" && (video.durationSeconds === 0 || !video.thumbnailUrl);

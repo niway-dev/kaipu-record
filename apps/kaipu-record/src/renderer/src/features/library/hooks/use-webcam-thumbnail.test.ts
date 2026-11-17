@@ -99,6 +99,7 @@ describe("useWebcamThumbnail", () => {
     );
     expect(window.electronAPI.writeWebcamThumbnail).toHaveBeenCalledWith(
       "needs",
+      "asset-needs",
       expect.any(ArrayBuffer),
     );
     expect(onUpdated).toHaveBeenCalledWith(
@@ -107,6 +108,26 @@ describe("useWebcamThumbnail", () => {
         thumbnailUrl: "kaipu-media://thumb/needs?v=2",
         thumbnailNeedsWebcam: false,
       }),
+    );
+  });
+
+  it("leaves an orphan to its heal, and composes it once the healed poster lands", async () => {
+    // The heal writes a plain poster: a bubble composed before it would be replaced.
+    const onUpdated = vi.fn();
+    const orphan = video({ id: "orphan", thumbnailUrl: null, durationSeconds: 0 });
+    const { rerender } = renderHook(({ list }) => useWebcamThumbnail(list, onUpdated), {
+      initialProps: { list: [orphan] },
+    });
+    await Promise.resolve();
+    expect(composeMock).not.toHaveBeenCalled();
+
+    rerender({
+      list: [{ ...orphan, thumbnailUrl: "kaipu-media://thumb/orphan?v=1", durationSeconds: 30 }],
+    });
+
+    await waitFor(() => expect(onUpdated).toHaveBeenCalledOnce());
+    expect(composeMock).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "orphan", screenUrl: "kaipu-media://thumb/orphan?v=1" }),
     );
   });
 
