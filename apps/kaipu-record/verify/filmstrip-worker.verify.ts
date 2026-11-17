@@ -33,6 +33,8 @@ const TAKE = process.env.KAIPU_PROBE_TAKE ?? path.join(EVIDENCE, "take", "take-1
 const TAKE_SMALL =
   process.env.KAIPU_PROBE_TAKE_SMALL ?? path.join(EVIDENCE, "take", "take-1080p.mp4");
 const ONE_KEY = process.env.KAIPU_PROBE_ONE_KEY ?? path.join(EVIDENCE, "one-keyframe-60s.mp4");
+/** The decoder the explore, AC13, AC5 and AC8 parts run with. */
+const PROBE_DECODER = (process.env.KAIPU_PROBE_DECODER ?? "software") as "software" | "hardware";
 const OUT = process.env.KAIPU_PROBE_OUT ?? path.join(EVIDENCE, "results");
 const APP_ROOT = path.resolve(__dirname, "..");
 const WORKER_BUNDLE = path.join(APP_ROOT, "out", "renderer", "assets", "filmstrip-probe.js");
@@ -111,6 +113,38 @@ async function waitFor(
   }
 }
 
+/** The frames posted so far, in time order, as one dark page; saved as a screenshot. */
+async function contactSheet(page: Page, file: string): Promise<void> {
+  await page.evaluate(async () => {
+    const all = (window as unknown as { __probe: { messages: Message[] } }).__probe.messages;
+    const frames = all.filter((m) => m.type === "frame") as unknown as {
+      timestamp: number;
+      blob: Blob;
+    }[];
+    frames.sort((a, b) => a.timestamp - b.timestamp);
+    const host = document.createElement("div");
+    host.id = "probe-sheet";
+    host.style.cssText =
+      "position:fixed;inset:0;z-index:99999;background:#111;color:#ddd;font:12px monospace;display:flex;flex-wrap:wrap;gap:6px;padding:8px;overflow:auto";
+    for (const f of frames) {
+      const cell = document.createElement("div");
+      const img = document.createElement("img");
+      img.src = URL.createObjectURL(f.blob);
+      img.style.cssText = "width:160px;display:block";
+      cell.append(img, `${f.timestamp.toFixed(2)} s`);
+      host.append(cell);
+    }
+    document.body.append(host);
+    await Promise.all(
+      [...host.querySelectorAll("img")].map((i) =>
+        (i as HTMLImageElement).decode().catch(() => undefined),
+      ),
+    );
+  });
+  await page.screenshot({ path: path.join(OUT, file) });
+  await page.evaluate(() => document.getElementById("probe-sheet")?.remove());
+}
+
 async function mediaUrl(page: Page, id: string): Promise<string> {
   return page.evaluate((recordingId) => {
     const w = window.electronAPI?.workspaces?.activeId?.() ?? null;
@@ -123,21 +157,36 @@ interface Usage {
   cpuSeconds: number;
   workingSetMb: number;
   privateMb: number;
+  /** Working set in MB per Electron process type (Tab = renderers, GPU, Utility, Browser). */
+  byTypeMb: Record<string, number>;
+  /** Cumulative CPU seconds per process type. */
+  cpuByType: Record<string, number>;
 }
 
 /** Cumulative CPU and memory of every process the app owns that is not the main one. */
 async function usage(s: { app: import("@playwright/test").ElectronApplication }): Promise<Usage> {
   return s.app.evaluate(({ app }) => {
-    const metrics = app.getAppMetrics();
     let cpu = 0;
     let workingSet = 0;
     let priv = 0;
-    for (const m of metrics) {
-      cpu += m.cpu.cumulativeCPUUsage ?? 0;
+    const byTypeMb: Record<string, number> = {};
+    const cpuByType: Record<string, number> = {};
+    for (const m of app.getAppMetrics()) {
+      const c = m.cpu.cumulativeCPUUsage ?? 0;
+      cpu += c;
       workingSet += m.memory.workingSetSize;
       priv += m.memory.privateBytes ?? 0;
+      byTypeMb[m.type] = (byTypeMb[m.type] ?? 0) + m.memory.workingSetSize / 1024;
+      cpuByType[m.type] = (cpuByType[m.type] ?? 0) + c;
     }
-    return { cpuSeconds: cpu, workingSetMb: workingSet / 1024, privateMb: priv / 1024 };
+    for (const k of Object.keys(byTypeMb)) byTypeMb[k] = Math.round(byTypeMb[k]);
+    return {
+      cpuSeconds: cpu,
+      workingSetMb: workingSet / 1024,
+      privateMb: priv / 1024,
+      byTypeMb,
+      cpuByType,
+    };
   });
 }
 
@@ -239,6 +288,36 @@ test("a worker reads the take by Range, and what it costs", async () => {
     };
     await clearMessages(page);
 
+    // The 10 GB take keeps its moov box at the START (an exported file); the 1080p take is a real
+    // recording with the moov at the END. Probe that one too: its index sits 1.1 GB into the file.
+    const smallUrlProbe = await mediaUrl(page, "take-small");
+    await post(page, { type: "info", id: 2, url: smallUrlProbe });
+    const smallInfo = (
+      await waitFor(page, (all) => all.some((m) => m.type === "info-done"), 180_000, "probe small")
+    ).find((m) => m.type === "info-done")!;
+    const smallFetches = (await messages(page)).filter((m) => m.type === "probe-fetch");
+    result.probeMoovAtEnd = {
+      file: TAKE_SMALL,
+      ok: smallFetches.some((f) => f.status === 206),
+      openMs: round(smallInfo.openMs as number),
+      duration: round(smallInfo.duration as number, 1),
+      width: smallInfo.width,
+      height: smallInfo.height,
+      fetchCount: smallFetches.length,
+      rangeRequests: smallFetches.slice(0, 12).map((f) => ({
+        range: f.range,
+        status: f.status,
+        contentRange: f.contentRange,
+        ms: round(f.ms as number),
+      })),
+    };
+    await writeFile(path.join(OUT, "probe.json"), JSON.stringify(result, null, 2));
+    expect(
+      (result.probeMoovAtEnd as { ok: boolean }).ok,
+      "the worker could not read the moov-at-end take",
+    ).toBe(true);
+    await clearMessages(page);
+
     // The editor at 2000% zoom: about 163 s on screen over 17 tiles (the brief's figure).
     const slotsAt = (centre: number, windowS: number, tiles = 17): Slot[] =>
       planSlots({
@@ -314,98 +393,79 @@ test("a worker reads the take by Range, and what it costs", async () => {
     };
 
     // ---------------------------------------------------------------- 3. THE ENGINE, as shipped
-    // 3a. A realistic request: 17 visible slots plus margin, the playhead at the middle.
+    // 3a. A realistic request: 22 visible slots plus margin (62), the playhead at the middle,
+    // once with each decoder through the engine as shipped.
     const memoryStart = await usage(s);
     result.memoryStart = memoryStart;
-    await clearMessages(page);
-    const cpuBefore = await usage(s);
-    const requestStart = Date.now();
-    await post(page, {
-      type: "request",
-      requestId: 1,
-      fileKey: "take",
-      url: takeUrl,
-      slots: requestSlots,
-      playhead: duration / 2,
-      direction: 0,
-    });
-    const afterRequest = await waitFor(
-      page,
-      (all) => all.some((m) => m.type === "done" && m.requestId === 1),
-      600_000,
-      "request 1",
-    );
-    const requestMs = Date.now() - requestStart;
-    const cpuAfter = await usage(s);
-    const doneMsg = afterRequest.find((m) => m.type === "done" && m.requestId === 1)!;
-    const frameMsgs = afterRequest.filter((m) => m.type === "frame" && m.requestId === 1);
-    result.request17 = {
-      slotsAsked: requestSlots.length,
-      frames: frameMsgs.length,
-      outcome: doneMsg.outcome,
-      openedFile: doneMsg.openedFile,
-      openMs: round(doneMsg.openMs as number),
-      elapsedMs: round(doneMsg.elapsedMs as number),
-      wallMs: requestMs,
-      cpuSeconds: round(cpuAfter.cpuSeconds - cpuBefore.cpuSeconds, 2),
-      cpuPercentOfOneCore: round(
-        ((cpuAfter.cpuSeconds - cpuBefore.cpuSeconds) / (requestMs / 1000)) * 100,
-        0,
-      ),
-      decodeMedianMs: round(median(frameMsgs.map((f) => f.decodeMs as number))),
-      encodeMedianMs: round(median(frameMsgs.map((f) => f.encodeMs as number))),
-      jpegBytesMedian: median(frameMsgs.map((f) => f.bytes as number)),
-      firstFrameAfterMs: round(
-        Math.min(...frameMsgs.map((f) => f._recv)) -
-          Math.min(...afterRequest.filter((m) => m.type === "file").map((f) => f._recv)),
-      ),
-    };
-    // AC14 from the worker's own timestamps.
-    const times = frameMsgs.map((f) => f._workerTime as number);
-    result.ac14 = {
-      frames: times.length,
-      maxFramesInAny1sWindow: maxFramesInWindow(times, 1000),
-      limit: 60,
-    };
-
-    // Contact sheet: the frames of that request, in order, as one HTML page screenshot.
-    const sheet = await page.evaluate(async () => {
-      const all = (window as unknown as { __probe: { messages: Message[] } }).__probe.messages;
-      const frames = all.filter((m) => m.type === "frame") as unknown as {
-        slotIndex: number;
-        timestamp: number;
-        blob: Blob;
-      }[];
-      frames.sort((a, b) => a.timestamp - b.timestamp);
-      const urls = frames.map((f) => ({
-        t: f.timestamp,
-        url: URL.createObjectURL(f.blob),
-      }));
-      const host = document.createElement("div");
-      host.id = "probe-sheet";
-      host.style.cssText =
-        "position:fixed;inset:0;z-index:99999;background:#111;color:#ddd;font:12px monospace;display:flex;flex-wrap:wrap;gap:6px;padding:8px;overflow:auto";
-      for (const u of urls) {
-        const cell = document.createElement("div");
-        const img = document.createElement("img");
-        img.src = u.url;
-        img.style.cssText = "width:160px;display:block";
-        cell.append(img, `${u.t.toFixed(2)} s`);
-        host.append(cell);
-      }
-      document.body.append(host);
-      await Promise.all(
-        [...host.querySelectorAll("img")].map((i) =>
-          (i as HTMLImageElement).decode().catch(() => undefined),
-        ),
+    const requests: Record<string, unknown> = {};
+    let requestId = 1;
+    for (const decoder of ["software", "hardware"] as const) {
+      await post(page, { type: "close" });
+      await post(page, { type: "configure", decoder });
+      await clearMessages(page);
+      const cpuBefore = await usage(s);
+      const requestStart = Date.now();
+      const id = requestId++;
+      await post(page, {
+        type: "request",
+        requestId: id,
+        fileKey: "take",
+        url: takeUrl,
+        slots: requestSlots,
+        playhead: duration / 2,
+        direction: 0,
+      });
+      const afterRequest = await waitFor(
+        page,
+        (all) => all.some((m) => m.type === "done" && m.requestId === id),
+        600_000,
+        `request ${decoder}`,
       );
-      return urls.length;
-    });
-    result.contactSheetFrames = sheet;
-    await page.screenshot({ path: path.join(OUT, "contact-sheet.png") });
-    await page.evaluate(() => document.getElementById("probe-sheet")?.remove());
+      const requestMs = Date.now() - requestStart;
+      const cpuAfter = await usage(s);
+      const doneMsg = afterRequest.find((m) => m.type === "done" && m.requestId === id)!;
+      const frameMsgs = afterRequest.filter((m) => m.type === "frame" && m.requestId === id);
+      const times = frameMsgs.map((f) => f._workerTime as number);
+      const cpuDelta = cpuAfter.cpuSeconds - cpuBefore.cpuSeconds;
+      requests[decoder] = {
+        slotsAsked: requestSlots.length,
+        frames: frameMsgs.length,
+        outcome: doneMsg.outcome,
+        openedFile: doneMsg.openedFile,
+        openMs: round(doneMsg.openMs as number),
+        elapsedMs: round(doneMsg.elapsedMs as number),
+        wallMs: requestMs,
+        cpuSeconds: round(cpuDelta, 2),
+        cpuPercentOfOneCore: round((cpuDelta / (requestMs / 1000)) * 100, 0),
+        cpuSecondsByType: Object.fromEntries(
+          Object.keys(cpuAfter.cpuByType).map((k) => [
+            k,
+            round(cpuAfter.cpuByType[k] - (cpuBefore.cpuByType[k] ?? 0), 2),
+          ]),
+        ),
+        decodeMedianMs: round(median(frameMsgs.map((f) => f.decodeMs as number))),
+        encodeMedianMs: round(median(frameMsgs.map((f) => f.encodeMs as number))),
+        jpegBytesMedian: median(frameMsgs.map((f) => f.bytes as number)),
+        framesPerSecond: round(frameMsgs.length / (requestMs / 1000)),
+        // AC14 from the worker's own timestamps.
+        maxFramesInAny1sWindow: maxFramesInWindow(times, 1000),
+      };
+      if (decoder === "software") await contactSheet(page, "contact-sheet.png");
+    }
+    result.request62 = requests;
+    result.ac14 = {
+      limit: 60,
+      maxFramesInAny1sWindowSoftware: (requests.software as { maxFramesInAny1sWindow: number })
+        .maxFramesInAny1sWindow,
+      maxFramesInAny1sWindowHardware: (requests.hardware as { maxFramesInAny1sWindow: number })
+        .maxFramesInAny1sWindow,
+    };
+    await post(page, { type: "close" });
+    await post(page, { type: "configure", decoder: PROBE_DECODER });
+    await clearMessages(page);
 
     // 3b. Explore: 25 requests over the file, then memory with the file still open, then idle.
+    const memorySamples: unknown[] = [];
     const exploreStart = Date.now();
     for (let i = 0; i < 25; i++) {
       const centre = (duration * (i + 1)) / 27;
@@ -424,6 +484,7 @@ test("a worker reads the take by Range, and what it costs", async () => {
         600_000,
         `explore ${i}`,
       );
+      if (i % 6 === 5) memorySamples.push({ afterRequests: i + 1, ...(await usage(s)) });
     }
     const memoryOpen = await usage(s);
     result.explore = {
@@ -431,6 +492,7 @@ test("a worker reads the take by Range, and what it costs", async () => {
       wallMs: Date.now() - exploreStart,
       memoryAfterWithFileOpen: memoryOpen,
       memoryStart,
+      memorySamples,
     };
 
     // AC13: the file is still open (one `opened`, no `closed`) and closes by itself after 10 s.
