@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FLAG_NAMES } from "@shared/analytics";
 import { reportError } from "@renderer/features/analytics/report-error";
+import { pushFlagOverrides } from "@renderer/test/flag-overrides-stub";
 import { DeveloperFlagsSection } from "./developer-flags-section";
 
 vi.mock("@renderer/features/analytics/report-error", () => ({ reportError: vi.fn() }));
@@ -13,6 +14,7 @@ describe("DeveloperFlagsSection", () => {
   };
   const original = { ...api };
   afterEach(() => {
+    pushFlagOverrides({});
     api.flagOverrides = original.flagOverrides;
     api.setFlagOverride = original.setFlagOverride;
   });
@@ -38,8 +40,8 @@ describe("DeveloperFlagsSection", () => {
   it("a pinned flag says so and Reset clears just that flag", () => {
     const set = vi.fn(async () => ({}));
     api.setFlagOverride = set;
-    api.flagOverrides = { "image-canvas": true };
     render(<DeveloperFlagsSection />);
+    act(() => pushFlagOverrides({ "image-canvas": true }));
     expect(screen.getByText("On · pinned here")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Reset" })).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));

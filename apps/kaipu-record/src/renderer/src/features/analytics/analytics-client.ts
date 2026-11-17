@@ -150,27 +150,49 @@ export function captureEvent(name: string, props?: Record<string, unknown>): voi
   posthog.capture(name, props);
 }
 
-/** Overrides pushed by main after a Developer page toggle; `null` until the first push. */
+/** The overrides main holds, once known (pushed after a toggle, or fetched on first use). */
 let liveOverrides: FlagOverrides | null = null;
 let overridesSubscribed = false;
 
 /**
- * The active overrides: the latest set main pushed, else the launch set the preload read
- * (`KAIPU_FLAG_OVERRIDES`). Unpackaged builds only; always empty in a packaged one.
+ * The active overrides: what main holds once this window has heard from it, else the launch
+ * set the preload read (`KAIPU_FLAG_OVERRIDES`). Unpackaged builds only; always empty in a
+ * packaged one. The first call also starts listening to main (see `subscribeToOverrideChanges`).
  */
 export function currentFlagOverrides(): FlagOverrides {
+  subscribeToOverrideChanges();
   return liveOverrides ?? window.electronAPI?.flagOverrides ?? {};
 }
 
+function setLiveOverrides(overrides: FlagOverrides): void {
+  liveOverrides = overrides;
+  for (const listener of flagListeners) listener();
+}
+
+/**
+ * Once per window: listen for toggles, and ask main for its current set. The launch arguments
+ * are frozen when the window is created, so a toggle made earlier, or a reload of this window,
+ * would otherwise leave it showing a stale set. A push that arrives first is newer than the
+ * snapshot's answer and wins.
+ */
 function subscribeToOverrideChanges(): void {
   if (overridesSubscribed) return;
-  const subscribe = window.electronAPI?.onFlagOverridesChanged;
-  if (!subscribe) return;
+  const api = window.electronAPI;
+  if (!api?.onFlagOverridesChanged) return;
   overridesSubscribed = true;
-  subscribe((overrides) => {
-    liveOverrides = overrides;
-    for (const listener of flagListeners) listener();
+  let heardFromMain = false;
+  api.onFlagOverridesChanged((overrides) => {
+    heardFromMain = true;
+    setLiveOverrides(overrides);
   });
+  api
+    .getFlagOverrides?.()
+    .then((overrides) => {
+      if (!heardFromMain) setLiveOverrides(overrides);
+    })
+    .catch(() => {
+      // No answer: the launch set stays in force.
+    });
 }
 
 /** Where a flag's effective value comes from, in the order `isFlagEnabled` reads them. */

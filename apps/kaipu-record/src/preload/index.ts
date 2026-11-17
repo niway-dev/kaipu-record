@@ -14,6 +14,7 @@ import type {
   QuietCaptureHandOff,
 } from "@shared/types/screenshot-capture";
 import { WorkspaceStampGuard } from "@shared/workspace-stamp-guard";
+import type { FlagName } from "@shared/analytics";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
 import type {
   RecordingReadyHandOff,
@@ -92,6 +93,12 @@ async function scopedInvoke<T>(channel: string, ...args: unknown[]): Promise<T> 
   return result;
 }
 
+/** Same validation as the launch argument: only known flags with boolean values get through. */
+function validFlagOverrides(overrides: unknown): Readonly<Partial<Record<FlagName, boolean>>> {
+  const { overrides: valid } = parseFlagOverrides(JSON.stringify(overrides), { isPackaged: false });
+  return Object.freeze(valid);
+}
+
 // Custom Kaipu bridge. Only methods with a live main-process handler are exposed.
 const kaipuApi: KaipuElectronAPI = {
   nativeCapture: {
@@ -106,14 +113,11 @@ const kaipuApi: KaipuElectronAPI = {
   },
   flagOverrides: Object.freeze(readFlagOverridesArg(process.argv)),
   setFlagOverride: (name, value) => ipcRenderer.invoke(IPC_CHANNELS.flagOverrideSet, name, value),
+  getFlagOverrides: async () =>
+    validFlagOverrides(await ipcRenderer.invoke(IPC_CHANNELS.flagOverridesGet)),
   onFlagOverridesChanged: (listener) => {
-    const handler = (_event: IpcRendererEvent, overrides: unknown): void => {
-      // Same validation as the launch argument: only known flags with boolean values get through.
-      const { overrides: valid } = parseFlagOverrides(JSON.stringify(overrides), {
-        isPackaged: false,
-      });
-      listener(Object.freeze(valid));
-    };
+    const handler = (_event: IpcRendererEvent, overrides: unknown): void =>
+      listener(validFlagOverrides(overrides));
     ipcRenderer.on(IPC_CHANNELS.flagOverridesChanged, handler);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.flagOverridesChanged, handler);
   },

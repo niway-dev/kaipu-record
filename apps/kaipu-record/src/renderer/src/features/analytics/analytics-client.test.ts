@@ -134,4 +134,52 @@ describe("live flag overrides (Developer page)", () => {
       api.onFlagOverridesChanged = original.onFlagOverridesChanged;
     }
   });
+
+  it("a reloaded window takes main's current set instead of its frozen launch set", async () => {
+    vi.resetModules();
+    const api = window.electronAPI as unknown as {
+      flagOverrides: unknown;
+      getFlagOverrides: unknown;
+    };
+    const original = { ...api };
+    api.flagOverrides = {}; // what this window was created with, before the toggle
+    api.getFlagOverrides = async () => ({ "image-canvas": true }); // what main holds now
+    try {
+      const { isFlagEnabled, onFlagsChanged } = await import("./analytics-client");
+      const subscriber = vi.fn();
+      onFlagsChanged(subscriber);
+      await vi.waitFor(() => expect(subscriber).toHaveBeenCalledTimes(1));
+      expect(isFlagEnabled("image-canvas", false)).toBe(true);
+    } finally {
+      api.flagOverrides = original.flagOverrides;
+      api.getFlagOverrides = original.getFlagOverrides;
+    }
+  });
+
+  it("a push that arrives before the snapshot is not overwritten by it", async () => {
+    vi.resetModules();
+    const api = window.electronAPI as unknown as {
+      onFlagOverridesChanged: unknown;
+      getFlagOverrides: unknown;
+    };
+    const original = { ...api };
+    let push: (overrides: Record<string, boolean>) => void = () => {};
+    let answer: (overrides: Record<string, boolean>) => void = () => {};
+    api.onFlagOverridesChanged = (listener: typeof push) => {
+      push = listener;
+      return () => {};
+    };
+    api.getFlagOverrides = () => new Promise((resolve) => (answer = resolve));
+    try {
+      const { isFlagEnabled, onFlagsChanged } = await import("./analytics-client");
+      onFlagsChanged(() => {});
+      push({ "image-text": true });
+      answer({}); // the older snapshot answers late
+      await Promise.resolve();
+      expect(isFlagEnabled("image-text", false)).toBe(true);
+    } finally {
+      api.onFlagOverridesChanged = original.onFlagOverridesChanged;
+      api.getFlagOverrides = original.getFlagOverrides;
+    }
+  });
 });

@@ -287,6 +287,8 @@ export interface KaipuElectronAPI {
     name: FlagName,
     value: boolean | null,
   ): Promise<Readonly<Partial<Record<FlagName, boolean>>>>;
+  /** The overrides main holds now: a window created before a toggle, or reloaded, starts from stale launch arguments. */
+  getFlagOverrides(): Promise<Readonly<Partial<Record<FlagName, boolean>>>>;
   /** The active overrides changed (here or in another window). Returns an unsubscribe. */
   onFlagOverridesChanged(
     listener: (overrides: Readonly<Partial<Record<FlagName, boolean>>>) => void,
