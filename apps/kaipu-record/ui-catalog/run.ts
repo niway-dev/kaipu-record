@@ -496,11 +496,12 @@ async function navigate(page: Page, route: string): Promise<void> {
  * pause and going back to the start: pause, seek to 0:00, and wait until that frame has
  * been presented.
  */
-async function pauseVideosAtStart(page: Page): Promise<void> {
-  await page.evaluate(async () => {
+async function pauseVideosAtStart(page: Page, within?: AreaId): Promise<void> {
+  const selector = within ? `[data-ui-area="${within}"] video` : "video";
+  await page.evaluate(async (selector) => {
     const within = (ms: number, promise: Promise<unknown>) =>
       Promise.race([promise, new Promise((resolve) => setTimeout(resolve, ms))]);
-    for (const video of document.querySelectorAll("video")) {
+    for (const video of document.querySelectorAll<HTMLVideoElement>(selector)) {
       video.pause();
       const seeked = new Promise((resolve) =>
         video.addEventListener("seeked", resolve, { once: true }),
@@ -514,7 +515,7 @@ async function pauseVideosAtStart(page: Page): Promise<void> {
       // The native controls animate (the scrubber thumb fades) when the state changes.
       await new Promise((resolve) => setTimeout(resolve, 1_000));
     }
-  });
+  }, selector);
 }
 
 async function waitFor(ctx: Ctx, page: Page, target: WaitTarget, timeoutMs: number): Promise<void> {
@@ -534,7 +535,7 @@ async function waitFor(ctx: Ctx, page: Page, target: WaitTarget, timeoutMs: numb
       undefined,
       { timeout: timeoutMs, polling: 100 },
     );
-    if (target.video === "paused-at-start") await pauseVideosAtStart(page);
+    if (target.video === "paused-at-start") await pauseVideosAtStart(page, target.within);
   } else if ("window" in target) {
     await floatingPage(ctx.app, target.window, timeoutMs);
   } else if (target.part) {
@@ -1231,6 +1232,7 @@ async function runProfile(name: ProfileName, entries: CatalogEntry[]): Promise<v
           joinedRecordings: profile.joinedRecordings,
           slideSequence: profile.slideSequence,
           frameCaptures: profile.frameCaptures,
+          splitWeeklySync: profile.splitWeeklySync,
           cameraRecordings: profile.cameraRecordings,
           textScreenshot: profile.textScreenshot,
           colorsScreenshots: profile.colorsScreenshots,

@@ -200,6 +200,8 @@ interface RecordingFixture {
   floating?: boolean;
   /** A saved edit of one clip followed by three slides (NIW2-817): `slideScene`. */
   slides?: boolean;
+  /** A saved edit of these clips, in source seconds, one after the other: `clipsScene`. */
+  clips?: readonly (readonly [number, number])[];
   /** A saved version 2 edit that joined another recording (ADR 0058): `joinedScene`. */
   joined?: JoinedKind;
   /** The media is `FIXTURE_FILES.joinedCut` (blue, a "B"), not a cut of the opened countdown. */
@@ -501,6 +503,24 @@ export function slideScene(seconds: number): unknown {
     webcam: null,
   };
 }
+/** The saved scene of a recording cut into `clips` (source seconds, in order): no slides. */
+export function clipsScene(clips: readonly (readonly [number, number])[]): unknown {
+  return {
+    items: clips.map(([sourceStart, sourceEnd], index) => ({
+      id: `clip-${index + 1}`,
+      kind: "clip",
+      sourceStart,
+      sourceEnd,
+    })),
+    overlays: [],
+    zoomSegments: [],
+    redactions: [],
+    zoomSensitivity: 55,
+    audioMuted: false,
+    mutedRanges: [],
+    webcam: null,
+  };
+}
 /** Seeded only where `cameraRecordings` is on: the recordings the camera panel's states open. */
 const CAMERA_RECORDINGS: readonly RecordingFixture[] = [
   {
@@ -603,6 +623,13 @@ export interface SeedOptions {
   joinedRecordings?: boolean;
   /** Add the recording whose saved edit ends in three slides (`SLIDES_RECORDING`). */
   slideSequence?: boolean;
+  /**
+   * Make “Weekly sync” 12 s long with a saved edit of three 4 s clips (0–4, 4–8, 8–12 source
+   * seconds). Only the `add-from-library` profile turns it on: the modal's placement strip and
+   * menu thumbnails then show clips before, after and around the new item. No other profile's
+   * vault changes.
+   */
+  splitWeeklySync?: boolean;
   /**
    * Add one screenshot taken from “Weekly sync” (`sourceVideoAssetId` in its sidecar). Only the
    * `add-from-library` profile turns it on: “Weekly sync”'s Captures panel lists it too, so the
@@ -875,6 +902,20 @@ async function seedRecording(
       exportedSavedAt: null,
     });
   }
+  if (item.clips) {
+    await writeJson(path.join(meta, `${item.stem}.edit.json`), {
+      version: 1,
+      scene: clipsScene(item.clips),
+    });
+    const source = await stat(media);
+    await writeJson(path.join(meta, `${item.stem}.edit.meta.json`), {
+      sourceSizeBytes: source.size,
+      sourceMtimeMs: source.mtimeMs,
+      assetIds: [],
+      savedAt: createdAt + HOUR,
+      exportedSavedAt: null,
+    });
+  }
   if (item.joined) {
     await writeJson(path.join(meta, `${item.stem}.edit.json`), {
       version: 2,
@@ -1041,7 +1082,19 @@ export async function seedCatalogVault(vaultDir: string, options: SeedOptions): 
     ...(options.slideSequence ? [SLIDES_RECORDING] : []),
     ...(options.cursorRecording ? [CURSOR_RECORDING] : []),
     ...(options.cameraRecordings ? CAMERA_RECORDINGS : []),
-    ...RECORDINGS,
+    ...RECORDINGS.map((it) =>
+      options.splitWeeklySync && it.assetId === ASSETS.weeklySync
+        ? {
+            ...it,
+            cut: 12 as const,
+            clips: [
+              [0, 4],
+              [4, 8],
+              [8, 12],
+            ] as const,
+          }
+        : it,
+    ),
   ];
   for (const item of recordings) await seedRecording(vaultDir, meta, fixtures, now, item);
 

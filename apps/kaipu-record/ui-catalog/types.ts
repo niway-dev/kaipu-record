@@ -136,8 +136,10 @@ export type WaitTarget =
    * thumbnails (and the webcam lane's), which decode after the video and appear all at once.
    * `"paused-at-start"` also pauses every video at 0:00 and waits for that frame to paint,
    * for a player that autoplays (a shot of it would catch whichever frame came up).
+   * `within` pauses only the videos inside that area, so the editor's own video and its
+   * playhead stay where an earlier step put them.
    */
-  | { readonly video: true | "paused-at-start" }
+  | { readonly video: true | "paused-at-start"; readonly within?: AreaId }
   | { readonly window: WindowKind };
 
 /**
