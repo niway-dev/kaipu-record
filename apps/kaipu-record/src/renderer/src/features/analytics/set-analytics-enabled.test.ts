@@ -67,7 +67,7 @@ describe("setAnalyticsEnabled", () => {
       expect(posthog.captureException).not.toHaveBeenCalled();
     });
 
-    it("still reads remote flags and subscribes to their reloads", async () => {
+    it("still reads remote flags", async () => {
       const client = await loadClient();
       client.setAnalyticsEnabled(false, "device-1");
       posthog.isFeatureEnabled.mockReturnValue(false);
@@ -100,7 +100,7 @@ describe("setAnalyticsEnabled", () => {
       expect(client.isFlagEnabled("image-canvas", false)).toBe(false);
     });
 
-    it("lifts a persisted opt-in only when the preference turns on", async () => {
+    it("opts capturing back in when the preference turns on after being off", async () => {
       const client = await loadClient();
       client.setAnalyticsEnabled(false, "device-1");
       client.setAnalyticsEnabled(true, "device-1");
