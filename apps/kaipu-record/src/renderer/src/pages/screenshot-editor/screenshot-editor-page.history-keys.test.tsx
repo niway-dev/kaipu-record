@@ -200,4 +200,21 @@ describe("ScreenshotEditorPage — Undo / Redo keys (NIW2-847)", () => {
     undoKey();
     await waitFor(() => expect(padding().value).not.toBe("40"));
   });
+
+  it("names the keys to assistive tech in ARIA form and prevents the default only when it acts", async () => {
+    mount();
+    await loadImage();
+    expect(screen.getByRole("button", { name: "Undo" })).toHaveAttribute(
+      "aria-keyshortcuts",
+      "Meta+Z",
+    );
+    expect(screen.getByRole("button", { name: "Redo" })).toHaveAttribute(
+      "aria-keyshortcuts",
+      "Meta+Shift+Z",
+    );
+    // Nothing to undo yet: the chord is left alone for the browser.
+    expect(undoKey()).toBe(true);
+    await drawBox();
+    expect(undoKey()).toBe(false);
+  });
 });

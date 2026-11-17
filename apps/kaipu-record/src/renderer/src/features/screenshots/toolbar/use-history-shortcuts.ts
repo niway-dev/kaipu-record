@@ -71,8 +71,9 @@ export function historyShortcut(
  * dialog is open, and it prevents the default (and so Electron's Edit menu) only when it acts.
  */
 export function useHistoryShortcuts(opts: {
-  onUndo: () => void;
-  onRedo: () => void;
+  /** Return false when the step did nothing: the key is then left alone. */
+  onUndo: () => boolean;
+  onRedo: () => boolean;
   canUndo: boolean;
   canRedo: boolean;
 }): void {
@@ -86,8 +87,7 @@ export function useHistoryShortcuts(opts: {
       if (!hit || document.querySelector(OVERLAY)) return;
       const { onUndo, onRedo, canUndo, canRedo } = latest.current;
       if (hit === "undo" ? !canUndo : !canRedo) return;
-      e.preventDefault();
-      (hit === "undo" ? onUndo : onRedo)();
+      if ((hit === "undo" ? onUndo : onRedo)()) e.preventDefault();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

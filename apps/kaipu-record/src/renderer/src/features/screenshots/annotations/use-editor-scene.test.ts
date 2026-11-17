@@ -143,7 +143,11 @@ describe("useEditorScene", () => {
     const { result } = renderHook(() => useEditorScene());
     act(() => result.current.addAnnotation(box));
     act(() => result.current.beginInteract());
-    act(() => result.current.undo());
+    let acted = true;
+    act(() => {
+      acted = result.current.undo();
+    });
+    expect(acted).toBe(false);
     expect(result.current.annotations).toHaveLength(1);
     act(() => result.current.endInteract());
     act(() => result.current.undo());
