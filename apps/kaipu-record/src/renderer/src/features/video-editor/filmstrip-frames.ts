@@ -30,7 +30,7 @@ export const FILMSTRIP_BYTE_BUDGET = 48 * 1024 * 1024;
 /** The finest slot: 0.25 s. Slot steps are this times a power of two. */
 export const MIN_SLOT_STEP = 0.25;
 
-/** At fit zoom a file never gets more than this many frames: what the editor decodes today. */
+/** At fit zoom a plan lists at most this many slots per file: what the editor decodes today. */
 export const FIT_FRAME_CAP = 24;
 
 /** A zoomed-in plan never lists more slots than this, whatever the inputs. */
@@ -64,6 +64,8 @@ function distanceToRange(timestamp: number, range: TimeRange): number {
   if (timestamp >= range.end) return timestamp - range.end;
   return 0;
 }
+
+const NO_FRAMES: readonly never[] = Object.freeze([]);
 
 export interface FrameStoreOptions<T> {
   /** Byte budget across all files. Default: {@link FILMSTRIP_BYTE_BUDGET}. */
@@ -105,7 +107,7 @@ export class FrameStore<T> {
    */
   frames(fileKey: string): readonly Frame<T>[] {
     const entry = this.files.get(fileKey);
-    if (!entry) return [];
+    if (!entry) return NO_FRAMES;
     this.files.delete(fileKey);
     this.files.set(fileKey, entry);
     return entry.frames;
@@ -236,9 +238,10 @@ export interface PlanSlotsInput {
  * The empty slots of the visible range plus its margin, sorted by start.
  *
  * A slot is filled when a stored frame sits inside it. At fit zoom (the visible range is the
- * whole file) the plan is capped so a file never gets more than {@link FIT_FRAME_CAP}
- * frames in total, stored ones included: the step grows until at most that many slots
- * cover the file, and what is asked is trimmed to what the cap still allows, evenly spread.
+ * whole file) the step grows until at most {@link FIT_FRAME_CAP} slots cover the file, so a
+ * fit plan asks for at most that many frames, evenly spread, and never for a slot that
+ * already holds one. Frames decoded while zoomed in do not count against that cap: counting
+ * them would leave the far stretches of the file without a frame of their own time.
  * A zoomed-in plan is bounded by {@link MAX_PLAN_SLOTS} the same way, so no input (a tiny
  * tile span, a file reporting 17.8 hours) can ask for an unbounded list.
  */
@@ -270,10 +273,7 @@ export function planSlots(input: PlanSlotsInput): Slot[] {
     empty.push({ index: n, start, end, visible: end > visibleStart && start < visibleEnd });
   }
 
-  if (!fit) return empty;
-  const allowed = Math.max(0, FIT_FRAME_CAP - frames.length);
-  if (empty.length <= allowed) return empty;
-  return Array.from({ length: allowed }, (_, i) => empty[Math.floor((i * empty.length) / allowed)]);
+  return empty;
 }
 
 // ---------------------------------------------------------------------------------------

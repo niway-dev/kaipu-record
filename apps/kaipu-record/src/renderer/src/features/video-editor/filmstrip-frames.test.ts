@@ -124,6 +124,13 @@ describe("FrameStore: AC5 thumbnail bytes held never exceed 48 MB", () => {
     expect(stamps(store.frames("a"))).toEqual([0, 10, 20, 25, 30]);
   });
 
+  it("an unknown file gives the same empty snapshot every time, so a subscription never loops", () => {
+    const store = new FrameStore<number>({ budgetBytes: 100 });
+    expect(store.frames("nope")).toBe(store.frames("other"));
+    store.add("a", frame(0));
+    expect(store.frames("a")).toBe(store.frames("a"));
+  });
+
   it("hands out snapshots: a later add never mutates an array already returned", () => {
     const store = new FrameStore<number>({ budgetBytes: 100 });
     store.add("a", frame(0));
@@ -269,17 +276,30 @@ describe("planSlots: AC3 fit zoom never asks for more than 24 frames per file", 
     expect(slots.at(-1)!.end).toBeGreaterThanOrEqual(1800);
   });
 
-  it("AC3: the 24 frames decoded at open count: with them stored, fit asks for nothing more", () => {
-    const opening = Array.from({ length: 24 }, (_, i) => frame(((i + 0.5) / 24) * 1800));
-    expect(fit(1800, opening)).toEqual([]);
+  it("AC3: one stored frame per fit slot means fit asks for nothing", () => {
+    // 1800 s at fit: 15 slots of 128 s; a frame in each, wherever inside the slot
+    const spread = Array.from({ length: 15 }, (_, i) => frame(i * 128 + 10));
+    expect(fit(1800, spread)).toEqual([]);
   });
 
-  it("AC3: stored plus requested frames never pass 24 at fit", () => {
+  it("AC3: a fit plan only ever lists slots that hold no frame, and at most 24", () => {
     for (let stored = 0; stored <= 30; stored += 3) {
-      const frames = Array.from({ length: stored }, (_, i) => frame(i * 0.01));
-      const asked = fit(1800, frames).length;
-      expect(stored + asked).toBeLessThanOrEqual(Math.max(stored, FIT_FRAME_CAP));
+      const frames = Array.from({ length: stored }, (_, i) => frame(i * 60 + 1));
+      const slots = fit(1800, frames);
+      expect(slots.length).toBeLessThanOrEqual(FIT_FRAME_CAP);
+      for (const slot of slots) {
+        expect(frames.some((f) => f.timestamp >= slot.start && f.timestamp < slot.end)).toBe(false);
+      }
     }
+  });
+
+  it("AC3: frames clustered from an earlier zoom-in never block the fit plan for the rest of the file", () => {
+    const cluster = Array.from({ length: 40 }, (_, i) => frame(600 + i * 0.5));
+    const slots = fit(1800, cluster);
+    expect(slots.length).toBeGreaterThan(0);
+    expect(slots.length).toBeLessThanOrEqual(FIT_FRAME_CAP);
+    expect(slots.some((s) => s.start === 0)).toBe(true);
+    expect(slots.some((s) => s.end > 1700)).toBe(true);
   });
 
   it("AC3: zoomed in (the range is not the whole file) the cap does not apply", () => {
@@ -318,7 +338,8 @@ describe("pickFrame: AC4 lookup rule", () => {
   });
 
   it("AC4: a frame exactly at the clip's end is outside it (half-open range)", () => {
-    const frames = [frame(200), frame(120)];
+    // sorted, as the store hands them out; 200 is nearer the centre (193) than 120 is
+    const frames = [frame(120), frame(200)];
     expect(pickFrame(frames, { start: 190, end: 196 }, clip)?.timestamp).toBe(120);
   });
 
