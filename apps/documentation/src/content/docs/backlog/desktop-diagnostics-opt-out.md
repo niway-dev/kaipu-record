@@ -32,8 +32,9 @@ is asked to rely on it.
 - **What is sent, with it on:** `recording_started`, `screenshot_captured`,
   `editor_speed_changed`, `library-detail-missing` (an opaque asset UUID, the list size and whether
   it came from a recording, sent when a library page cannot find its item) and `editor_opened` with
-  `{ editor: "video" | "image" }` once per loaded editor session (the hook is
-  `useEditorOpened`). Plus crash reports. Identity is the random per-install `deviceId`; there
+  `{ editor: "video" | "image" }` once per editor session (the hook is
+  `useEditorOpened`): the video editor counts once its session loads, the image editor once its
+  file resolves to a URL, so a missing or undecodable image is still counted. Plus crash reports. Identity is the random per-install `deviceId`; there
   is no account, name or email. No call site sends keystrokes, pixels or file names, which is
   what the onboarding copy promises.
 - **What runs with it off:** only the feature-flags request, for that `deviceId`. No event and

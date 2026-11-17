@@ -23,7 +23,7 @@ function mockApi(overrides: Partial<KaipuElectronAPI> = {}): {
     getSettings: vi.fn().mockResolvedValue({ shortcuts: defaultShortcutsFor("darwin") }),
     onSettingsChanged: vi.fn(() => () => {}),
     onShortcutFired: vi.fn(() => () => {}),
-    updateSettings: vi.fn().mockResolvedValue(undefined),
+    updateSettings: vi.fn(async (patch: object) => ({ ...patch })),
     requestRecordSelector: vi.fn(),
     requestCaptureScreenshot: vi.fn(),
     ...overrides,
