@@ -4,11 +4,10 @@ import { useTranslations } from "@kaipu/i18n";
 import {
   destinationAllowed,
   LIBRARY_DESTINATIONS,
-  placementPreview,
+  schematicPlacement,
   type LibraryDestination,
   type LibraryItemKind,
 } from "../add-from-library";
-import type { LayoutEntry } from "../timeline";
 import { PlacementStrip } from "./placement-strip";
 import styles from "./add-destination-button.module.css";
 
@@ -17,11 +16,6 @@ export interface AddDestinationButtonProps {
   kind: LibraryItemKind;
   /** The chosen destination: the big part of the button adds there and says so. */
   value: LibraryDestination;
-  /** The sequence and playhead the menu's thumbnails are drawn from. */
-  layout: LayoutEntry[];
-  playhead: number;
-  /** How long the item is in each place, for the thumbnails ("over" can differ from the rest). */
-  newSecondsFor(destination: LibraryDestination): number;
   onChange(destination: LibraryDestination): void;
   /** The single Add: applies the selection at `value`. */
   onAdd(): void;
@@ -44,15 +38,13 @@ const KEYS: Record<LibraryDestination, CtaKey> = {
 /**
  * The one place an Add from Library item is sent (NIW2-829): a split button. The big part adds
  * at the chosen destination and names it ("Add after this clip"); the arrow opens a menu of the
- * five destinations, each with a thumbnail of the sequence it makes. Choosing one only sets the
+ * five destinations, each with a thumbnail of the same fixed schematic (three clips and a new
+ * item), so the menu reads as a legend of the places, not as the user's own sequence. Choosing one only sets the
  * destination and closes the menu: it never adds. A WAI-ARIA menu of radio items.
  */
 export function AddDestinationButton({
   kind,
   value,
-  layout,
-  playhead,
-  newSecondsFor,
   onChange,
   onAdd,
   onPreview,
@@ -197,15 +189,7 @@ export function AddDestinationButton({
                 onFocus={() => allowed && setFocused(destination)}
               >
                 <span className={styles.thumb} aria-hidden>
-                  <PlacementStrip
-                    size="small"
-                    preview={placementPreview(
-                      layout,
-                      playhead,
-                      destination,
-                      newSecondsFor(destination),
-                    )}
-                  />
+                  <PlacementStrip size="small" preview={schematicPlacement(destination)} />
                 </span>
                 <span className={styles.itemText}>
                   <span className={styles.itemLabel}>{label(destination)}</span>

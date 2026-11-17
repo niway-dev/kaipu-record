@@ -13,12 +13,16 @@ import {
   boundaryAtEnd,
   libraryScreenshots,
   placementPreview,
+  condensePlacement,
+  schematicPlacement,
+  sameAsDestination,
   FLOATING_IMAGE_SECONDS,
   boundaryForDestination,
   defaultDestination,
   destinationAllowed,
   insertSlideAtBoundary,
   LIBRARY_DESTINATIONS,
+  type LibraryDestination,
   SEQUENCE_IMAGE_SECONDS,
 } from "./add-from-library";
 
@@ -634,5 +638,203 @@ describe("placementPreview", () => {
         expect(preview.blocks[at].start).toBe(boundary?.time);
       }
     }
+  });
+});
+
+describe("condensePlacement", () => {
+  // Illustrative: ten 10 s clips c0..c9, the playhead in c4 (index 4, 40-50), a 7 s item.
+  const ten = Array.from({ length: 10 }, (_, i) => clip(`c${i}`, i * 10, i * 10 + 10));
+  const NEW = 7;
+  const shape = (destination: LibraryDestination, layout = ten, playhead = 45) => {
+    const condensed = condensePlacement(placementPreview(layout, playhead, destination, NEW));
+    return {
+      condensed,
+      kinds: condensed.slots.map((slot) =>
+        slot.kind === "group" ? `group:${slot.count}` : slot.kind === "new" ? "new" : slot.key,
+      ),
+    };
+  };
+
+  it("after the clip: the groups hide the far clips and everything near the playhead and the new item stays", () => {
+    const { condensed, kinds } = shape("after-clip");
+    expect(kinds).toEqual(["group:3", "c3", "c4", "new", "c5", "group:4"]);
+    expect(condensed.slots.filter((s) => s.current).map((s) => s.key)).toEqual(["c4"]);
+    expect(condensed.slots.map((s) => s.moved)).toEqual([false, false, false, false, true, true]);
+  });
+
+  it("before the clip: the new item sits left of the clip the playhead is on, which moves", () => {
+    const { condensed, kinds } = shape("before-clip");
+    expect(kinds).toEqual(["group:3", "c3", "new", "c4", "c5", "group:4"]);
+    expect(condensed.slots.find((s) => s.current)?.key).toBe("c4");
+    expect(condensed.slots.map((s) => s.moved)).toEqual([false, false, false, true, true, true]);
+  });
+
+  it("at the start: new and its neighbour, then a group, the playhead's clip with its neighbours, a group", () => {
+    const { condensed, kinds } = shape("start");
+    expect(kinds).toEqual(["new", "c0", "group:2", "c3", "c4", "c5", "group:4"]);
+    expect(condensed.slots.find((s) => s.current)?.key).toBe("c4");
+    expect(condensed.slots.filter((s) => s.kind !== "new").every((s) => s.moved)).toBe(true);
+  });
+
+  it("at the end: nothing moves, the new item closes the strip", () => {
+    const { condensed, kinds } = shape("end");
+    expect(kinds).toEqual(["group:3", "c3", "c4", "c5", "group:3", "c9", "new"]);
+    expect(condensed.slots.some((s) => s.moved)).toBe(false);
+  });
+
+  it("over: the same condensing with no new block, and the floating bar is on the strip", () => {
+    const { condensed, kinds } = shape("over");
+    expect(kinds).toEqual(["group:3", "c3", "c4", "c5", "group:4"]);
+    expect(condensed.slots.some((s) => s.kind === "new" || s.moved)).toBe(false);
+    expect(condensed.floating).not.toBeNull();
+    const current = condensed.slots.find((s) => s.current);
+    expect(condensed.floating?.x0).toBeCloseTo(condensed.x(45));
+    expect(condensed.floating?.x0).toBeGreaterThanOrEqual(current?.x0 ?? 1);
+    expect(condensed.floating?.x1).toBeCloseTo(condensed.x(52));
+  });
+
+  it("a run of one hidden clip is a plain clip, never a group of one", () => {
+    // Playhead in c2: after-clip shows c1 c2 new c3, hides c0 (one clip) and c4..c9 (six).
+    const { kinds } = shape("after-clip", ten, 25);
+    expect(kinds).toEqual(["c0", "c1", "c2", "new", "c3", "group:6"]);
+  });
+
+  it("three clips draw no group: clip, clip, new, clip for after-clip with the playhead in the middle", () => {
+    const three = [clip("a", 0, 8), clip("b", 8, 20), clip("c", 20, 30)];
+    const { condensed } = shape("after-clip", three, 12);
+    expect(condensed.slots.map((s) => s.kind)).toEqual(["clip", "clip", "new", "clip"]);
+    expect(condensed.slots.map((s) => s.current)).toEqual([false, true, false, false]);
+  });
+
+  it("a one-clip video: the clip is current and the new item sits after it", () => {
+    const one = [clip("a", 0, 12)];
+    const { condensed } = shape("after-clip", one, 3);
+    expect(condensed.slots.map((s) => s.kind)).toEqual(["clip", "new"]);
+    expect(condensed.slots[0].current).toBe(true);
+  });
+
+  it("a tiny clip next to a long one gets at least the minimum share, and the shares sum to one", () => {
+    const uneven = [clip("a", 0, 1), clip("b", 1, 601)];
+    const { condensed } = shape("after-clip", uneven, 0.5);
+    for (const slot of condensed.slots) expect(slot.x1 - slot.x0).toBeGreaterThanOrEqual(0.07);
+    expect(condensed.slots[0].x0).toBeCloseTo(0);
+    expect(condensed.slots.at(-1)?.x1).toBeCloseTo(1);
+    for (let i = 1; i < condensed.slots.length; i++) {
+      expect(condensed.slots[i].x0).toBeCloseTo(condensed.slots[i - 1].x1);
+    }
+  });
+
+  it("a group is wide enough for its label", () => {
+    const { condensed } = shape("after-clip");
+    for (const slot of condensed.slots.filter((s) => s.kind === "group")) {
+      expect(slot.x1 - slot.x0).toBeGreaterThanOrEqual(0.14);
+    }
+  });
+
+  it("the playhead marker lies inside the current clip's slot, in every destination and place", () => {
+    for (const destination of ["over", "before-clip", "after-clip", "start", "end"] as const) {
+      for (const playhead of [0.5, 12, 45, 55, 99]) {
+        const preview = placementPreview(ten, playhead, destination, NEW);
+        const condensed = condensePlacement(preview);
+        const current = condensed.slots.find((s) => s.current);
+        expect(current).toBeDefined();
+        const at = condensed.x(preview.playhead);
+        expect(at).toBeGreaterThanOrEqual((current?.x0 ?? 1) - 1e-9);
+        expect(at).toBeLessThanOrEqual((current?.x1 ?? 0) + 1e-9);
+      }
+    }
+  });
+
+  it("x maps the ends of the sequence to the ends of the strip", () => {
+    const preview = placementPreview(ten, 45, "after-clip", NEW);
+    const condensed = condensePlacement(preview);
+    expect(condensed.x(0)).toBeCloseTo(0);
+    expect(condensed.x(preview.total)).toBeCloseTo(1);
+  });
+
+  it("an empty sequence has no slots but the new one, and a floating item maps linearly", () => {
+    expect(condensePlacement(placementPreview([], 0, "end", 5)).slots.map((s) => s.kind)).toEqual([
+      "new",
+    ]);
+    const over = condensePlacement(placementPreview([], 0, "over", 5));
+    expect(over.slots).toEqual([]);
+    expect(over.floating).toEqual({ x0: 0, x1: 1 });
+  });
+});
+
+describe("schematicPlacement", () => {
+  const order = (destination: LibraryDestination): string[] =>
+    schematicPlacement(destination).blocks.map((b) => b.key);
+  const spans = (destination: LibraryDestination): Array<[number, number]> =>
+    schematicPlacement(destination).blocks.map((b) => [b.start, b.end]);
+
+  it("draws the design's three clips of 8, 12 and 10 and a new item of 7", () => {
+    expect(order("start")).toEqual(["new", "c0", "c1", "c2"]);
+    expect(order("before-clip")).toEqual(["c0", "new", "c1", "c2"]);
+    expect(order("after-clip")).toEqual(["c0", "c1", "new", "c2"]);
+    expect(order("end")).toEqual(["c0", "c1", "c2", "new"]);
+    expect(order("over")).toEqual(["c0", "c1", "c2"]);
+    expect(spans("after-clip")).toEqual([
+      [0, 8],
+      [8, 20],
+      [20, 27],
+      [27, 37],
+    ]);
+  });
+
+  it("moves the clips after the new item and floats the item over the playhead", () => {
+    const movedOf = (d: LibraryDestination): string[] =>
+      schematicPlacement(d)
+        .blocks.filter((b) => b.moved)
+        .map((b) => b.key);
+    expect(movedOf("start")).toEqual(["c0", "c1", "c2"]);
+    expect(movedOf("before-clip")).toEqual(["c1", "c2"]);
+    expect(movedOf("after-clip")).toEqual(["c2"]);
+    expect(movedOf("end")).toEqual([]);
+    expect(movedOf("over")).toEqual([]);
+    const over = schematicPlacement("over");
+    expect(over.floating).toEqual({ start: 12, end: 19 });
+    expect(over.blocks.some((b) => b.isNew)).toBe(false);
+  });
+
+  it("keeps the playhead 4 s into the second clip wherever that clip lands", () => {
+    const at = (d: LibraryDestination): number => schematicPlacement(d).playhead;
+    expect(at("start")).toBe(19);
+    expect(at("before-clip")).toBe(19);
+    expect(at("after-clip")).toBe(12);
+    expect(at("end")).toBe(12);
+    expect(at("over")).toBe(12);
+  });
+});
+
+describe("sameAsDestination", () => {
+  const three = [clip("a", 0, 8), clip("b", 8, 20), clip("c", 20, 30)];
+  const one = [clip("a", 0, 12)];
+
+  it("after the clip on the last clip is the same as at the end", () => {
+    expect(sameAsDestination("after-clip", three, 25)).toBe("end");
+  });
+
+  it("a one-clip video: after is the same as the end and before the same as the start", () => {
+    expect(sameAsDestination("after-clip", one, 3)).toBe("end");
+    expect(sameAsDestination("before-clip", one, 3)).toBe("start");
+  });
+
+  it("before the clip on the first clip is the same as at the start", () => {
+    expect(sameAsDestination("before-clip", three, 3)).toBe("start");
+  });
+
+  it("a middle clip has no note, and neither do the other destinations", () => {
+    expect(sameAsDestination("after-clip", three, 12)).toBeNull();
+    expect(sameAsDestination("before-clip", three, 12)).toBeNull();
+    expect(sameAsDestination("after-clip", three, 3)).toBeNull();
+    expect(sameAsDestination("before-clip", three, 25)).toBeNull();
+    for (const d of ["over", "start", "end"] as const) {
+      expect(sameAsDestination(d, one, 3)).toBeNull();
+    }
+  });
+
+  it("an empty sequence has no note", () => {
+    expect(sameAsDestination("after-clip", [], 0)).toBeNull();
   });
 });

@@ -431,7 +431,9 @@ describe("AddFromLibraryModal", () => {
           renderModal({ videos: list, playhead: 3 });
           expect(sentence()).toBe("Goes after the clip you are on. 1 clip moves 0:16 later.");
           choose(BEFORE);
-          expect(sentence()).toBe("Goes before the clip you are on. 2 clips move 0:16 later.");
+          expect(sentence()).toBe(
+            "Goes before the clip you are on. 2 clips move 0:16 later. Same as At the start here: you are on the first clip.",
+          );
           choose(START);
           expect(sentence()).toBe(
             "Becomes the first thing in the video. All 2 clips move 0:16 later.",
@@ -440,9 +442,36 @@ describe("AddFromLibraryModal", () => {
           expect(sentence()).toBe("Goes last. No clip moves.");
         });
 
-        it("after the clip the playhead is in, in the last clip, nothing moves", () => {
+        it("after the clip the playhead is in, in the last clip, nothing moves and it says it is the same as the end", () => {
           renderModal({ videos: list, playhead: 12 });
-          expect(sentence()).toBe("Goes after the clip you are on. No clip moves.");
+          expect(sentence()).toBe(
+            "Goes after the clip you are on. No clip moves. Same as At the end here: you are on the last clip.",
+          );
+          expect(screen.getByTestId("placement-same-as")).toHaveTextContent(
+            "Same as At the end here: you are on the last clip.",
+          );
+        });
+
+        it("a one-clip sequence says After and At the end are the same, and Before and At the start too", () => {
+          const oneClip = toLayout([{ id: "a", kind: "clip", sourceStart: 0, sourceEnd: 20 }]);
+          renderModal({ videos: list, layout: oneClip, playhead: 5 });
+          expect(sentence()).toContain("Same as At the end here: you are on the last clip.");
+          choose(BEFORE);
+          expect(sentence()).toContain("Same as At the start here: you are on the first clip.");
+          choose(START);
+          expect(screen.queryByTestId("placement-same-as")).toBeNull();
+        });
+
+        it("no note when the playhead is on a clip that is neither the first nor the last", () => {
+          const three = toLayout([
+            { id: "a", kind: "clip", sourceStart: 0, sourceEnd: 10 },
+            { id: "b", kind: "clip", sourceStart: 10, sourceEnd: 20 },
+            { id: "c", kind: "clip", sourceStart: 20, sourceEnd: 30 },
+          ]);
+          renderModal({ videos: list, layout: three, playhead: 12 });
+          expect(screen.queryByTestId("placement-same-as")).toBeNull();
+          choose(BEFORE);
+          expect(screen.queryByTestId("placement-same-as")).toBeNull();
         });
 
         it("draws the real sequence: two clips plus the new one, the new one in the right place", () => {
@@ -457,9 +486,65 @@ describe("AddFromLibraryModal", () => {
           expect(blocks[0].closest("[aria-hidden]")).not.toBeNull();
           expect(screen.getByTestId("placement-sentence").closest("[aria-hidden]")).toBeNull();
         });
+
+        it("marks where you are: the current clip and a You are here chip, once, in the large strip", () => {
+          renderModal({ videos: list, playhead: 3 });
+          const strip = within(screen.getByTestId("placement-strip"));
+          const blocks = strip.getAllByTestId("placement-block");
+          expect(blocks.map((el) => el.getAttribute("data-current"))).toEqual(["true", null, null]);
+          expect(strip.getAllByTestId("placement-you-are-here")).toHaveLength(1);
+          expect(strip.getByTestId("placement-you-are-here")).toHaveTextContent("You are here");
+        });
+
+        it("folds a long sequence into groups instead of one sliver per clip", () => {
+          const ten = toLayout(
+            Array.from({ length: 10 }, (_, i) => ({
+              id: `c${i}`,
+              kind: "clip" as const,
+              sourceStart: i * 10,
+              sourceEnd: i * 10 + 10,
+            })),
+          );
+          renderModal({ videos: list, layout: ten, playhead: 45 });
+          const strip = within(screen.getByTestId("placement-strip"));
+          expect(strip.getAllByTestId("placement-block")).toHaveLength(4);
+          const groups = strip.getAllByTestId("placement-group");
+          expect(groups.map((el) => el.getAttribute("data-count"))).toEqual(["3", "4"]);
+          expect(groups[0]).toHaveTextContent("3 clips");
+        });
       });
 
       describe("the destination menu", () => {
+        it("draws the same fixed schematic whatever the sequence is, without the chip", () => {
+          // The thumbnails' markup, and a check that none of them carries the chip.
+          const thumbs = (): string[] => {
+            openMenu();
+            const items = screen.getAllByRole("menuitemradio");
+            for (const el of items) {
+              expect(within(el).queryByTestId("placement-you-are-here")).toBeNull();
+            }
+            const html = items.map(
+              (el) => el.querySelector('[aria-hidden="true"]')?.innerHTML ?? "",
+            );
+            fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+            return html;
+          };
+          renderModal({ videos: list, playhead: 3 });
+          const first = thumbs();
+          expect(first).toHaveLength(5);
+          cleanup();
+          const many = toLayout(
+            Array.from({ length: 6 }, (_, i) => ({
+              id: `c${i}`,
+              kind: "clip" as const,
+              sourceStart: i * 4,
+              sourceEnd: i * 4 + 4,
+            })),
+          );
+          renderModal({ videos: list, layout: many, playhead: 17 });
+          expect(thumbs()).toEqual(first);
+        });
+
         it("opens upward from the arrow part, which reports its state", () => {
           renderModal({ videos: list });
           expect(arrow()).toHaveAttribute("aria-haspopup", "menu");
@@ -772,7 +857,9 @@ describe("AddFromLibraryModal", () => {
       expect(sentence()).toBe("Floats over the video from the playhead for 10 s. No clip moves.");
       expect(screen.getByText("New · 10 s")).toBeInTheDocument();
       choose(AFTER);
-      expect(sentence()).toBe("Goes after the clip you are on. No clip moves.");
+      expect(sentence()).toBe(
+        "Goes after the clip you are on. No clip moves. Same as At the end here: you are on the last clip.",
+      );
       choose(START);
       expect(sentence()).toBe("Becomes the first thing in the video. All 2 clips move 5 s later.");
     });

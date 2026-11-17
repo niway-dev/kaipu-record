@@ -13,6 +13,7 @@ import {
   joinableRecordings,
   libraryScreenshots,
   placementPreview,
+  sameAsDestination,
   resolutionLabel,
   SEQUENCE_IMAGE_SECONDS,
   type LibraryDestination,
@@ -174,6 +175,7 @@ export function AddFromLibraryModal({
         <PlacementCard
           preview={placementPreview(layout, playhead, shown, newSecondsFor(shown))}
           destination={shown}
+          sameAs={sameAsDestination(shown, layout, playhead)}
           formatLength={(seconds) =>
             kind === "recording"
               ? formatDuration(seconds)
@@ -185,9 +187,6 @@ export function AddFromLibraryModal({
           key={`${tab}:${item.assetId}`}
           kind={kind}
           value={destination}
-          layout={layout}
-          playhead={playhead}
-          newSecondsFor={newSecondsFor}
           onChange={(next) => setChoices((prev) => ({ ...prev, [kind]: next }))}
           onAdd={addSelected}
           onPreview={setPointed}

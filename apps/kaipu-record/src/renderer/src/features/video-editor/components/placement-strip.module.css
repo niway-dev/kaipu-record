@@ -1,10 +1,11 @@
-/* The placement strip of Add from Library (NIW2-829): a mini timeline drawn from the real
-   sequence. Two sizes share one structure: a thin row on top for "Over the video" and the
-   clips' row under it. The grey of a clip is the text colour at low alpha, so it follows the
-   theme; pink is the accent. */
+/* The placement strip of Add from Library (NIW2-829): a mini timeline. The large one is the real
+   sequence, condensed; the small one is the menu's fixed schematic. Both share one structure: a
+   thin row on top for "Over the video" and the clips' row under it. The grey of a clip is the
+   text colour at low alpha, so it follows the theme; pink is the accent. A clip is one plain
+   fill (no texture), so one clip reads as one block. */
 .strip {
   --strip-clip: color-mix(in srgb, var(--text-primary) 28%, transparent);
-  --strip-clip-band: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  --strip-clip-current: color-mix(in srgb, var(--text-primary) 40%, transparent);
   --strip-track: color-mix(in srgb, var(--text-primary) 4%, transparent);
   position: relative;
   width: 100%;
@@ -12,8 +13,8 @@
 
 .large {
   height: 47px;
-  /* Room for the playhead's flag above and the line's tail below. */
-  margin: 7px 0 4px;
+  /* Room above for the "You are here" chip, its flag and the line, and below for the tail. */
+  margin: 25px 0 4px;
 }
 
 .small {
@@ -94,12 +95,24 @@
   background: var(--strip-clip);
 }
 
-.large .clip {
-  background: repeating-linear-gradient(
-    90deg,
-    var(--strip-clip) 0 18px,
-    var(--strip-clip-band) 18px 19px
-  );
+/* The clip the playhead is on: a lighter fill and a hairline, so "you" are findable. */
+.large .current {
+  background: var(--strip-clip-current);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-primary) 55%, transparent);
+}
+
+/* Several clips folded into one: the same tone, quiet, with a dashed edge and its count. */
+.group {
+  gap: 4px;
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--text-primary) 40%, transparent);
+}
+
+.groupLabel {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
 }
 
 .fresh {
@@ -129,18 +142,42 @@
 
 .playhead {
   position: absolute;
-  top: -4px;
+  top: -23px;
   width: 1.5px;
-  height: 55px;
+  height: 74px;
   margin-left: -0.75px;
   border-radius: 1px;
   background: var(--text-primary);
   pointer-events: none;
 }
 
+/* The chip sits above the strip's top row, on the line, so it never covers the floating
+   item's label. Which side of the line depends on where the line is (flipped near the right
+   edge, so the chip stays inside the card). */
+.youAreHere {
+  position: absolute;
+  top: 0;
+  padding: 0 6px;
+  color: var(--bg-canvas);
+  font-size: 9.5px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 16px;
+  white-space: nowrap;
+  background: var(--text-primary);
+  border-radius: 4px;
+}
+
+.chipRight {
+  left: -0.75px;
+}
+
+.chipLeft {
+  right: -0.75px;
+}
+
 .flag {
   position: absolute;
-  top: -3px;
+  top: 16px;
   left: -3.75px;
   border-top: 6px solid var(--text-primary);
   border-right: 4.5px solid transparent;
