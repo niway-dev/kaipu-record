@@ -173,11 +173,11 @@ describe("FilmstripController", () => {
     expect(onScreen.slots.length).toBeGreaterThanOrEqual(Math.floor(1000 / THUMB_TILE_PX));
     expect(onScreen.slots.length).toBeLessThanOrEqual(Math.ceil(1000 / THUMB_TILE_PX) + 1);
     for (const slot of onScreen.slots) {
-      // The slot is the middle half of its tile: any frame that fills it is inside the tile.
+      // The slot covers its tile: any frame that fills it is inside the tile.
       const i = Math.floor((slot.start + slot.end) / 2 / tile);
-      expect(slot.start).toBeGreaterThanOrEqual(i * tile);
-      expect(slot.end).toBeLessThanOrEqual((i + 1) * tile);
-      expect(slot.end - slot.start).toBeCloseTo(tile / 2, 6);
+      expect(slot.start).toBeCloseTo(i * tile, 6);
+      expect(slot.end).toBeCloseTo((i + 1) * tile, 6);
+      expect(slot.end - slot.start).toBeCloseTo(tile, 6);
     }
     // The margin is its own request, sent once the tiles on screen are answered.
     expect(workers[0].requests).toHaveLength(1);

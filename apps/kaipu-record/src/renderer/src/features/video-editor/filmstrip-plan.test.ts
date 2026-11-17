@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Slot } from "./filmstrip-frames";
+import { planTileSlots, type Slot } from "./filmstrip-frames";
 import { MAX_EXACT_PACKETS } from "./filmstrip-messages";
 import {
   batchIntoPasses,
@@ -318,4 +318,30 @@ describe("batchIntoPasses: one decoder start-up for many slots", () => {
   it("is empty for nothing", () => {
     expect(batchIntoPasses([], 8)).toEqual([]);
   });
+});
+
+it("plans a 30 fps frame when a narrow tile's middle half contains none", async () => {
+  const stamps = Array.from({ length: 601 }, (_, i) => i / 30);
+  const index: PacketIndex = {
+    keyAtOrBefore: async (t) => Math.floor(t / 2) * 2,
+    frameAtOrBefore: async (t) => stamps.filter((s) => s <= t).at(-1) ?? null,
+    async *packetTimestampsFrom(key) {
+      yield* stamps.filter((s) => s >= key);
+    },
+  };
+  const slots = planTileSlots({
+    duration: 20,
+    clip: { start: 10, end: 20 },
+    count: 222,
+    visible: { start: 10, end: 20 },
+    margin: 0,
+    frames: [],
+  });
+  const tile = slots.find((s) => s.index === 2)!;
+  const planned = await planSlot(index, tile);
+  expect(planned.kind).toBe("plan");
+  if (planned.kind === "plan") {
+    expect(planned.targetTimestamp).toBeGreaterThanOrEqual(10 + 20 / 222);
+    expect(planned.targetTimestamp).toBeLessThan(10 + 30 / 222);
+  }
 });

@@ -295,11 +295,9 @@ export interface PlanTileSlotsInput {
 /**
  * One slot per tile that has no frame of its own time yet, for the visible range and the margin.
  *
- * The slot is the middle half of the tile's span, so whatever frame fills it is inside the tile
- * (AC1, AC2) and near its centre. A grid of fixed slots cannot promise that: a slot that is
- * larger than half a tile can straddle two tiles and leave both without a frame inside its own
- * span, which is what a 9.5-second tile over an 8-second grid did. A tile already holding a
- * frame inside its span, from any earlier zoom or from the opening strip, is not asked for again.
+ * Each slot covers the full tile span: a narrow tile can contain valid frames only outside
+ * its middle half. The decoder still prefers a keyframe, then a frame near the centre.
+ * A tile already holding a frame inside its span is not asked for again.
  * Sorted by start; the visible ones are flagged. At most {@link MAX_PLAN_SLOTS}, visible first.
  */
 export function planTileSlots(input: PlanTileSlotsInput): Slot[] {
@@ -324,12 +322,10 @@ export function planTileSlots(input: PlanTileSlotsInput): Slot[] {
     if (end <= start) break; // past the end of the file
     const at = lowerBound(frames, start);
     if (at < frames.length && frames[at].timestamp < end) continue;
-    const centre = (start + end) / 2;
-    const quarter = (end - start) / 4;
     slots.push({
       index: i,
-      start: centre - quarter,
-      end: centre + quarter,
+      start,
+      end,
       visible: end > visibleStart && start < visibleEnd,
     });
   }

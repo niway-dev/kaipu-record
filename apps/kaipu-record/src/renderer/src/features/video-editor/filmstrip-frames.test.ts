@@ -443,10 +443,10 @@ describe("planTileSlots: AC1/AC2 one slot inside each tile", () => {
     }
   });
 
-  it("the slot is the middle half of the tile", () => {
+  it("the slot covers the full tile span", () => {
     const [slot] = planTileSlots({ ...base, visible: { start: 19, end: 28.5 }, margin: 0 });
-    expect(slot.start).toBeCloseTo(19 + 9.5 / 4, 6);
-    expect(slot.end).toBeCloseTo(19 + (9.5 * 3) / 4, 6);
+    expect(slot.start).toBeCloseTo(19, 6);
+    expect(slot.end).toBeCloseTo(28.5, 6);
     expect(slot.visible).toBe(true);
   });
 
