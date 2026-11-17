@@ -22,29 +22,36 @@ The crop is non-destructive. The asset on disk stays whole, so Reset (or widenin
 the cropped-out pixels back. That is also the privacy risk this spec names: a redaction over a
 cropped-out part must still reach the asset's pixels (see "Privacy rule").
 
-| Decision                                                                                                    | Why                                                                                                                                        | ADR                                                                                                                                               |
-| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The crop is a window inside the asset (`crop`, 0–1 of the asset); `x/y/w/h` stay the **visible** rect       | Selection, extents, hit-testing, gaps and the export box keep working unchanged; only drawing and redaction baking need the uncropped rect | none                                                                                                                                              |
-| A `fullRect(a)` helper gives the uncropped rect on the canvas                                               | One definition of "where the whole asset is", shared by the compositor and the redaction bake                                              | none                                                                                                                                              |
-| Per-image corners: `radius` undefined follows the global slider; set is that image's own value in source px | The global slider keeps working for every image that was never touched; an own value survives slider changes                               | none (refines a line of [ADR 0053](#adr-0053-check))                                                                                              |
-| Canvas document v3: write v3, read 1, 2 and 3                                                               | An older build would stretch the whole asset into the cropped rect; refusing the file (fallback to the flattened PNG) is the safe failure  | reuses the version rule of [ADR 0053](/architecture/decisions/0053-the-image-editor-is-a-canvas-saved-as-a-document-beside-its-flattened-export/) |
-| X stays "Export frame" and never crops a selected image                                                     | Two different crops need two different entry points                                                                                        | none                                                                                                                                              |
-| Double-click on image pixels crops that image; on padding or background it opens the Export frame as today  | The click lands on what the user is pointing at; the base is hit-tested on its own rect                                                    | none                                                                                                                                              |
-| Cropping the base ships in the same release as the first visible UI                                         | A crop that works on added images only looks broken: the screenshot is the image people crop                                               | none                                                                                                                                              |
-| The selection tag and the chip read **source pixels**: "Showing 1200×800 of 3840×2160 px"                   | The user sees how much of the original is visible                                                                                          | none                                                                                                                                              |
+| Decision                                                                                                                                                 | Why                                                                                                                                        | ADR                                                                                                                                                                  |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The crop is a window inside the asset (`crop`, 0–1 of the asset); `x/y/w/h` stay the **visible** rect                                                    | Selection, extents, hit-testing, gaps and the export box keep working unchanged; only drawing and redaction baking need the uncropped rect | none                                                                                                                                                                 |
+| A `fullRect(a)` helper gives the uncropped rect on the canvas                                                                                            | One definition of "where the whole asset is", shared by the compositor and the redaction bake                                              | none                                                                                                                                                                 |
+| Per-image corners: `radius` undefined follows the global slider; set is that image's own value in source px                                              | The global slider keeps working for every image that was never touched; an own value survives slider changes                               | none (refines a line of [ADR 0053](#adr-0053-check))                                                                                                                 |
+| Canvas document v3: write v3, read 1, 2 and 3                                                                                                            | An older build would stretch the whole asset into the cropped rect; refusing the file (fallback to the flattened PNG) is the safe failure  | amends [ADR 0053](/architecture/decisions/0053-the-image-editor-is-a-canvas-saved-as-a-document-beside-its-flattened-export/) (reopen condition met, owner accepted) |
+| X stays "Export frame" and never crops a selected image                                                                                                  | Two different crops need two different entry points                                                                                        | none                                                                                                                                                                 |
+| Double-click on image pixels crops that image; on padding or background it opens the Export frame as today                                               | The click lands on what the user is pointing at; the base is hit-tested on its own rect                                                    | none                                                                                                                                                                 |
+| Resize means proportional resize with the corner handles, after a crop and at any time; no stretch, rotate or skew; upscaling past the source is allowed | The crop is a unitless window, so scaling the visible rect never loses the hidden pixels                                                   | none                                                                                                                                                                 |
+| Cropping the base ships in the same release as the first visible UI                                                                                      | A crop that works on added images only looks broken: the screenshot is the image people crop                                               | none                                                                                                                                                                 |
+| The selection tag and the chip read **source pixels**: "Showing 1200×800 of 3840×2160 px"                                                                | The user sees how much of the original is visible                                                                                          | none                                                                                                                                                                 |
 
-### Open question (owner)
+### Resize ("deform"), decided 2026-11-16
 
-The owner also wants to "deform" the base image (resize or stretch it). The meaning is pending:
-**corner handles = proportional resize and edge handles = stretch one axis?** Not designed, not
-built. It interacts with the crop (a stretched, cropped image), so unit 3 must not close the door:
-`x/y/w/h` stay the visible rect, and a stretch would scale that rect, never the asset.
+The owner's "deform" means **resize, not stretch**. After cropping an image, the base included,
+the person can make it bigger or smaller, proportionally, and can widen the crop back at any time
+without loss:
+
+- Corner handles resize proportionally, as added images do today. There is no non-uniform
+  stretch, no rotation and no skew.
+- Resizing scales the **visible rect** and the whole asset with it (`fullRect` keeps its ratio to
+  the visible rect). The `crop` window is unitless (0–1 of the asset), so it survives a resize
+  untouched, and widening it later still brings the hidden pixels back.
+- Scaling up past the source pixels is allowed.
 
 ### Out of scope
 
 - Any user-facing UI in this PR (units 4 and 5).
 - Cropping the base (unit 3): `baseCrop`, `baseRadius`, signed extents.
-- Deform / stretch of an image.
+- Non-uniform stretch, rotation or skew of an image. Proportional resize is in scope (unit 3 for the base, unit 4 for the handles).
 - A rotation, a freeform shape or a mask other than a rounded rectangle.
 - Changing the Export frame or the classic (non-canvas) crop.
 - Retiring the asset's cropped-out pixels (a "bake the crop" action). Non-destructive is the point.
@@ -207,14 +214,12 @@ is not contradicted in its Decision section. Two lines need a note:
    value. Shadow is unchanged. This is a refinement, not a reversal; no reopen condition applies.
 2. **Reopen condition "the document needs a second breaking schema change within its first three
    versions."** v1 → v2 (world units) was the first breaking change. v3 is the second: an older
-   build must refuse it. **Read literally, the condition is met.** The honest reading is that the
-   condition guards against a format that keeps being redesigned, while v3 is purely additive
-   (two optional fields) and v2 documents open unchanged. Two ways to respect it, for the owner to
-   pick before the first visible release:
-   - keep writing v3 and amend the ADR's reopen line to say additive versions do not count; or
-   - write v2 unless an image actually carries `crop` or `radius`, so existing documents stay
-     readable by old builds until a crop is used. This costs a small branch in
-     `buildCanvasDoc`; unit 1 does not do it.
+   build must refuse it, so the condition is met. **The owner accepted it on 2026-11-16:** every
+   save writes v3, whether or not an image carries a crop, and an older build opens a v3 document
+   as the flattened PNG, with no data lost. The ADR carries the
+   [amendment](/architecture/decisions/0053-the-image-editor-is-a-canvas-saved-as-a-document-beside-its-flattened-export/#amendment-2026-11-16-version-3-per-image-crop)
+   with the new reopen condition. Rejected: writing v2 unless an image carries a crop or radius
+   (two writers to keep honest, and the version would depend on content).
 
 A third point is not a contradiction: the ADR calls the base "the anchor (item 0, not selectable
 or movable)" and leaves open whether it becomes an ordinary item. Unit 3 gives the base a crop

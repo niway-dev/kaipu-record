@@ -82,8 +82,9 @@ and moves the document to world units (see "Several images" below).
   two differ only by the base's pixel size, so the conversion is one multiply at save and one
   divide at open, in `canvas-doc.ts`. Strokes, font sizes and seeds are not geometry and are
   stored as before. A version 1 document opens unchanged (it holds one image, so it needs no
-  conversion); every save writes version 2. An older build reads a version 2 document as
-  unsupported and opens the flattened PNG, the fallback of point 4.
+  conversion); every save writes version 2 (version 3 since the per-image crop amendment
+  below). An older build reads a newer document as unsupported and opens the flattened PNG,
+  the fallback of point 4.
   - _Why world units now, not at the first movable base._ The disk format is the part that
     must be readable forever. Base-normalized coordinates on disk would need a second breaking
     version the day the base moves or stops being item 0, and this ADR reopens on a second
@@ -126,8 +127,34 @@ and moves the document to world units (see "Several images" below).
 
 Cloud sync of the document, layout helpers, layers UI, multi-page documents, collaboration.
 
+## Amendment, 2026-11-16: version 3 (per-image crop)
+
+**Decision.** Per-image crop ([spec](/specs/2026-11-16-image-editor-per-image-crop/)) adds two
+optional fields to an image item, `crop` and `radius`, and the document becomes **version 3**.
+Every save writes version 3 from now on, whether or not an image carries a crop. Versions 1, 2
+and 3 stay readable.
+
+**Why.** v1 to v2 (world units) was the first breaking change, so v3 is the second and the
+reopen condition below ("a second breaking schema change within its first three versions") is
+met. The owner accepted it on 2026-11-16 instead of keeping v2 until a crop is used. The change
+is additive: v2 documents open unchanged and nothing is migrated.
+
+**Consequence.** A build that predates v3 reads a version 3 document as unsupported and opens the
+flattened PNG (point 4), so no data is lost. It would otherwise stretch the whole asset into the
+cropped rect and show a wrong picture with no warning.
+
+**Rejected.** Writing v2 unless an image carries a crop or radius: a small branch in
+`buildCanvasDoc` would keep old builds reading existing documents until a crop is used, but it
+leaves two writers to keep honest and the file's version would depend on content.
+
+**Reopen condition after this amendment.** A third breaking schema change within the first four
+versions, or an additive version that an older build cannot refuse safely (it would misread
+instead of falling back).
+
 ## What would reopen this
 
 - One-image parity cannot be kept without special cases in the compositor.
-- The document needs a second breaking schema change within its first three versions.
+- The document needs a breaking schema change after version 3 (see the amendment above; the
+  original wording was "a second breaking schema change within its first three versions", met
+  by version 3).
 - Cloud sync of editable items is scheduled: the asset and document transport needs its own decision.
