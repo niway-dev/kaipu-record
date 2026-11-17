@@ -124,6 +124,10 @@ stands; plan B (native exclusion by window id) stays unscheduled.
   the Library composites the bubble (recorded layout, webcam frame ~150 ms into the take) into
   the thumbnail of every webcam recording, new and existing, and marks it in the sidecar
   (`thumbnailWebcam`). Unit-tested only; owner QA on a real take is pending.
+- A webcam whose first frame is up to 1 s past screen time 0 (the writer starts tens of ms after
+  the screen on every take) shows that frame from 0:00, in the preview and in the export; a
+  later start is a real late camera and stays hidden until its first frame
+  (`WEBCAM_LEAD_IN_HOLD_SECONDS`, NIW2-845).
 - The spec and ADR 0037 still say "Share" for what is now the Prepare copy.
 - Camera sections with transitions, tracks on demand and media overlays: the
   [editor timeline v2](/specs/2026-10-31-editor-timeline-v2-design/) design (#469).

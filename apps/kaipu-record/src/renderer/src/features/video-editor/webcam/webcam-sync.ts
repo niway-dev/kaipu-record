@@ -4,8 +4,9 @@
  * verdict, so the rule is testable without media.
  *
  * Offset semantics (ADR 0037): `startOffsetMs = webcamT0 − screenT0`. A webcam that started
- * 500 ms after the screen shows its first frame at screen time 0.5 s, so for screen source
- * time `t` the webcam time is `t − startOffsetMs / 1000`.
+ * 500 ms after the screen has its first frame at screen time 0.5 s (held back to 0 s by
+ * {@link WEBCAM_LEAD_IN_HOLD_SECONDS}), so for screen source time `t` the webcam time is
+ * `t − startOffsetMs / 1000`.
  */
 
 import { recordingAt, type SourceAxis } from "../source-axis";
