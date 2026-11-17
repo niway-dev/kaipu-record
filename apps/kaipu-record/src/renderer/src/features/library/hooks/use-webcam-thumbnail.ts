@@ -23,7 +23,8 @@ function needsComposite(video: LocalLibraryVideo): boolean {
  * Window-wide, not per hook: `useLocalLibrary` is mounted by several pages at once (Library,
  * detail, export, editor), and each must not compose the same recording again or in parallel.
  * `attempted` is never cleared while the app runs, so a broken file is not decoded on every
- * list refresh; the next launch tries again. Every mounted hook hears each result, so a page
+ * list refresh; the next launch tries again. It is keyed by asset id, like the write, so a
+ * different recording under the same file id (another workspace) is not skipped. Every mounted hook hears each result, so a page
  * opened after the one that queued the item still shows the new poster.
  */
 const attempted = new Set<string>();
@@ -64,8 +65,8 @@ export function useWebcamThumbnail(
 
   useEffect(() => {
     for (const v of videos) {
-      if (!needsComposite(v) || attempted.has(v.id)) continue;
-      attempted.add(v.id);
+      if (!needsComposite(v) || attempted.has(v.assetId)) continue;
+      attempted.add(v.assetId);
       // Chained, not started here: a later list refresh queues behind the work in flight.
       queue = queue.then(async () => {
         try {

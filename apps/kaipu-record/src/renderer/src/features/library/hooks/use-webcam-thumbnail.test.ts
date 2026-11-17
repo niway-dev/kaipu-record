@@ -147,6 +147,26 @@ describe("useWebcamThumbnail", () => {
     );
   });
 
+  it("keys what it attempted by asset id, so another recording under the same file id is composed", async () => {
+    const onUpdated = vi.fn();
+    const first = [video({ id: "same", assetId: "asset-a" })];
+    const { rerender } = renderHook(({ list }) => useWebcamThumbnail(list, onUpdated), {
+      initialProps: { list: first },
+    });
+    await waitFor(() => expect(onUpdated).toHaveBeenCalledOnce());
+
+    // A workspace switch lists a different recording with the same file id.
+    rerender({ list: [video({ id: "same", assetId: "asset-b" })] });
+
+    await waitFor(() => expect(onUpdated).toHaveBeenCalledTimes(2));
+    expect(composeMock).toHaveBeenCalledTimes(2);
+    expect(window.electronAPI.writeWebcamThumbnail).toHaveBeenLastCalledWith(
+      "same",
+      "asset-b",
+      expect.anything(),
+    );
+  });
+
   it("composes one recording at a time, never in parallel", async () => {
     const releases: Array<() => void> = [];
     let inFlight = 0;
