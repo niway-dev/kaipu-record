@@ -19,6 +19,21 @@ const addImageButton: Step = {
     part: { role: "button", name: "Add image", exact: true },
   },
 };
+/** The Export button beside PDF (NIW2-852), once the image is ready. */
+const exportImageButton: Step = {
+  click: {
+    area: "editorImage.exportImage",
+    part: { role: "button", name: "Export", exact: true },
+  },
+};
+/** A radio of the Export popover (preset, format or scale) by its label. */
+const exportOption = (name: string): Step => ({
+  click: { area: "editorImage.exportImage", part: { role: "radio", name, exact: true } },
+});
+/** The popover measures the real file size after a pause; a shot taken before shows "Measuring". */
+const exportSizeMeasured: Step = {
+  waitFor: { area: "editorImage.exportImage", part: { css: "[data-state='ready']" } },
+};
 const fromLibrary: Step = {
   click: {
     area: "editorImage.addImage",
@@ -371,7 +386,11 @@ export const editorImage = catalog(
       profile: "image-canvas",
       how: "With the flag forced on, open “Settings page” in the image editor: the canvas is marked as the flag's content-box canvas.",
       steps: [open(ASSETS.settingsShot)],
-      demonstrates: ["editorImage.canvasView:default", "editorImage.addImage:closed"],
+      demonstrates: [
+        "editorImage.canvasView:default",
+        "editorImage.addImage:closed",
+        "editorImage.exportImage:closed",
+      ],
       gates: [{ flag: "image-canvas", side: "on" }],
     },
     "canvas-off-content": {
@@ -395,6 +414,38 @@ export const editorImage = catalog(
       how: "Mock E1: with the flag forced on, open “Settings page” and press Add image: the menu offers New capture (focused) and From Library, and says pasting works too, with the paste key in a chip.",
       steps: [open(ASSETS.settingsShot), addImageButton],
       demonstrates: ["editorImage.addImage:open"],
+      gates: [{ flag: "image-canvas", side: "on" }],
+    },
+    "export-image-popover": {
+      profile: "image-canvas",
+      how: "With the flag forced on, open “Settings page”, press Export beside PDF and pick the Original preset: the popover offers Preset, Format, Quality (off for PNG), Scale, the resulting pixel size and the measured file size, and an Export button.",
+      steps: [
+        open(ASSETS.settingsShot),
+        exportImageButton,
+        // The last settings are remembered on the machine: start from a known preset.
+        exportOption("Original"),
+        exportSizeMeasured,
+      ],
+      demonstrates: ["editorImage.exportImage:open"],
+      gates: [{ flag: "image-canvas", side: "on" }],
+    },
+    "export-image-jpeg-notice": {
+      profile: "image-canvas",
+      how: "With the flag forced on, open “Settings page”, pick the None background, press Export and choose JPEG: a line under the sizes says transparent areas become white in JPEG.",
+      steps: [
+        open(ASSETS.settingsShot),
+        {
+          click: {
+            area: "editorImage.beautify",
+            part: { role: "button", name: "None", exact: true },
+          },
+        },
+        exportImageButton,
+        exportOption("JPEG"),
+        { waitFor: { area: "editorImage.exportJpegNotice" } },
+        exportSizeMeasured,
+      ],
+      demonstrates: ["editorImage.exportJpegNotice:shown"],
       gates: [{ flag: "image-canvas", side: "on" }],
     },
     "library-picker": {

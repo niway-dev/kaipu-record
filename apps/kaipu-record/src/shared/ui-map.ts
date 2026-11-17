@@ -407,6 +407,11 @@ export const UI_MAP = {
       exportFrameCard: { states: ["open"], gatedBy: [{ flag: "image-canvas" }] },
       offContentNotice: { states: ["shown"], gatedBy: [{ flag: "image-canvas" }] },
       addImage: { states: ["closed", "open"], gatedBy: [{ flag: "image-canvas" }] },
+      // The image exporter (NIW2-852): the button beside PDF and the popover it opens (preset,
+      // format, quality, scale, the resulting size), and the line that says a JPEG paints
+      // transparent areas white, shown only for JPEG over the "None" background.
+      exportImage: { states: ["closed", "open"], gatedBy: [{ flag: "image-canvas" }] },
+      exportJpegNotice: { states: ["shown"], gatedBy: [{ flag: "image-canvas" }] },
       // The Library picker (mock E2): the list with the newest selected, the list narrowed by
       // the search field, a search that matches nothing, and a Library with nothing to add.
       libraryPicker: {

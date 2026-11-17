@@ -133,7 +133,15 @@ import {
   clearExportCache,
   exportScene,
   type ExportFormat,
+  type ExportInput,
 } from "@renderer/features/screenshots/export";
+import { ExportImageControl } from "@renderer/features/screenshots/export/export-image-control";
+import {
+  readExportSettings,
+  writeExportSettings,
+} from "@renderer/features/screenshots/export/export-settings-store";
+import { exportImage } from "@renderer/features/screenshots/export/image-exporter";
+import type { ImageExportSettings } from "@renderer/features/screenshots/export/image-export-settings";
 import { useTransientValue } from "@renderer/ui/use-transient-value";
 import { PanelToggle } from "@renderer/features/screenshots/toolbar/panel-toggle";
 import { MoreMenu } from "@renderer/features/screenshots/toolbar/more-menu";
@@ -161,8 +169,8 @@ const AUTOSAVE_DEBOUNCE_MS = 800;
 type Feedback =
   | { kind: "copied" }
   | { kind: "saved"; name: string }
-  // A PDF went to a path the user picked; `name` is the file name there.
-  | { kind: "exported"; name: string }
+  // A PDF or an image (PNG, JPEG, WebP) went to a path the user picked; `name` is the file name there.
+  | { kind: "exported"; name: string; via: "pdf" | "image" }
   // Both auto actions fired on open. One indicator, not two: `feedback` holds a
   // single value on purpose, so the combined outcome needs its own kind.
   | { kind: "savedAndCopied"; name: string };
@@ -847,13 +855,14 @@ function ScreenshotEditorBody({
   // what Copy and Save use, PDF what Export writes. Only ever invoked once
   // `imageReady` is true (see the guards below), which itself can only happen once
   // `image` has resolved, so the non-null assert is safe.
+  const exportInput = async (snap: Scene): Promise<ExportInput> => ({
+    scene: snap,
+    bytes: await image!.getBytes(),
+    displayedW: imgRef.current?.clientWidth ?? 0,
+    ...(canvasMode ? { canvas: true, assets: assetsRef.current } : {}),
+  });
   const exportAs = async (format: ExportFormat, snap: Scene): Promise<ArrayBuffer> =>
-    exportScene(format, {
-      scene: snap,
-      bytes: await image!.getBytes(),
-      displayedW: imgRef.current?.clientWidth ?? 0,
-      ...(canvasMode ? { canvas: true, assets: assetsRef.current } : {}),
-    });
+    exportScene(format, await exportInput(snap));
 
   /** The base image's pixel size: the decoded image first, then the sizes already known. */
   const basePixels = (): { width: number; height: number } => ({
@@ -1258,12 +1267,66 @@ function ScreenshotEditorBody({
             extension: "pdf",
           },
         );
-        if (written) showFeedback({ kind: "exported", name: fileName(written.path) });
+        if (written) {
+          showFeedback({ kind: "exported", name: fileName(written.path), via: "pdf" });
+        }
       } catch (error) {
         reportError(t("exportPdfError"), error, {
           context: { phase: "export", format: "pdf" },
           retry: () => {
             if (alive.current) void onExportPdf();
+          },
+        });
+      }
+    });
+  };
+
+  // The Export popover (NIW2-852, canvas mode): the last settings, remembered on this machine.
+  const [exportSettings, setExportSettings] = useState<ImageExportSettings>(readExportSettings);
+  const [exportOpen, setExportOpen] = useState(false);
+  const changeExportSettings = (next: ImageExportSettings): void => {
+    setExportSettings(next);
+    writeExportSettings(next);
+  };
+  // The export frame's 1× size, from the export box's own computation: the popover's pixel size
+  // and the encode both start from it, so the size shown is the size written.
+  const exportFrame = exportSize ? { w: exportSize.w, h: exportSize.h } : null;
+
+  /** The real size of the file these settings would write: one encode, nothing is saved. */
+  const measureImageExport = async (settings: ImageExportSettings): Promise<number> => {
+    if (!exportFrame) throw new Error("export: the frame size is not known yet");
+    const out = await exportImage(settings, exportFrame, await exportInput(latest.current.scene));
+    return out.bytes.byteLength;
+  };
+
+  /**
+   * Export the scene as PNG, JPEG or WebP to a path the user picks. Same contract as the PDF:
+   * outside the vault, no change to `dirty`, a cancelled dialog shows nothing. The composite is
+   * the one Copy and Save use (`exportScene("png")`), so redactions are baked into every format.
+   */
+  const onExportImage = (settings: ImageExportSettings): void => {
+    if (!imageReady || !exportFrame) return;
+    setExportOpen(false);
+    void enqueue(async () => {
+      if (!alive.current) return;
+      try {
+        const out = await exportImage(
+          settings,
+          exportFrame,
+          await exportInput(latest.current.scene),
+        );
+        const written = await window.electronAPI.exportScreenshotFile(out.bytes, {
+          suggestedName: resolveCaptureTitle(latest.current.draft, captureTitle.autoTitle),
+          extension: out.plan.extension,
+        });
+        if (written) {
+          showFeedback({ kind: "exported", name: fileName(written.path), via: "image" });
+        }
+      } catch (error) {
+        reportError(t("exportImageError"), error, {
+          context: { phase: "export", format: settings.format },
+          retry: () => {
+            if (alive.current) onExportImage(settings);
           },
         });
       }
@@ -1381,7 +1444,10 @@ function ScreenshotEditorBody({
   const copied = feedback?.kind === "copied" || feedback?.kind === "savedAndCopied";
   const savedName =
     feedback?.kind === "saved" || feedback?.kind === "savedAndCopied" ? feedback.name : null;
-  const exportedName = feedback?.kind === "exported" ? feedback.name : null;
+  const exportedName =
+    feedback?.kind === "exported" && feedback.via === "pdf" ? feedback.name : null;
+  const exportedImageName =
+    feedback?.kind === "exported" && feedback.via === "image" ? feedback.name : null;
 
   // Compact layout (mock B3): below 1000 px the toolbar folds and the right panel becomes a
   // sheet. Measured on the page element; the revision re-measures once the image has mounted it.
@@ -1670,6 +1736,20 @@ function ScreenshotEditorBody({
             {savedName ? <Check size={16} /> : <Download size={16} />}
             <span className={styles.saveLabel}>{savedName ? t("saved") : t("save")}</span>
           </button>
+          {canvasMode && (
+            <ExportImageControl
+              settings={exportSettings}
+              onSettingsChange={changeExportSettings}
+              frame={exportFrame}
+              bg={scene.beautify.state.bg}
+              open={exportOpen}
+              onOpenChange={setExportOpen}
+              disabled={!imageReady}
+              exportedName={exportedImageName}
+              measure={measureImageExport}
+              onExport={onExportImage}
+            />
+          )}
           {!compact && (
             <button
               type="button"

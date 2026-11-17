@@ -117,6 +117,7 @@ describe("toolbar B1: layout", () => {
       "Redo",
       "Copy",
       "Save",
+      "Export",
       "PDF",
     ]);
     expect(screen.getByRole("textbox", { name: /title/i })).toBeInTheDocument();
