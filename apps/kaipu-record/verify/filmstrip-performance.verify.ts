@@ -7,7 +7,7 @@ import { startScenario } from "./helpers";
 // AC9: identical real-app workload on main, flag-off and flag-on, on the idle Mac mini.
 // No screenshots/video assertions substitute for the rAF and long-task measurements here.
 const SIDE = process.env.KAIPU_VERIFY_SIDE ?? "on";
-const OUT = path.join(homedir(), "kaipu-evidence/niw2-844/layer-4");
+const OUT = process.env.KAIPU_VERIFY_OUT ?? path.join(homedir(), "kaipu-evidence/niw2-844/layer-4");
 const TAKE = path.join(homedir(), "kaipu-evidence/niw2-844/take/take-1440p-10gb.mp4");
 const ID = "e2e0a5e7-0000-4000-8000-00000000d844";
 test(`filmstrip scroll and zoom frame times (${SIDE})`, async () => {

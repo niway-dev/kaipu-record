@@ -43,34 +43,70 @@ workspace change or eviction, so reopening can reuse them.
 
 ### Review correction status (2026-11-17)
 
-The saved measurements below describe `b01cf0cf`, not the subsequent CodeRabbit fixes.
+The historical measurements later in this section describe `b01cf0cf`, before the CodeRabbit fixes.
 The five claims reviewed at `99da38cf` were reproduced locally before fixing them:
 a 30 fps tile's middle half excluded every valid frame; a worker-only Webcam lane mounted
 no tiles; an undecoded replacement escaped the blank sampler; both empty-tile latency
 branches reported `-Infinity`; report-write failures skipped scenario cleanup in all four
 verifiers. Regression coverage now exercises these failures without launching Electron.
 
-**Current-head actual-app evidence: not verified.** The historical zero-blank result is
-invalid as proof of AC12 across DOM replacement because the old sampler tracked element
-identity. Existing non-empty latency observations remain historical measurements, but their
-old assertions did not reject empty tile sets. No historical result proves the changed
-full-span planner or worker-only Webcam mounting.
+**Current-head actual-app validation is mixed (2026-11-17).** The Mac mini rebuilt the runtime
+from `673ca7fc20880b8d33293879f10aee6b5078d982`; the final SHA-256 manifest matches
+55 runtime/verifier files. The eight corrected runtime files and four verifiers were synced
+into the existing dirty `kaipu-record-844-3-after` worktree (base `38549dc8`), after saving
+its diff and verifiers. No reset, new worktree, rollout, push, or GitHub post was performed.
 
-Before claiming current-head acceptance, rebuild the app and worker on the Mac mini and rerun:
+New artifacts live under `~/kaipu-evidence/niw2-844/review-673ca7fc/` on the mini and in
+`.evidence/niw2-844/review-673ca7fc/final/` in the M5 task worktree. A durable copy lives in
+the main checkout's `.evidence/niw2-844/review-673ca7fc/`. `source-manifest-final.json`,
+`manifest-check-final.json`, `remote-before.patch`, and `remote-status-before.txt` record
+provenance. The app runs used the same existing fixture files described below. New verifier
+controls only seed/suppress/inject test conditions; production code was not changed.
 
-- Editor on/off scenarios, including a trimmed 10-second 30 fps clip at 20× zoom and a Webcam
-  whose legacy thumbnails/recording strips are empty, to capture own-time tiles and flag-off parity.
-- AC12 scrolling with the corrected logical lane/clip/span sampler, including an undecoded DOM
-  replacement; keep the initial-load limitation explicit (only previously decoded spans count).
-- Latency acceptance and larger stress fixtures with positive visible-tile counts in every row;
-  retain strict 500 ms failures. Repeat lifecycle and performance-on scenarios for the rebuilt
-  planner; prior performance/memory observations are not a current-head resource guarantee.
+| Current runtime workload                                                                                                                      | Observed result                                                                                                                                                                                                                 | Exit / artifact relative to the new folder              |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Owner's 54-minute take, Clips only; on/off                                                                                                    | On: first zoom 335 ms; four jumps 310–347 ms; 18/18 own-time tiles. No minting during playback/scroll. Corrected logical sampler: 0 blank samples / 917 animation frames / 122 source changes. Off: no filmstrip attributes.    | Both 0; `editor/on.json`, `editor/off.json`             |
+| 30-minute 1440p screen + generated 720p/30 Webcam, +5 s; normal legacy strips                                                                 | All 12 rows have 36–38 visible tiles and meet 500 ms: first zoom 437.7 ms, slowest warm jump 490.0 ms, after idle 440.4 ms.                                                                                                     | 0; `latency/acceptance.json`                            |
+| Generated 720p/30 source used in both lanes, trimmed to source 5–15 s; 20× zoom, legacy enabled, no injection                                 | **Fails own-time coverage:** 32/36 visible tiles own-time after the 30 s wait. Four frames remain outside their spans; e.g. span `9.737,9.766`, frame `9.767`. Webcam has 20/20 decoded mounted images, including margin tiles. | 1; `trim/on.json`, `trim-shots/03-zoom-2000-marked.png` |
+| Same acceptance files, legacy encoding suppressed (`HTMLCanvasElement.toBlob` returns null), worker-only Webcam; isolated replacement at rest | Webcam eventually mounts 18/18 decoded images. **Fails 500 ms:** first zoom 527 ms; four warm jumps 778/517/777/491 ms. No minting during scroll/playback. Negative control detects 15 blank samples over 181 animation frames. | 1; `worker-only-final/on.json`                          |
+| Short real MP4 export with viewport changes; real workspace switch                                                                            | 0 requests during 487.6 ms exporting; 2 viewport changes; all 18 cached URLs revoked after switch.                                                                                                                              | 0; `lifecycle/lifecycle.json`                           |
+| Same 54-minute scroll/jump/zoom performance-on workload, three trials                                                                         | p95 8.1/7.3/7.1 ms; median 7.3 ms; no main-thread task >50 ms. This is slightly above the historical main median of 7.2 ms; main was not rerun.                                                                                 | 0; `performance/performance-on.json`                    |
 
-The new cleanup fault-injection tests verify finalization after report-write failure and
-workspace removal even if finalization fails; an actual disk-full Electron run was not performed.
-No actual-app rerun was performed in this bounded five-finding implementation task. The remote
-Wachiman attempt exhausted its weekly quota; it is not an independent clean review. No merge,
-flag rollout, push, or review reply was performed.
+The trimmed tile spans are about 29 ms wide, below the 33.3 ms interval of the 30 fps source.
+That is consistent with some spans containing no valid frame timestamp; the observed result is
+failed own-time coverage, not an assertion that full-span planning alone guarantees every zoom.
+No decoder change, fixture tuning, budget relaxation, or optimization was attempted.
+
+The worker-only first-zoom timer returned when the 18 screen images were own-time, before
+Webcam images mounted (`webcamTilesAtZoom.count = 0`). Warm rows contain both lanes (36 images).
+A positive tile count therefore does not prove that every expected lane has mounted. The normal
+acceptance run had 36–38 tiles in every row; the worker-only cold timing is not a complete
+both-lanes latency measurement. The final count and screenshots prove eventual worker-only
+Webcam rendering, while its strict overall scenario remains red. The preceding worker-only run
+also failed (532 ms first zoom; warm 688/654/623/651 ms); it is retained in `worker-only/`.
+
+The 15 negative-control blanks are intentional and do not represent natural blanking. The normal
+corrected sampler's zero-blank observation remains limited to previously decoded logical spans;
+it cannot establish initial-load blank freedom. An earlier combined trim/replacement run
+(`edge/`) detected 10 blanks, but replacing a React-owned node during scrolling disrupted the
+editor and caused a later locator timeout (exit 1). Its post-injection behavior is invalid as
+product evidence. A first setup attempt waited at fit zoom with legacy strips suppressed and
+was interrupted (exit 130); fit intentionally requests no worker frames. Both attempts are
+preserved, not counted as passes. The final negative control replaces/restores the node at rest.
+
+The mini was idle with respect to test/export jobs before each scenario (74–75% free system
+memory); the owner's resident app and NIW2-807 worktrees/processes were preserved. Available
+NIW2-807 logs ended `DONE`/`ALLDONE`; the literal historical `chain done` marker was not located
+in the checked `/tmp`/evidence logs. Post-run process inventory shows no test-owned Electron or
+Playwright process. No M5 app was launched. The actual disk-full Electron cleanup path was not
+run; extracted fault-injection tests remain its evidence. The nine verifier regressions pass
+(exit 0); the prior 8,486-test suite was not repeated. A type-check after verifier edits passed
+(exit 0, 24 tasks, 23 cached).
+
+**Limits retained:** the historical larger stress failure remains 594.2 ms at its slowest warm
+jump (`layer-3/stress-final.json`), and was not rerun here. Historical memory observations below
+are not current-head memory guarantees. Wachiman exhausted its weekly quota and supplies no
+independent clean review. No actual camera recording or Windows validation was added.
 
 Measurements below were observed on 2026-11-17 on the Mac mini, with the production decoder
 path unchanged from layer 2. Code: `b01cf0cfc60f99b23728b12f1c32d1c70056b892`.
@@ -145,3 +181,40 @@ The scenario assigns the Webcam a positive five-second offset. The first zoom in
 acceptance run, the worker was created and preparation sent at page time 980 ms, and the file
 opened at 1,087.8 ms (107.8 ms including worker startup and opening). This is separate from the
 458 ms first-zoom result; it is not an unprepared-worker cold-start claim.
+
+## Reproduce review-only fixtures
+
+Use the same built mini worktree and generated Webcam above. From `apps/kaipu-record`,
+`KAIPU_VERIFY_OUT` now also applies to lifecycle and performance, so a rerun preserves prior results.
+The editor controls are verifier-only and leave its standard workload unchanged when unset.
+
+```sh
+# Ten-second edit of the existing generated 30 fps file, at the standard five-click 20× zoom.
+# This run failed: 32/36 visible tiles own-time after 30 seconds; strict assertion unchanged.
+env -u ELECTRON_RUN_AS_NODE KAIPU_VERIFY_TRIM=1 KAIPU_VERIFY_ZOOM_ONLY=1 \
+  KAIPU_VERIFY_WEBCAM=1 \
+  KAIPU_VERIFY_TAKE="$HOME/kaipu-evidence/niw2-844/fixtures/webcam-30min-720p.mp4" \
+  KAIPU_VERIFY_WEBCAM_FILE="$HOME/kaipu-evidence/niw2-844/fixtures/webcam-30min-720p.mp4" \
+  KAIPU_VERIFY_OUT="$HOME/kaipu-evidence/niw2-844/review-673ca7fc/trim-repeat" \
+  node node_modules/@playwright/test/cli.js test -c verify/playwright.config.ts \
+  filmstrip-editor.verify.ts
+
+# Worker-only lanes: suppress main-renderer HTMLCanvasElement.toBlob (legacy strips),
+# while leaving the production OffscreenCanvas worker intact. Inject/restore one undecoded
+# logical-span replacement at rest; nonzero blank samples are expected in this control.
+# This run rendered Webcam tiles and detected the injection, but failed strict 500 ms latency.
+env -u ELECTRON_RUN_AS_NODE KAIPU_VERIFY_WORKER_ONLY=1 KAIPU_VERIFY_INJECT_BLANK=1 \
+  KAIPU_VERIFY_WEBCAM=1 \
+  KAIPU_VERIFY_TAKE="$HOME/kaipu-evidence/niw2-844/fixtures/screen-30min-1440p.mp4" \
+  KAIPU_VERIFY_WEBCAM_FILE="$HOME/kaipu-evidence/niw2-844/fixtures/webcam-30min-720p.mp4" \
+  KAIPU_VERIFY_OUT="$HOME/kaipu-evidence/niw2-844/review-673ca7fc/worker-only-repeat" \
+  node node_modules/@playwright/test/cli.js test -c verify/playwright.config.ts \
+  filmstrip-editor.verify.ts
+```
+
+`TRIM` seeds a real saved edit with source range 5–15 seconds. `ZOOM_ONLY` captures and asserts
+the first zoom, then finalizes without running the unrelated later phases. `WORKER_ONLY` skips
+the fit-zoom image wait because fit requests no worker frames. `INJECT_BLANK` keeps the viewport
+still for its negative control; omit it for the normal scrolling AC12 scenario. The sampler
+only detects a blank after that logical lane/clip/span has previously decoded; initial loading
+remains outside its claim. The earlier moving-node injection failure is not a product regression.

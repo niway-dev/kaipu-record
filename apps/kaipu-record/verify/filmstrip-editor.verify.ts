@@ -36,6 +36,11 @@ const TAKE = process.env.KAIPU_VERIFY_TAKE ?? path.join(EVIDENCE, "take", "take-
 const OUT = process.env.KAIPU_VERIFY_OUT ?? path.join(EVIDENCE, "layer-3");
 const WEBCAM = process.env.KAIPU_VERIFY_WEBCAM === "1";
 const WEBCAM_FILE = process.env.KAIPU_VERIFY_WEBCAM_FILE ?? TAKE;
+// Review-only fixture controls: preserve the standard workload when unset.
+const ZOOM_ONLY = process.env.KAIPU_VERIFY_ZOOM_ONLY === "1";
+const TRIM = process.env.KAIPU_VERIFY_TRIM === "1";
+const WORKER_ONLY = process.env.KAIPU_VERIFY_WORKER_ONLY === "1";
+const INJECT_BLANK = process.env.KAIPU_VERIFY_INJECT_BLANK === "1";
 const ASSET_ID = "e2e0a5e7-0000-4000-8000-00000000d844";
 const NAME = `filmstrip-editor-${SIDE}`;
 /** Only the `on` side has frames of its own time to wait for; the others read the row as it is. */
@@ -189,6 +194,30 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
       await symlink(TAKE, path.join(dir, "Long take.mp4"));
       // A real media file stands in for the camera, with a nonzero start offset.
       if (WEBCAM) await symlink(WEBCAM_FILE, path.join(meta, "Long take.webcam.mp4"));
+      if (TRIM) {
+        await writeFile(
+          path.join(meta, "Long take.edit.json"),
+          JSON.stringify({
+            version: 1,
+            scene: {
+              items: [
+                {
+                  id: "review-trim",
+                  kind: "clip",
+                  sourceStart: 5,
+                  sourceEnd: 15,
+                },
+              ],
+              overlays: [],
+              zoomSegments: [],
+              redactions: [],
+              zoomSensitivity: 50,
+              audioMuted: false,
+              mutedRanges: [],
+            },
+          }),
+        );
+      }
       await writeFile(
         path.join(meta, "Long take.json"),
         JSON.stringify({
@@ -219,9 +248,22 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
     durationSeconds: duration,
     webcamOffsetMs: WEBCAM ? 5000 : null,
     webcamFile: WEBCAM ? WEBCAM_FILE : null,
+    reviewFixture: {
+      trim: TRIM ? [5, 15] : null,
+      workerOnly: WORKER_ONLY,
+      injectedBlank: INJECT_BLANK,
+    },
   };
   try {
-    await page.addInitScript(() => {
+    await page.addInitScript((workerOnly) => {
+      if (workerOnly) {
+        // Legacy strips encode on HTMLCanvasElement; the production worker uses OffscreenCanvas.
+        // Suppress only the former, so no legacy thumbnail can satisfy the lane guard.
+        HTMLCanvasElement.prototype.toBlob = function (callback) {
+          callback(null);
+        };
+      }
+
       // The part of the scroller that shows tiles: right of the label column.
       (window as unknown as { lanesRect: (body: HTMLElement) => DOMRect }).lanesRect = (body) => {
         const rect = body.getBoundingClientRect();
@@ -238,7 +280,7 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
         w.__mintTimes.push(performance.now());
         return original(obj);
       };
-    });
+    }, WORKER_ONLY);
     // The init script applies to later navigations, so load the app again once it is set.
     await page.reload();
 
@@ -257,9 +299,13 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
     await page.waitForFunction(() => location.hash.startsWith("#/editor/video/"));
     await page.waitForSelector("video");
     await page.locator("[data-ui-area='editorVideo.transport']").waitFor({ state: "visible" });
-    await expect
-      .poll(async () => (await readTiles(page)).withImage, { timeout: 120_000 })
-      .toBeGreaterThan(0);
+    // At fit zoom only legacy strips are requested. The worker-only fixture intentionally
+    // has none; zoom first so the production fine-frame request can populate it.
+    if (!WORKER_ONLY) {
+      await expect
+        .poll(async () => (await readTiles(page)).withImage, { timeout: 120_000 })
+        .toBeGreaterThan(0);
+    }
     await s.shot("editor-fit");
 
     // ---- zoom to 2,000%: five presses of +, then the view rests
@@ -279,10 +325,26 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
       tiles: await readTiles(page),
       notOwn: await notOwnTiles(page),
     };
+    result.webcamTilesAtZoom = await page.evaluate(() => {
+      const imgs = [
+        ...document.querySelectorAll<HTMLImageElement>(
+          "[data-ui-area='editorVideo.webcamLane'] img[data-filmstrip-span]",
+        ),
+      ];
+      return {
+        count: imgs.length,
+        decoded: imgs.filter((img) => img.complete && img.naturalWidth > 0).length,
+      };
+    });
     await s.shot("zoom-2000");
     await markTiles(page, true);
     await s.shot("zoom-2000-marked");
     await markTiles(page, false);
+    if (ZOOM_ONLY) {
+      expect(restZoom, "review zoom: every visible tile own-time").not.toBeNull();
+      expect(restZoom!, "review zoom: strict 500 ms").toBeLessThanOrEqual(500);
+      return;
+    }
 
     // ---- AC1/AC2 again at three places in the take, each one a jump the view then rests on
     const scroller = page.getByTestId("timeline-scroller");
@@ -355,7 +417,7 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
 
     // ---- AC12: a tile that showed an image never goes blank while the view moves and zooms
     result.ac12 = await page.evaluate(
-      () =>
+      (injectBlank) =>
         new Promise<{ samples: number; srcChanges: number; blankTileSamples: number }>(
           (resolve) => {
             const root = document.querySelector("[data-ui-area='editorVideo.timeline']")!;
@@ -382,8 +444,28 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
               if (running) requestAnimationFrame(sample);
             };
             requestAnimationFrame(sample);
+            if (injectBlank)
+              setTimeout(() => {
+                const original = [
+                  ...root.querySelectorAll<HTMLImageElement>("img[data-filmstrip-span]"),
+                ].find((img) => img.complete && img.naturalWidth > 0);
+                if (!original) return;
+                const replacement = original.cloneNode(true) as HTMLImageElement;
+                replacement.removeAttribute("src");
+                original.replaceWith(replacement);
+                setTimeout(() => replacement.replaceWith(original), 100);
+              }, 1000);
             let i = 0;
             const step = (): void => {
+              if (injectBlank) {
+                // Keep React idle while temporarily replacing its node. The normal run above
+                // exercises moving views; this run only checks the sampler's negative control.
+                setTimeout(() => {
+                  running = false;
+                  resolve({ samples, srcChanges, blankTileSamples });
+                }, 1250);
+                return;
+              }
               body.scrollLeft += i % 2 === 0 ? 900 : -500;
               i += 1;
               if (i < 12) setTimeout(step, 350);
@@ -396,6 +478,7 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
             step();
           },
         ),
+      INJECT_BLANK,
     );
 
     // ---- AC6: play, and nothing is minted while it plays
@@ -417,6 +500,17 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
 
     // ---- AC11 (off) and the tile count in every side
     result.finalTiles = await readTiles(page);
+    result.webcamTilesAtEnd = await page.evaluate(() => {
+      const imgs = [
+        ...document.querySelectorAll<HTMLImageElement>(
+          "[data-ui-area='editorVideo.webcamLane'] img[data-filmstrip-span]",
+        ),
+      ];
+      return {
+        count: imgs.length,
+        decoded: imgs.filter((img) => img.complete && img.naturalWidth > 0).length,
+      };
+    });
     result.filmstripAttributes = await page.evaluate(
       () => document.querySelectorAll("[data-filmstrip-frame]").length,
     );
@@ -455,7 +549,22 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
       expect(ac7.mintedDuringScroll, "AC7: a continuous scroll decodes nothing").toBe(0);
       expect(ac7.msUntilAllOwnAfterRest, "AC7: the tiles are right once it rests").not.toBeNull();
       expect(ac6.mintedDuringPlay, "AC6: nothing decodes while playing").toBe(0);
-      expect(ac12.blankTileSamples, "AC12: no tile goes blank").toBe(0);
+      if (INJECT_BLANK) {
+        expect(
+          ac12.blankTileSamples,
+          "negative control detects undecoded logical-span replacement",
+        ).toBeGreaterThan(0);
+      } else {
+        expect(ac12.blankTileSamples, "AC12: no tile goes blank").toBe(0);
+      }
+      if (WORKER_ONLY && WEBCAM) {
+        const cameraTiles = page.locator(
+          "[data-ui-area='editorVideo.webcamLane'] img[data-filmstrip-span]",
+        );
+        expect(await cameraTiles.count(), "worker-only Webcam lane mounts tiles").toBeGreaterThan(
+          0,
+        );
+      }
     } else {
       expect(result.filmstripAttributes, "AC11: today's row carries no filmstrip attribute").toBe(
         0,

@@ -6,7 +6,7 @@ import { startScenario } from "./helpers";
 
 // Actual-app AC6/10. Uses the established short media fixture for a real export.
 // Worker messages and blob revocations are observed; no product test hooks or fake export.
-const OUT = path.join(homedir(), "kaipu-evidence/niw2-844/layer-4");
+const OUT = process.env.KAIPU_VERIFY_OUT ?? path.join(homedir(), "kaipu-evidence/niw2-844/layer-4");
 const TAKE = process.env.KAIPU_VERIFY_TAKE ?? path.resolve(__dirname, "../e2e/fixtures/sample.mp4");
 const ID = "e2e0a5e7-0000-4000-8000-00000000d844";
 
