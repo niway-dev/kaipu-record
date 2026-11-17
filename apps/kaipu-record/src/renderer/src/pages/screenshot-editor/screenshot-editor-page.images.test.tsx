@@ -507,7 +507,7 @@ describe("ScreenshotEditor — adding images (image-canvas)", () => {
       schemaVersion: number;
       items: { kind: string; assetId: string; x: number; w: number }[];
     };
-    expect(doc.schemaVersion).toBe(2);
+    expect(doc.schemaVersion).toBe(3);
     expect(doc.items.map((i) => i.kind)).toEqual(["image", "image"]);
     // World units: 1 unit = 1 base px.
     expect(doc.items[1]).toMatchObject({ x: 432, w: 200 });

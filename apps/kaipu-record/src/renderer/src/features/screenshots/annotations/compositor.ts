@@ -34,6 +34,7 @@ import {
   stepNumbers,
   type Annotation,
   type BlurAnnotation,
+  fullRect,
   type ImageAnnotation,
   type Scene,
 } from "./scene";
@@ -357,7 +358,7 @@ export function buildSvg(scene: Scene, g: Geom): string {
     if (href === undefined) throw new Error(`compositor: missing asset ${a.assetId}`);
     assetDefs.add(id);
     defs.push(
-      `<image id="${id}" href="${href}" width="${a.w * g.naturalW}" height="${a.h * g.naturalH}" preserveAspectRatio="none"/>`,
+      `<image id="${id}" href="${href}" width="${fullRect(a).w * g.naturalW}" height="${fullRect(a).h * g.naturalH}" preserveAspectRatio="none"/>`,
     );
   }
 
@@ -420,7 +421,11 @@ export function buildSvg(scene: Scene, g: Geom): string {
 
 /** The def id of an added image at its own size, so each distinct size is embedded once. */
 function assetDefId(a: ImageAnnotation, g: Geom): string {
-  return `asset-${a.assetId}-${a.w * g.naturalW}x${a.h * g.naturalH}`;
+  // The def is the WHOLE asset at the size it has on the canvas (`fullRect`), so a crop
+  // enters the id through that size: two placements share a def only when the asset is
+  // drawn at the same size, whatever window each one shows.
+  const f = fullRect(a);
+  return `asset-${a.assetId}-${f.w * g.naturalW}x${f.h * g.naturalH}`;
 }
 
 /**
@@ -438,12 +443,19 @@ function imageSvg(a: ImageAnnotation, g: Geom, shadow: boolean, idSuffix = ""): 
   const w = a.w * g.naturalW;
   const h = a.h * g.naturalH;
   const clip = `ic-${a.id}${idSuffix}`;
+  // The clip is the VISIBLE rect; the asset is drawn whole from its own top-left, which
+  // sits left of / above the visible rect when the image is cropped. Per-image radius
+  // (source px) wins over the global one.
+  const full = fullRect(a);
+  const fx = full.x * g.naturalW;
+  const fy = full.y * g.naturalH;
+  const r = a.radius ?? g.radius;
   return (
-    `<defs><clipPath id="${clip}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${g.radius}"/></clipPath></defs>` +
+    `<defs><clipPath id="${clip}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}"/></clipPath></defs>` +
     (shadow
-      ? `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${g.radius}" fill="#000" filter="url(#sh)"/>`
+      ? `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" fill="#000" filter="url(#sh)"/>`
       : "") +
-    `<g clip-path="url(#${clip})"><use href="#${assetDefId(a, g)}" x="${x}" y="${y}"/></g>`
+    `<g clip-path="url(#${clip})"><use href="#${assetDefId(a, g)}" x="${fx}" y="${fy}"/></g>`
   );
 }
 

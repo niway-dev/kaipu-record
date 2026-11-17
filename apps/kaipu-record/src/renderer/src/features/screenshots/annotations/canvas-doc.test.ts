@@ -90,7 +90,7 @@ describe("canvas document", () => {
   it("writes the current version with every geometry in world units", () => {
     const doc = buildCanvasDoc(scene, base);
     expect(doc.schemaVersion).toBe(CANVAS_DOC_VERSION);
-    expect(CANVAS_DOC_VERSION).toBe(2);
+    expect(CANVAS_DOC_VERSION).toBe(3);
     const [, box, arrow, text, path] = doc.items as any[];
     expect(box).toMatchObject({ x: 80, y: 60, w: 160, h: 120 });
     expect(arrow).toMatchObject({ x1: -160, y1: 0, x2: 1120, y2: 300 });
@@ -313,7 +313,7 @@ describe("canvas document", () => {
     expect(parseCanvasDoc("42")).toBeNull();
   });
   it("returns null for an unknown schema version", () => {
-    expect(parseCanvasDoc(docWith((d) => (d.schemaVersion = 3)))).toBeNull();
+    expect(parseCanvasDoc(docWith((d) => (d.schemaVersion = 4)))).toBeNull();
     expect(parseCanvasDoc(docWith((d) => (d.schemaVersion = 0)))).toBeNull();
     expect(parseCanvasDoc(docWith((d) => delete d.schemaVersion))).toBeNull();
   });
@@ -440,5 +440,80 @@ describe("canvas document — lockedAt", () => {
       const json = docWith((d) => (d.items[5].lockedAt = bad));
       expect(parseCanvasDoc(json), String(bad)).toBeNull();
     }
+  });
+});
+
+describe("canvas document — per-image crop (v3)", () => {
+  // Illustrative: a 400x300 image right of the 800x600 base, showing the middle 50% x 50%
+  // of its asset, with its own 12 px corner.
+  const cropped: Annotation = {
+    id: "a7",
+    kind: "image",
+    assetId: "img-aaaaaaaaaaaa",
+    x: 1.25,
+    y: 0.125,
+    w: 0.25,
+    h: 0.25,
+    pixelWidth: 800,
+    pixelHeight: 600,
+    crop: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 },
+    radius: 12,
+  };
+  const plain: Annotation = { ...cropped, id: "a8", y: 1, crop: undefined, radius: undefined };
+  delete plain.crop;
+  delete plain.radius;
+  const withImages: Scene = { ...scene, annotations: [cropped, plain] };
+
+  it("round-trips crop and radius; crop and radius stay asset-relative, the rect goes to world units", () => {
+    const doc = buildCanvasDoc(withImages, base);
+    const [, item] = doc.items as any[];
+    expect(item).toMatchObject({ x: 1000, y: 75, w: 200, h: 150, radius: 12 });
+    expect(item.crop).toEqual({ x: 0.25, y: 0.25, w: 0.5, h: 0.5 });
+    const parsed = parseCanvasDoc(JSON.stringify(doc));
+    expectClose(parsed!.scene.annotations, withImages.annotations);
+  });
+
+  it("writes no crop or radius key for an image that has neither", () => {
+    const [, , item] = buildCanvasDoc(withImages, base).items as any[];
+    expect("crop" in item).toBe(false);
+    expect("radius" in item).toBe(false);
+  });
+
+  it("still reads a v2 document (no crop, no radius)", () => {
+    const v2 = docWith((d) => {
+      d.schemaVersion = 2;
+      d.items = [d.items[0], { ...d.items[0], id: "a1", assetId: "img-bbbbbbbbbbbb", x: 900 }];
+    });
+    const parsed = parseCanvasDoc(v2);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.scene.annotations[0]).not.toHaveProperty("crop");
+  });
+
+  it("ignores crop and radius on a v2 file: that version never wrote them", () => {
+    const doc = JSON.parse(JSON.stringify(buildCanvasDoc(withImages, base)));
+    doc.schemaVersion = 2;
+    const parsed = parseCanvasDoc(JSON.stringify(doc));
+    expect(parsed!.scene.annotations[0]).not.toHaveProperty("crop");
+    expect(parsed!.scene.annotations[0]).not.toHaveProperty("radius");
+  });
+
+  it("falls back to the flattened PNG for a crop outside the asset or a negative radius", () => {
+    const bad = (patch: (item: any) => void) =>
+      parseCanvasDoc(
+        JSON.stringify(
+          (() => {
+            const d = JSON.parse(JSON.stringify(buildCanvasDoc(withImages, base)));
+            patch(d.items[1]);
+            return d;
+          })(),
+        ),
+      );
+    expect(bad((i) => (i.crop = { x: 0.6, y: 0, w: 0.5, h: 1 }))).toBeNull();
+    expect(bad((i) => (i.crop = { x: -0.1, y: 0, w: 0.5, h: 1 }))).toBeNull();
+    expect(bad((i) => (i.crop = { x: 0, y: 0, w: 0, h: 1 }))).toBeNull();
+    expect(bad((i) => (i.crop = { x: "0", y: 0, w: 1, h: 1 }))).toBeNull();
+    expect(bad((i) => (i.radius = -1))).toBeNull();
+    expect(bad((i) => (i.radius = "12"))).toBeNull();
+    expect(bad(() => {})).not.toBeNull();
   });
 });

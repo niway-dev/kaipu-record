@@ -4,6 +4,7 @@ import {
   nextAnnotationId,
   reserveAnnotationIds,
   sameScene,
+  fullRect,
   stepNumbers,
   type Annotation,
   type Scene,
@@ -78,5 +79,52 @@ describe("stepNumbers", () => {
       ["s1", 1],
       ["s3", 2],
     ]);
+  });
+});
+
+describe("fullRect", () => {
+  // Illustrative: a visible rect of 0.25 x 0.25 at (1, 0.5) that shows the middle half of
+  // its asset on both axes, so the whole asset is twice as large and starts 0.125 earlier.
+  const image = {
+    id: "i",
+    kind: "image" as const,
+    assetId: "img-aaaaaaaaaaaa",
+    x: 1,
+    y: 0.5,
+    w: 0.25,
+    h: 0.25,
+    pixelWidth: 100,
+    pixelHeight: 100,
+  };
+
+  it("is the visible rect when there is no crop", () => {
+    expect(fullRect(image)).toEqual({ x: 1, y: 0.5, w: 0.25, h: 0.25 });
+  });
+
+  it("is the visible rect when the crop is the whole asset", () => {
+    expect(fullRect({ ...image, crop: { x: 0, y: 0, w: 1, h: 1 } })).toEqual({
+      x: 1,
+      y: 0.5,
+      w: 0.25,
+      h: 0.25,
+    });
+  });
+
+  it("extends the visible rect to the asset's own rect", () => {
+    expect(fullRect({ ...image, crop: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 } })).toEqual({
+      x: 0.875,
+      y: 0.375,
+      w: 0.5,
+      h: 0.5,
+    });
+  });
+
+  it("falls back to the visible rect for a degenerate crop instead of dividing by zero", () => {
+    expect(fullRect({ ...image, crop: { x: 0, y: 0, w: 0, h: 1 } })).toEqual({
+      x: 1,
+      y: 0.5,
+      w: 0.25,
+      h: 0.25,
+    });
   });
 });

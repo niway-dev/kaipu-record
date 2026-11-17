@@ -1,5 +1,5 @@
 import { annotationBox } from "./handles";
-import type { Annotation, BlurAnnotation, RedactionStyle } from "./scene";
+import { fullRect, type Annotation, type BlurAnnotation, type RedactionStyle } from "./scene";
 
 /** A redaction block is at least this many image pixels on a side. */
 export const REDACTION_MIN_BLOCK_PX = 24;
@@ -200,7 +200,9 @@ export async function bakeCanvasRedactions(
   const perAsset = new Map<string, BlurAnnotation[]>();
   for (const a of annotations) {
     if (a.kind !== "image" || !assets[a.assetId]) continue;
-    perAsset.set(a.assetId, [...(perAsset.get(a.assetId) ?? []), ...localBlurs(a)]);
+    // The whole asset's rect, not the visible one: a blur over a part that is cropped out
+    // must still reach the pixels, or widening the crop later would show them (privacy).
+    perAsset.set(a.assetId, [...(perAsset.get(a.assetId) ?? []), ...localBlurs(fullRect(a))]);
   }
   let next = assets;
   for (const [assetId, local] of perAsset) {

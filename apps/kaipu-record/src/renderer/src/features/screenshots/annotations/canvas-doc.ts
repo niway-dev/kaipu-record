@@ -24,8 +24,14 @@ const level = (v: unknown, table: readonly unknown[]): boolean =>
  * base-normalized units (the M2 model); the conversion happens only here, in
  * `buildCanvasDoc` and `parseCanvasDoc`. Version 1 (M3) was already base-normalized and
  * never held an added image, so it is read as it is.
+ *
+ * Version 3 (per-image crop) adds optional `crop` (visible window inside the asset,
+ * 0–1 of the asset) and `radius` (source px) to an added image item. Both are unitless
+ * or asset-relative, so the world conversion leaves them alone, and `x/y/w/h` stay the
+ * visible rect. A build that only knows 1 and 2 rejects v3 on purpose: it would stretch
+ * the whole asset into the cropped rect instead of showing the window.
  */
-export const CANVAS_DOC_VERSION = 2;
+export const CANVAS_DOC_VERSION = 3;
 /** Asset id of the base image. */
 export const BASE_ASSET_ID = "base";
 
@@ -39,6 +45,10 @@ export interface CanvasImageItem {
   h: number;
   pixelWidth: number;
   pixelHeight: number;
+  /** v3: visible window inside the asset, normalized 0–1 of the asset. x/y/w/h stay the visible rect. */
+  crop?: CropRect;
+  /** v3: this image's own corner radius in source px; absent = the frame's global radius. */
+  radius?: number;
 }
 
 /** The M3 document, read-only: base-normalized annotations, no added images. */
@@ -51,7 +61,7 @@ export interface CanvasDocV1 {
 }
 
 export interface CanvasDocV2 {
-  schemaVersion: 2;
+  schemaVersion: 2 | 3;
   /**
    * z-order = array order. Item 0 is the base image (normally at 0,0 with w/h = its pixel
    * size); every x/y/w/h/points/width/exportFrame value below is in world units (base
@@ -207,7 +217,7 @@ function parseImage(o: Obj): CanvasImageItem | null {
   if (!nums(o, ["x", "y", "w", "h", "pixelWidth", "pixelHeight"])) return null;
   if ((o.w as number) <= 0 || (o.h as number) <= 0) return null;
   if ((o.pixelWidth as number) <= 0 || (o.pixelHeight as number) <= 0) return null;
-  return {
+  const item: CanvasImageItem = {
     id: o.id,
     kind: "image",
     assetId: o.assetId,
@@ -218,6 +228,19 @@ function parseImage(o: Obj): CanvasImageItem | null {
     pixelWidth: o.pixelWidth as number,
     pixelHeight: o.pixelHeight as number,
   };
+  if (o.crop !== undefined) {
+    const c = o.crop;
+    // A window inside the asset: a crop outside 0–1 would read pixels that do not exist.
+    if (!isObj(c) || !nums(c, ["x", "y", "w", "h"])) return null;
+    const { x, y, w, h } = c as unknown as CropRect;
+    if (w <= 0 || h <= 0 || x < 0 || y < 0 || x + w > 1 + 1e-9 || y + h > 1 + 1e-9) return null;
+    item.crop = { x, y, w, h };
+  }
+  if (o.radius !== undefined) {
+    if (!num(o.radius) || o.radius < 0) return null;
+    item.radius = o.radius;
+  }
+  return item;
 }
 
 function parseAnnotation(o: Obj): Annotation | null {
@@ -293,7 +316,7 @@ export function parseCanvasDoc(json: string): ParsedCanvasDoc | null {
   // v1 is already base-normalized (identity); v2 is in world units. Anything else is a
   // version this build does not know how to read.
   const version = raw.schemaVersion;
-  if (version !== 1 && version !== 2) return null;
+  if (version !== 1 && version !== 2 && version !== 3) return null;
   const frame = parseFrame(raw.frame);
   if (!frame) return null;
   let exportFrame: CropRect | undefined;
@@ -309,7 +332,7 @@ export function parseCanvasDoc(json: string): ParsedCanvasDoc | null {
   if (!isObj(first) || first.kind !== "image") return null; // item 0 must be the base image
   base = parseImage(first);
   if (!base) return null;
-  const [px, py, sw, sh] = version === 2 ? toNormMaps(base) : [null, null, null, null];
+  const [px, py, sw, sh] = version !== 1 ? toNormMaps(base) : [null, null, null, null];
   const convert = (a: Annotation): Annotation => (px ? mapGeometry(a, px, py, sw, sh, false) : a);
   for (let i = 1; i < items.length; i++) {
     const item: unknown = items[i];
@@ -331,6 +354,9 @@ export function parseCanvasDoc(json: string): ParsedCanvasDoc | null {
           h: image.h,
           pixelWidth: image.pixelWidth,
           pixelHeight: image.pixelHeight,
+          // Only a v3 document can hold them; a v2 file never wrote either.
+          ...(version === 3 && image.crop ? { crop: image.crop } : {}),
+          ...(version === 3 && image.radius !== undefined ? { radius: image.radius } : {}),
         }),
       );
       continue;

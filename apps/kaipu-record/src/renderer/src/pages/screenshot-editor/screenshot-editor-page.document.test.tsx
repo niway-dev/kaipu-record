@@ -373,7 +373,7 @@ describe("ScreenshotEditor — reopen from the document (image-canvas)", () => {
     ["corrupt JSON", () => readCanvas.mockResolvedValue(stored("{not json"))],
     [
       "an unsupported schema version",
-      () => readCanvas.mockResolvedValue(stored(docJson({ schemaVersion: 3 }))),
+      () => readCanvas.mockResolvedValue(stored(docJson({ schemaVersion: 4 }))),
     ],
     ["a missing base asset", () => readCanvas.mockResolvedValue(stored(docJson(), {}))],
     [
@@ -421,7 +421,7 @@ describe("ScreenshotEditor — saving the document (image-canvas)", () => {
       schemaVersion: number;
       items: { kind: string; locked?: boolean }[];
     };
-    expect(doc.schemaVersion).toBe(2);
+    expect(doc.schemaVersion).toBe(3);
     expect(doc.items.map((i) => i.kind)).toEqual(["image", "blur"]);
     expect(doc.items[1].locked).toBe(true);
     expect(canvas.assets).toHaveLength(1);

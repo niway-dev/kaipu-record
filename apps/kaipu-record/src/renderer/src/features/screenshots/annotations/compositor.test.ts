@@ -442,6 +442,51 @@ describe("compositor image annotations (canvas mode)", () => {
     expect(plain).not.toContain("asset-");
   });
 
+  it("draws a cropped image: whole asset from its own corner, clipped to the visible rect", () => {
+    // Illustrative: the visible 500x300 rect shows the middle half of the asset, so the
+    // asset is 1000x600 on the canvas and starts 250 px left of / 150 px above the rect (x 1250 -> 1000).
+    const cropped: Annotation = { ...second, x: 1.25, crop: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 } };
+    const svg = buildSvg(scene([cropped]), g);
+    expect(svg).toContain(`<image id="asset-img-abc123def456-1000x600"`);
+    expect(svg).toContain(`width="1000" height="600" preserveAspectRatio="none"`);
+    expect(svg).toContain(
+      `<clipPath id="ic-a9"><rect x="1250" y="0" width="500" height="300" rx="12"/></clipPath>`,
+    );
+    expect(svg).toContain(`<use href="#asset-img-abc123def456-1000x600" x="1000" y="-150"/>`);
+  });
+
+  it("keeps two crops of one asset on separate placements when their full sizes differ", () => {
+    const a: Annotation = { ...second, crop: { x: 0, y: 0, w: 0.5, h: 0.5 } };
+    const b: Annotation = { ...second, id: "a10", y: 1, crop: { x: 0, y: 0, w: 0.25, h: 0.25 } };
+    const svg = buildSvg(scene([a, b]), g);
+    expect(svg).toContain(`<image id="asset-img-abc123def456-1000x600"`);
+    expect(svg).toContain(`<image id="asset-img-abc123def456-2000x1200"`);
+  });
+
+  it("uses an image's own radius, in source px, for its clip and shadow; else the global one", () => {
+    const own: Annotation = { ...second, radius: 40 };
+    const svg = buildSvg(scene([own]), g);
+    expect(svg).toContain(
+      `<clipPath id="ic-a9"><rect x="1100" y="0" width="500" height="300" rx="40"/></clipPath>`,
+    );
+    expect(svg).toContain(`rx="40" fill="#000" filter="url(#sh)"`);
+    // 0 is a real value (square corners), not "unset".
+    expect(buildSvg(scene([{ ...second, radius: 0 }]), g)).toContain(`height="300" rx="0"/>`);
+  });
+
+  it("draws an image without crop or radius exactly as before this feature", () => {
+    // The pre-crop template, written out: any drift here changes every existing export.
+    const svg = buildSvg(scene([second]), g);
+    expect(svg).toContain(
+      `<defs><clipPath id="ic-a9"><rect x="1100" y="0" width="500" height="300" rx="12"/></clipPath></defs>` +
+        `<rect x="1100" y="0" width="500" height="300" rx="12" fill="#000" filter="url(#sh)"/>` +
+        `<g clip-path="url(#ic-a9)"><use href="#asset-img-abc123def456-500x300" x="1100" y="0"/></g>`,
+    );
+    expect(svg).toContain(
+      `<image id="asset-img-abc123def456-500x300" href="data:image/png;base64,BBBB" width="500" height="300" preserveAspectRatio="none"/>`,
+    );
+  });
+
   it("redraws, at a blur's z-position, the baked images below it and never one above", () => {
     const blur: Annotation = { id: "z", kind: "blur", x: 1.2, y: 0.1, w: 0.2, h: 0.2 };
     const above = buildSvg(scene([second, blur]), g);
