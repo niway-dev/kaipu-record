@@ -628,6 +628,24 @@ describe("canvas document — base crop, scale and corners (v3)", () => {
     }
   });
 
+  it("falls back to the flattened PNG for a base whose visible side no canvas could hold", () => {
+    // 800x600 at scale 25 is 20000x15000 px: inside the 100x ceiling, past the export cap.
+    const huge = JSON.parse(JSON.stringify(buildCanvasDoc(scene, base)));
+    Object.assign(huge.items[0], { w: 20000, h: 15000 });
+    expect(parseCanvasDoc(JSON.stringify(huge))).toBeNull();
+    // 800x600 at scale 20 is 16000x12000: under the cap, so it still opens.
+    const big = JSON.parse(JSON.stringify(buildCanvasDoc(scene, base)));
+    Object.assign(big.items[0], { w: 16000, h: 12000 });
+    expect(parseCanvasDoc(JSON.stringify(big))).not.toBeNull();
+    // A 100x asset seen through a 1% window is a small export, however large the asset is.
+    const window100: Scene = {
+      ...scene,
+      baseCrop: { x: 0, y: 0, w: 0.01, h: 0.01 },
+      basePlacement: { x: 0, y: 0, scale: 100 },
+    };
+    expect(parseCanvasDoc(JSON.stringify(buildCanvasDoc(window100, base)))).not.toBeNull();
+  });
+
   it("refuses to build a document for an invalid base crop", () => {
     expect(() => buildCanvasDoc({ ...scene, baseCrop: { x: 0, y: 0, w: 0, h: 1 } }, base)).toThrow(
       /invalid crop/,

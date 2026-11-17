@@ -14,6 +14,7 @@ import {
   type CropRect,
   type Scene,
 } from "./scene";
+import { MAX_EXPORT_SIDE } from "./canvas-geometry";
 import { STEP_PX, STROKE_WIDTHS, TEXT_SIZES } from "./tools";
 
 /** A stored preset index (stroke level, text size): an integer inside its table. Anything
@@ -338,9 +339,9 @@ function parseFrame(v: unknown): BeautifyState | null {
 }
 
 /** The base may be resized between a thousandth and a hundred times its natural size, and its
- * corner may sit at most this many base widths away: anything else is a corrupt file. This is a
- * sanity bound on the file, not a cap on the export size (`clampRasterScale` never shrinks a
- * frame, it only limits the extra multiplier). */
+ * corner may sit at most this many base widths away: anything else is a corrupt file. These
+ * bounds alone still allow a 100x base to ask for a frame no canvas can hold, so the visible base
+ * is also held to `MAX_EXPORT_SIDE` below, and the compositor refuses any frame past it. */
 const MIN_BASE_SCALE = 1e-3;
 const MAX_BASE_SCALE = 1e2;
 const MAX_BASE_OFFSET = 1e4;
@@ -360,9 +361,12 @@ function placementOf(item: CanvasImageItem): BasePlacement | undefined | null {
   const sy = fullH / item.pixelHeight;
   if (!Number.isFinite(sx) || !Number.isFinite(sy) || sx <= 0 || sy <= 0) return null;
   if (Math.abs(sx - sy) > 1e-6 * Math.max(sx, sy)) return null;
-  // Sane bounds: a hostile file must not ask for a 1e12 px export; the editor opens the
+  // Sane bounds: a hostile file must not ask for a huge export; the editor opens the
   // flattened PNG instead.
   if (sx < MIN_BASE_SCALE || sx > MAX_BASE_SCALE) return null;
+  // The visible base is the content box of the export (its w/h are px at the asset's scale 1):
+  // a side no canvas can hold would be an export that can never be saved.
+  if (item.w > MAX_EXPORT_SIDE || item.h > MAX_EXPORT_SIDE) return null;
   const x = (item.x - c.x * fullW) / item.pixelWidth;
   const y = (item.y - c.y * fullH) / item.pixelHeight;
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;

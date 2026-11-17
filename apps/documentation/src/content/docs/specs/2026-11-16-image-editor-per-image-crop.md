@@ -124,11 +124,12 @@ Consequences, all in `canvas-geometry.ts`, `compositor.ts` and `content-box.ts`:
 - `baseVisibleRect` throws on an invalid `baseCrop`, like `fullRect` does for an image, so a save
   or an export stops instead of writing a NaN rect.
 - The reader refuses a placement outside sane bounds (scale under 1/1000 or over 100, a corner
-  more than 10 000 base widths away): a corrupt file opens the flattened PNG instead of asking for
-  a 1e12 px export. This is a sanity bound on the file, not an export-size cap: a base at the 100x
-  ceiling is still a very large frame, and `clampRasterScale` only limits the extra multiplier
-  (it never shrinks a frame). Capping the export area belongs to unit 4, with the resize handles
-  that will decide the user-facing limit.
+  more than 10 000 base widths away, or a visible base side over `MAX_EXPORT_SIDE`, 16384 px, the
+  most a canvas can hold): a corrupt or hostile file opens the flattened PNG instead of asking for
+  a huge export. The compositor repeats the check on the frame it is about to rasterize
+  (`assertExportSize`) and refuses one past that limit, so no document, however it was built, can
+  make an export allocate a gigantic canvas. The 16384 px ceiling is a safety limit, not the
+  user-facing size limit that unit 4's resize handles will decide.
 
 ### Canvas document v3
 
@@ -319,10 +320,15 @@ Unit 3 tests:
   and placement with every other item's coordinates unchanged, an untouched base writes nothing
   extra, a stretching or invalid base falls back, an invalid placement refuses to build, v2 ignores
   the fields.
-- `annotations/redaction.test.ts` — a blur over the cropped-out part of the base is baked; redact,
-  crop out, save, expand the crop: the stored pixels stay redacted; a resized base is baked through
-  its placed rect; an invalid placement throws.
-- `annotations/compositor.test.ts` — the export hands the placement, not the crop, to the bake.
+- `annotations/redaction.test.ts` — the bake itself never takes a crop, so the base-crop privacy
+  tests run the real export (`compositeSceneAt`) on a scene that carries `baseCrop`: a blur over
+  the cropped-out part, and one straddling the crop edge, are baked into the whole asset; redact,
+  crop out, save, expand the crop: the stored pixels stay redacted. Each fails if the compositor
+  hands the bake the visible rect instead of the placement. A resized base is baked through its
+  placed rect; an invalid placement throws.
+- `annotations/compositor.test.ts` — the export hands the placement, not the crop, to the bake;
+  a frame past `MAX_EXPORT_SIDE` is refused before rasterizing.
+- `annotations/canvas-doc.test.ts` also covers the visible-side bound of the reader.
 - `pages/screenshot-editor/screenshot-editor-page.document.test.tsx` — Save over a reopened v3
   document with a resized base hands that placement to the bake (this test fails without the fix).
 - `text-selection/geometry.test.ts` — redactions measured against the placed base; an invalid

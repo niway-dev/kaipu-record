@@ -26,6 +26,7 @@ import {
   contentExtents,
   hasExtents,
   intersectFrame,
+  MAX_EXPORT_SIDE,
   visibleBaseBounds,
   worldToFrame,
   type Bounds,
@@ -61,6 +62,17 @@ export function clampRasterScale(requested: number, w: number, h: number): numbe
   const longest = Math.max(w, h, 1);
   const fits = Math.floor(MAX_RASTER_SIDE / longest);
   return Math.max(1, Math.min(wanted, fits));
+}
+
+/**
+ * Refuses an export frame no canvas can hold, before anything is allocated at that size. The
+ * size comes from the document (a base resized to 100x is a 288 000 px frame), so it is checked
+ * here and not only when a file is read. Pure, exported for tests.
+ */
+export function assertExportSize(w: number, h: number): void {
+  if (!(w <= MAX_EXPORT_SIDE && h <= MAX_EXPORT_SIDE)) {
+    throw new Error(`compositor: export frame ${w}x${h} exceeds ${MAX_EXPORT_SIDE}px per side`);
+  }
 }
 
 export interface CompositeOptions {
@@ -166,6 +178,7 @@ export async function compositeSceneAt(
     geom.assets = assetHrefs;
   }
   const { outW, outH } = frameWindow(scene, geom);
+  assertExportSize(outW, outH);
   const svg = buildSvg(scene, geom);
   const rasterScale = clampRasterScale(options.rasterScale ?? 1, outW, outH);
   const png = await rasterize(svg, outW, outH, rasterScale);
@@ -463,7 +476,8 @@ function assetDefId(a: ImageAnnotation, g: Geom): string {
 /**
  * One added image: its shadow (same filter as the base, when shadow > 0), then the shared
  * asset clipped to a rect with the beautify radius. Authored in the annotation group's
- * space (already translated to the base's corner). As with the base, the clip sits on a
+ * space (already translated to the world origin, which is not the visible base's corner once the
+ * base is cropped or moved). As with the base, the clip sits on a
  * wrapping <g> that carries no transform of its own: a clip-path on the <use> that also
  * carries the x/y translation would be resolved in the translated space and land twice.
  * Outside canvas mode there are no image annotations; one is drawn as nothing.
@@ -493,7 +507,7 @@ function imageSvg(a: ImageAnnotation, g: Geom, shadow: boolean, idSuffix = ""): 
 
 /**
  * A mask that shows everything except the rects of `covers`. Authored in the annotation
- * group's space (translated to the base's corner), like the annotations it is applied to.
+ * group's space (translated to the world origin), like the annotations it is applied to.
  */
 function redactionCutMask(id: string, covers: readonly BlurAnnotation[], g: Geom): string {
   const far = 1_000_000;

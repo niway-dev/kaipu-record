@@ -50,6 +50,14 @@ export interface BaseView {
 }
 
 /**
+ * The longest side, in px, of the frame an export may produce. Chromium caps a canvas at 16384
+ * px per side, past which `toBlob` returns null, so a larger frame can never be saved. A
+ * hostile or corrupt document (a base resized to 100x) must not get as far as allocating one:
+ * the compositor refuses it and the reader opens the flattened PNG instead.
+ */
+export const MAX_EXPORT_SIDE = 16384;
+
+/**
  * The VISIBLE base rect in natural px relative to the world origin (the whole image's
  * top-left at scale 1), snapped OUTWARD to whole px: the export frame is a whole number of px,
  * and a visible rect that was snapped inward would leave the base's edge outside the content
