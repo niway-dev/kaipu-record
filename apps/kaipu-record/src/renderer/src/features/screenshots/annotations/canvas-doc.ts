@@ -364,8 +364,9 @@ function placementOf(item: CanvasImageItem): BasePlacement | undefined | null {
   // Sane bounds: a hostile file must not ask for a huge export; the editor opens the
   // flattened PNG instead.
   if (sx < MIN_BASE_SCALE || sx > MAX_BASE_SCALE) return null;
-  // The visible base is the content box of the export (its w/h are px at the asset's scale 1):
-  // a side no canvas can hold would be an export that can never be saved.
+  // A visible base (item.w/h, already scaled) wider than any canvas can never export, so the
+  // file opens as its flattened PNG. Padding or annotations can still push the frame past the
+  // cap; compositeSceneAt's assertExportSize refuses that at export, and Save/Copy show the error.
   if (item.w > MAX_EXPORT_SIDE || item.h > MAX_EXPORT_SIDE) return null;
   const x = (item.x - c.x * fullW) / item.pixelWidth;
   const y = (item.y - c.y * fullH) / item.pixelHeight;
