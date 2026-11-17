@@ -497,6 +497,16 @@ describe("canvas document — per-image crop (v3)", () => {
     expect(parsed!.scene.annotations[0]).not.toHaveProperty("radius");
   });
 
+  it("ignores a malformed crop or radius in a v2 file instead of refusing it", () => {
+    const doc = JSON.parse(JSON.stringify(buildCanvasDoc(withImages, base)));
+    doc.schemaVersion = 2;
+    doc.items[1].crop = { x: 9, y: 0, w: 0, h: 1 };
+    doc.items[1].radius = -4;
+    const parsed = parseCanvasDoc(JSON.stringify(doc));
+    expect(parsed).not.toBeNull();
+    expect(parsed!.scene.annotations[0]).not.toHaveProperty("crop");
+  });
+
   it("falls back to the flattened PNG for a crop outside the asset or a negative radius", () => {
     const bad = (patch: (item: any) => void) =>
       parseCanvasDoc(

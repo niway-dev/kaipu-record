@@ -155,7 +155,8 @@ const toNormMaps = (b: WorldBase) =>
 /**
  * Builds the document for a save (always the current version, in world units). Every
  * redaction is written `locked`: this save bakes its pixels into every image it touches.
- * `crop` is not stored (canvas mode exports by `exportFrame`). An image annotation is
+ * The scene-level `crop` is not stored (canvas mode exports by `exportFrame`); an image's own
+ * `crop` and `radius` are (v3). An image annotation is
  * written as an image item at its z-position, after the base.
  *
  * `lockedAt(id)` (epoch ms) is asked for each redaction that is not yet locked in memory:
@@ -202,7 +203,7 @@ export interface ParsedCanvasDoc {
    * here: they are `ImageAnnotation`s in `scene.annotations`, at their z-position.
    */
   base: CanvasImageItem;
-  /** Base-normalized, whatever the stored version. `crop` is always undefined: canvas mode exports by `exportFrame`. */
+  /** Base-normalized, whatever the stored version. the scene-level `crop` is always undefined (canvas mode exports by `exportFrame`); an image's own `crop`/`radius` are kept. */
   scene: Scene;
 }
 
@@ -214,7 +215,8 @@ const str = (v: unknown): v is string => typeof v === "string";
 const MIN_CROP = 1e-3;
 const nums = (o: Obj, keys: string[]): boolean => keys.every((k) => num(o[k]));
 
-function parseImage(o: Obj): CanvasImageItem | null {
+/** `extras`: read `crop`/`radius` (v3 only); an older version never wrote them, so they are ignored there, valid or not. */
+function parseImage(o: Obj, extras: boolean): CanvasImageItem | null {
   if (!str(o.id) || !str(o.assetId) || !CANVAS_ASSET_ID_PATTERN.test(o.assetId)) return null;
   if (!nums(o, ["x", "y", "w", "h", "pixelWidth", "pixelHeight"])) return null;
   if ((o.w as number) <= 0 || (o.h as number) <= 0) return null;
@@ -230,7 +232,7 @@ function parseImage(o: Obj): CanvasImageItem | null {
     pixelWidth: o.pixelWidth as number,
     pixelHeight: o.pixelHeight as number,
   };
-  if (o.crop !== undefined) {
+  if (extras && o.crop !== undefined) {
     const c = o.crop;
     // A window inside the asset: a crop outside 0–1 would read pixels that do not exist.
     if (!isObj(c) || !nums(c, ["x", "y", "w", "h"])) return null;
@@ -240,7 +242,7 @@ function parseImage(o: Obj): CanvasImageItem | null {
       return null;
     item.crop = { x, y, w, h };
   }
-  if (o.radius !== undefined) {
+  if (extras && o.radius !== undefined) {
     if (!num(o.radius) || o.radius < 0) return null;
     item.radius = o.radius;
   }
@@ -334,7 +336,7 @@ export function parseCanvasDoc(json: string): ParsedCanvasDoc | null {
   // Item 0 first: every other value of a v2 document is converted by the base's rect.
   const first: unknown = items[0];
   if (!isObj(first) || first.kind !== "image") return null; // item 0 must be the base image
-  base = parseImage(first);
+  base = parseImage(first, true);
   // The base has no crop or radius yet: reading one as the base's world rect would be silently wrong.
   if (!base || base.crop || base.radius !== undefined) return null;
   const [px, py, sw, sh] = version !== 1 ? toNormMaps(base) : [null, null, null, null];
@@ -343,7 +345,7 @@ export function parseCanvasDoc(json: string): ParsedCanvasDoc | null {
     const item: unknown = items[i];
     if (!isObj(item)) return null;
     if (item.kind === "image") {
-      const image = parseImage(item);
+      const image = parseImage(item, version === 3);
       if (!image) return null;
       // v1 never held added images: M3 ignored extras, so does this.
       if (version === 1) continue;
@@ -359,9 +361,8 @@ export function parseCanvasDoc(json: string): ParsedCanvasDoc | null {
           h: image.h,
           pixelWidth: image.pixelWidth,
           pixelHeight: image.pixelHeight,
-          // Only a v3 document can hold them; a v2 file never wrote either.
-          ...(version === 3 && image.crop ? { crop: image.crop } : {}),
-          ...(version === 3 && image.radius !== undefined ? { radius: image.radius } : {}),
+          ...(image.crop ? { crop: image.crop } : {}),
+          ...(image.radius !== undefined ? { radius: image.radius } : {}),
         }),
       );
       continue;

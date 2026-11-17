@@ -128,8 +128,11 @@ pixels. A crop must never let a redaction be "forgotten":
 
 This is the same class of problem as the redaction privacy fix
 [NIW2-799](https://linear.app/niway/issue/NIW2-799) (a redaction that showed through a later image), which is why it is a hard
-requirement and has tests: a redaction cropped out and saved stays redacted when the crop is
-widened, and a blur that misses the whole asset still does not touch it.
+requirement and has tests: the blur over a cropped-out part, one straddling the crop edge, and one
+asset placed twice with different crops are all baked through the whole asset's rect, and a blur
+that misses the whole asset still does not touch it. What the unit tests cannot show is the
+saved-then-widened flow on real pixels (the test canvas only records the rects it blurs); unit 4
+adds that check with the crop writer.
 
 Consequences for later units. Found in review of unit 1 and 2, they are latent until a crop can be
 written, so they are **blocking for unit 4**:
@@ -194,7 +197,7 @@ with a catalog state per area:
 - chip state `cropped-image` (the hover chip on a cropped image);
 - tool panel state `imageOptions` (the same action component in the Tool tab).
 
-## ADR 0053 check {#adr-0053-check}
+## ADR 0053 check
 
 [ADR 0053](/architecture/decisions/0053-the-image-editor-is-a-canvas-saved-as-a-document-beside-its-flattened-export/)
 is not contradicted in its Decision section. Two lines need a note:
@@ -226,5 +229,6 @@ Unit 1 and 2 tests (existing files):
   a v2 document still loads, v2 ignores the new fields, invalid crop or radius falls back.
 - `annotations/compositor.test.ts` — cropped image draws the whole asset clipped to the visible
   rect, per-image radius, radius 0, def ids, and an uncropped image draws the same SVG as before.
-- `annotations/redaction.test.ts` — a blur over the cropped-out part is baked; a redaction cropped
-  out and saved stays redacted when the crop widens; a blur that misses the asset does nothing.
+- `annotations/redaction.test.ts` — a blur over the cropped-out part is baked; one straddling the
+  crop edge is baked; one asset placed twice with different crops is baked through the larger
+  placement; a blur that misses the asset does nothing.
