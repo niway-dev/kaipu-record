@@ -19,7 +19,7 @@ const NON_TEXT_INPUTS = new Set([
 function isTextEntryTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (target instanceof HTMLInputElement) return !NON_TEXT_INPUTS.has(target.type);
-  if (target.tagName === "TEXTAREA" || target.tagName === "SELECT") return true;
+  if (target.tagName === "TEXTAREA") return true;
   if (target.isContentEditable) return true;
   const attr = target.getAttribute("contenteditable");
   return attr !== null && attr !== "false";

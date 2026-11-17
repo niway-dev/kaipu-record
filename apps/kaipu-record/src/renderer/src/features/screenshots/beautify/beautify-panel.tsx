@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { PADDING_RANGE, RADIUS_RANGE, SHADOW_RANGE } from "./backgrounds";
 import { BackgroundSwatches } from "./background-swatches";
@@ -99,6 +99,9 @@ function Slider({
   onLive: (value: number) => void;
   onEnd: () => void;
 }): React.JSX.Element {
+  const end = useRef(onEnd);
+  end.current = onEnd;
+  useEffect(() => () => end.current(), []);
   return (
     <div className={styles.control}>
       <div className={styles.controlHead}>
@@ -116,10 +119,14 @@ function Slider({
         value={value}
         onPointerDown={onBegin}
         onPointerUp={onEnd}
+        // A lost key-up or pointer-up must not leave the edit open: an open edit blocks Undo.
+        onPointerCancel={onEnd}
+        onBlur={onEnd}
         onKeyDown={(e) => {
           // Only a key that moves the thumb opens an edit. Any other key (Tab, or the Undo chord)
           // would open one that no key-up on this slider closes, and an open edit blocks Undo.
-          if (SLIDER_KEYS.has(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) onBegin();
+          if (SLIDER_KEYS.has(e.key) && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey)
+            onBegin();
         }}
         onKeyUp={(e) => {
           if (SLIDER_KEYS.has(e.key)) onEnd();

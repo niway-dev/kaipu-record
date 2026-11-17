@@ -188,4 +188,16 @@ describe("ScreenshotEditorPage — Undo / Redo keys (NIW2-847)", () => {
     await waitFor(() => expect(padding().value).toBe(before));
     expect(annotations()).toBe(1);
   });
+
+  it("a slider that loses focus mid-edit does not leave Undo blocked", async () => {
+    mount();
+    await loadImage();
+    await drawBox();
+    const range = padding();
+    fireEvent.keyDown(range, { key: "ArrowRight" });
+    fireEvent.change(range, { target: { value: "40" } });
+    fireEvent.blur(range); // the key-up never arrives
+    undoKey();
+    await waitFor(() => expect(padding().value).not.toBe("40"));
+  });
 });
