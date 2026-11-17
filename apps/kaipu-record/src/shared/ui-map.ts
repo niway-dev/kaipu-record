@@ -404,7 +404,7 @@ export const UI_MAP = {
       // The canvas chrome (NIW2-711): the box Copy and Save export, the card the export frame
       // tool opens, and the notice that says where the content went when it is off stage.
       exportBox: {
-        states: ["labeled", "quiet", "transparentGap"],
+        states: ["labeled", "quiet"],
         gatedBy: [{ flag: "image-canvas" }],
       },
       exportFrameCard: { states: ["open"], gatedBy: [{ flag: "image-canvas" }] },

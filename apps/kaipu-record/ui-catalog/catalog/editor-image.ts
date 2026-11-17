@@ -515,7 +515,7 @@ export const editorImage = catalog(
         },
         { waitFor: { area: "editorImage.exportBox" } },
       ],
-      demonstrates: ["editorImage.exportBox:transparentGap"],
+      demonstrates: ["editorImage.exportBox:labeled"],
       stillOnScreen: { area: "editorImage.canvas", part: { text: "Drag to move" } },
       after: leaveAndRestore,
     },
