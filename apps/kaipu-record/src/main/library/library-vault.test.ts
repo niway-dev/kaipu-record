@@ -1,5 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultCaptureName } from "@shared/default-capture-name";
@@ -290,6 +300,13 @@ describe("LibraryVault", () => {
         const url = (await vault.describe("rec"))?.thumbnailUrl ?? "";
         expect(url).toMatch(/^kaipu-media:\/\/thumb\/rec\?v=\d+$/);
         expect(parseMediaUrl(url)).toMatchObject({ kind: "thumb", id: "rec" });
+
+        // Rewritten with a later mtime, the same jpg gets a different URL.
+        const later = new Date(Date.now() + 60_000);
+        await utimes(vault.thumbnailPath("rec"), later, later);
+        const rewritten = (await vault.describe("rec"))?.thumbnailUrl ?? "";
+        expect(rewritten).toMatch(/^kaipu-media:\/\/thumb\/rec\?v=\d+$/);
+        expect(rewritten).not.toBe(url);
       });
 
       it("refuses a recording without a webcam track and leaves its thumbnail alone", async () => {
