@@ -259,8 +259,9 @@ export function scrubPersonalPathsDeep<T>(value: T): T {
 
 /**
  * Property names that carry a library item's id. A local item's id is a file-name stem
- * projected from its title (ADR 0035), so it can spell the recording's name: it never leaves
- * the app, whatever event or crash report it sat in.
+ * projected from its title (ADR 0035), so it can spell the recording's name. Dropped as a
+ * top-level property of any event or crash report; an `id` nested inside a context object is not
+ * touched, so callers keep ids out of nested context.
  */
 export const ITEM_ID_PROPERTIES = ["id", "assetId", "localId"] as const;
 

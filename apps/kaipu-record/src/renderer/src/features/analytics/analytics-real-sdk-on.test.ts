@@ -20,6 +20,8 @@ describe("real posthog-js, preference on (NIW2-849)", () => {
     "sends the event and the crash report, with personal paths removed",
     async () => {
       const sent = installNetwork();
+      // The router keeps the item id in the hash, and a local id spells the recording's name.
+      window.location.hash = "#/library/Q3%20board%20call";
       const client = await loadClient();
       client.setAnalyticsEnabled(true, "device-abc");
       await allowJsdomUserAgent();
@@ -38,6 +40,8 @@ describe("real posthog-js, preference on (NIW2-849)", () => {
       expect(events).toContain("$exception");
       // The uncaught error reaches PostHog on its own, so the "off" test can fail on it.
       expect(events).toContain('"handled":false');
+      expect(events).toContain("$current_url");
+      expect(events).not.toMatch(/Q3(%20| )board/);
       expect(events).not.toContain("/Users/ana");
       expect(events).toContain("<user-path>");
     },

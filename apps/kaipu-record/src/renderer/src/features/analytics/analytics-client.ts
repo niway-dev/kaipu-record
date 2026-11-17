@@ -38,7 +38,7 @@ export interface PosthogConfigInput {
  * item-id properties, which can spell a recording's name.
  */
 export function scrubEventBeforeSend(event: CaptureResult | null): CaptureResult | null {
-  if (!event) return event;
+  if (!event?.properties) return event;
   return { ...event, properties: scrubEventProperties(event.properties) };
 }
 
@@ -78,6 +78,9 @@ export function buildPosthogConfig(
     disable_session_recording: true, // never record the screen-recorder's own screen
     capture_exceptions: true, // PostHog Error Tracking autocapture
     person_profiles: "always",
+    // The router puts ids in the hash (`#/library/<id>`), and a local id is a file-name stem.
+    // Without this the hash travels in `$current_url` and in the stored first-page URL.
+    disable_capture_url_hashes: true,
     // Off at launch: PostHog starts opted out, so no event or crash report can leave. Flags do
     // not depend on this switch; they load either way.
     opt_out_capturing_by_default: !input.capturing,

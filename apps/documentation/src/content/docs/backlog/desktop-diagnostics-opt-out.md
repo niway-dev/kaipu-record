@@ -60,9 +60,10 @@ is asked to rely on it.
   `Screen Recording (2).mov`, `Ana's Videos` or `Clients' Archive` goes whole (a few words after a
   second quoted value may go with it). It runs in `before_send` in both SDKs,
   over every string in the event, so a path in an exception message, a stack frame or a context
-  value never travels. The properties `id`, `assetId` and `localId` are dropped from every event: a
+  value never travels. The top-level properties `id`, `assetId` and `localId` are dropped from every event: a
   local item's id is a file-name stem projected from its title (ADR 0035), so it can spell the
-  recording's name. PostHog also stores the first page's URL and sends it with every flags
+  recording's name; for the same reason the URL hash (`#/library/<id>`) is not captured
+  (`disable_capture_url_hashes`). PostHog also stores the first page's URL and sends it with every flags
   request, which `before_send` never sees; `scrubStoredInitialInfo` removes personal paths from
   that stored value right after the SDK starts. A recordings folder outside those roots (say `/data/clips`) is not
   recognised: the settings folder offers the home folder and volumes, which are covered.
