@@ -2,9 +2,10 @@ import { useEffect } from "react";
 import { setAnalyticsEnabled } from "./analytics-client";
 
 /**
- * Run PostHog in the main window while diagnostics are enabled. Reads the persisted
- * deviceId (which the settings-store mints) and identifies with it, then follows the
- * Send diagnostics toggle without a restart. No-op without a key.
+ * Start PostHog in the main window and follow the Share usage and crash reports toggle
+ * without a restart. Reads the persisted deviceId (which the settings-store mints) and gives
+ * it to the SDK on every launch: with the toggle off the SDK still loads feature flags for
+ * that id, and sends no event or crash report. No-op without a key.
  */
 export function useInitAnalytics(): void {
   useEffect(() => {

@@ -4,6 +4,7 @@ import * as i18n from "@kaipu/i18n";
 import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 import { type KaipuElectronAPI, type PermissionStatus, type ShortcutAction } from "@shared/types";
 import { OnboardingOverlay } from "./onboarding-overlay";
+import { hasSeenPrivacyNotice } from "./onboarding-store";
 
 /** What main would send on `shortcut:fired`: every listener the overlay registered. */
 const shortcutListeners = new Set<(action: ShortcutAction) => void>();
@@ -21,6 +22,7 @@ function mockElectronAPI(overrides: Partial<KaipuElectronAPI> = {}): {
   requestAccessibility: ReturnType<typeof vi.fn>;
   requestRecordSelector: ReturnType<typeof vi.fn>;
   requestCaptureScreenshot: ReturnType<typeof vi.fn>;
+  updateSettings: ReturnType<typeof vi.fn>;
 } {
   const allDenied: PermissionStatus = { screen: false, microphone: false, camera: false };
   // Built as one object, `overrides` applied last, so the returned mocks below are
@@ -48,6 +50,8 @@ function mockElectronAPI(overrides: Partial<KaipuElectronAPI> = {}): {
       shortcutListeners.add(callback);
       return () => shortcutListeners.delete(callback);
     }),
+    // The Privacy step writes the share-usage toggle through the same call as Settings.
+    updateSettings: vi.fn().mockResolvedValue(undefined),
     requestRecordSelector: vi.fn(),
     requestCaptureScreenshot: vi.fn(),
     ...overrides,
@@ -61,6 +65,7 @@ function mockElectronAPI(overrides: Partial<KaipuElectronAPI> = {}): {
     requestAccessibility: api.requestAccessibility as ReturnType<typeof vi.fn>,
     requestRecordSelector: api.requestRecordSelector as ReturnType<typeof vi.fn>,
     requestCaptureScreenshot: api.requestCaptureScreenshot as ReturnType<typeof vi.fn>,
+    updateSettings: api.updateSettings as ReturnType<typeof vi.fn>,
   };
 }
 
@@ -76,8 +81,14 @@ async function toShortcuts(): Promise<void> {
   await screen.findByRole("heading", { name: /four shortcuts are the whole app/i });
 }
 
-async function toDone(): Promise<void> {
+async function toPrivacy(): Promise<void> {
   await toShortcuts();
+  fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+  await screen.findByRole("heading", { name: /your recordings are yours/i });
+}
+
+async function toDone(): Promise<void> {
+  await toPrivacy();
   fireEvent.click(screen.getByRole("button", { name: /continue/i }));
   await screen.findByRole("heading", { name: /you're set/i });
 }
@@ -266,6 +277,53 @@ describe("OnboardingOverlay", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it("Privacy comes after Shortcuts, says what is sent and what never is, with the toggle on", async () => {
+    mockElectronAPI({ checkPermissions: vi.fn().mockResolvedValue(granted) });
+    render(<OnboardingOverlay onClose={vi.fn()} />);
+    await toPrivacy();
+    expect(screen.getByText(/which features you use, and crash reports/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/your recordings, screenshots, screen, keystrokes or file names/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/a random id for this mac\. no account, name or email/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: /share usage and crash reports/i })).toBeChecked();
+    // Never claims nothing is sent, or that it needs permission.
+    expect(screen.queryByText(/nothing is sent|only with your permission/i)).toBeNull();
+    // Informs, never blocks: Continue is on.
+    expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
+  });
+
+  it("Privacy: the toggle writes diagnosticsEnabled and follows what Settings already holds", async () => {
+    const { updateSettings } = mockElectronAPI({
+      checkPermissions: vi.fn().mockResolvedValue(granted),
+      getSettings: vi.fn().mockResolvedValue({
+        shortcuts: defaultShortcutsFor("darwin"),
+        diagnosticsEnabled: false,
+      }),
+    });
+    render(<OnboardingOverlay onClose={vi.fn()} />);
+    await toPrivacy();
+    const toggle = screen.getByRole("switch", { name: /share usage and crash reports/i });
+    await waitFor(() => expect(toggle).not.toBeChecked());
+    fireEvent.click(toggle);
+    expect(updateSettings).toHaveBeenCalledWith({ diagnosticsEnabled: true });
+    expect(toggle).toBeChecked();
+  });
+
+  it("Privacy marks the notice as seen, so the step is not shown twice", async () => {
+    localStorage.clear();
+    mockElectronAPI({ checkPermissions: vi.fn().mockResolvedValue(granted) });
+    render(<OnboardingOverlay onClose={vi.fn()} />);
+    await toShortcuts();
+    expect(hasSeenPrivacyNotice()).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /your recordings are yours/i });
+    expect(hasSeenPrivacyNotice()).toBe(true);
+    localStorage.clear();
+  });
+
   it("You're set: Record something closes, then opens the capture widget to record", async () => {
     const { requestRecordSelector, requestCaptureScreenshot } = mockElectronAPI({
       checkPermissions: vi.fn().mockResolvedValue(granted),
@@ -330,6 +388,10 @@ describe("OnboardingOverlay", () => {
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     expect(await screen.findByText(/back from the system tray/)).toBeInTheDocument();
     expect(screen.queryByText(/⌘|⌃|menu bar/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    expect(await screen.findByText(/a random id for this computer/i)).toBeInTheDocument();
+    expect(screen.queryByText(/\bMac\b/)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     expect(await screen.findByText("Ctrl+Alt+2")).toBeInTheDocument();

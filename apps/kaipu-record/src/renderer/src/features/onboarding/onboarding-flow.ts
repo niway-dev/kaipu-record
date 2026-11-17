@@ -5,9 +5,9 @@ import type { ShortcutAction } from "@shared/types";
  * One rule shapes all of them: only Permissions blocks (screen + microphone).
  */
 
-export type StepId = "welcome" | "permissions" | "shortcuts" | "done";
+export type StepId = "welcome" | "permissions" | "shortcuts" | "privacy" | "done";
 
-export const STEPS: readonly StepId[] = ["welcome", "permissions", "shortcuts", "done"];
+export const STEPS: readonly StepId[] = ["welcome", "permissions", "shortcuts", "privacy", "done"];
 
 const PERMISSIONS_INDEX = STEPS.indexOf("permissions");
 

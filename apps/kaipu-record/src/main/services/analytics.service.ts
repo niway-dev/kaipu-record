@@ -49,7 +49,7 @@ function startClient(key: string): void {
 /**
  * Initialize posthog-node once. No-op without a key. Installs process-level crash
  * handlers so Node-side failures (file writes, IPC, window management) are captured.
- * With `enabled` false (Settings → App → Send diagnostics off) no client is created,
+ * With `enabled` false (Settings → App → Share usage and crash reports off) no client is created,
  * so every capture below is a no-op and nothing leaves the device.
  */
 export function initMainAnalytics(deviceId: string, enabled: boolean): void {

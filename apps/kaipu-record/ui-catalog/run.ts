@@ -1269,6 +1269,9 @@ async function runProfile(name: ProfileName, entries: CatalogEntry[]): Promise<v
     if (profile.neutralBackdrop) await coverDesktop(app);
     if (profile.onboarding === "keep") {
       await waitForArea(main, "onboarding.root", 15_000);
+    } else if (profile.onboarding === "notice") {
+      await dismissOnboarding(main, { notice: "keep" });
+      await waitForArea(main, "onboarding.privacyNotice", 15_000);
     } else {
       await dismissOnboarding(main);
     }
