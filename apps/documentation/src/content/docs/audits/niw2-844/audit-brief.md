@@ -13,6 +13,26 @@ first full desktop run passed 8,475 tests / 8 skipped. A later full run hit one 
 compiled renderer and worker, not jsdom. All 15 changed production source files matched the
 mini by SHA-256 (`source-manifest.json` in the M5 evidence folder).
 
+## Stack refresh after main changed (2026-11-17)
+
+`gh stack rebase design/niw2-844-zoom-aware-filmstrip --upstack` rebased all four
+layers onto main `b9dd6284d5a3ec34e5b97aff94b3382d09f7a6ba`. The stale two-layer local
+registration was backed up and reconstructed from GitHub with `gh stack checkout 676`.
+The owner's dirty main checkout was left unchanged.
+
+Conflicts were limited to the Clips block binding in `timeline-strip.tsx` and imports in
+`webcam-lane.tsx`. Resolution keeps main's `TimelineShowRangeContext`, camera-part controls,
+and all filmstrip props/rendering. `git range-diff` shows only changed surrounding context in
+the original editor-wiring commit; all twelve later commits replay unchanged. Stable patch IDs
+of the design, pure-logic, and worker layers match their pre-rebase versions exactly.
+No decoder protocol, pacing, time offset, cache budget, or fallback rule changed in resolution.
+
+Desktop type checks and the documentation build passed on the rebased tree. Full-suite result
+is recorded on the PR. The existing actual-app measurements above/below predate this base
+refresh: no new app latency, camera-parts interaction, or frame-time measurement was performed
+on the rebased tree. Previous red probes and the unavailable independent review remain open;
+this rebase does not establish acceptance or rollout readiness.
+
 ## Intent
 
 Original owner request:
