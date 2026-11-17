@@ -514,6 +514,12 @@ export const editorImage = catalog(
           to: { x: 0.56, y: 0.5 },
         },
         { waitFor: { area: "editorImage.exportBox" } },
+        {
+          waitFor: {
+            area: "editorImage.exportBox",
+            part: { css: '[data-testid="export-box-fill"]' },
+          },
+        },
       ],
       demonstrates: ["editorImage.exportBox:labeled"],
       stillOnScreen: { area: "editorImage.canvas", part: { text: "Drag to move" } },
