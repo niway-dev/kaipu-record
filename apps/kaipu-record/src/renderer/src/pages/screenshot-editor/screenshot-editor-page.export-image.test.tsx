@@ -196,6 +196,43 @@ describe("ScreenshotEditorPage — Export popover (image-canvas)", () => {
     expect(screen.queryByRole("radio", { name: "Web", checked: true })).toBeNull();
   });
 
+  it("clicking the already-selected option keeps the preset and its size cap", async () => {
+    imageCanvas = true;
+    mount(PASTE);
+    await loadImage();
+    openPopover();
+    fireEvent.click(radio("Web"));
+    fireEvent.click(radio("WebP"));
+    fireEvent.click(radio("1×"));
+    expect(radio("Web").getAttribute("aria-checked")).toBe("true");
+    expect(screen.queryByRole("radio", { name: "Custom" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Export…" }));
+    await waitFor(() => expect(exportImage).toHaveBeenCalled());
+    expect(exportImage.mock.calls.at(-1)![0]).toMatchObject({ format: "webp", maxSide: 1920 });
+  });
+
+  it("says the size could not be measured when the estimate encode fails", async () => {
+    imageCanvas = true;
+    exportImage.mockRejectedValue(new Error("encode failed"));
+    mount(PASTE);
+    await loadImage();
+    openPopover();
+    fireEvent.click(radio("Web"));
+    expect(await screen.findByText("Couldn't measure the size")).toBeTruthy();
+    expect(screen.queryByText("Measuring size…")).toBeNull();
+  });
+
+  it("Esc closes the popover and returns focus to the Export button", async () => {
+    imageCanvas = true;
+    mount(PASTE);
+    await loadImage();
+    openPopover();
+    expect(screen.getByRole("dialog", { name: "Export image" })).toBeTruthy();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Export image" })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Export" }));
+  });
+
   it("says a JPEG paints transparent areas white, only for JPEG on no background", async () => {
     imageCanvas = true;
     mount(PASTE);

@@ -1,6 +1,7 @@
 /*
  * The image editor's Export popover (NIW2-852) and its toolbar button, which sits where the PDF
- * button does and looks like it. Editor tokens only.
+ * button does and looks like it. Editor tokens, except `color: #fff` on the selected segment and
+ * `.primary` (text on the accent, the same exception as `.save` in screenshot-editor-page.module.css).
  */
 .anchor {
   position: relative;
@@ -172,7 +173,7 @@
 }
 
 .pixels {
-  font-weight: 600;
+  font-weight: var(--font-weight-semibold);
 }
 
 .size[data-state="wait"] {

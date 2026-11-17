@@ -55,6 +55,15 @@ describe("presets", () => {
     expect(presetOf(edited)).toBe("custom");
     expect(presetOf(withChange(settingsForPreset("web"), { scale: 2 }))).toBe("custom");
   });
+
+  it("keeps the preset and its cap when the chosen value is already selected", () => {
+    const web = settingsForPreset("web");
+    expect(withChange(web, { format: "webp" })).toBe(web);
+    expect(withChange(web, { scale: 1 })).toBe(web);
+    expect(withChange(web, { quality: 0.8 })).toBe(web);
+    expect(withChange(web, { format: "webp" }).maxSide).toBe(1920);
+    expect(presetOf(withChange(web, { scale: 1 }))).toBe("web");
+  });
 });
 
 describe("scaledSize", () => {

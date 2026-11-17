@@ -95,7 +95,7 @@ the error toast with Retry.
 | Custom   | any    | any     | any   | none             |
 
 The cap belongs to the preset: changing the format, quality or scale of a preset makes it Custom and
-drops the cap. The output size is `frame × scale`, then shrunk to the cap if it is larger. Examples
+drops the cap; clicking the value that is already selected changes nothing and keeps the preset. The output size is `frame × scale`, then shrunk to the cap if it is larger. Examples
 (illustrative): a 3840 × 2160 frame under Web becomes 1920 × 1080; an 800 × 600 frame under Web stays
 800 × 600; a 1000 × 500 frame at 2× is 2000 × 1000.
 

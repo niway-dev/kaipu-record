@@ -74,13 +74,19 @@ export function presetOf(settings: ImageExportSettings): PresetId {
 }
 
 /**
- * Change one field. Any edit leaves the preset: the cap belongs to the preset, so it goes too
- * (a "Web" file the person then sets to JPEG is no longer "capped at 1920").
+ * Change one field. A real edit leaves the preset: the cap belongs to the preset, so it goes too
+ * (a "Web" file the person then sets to JPEG is no longer "capped at 1920"). Choosing the value
+ * already selected changes nothing, so the settings (preset and cap) come back untouched.
  */
 export function withChange(
   settings: ImageExportSettings,
   change: Partial<Pick<ImageExportSettings, "format" | "quality" | "scale">>,
 ): ImageExportSettings {
+  const same =
+    (change.format === undefined || change.format === settings.format) &&
+    (change.quality === undefined || change.quality === settings.quality) &&
+    (change.scale === undefined || change.scale === settings.scale);
+  if (same) return settings;
   return { ...settings, ...change, maxSide: null };
 }
 
