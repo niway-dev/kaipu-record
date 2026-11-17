@@ -41,6 +41,37 @@ workspace change or eviction, so reopening can reuse them.
 
 ## Verification and limits
 
+### Review correction status (2026-11-17)
+
+The saved measurements below describe `b01cf0cf`, not the subsequent CodeRabbit fixes.
+The five claims reviewed at `99da38cf` were reproduced locally before fixing them:
+a 30 fps tile's middle half excluded every valid frame; a worker-only Webcam lane mounted
+no tiles; an undecoded replacement escaped the blank sampler; both empty-tile latency
+branches reported `-Infinity`; report-write failures skipped scenario cleanup in all four
+verifiers. Regression coverage now exercises these failures without launching Electron.
+
+**Current-head actual-app evidence: not verified.** The historical zero-blank result is
+invalid as proof of AC12 across DOM replacement because the old sampler tracked element
+identity. Existing non-empty latency observations remain historical measurements, but their
+old assertions did not reject empty tile sets. No historical result proves the changed
+full-span planner or worker-only Webcam mounting.
+
+Before claiming current-head acceptance, rebuild the app and worker on the Mac mini and rerun:
+
+- Editor on/off scenarios, including a trimmed 10-second 30 fps clip at 20× zoom and a Webcam
+  whose legacy thumbnails/recording strips are empty, to capture own-time tiles and flag-off parity.
+- AC12 scrolling with the corrected logical lane/clip/span sampler, including an undecoded DOM
+  replacement; keep the initial-load limitation explicit (only previously decoded spans count).
+- Latency acceptance and larger stress fixtures with positive visible-tile counts in every row;
+  retain strict 500 ms failures. Repeat lifecycle and performance-on scenarios for the rebuilt
+  planner; prior performance/memory observations are not a current-head resource guarantee.
+
+The new cleanup fault-injection tests verify finalization after report-write failure and
+workspace removal even if finalization fails; an actual disk-full Electron run was not performed.
+No actual-app rerun was performed in this bounded five-finding implementation task. The remote
+Wachiman attempt exhausted its weekly quota; it is not an independent clean review. No merge,
+flag rollout, push, or review reply was performed.
+
 Measurements below were observed on 2026-11-17 on the Mac mini, with the production decoder
 path unchanged from layer 2. Code: `b01cf0cfc60f99b23728b12f1c32d1c70056b892`.
 The NIW2-807 log ended `chain done`; no other Electron test/export was active during these runs.

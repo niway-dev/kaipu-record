@@ -7,7 +7,7 @@ description: Verified implementation, review findings, measurement limits, and r
 
 **Branch** `feature/niw2-844-3-filmstrip-editor` · **Implementation head** `b01cf0cfc60f99b23728b12f1c32d1c70056b892` · **Generated** 2026-11-17
 
-**Check:** desktop type checks → exit 0; targeted filmstrip suites → exit 0, 183 tests. The
+**Historical baseline check:** desktop type checks → exit 0; targeted filmstrip suites → exit 0, 183 tests. The
 first full desktop run passed 8,475 tests / 8 skipped. A later full run hit one unrelated
 5-second workspace-move timeout; that file passed alone (42 tests). The bounded-worker full rerun (`bun run test --maxWorkers=4`) passed 8,475 tests / 8 skipped, exit 0. Documentation build → exit 0. Real-app scenarios below exercised the
 compiled renderer and worker, not jsdom. All 15 changed production source files matched the
@@ -79,6 +79,57 @@ the shipped worker still uses the original CanvasSink path, eight-slot passes, a
 | No new subagents or fresh independent local reviewer                                              | Dispatch another reviewer                                                | Current owner explicitly required solo implementation                                                    | user         | settled                              |
 
 ## Evidence and gaps
+
+### Review correction status (2026-11-17)
+
+Verified locally by gpt-6.1-sol; no subagents were dispatched. Local commits (not pushed):
+
+| CodeRabbit claim                                 | Kind    | Reproduction before fix                                           | Fix commit  |
+| ------------------------------------------------ | ------- | ----------------------------------------------------------------- | ----------- |
+| `4597731495`                                     | correct | 30 fps tile 2 returned `skip` through `planSlot`                  | `b88b8b642` |
+| `4597731516`                                     | correct | Undecoded logical-tile replacement counted zero blank samples     | `4a9b059a6` |
+| `4597731529`                                     | correct | Injected report-write rejection skipped all four `finish()` calls | `4a9b059a6` |
+| `4597731541`                                     | correct | Both request/no-request empty-tile rows returned `-Infinity`      | `4a9b059a6` |
+| Review `5936046516`, Webcam outside-diff finding | correct | Empty legacy strips prevented stored worker frames rendering      | `64d1ff161` |
+
+Before-fix production regressions: exit 1, 2 failed / 31 passed. Before-fix verifier
+regressions: exit 1, 7 failed / 1 passed. After fixes: desktop `bun run check-types`
+exit 0; `bun run test --maxWorkers=4` exit 0, 8,486 passed / 8 skipped; focused
+controller/verifier run exit 0, 27 passed. Changed-file lint and pre-commit checks exit 0.
+Documentation `bun run build` exit 0. `bun run proof:run --list filmstrip-editor
+filmstrip-latency filmstrip-lifecycle filmstrip-performance` exit 0, four scenarios loaded;
+listing does not execute them. Verifier regressions execute extracted scenario code with
+injected failures/image state; they do not establish real image decoding or Electron teardown.
+Session logs are preserved in the ignored `.evidence/niw2-844/review-99da38cf/` folder.
+
+The saved measurements below describe `b01cf0cf`, not the subsequent CodeRabbit fixes.
+The five claims reviewed at `99da38cf` were reproduced locally before fixing them:
+a 30 fps tile's middle half excluded every valid frame; a worker-only Webcam lane mounted
+no tiles; an undecoded replacement escaped the blank sampler; both empty-tile latency
+branches reported `-Infinity`; report-write failures skipped scenario cleanup in all four
+verifiers. Regression coverage now exercises these failures without launching Electron.
+
+**Current-head actual-app evidence: not verified.** The historical zero-blank result is
+invalid as proof of AC12 across DOM replacement because the old sampler tracked element
+identity. Existing non-empty latency observations remain historical measurements, but their
+old assertions did not reject empty tile sets. No historical result proves the changed
+full-span planner or worker-only Webcam mounting.
+
+Before claiming current-head acceptance, rebuild the app and worker on the Mac mini and rerun:
+
+- Editor on/off scenarios, including a trimmed 10-second 30 fps clip at 20× zoom and a Webcam
+  whose legacy thumbnails/recording strips are empty, to capture own-time tiles and flag-off parity.
+- AC12 scrolling with the corrected logical lane/clip/span sampler, including an undecoded DOM
+  replacement; keep the initial-load limitation explicit (only previously decoded spans count).
+- Latency acceptance and larger stress fixtures with positive visible-tile counts in every row;
+  retain strict 500 ms failures. Repeat lifecycle and performance-on scenarios for the rebuilt
+  planner; prior performance/memory observations are not a current-head resource guarantee.
+
+The new cleanup fault-injection tests verify finalization after report-write failure and
+workspace removal even if finalization fails; an actual disk-full Electron run was not performed.
+No actual-app rerun was performed in this bounded five-finding implementation task. The remote
+Wachiman attempt exhausted its weekly quota; it is not an independent clean review. No merge,
+flag rollout, push, or review reply was performed.
 
 **Verified this recovery:**
 
