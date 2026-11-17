@@ -17,10 +17,12 @@ import { startScenario } from "./helpers";
  * Each launch opens the take in the editor, zooms to 2,000% and reads the DOM:
  *   - AC1/AC2  every visible Clips tile reads a frame from inside its own span, and how long it
  *              took after the view came to rest (`data-filmstrip-own`, `data-filmstrip-span`);
- *   - AC6      no new image is decoded while the take plays (object URLs minted during playback);
+ *   - AC6      no new image is decoded while the take plays (every `URL.createObjectURL` call the
+ *              page makes during playback is counted, the filmstrip's or not);
  *   - AC7      a continuous scroll (a step every 60 ms, under the 120 ms rest) mints none, and the
  *              tiles are right once the view rests;
- *   - AC12     no tile ever shows an image that is not decoded (checked at every `src` change).
+ *   - AC12     no tile ever shows an image that is not decoded (every tile is sampled on every
+ *              animation frame while the view moves and zooms; `src` changes are counted too).
  * AC10 (a workspace switch) and the export half of AC6 are pinned by the unit tests only: the
  * scenario has one workspace and does not export a 54-minute take.
  *
@@ -407,6 +409,35 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
       path: path.join(OUT, `${SIDE}-timeline-crop.png`),
     });
     result.window = await page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
+
+    // ---- what each side must show (the numbers above are in the JSON either way)
+    if (SIDE === "on") {
+      const ac12 = result.ac12 as { blankTileSamples: number };
+      const ac7 = result.ac7 as {
+        mintedDuringScroll: number;
+        msUntilAllOwnAfterRest: number | null;
+      };
+      const ac6 = result.ac6 as { mintedDuringPlay: number };
+      const zoom = result.ac1ac2Zoom as { notOwn: unknown[] };
+      expect(restZoom, "AC1: every tile own after the zoom").not.toBeNull();
+      expect(restZoom!, "AC1: within 500 ms of the view resting").toBeLessThanOrEqual(500);
+      expect(zoom.notOwn, "AC1: no tile reads a frame from outside its span").toEqual([]);
+      for (const jump of jumps as { fraction: number; msUntilAllOwn: number | null }[]) {
+        expect(jump.msUntilAllOwn, `AC1 after the jump to ${jump.fraction}`).not.toBeNull();
+        expect(jump.msUntilAllOwn!).toBeLessThanOrEqual(500);
+      }
+      expect(ac7.mintedDuringScroll, "AC7: a continuous scroll decodes nothing").toBe(0);
+      expect(ac7.msUntilAllOwnAfterRest, "AC7: the tiles are right once it rests").not.toBeNull();
+      expect(ac6.mintedDuringPlay, "AC6: nothing decodes while playing").toBe(0);
+      expect(ac12.blankTileSamples, "AC12: no tile goes blank").toBe(0);
+    } else {
+      expect(result.filmstripAttributes, "AC11: today's row carries no filmstrip attribute").toBe(
+        0,
+      );
+    }
+  } catch (error) {
+    result.error = error instanceof Error ? error.message : String(error);
+    throw error;
   } finally {
     result.error = result.error ?? null;
     await writeFile(path.join(OUT, `${SIDE}.json`), JSON.stringify(result, null, 2));

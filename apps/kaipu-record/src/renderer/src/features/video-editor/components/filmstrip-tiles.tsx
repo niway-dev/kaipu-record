@@ -12,7 +12,7 @@
  *
  * With the flag off none of this renders: the callers keep today's `img` map.
  */
-import { memo, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { CoveredRange } from "../use-source-thumbnails";
 import type { StoredFrame } from "../filmstrip-store";
 import { getFilmstripStore } from "../filmstrip-service";
@@ -111,7 +111,7 @@ export interface FilmstripTilesProps {
   className: string;
 }
 
-export const FilmstripTiles = memo(function FilmstripTiles({
+export function FilmstripTiles({
   tiles,
   entry,
   binding,
@@ -157,4 +157,4 @@ export const FilmstripTiles = memo(function FilmstripTiles({
       })}
     </>
   );
-});
+}

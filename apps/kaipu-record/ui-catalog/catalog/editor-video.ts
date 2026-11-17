@@ -685,12 +685,19 @@ export const editorVideo = catalog(
         zoomIn,
         zoomIn,
         zoomIn,
-        // The tiles decode only after the view rests (120 ms); a tile is ready once it reads a frame
-        // inside its own span.
+        // The tiles decode only after the view rests (120 ms): first one tile reads a frame inside
+        // its own span, then no tile is left reading one from outside it.
         {
           waitFor: {
             area: "editorVideo.timeline",
             part: { css: 'img[data-filmstrip-own="true"]' },
+          },
+        },
+        {
+          waitFor: {
+            area: "editorVideo.timeline",
+            part: { css: 'img[data-filmstrip-own="false"]' },
+            state: "hidden",
           },
         },
       ],

@@ -92,11 +92,14 @@ describe("frameForTile", () => {
   it("reads the file's own time through the offset (AC2: the webcam's start offset)", () => {
     // The webcam file starts 5 s after the screen: its frame at 33 is the source's 38.
     const entry = clip();
-    const picked = frameForTile({ frames, tile: tile(3, 10, entry), entry, fileOffset: -5 });
-    // Tile 3 is source [30, 40) = file [35, 45): the frame at 33 is outside it, so it is the
-    // nearest inside the clip instead.
-    expect(picked!.span).toEqual({ start: 35, end: 45 });
+    const picked = frameForTile({ frames, tile: tile(3, 10, entry), entry, fileOffset: 5 });
+    // Tile 3 is source [30, 40) = file [25, 35): the frame at 33 is inside it.
+    expect(picked!.span).toEqual({ start: 25, end: 35 });
     expect(picked?.frame.url).toBe("inside");
+    // Read with no offset, the same tile is [30, 40) and the frame at 33 is inside it too, so
+    // only the span tells the two apart: the offset moved it.
+    const unshifted = frameForTile({ frames, tile: tile(3, 10, entry), entry, fileOffset: 0 });
+    expect(unshifted!.span).toEqual({ start: 30, end: 40 });
   });
 
   it("AC4: never takes a frame from outside the clip while one inside exists", () => {

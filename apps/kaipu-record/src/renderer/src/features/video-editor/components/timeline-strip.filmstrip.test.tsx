@@ -104,11 +104,18 @@ const files = new Map<string | null, string>([
   ["src-b", JOINED_KEY],
 ]);
 
-/** Adds frames, then waits out the store's publish throttle so the tiles see all of them. */
-async function storeFrames(fileKey: string, from: number, to: number): Promise<void> {
+/**
+ * Adds frames every 0.5 s from `from + shift`, then waits out the store's publish throttle so the
+ * tiles see all of them. A file's `shift` makes its timestamps tell it apart from another file's.
+ */
+async function storeFrames(fileKey: string, from: number, to: number, shift = 0): Promise<void> {
   await act(async () => {
     for (let t = from; t <= to; t += 0.5) {
-      getFilmstripStore().add(fileKey, { timestamp: t, blob: new Blob(["x"]), bytes: 1 });
+      getFilmstripStore().add(fileKey, {
+        timestamp: t + shift,
+        blob: new Blob(["x"]),
+        bytes: 1,
+      });
     }
     await new Promise((resolve) => setTimeout(resolve, PUBLISH_MS + 50));
   });
@@ -137,16 +144,24 @@ describe("TimelineStrip filmstrip (NIW2-844, flag zoom-filmstrip)", () => {
   it("draws a tile from the decoded frame of its own time, per file", async () => {
     const { container } = renderStrip({}, { filmstripFiles: files });
     await storeFrames(OPENED_KEY, 0, 25);
-    // The joined clip covers file time [0, 6] of the second recording (axis 3600..3606).
-    await storeFrames(JOINED_KEY, 0, 6);
+    // The joined clip covers file time [0, 6] of the second recording (axis 3600..3606). Its frames
+    // sit a quarter second off the opened file's, so a tile reading the wrong file shows.
+    await storeFrames(JOINED_KEY, 0, 6, 0.25);
     const framed = decodedTiles(container);
     expect(framed.length).toBeGreaterThan(0);
+    const frames: number[] = [];
     for (const img of framed) {
       const [start, end] = (img.getAttribute("data-filmstrip-span") ?? "").split(",").map(Number);
       const frame = Number(img.getAttribute("data-filmstrip-frame"));
+      frames.push(frame);
       expect(frame).toBeGreaterThanOrEqual(start);
       expect(frame).toBeLessThanOrEqual(end);
     }
+    // The joined clip's tile reads the joined file (a frame ending in .25 or .75) ...
+    expect(frames.some((f) => f % 0.5 === 0.25)).toBe(true);
+    // ... and the opened file's last clip, 14 to 25 s, reads the opened file (the joined file
+    // has nothing past 6.25 s).
+    expect(frames.some((f) => f > 14 && f % 0.5 === 0)).toBe(true);
   });
 
   it("keeps showing today's frames for a tile the store has no frame for yet", () => {
