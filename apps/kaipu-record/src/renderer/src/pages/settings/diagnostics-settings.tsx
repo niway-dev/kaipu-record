@@ -4,6 +4,7 @@ import { Row } from "@kaipu/ui";
 import { Toggle } from "@kaipu/ui";
 import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import { useAppSettings } from "./use-app-settings";
+import styles from "./diagnostics-settings.module.css";
 
 /**
  * Opt-out for usage and crash reports — writes AppSettings.diagnosticsEnabled, which both
@@ -19,7 +20,11 @@ export function DiagnosticsSettings(): React.JSX.Element {
   return (
     <Row
       label={t("diagnostics")}
-      description={t(isWindowsHost() ? "diagnosticsDescriptionWindows" : "diagnosticsDescription")}
+      description={
+        <span className={styles.description}>
+          {t(isWindowsHost() ? "diagnosticsDescriptionWindows" : "diagnosticsDescription")}
+        </span>
+      }
       action={
         <Toggle
           aria-label={t("diagnostics")}
