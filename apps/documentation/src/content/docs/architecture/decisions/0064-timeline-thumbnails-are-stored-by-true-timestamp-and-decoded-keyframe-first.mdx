@@ -44,9 +44,13 @@ Three facts shape the decision:
    only after counting the packets it would decode: above 300, the slot is skipped and the tile keeps
    the nearest frame.
 5. **Enforced budgets.** 48 MB of thumbnail bytes across all files, least recently used file evicted
-   first, and one media file open for thumbnail decoding at a time.
-6. **In a worker.** Demux, decode and JPEG encoding run in one dedicated worker, one job at a time,
-   and a newer request cancels the older one.
+   first, and one media file open for thumbnail decoding at a time. That file stays open between
+   requests and closes after 10 s without one, and its read cache is capped at 8 MiB instead of
+   mediabunny's 64 MiB default.
+6. **In a worker, paced.** Demux, decode and JPEG encoding run in one dedicated worker, one job at a
+   time, and a newer request cancels the older one. The worker decodes one frame at a time, yields
+   between frames and decodes at most 60 frames per second, nearest the playhead first. Whether it
+   decodes in hardware or software is decided by measurement on the real app.
 
 ## Alternatives rejected
 
