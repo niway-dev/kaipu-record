@@ -127,6 +127,12 @@ export const PROFILES = {
     flags: { "timeline-levels": true },
     slideSequence: true,
   },
+  "zoom-filmstrip": {
+    description:
+      "Flag zoom-filmstrip forced on: the video editor's Clips and Webcam tiles decode a frame of their own time once the timeline is zoomed in.",
+    seed: "demo",
+    flags: { "zoom-filmstrip": true },
+  },
   "image-canvas": {
     description:
       "Flag image-canvas forced on: the image editor's content-box canvas, pan, zoom and export frame.",

@@ -59,6 +59,7 @@ Ventana principal          Ventanas secundarias
 | `image-inspect`           | `false` | owner devices only | Image editor Inspect mode (NIW2-699).                                                                                                                                                                        |
 | `image-text`              | `false` | owner devices only | Text recognition in the image editor, macOS only (NIW2-705).                                                                                                                                                 |
 | `timeline-levels`         | `false` | owner devices only | Add from Library… in the video editor's Captures panel (NIW2-772); with it on, the button opens the Add from Library modal, whose destination chooser can add the image over the video (NIW2-771, NIW2-829). |
+| `zoom-filmstrip`          | `false` | not created yet    | The video editor's Clips and Webcam filmstrips decode a frame of each tile's own time when the timeline is zoomed in (NIW2-844). The PostHog flag is the owner's to create.                                  |
 
 posthog-js (≥ 1.261.8) returns `undefined` for a **disabled** or missing flag, so the code
 default applies, and `false` for an enabled flag the user does not match. A PostHog value

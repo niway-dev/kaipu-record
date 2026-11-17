@@ -42,6 +42,7 @@ import { NAME_LABEL } from "./webcam-name-label";
 import { WebcamLaneCard, type CardAnchor } from "./webcam-lane-card";
 import { WEBCAM_DEFAULTS, type WebcamLayout, type WebcamSegment } from "../webcam/webcam-model";
 import { thumbnailAt, thumbnailTiles, timeToFraction } from "./timeline-geometry";
+import { FilmstripTiles } from "./filmstrip-tiles";
 import {
   useTimelinePointer,
   useTimelineShowRange,
@@ -54,6 +55,13 @@ import { uiArea } from "@renderer/lib/ui-area";
 
 /** No known range: every tile gets its nearest frame. */
 const ALL_SOURCE: CoveredRange = { start: -Infinity, end: Infinity };
+
+/** With `zoom-filmstrip` on: the webcam file a recording's clips draw from, and where it starts. */
+export interface WebcamFilmstripFile {
+  fileKey: string;
+  /** The webcam file's start offset against its recording's own time (ADR 0037), in seconds. */
+  companionOffset: number;
+}
 
 export interface WebcamLaneProps {
   segments: WebcamSegment[];
@@ -77,6 +85,9 @@ export interface WebcamLaneProps {
   /** Each JOINED recording's webcam frames by `SceneSource.id`, at the recording's own time. A
    *  joined clip draws from its recording's strip only: never from `thumbnails`. */
   recordingStrips?: ReadonlyMap<string, CompanionThumbnails>;
+  /** The webcam files by `SceneSource.id` (null is the opened recording). Absent with the flag
+   *  off: tiles draw as they always did. */
+  filmstripFiles?: ReadonlyMap<string | null, WebcamFilmstripFile>;
   selectedId: string | null;
   /** The window a part would take while the drop card is open, in SOURCE time: a dashed block. */
   pendingPart?: { start: number; end: number } | null;
@@ -153,6 +164,7 @@ export const WebcamLane = memo(function WebcamLane({
   noCameraItemIds,
   clipRecordings = null,
   recordingStrips,
+  filmstripFiles,
   selectedId,
   pendingPart = null,
   onSelect,
@@ -265,6 +277,7 @@ export const WebcamLane = memo(function WebcamLane({
           const frames = joined ? (strip?.thumbnails ?? []) : thumbnails;
           const frameRange = joined ? (strip?.covered ?? ALL_SOURCE) : range;
           const shift = joined ? recording.offset : 0;
+          const filmstrip = filmstripFiles?.get(joined ? recording.sourceId : null);
           const width = timeToFraction(entry.timelineEnd - entry.timelineStart, duration);
           const { tiles } = thumbnailTiles({
             timelineStart: entry.timelineStart,
@@ -283,20 +296,35 @@ export const WebcamLane = memo(function WebcamLane({
                 width: `${width * 100}%`,
               }}
             >
-              {tiles.map((tile) => {
-                // A tile outside the file's footage stays empty: it must not borrow a frame.
-                const thumb = thumbnailAt(frames, tile.sourceTime - shift, frameRange);
-                return thumb ? (
-                  <img
-                    key={tile.index}
-                    src={thumb.url}
-                    alt=""
-                    className={styles.tile}
-                    style={{ left: `${tile.left * 100}%`, width: `${tile.width * 100}%` }}
-                    draggable={false}
-                  />
-                ) : null;
-              })}
+              {filmstrip ? (
+                <FilmstripTiles
+                  tiles={tiles}
+                  entry={entry}
+                  binding={{
+                    fileKey: filmstrip.fileKey,
+                    fileOffset: shift + filmstrip.companionOffset,
+                    legacyOffset: filmstrip.companionOffset,
+                  }}
+                  legacy={frames}
+                  covered={frameRange}
+                  className={styles.tile}
+                />
+              ) : (
+                tiles.map((tile) => {
+                  // A tile outside the file's footage stays empty: it must not borrow a frame.
+                  const thumb = thumbnailAt(frames, tile.sourceTime - shift, frameRange);
+                  return thumb ? (
+                    <img
+                      key={tile.index}
+                      src={thumb.url}
+                      alt=""
+                      className={styles.tile}
+                      style={{ left: `${tile.left * 100}%`, width: `${tile.width * 100}%` }}
+                      draggable={false}
+                    />
+                  ) : null;
+                })
+              )}
             </div>
           );
         })}
