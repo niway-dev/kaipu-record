@@ -69,6 +69,37 @@ describe("FrameStore: AC5 thumbnail bytes held never exceed 48 MB", () => {
     expect(store.bytes).toBeLessThanOrEqual(4);
   });
 
+  it("AC5: a frame added far from the view is itself the one dropped, and it is reported", () => {
+    const onEvict = vi.fn();
+    const store = new FrameStore<number>({ budgetBytes: 2, onEvict });
+    const view = { start: 100, end: 110 };
+    store.add("a", frame(105), view);
+    store.add("a", frame(108), view);
+    store.add("a", frame(400), view);
+    expect(stamps(store.frames("a"))).toEqual([105, 108]);
+    expect(onEvict).toHaveBeenCalledTimes(1);
+    expect(onEvict).toHaveBeenCalledWith("a", expect.objectContaining({ timestamp: 400 }));
+  });
+
+  it("AC5: with no view ever given, the frame just added is kept and the farthest ones go", () => {
+    const onEvict = vi.fn();
+    const store = new FrameStore<number>({ budgetBytes: 2, onEvict });
+    store.add("a", frame(10));
+    store.add("a", frame(20));
+    store.add("a", frame(15));
+    expect(stamps(store.frames("a"))).toContain(15);
+    expect(store.frames("a")).toHaveLength(2);
+    expect(onEvict).not.toHaveBeenCalledWith("a", expect.objectContaining({ timestamp: 15 }));
+  });
+
+  it("AC5: the last view given stays in force for later adds that pass none", () => {
+    const store = new FrameStore<number>({ budgetBytes: 2 });
+    store.add("a", frame(100), { start: 100, end: 110 });
+    store.add("a", frame(105));
+    store.add("a", frame(400)); // no view: the earlier one still decides, so 400 is the farthest
+    expect(stamps(store.frames("a"))).toEqual([100, 105]);
+  });
+
   it("AC5: a single frame larger than the whole budget is not kept", () => {
     const store = new FrameStore<number>({ budgetBytes: 5 });
     store.add("a", frame(1, 6));
@@ -332,7 +363,7 @@ describe("pickFrame: AC4 lookup rule", () => {
   });
 
   it("AC4: never a frame from outside the clip when one inside it exists", () => {
-    // 99.9 (before the cut) is 30.1 s from the tile's centre; 190 is 57 s away, still the pick.
+    // 99.9 (before the cut) is 33.1 s from the tile's centre (133); 190 is 57 s away, still the pick.
     const frames = [frame(99.9), frame(190), frame(200.1)];
     expect(pickFrame(frames, { start: 130, end: 136 }, clip)?.timestamp).toBe(190);
   });

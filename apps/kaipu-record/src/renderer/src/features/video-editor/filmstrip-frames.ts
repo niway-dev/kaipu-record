@@ -116,7 +116,8 @@ export class FrameStore<T> {
   /**
    * Keeps a frame under its true timestamp. A frame at an already stored timestamp replaces
    * it. `view` is the range the user is looking at; it only matters if this file alone ends
-   * up over budget. A frame with a non-finite timestamp or a negative or non-finite size is
+   * up over budget. The last `view` given stays in force for the file until a later add
+   * passes another; an add without one does not clear it. A frame with a non-finite timestamp or a negative or non-finite size is
    * refused (and reported through `onEvict`, so the caller releases it the usual way).
    */
   add(fileKey: string, frame: Frame<T>, view?: TimeRange): void {
