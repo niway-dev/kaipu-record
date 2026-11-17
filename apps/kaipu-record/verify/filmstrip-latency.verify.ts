@@ -85,7 +85,7 @@ function analyse(evs: Ev[], label: string, origin: number, visibleAtEnd: number[
       label,
       noRequest: true,
       tiles: visibleAtEnd.length,
-      allOwnAtMs: known.length === at.length ? Math.max(...known) : null,
+      allOwnAtMs: at.length > 0 && known.length === at.length ? Math.max(...known) : null,
       withinBudget: known.filter((v) => v <= BUDGET_MS).length,
     };
   }
@@ -127,7 +127,8 @@ function analyse(evs: Ev[], label: string, origin: number, visibleAtEnd: number[
     return since;
   });
   const known = tileOwnAt.filter((v): v is number => v !== null);
-  const allOwnAt = known.length === tileOwnAt.length ? Math.max(...known) : null;
+  const allOwnAt =
+    tileOwnAt.length > 0 && known.length === tileOwnAt.length ? Math.max(...known) : null;
 
   // Frame by frame: when it arrived, what the worker spent, and what is left over (the pacer's
   // yield, the pass set-up, the transfer).
@@ -490,6 +491,7 @@ test(`NIW2-844 layer 3: where the 500 ms of AC1 goes (${LABEL})`, async () => {
     };
     console.log(`[verify] ${LABEL}: ${JSON.stringify(result.warmSummary)}`);
     for (const row of rows) {
+      expect(row.tiles, `${row.label}: measurement requires visible tiles`).toBeGreaterThan(0);
       expect(row.allOwnAtMs, `${row.label}: every visible tile must be own-time`).not.toBeNull();
       expect(row.allOwnAtMs!, `${row.label}: AC1/2 must remain within 500 ms`).toBeLessThanOrEqual(
         BUDGET_MS,
@@ -500,7 +502,10 @@ test(`NIW2-844 layer 3: where the 500 ms of AC1 goes (${LABEL})`, async () => {
     throw error;
   } finally {
     result.error ??= null;
-    await writeFile(path.join(OUT, `${LABEL}.json`), JSON.stringify(result, null, 2));
-    await s.finish();
+    try {
+      await writeFile(path.join(OUT, `${LABEL}.json`), JSON.stringify(result, null, 2));
+    } finally {
+      await s.finish();
+    }
   }
 });

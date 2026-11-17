@@ -117,7 +117,10 @@ test(`filmstrip scroll and zoom frame times (${SIDE})`, async () => {
     throw error;
   } finally {
     result.error ??= null;
-    await writeFile(path.join(OUT, `performance-${SIDE}.json`), JSON.stringify(result, null, 2));
-    await s.finish();
+    try {
+      await writeFile(path.join(OUT, `performance-${SIDE}.json`), JSON.stringify(result, null, 2));
+    } finally {
+      await s.finish();
+    }
   }
 });

@@ -199,8 +199,14 @@ test("filmstrip pauses for a real export and clears on a real workspace switch",
     throw error;
   } finally {
     result.error ??= null;
-    await writeFile(path.join(OUT, "lifecycle.json"), JSON.stringify(result, null, 2));
-    await s.finish();
-    if (createdPath) await rm(createdPath, { recursive: true, force: true });
+    try {
+      await writeFile(path.join(OUT, "lifecycle.json"), JSON.stringify(result, null, 2));
+    } finally {
+      try {
+        await s.finish();
+      } finally {
+        if (createdPath) await rm(createdPath, { recursive: true, force: true });
+      }
+    }
   }
 });

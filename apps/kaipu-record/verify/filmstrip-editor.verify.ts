@@ -360,7 +360,7 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
           (resolve) => {
             const root = document.querySelector("[data-ui-area='editorVideo.timeline']")!;
             const body = document.querySelector<HTMLElement>('[data-testid="timeline-scroller"]')!;
-            const had = new WeakSet<HTMLImageElement>();
+            const had = new Set<string>();
             let samples = 0;
             let blankTileSamples = 0;
             let srcChanges = 0;
@@ -369,9 +369,14 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
             }).observe(root, { subtree: true, attributes: true, attributeFilter: ["src"] });
             let running = true;
             const sample = (): void => {
-              for (const img of root.querySelectorAll<HTMLImageElement>("img")) {
-                if (img.complete && img.naturalWidth > 0) had.add(img);
-                else if (had.has(img)) blankTileSamples += 1;
+              for (const img of root.querySelectorAll<HTMLImageElement>(
+                "img[data-filmstrip-span]",
+              )) {
+                // Keep continuity across React replacing an img in the same lane/clip/span.
+                // Separate repeated source spans by their clip's layout position.
+                const key = `${img.closest("[data-ui-area]")?.getAttribute("data-ui-area")}:${img.parentElement?.getAttribute("style")}:${img.getAttribute("data-filmstrip-span")}`;
+                if (img.complete && img.naturalWidth > 0) had.add(key);
+                else if (had.has(key)) blankTileSamples += 1;
               }
               samples += 1;
               if (running) requestAnimationFrame(sample);
@@ -461,8 +466,11 @@ test(`NIW2-844 layer 3: the editor filmstrip, side ${SIDE}`, async () => {
     throw error;
   } finally {
     result.error = result.error ?? null;
-    await writeFile(path.join(OUT, `${SIDE}.json`), JSON.stringify(result, null, 2));
-    console.log(`[verify] ${NAME}: ${JSON.stringify(result)}`);
-    await s.finish();
+    try {
+      await writeFile(path.join(OUT, `${SIDE}.json`), JSON.stringify(result, null, 2));
+      console.log(`[verify] ${NAME}: ${JSON.stringify(result)}`);
+    } finally {
+      await s.finish();
+    }
   }
 });
