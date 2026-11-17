@@ -465,6 +465,8 @@ test("a worker reads the take by Range, and what it costs", async () => {
       maxFramesInAny1sWindowHardware: (requests.hardware as { maxFramesInAny1sWindow: number })
         .maxFramesInAny1sWindow,
     };
+    // Drop what the loop above left in the buffer, so only this close can satisfy the wait.
+    await clearMessages(page);
     await post(page, { type: "close" });
     // The engine posts `closed` only after the file's close resolves; wait for it so it cannot
     // land after the clear below and be counted as an event of the explore run (AC13).
