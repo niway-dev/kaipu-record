@@ -30,9 +30,12 @@ is asked to rely on it.
   breaks), what never is (recordings, screen, files), and that with it off Kaipu still checks
   which features are on for this Mac. It never says "nothing is sent".
 - **What is sent, with it on:** `recording_started`, `screenshot_captured`,
-  `editor_speed_changed`, and `editor_opened` with `{ editor: "video" | "image" }` once per
-  loaded editor session (the hook is `useEditorOpened`). Plus crash reports. Identity is the
-  random per-install `deviceId`; there is no account, name or email.
+  `editor_speed_changed`, `library-detail-missing` (an opaque asset UUID and two counts, sent
+  when a library page cannot find its item) and `editor_opened` with
+  `{ editor: "video" | "image" }` once per loaded editor session (the hook is
+  `useEditorOpened`). Plus crash reports. Identity is the random per-install `deviceId`; there
+  is no account, name or email. No call site sends keystrokes, pixels or file names, which is
+  what the onboarding copy promises.
 - **What runs with it off:** only the feature-flags request, for that `deviceId`. No event and
   no crash report leaves the Mac, from either process.
 - **Renderer** (`features/analytics/analytics-client.ts`): `posthog-js` is always initialised
