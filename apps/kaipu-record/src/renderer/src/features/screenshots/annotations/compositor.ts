@@ -357,8 +357,9 @@ export function buildSvg(scene: Scene, g: Geom): string {
     const href = g.assets?.[a.assetId];
     if (href === undefined) throw new Error(`compositor: missing asset ${a.assetId}`);
     assetDefs.add(id);
+    const full = fullRect(a);
     defs.push(
-      `<image id="${id}" href="${href}" width="${fullRect(a).w * g.naturalW}" height="${fullRect(a).h * g.naturalH}" preserveAspectRatio="none"/>`,
+      `<image id="${id}" href="${href}" width="${full.w * g.naturalW}" height="${full.h * g.naturalH}" preserveAspectRatio="none"/>`,
     );
   }
 

@@ -60,6 +60,7 @@ export interface CanvasDocV1 {
   exportFrame?: CropRect;
 }
 
+/** Versions 2 and 3 share this shape: v3 only adds optional fields to image items. */
 export interface CanvasDocV2 {
   schemaVersion: 2 | 3;
   /**
@@ -336,7 +337,7 @@ export function parseCanvasDoc(json: string): ParsedCanvasDoc | null {
   // Item 0 first: every other value of a v2 document is converted by the base's rect.
   const first: unknown = items[0];
   if (!isObj(first) || first.kind !== "image") return null; // item 0 must be the base image
-  base = parseImage(first, true);
+  base = parseImage(first, version === 3);
   // The base has no crop or radius yet: reading one as the base's world rect would be silently wrong.
   if (!base || base.crop || base.radius !== undefined) return null;
   const [px, py, sw, sh] = version !== 1 ? toNormMaps(base) : [null, null, null, null];

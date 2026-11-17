@@ -230,5 +230,5 @@ Unit 1 and 2 tests (existing files):
 - `annotations/compositor.test.ts` — cropped image draws the whole asset clipped to the visible
   rect, per-image radius, radius 0, def ids, and an uncropped image draws the same SVG as before.
 - `annotations/redaction.test.ts` — a blur over the cropped-out part is baked; one straddling the
-  crop edge is baked; one asset placed twice with different crops is baked through the larger
-  placement; a blur that misses the asset does nothing.
+  crop edge is baked; one asset placed twice with different crops is baked through each placement's
+  whole-asset rect; a blur that misses the asset does nothing.
