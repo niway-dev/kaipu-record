@@ -157,7 +157,8 @@ let overridesSubscribed = false;
 /**
  * The active overrides: what main holds once this window has heard from it, else the launch
  * set the preload read (`KAIPU_FLAG_OVERRIDES`). Unpackaged builds only; always empty in a
- * packaged one. The first call also starts listening to main (see `subscribeToOverrideChanges`).
+ * packaged one. In a dev build the first call also starts listening to main (see
+ * `subscribeToOverrideChanges`).
  */
 export function currentFlagOverrides(): FlagOverrides {
   subscribeToOverrideChanges();
@@ -176,7 +177,9 @@ function setLiveOverrides(overrides: FlagOverrides): void {
  * snapshot's answer and wins.
  */
 function subscribeToOverrideChanges(): void {
-  if (overridesSubscribed) return;
+  // Dev builds only: a packaged build has no live overrides (main refuses them and the page is
+  // not routed), so it should not listen or ask main for an answer that is always empty.
+  if (overridesSubscribed || !import.meta.env.DEV) return;
   const api = window.electronAPI;
   if (!api?.onFlagOverridesChanged) return;
   overridesSubscribed = true;

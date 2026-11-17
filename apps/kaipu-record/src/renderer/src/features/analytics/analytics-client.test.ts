@@ -182,4 +182,32 @@ describe("live flag overrides (Developer page)", () => {
       api.getFlagOverrides = original.getFlagOverrides;
     }
   });
+
+  it("a production build neither listens to main nor asks it for the set", async () => {
+    vi.resetModules();
+    vi.stubEnv("DEV", false);
+    const api = window.electronAPI as unknown as {
+      flagOverrides: unknown;
+      onFlagOverridesChanged: unknown;
+      getFlagOverrides: unknown;
+    };
+    const original = { ...api };
+    const listen = vi.fn(() => () => {});
+    const snapshot = vi.fn(async () => ({ "image-canvas": true }));
+    api.flagOverrides = {};
+    api.onFlagOverridesChanged = listen;
+    api.getFlagOverrides = snapshot;
+    try {
+      const { isFlagEnabled, onFlagsChanged } = await import("./analytics-client");
+      onFlagsChanged(() => {});
+      expect(isFlagEnabled("image-canvas", false)).toBe(false);
+      expect(listen).not.toHaveBeenCalled();
+      expect(snapshot).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+      api.flagOverrides = original.flagOverrides;
+      api.onFlagOverridesChanged = original.onFlagOverridesChanged;
+      api.getFlagOverrides = original.getFlagOverrides;
+    }
+  });
 });
