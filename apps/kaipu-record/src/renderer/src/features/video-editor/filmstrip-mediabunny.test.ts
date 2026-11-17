@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { ALL_FORMATS, BufferSource, Input } from "mediabunny";
 import { describe, expect, it } from "vitest";
-import { createFilmstripUrlSource, createPacketIndex } from "./filmstrip-mediabunny";
+import {
+  createFilmstripUrlSource,
+  createPacketIndex,
+  filmstripRetryDelay,
+} from "./filmstrip-mediabunny";
 import { READ_CACHE_BYTES } from "./filmstrip-messages";
 import { countPacketsTo, planSlot, type PlannedSlot } from "./filmstrip-plan";
 import type { Slot } from "./filmstrip-frames";
@@ -31,6 +35,15 @@ describe("createFilmstripUrlSource: AC13 the read cache is capped", () => {
       ._orchestrator.options.maxCacheSize;
     expect(READ_CACHE_BYTES).toBe(8 * 1024 * 1024);
     expect(cache).toBe(READ_CACHE_BYTES);
+  });
+});
+
+describe("filmstripRetryDelay: a failed request is tried twice more", () => {
+  it("waits 0.5 s after the first failure, 1.5 s after the second, then gives up", () => {
+    // mediabunny passes the failure count including the one that just happened (1-based).
+    expect(filmstripRetryDelay(1)).toBe(0.5);
+    expect(filmstripRetryDelay(2)).toBe(1.5);
+    expect(filmstripRetryDelay(3)).toBeNull();
   });
 });
 

@@ -20,8 +20,10 @@ import { startScenario } from "./helpers";
  *    decoding, CPU during a 17-frame request, process memory after exploring, per-slot against a
  *    single forward pass.
  * 3. RULES: AC13 (one file, idle close), AC5 (the second file closes the first), AC8 (a file with
- *    one keyframe is never decoded past 300 packets), AC14 (frames per second, from the worker's
- *    own clock).
+ *    one keyframe: the far slots are skipped at plan time, `skippedOverCap`; the 300-packet bound
+ *    on a decoded slot is pinned by the unit tests, not measured here), AC14 (frames per second,
+ *    from the worker's own clock; one 62-slot request may stay under 60 per second on its own, so
+ *    this shows the limit holds, and the pacer itself is pinned by the unit tests).
  *
  * The worker is bundled for the probe with `bun build` (the editor does not start it until
  * layer 3), together with `verify/filmstrip-probe/` which adds fetch logging and a `bench`
@@ -659,10 +661,11 @@ test("a worker reads the take by Range, and what it costs", async () => {
     await page.waitForTimeout(3000);
     result.memoryTerminate = { before: beforeTerminate.byTypeMb, after: (await usage(s)).byTypeMb };
 
-    // AC8: a file with one keyframe is never decoded past the packet cap: the far slots are skipped.
+    // AC8: on a file with one keyframe the far slots are skipped (the plan-time decision only).
     expect(result.ac8).toMatchObject({ failed: 0 });
     expect((result.ac8 as { skippedOverCap: number }).skippedOverCap).toBeGreaterThan(0);
-    // AC14: never more than 60 frames in any 1 s window, with either decoder.
+    // AC14: never more than 60 frames in any 1 s window, with either decoder. A 62-slot request
+    // can pass without the pacer sleeping; the unit tests drive the pacer past the limit.
     const pace = result.ac14 as {
       limit: number;
       maxFramesInAny1sWindowSoftware: number;

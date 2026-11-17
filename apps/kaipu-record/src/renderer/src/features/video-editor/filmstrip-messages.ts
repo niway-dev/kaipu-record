@@ -91,7 +91,10 @@ export interface FilmstripDoneMessage {
   skippedNoFrame: number;
   /** Slots whose exact decode would pass the packet cap (AC8): the tile keeps the nearest frame. */
   skippedOverCap: number;
-  /** Slots whose decode threw. */
+  /**
+   * Slots left unfilled because of an error: a decode or plan that threw, and the slots given up
+   * on after repeated failures in a row.
+   */
   failed: number;
   /** True when this request had to open the file (false: it was still open from before). */
   openedFile: boolean;

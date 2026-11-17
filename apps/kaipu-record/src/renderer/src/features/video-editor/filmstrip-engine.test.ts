@@ -357,7 +357,9 @@ describe("the request queue: decision 14", () => {
   it("shares one decode between slots of one keyframe (a group is decoded once)", async () => {
     const t = setup();
     const decoded: number[] = [];
+    const passes: number[][] = [];
     t.opener.onDecode = (s) => decoded.push(s.index);
+    t.opener.onPass = (group) => passes.push(group.items.map((i) => i.slot.index));
     t.opener.fileOptions.plan = (s) => ({
       kind: "plan",
       slot: s,
@@ -374,6 +376,8 @@ describe("the request queue: decision 14", () => {
       ),
     );
     expect(decoded).toEqual([0, 1, 2]);
+    // One keyframe group is one decoder pass.
+    expect(passes).toEqual([[0, 1, 2]]);
     // ...but the frames are posted in that decode order, not the served order.
     expect(t.frames().map((f) => f.slotIndex)).toEqual([0, 1, 2]);
   });

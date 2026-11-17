@@ -29,6 +29,14 @@ const CANVAS_POOL_SIZE = 2;
 const RETRY_DELAYS_S = [0.5, 1.5];
 
 /**
+ * mediabunny's `getRetryDelay` counts from 1 (it passes the number of failures so far, already
+ * including this one: `++consecutiveReadFailures`), so the first retry is attempt 1.
+ */
+export function filmstripRetryDelay(failuresSoFar: number): number | null {
+  return RETRY_DELAYS_S[failuresSoFar - 1] ?? null;
+}
+
+/**
  * The byte source for one recording. `UrlSource` keeps up to 64 MiB of reads by default; a
  * thumbnail decoder reads a key packet here and there and gains little from that, so the cache
  * is capped at {@link READ_CACHE_BYTES} (decision 12, AC13).
@@ -36,7 +44,7 @@ const RETRY_DELAYS_S = [0.5, 1.5];
 export function createFilmstripUrlSource(url: string): UrlSource {
   return new UrlSource(url, {
     maxCacheSize: READ_CACHE_BYTES,
-    getRetryDelay: (attempts) => RETRY_DELAYS_S[attempts] ?? null,
+    getRetryDelay: filmstripRetryDelay,
   });
 }
 
