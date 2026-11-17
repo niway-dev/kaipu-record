@@ -171,6 +171,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.pixels {
+  font-weight: 600;
+}
+
 .size[data-state="wait"] {
   color: var(--ie-tx2);
 }

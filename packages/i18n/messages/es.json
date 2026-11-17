@@ -1206,7 +1206,7 @@
     "exportPresetWeb": "Web",
     "exportPresetSmall": "Pequeña",
     "exportPresetCustom": "Personalizado",
-    "exportCaptionOriginal": "PNG a tamaño completo, los mismos píxeles que guarda Guardar.",
+    "exportCaptionOriginal": "PNG a tamaño completo, igual al que crea el botón Guardar.",
     "exportCaptionWeb": "WebP con 80 % de calidad, lado mayor de hasta 1920 px.",
     "exportCaptionSmall": "JPEG con 70 % de calidad, lado mayor de hasta 1280 px.",
     "exportCaptionCustom": "Tus propios ajustes.",

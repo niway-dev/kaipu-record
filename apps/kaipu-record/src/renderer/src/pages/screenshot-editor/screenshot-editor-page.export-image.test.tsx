@@ -164,6 +164,8 @@ describe("ScreenshotEditorPage — Export popover (image-canvas)", () => {
 
   it("exports with the chosen settings, names the file by format and remembers them", async () => {
     imageCanvas = true;
+    const out = encoded("webp");
+    exportImage.mockResolvedValue(out);
     mount(PASTE);
     await loadImage();
     openPopover();
@@ -171,7 +173,8 @@ describe("ScreenshotEditorPage — Export popover (image-canvas)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Export…" }));
     await waitFor(() => expect(window.electronAPI.exportScreenshotFile).toHaveBeenCalledTimes(1));
     const [sent, meta] = vi.mocked(window.electronAPI.exportScreenshotFile).mock.calls[0];
-    expect((sent as ArrayBuffer).byteLength).toBe(2000);
+    // The bytes written are the encoder's output, untouched, and the name follows its format.
+    expect(sent).toBe(out.bytes);
     expect(meta.extension).toBe("webp");
     // The popover closes and the library is untouched: an export is a file for someone else.
     expect(screen.queryByRole("dialog", { name: "Export image" })).toBeNull();
