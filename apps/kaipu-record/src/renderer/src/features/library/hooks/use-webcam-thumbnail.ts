@@ -24,8 +24,9 @@ function needsComposite(video: LocalLibraryVideo): boolean {
  * detail, export, editor), and each must not compose the same recording again or in parallel.
  * `attempted` is never cleared while the app runs, so a broken file is not decoded on every
  * list refresh; the next launch tries again. It is keyed by asset id, like the write, so a
- * different recording under the same file id (another workspace) is not skipped. Every mounted hook hears each result, so a page
- * opened after the one that queued the item still shows the new poster.
+ * different recording under the same file id (another workspace) is not skipped. Every mounted
+ * hook hears each result, so a page opened after the one that queued the item still shows the
+ * new poster.
  */
 const attempted = new Set<string>();
 let queue: Promise<void> = Promise.resolve();
