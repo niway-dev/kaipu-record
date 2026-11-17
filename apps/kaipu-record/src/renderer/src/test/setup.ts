@@ -124,6 +124,8 @@ window.electronAPI = {
     cancel: async () => {},
   },
   flagOverrides: {},
+  setFlagOverride: async () => ({}),
+  onFlagOverridesChanged: () => () => {},
   platform: "darwin",
   getAppVersion: async () => "1.0.0",
   notifyReady: () => {},

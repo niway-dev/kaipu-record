@@ -1,7 +1,13 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { buildPosthogConfig, isFlagEnabled, scrubEventBeforeSend } from "./analytics-client";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  buildPosthogConfig,
+  flagState,
+  isFlagEnabled,
+  onFlagsChanged,
+  scrubEventBeforeSend,
+} from "./analytics-client";
 
 const ANY = { deviceId: "device-1", capturing: true };
 
@@ -92,5 +98,42 @@ describe("isFlagEnabled overrides", () => {
   it("falls back to the default for a flag with no override", () => {
     setOverrides({ "native-cursor-capture": true });
     expect(isFlagEnabled("image-canvas", true)).toBe(true);
+  });
+});
+
+describe("live flag overrides (Developer page)", () => {
+  it("a change from main wins over the launch overrides and tells subscribers", () => {
+    const api = window.electronAPI as unknown as {
+      flagOverrides: unknown;
+      onFlagOverridesChanged: unknown;
+    };
+    const original = { ...api };
+    let push: (overrides: Record<string, boolean>) => void = () => {};
+    api.flagOverrides = { "image-canvas": true };
+    api.onFlagOverridesChanged = (listener: typeof push) => {
+      push = listener;
+      return () => {};
+    };
+    try {
+      const subscriber = vi.fn();
+      const off = onFlagsChanged(subscriber);
+      expect(isFlagEnabled("image-canvas", false)).toBe(true);
+      expect(flagState("image-canvas", false)).toEqual({ value: true, source: "override" });
+
+      push({ "image-text": true });
+
+      expect(subscriber).toHaveBeenCalledTimes(1);
+      // The live set replaces the launch set: image-canvas is no longer pinned.
+      expect(isFlagEnabled("image-canvas", false)).toBe(false);
+      expect(flagState("image-canvas", false)).toEqual({ value: false, source: "default" });
+      expect(flagState("image-text", false)).toEqual({ value: true, source: "override" });
+
+      off();
+      push({});
+      expect(subscriber).toHaveBeenCalledTimes(1);
+    } finally {
+      api.flagOverrides = original.flagOverrides;
+      api.onFlagOverridesChanged = original.onFlagOverridesChanged;
+    }
   });
 });

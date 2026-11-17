@@ -2,7 +2,7 @@ import { NATIVE_CAPTURE_CHANNELS as nativeChannels } from "@shared/native-captur
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from "electron";
 import { electronAPI } from "@electron-toolkit/preload";
 import { IPC_CHANNELS } from "@shared/types";
-import { readFlagOverridesArg } from "@shared/flag-overrides";
+import { parseFlagOverrides, readFlagOverridesArg } from "@shared/flag-overrides";
 import type { AppSettings, ReconcileProgress, ShortcutAction } from "@shared/types";
 import type { AuthError, AuthStatus } from "@shared/types/auth";
 import type {
@@ -105,6 +105,18 @@ const kaipuApi: KaipuElectronAPI = {
     cancel: () => ipcRenderer.invoke(nativeChannels.cancel),
   },
   flagOverrides: Object.freeze(readFlagOverridesArg(process.argv)),
+  setFlagOverride: (name, value) => ipcRenderer.invoke(IPC_CHANNELS.flagOverrideSet, name, value),
+  onFlagOverridesChanged: (listener) => {
+    const handler = (_event: IpcRendererEvent, overrides: unknown): void => {
+      // Same validation as the launch argument: only known flags with boolean values get through.
+      const { overrides: valid } = parseFlagOverrides(JSON.stringify(overrides), {
+        isPackaged: false,
+      });
+      listener(Object.freeze(valid));
+    };
+    ipcRenderer.on(IPC_CHANNELS.flagOverridesChanged, handler);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.flagOverridesChanged, handler);
+  },
   platform: process.platform,
   getAppVersion: () => ipcRenderer.invoke(IPC_CHANNELS.getAppVersion),
   notifyReady: () => ipcRenderer.send(IPC_CHANNELS.appReady),

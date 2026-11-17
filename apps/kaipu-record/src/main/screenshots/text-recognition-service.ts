@@ -58,3 +58,11 @@ export function reportImageTextFlag(enabled: boolean): void {
   if (activeFlagOverrides()["image-text"] !== undefined) return;
   getTextRecognitionService().warmUp.setEnabled(enabled);
 }
+
+/**
+ * The Developer page pinned `image-text` (`true`/`false`) or cleared it (`undefined`). A pin
+ * starts or stops the warm-up now; a cleared pin leaves it to the renderer's next report.
+ */
+export function applyImageTextOverride(override: boolean | undefined): void {
+  if (override !== undefined) getTextRecognitionService().warmUp.setEnabled(override);
+}

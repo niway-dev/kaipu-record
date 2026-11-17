@@ -9,6 +9,7 @@ import {
   scrubPersonalPathsDeep,
   type FlagName,
 } from "@shared/analytics";
+import type { FlagOverrides } from "@shared/flag-overrides";
 
 /**
  * Two switches, on purpose (NIW2-849). `initialized`: the SDK is running, so remote feature
@@ -149,26 +150,65 @@ export function captureEvent(name: string, props?: Record<string, unknown>): voi
   posthog.capture(name, props);
 }
 
+/** Overrides pushed by main after a Developer page toggle; `null` until the first push. */
+let liveOverrides: FlagOverrides | null = null;
+let overridesSubscribed = false;
+
 /**
- * Read a flag, returning `fallback` while unresolved or when the build has no PostHog key.
- * It does not depend on the usage-and-crash-reports preference. A `KAIPU_FLAG_OVERRIDES`
- * override (unpackaged builds only) wins over PostHog, initialized or not.
+ * The active overrides: the latest set main pushed, else the launch set the preload read
+ * (`KAIPU_FLAG_OVERRIDES`). Unpackaged builds only; always empty in a packaged one.
  */
-export function isFlagEnabled(name: FlagName, fallback: boolean): boolean {
-  const override = window.electronAPI?.flagOverrides?.[name];
-  if (override !== undefined) return override;
-  if (!initialized) return fallback;
-  const value = posthog.isFeatureEnabled(name);
-  return value === undefined ? fallback : value;
+export function currentFlagOverrides(): FlagOverrides {
+  return liveOverrides ?? window.electronAPI?.flagOverrides ?? {};
+}
+
+function subscribeToOverrideChanges(): void {
+  if (overridesSubscribed) return;
+  const subscribe = window.electronAPI?.onFlagOverridesChanged;
+  if (!subscribe) return;
+  overridesSubscribed = true;
+  subscribe((overrides) => {
+    liveOverrides = overrides;
+    for (const listener of flagListeners) listener();
+  });
+}
+
+/** Where a flag's effective value comes from, in the order `isFlagEnabled` reads them. */
+export type FlagSource = "override" | "posthog" | "default";
+
+/** The effective value of a flag and which layer decided it. */
+export function flagState(
+  name: FlagName,
+  fallback: boolean,
+): { value: boolean; source: FlagSource } {
+  const override = currentFlagOverrides()[name];
+  if (override !== undefined) return { value: override, source: "override" };
+  if (initialized) {
+    const value = posthog.isFeatureEnabled(name);
+    if (value !== undefined) return { value, source: "posthog" };
+  }
+  return { value: fallback, source: "default" };
 }
 
 /**
- * Subscribe to flag (re)loads. Returns an unsubscribe fn. A component usually mounts before
- * the settings arrive and PostHog starts, so listeners are kept here and wired to PostHog
- * once it does, instead of being dropped.
+ * Read a flag, returning `fallback` while unresolved or when the build has no PostHog key.
+ * It does not depend on the usage-and-crash-reports preference. An override (unpackaged
+ * builds only: `KAIPU_FLAG_OVERRIDES` at launch, or the Developer page while running) wins
+ * over PostHog, initialized or not.
+ */
+export function isFlagEnabled(name: FlagName, fallback: boolean): boolean {
+  return flagState(name, fallback).value;
+}
+
+/**
+ * Subscribe to flag changes: PostHog (re)loads, and, in a dev build, overrides changed from
+ * the Developer page. Returns an unsubscribe fn. A component usually mounts before the
+ * settings arrive and PostHog starts, so listeners are kept here and wired to PostHog once it
+ * does, instead of being dropped.
  */
 export function onFlagsChanged(callback: () => void): () => void {
   flagListeners.add(callback);
+  subscribeToOverrideChanges();
   return () => {
     flagListeners.delete(callback);
   };
