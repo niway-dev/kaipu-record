@@ -73,7 +73,7 @@ let seededDir: string | undefined;
 
 // launchApp creates the workspace folder before it seeds it and returns teardown only after the
 // launch, so a seed or a launch that fails (a full copy that runs out of disk, an unreadable
-// sidecar, a missing out/) would leave a multi-GB folder behind. The seed removes it on its own
+// sidecar, an app that fails to start) would leave a multi-GB folder behind. The seed removes it on its own
 // failure, the launch call on the launch's; the small user-data folder is left as is.
 async function seed(vaultDir: string): Promise<void> {
   seededDir = vaultDir;
@@ -161,8 +161,6 @@ test("export memory of a real take, YouTube 1440p", async () => {
   test.skip(!SOURCE_DIR || !STEM, "set KAIPU_BENCH_SOURCE_DIR and KAIPU_BENCH_STEM");
   test.setTimeout(150 * 60_000);
   const outDir = path.resolve("test-results/verify", `export-memory-${LABEL}`);
-  await rm(outDir, { recursive: true, force: true });
-  await mkdir(outDir, { recursive: true });
 
   // The sidecar is the one required sidecar file; checked here, before launchApp creates any
   // temporary folder, so a wrong path fails without leaving one behind.
@@ -181,6 +179,9 @@ test("export memory of a real take, YouTube 1440p", async () => {
       version: string;
     }
   ).version;
+  // Only now, with the inputs checked: a run with a wrong path keeps the label's earlier results.
+  await rm(outDir, { recursive: true, force: true });
+  await mkdir(outDir, { recursive: true });
 
   const { app, page, vaultDir, teardown } = await launchApp({ seedVault: seed }).catch(
     async (error: unknown) => {

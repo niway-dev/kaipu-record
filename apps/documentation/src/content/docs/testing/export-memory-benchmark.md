@@ -52,6 +52,10 @@ that could not clone. It waits 20 s for the editor to settle, then exports. It w
 - `export-<label>.mp4`: the exported file, for `ffprobe`. It is as large as the export (8.6 GB
   for the take below), and each run with a new label adds one, so delete it when done.
 
+A run with a label already used replaces that label's folder, but only after the checks that come
+before the launch pass: the sidecar `.kaipu/<stem>.json`, `git`, `out/` and the installed
+mediabunny. The `.mp4` is checked later, by the seed, after the folder is replaced.
+
 Compare builds on the same machine, one at a time, with nothing else running. The machine's
 encoder decides the output bitrate, so the output size, and with it the memory, differs
 between an M4 and an M5.
