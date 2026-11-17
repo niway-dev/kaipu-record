@@ -71,6 +71,17 @@ export function BeautifyPanel({
   );
 }
 
+const SLIDER_KEYS = new Set([
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
+  "ArrowDown",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+]);
+
 function Slider({
   label,
   suffix,
@@ -105,8 +116,14 @@ function Slider({
         value={value}
         onPointerDown={onBegin}
         onPointerUp={onEnd}
-        onKeyDown={onBegin}
-        onKeyUp={onEnd}
+        onKeyDown={(e) => {
+          // Only a key that moves the thumb opens an edit. Any other key (Tab, or the Undo chord)
+          // would open one that no key-up on this slider closes, and an open edit blocks Undo.
+          if (SLIDER_KEYS.has(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) onBegin();
+        }}
+        onKeyUp={(e) => {
+          if (SLIDER_KEYS.has(e.key)) onEnd();
+        }}
         onChange={(e) => onLive(Number(e.target.value))}
       />
     </div>
