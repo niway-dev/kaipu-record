@@ -466,6 +466,14 @@ test("a worker reads the take by Range, and what it costs", async () => {
         .maxFramesInAny1sWindow,
     };
     await post(page, { type: "close" });
+    // The engine posts `closed` only after the file's close resolves; wait for it so it cannot
+    // land after the clear below and be counted as an event of the explore run (AC13).
+    await waitFor(
+      page,
+      (all) => all.some((m) => m.type === "file" && m.event === "closed" && m.reason === "close"),
+      30_000,
+      "close event",
+    );
     await post(page, { type: "configure", decoder: PROBE_DECODER });
     await clearMessages(page);
 
