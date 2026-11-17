@@ -614,6 +614,25 @@ describe("canvas document — base crop, scale and corners (v3)", () => {
     }
   });
 
+  it("falls back to the flattened PNG for a base asked to be absurdly large, small or far away", () => {
+    for (const patch of [
+      { w: 8e11, h: 6e11 }, // scale 1e9
+      { w: 8e-9, h: 6e-9 }, // scale 1e-11
+      { x: 1e300 },
+      { y: -1e12 },
+    ]) {
+      const d = JSON.parse(JSON.stringify(buildCanvasDoc(scene, base)));
+      Object.assign(d.items[0], patch);
+      expect(parseCanvasDoc(JSON.stringify(d)), JSON.stringify(patch)).toBeNull();
+    }
+  });
+
+  it("refuses to build a document for an invalid base crop", () => {
+    expect(() => buildCanvasDoc({ ...scene, baseCrop: { x: 0, y: 0, w: 0, h: 1 } }, base)).toThrow(
+      /invalid crop/,
+    );
+  });
+
   it("refuses to build a document for an invalid placement instead of placing the asset wrongly", () => {
     expect(() =>
       buildCanvasDoc({ ...scene, basePlacement: { x: 0, y: 0, scale: 0 } }, base),

@@ -93,4 +93,22 @@ describe("redactionRectsInPixels", () => {
   it("is empty for an image of unknown size", () => {
     expect(redactionRectsInPixels([blur()], { w: 0, h: 0 })).toEqual([]);
   });
+
+  it("measures a redaction against the whole base asset when the base was resized", () => {
+    // Illustrative: NATURAL is 1000 x 500. The asset at half size with its corner at normalized
+    // (1, 0) covers x 1..1.5, y 0..0.5; the blur at x 1.125, w 0.25 is a quarter in, a half wide.
+    expect(
+      redactionRectsInPixels([blur({ x: 1.125, y: 0.125, w: 0.25, h: 0.25 })], NATURAL, {
+        x: 1,
+        y: 0,
+        scale: 0.5,
+      }),
+    ).toEqual([{ x: 250, y: 125, w: 500, h: 250 }]);
+  });
+
+  it("fails closed on an invalid placement: the whole image counts as redacted", () => {
+    expect(redactionRectsInPixels([blur()], NATURAL, { x: 0, y: 0, scale: 0 })).toEqual([
+      { x: 0, y: 0, w: 1000, h: 500 },
+    ]);
+  });
 });

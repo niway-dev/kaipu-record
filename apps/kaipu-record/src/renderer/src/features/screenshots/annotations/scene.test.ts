@@ -169,6 +169,16 @@ describe("the base's rects (per-image crop, unit 3)", () => {
       RangeError,
     );
   });
+  it("an invalid base crop throws instead of giving a NaN or empty rect", () => {
+    for (const baseCrop of [
+      { x: 0, y: 0, w: 0, h: 1 },
+      { x: 0, y: 0, w: -1, h: 1 },
+      { x: Number.NaN, y: 0, w: 1, h: 1 },
+      { x: 0, y: 0, w: Number.POSITIVE_INFINITY, h: 1 },
+    ]) {
+      expect(() => baseVisibleRect({ baseCrop }), JSON.stringify(baseCrop)).toThrow(RangeError);
+    }
+  });
   it("sameScene sees a change of any base field", () => {
     const s: Scene = { ...base };
     expect(sameScene(s, { ...s, baseCrop: { x: 0, y: 0, w: 1, h: 1 } })).toBe(false);

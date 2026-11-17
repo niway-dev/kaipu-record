@@ -118,7 +118,15 @@ Consequences, all in `canvas-geometry.ts`, `compositor.ts` and `content-box.ts`:
   clipped to the visible rect only when a crop is set, so the default SVG is unchanged.
 - Fit to content (`contentBoxFrame`) and the export frame math use `base` the same way.
 - Redaction baking tests every blur against the **whole** placed base rect (`baseFullRect`), never
-  `baseCrop`; an invalid placement throws.
+  `baseCrop`; an invalid placement throws. Every caller passes the placement: the export
+  (`compositeSceneAt`), the save (`buildCanvasPayload` in the editor page), and the text cache
+  (`redactionRectsInPixels`, which decides which recognized words a save may store; it fails closed
+  on an invalid placement by treating the whole image as redacted).
+- `baseVisibleRect` throws on an invalid `baseCrop`, like `fullRect` does for an image, so a save
+  or an export stops instead of writing a NaN rect.
+- The reader refuses a placement outside sane bounds (scale under 1/1000 or over 1000, a corner
+  more than 10 000 base widths away): a corrupt file opens the flattened PNG instead of asking for
+  a 1e12 px export.
 
 ### Canvas document v3
 
@@ -236,6 +244,13 @@ read them:
   anchor) draws the whole base. A document with a cropped or resized base therefore exports
   correctly but previews as uncropped until unit 4 gives the live geometry `CanvasGeom.base`.
   This could not be changed safely without running the app.
+- The editor page's own geometry reads the whole base too: its `contentExtents` calls, the
+  `canvasGeom` it hands to `worldToFrame` / `frameToWorld` (in display px, so `visibleBaseBounds`,
+  which snaps to whole px, cannot be reused as is), and the scene it gives `exportPixelSize`. For
+  a cropped or resized base the size label, the Fit to content overhang and the coordinates of a
+  dragged Export frame are therefore computed against the whole base, while Copy and Save use the
+  right geometry. Unreachable until a crop can be written; it must be fixed together with the
+  live frame.
 - The per-image `radius` and the crop of added images are drawn by the live layer from the
   visible rect; the base's own radius needs the same treatment.
 - A ruler (`measure`) is anchored to the base asset and does not follow a scaled base.
@@ -304,6 +319,10 @@ Unit 3 tests:
   crop out, save, expand the crop: the stored pixels stay redacted; a resized base is baked through
   its placed rect; an invalid placement throws.
 - `annotations/compositor.test.ts` — the export hands the placement, not the crop, to the bake.
+- `pages/screenshot-editor/screenshot-editor-page.document.test.tsx` — Save over a reopened v3
+  document with a resized base hands that placement to the bake (this test fails without the fix).
+- `text-selection/geometry.test.ts` — redactions measured against the placed base; an invalid
+  placement fails closed.
 - `annotations/scene.test.ts`, `handles.test.ts`, `use-editor-scene.test.ts` — the base rects,
   `resizeImage` on a cropped image, the scene carrying the base fields through undo and redo.
 

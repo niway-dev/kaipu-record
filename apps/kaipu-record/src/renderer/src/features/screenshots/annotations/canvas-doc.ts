@@ -337,6 +337,12 @@ function parseFrame(v: unknown): BeautifyState | null {
   return v as unknown as BeautifyState;
 }
 
+/** The base may be resized between a thousandth and a thousand times its natural size, and its
+ * corner may sit at most this many base widths away: anything else is a corrupt file. */
+const MIN_BASE_SCALE = 1e-3;
+const MAX_BASE_SCALE = 1e3;
+const MAX_BASE_OFFSET = 1e4;
+
 /**
  * The placement of the whole base asset that a v3 base item implies: its visible rect divided
  * by its crop window gives the asset's rect, and a uniform resize needs the same scale on both
@@ -352,9 +358,13 @@ function placementOf(item: CanvasImageItem): BasePlacement | undefined | null {
   const sy = fullH / item.pixelHeight;
   if (!Number.isFinite(sx) || !Number.isFinite(sy) || sx <= 0 || sy <= 0) return null;
   if (Math.abs(sx - sy) > 1e-6 * Math.max(sx, sy)) return null;
+  // Sane bounds: a hostile file must not ask for a 1e12 px export; the editor opens the
+  // flattened PNG instead.
+  if (sx < MIN_BASE_SCALE || sx > MAX_BASE_SCALE) return null;
   const x = (item.x - c.x * fullW) / item.pixelWidth;
   const y = (item.y - c.y * fullH) / item.pixelHeight;
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  if (Math.abs(x) > MAX_BASE_OFFSET || Math.abs(y) > MAX_BASE_OFFSET) return null;
   // Float noise from the divide-and-multiply round trip is the identity, not a placement.
   const near = (v: number, to: number): boolean => Math.abs(v - to) < 1e-9;
   if (near(x, 0) && near(y, 0) && near(sx, 1)) return undefined;

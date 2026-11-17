@@ -236,6 +236,10 @@ export function baseVisibleRect(s: {
   const f = baseFullRect(s);
   const c = s.baseCrop;
   if (!c) return f;
+  // Like `fullRect`: a crop that is not a real window throws, never a NaN or empty rect.
+  if (![c.x, c.y, c.w, c.h].every(Number.isFinite) || c.w <= 0 || c.h <= 0) {
+    throw new RangeError("base: invalid crop");
+  }
   return { x: f.x + c.x * f.w, y: f.y + c.y * f.h, w: c.w * f.w, h: c.h * f.h };
 }
 

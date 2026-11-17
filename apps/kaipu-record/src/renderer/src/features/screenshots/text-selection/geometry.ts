@@ -1,5 +1,5 @@
 import type { RecognizedWord } from "@kaipu/domain/schemas";
-import type { Annotation } from "../annotations/scene";
+import { baseFullRect, type Annotation, type BasePlacement } from "../annotations/scene";
 
 /** A size in pixels. */
 export interface PixelSize {
@@ -35,20 +35,34 @@ export function wordBoxNorm(word: RecognizedWord, natural: PixelSize): PixelRect
 /**
  * Where every redaction sits in base-image pixels, the way the save bakes it (same rounding:
  * out to whole pixels, clamped to the image). Locked redactions count too: they are already
- * part of the stored pixels.
+ * part of the stored pixels. `basePlacement` is where the whole base asset sits (a resized
+ * base); the redaction is measured against that rect, never the base's crop. An invalid
+ * placement fails closed: the whole image counts as redacted, so no word is offered.
  */
 export function redactionRectsInPixels(
   annotations: readonly Annotation[],
   natural: PixelSize,
+  basePlacement?: BasePlacement,
 ): PixelRect[] {
   if (natural.w <= 0 || natural.h <= 0) return [];
+  let at: { x: number; y: number; w: number; h: number };
+  try {
+    at = baseFullRect({ basePlacement });
+  } catch {
+    return [{ x: 0, y: 0, w: natural.w, h: natural.h }];
+  }
   const rects: PixelRect[] = [];
   for (const a of annotations) {
     if (a.kind !== "blur") continue;
-    const x0 = Math.max(0, Math.floor(a.x * natural.w));
-    const y0 = Math.max(0, Math.floor(a.y * natural.h));
-    const x1 = Math.min(natural.w, Math.ceil((a.x + a.w) * natural.w));
-    const y1 = Math.min(natural.h, Math.ceil((a.y + a.h) * natural.h));
+    // Base-local units; with no placement the rect is the unit square and these are `a.x`, ...
+    const lx = (a.x - at.x) / at.w;
+    const ly = (a.y - at.y) / at.h;
+    const lw = a.w / at.w;
+    const lh = a.h / at.h;
+    const x0 = Math.max(0, Math.floor(lx * natural.w));
+    const y0 = Math.max(0, Math.floor(ly * natural.h));
+    const x1 = Math.min(natural.w, Math.ceil((lx + lw) * natural.w));
+    const y1 = Math.min(natural.h, Math.ceil((ly + lh) * natural.h));
     if (x1 > x0 && y1 > y0) rects.push({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
   }
   return rects;
