@@ -6,6 +6,7 @@ import {
   MIN_SLOT_STEP,
   pickFrame,
   planSlots,
+  planTileSlots,
   slotStepFor,
   type Frame,
 } from "./filmstrip-frames";
@@ -417,5 +418,82 @@ describe("pickFrame: AC4 lookup rule", () => {
     const store = new FrameStore<number>({ budgetBytes: 100 });
     for (const t of [10, 140, 190]) store.add("a", frame(t));
     expect(pickFrame(store.frames("a"), { start: 130, end: 136 }, clip)?.timestamp).toBe(140);
+  });
+});
+
+describe("planTileSlots: AC1/AC2 one slot inside each tile", () => {
+  // A 9.5 s tile over a grid of 8 s slots left tiles with no frame of their own span: the slot a
+  // frame fell in straddled two tiles. These slots live inside the tile instead.
+  const clip = { start: 0, end: 950 };
+  const base = { duration: 950, clip, count: 100, visible: { start: 200, end: 300 }, frames: [] };
+
+  it("gives every tile in view a slot inside its own span, however the tiles line up", () => {
+    for (const shift of [0, 0.3, 4.7, 9.4]) {
+      const slots = planTileSlots({ ...base, visible: { start: 200 + shift, end: 300 + shift } });
+      const shown = slots.filter((s) => s.visible);
+      expect(shown.length).toBeGreaterThanOrEqual(10);
+      for (const slot of shown) {
+        const i = Math.floor((slot.start + slot.end) / 2 / 9.5);
+        expect(slot.start).toBeGreaterThanOrEqual(i * 9.5 - 1e-9);
+        expect(slot.end).toBeLessThanOrEqual((i + 1) * 9.5 + 1e-9);
+      }
+      // Each tile on screen is asked for exactly once.
+      const tiles = shown.map((s) => Math.floor((s.start + s.end) / 2 / 9.5));
+      expect(new Set(tiles).size).toBe(tiles.length);
+    }
+  });
+
+  it("the slot is the middle half of the tile", () => {
+    const [slot] = planTileSlots({ ...base, visible: { start: 19, end: 28.5 }, margin: 0 });
+    expect(slot.start).toBeCloseTo(19 + 9.5 / 4, 6);
+    expect(slot.end).toBeCloseTo(19 + (9.5 * 3) / 4, 6);
+    expect(slot.visible).toBe(true);
+  });
+
+  it("skips a tile that already holds a frame anywhere inside its span, and only that tile", () => {
+    const frames = [{ timestamp: 19.2 }, { timestamp: 38 }]; // tile 2 [19, 28.5), tile 4's start
+    const slots = planTileSlots({ ...base, visible: { start: 19, end: 47.5 }, margin: 0, frames });
+    const tiles = slots.map((s) => Math.floor((s.start + s.end) / 2 / 9.5));
+    expect(tiles).toEqual([3]); // tile 2 has 19.2, tile 4 has 38; only tile 3 is empty
+  });
+
+  it("flags the margin as not visible and plans it on both sides", () => {
+    const slots = planTileSlots({ ...base, visible: { start: 400, end: 490 }, margin: 95 });
+    expect(slots.some((s) => !s.visible && s.end <= 400)).toBe(true);
+    expect(slots.some((s) => !s.visible && s.start >= 490)).toBe(true);
+    expect(slots.filter((s) => s.visible).length).toBeGreaterThan(8);
+  });
+
+  it("never plans past the file or outside the clip", () => {
+    const slots = planTileSlots({
+      duration: 100,
+      clip: { start: 20, end: 120 }, // the clip runs past the file's end
+      count: 10,
+      visible: { start: 0, end: 200 },
+      frames: [],
+    });
+    expect(slots.length).toBeGreaterThan(0);
+    for (const slot of slots) {
+      expect(slot.start).toBeGreaterThanOrEqual(20);
+      expect(slot.end).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it("plans nothing for a file without a usable duration, or a view outside the clip", () => {
+    expect(planTileSlots({ ...base, duration: Number.NaN })).toEqual([]);
+    expect(planTileSlots({ ...base, visible: { start: 2000, end: 2100 } })).toEqual([]);
+    expect(planTileSlots({ ...base, count: 0 })).toEqual([]);
+  });
+
+  it("is bounded for any input, visible tiles first", () => {
+    const slots = planTileSlots({
+      duration: 100_000,
+      clip: { start: 0, end: 100_000 },
+      count: 100_000,
+      visible: { start: 0, end: 100_000 },
+      frames: [],
+    });
+    expect(slots).toHaveLength(192);
+    expect(slots.every((s) => s.visible)).toBe(true);
   });
 });

@@ -11,6 +11,7 @@ import type {
   FilmstripWorkerInput,
   FilmstripWorkerOutput,
 } from "./filmstrip-messages";
+import { THUMB_TILE_PX } from "./components/timeline-geometry";
 import type { TimelineView } from "./components/timeline-view";
 
 function fakeTimers() {
@@ -145,22 +146,60 @@ describe("FilmstripController", () => {
     expect(workers[0].requests[0].url).toBe(URL_A);
   });
 
-  it("AC1/AC2 input: at 2,000% on a 30-minute take it plans 4 s slots around the view, all inside the file", () => {
-    const { controller, clock, workers } = setup();
+  it("AC1/AC2 input: at 2,000% on a 30-minute take it asks for one slot inside each tile on screen, then for the margin", () => {
+    const { controller, clock, workers, done } = setup();
     controller.setTargets([target()]);
     clock.advance(REST_MS);
-    const [request] = workers[0].requests;
-    const visible = request.slots.filter((s) => s.visible);
-    // 90 s are shown (1000 px at 20x of 1800 s): 4 s slots, 23 of them, none planned past 90 s.
-    expect(visible.length).toBeGreaterThanOrEqual(22);
-    expect(visible.length).toBeLessThanOrEqual(24);
-    for (const slot of request.slots) {
-      expect(slot.end - slot.start).toBe(4);
+    const [onScreen] = workers[0].requests;
+    // 90 s are shown (1000 px at 20x of 1800 s) in tiles of THUMB_TILE_PX px: one slot per tile.
+    const count = Math.round((1800 * ((1000 * 20) / 1800)) / THUMB_TILE_PX);
+    const tile = 1800 / count;
+    expect(onScreen.slots.every((s) => s.visible)).toBe(true);
+    expect(onScreen.slots.length).toBeGreaterThanOrEqual(Math.floor(1000 / THUMB_TILE_PX));
+    expect(onScreen.slots.length).toBeLessThanOrEqual(Math.ceil(1000 / THUMB_TILE_PX) + 1);
+    for (const slot of onScreen.slots) {
+      // The slot is the middle half of its tile: any frame that fills it is inside the tile.
+      const i = Math.floor((slot.start + slot.end) / 2 / tile);
+      expect(slot.start).toBeGreaterThanOrEqual(i * tile);
+      expect(slot.end).toBeLessThanOrEqual((i + 1) * tile);
+      expect(slot.end - slot.start).toBeCloseTo(tile / 2, 6);
+    }
+    // The margin is its own request, sent once the tiles on screen are answered.
+    expect(workers[0].requests).toHaveLength(1);
+    done(workers[0], onScreen.requestId, URL_A);
+    expect(workers[0].requests).toHaveLength(2);
+    const margin = workers[0].requests[1];
+    expect(margin.slots.length).toBeGreaterThan(0);
+    expect(margin.slots.every((s) => !s.visible)).toBe(true);
+    expect(margin.slots.length + onScreen.slots.length).toBeLessThanOrEqual(192);
+    for (const slot of [...onScreen.slots, ...margin.slots]) {
       expect(slot.start).toBeGreaterThanOrEqual(0);
       expect(slot.end).toBeLessThanOrEqual(1800);
     }
-    expect(Math.max(...visible.map((s) => s.end))).toBeGreaterThanOrEqual(90);
-    expect(request.slots.length).toBeLessThanOrEqual(192);
+  });
+
+  it("asks for the tiles on screen of every file before any file's margin", () => {
+    const { controller, clock, workers, done } = setup();
+    controller.setTargets([target(), target({ fileKey: URL_B })]);
+    clock.advance(REST_MS);
+    const worker = workers[0];
+    const order: Array<[string, boolean]> = [];
+    const note = () => {
+      const r = worker.requests.at(-1)!;
+      order.push([r.fileKey, r.slots.every((s) => s.visible)]);
+    };
+    note();
+    for (let i = 0; i < 3; i++) {
+      const r = worker.requests.at(-1)!;
+      done(worker, r.requestId, r.fileKey);
+      note();
+    }
+    expect(order).toEqual([
+      [URL_A, true],
+      [URL_B, true],
+      [URL_A, false],
+      [URL_B, false],
+    ]);
   });
 
   it("AC3: at fit zoom it asks for nothing", () => {
@@ -239,16 +278,16 @@ describe("FilmstripController", () => {
     expect(worker.requests.map((r) => r.fileKey)).toEqual([URL_A, URL_B]);
   });
 
-  it("does not ask for slots a stored or an opening frame already fills", () => {
+  it("does not ask for a tile that already holds a frame inside its own span", () => {
     const { controller, clock, workers, store } = setup();
-    // Slot [0, 4) holds a legacy frame; slot [4, 8) a stored one.
-    store.add(URL_A, { timestamp: 5, blob: new Blob(), bytes: 3 });
-    controller.setTargets([target({ legacy: [{ timestamp: 1 }] })]);
+    const tile = 1800 / Math.round((1800 * ((1000 * 20) / 1800)) / THUMB_TILE_PX);
+    // Tile 0 holds a legacy frame, tile 1 a stored one (anywhere inside its span, not its centre).
+    store.add(URL_A, { timestamp: tile * 1.9, blob: new Blob(), bytes: 3 });
+    controller.setTargets([target({ legacy: [{ timestamp: 0.1 }] })]);
     clock.advance(REST_MS);
     const starts = workers[0].requests[0].slots.map((s) => s.start);
-    expect(starts).not.toContain(0);
-    expect(starts).not.toContain(4);
-    expect(starts).toContain(8);
+    expect(starts.every((start) => start >= tile * 2)).toBe(true);
+    expect(starts.length).toBeGreaterThan(0);
   });
 
   it("plans the file's own time: a file offset moves the slots, and a clip bounds them", () => {
@@ -301,11 +340,37 @@ describe("FilmstripController", () => {
     expect(store.liveFrames(URL_A)).toHaveLength(0);
   });
 
+  it("AC1: publishes the frames of a finished request at once, not at the next 150 ms batch", () => {
+    const { controller, clock, workers, store, done } = setup();
+    controller.setTargets([target()]);
+    clock.advance(REST_MS);
+    const worker = workers[0];
+    const id = worker.requests[0].requestId;
+    for (const timestamp of [2, 8, 15]) {
+      worker.emit({
+        type: "frame",
+        requestId: id,
+        fileKey: URL_A,
+        slotIndex: 0,
+        timestamp,
+        blob: new Blob(),
+        bytes: 3000,
+        decodeMs: 1,
+        encodeMs: 1,
+      });
+    }
+    expect(store.frames(URL_A)).toHaveLength(1); // the first frame published, the rest wait
+    done(worker, id, URL_A);
+    expect(store.frames(URL_A)).toHaveLength(3);
+  });
+
   it("terminates the worker when its file closes for being idle, if told to, and starts a new one next time", () => {
-    const { controller, clock, workers } = setup({ terminateOnIdleClose: true });
+    const { controller, clock, workers, done } = setup({ terminateOnIdleClose: true });
     controller.setTargets([target()]);
     clock.advance(REST_MS);
     const first = workers[0];
+    done(first, first.requests[0].requestId, URL_A); // the tiles on screen
+    done(first, first.requests[1].requestId, URL_A); // the margin: nothing is running now
     first.emit({ type: "file", event: "closed", url: URL_A, reason: "idle" });
     expect(first.terminated).toBe(true);
 
@@ -313,6 +378,26 @@ describe("FilmstripController", () => {
     clock.advance(REST_MS);
     expect(workers).toHaveLength(2);
     expect(workers[1].requests).toHaveLength(1);
+  });
+
+  it("does not end the worker for an idle close that arrives while a request is running", () => {
+    const { controller, clock, workers } = setup({ terminateOnIdleClose: true });
+    controller.setTargets([target()]);
+    clock.advance(REST_MS);
+    expect(workers[0].requests).toHaveLength(1); // in flight
+    workers[0].emit({ type: "file", event: "closed", url: URL_A, reason: "idle" });
+    expect(workers[0].terminated).toBe(false);
+  });
+
+  it("goes on with the files still queued after the worker fails", () => {
+    const { controller, clock, workers } = setup();
+    controller.setTargets([target(), target({ fileKey: URL_B })]);
+    clock.advance(REST_MS);
+    expect(workers[0].requests.map((r) => r.fileKey)).toEqual([URL_A]);
+    workers[0].onerror?.(new Error("boom"));
+    expect(workers[0].terminated).toBe(true);
+    expect(workers).toHaveLength(2);
+    expect(workers[1].requests.map((r) => r.fileKey)).toEqual([URL_B]);
   });
 
   it("keeps the worker after an idle close by default (hardware decoding)", () => {

@@ -16,7 +16,7 @@
  * request are in the media file's OWN time, like the frame store; `fileOffset` is what turns the
  * timeline's SOURCE axis into it (a joined recording's offset, a webcam's start offset).
  */
-import { planSlots, type Slot, type TimeRange } from "./filmstrip-frames";
+import { planTileSlots, type Slot, type TimeRange } from "./filmstrip-frames";
 import { realTimers, type FilmstripStore, type FilmstripTimers } from "./filmstrip-store";
 import type {
   FilmstripWorkerInput,
@@ -215,7 +215,12 @@ export class FilmstripController {
     this.pump();
   }
 
-  /** Per file, the empty slots of what the lanes show (and one screen around it). */
+  /**
+   * Per file, one slot for each tile that has no frame of its own time yet, for what the lanes show
+   * and one screen around it. The tiles on screen of ALL files come first, then the margins, so a
+   * row's margin never holds back another row's visible tiles (the worker runs one request at a
+   * time).
+   */
   private plan(): QueuedRequest[] {
     const view = this.getView();
     if (view.zoom <= 1) return []; // AC3: the strip decoded at open covers fit zoom
@@ -224,7 +229,8 @@ export class FilmstripController {
     const shown = visibleRange(view);
     if (shown.end <= shown.start) return [];
 
-    const out: QueuedRequest[] = [];
+    const onScreen: QueuedRequest[] = [];
+    const around: QueuedRequest[] = [];
     for (const target of this.targets) {
       if (!Number.isFinite(target.duration) || target.duration <= 0) continue;
       const frames = mergeSorted(this.store.liveFrames(target.fileKey), target.legacy);
@@ -245,14 +251,19 @@ export class FilmstripController {
         };
         // The same tile count as `thumbnailTiles`: one tile per THUMB_TILE_PX of block width.
         const count = Math.max(1, Math.round((length * scale) / THUMB_TILE_PX));
-        const tileSpan = sourceLength / count;
-        const clipStart = clip.sourceStart - target.fileOffset;
-        const clipEnd = clip.sourceEnd - target.fileOffset;
         hullStart = Math.min(hullStart, visible.start);
         hullEnd = Math.max(hullEnd, visible.end);
-        for (const slot of planSlots({ duration: target.duration, visible, tileSpan, frames })) {
-          // A frame outside the clip is never drawn while one inside exists: do not decode it.
-          if (slot.end <= clipStart || slot.start >= clipEnd) continue;
+        const slots = planTileSlots({
+          duration: target.duration,
+          clip: {
+            start: clip.sourceStart - target.fileOffset,
+            end: clip.sourceEnd - target.fileOffset,
+          },
+          count,
+          visible,
+          frames,
+        });
+        for (const slot of slots) {
           const key = `${slot.start}:${slot.end}`;
           const known = byKey.get(key);
           if (!known) byKey.set(key, slot);
@@ -261,15 +272,18 @@ export class FilmstripController {
       }
       if (byKey.size === 0) continue;
       const slots = [...byKey.values()].sort((a, b) => a.start - b.start);
-      out.push({
+      const base = {
         target,
-        slots,
         playhead: this.playheadIn(target, hullStart, hullEnd),
         direction: this.direction,
         view: { start: hullStart, end: hullEnd },
-      });
+      };
+      const near = slots.filter((slot) => slot.visible);
+      const far = slots.filter((slot) => !slot.visible);
+      if (near.length > 0) onScreen.push({ ...base, slots: near });
+      if (far.length > 0) around.push({ ...base, slots: far });
     }
-    return out;
+    return [...onScreen, ...around];
   }
 
   /** The playhead in the file's own time; the middle of what is shown when it is elsewhere. */
@@ -310,6 +324,9 @@ export class FilmstripController {
       this.worker = null;
       this.inFlight = null;
       worker.terminate();
+      console.warn("[filmstrip] the thumbnail worker failed; the next request starts a new one");
+      // The request it was running is lost; the files still queued go on with a fresh worker.
+      this.pump();
     };
     this.worker = worker;
     return worker;
@@ -342,10 +359,19 @@ export class FilmstripController {
       case "done":
       case "error":
         if (this.inFlight?.requestId === message.requestId) this.inFlight = null;
+        // The last frame of the request is in: show it now, not at the next batch (AC1).
+        this.store.flush();
         this.pump();
         return;
       case "file":
-        if (message.event === "closed" && message.reason === "idle" && this.terminateOnIdleClose) {
+        // Not while a request is in flight: it was posted after the idle close began and the
+        // worker is already running it (ending the worker would lose it).
+        if (
+          message.event === "closed" &&
+          message.reason === "idle" &&
+          this.terminateOnIdleClose &&
+          !this.inFlight
+        ) {
           this.endWorker();
         }
         return;

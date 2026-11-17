@@ -78,6 +78,33 @@ describe("FilmstripStore", () => {
     expect(store.frames("a").map((f) => f.timestamp)).toEqual([1, 2, 3]);
   });
 
+  it("AC1: flush publishes what is waiting at once, and the batch timer then has nothing left to do", () => {
+    const { store, clock, frame } = setup();
+    let calls = 0;
+    store.subscribe("a", () => calls++);
+    store.add("a", frame(1)); // leading edge: published
+    store.add("a", frame(2)); // waits for the batch
+    store.add("a", frame(3));
+    expect(calls).toBe(1);
+    expect(store.frames("a")).toHaveLength(1);
+
+    store.flush();
+    expect(calls).toBe(2);
+    expect(store.frames("a")).toHaveLength(3);
+    clock.advance(1000);
+    expect(calls).toBe(2);
+  });
+
+  it("flush with nothing waiting tells nobody", () => {
+    const { store, frame } = setup();
+    let calls = 0;
+    store.subscribe("a", () => calls++);
+    store.add("a", frame(1));
+    store.flush();
+    store.flush();
+    expect(calls).toBe(1);
+  });
+
   it("tells only the subscribers of the file that changed", () => {
     const { store, frame } = setup();
     let a = 0;
@@ -122,6 +149,24 @@ describe("FilmstripStore", () => {
     clock.advance(2000);
     expect(revoked).toEqual([created[0]]);
     expect(store.bytes).toBe(20);
+  });
+
+  it("gives each publish its own grace: a frame evicted late is not revoked with the earlier batch", () => {
+    const { store, clock, created, revoked, frame } = setup(25);
+    store.add("a", frame(1, 10)); // created[0]
+    store.add("b", frame(2, 10)); // created[1]
+    clock.advance(150);
+    store.add("c", frame(3, 10)); // evicts "a"
+    clock.advance(150); // publishes the snapshot without "a": its 2 s grace starts here
+    clock.advance(1990);
+    store.add("d", frame(4, 10)); // evicts "b" 10 ms before "a"'s grace ends
+    expect(store.liveFrames("b")).toHaveLength(0);
+    clock.advance(10);
+    expect(revoked).toEqual([created[0]]); // "b" is not revoked with "a"'s batch
+    clock.advance(1989);
+    expect(revoked).toEqual([created[0]]);
+    clock.advance(1);
+    expect(revoked).toEqual([created[0], created[1]]);
   });
 
   it("revokes the URL of a frame replaced at the same timestamp", () => {

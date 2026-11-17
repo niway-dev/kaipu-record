@@ -16,7 +16,8 @@ export const PUBLISH_MS = 150;
 
 /**
  * An evicted frame's URL is revoked this long after the snapshot that drops it was published, so a
- * tile that has not re-rendered yet still resolves the image it shows.
+ * tile that has not re-rendered yet still resolves the image it shows. Each publish starts its own
+ * grace for the URLs it dropped: a URL evicted after it waits for the next publish first.
  */
 export const REVOKE_GRACE_MS = 2000;
 
@@ -52,9 +53,11 @@ export class FilmstripStore {
   private readonly published = new Map<string, readonly StoredFrame[]>();
   private readonly listeners = new Map<string, Set<() => void>>();
   private readonly dirty = new Set<string>();
+  /** URLs evicted since the last publish: the snapshot on screen still lists them. */
   private readonly revokeQueue: string[] = [];
+  /** URLs the last publishes dropped, each batch waiting out its own grace. */
+  private readonly graceBatches = new Set<{ urls: string[]; timer: unknown }>();
   private publishTimer: unknown = null;
-  private revokeTimer: unknown = null;
   private lastPublish = -Infinity;
 
   constructor(options: FilmstripStoreOptions) {
@@ -119,6 +122,17 @@ export class FilmstripStore {
   }
 
   /**
+   * Publishes what has arrived now, without waiting for the interval. The controller calls it
+   * when the tiles on screen have all been asked for and answered, so the last of them is not held
+   * back by the 150 ms batch (AC1).
+   */
+  flush(): void {
+    if (this.dirty.size === 0) return;
+    this.cancelPublishTimer();
+    this.publishNow();
+  }
+
+  /**
    * Empties the store (a workspace switch, AC10): every frame goes, every URL is revoked now and
    * every subscriber is told at once, so no tile keeps showing another workspace's frame.
    */
@@ -133,8 +147,6 @@ export class FilmstripStore {
   /** Stops the timers and revokes everything still queued (the editor is going away for good). */
   dispose(): void {
     this.clear();
-    if (this.revokeTimer !== null) this.timers.clear(this.revokeTimer);
-    this.revokeTimer = null;
   }
 
   // -------------------------------------------------------------------------------------
@@ -170,15 +182,24 @@ export class FilmstripStore {
     for (const fileKey of files) {
       for (const listener of Array.from(this.listeners.get(fileKey) ?? [])) listener();
     }
-    if (this.revokeQueue.length > 0 && this.revokeTimer === null) {
-      this.revokeTimer = this.timers.set(() => {
-        this.revokeTimer = null;
-        this.flushRevokes();
+    if (this.revokeQueue.length > 0) {
+      // The snapshot just published no longer lists these: they go once the grace has passed.
+      const batch = { urls: this.revokeQueue.splice(0), timer: null as unknown };
+      batch.timer = this.timers.set(() => {
+        this.graceBatches.delete(batch);
+        for (const url of batch.urls) this.options.revokeUrl(url);
       }, this.revokeGraceMs);
+      this.graceBatches.add(batch);
     }
   }
 
+  /** Revokes everything evicted so far, the batches still in their grace included. */
   private flushRevokes(): void {
+    for (const batch of this.graceBatches) {
+      this.timers.clear(batch.timer);
+      for (const url of batch.urls) this.options.revokeUrl(url);
+    }
+    this.graceBatches.clear();
     for (const url of this.revokeQueue.splice(0)) this.options.revokeUrl(url);
   }
 }
