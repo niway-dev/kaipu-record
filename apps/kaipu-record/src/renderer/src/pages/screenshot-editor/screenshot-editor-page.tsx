@@ -22,7 +22,7 @@ import { DiscardChangesDialog } from "@renderer/features/screenshots/discard-cha
 import { FitIcon } from "@renderer/features/screenshots/toolbar/editor-icons";
 import type { CanvasSavePayload } from "@shared/types/screenshot-canvas";
 import type { TextCacheSavePayload } from "@shared/types/text-recognition";
-import { captureException, reportError } from "@renderer/features/analytics";
+import { captureException, reportError, useEditorOpened } from "@renderer/features/analytics";
 import { screenshotTitle } from "@shared/screenshot-title";
 import { ROUTES } from "@shared/routes";
 import {
@@ -334,6 +334,8 @@ function ScreenshotEditorBody({
     [doc, source],
   );
   const image = useImageSource(imageSource);
+  // The editor counts as opened once its image has resolved, not while it is still loading.
+  useEditorOpened("image", image !== null);
   // A re-opened saved shot is already framed/flattened — start it unframed so the
   // editor doesn't beautify it twice; a fresh capture gets the default frame.
   // A pasted image is the user's own picture (often a photo), not a screenshot to

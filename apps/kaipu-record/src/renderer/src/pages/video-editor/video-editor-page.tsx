@@ -5,7 +5,12 @@ import { AudioLines, Shield, Trash2, TriangleAlert, Webcam, ZoomIn } from "lucid
 import { useTranslations } from "@kaipu/i18n";
 import { parseCursorTrack, type CursorTrack } from "@shared/cursor-track";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
-import { captureEvent, captureException, reportError } from "@renderer/features/analytics";
+import {
+  captureEvent,
+  captureException,
+  reportError,
+  useEditorOpened,
+} from "@renderer/features/analytics";
 import { buildEditorSpeedChangedProperties, EDITOR_SPEED_CHANGED_EVENT } from "@shared/analytics";
 import {
   initialScene,
@@ -432,6 +437,8 @@ export function VideoEditorLoader({ source }: { source: VideoEditorSource }): Re
     scene: VideoScene;
     cursorTrack: CursorTrack | null;
   } | null>(null);
+  // The editor counts as opened once its session is read and it can render, not before.
+  useEditorOpened("video", resolved !== null);
   // Why nothing was loaded: the item is gone, or two files claim its identity.
   const [unavailable, setUnavailable] = useState<"gone" | "ambiguous" | null>(null);
   const navigate = useNavigate();
