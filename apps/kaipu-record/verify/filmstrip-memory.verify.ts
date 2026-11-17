@@ -103,6 +103,15 @@ const messages = (page: Page): Promise<Message[]> =>
     (window as unknown as { __probe: { messages: Message[] } }).__probe.messages.slice(),
   );
 
+/** Drops only the `mem-done` replies, so a checkpoint never eats an idle-close event in flight. */
+const dropMemReplies = (page: Page) =>
+  page.evaluate(() => {
+    const store = (window as unknown as { __probe: { messages: { type?: string }[] } }).__probe;
+    for (let i = store.messages.length - 1; i >= 0; i--) {
+      if (store.messages[i]?.type === "mem-done") store.messages.splice(i, 1);
+    }
+  });
+
 const clearMessages = (page: Page) =>
   page.evaluate(() => {
     (window as unknown as { __probe: { messages: unknown[] } }).__probe.messages.length = 0;
@@ -297,13 +306,13 @@ test(`filmstrip worker memory: ${LABEL}`, async () => {
     const heap = (name: string) => pageMetrics.metrics.find((m) => m.name === name)?.value ?? 0;
     let worker: Message | null = null;
     if (MODE !== "no-worker" && workerAlive) {
-      await clearMessages(page);
+      await dropMemReplies(page);
       await post(page, { type: "mem", id: Date.now() });
       worker =
         (await waitFor(page, (all) => all.some((m) => m.type === "mem-done"), 30_000, "mem")).find(
           (m) => m.type === "mem-done",
         ) ?? null;
-      await clearMessages(page);
+      await dropMemReplies(page);
     }
     const entry = {
       label,

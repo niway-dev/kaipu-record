@@ -12,7 +12,14 @@ bun build "$here/driver.ts" --target=browser --format=esm --outfile "$out/driver
 electron=$(ls -d ../../node_modules/.bun/electron@*/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron | head -1)
 for mode in ${2:-none network}; do
   for decoder in ${DECODERS:-hardware}; do
+    set +e
     CDP_MODE=$mode DECODER=$decoder TAKE="$1" PROBE_BUNDLE="$out/probe.js" DRIVER_BUNDLE="$out/driver.js" \
-      "$electron" "$here/main.cjs" --user-data-dir="$out/ud-$mode-$decoder" 2>&1 | grep "^\[$mode/" | tee -a "$out/$mode-$decoder.txt"
+      "$electron" "$here/main.cjs" --user-data-dir="$out/ud-$mode-$decoder" 2>&1 \
+      | tee -a "$out/$mode-$decoder.full.txt" | grep --line-buffered "^\[$mode/" \
+      | tee -a "$out/$mode-$decoder.txt"
+    code=${PIPESTATUS[0]}
+    set -e
+    # Electron's own exit code: a crash or a driver error must not look like a finished run.
+    [ "$code" -eq 0 ] || { echo "Electron exited $code (see $out/$mode-$decoder.full.txt)" >&2; exit 1; }
   done
 done

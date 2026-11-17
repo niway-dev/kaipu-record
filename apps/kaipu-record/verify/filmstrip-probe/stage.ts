@@ -3,7 +3,9 @@
  * chosen stage and stops, so the memory scenario can tell which stage the worker's growth comes
  * from. One file stays open between requests, as in the engine. Stages, each including the one
  * before: `plan` (packet metadata only), `read` (the key packet's bytes), `decode` (the frame,
- * drawn to the 160 px canvas), `encode` (the JPEG blob). Nothing is posted back but a count.
+ * drawn to the 160 px canvas), `encode` (the JPEG blob). Control stages that skip mediabunny:
+ * `fetch-*` (one ranged fetch per slot, in the variants `runFetchStage` documents) and `alloc-*`
+ * (allocate and drop one buffer per slot, no I/O). Nothing is posted back but a count.
  * Never shipped.
  */
 import {
@@ -117,7 +119,6 @@ export function closeStage(): void {
   open = null;
 }
 
-/** Returns how many slots were planned and how many frames or blobs the stage produced. */
 /** No I/O at all: allocate and touch one buffer per slot, then drop it. */
 function runAllocStage(request: StageRequest): { planned: number; produced: number } {
   const size = request.stage === "alloc-1mb" ? 1024 * 1024 : 64 * 1024;
@@ -131,7 +132,8 @@ function runAllocStage(request: StageRequest): { planned: number; produced: numb
 }
 
 const DEFAULT_FETCH_BYTES = 512 * 1024;
-let fetchedSize: number | null = null;
+/** File size per URL, from one `bytes=0-0` probe request. */
+const fetchedSizes = new Map<string, number>();
 
 /**
  * What `UrlSource` does on one cache miss, without mediabunny: one ranged fetch per slot at a
@@ -143,13 +145,14 @@ let fetchedSize: number | null = null;
 async function runFetchStage(
   request: StageRequest,
 ): Promise<{ planned: number; produced: number }> {
-  if (fetchedSize === null) {
+  let size = fetchedSizes.get(request.url);
+  if (size === undefined) {
     const head = await fetch(request.url, { headers: { Range: "bytes=0-0" } });
     const total = /\/(\d+)$/.exec(head.headers.get("content-range") ?? "");
     await head.arrayBuffer();
-    fetchedSize = total ? Number(total[1]) : 1_000_000_000;
+    size = total ? Number(total[1]) : 1_000_000_000;
+    fetchedSizes.set(request.url, size);
   }
-  const size = fetchedSize;
   const FETCH_BYTES = request.fetchBytes ?? DEFAULT_FETCH_BYTES;
   let produced = 0;
   for (const [i] of request.slots.entries()) {
@@ -188,6 +191,7 @@ async function runFetchStage(
   return { planned: request.slots.length, produced };
 }
 
+/** Returns how many slots were planned and how many frames or blobs the stage produced. */
 export async function runStage(
   request: StageRequest,
 ): Promise<{ planned: number; produced: number }> {

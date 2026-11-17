@@ -3,7 +3,8 @@
  * It reports every `fetch` the worker makes (the Range asked, the status, the bytes granted) and
  * stamps every message the worker posts with the worker's own clock, so the scenario can prove
  * "the worker read this 10 GB file by Range" and measure pacing without the main thread's
- * receive delay. Never shipped: only `verify/filmstrip-worker.verify.ts` builds it.
+ * receive delay. Never shipped: only the verify scenarios (`filmstrip-worker.verify.ts`,
+ * `filmstrip-memory.verify.ts`) and `filmstrip-no-cdp/run.sh` build it.
  */
 const realFetch = self.fetch.bind(self);
 const realPost = self.postMessage.bind(self) as (

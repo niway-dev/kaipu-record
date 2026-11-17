@@ -6,8 +6,8 @@
  * It wraps `VideoDecoder` (every frame it outputs and every decoder it creates) and
  * `OffscreenCanvas.convertToBlob` (the JPEG bytes produced), and answers a `mem` message with
  * the counters and the worker's JS heap. It runs BEFORE the filmstrip worker in the same bundle,
- * so mediabunny sees the wrapped constructor. Never shipped: only
- * `verify/filmstrip-memory.verify.ts` and `verify/filmstrip-worker.verify.ts` build it.
+ * so mediabunny sees the wrapped constructor. Never shipped: only the verify scenarios
+ * (`filmstrip-memory.verify.ts`, `filmstrip-worker.verify.ts`) and `filmstrip-no-cdp/run.sh` build it.
  */
 export interface WorkerMemCounters {
   decodersCreated: number;

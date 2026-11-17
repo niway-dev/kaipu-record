@@ -59,40 +59,53 @@ async function sample(label) {
   console.log(`[${MODE}/${DECODER}] ${label}: ${parts.join(" ")}`);
 }
 
+const TIMEOUT_MS = Number(process.env.TIMEOUT_MS || 30 * 60 * 1000);
+
+// A hung driver or a thrown error must end the run with a code, never hang the shell script.
+const fail = (error) => {
+  console.error(`[${MODE}/${DECODER}] FAILED:`, error);
+  app.exit(1);
+};
+
 app.whenReady().then(() =>
-  server.listen(8766, "127.0.0.1", async () => {
-    const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
-    await win.loadURL("http://127.0.0.1:8766/page.html");
-    if (MODE !== "none") {
-      const dbg = win.webContents.debugger;
-      dbg.attach("1.3");
-      dbg.on("message", (_event, method, params) => {
-        if (method === "Target.attachedToTarget" && params.targetInfo.type === "worker")
-          dbg.sendCommand(
-            MODE === "network" ? "Network.enable" : "Runtime.enable",
-            {},
-            params.sessionId,
-          );
-      });
-      await dbg.sendCommand(MODE === "network" ? "Network.enable" : "Runtime.enable", {});
-      await dbg.sendCommand("Target.setAutoAttach", {
-        autoAttach: true,
-        waitForDebuggerOnStart: false,
-        flatten: true,
-      });
+  server.listen(process.env.PORT || 8766, "127.0.0.1", async () => {
+    setTimeout(() => fail(new Error(`no result after ${TIMEOUT_MS} ms`)), TIMEOUT_MS).unref();
+    try {
+      const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
+      await win.loadURL(`http://127.0.0.1:${process.env.PORT || 8766}/page.html`);
+      if (MODE !== "none") {
+        const dbg = win.webContents.debugger;
+        dbg.attach("1.3");
+        dbg.on("message", (_event, method, params) => {
+          if (method === "Target.attachedToTarget" && params.targetInfo.type === "worker")
+            dbg.sendCommand(
+              MODE === "network" ? "Network.enable" : "Runtime.enable",
+              {},
+              params.sessionId,
+            );
+        });
+        await dbg.sendCommand(MODE === "network" ? "Network.enable" : "Runtime.enable", {});
+        await dbg.sendCommand("Target.setAutoAttach", {
+          autoAttach: true,
+          waitForDebuggerOnStart: false,
+          flatten: true,
+        });
+      }
+      const js = (code) => win.webContents.executeJavaScript(code);
+      await sample("before the worker");
+      await js(`window.__driver.start(${JSON.stringify(DECODER)})`);
+      await sample("start");
+      let at = 0;
+      for (const next of [...CHECKPOINTS.filter((n) => n < REQUESTS), REQUESTS]) {
+        await js(`window.__driver.run(${at}, ${next})`);
+        at = next;
+        await sample(`req=${next}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 12000));
+      await sample("12 s after the last request (idle close)");
+      app.exit(0);
+    } catch (error) {
+      fail(error);
     }
-    const js = (code) => win.webContents.executeJavaScript(code);
-    await sample("before the worker");
-    await js(`window.__driver.start(${JSON.stringify(DECODER)})`);
-    await sample("start");
-    let at = 0;
-    for (const next of [...CHECKPOINTS.filter((n) => n < REQUESTS), REQUESTS]) {
-      await js(`window.__driver.run(${at}, ${next})`);
-      at = next;
-      await sample(`req=${next}`);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 12000));
-    await sample("12 s after the last request (idle close)");
-    app.exit(0);
   }),
 );
