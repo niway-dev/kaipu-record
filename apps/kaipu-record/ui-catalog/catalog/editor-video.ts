@@ -12,6 +12,16 @@ const playheadInMiddleClip: Step = {
   click: { area: "editorVideo.timeline", part: { css: '[data-testid="ruler"]' } },
   at: { x: 0.5, y: 0.5 },
 };
+/** The ruler at 92%: 11 s of the 12 s, inside the last of the three 4 s clips. */
+const playheadInLastClip: Step = {
+  click: { area: "editorVideo.timeline", part: { css: '[data-testid="ruler"]' } },
+  at: { x: 0.92, y: 0.5 },
+};
+/** “Long sequence” is ten 1.2 s clips: 45% of its 12 s is 5.4 s, the middle of the fifth. */
+const playheadInFifthClip: Step = {
+  click: { area: "editorVideo.timeline", part: { css: '[data-testid="ruler"]' } },
+  at: { x: 0.45, y: 0.5 },
+};
 const rail = (name: string): Step => ({
   click: { area: "editorVideo.toolRail", part: { role: "button", name, exact: true } },
 });
@@ -855,7 +865,7 @@ export const editorVideo = catalog(
     },
     "add-from-library": {
       profile: "add-from-library",
-      how: "With the `timeline-levels` flag forced on, open “Weekly sync” (three 4 s clips, with the playhead put in the middle one) and press Add recording at the left end of the transport bar: the Add from Library modal opens on its Recordings tab, a compact list of the Library's other recordings, newest first, with the first one selected and previewed on the right (paused at its first frame) above the placement strip (a mini timeline of the real sequence: the three clips, with the new one in pink after the middle clip and the last clip moving later, and one sentence saying how many clips move) and the Add button, a split button that reads “Add after this clip”; the transport button stays lit while the modal is open.",
+      how: "With the `timeline-levels` flag forced on, open “Weekly sync” (three 4 s clips, with the playhead put in the middle one) and press Add recording at the left end of the transport bar: the Add from Library modal opens on its Recordings tab, a compact list of the Library's other recordings, newest first, with the first one selected and previewed on the right (paused at its first frame) above the placement strip (a mini timeline of the real sequence: the three clips, the middle one lighter with a “You are here” chip on the playhead line, the new one in pink after it and the last clip moving later, and one sentence saying how many clips move) and the Add button, a split button that reads “Add after this clip”; the transport button stays lit while the modal is open.",
       steps: [
         open(ASSETS.weeklySync),
         loaded,
@@ -876,9 +886,41 @@ export const editorVideo = catalog(
       ready: { area: "editorVideo.addFromLibrary" },
       gates: [{ flag: "timeline-levels", side: "on" }],
     },
+    "add-from-library-last-clip": {
+      profile: "add-from-library",
+      how: "With the `timeline-levels` flag forced on, open “Weekly sync” (three 4 s clips), put the playhead in the last clip and press Add recording: the Add from Library modal opens on its Recordings tab with the first recording selected and the Add button at “Add after this clip”. The placement strip marks the clip you are on (lighter, with a “You are here” chip on the playhead line), draws the new item after it with nothing moving, and the sentence under it adds “Same as At the end here: you are on the last clip.”, because After this clip and At the end land in the same place.",
+      steps: [
+        open(ASSETS.weeklySync),
+        loaded,
+        playheadInLastClip,
+        addRecordingButton,
+        { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        { waitFor: { video: "paused-at-start", within: "editorVideo.addFromLibrary" } },
+        { waitMs: 400 },
+      ],
+      demonstrates: ["editorVideo.addFromLibrary:sameAsEnd"],
+      ready: { area: "editorVideo.addFromLibrary" },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
+    "add-from-library-many-clips": {
+      profile: "add-from-library",
+      how: "With the `timeline-levels` flag forced on, open “Long sequence” (ten 1.2 s clips), put the playhead in the fifth clip and press Add recording: the placement strip condenses the sequence instead of drawing ten slivers. It shows the fifth clip (lighter, with the “You are here” chip), its neighbour before, the new item in pink after it and the next clip, and folds the clips before and after into two dashed “3 clips” and “4 clips” groups, the last one with the moved arrow.",
+      steps: [
+        open(ASSETS.longSequence),
+        loaded,
+        playheadInFifthClip,
+        addRecordingButton,
+        { waitFor: { area: "editorVideo.addFromLibrary", part: libraryRow("Walkthrough 1") } },
+        { waitFor: { video: "paused-at-start", within: "editorVideo.addFromLibrary" } },
+        { waitMs: 400 },
+      ],
+      demonstrates: ["editorVideo.addFromLibrary:longSequence"],
+      ready: { area: "editorVideo.addFromLibrary" },
+      gates: [{ flag: "timeline-levels", side: "on" }],
+    },
     "add-from-library-destination-menu": {
       profile: "add-from-library",
-      how: "With the flag forced on, open “Weekly sync” (three 4 s clips, playhead in the middle one), press Add recording and open the arrow at the right end of the Add button: the “Where it goes” menu opens upward from the button with its five destinations, each with a thumbnail of the sequence it makes (four blocks: the three clips and the new item, so before, after and around the clip under the playhead look different) and a hint. After this clip is checked with a pink tick, Over the video is greyed out with “Floating videos come later.”, and the arrow part of the button is a shade darker and points down.",
+      how: "With the flag forced on, open “Weekly sync” (three 4 s clips, playhead in the middle one), press Add recording and open the arrow at the right end of the Add button: the “Where it goes” menu opens upward from the button with its five destinations, each with the same fixed thumbnail (three clips and the new item, placed before, after or around the second clip, or floating over the video for Over the video) and a hint. After this clip is checked with a pink tick, Over the video is greyed out with “Floating videos come later.”, and the arrow part of the button is a shade darker and points down.",
       steps: [
         open(ASSETS.weeklySync),
         loaded,

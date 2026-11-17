@@ -61,6 +61,8 @@ export const ASSETS = {
   cameraSize: "c0a1a10c-0000-4000-8000-000000000011",
   /** Seeded with `cameraParts`: a recording that declares 20 minutes, with a 5 s camera part. */
   cameraLong: "c0a1a10c-0000-4000-8000-000000000012",
+  /** Seeded only where `manyClipsRecording` is on: a saved edit of ten consecutive 1.2 s clips. */
+  longSequence: "c0a1a10c-0000-4000-8000-000000000013",
   settingsShot: "c0a1a10c-0000-4000-8000-000000000101",
   dashboardShot: "c0a1a10c-0000-4000-8000-000000000102",
   dialogShot: "c0a1a10c-0000-4000-8000-000000000103",
@@ -267,6 +269,25 @@ const RECORDINGS: readonly RecordingFixture[] = [
     exportPreset: "light",
   },
 ];
+
+/**
+ * Seeded only where `manyClipsRecording` is on: the same 12 s media as the other cuts, with a
+ * saved edit of ten 1.2 s clips (0–1.2, 1.2–2.4 … 10.8–12 source seconds). Add from Library
+ * condenses a sequence this long into groups. The oldest recording, so the Library lists the
+ * other states open keep their first rows.
+ */
+export const LONG_SEQUENCE_CLIPS: readonly (readonly [number, number])[] = Array.from(
+  { length: 10 },
+  (_, i) => [(i * 12) / 10, ((i + 1) * 12) / 10] as const,
+);
+const LONG_SEQUENCE_RECORDING: RecordingFixture = {
+  stem: "Long sequence",
+  assetId: ASSETS.longSequence,
+  title: "Long sequence",
+  cut: 12,
+  ago: 15 * DAY,
+  clips: LONG_SEQUENCE_CLIPS,
+};
 
 /** Seeded only where the cursor flag is on: it stands for a take recorded with it. */
 const CURSOR_RECORDING: RecordingFixture = {
@@ -630,6 +651,13 @@ export interface SeedOptions {
    * vault changes.
    */
   splitWeeklySync?: boolean;
+  /**
+   * Add “Long sequence”, a 12 s recording whose saved edit is ten 1.2 s clips
+   * (`LONG_SEQUENCE_CLIPS`): Add from Library's strip then folds the far clips into groups. Only
+   * the `add-from-library` profile turns it on; it is the oldest recording, so the first rows of
+   * that profile's Library list stay as they were.
+   */
+  manyClipsRecording?: boolean;
   /**
    * Add one screenshot taken from “Weekly sync” (`sourceVideoAssetId` in its sidecar). Only the
    * `add-from-library` profile turns it on: “Weekly sync”'s Captures panel lists it too, so the
@@ -1080,6 +1108,7 @@ export async function seedCatalogVault(vaultDir: string, options: SeedOptions): 
     ...(options.floatingImages ? [FLOATING_RECORDING] : []),
     ...(options.joinedRecordings ? JOINED_RECORDINGS : []),
     ...(options.slideSequence ? [SLIDES_RECORDING] : []),
+    ...(options.manyClipsRecording ? [LONG_SEQUENCE_RECORDING] : []),
     ...(options.cursorRecording ? [CURSOR_RECORDING] : []),
     ...(options.cameraRecordings ? CAMERA_RECORDINGS : []),
     ...RECORDINGS.map((it) =>

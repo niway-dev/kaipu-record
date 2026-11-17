@@ -265,9 +265,19 @@ export const UI_MAP = {
       // with the "From this recording" tag and no card selected yet; screenshotSelected: a card
       // selected, with the strip and the Add button at "Over the video"; noMatch: a search that
       // matches no recording; destinationMenu: the arrow's menu open over the strip, with
-      // "Over the video" disabled for a recording.
+      // "Over the video" disabled for a recording; sameAsEnd: the playhead on the last clip, where
+      // "After this clip" says it is the same as "At the end"; longSequence: ten clips with the
+      // playhead in the fifth, so the strip folds the far clips into "N clips" groups.
       addFromLibrary: {
-        states: ["recordings", "screenshots", "screenshotSelected", "noMatch", "destinationMenu"],
+        states: [
+          "recordings",
+          "screenshots",
+          "screenshotSelected",
+          "noMatch",
+          "destinationMenu",
+          "sameAsEnd",
+          "longSequence",
+        ],
         gatedBy: [{ flag: "timeline-levels" }],
       },
       // The "Insert here" bar and pill on the Clips row while a recording is dragged over it: it
