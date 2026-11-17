@@ -247,6 +247,7 @@ test("a worker reads the take by Range, and what it costs", async () => {
   const result: Record<string, unknown> = { take: TAKE };
   try {
     await dismissOnboarding(page);
+    result.memoryFreshApp = await usage(s);
     await startWorker(page);
     const takeUrl = await mediaUrl(page, "take");
     result.takeUrl = takeUrl.replace(/\?w=.*/, "?w=…");
@@ -374,6 +375,7 @@ test("a worker reads the take by Range, and what it costs", async () => {
       }
     }
     result.bench = bench;
+    result.memoryAfterBench = await usage(s);
     await writeFile(path.join(OUT, "bench.json"), JSON.stringify(result, null, 2));
 
     // 2b. Open time, cold-ish (a fresh worker file, OS cache warm) and repeated.
