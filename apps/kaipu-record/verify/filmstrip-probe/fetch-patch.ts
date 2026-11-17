@@ -29,10 +29,36 @@ self.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   return response;
 };
 
-(self as unknown as { postMessage: typeof realPost }).postMessage = (message, transfer) =>
-  realPost(
+/**
+ * How a `frame` message leaves the worker (memory scenario, `probe-config` message): `blob` as
+ * the engine posts it, `drop` (the Blob is made and never posted), `buffer` (its bytes as a
+ * transferred ArrayBuffer). Messages keep their order through one promise chain.
+ */
+let frameMode: "blob" | "drop" | "buffer" = "blob";
+let chain: Promise<void> = Promise.resolve();
+
+(self as unknown as { postMessage: typeof realPost }).postMessage = (message, transfer) => {
+  const stamped =
     message && typeof message === "object"
       ? { ...(message as object), _workerTime: performance.now() }
-      : message,
-    transfer,
-  );
+      : message;
+  const m = stamped as { type?: string; blob?: Blob } | undefined;
+  if (m?.type === "probe-config") {
+    frameMode = (message as unknown as { frameMode: typeof frameMode }).frameMode;
+    return;
+  }
+  if (frameMode === "blob" || m?.type !== "frame" || !m.blob) {
+    if (frameMode === "blob") return realPost(stamped, transfer);
+    chain = chain.then(() => realPost(stamped, transfer));
+    return;
+  }
+  const blob = m.blob;
+  chain = chain.then(async () => {
+    if (frameMode === "drop") {
+      realPost({ ...m, blob: undefined }, transfer);
+    } else {
+      const bytes = await blob.arrayBuffer();
+      realPost({ ...m, blob: undefined, bytesBuffer: bytes }, [bytes]);
+    }
+  });
+};

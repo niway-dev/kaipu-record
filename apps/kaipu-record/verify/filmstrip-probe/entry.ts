@@ -6,6 +6,8 @@
  * `verify/filmstrip-worker.verify.ts`; never shipped.
  */
 import "./fetch-patch";
+import { readWorkerMem } from "./mem";
+import { closeStage, runStage, type StageRequest } from "./stage";
 import "../../src/renderer/src/features/video-editor/filmstrip-worker";
 import { ALL_FORMATS, EncodedPacketSink, Input } from "mediabunny";
 import type { Slot } from "../../src/renderer/src/features/video-editor/filmstrip-frames";
@@ -126,7 +128,24 @@ async function info(message: InfoMessage): Promise<void> {
 }
 
 (self as unknown as { onmessage: (event: MessageEvent) => void }).onmessage = (event) => {
-  if (event.data?.type === "info") void info(event.data as InfoMessage);
+  if (event.data?.type === "probe-config") {
+    (self.postMessage as unknown as (m: unknown) => void)(event.data);
+  } else if (event.data?.type === "stage-request") {
+    const request = event.data as StageRequest;
+    const reply = self.postMessage as unknown as (m: unknown) => void;
+    runStage(request).then(
+      (result) => reply({ type: "stage-done", id: request.id, ...result }),
+      (error) => reply({ type: "error", message: String(error) }),
+    );
+  } else if (event.data?.type === "stage-close") {
+    closeStage();
+  } else if (event.data?.type === "mem") {
+    (self.postMessage as unknown as (m: unknown) => void)({
+      type: "mem-done",
+      id: event.data.id,
+      ...readWorkerMem(),
+    });
+  } else if (event.data?.type === "info") void info(event.data as InfoMessage);
   else if (event.data?.type === "bench") void bench(event.data as BenchMessage);
   else engineHandler(event);
 };

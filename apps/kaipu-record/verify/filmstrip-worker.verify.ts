@@ -166,7 +166,14 @@ interface Usage {
   cpuByType: Record<string, number>;
 }
 
-/** Cumulative CPU and memory of every process the app owns, the main one (`Browser`) included. */
+/**
+ * Cumulative CPU and memory of every process the app owns, the main one (`Browser`) included.
+ *
+ * The renderer's memory read here is inflated by the harness: Playwright enables the DevTools
+ * Network domain on the page and its workers, and that agent keeps the bodies of the worker's
+ * fetches (about +210 to +270 MB, plus about 0.19 MB per request). Without a CDP client the
+ * same run plateaus about 70 MB above the baseline (`verify/filmstrip-no-cdp/`, NIW2-844).
+ */
 async function usage(s: { app: import("@playwright/test").ElectronApplication }): Promise<Usage> {
   return s.app.evaluate(({ app }) => {
     let cpu = 0;
