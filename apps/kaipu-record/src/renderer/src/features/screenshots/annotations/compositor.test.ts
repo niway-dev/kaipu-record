@@ -303,7 +303,7 @@ describe("compositor canvas mode", () => {
     expect(buildSvg(s, g)).toMatch(/<rect width="1380" height="680" rx="\d+" fill="url\(#bg\)"/);
   });
 
-  it("draws no neutral fill for bg none when extents are zero", () => {
+  it("with bg none and zero extents (one image, no gap) the export also has no white rect", () => {
     expect(buildSvg(scene([], "none"), { ...geom, extents: ZERO })).not.toContain("#ffffff");
   });
 
