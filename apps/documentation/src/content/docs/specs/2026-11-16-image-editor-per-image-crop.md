@@ -284,7 +284,9 @@ is not contradicted in its Decision section. Two lines need a note:
    versions."** v1 → v2 (world units) was the first breaking change. v3 is the second: an older
    build must refuse it, so the condition is met. **The owner accepted it on 2026-11-16:** every
    save writes v3, whether or not an image carries a crop, and an older build opens a v3 document
-   as the flattened PNG, with no data lost. The ADR carries the
+   as the flattened PNG, so the picture stays correct. If the person edits and saves it in that
+   older build, the new save replaces the editable document, so its layers, crops and original
+   assets are lost. The ADR carries the
    [amendment](/architecture/decisions/0053-the-image-editor-is-a-canvas-saved-as-a-document-beside-its-flattened-export/#amendment-2026-11-16-version-3-per-image-crop)
    with the new reopen condition. Rejected: writing v2 unless an image carries a crop or radius
    (two writers to keep honest, and the version would depend on content).

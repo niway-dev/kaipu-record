@@ -140,7 +140,9 @@ met. The owner accepted it on 2026-11-16 instead of keeping v2 until a crop is u
 is additive: v2 documents open unchanged and nothing is migrated.
 
 **Consequence.** A build that predates v3 reads a version 3 document as unsupported and opens the
-flattened PNG (point 4), so no data is lost. It would otherwise stretch the whole asset into the
+flattened PNG (point 4), so the picture stays correct. If the person edits and saves it in that
+build, the new save replaces the editable document, so its layers, crops and original assets are
+lost. Without the fallback, it would stretch the whole asset into the
 cropped rect and show a wrong picture with no warning.
 
 **Rejected.** Writing v2 unless an image carries a crop or radius: a small branch in
