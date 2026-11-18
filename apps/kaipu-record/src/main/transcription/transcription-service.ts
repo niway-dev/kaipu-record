@@ -306,7 +306,8 @@ export class TranscriptionService {
   /** The model id of a `begin` that passed its checks and is still resolving the item. */
   private opening: string | null = null;
   /** Models being removed: `begin` refuses them, the store still reports them installed. */
-  private readonly removing = new Set<string>();
+  /** Removals in flight per model id; overlapping calls each hold one until their own delete ends. */
+  private readonly removing = new Map<string, number>();
   private readonly sweptDirs = new Set<string>();
 
   constructor(private readonly deps: TranscriptionServiceDeps) {
@@ -499,7 +500,7 @@ export class TranscriptionService {
       throw new Error("The speech model is in use by a transcription job");
     }
     // Reserved in the same tick as the check above, so a `begin` cannot slip in between.
-    this.removing.add(id);
+    this.removing.set(id, (this.removing.get(id) ?? 0) + 1);
     try {
       const running = this.download;
       if (running?.id === id) {
@@ -508,7 +509,9 @@ export class TranscriptionService {
       }
       await this.deps.modelStore.remove(id);
     } finally {
-      this.removing.delete(id);
+      const left = (this.removing.get(id) ?? 1) - 1;
+      if (left > 0) this.removing.set(id, left);
+      else this.removing.delete(id);
     }
   }
 

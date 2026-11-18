@@ -854,6 +854,28 @@ describe("begin", () => {
     expect((await h.service.begin(REQUEST)).status).toBe("accepted");
   });
 
+  it("keeps refusing the model until the last of two overlapping removals returns", async () => {
+    const h = makeHarness();
+    await mkdir(join(root, ".kaipu"), { recursive: true });
+    await writeFile(h.state.mediaPath, "media");
+    const first = Promise.withResolvers<void>();
+    const second = Promise.withResolvers<void>();
+    h.modelStore.remove
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+
+    const removingFirst = h.service.removeModel(MODEL_ID);
+    const removingSecond = h.service.removeModel(MODEL_ID);
+    first.resolve();
+    await removingFirst;
+    // One delete is still in flight, so the model stays reserved.
+    expect(await h.service.begin(REQUEST)).toEqual({ status: "refused", reason: "model-missing" });
+
+    second.resolve();
+    await removingSecond;
+    expect((await h.service.begin(REQUEST)).status).toBe("accepted");
+  });
+
   it("refuses a second job with busy, also while the first is still being opened", async () => {
     const h = makeHarness();
     const first = h.service.begin(REQUEST);
