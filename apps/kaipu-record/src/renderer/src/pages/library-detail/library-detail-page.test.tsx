@@ -23,6 +23,11 @@ const probe = vi.hoisted(() =>
 );
 vi.mock("@renderer/features/video-editor/export/probe-source", () => ({ probeSource: probe }));
 
+// A job that never ends: the tests look at the progress it shows, not at the decoding.
+vi.mock("@renderer/features/transcription/audio/run-transcription-job", () => ({
+  runTranscriptionJob: () => new Promise(() => {}),
+}));
+
 const transcribeFlag = vi.hoisted(() => ({ on: false }));
 vi.mock("@renderer/features/analytics/use-flag", () => ({ useFlag: () => transcribeFlag.on }));
 
@@ -2034,5 +2039,249 @@ describe("LibraryDetailPage Transcribe button (NIW2-818)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Transcribe" }));
     await act(async () => {});
     expect(router.state.location.pathname).toBe("/library/asset-b");
+  });
+});
+
+describe("LibraryDetailPage Transcript tab (NIW2-870)", () => {
+  const realElectronApi = window.electronAPI;
+
+  function word(id: string, text: string, startMs: number, endMs: number) {
+    return { id, segmentId: "s1", text, startMs, endMs, logProb: -0.1 };
+  }
+  const TRANSCRIPT = {
+    schemaVersion: 1,
+    model: { id: "m", revision: "1", files: {} },
+    engine: { name: "sherpa", version: "1" },
+    media: { contentHash: "h", durationMs: 45_000 },
+    createdAt: "2026-11-15T00:00:00.000Z",
+    segments: [],
+    unresolved: [],
+    words: [
+      word("w1", "Hello", 1000, 1400),
+      word("w2", "brave", 1500, 1900),
+      word("w3", "world.", 2400, 2900),
+      word("w4", "Goodbye", 30_000, 30_500),
+    ],
+  };
+
+  let readTranscript: ReturnType<typeof vi.fn>;
+
+  function stubApi(transcript: unknown): void {
+    readTranscript = vi.fn(async (_id: string) =>
+      transcript ? { status: "ready", transcript, stale: false } : { status: "none" },
+    );
+    window.electronAPI = {
+      ...realElectronApi,
+      readTranscript,
+      getTranscriptionStatus: vi.fn(async () => ({
+        availability: { status: "available" as const },
+        defaultModelId: "m",
+        models: [
+          {
+            id: "m",
+            label: "Parakeet",
+            languages: ["en"],
+            sizeBytes: 1,
+            location: "/m",
+            license: { name: "l", attribution: "a", url: "u" },
+            status: { state: "ready" as const },
+          },
+        ],
+        job: null,
+      })),
+    } as typeof window.electronAPI;
+  }
+
+  function list(...items: LibraryItem[]): void {
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items,
+      vaultError: null,
+      catalogVerifiedAt: null,
+    }));
+  }
+
+  beforeEach(() => {
+    transcribeFlag.on = true;
+  });
+  afterEach(async () => {
+    window.electronAPI = realElectronApi;
+    const { resetTranscriptionJobStore } =
+      await import("@renderer/features/transcription/transcription-job-store");
+    resetTranscriptionJobStore();
+  });
+
+  async function openTranscript(assetId = "asset-b"): Promise<void> {
+    renderDetail(assetId);
+    await waitForLoaded();
+    await waitFor(() => expect(probe).toHaveBeenCalled());
+    fireEvent.click(await screen.findByRole("tab", { name: "Transcript" }));
+  }
+
+  it("T1: sits right after Versions with the flag on, and the default tab does not change", async () => {
+    stubApi(null);
+    list(exportedOnlyItem);
+    renderDetail("asset-b");
+    await waitForLoaded();
+    const names = (await screen.findAllByRole("tab")).map((tab) => tab.textContent);
+    expect(names).toEqual(["Versions", "Transcript", "Details", "Where is it going?"]);
+    expect(screen.getByRole("tab", { name: "Where is it going?" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("T1: no tab, and nothing read, with the flag off", async () => {
+    transcribeFlag.on = false;
+    stubApi(null);
+    list(exportedOnlyItem);
+    renderDetail("asset-b");
+    await waitForLoaded();
+    await act(async () => {});
+    expect(screen.queryByRole("tab", { name: "Transcript" })).toBeNull();
+    expect(readTranscript).not.toHaveBeenCalled();
+  });
+
+  it("T1: no tab for a cloud-only screenshot", async () => {
+    stubApi(null);
+    list(cloudOnlyItem);
+    renderDetail("cloud-1");
+    await waitForLoaded();
+    await act(async () => {});
+    expect(screen.queryByRole("tab", { name: "Transcript" })).toBeNull();
+  });
+
+  it("T1: the tab leaves, back on a visible tab, once the file is read and has no audio", async () => {
+    stubApi(null);
+    probe.mockResolvedValueOnce({
+      width: 1280,
+      height: 720,
+      durationSec: 45,
+      fps: 30,
+      hasAudio: false,
+      sampleRate: 0,
+    });
+    list(exportedOnlyItem);
+    renderDetail("asset-b");
+    await waitForLoaded();
+    await waitFor(() => expect(probe).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByRole("tab", { name: "Transcript" })).toBeNull());
+    expect(screen.getAllByRole("tab").length).toBeGreaterThan(0);
+  });
+
+  it("T2 and failure 1: the word the detail video says is the one highlighted, after a seek", async () => {
+    stubApi(TRANSCRIPT);
+    list(exportedOnlyItem);
+    await openTranscript();
+    const list_ = await screen.findByTestId("transcript-list");
+    expect(list_.closest('[data-ui-area="libraryDetail.transcriptPanel"]')).not.toBeNull();
+
+    const video = screen.getByTestId("recording-video") as HTMLVideoElement;
+    video.currentTime = 2.45;
+    fireEvent.seeked(video);
+    await waitFor(() =>
+      expect(document.querySelector("[data-current]")).toHaveTextContent("world."),
+    );
+    video.currentTime = 30.2;
+    fireEvent.seeked(video);
+    await waitFor(() =>
+      expect(document.querySelector("[data-current]")).toHaveTextContent("Goodbye"),
+    );
+  });
+
+  it("T3: clicking a word sets the detail video's time to that word's start", async () => {
+    stubApi(TRANSCRIPT);
+    list(exportedOnlyItem);
+    await openTranscript();
+    fireEvent.click(await screen.findByText("brave"));
+    expect((screen.getByTestId("recording-video") as HTMLVideoElement).currentTime).toBe(1.5);
+  });
+
+  it("T4: with no transcript the tab offers Transcribe now, and the words replace the progress", async () => {
+    stubApi(null);
+    list(exportedOnlyItem);
+    await openTranscript();
+    const panel = await screen.findByTestId("transcript-panel");
+    expect(panel).toHaveAttribute("data-state", "idle");
+    expect(panel.tagName).toBe("SECTION");
+    expect(screen.queryByRole("button", { name: "Close transcript" })).toBeNull();
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Transcribe now" }));
+    await waitFor(() => expect(panel).toHaveAttribute("data-state", "transcribing"));
+    // Failure 4: the header button reads the same job and shows its progress too.
+    expect(screen.getByTestId("transcribe-progress")).toBeInTheDocument();
+  });
+
+  it("T5: the header's Transcribed badge opens the Transcript tab", async () => {
+    stubApi(TRANSCRIPT);
+    list({ ...exportedOnlyItem, transcribedAt: 99 });
+    renderDetail("asset-b");
+    await waitForLoaded();
+    fireEvent.click(await screen.findByRole("button", { name: "Transcribed" }));
+    expect(screen.getByRole("tab", { name: "Transcript" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(await screen.findByTestId("transcript-list")).toBeInTheDocument();
+  });
+
+  it("T6: search counts matches in the tab", async () => {
+    stubApi(TRANSCRIPT);
+    list(exportedOnlyItem);
+    await openTranscript();
+    fireEvent.change(await screen.findByRole("searchbox"), { target: { value: "brave" } });
+    expect(within(screen.getByTestId("transcript-panel")).getByText("1 of 1")).toBeInTheDocument();
+  });
+
+  it("failure 2: leaving the tab stops the frame loop that follows the video", async () => {
+    const frames = new Map<number, FrameRequestCallback>();
+    let next = 1;
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      frames.set(next, cb);
+      return next++;
+    });
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => frames.delete(id));
+    try {
+      stubApi(TRANSCRIPT);
+      list(exportedOnlyItem);
+      await openTranscript();
+      await screen.findByTestId("transcript-list");
+      fireEvent.play(screen.getByTestId("recording-video"));
+      expect(frames.size).toBe(1);
+      fireEvent.click(screen.getByRole("tab", { name: "Details" }));
+      expect(frames.size).toBe(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("failure 3: another item shows its own state, never the previous video's words", async () => {
+    stubApi(TRANSCRIPT);
+    const other: LibraryItem = {
+      ...exportedOnlyItem,
+      assetId: "asset-d",
+      title: "Other",
+      local: { ...exportedOnlyItem.local!, id: "local-d", assetId: "asset-d", title: "Other" },
+      cloud: null,
+      availability: "local",
+    };
+    readTranscript.mockImplementation(async (id: string) =>
+      id === "local-b"
+        ? { status: "ready", transcript: TRANSCRIPT, stale: false }
+        : { status: "none" },
+    );
+    list(exportedOnlyItem, other);
+    const router = renderDetail("asset-b");
+    await waitForLoaded();
+    fireEvent.click(await screen.findByRole("tab", { name: "Transcript" }));
+    await screen.findByTestId("transcript-list");
+
+    await act(async () => {
+      await router.navigate("/library/asset-d");
+    });
+    fireEvent.click(await screen.findByRole("tab", { name: "Transcript" }));
+    const panel = await screen.findByTestId("transcript-panel");
+    await waitFor(() => expect(panel).toHaveAttribute("data-state", "idle"));
+    expect(screen.queryByText("brave")).toBeNull();
+    expect(readTranscript).toHaveBeenCalledWith("local-d");
   });
 });
