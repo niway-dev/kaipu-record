@@ -99,8 +99,9 @@ describe("groupParagraphs", () => {
   });
 
   it("tells the same word on two repeats apart in the id", () => {
+    // Same word at the same timeline time: only the clip differs, and the source jump breaks them.
     const one = occ("hola", 1, { clipId: "first" });
-    const two = occ("hola", 8, { clipId: "again" });
+    const two = occ("hola", 1, { clipId: "again", sourceStartMs: 9000, sourceEndMs: 9400 });
     const ids = groupParagraphs([one, two]).map((p) => p.id);
     expect(ids).toHaveLength(2);
     expect(ids[0]).not.toBe(ids[1]);
