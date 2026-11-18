@@ -22,8 +22,10 @@ import {
 
 /**
  * The id the base image answers to for selection and crop mode. The base is not an annotation
- * (`scene.ts`: it stays the anchor), so it has a sentinel; no annotation id looks like this
- * (`a<number>`), and a `removeAnnotation` on it finds nothing and does nothing.
+ * (`scene.ts`: it stays the anchor), so it has a sentinel. The editor only generates
+ * `a<number>` annotation ids, so only a hand-edited document could carry an annotation whose id
+ * is "base" (the reader accepts any string id); that case would be ambiguous. Otherwise a
+ * `removeAnnotation` on it finds nothing and does nothing.
  */
 export const BASE_IMAGE_ID = "base";
 
