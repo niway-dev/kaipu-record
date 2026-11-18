@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { VideoOff } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
@@ -23,6 +23,20 @@ export function pictureBox(frame: FrameSize): { width: string; height: string } 
   return { width: `${width * 100}%`, height: `${height * 100}%` };
 }
 
+/**
+ * What a host can do with the player without owning its `<video>`: move the clock, read it and
+ * follow it. Seconds are the recording's own time, the element's `currentTime`.
+ */
+export interface PlayerHandle {
+  seek(seconds: number): void;
+  readTime(): number;
+  /**
+   * Called with the current time at frame rate while the video plays, and once after every seek
+   * (a paused video moves too). The returned function stops it.
+   */
+  subscribeTime(listener: (seconds: number) => void): () => void;
+}
+
 interface RecordingPlayerProps {
   id: string;
   poster?: string | null;
@@ -39,6 +53,11 @@ interface RecordingPlayerProps {
    * metadata of this mount; a rename's position restore wins over it.
    */
   startAt?: number;
+  /**
+   * Receives the player's handle once it is mounted, and `null` when it unmounts. The handle
+   * is stable for the life of the player. Without this prop nothing runs besides the video.
+   */
+  onHandle?: (handle: PlayerHandle | null) => void;
 }
 
 /**
@@ -54,6 +73,7 @@ export function RecordingPlayer({
   webcam,
   durationSeconds,
   startAt,
+  onHandle,
 }: RecordingPlayerProps): React.JSX.Element {
   const t = useTranslations("library");
   const [playable, setPlayable] = useState(true);
@@ -78,6 +98,57 @@ export function RecordingPlayer({
     mountedId.current = id;
     restoring.current = true;
   }, [id]);
+
+  // The handle: listeners are called from a frame loop that exists only while the video plays.
+  const listeners = useRef(new Set<(seconds: number) => void>());
+  const loopFrame = useRef<number | null>(null);
+  const notify = useRef((): void => {});
+  notify.current = (): void => {
+    const time = videoRef.current?.currentTime ?? 0;
+    for (const listener of [...listeners.current]) listener(time);
+  };
+  const stopLoop = useRef((): void => {
+    if (loopFrame.current !== null) cancelAnimationFrame(loopFrame.current);
+    loopFrame.current = null;
+  });
+  const startLoop = useRef((): void => {
+    if (loopFrame.current !== null) return;
+    const step = (): void => {
+      notify.current();
+      loopFrame.current = requestAnimationFrame(step);
+    };
+    loopFrame.current = requestAnimationFrame(step);
+  });
+  const handle = useMemo<PlayerHandle>(
+    () => ({
+      seek(seconds) {
+        const video = videoRef.current;
+        if (!video) return;
+        video.currentTime = Math.max(0, seconds);
+        notify.current();
+      },
+      readTime: () => videoRef.current?.currentTime ?? 0,
+      subscribeTime(listener) {
+        listeners.current.add(listener);
+        return () => {
+          listeners.current.delete(listener);
+        };
+      },
+    }),
+    [],
+  );
+  useEffect(() => {
+    onHandle?.(handle);
+    return () => onHandle?.(null);
+  }, [handle, onHandle]);
+  useEffect(() => {
+    const active = listeners.current;
+    const stop = stopLoop.current;
+    return () => {
+      stop();
+      active.clear();
+    };
+  }, []);
 
   const onLoadedMetadata = (event: React.SyntheticEvent<HTMLVideoElement>): void => {
     const video = event.currentTarget;
@@ -117,10 +188,18 @@ export function RecordingPlayer({
             }}
             onPlay={() => {
               if (!restoring.current) position.current.paused = false;
+              startLoop.current();
             }}
             onPause={() => {
               if (!restoring.current) position.current.paused = true;
+              stopLoop.current();
+              notify.current();
             }}
+            onEnded={() => {
+              stopLoop.current();
+              notify.current();
+            }}
+            onSeeked={() => notify.current()}
           />
           {webcam && scene && frame && (
             <div className={styles.picture} style={pictureBox(frame)}>

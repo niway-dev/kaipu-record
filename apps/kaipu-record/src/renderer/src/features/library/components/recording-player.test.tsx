@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render } from "@testing-library/react";
-import { pictureBox, RecordingPlayer } from "./recording-player";
+import { pictureBox, RecordingPlayer, type PlayerHandle } from "./recording-player";
 
 function video(container: HTMLElement): HTMLVideoElement {
   return container.querySelector("video")!;
@@ -76,6 +76,139 @@ describe("RecordingPlayer", () => {
     fireEvent.loadedMetadata(video(container));
     expect(video(container).currentTime).toBe(0);
     expect(pause).not.toHaveBeenCalled();
+  });
+});
+
+describe("RecordingPlayer handle", () => {
+  let frames: Map<number, FrameRequestCallback>;
+  let nextFrame: number;
+  const cancelled = vi.fn();
+
+  beforeEach(() => {
+    frames = new Map();
+    nextFrame = 1;
+    cancelled.mockClear();
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      const id = nextFrame++;
+      frames.set(id, callback);
+      return id;
+    });
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => {
+      cancelled(id);
+      frames.delete(id);
+    });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  /** Run the next pending frame, as the browser would. */
+  function tick(): void {
+    const [id, callback] = [...frames.entries()][0] ?? [];
+    if (id === undefined || !callback) return;
+    frames.delete(id);
+    callback(0);
+  }
+
+  function mount(onHandle: (handle: PlayerHandle | null) => void = () => {}) {
+    const view = render(<RecordingPlayer id="clip" onHandle={onHandle} />);
+    return { ...view, el: video(view.container) };
+  }
+
+  it("hands the handle out on mount and null on unmount", () => {
+    const onHandle = vi.fn();
+    const { unmount } = mount(onHandle);
+    expect(onHandle).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        seek: expect.any(Function),
+        readTime: expect.any(Function),
+        subscribeTime: expect.any(Function),
+      }),
+    );
+    unmount();
+    expect(onHandle).toHaveBeenLastCalledWith(null);
+  });
+
+  it("reads the element's own clock and seeks it", () => {
+    let handle: PlayerHandle | null = null;
+    const { el } = mount((h) => (handle = h));
+    el.currentTime = 12.5;
+    expect(handle!.readTime()).toBe(12.5);
+    handle!.seek(30);
+    expect(el.currentTime).toBe(30);
+  });
+
+  it("notifies listeners with the new time when the player seeks while paused", () => {
+    let handle: PlayerHandle | null = null;
+    const { el } = mount((h) => (handle = h));
+    const listener = vi.fn();
+    handle!.subscribeTime(listener);
+    el.currentTime = 8.5;
+    fireEvent.seeked(el);
+    expect(listener).toHaveBeenLastCalledWith(8.5);
+    handle!.seek(2);
+    expect(listener).toHaveBeenLastCalledWith(2);
+  });
+
+  it("runs the frame loop only while playing, feeding listeners the current time", () => {
+    let handle: PlayerHandle | null = null;
+    const { el } = mount((h) => (handle = h));
+    const listener = vi.fn();
+    handle!.subscribeTime(listener);
+    expect(frames.size).toBe(0);
+
+    fireEvent.play(el);
+    expect(frames.size).toBe(1);
+    el.currentTime = 1.5;
+    tick();
+    expect(listener).toHaveBeenLastCalledWith(1.5);
+    expect(frames.size).toBe(1);
+
+    fireEvent.pause(el);
+    expect(frames.size).toBe(0);
+    const calls = listener.mock.calls.length;
+    tick();
+    expect(listener.mock.calls.length).toBe(calls);
+  });
+
+  it("stops the loop when the video ends", () => {
+    const { el } = mount();
+    fireEvent.play(el);
+    expect(frames.size).toBe(1);
+    fireEvent.ended(el);
+    expect(frames.size).toBe(0);
+  });
+
+  it("stops listeners after unsubscribe, and the loop and listeners after unmount", () => {
+    let handle: PlayerHandle | null = null;
+    const { el, unmount } = mount((h) => (handle = h));
+    const kept = vi.fn();
+    const dropped = vi.fn();
+    const unsubscribe = handle!.subscribeTime(dropped);
+    handle!.subscribeTime(kept);
+    fireEvent.play(el);
+    unsubscribe();
+    tick();
+    expect(dropped).not.toHaveBeenCalled();
+    expect(kept).toHaveBeenCalled();
+
+    const before = kept.mock.calls.length;
+    unmount();
+    expect(frames.size).toBe(0);
+    expect(cancelled).toHaveBeenCalled();
+    expect(kept.mock.calls.length).toBe(before);
+  });
+
+  it("behaves as before for a caller that passes no handle prop", () => {
+    const { container } = render(<RecordingPlayer id="clip" />);
+    const el = video(container);
+    expect(() => {
+      fireEvent.play(el);
+      tick();
+      fireEvent.pause(el);
+      fireEvent.seeked(el);
+    }).not.toThrow();
   });
 });
 
