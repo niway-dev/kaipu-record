@@ -15,7 +15,9 @@ choose; keep it outside the repository.
   v2.0.1 were measured). Use a fresh empty directory for a downloaded archive.
 - The Parakeet v3 int8 model directory (`encoder.int8.onnx`, `decoder.int8.onnx`,
   `joiner.int8.onnx`, `tokens.txt`).
-- `bun`, `ffmpeg`, and on macOS `say` for the synthetic fixtures.
+- macOS. `run.ts` wraps the CLI in BSD `/usr/bin/time -l`, parses its `maximum resident set size`
+  line and sets `DYLD_LIBRARY_PATH`, so it fails on Linux at the first batch.
+- `bun`, `ffmpeg`, and `say` (macOS) for the synthetic fixtures.
 
 ## Make the inputs
 
@@ -51,6 +53,8 @@ that lists the allowed values.
 | `--strategy fixed`                          | windows of `--window-ms` (30 000) overlapping by `--overlap-ms` (3 000) |
 | `--strategy energy`                         | energy VAD regions, padded, long ones split with overlap                |
 | `--batch N`                                 | segments per CLI call                                                   |
+| `--threads N`                               | CLI threads (4)                                                         |
+| `--max-segment-ms N`                        | longest energy-VAD region before it is split with overlap               |
 | `--rule spec / midpoint / midpoint-dedupe`  | how overlapping segments are joined (see `words.ts`)                    |
 | `--truth words.json` / `--marks marks.json` | score against the true words / the true word times                      |
 | `--reference words.json`                    | score against another run's saved words                                 |
