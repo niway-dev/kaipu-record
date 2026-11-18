@@ -49,10 +49,16 @@ Two tests keep it true:
 
 - `settings-consumers.test.ts` scans the renderer. It fails when a file imports the store (or
   `useAppSettings`) and is missing from the map, and when a listed file no longer reads the store.
-- `settings-consumers.behaviour.test.tsx` fails when a listed consumer has no behaviour case. Each
-  case changes the consumer's key in a fake main process, broadcasts it, and asserts what the
-  consumer returned or rendered. A consumer already covered by another test points at it in the
-  map, and the first test checks that the file exists and names the key.
+- `settings-consumers.behaviour.test.tsx` fails when a listed consumer has no behaviour case. For
+  a `live` consumer, the case changes its key in a fake main process, broadcasts it, and asserts
+  what the consumer returned or rendered. For a `once` one, it asserts the first read applied and
+  that a later broadcast did not change it.
+- A consumer whose entry points at another test (`coveredIn`) is covered less directly. The scan
+  test checks that the test file exists and contains the names listed in `mentions`; it does not
+  run a broadcast through the consumer. For the pages that read through `useAppSettings`, the
+  hook's own test shows the hook follows a broadcast, and the scan test fails if such a file
+  stops using the hook or reads once with `getSettingsSnapshot` or `loadSettings`. A page
+  that keeps the hook but ignores a key is not caught.
 
 `e2e/settings-listeners.e2e.ts` checks the same thing against the built app: no
 `MaxListenersExceededWarning` on Record or after ten laps through the app, a change made in the
@@ -98,8 +104,13 @@ points below say what they do not cover.
    (`main/workspaces/index.ts:134`), then `registerSettings()` (line 942) loads the file, recomputes
    the effective settings (`settings-store.ts:72`) and registers the `settings:get` handler
    (`settings-store.ts:269`), and the first window is created after that (line 1280). A renderer
-   cannot read settings before the overrides source is in place. If someone moves that order, the
-   e2e test "a workspace override is in force when the window opens" is the one that fails. One
+   cannot read settings before the overrides source is in place. The e2e test "a workspace
+   override is in force when the window opens" opens the Cloud page and checks its save-mode
+   radio, which the window renders from its own store; it passes on the branch, and a window that
+   read before the override was applied would show the All level's value instead (reasoned from
+   the code, not run). It does not fail for every reorder: `setOverridesSource()` recomputes the effective settings whenever it runs, so
+   swapping `initWorkspaces()` and `registerSettings()` alone is not seen, only a window that
+   reads before both. One
    path is outside this proof (read from the code, not run): a second launch that arrives after
    Electron is ready but before `registerSettings()` runs would create the main window early, and
    that window would find no `settings:get` handler. That is a failed read (point 2), not a stale

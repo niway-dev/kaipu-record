@@ -110,4 +110,26 @@ describe("the settings consumers map matches the renderer", () => {
     });
     expect(broken).toEqual([]);
   });
+
+  it("a file covered through the useAppSettings hook reads only through the hook", () => {
+    // Its follow-the-store test is the hook's own (`use-app-settings.test.tsx`), so the file
+    // must not bypass the hook with a one-time read (it would not follow, and nothing else fails).
+    const bypass = SETTINGS_CONSUMERS.flatMap((entry) => {
+      const { behaviour } = entry;
+      if (behaviour === "here" || !behaviour.coveredIn.endsWith("use-app-settings.test.tsx")) {
+        return [];
+      }
+      const source = readFileSync(path.join(RENDERER_SRC, entry.file), "utf8");
+      const reads = ["getSettingsSnapshot(", "loadSettings("].filter((call) =>
+        source.includes(call),
+      );
+      const hooked = source.includes("useAppSettings(");
+      return !hooked || reads.length > 0
+        ? [
+            `${entry.file}: uses the hook ${hooked}, reads once with ${reads.join(", ") || "nothing"}`,
+          ]
+        : [];
+    });
+    expect(bypass).toEqual([]);
+  });
 });

@@ -144,10 +144,16 @@ test("a workspace override is in force when the window opens", async () => {
   try {
     await dismissOnboarding(page);
     await page.waitForSelector(RECORD_READY);
-    // The window's own read, at startup and now: the override over the All level (which is
-    // "local-only"), not the file's value.
-    const settings = await page.evaluate(() => window.electronAPI.getSettings());
-    expect(settings.uploadMode).toBe("automatic");
+    // What the window renders from its store: the Cloud page's save-mode radio. The effective
+    // value is the override over the All level ("local-only"), so "automatic" is checked only
+    // if the window read the settings after the override source was set. The radio is
+    // disabled while signed out, but it stays checked: the saved preference is shown.
+    await page.evaluate(() => {
+      location.hash = "#/cloud";
+    });
+    const saveMode = page.locator('[data-ui-area="cloud.saveMode"]');
+    await expect(saveMode.locator('input[value="automatic"]')).toBeChecked();
+    await expect(saveMode.locator('input[value="local-only"]')).not.toBeChecked();
   } finally {
     await teardown();
   }

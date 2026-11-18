@@ -20,10 +20,11 @@ import { ScreenshotAfterCaptureSettings } from "../../pages/settings/screenshot-
 import { BEHAVIOUR_TEST, SETTINGS_CONSUMERS } from "./settings-consumers";
 
 /**
- * Each consumer in the map that says `behaviour: "here"` is shown to follow main's broadcast:
- * the test changes the consumer's key in a fake main process, broadcasts it, and asserts what
- * the consumer returns or renders now. A consumer that stopped following the store (or never
- * did) fails its own case.
+ * Each consumer in the map that says `behaviour: "here"` is shown to behave as its `follows`
+ * says. For a `live` one, the test changes the consumer's key in a fake main process,
+ * broadcasts it, and asserts what the consumer returns or renders now: a consumer that stopped
+ * following the store fails its own case. For a `once` one, it asserts the first read applied
+ * and that a later broadcast did not change it.
  *
  * The map drives this file. A `"here"` entry without a case below fails
  * "has a behaviour case"; a case with no entry fails "has no orphan case". The consumers
@@ -133,7 +134,9 @@ const CASES: Record<string, Case> = {
   // Read once: the overlay window lives for one capture, so it takes the bubble's look when it
   // opens and keeps it.
   "features/screenshots/overlay/use-overlay-toggles.ts": async () => {
-    main(withPatch({ cameraBubble: { ...BASE.cameraBubble, size: 333, shape: "rectangle" } }));
+    const ipc = main(
+      withPatch({ cameraBubble: { ...BASE.cameraBubble, size: 333, shape: "rectangle" } }),
+    );
     const off = {
       isMicrophoneEnabled: false,
       isSystemAudioEnabled: false,
@@ -148,6 +151,11 @@ const CASES: Record<string, Case> = {
 
     await waitFor(() => expect(result.current.cameraBubble.size).toBe(333));
     expect(result.current.cameraBubble.shape).toBe("rectangle");
+
+    // A later broadcast does not reach it: the map says `once`, and this is what that means.
+    act(() => ipc.broadcast(withPatch({ cameraBubble: { ...BASE.cameraBubble, size: 111 } })));
+
+    expect(result.current.cameraBubble.size).toBe(333);
   },
 
   "pages/settings/countdown-settings.tsx": async () => {
@@ -186,9 +194,9 @@ const CASES: Record<string, Case> = {
 
 const here = SETTINGS_CONSUMERS.filter((entry) => entry.behaviour === "here");
 
-describe("every settings consumer follows a change of its keys", () => {
-  it("the map says where its behaviour test is", () => {
-    expect(BEHAVIOUR_TEST).toBe("features/settings/settings-consumers.behaviour.test.tsx");
+describe("each consumer that says here behaves as the map says", () => {
+  it("the map names this file as the behaviour test", () => {
+    expect(new URL(import.meta.url).pathname.endsWith(`/${BEHAVIOUR_TEST}`)).toBe(true);
     expect(here.length).toBeGreaterThan(5);
   });
 
