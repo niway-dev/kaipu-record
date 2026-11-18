@@ -149,10 +149,12 @@ export function RecordingPlayer({
     }),
     [],
   );
+  // A video that failed is gone from the page: its handle goes with it, so a caller never seeks
+  // or reads a clock that is not there.
   useEffect(() => {
-    onHandle?.(handle);
+    onHandle?.(playable ? handle : null);
     return () => onHandle?.(null);
-  }, [handle, onHandle]);
+  }, [handle, onHandle, playable]);
   useEffect(() => {
     const active = listeners.current;
     const stop = stopLoop.current;
@@ -193,7 +195,12 @@ export function RecordingPlayer({
             controls
             autoPlay
             data-testid="recording-video"
-            onError={() => setPlayable(false)}
+            onError={() => {
+              // The element unmounts and sends no pause: stop the loop here.
+              playing.current = false;
+              syncLoop.current();
+              setPlayable(false);
+            }}
             onLoadedMetadata={onLoadedMetadata}
             onTimeUpdate={(event) => {
               if (!restoring.current) position.current.time = event.currentTarget.currentTime;

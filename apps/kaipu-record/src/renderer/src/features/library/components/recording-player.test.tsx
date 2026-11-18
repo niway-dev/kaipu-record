@@ -246,6 +246,22 @@ describe("RecordingPlayer handle", () => {
     expect(frames.size).toBe(1);
   });
 
+  it("stops the loop and hands out null when the video fails mid-play", () => {
+    const onHandle = vi.fn();
+    const { el } = mount(onHandle);
+    const handle = onHandle.mock.lastCall![0] as PlayerHandle;
+    const listener = vi.fn();
+    handle.subscribeTime(listener);
+    fireEvent.play(el);
+    expect(frames.size).toBe(1);
+    fireEvent.error(el);
+    expect(frames.size).toBe(0);
+    expect(onHandle).toHaveBeenLastCalledWith(null);
+    const calls = listener.mock.calls.length;
+    tick();
+    expect(listener.mock.calls.length).toBe(calls);
+  });
+
   it("behaves as before for a caller that passes no handle prop", () => {
     const { container } = render(<RecordingPlayer id="clip" />);
     const el = video(container);
