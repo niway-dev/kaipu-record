@@ -195,6 +195,32 @@ describe("useWidgetDevices", () => {
     });
   });
 
+  describe("a pick that main has already answered", () => {
+    afterEach(cleanup);
+
+    it("shows the saved camera again when it returns to the value the pick was made over", async () => {
+      const ipc = installSettingsIpc(settingsWithCamera("cam-1"));
+      const api = {
+        getRecordingSettings: vi.fn(() => new Promise(() => {})),
+        updateSettings: vi.fn(),
+        updateRecordingSettings: vi.fn(),
+        onRecordingSettingsChanged: vi.fn(() => () => {}),
+      } as unknown as Parameters<typeof useWidgetDevices>[0];
+      const { result } = renderHook(() => useWidgetDevices(api, true));
+      await waitFor(() => expect(result.current.cameraId).toBe("cam-1"));
+
+      act(() => result.current.selectCamera("cam-2"));
+      expect(result.current.cameraId).toBe("cam-2");
+      // Main's echo makes the pick the saved value; the pick is spent.
+      act(() => ipc.broadcast(settingsWithCamera("cam-2")));
+      expect(result.current.cameraId).toBe("cam-2");
+
+      // Another display (or Settings) puts cam-1 back: this widget must follow, not keep cam-2.
+      act(() => ipc.broadcast(settingsWithCamera("cam-1")));
+      expect(result.current.cameraId).toBe("cam-1");
+    });
+  });
+
   describe("the camera across displays", () => {
     afterEach(cleanup);
     it("follows a camera chosen in another overlay window", async () => {

@@ -62,9 +62,14 @@ export function useWidgetDevices(
     pick && (pick.over === NOT_LOADED || pick.over === savedCameraId) ? pick.id : savedCameraId;
   useEffect(() => {
     if (loaded) {
-      setPick((current) =>
-        current && current.over === NOT_LOADED ? { id: current.id, over: savedCameraId } : current,
-      );
+      setPick((current) => {
+        if (!current) return current;
+        // Settled over the first read's value.
+        if (current.over === NOT_LOADED) return { id: current.id, over: savedCameraId };
+        // The store moved off the value the pick was made over: the pick is spent, so the
+        // saved camera can come back to that value later without reviving it.
+        return current.over === savedCameraId ? current : null;
+      });
     }
   }, [loaded, savedCameraId]);
   // Counts every microphone change after mount (a choice or a broadcast), so a late first
