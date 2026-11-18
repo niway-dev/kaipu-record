@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { KaipuElectronAPI } from "@shared/types/electron-api";
 import type { RecordingSettings } from "@shared/types/ipc";
+import type { AppSettings } from "@shared/types";
+import { loadSettings, useSettings } from "@renderer/features/settings/settings-store";
 import { useCameras } from "@renderer/features/camera-settings/use-camera-settings";
 import { useMicrophones } from "@renderer/features/recording/hooks/use-microphones";
 import type { RecordingTogglesApi } from "./use-overlay-toggles";
@@ -9,6 +11,11 @@ export interface WidgetDevice {
   id: string;
   label: string;
 }
+
+const wholeSettings = (settings: AppSettings): AppSettings => settings;
+
+/** `over` while the store had not answered yet when the camera was picked. */
+const NOT_LOADED = Symbol("settings not loaded");
 
 /** The devices the widget's Microphone and Camera chevrons offer, and the ones in use. */
 export interface WidgetDevices {
@@ -31,20 +38,38 @@ export interface WidgetDevices {
  * after a switch from capture, because `enabled` follows the intent.
  */
 export function useWidgetDevices(
-  api: RecordingTogglesApi &
-    Partial<Pick<KaipuElectronAPI, "updateSettings" | "onSettingsChanged">>,
+  api: RecordingTogglesApi & Partial<Pick<KaipuElectronAPI, "updateSettings">>,
   enabled: boolean,
 ): WidgetDevices {
   const microphones = useMicrophones(enabled);
   const cameras = useCameras(enabled);
   const [selectedMicrophone, setSelectedMicrophone] =
     useState<RecordingSettings["selectedMicrophone"]>(null);
-  const [cameraId, setCameraId] = useState<string | null>(null);
+  // The camera in use is what the window's settings store holds. One overlay window per display
+  // mounts this hook: a camera picked in another window arrives as a settings broadcast, and
+  // this window's widget follows it. A pick made here shows at once, until the store changes
+  // (main's echo, or another window's choice), which is newer.
+  // A pick made before the store's first read answered stands over that read, which was
+  // computed before the choice; the next change after it (main's echo) is the newer one.
+  const app = useSettings(wholeSettings);
+  const loaded = app !== null;
+  const savedCameraId = app?.cameraBubble?.deviceId ?? null;
+  const [pick, setPick] = useState<{
+    id: string;
+    over: string | null | typeof NOT_LOADED;
+  } | null>(null);
+  const cameraId =
+    pick && (pick.over === NOT_LOADED || pick.over === savedCameraId) ? pick.id : savedCameraId;
+  useEffect(() => {
+    if (loaded) {
+      setPick((current) =>
+        current && current.over === NOT_LOADED ? { id: current.id, over: savedCameraId } : current,
+      );
+    }
+  }, [loaded, savedCameraId]);
   // Counts every microphone change after mount (a choice or a broadcast), so a late first
   // read can tell it is older than what the window already shows.
   const microphoneRevision = useRef(0);
-  // The same for the camera: a pick here or an app-settings broadcast outdates the first read.
-  const cameraRevision = useRef(0);
 
   useEffect(() => {
     if (!enabled) return;
@@ -58,29 +83,13 @@ export function useWidgetDevices(
         }
       })
       .catch(() => {});
-    const cameraRevisionAtRequest = cameraRevision.current;
-    api
-      .getSettings?.()
-      .then((app) => {
-        if (live && cameraRevision.current === cameraRevisionAtRequest) {
-          setCameraId(app.cameraBubble?.deviceId ?? null);
-        }
-      })
-      .catch(() => {});
     const unsubscribe = api.onRecordingSettingsChanged((current) => {
       microphoneRevision.current += 1;
       setSelectedMicrophone(current.selectedMicrophone);
     });
-    // One overlay window per display mounts this hook: a camera picked in another window
-    // arrives as an app-settings broadcast, and this window's widget must follow it.
-    const unsubscribeSettings = api.onSettingsChanged?.((app) => {
-      cameraRevision.current += 1;
-      setCameraId(app.cameraBubble?.deviceId ?? null);
-    });
     return () => {
       live = false;
       unsubscribe();
-      unsubscribeSettings?.();
     };
   }, [api, enabled]);
 
@@ -97,17 +106,15 @@ export function useWidgetDevices(
 
   const selectCamera = useCallback(
     (id: string): void => {
-      cameraRevision.current += 1;
-      setCameraId(id);
+      setPick({ id, over: loaded ? savedCameraId : NOT_LOADED });
       // The whole bubble is written back, as the camera settings do: a partial would drop it.
-      void api
-        .getSettings?.()
+      void loadSettings()
         .then((app) =>
           api.updateSettings?.({ cameraBubble: { ...app.cameraBubble, deviceId: id } }),
         )
         .catch(() => {});
     },
-    [api],
+    [api, loaded, savedCameraId],
   );
 
   return {

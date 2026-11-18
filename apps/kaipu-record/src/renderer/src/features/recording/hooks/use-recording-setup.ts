@@ -24,6 +24,7 @@ import {
   type RecorderStatus,
   type StartInput,
 } from "@renderer/features/recording/hooks/use-screen-recorder";
+import { loadSettings, watchSettings } from "@renderer/features/settings/settings-store";
 import type { AppSettings } from "@shared/types";
 import type { Microphone, SelectedSource } from "@renderer/features/recording/types";
 
@@ -99,7 +100,7 @@ export function useRecordingSetup(): RecordingSetup {
   const qualityRef = useRef<RecordingQuality>(DEFAULT_QUALITY);
 
   // The audio settings (mic level, noise reduction, system volume, ducking) are persisted
-  // app settings too. Read on mount, then kept current through `onSettingsChanged`, so a
+  // app settings too. Read from the window's settings store, which keeps them current, so a
   // level changed in the popover before pressing Record is the one the take starts with.
   const audioRef = useRef<AudioSettings>(DEFAULT_AUDIO_SETTINGS);
   // The bubble's camera, size and framing decide the webcam file's camera and lines (ADR 0037).
@@ -135,22 +136,15 @@ export function useRecordingSetup(): RecordingSetup {
       cameraBubbleRef.current = sanitizeCameraBubble(appSettings.cameraBubble);
       setPreferredMicrophone(appSettings.microphone ?? null);
     };
-    // A broadcast is newer than the initial read, which may resolve after it: once one has
-    // arrived, the read must not overwrite it.
-    let heardChange = false;
-    void window.electronAPI.getSettings().then(
-      (appSettings) => {
-        if (!heardChange) apply(appSettings);
-        ready();
-      },
-      // A failed read leaves the defaults, as before; the start must not wait forever.
-      ready,
-    );
-    const unsubscribe = window.electronAPI.onSettingsChanged((appSettings) => {
-      heardChange = true;
+    // The window's settings store holds the one read and orders it against broadcasts (a
+    // broadcast newer than the read wins), so this only applies whatever the store hands over:
+    // the value it already holds, the first read, then every change.
+    const unsubscribe = watchSettings((appSettings) => {
       apply(appSettings);
       ready();
     });
+    // A failed read leaves the defaults, as before; the start must not wait forever.
+    loadSettings().catch(ready);
     return unsubscribe;
   }, []);
 

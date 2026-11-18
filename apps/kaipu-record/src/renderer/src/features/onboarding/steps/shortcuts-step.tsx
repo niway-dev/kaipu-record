@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
 import { AppWindow, Camera, Check, ScanLine, Video, type LucideIcon } from "lucide-react";
 import type { AppSettings, ShortcutAction } from "@shared/types";
 import { useTranslations } from "@kaipu/i18n";
 import { acceleratorKeys } from "@renderer/features/shortcuts/keyboard-accelerator";
 import { isWindowsHost } from "@renderer/features/shortcuts/host-platform";
 import { uiArea } from "@renderer/lib/ui-area";
+import { useSettings } from "@renderer/features/settings/settings-store";
 import { ONBOARDING_SHORTCUTS, triedShortcutCount } from "../onboarding-flow";
 import common from "./step.module.css";
 import styles from "./shortcuts-step.module.css";
@@ -32,15 +32,11 @@ function cardText(action: ShortcutAction): CardText {
   }
 }
 
+const pickShortcuts = (settings: AppSettings): AppSettings["shortcuts"] => settings.shortcuts;
+
 /** The live bindings, so a rebind on the Shortcuts page shows here at once. `null` until read. */
 function useShortcutBindings(): AppSettings["shortcuts"] | null {
-  const [shortcuts, setShortcuts] = useState<AppSettings["shortcuts"] | null>(null);
-  useEffect(() => {
-    const apply = (settings: AppSettings): void => setShortcuts(settings.shortcuts);
-    void window.electronAPI.getSettings().then(apply);
-    return window.electronAPI.onSettingsChanged(apply);
-  }, []);
-  return shortcuts;
+  return useSettings(pickShortcuts);
 }
 
 interface ShortcutsStepProps {

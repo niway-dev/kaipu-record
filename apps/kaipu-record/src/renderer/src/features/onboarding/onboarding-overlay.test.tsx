@@ -353,43 +353,34 @@ describe("OnboardingOverlay", () => {
 
   it("Privacy: the toggle waits for the saved value instead of showing On first", async () => {
     type Settings = Awaited<ReturnType<KaipuElectronAPI["getSettings"]>>;
+    // The window's settings store asks main once, when the first step that needs it mounts
+    // (Shortcuts). Held back here, so the Privacy step opens before the answer.
     let settle: (value: Settings) => void = () => {};
-    let pending = false;
     const base = { shortcuts: defaultShortcutsFor("darwin") } as Settings;
     mockElectronAPI({
       checkPermissions: vi.fn().mockResolvedValue(granted),
-      getSettings: vi.fn(() =>
-        pending ? new Promise<Settings>((resolve) => (settle = resolve)) : Promise.resolve(base),
-      ),
+      getSettings: vi.fn(() => new Promise<Settings>((resolve) => (settle = resolve))),
     });
     render(<OnboardingOverlay onClose={vi.fn()} />);
-    await toShortcuts();
-    pending = true;
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    await screen.findByRole("heading", { name: /your recordings are yours/i });
+    await toPrivacy();
     const toggle = screen.getByRole("switch", { name: /share usage and crash reports/i });
     expect(toggle).toBeDisabled();
     expect(toggle).not.toBeChecked();
 
-    settle({ ...base, diagnosticsEnabled: false } as Settings);
+    await act(async () => settle({ ...base, diagnosticsEnabled: false } as Settings));
     await waitFor(() => expect(toggle).toBeEnabled());
     expect(toggle).not.toBeChecked();
   });
 
   it("Privacy: the toggle stays disabled when the saved value cannot be read", async () => {
-    let failing = false;
-    const base = { shortcuts: defaultShortcutsFor("darwin") };
     mockElectronAPI({
       checkPermissions: vi.fn().mockResolvedValue(granted),
       getSettings: vi.fn(() =>
-        failing ? Promise.reject(new Error("ipc down")) : Promise.resolve(base),
+        Promise.reject(new Error("ipc down")),
       ) as unknown as KaipuElectronAPI["getSettings"],
     });
     render(<OnboardingOverlay onClose={vi.fn()} />);
-    await toShortcuts();
-    failing = true;
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    await screen.findByRole("heading", { name: /your recordings are yours/i });
+    await toPrivacy();
     const toggle = screen.getByRole("switch", { name: /share usage and crash reports/i });
     // Give the failed read time to settle: it must not turn the switch on.
     await new Promise((resolve) => setTimeout(resolve, 20));

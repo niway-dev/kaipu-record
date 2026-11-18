@@ -4,6 +4,11 @@ import es from "@kaipu/i18n/messages/es";
 import en from "@kaipu/i18n/messages/en";
 import { setRuntimeLocale } from "@renderer/lib/runtime-i18n";
 import { applyTheme } from "@renderer/lib/apply-theme";
+import {
+  loadSettings,
+  subscribeSettings,
+  updateSettings,
+} from "@renderer/features/settings/settings-store";
 
 /**
  * Wraps any renderer root in <I18nProvider>, resolving the initial locale from
@@ -23,7 +28,7 @@ function syncLocale(locale: Locale): void {
 }
 
 export async function I18nRoot({ children }: { children: ReactNode }): Promise<React.JSX.Element> {
-  const settings = await window.electronAPI.getSettings();
+  const settings = await loadSettings();
   syncLocale(settings.locale);
   applyTheme(settings.theme);
 
@@ -33,10 +38,10 @@ export async function I18nRoot({ children }: { children: ReactNode }): Promise<R
       messagesByLocale={{ es, en }}
       onLocaleChange={(locale: Locale) => {
         syncLocale(locale);
-        void window.electronAPI.updateSettings({ locale });
+        void updateSettings({ locale });
       }}
       subscribeExternal={(apply) =>
-        window.electronAPI.onSettingsChanged((s) => {
+        subscribeSettings((s) => {
           syncLocale(s.locale);
           applyTheme(s.theme);
           apply(s.locale);

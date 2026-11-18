@@ -1,4 +1,6 @@
 import { useEffect } from "react";
+import type { AppSettings } from "@shared/types";
+import { watchSettings } from "@renderer/features/settings/settings-store";
 import { setAnalyticsEnabled } from "./analytics-client";
 
 /**
@@ -9,11 +11,8 @@ import { setAnalyticsEnabled } from "./analytics-client";
  */
 export function useInitAnalytics(): void {
   useEffect(() => {
-    void window.electronAPI.getSettings().then((settings) => {
+    const apply = (settings: AppSettings): void =>
       setAnalyticsEnabled(settings.diagnosticsEnabled, settings.deviceId);
-    });
-    return window.electronAPI.onSettingsChanged((settings) => {
-      setAnalyticsEnabled(settings.diagnosticsEnabled, settings.deviceId);
-    });
+    return watchSettings(apply);
   }, []);
 }

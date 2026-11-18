@@ -3,7 +3,6 @@ import { isMaintenanceError } from "@renderer/features/library/vault-errors";
 import { defaultCaptureName } from "@shared/default-capture-name";
 import { sanitizeAudioSettings, type AudioSettings } from "@shared/audio-settings";
 import {
-  DEFAULT_RECORDING_COUNTDOWN_SECONDS,
   sanitizeCountdownSeconds,
   type RecorderPhaseReport,
   type RecordingArea,
@@ -30,6 +29,11 @@ import { WebcamGapLog } from "./webcam-gaps";
 import type { WatermarkConfig } from "@renderer/features/watermark/watermark";
 import { reportError } from "@renderer/features/analytics";
 import { showToast } from "@renderer/ui/toast-store";
+import {
+  getSettingsSnapshot,
+  loadSettings,
+  subscribeSettings,
+} from "@renderer/features/settings/settings-store";
 import { finalizeErrorKey } from "./finalize-error-message";
 import { buildRecordingCapture, type RecordingCapture } from "@shared/recording-capture";
 import { runtimeT } from "@renderer/lib/runtime-i18n";
@@ -86,11 +90,14 @@ export interface RecorderSnapshot {
 }
 
 /**
- * The countdown length from Settings (0, 3 or 5), read when a start is requested. Kept here
- * because a start is synchronous: it is primed from the settings file and follows the
- * broadcast, so a change applies to the very next take with no restart.
+ * The countdown length from Settings (0, 3 or 5), read from the window's settings store when a
+ * start is requested. A start is synchronous, so it takes what the store holds now (the store
+ * is primed at import, below, and follows every broadcast): a change applies to the very next
+ * take with no restart, and before the first read lands the default stands.
  */
-let countdownSeconds: number = DEFAULT_RECORDING_COUNTDOWN_SECONDS;
+function countdownSeconds(): number {
+  return sanitizeCountdownSeconds(getSettingsSnapshot()?.recordingCountdownSeconds);
+}
 /**
  * How long the first tick waits for main to say the countdown is on screen (the shade window
  * loading on the chosen region). Past it the countdown runs anyway: a take never depends on it.
@@ -289,7 +296,7 @@ export function requestStartRecording(
   beginRecordTiming("requestStartRecording");
   const request = ++countdownRequest;
   const skip = options?.skipCountdown === true;
-  const seconds = skip ? 0 : countdownSeconds;
+  const seconds = skip ? 0 : countdownSeconds();
   if (seconds === 0) {
     markRecordTiming(skip ? "countdown done in the overlay" : "countdown off");
     startTake(resolveInput);
@@ -842,7 +849,7 @@ interface AudioSettingsTracker {
 /** Remembers the newest `AppSettings.audio` broadcast from now on. */
 function trackAudioSettings(initial: AudioSettings): AudioSettingsTracker {
   let latest = initial;
-  let unsubscribe: (() => void) | null = window.electronAPI.onSettingsChanged((appSettings) => {
+  let unsubscribe: (() => void) | null = subscribeSettings((appSettings) => {
     latest = sanitizeAudioSettings(appSettings.audio);
   });
   return {
@@ -967,7 +974,7 @@ function forwardLiveSettings(
   const missed = early.latest();
   early.stop();
   applyAudio(missed);
-  const unsubscribeAudio = window.electronAPI.onSettingsChanged((appSettings) => {
+  const unsubscribeAudio = subscribeSettings((appSettings) => {
     applyAudio(sanitizeAudioSettings(appSettings.audio));
   });
   const applyToggles = (
@@ -1228,24 +1235,10 @@ async function webcamFinalizeMeta(
   };
 }
 
-// The countdown length (Settings → Recording). Registered at import like the command listener
-// below, so every window that records follows the same persisted value. A broadcast that lands
-// before the first read finishes wins: it is newer than the file the read saw.
-let countdownBroadcastSeen = false;
-window.electronAPI.onSettingsChanged?.((settings) => {
-  countdownBroadcastSeen = true;
-  countdownSeconds = sanitizeCountdownSeconds(settings.recordingCountdownSeconds);
-});
-void window.electronAPI
-  .getSettings?.()
-  .then((settings) => {
-    if (!countdownBroadcastSeen) {
-      countdownSeconds = sanitizeCountdownSeconds(settings.recordingCountdownSeconds);
-    }
-  })
-  .catch(() => {
-    // Unreadable settings leave the default: a take never depends on this read.
-  });
+// Prime the window's settings store at import, so the countdown length is there by the time a
+// take is requested. A broadcast that lands before the first read finishes wins (the store
+// drops the older read). Unreadable settings leave the default: a take never depends on it.
+void loadSettings().catch(() => undefined);
 
 // The bar's buttons and the global stop shortcut arrive as relayed commands.
 // Registered ONCE here at module scope — not inside a React effect tied to a

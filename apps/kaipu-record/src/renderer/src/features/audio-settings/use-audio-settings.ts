@@ -5,6 +5,7 @@ import {
   sanitizeAudioSettings,
   type AudioSettings,
 } from "@shared/audio-settings";
+import { getSettingsSnapshot, watchSettings } from "@renderer/features/settings/settings-store";
 
 export interface AudioSettingsStore {
   audio: AudioSettings;
@@ -16,8 +17,9 @@ export interface AudioSettingsStore {
 const PERSIST_EVERY_MS = 60;
 
 /**
- * The audio settings (persisted in `AppSettings.audio` by main). Query on mount +
- * subscribe, like every cross-window setting. The whole `audio` object is what main
+ * The audio settings (persisted in `AppSettings.audio` by main), followed through the window's
+ * settings store like every cross-window setting. A window that already holds them starts on
+ * them; otherwise the defaults stand until the store's first read lands. The whole `audio` object is what main
  * replaces, so every write spreads the current value.
  *
  * Same throttle and early-change rules as `useCameraSettings`: a change made before the
@@ -25,7 +27,10 @@ const PERSIST_EVERY_MS = 60;
  * throttled when the settings close is sent, not lost.
  */
 export function useAudioSettings(): AudioSettingsStore {
-  const [audio, setAudio] = useState<AudioSettings>(DEFAULT_AUDIO_SETTINGS);
+  const [audio, setAudio] = useState<AudioSettings>(() => {
+    const held = getSettingsSnapshot();
+    return held ? sanitizeAudioSettings(held.audio) : DEFAULT_AUDIO_SETTINGS;
+  });
   const latest = useRef(audio);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSent = useRef(0);
@@ -51,8 +56,7 @@ export function useAudioSettings(): AudioSettingsStore {
       setAudio(next);
       if (patch) send();
     };
-    void window.electronAPI.getSettings().then(accept);
-    const unsubscribe = window.electronAPI.onSettingsChanged(accept);
+    const unsubscribe = watchSettings(accept);
     return () => {
       unsubscribe();
       if (timer.current) {

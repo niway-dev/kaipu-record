@@ -6,6 +6,7 @@ import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import { SESSION_BEFORE_WEBCAM } from "@renderer/features/video-editor/session-before-webcam.fixture";
 import { serializeSession } from "@renderer/features/video-editor/session";
 import { initialScene } from "@renderer/features/video-editor/scene";
+import { resetSettingsStoreForTests } from "@renderer/features/settings/settings-store";
 import { TRACK_KEYS } from "@renderer/features/video-editor/tracks";
 import { WEBCAM_DEFAULTS } from "@renderer/features/video-editor/webcam/webcam-model";
 import { setHeaderActionsElement } from "@renderer/features/workspaces/header-slot";
@@ -1776,6 +1777,8 @@ describe("VideoEditorPage — Tracks popover (NIW2-665)", () => {
 
   /** A settings store that remembers what the page writes and tells its subscribers. */
   function fakeSettings(hiddenTracks: string[]): void {
+    // A new window: its settings store asks the fake main again.
+    resetSettingsStoreForTests();
     const base = original.getSettings();
     const listeners = new Set<(s: Settings) => void>();
     let current: Settings | null = null;

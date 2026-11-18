@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS, type AppSettings } from "@shared/types";
 import { defaultShortcutsFor } from "@shared/shortcut-defaults";
 import { uiArea } from "@renderer/lib/ui-area";
+import { resetSettingsStoreForTests } from "@renderer/features/settings/settings-store";
 import { CaptureEntries } from "./capture-entries";
 import { useCaptureEntryActions } from "./use-capture-entry-actions";
 
@@ -26,6 +27,8 @@ afterEach(() => {
 
 /** Main answers these settings; returns the two selector requests. */
 function givenSettings(patch: Partial<AppSettings>) {
+  // A new window: its settings store has not asked main yet, so it asks the new answer.
+  resetSettingsStoreForTests();
   const requestCaptureScreenshot = vi.fn();
   const requestRecordSelector = vi.fn();
   window.electronAPI = {
