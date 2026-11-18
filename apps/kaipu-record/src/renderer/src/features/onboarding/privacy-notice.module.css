@@ -1,0 +1,15 @@
+/* The notice is the step's content in a card: same facts, same toggle, one button. */
+.notice {
+  padding: 28px 28px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  overflow-y: auto;
+}
+
+.actions {
+  width: 100%;
+  max-width: 520px;
+  margin-top: 20px;
+}

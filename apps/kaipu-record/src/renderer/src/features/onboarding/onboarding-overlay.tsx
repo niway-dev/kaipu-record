@@ -5,21 +5,28 @@ import { useTranslations } from "@kaipu/i18n";
 import { usePermissions, useAccessibility } from "@renderer/features/permissions";
 import { uiArea } from "@renderer/lib/ui-area";
 import { requiredPermissionsMet } from "./permissions";
+import { markPrivacySeen } from "./onboarding-store";
 import { canAdvanceFrom, canJumpTo, skipActionFor, STEPS, type StepId } from "./onboarding-flow";
 import type { DemoId } from "./demos";
 import { WelcomeStep } from "./steps/welcome-step";
 import { PermissionsStep, type PendingGrant } from "./steps/permissions-step";
 import { ShortcutsStep } from "./steps/shortcuts-step";
+import { PrivacyStep } from "./steps/privacy-step";
 import { DoneStep } from "./steps/done-step";
 import styles from "./onboarding-overlay.module.css";
 
 const STEP_LABEL_KEY: Record<
   StepId,
-  "stepLabelWelcome" | "stepLabelPermissions" | "stepLabelShortcuts" | "stepLabelDone"
+  | "stepLabelWelcome"
+  | "stepLabelPermissions"
+  | "stepLabelShortcuts"
+  | "stepLabelPrivacy"
+  | "stepLabelDone"
 > = {
   welcome: "stepLabelWelcome",
   permissions: "stepLabelPermissions",
   shortcuts: "stepLabelShortcuts",
+  privacy: "stepLabelPrivacy",
   done: "stepLabelDone",
 };
 
@@ -39,7 +46,7 @@ interface OnboardingOverlayProps {
 }
 
 /**
- * Full-window onboarding takeover: Welcome → Permissions → Shortcuts → You're set.
+ * Full-window onboarding takeover: Welcome → Permissions → Shortcuts → Privacy → You're set.
  * Owns the step, the demo playing on Welcome, the shortcuts tried and the grants in
  * flight. Only Permissions blocks: Continue there waits for screen and microphone.
  */
@@ -64,6 +71,11 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
   const requiredMet = requiredPermissionsMet(status);
   const canAdvance = canAdvanceFrom(stepId, requiredMet);
   const isLastStep = step === STEPS.length - 1;
+
+  // Once the privacy step has been on screen, the one-time notice has nothing left to say.
+  useEffect(() => {
+    if (stepId === "privacy") markPrivacySeen();
+  }, [stepId]);
 
   // A global shortcut reaches main, never this window's keydown; main reports each one
   // it ran. Only a press made while the Shortcuts step is open counts as tried.
@@ -172,6 +184,7 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
             />
           )}
           {stepId === "shortcuts" && <ShortcutsStep tried={tried} />}
+          {stepId === "privacy" && <PrivacyStep />}
           {stepId === "done" && (
             <DoneStep onRecord={finishAndRecord} onScreenshot={finishAndScreenshot} />
           )}

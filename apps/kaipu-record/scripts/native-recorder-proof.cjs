@@ -47,6 +47,17 @@ const path = require("node:path");
     await onboarding.waitFor({ state: "visible", timeout: 15000 });
     await page.keyboard.press("Escape");
     await onboarding.waitFor({ state: "detached" });
+    // Leaving onboarding early opens the one-time privacy notice over the app (NIW2-849).
+    const notice = page.getByRole("alertdialog", { name: "Your recordings are yours" });
+    if (
+      await notice.waitFor({ state: "visible", timeout: 5000 }).then(
+        () => true,
+        () => false,
+      )
+    ) {
+      await page.keyboard.press("Escape");
+      await notice.waitFor({ state: "detached" });
+    }
     await page.getByRole("button", { name: "Screen", exact: true }).click();
     await page.waitForTimeout(1500);
     const overlay = app

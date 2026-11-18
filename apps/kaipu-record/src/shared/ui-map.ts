@@ -755,7 +755,7 @@ export const UI_MAP = {
   onboarding: {
     kind: "overlay",
     areas: {
-      root: { states: ["welcome", "permissions", "shortcuts", "done"] },
+      root: { states: ["welcome", "permissions", "shortcuts", "privacy", "done"] },
       welcomeStep: { states: ["default"] },
       demo: { states: ["record", "capture", "share", "editor", "workspaces"] },
       permissionsStep: {
@@ -768,6 +768,10 @@ export const UI_MAP = {
         ],
       },
       shortcutsStep: { states: ["none", "someTried"] },
+      // The step for new users, and the same content as a one-time notice over the app for
+      // people who finished before it existed (NIW2-849). Off is the one thing that differs.
+      privacyStep: { states: ["on", "off"] },
+      privacyNotice: { states: ["default"] },
       doneStep: { states: ["default"] },
     },
   },
