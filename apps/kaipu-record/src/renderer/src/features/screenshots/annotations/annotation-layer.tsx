@@ -468,6 +468,9 @@ function AnnotationLayerImpl({
             sel.id === BASE_IMAGE_ID
               ? { mode: "resize-base", handle, orig: base }
               : { mode: "resize", id: sel.id, handle, orig: sel };
+          // A base drag owns the history until it ends: undo mid-drag would remove the crop the
+          // release then computes its placement from.
+          if (sel.id === BASE_IMAGE_ID) scene.beginInteract();
           ref.current?.setPointerCapture(e.pointerId);
           return;
         }
@@ -652,6 +655,9 @@ function AnnotationLayerImpl({
   // Ends a base resize: one `basePlacement` commit (one undo step) with the last placement shown.
   const baseLiveRef = useRef<NonNullable<BaseFields["basePlacement"]> | null>(null);
   const commitBaseLive = (): void => {
+    // Close the interaction first: the scene did not change during it (undo and redo were
+    // no-ops), so this pushes nothing, and the commit below is the one history step.
+    scene.endInteract();
     const placement = baseLiveRef.current;
     baseLiveRef.current = null;
     if (!placement) return;

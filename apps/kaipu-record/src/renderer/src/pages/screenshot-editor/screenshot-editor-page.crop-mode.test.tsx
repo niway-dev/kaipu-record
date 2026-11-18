@@ -336,6 +336,30 @@ describe("selecting and resizing the base", () => {
   });
 });
 
+describe("a base corner drag owns the history until it ends", () => {
+  it("undo mid-drag does nothing: the crop stays and the release is one step", async () => {
+    await open({});
+    await cropBaseToTopLeftQuarter();
+    fireEvent.keyDown(window, { key: "Enter" });
+    await waitFor(() => expect(label()).toHaveTextContent("200 × 200 px"));
+    // Select the cropped base (it now shows x 0..100 on screen) and start a corner drag.
+    fireEvent.pointerDown(surface(), { clientX: 50, clientY: 50, button: 0 });
+    fireEvent.pointerUp(surface());
+    await screen.findByTestId("image-selection");
+    fireEvent.pointerDown(surface(), { clientX: 100, clientY: 100, button: 0 });
+    fireEvent.pointerMove(surface(), { clientX: 150, clientY: 150 });
+    undoKey();
+    fireEvent.pointerUp(surface(), { clientX: 150, clientY: 150 });
+    // The crop is still there and the resize applied on top of it: 1.5x the 200 px quarter.
+    await waitFor(() => expect(label()).toHaveTextContent("300 × 300 px"));
+    // One step takes back the resize only; the crop is the step before it.
+    undoKey();
+    await waitFor(() => expect(label()).toHaveTextContent("200 × 200 px"));
+    undoKey();
+    await waitFor(() => expect(label()).toHaveTextContent("400 × 400 px"));
+  });
+});
+
 describe("crop mode on an added image", () => {
   async function addImage(): Promise<void> {
     await open({});
