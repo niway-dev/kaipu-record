@@ -137,7 +137,10 @@ function parseFailReason(value: unknown): "no-audio" | "decode-failed" | undefin
 
 /**
  * The file's words, with `stale` when the recording's content no longer matches the one that was
- * transcribed. The hash is computed on each call and kept nowhere.
+ * transcribed. The hash is computed on each call and kept nowhere. That streams the whole file while
+ * the library gate is held, so the cost grows with the recording's size; a (size, mtime) precheck
+ * that skips the hash is the known follow-up, left out because the media hash is what marks a
+ * transcript stale.
  */
 async function readTranscript(id: string): Promise<TranscriptReadResult> {
   if (!isPlainItemId(id)) throw new Error("transcription: invalid item id");
