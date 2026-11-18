@@ -33,6 +33,7 @@ import {
   moveMeasure,
 } from "./measure";
 import {
+  baseFullRect,
   baseVisibleRect,
   fullRect,
   nextAnnotationId,
@@ -903,6 +904,7 @@ function AnnotationLayerImpl({
                 selected={scene.selectedId === a.id && !cropping}
                 src={src}
                 canvasMode={canvasMode}
+                base={base}
                 n={numbers.get(a.id)}
               />
               {canvasMode && a.kind === "blur" && (
@@ -918,7 +920,14 @@ function AnnotationLayerImpl({
         )}
         {draft && (
           <>
-            <Shape a={draft} size={size} selected={false} src={src} canvasMode={canvasMode} />
+            <Shape
+              a={draft}
+              size={size}
+              selected={false}
+              src={src}
+              canvasMode={canvasMode}
+              base={base}
+            />
             {canvasMode && draft.kind === "blur" && (
               <BlurOverImagesBelow blur={draft} below={shown} imageUrls={imageUrls} size={size} />
             )}
@@ -1248,6 +1257,7 @@ const Shape = React.memo(function Shape({
   selected,
   src,
   canvasMode,
+  base,
   n,
 }: {
   a: Annotation;
@@ -1255,6 +1265,8 @@ const Shape = React.memo(function Shape({
   selected: boolean;
   src: string;
   canvasMode: boolean;
+  /** The base's crop and placement: a redaction previews against the WHOLE asset it sits on. */
+  base: BaseFields;
   /** The badge's number, for a `step` annotation (see `stepNumbers`). */
   n?: number;
 }): React.JSX.Element {
@@ -1332,7 +1344,7 @@ const Shape = React.memo(function Shape({
   }
 
   if (a.kind === "blur" && canvasMode) {
-    return <RedactionTile a={a} size={size} selected={selected} src={src} />;
+    return <RedactionTile a={a} size={size} selected={selected} src={src} base={base} />;
   }
 
   if (a.kind === "blur") {
@@ -1792,13 +1804,28 @@ function RedactionTile({
   size,
   selected,
   src,
+  base,
 }: {
   a: Extract<Annotation, { kind: "blur" }>;
   size: Size;
   selected: boolean;
   src: string;
+  base: BaseFields;
 }): React.JSX.Element | null {
-  const tile = useRedactionTile(src, a, a.style ?? "blur", !a.locked);
+  // In the WHOLE asset's local units, as `bakeCanvasRedactions` maps them (a resized base is
+  // not the unit rect; a cropped-out part still previews the pixels the save bakes).
+  const full = baseFullRect(base);
+  const tile = useRedactionTile(
+    src,
+    {
+      x: (a.x - full.x) / full.w,
+      y: (a.y - full.y) / full.h,
+      w: a.w / full.w,
+      h: a.h / full.h,
+    },
+    a.style ?? "blur",
+    !a.locked,
+  );
   const bx = a.x * size.w;
   const by = a.y * size.h;
   if (a.locked) {
@@ -1810,29 +1837,49 @@ function RedactionTile({
         </clipPath>
         <image
           href={src}
-          x={0}
-          y={0}
-          width={size.w}
-          height={size.h}
+          x={full.x * size.w}
+          y={full.y * size.h}
+          width={full.w * size.w}
+          height={full.h * size.h}
           preserveAspectRatio="none"
           clipPath={`url(#${clipId})`}
         />
       </g>
     );
   }
+  // A cropped base shows only its window: a tile over a part that is cropped out would float on
+  // nothing, so it is clipped to what the base shows (the export draws only that window).
+  const vis = base.baseCrop ? baseVisibleRect(base) : null;
+  const clipId = `base-clip-${a.id}`;
+  const tileEl = tile && (
+    <image
+      data-testid="redaction-tile"
+      href={tile.url}
+      x={full.x * size.w + (tile.rect.x / tile.naturalW) * full.w * size.w}
+      y={full.y * size.h + (tile.rect.y / tile.naturalH) * full.h * size.h}
+      width={(tile.rect.w / tile.naturalW) * full.w * size.w}
+      height={(tile.rect.h / tile.naturalH) * full.h * size.h}
+      preserveAspectRatio="none"
+    />
+  );
   return (
     <g data-annotation={a.id}>
-      {tile && (
-        <image
-          data-testid="redaction-tile"
-          href={tile.url}
-          x={(tile.rect.x / tile.naturalW) * size.w}
-          y={(tile.rect.y / tile.naturalH) * size.h}
-          width={(tile.rect.w / tile.naturalW) * size.w}
-          height={(tile.rect.h / tile.naturalH) * size.h}
-          preserveAspectRatio="none"
-        />
-      )}
+      {tileEl &&
+        (vis ? (
+          <g clipPath={`url(#${clipId})`}>
+            <clipPath id={clipId}>
+              <rect
+                x={vis.x * size.w}
+                y={vis.y * size.h}
+                width={vis.w * size.w}
+                height={vis.h * size.h}
+              />
+            </clipPath>
+            {tileEl}
+          </g>
+        ) : (
+          tileEl
+        ))}
       {selected && (
         <rect
           className={styles.selOutline}
