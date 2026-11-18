@@ -22,6 +22,8 @@ interface Route {
   hold?: Promise<void>;
   /** Redirect to this path instead of serving the body. */
   redirectTo?: string;
+  /** Send the body chunked, with no content-length header. */
+  chunked?: boolean;
 }
 
 function deferred<T = void>() {
@@ -48,7 +50,7 @@ describe("ModelStore", () => {
         res.writeHead(302, { location: `${baseUrl}${route.redirectTo}` }).end();
         return;
       }
-      res.writeHead(200, { "content-length": route.body.length });
+      res.writeHead(200, route.chunked ? {} : { "content-length": route.body.length });
       const half = Math.floor(route.body.length / 2);
       res.write(route.body.subarray(0, half));
       void (route.hold ?? Promise.resolve()).then(() => {
@@ -139,6 +141,26 @@ describe("ModelStore", () => {
     expect(store.locate("m1")).not.toBeNull();
   });
 
+  it("refuses a redirect to a host the allow-list rejects, and leaves nothing behind", async () => {
+    const entry = makeEntry("m1", smallFiles());
+    // The request goes to the allowed local server, but the response says it was served from an
+    // http host that is not the one insecure host the test store allows (as after a redirect).
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const response = await fetch(input, init);
+      Object.defineProperty(response, "url", { value: "http://example.test/m1/file" });
+      return response;
+    };
+    const store = makeStore([entry], { fetchImpl });
+
+    await expect(store.download("m1", () => {})).rejects.toMatchObject({
+      code: "network",
+      message: expect.stringContaining("Refusing a non-https download URL"),
+    });
+
+    expect(existsSync(join(root, "m1"))).toBe(false);
+    expect(existsSync(join(root, "m1.partial"))).toBe(false);
+  });
+
   it("reports the destination directory", () => {
     const store = makeStore([makeEntry("m1", smallFiles())]);
     expect(store.destination("m1")).toBe(join(root, "m1"));
@@ -168,6 +190,24 @@ describe("ModelStore", () => {
 
     await expect(store.download("m1", () => {})).rejects.toMatchObject({
       code: "size-mismatch",
+    });
+
+    expect(existsSync(join(root, "m1"))).toBe(false);
+    expect(existsSync(join(root, "m1.partial"))).toBe(false);
+  });
+
+  it("fails with size-mismatch when a body with no content-length runs past the expected size", async () => {
+    const entry = makeEntry("m1", smallFiles());
+    const first = entry.files[0];
+    routes.set(`/m1/${first.name}`, {
+      body: Buffer.alloc(first.sizeBytes + 500, 1),
+      chunked: true,
+    });
+    const store = makeStore([entry]);
+
+    await expect(store.download("m1", () => {})).rejects.toMatchObject({
+      code: "size-mismatch",
+      message: expect.stringContaining("larger than the expected"),
     });
 
     expect(existsSync(join(root, "m1"))).toBe(false);
