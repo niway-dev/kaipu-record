@@ -224,6 +224,16 @@ describe("transcription job store", () => {
     expect(() => cancelRunningTranscription()).not.toThrow();
   });
 
+  it("resolves cancelled when the job is aborted before it starts, and records no failure", async () => {
+    const job = controlledJob();
+    const outcome = startTranscription(ARGS);
+    job.fail(new DOMException("aborted", "AbortError"));
+
+    await expect(outcome).resolves.toEqual({ status: "cancelled" });
+    expect(getSnapshot().failures).toEqual({});
+    expect(getSnapshot().running).toBeNull();
+  });
+
   it("turns a thrown error into an unknown failure and frees the engine slot", async () => {
     const job = controlledJob();
     const outcome = startTranscription(ARGS);

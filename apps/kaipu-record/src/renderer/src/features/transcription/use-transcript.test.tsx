@@ -86,6 +86,33 @@ describe("useTranscript", () => {
     await waitFor(() => expect(result.current.state).toBe("none"));
   });
 
+  it("keeps the newer read's answer when an older read of the same item lands after it", async () => {
+    const resolvers: Array<(r: TranscriptReadResult) => void> = [];
+    const readTranscript = vi.fn(
+      () => new Promise<TranscriptReadResult>((resolve) => resolvers.push(resolve)),
+    );
+    stubApi({ readTranscript });
+    const { result } = renderHook(() => useTranscript("a"));
+    await waitFor(() => expect(resolvers).toHaveLength(1));
+
+    let refreshed: Promise<void> = Promise.resolve();
+    act(() => {
+      refreshed = result.current.refresh();
+    });
+    await waitFor(() => expect(resolvers).toHaveLength(2));
+
+    await act(async () => {
+      resolvers[1](READY);
+      await refreshed;
+    });
+    expect(result.current.state).toBe("ready");
+
+    await act(async () => {
+      resolvers[0]({ status: "none" });
+    });
+    expect(result.current.state).toBe("ready");
+  });
+
   it("does not read without an item id", async () => {
     const readTranscript = vi.fn(async (): Promise<TranscriptReadResult> => READY);
     stubApi({ readTranscript });
