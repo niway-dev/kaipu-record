@@ -1,10 +1,11 @@
 import { vi } from "vitest";
 
+const realElectronApi = window.electronAPI;
+
 /**
  * Stubs `window.electronAPI.getTranscriptionStatus` with one default model in the given state,
  * for the Library card and row tests. Returns the spy; the caller restores `window.electronAPI`.
  */
-const realElectronApi = window.electronAPI;
 export function stubTranscriptionStatus(modelState: "ready" | "missing"): ReturnType<typeof vi.fn> {
   const getTranscriptionStatus = vi.fn(async () => ({
     availability: { status: "available" as const },
