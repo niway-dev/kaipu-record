@@ -75,7 +75,7 @@ describe("OnboardingOverlay: the Transcription step", () => {
     vi.restoreAllMocks();
   });
 
-  it("sits between Shortcuts and You're set when the model is on offer", async () => {
+  it("sits between Shortcuts and Privacy when the model is on offer", async () => {
     mockApi(transcriptionStatus());
     render(<OnboardingOverlay onClose={vi.fn()} />);
     await waitFor(() => expect(dots()).toHaveLength(5));
@@ -87,7 +87,7 @@ describe("OnboardingOverlay: the Transcription step", () => {
     expect(screen.queryByRole("button", { name: /^continue$/i })).toBeNull();
   });
 
-  it("Not now goes to You're set without downloading", async () => {
+  it("Not now moves past Transcription to Privacy without downloading", async () => {
     const { downloadTranscriptionModel } = mockApi(transcriptionStatus());
     render(<OnboardingOverlay onClose={vi.fn()} />);
     await waitFor(() => expect(dots()).toHaveLength(5));
