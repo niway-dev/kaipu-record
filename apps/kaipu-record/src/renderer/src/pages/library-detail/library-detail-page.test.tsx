@@ -2188,6 +2188,26 @@ describe("LibraryDetailPage Transcript tab (NIW2-870)", () => {
     );
   });
 
+  it("T3b: a stored duration of 0 uses the probed one, so the words show and nothing reads as cut", async () => {
+    stubApi(TRANSCRIPT);
+    probe.mockResolvedValueOnce({
+      width: 1280,
+      height: 720,
+      durationSec: 12,
+      fps: 30,
+      hasAudio: true,
+      sampleRate: 48000,
+    });
+    list({
+      ...exportedOnlyItem,
+      durationSeconds: 0,
+      local: exportedOnlyItem.local && { ...exportedOnlyItem.local, durationSeconds: 0 },
+    });
+    await openTranscript();
+    expect(await screen.findByText("brave")).toBeInTheDocument();
+    expect(screen.queryByText(/everything is cut or muted/i)).toBeNull();
+  });
+
   it("T3: clicking a word sets the detail video's time to that word's start", async () => {
     stubApi(TRANSCRIPT);
     list(exportedOnlyItem);

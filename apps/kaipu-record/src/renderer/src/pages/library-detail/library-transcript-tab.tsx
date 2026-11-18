@@ -1,10 +1,12 @@
 import { useMemo } from "react";
+import { useTranslations } from "@kaipu/i18n";
 import type { LibraryVideo } from "@renderer/features/library/types";
 import type { PlayerHandle } from "@renderer/features/library/components/recording-player";
 import { mediaUrl } from "@renderer/lib/media-url";
 import { uiArea } from "@renderer/lib/ui-area";
 import type { LayoutEntry } from "@renderer/features/video-editor/timeline";
 import { TranscriptPanel } from "@renderer/features/video-editor/transcript-panel";
+import styles from "@renderer/features/video-editor/transcript-panel.module.css";
 
 interface LibraryTranscriptTabProps {
   /** A local recording: the page only mounts the tab for one (`canTranscribeVideo`). */
@@ -13,6 +15,8 @@ interface LibraryTranscriptTabProps {
   hasAudio: boolean | null;
   /** The detail page's player, or `null` while it is not on screen (it left, or could not play). */
   player: PlayerHandle | null;
+  /** The file's probed duration: the fallback when the vault stored none (`0`). */
+  probedDurationSeconds: number | null;
 }
 
 const NO_MUTES: never[] = [];
@@ -29,19 +33,25 @@ export function LibraryTranscriptTab({
   video,
   hasAudio,
   player,
+  probedDurationSeconds,
 }: LibraryTranscriptTabProps): React.JSX.Element {
+  const t = useTranslations("videoEditor");
+  // The vault can store 0 for a recording whose metadata it could not read. A zero-length clip
+  // would drop every word and say "everything is cut", so the probed duration stands in for it.
+  const durationSeconds =
+    video.durationSeconds > 0 ? video.durationSeconds : (probedDurationSeconds ?? 0);
   const layout = useMemo<LayoutEntry[]>(
     () => [
       {
         itemId: video.id,
         kind: "clip",
         timelineStart: 0,
-        timelineEnd: video.durationSeconds,
+        timelineEnd: durationSeconds,
         sourceStart: 0,
-        sourceEnd: video.durationSeconds,
+        sourceEnd: durationSeconds,
       },
     ],
-    [video.id, video.durationSeconds],
+    [video.id, durationSeconds],
   );
   // New functions only when the player changes: the panel re-subscribes to its clock then, and
   // at no other moment.
@@ -54,6 +64,9 @@ export function LibraryTranscriptTab({
     }),
     [player],
   );
+  // No positive duration yet (the file is still being read): the loading look, never a layout
+  // that would cut every word.
+  if (durationSeconds <= 0) return <p className={styles.note}>{t("transcriptLoading")}</p>;
   return (
     <TranscriptPanel
       // Another item starts from its own state at once, never the previous video's words.
@@ -64,7 +77,7 @@ export function LibraryTranscriptTab({
       assetId={video.assetId}
       title={video.title}
       mediaUrl={mediaUrl("recording", video.id)}
-      durationMs={Math.round(video.durationSeconds * 1000)}
+      durationMs={Math.round(durationSeconds * 1000)}
       layout={layout}
       audioMuted={false}
       mutedRanges={NO_MUTES}

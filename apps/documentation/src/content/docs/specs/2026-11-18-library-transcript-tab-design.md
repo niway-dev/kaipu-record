@@ -40,7 +40,7 @@ is reused as it is, with no edits to apply.
 | 7 | Copy of the empty-state button | Keep "Transcribe"; "Transcribe now" in the tab only; "Transcribe now" in both panels | "Transcribe now" (es "Transcribir ahora") in both panels: one key, the editor panel is the same component | Yes, your call | none |
 | 8 | The header's **Transcribed** badge | A static badge; a button that opens the tab | A button that selects the Transcript tab. It answers "what do I do with Transcribed?" from the same chat | Yes, your call | none |
 | 9 | Panel chrome inside the tab | Keep the close button and `<aside>` root; embedded mode | Embedded: no close button (a tab is left by picking another tab), a `<section>` root (the page's panel is already an `<aside>`) and its own UI-map area | Yes, your call | none |
-| 10 | How the panel reads and moves the player | Lift the `<video>` ref into the page; a small handle from `RecordingPlayer` | `RecordingPlayer` exposes an optional handle: `seek(seconds)`, `readTime()`, `subscribeTime(listener)` at frame rate while playing. The page passes it to the panel; nothing else changes for other callers | Yes, your call | none |
+| 10 | How the panel reads and moves the player | Lift the `<video>` ref into the page; a small handle from `RecordingPlayer` | `RecordingPlayer` takes an optional `onHandle?: (handle: PlayerHandle \| null) => void` prop (called with `null` on unmount), whose handle has `seek(seconds)`, `readTime()` and `subscribeTime(listener)` at frame rate while playing. The page passes it to the panel; nothing else changes for other callers | Yes, your call | none |
 | 11 | Release strategy (one PR) | `safe`, `flag`, `direct` | `flag`: everything is behind the existing `transcription` flag, default off | No, the stack's spec (decision 10) | none |
 
 **Picture of the controls.** The PR's Evidence section carries the owner's screenshot with
@@ -103,9 +103,10 @@ One PR, on top of PR #668 (the in-app engine download), in the NIW2-818 native s
 
 ## How it is built
 
-- `features/library/components/recording-player.tsx`: an optional `handle` prop (ref-like
-  callback) exposing `seek`, `readTime` and `subscribeTime`; the frame loop runs only while
-  playing and stops on pause, end and unmount.
+- `features/library/components/recording-player.tsx`: an optional
+  `onHandle?: (handle: PlayerHandle | null) => void` prop (called with `null` on unmount)
+  exposing `seek`, `readTime` and `subscribeTime`; the frame loop runs only while playing and at
+  least one listener is subscribed, and stops on pause, end and unmount.
 - `features/video-editor/transcript-panel.tsx`: optional `onClose` (no close button when
   absent), an `embedded` prop (`<section>` root) and an `area` prop (default
   `editorVideo.transcriptPanel`).

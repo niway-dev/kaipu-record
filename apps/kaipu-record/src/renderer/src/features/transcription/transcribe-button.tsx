@@ -83,8 +83,9 @@ function percentOf(received: number, total: number): number {
  * The Transcribe action of one video, for the Library card, the Library row, the Library detail
  * page and the editor. It shows what `useTranscribeControl` decides: nothing with the flag off or
  * without local media, "Transcribe" when a job can start, the download offer when the speech
- * model is missing, progress with a Cancel while a job runs, and a non-clickable "Transcribed"
- * badge once the video has a transcript (a button when `onOpenTranscript` is given). A click never reaches the card or row around it.
+ * model is missing, progress with a Cancel while a job runs, and a "Transcribed" badge once the
+ * video has a transcript: a plain label by default, a button that opens the transcript when
+ * `onOpenTranscript` is given. A click never reaches the card or row around it.
  */
 export function TranscribeButton({
   item,

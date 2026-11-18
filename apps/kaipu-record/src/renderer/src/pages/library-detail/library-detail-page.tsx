@@ -810,6 +810,7 @@ export function LibraryDetailPage(): React.JSX.Element {
                 video={{ ...video, id: video.id }}
                 hasAudio={probe ? probe.hasAudio : null}
                 player={player}
+                probedDurationSeconds={probe ? probe.durationSec : null}
               />
             ) : tab === "captures" ? (
               <ul {...uiArea("libraryDetail.captures")} className={styles.capturesList}>
