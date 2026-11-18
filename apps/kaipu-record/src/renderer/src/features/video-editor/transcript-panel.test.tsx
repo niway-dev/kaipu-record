@@ -9,6 +9,7 @@ import type {
 import type { TranscribeControlState } from "@renderer/features/transcription/transcribe-control";
 import type { TranscriptApi } from "@renderer/features/transcription/use-transcript";
 import type { LayoutEntry } from "./timeline";
+import { uiArea } from "@renderer/lib/ui-area";
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import { TranscriptPanel, type TranscriptPanelProps } from "./transcript-panel";
 
@@ -178,7 +179,7 @@ describe("TranscriptPanel — states", () => {
     setup();
     expect(panel()).toHaveAttribute("data-state", "idle");
     expect(screen.queryByRole("button", { name: /translate/i })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Transcribe" }));
+    fireEvent.click(screen.getByRole("button", { name: "Transcribe now" }));
     expect(start).toHaveBeenCalledOnce();
   });
 
@@ -884,5 +885,30 @@ describe("TranscriptPanel — long transcripts", () => {
     // No word carries its own handler: a click is caught by the list.
     fireEvent.click(screen.getByText("word3600"));
     expect(props.onSeek).toHaveBeenCalledExactlyOnceWith(words[3600].startMs / 1000);
+  });
+});
+
+describe("TranscriptPanel — chrome", () => {
+  it("keeps the editor's aside root, area id and close button by default", () => {
+    const props = setup();
+    expect(panel().tagName).toBe("ASIDE");
+    expect(panel()).toHaveAttribute("data-ui-area", "editorVideo.transcriptPanel");
+    fireEvent.click(screen.getByRole("button", { name: "Close transcript" }));
+    expect(props.onClose).toHaveBeenCalledOnce();
+  });
+
+  it("embedded without onClose: a section root, the given area and no close button", () => {
+    setup({ embedded: true, onClose: undefined, area: uiArea("libraryDetail.transcriptPanel") });
+    expect(panel().tagName).toBe("SECTION");
+    expect(panel()).toHaveAttribute("data-ui-area", "libraryDetail.transcriptPanel");
+    expect(screen.queryByRole("button", { name: "Close transcript" })).toBeNull();
+  });
+
+  it("highlights the word the player clock names after a seek, and stops listening on unmount", () => {
+    setup({ embedded: true, onClose: undefined });
+    act(() => timeListener?.(8.5));
+    expect(document.querySelector("[data-current]")).toHaveTextContent("again");
+    cleanup();
+    expect(unsubscribe).toHaveBeenCalled();
   });
 });
