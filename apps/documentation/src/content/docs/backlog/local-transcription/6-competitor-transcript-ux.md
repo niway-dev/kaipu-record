@@ -5,7 +5,7 @@ sidebar:
   order: 6
 ---
 
-> Evidence, kept verbatim (2026-11-15, design of [NIW2-818](https://linear.app/niway/issue/NIW2-818/local-transcription-with-parakeet-transcript-panel-and-subtitle-export)). The [spec](/specs/2026-11-15-local-transcription-design/) wins where they disagree.
+> Evidence, kept verbatim (2026-11-15, design of [NIW2-818](https://linear.app/niway/issue/NIW2-818/local-transcription-with-parakeet-transcript-panel-and-subtitle-export)). The [spec](/specs/2026-11-15-local-transcription-design/) wins where they disagree. Editorial notes added after the fact are marked as such: the removed-harness-instructions comment under Brief, finding 4's note about an unverified link, and finding 12's note about a guide version.
 
 ## Brief
 
@@ -71,7 +71,7 @@ Checked November 2026 against public sources; no hands-on testing. **U = unverif
 9. Camtasia stores dynamic-caption corrections against source media so repeated timeline instances reuse them, but displays only the topmost transcribed media ([dynamic-caption behavior](https://support.techsmith.com/hc/en-us/articles/26713588518413-Dynamic-Captions-Best-Practices)).
 10. Final Cut connects captions to source clips yet still recommends finishing dialogue edits before captioning because later changes can break synchronization ([caption creation](https://support.apple.com/en-gb/guide/final-cut-pro/vere399dab5e/mac)).
 11. Premiere dynamically synchronizes sequence transcripts but explicitly separates caption generation from Text-Based Editing ([editing overview](https://helpx.adobe.com/in/premiere/desktop/edit-projects/edit-video-using-text-based-editing/overview-of-text-based-editing.html)).
-12. Resolve’s animated subtitle templates use transcription timing to highlight spoken words and require Studio ([Resolve 20 guide](https://documents.blackmagicdesign.com/SupportNotes/DaVinci_Resolve_20_New_Features_Guide.pdf)).
+12. Resolve’s animated subtitle templates use transcription timing to highlight spoken words and require Studio ([Resolve 20 guide](https://documents.blackmagicdesign.com/SupportNotes/DaVinci_Resolve_20_New_Features_Guide.pdf)) _(Editor's note: this finding cites the Resolve 20 guide; the table row above cites the Resolve 19 guide, which is the source of its export-matrix cell.)_.
 13. MacWhisper explicitly distinguishes local transcription/speaker identification from user-selected cloud services and exports structured JSON ([official App Store listing](https://apps.apple.com/us/app/whisper-transcription/id1668083311?platform=mac)).
 14. Kapwing warns that converting smart subtitles into ordinary text removes their ability to follow video deletions and moves ([caption help](https://www.kapwing.com/help/add-captions/)).
 

@@ -13,7 +13,6 @@ Read-only investigation. Do not edit, commit, install or run anything heavy. Rep
 
 ## Report
 
-Now audio feeding/segmenting in the service, plus the bench.
 Parakeet v3 (int8) runs as a child process, sherpa-onnx's offline websocket server. The app bundles that server, signs it with the app, and downloads the weights separately. Every item below comes from reading the repo. I ran no benchmark myself.
 
 ## 1. Runtime, packaging, launch, model files
