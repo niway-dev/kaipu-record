@@ -13,7 +13,7 @@ import {
   windowToCrop,
   wholeImage,
 } from "./image-crop";
-import type { ImageAnnotation } from "./scene";
+import { baseVisibleRect, type ImageAnnotation } from "./scene";
 
 // Per-image crop, unit 4: the math behind the crop mode. Illustrative numbers throughout.
 
@@ -205,6 +205,50 @@ describe("resizeBasePlacement", () => {
     const p = resizeBasePlacement({}, "se", { x: 1000, y: 1000 }, SIZE, natural)!;
     expect(p.scale * natural.w).toBeCloseTo(MAX_BASE_SIDE_PX);
     expect(p.x).toBe(0);
+  });
+
+  describe("with a crop away from the origin and an existing placement", () => {
+    // The lower-right quarter shows, the asset sits at (0.1, 0.2) at scale 1: visible rect
+    // (0.6, 0.7, 0.5, 0.5), so its corners are nw (0.6,0.7), ne (1.1,0.7), sw (0.6,1.2), se (1.1,1.2).
+    const base = {
+      baseCrop: { x: 0.5, y: 0.5, w: 0.5, h: 0.5 },
+      basePlacement: { x: 0.1, y: 0.2, scale: 1 },
+    };
+    const corner = (b: typeof base, p: { x: number; y: number }, h: "nw" | "ne" | "sw" | "se") => {
+      const v = baseVisibleRect({ ...b, basePlacement: p as never });
+      return {
+        x: h === "nw" || h === "sw" ? v.x : v.x + v.w,
+        y: h === "nw" || h === "ne" ? v.y : v.y + v.h,
+      };
+    };
+
+    it.each([
+      ["se", { x: 1.6, y: 1.7 }, "nw", { x: 0.6, y: 0.7 }],
+      ["nw", { x: 0.1, y: 0.2 }, "se", { x: 1.1, y: 1.2 }],
+      ["ne", { x: 1.6, y: 0.2 }, "sw", { x: 0.6, y: 1.2 }],
+      ["sw", { x: 0.1, y: 1.7 }, "ne", { x: 1.1, y: 0.7 }],
+    ] as const)("dragging %s keeps the opposite visible corner (%s) fixed", (h, to, opp, fixed) => {
+      const p = resizeBasePlacement(base, h, to, SIZE, natural)!;
+      const c = corner(base, p, opp);
+      expect(c.x).toBeCloseTo(fixed.x);
+      expect(c.y).toBeCloseTo(fixed.y);
+      expect(p.scale).toBeGreaterThan(1);
+    });
+
+    it("the crop is not touched and the visible window scales with the placement", () => {
+      const p = resizeBasePlacement(base, "se", { x: 1.6, y: 1.7 }, SIZE, natural)!;
+      const v = baseVisibleRect({ ...base, basePlacement: p });
+      expect(v.w).toBeCloseTo(1);
+      expect(v.h).toBeCloseTo(1);
+    });
+
+    it("the cap shrinks about the corner that stays: nw handle, opposite se fixed", () => {
+      const p = resizeBasePlacement(base, "nw", { x: -100, y: -100 }, SIZE, natural)!;
+      const v = baseVisibleRect({ ...base, basePlacement: p });
+      expect(Math.max(v.w * natural.w, v.h * natural.h)).toBeCloseTo(MAX_BASE_SIDE_PX);
+      expect(v.x + v.w).toBeCloseTo(1.1);
+      expect(v.y + v.h).toBeCloseTo(1.2);
+    });
   });
 
   it("baseAsImage is the visible rect with the asset's pixel size", () => {
