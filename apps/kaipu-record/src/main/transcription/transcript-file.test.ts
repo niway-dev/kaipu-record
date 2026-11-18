@@ -147,9 +147,22 @@ describe("parseTranscript", () => {
   });
 
   it("never throws on hostile input", () => {
-    for (const value of [undefined, 1, true, Symbol.iterator.toString(), { schemaVersion: {} }]) {
+    for (const value of [undefined, 1, true, Symbol.iterator, { schemaVersion: {} }]) {
       expect(() => parseTranscript(value)).not.toThrow();
     }
+  });
+
+  it("turns a throw while reading the value into an invalid rejection", () => {
+    const hostile = {
+      get schemaVersion(): number {
+        throw new Error("getter exploded");
+      },
+    };
+    expect(parseTranscript(hostile)).toEqual({
+      ok: false,
+      reason: "invalid",
+      message: "getter exploded",
+    });
   });
 });
 
