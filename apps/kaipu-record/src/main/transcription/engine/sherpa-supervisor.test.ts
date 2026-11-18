@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { getEventListeners } from "node:events";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   buildCliArgs,
   runBatch,
@@ -307,23 +309,28 @@ setInterval(() => {}, 1000);`,
       signal: controller.signal,
     });
     expect(results).toHaveLength(3);
-    controller.abort(); // must be a no-op now
+    expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
   });
 });
 
-const realEngine = join(
-  homedir(),
-  "Library/Application Support/desktop/runtimes/sherpa-onnx/v1.13.8",
+/**
+ * The real-engine test needs three things and skips when any is missing:
+ * - the engine, installed by `bun run fetch:speech-engine` into `resources/native/sherpa-onnx`;
+ * - a Parakeet model directory, named by `KAIPU_TEST_PARAKEET_DIR` (it holds `encoder.int8.onnx`);
+ * - a 16 kHz mono WAV of speech, named by `KAIPU_TEST_WAV` (see `scripts/spikes/transcription-m0`).
+ */
+const realEngine = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../../resources/native/sherpa-onnx",
 );
-const realModel = join(
-  homedir(),
-  "Library/Application Support/desktop/models/parakeet/parakeet-tdt-0.6b-v3-int8",
-);
-const fixture = "/tmp/niw2-818-m0-fixtures/timing-en.wav";
+const realModel = process.env.KAIPU_TEST_PARAKEET_DIR ?? "";
+const fixture = process.env.KAIPU_TEST_WAV ?? "";
 const haveReal =
   process.platform === "darwin" &&
   process.arch === "arm64" &&
   existsSync(join(realEngine, "bin", "sherpa-onnx-offline")) &&
+  realModel !== "" &&
+  fixture !== "" &&
   existsSync(join(realModel, "encoder.int8.onnx")) &&
   existsSync(fixture);
 
