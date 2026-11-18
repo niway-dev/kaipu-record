@@ -232,18 +232,18 @@ function newImageAssetId(): string {
   return `img-${id.slice(0, 12)}`;
 }
 
-/**
- * Read and validate the document saved beside a vault shot. Anything but `loaded` means
- * "open the flattened PNG instead": `absent` when there is no document (a plain screenshot),
- * `unreadable` when one exists but is corrupt or unsupported, lacks its base asset, or could
- * not be read. It never rejects, so a bad document can never keep the editor from opening.
- */
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const isPng = (bytes: ArrayBuffer): boolean => {
   const head = new Uint8Array(bytes, 0, Math.min(8, bytes.byteLength));
   return head.length === 8 && PNG_SIGNATURE.every((b, i) => head[i] === b);
 };
 
+/**
+ * Read and validate the document saved beside a vault shot. Anything but `loaded` means
+ * "open the flattened PNG instead": `absent` when there is no document (a plain screenshot),
+ * `unreadable` when one exists but is corrupt or unsupported, lacks its base asset, or could
+ * not be read. It never rejects, so a bad document can never keep the editor from opening.
+ */
 async function loadCanvasDoc(id: string): Promise<CanvasLoad<LoadedCanvasDoc>> {
   const unreadable: CanvasLoad<LoadedCanvasDoc> = { status: "unreadable" };
   try {
