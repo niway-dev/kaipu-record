@@ -26,6 +26,11 @@ export interface ExportInput {
    * memo key (by identity, like `bytes`).
    */
   assets?: CanvasAssets;
+  /**
+   * Resolution multiplier over the frame's natural pixels (NIW2-852: the image exporter's 2×).
+   * Absent or 1 = today's 1:1 PNG, which is what Copy and Save use. Part of the memo key.
+   */
+  rasterScale?: number;
 }
 
 export interface Exporter {

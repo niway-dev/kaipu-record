@@ -1,0 +1,212 @@
+/*
+ * The image editor's Export popover (NIW2-852) and its toolbar button, which sits where the PDF
+ * button does and looks like it. Editor tokens, except `color: #fff` on the selected segment and
+ * `.primary` (text on the accent, the same exception as `.save` in screenshot-editor-page.module.css).
+ */
+.anchor {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--ie-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ie-tx);
+  font-family: var(--font-family);
+  font-size: 12.5px;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.button:hover:not(:disabled) {
+  background: var(--ie-hover);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.button[aria-expanded="true"] {
+  background: var(--ie-hover);
+}
+
+.button[data-done="true"] {
+  color: var(--ie-accent);
+}
+
+.label {
+  white-space: nowrap;
+}
+
+/* Compact toolbar: icon only, like the other secondary actions. */
+:global([data-compact="true"]) .label {
+  display: none;
+}
+
+:global([data-compact="true"]) .button {
+  height: 30px;
+  padding: 0 var(--space-sm);
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 46;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 288px;
+  padding: 14px;
+  border: 1px solid var(--ie-strong);
+  border-radius: 8px;
+  background: var(--ie-card);
+  box-shadow: var(--ie-shadow);
+  color: var(--ie-tx);
+  text-align: left;
+  transform-origin: top right;
+  animation: pop-in 0.15s ease-out;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldLabel {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--ie-tx2);
+  font-size: 11.5px;
+  font-weight: var(--font-weight-semibold);
+}
+
+.value {
+  color: var(--ie-tx);
+  font-variant-numeric: tabular-nums;
+}
+
+.segments {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--ie-strong);
+  border-radius: 7px;
+}
+
+.segment {
+  flex: 1;
+  height: 28px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ie-tx2);
+  font-family: var(--font-family);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.segment:hover {
+  background: var(--ie-hover);
+  color: var(--ie-tx);
+}
+
+.segment[aria-checked="true"] {
+  background: var(--ie-accent);
+  color: #fff;
+}
+
+.caption {
+  margin: 0;
+  color: var(--ie-tx2);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.range {
+  width: 100%;
+  accent-color: var(--ie-accent);
+}
+
+.range:disabled {
+  opacity: 0.4;
+}
+
+.result {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid var(--ie-strong);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pixels {
+  font-weight: var(--font-weight-semibold);
+}
+
+.size[data-state="wait"] {
+  color: var(--ie-tx2);
+}
+
+.notice {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--ie-hover);
+  color: var(--ie-tx);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  height: 34px;
+  border: none;
+  border-radius: 6px;
+  background: var(--ie-accent);
+  color: #fff;
+  font-family: var(--font-family);
+  font-size: 12.5px;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

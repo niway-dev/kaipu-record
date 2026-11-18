@@ -44,6 +44,7 @@ function sameInput(a: ExportInput, b: ExportInput): boolean {
     a.displayedW === b.displayedW &&
     Boolean(a.canvas) === Boolean(b.canvas) &&
     a.assets === b.assets &&
+    (a.rasterScale ?? 1) === (b.rasterScale ?? 1) &&
     sameScene(a.scene, b.scene)
   );
 }

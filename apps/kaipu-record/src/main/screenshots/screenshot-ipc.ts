@@ -11,7 +11,12 @@ import {
   type CaptureMode,
   type OverlayAnswer,
 } from "@shared/types/screenshot-capture";
-import { assertExportPayload, exportFileName } from "./export-file-name";
+import {
+  assertExportPayload,
+  exportFileName,
+  EXPORT_FILE_TYPE_KEYS,
+  type ExportExtension,
+} from "./export-file-name";
 import {
   createCaptureHandler,
   type CaptureWindowHooks,
@@ -408,7 +413,7 @@ export function registerScreenshotHandlers(
       ),
   );
 
-  // Exports (PDF) are files to hand to someone, not library items: they go where
+  // Exports (PDF, PNG, JPEG, WebP) are files to hand to someone, not library items: they go where
   // the user says, outside the vault, so the library never has to understand them.
   ipcMain.handle(
     IPC_CHANNELS.screenshotExportFile,
@@ -422,12 +427,18 @@ export function registerScreenshotHandlers(
       const window = BrowserWindow.fromWebContents(event.sender);
       const t = createMainTranslator(getAppSettings().locale);
       const options: Electron.SaveDialogOptions = {
-        title: t("dialogs.exportPdfTitle"),
+        title:
+          meta.extension === "pdf" ? t("dialogs.exportPdfTitle") : t("dialogs.exportImageTitle"),
         defaultPath: join(
           app.getPath("downloads"),
           exportFileName(String(meta.suggestedName ?? ""), meta.extension),
         ),
-        filters: [{ name: t("dialogs.pdfFileType"), extensions: [meta.extension] }],
+        filters: [
+          {
+            name: t(`dialogs.${EXPORT_FILE_TYPE_KEYS[meta.extension as ExportExtension]}`),
+            extensions: [meta.extension],
+          },
+        ],
       };
       const result = window
         ? await dialog.showSaveDialog(window, options)
