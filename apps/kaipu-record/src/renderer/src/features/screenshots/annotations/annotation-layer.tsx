@@ -1828,29 +1828,50 @@ function RedactionTile({
   );
   const bx = a.x * size.w;
   const by = a.y * size.h;
+  // A cropped base shows only its window: a tile (or a locked blur's pixels) over a part that is
+  // cropped out would float on nothing, so it is clipped to what the base shows (the export
+  // draws only that window).
+  const vis = base.baseCrop ? baseVisibleRect(base) : null;
+  const winClipId = `base-clip-${a.id}`;
+  const inWindow = (content: React.ReactNode): React.ReactNode =>
+    vis ? (
+      <g clipPath={`url(#${winClipId})`}>
+        <clipPath id={winClipId}>
+          <rect
+            x={vis.x * size.w}
+            y={vis.y * size.h}
+            width={vis.w * size.w}
+            height={vis.h * size.h}
+          />
+        </clipPath>
+        {content}
+      </g>
+    ) : (
+      content
+    );
   if (a.locked) {
     const clipId = `lock-clip-${a.id}`;
     return (
       <g data-testid="locked-redaction">
-        <clipPath id={clipId}>
-          <rect x={bx} y={by} width={a.w * size.w} height={a.h * size.h} />
-        </clipPath>
-        <image
-          href={src}
-          x={full.x * size.w}
-          y={full.y * size.h}
-          width={full.w * size.w}
-          height={full.h * size.h}
-          preserveAspectRatio="none"
-          clipPath={`url(#${clipId})`}
-        />
+        {inWindow(
+          <>
+            <clipPath id={clipId}>
+              <rect x={bx} y={by} width={a.w * size.w} height={a.h * size.h} />
+            </clipPath>
+            <image
+              href={src}
+              x={full.x * size.w}
+              y={full.y * size.h}
+              width={full.w * size.w}
+              height={full.h * size.h}
+              preserveAspectRatio="none"
+              clipPath={`url(#${clipId})`}
+            />
+          </>,
+        )}
       </g>
     );
   }
-  // A cropped base shows only its window: a tile over a part that is cropped out would float on
-  // nothing, so it is clipped to what the base shows (the export draws only that window).
-  const vis = base.baseCrop ? baseVisibleRect(base) : null;
-  const clipId = `base-clip-${a.id}`;
   const tileEl = tile && (
     <image
       data-testid="redaction-tile"
@@ -1864,22 +1885,7 @@ function RedactionTile({
   );
   return (
     <g data-annotation={a.id}>
-      {tileEl &&
-        (vis ? (
-          <g clipPath={`url(#${clipId})`}>
-            <clipPath id={clipId}>
-              <rect
-                x={vis.x * size.w}
-                y={vis.y * size.h}
-                width={vis.w * size.w}
-                height={vis.h * size.h}
-              />
-            </clipPath>
-            {tileEl}
-          </g>
-        ) : (
-          tileEl
-        ))}
+      {tileEl && inWindow(tileEl)}
       {selected && (
         <rect
           className={styles.selOutline}

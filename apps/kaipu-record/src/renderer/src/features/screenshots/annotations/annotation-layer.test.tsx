@@ -801,6 +801,22 @@ describe("AnnotationLayer — added images (NIW2-703)", () => {
       expect(tile.parentElement?.getAttribute("clip-path")).toMatch(/^url\(#base-clip-/);
     });
 
+    it("a locked blur on a cropped base is clipped to the window like the unlocked tile", () => {
+      // The right half shows (world x 0.5..1); the blur reaches into the hidden left half.
+      const lockedBlur: BlurAnnotation = { ...baseBlur, x: 0.4, y: 0.1, locked: true };
+      const { container } = renderImageLayer(makeScene([lockedBlur], null), makeTools(), {
+        canvasMode: true,
+        src: "blob:base",
+        base: { baseCrop: { x: 0.5, y: 0, w: 0.5, h: 1 } },
+      });
+      const el = container.querySelector('[data-testid="locked-redaction"]')!;
+      const outer = el.querySelector('[clip-path^="url(#base-clip-"]')!;
+      expect(outer).not.toBeNull();
+      const rect = outer.querySelector("clipPath rect")!;
+      expect(rect.getAttribute("x")).toBe("50");
+      expect(rect.getAttribute("width")).toBe("50");
+    });
+
     it("a blur below an image draws the base's tile under the image", () => {
       tileMock.mockImplementation(baseTileOnly);
       const { container } = renderImageLayer(makeScene([blur, image], null), makeTools(), {
