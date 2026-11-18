@@ -116,9 +116,11 @@
  * are in it (the video editor): pieces collapse lowest priority first as the window
  * narrows toward its 720 px minimum. Each piece marks itself with data-collapse:
  *
- *   badge      ORIGINAL UNTOUCHED (video-editor-page.tsx)
+ *   badge-early  ORIGINAL UNTOUCHED, when the Transcribe button shares the bar
+ *              (video-editor-page.tsx)
  *   transcribe-label  the word on the editor's Transcribe button; its icon stays
  *              (transcribe-button.tsx)
+ *   badge      ORIGINAL UNTOUCHED, when it is alone (video-editor-page.tsx)
  *   location   the switcher's "This Mac" (workspace-switcher.tsx)
  *   save       the save state, unless it failed and offers a retry (video-editor-page.tsx)
  *   .name      "Kaipu Record" and its separator (here)
@@ -128,17 +130,19 @@
  */
 /* At the default 1440 px window the pill, the announcement banner and the workspace chip left
    the Transcribe button no room, so the bar clipped it away: the pill, a reminder and not a
-   control, goes first. */
+   control, goes first, and the word follows it (with the banner showing, "Transcribed" is still
+   cut by Export at 1440 px; the icon keeps its tooltip and accessible name). Only the editor
+   that shows the button marks its pill "badge-early". */
 @container titlebar (max-width: 1500px) {
-  .bar:has(.actions:not(:empty)) [data-collapse~="badge"] {
+  .bar:has(.actions:not(:empty)) [data-collapse~="badge-early"],
+  .bar:has(.actions:not(:empty)) [data-collapse~="transcribe-label"] {
     display: none;
   }
 }
 
-/* The word follows the pill: with the banner showing, "Transcribed" is still cut by Export at
-   1440 px, and the icon keeps its tooltip and accessible name. */
-@container titlebar (max-width: 1500px) {
-  .bar:has(.actions:not(:empty)) [data-collapse~="transcribe-label"] {
+/* The pill with no Transcribe button beside it: where it always went. */
+@container titlebar (max-width: 1260px) {
+  .bar:has(.actions:not(:empty)) [data-collapse~="badge"] {
     display: none;
   }
 }

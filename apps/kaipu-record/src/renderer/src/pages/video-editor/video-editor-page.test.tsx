@@ -497,6 +497,22 @@ describe("VideoEditorPage — actions in the title bar (NIW2-619)", () => {
     const buttons = within(headerActions).getAllByRole("button");
     expect(buttons[buttons.length - 1]).toHaveAccessibleName("Export");
   });
+
+  it("marks the badge to collapse early only when the Transcribe button shares the bar", async () => {
+    const collapse = (): string | null =>
+      within(headerActions)
+        .getByText("ORIGINAL UNTOUCHED", { exact: false })
+        .closest("[data-collapse]")!
+        .getAttribute("data-collapse");
+    flags.transcription = true;
+    try {
+      renderEditor();
+      await waitForEditorLoaded();
+      expect(collapse()).toBe("badge badge-early");
+    } finally {
+      flags.transcription = false;
+    }
+  });
 });
 
 describe("VideoEditorPage — playback is the play button and Space only (NIW2-619)", () => {

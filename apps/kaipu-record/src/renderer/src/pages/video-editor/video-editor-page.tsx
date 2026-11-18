@@ -2849,8 +2849,15 @@ function VideoEditor({
             {/* Not interactive — a reminder, not a control (plans/video-editor-v2/08 § PR 10
                 polish, W12's "ORIGINAL UNTOUCHED" pill). The original recording on disk and
                 its library thumbnail are untouched by every edit in this page. */}
-            {/* data-collapse: the first thing a crowded title bar hides (title-bar.module.css). */}
-            <span data-collapse="badge" className={styles.badgeSlot}>
+            {/* data-collapse: the first thing a crowded title bar hides (title-bar.module.css).
+                With the Transcribe button beside it the pill goes earlier ("badge-early"), to
+                leave the button room; without the button it keeps its own, narrower breakpoint. */}
+            <span
+              data-collapse={
+                transcriptionOn && sourceProbe?.hasAudio !== false ? "badge badge-early" : "badge"
+              }
+              className={styles.badgeSlot}
+            >
               <Badge variant="neutral" style={sxEditor.originalPill}>
                 <Shield size={12} strokeWidth={2} /> {t("originalUntouched")}
               </Badge>

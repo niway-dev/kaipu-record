@@ -35,10 +35,11 @@ describe("title bar collapse order", () => {
     expect(css).toMatch(/container:\s*titlebar\s*\/\s*inline-size/);
   });
 
-  it("collapses the badge, then the Transcribe word, then the location, then the save state, then the app name, then the chip's name", () => {
+  it("collapses the badge beside the Transcribe button, then the Transcribe word, then a lone badge, then the location, then the save state, then the app name, then the chip's name", () => {
     const order = [
-      '[data-collapse~="badge"]',
+      '[data-collapse~="badge-early"]',
       '[data-collapse~="transcribe-label"]',
+      '[data-collapse~="badge"]',
       '[data-collapse~="location"]',
       '[data-collapse~="save"]',
       ".name",
