@@ -671,7 +671,7 @@ describe("TranscriptPanel — copy", () => {
 
 describe("TranscriptPanel — long transcripts", () => {
   it("renders a long transcript as paragraphs and seeks from one delegated handler", () => {
-    // About 60 minutes of speech: 7,200 words, one every half second, a pause every 12.
+    // About 80 minutes of speech: 7,200 words, one every half second (3,600 s) plus a 2 s pause every 12 (1,200 s).
     const words: TranscriptWord[] = [];
     for (let i = 0; i < 7200; i++) {
       const group = Math.floor(i / 12);
