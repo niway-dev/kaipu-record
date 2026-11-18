@@ -11,6 +11,7 @@ import type { EngineLocation } from "./engine/engine-locator";
 import { SherpaError, type CliResult, type RunBatchOptions } from "./engine/sherpa-supervisor";
 import { DEFAULT_MODEL_ID, getModel } from "./models/catalog";
 import { ModelStoreError, type ModelStatus } from "./models/model-store";
+import { PcmWriter } from "./pcm";
 import { parseTranscript } from "./transcript-file";
 import {
   BATCH_DEADLINE_AUDIO_FACTOR,
@@ -548,6 +549,41 @@ describe("chunks", () => {
     );
     await h.service.chunk(jobId, new Uint8Array(MAX_CHUNK_BYTES));
     expect((await h.service.status()).job?.phase).toBe("receiving-audio");
+  });
+
+  it("fails the job with no-audio and frees the slot when the audio passes the 12 h cap", async () => {
+    // The writer is stubbed: the point is the byte count, not 1.3 GB on disk.
+    const append = vi.spyOn(PcmWriter.prototype, "append").mockResolvedValue(undefined);
+    try {
+      const h = makeHarness();
+      const jobId = await startJob(h, 1000);
+      const chunk = new Uint8Array(MAX_CHUNK_BYTES);
+      // 12 h of 16 kHz 16-bit mono is 1,382,400,000 bytes: 164 whole chunks fit, the 165th does not.
+      for (let i = 0; i < 164; i++) await h.service.chunk(jobId, chunk);
+      await expect(h.service.chunk(jobId, chunk)).rejects.toThrow(RangeError);
+      expect(await h.settled()).toMatchObject({ phase: "failed", failure: "no-audio" });
+      await expect(h.service.chunk(jobId, new Uint8Array(2))).rejects.toThrow(/unknown job/);
+      expect((await h.service.begin(REQUEST)).status).toBe("accepted");
+    } finally {
+      append.mockRestore();
+    }
+  });
+
+  it("fails the job with write-failed and frees the slot when the writer cannot append", async () => {
+    const h = makeHarness();
+    const jobId = await startJob(h, 1000);
+    const append = vi.spyOn(PcmWriter.prototype, "append").mockImplementation(async () => {
+      throw new Error("disk full");
+    });
+    try {
+      await expect(h.service.chunk(jobId, new Uint8Array(2))).rejects.toThrow("disk full");
+    } finally {
+      append.mockRestore();
+    }
+    expect(await h.settled()).toMatchObject({ phase: "failed", failure: "write-failed" });
+    expect(await tmpEntries(h)).toEqual([]);
+    await expect(h.service.chunk(jobId, new Uint8Array(2))).rejects.toThrow(/unknown job/);
+    expect((await h.service.begin(REQUEST)).status).toBe("accepted");
   });
 
   it("throws for an unknown job, for chunk and for end", async () => {
