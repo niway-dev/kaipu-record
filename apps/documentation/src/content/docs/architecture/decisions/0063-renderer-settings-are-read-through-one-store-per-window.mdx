@@ -47,8 +47,10 @@ have added a listener, with no test to notice.
    window that already holds the settings returns them on the first render, with no `null` flash.
 4. **A broadcast that lands before the first read finishes wins**, because it is newer than the
    file the read saw. The store keeps that rule once, so no consumer keeps its own flag.
-5. **Writes go through the store's `updateSettings`**, which returns main's answer and hands it to
-   every consumer in the window at once, ahead of the broadcast.
+5. **Writes go through the store's `updateSettings`**, which returns main's answer. Main
+   broadcasts the change to every window, this one included, before it replies, so the broadcast
+   normally reaches the consumers first. The answer is published only when nothing newer landed
+   while it was on its way, so a late answer never rolls the window back.
 6. **A test enforces it.** No renderer source file other than the store may reference
    `onSettingsChanged` or call the bridge's `getSettings`; the test scans the source and fails
    otherwise.

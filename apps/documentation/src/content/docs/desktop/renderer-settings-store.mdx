@@ -23,8 +23,10 @@ alternatives are in [ADR 0063](/architecture/decisions/0063-renderer-settings-ar
   settings.
 - **A broadcast before the first read wins.** It is newer than what the read saw, so the late
   read is dropped.
-- **Writes.** `updateSettings(patch)` calls main, returns the new settings and hands them to
-  every consumer in the window at once. The other windows get main's broadcast.
+- **Writes.** `updateSettings(patch)` calls main and returns the new settings. Main broadcasts to
+  every window, this one included, before it replies, so the broadcast normally updates the
+  consumers first. The answer is published only when nothing newer landed meanwhile, so a late
+  answer never rolls the window back.
 - **No null flash.** A window that already holds the settings returns them on the first render.
 
 | Export                            | Use it for                                                                                     |

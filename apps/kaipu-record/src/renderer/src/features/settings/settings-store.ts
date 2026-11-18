@@ -120,10 +120,11 @@ export function watchSettings(listener: SettingsListener): () => void {
 }
 
 /**
- * Saves a patch in main and hands main's answer (the new full settings) to every consumer in
- * this window at once, ahead of the broadcast that tells the other windows. When a broadcast
- * landed while the answer was on its way, that broadcast is newer, so the answer is returned
- * but not published (main also sends this window its own change as a broadcast).
+ * Saves a patch in main and returns main's answer (the new full settings). Main broadcasts the
+ * change to every window, this one included, before it replies, so the broadcast normally
+ * reaches the consumers first. The answer is published to them only when the store took
+ * nothing else while it was on its way; otherwise it is returned but not published, because
+ * what the store holds is newer.
  */
 export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   start();
