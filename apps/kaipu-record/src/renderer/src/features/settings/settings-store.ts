@@ -36,7 +36,8 @@ const listeners = new Set<SettingsListener>();
 function publish(next: AppSettings): void {
   current = next;
   revision += 1;
-  // A copy: a consumer may unsubscribe (or subscribe) while it is being told.
+  // A copy: a Set visits entries added during iteration, so a consumer that subscribes another
+  // while being told would otherwise get that one called for this same publish.
   for (const listener of [...listeners]) listener(next);
 }
 
@@ -51,7 +52,7 @@ function openIpc(): void {
 /**
  * The one startup read. Resolves with the newest value the store holds, which is the read's
  * own unless a broadcast arrived first. A failed read rejects (unless a broadcast already gave
- * a value) and clears itself, so a later `loadSettings()` asks main again.
+ * a value) and clears itself, so the next `loadSettings()` or consumer asks main again.
  */
 function readOnce(): Promise<AppSettings> {
   if (firstRead) return firstRead;
@@ -74,10 +75,11 @@ function readOnce(): Promise<AppSettings> {
 }
 
 function start(): void {
-  const firstStart = !ipcOpen;
   openIpc();
-  // The listener first, so nothing that arrives while the read is out is missed.
-  if (firstStart) readOnce().catch(() => undefined);
+  // The listener first, so nothing that arrives while the read is out is missed. A read starts
+  // whenever the store holds no value and none is out: the first start, and any later one after
+  // a failed read, so the next consumer to arrive retries instead of staying on `null`.
+  if (!current && !firstRead) readOnce().catch(() => undefined);
 }
 
 /**
