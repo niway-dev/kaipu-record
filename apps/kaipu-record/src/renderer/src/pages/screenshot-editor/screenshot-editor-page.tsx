@@ -1524,6 +1524,9 @@ function ScreenshotEditorBody({
     scene.annotations,
     scene.crop,
     scene.exportFrame,
+    scene.baseCrop,
+    scene.baseRadius,
+    scene.basePlacement,
   ]);
 
   // Leaving a shot that is in the vault: save what is pending, then go. A failed save

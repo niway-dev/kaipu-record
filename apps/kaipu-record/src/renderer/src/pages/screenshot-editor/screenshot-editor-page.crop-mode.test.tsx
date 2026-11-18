@@ -284,6 +284,37 @@ describe("Save, Copy and PDF never run on an uncommitted crop window", () => {
   });
 });
 
+describe("autosave of a base crop or resize", () => {
+  it("a base crop alone, made while the first save is still running, is saved too", async () => {
+    // `dirty` is already true when the second edit lands, so only the base fields can re-arm
+    // the debounce (the timer of the first edit has fired and its save is in flight).
+    const saved = { id: "shot-1", assetId: "a-shot-1", title: "Shot" };
+    let release!: () => void;
+    const save = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = () => resolve(saved);
+          }),
+      )
+      .mockResolvedValue(saved);
+    window.electronAPI.saveScreenshot = save as never;
+    await open({});
+    await cropBaseToTopLeftQuarter();
+    fireEvent.keyDown(window, { key: "Enter" });
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    // Second crop, only the base changes: the visible base is now x 0..100 on screen.
+    fireEvent.doubleClick(surface(), { clientX: 50, clientY: 50 });
+    await screen.findByTestId("crop-window");
+    drag([100, 100], [50, 50]);
+    fireEvent.keyDown(window, { key: "Enter" });
+    await waitFor(() => expect(label()).toHaveTextContent("100 × 100 px"));
+    release();
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2), { timeout: 4000 });
+  });
+});
+
 describe("selecting and resizing the base", () => {
   it("a click on the base selects it and shows the image handles", async () => {
     await open({});
