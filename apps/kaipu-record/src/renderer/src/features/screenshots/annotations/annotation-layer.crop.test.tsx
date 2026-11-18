@@ -184,6 +184,15 @@ describe("selecting and resizing the base", () => {
     expect(screen.getAllByTestId("image-handle")).toHaveLength(8);
   });
 
+  it("the base's tag shows its size but not 'Drag to move', which an added image keeps", () => {
+    const base = mount(sceneOf([], BASE_IMAGE_ID));
+    expect(screen.getByTestId("image-tag").textContent).toContain("200 × 200 px");
+    expect(screen.queryByText("Drag to move")).toBeNull();
+    base.unmount();
+    mount(sceneOf([image], "i1"));
+    expect(screen.getByText("Drag to move")).not.toBeNull();
+  });
+
   it("dragging a corner resizes proportionally: live while it moves, one commit on release", () => {
     const scene = sceneOf([], BASE_IMAGE_ID);
     const onLiveBase = vi.fn();
@@ -277,8 +286,10 @@ describe("crop mode", () => {
   it("a press away from the window selects and moves nothing", () => {
     const scene = sceneOf([image]);
     const { layer } = mount(scene, { cropping: session });
-    fireEvent.pointerDown(layer, { clientX: 70, clientY: 60 });
-    fireEvent.pointerMove(layer, { clientX: 80, clientY: 70 });
+    // (88, 78) is on the added image, outside the window (x 25..75) and farther than the 12 px
+    // handle tolerance from the se corner (75, 75) and from the east edge.
+    fireEvent.pointerDown(layer, { clientX: 88, clientY: 78 });
+    fireEvent.pointerMove(layer, { clientX: 95, clientY: 70 });
     fireEvent.pointerUp(layer);
     expect(scene.select).not.toHaveBeenCalled();
     expect(scene.commitAnnotation).not.toHaveBeenCalled();

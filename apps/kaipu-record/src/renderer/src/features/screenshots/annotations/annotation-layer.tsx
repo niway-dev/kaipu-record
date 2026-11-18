@@ -991,6 +991,7 @@ function AnnotationLayerImpl({
           pixelWidth={selectedImage.pixelWidth}
           pixelHeight={selectedImage.pixelHeight}
           justAdded={justAddedId != null && justAddedId === selectedImage.id}
+          movable={selectedImage.id !== BASE_IMAGE_ID}
           gaps={gaps}
           unit={natural && natural.w > 0 ? size.w / natural.w : 1}
         />
