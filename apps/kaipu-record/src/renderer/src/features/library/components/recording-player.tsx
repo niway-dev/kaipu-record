@@ -119,9 +119,13 @@ export function RecordingPlayer({
       return;
     }
     if (loopFrame.current !== null) return;
+    // The frame that is running has fired: clear it before the listeners run, because one of
+    // them may unsubscribe (the loop must stop) or subscribe (a new frame is already queued).
+    // Re-deciding afterwards schedules the next frame only when the loop should still run.
     const step = (): void => {
+      loopFrame.current = null;
       notify.current();
-      loopFrame.current = requestAnimationFrame(step);
+      syncLoop.current();
     };
     loopFrame.current = requestAnimationFrame(step);
   });

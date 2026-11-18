@@ -216,6 +216,36 @@ describe("RecordingPlayer handle", () => {
     expect(frames.size).toBe(0);
   });
 
+  it("schedules no further frame when the last listener unsubscribes from inside its own call", () => {
+    let handle: PlayerHandle | null = null;
+    const { el } = mount((h) => (handle = h));
+    fireEvent.play(el);
+    let unsubscribe = (): void => {};
+    const listener = vi.fn(() => unsubscribe());
+    unsubscribe = handle!.subscribeTime(listener);
+    expect(frames.size).toBe(1);
+    tick();
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(frames.size).toBe(0);
+  });
+
+  it("keeps the loop going for a listener that subscribes from inside another's call", () => {
+    let handle: PlayerHandle | null = null;
+    const { el } = mount((h) => (handle = h));
+    fireEvent.play(el);
+    const late = vi.fn();
+    let first = (): void => {};
+    first = handle!.subscribeTime(() => {
+      first();
+      handle!.subscribeTime(late);
+    });
+    tick();
+    expect(frames.size).toBe(1);
+    tick();
+    expect(late).toHaveBeenCalled();
+    expect(frames.size).toBe(1);
+  });
+
   it("behaves as before for a caller that passes no handle prop", () => {
     const { container } = render(<RecordingPlayer id="clip" />);
     const el = video(container);
