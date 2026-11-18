@@ -132,6 +132,28 @@ describe("unresolvedMarks", () => {
       { start: 3, end: 4 },
     ]);
   });
+
+  it("keeps one mark for an interval that crosses a split, where the source stays contiguous", () => {
+    // A split at source 5 leaves two clips that play on without a gap.
+    const layout = [clip(0, 0, 5), clip(5, 5, 10)];
+    const marks = unresolvedMarks(
+      [{ startMs: 4000, endMs: 6000, reason: "segment-failed" }],
+      layout,
+    );
+    expect(marks).toEqual([{ start: 4, end: 6 }]);
+  });
+
+  it("merges overlapping intervals into one mark", () => {
+    const layout = [clip(0, 0, 10)];
+    const marks = unresolvedMarks(
+      [
+        { startMs: 1000, endMs: 3000, reason: "segment-failed" },
+        { startMs: 2000, endMs: 4000, reason: "empty-with-speech" },
+      ],
+      layout,
+    );
+    expect(marks).toEqual([{ start: 1, end: 4 }]);
+  });
 });
 
 function occ(wordId: string, start: number, end: number, text = wordId): WordOccurrence {

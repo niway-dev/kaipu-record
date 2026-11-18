@@ -126,9 +126,14 @@ export interface UnresolvedMark {
   end: number;
 }
 
+/** Marks closer than this are one stretch (seconds); the same tolerance `source-time.ts` uses. */
+const MARK_EPSILON = 1e-6;
+
 /**
  * The unresolved intervals (source ms) as marks on the timeline: the pieces of each interval
- * that survive the edit, sorted by start. An interval cut away entirely has no mark.
+ * that survive the edit, sorted by start. An interval cut away entirely has no mark. Pieces that
+ * touch or overlap are one mark: a split keeps the source contiguous, so an interval over a split
+ * point reaches the timeline as two back-to-back pieces that the user sees as one stretch.
  */
 export function unresolvedMarks(
   unresolved: readonly TranscriptUnresolvedInterval[],
@@ -145,7 +150,14 @@ export function unresolvedMarks(
       marks.push({ start: block.timelineStart, end: block.timelineEnd });
     }
   }
-  return marks.sort((a, b) => a.start - b.start || a.end - b.end);
+  marks.sort((a, b) => a.start - b.start || a.end - b.end);
+  const merged: UnresolvedMark[] = [];
+  for (const mark of marks) {
+    const last = merged[merged.length - 1];
+    if (last && mark.start <= last.end + MARK_EPSILON) last.end = Math.max(last.end, mark.end);
+    else merged.push({ ...mark });
+  }
+  return merged;
 }
 
 export type TranscriptRow =
