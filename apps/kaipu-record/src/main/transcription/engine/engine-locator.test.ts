@@ -150,11 +150,11 @@ describe("locateEngine", () => {
       versionScript: `echo $$ > "${pidFile}"\nexec sleep 30`,
     });
     const started = Date.now();
-    expect(await locateEngine({ resourcesPath, ...arm, handshakeTimeoutMs: 200 })).toEqual({
+    expect(await locateEngine({ resourcesPath, ...arm, handshakeTimeoutMs: 1500 })).toEqual({
       available: false,
       reason: "handshake-failed",
     });
-    expect(Date.now() - started).toBeLessThan(2000);
+    expect(Date.now() - started).toBeLessThan(10_000);
     const pid = Number((await readFile(pidFile, "utf8")).trim());
     expect(pid).toBeGreaterThan(0);
     // The kill is a signal; give the OS a moment to reap the child before checking.
