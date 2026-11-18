@@ -57,6 +57,7 @@ export interface FilmstripConfigureMessage {
 }
 
 export type FilmstripWorkerInput =
+  | { type: "prepare"; url: string }
   | FilmstripRequestMessage
   | FilmstripCancelMessage
   | FilmstripCloseMessage
@@ -146,9 +147,8 @@ export const PACE_MAX_FRAMES = 60;
 export const PACE_WINDOW_MS = 1000;
 
 /**
- * Slots decoded in one forward pass. A decoder pass has a start-up cost (measured on the Mac
- * mini: 17 frames took 520 ms hardware / 823 ms software as one pass each, 184 ms / 439 ms as
- * one pass), so slots are batched; a small batch keeps the playhead's slots arriving first.
+ * Slots decoded in one forward pass. A small batch keeps the playhead's slots arriving first,
+ * while amortizing decoder startup across several keyframes.
  */
 export const PASS_SLOTS = 8;
 

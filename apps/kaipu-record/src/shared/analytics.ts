@@ -17,6 +17,7 @@ export const FLAG_NAMES = [
   "image-inspect",
   "image-text",
   "timeline-levels",
+  "zoom-filmstrip",
 ] as const;
 export type FlagName = (typeof FLAG_NAMES)[number];
 
@@ -44,6 +45,10 @@ export const FLAG_DEFAULTS: Record<FlagName, boolean> = {
   // sequence or over it (NIW2-771, NIW2-829). A scene that already has floating items still shows
   // and exports them with the flag off.
   "timeline-levels": false,
+  // Zoom-aware filmstrip (NIW2-844, ADR 0064): the Clips and Webcam tiles decode a frame of their
+  // own time when the timeline is zoomed in. Off until the budgets are proven on the 54-minute
+  // take (spec decision 11); with it off the filmstrip is the 24 frames per file it always was.
+  "zoom-filmstrip": false,
 };
 
 /** Identity super-properties attached to every event/error for multi-surface filtering. */

@@ -154,6 +154,19 @@ export class FilmstripEngine {
   /** Handles one message. Never throws: a failure is reported as an `error` message. */
   handle(message: FilmstripWorkerInput): void {
     switch (message.type) {
+      case "prepare":
+        // Opening reads metadata only. Use the same serialized lifecycle and idle close,
+        // without consuming the frame pacer or decoding any thumbnail.
+        this.start({
+          type: "request",
+          requestId: 0,
+          fileKey: message.url,
+          url: message.url,
+          slots: [],
+          playhead: 0,
+          direction: 0,
+        });
+        return;
       case "request":
         this.start(message);
         return;

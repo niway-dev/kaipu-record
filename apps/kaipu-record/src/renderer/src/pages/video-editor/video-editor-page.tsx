@@ -230,6 +230,14 @@ import {
 import { TimelineStrip } from "@renderer/features/video-editor/components/timeline-strip";
 import { TransportBar } from "@renderer/features/video-editor/components/transport-bar";
 import { useTimelineViewStore } from "@renderer/features/video-editor/use-timeline-view";
+import { useFilmstrip } from "@renderer/features/video-editor/use-filmstrip";
+import {
+  laneFileInputs,
+  screenFileMap,
+  webcamFileMap,
+  type ScreenFile,
+  type WebcamFile,
+} from "@renderer/features/video-editor/filmstrip-lanes";
 import { showToast } from "@renderer/ui/toast-store";
 import { isAmbiguousIdentityError } from "@renderer/features/library/rename-outcome";
 import { registerSwitchFlush } from "@renderer/features/workspaces/prepare-switch";
@@ -1986,6 +1994,98 @@ function VideoEditor({
   // A drag freezes the playhead the target is resolved at (review S1): playback crossing an
   // override mid-drag would otherwise swap the inspector and unmount the dragged slider.
   const playheadSource = sourceTimeAtTimeline(layout, playback.timelineTime);
+  // Zoom-aware filmstrip (NIW2-844, ADR 0064), behind `zoom-filmstrip`. Off, none of this runs and the
+  // lanes draw the 24 frames per file they always did. On, the Clips and Webcam tiles also decode a
+  // frame of their own time once the view rests, in a worker, and never while playing or exporting.
+  const zoomFilmstrip = useFlag("zoom-filmstrip");
+  const screenFiles = useMemo<ScreenFile[]>(
+    () =>
+      zoomFilmstrip
+        ? [
+            {
+              sourceId: null,
+              url: sourceUrl,
+              duration: source.durationSeconds,
+              thumbnails,
+            },
+            ...recordingStripRequests.map((request) => ({
+              sourceId: request.key,
+              url: request.mediaUrl,
+              duration: request.durationSeconds,
+              thumbnails: recordingThumbnails.get(request.key) ?? [],
+            })),
+          ]
+        : [],
+    [
+      zoomFilmstrip,
+      sourceUrl,
+      source.durationSeconds,
+      thumbnails,
+      recordingStripRequests,
+      recordingThumbnails,
+    ],
+  );
+  const webcamFiles = useMemo<WebcamFile[]>(
+    () =>
+      zoomFilmstrip && scene.webcam !== null
+        ? [
+            ...(webcamTrack
+              ? [
+                  {
+                    sourceId: null,
+                    url: mediaUrl("webcam", source.id),
+                    companionOffset: webcamTrack.startOffsetMs / 1000,
+                    strip: webcamStrip,
+                  },
+                ]
+              : []),
+            ...webcamStripRequests.map((request) => ({
+              sourceId: request.key,
+              url: request.mediaUrl,
+              companionOffset: request.companionOffsetSeconds ?? 0,
+              strip: webcamRecordingStrips.get(request.key),
+            })),
+          ]
+        : [],
+    [
+      zoomFilmstrip,
+      scene.webcam,
+      webcamTrack,
+      source.id,
+      webcamStrip,
+      webcamStripRequests,
+      webcamRecordingStrips,
+    ],
+  );
+  const screenFilmstripFiles = useMemo(
+    () => (zoomFilmstrip ? screenFileMap(screenFiles) : undefined),
+    [zoomFilmstrip, screenFiles],
+  );
+  const webcamFilmstripFiles = useMemo(
+    () => (zoomFilmstrip ? webcamFileMap(webcamFiles) : undefined),
+    [zoomFilmstrip, webcamFiles],
+  );
+  const webcamLaneHidden = isTrackHidden("webcam", hiddenTracks);
+  const filmstripFiles = useMemo(
+    () =>
+      laneFileInputs({
+        layout,
+        clipRecordings: clipRecordingMap,
+        screen: screenFiles,
+        // A hidden lane is not on screen and asks for nothing.
+        webcam: webcamLaneHidden || !hasWebcam ? [] : webcamFiles,
+      }),
+    [layout, clipRecordingMap, screenFiles, webcamFiles, webcamLaneHidden, hasWebcam],
+  );
+  useFilmstrip({
+    enabled: zoomFilmstrip,
+    viewStore: timelineView,
+    files: filmstripFiles,
+    // The decoder belongs to the preview while it plays and to an export while one runs (AC6).
+    paused:
+      playback.playing || videoExport.status === "exporting" || gifExport.status === "exporting",
+    playheadSource,
+  });
   const webcamTargetPlayhead = useRef(playheadSource);
   if (!controller.interacting) webcamTargetPlayhead.current = playheadSource;
   const webcamTarget =
@@ -2350,6 +2450,7 @@ function VideoEditor({
                     noCameraItemIds={noCameraClips}
                     clipRecordings={clipRecordingMap}
                     recordingStrips={webcamRecordingStrips}
+                    filmstripFiles={webcamFilmstripFiles}
                     selectedId={webcamSelectedId}
                     pendingPart={webcamDrop.card?.room ?? null}
                     onSelect={handleSelectWebcam}
@@ -2411,6 +2512,7 @@ function VideoEditor({
       noCameraClips,
       clipRecordingMap,
       webcamRecordingStrips,
+      webcamFilmstripFiles,
       webcamSelectedId,
       webcamDrop.card?.room,
       handleSelectWebcam,
@@ -2897,6 +2999,7 @@ function VideoEditor({
           thumbnails={thumbnails}
           clipRecordings={clipRecordingMap}
           recordingThumbnails={recordingThumbnails}
+          filmstripFiles={screenFilmstripFiles}
           selectedItemId={selectedItemId}
           onSelectItem={setSelectedItemId}
           onTrim={handleTrim}

@@ -277,6 +277,64 @@ export function planSlots(input: PlanSlotsInput): Slot[] {
   return empty;
 }
 
+export interface PlanTileSlotsInput {
+  /** The file's duration, in its own time. Not finite or not positive: nothing is planned. */
+  duration: number;
+  /** The clip block's stretch of the file, in the file's own time. */
+  clip: TimeRange;
+  /** How many equal tiles the block is drawn as (the same count `thumbnailTiles` uses). */
+  count: number;
+  /** What the user sees of the clip, in the file's own time. */
+  visible: TimeRange;
+  /** The file's stored frames, sorted by timestamp (a store snapshot plus the opening ones). */
+  frames: readonly { timestamp: number }[];
+  /** Extra range planned on each side. Default: one screen (the visible length). */
+  margin?: number;
+}
+
+/**
+ * One slot per tile that has no frame of its own time yet, for the visible range and the margin.
+ *
+ * Each slot covers the full tile span: a narrow tile can contain valid frames only outside
+ * its middle half. The decoder still prefers a keyframe, then a frame near the centre.
+ * A tile already holding a frame inside its span is not asked for again.
+ * Sorted by start; the visible ones are flagged. At most {@link MAX_PLAN_SLOTS}, visible first.
+ */
+export function planTileSlots(input: PlanTileSlotsInput): Slot[] {
+  const { duration, clip, count, frames } = input;
+  if (!Number.isFinite(duration) || duration <= 0) return [];
+  if (!Number.isFinite(input.visible.start) || !Number.isFinite(input.visible.end)) return [];
+  const clipLength = clip.end - clip.start;
+  if (!(clipLength > 0) || !(count >= 1)) return [];
+  const span = clipLength / count;
+  const visibleStart = Math.max(clip.start, input.visible.start);
+  const visibleEnd = Math.min(clip.end, input.visible.end);
+  if (visibleEnd <= visibleStart) return [];
+
+  const margin = Math.max(0, input.margin ?? visibleEnd - visibleStart);
+  const first = Math.max(0, Math.floor((visibleStart - margin - clip.start) / span));
+  const last = Math.min(count - 1, Math.ceil((visibleEnd + margin - clip.start) / span) - 1);
+
+  const slots: Slot[] = [];
+  for (let i = first; i <= last; i++) {
+    const start = clip.start + i * span;
+    const end = Math.min(start + span, duration);
+    if (end <= start) break; // past the end of the file
+    const at = lowerBound(frames, start);
+    if (at < frames.length && frames[at].timestamp < end) continue;
+    slots.push({
+      index: i,
+      start,
+      end,
+      visible: end > visibleStart && start < visibleEnd,
+    });
+  }
+  if (slots.length <= MAX_PLAN_SLOTS) return slots;
+  return [...slots.filter((s) => s.visible), ...slots.filter((s) => !s.visible)]
+    .slice(0, MAX_PLAN_SLOTS)
+    .sort((a, b) => a.start - b.start);
+}
+
 // ---------------------------------------------------------------------------------------
 // Tile lookup
 // ---------------------------------------------------------------------------------------
