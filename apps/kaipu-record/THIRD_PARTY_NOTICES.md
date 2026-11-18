@@ -44,13 +44,15 @@ upstream's published terms and not re-read against the pinned artifact.
 
 ## Where the notices are
 
-- The Apache-2.0 and MIT texts that sherpa-onnx's own release archive carries (its top-level
-  `LICENSE*`, `NOTICE*` and `COPYING*` files) are copied by `scripts/fetch-speech-engine.sh` into
-  `resources/native/sherpa-onnx/licenses/`, next to `bin/` and `lib/`, and ship inside the app. The
-  fetch fails if the archive has none, and the release checks that the folder is not empty, both
-  before packaging and in the packaged arm64 app.
+- The Apache-2.0 text (sherpa-onnx, copied from its repository at tag `v1.13.8`) and the MIT text
+  (ONNX Runtime) live in `scripts/speech-engine-licenses/`. The pinned release archive carries no
+  license file of its own (checked 2026-11-18 by listing it), so `scripts/fetch-speech-engine.sh`
+  copies these into `resources/native/sherpa-onnx/licenses/`, next to `bin/` and `lib/`, and they
+  ship inside the app. The fetch fails if the folder is empty, and the release checks that the
+  destination is not empty, both before packaging and in the packaged arm64 app.
 - The app has no screen that lists third-party notices (NIW2-818 tracks local transcription). The
   model credit is shown in the download prompt. This file is the repository's record.
-- Not verified: which files the pinned archive actually holds, and whether it carries a separate
-  ONNX Runtime license text. Nobody has run the fetch against the real archive since the license
-  copy was added; a failed fetch would say so.
+- Not verified: the ONNX Runtime MIT text was written from the upstream license's well-known
+  wording ("Copyright (c) Microsoft Corporation") and not copied from the upstream repository, which
+  was not reachable when this was written; it is also not checked against the ONNX Runtime version
+  inside the pinned archive. Nobody has run the fetch since the license copy was added.

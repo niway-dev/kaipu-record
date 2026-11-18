@@ -8,9 +8,10 @@
 #   it is extracted, and nothing is run from inside the temp directory.
 # - Only the CLI, the version tool and the dylibs they need are copied, then run from the
 #   destination once to prove they load.
-# - The archive's own license files (LICENSE*, NOTICE*, COPYING*, top level) are copied to
-#   licenses/ next to bin/ and lib/: Apache-2.0 and MIT require the text to travel with every
-#   redistributed copy. The script fails if the archive has none, so a release cannot ship without.
+# - The license texts (scripts/speech-engine-licenses/) are copied to licenses/ next to bin/ and
+#   lib/: Apache-2.0 and MIT require the text to travel with every redistributed copy. The pinned
+#   archive carries none of its own, so the repository holds them. The script fails if they are
+#   missing, so a release cannot ship without.
 # - Idempotent: a stamp holding the version and hash makes a repeat run a no-op.
 set -euo pipefail
 
@@ -95,16 +96,17 @@ while ((${#QUEUE[@]} > 0)); do
   done < <(otool -L "$CURRENT" | awk '/@rpath\// { sub(".*@rpath/", "", $1); print $1 }')
 done
 
-# The license texts of what we redistribute, from the archive itself. A glob, because the pinned
-# archive's file names are not recorded here; no match is an error, never a silent omission.
+# The license texts of what we redistribute. The pinned archive has no LICENSE, NOTICE or COPYING
+# file, so they come from the repository; a missing folder is an error, never a silent omission.
+LICENSES_SRC="$SCRIPT_DIR/speech-engine-licenses"
 mkdir -p "$STAGE/licenses"
 shopt -s nullglob
-for FILE in "$SRC"/LICENSE* "$SRC"/NOTICE* "$SRC"/COPYING*; do
+for FILE in "$LICENSES_SRC"/*; do
   if [[ -f "$FILE" ]]; then cp "$FILE" "$STAGE/licenses/"; fi
 done
 shopt -u nullglob
 if [[ -z "$(find "$STAGE/licenses" -type f | head -n 1)" ]]; then
-  echo "fetch-speech-engine: $ARCHIVE has no LICENSE*, NOTICE* or COPYING* file at its top level" >&2
+  echo "fetch-speech-engine: no license files in $LICENSES_SRC" >&2
   exit 1
 fi
 
