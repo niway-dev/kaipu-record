@@ -72,6 +72,21 @@ describe("groupTokens", () => {
     expect(mid.map((w) => w.text)).toEqual(["Hola", "¿qué"]);
   });
 
+  it("keeps a quote or currency symbol with the word that follows it", () => {
+    const quoted = groupTokens(result([" said", ' "', "Hola", '"'], [0, 0.4, 0.5, 0.9]), seg("s0"));
+    expect(quoted.map((w) => w.text)).toEqual(["said", '"Hola"']);
+    const price = groupTokens(result(["▁costs", "▁$", "50"], [0, 0.4, 0.5]), seg("s0"));
+    expect(price.map((w) => w.text)).toEqual(["costs", "$50"]);
+  });
+
+  it("still attaches closing marks that carry a space marker to the word before", () => {
+    const words = groupTokens(
+      result(["▁Hola", "▁)", "▁mundo", "▁?", "▁sí", "▁%"], [0, 0.3, 0.5, 0.8, 1, 1.4]),
+      seg("s0"),
+    );
+    expect(words.map((w) => w.text)).toEqual(["Hola)", "mundo?", "sí%"]);
+  });
+
   it("ends the last word at its last token start plus duration", () => {
     const words = groupTokens(result([" uno", " dos"], [1, 2], 0.24), seg("s0"));
     expect(words[1]).toMatchObject({ startMs: 2000, endMs: 2240 });

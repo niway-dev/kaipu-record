@@ -24,8 +24,12 @@ export type IdentifiedWord = Word & { id: string };
 export const MIN_WORD_MS = 80;
 
 const PUNCTUATION_ONLY = /^[\p{P}\p{S}]+$/u;
-/** Punctuation that opens a phrase belongs to the word after it, not the one before. */
-const OPENING_PUNCTUATION = /^[¿¡([{“‘«]+$/u;
+/**
+ * Punctuation that closes a phrase belongs to the word before it. Any other punctuation or symbol
+ * that starts with a space marker (`¿`, `"`, `$`, `€`, `#`...) opens the next word, so
+ * `said "Hola"` and `costs $50` stay two words.
+ */
+const CLOSING_PUNCTUATION = /^[.,;:!?)\]}”’»…%–—]+$/u;
 
 type Pending = {
   text: string;
@@ -99,7 +103,7 @@ export function groupTokens(result: CliResult, segment: Segment): Word[] {
       current = begin();
     } else if (!startsWord) {
       append(current);
-    } else if (punctuation && !OPENING_PUNCTUATION.test(piece)) {
+    } else if (punctuation && CLOSING_PUNCTUATION.test(piece)) {
       append(current); // closing punctuation with its own space marker
     } else if (PUNCTUATION_ONLY.test(current.text)) {
       append(current); // leading punctuation waiting for its word
