@@ -338,6 +338,45 @@ describe("useTranscriptionStatus", () => {
     }
   });
 
+  it("a poll from before a restart does not reopen the gate for the poll that replaced it", async () => {
+    vi.useFakeTimers();
+    try {
+      const downloading = statusOf({ state: "downloading", receivedBytes: 1, totalBytes: 10 });
+      const pending: Array<(status: TranscriptionStatus) => void> = [];
+      let call = 0;
+      const getStatus = vi.fn(() => {
+        call += 1;
+        // Loads (1 and 3) answer at once; the polls (2 and 4) stay out until resolved by hand.
+        if (call % 2 === 1) return Promise.resolve(downloading);
+        return new Promise<TranscriptionStatus>((resolve) => pending.push(resolve));
+      });
+      stubApi({ getTranscriptionStatus: getStatus });
+
+      const first = renderHook(() => useTranscriptionStatus());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000); // poll 2 starts and stays in flight
+      });
+      first.unmount(); // the store goes idle with that poll still out
+      renderHook(() => useTranscriptionStatus());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000); // load 3 settled; poll 4 starts and stays in flight
+      });
+      expect(getStatus).toHaveBeenCalledTimes(4);
+
+      // The old poll ends now. It must not tell the new poll's gate that nothing is in flight.
+      await act(async () => {
+        pending[0]!(downloading);
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      expect(getStatus).toHaveBeenCalledTimes(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not subscribe an idle consumer to the shared store", async () => {
     const getStatus = vi.fn(async () => statusOf({ state: "missing" }));
     const onProgress = vi.fn(() => () => {});

@@ -94,7 +94,9 @@ function syncPoll(): void {
         })
         .catch(() => {})
         .finally(() => {
-          pollInFlight = false;
+          // `stop()` already reset the gate; a poll that outlived it must not reopen it for the
+          // poll that replaced it.
+          if (owner === generation) pollInFlight = false;
         });
     }, DOWNLOAD_POLL_MS);
   } else if (!wanted && pollTimer !== null) {
