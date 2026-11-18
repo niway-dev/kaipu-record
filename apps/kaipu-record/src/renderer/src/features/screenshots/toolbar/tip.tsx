@@ -57,7 +57,13 @@ export function useTip(
  * Display labels whose `aria-keyshortcuts` name differs: ARIA wants UI Events `key` values
  * ("Escape"), while the kbd chip shows the short label ("Esc"). Every other hint is already a key name.
  */
-const ARIA_KEY_NAMES: Record<string, string> = { Esc: "Escape" };
+const ARIA_KEY_NAMES: Record<string, string> = {
+  Esc: "Escape",
+  "⌘Z": "Meta+Z",
+  "⇧⌘Z": "Meta+Shift+Z",
+  "Ctrl+Z": "Control+Z",
+  "Ctrl+Shift+Z": "Control+Shift+Z",
+};
 
 /** The `aria-keyshortcuts` value for a display key hint. */
 export function ariaKeyShortcut(keyHint: string): string {

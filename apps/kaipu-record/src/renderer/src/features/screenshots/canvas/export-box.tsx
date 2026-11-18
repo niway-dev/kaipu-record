@@ -1,6 +1,7 @@
 import React from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { uiArea } from "@renderer/lib/ui-area";
+import { TRANSPARENT_CHECKER_CSS } from "../beautify/backgrounds";
 import styles from "./export-box.module.css";
 
 /**
@@ -15,10 +16,10 @@ import styles from "./export-box.module.css";
  * been measured. `labeled` false keeps the box and drops the label (Inspect, Redact and Select
  * text are reading the image and the label would sit on top of what they show).
  *
- * `filled` paints the stage colour under the content, so the dot grid does not show through the
- * box (mock A1). The page passes it when there is no background: the export fills the gaps with
- * a neutral colour then, never a see-through void, so a solid fill is the truthful preview. With
- * a background the frame already paints it, and a fill here would cover it.
+ * `filled` paints the transparent checker under the content, so the dot grid does not show
+ * through the box and the gap between images reads as what it exports: nothing. The page passes
+ * it when the background is transparent; the PNG, the clipboard and the PDF keep their alpha
+ * there. With a background the frame already paints it, and a fill here would cover it.
  */
 export function ExportBox({
   size,
@@ -38,7 +39,14 @@ export function ExportBox({
       data-testid="export-box"
       data-label={showLabel ? "labeled" : "quiet"}
     >
-      {filled && <div className={styles.fill} data-testid="export-box-fill" aria-hidden />}
+      {filled && (
+        <div
+          className={styles.fill}
+          style={{ background: TRANSPARENT_CHECKER_CSS }}
+          data-testid="export-box-fill"
+          aria-hidden
+        />
+      )}
       <div className={styles.dash} aria-hidden />
       {showLabel && (
         <div className={styles.label} data-testid="export-box-label">

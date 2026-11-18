@@ -65,9 +65,9 @@ const editPadding = () => {
   const range = screen
     .getByText("Padding")
     .parentElement!.parentElement!.querySelector("input[type=range]")!;
-  fireEvent.keyDown(range);
+  fireEvent.keyDown(range, { key: "ArrowRight" });
   fireEvent.change(range, { target: { value: "40" } });
-  fireEvent.keyUp(range);
+  fireEvent.keyUp(range, { key: "ArrowRight" });
 };
 const saveCalls = () => vi.mocked(window.electronAPI.saveScreenshot).mock.calls;
 

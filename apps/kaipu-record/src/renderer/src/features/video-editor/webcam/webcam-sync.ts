@@ -4,8 +4,9 @@
  * verdict, so the rule is testable without media.
  *
  * Offset semantics (ADR 0037): `startOffsetMs = webcamT0 − screenT0`. A webcam that started
- * 500 ms after the screen shows its first frame at screen time 0.5 s, so for screen source
- * time `t` the webcam time is `t − startOffsetMs / 1000`.
+ * 500 ms after the screen has its first frame at screen time 0.5 s (held back to 0 s by
+ * {@link WEBCAM_LEAD_IN_HOLD_SECONDS}), so for screen source time `t` the webcam time is
+ * `t − startOffsetMs / 1000`.
  */
 
 import { recordingAt, type SourceAxis } from "../source-axis";
@@ -57,12 +58,20 @@ export function webcamTimeFor(t: number, startOffsetMs: number): number {
 }
 
 /**
- * Whether the webcam file has a frame at `webcamTime`: hidden before its first frame and
- * after its last. An unknown duration (NaN, 0: metadata not loaded) has nothing to show; an
+ * How long before its first frame the webcam still shows it: the webcam writer starts tens of
+ * ms after the screen on every take, and holding its first frame over that startup lag keeps
+ * the bubble visible from 0:00, while a longer lead-in is a real late camera start and stays hidden.
+ */
+export const WEBCAM_LEAD_IN_HOLD_SECONDS = 1;
+
+/**
+ * Whether the webcam file has a frame at `webcamTime`: its first frame is held from
+ * {@link WEBCAM_LEAD_IN_HOLD_SECONDS} before time 0, then it plays, and it is hidden after
+ * its last frame. An unknown duration (NaN, 0: metadata not loaded) has nothing to show; an
  * infinite one (a stream without a known end) has no last frame.
  */
 export function webcamHasFrameAt(webcamTime: number, duration: number): boolean {
-  if (!Number.isFinite(webcamTime) || webcamTime < 0) return false;
+  if (!Number.isFinite(webcamTime) || webcamTime < -WEBCAM_LEAD_IN_HOLD_SECONDS) return false;
   if (Number.isNaN(duration) || duration <= 0) return false;
   return webcamTime < duration;
 }

@@ -40,6 +40,7 @@ import { BrandBadgeSettings } from "./brand-badge-settings";
 import { AppWideBadge, OverrideBlock } from "./scope/scope-controls";
 import { CountdownSettings } from "./countdown-settings";
 import { DiagnosticsSettings } from "./diagnostics-settings";
+import { DeveloperFlagsSection } from "./developer-flags-section";
 import { Section, SettingsPanel } from "./settings-panel";
 import styles from "./settings-page.module.css";
 import { uiArea } from "@renderer/lib/ui-area";
@@ -463,6 +464,7 @@ export function DeveloperSettingsPage(): React.JSX.Element {
       title="Developer"
       subtitle="Dev-only overrides. Stripped from production builds."
     >
+      <DeveloperFlagsSection />
       <Section title="Updater simulator">
         <Row
           label="Force an update state"

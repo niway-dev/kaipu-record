@@ -51,6 +51,8 @@ export interface LibraryVideo {
   capture?: RecordingCapture | null;
   /** The take's webcam track (ADR 0037) while its file exists; null otherwise. */
   webcam?: LocalRecording["webcam"];
+  /** A webcam recording whose thumbnail does not show the bubble yet (NIW2-845). */
+  thumbnailNeedsWebcam?: LocalRecording["thumbnailNeedsWebcam"];
   /** Set when the local sidecar could not be read: the item is listed but read-only (NIW2-568). */
   metadataIssue?: LocalRecording["metadataIssue"];
 }

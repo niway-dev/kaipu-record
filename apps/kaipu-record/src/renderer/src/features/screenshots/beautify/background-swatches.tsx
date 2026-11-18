@@ -28,7 +28,7 @@ export function BackgroundSwatches({
           title={t(bg.nameKey)}
           aria-label={t(bg.nameKey)}
           aria-pressed={value === bg.id}
-          className={`${styles.swatch} ${value === bg.id ? styles.selected : ""}`}
+          className={`${styles.swatch} ${bg.id === "white" ? styles.light : ""} ${value === bg.id ? styles.selected : ""}`}
           style={{ background: backgroundCss(bg.id) }}
           onClick={() => onSelect(bg.id)}
         />

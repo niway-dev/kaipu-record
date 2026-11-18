@@ -8,6 +8,7 @@ import {
   backgroundPaint,
   frameRadius,
   shadowCss,
+  TRANSPARENT_CHECKER_CSS,
 } from "./backgrounds";
 
 describe("beautify helpers", () => {
@@ -35,8 +36,8 @@ describe("beautify helpers", () => {
   });
 });
 
-describe("the background table (NIW2-676: seventeen presets)", () => {
-  const FIRST_NINE = [
+describe("the background table (NIW2-676: seventeen presets, NIW2-851: plus White)", () => {
+  const ORIGINAL = [
     "none",
     "dark",
     "carbon",
@@ -49,16 +50,28 @@ describe("the background table (NIW2-676: seventeen presets)", () => {
   ];
   const NEW_EIGHT = ["aurora", "iris", "coral", "lilac", "citrus", "ember", "sky", "dusk"] as const;
 
-  it("keeps the first nine in their order and appends the eight new ones after them", () => {
-    expect(BACKGROUND_IDS.slice(0, 9)).toEqual(FIRST_NINE);
-    expect(BACKGROUND_IDS.slice(9)).toEqual(NEW_EIGHT);
-    expect(BACKGROUND_IDS).toHaveLength(17);
+  it("keeps the original nine in their order, White after the dark solids, the eight new ones last", () => {
+    expect(BACKGROUND_IDS.filter((id) => id !== "white").slice(0, 9)).toEqual(ORIGINAL);
+    expect(BACKGROUND_IDS.slice(0, 4)).toEqual(["none", "dark", "carbon", "white"]);
+    expect(BACKGROUND_IDS.slice(10)).toEqual(NEW_EIGHT);
+    expect(BACKGROUND_IDS).toHaveLength(18);
     expect(BACKGROUNDS.map((b) => b.id)).toEqual([...BACKGROUND_IDS]);
   });
 
   it("has unique ids and unique name keys", () => {
     expect(new Set(BACKGROUND_IDS).size).toBe(BACKGROUND_IDS.length);
     expect(new Set(BACKGROUNDS.map((b) => b.nameKey)).size).toBe(BACKGROUNDS.length);
+  });
+
+  it("White is a solid #ffffff with a Spanish and an English name", () => {
+    expect(backgroundPaint("white")).toEqual({ kind: "solid", color: "#ffffff" });
+    expect(backgroundCss("white")).toBe("#ffffff");
+    expect(en.screenshots.bgWhite).toBe("White");
+    expect(es.screenshots.bgWhite).toBe("Blanco");
+  });
+
+  it("the transparent swatch and the export-box fill share one checker", () => {
+    expect(backgroundCss("none")).toBe(TRANSPARENT_CHECKER_CSS);
   });
 
   it("leaves the first nine's values untouched", () => {

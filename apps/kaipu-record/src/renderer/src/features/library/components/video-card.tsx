@@ -95,7 +95,16 @@ export function VideoCard({
         }
       }}
     >
-      <div className={styles.poster}>
+      <div
+        className={styles.poster}
+        data-webcam-thumbnail={
+          video.kind === "recording" && video.webcam
+            ? video.thumbnailNeedsWebcam
+              ? "pending"
+              : "done"
+            : undefined
+        }
+      >
         {selection && (
           <span className={styles.selectCheck}>
             <SelectCheck selection={selection} />

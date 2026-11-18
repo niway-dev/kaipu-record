@@ -4,12 +4,14 @@ import { useTranslations } from "@kaipu/i18n";
 import { uiArea } from "@renderer/lib/ui-area";
 import type { AnnotationTool } from "../annotations/tools";
 import { ADD_IMAGE_KEY, TOOL_KEYS, toolMeta } from "./tool-meta";
+import { detectKeyPlatform } from "../overlay/overlay-keys";
+import { undoKeyLabel, redoKeyLabel } from "./use-history-shortcuts";
 import { MENU_DIVIDER, ToolbarMenu, type ToolbarMenuItem } from "./toolbar-menu";
 
 /**
  * The compact toolbar's "•••" menu (mock B3): what no longer fits in the row. Export frame, Add
  * image and Select text first, then Undo and Redo, then PDF. Each item shows its key where it has
- * one (X, M); Undo, Redo, PDF and Select text have none today.
+ * one (X, M, ⌘Z, ⇧⌘Z); PDF and Select text have none today.
  */
 export function MoreMenu({
   canvasMode,
@@ -30,6 +32,7 @@ export function MoreMenu({
   pdf: { onSelect: () => void; disabled: boolean };
 }): React.JSX.Element {
   const t = useTranslations("screenshots");
+  const platform = detectKeyPlatform();
   const frame = toolMeta("crop", canvasMode);
   const selectText = toolMeta("selectText", canvasMode);
   const items: Array<ToolbarMenuItem | typeof MENU_DIVIDER> = [
@@ -60,8 +63,20 @@ export function MoreMenu({
   }
   items.push(
     MENU_DIVIDER,
-    { id: "undo", label: t("undo"), icon: <Undo2 size={15} />, ...undo },
-    { id: "redo", label: t("redo"), icon: <Redo2 size={15} />, ...redo },
+    {
+      id: "undo",
+      label: t("undo"),
+      icon: <Undo2 size={15} />,
+      hint: undoKeyLabel(platform),
+      ...undo,
+    },
+    {
+      id: "redo",
+      label: t("redo"),
+      icon: <Redo2 size={15} />,
+      hint: redoKeyLabel(platform),
+      ...redo,
+    },
     MENU_DIVIDER,
     { id: "pdf", label: t("exportPdf"), icon: <FileText size={15} />, ...pdf },
   );

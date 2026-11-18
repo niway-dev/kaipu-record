@@ -255,8 +255,15 @@ export async function launchApp(options: LaunchOptions = {}): Promise<{
  * (rather than an immediate isVisible check that races the mount), press Escape, which
  * closes it from any step (there is no skip link before Permissions are granted), and
  * wait for the dialog to detach. If it never appears (already dismissed), proceed.
+ *
+ * Leaving the takeover before its Privacy step owes the person that step once, as a notice
+ * over the app (NIW2-849), and it covers the app just as the takeover did. It is dismissed
+ * here too, unless `notice: "keep"` asks to leave it up (the catalog's notice state).
  */
-export async function dismissOnboarding(page: Page): Promise<void> {
+export async function dismissOnboarding(
+  page: Page,
+  options: { notice?: "dismiss" | "keep" } = {},
+): Promise<void> {
   const dialog = page.getByRole("dialog", { name: "Onboarding" });
   try {
     await dialog.waitFor({ state: "visible", timeout: 10_000 });
@@ -265,6 +272,15 @@ export async function dismissOnboarding(page: Page): Promise<void> {
   }
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "detached" });
+  if (options.notice === "keep") return;
+  const notice = page.getByRole("alertdialog", { name: "Your recordings are yours" });
+  try {
+    await notice.waitFor({ state: "visible", timeout: 5_000 });
+  } catch {
+    return;
+  }
+  await page.keyboard.press("Escape");
+  await notice.waitFor({ state: "detached" });
 }
 
 /**

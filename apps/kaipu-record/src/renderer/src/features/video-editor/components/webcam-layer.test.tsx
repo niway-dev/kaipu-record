@@ -40,10 +40,14 @@ function setTime(el: HTMLVideoElement, t: number): void {
   fireEvent(el, new Event("seeked"));
 }
 
-/** The webcam file is `duration` seconds long; until then jsdom says NaN. */
-function loadWebcam(duration: number): HTMLVideoElement {
+/**
+ * The webcam file is `duration` seconds long; until then jsdom says NaN. `readyState` is the
+ * element's (2 = HAVE_CURRENT_DATA: a decoded frame is there; jsdom always says 0).
+ */
+function loadWebcam(duration: number, readyState = 2): HTMLVideoElement {
   const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
   Object.defineProperty(cam, "duration", { configurable: true, get: () => duration });
+  Object.defineProperty(cam, "readyState", { configurable: true, get: () => readyState });
   fireEvent.loadedMetadata(cam);
   return cam;
 }
@@ -120,15 +124,99 @@ describe("WebcamLayer", () => {
     expect(cam.style.transform).toContain("scaleX(-1)");
   });
 
-  it("is hidden before the webcam's first frame and after its last (offset subtracted)", () => {
+  it("is hidden beyond the lead-in hold and after the webcam's last frame (offset subtracted)", () => {
     const { ref, el } = mainVideo(0.2);
-    renderLayer({ videoRef: ref, startOffsetMs: 500 });
+    renderLayer({ videoRef: ref, startOffsetMs: 2000 });
     loadWebcam(10);
     expect(bubble().style.display).toBe("none");
-    act(() => setTime(el, 0.6));
+    act(() => setTime(el, 2.6));
     expect(bubble().style.display).toBe("");
-    act(() => setTime(el, 10.6));
+    act(() => setTime(el, 12.6));
     expect(bubble().style.display).toBe("none");
+  });
+
+  it.each([75, 500])(
+    "shows the bubble at 0:00, paused, when the webcam started %i ms late (first frame held)",
+    (startOffsetMs) => {
+      const { ref } = mainVideo(0);
+      renderLayer({ videoRef: ref, startOffsetMs });
+      const cam = loadWebcam(30);
+      expect(bubble().style.display).toBe("");
+      expect(cam.currentTime).toBe(0);
+    },
+  );
+
+  it("holds the webcam paused on its first frame while playing through the lead-in, then plays it", () => {
+    const { ref, el } = mainVideo(3);
+    renderLayer({ videoRef: ref, startOffsetMs: 500 });
+    const cam = loadWebcam(30);
+    let camTime = 0;
+    let camPaused = false;
+    let seeking = false;
+    const writes: number[] = [];
+    Object.defineProperty(cam, "currentTime", {
+      configurable: true,
+      get: () => camTime,
+      set: (v: number) => {
+        writes.push(v);
+        camTime = v;
+        seeking = true;
+      },
+    });
+    Object.defineProperty(cam, "seeking", { configurable: true, get: () => seeking });
+    Object.defineProperty(cam, "paused", { configurable: true, get: () => camPaused });
+    Object.defineProperty(el, "paused", { configurable: true, get: () => false });
+    vi.mocked(HTMLMediaElement.prototype.pause).mockImplementation(() => {
+      camPaused = true;
+    });
+    const now = vi.spyOn(performance, "now").mockReturnValue(1_000);
+    act(() => setTime(el, 4));
+    // A 400 ms seek: during playback the next one would lead by 400 ms.
+    now.mockReturnValue(1_400);
+    seeking = false;
+    act(() => void fireEvent(cam, new Event("seeked")));
+    vi.mocked(HTMLMediaElement.prototype.play).mockClear();
+    // Playing, the user scrubs back into the lead-in: the first frame is held, not played,
+    // and the seek to it gets no lead (a lead would land past the frame that is meant to show).
+    writes.length = 0;
+    act(() => setTime(el, 0.3));
+    expect(writes).toEqual([0]);
+    expect(camPaused).toBe(true);
+    seeking = false;
+    act(() => void fireEvent(cam, new Event("seeked")));
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    expect(bubble().style.display).toBe("");
+    act(() => setTime(el, 0.6));
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
+  });
+
+  it("keeps the bubble hidden at 0:00 when the camera really started 11 s late", () => {
+    const { ref, el } = mainVideo(0);
+    renderLayer({ videoRef: ref, startOffsetMs: 11386 });
+    loadWebcam(30);
+    expect(bubble().style.display).toBe("none");
+    act(() => setTime(el, 11.5));
+    expect(bubble().style.display).toBe("");
+  });
+
+  it("does not show an empty box before the webcam has a decoded frame, then paints on loadeddata", () => {
+    const { ref } = mainVideo(0);
+    renderLayer({ videoRef: ref, startOffsetMs: 75 });
+    const cam = loadWebcam(30, 1);
+    expect(bubble().style.display).toBe("none");
+    Object.defineProperty(cam, "readyState", { configurable: true, get: () => 2 });
+    fireEvent.loadedData(cam);
+    expect(bubble().style.display).toBe("");
+  });
+
+  it("keeps a painted bubble through a seek, when Chromium drops readyState until the frame lands", () => {
+    const { ref, el } = mainVideo(1);
+    renderLayer({ videoRef: ref });
+    const cam = loadWebcam(30);
+    expect(bubble().style.display).toBe("");
+    Object.defineProperty(cam, "readyState", { configurable: true, get: () => 1 });
+    act(() => setTime(el, 5));
+    expect(bubble().style.display).toBe("");
   });
 
   it("shrinks during a zoom from the camera path's scale, and not in the unzoomed view", () => {

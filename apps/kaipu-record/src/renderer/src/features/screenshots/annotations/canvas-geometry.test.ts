@@ -261,6 +261,28 @@ describe("image annotation bounds", () => {
     });
   });
 
+  it("an annotation past an added image grows the extents past that image's edge (NIW2-851)", () => {
+    // Illustrative: the added image ends at x = 1600; a box drawn out to x = 2000 goes further.
+    const box: Annotation = {
+      id: "b",
+      kind: "box",
+      x: 0.5,
+      y: 0.1,
+      w: 1.5,
+      h: 0.2,
+      color: "#f00",
+      stroke: 0,
+      seed: 1,
+    };
+    const imageOnly = contentExtents([image(1.1)], W, H, 1, measure);
+    const both = contentExtents([image(1.1), box], W, H, 1, measure);
+    expect(imageOnly.right).toBe(600);
+    expect(both.right).toBeGreaterThanOrEqual(1000);
+    expect(both.right).toBeGreaterThan(imageOnly.right);
+    // The same box alone already sticks out past the base.
+    expect(contentExtents([box], W, H, 1, measure).right).toBe(both.right);
+  });
+
   it("an image above-left grows left and top, and one inside the base grows nothing", () => {
     const e = contentExtents([image(-0.6, -0.5)], W, H, 1, measure);
     expect(e.left).toBe(600);

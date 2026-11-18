@@ -149,6 +149,25 @@ instance does not interfere (separate `--user-data-dir`).
 Not covered yet: recording itself (needs screen-capture permission), the screenshot editor outside the `image-canvas` flag, settings, auth.
 Add a scenario when a PR's criterion lands there.
 
+## Zoom-aware filmstrip (NIW2-844)
+
+Run only on the Mac mini, one scenario at a time, from `apps/kaipu-record`, after building.
+The source, fixture commands, measured limits and artifact names are in
+`apps/documentation/src/content/docs/features/zoom-aware-filmstrip.md`.
+
+| Scenario                                         | Command after `node node_modules/@playwright/test/cli.js test -c verify/playwright.config.ts` | Proof                                                                                                           |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Original / flag off / flag on                    | `filmstrip-editor.verify.ts`, with `KAIPU_VERIFY_SIDE=before`, `off` or `on`                  | Own-time tiles, old-path parity, playback/continuous-scroll pause, no blank swaps, screenshots                  |
+| First zoom / warm / idle, optional offset Webcam | `filmstrip-latency.verify.ts`; add `KAIPU_VERIFY_WEBCAM=1` and `KAIPU_VERIFY_WEBCAM_FILE`     | Every case asserts 500 ms. Output includes exact media paths; generated camera media must be labelled generated |
+| Export and workspace lifecycle                   | `filmstrip-lifecycle.verify.ts`                                                               | Real export busy interval with viewport changes; real switch revokes every cached filmstrip URL                 |
+| Scroll/zoom performance                          | `filmstrip-performance.verify.ts`, same `KAIPU_VERIFY_SIDE` per build                         | Three rAF p95 trials, all main-thread long tasks; keep individual trials beside the aggregate                   |
+
+Do not compare overlapping runs. Check the NIW2-807 log for `chain done`, other app processes,
+and memory pressure. A bare-worker no-CDP probe avoids Playwright's retained response bodies;
+label it as a worker memory probe, not total editor memory. A script exiting 0 without exercising
+the intended workload is not acceptance evidence. The latency helper must wait for the new view's
+request/completion or fresh quiet interval, never reuse an old quiet window.
+
 ## Before / after in the real app
 
 Run the **same scenario** on a worktree at the commit without the change: the commit before the

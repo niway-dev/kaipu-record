@@ -12,6 +12,7 @@ import {
   notifyRenameOutcome,
 } from "@renderer/features/library/rename-outcome";
 import { useOrphanHeal } from "./use-orphan-heal";
+import { useWebcamThumbnail } from "./use-webcam-thumbnail";
 
 export interface LocalLibrary {
   videos: LibraryVideo[];
@@ -212,6 +213,23 @@ export function useLocalLibrary(): LocalLibrary {
     [videos],
   );
   useOrphanHeal(localVideos, patchHealed);
+  // NIW2-845: the poster of a webcam recording, composed with the bubble. Only the poster
+  // fields change, on the item as it is now: the compose ran for a while, and the item may
+  // have been renamed or re-listed meanwhile.
+  const patchThumbnail = useCallback((updated: LibraryVideo) => {
+    setVideos((prev) =>
+      prev.map((video) =>
+        video.id === updated.id
+          ? {
+              ...video,
+              thumbnailUrl: updated.thumbnailUrl,
+              thumbnailNeedsWebcam: updated.thumbnailNeedsWebcam,
+            }
+          : video,
+      ),
+    );
+  }, []);
+  useWebcamThumbnail(localVideos, patchThumbnail);
 
   useEffect(() => {
     void refresh();

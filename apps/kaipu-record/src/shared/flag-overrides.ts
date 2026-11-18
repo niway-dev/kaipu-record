@@ -39,6 +39,27 @@ export function parseFlagOverrides(
   return { overrides, rejected };
 }
 
+/**
+ * One change to the live overrides (the Developer page toggle): pins `name` to `value`, or
+ * clears it when `value` is `null`. Returns a new object. A packaged build, an unknown flag
+ * and a value that is neither a boolean nor `null` change nothing (a packaged build also
+ * returns no overrides at all, like `parseFlagOverrides`).
+ */
+export function applyFlagOverride(
+  current: FlagOverrides,
+  name: string,
+  value: unknown,
+  opts: { isPackaged: boolean },
+): FlagOverrides {
+  if (opts.isPackaged) return {};
+  if (!KNOWN_FLAG_NAMES.includes(name)) return current;
+  if (value !== null && typeof value !== "boolean") return current;
+  const next = { ...current };
+  if (value === null) delete next[name as FlagName];
+  else next[name as FlagName] = value;
+  return next;
+}
+
 /** The process argument that carries `overrides` to a renderer. */
 export function flagOverridesArg(overrides: FlagOverrides): string {
   return `${FLAG_OVERRIDES_ARG}${JSON.stringify(overrides)}`;

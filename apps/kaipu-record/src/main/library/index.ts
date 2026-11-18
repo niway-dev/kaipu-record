@@ -39,6 +39,11 @@ import { registerVideoEditSessionHandlers } from "./video-edit-session";
 import { MaintenanceError, vaultActivity, type ActivityKind } from "./vault-activity";
 import { skipPaths } from "./vault-reconcile";
 
+/** A JPEG starts with FFD8FF; the renderer composites it, so main checks before it lands on disk. */
+function isJpeg(bytes: Buffer): boolean {
+  return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+}
+
 function broadcast(channel: string, ...args: unknown[]): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) window.webContents.send(channel, ...args);
@@ -319,6 +324,14 @@ export function registerLibraryVaultHandlers(deps: {
   handleVault(IPC_CHANNELS.backfillLocalRecordingMeta, (id: string, meta: RecordingBackfillMeta) =>
     currentVault().backfill(id, meta),
   );
+  // NIW2-845: the Library composites the webcam bubble into the poster; main validates the
+  // bytes as a JPEG and writes them with the marker. A non-webcam item is refused (null).
+  handleVault(IPC_CHANNELS.writeWebcamThumbnail, (id: string, assetId: unknown, jpeg: unknown) => {
+    if (typeof assetId !== "string" || !assetId) throw new Error("webcam thumbnail: no asset id");
+    const bytes = jpeg instanceof ArrayBuffer ? Buffer.from(jpeg) : null;
+    if (!bytes || !isJpeg(bytes)) throw new Error("webcam thumbnail: not a JPEG");
+    return currentVault().writeWebcamThumbnail(id, assetId, bytes);
+  });
   // remove() deletes every companion, the edit session and its assets included.
   handleVault(IPC_CHANNELS.deleteLocalRecording, (id: string) =>
     withItemLock(activeWorkspace().id, id, () => currentVault().remove(id)),

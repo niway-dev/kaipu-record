@@ -1,0 +1,449 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { AudioSample } from "mediabunny";
+import { describe, expect, it, vi } from "vitest";
+import type { AudioEdits } from "../audio-edits";
+import {
+  AUDIO_LEAD_SECONDS,
+  createAudioPump,
+  createInterleavedFeed,
+  type AudioPumpOptions,
+} from "./audio-pump";
+import type { RenderSegment } from "./export-plan";
+
+/**
+ * NIW2-806: the audio is produced in step with the video instead of after it. The point of
+ * these tests is that only WHEN each sample is produced changed: the sequence handed to the
+ * audio source (timestamp, duration, size, format and the data itself) is the same either way.
+ */
+
+const REFERENCE = { sourceId: null, sampleRate: 48000, channels: 2 };
+const BLOCK_FRAMES = 1024; // what a decoder yields per sample
+const FPS = 30;
+
+/** What the sink saw of one sample; the data is hashed. */
+interface Captured {
+  timestamp: number;
+  duration: number;
+  numberOfFrames: number;
+  numberOfChannels: number;
+  sampleRate: number;
+  format: string;
+  hash: string;
+}
+
+const capture = (sample: AudioSample): Captured => {
+  const data = new Float32Array(sample.numberOfFrames * sample.numberOfChannels);
+  sample.copyTo(data, { planeIndex: 0, format: "f32" });
+  return {
+    timestamp: sample.timestamp,
+    duration: sample.duration,
+    numberOfFrames: sample.numberOfFrames,
+    numberOfChannels: sample.numberOfChannels,
+    sampleRate: sample.sampleRate,
+    format: sample.format ?? "",
+    hash: createHash("sha256").update(new Uint8Array(data.buffer)).digest("hex"),
+  };
+};
+
+/**
+ * A decoder over a file of `rate` Hz and `channels` channels whose signal is never zero, so a
+ * muted span shows. Like mediabunny's sink it yields whole blocks: the one holding `start`
+ * (pre-roll included) up to the first starting at or after `end`.
+ */
+function fileReader(rate: number, channels: number) {
+  return {
+    samples(start: number, end: number): AsyncIterable<AudioSample> {
+      return (async function* () {
+        for (let block = Math.floor((start * rate) / BLOCK_FRAMES); ; block++) {
+          const first = block * BLOCK_FRAMES;
+          if (first / rate >= end) return;
+          const data = new Float32Array(BLOCK_FRAMES * channels);
+          for (let f = 0; f < BLOCK_FRAMES; f++) {
+            for (let c = 0; c < channels; c++) {
+              data[f * channels + c] = Math.sin((first + f) * 0.013 + c) * 0.5 + 0.001 * (c + 1);
+            }
+          }
+          yield new AudioSample({
+            data,
+            format: "f32",
+            numberOfChannels: channels,
+            sampleRate: rate,
+            timestamp: first / rate,
+          });
+        }
+      })();
+    },
+  };
+}
+
+const clip = (
+  timelineStart: number,
+  sourceStart: number,
+  sourceEnd: number,
+  sourceId: string | null = null,
+): RenderSegment => ({
+  kind: "clip",
+  timelineStart,
+  duration: sourceEnd - sourceStart,
+  sourceStart,
+  sourceEnd,
+  sourceId,
+});
+
+/**
+ * A representative timeline, 9.4 s on the output axis:
+ *   0.0  clip of the opened recording, cut 0.37..2.87, with a muted span inside
+ *   2.5  clip of the same recording after a cut (4.1..5.1)
+ *   3.5  a slide of 2.4 s (silence in three pieces)
+ *   5.9  a clip of joined recording "nosound", whose file has no audio (silence by plan)
+ *   7.9  a clip of joined recording "mono44", 44.1 kHz mono: resampled and mapped to stereo
+ */
+function fixture() {
+  const segments: RenderSegment[] = [
+    clip(0, 0.37, 2.87),
+    clip(2.5, 4.1, 5.1),
+    { kind: "slide", timelineStart: 3.5, duration: 2.4, assetId: "slide" },
+    clip(5.9, 200, 202, "nosound"),
+    clip(7.9, 100.5, 102, "mono44"),
+  ];
+  const perSegment: ("decode" | "silence")[] = ["decode", "decode", "silence", "silence", "decode"];
+  const edits: AudioEdits = {
+    audioMuted: false,
+    mutedRanges: [
+      { id: "a", sourceStart: 1.0, sourceEnd: 1.3 },
+      { id: "b", sourceStart: 100.9, sourceEnd: 101.1 },
+    ],
+  };
+  const totalDuration = 9.4;
+  return { segments, perSegment, edits, totalDuration };
+}
+
+function run(options: { downmix?: boolean; onAudio?: (sample: Captured) => void } = {}) {
+  const { segments, perSegment, edits, totalDuration } = fixture();
+  const samples: Captured[] = [];
+  const log: string[] = [];
+  const closed = vi.fn(() => log.push("close"));
+  const pumpOptions: AudioPumpOptions = {
+    segments,
+    perSegment,
+    edits,
+    joined: [
+      { sourceId: "nosound", offset: 200 },
+      { sourceId: "mono44", offset: 100 },
+    ],
+    readers: new Map([
+      [null, fileReader(48000, 2)],
+      ["mono44", fileReader(44100, 1)],
+    ]),
+    reference: REFERENCE,
+    silenceSampleRate: 48000,
+    silenceChannelCount: options.downmix ? 1 : 2,
+    downmix: options.downmix ?? false,
+    sink: {
+      add: async (sample) => {
+        const captured = capture(sample);
+        options.onAudio?.(captured);
+        samples.push(captured);
+        log.push("audio");
+      },
+      close: closed,
+    },
+  };
+  return { pump: createAudioPump(pumpOptions), samples, log, closed, totalDuration };
+}
+
+/** The old order: no video at all, the whole audio produced in one go. */
+async function allAtOnce(options?: { downmix?: boolean }) {
+  const r = run(options);
+  await r.pump.drain();
+  return r;
+}
+
+/** The new order: every video frame added first, then the audio a lead past it; the rest drained at the end. */
+async function interleaved(options?: { downmix?: boolean }) {
+  const r = run(options);
+  // `last`: the duration of the last audio sample added before this frame, the most the
+  // pump can overshoot the lead by (it stops at the first sample that reaches it).
+  const videoAdds: { t: number; cursor: number; done: boolean; last: number }[] = [];
+  const frames = Math.floor(r.totalDuration * FPS);
+  for (let i = 0; i < frames; i++) {
+    const t = i / FPS;
+    r.log.push("video");
+    await r.pump.advanceTo(t + AUDIO_LEAD_SECONDS);
+    const last = r.samples.at(-1)?.duration ?? 0;
+    videoAdds.push({ t, cursor: r.pump.cursor, done: r.pump.done, last });
+  }
+  await r.pump.drain();
+  return { ...r, videoAdds };
+}
+
+/**
+ * The sequence the audio source received BEFORE the pump existed, per preset variant, as
+ * `[timestamp, duration, numberOfFrames, numberOfChannels, sampleRate, format, sha256 of the
+ * interleaved f32 data]`. Both pump orders must reproduce it exactly.
+ *
+ * HOW IT WAS PRODUCED (NIW2-806): the audio pass of `export-worker.ts` as it was on origin/main
+ * at 8df7b90cb (`git show 8df7b90cb:apps/kaipu-record/src/renderer/src/features/video-editor/
+ * export/export-worker.ts`, the block from `if (audioReference && audioSource) {` to
+ * `audioSource.close()` plus its helpers trimAudioSample, zeroedLike, downmixToMono,
+ * toReferenceFormat and planesToSample) was copied unchanged into a throwaway module, run
+ * on this file's `fixture()` readers with and without `downmix`, and every `AudioSample` it
+ * handed to the source was recorded with `capture()` below. That script is not committed: it
+ * imports a copy of the old worker body, which no longer exists in the tree.
+ *
+ * Regenerate ONLY from that pre-refactor code, never from `createAudioPump`: a golden taken
+ * from the pump would pass whatever the pump does. Change the fixture or the expected audio
+ * on purpose only, and say why in the commit.
+ */
+type GoldenRow = [number, number, number, number, number, string, string];
+const GOLDEN = JSON.parse(
+  readFileSync(resolve(__dirname, "__fixtures__/audio-pump.golden.json"), "utf8"),
+) as { stereo: GoldenRow[]; downmix: GoldenRow[] };
+
+const asGolden = (samples: Captured[]): GoldenRow[] =>
+  samples.map((s) => [
+    s.timestamp,
+    s.duration,
+    s.numberOfFrames,
+    s.numberOfChannels,
+    s.sampleRate,
+    s.format,
+    s.hash,
+  ]);
+
+describe("createAudioPump: the samples the pre-refactor audio pass produced", () => {
+  it("drain() alone reproduces them exactly", async () => {
+    const { samples } = await allAtOnce();
+    expect(GOLDEN.stereo.length).toBeGreaterThan(200);
+    expect(asGolden(samples)).toEqual(GOLDEN.stereo);
+  });
+
+  it("interleaved with the video reproduces them exactly", async () => {
+    const { samples } = await interleaved();
+    expect(asGolden(samples)).toEqual(GOLDEN.stereo);
+  });
+
+  it("does the same with the mono downmix of the Light preset, in both orders", async () => {
+    expect(asGolden((await allAtOnce({ downmix: true })).samples)).toEqual(GOLDEN.downmix);
+    expect(asGolden((await interleaved({ downmix: true })).samples)).toEqual(GOLDEN.downmix);
+  });
+
+  it("keeps the cursor contiguous from 0 and the whole timeline's length", async () => {
+    const { samples, totalDuration } = await interleaved();
+    let expected = 0;
+    for (const s of samples) {
+      expect(s.timestamp).toBeCloseTo(expected, 9);
+      expected += s.duration;
+    }
+    // Within one decoder block of the timeline: sample rounding, not drift.
+    expect(Math.abs(expected - totalDuration)).toBeLessThan(BLOCK_FRAMES / 44100);
+  });
+
+  it("covers every case of the fixture: silence in pieces, zeroed spans and a resampled clip", async () => {
+    const { samples } = await allAtOnce();
+    const silentHash = (frames: number, channels: number) =>
+      createHash("sha256")
+        .update(new Uint8Array(new Float32Array(frames * channels).buffer))
+        .digest("hex");
+    // Silence in 1 s pieces, all zero: the 2.4 s slide (48000, 48000, 19200 frames), then the
+    // 2 s clip of a recording without audio (48000, 48000).
+    const silencePieces = samples.filter(
+      (s) => s.numberOfFrames === 48000 || s.numberOfFrames === 19200,
+    );
+    expect(silencePieces.map((s) => s.numberOfFrames)).toEqual([48000, 48000, 19200, 48000, 48000]);
+    for (const s of silencePieces) expect(s.hash).toBe(silentHash(s.numberOfFrames, 2));
+    // The muted span of the first clip leaves some all-zero blocks among sounding ones.
+    const zeroBlocks = samples.filter((s) => s.hash === silentHash(s.numberOfFrames, 2));
+    expect(zeroBlocks.length).toBeGreaterThan(silencePieces.length);
+    // The mono 44.1 kHz clip arrives in the reference format.
+    expect(samples.every((s) => s.sampleRate === 48000 && s.numberOfChannels === 2)).toBe(true);
+  });
+});
+
+describe("createAudioPump: interleaving", () => {
+  it("has the audio reach each video frame, and no further than the lead plus one sample", async () => {
+    const { videoAdds } = await interleaved();
+    expect(videoAdds.length).toBeGreaterThan(200);
+    // Most frames fall in decoded clips, whose blocks are 1024 frames (~21 ms), so the bound
+    // below pins the lead there; only silence pieces (1 s) allow a wider overshoot.
+    expect(videoAdds.filter((a) => a.last < 0.05).length).toBeGreaterThan(videoAdds.length / 2);
+    for (const add of videoAdds) {
+      // The audio already added covers this frame, unless the audio timeline had ended.
+      if (!add.done) expect(add.cursor).toBeGreaterThanOrEqual(add.t);
+      // And it never ran further ahead than the lead allows.
+      expect(add.cursor).toBeLessThanOrEqual(add.t + AUDIO_LEAD_SECONDS + add.last + 1e-9);
+    }
+  });
+
+  it("does not produce the audio ahead of the video (the first frame sees about one second)", async () => {
+    const { videoAdds, totalDuration } = await interleaved();
+    expect(videoAdds[0]!.cursor).toBeGreaterThanOrEqual(AUDIO_LEAD_SECONDS);
+    expect(videoAdds[0]!.cursor).toBeLessThanOrEqual(
+      AUDIO_LEAD_SECONDS + videoAdds[0]!.last + 1e-9,
+    );
+    expect(videoAdds[0]!.cursor).toBeLessThan(totalDuration / 2);
+  });
+
+  it("alternates audio and video adds instead of putting all of one first", async () => {
+    const { log } = await interleaved();
+    const firstAudioAfterVideo = log.indexOf("audio", log.indexOf("video"));
+    const lastVideo = log.lastIndexOf("video");
+    // Audio is still being added after the first video frame and before the last one.
+    expect(firstAudioAfterVideo).toBeGreaterThan(-1);
+    expect(firstAudioAfterVideo).toBeLessThan(lastVideo);
+    const videoBeforeLastAudio = log
+      .slice(0, log.lastIndexOf("audio"))
+      .filter((e) => e === "video");
+    expect(videoBeforeLastAudio.length).toBeGreaterThan(100);
+  });
+
+  it("closes the audio source once, when the timeline ends, and not before", async () => {
+    const { pump, closed } = run();
+    await pump.advanceTo(2);
+    expect(closed).not.toHaveBeenCalled();
+    await pump.drain();
+    await pump.drain();
+    await pump.advanceTo(Infinity);
+    expect(closed).toHaveBeenCalledTimes(1);
+    expect(pump.done).toBe(true);
+  });
+
+  it("leaves the decoder of a clip in progress to dispose()", async () => {
+    const returned = vi.fn();
+    const reader = {
+      samples: (): AsyncIterable<AudioSample> => ({
+        [Symbol.asyncIterator]: () => ({
+          next: async () => ({
+            done: false as const,
+            value: new AudioSample({
+              data: new Float32Array(BLOCK_FRAMES * 2),
+              format: "f32",
+              numberOfChannels: 2,
+              sampleRate: 48000,
+              timestamp: 0,
+            }),
+          }),
+          return: async () => {
+            returned();
+            return { done: true as const, value: undefined };
+          },
+        }),
+      }),
+    };
+    const pump = createAudioPump({
+      segments: [clip(0, 0, 10)],
+      perSegment: ["decode"],
+      edits: { audioMuted: false, mutedRanges: [] },
+      joined: [],
+      readers: new Map([[null, reader]]),
+      reference: REFERENCE,
+      silenceSampleRate: 48000,
+      silenceChannelCount: 2,
+      downmix: false,
+      sink: { add: async () => {}, close: () => {} },
+    });
+    await pump.advanceTo(0.1);
+    expect(returned).not.toHaveBeenCalled();
+    await pump.dispose();
+    expect(returned).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("createInterleavedFeed: the order the muxer is fed in", () => {
+  const recorder = () => {
+    const events: string[] = [];
+    const audio = {
+      advanceTo: vi.fn(async (t: number) => void events.push(`audio to ${t}`)),
+      drain: vi.fn(async () => void events.push("audio drain")),
+    };
+    const video = {
+      add: vi.fn(async (ts: number) => void events.push(`video ${ts}`)),
+      close: vi.fn(() => void events.push("video close")),
+    };
+    return { events, audio, video };
+  };
+
+  it("adds each frame first, then produces the audio a lead past it", async () => {
+    const { events, audio, video } = recorder();
+    const feed = createInterleavedFeed(audio, video);
+    await feed.frame(0, 0.5);
+    await feed.frame(0.5, 0.5);
+    expect(events).toEqual([
+      "video 0",
+      `audio to ${AUDIO_LEAD_SECONDS}`,
+      "video 0.5",
+      `audio to ${0.5 + AUDIO_LEAD_SECONDS}`,
+    ]);
+  });
+
+  it("closes the video before draining the audio still owed", async () => {
+    const { events, audio, video } = recorder();
+    const feed = createInterleavedFeed(audio, video);
+    await feed.frame(0, 1);
+    await feed.finish();
+    expect(events.slice(-2)).toEqual(["video close", "audio drain"]);
+  });
+
+  it("feeds only video when the export has no audio track", async () => {
+    const { events, video } = recorder();
+    const feed = createInterleavedFeed(null, video);
+    await feed.frame(0, 1);
+    await feed.finish();
+    expect(events).toEqual(["video 0", "video close"]);
+  });
+});
+
+describe("createInterleavedFeed: sparse video frames", () => {
+  it("never lets the audio get more than the lead past the latest queued frame", async () => {
+    // Two frames as far apart as the fixture timeline allows, nothing in between: a still
+    // screen with no webcam or floating images emits no fill frames.
+    let latestFrame = -Infinity;
+    let videoClosed = false;
+    const violations: string[] = [];
+    // At every audio sample the pump adds, the video must already reach it, less the lead and
+    // one sample (the pump stops at the first sample past the lead). That is what bounds the
+    // muxer's RAM: it holds audio while the video queue has nothing at or past it.
+    const r = run({
+      onAudio: (a) => {
+        const floor = a.timestamp - AUDIO_LEAD_SECONDS - a.duration - 1e-9;
+        if (!videoClosed && latestFrame < floor) {
+          violations.push(`audio at ${a.timestamp} with latest frame ${latestFrame}`);
+        }
+      },
+    });
+    const lastFrame = r.totalDuration - 0.1;
+    const feed = createInterleavedFeed(r.pump, {
+      add: async (t) => void (latestFrame = t),
+      close: () => void (videoClosed = true),
+    });
+    await feed.frame(0, 0.1);
+    await feed.frame(lastFrame, 0.1);
+    await feed.finish();
+    expect(violations).toEqual([]);
+    expect(r.samples.length).toBeGreaterThan(100);
+  });
+});
+
+describe("export-worker.ts goes through the interleaved feed", () => {
+  // The worker needs WebCodecs and cannot run here. The order itself is tested above; this only
+  // pins that the worker never reaches the video source except through the feed. The comment
+  // stripper is a plain regex: a string literal holding `//` or `/*` would be cut too, so keep
+  // such literals out of the worker or make these checks parse it.
+  const worker = readFileSync(resolve(__dirname, "export-worker.ts"), "utf8").replace(
+    /\/\/.*$|\/\*[\s\S]*?\*\//gm,
+    "",
+  );
+
+  it("never adds a frame to, or closes, the video source directly", () => {
+    expect(worker).toMatch(/createInterleavedFeed\(\s*audio\s*,\s*videoSource\s*\)/);
+    expect(worker).not.toMatch(/videoSource\s*\.\s*(add|close)\s*\(/);
+  });
+
+  it("finishes the feed before finalizing the output", () => {
+    const finish = worker.search(/feed\s*\.\s*finish\s*\(/);
+    expect(finish).toBeGreaterThan(-1);
+    expect(worker.search(/out\s*\.\s*finalize\s*\(/)).toBeGreaterThan(finish);
+  });
+});

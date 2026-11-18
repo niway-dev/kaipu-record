@@ -20,6 +20,7 @@ import { readFile } from "fs/promises";
 import { join } from "path";
 import { captureWhileRecordingEnabled } from "./screenshots/capture-while-recording";
 import { setActiveFlagOverrides, withFlagOverrides } from "./flag-overrides";
+import { registerFlagOverridesIpc } from "./flag-overrides-ipc";
 import { parseFlagOverrides } from "@shared/flag-overrides";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { IPC_CHANNELS } from "@shared/types";
@@ -966,6 +967,7 @@ app.whenReady().then(async () => {
   initMainAnalytics(getDeviceId(), getAppSettings().diagnosticsEnabled);
   onSettingsChanged((settings) => setMainAnalyticsEnabled(settings.diagnosticsEnabled));
   registerAnalyticsIpc();
+  registerFlagOverridesIpc();
   const nativeTransport = registerNativeCaptureTransport(
     () => mainWindow?.webContents,
     () => hub?.currentArea(),

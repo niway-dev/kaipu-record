@@ -673,6 +673,37 @@ export const editorVideo = catalog(
       steps: [open(ASSETS.teamNotes), audioWaveformDrawn, loaded, zoomIn, zoomIn],
       demonstrates: ["editorVideo.transport:zoomed", "editorVideo.timeline:zoomed"],
     },
+    "timeline-filmstrip-zoomed": {
+      profile: "zoom-filmstrip",
+      how: "With the `zoom-filmstrip` flag forced on, open “Team notes” and press + in the transport bar five times: the zoom level reads 2000% and, once the view has rested, every tile of the Clips row shows a frame from inside its own stretch of the recording instead of the nearest of 24.",
+      steps: [
+        open(ASSETS.teamNotes),
+        audioWaveformDrawn,
+        loaded,
+        zoomIn,
+        zoomIn,
+        zoomIn,
+        zoomIn,
+        zoomIn,
+        // The tiles decode only after the view rests (120 ms): first one tile reads a frame inside
+        // its own span, then no tile is left reading one from outside it.
+        {
+          waitFor: {
+            area: "editorVideo.timeline",
+            part: { css: 'img[data-filmstrip-own="true"]' },
+          },
+        },
+        {
+          waitFor: {
+            area: "editorVideo.timeline",
+            part: { css: 'img[data-filmstrip-own="false"]' },
+            state: "hidden",
+          },
+        },
+      ],
+      demonstrates: ["editorVideo.transport:zoomed", "editorVideo.timeline:filmstripZoomed"],
+      gates: [{ flag: "zoom-filmstrip", side: "on" }],
+    },
     "mute-all": {
       profile: "default",
       how: "Open “Bug report” and press Mute the whole recording: the audio lane reads muted and the edit saves.",

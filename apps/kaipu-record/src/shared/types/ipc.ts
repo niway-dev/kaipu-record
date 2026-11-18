@@ -411,6 +411,8 @@ export const IPC_CHANNELS = {
   deleteTag: "tags:delete",
   setItemTags: "tags:setItemTags",
   backfillLocalRecordingMeta: "library:backfill-meta",
+  /** NIW2-845: replace a webcam recording's thumbnail with the bubble composited in. */
+  writeWebcamThumbnail: "library:write-webcam-thumbnail",
   deleteLocalRecording: "library:delete-local",
   revealLocalRecording: "library:reveal-local",
   /** NIW2-669: open a local recording in its default application. */
@@ -513,6 +515,14 @@ export const IPC_CHANNELS = {
   // Renderer → main: the resolved `image-text` flag; main starts the text recognition warm-up
   // from it (main has no PostHog client).
   screenshotImageTextFlag: "screenshot:image-text-flag",
+  // Renderer → main (invoke): pin or clear one feature-flag override from the Developer page.
+  // Refused in a packaged build. Resolves with the overrides now active.
+  flagOverrideSet: "flags:override-set",
+  // Renderer → main (invoke): the overrides active now. A window created before a toggle (or one
+  // that reloaded) holds only its launch arguments, so it asks on first use.
+  flagOverridesGet: "flags:overrides-get",
+  // Main → every renderer window: the active feature-flag overrides changed.
+  flagOverridesChanged: "flags:overrides-changed",
   // Main → renderer: global hotkey fired, run the region capture flow.
   screenshotHotkey: "screenshot:hotkey",
   // Capture overlay: one window per display (main/screenshots/capture-overlay-windows.ts).

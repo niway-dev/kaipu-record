@@ -137,22 +137,9 @@ export function BeautifiedFrame({
       : {}),
   };
   const transform = viewTransform({ zoom, panX: pan?.x ?? 0, panY: pan?.y ?? 0 });
-  // Canvas mode with nothing behind the content: the union box (not the padding ring)
-  // gets a neutral white under the shot, as the export does.
-  const boxFill =
-    ext && beautify.bg === "none" ? (
-      <div
-        className={styles.boxFill}
-        style={{ inset: `${beautify.padding}px` }}
-        data-testid="canvas-box-fill"
-        aria-hidden
-      />
-    ) : null;
-
   const inner = (
     <>
       {boxLayer}
-      {boxFill}
       <div className={styles.shotWrap}>
         <img
           ref={imgRef}

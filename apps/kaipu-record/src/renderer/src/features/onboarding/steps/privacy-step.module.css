@@ -1,0 +1,12 @@
+/* A calm tile instead of Kai: this step is about trust, not about the product. */
+.mark {
+  width: 76px;
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 22px;
+  color: var(--text);
+  background: var(--bg-raised);
+  border: 1px solid var(--line-strong);
+}

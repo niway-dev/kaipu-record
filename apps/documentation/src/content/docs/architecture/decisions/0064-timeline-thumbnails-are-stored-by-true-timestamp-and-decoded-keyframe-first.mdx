@@ -1,0 +1,99 @@
+---
+title: "ADR 0064: Timeline thumbnails are stored per file by true timestamp and decoded keyframe first for the visible range"
+description: The video editor's filmstrip keeps one frame store per media file keyed by the frame's own timestamp, fills the visible range on demand by decoding keyframes first, runs that in a worker and enforces a byte budget.
+---
+
+# ADR 0064: Timeline thumbnails are stored per file by true timestamp and decoded keyframe first for the visible range
+
+**Status:** Proposed (2026-11-16). Not implemented: the design is in the
+[zoom-aware filmstrip spec](/specs/2026-11-16-zoom-aware-filmstrip-design/), tracked in
+[NIW2-844](https://linear.app/niway/issue/NIW2-844/video-editor-the-filmstrip-shows-what-happens-at-each-tiles-own-time).
+
+## Context
+
+The video editor shows a filmstrip on the Clips row and the Webcam row. `use-source-thumbnails.ts`
+decodes 24 evenly spaced frames per media file, once, on the main thread, and tiles pick the nearest
+of them. On a 30-minute recording that is one frame every 77 seconds. At 2,000% timeline zoom the
+visible 90 seconds repeat one or two far-away frames, so the filmstrip shows content that is not at
+that time (reported by the owner on 2026-11-14, NIW2-844).
+
+The owner's limits: the fix must not fill memory, must not cause CPU spikes and must not slow the UI.
+
+Three facts shape the decision:
+
+- Kaipu recordings have a keyframe every 2.0 seconds. Measured on 8 recordings on 2026-11-16: median
+  2.00 s, worst gap 3.05 s (table in the spec).
+- mediabunny decodes a frame at a time by starting at the previous keyframe. It offers no packet
+  limit and no guaranteed cancel in the middle of a decode, and each open file can hold a 64 MiB read
+  cache by default.
+- The timeline scale is computed over the edited duration, so after trimming, the same zoom asks for
+  finer frames of the original file. Zoom does not bound how many frames get decoded.
+
+## Decision
+
+1. **One store per media file, keyed by true timestamp.** A frame is stored under its own timestamp
+   in the file's own time. The timeline zoom only changes how many frames are wanted. Cuts, moves and
+   joins never invalidate a frame.
+2. **A tile is correct when its frame comes from inside the tile's own time span.** The exact frame
+   at the tile's centre is not required.
+3. **Decode on demand for the visible range.** When the view rests, a planner lists the time slots of
+   the visible range that hold no frame. Slot steps are 0.25 s times a power of two, so frames
+   decoded at one zoom fill the slots of every coarser zoom.
+4. **Keyframe first.** A slot is filled by decoding the single key packet inside it when there is
+   one. Only when there is none does the decoder start at the previous keyframe and run forward, and
+   only after counting the packets it would decode: above 300, the slot is skipped and the tile keeps
+   the nearest frame.
+5. **Enforced budgets.** 48 MB of thumbnail bytes across all files, least recently used file evicted
+   first, and one media file open for thumbnail decoding at a time. That file stays open between
+   requests and closes after 10 s without one, and its read cache is capped at 8 MiB instead of
+   mediabunny's 64 MiB default.
+6. **In a worker, paced.** Demux, decode and JPEG encoding run in one dedicated worker, one job at a
+   time, and a newer request cancels the older one. The worker decodes one frame at a time, yields
+   between frames and decodes at most 60 frames per second, nearest the playhead first. Whether it
+   decodes in hardware or software is decided by measurement on the real app.
+
+## Alternatives rejected
+
+- **One fixed dense strip decoded once in the background**, like the audio waveform's fixed
+  100 peaks per second. A frame is thousands of times larger than a peak, the whole take is decoded
+  even where the user never looks, and its precision has a ceiling that trimming exceeds.
+- **Always decode the visible range exactly, with no keyframe step.** The simplest correctness model.
+  On the 54-minute take at 2,000% each view change decodes about 160 seconds of video, against 17
+  frames on the keyframe path, and a file with a single keyframe has no bound at all.
+- **A cache keyed by zoom level.** Frames decoded at one zoom could not serve another, and every
+  change of window width or trim would create a new level.
+- **A hidden video element that seeks and is drawn to a canvas.** Seeks run one after another, the
+  drawing is on the main thread, and it competes with the preview for the decoder.
+- **Deriving the memory bound from the zoom cap.** Trimming, short clip blocks and window width all
+  change how many frames a zoom level needs, so the bound would not hold.
+
+## Consequences
+
+- Most tiles of a Kaipu recording cost one decoded frame, because a 2-second keyframe spacing puts a
+  keyframe inside any tile of 3 seconds or more.
+- A tile can show a frame up to one tile span away from its centre. That is the accepted meaning of
+  correct.
+- An imported file with sparse keyframes keeps approximate tiles for good. It is never empty and
+  never decodes without bound.
+- The editor gains a fifth worker and a second code path for thumbnails while the release flag
+  exists.
+- The store must be cleared on workspace switch, like every media cache (ADR 0032), and its keys stay
+  in each file's own time (ADR 0058).
+
+## Non-goals
+
+- Frame-exact thumbnails.
+- A disk cache.
+- Thumbnails that reflect effects.
+- Showing a frame on hover.
+
+## What would reopen this
+
+- The recorder changes its keyframe spacing, or a capture path appears whose recordings have gaps
+  well above 3 seconds: decision 4's cost argument must be measured again.
+- A worker cannot do Range reads through the media protocol: decision 6 needs another way to reach
+  the bytes.
+- The timeline zoom cap rises far enough that tiles are shorter than a frame: decision 2 stops being
+  a choice.
+- Measurement in the real app shows process or GPU memory growing with the store: decision 5's budget
+  must count more than thumbnail bytes.

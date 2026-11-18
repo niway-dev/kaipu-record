@@ -1,5 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { pushFlagOverrides } from "../test/flag-overrides-stub";
 import { EnvBadge } from "./env-badge";
 
 describe("EnvBadge", () => {
@@ -10,16 +11,12 @@ describe("EnvBadge", () => {
     expect(screen.getByText("local env")).toBeInTheDocument();
   });
 
-  it("says when feature flags are overridden", () => {
-    const original = window.electronAPI.flagOverrides;
-    (window.electronAPI as { flagOverrides: unknown }).flagOverrides = {
-      "native-cursor-capture": true,
-    };
-    try {
-      render(<EnvBadge />);
-      expect(screen.getByText("local env · flags overridden")).toBeInTheDocument();
-    } finally {
-      (window.electronAPI as { flagOverrides: unknown }).flagOverrides = original;
-    }
+  it("says when feature flags are overridden, and follows a toggle live", () => {
+    render(<EnvBadge />);
+    expect(screen.getByText("local env")).toBeInTheDocument();
+    act(() => pushFlagOverrides({ "native-cursor-capture": true }));
+    expect(screen.getByText("local env · flags overridden")).toBeInTheDocument();
+    act(() => pushFlagOverrides({}));
+    expect(screen.getByText("local env")).toBeInTheDocument();
   });
 });

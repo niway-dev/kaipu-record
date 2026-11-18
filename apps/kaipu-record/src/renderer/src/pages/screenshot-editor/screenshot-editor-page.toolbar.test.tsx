@@ -130,7 +130,7 @@ describe("toolbar B1: layout", () => {
       (btn(name).closest('[class*="tipWrap"]') ?? btn(name)).previousElementSibling;
     expect(before("Redact")?.className).toMatch(/divider/);
     expect(before("Export frame")?.className).toMatch(/divider/);
-    expect(btn("Undo").previousElementSibling?.className).toMatch(/divider/);
+    expect(before("Undo")?.className).toMatch(/divider/);
   });
 
   it("keeps the mode switch's names and the ui-map area on the Inspect segment", async () => {
@@ -447,7 +447,7 @@ describe("toolbar B3: compact", () => {
       within(menu)
         .getAllByRole("menuitem")
         .map((i) => i.textContent),
-    ).toEqual(["Export frameX", "Add imageM", "Select text", "Undo", "Redo", "PDF"]);
+    ).toEqual(["Export frameX", "Add imageM", "Select text", "Undo⌘Z", "Redo⇧⌘Z", "PDF"]);
   });
 
   it("opens the Add image menu from the More menu", async () => {
