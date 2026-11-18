@@ -28,13 +28,18 @@ export interface EditorScene {
    */
   exportFrame?: CropRect;
   /**
-   * Per-image crop, unit 3: the base's crop, own radius and placement (see `Scene`). Carried
-   * from a reopened document to the next save and export; nothing in the editor writes them
-   * yet (the crop mode is unit 4), so an edit never drops them.
+   * Per-image crop: the base's crop, own radius and placement (see `Scene`). Carried from a
+   * reopened document to the next save and export; the crop mode and the base's corner
+   * handles write them through `commitBase`, so an edit never drops them.
    */
   baseCrop?: CropRect;
   baseRadius?: number;
   basePlacement?: Scene["basePlacement"];
+  /**
+   * Write the base's crop, own radius or placement as one undoable change (per-image crop,
+   * unit 4). A key set to undefined is removed, so a base back to "whole" writes nothing.
+   */
+  commitBase(patch: Partial<Pick<Scene, "baseCrop" | "baseRadius" | "basePlacement">>): void;
   /** Set the export frame as one undoable change (Reset/Esc, or a crop drag release). */
   setExportFrame(frame: CropRect | undefined): void;
   /** Step the history; false when it did nothing (empty history, or a drag is open). */
@@ -141,6 +146,18 @@ export function useEditorScene(
     [commit],
   );
 
+  const commitBase = useCallback(
+    (patch: Partial<Pick<Scene, "baseCrop" | "baseRadius" | "basePlacement">>) => {
+      const next: Scene = { ...sceneRef.current, ...patch };
+      // An undefined value is no field: the scene and the document never carry a dead key.
+      for (const key of ["baseCrop", "baseRadius", "basePlacement"] as const) {
+        if (next[key] === undefined) delete next[key];
+      }
+      commit(next);
+    },
+    [commit],
+  );
+
   const removeAnnotation = useCallback(
     (id: string) => {
       if (!sceneRef.current.annotations.some((a) => a.id === id)) return;
@@ -187,6 +204,7 @@ export function useEditorScene(
     baseCrop: scene.baseCrop,
     baseRadius: scene.baseRadius,
     basePlacement: scene.basePlacement,
+    commitBase,
     setExportFrame,
     undo,
     redo,
