@@ -45,7 +45,9 @@ export type TranscribeControlState =
  * 2. `running`: this item's job is in flight, whatever else is true.
  * 3. `unavailable`: the engine cannot run on this machine.
  * 4. `loading`: the engine or model status has not arrived.
- * 5. `failed`: the last attempt failed and there is no transcript to fall back on.
+ * 5. `failed`: the last attempt failed and there is no transcript to fall back on, and a retry
+ *    could start now. While another job holds the engine or the model downloads, the control
+ *    shows that instead (a retry would be refused); the failure returns once they end.
  * 6. `done`, `stale`, `invalid`: a transcript file exists (ready, out of date, unreadable).
  * 7. `busy-elsewhere`: another item's job holds the engine.
  * 8. `model-downloading`, then `needs-model`: the default model is not installed.
@@ -67,7 +69,10 @@ export function transcribeControlState(input: TranscribeControlInput): Transcrib
   if (input.availability?.status === "unavailable") return { kind: "unavailable" };
   if (input.availability === null || input.defaultModelReady === null) return { kind: "loading" };
   const hasNoTranscript = input.transcript === "none" || input.transcript === "unknown";
-  if (input.failure !== null && hasNoTranscript) return { kind: "failed", failure: input.failure };
+  const retryBlocked = input.busyElsewhere || input.downloading;
+  if (input.failure !== null && hasNoTranscript && !retryBlocked) {
+    return { kind: "failed", failure: input.failure };
+  }
   if (input.transcript === "ready") return { kind: "done" };
   if (input.transcript === "stale") return { kind: "stale" };
   if (input.transcript === "invalid") return { kind: "invalid" };

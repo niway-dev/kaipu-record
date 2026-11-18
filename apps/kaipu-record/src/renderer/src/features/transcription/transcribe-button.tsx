@@ -133,7 +133,15 @@ function TranscribeButtonView({ control, variant, ui }: ViewProps): React.JSX.El
     const label = t("transcribed");
     return (
       <span {...rootProps}>
-        <span className={styles.badge} title={label} data-testid="transcribe-done">
+        {/* The editor's title bar hides the word with display:none, which would leave the badge
+            nameless: the name is on the badge itself. */}
+        <span
+          className={styles.badge}
+          role="img"
+          aria-label={label}
+          title={label}
+          data-testid="transcribe-done"
+        >
           <Check size={iconSize} strokeWidth={2} aria-hidden />
           <span className={showLabel ? styles.label : styles.visuallyHidden} {...labelProps}>
             {label}

@@ -176,7 +176,7 @@ export const libraryCatalog = catalog(
     },
     "card-transcribe-done": {
       profile: "transcription-transcripts",
-      how: "With transcript files beside four recordings (the badge follows the file, so the unreadable “Team notes” and the stale “Onboarding flow” carry it too), “Walkthrough 1” and “Release demo” are the two the crop shows.",
+      how: "With transcript files beside four recordings (the badge follows the file, so the unreadable “Team notes” and the stale “Onboarding flow” carry it too), the crop shows one of the Transcribed cards.",
       steps: [library, { waitFor: { area: card.area, part: { text: "Transcribed" } } }],
       demonstrates: ["library.videoCardTranscribe:done"],
       crops: { "library.videoCardTranscribe": { hasText: "Transcribed" } },

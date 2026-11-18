@@ -293,6 +293,8 @@ describe("TranscribeButton", () => {
     mount();
     const badge = screen.getByTestId("transcribe-done");
     expect(badge).toHaveTextContent("Transcribed");
+    // Named on the badge itself: the editor's title bar can hide the word.
+    expect(screen.getByRole("img", { name: "Transcribed" })).toBe(badge);
     expect(screen.queryByRole("button")).toBeNull();
   });
 

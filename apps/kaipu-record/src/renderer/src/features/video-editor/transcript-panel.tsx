@@ -342,7 +342,13 @@ export function TranscriptPanel({
               : t(`transcriptFailure_${view.reason}`)}
           </p>
           <div className={styles.actions}>
-            <Button variant="primary" size="sm" onClick={transcribe}>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={transcribe}
+              disabled={!canTranscribeAgain}
+              title={transcribeAgainHint}
+            >
               {t("transcriptRetry")}
             </Button>
           </div>

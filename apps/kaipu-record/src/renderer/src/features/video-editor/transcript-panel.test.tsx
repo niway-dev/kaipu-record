@@ -341,6 +341,21 @@ describe("TranscriptPanel — states", () => {
     expect(start).toHaveBeenCalledOnce();
   });
 
+  it("failed: an unreadable transcript file cannot be retried while another video is transcribing", () => {
+    hooks.transcript.mockReturnValue({ ...NO_TRANSCRIPT, state: "invalid" });
+    control({ kind: "busy-elsewhere" });
+    setup();
+    expect(panel()).toHaveAttribute("data-state", "failed");
+    const retry = screen.getByRole("button", { name: "Try again" });
+    expect(retry).toBeDisabled();
+    expect(retry).toHaveAttribute(
+      "title",
+      expect.stringMatching(/Another video is being transcribed/),
+    );
+    fireEvent.click(retry);
+    expect(start).not.toHaveBeenCalled();
+  });
+
   it("no audio: explains and offers no button, whether the probe or the engine found it", () => {
     hooks.transcript.mockReturnValue(NO_TRANSCRIPT);
     control({ kind: "idle" });
