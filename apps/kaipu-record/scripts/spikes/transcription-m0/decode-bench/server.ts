@@ -48,10 +48,11 @@ if (import.meta.main) {
     if (!value) throw new Error(`missing --${name}`);
     return value;
   };
+  const portIndex = process.argv.indexOf("--port");
   const server = startServer(
     get("dir"),
     get("media"),
-    Number(process.argv[process.argv.indexOf("--port") + 1] ?? 0) || 0,
+    portIndex >= 0 ? Number(process.argv[portIndex + 1]) || 0 : 0,
   );
   console.log(`serving on http://127.0.0.1:${server.port}`);
 }
