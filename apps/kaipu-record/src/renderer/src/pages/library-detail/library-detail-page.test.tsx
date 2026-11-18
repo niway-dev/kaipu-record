@@ -2208,6 +2208,28 @@ describe("LibraryDetailPage Transcript tab (NIW2-870)", () => {
     expect(screen.queryByText(/everything is cut or muted/i)).toBeNull();
   });
 
+  it("T3e: a floored stored duration yields to the probed one, so the last words still show", async () => {
+    // An import stores Math.floor(duration): 30 for a 30.6 s file. "Goodbye" (30.0-30.5 s) lies
+    // past the floored end, and only the probed duration keeps it in the clip.
+    stubApi(TRANSCRIPT);
+    probe.mockResolvedValueOnce({
+      width: 1280,
+      height: 720,
+      durationSec: 30.6,
+      fps: 30,
+      hasAudio: true,
+      sampleRate: 48000,
+    });
+    list({
+      ...exportedOnlyItem,
+      durationSeconds: 30,
+      local: exportedOnlyItem.local && { ...exportedOnlyItem.local, durationSeconds: 30 },
+    });
+    await openTranscript();
+    await waitFor(() => expect(probe).toHaveBeenCalled());
+    expect(await screen.findByText("Goodbye")).toBeInTheDocument();
+  });
+
   it("T3c: stored duration 0 while the probe is pending shows the loading note, never 'cut'", async () => {
     stubApi(TRANSCRIPT);
     probe.mockImplementationOnce(() => new Promise(() => {}));

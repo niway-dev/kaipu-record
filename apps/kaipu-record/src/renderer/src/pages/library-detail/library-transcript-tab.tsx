@@ -36,10 +36,12 @@ export function LibraryTranscriptTab({
   probedDurationSeconds,
 }: LibraryTranscriptTabProps): React.JSX.Element {
   const t = useTranslations("videoEditor");
-  // The vault can store 0 for a recording whose metadata it could not read. A zero-length clip
-  // would drop every word and say "everything is cut", so the probed duration stands in for it.
-  const durationSeconds =
-    video.durationSeconds > 0 ? video.durationSeconds : (probedDurationSeconds ?? 0);
+  // The probed duration is the file's own, so it leads. The stored one is floored on import (30
+  // for a 30.6 s file, dropping the last words) and can be 0 when the vault could not read the
+  // metadata (a zero-length clip would say "everything is cut"); it only fills in until the
+  // probe lands, or when the probe fails.
+  const probed = probedDurationSeconds ?? 0;
+  const durationSeconds = probed > 0 ? probed : video.durationSeconds;
   const layout = useMemo<LayoutEntry[]>(
     () => [
       {
