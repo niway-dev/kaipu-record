@@ -27,7 +27,9 @@ interface Watch {
 
 /**
  * Listens to the main process (its stderr and console) and to every window, present and future.
- * Attach it before the page loads: a message printed earlier is gone.
+ * Pass it to `launchApp` as `onLaunch`, which calls it before the first window is awaited: the
+ * windows that open on their own (the prewarmed capture panel, the overlays) are then followed
+ * from their creation, and a message printed earlier is the only one lost.
  */
 function watchWarnings(app: ElectronApplication): Watch {
   const seen: string[] = [];
@@ -54,14 +56,21 @@ async function capturePanelPage(app: ElectronApplication): Promise<Page> {
 }
 
 test("no MaxListenersExceededWarning on Record, or after ten laps through the app", async () => {
-  const { app, page, teardown } = await launchApp();
+  const watcher: { current?: Watch } = {};
+  const { app, page, teardown } = await launchApp({
+    onLaunch: (launched) => {
+      watcher.current = watchWarnings(launched);
+    },
+  });
   try {
-    const watch = watchWarnings(app);
-    // Load the window again with the listeners attached, so its whole startup is observed.
+    const watch = watcher.current;
+    if (!watch) throw new Error("the warning watcher was not attached at launch");
+    // The main window is loaded again so its whole startup is observed from the first frame.
     await page.reload();
     await dismissOnboarding(page);
     await page.waitForSelector(RECORD_READY);
-    // Give the other windows (the prewarmed panel and overlays) time to start as well.
+    // The prewarmed panel and the overlays were followed from their creation by `onLaunch`;
+    // wait for the panel to finish starting so its warnings, if any, are in `seen`.
     await capturePanelPage(app);
 
     expect(watch.warnings()).toEqual([]);

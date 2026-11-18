@@ -128,6 +128,12 @@ export interface LaunchOptions {
    * version (V0.16.0) rather than Electron's own; the UI catalog needs that, the suite does not.
    */
   launchAppDir?: boolean;
+  /**
+   * Called with the app as soon as Electron is up, before `launchApp` waits for the first
+   * window. A test that must observe every window from its creation (not only the first)
+   * attaches its `app.on("window")` and process listeners here.
+   */
+  onLaunch?: (app: ElectronApplication) => void;
 }
 
 export async function launchApp(options: LaunchOptions = {}): Promise<{
@@ -207,6 +213,8 @@ export async function launchApp(options: LaunchOptions = {}): Promise<{
       console.error(`[e2e] a window closed while the test was still running: ${window.url()}`);
     });
   });
+
+  options.onLaunch?.(app);
 
   const page = await app.firstWindow();
 
