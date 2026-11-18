@@ -1,6 +1,6 @@
 ---
 title: Renderer settings store
-description: How a renderer window reads the app settings through one store (one getSettings call and one settings:changed listener per window), how to add a consumer, why no code calls onSettingsChanged directly, and the 2026-11-18 listener audit that led to it.
+description: How a renderer window reads the app settings through one store (one getSettings call and one settings:changed listener per window), how to add a consumer, what to watch when changing settings, why no code calls onSettingsChanged directly, and the 2026-11-18 listener audit that led to it.
 ---
 
 # Renderer settings store
@@ -38,6 +38,26 @@ alternatives are in [ADR 0063](/architecture/decisions/0063-renderer-settings-ar
 | `loadSettings()`                  | A promise for the settings once the window has them                                            |
 | `updateSettings(patch)`           | Writing a setting                                                                              |
 
+## Who reads the settings
+
+`apps/kaipu-record/src/renderer/src/features/settings/settings-consumers.ts` lists every file that
+reads the store, the windows it runs in, the `AppSettings` keys it reads, whether it follows
+changes live or reads once, and where a change of its keys is shown to reach it. That file is the
+only list: this page does not repeat it.
+
+Two tests keep it true:
+
+- `settings-consumers.test.ts` scans the renderer. It fails when a file imports the store (or
+  `useAppSettings`) and is missing from the map, and when a listed file no longer reads the store.
+- `settings-consumers.behaviour.test.tsx` fails when a listed consumer has no behaviour case. Each
+  case changes the consumer's key in a fake main process, broadcasts it, and asserts what the
+  consumer returned or rendered. A consumer already covered by another test points at it in the
+  map, and the first test checks that the file exists and names the key.
+
+`e2e/settings-listeners.e2e.ts` checks the same thing against the built app: no
+`MaxListenersExceededWarning` on Record or after ten laps through the app, a change made in the
+main window reaching an open capture panel, and a workspace override in force when the window opens.
+
 ## Add a consumer
 
 ```tsx
@@ -61,6 +81,55 @@ reference each time; pass an `isEqual` function to ignore broadcasts that left i
 
 Outside React, `watchSettings(apply)` in an effect (or at module level) does the same and returns
 the unsubscribe.
+
+## What to watch
+
+These are the ways the settings can go wrong without the test of any single feature noticing. The
+map and the three tests in [Who reads the settings](#who-reads-the-settings) are the guard; the
+points below say what they do not cover.
+
+1. **Every main path that changes settings must broadcast.** A window learns of a change only from
+   main's `settings:changed` message. `updateAppSettings` and `notifyOverridesChanged` broadcast;
+   a new write path that changes the effective settings without calling `broadcastSettings()`
+   leaves every open window showing the old value until it is reopened. The startup path is the
+   one that looks suspicious and is not: `setOverridesSource()` recomputes the effective settings
+   without broadcasting, but it runs before any window exists, so nothing can be stale. In
+   `main/index.ts`, `await initWorkspaces()` (line 886) calls it
+   (`main/workspaces/index.ts:134`), then `registerSettings()` (line 942) loads the file, recomputes
+   the effective settings (`settings-store.ts:72`) and registers the `settings:get` handler
+   (`settings-store.ts:269`), and the first window is created after that (line 1280). A renderer
+   cannot read settings before the overrides source is in place. If someone moves that order, the
+   e2e test "a workspace override is in force when the window opens" is the one that fails. One
+   path is outside this proof (read from the code, not run): a second launch that arrives after
+   Electron is ready but before `registerSettings()` runs would create the main window early, and
+   that window would find no `settings:get` handler. That is a failed read (point 2), not a stale
+   value.
+2. **A failed first read is retried only when a consumer subscribes.** The store clears the failed
+   read, but nothing asks main again on a timer. A window whose first read failed stays on `null`
+   until the next `subscribeSettings`, `loadSettings`, `watchSettings` or `useSettings` call
+   (a route change that mounts a consumer does it). A consumer that treats `null` as final will
+   show nothing for as long as it stays mounted.
+3. **A consumer that reads once does not follow.** The map marks it `once` (the capture overlay's
+   countdown and remembered area, the overlay's camera placeholder). That is right for a window
+   that lives for one capture and wrong for one that stays open. Mark a new consumer `live`
+   unless the window is short-lived.
+4. **The overlay's remembered-area save merges into the window's copy.** `capture-overlay.tsx` reads
+   the window's settings, replaces one display's rectangle and sends the whole object. Main's
+   broadcast keeps the copy current, but two displays saving in the same few milliseconds can each
+   merge into an older copy, and the later write overwrites the other display's rectangle.
+5. **Selectors must return stable values.** `useSettings` runs on `useSyncExternalStore`, which
+   re-renders in a loop when `getSnapshot` returns a new object on every call. A selector that
+   builds an object or array needs an `isEqual` (as `useShortcutLabels` does), or must derive the
+   fresh value with `useMemo` from a picked one.
+6. **Module state leaks between tests unless reset.** The store lives at module level, so one
+   test's value, consumers and listener would reach the next. `test/setup.ts` calls
+   `resetSettingsStoreForTests()` after every test; a test that imports the store from a file
+   outside that setup must do the same.
+7. **Hot reload may leave an old listener (dev only, read from the code, not run).** The store has
+   no `import.meta.hot` handling, so when Vite reloads `settings-store.ts` the new module opens a
+   new `onSettingsChanged` listener and the old one is never unsubscribed. Each edit of that file
+   during `bun run dev` adds one. Reload the window after editing the store; a packaged app never
+   reloads modules.
 
 ## Never call `onSettingsChanged` directly
 
@@ -87,16 +156,10 @@ How many `settings:changed` listeners each window held before the store, counted
 | Capture overlay (one per display)          | 1 to 2           | 1     |
 | Capture toast, recording ready card, shade | 1 each           | 1     |
 
-The main window on Record, before:
-
-- Five were there from the start of the app: `I18nRoot` (locale and theme), `useInitAnalytics`, the
-  recorder store's countdown length (registered at import), `useShortcutLabels` in `AppShell`, and
-  `PendingSettingsHost`.
-- Seven more arrived with the Record page: `useShortcutLabels` again, `useRecordingSetup`,
-  `useWatermark`, `useScreenshotMode`, `useRecordingMode`, `useAudioSettings` and
-  `useCameraSettings`.
-
-Each of them also called `getSettings()` on mount: about twelve reads at startup, against one now.
+The twelve on the main window's Record page were the app's own consumers plus the Record page's
+hooks, each with its own `getSettings()` on mount: about twelve reads at startup, against one now.
+The consumers that read the store today are in the
+[map](#who-reads-the-settings), not listed here.
 
 The warning printed twice, not once, because StrictMode replays effects in development and the
 replay resets Node's "already warned" flag.
