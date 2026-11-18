@@ -99,8 +99,10 @@ export function RecordingPlayer({
     restoring.current = true;
   }, [id]);
 
-  // The handle: listeners are called from a frame loop that exists only while the video plays.
+  // The handle: listeners are called from a frame loop that exists only while the video plays
+  // AND someone is listening, so a panel that went away leaves nothing running.
   const listeners = useRef(new Set<(seconds: number) => void>());
+  const playing = useRef(false);
   const loopFrame = useRef<number | null>(null);
   const notify = useRef((): void => {});
   notify.current = (): void => {
@@ -111,7 +113,11 @@ export function RecordingPlayer({
     if (loopFrame.current !== null) cancelAnimationFrame(loopFrame.current);
     loopFrame.current = null;
   });
-  const startLoop = useRef((): void => {
+  const syncLoop = useRef((): void => {
+    if (!playing.current || listeners.current.size === 0) {
+      stopLoop.current();
+      return;
+    }
     if (loopFrame.current !== null) return;
     const step = (): void => {
       notify.current();
@@ -130,8 +136,10 @@ export function RecordingPlayer({
       readTime: () => videoRef.current?.currentTime ?? 0,
       subscribeTime(listener) {
         listeners.current.add(listener);
+        syncLoop.current();
         return () => {
           listeners.current.delete(listener);
+          syncLoop.current();
         };
       },
     }),
@@ -188,15 +196,18 @@ export function RecordingPlayer({
             }}
             onPlay={() => {
               if (!restoring.current) position.current.paused = false;
-              startLoop.current();
+              playing.current = true;
+              syncLoop.current();
             }}
             onPause={() => {
               if (!restoring.current) position.current.paused = true;
-              stopLoop.current();
+              playing.current = false;
+              syncLoop.current();
               notify.current();
             }}
             onEnded={() => {
-              stopLoop.current();
+              playing.current = false;
+              syncLoop.current();
               notify.current();
             }}
             onSeeked={() => notify.current()}

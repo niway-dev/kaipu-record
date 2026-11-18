@@ -173,7 +173,9 @@ describe("RecordingPlayer handle", () => {
   });
 
   it("stops the loop when the video ends", () => {
-    const { el } = mount();
+    let handle: PlayerHandle | null = null;
+    const { el } = mount((h) => (handle = h));
+    handle!.subscribeTime(() => {});
     fireEvent.play(el);
     expect(frames.size).toBe(1);
     fireEvent.ended(el);
@@ -198,6 +200,20 @@ describe("RecordingPlayer handle", () => {
     expect(frames.size).toBe(0);
     expect(cancelled).toHaveBeenCalled();
     expect(kept.mock.calls.length).toBe(before);
+  });
+
+  it("runs no loop without listeners, starts when one arrives mid-play and stops with the last", () => {
+    let handle: PlayerHandle | null = null;
+    const { el } = mount((h) => (handle = h));
+    fireEvent.play(el);
+    expect(frames.size).toBe(0);
+    const first = handle!.subscribeTime(() => {});
+    const second = handle!.subscribeTime(() => {});
+    expect(frames.size).toBe(1);
+    first();
+    expect(frames.size).toBe(1);
+    second();
+    expect(frames.size).toBe(0);
   });
 
   it("behaves as before for a caller that passes no handle prop", () => {
