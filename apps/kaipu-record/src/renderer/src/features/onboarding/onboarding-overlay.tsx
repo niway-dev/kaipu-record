@@ -6,7 +6,15 @@ import { usePermissions, useAccessibility } from "@renderer/features/permissions
 import { uiArea } from "@renderer/lib/ui-area";
 import { requiredPermissionsMet } from "./permissions";
 import { markPrivacySeen } from "./onboarding-store";
-import { canAdvanceFrom, canJumpTo, skipActionFor, stepsFor, type StepId } from "./onboarding-flow";
+import {
+  canAdvanceFrom,
+  canJumpTo,
+  PERMISSIONS_INDEX,
+  skipActionFor,
+  stepIndexFor,
+  stepsFor,
+  type StepId,
+} from "./onboarding-flow";
 import { useTranscriptionOffer } from "./use-transcription-offer";
 import type { DemoId } from "./demos";
 import { WelcomeStep } from "./steps/welcome-step";
@@ -33,9 +41,6 @@ const STEP_LABEL_KEY: Record<
   transcription: "stepLabelTranscription",
   done: "stepLabelDone",
 };
-
-// Permissions is the second step whichever steps are on offer.
-const PERMISSIONS_STEP = stepsFor({ offerTranscription: false }).indexOf("permissions");
 
 /** Buttons and fields keep their own Enter, so a focused card opens instead of advancing. */
 function ownsEnter(target: EventTarget | null): boolean {
@@ -77,8 +82,7 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
     return () => window.electronAPI.setOnboardingWindowMode(false);
   }, []);
 
-  const found = steps.indexOf(currentStep);
-  const step = found === -1 ? steps.length - 1 : found;
+  const step = stepIndexFor(steps, currentStep);
   const stepId = steps[step]!;
   const requiredMet = requiredPermissionsMet(status);
   const canAdvance = canAdvanceFrom(stepId, requiredMet);
@@ -120,7 +124,7 @@ export function OnboardingOverlay({ onClose }: OnboardingOverlayProps): React.JS
 
   const skipAction = skipActionFor(stepId, requiredMet);
   const skip = useCallback(() => {
-    if (skipAction === "toPermissions") goTo(PERMISSIONS_STEP);
+    if (skipAction === "toPermissions") goTo(PERMISSIONS_INDEX);
     else if (skipAction === "close") onClose();
   }, [skipAction, goTo, onClose]);
 

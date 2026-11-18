@@ -67,6 +67,12 @@ async function toShortcuts(): Promise<void> {
   await screen.findByRole("heading", { name: /four shortcuts are the whole app/i });
 }
 
+async function privacyToDone(): Promise<void> {
+  await screen.findByRole("heading", { name: /your recordings are yours/i });
+  fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+  await screen.findByRole("heading", { name: /you're set/i });
+}
+
 describe("OnboardingOverlay: the Transcription step", () => {
   beforeEach(() => {
     flags.transcription = true;
@@ -78,7 +84,7 @@ describe("OnboardingOverlay: the Transcription step", () => {
   it("sits between Shortcuts and Privacy when the model is on offer", async () => {
     mockApi(transcriptionStatus());
     render(<OnboardingOverlay onClose={vi.fn()} />);
-    await waitFor(() => expect(dots()).toHaveLength(5));
+    await waitFor(() => expect(dots()).toHaveLength(6));
     await toShortcuts();
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     await screen.findByRole("heading", { name: /turn recordings into text/i });
@@ -90,11 +96,11 @@ describe("OnboardingOverlay: the Transcription step", () => {
   it("Not now moves past Transcription to Privacy without downloading", async () => {
     const { downloadTranscriptionModel } = mockApi(transcriptionStatus());
     render(<OnboardingOverlay onClose={vi.fn()} />);
-    await waitFor(() => expect(dots()).toHaveLength(5));
+    await waitFor(() => expect(dots()).toHaveLength(6));
     await toShortcuts();
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(await screen.findByRole("button", { name: "Not now" }));
-    await screen.findByRole("heading", { name: /you're set/i });
+    await privacyToDone();
     expect(downloadTranscriptionModel).not.toHaveBeenCalled();
   });
 
@@ -102,20 +108,22 @@ describe("OnboardingOverlay: the Transcription step", () => {
     // The mocked download never resolves: reaching You're set proves nothing awaits it.
     const { downloadTranscriptionModel } = mockApi(transcriptionStatus());
     render(<OnboardingOverlay onClose={vi.fn()} />);
-    await waitFor(() => expect(dots()).toHaveLength(5));
+    await waitFor(() => expect(dots()).toHaveLength(6));
     await toShortcuts();
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(await screen.findByRole("button", { name: "Download in background" }));
-    await screen.findByRole("heading", { name: /you're set/i });
+    await privacyToDone();
     expect(downloadTranscriptionModel).toHaveBeenCalledTimes(1);
     expect(downloadTranscriptionModel).toHaveBeenCalledWith(MODEL_ID);
     // The model is downloading now, yet the step stays in the flow.
-    expect(dots()).toHaveLength(5);
+    expect(dots()).toHaveLength(6);
 
     // Back on the step, a second download is not started while the first one runs.
     fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    await screen.findByRole("heading", { name: /your recordings are yours/i });
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
     fireEvent.click(await screen.findByRole("button", { name: "Download in background" }));
-    await screen.findByRole("heading", { name: /you're set/i });
+    await privacyToDone();
     expect(downloadTranscriptionModel).toHaveBeenCalledTimes(1);
   });
 
@@ -124,9 +132,9 @@ describe("OnboardingOverlay: the Transcription step", () => {
     const { getTranscriptionStatus } = mockApi(transcriptionStatus());
     render(<OnboardingOverlay onClose={vi.fn()} />);
     await toShortcuts();
-    expect(dots()).toHaveLength(4);
+    expect(dots()).toHaveLength(5);
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    await screen.findByRole("heading", { name: /you're set/i });
+    await privacyToDone();
     expect(getTranscriptionStatus).not.toHaveBeenCalled();
   });
 
@@ -135,7 +143,7 @@ describe("OnboardingOverlay: the Transcription step", () => {
       "the engine is unavailable",
       transcriptionStatus(
         { state: "missing" },
-        { status: "unavailable", reason: "engine-missing" },
+        { status: "unavailable", reason: "unsupported-platform" },
       ),
     ],
     ["the model is already installed", transcriptionStatus({ state: "ready" })],
@@ -144,15 +152,15 @@ describe("OnboardingOverlay: the Transcription step", () => {
     render(<OnboardingOverlay onClose={vi.fn()} />);
     await waitFor(() => expect(getTranscriptionStatus).toHaveBeenCalled());
     await toShortcuts();
-    expect(dots()).toHaveLength(4);
+    expect(dots()).toHaveLength(5);
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    await screen.findByRole("heading", { name: /you're set/i });
+    await privacyToDone();
   });
 
   it("is offered again after a download that failed", async () => {
     mockApi(transcriptionStatus({ state: "failed", reason: "network" }));
     render(<OnboardingOverlay onClose={vi.fn()} />);
-    await waitFor(() => expect(dots()).toHaveLength(5));
+    await waitFor(() => expect(dots()).toHaveLength(6));
   });
 
   it("stays on You're set when the offer arrives late, instead of being moved to the new step", async () => {
@@ -165,28 +173,46 @@ describe("OnboardingOverlay: the Transcription step", () => {
     render(<OnboardingOverlay onClose={vi.fn()} />);
     await toShortcuts();
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    await screen.findByRole("heading", { name: /you're set/i });
-    expect(dots()).toHaveLength(4);
+    await privacyToDone();
+    expect(dots()).toHaveLength(5);
 
     answer(transcriptionStatus());
 
-    await waitFor(() => expect(dots()).toHaveLength(5));
+    await waitFor(() => expect(dots()).toHaveLength(6));
     expect(screen.getByRole("heading", { name: /you're set/i })).toBeInTheDocument();
+  });
+
+  it("goes to Privacy, not past it, when the offer goes away while Transcription is open", async () => {
+    mockApi(transcriptionStatus());
+    const { rerender } = render(<OnboardingOverlay onClose={vi.fn()} />);
+    await waitFor(() => expect(dots()).toHaveLength(6));
+    await toShortcuts();
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /turn recordings into text/i });
+
+    flags.transcription = false;
+    rerender(<OnboardingOverlay onClose={vi.fn()} />);
+
+    expect(
+      await screen.findByRole("heading", { name: /your recordings are yours/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /you're set/i })).toBeNull();
+    expect(dots()).toHaveLength(5);
   });
 
   it("stays on You're set when the flag turns off after the offer was shown", async () => {
     mockApi(transcriptionStatus());
     const { rerender } = render(<OnboardingOverlay onClose={vi.fn()} />);
-    await waitFor(() => expect(dots()).toHaveLength(5));
+    await waitFor(() => expect(dots()).toHaveLength(6));
     await toShortcuts();
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(await screen.findByRole("button", { name: "Not now" }));
-    await screen.findByRole("heading", { name: /you're set/i });
+    await privacyToDone();
 
     flags.transcription = false;
     rerender(<OnboardingOverlay onClose={vi.fn()} />);
 
     expect(screen.getByRole("heading", { name: /you're set/i })).toBeInTheDocument();
-    expect(dots()).toHaveLength(4);
+    expect(dots()).toHaveLength(5);
   });
 });

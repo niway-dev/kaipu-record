@@ -6,13 +6,7 @@ import type { TranscriptionModelInfo, TranscriptionStatus } from "@shared/types/
  * One rule shapes all of them: only Permissions blocks (screen + microphone).
  */
 
-export type StepId =
-  | "welcome"
-  | "permissions"
-  | "shortcuts"
-  | "transcription"
-  | "privacy"
-  | "done";
+export type StepId = "welcome" | "permissions" | "shortcuts" | "transcription" | "privacy" | "done";
 
 export interface StepsOptions {
   /** Whether the local transcription model is on offer (see `transcriptionOfferModel`). */
@@ -30,7 +24,22 @@ export function stepsFor({ offerTranscription }: StepsOptions): readonly StepId[
 }
 
 /** Permissions is the second step whichever steps are on offer: only later ones come and go. */
-const PERMISSIONS_INDEX = stepsFor({ offerTranscription: false }).indexOf("permissions");
+export const PERMISSIONS_INDEX = stepsFor({ offerTranscription: false }).indexOf("permissions");
+
+/**
+ * Where `current` sits in `steps`. When it left the list (the offer went away while the user was
+ * on Transcription) the flow lands on the next step that is still there, so Privacy is not skipped.
+ */
+export function stepIndexFor(steps: readonly StepId[], current: StepId): number {
+  const at = steps.indexOf(current);
+  if (at !== -1) return at;
+  const order = stepsFor({ offerTranscription: true });
+  for (const id of order.slice(order.indexOf(current) + 1)) {
+    const next = steps.indexOf(id);
+    if (next !== -1) return next;
+  }
+  return steps.length - 1;
+}
 
 /**
  * The model the Transcription step offers, or `null` when there is nothing to offer: the

@@ -4,6 +4,7 @@ import {
   canAdvanceFrom,
   canJumpTo,
   skipActionFor,
+  stepIndexFor,
   stepsFor,
   transcriptionOfferModel,
   triedShortcutCount,
@@ -50,6 +51,12 @@ describe("onboarding flow", () => {
 
   it("keeps Permissions at the same place, so the dot rules do not depend on the offer", () => {
     expect(WITHOUT.indexOf("permissions")).toBe(WITH.indexOf("permissions"));
+  });
+
+  it("lands on the next step still there when the current one left the list", () => {
+    expect(stepIndexFor(WITHOUT, "transcription")).toBe(WITHOUT.indexOf("privacy"));
+    expect(stepIndexFor(WITH, "transcription")).toBe(WITH.indexOf("transcription"));
+    expect(stepIndexFor(WITHOUT, "done")).toBe(WITHOUT.indexOf("done"));
   });
 
   it("Transcription lets the footer move on and dots jump over it, once Permissions are met", () => {
