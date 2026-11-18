@@ -8,8 +8,9 @@ description: Crop one image on the canvas, the base screenshot included, without
 **Status: 🟡 In progress · 2026-11-16.** Direction approved by the owner in chat. Unit 1 and 2
 (model, document v3, compositor) are tracked in
 [NIW2-848](https://linear.app/niway/issue/NIW2-848/per-image-crop-spec-data-model-v3-and-compositor-clip).
-Everything stays behind the `image-canvas` flag. Units 3 to 5 have no ticket yet: the free Linear
-plan refuses sub-issues, so the units live here.
+Unit 3 (the base's crop, scale and corners: model, geometry, compositor, redaction bake) is built
+in a PR stacked on it, ticket [NIW2-853](https://linear.app/niway/issue/NIW2-853/image-editor-per-image-crop-unit-3-base-image-crop-scale-and-corners). Everything stays behind the `image-canvas` flag. Units 4
+and 5 have no ticket yet: the free Linear plan refuses sub-issues, so the units live here.
 
 ## Summary
 
@@ -49,8 +50,7 @@ without loss:
 
 ### Out of scope
 
-- Any user-facing UI in this PR (units 4 and 5).
-- Cropping the base (unit 3): `baseCrop`, `baseRadius`, signed extents.
+- Any user-facing UI before units 4 and 5. Unit 3 (NIW2-853) builds the base crop, radius and resize in the model and the export, and nothing a user can reach writes them yet.
 - Non-uniform stretch, rotation or skew of an image. Proportional resize is in scope (unit 3 for the base, unit 4 for the handles).
 - A rotation, a freeform shape or a mask other than a rounded rectangle.
 - Changing the Export frame or the classic (non-canvas) crop.
@@ -81,12 +81,55 @@ bake.
 Example (illustrative): a visible rect of 0.25 × 0.25 at (1, 0.5) that shows the middle half of its
 asset on both axes. The whole asset is 0.5 × 0.5 and starts at (0.875, 0.375).
 
-**Base image.** The base is not an item in the editor (`scene.ts`: it "stays the anchor"), so it
-has no `crop` yet. Unit 3 adds `baseCrop` and `baseRadius` to the scene and has to solve the part
-that is hard: the content box and the extents are clamped to contain the **whole** base
-(`contentExtents`, `over()`), and the compositor draws the base at the origin. A cropped base
-needs either signed extents or a "visible base rect", and then the compositor origin, the live
-`BeautifiedFrame`, Fit to content and the gaps follow. It is the riskiest unit and gets its own PR.
+**Base image (unit 3).** The base is not an item in the editor (`scene.ts`: it "stays the
+anchor"), so its crop, corners and size live on the scene, not on an annotation:
+
+- `baseCrop?` is the window of the base asset that shows (0–1 of the asset), as for an added image.
+- `baseRadius?` is the base's own corner radius in source px; absent follows the global slider.
+- `basePlacement?: { x, y, scale }` is where the **whole** base asset sits: its top-left corner in
+  the same base-normalized units as every annotation, and a uniform `scale` (1 = natural size).
+  Absent is `{ x: 0, y: 0, scale: 1 }`. The whole rect is `{ x, y, w: scale, h: scale }`
+  (`baseFullRect`); the visible rect is the `baseCrop` window of it (`baseVisibleRect`).
+
+**Why a placement, and how the base scales proportionally.** The world origin and the world unit
+never move: they stay "the base asset at scale 1, corner at 0,0". Cropping or resizing the base
+changes only these three scene fields, so **no annotation, image, ruler or export-frame coordinate
+is rewritten**, and undoing a crop or a resize is one field edit. A resize is a change of `scale`
+(and of `x/y` so the chosen corner stays put); the crop window is unitless, so it follows the
+scale and expanding it later brings the hidden pixels back at the scale they had.
+
+_Rejected: rebase the world on the visible base._ Making the visible base the new origin and unit
+would keep the base looking like "item 0 at 0,0 with its pixel size", but every crop or resize
+would have to rewrite the coordinates of every other item (and the ruler's source-px values, and
+the export frame), and an undo would rewrite them back. One rounding slip would move an annotation
+off the thing it marks. That is the opposite of the invariant this unit keeps.
+
+Consequences, all in `canvas-geometry.ts`, `compositor.ts` and `content-box.ts`:
+
+- `CanvasGeom.base` (`visibleBaseBounds`) is the visible base in natural px from the world origin,
+  snapped **outward** to whole px so the base's edge is never left outside the box. The extents
+  (`contentExtents`, `over()`) are measured from it, clamped at 0, and the content box always
+  contains the whole **visible** base. A blur counts only where it covers the visible base.
+- `canvasLayout` puts the **world origin** at `pad + extents.left - base.x1`, so it is no longer the
+  base's corner when the base is cropped or moved; annotations still translate by it.
+- The compositor clips the visible rect (with `baseRadius` when set), sizes the `#shot` def to the
+  whole asset at the placed size, and draws it at the whole rect. The blur-under-base redraw is
+  clipped to the visible rect only when a crop is set, so the default SVG is unchanged.
+- Fit to content (`contentBoxFrame`) and the export frame math use `base` the same way.
+- Redaction baking tests every blur against the **whole** placed base rect (`baseFullRect`), never
+  `baseCrop`; an invalid placement throws. Every caller passes the placement: the export
+  (`compositeSceneAt`), the save (`buildCanvasPayload` in the editor page), and the text cache
+  (`redactionRectsInPixels`, which decides which recognized words a save may store; it fails closed
+  on an invalid placement by treating the whole image as redacted).
+- `baseVisibleRect` throws on an invalid `baseCrop`, like `fullRect` does for an image, so a save
+  or an export stops instead of writing a NaN rect.
+- The reader refuses a placement outside sane bounds (scale under 1/1000 or over 100, a corner
+  more than 10 000 base widths away, or a visible base side over `MAX_EXPORT_SIDE`, 16384 px, the
+  most a canvas can hold): a corrupt or hostile file opens the flattened PNG instead of asking for
+  a huge export. The compositor repeats the check on the frame it is about to rasterize
+  (`assertExportSize`) and refuses one past that limit, so no document, however it was built, can
+  make an export allocate a gigantic canvas. The 16384 px ceiling is a safety limit, not the
+  user-facing size limit that unit 4's resize handles will decide.
 
 ### Canvas document v3
 
@@ -101,8 +144,13 @@ needs either signed extents or a "visible base rect", and then the compositor or
   non-numeric radius
   makes the document unreadable, so the editor opens the flattened PNG (ADR 0053 point 4) rather
   than guess.
-- The base item (item 0) must not carry `crop` or `radius` yet; a document that does is unreadable
-  until unit 3 defines them, rather than read as the base's world rect.
+- The base item (item 0) is an image item like any other: `x/y/w/h` is its **visible** rect and
+  it may carry `crop` and `radius`. The world conversion always uses the unit rect
+  `0,0,pixelWidth,pixelHeight` (the asset at scale 1), so the base's crop or resize never changes
+  another item's numbers. The reader derives `basePlacement` from the item (visible rect divided
+  by the crop window gives the whole asset's rect). A base that stretches the asset, with unequal
+  scale on the two axes, is unreadable and opens the flattened PNG. v1 and v2 convert by the base
+  item's rect, as before, and ignore a crop or radius on it.
 - **An older build rejects v3 on purpose.** It would draw the whole asset stretched into the
   cropped rect and show the wrong picture with no warning.
 
@@ -183,13 +231,34 @@ Rules:
 
 ## Delivery units
 
-| Unit | Content                                                                                                                                                       | PR       |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| 1    | Model: `crop`, `radius` on `ImageAnnotation`, `fullRect`, canvas document v3 (write 3, read 1/2/3)                                                            | NIW2-848 |
-| 2    | Compositor clip, per-image radius, def id, redaction bake on `fullRect`, privacy tests                                                                        | NIW2-848 |
-| 3    | Base crop: `baseCrop`, `baseRadius`, signed extents or a visible-base rect, compositor origin, `BeautifiedFrame`, Fit to content, gaps. **The riskiest unit** | not yet  |
-| 4    | Crop mode state `cropping: id \| null`, one undo step per commit, dimmed whole asset, double-click routing                                                    | not yet  |
-| 5    | Shared action bar and Tool tab, chip text, selection-tag fix, ui-map and catalog states, OCR words filtered to the visible rect                               | not yet  |
+| Unit | Content                                                                                                                                                                                       | PR       |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| 1    | Model: `crop`, `radius` on `ImageAnnotation`, `fullRect`, canvas document v3 (write 3, read 1/2/3)                                                                                            | NIW2-848 |
+| 2    | Compositor clip, per-image radius, def id, redaction bake on `fullRect`, privacy tests                                                                                                        | NIW2-848 |
+| 3    | Base crop, scale and corners: `baseCrop`, `baseRadius`, `basePlacement`, visible-base geometry, compositor, redaction bake, document v3 base item. The live frame is **not** in it, see below | NIW2-853 |
+| 4    | Crop mode state `cropping: id \| null`, one undo step per commit, dimmed whole asset, double-click routing                                                                                    | not yet  |
+| 5    | Shared action bar and Tool tab, chip text, selection-tag fix, ui-map and catalog states, OCR words filtered to the visible rect                                                               | not yet  |
+
+**Left for unit 4, and blocking it.** Unit 3 carries the base fields from a reopened document to
+the next save and export, but nothing in the editor writes them yet, and the live view does not
+read them:
+
+- The live frame (`BeautifiedFrame` and the page's flex layout, where the `<img>` is the world
+  anchor) draws the whole base. A document with a cropped or resized base therefore exports
+  correctly but previews as uncropped until unit 4 gives the live geometry `CanvasGeom.base`.
+  This could not be changed safely without running the app.
+- The editor page's own geometry reads the whole base too: its `contentExtents` calls, the
+  `canvasGeom` it hands to `worldToFrame` / `frameToWorld` (in display px, so `visibleBaseBounds`,
+  which snaps to whole px, cannot be reused as is), and the scene it gives `exportPixelSize`. For
+  a cropped or resized base the size label, the Fit to content overhang and the coordinates of a
+  dragged Export frame are therefore computed against the whole base, while Copy and Save use the
+  right geometry. Unreachable until a crop can be written; it must be fixed together with the
+  live frame.
+- The per-image `radius` and the crop of added images are drawn by the live layer from the
+  visible rect; the base's own radius needs the same treatment.
+- A ruler (`measure`) is anchored to the base asset and does not follow a scaled base.
+- The base's corner handles (proportional resize) are not wired. `resizeImage` already locks the
+  crop window's aspect and keeps the crop, so wiring them is a matter of writing `basePlacement`.
 
 Units 1 and 2 ship together because the model is untestable without the compositor. Nothing is
 visible until unit 5, and the first visible release must include unit 3 (decision 7).
@@ -239,3 +308,33 @@ Unit 1 and 2 tests (existing files):
 - `annotations/redaction.test.ts` — a blur over the cropped-out part is baked; one straddling the
   crop edge is baked; one asset placed twice with different crops is baked through each placement's
   whole-asset rect; a blur that misses the asset does nothing.
+
+Unit 3 tests:
+
+- `annotations/base-crop.test.ts` — the default SVG matches three strings captured from the parent
+  commit; `visibleBaseBounds` (crop, resize, outward snapping); extents measured from a cropped
+  base (never negative, blur limited to the visible part); layout origin; Fit to content; the export
+  frame window; the cropped and the resized base in `buildSvg` (clip, radius override, def size,
+  `use` position).
+- `annotations/canvas-doc.test.ts` — the base item as its visible rect, round trip of crop, radius
+  and placement with every other item's coordinates unchanged, an untouched base writes nothing
+  extra, a stretching or invalid base falls back, an invalid placement refuses to build, v2 ignores
+  the fields.
+- `annotations/redaction.test.ts` — the bake itself never takes a crop, so the base-crop privacy
+  tests run the real export (`compositeSceneAt`) on a scene that carries `baseCrop`: a blur over
+  the cropped-out part, and one straddling the crop edge, are baked into the whole asset; redact,
+  crop out, save, expand the crop: the stored pixels stay redacted. Each fails if the compositor
+  hands the bake the visible rect instead of the placement. A resized base is baked through its
+  placed rect; an invalid placement throws.
+- `annotations/compositor.test.ts` — the export hands the placement, not the crop, to the bake;
+  a frame past `MAX_EXPORT_SIDE` is refused before rasterizing.
+- `annotations/canvas-doc.test.ts` also covers the visible-side bound of the reader.
+- `pages/screenshot-editor/screenshot-editor-page.document.test.tsx` — Save over a reopened v3
+  document with a resized base hands that placement to the bake (this test fails without the fix).
+- `text-selection/geometry.test.ts` — redactions measured against the placed base; an invalid
+  placement fails closed.
+- `annotations/scene.test.ts`, `handles.test.ts`, `use-editor-scene.test.ts` — the base rects,
+  `resizeImage` on a cropped image, the scene carrying the base fields through undo and redo.
+
+The redaction tests use a fake canvas that records the blurred rects, so they prove which rectangle
+is baked, not the pixels (unit 4 adds the crop writer and should add a real-pixel check).

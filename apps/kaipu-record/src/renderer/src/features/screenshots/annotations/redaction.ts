@@ -1,5 +1,12 @@
 import { annotationBox } from "./handles";
-import { fullRect, type Annotation, type BlurAnnotation, type RedactionStyle } from "./scene";
+import {
+  baseFullRect,
+  fullRect,
+  type Annotation,
+  type BasePlacement,
+  type BlurAnnotation,
+  type RedactionStyle,
+} from "./scene";
 
 /** A redaction block is at least this many image pixels on a side. */
 export const REDACTION_MIN_BLOCK_PX = 24;
@@ -174,6 +181,8 @@ export async function bakeCanvasRedactions(
   baseBytes: ArrayBuffer,
   assets: CanvasAssets,
   annotations: readonly Annotation[],
+  /** Where the whole base asset sits (a resized base); absent = the unit rect. Never the crop. */
+  basePlacement?: BasePlacement,
 ): Promise<{ base: ArrayBuffer; assets: CanvasAssets }> {
   const blurs = annotations.filter((a): a is BlurAnnotation => a.kind === "blur" && !a.locked);
   if (blurs.length === 0) return { base: baseBytes, assets };
@@ -194,8 +203,10 @@ export async function bakeCanvasRedactions(
         w: b.w / rect.w,
         h: b.h / rect.h,
       }));
-  // The base is the unit rect: its local coordinates are the stored ones.
-  const base = await bakeRedactions(baseBytes, localBlurs({ x: 0, y: 0, w: 1, h: 1 }));
+  // The WHOLE base asset's rect (the unit rect unless the base was resized), never its visible
+  // window: a blur over a part that is cropped out must still reach the pixels, or widening
+  // the crop later would show them (privacy). An invalid placement throws, failing closed.
+  const base = await bakeRedactions(baseBytes, localBlurs(baseFullRect({ basePlacement })));
   // One asset can sit on the canvas twice: both placements' blurs apply to its bytes.
   const perAsset = new Map<string, BlurAnnotation[]>();
   for (const a of annotations) {

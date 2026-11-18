@@ -577,6 +577,29 @@ describe("AnnotationLayer — added images (NIW2-703)", () => {
     expect(container.querySelector('[data-annotation="i1"]')).not.toBeNull();
   });
 
+  it("draws a cropped image whole from the full rect and clips to the visible rect", () => {
+    // Illustrative: the visible rect is the right half of the asset, so the whole asset is
+    // twice as wide and starts left of the visible rect: x 0.5 - 0.5 * 0.4 = 0.3.
+    const cropped: ImageAnnotation = {
+      ...image,
+      x: 0.5,
+      y: 0.25,
+      w: 0.2,
+      h: 0.3,
+      crop: { x: 0.5, y: 0, w: 0.5, h: 1 },
+    };
+    const { container } = renderImageLayer(makeScene([cropped], null), makeTools());
+    const el = imageEl(container)!;
+    expect(el.getAttribute("x")).toBe("30");
+    expect(el.getAttribute("y")).toBe("25");
+    expect(el.getAttribute("width")).toBe("40");
+    expect(el.getAttribute("height")).toBe("30");
+    const clip = container.querySelector("clipPath rect")!;
+    expect(clip.getAttribute("x")).toBe("50");
+    expect(clip.getAttribute("width")).toBe("20");
+    expect(clip.getAttribute("height")).toBe("30");
+  });
+
   it("draws nothing when the editor has no URL for the asset", () => {
     const { container } = renderImageLayer(makeScene([image], "i1"), makeTools(), {
       imageUrls: {},

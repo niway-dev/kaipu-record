@@ -27,6 +27,14 @@ export interface EditorScene {
    * the whole content box.
    */
   exportFrame?: CropRect;
+  /**
+   * Per-image crop, unit 3: the base's crop, own radius and placement (see `Scene`). Carried
+   * from a reopened document to the next save and export; nothing in the editor writes them
+   * yet (the crop mode is unit 4), so an edit never drops them.
+   */
+  baseCrop?: CropRect;
+  baseRadius?: number;
+  basePlacement?: Scene["basePlacement"];
   /** Set the export frame as one undoable change (Reset/Esc, or a crop drag release). */
   setExportFrame(frame: CropRect | undefined): void;
   /** Step the history; false when it did nothing (empty history, or a drag is open). */
@@ -41,12 +49,18 @@ export interface EditorScene {
 export function useEditorScene(
   initialBeautify: BeautifyState = DEFAULT_BEAUTIFY,
   /** A reopened document's content (ADR 0053): the scene starts as saved, with an empty history. */
-  initial?: Pick<Scene, "annotations" | "exportFrame">,
+  initial?: Pick<
+    Scene,
+    "annotations" | "exportFrame" | "baseCrop" | "baseRadius" | "basePlacement"
+  >,
 ): EditorScene {
   const [scene, setScene] = useState<Scene>(() => ({
     beautify: initialBeautify,
     annotations: initial?.annotations ?? [],
     ...(initial?.exportFrame ? { exportFrame: initial.exportFrame } : {}),
+    ...(initial?.baseCrop ? { baseCrop: initial.baseCrop } : {}),
+    ...(initial?.baseRadius !== undefined ? { baseRadius: initial.baseRadius } : {}),
+    ...(initial?.basePlacement ? { basePlacement: initial.basePlacement } : {}),
   }));
   const [past, setPast] = useState<Scene[]>([]);
   const [future, setFuture] = useState<Scene[]>([]);
@@ -170,6 +184,9 @@ export function useEditorScene(
     crop: scene.crop,
     setCrop,
     exportFrame: scene.exportFrame,
+    baseCrop: scene.baseCrop,
+    baseRadius: scene.baseRadius,
+    basePlacement: scene.basePlacement,
     setExportFrame,
     undo,
     redo,

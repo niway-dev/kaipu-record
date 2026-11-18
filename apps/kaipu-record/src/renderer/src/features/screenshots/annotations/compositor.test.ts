@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { intersectFrame, worldToFrame } from "./canvas-geometry";
-import { buildSvg, compositeSceneAt, frameWindow, type Geom } from "./compositor";
+import { assertExportSize, buildSvg, compositeSceneAt, frameWindow, type Geom } from "./compositor";
+import { MAX_EXPORT_SIDE } from "./canvas-geometry";
 import { TEXT_SIZES } from "./tools";
 import type { Annotation, Scene } from "./scene";
 
@@ -251,13 +252,59 @@ describe("compositor canvas mode", () => {
     await expect(compositeSceneAt(scene(inside), bytes, 100, { canvas: true })).rejects.toThrow(
       "baked",
     );
-    expect(bakeMock).toHaveBeenCalledWith(bytes, {}, inside);
+    expect(bakeMock).toHaveBeenCalledWith(bytes, {}, inside, undefined);
     // Flag off: the export goes straight to decoding the bytes, which never settles for
     // these fake bytes in jsdom; the bake would have run before that, so one tick is enough.
     bakeMock.mockClear();
     void compositeSceneAt(scene(inside), bytes, 100).catch(() => undefined);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(bakeMock).not.toHaveBeenCalled();
+  });
+
+  it("hands the base's placement (never its crop) to the bake, so the whole asset is what gets redacted", async () => {
+    bakeMock.mockReset();
+    bakeMock.mockRejectedValue(new Error("baked"));
+    const bytes = new ArrayBuffer(4);
+    const basePlacement = { x: 1, y: 0, scale: 0.5 };
+    const s = {
+      ...scene(inside),
+      basePlacement,
+      baseCrop: { x: 0.5, y: 0, w: 0.5, h: 1 },
+    };
+    await expect(compositeSceneAt(s, bytes, 100, { canvas: true })).rejects.toThrow("baked");
+    expect(bakeMock).toHaveBeenCalledWith(bytes, {}, inside, basePlacement);
+  });
+
+  it("refuses an export frame past the canvas limit before rasterizing it", async () => {
+    // A hostile document: the 2880x1800 base resized to 100x is a 288 000 x 180 000 px frame.
+    bakeMock.mockReset();
+    bakeMock.mockImplementation(async (base: ArrayBuffer) => ({ base, assets: {} }));
+    vi.stubGlobal(
+      "Image",
+      class {
+        naturalWidth = 2880;
+        naturalHeight = 1800;
+        onload: (() => void) | null = null;
+        set src(_url: string) {
+          queueMicrotask(() => this.onload?.());
+        }
+      },
+    );
+    try {
+      const s = { ...scene([]), basePlacement: { x: 0, y: 0, scale: 100 } };
+      await expect(compositeSceneAt(s, new ArrayBuffer(4), 1440, { canvas: true })).rejects.toThrow(
+        /export frame .* exceeds 16384px/,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("accepts a frame at the canvas limit and refuses one px past it", () => {
+    expect(() => assertExportSize(MAX_EXPORT_SIDE, MAX_EXPORT_SIDE)).not.toThrow();
+    expect(() => assertExportSize(MAX_EXPORT_SIDE + 1, 10)).toThrow(/export frame/);
+    expect(() => assertExportSize(10, MAX_EXPORT_SIDE + 1)).toThrow(/export frame/);
+    expect(() => assertExportSize(Number.NaN, 10)).toThrow(/export frame/);
   });
 
   it("grows the frame for a text outside the image and keeps the shot at the padding", () => {

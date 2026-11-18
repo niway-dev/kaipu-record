@@ -9,7 +9,9 @@ import {
   withoutRedactedText,
   type PixelRegion,
 } from "./redaction";
-import type { Annotation } from "./scene";
+import { buildCanvasDoc, parseCanvasDoc } from "./canvas-doc";
+import { compositeSceneAt } from "./compositor";
+import type { Annotation, Scene } from "./scene";
 
 function region(
   width: number,
@@ -327,6 +329,45 @@ describe("bakeCanvasRedactions", () => {
     expect(out.base).toBe(base);
     expect(out.assets).toBe(assets);
   });
+
+  it("bakes a blur into a resized base through the whole asset's placed rect", async () => {
+    fakeBrowser();
+    // The 1000x600 base at half size with its corner at normalized (1, 0): it covers x 1..1.5,
+    // y 0..0.5. The blur at x 1.125..1.25, y 0.125..0.25 is a quarter of the way in, a quarter wide.
+    const out = await bakeCanvasRedactions(
+      base,
+      assets,
+      [blur({ x: 1.125, y: 0.125, w: 0.125, h: 0.125 })],
+      { x: 1, y: 0, scale: 0.5 },
+    );
+    expect(dec(out.base).rects).toEqual([{ x: 250, y: 150, w: 250, h: 150 }]);
+  });
+
+  it("does not bake a blur that misses the resized base, even where the unmoved base was", async () => {
+    fakeBrowser();
+    // Normalized 0..0.125 lies over the base's ORIGINAL place; it now sits at x 1..1.5.
+    const out = await bakeCanvasRedactions(
+      base,
+      assets,
+      [blur({ x: 0, y: 0.125, w: 0.125, h: 0.125 })],
+      { x: 1, y: 0, scale: 0.5 },
+    );
+    expect(out.base).toBe(base);
+  });
+
+  it("fails closed on an invalid base placement instead of guessing where the asset is", async () => {
+    fakeBrowser();
+    const hidden = [blur({ x: 0, y: 0.125, w: 0.125, h: 0.25 })];
+    for (const placement of [
+      { x: 0, y: 0, scale: 0 },
+      { x: 0, y: 0, scale: -1 },
+      { x: Number.NaN, y: 0, scale: 1 },
+    ]) {
+      await expect(bakeCanvasRedactions(base, assets, hidden, placement)).rejects.toThrow(
+        /invalid placement/,
+      );
+    }
+  });
 });
 
 describe("withoutRedactedText (NIW2-799)", () => {
@@ -388,5 +429,108 @@ describe("withoutRedactedText (NIW2-799)", () => {
   it("keeps everything when the displayed size is unknown", () => {
     const list = [text("t", 0.3, 0.5), blur("b", 0.25, 0.45, 0.5, 0.25)];
     expect(ids(withoutRedactedText(list, { w: 0, h: 0 }))).toEqual(["t", "b"]);
+  });
+});
+
+/**
+ * Base crop privacy, through the real export. `bakeCanvasRedactions` never takes a crop, so
+ * what these tests pin is the layer above it: `compositeSceneAt` is handed a scene that CARRIES
+ * `baseCrop` and must still bake the blur into the whole asset. Nothing is mocked but the
+ * browser (see `fakeBrowser`); the baked base is read back from the data URL the compositor
+ * decodes, which is the very bytes the export embeds.
+ */
+describe("base crop privacy (through compositeSceneAt)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  // Illustrative: a 1000x600 base shown through its RIGHT half. The blur sits at world
+  // x 0..125, y 75..225: entirely in the left half, which the crop hides.
+  const bytes = enc({ w: 1000, h: 600 });
+  const hidden: Annotation = {
+    id: "b",
+    kind: "blur",
+    x: 0,
+    y: 0.125,
+    w: 0.125,
+    h: 0.25,
+  };
+  const cropped = (annotations: Annotation[]): Scene => ({
+    beautify: { bg: "none", padding: 0, radius: 0, shadow: 0 },
+    annotations,
+    baseCrop: { x: 0.5, y: 0, w: 0.5, h: 1 },
+  });
+  const rect125 = { x: 0, y: 75, w: 125, h: 150 };
+
+  /** Fakes `Image` so every src the compositor decodes is recorded; returns the base bytes. */
+  function fakeImages(): { baked: () => ArrayBuffer } {
+    const srcs: string[] = [];
+    vi.stubGlobal(
+      "Image",
+      class {
+        naturalWidth = 1000;
+        naturalHeight = 600;
+        onload: (() => void) | null = null;
+        set src(url: string) {
+          srcs.push(url);
+          queueMicrotask(() => this.onload?.());
+        }
+      },
+    );
+    return {
+      // The first image the compositor decodes is the (baked) base.
+      baked: () => {
+        const png = /^data:image\/png;base64,(.*)$/.exec(srcs[0])![1];
+        return Uint8Array.from(atob(png), (c) => c.charCodeAt(0)).buffer;
+      },
+    };
+  }
+
+  it("bakes a blur over the cropped-out part of the base, given a scene that has the crop", async () => {
+    fakeBrowser();
+    const images = fakeImages();
+    const scene = cropped([hidden]);
+    expect(scene.baseCrop).toBeDefined(); // the crop IS in the input
+    await compositeSceneAt(scene, bytes, 1000, { canvas: true, assets: {} });
+    // Against the visible (right-half) rect the blur would miss the base and nothing be baked.
+    expect(dec(images.baked()).rects).toEqual([rect125]);
+  });
+
+  it("bakes a blur that straddles the crop edge across the whole base, not only its visible half", async () => {
+    fakeBrowser();
+    const images = fakeImages();
+    // World x 375..625 (normalized 0.375..0.625): half in the hidden left half, half in the visible.
+    const straddling: Annotation = { ...hidden, x: 0.375, y: 0.125, w: 0.25, h: 0.25 };
+    await compositeSceneAt(cropped([straddling]), bytes, 1000, { canvas: true, assets: {} });
+    expect(dec(images.baked()).rects).toEqual([{ x: 375, y: 75, w: 250, h: 150 }]);
+  });
+
+  it("redact over a cropped-out part, save, reopen and widen the crop: the pixels stay redacted", async () => {
+    fakeBrowser();
+    const first = fakeImages();
+    const scene = cropped([hidden]);
+    // Save 1 bakes the whole asset even though the crop hides the blur.
+    await compositeSceneAt(scene, bytes, 1000, { canvas: true, assets: {} });
+    const saved = first.baked();
+    expect(dec(saved).rects).toEqual([rect125]);
+    // The stored document keeps the crop and marks the blur locked.
+    const reopened = parseCanvasDoc(
+      JSON.stringify(buildCanvasDoc(scene, { pixelWidth: 1000, pixelHeight: 600 })),
+    )!;
+    expect(reopened.scene.baseCrop).toEqual(scene.baseCrop);
+    expect(reopened.scene.annotations).toEqual([
+      expect.objectContaining({ kind: "blur", locked: true }),
+    ]);
+    // Save 2, after the crop was widened to the whole asset, starts from the stored asset: the
+    // locked blur is not baked again and the pixels of save 1 are what the export decodes.
+    vi.unstubAllGlobals();
+    const second = fakeImages();
+    await compositeSceneAt({ ...reopened.scene, baseCrop: undefined }, saved, 1000, {
+      canvas: true,
+      assets: {},
+    });
+    expect(new Uint8Array(second.baked())).toEqual(new Uint8Array(saved));
+    expect(dec(second.baked()).rects).toEqual([rect125]);
   });
 });

@@ -471,8 +471,11 @@ function ScreenshotEditorBody({
   // The words a person can select: those no redaction of this session (saved or not) covers.
   const visibleWords = useMemo(() => {
     if (recognized.status !== "ready" || !natural || natural.w <= 0 || natural.h <= 0) return [];
-    return wordsOutsideRects(recognized.words, redactionRectsInPixels(scene.annotations, natural));
-  }, [recognized, natural, scene.annotations]);
+    return wordsOutsideRects(
+      recognized.words,
+      redactionRectsInPixels(scene.annotations, natural, scene.basePlacement),
+    );
+  }, [recognized, natural, scene.annotations, scene.basePlacement]);
   const textSelection = useTextSelection(visibleWords);
   const textActive = textEnabled && tools.tool === "selectText";
   // The redact tool hides recognized lines in one click (NIW2-706), canvas mode only.
@@ -614,6 +617,10 @@ function ScreenshotEditorBody({
     annotations: scene.annotations,
     crop: scene.crop,
     exportFrame: scene.exportFrame,
+    // Per-image crop, unit 3: carried through, never written by this editor yet.
+    ...(scene.baseCrop ? { baseCrop: scene.baseCrop } : {}),
+    ...(scene.baseRadius !== undefined ? { baseRadius: scene.baseRadius } : {}),
+    ...(scene.basePlacement ? { basePlacement: scene.basePlacement } : {}),
   });
   // The scene and title field as of the latest render, for queued jobs to read.
   const latest = useRef({ scene: currentScene(), draft: captureTitle.draft });
@@ -1093,6 +1100,9 @@ function ScreenshotEditorBody({
       await image!.getBytes(),
       assetsRef.current,
       snap.annotations,
+      // Where the whole base asset sits (a resized base), never its crop: a blur over a
+      // cropped-out part must still reach the stored pixels.
+      snap.basePlacement,
     );
     // A text a redaction covers entirely is hidden in the PNG, so its characters must not sit
     // in the document as plain JSON either (NIW2-799). The live scene keeps it.
@@ -1134,7 +1144,7 @@ function ScreenshotEditorBody({
     if (!textEnabled || result.status !== "ready") return null;
     const words = wordsOutsideRects(
       result.words,
-      redactionRectsInPixels(snap.annotations, naturalNow()),
+      redactionRectsInPixels(snap.annotations, naturalNow(), snap.basePlacement),
     );
     return { assets: [{ assetId: BASE_ASSET_ID, words }] };
   };

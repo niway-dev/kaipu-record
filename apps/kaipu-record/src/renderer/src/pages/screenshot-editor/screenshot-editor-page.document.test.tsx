@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import { dismissToast, getToasts } from "@renderer/ui/toast-store";
 import type { ImageSource } from "@renderer/features/screenshots/image-source";
 import type { CanvasReadResult } from "@shared/types/screenshot-canvas";
+import { bakeCanvasRedactions } from "@renderer/features/screenshots/annotations/redaction";
 import { ScreenshotEditor, ScreenshotEditorPage } from "./screenshot-editor-page";
 
 // The editable document (ADR 0053, NIW2-700) only exists in canvas mode.
@@ -427,6 +428,24 @@ describe("ScreenshotEditor — saving the document (image-canvas)", () => {
     expect(canvas.assets).toHaveLength(1);
     expect(canvas.assets[0].assetId).toBe("base");
     expect(canvas.assets[0].png).toBeInstanceOf(ArrayBuffer);
+  });
+
+  it("privacy: Save bakes against the base's placement from a reopened v3 document, not the unit rect", async () => {
+    // A v3 document whose base is shown at half size: its visible rect is 200 x 200 of a
+    // 400 x 400 asset, so the reader derives a placement of scale 0.5 at the origin.
+    readCanvas.mockResolvedValue(
+      stored(docJson({ schemaVersion: 3, items: [{ ...image, w: 200, h: 200 }] })),
+    );
+    mountLocal();
+    await loadImage();
+    vi.mocked(bakeCanvasRedactions).mockClear();
+    await drawBlurAndSave();
+    expect(bakeCanvasRedactions).toHaveBeenCalled();
+    expect(vi.mocked(bakeCanvasRedactions).mock.calls.at(-1)![3]).toEqual({
+      x: 0,
+      y: 0,
+      scale: 0.5,
+    });
   });
 
   it("the document records the image's pixel size", async () => {

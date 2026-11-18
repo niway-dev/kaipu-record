@@ -188,11 +188,72 @@ export interface CropRect {
   h: number;
 }
 
+/**
+ * Where the WHOLE base asset sits on the canvas (per-image crop, unit 3): its top-left in the
+ * same base-normalized units as every annotation, and a uniform `scale` (1 = natural size,
+ * never a stretch). Absent = the identity, `{ x: 0, y: 0, scale: 1 }`. The world origin and
+ * the units of every other item never move: a resized base moves only this, so no annotation
+ * coordinate is rewritten.
+ */
+export interface BasePlacement {
+  x: number;
+  y: number;
+  scale: number;
+}
+
+/** A rect in base-normalized world units. */
+export interface NormalizedRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * The rect the whole base asset covers, base-normalized: `{0, 0, 1, 1}` without a placement.
+ * It does not depend on `baseCrop`, so anything that works on the base's pixels (redaction
+ * baking) cannot lose the hidden part by reading a crop. An invalid placement (non-finite,
+ * zero or negative scale) throws: it fails closed, like `fullRect`.
+ */
+export function baseFullRect(s: { basePlacement?: BasePlacement }): NormalizedRect {
+  const p = s.basePlacement;
+  if (!p) return { x: 0, y: 0, w: 1, h: 1 };
+  if (![p.x, p.y, p.scale].every(Number.isFinite) || p.scale <= 0) {
+    throw new RangeError("base: invalid placement");
+  }
+  return { x: p.x, y: p.y, w: p.scale, h: p.scale };
+}
+
+/**
+ * The part of the base that shows: its `baseCrop` window of the whole asset rect. This is the
+ * rect selection, extents and the export box see (the base's `x/y/w/h`, as for an added image).
+ * Without a crop it is the whole asset rect.
+ */
+export function baseVisibleRect(s: {
+  basePlacement?: BasePlacement;
+  baseCrop?: CropRect;
+}): NormalizedRect {
+  const f = baseFullRect(s);
+  const c = s.baseCrop;
+  if (!c) return f;
+  // Like `fullRect`: a crop that is not a real window throws, never a NaN or empty rect.
+  if (![c.x, c.y, c.w, c.h].every(Number.isFinite) || c.w <= 0 || c.h <= 0) {
+    throw new RangeError("base: invalid crop");
+  }
+  return { x: f.x + c.x * f.w, y: f.y + c.y * f.h, w: c.w * f.w, h: c.h * f.h };
+}
+
 /** The full editing document: beautify settings + the annotation layer. */
 export interface Scene {
   beautify: BeautifyState;
   annotations: Annotation[];
   crop?: CropRect;
+  /** The base's non-destructive crop: the window of the asset that shows, 0–1 of the asset. */
+  baseCrop?: CropRect;
+  /** The base's own corner radius in source px. Absent = follows `beautify.radius`. */
+  baseRadius?: number;
+  /** Where the whole base asset sits and how big it is. Absent = unmoved, natural size. */
+  basePlacement?: BasePlacement;
   /**
    * Canvas mode only (NIW2-698): the export window in WORLD-normalized units — the same
    * units as annotations (relative to the base image, may exceed 0–1). The output is
@@ -207,7 +268,10 @@ export function sameScene(a: Scene, b: Scene): boolean {
     a.beautify === b.beautify &&
     a.annotations === b.annotations &&
     a.crop === b.crop &&
-    a.exportFrame === b.exportFrame
+    a.exportFrame === b.exportFrame &&
+    a.baseCrop === b.baseCrop &&
+    a.baseRadius === b.baseRadius &&
+    a.basePlacement === b.basePlacement
   );
 }
 
