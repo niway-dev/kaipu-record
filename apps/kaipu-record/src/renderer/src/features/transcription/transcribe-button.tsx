@@ -25,6 +25,11 @@ export interface TranscribeButtonProps {
   variant: TranscribeButtonVariant;
   /** The catalog area this button is on the screen that hosts it (`uiArea("<screen>.<area>")`). */
   ui?: UiAreaProps;
+  /**
+   * Given, the "Transcribed" badge is a button that calls it: the Library detail page opens its
+   * Transcript tab. Without it (cards, rows, the editor) the badge stays a plain label.
+   */
+  onOpenTranscript?: () => void;
 }
 
 const ICON_SIZE: Record<TranscribeButtonVariant, number> = {
@@ -79,24 +84,38 @@ function percentOf(received: number, total: number): number {
  * page and the editor. It shows what `useTranscribeControl` decides: nothing with the flag off or
  * without local media, "Transcribe" when a job can start, the download offer when the speech
  * model is missing, progress with a Cancel while a job runs, and a non-clickable "Transcribed"
- * badge once the video has a transcript. A click never reaches the card or row around it.
+ * badge once the video has a transcript (a button when `onOpenTranscript` is given). A click never reaches the card or row around it.
  */
 export function TranscribeButton({
   item,
   variant,
   ui,
+  onOpenTranscript,
 }: TranscribeButtonProps): React.JSX.Element | null {
   const control = useTranscribeControl(item);
-  return <TranscribeButtonView control={control} variant={variant} ui={ui} />;
+  return (
+    <TranscribeButtonView
+      control={control}
+      variant={variant}
+      ui={ui}
+      onOpenTranscript={onOpenTranscript}
+    />
+  );
 }
 
 interface ViewProps {
   control: TranscribeControl;
   variant: TranscribeButtonVariant;
   ui?: UiAreaProps;
+  onOpenTranscript?: () => void;
 }
 
-function TranscribeButtonView({ control, variant, ui }: ViewProps): React.JSX.Element | null {
+function TranscribeButtonView({
+  control,
+  variant,
+  ui,
+  onOpenTranscript,
+}: ViewProps): React.JSX.Element | null {
   const t = useTranslations("transcription");
   const { state } = control;
   const [offerOpen, setOfferOpen] = useState(false);
@@ -131,22 +150,41 @@ function TranscribeButtonView({ control, variant, ui }: ViewProps): React.JSX.El
 
   if (state.kind === "done") {
     const label = t("transcribed");
+    // The editor's title bar hides the word with display:none, which would leave the badge
+    // nameless: the name is on the badge itself.
+    const content = (
+      <>
+        <Check size={iconSize} strokeWidth={2} aria-hidden />
+        <span className={showLabel ? styles.label : styles.visuallyHidden} {...labelProps}>
+          {label}
+        </span>
+      </>
+    );
     return (
       <span {...rootProps}>
-        {/* The editor's title bar hides the word with display:none, which would leave the badge
-            nameless: the name is on the badge itself. */}
-        <span
-          className={styles.badge}
-          role="img"
-          aria-label={label}
-          title={label}
-          data-testid="transcribe-done"
-        >
-          <Check size={iconSize} strokeWidth={2} aria-hidden />
-          <span className={showLabel ? styles.label : styles.visuallyHidden} {...labelProps}>
-            {label}
+        {onOpenTranscript ? (
+          <button
+            type="button"
+            className={styles.badge}
+            data-clickable=""
+            title={label}
+            aria-label={label}
+            data-testid="transcribe-done"
+            onClick={onOpenTranscript}
+          >
+            {content}
+          </button>
+        ) : (
+          <span
+            className={styles.badge}
+            role="img"
+            aria-label={label}
+            title={label}
+            data-testid="transcribe-done"
+          >
+            {content}
           </span>
-        </span>
+        )}
       </span>
     );
   }

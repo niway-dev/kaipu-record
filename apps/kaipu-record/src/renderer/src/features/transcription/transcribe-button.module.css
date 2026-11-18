@@ -66,6 +66,15 @@
   cursor: default;
 }
 
+/* The badge as a button (detail page): it opens the Transcript tab. */
+.badge[data-clickable] {
+  cursor: pointer;
+}
+
+.badge[data-clickable]:hover {
+  background: color-mix(in srgb, var(--accent-green) 12%, var(--bg-modal));
+}
+
 .progress {
   color: var(--accent-primary);
   border-color: var(--accent-primary);

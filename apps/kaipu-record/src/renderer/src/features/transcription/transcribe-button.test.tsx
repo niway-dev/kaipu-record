@@ -298,6 +298,24 @@ describe("TranscribeButton", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
+  it("done with onOpenTranscript: the badge is a button that opens the transcript", () => {
+    setControl({ kind: "done" });
+    const onOpen = vi.fn();
+    const onParentClick = vi.fn();
+    render(
+      <div onClick={onParentClick}>
+        <TranscribeButton item={ITEM} variant="detail" onOpenTranscript={onOpen} />
+      </div>,
+    );
+    const badge = screen.getByRole("button", { name: "Transcribed" });
+    expect(badge).toBe(screen.getByTestId("transcribe-done"));
+    expect(badge).toHaveTextContent("Transcribed");
+    fireEvent.click(badge);
+    expect(onOpen).toHaveBeenCalledOnce();
+    // Like every click in here, it never reaches the card or row around it.
+    expect(onParentClick).not.toHaveBeenCalled();
+  });
+
   it("never says Translate, in any state", () => {
     for (const state of [
       { kind: "idle" },
