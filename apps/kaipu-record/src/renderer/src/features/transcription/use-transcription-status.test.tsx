@@ -257,4 +257,27 @@ describe("useTranscriptionStatus", () => {
     expect(remove).toHaveBeenCalledWith(MODEL_ID);
     expect(result.current.status?.models[0].status).toEqual({ state: "missing" });
   });
+
+  it("remove and cancel do not reject when the IPC call does, and remove re-reads the disk state", async () => {
+    const getStatus = vi.fn(async () => statusOf({ state: "ready" }));
+    stubApi({
+      getTranscriptionStatus: getStatus,
+      removeTranscriptionModel: async () => {
+        throw new Error("ipc down");
+      },
+      cancelTranscriptionModelDownload: async () => {
+        throw new Error("ipc down");
+      },
+    });
+    const { result } = renderHook(() => useTranscriptionStatus());
+    await waitFor(() => expect(result.current.status).not.toBeNull());
+
+    await act(async () => {
+      await expect(result.current.cancel(MODEL_ID)).resolves.toBeUndefined();
+      await expect(result.current.remove(MODEL_ID)).resolves.toBeUndefined();
+    });
+
+    expect(getStatus).toHaveBeenCalledTimes(2);
+    expect(result.current.status?.models[0].status).toEqual({ state: "ready" });
+  });
 });

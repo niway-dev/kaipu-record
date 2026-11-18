@@ -135,13 +135,15 @@ export function useTranscriptionStatus(): TranscriptionStatusApi {
     [refresh],
   );
 
+  // A rejected IPC call is swallowed, not left as an unhandled rejection. Remove then re-reads the
+  // state, so a model that is still on disk keeps showing as installed.
   const cancel = useCallback(async (id: string) => {
-    await window.electronAPI.cancelTranscriptionModelDownload(id);
+    await window.electronAPI.cancelTranscriptionModelDownload(id).catch(() => {});
   }, []);
 
   const remove = useCallback(
     async (id: string) => {
-      await window.electronAPI.removeTranscriptionModel(id);
+      await window.electronAPI.removeTranscriptionModel(id).catch(() => {});
       await refresh();
     },
     [refresh],
