@@ -4,8 +4,9 @@
  * typed rejection, so a caller can tell a file from a newer app (`unsupported-version`) from a
  * damaged one (`invalid`).
  */
-import { open, readFile, rename, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { z } from "zod";
+import { atomicWriteFile } from "../library/atomic-write";
 import type { Seam, Segment } from "./segment";
 import { DEFAULT_SPEECH_MARGIN_DB, speechThresholdDb, voicedMs } from "./segment";
 import { reconcile, type Word } from "./words";
@@ -150,25 +151,12 @@ export async function readTranscriptFile(path: string): Promise<ReadResult> {
   return parseTranscript(json);
 }
 
-/** Writes `<path>.tmp`, flushes it, renames it over `path`. The temp file is removed on failure. */
+/** Writes the transcript with the library's atomic write: unique temp file, fsync, rename, folder flush. */
 export async function writeTranscriptFileAtomic(
   path: string,
   transcript: Transcript,
 ): Promise<void> {
-  const temp = `${path}.tmp`;
-  try {
-    const handle = await open(temp, "w");
-    try {
-      await handle.writeFile(serializeTranscript(transcript), "utf8");
-      await handle.sync();
-    } finally {
-      await handle.close();
-    }
-    await rename(temp, path);
-  } catch (error) {
-    await rm(temp, { force: true }).catch(() => {});
-    throw error;
-  }
+  await atomicWriteFile(path, serializeTranscript(transcript));
 }
 
 export type BuildTranscriptInput = {
