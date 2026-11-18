@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { buildCameraPath, type CameraPath } from "../zoom/camera-path";
-import { WEBCAM_DEFAULTS, type WebcamScene } from "../webcam/webcam-model";
+import { WEBCAM_DEFAULTS, webcamStateAt, type WebcamScene } from "../webcam/webcam-model";
+import { webcamStateRect } from "../webcam/webcam-layout";
 import { WebcamLayer } from "./webcam-layer";
 import { PreviewStage } from "./preview-stage";
 import type { PreviewPlayback } from "../use-preview-playback";
+import { sourceAxis } from "../source-axis";
+import type { PreviewMedia } from "../playback-media";
 
 const FRAME = { width: 1000, height: 1000 };
 const flatPath: CameraPath = buildCameraPath([], null, 30);
@@ -49,10 +52,10 @@ const bubble = (): HTMLElement => screen.getByTestId("webcam-layer");
 
 function renderLayer(
   props: Partial<React.ComponentProps<typeof WebcamLayer>> & {
-    videoRef: React.RefObject<HTMLVideoElement | null>;
+    videoRef: React.RefObject<PreviewMedia | null>;
   },
 ) {
-  const handlers = { onSelect: vi.fn(), onBegin: vi.fn(), onMove: vi.fn(), onEnd: vi.fn() };
+  const handlers = { onSelect: vi.fn(), onDrop: vi.fn() };
   const utils = render(
     <WebcamLayer
       src="kaipu-media://webcam/rec-1"
@@ -64,6 +67,7 @@ function renderLayer(
       hidden={false}
       interactive
       selected={false}
+      dropAt={null}
       {...handlers}
       {...props}
     />,
@@ -77,6 +81,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   document.body.innerHTML = "";
 });
 
@@ -161,10 +166,9 @@ describe("WebcamLayer", () => {
         hidden={false}
         interactive
         selected={false}
+        dropAt={null}
         onSelect={vi.fn()}
-        onBegin={vi.fn()}
-        onMove={vi.fn()}
-        onEnd={vi.fn()}
+        onDrop={vi.fn()}
       />,
     );
     expect(bubble().style.width).toBe("20%");
@@ -402,22 +406,370 @@ describe("WebcamLayer", () => {
     expect(onWindowKey).not.toHaveBeenCalled();
   });
 
-  it("a drag reports clamped centres between one begin and one end", () => {
-    const { ref } = mainVideo(1);
-    const { handlers, container } = renderLayer({ videoRef: ref });
+  /** A layer in a 1000 px frame whose slot measures 1000 px, with the webcam file loaded. */
+  function dragSetup(
+    webcam: WebcamScene = scene(),
+    extra: Partial<React.ComponentProps<typeof WebcamLayer>> = {},
+  ) {
+    const { ref, el } = mainVideo(1);
+    const view = renderLayer({ videoRef: ref, webcam, ...extra });
     loadWebcam(30);
-    const slot = container.querySelector('[data-testid="webcam-slot"]') as HTMLElement;
+    const slot = view.container.querySelector('[data-testid="webcam-slot"]') as HTMLElement;
     slot.getBoundingClientRect = () => ({ width: 1000, height: 1000 }) as DOMRect;
+    return { ...view, el, ref };
+  }
+  const center = (): { x: number; y: number } => {
+    const b = bubble();
+    return {
+      x: parseFloat(b.style.left) / 100 + parseFloat(b.style.width) / 200,
+      y: parseFloat(b.style.top) / 100 + parseFloat(b.style.height) / 200,
+    };
+  };
+
+  it("a drag moves only the bubble's element, 1:1 with the pointer and stopped by the frame edge", () => {
+    const { handlers } = dragSetup();
+    fireEvent.pointerDown(bubble(), { clientX: 500, clientY: 500, pointerId: 1 });
+    fireEvent.pointerMove(bubble(), { clientX: 600, clientY: 500, pointerId: 1 });
+    expect(center().x).toBeCloseTo(0.6, 6);
+    expect(center().y).toBeCloseTo(0.5, 6);
+    // Far right: held so the 200 px bubble stays inside the frame.
+    fireEvent.pointerMove(bubble(), { clientX: 2000, clientY: 500, pointerId: 1 });
+    expect(center().x).toBeCloseTo(0.9, 6);
+    // Nothing reached the page: no selection, no drop, until the pointer is released.
+    expect(handlers.onSelect).not.toHaveBeenCalled();
+    expect(handlers.onDrop).not.toHaveBeenCalled();
+    expect(bubble().dataset.dragging).toBe("true");
+  });
+
+  it("reports ONE drop on release, with the clamped centre and the source time", () => {
+    const { handlers } = dragSetup();
     fireEvent.pointerDown(bubble(), { clientX: 500, clientY: 500, pointerId: 1 });
     fireEvent.pointerMove(bubble(), { clientX: 600, clientY: 500, pointerId: 1 });
     fireEvent.pointerMove(bubble(), { clientX: 2000, clientY: 500, pointerId: 1 });
-    fireEvent.pointerUp(bubble(), { pointerId: 1 });
-    expect(handlers.onSelect).toHaveBeenCalledOnce();
-    expect(handlers.onBegin).toHaveBeenCalledOnce();
-    expect(handlers.onMove).toHaveBeenNthCalledWith(1, { x: 0.6, y: 0.5 }, 1);
-    // Far right: held so the 200 px bubble stays inside the frame.
-    expect(handlers.onMove).toHaveBeenNthCalledWith(2, { x: 0.9, y: 0.5 }, 1);
-    expect(handlers.onEnd).toHaveBeenCalledOnce();
+    fireEvent.pointerUp(bubble(), { clientX: 2000, clientY: 500, pointerId: 1 });
+    expect(handlers.onDrop).toHaveBeenCalledOnce();
+    const [position, sourceTime] = handlers.onDrop.mock.calls[0]!;
+    expect(position.x).toBeCloseTo(0.9, 6);
+    expect(position.y).toBeCloseTo(0.5, 6);
+    expect(sourceTime).toBe(1);
+    expect(handlers.onSelect).not.toHaveBeenCalled();
+    expect(bubble().dataset.dragging).toBe("false");
+  });
+
+  it("a press that moves under 3 px is a click: it selects and drops nothing", () => {
+    const { handlers } = dragSetup();
+    fireEvent.pointerDown(bubble(), { clientX: 500, clientY: 500, pointerId: 1 });
+    fireEvent.pointerMove(bubble(), { clientX: 502, clientY: 501, pointerId: 1 });
+    fireEvent.pointerUp(bubble(), { clientX: 502, clientY: 501, pointerId: 1 });
+    expect(handlers.onSelect).toHaveBeenCalledExactlyOnceWith(1);
+    expect(handlers.onDrop).not.toHaveBeenCalled();
+    // And the bubble is back where the scene has it.
+    expect(center().x).toBeCloseTo(0.5, 6);
+  });
+
+  it("a press that moves 3 px or more is a drag", () => {
+    const { handlers } = dragSetup();
+    fireEvent.pointerDown(bubble(), { clientX: 500, clientY: 500, pointerId: 1 });
+    fireEvent.pointerMove(bubble(), { clientX: 503, clientY: 500, pointerId: 1 });
+    fireEvent.pointerUp(bubble(), { clientX: 503, clientY: 500, pointerId: 1 });
+    expect(handlers.onDrop).toHaveBeenCalledOnce();
+    expect(handlers.onSelect).not.toHaveBeenCalled();
+  });
+
+  it("a press that went out past 3 px and came back is still a drag: it drops and selects nothing", () => {
+    const { handlers } = dragSetup();
+    fireEvent.pointerDown(bubble(), { clientX: 500, clientY: 500, pointerId: 1 });
+    fireEvent.pointerMove(bubble(), { clientX: 600, clientY: 500, pointerId: 1 });
+    fireEvent.pointerMove(bubble(), { clientX: 501, clientY: 500, pointerId: 1 });
+    fireEvent.pointerUp(bubble(), { clientX: 501, clientY: 500, pointerId: 1 });
+    expect(handlers.onDrop).toHaveBeenCalledOnce();
+    expect(handlers.onDrop.mock.calls[0]![0].x).toBeCloseTo(0.501, 6);
+    expect(handlers.onSelect).not.toHaveBeenCalled();
+  });
+
+  it("an aborted drag puts the bubble back and calls nothing", () => {
+    for (const abort of ["pointerCancel", "lostPointerCapture"] as const) {
+      const { handlers, unmount } = dragSetup();
+      fireEvent.pointerDown(bubble(), { clientX: 500, clientY: 500, pointerId: 1 });
+      fireEvent.pointerMove(bubble(), { clientX: 700, clientY: 500, pointerId: 1 });
+      expect(center().x).toBeCloseTo(0.7, 6);
+      fireEvent[abort](bubble(), { pointerId: 1 });
+      expect(center().x).toBeCloseTo(0.5, 6);
+      expect(bubble().dataset.dragging).toBe("false");
+      expect(handlers.onDrop).not.toHaveBeenCalled();
+      expect(handlers.onSelect).not.toHaveBeenCalled();
+      unmount();
+    }
+  });
+
+  it("a second drag cancelled while a card waits puts the bubble back at the dropped place", () => {
+    for (const abort of ["pointerCancel", "lostPointerCapture"] as const) {
+      const { rerender, handlers, ref, unmount } = dragSetup();
+      const props = {
+        src: "kaipu-media://webcam/rec-1",
+        startOffsetMs: 0,
+        webcam: scene(),
+        path: flatPath,
+        cameraEnabled: true,
+        frame: FRAME,
+        hidden: false,
+        interactive: true,
+        selected: false,
+        videoRef: ref,
+        ...handlers,
+      };
+      rerender(<WebcamLayer {...props} dropAt={{ x: 0.8, y: 0.3 }} />);
+      fireEvent.pointerDown(bubble(), { clientX: 800, clientY: 300, pointerId: 1 });
+      fireEvent.pointerMove(bubble(), { clientX: 600, clientY: 300, pointerId: 1 });
+      expect(center().x).toBeCloseTo(0.6, 6);
+      fireEvent[abort](bubble(), { pointerId: 1 });
+      // The card is still open on the dropped place, so that is where the bubble stays.
+      expect(center().x).toBeCloseTo(0.8, 6);
+      expect(center().y).toBeCloseTo(0.3, 6);
+      expect(handlers.onDrop).not.toHaveBeenCalled();
+      unmount();
+    }
+  });
+
+  describe("onHeldChange", () => {
+    /** The layer reports its state once on mount; what matters is what a gesture adds. */
+    function heldSetup() {
+      const onHeldChange = vi.fn();
+      const setup = dragSetup(scene(), { onHeldChange });
+      onHeldChange.mockClear();
+      return { ...setup, onHeldChange };
+    }
+
+    it("is true once the bubble moves past the click slop and false on release", () => {
+      const { onHeldChange } = heldSetup();
+      fireEvent.pointerDown(bubble(), { clientX: 500, clientY: 500, pointerId: 1 });
+      expect(onHeldChange).not.toHaveBeenCalled();
+      fireEvent.pointerMove(bubble(), { clientX: 503, clientY: 500, pointerId: 1 });
+      expect(onHeldChange.mock.calls).toEqual([[true]]);
+      fireEvent.pointerUp(bubble(), { clientX: 503, clientY: 500, pointerId: 1 });
+      expect(onHeldChange.mock.calls).toEqual([[true], [false]]);
+    });
+
+    it("is false when the drag is cancelled or loses the pointer", () => {
+      for (const abort of ["pointerCancel", "lostPointerCapture"] as const) {
+        const { onHeldChange, unmount } = heldSetup();
+        fireEvent.pointerDown(bubble(), { clientX: 500, clientY: 500, pointerId: 1 });
+        fireEvent.pointerMove(bubble(), { clientX: 700, clientY: 500, pointerId: 1 });
+        expect(onHeldChange.mock.calls).toEqual([[true]]);
+        fireEvent[abort](bubble(), { pointerId: 1 });
+        expect(onHeldChange.mock.calls).toEqual([[true], [false]]);
+        unmount();
+      }
+    });
+
+    // In the page, "held" pauses a playing video: a plain click must not.
+    it("is never raised by a press that moves under 3 px", () => {
+      const { onHeldChange } = heldSetup();
+      fireEvent.pointerDown(bubble(), { clientX: 500, clientY: 500, pointerId: 1 });
+      fireEvent.pointerMove(bubble(), { clientX: 502, clientY: 501, pointerId: 1 });
+      fireEvent.pointerUp(bubble(), { clientX: 502, clientY: 501, pointerId: 1 });
+      expect(onHeldChange).not.toHaveBeenCalled();
+    });
+  });
+
+  it("stays at the dropped place while a card waits, and goes back when it is gone", () => {
+    const { rerender, handlers, ref } = dragSetup();
+    const props = {
+      src: "kaipu-media://webcam/rec-1",
+      startOffsetMs: 0,
+      webcam: scene(),
+      path: flatPath,
+      cameraEnabled: true,
+      frame: FRAME,
+      hidden: false,
+      interactive: true,
+      selected: false,
+      videoRef: ref,
+      ...handlers,
+    };
+    rerender(<WebcamLayer {...props} dropAt={{ x: 0.8, y: 0.3 }} />);
+    expect(center().x).toBeCloseTo(0.8, 6);
+    expect(center().y).toBeCloseTo(0.3, 6);
+    rerender(<WebcamLayer {...props} dropAt={null} />);
+    expect(center().x).toBeCloseTo(0.5, 6);
+    expect(center().y).toBeCloseTo(0.5, 6);
+  });
+});
+
+// Camera sections (ADR 0039): the preview reads the export's state function at the media
+// time, with no CSS transition, so a slide is drawn frame by frame and seeking is exact.
+describe("WebcamLayer — a camera block's slide", () => {
+  const TARGET = { x: 0.8, y: 0.2 };
+  const sliding = (): WebcamScene =>
+    scene({
+      segments: [
+        {
+          id: "b",
+          start: 2,
+          end: 8,
+          mode: "override",
+          layout: { position: TARGET },
+          transition: { kind: "slide", ms: 700, easing: "back" },
+        },
+      ],
+    });
+  const box = () => ({
+    left: parseFloat(bubble().style.left),
+    top: parseFloat(bubble().style.top),
+    width: parseFloat(bubble().style.width),
+    height: parseFloat(bubble().style.height),
+  });
+
+  it("places the box where webcamStateRect puts it at each source time, inside the frame", () => {
+    const { ref, el } = mainVideo(1);
+    renderLayer({ videoRef: ref, webcam: sliding() });
+    loadWebcam(30);
+    const lefts: number[] = [];
+    for (const t of [2.1, 2.25, 2.4]) {
+      act(() => setTime(el, t));
+      const state = webcamStateAt({ webcam: sliding() }, t)!;
+      const rect = webcamStateRect(state, FRAME, 1)!;
+      const placed = box();
+      expect(placed.left).toBeCloseTo((rect.x / FRAME.width) * 100, 4);
+      expect(placed.top).toBeCloseTo((rect.y / FRAME.height) * 100, 4);
+      expect(placed.left).toBeGreaterThanOrEqual(0);
+      expect(placed.left + placed.width).toBeLessThanOrEqual(100 + 1e-9);
+      expect(placed.top).toBeGreaterThanOrEqual(0);
+      expect(placed.top + placed.height).toBeLessThanOrEqual(100 + 1e-9);
+      lefts.push(placed.left);
+    }
+    expect(new Set(lefts.map((l) => l.toFixed(3))).size).toBe(3);
+    // No CSS transition animates it: the box is exactly what the function says.
+    expect(bubble().style.transition).toBe("");
+  });
+
+  it("is where it was at the same time after seeking backwards", () => {
+    const { ref, el } = mainVideo(1);
+    renderLayer({ videoRef: ref, webcam: sliding() });
+    loadWebcam(30);
+    act(() => setTime(el, 2.25));
+    const forwards = box();
+    act(() => setTime(el, 5));
+    act(() => setTime(el, 1));
+    act(() => setTime(el, 2.25));
+    expect(box()).toEqual(forwards);
+  });
+
+  it("takes the non-position fields of the layout in force at once, not eased", () => {
+    const { ref, el } = mainVideo(1);
+    const webcam = scene({
+      segments: [
+        {
+          id: "b",
+          start: 2,
+          end: 8,
+          mode: "override",
+          layout: { position: TARGET, shape: "rounded", mirrored: false },
+          transition: { kind: "slide", ms: 700, easing: "back" },
+        },
+      ],
+    });
+    const { container } = renderLayer({ videoRef: ref, webcam });
+    const cam = loadWebcam(30);
+    act(() => setTime(el, 2.05));
+    expect(
+      (container.querySelector("[data-testid=webcam-layer]")!.firstElementChild as HTMLElement)
+        .style.clipPath,
+    ).toBe("inset(0 round 18% / 18%)");
+    expect(cam.style.transform).not.toContain("scaleX(-1)");
+  });
+
+  it("a drag grabbed mid-slide starts from where the bubble is drawn now, and keeps the bubble under the pointer", () => {
+    const { ref, el } = mainVideo(1);
+    const { handlers, container } = renderLayer({ videoRef: ref, webcam: sliding() });
+    loadWebcam(30);
+    act(() => setTime(el, 2.25));
+    const state = webcamStateAt({ webcam: sliding() }, 2.25)!;
+    const rect = webcamStateRect(state, FRAME, 1)!;
+    const slot = container.querySelector('[data-testid="webcam-slot"]') as HTMLElement;
+    slot.getBoundingClientRect = () => ({ width: 1000, height: 1000 }) as DOMRect;
+    fireEvent.pointerDown(bubble(), { clientX: 500, clientY: 500, pointerId: 1 });
+    // A tick of the clock mid-drag must not slide the bubble toward the part's place.
+    act(() => setTime(el, 2.3));
+    fireEvent.pointerMove(bubble(), { clientX: 550, clientY: 500, pointerId: 1 });
+    const left = parseFloat(bubble().style.left);
+    const width = parseFloat(bubble().style.width);
+    expect((left + width / 2) / 100).toBeCloseTo((rect.x + rect.width / 2) / FRAME.width + 0.05, 6);
+    fireEvent.pointerUp(bubble(), { clientX: 550, clientY: 500, pointerId: 1 });
+    const [position] = handlers.onDrop.mock.calls[0]!;
+    expect(position.x).toBeCloseTo((rect.x + rect.width / 2) / FRAME.width + 0.05, 6);
+    expect(position.y).toBeCloseTo((rect.y + rect.height / 2) / FRAME.height, 6);
+  });
+
+  it("moves a slide on every display frame while the screen is still, and stops when paused", () => {
+    // A queue of pending frames by id, so a cancel really removes one.
+    const queue = new Map<number, FrameRequestCallback>();
+    let nextId = 1;
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      queue.set(nextId, cb);
+      return nextId++;
+    });
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => void queue.delete(id));
+    const { ref, el } = mainVideo(2.1);
+    renderLayer({ videoRef: ref, webcam: sliding() });
+    loadWebcam(30);
+    let paused = true;
+    Object.defineProperty(el, "paused", { configurable: true, get: () => paused });
+    paused = false;
+    act(() => void fireEvent(el, new Event("play")));
+    // No presented frame and no `timeupdate`: only the media clock moves.
+    const leftAt = (t: number): number => {
+      el.currentTime = t;
+      const next = [...queue.values()];
+      queue.clear();
+      act(() => next.forEach((cb) => cb(0)));
+      return box().left;
+    };
+    const a = leftAt(2.2);
+    const b = leftAt(2.3);
+    const rect = (t: number) =>
+      webcamStateRect(webcamStateAt({ webcam: sliding() }, t)!, FRAME, 1)!;
+    expect(a).toBeCloseTo((rect(2.2).x / FRAME.width) * 100, 6);
+    expect(b).toBeCloseTo((rect(2.3).x / FRAME.width) * 100, 6);
+    expect(a).not.toBe(b);
+    // Paused: the frame the loop had queued is cancelled, so nothing keeps asking for more.
+    expect(queue.size).toBe(1);
+    paused = true;
+    act(() => void fireEvent(el, new Event("pause")));
+    expect(queue.size).toBe(0);
+  });
+
+  it("caps the last return by the recording's end when it is given", () => {
+    const back = (): WebcamScene =>
+      scene({
+        segments: [
+          {
+            id: "b",
+            start: 2,
+            end: 5,
+            mode: "override",
+            layout: { position: TARGET },
+            transition: { kind: "slide", ms: 700, easing: "linear" },
+          },
+        ],
+      });
+    const settledLeft = (() => {
+      const { ref, el } = mainVideo(1);
+      const view = renderLayer({ videoRef: ref, webcam: back(), endSeconds: 6 });
+      loadWebcam(30);
+      // 1 s are left after the block: its return takes 0.5 s, so it is settled at 5.6.
+      act(() => setTime(el, 5.6));
+      const left = parseFloat(bubble().style.left);
+      view.unmount();
+      return left;
+    })();
+    expect(settledLeft).toBeCloseTo(40, 3);
+    const { ref, el } = mainVideo(1);
+    renderLayer({ videoRef: ref, webcam: back() });
+    loadWebcam(30);
+    // Without the end the return takes its whole 0.7 s: still moving at 5.6.
+    act(() => setTime(el, 5.6));
+    expect(parseFloat(bubble().style.left)).not.toBeCloseTo(40, 1);
   });
 });
 
@@ -451,5 +803,73 @@ describe("PreviewStage — webcam slot", () => {
     const children = Array.from(picture.children);
     expect(children.indexOf(webcam)).toBe(children.indexOf(contentRef.current!) + 1);
     expect(children.indexOf(screen.getByTestId("slot-chrome"))).toBe(children.indexOf(webcam) + 1);
+  });
+});
+
+describe("WebcamLayer over joined recordings (ADR 0058)", () => {
+  const source = (id: string, offset: number, durationSeconds: number) => ({
+    id,
+    assetId: `asset-${id}`,
+    title: id,
+    offset,
+    durationSeconds,
+    width: 1280,
+    height: 720,
+  });
+  // Opened [0, 100] (webcam, 500 ms late); B [3600, 3640] (webcam, 200 ms late); C [7200, 7230] has none.
+  const recordings = {
+    axis: sourceAxis(100, [source("B", 3600, 40), source("C", 7200, 30)]),
+    files: new Map([
+      [null, { src: "kaipu-media://webcam/opened", startOffsetMs: 500 }],
+      ["B", { src: "kaipu-media://webcam/b", startOffsetMs: 200 }],
+      ["C", { src: null, startOffsetMs: 0 }],
+    ]),
+  };
+  const layer = (el: HTMLVideoElement) =>
+    renderLayer({
+      videoRef: { current: el },
+      src: "kaipu-media://webcam/opened",
+      startOffsetMs: 500,
+      recordings,
+    });
+
+  it("plays the active recording's own webcam file, swapped when the playhead crosses over", () => {
+    const { el } = mainVideo(5);
+    layer(el);
+    const cam = loadWebcam(100);
+    expect(cam.getAttribute("src")).toBe("kaipu-media://webcam/opened");
+    act(() => setTime(el, 3610));
+    expect(cam.getAttribute("src")).toBe("kaipu-media://webcam/b");
+    act(() => setTime(el, 20));
+    expect(cam.getAttribute("src")).toBe("kaipu-media://webcam/opened");
+  });
+
+  it("aims the webcam at the LOCAL second minus that file's own offset", () => {
+    const { el } = mainVideo(5);
+    layer(el);
+    const cam = loadWebcam(100);
+    act(() => setTime(el, 3610)); // 10 s into B; its webcam started 200 ms late
+    expect(cam.currentTime).toBeCloseTo(9.8, 6);
+  });
+
+  it("hides the face during clips of a recording that has no webcam, and brings it back", () => {
+    const { el } = mainVideo(5);
+    layer(el);
+    loadWebcam(100);
+    expect(bubble().style.display).toBe("");
+    act(() => setTime(el, 7210));
+    expect(bubble().style.display).toBe("none");
+    act(() => setTime(el, 20));
+    expect(bubble().style.display).toBe("");
+  });
+
+  it("applies the scene's one layout to every recording's face", () => {
+    const { el } = mainVideo(5);
+    layer(el);
+    loadWebcam(100);
+    const before = [bubble().style.left, bubble().style.top, bubble().style.width];
+    act(() => setTime(el, 3610));
+    loadWebcam(100);
+    expect([bubble().style.left, bubble().style.top, bubble().style.width]).toEqual(before);
   });
 });

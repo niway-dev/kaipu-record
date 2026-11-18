@@ -1,9 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { WEBCAM_DEFAULTS, type WebcamLayout, type WebcamScene } from "../webcam/webcam-model";
-import { WEBCAM_POSITION_PRESETS } from "../webcam/webcam-layout";
+import {
+  WEBCAM_DEFAULTS,
+  webcamStateAt,
+  type WebcamLayout,
+  type WebcamScene,
+  type WebcamTransition,
+} from "../webcam/webcam-model";
+import { webcamStateRect } from "../webcam/webcam-layout";
 import { drawWebcamLayer, planWebcamDraw, type WebcamCtx } from "./compose-webcam";
 
 const IMAGE = { width: 1280, height: 720 };
+/** The four corners, four edge middles and the centre: where a dragged bubble most often lands. */
+const EDGE_AND_CENTER_POSITIONS = [
+  { id: "top-left", x: 0, y: 0 },
+  { id: "top", x: 0.5, y: 0 },
+  { id: "top-right", x: 1, y: 0 },
+  { id: "left", x: 0, y: 0.5 },
+  { id: "center", x: 0.5, y: 0.5 },
+  { id: "right", x: 1, y: 0.5 },
+  { id: "bottom-left", x: 0, y: 1 },
+  { id: "bottom", x: 0.5, y: 1 },
+  { id: "bottom-right", x: 1, y: 1 },
+] as const;
 const layout = (patch: Partial<WebcamLayout> = {}): WebcamLayout => ({
   ...WEBCAM_DEFAULTS,
   ...patch,
@@ -73,6 +91,121 @@ describe("planWebcamDraw", () => {
     expect(plan.cornerRadius).toBe(0.25);
   });
 
+  describe("camera sections (ADR 0039)", () => {
+    const frame = { width: 1920, height: 1080 };
+    const TARGET = { x: 0.88, y: 0.18 };
+    // The default sits bottom-left; the block from 10 s moves the bubble to the top right.
+    const block = (transition?: WebcamTransition): WebcamScene =>
+      scene({ position: { x: 0.12, y: 0.82 } }, [
+        {
+          id: "b",
+          start: 10,
+          end: 20,
+          mode: "override",
+          layout: { position: TARGET },
+          ...(transition ? { transition } : {}),
+        },
+      ]);
+    const SLIDE: WebcamTransition = { kind: "slide", ms: 700, easing: "back" };
+
+    it("moves the bubble through distinct places, inside the frame, while a slide plays", () => {
+      const s = block(SLIDE);
+      const xs = [10.1, 10.25, 10.4].map((t) => {
+        const plan = planWebcamDraw(s, t, frame, 1, IMAGE)!;
+        expect(inside(plan.rect, frame)).toBe(true);
+        return plan.rect.x;
+      });
+      expect(new Set(xs.map((x) => x.toFixed(3))).size).toBe(3);
+      // And it ends on the target once the slide is over.
+      const settled = planWebcamDraw(s, 11, frame, 1, IMAGE)!;
+      const at = planWebcamDraw(scene({ position: TARGET }), 0, frame, 1, IMAGE)!;
+      expect(settled.rect.x).toBeCloseTo(at.rect.x);
+      expect(settled.rect.y).toBeCloseTo(at.rect.y);
+    });
+
+    it("agrees with the preview's formula at the same source time", () => {
+      const s = block(SLIDE);
+      for (const t of [9.9, 10, 10.1, 10.3, 10.6, 10.7, 15]) {
+        const state = webcamStateAt({ webcam: s }, t)!;
+        const preview = webcamStateRect(state, frame, 1.3)!;
+        const plan = planWebcamDraw(s, t, frame, 1.3, IMAGE)!;
+        expect(plan.rect).toEqual(preview);
+      }
+    });
+
+    it("a Cut jumps at the block's start with no place in between", () => {
+      const cut = block({ kind: "cut", ms: 700, easing: "back" });
+      const before = planWebcamDraw(cut, 9.999, frame, 1, IMAGE)!.rect;
+      const during = [10, 10.1, 10.35, 10.69].map(
+        (t) => planWebcamDraw(cut, t, frame, 1, IMAGE)!.rect,
+      );
+      for (const rect of during) expect(rect).toEqual(during[0]);
+      expect(during[0]!.x).not.toBeCloseTo(before.x);
+    });
+
+    describe("the last block's return, capped by the recording's end", () => {
+      // The block ends 0.3 s before the recording ends (20 s): its 700 ms return gets half
+      // of that gap, 150 ms, so it is settled on the default layout well before the end.
+      const last = (): WebcamScene =>
+        scene({ position: { x: 0.12, y: 0.82 } }, [
+          {
+            id: "b",
+            start: 10,
+            end: 19.7,
+            mode: "override",
+            layout: { position: TARGET },
+            transition: SLIDE,
+          },
+        ]);
+
+      it("agrees with the preview's formula inside the return and is settled at the end", () => {
+        const s = last();
+        const xs: number[] = [];
+        for (const t of [19.72, 19.78, 19.83]) {
+          const state = webcamStateAt({ webcam: s }, t, 20)!;
+          const plan = planWebcamDraw(s, t, frame, 1, IMAGE, 20)!;
+          expect(plan.rect).toEqual(webcamStateRect(state, frame, 1)!);
+          expect(inside(plan.rect, frame)).toBe(true);
+          xs.push(plan.rect.x);
+        }
+        expect(new Set(xs.map((x) => x.toFixed(3))).size).toBe(3);
+        const home = planWebcamDraw(scene({ position: { x: 0.12, y: 0.82 } }), 0, frame, 1, IMAGE)!;
+        for (const t of [19.86, 19.99]) {
+          expect(planWebcamDraw(s, t, frame, 1, IMAGE, 20)!.rect).toEqual(home.rect);
+        }
+      });
+
+      it("without the end the return keeps its whole duration (no end known)", () => {
+        const s = last();
+        const home = planWebcamDraw(scene({ position: { x: 0.12, y: 0.82 } }), 0, frame, 1, IMAGE)!;
+        expect(planWebcamDraw(s, 19.99, frame, 1, IMAGE)!.rect).not.toEqual(home.rect);
+        // A missing, zero or NaN end is no end.
+        for (const end of [undefined, 0, Number.NaN]) {
+          expect(planWebcamDraw(s, 19.99, frame, 1, IMAGE, end)!.rect).toEqual(
+            planWebcamDraw(s, 19.99, frame, 1, IMAGE)!.rect,
+          );
+        }
+      });
+    });
+
+    it("takes every other field from the layout in force at once, with no animation", () => {
+      const s = scene({}, [
+        {
+          id: "b",
+          start: 10,
+          end: 20,
+          mode: "override",
+          layout: { position: TARGET, shape: "rounded", mirrored: false, shadow: false },
+          transition: SLIDE,
+        },
+      ]);
+      const plan = planWebcamDraw(s, 10.05, frame, 1, IMAGE)!;
+      expect(plan.shape).toBe("rounded");
+      expect(plan.mirrored).toBe(false);
+      expect(plan.shadow).toBe(false);
+    });
+  });
+
   // Failure 10: the layer is placed in the OUTPUT canvas (after the framer), so Fill cannot
   // crop it and Fit cannot shrink it into the padding.
   describe.each([
@@ -80,12 +213,12 @@ describe("planWebcamDraw", () => {
     ["Square (Fit)", { width: 1080, height: 1080 }],
   ])("%s keeps the whole bubble inside the output", (_name, frame) => {
     it.each(
-      WEBCAM_POSITION_PRESETS.flatMap((p) =>
+      EDGE_AND_CENTER_POSITIONS.flatMap((p) =>
         (["circle", "rectangle"] as const).map((shape) => [p.id, shape, p] as const),
       ),
-    )("at %s (%s)", (_id, shape, preset) => {
+    )("at %s (%s)", (_id, shape, point) => {
       const size = 0.6; // the largest bubble
-      const position = { x: preset.x, y: preset.y };
+      const position = { x: point.x, y: point.y };
       const plan = planWebcamDraw(scene({ shape, size, position }), 0, frame, 1, IMAGE)!;
       expect(inside(plan.rect, frame)).toBe(true);
     });

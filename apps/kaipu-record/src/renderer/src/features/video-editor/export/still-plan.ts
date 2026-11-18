@@ -4,8 +4,14 @@
  * itself is composed by `gif-worker.ts` in "still" mode through the same composer the
  * exports use, so a capture and an export of the same time never differ.
  */
+import { placeMedia } from "../media";
 import type { VideoScene } from "../scene";
-import { buildExportPlan, locateTimelineTime, type ExportPlan } from "./export-plan";
+import {
+  buildExportPlan,
+  locateTimelineTime,
+  withSourceDuration,
+  type ExportPlan,
+} from "./export-plan";
 
 /**
  * A playhead resting on the very end of the timeline lies past the last frame's span; the
@@ -21,22 +27,39 @@ export interface StillPlan {
   timelineSeconds: number;
   /** Source video time of that frame; null on a slide. */
   sourceSeconds: number | null;
+  /** The recording under the playhead: null = the opened one (and on a slide). */
+  sourceId: string | null;
   kind: "clip" | "slide";
 }
 
-export function planStill(scene: VideoScene, playheadSeconds: number): StillPlan {
+export function planStill(
+  scene: VideoScene,
+  playheadSeconds: number,
+  sourceDurationSeconds?: number,
+): StillPlan {
   // Throws on an empty timeline: there is nothing to capture.
-  const plan = buildExportPlan(scene);
+  const plan = withSourceDuration(buildExportPlan(scene), sourceDurationSeconds);
   const latest = Math.max(0, plan.totalDuration - STILL_END_MARGIN_S);
   const requested = Number.isFinite(playheadSeconds) ? playheadSeconds : 0;
   const timelineSeconds = Math.min(Math.max(0, requested), latest);
   const located = locateTimelineTime(plan, timelineSeconds);
   if (!located) throw new Error(`no segment at ${timelineSeconds}`);
   const isClip = located.segment.kind === "clip";
+  if (plan.floating) {
+    // One frame is drawn: only the floating images on screen at it are decoded and sent.
+    const { items, layout, timeOffset } = plan.floating;
+    const at = timelineSeconds + timeOffset;
+    const kept = placeMedia(items, layout)
+      .filter((p) => p.start <= at && at < p.end)
+      .map((p) => p.item);
+    if (kept.length > 0) plan.floating = { items: kept, layout, timeOffset };
+    else delete plan.floating;
+  }
   return {
     plan,
     timelineSeconds,
     sourceSeconds: isClip ? located.sourceTime : null,
+    sourceId: located.segment.kind === "clip" ? located.segment.sourceId : null,
     kind: isClip ? "clip" : "slide",
   };
 }

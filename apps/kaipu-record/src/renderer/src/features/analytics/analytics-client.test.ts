@@ -1,11 +1,16 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildPosthogConfig, isFlagEnabled } from "./analytics-client";
+import { buildPosthogConfig, isFlagEnabled, scrubEventBeforeSend } from "./analytics-client";
+
+const ANY = { deviceId: "device-1", capturing: true };
 
 describe("buildPosthogConfig", () => {
   it("locks privacy down for a screen recorder", () => {
-    const config = buildPosthogConfig("https://us.i.posthog.com");
+    const config = buildPosthogConfig("https://us.i.posthog.com", {
+      deviceId: "device-1",
+      capturing: true,
+    });
     expect(config.autocapture).toBe(false);
     expect(config.capture_pageview).toBe(false);
     expect(config.disable_session_recording).toBe(true);
@@ -14,17 +19,50 @@ describe("buildPosthogConfig", () => {
   });
 
   it("falls back to the US host when none is provided", () => {
-    expect(buildPosthogConfig(undefined).api_host).toBe("https://us.i.posthog.com");
+    expect(buildPosthogConfig(undefined, ANY).api_host).toBe("https://us.i.posthog.com");
   });
 
   it("treats an empty host (an unset CI variable) as no host", () => {
-    expect(buildPosthogConfig("").api_host).toBe("https://us.i.posthog.com");
+    expect(buildPosthogConfig("", ANY).api_host).toBe("https://us.i.posthog.com");
+  });
+
+  it("starts opted out and under the device id when the preference is off", () => {
+    const config = buildPosthogConfig(undefined, { deviceId: "device-1", capturing: false });
+    expect(config.opt_out_capturing_by_default).toBe(true);
+    expect(config.bootstrap).toEqual({ distinctID: "device-1" });
+  });
+
+  it("starts opted in when the preference is on", () => {
+    expect(buildPosthogConfig(undefined, ANY).opt_out_capturing_by_default).toBe(false);
+  });
+
+  it("has no bootstrap identity without a device id", () => {
+    expect(buildPosthogConfig(undefined, { deviceId: "", capturing: true }).bootstrap).toEqual({});
   });
 
   it("uses a host the renderer CSP lets it connect to", () => {
     const html = readFileSync(resolve(__dirname, "../../../index.html"), "utf8");
     const connectSrc = html.match(/content="[^"]*connect-src ([^;"]+)/)?.[1].split(/\s+/) ?? [];
-    expect(connectSrc).toContain(buildPosthogConfig(undefined).api_host);
+    expect(connectSrc).toContain(buildPosthogConfig(undefined, ANY).api_host);
+  });
+});
+
+describe("scrubEventBeforeSend", () => {
+  it("drops the item id and removes personal paths before an event leaves", () => {
+    const sent = scrubEventBeforeSend({
+      uuid: "u",
+      event: "$exception",
+      properties: {
+        id: "Q3 board call",
+        phase: "rename",
+        message: "open '/Users/ana/a.mp4' failed",
+      },
+    });
+    expect(sent?.properties).toEqual({ phase: "rename", message: "open '<user-path>' failed" });
+  });
+
+  it("passes a dropped event through", () => {
+    expect(scrubEventBeforeSend(null)).toBeNull();
   });
 });
 

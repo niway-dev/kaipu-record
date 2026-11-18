@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { LibraryVideo } from "@renderer/features/library/types";
-import { initialScene, type VideoScene } from "../scene";
+import { initialScene, type SceneSource, type VideoScene } from "../scene";
 import { parseSession, serializeSession } from "../session";
 import { encodeFingerprint, normalizeExportPresetId } from "./export-presets";
-import { seedWebcamScene } from "../webcam/webcam-model";
+import { seedWebcamScene, type WebcamTransition } from "../webcam/webcam-model";
 import {
   facelessFingerprint,
   WHOLE_RECORDING_FINGERPRINT,
@@ -72,8 +72,66 @@ describe("editFingerprint — webcam", () => {
 
   it("is tagged only with a webcam, so an export made before the layer was drawn never matches", () => {
     // Before NIW2-575 a webcam scene fingerprinted as `edit:<hash>` and its file had no face.
-    expect(editFingerprint(fixed(track))).toMatch(/^edit:wc2:[0-9a-z]+$/);
-    expect(editFingerprint(fixed(null))).not.toMatch(/wc2/);
+    expect(editFingerprint(fixed(track))).toMatch(/^edit:wc3:[0-9a-z]+$/);
+    expect(editFingerprint(fixed(null))).not.toMatch(/wc3/);
+    // The editable-cursor export draws the webcam too, so it carries the revision as well.
+    expect(editFingerprint(fixed(track), true)).toMatch(/^edit:cursor3:wc3:[0-9a-z]+$/);
+    expect(editFingerprint(fixed(null), true)).not.toMatch(/wc3/);
+  });
+});
+
+describe("editFingerprint — camera block transitions (ADR 0039)", () => {
+  const track = {
+    startOffsetMs: 0,
+    offsetQuality: "exact",
+    width: 1280,
+    height: 720,
+    fps: 30,
+  } as const;
+  const withBlock = (transition?: WebcamTransition): VideoScene => {
+    const scene = initialScene(10, track);
+    return {
+      ...scene,
+      items: [{ ...scene.items[0]!, id: "clip" }],
+      webcam: {
+        layout: scene.webcam!.layout,
+        segments: [
+          {
+            id: "o",
+            start: 2,
+            end: 5,
+            mode: "override",
+            layout: { position: { x: 0.8, y: 0.2 } },
+            ...(transition ? { transition } : {}),
+          },
+          { id: "h", start: 6, end: 7, mode: "hidden" },
+        ],
+      },
+    };
+  };
+  const slide: WebcamTransition = { kind: "slide", ms: 700, easing: "back" };
+
+  it("changes with the kind, then the duration, then the easing (the fingerprint covers the field)", () => {
+    const prints = [
+      editFingerprint(withBlock(slide)),
+      editFingerprint(withBlock({ ...slide, kind: "cut" })),
+      editFingerprint(withBlock({ ...slide, ms: 900 })),
+      editFingerprint(withBlock({ ...slide, easing: "linear" })),
+    ];
+    expect(new Set(prints).size).toBe(4);
+  });
+
+  it("is the same after a session save and reload with a transition", () => {
+    const scene = withBlock(slide);
+    const reopened = parseSession(serializeSession(scene))!.scene;
+    expect(editFingerprint(reopened)).toBe(editFingerprint(scene));
+  });
+
+  it("keeps the fingerprint a scene without transitions had before them (pinned)", () => {
+    // Pinned: computed on the commit before transitions existed, for this very scene, so the
+    // export of every older edit with a camera block stays reusable. No revision bump.
+    expect(editFingerprint(withBlock())).toBe("edit:wc3:7c4qtu5ih5");
+    expect(serializeSession(withBlock())).not.toContain("transition");
   });
 });
 
@@ -96,8 +154,8 @@ describe("editFingerprint — background (NIW2-668)", () => {
     // must still match.
     expect(editFingerprint(fixed(null))).toBe("edit:2bdufz02r20");
     expect(editFingerprint(fixed(null), true)).toBe("edit:cursor3:czrk19yfc6");
-    expect(editFingerprint(fixed(track))).toBe("edit:wc2:3sdivqr4ok");
-    expect(editFingerprint(fixed(track), true)).toBe("edit:cursor3:3sdivqr4ok");
+    expect(editFingerprint(fixed(track))).toBe("edit:wc3:3sdivqr4ok");
+    expect(editFingerprint(fixed(track), true)).toBe("edit:cursor3:wc3:3sdivqr4ok");
   });
 
   it("is unchanged by a none background, even with stored padding, radius and shadow", () => {
@@ -122,9 +180,9 @@ describe("editFingerprint — background (NIW2-668)", () => {
   it("is tagged bg1 only when a background is set", () => {
     const withBg = (webcam: typeof track | null) => ({ ...fixed(webcam), background: MAGENTA });
     expect(editFingerprint(withBg(null))).toMatch(/^edit:bg1:[0-9a-z]+$/);
-    expect(editFingerprint(withBg(track))).toMatch(/^edit:wc2:bg1:[0-9a-z]+$/);
+    expect(editFingerprint(withBg(track))).toMatch(/^edit:wc3:bg1:[0-9a-z]+$/);
     expect(editFingerprint(withBg(null), true)).toMatch(/^edit:cursor3:bg1:[0-9a-z]+$/);
-    expect(editFingerprint(withBg(track), true)).toMatch(/^edit:cursor3:bg1:[0-9a-z]+$/);
+    expect(editFingerprint(withBg(track), true)).toMatch(/^edit:cursor3:wc3:bg1:[0-9a-z]+$/);
     expect(editFingerprint(fixed(null))).not.toMatch(/bg1/);
   });
 
@@ -374,6 +432,54 @@ describe("facelessFingerprint", () => {
   it("keeps the cursor revision of a cursor-redrawing copy that lost its face", () => {
     expect(facelessFingerprint("whole:abc123:cursor3")).toBe("whole:cursor3");
     expect(facelessFingerprint("whole:abc123")).toBe("whole");
-    expect(facelessFingerprint("edit:wc2:abc")).toBeUndefined();
+    expect(facelessFingerprint("edit:wc3:abc")).toBeUndefined();
+  });
+});
+
+describe("editFingerprint — joined recordings (ADR 0058)", () => {
+  const plain = (): VideoScene => {
+    const scene = initialScene(10);
+    return { ...scene, items: [{ ...scene.items[0]!, id: "clip" }] };
+  };
+  const joined = (extra: Partial<SceneSource> = {}): SceneSource => ({
+    id: "src-1",
+    assetId: "lib-b",
+    title: "Recording B",
+    offset: 3600,
+    durationSeconds: 20,
+    width: 1280,
+    height: 720,
+    ...extra,
+  });
+  const withJoin = (source: SceneSource): VideoScene => ({ ...plain(), sources: [source] });
+
+  it("is the same as before for a scene without joins, with or without an empty list", () => {
+    expect(editFingerprint(plain())).toBe("edit:2bdufz02r20");
+    expect(editFingerprint({ ...plain(), sources: [] })).toBe("edit:2bdufz02r20");
+    expect(editFingerprint(plain(), true)).toBe("edit:cursor3:czrk19yfc6");
+  });
+
+  it("changes when a recording is joined", () => {
+    expect(editFingerprint(withJoin(joined()))).not.toBe(editFingerprint(plain()));
+  });
+
+  it("changes with the joined recording's asset, offset or length", () => {
+    const base = editFingerprint(withJoin(joined()));
+    expect(editFingerprint(withJoin(joined({ assetId: "lib-c" })))).not.toBe(base);
+    expect(editFingerprint(withJoin(joined({ offset: 7200 })))).not.toBe(base);
+    expect(editFingerprint(withJoin(joined({ durationSeconds: 21 })))).not.toBe(base);
+  });
+
+  it("does not change with the scene-local id, the title or the capture size", () => {
+    expect(
+      editFingerprint(withJoin(joined({ id: "other", title: "Renamed", width: 1, height: 2 }))),
+    ).toBe(editFingerprint(withJoin(joined())));
+  });
+
+  it("is stable across a session round-trip", () => {
+    const scene = withJoin(joined());
+    expect(editFingerprint(parseSession(serializeSession(scene))!.scene)).toBe(
+      editFingerprint(scene),
+    );
   });
 });

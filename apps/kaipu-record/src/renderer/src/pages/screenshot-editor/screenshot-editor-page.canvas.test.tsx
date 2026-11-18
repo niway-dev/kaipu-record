@@ -352,8 +352,12 @@ describe("ScreenshotEditorPage — preview matches the export (image-canvas)", (
       expect(top).toBeGreaterThanOrEqual(40);
       expect(right).toBe(0);
       expect(bottom).toBe(0);
-      // No background by default: the union box is filled white under the shot.
-      expect(screen.getByTestId("canvas-box-fill")).toBeInTheDocument();
+      // No background by default: nothing is painted white under the shot; the export box
+      // draws the transparent checker instead.
+      expect(screen.queryByTestId("canvas-box-fill")).toBeNull();
+      expect(screen.getByTestId("export-box-fill").style.background).toContain(
+        "repeating-conic-gradient",
+      );
     } finally {
       // @ts-expect-error — drop the stubs
       delete HTMLImageElement.prototype.naturalWidth;

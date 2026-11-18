@@ -1,43 +1,180 @@
-/* Nine position presets as a 3×3 grid that reads like the frame it places the bubble in. */
-.positions {
+/* Tabs under the "Camera" header: "This part" and "Whole video". */
+.tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-xs);
-  aspect-ratio: 16 / 9;
-  padding: var(--space-xs);
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 2px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--bg-raised);
 }
 
-.position,
-.positionActive {
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 1px solid transparent;
+.tab,
+.tabActive {
+  padding: var(--space-xs) var(--space-sm);
+  border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
   cursor: pointer;
 }
 
-.position:hover {
-  border-color: var(--border);
+.tabActive {
+  background: var(--accent-primary);
+  color: #fff;
 }
 
-.dot {
+/* A flex column so the danger button's `margin-top: auto` sits at the bottom of the panel. */
+.tabBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* A row of buttons that pick one value (Slide or Cut, S, M or L, the shapes, the durations):
+   as many equal columns as there are buttons. */
+.choices {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--space-xs);
+}
+
+.labelRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.trailing {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The small frame and the name beside it. The frame is a picture, never a control. */
+.placeBlock {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.placeText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.placeName {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+}
+
+.placeFrame {
+  flex: none;
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  pointer-events: none;
+}
+
+/* The track is the range the bubble's centre can reach, so a dot at 0% or 100% sits at the
+   edge of the track and the frame's padding keeps it inside the frame. */
+.placeTrack {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.placeLine {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.placeLine line {
+  stroke: var(--text-muted);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.placeBefore,
+.placeNow {
+  position: absolute;
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--text-muted);
+  transform: translate(-50%, -50%);
 }
 
-.positionActive {
-  border-color: var(--accent-primary);
+.placeBefore {
+  border: 1.5px dashed var(--text-muted);
+  background: var(--bg-raised);
 }
 
-.positionActive .dot {
+.placeNow {
   background: var(--accent-primary);
+}
+
+.playButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.playButton:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+/* "No change at 0:04": what is under the playhead and how a part gets made. No button. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-lg) var(--space-md);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  text-align: center;
+}
+
+.emptyIcon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+}
+
+.emptyTitle {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
 }
 
 .toggle {

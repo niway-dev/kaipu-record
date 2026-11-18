@@ -5,19 +5,25 @@
  * about timeline↔source mapping — see that module's header comment.
  */
 import { layoutDuration, toLayout } from "../timeline";
+import { placeMedia } from "../media";
+import type { FloatingMediaPlan } from "./floating-frame";
 import type { VideoScene } from "../scene";
 import type { AudioEdits } from "../audio-edits";
 import type { Redaction } from "../privacy/redaction";
+import { recordingOfClip } from "./export-recordings";
 import { isSourceRangeVisible } from "../source-time";
-import type { WebcamScene } from "../webcam/webcam-model";
+import { webcamEndSeconds, type WebcamScene } from "../webcam/webcam-model";
 import { DEFAULT_BACKGROUND, type VideoBackground } from "../background";
 
 export interface RenderClipSegment {
   kind: "clip";
   timelineStart: number;
   duration: number;
+  /** AXIS seconds (ADR 0058): the decoder wants `localRange`, not these. */
   sourceStart: number;
   sourceEnd: number;
+  /** The recording the clip reads: null = the opened one, else the `SceneSource.id`. */
+  sourceId: string | null;
 }
 
 export interface RenderSlideSegment {
@@ -62,17 +68,38 @@ export interface ExportPlan {
    */
   webcam: WebcamScene | null;
   /**
+   * The recording's length in SOURCE seconds, when the caller knows it: the last camera
+   * block's return to the default layout settles before it, in the preview and in the
+   * export alike (ADR 0039). Not a clip's end: a cut never moves a block. Absent means no
+   * end is known, and the return keeps its whole duration.
+   */
+  sourceDurationSeconds?: number;
+  /**
    * The picture's background (ADR 0051), drawn last by the composer; the worker reads
    * `hasBackground` — with `none` the padding, radius and shadow are never drawn.
    */
   background: VideoBackground;
+  /**
+   * The floating images placed on the timeline (spec 2026-11-13), or absent when there are
+   * none: a scene without them yields exactly the plan it always did. Never behind a flag.
+   * The composer draws them from `mediaAt` over the finished picture, under the webcam.
+   */
+  floating?: FloatingMediaPlan;
+}
+
+/** The scene has nothing to encode: the one failure `buildExportPlan` expects (a user can cause it). */
+export class EmptyTimelineError extends Error {
+  constructor() {
+    super("empty timeline");
+    this.name = "EmptyTimelineError";
+  }
 }
 
 export function buildExportPlan(scene: VideoScene): ExportPlan {
   const layout = toLayout(scene.items);
   // The UI disables the Exportar action when the timeline is empty; this throw is
   // just a backstop so the worker never starts an export with nothing to encode.
-  if (layout.length === 0) throw new Error("empty timeline");
+  if (layout.length === 0) throw new EmptyTimelineError();
 
   const segments: RenderSegment[] = layout.map((entry) =>
     entry.kind === "clip"
@@ -82,6 +109,12 @@ export function buildExportPlan(scene: VideoScene): ExportPlan {
           duration: entry.timelineEnd - entry.timelineStart,
           sourceStart: entry.sourceStart,
           sourceEnd: entry.sourceEnd,
+          sourceId: recordingOfClip(
+            scene.sources,
+            entry.sourceStart,
+            entry.sourceEnd,
+            `clip ${entry.itemId}`,
+          ),
         }
       : {
           kind: "slide",
@@ -97,6 +130,12 @@ export function buildExportPlan(scene: VideoScene): ExportPlan {
     start: overlay.start,
     end: overlay.end,
   }));
+
+  // Only items that are placed (their footage still exists) travel, so an unplaced image's
+  // asset is never decoded or sent.
+  const placed = placeMedia(scene.media, layout);
+  const floating: FloatingMediaPlan | null =
+    placed.length > 0 ? { items: placed.map((p) => p.item), layout, timeOffset: 0 } : null;
 
   return {
     segments,
@@ -115,7 +154,19 @@ export function buildExportPlan(scene: VideoScene): ExportPlan {
     audio: { audioMuted: scene.audioMuted, mutedRanges: scene.mutedRanges },
     webcam: scene.webcam,
     background: scene.background ?? DEFAULT_BACKGROUND,
+    ...(floating ? { floating } : {}),
   };
+}
+
+/**
+ * `plan` with the recording's length in source seconds, when it is usable: a missing, zero,
+ * NaN or infinite one returns the plan as it was. A separate step rather than a parameter of
+ * `buildExportPlan`, whose arity is pinned so nothing about the view can travel into it: the
+ * recording's length is a fact of the source, not of the view.
+ */
+export function withSourceDuration(plan: ExportPlan, seconds: number | undefined): ExportPlan {
+  const usable = webcamEndSeconds(seconds);
+  return usable === undefined ? plan : { ...plan, sourceDurationSeconds: usable };
 }
 
 /**
@@ -144,6 +195,7 @@ export function sliceExportPlan(plan: ExportPlan, start: number, end: number): E
         duration,
         sourceStart,
         sourceEnd: sourceStart + duration,
+        sourceId: segment.sourceId,
       });
     } else {
       segments.push({ kind: "slide", timelineStart, duration, assetId: segment.assetId });
@@ -156,7 +208,21 @@ export function sliceExportPlan(plan: ExportPlan, start: number, end: number): E
       start: Math.max(w.start, from) - from,
       end: Math.min(w.end, to) - from,
     }));
-  return { ...plan, segments, overlayWindows, totalDuration: to - from };
+  const sliced: ExportPlan = { ...plan, segments, overlayWindows, totalDuration: to - from };
+  if (plan.floating) {
+    // Anchors resolve against the whole timeline, so the layout stays and the plan's clock
+    // gets an offset. Items that are not on screen anywhere in the range are dropped, so
+    // their images are not decoded for it.
+    const { items, layout, timeOffset } = plan.floating;
+    const windowStart = from + timeOffset;
+    const windowEnd = to + timeOffset;
+    const kept = placeMedia(items, layout)
+      .filter((p) => p.start < windowEnd && p.end > windowStart)
+      .map((p) => p.item);
+    if (kept.length > 0) sliced.floating = { items: kept, layout, timeOffset: windowStart };
+    else delete sliced.floating;
+  }
+  return sliced;
 }
 
 export interface GifFrameSlot {

@@ -657,4 +657,52 @@ describe("EditorToolRail — Captures (NIW2-764)", () => {
     renderRail();
     expect(screen.queryByRole("button", { name: "Captures" })).toBeNull();
   });
+
+  it("has no camera buttons for a recording without a webcam", () => {
+    renderRail();
+    expect(screen.queryByRole("button", { name: "Change camera from here" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Hide camera from here" })).toBeNull();
+  });
+
+  it("offers Hide camera from here, enabled, but no button that changes the camera", () => {
+    renderRail({ onHideWebcam: vi.fn() });
+    const hide = screen.getByRole("button", { name: "Hide camera from here" });
+    expect(hide).toBeEnabled();
+    expect(hide).toHaveAttribute(
+      "title",
+      "Hides the camera for 10 seconds from the playhead, or until the next block or the end of the recording.",
+    );
+    expect(screen.queryByRole("button", { name: "Change camera from here" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Move camera from here" })).toBeNull();
+  });
+
+  it("disables Hide camera from here with the reason as its tooltip", () => {
+    const onHideWebcam = vi.fn();
+    const reasons = {
+      "in-part": "Inside a part the camera cannot be hidden. Pick a spot outside it.",
+      "in-hidden": "The camera is already hidden here.",
+      "no-room": "Not enough room here: under 1 second is left before the next block or the end.",
+      "on-slide": "A slide has no camera to hide.",
+    } as const;
+    for (const [block, reason] of Object.entries(reasons)) {
+      cleanup();
+      renderRail({ onHideWebcam, hideWebcamBlock: block as keyof typeof reasons });
+      const hide = screen.getByRole("button", { name: "Hide camera from here" });
+      expect(hide).toBeDisabled();
+      expect(hide).toHaveAttribute("title", reason);
+      fireEvent.click(hide);
+    }
+    expect(onHideWebcam).not.toHaveBeenCalled();
+  });
+
+  it("enables it again when nothing blocks the playhead", () => {
+    const onHideWebcam = vi.fn();
+    renderRail({ onHideWebcam, hideWebcamBlock: "in-part" });
+    expect(screen.getByRole("button", { name: "Hide camera from here" })).toBeDisabled();
+    rerenderRail({ hideWebcamBlock: null });
+    const hide = screen.getByRole("button", { name: "Hide camera from here" });
+    expect(hide).toBeEnabled();
+    fireEvent.click(hide);
+    expect(onHideWebcam).toHaveBeenCalledOnce();
+  });
 });

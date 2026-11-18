@@ -76,6 +76,18 @@ vi.mock("@renderer/features/video-editor/export/use-still-capture", () => ({
   useStillCapture: () => ({ capture: stillCapture.capture, busy: stillCapture.busy }),
 }));
 
+// The page reads `timeline-levels` from `analytics/use-flag` itself (the panels read it from the
+// analytics index mocked below). Off by default, so every other test sees the page as shipped;
+// the Add recording tests (NIW2-782) switch it on and put it back.
+const levelsFlag = vi.hoisted(() => ({ on: false }));
+// A test that switches the flag on must not leak it into the next one.
+afterEach(() => {
+  levelsFlag.on = false;
+});
+vi.mock("@renderer/features/analytics/use-flag", () => ({
+  useFlag: (name: string) => (name === "timeline-levels" ? levelsFlag.on : false),
+}));
+
 // The page reports one product event for the speed button. The real client is a no-op
 // without PostHog; spying on it lets the tests pin the name and the payload.
 const captureEventSpy = vi.hoisted(() => vi.fn());
@@ -176,6 +188,12 @@ async function waitForEditorLoaded(): Promise<HTMLElement> {
   await waitFor(() => {
     expect(document.querySelector("footer")).not.toBeNull();
   });
+  // A real browser reports the opened recording's decoded size with `loadedmetadata`, and the page
+  // keeps it as state (ADR 0058: never read off whichever element is on screen). jsdom decodes
+  // nothing, so report it the way the browser would: with the size the test stubbed (0 = unknown,
+  // which the stage ignores).
+  const opened = document.querySelector("video");
+  if (opened) fireEvent.loadedMetadata(opened);
   return document.querySelector("footer")!;
 }
 
@@ -217,7 +235,7 @@ const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
 
 /**
  * Seed one capture of this video whose PNG bytes are `bytes`. The only way to put an image
- * on the timeline is a capture's Add to timeline (NIW2-768); the editor must be mounted
+ * on the timeline is a capture's Add from Library (NIW2-768, NIW2-829); the editor must be mounted
  * AFTER this runs, because it reads the captures list when it opens.
  */
 function seedCapture(bytes: Uint8Array, id = "cap-1"): ReturnType<typeof vi.fn> {
@@ -245,22 +263,40 @@ function seedCapture(bytes: Uint8Array, id = "cap-1"): ReturnType<typeof vi.fn> 
   return read;
 }
 
-/** Opens Captures (if closed) and presses the first capture's Add to timeline. */
-async function pressAddToTimeline(): Promise<void> {
+/**
+ * Opens Captures (if closed), presses the first capture's Add from Library, and adds it to the
+ * sequence at the start (a 5 s image slide). The button opens the modal on Screenshots with
+ * that capture selected (NIW2-829); the modal exists only with `timeline-levels` on, and the
+ * page reads the flag on its next render, which the click on Captures or the button causes.
+ */
+async function addCaptureAsSlide(): Promise<void> {
+  levelsFlag.on = true;
   if (!screen.queryByTestId("captures-panel")) {
     fireEvent.click(screen.getByRole("button", { name: "Captures" }));
   }
-  fireEvent.click(await screen.findByRole("button", { name: "Add to timeline" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Add from Library…" }));
+  const dialog = await screen.findByRole("alertdialog", { name: "Add from Library" });
+  fireEvent.click(await within(dialog).findByRole("radio", { name: /^At the start/ }));
+  fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
+}
+
+/** Closes Add from Library, which stays open after an add. */
+async function closeAddFromLibrary(): Promise<void> {
+  fireEvent.click(screen.getByRole("button", { name: "Close Add from Library" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("alertdialog", { name: "Add from Library" })).toBeNull(),
+  );
 }
 
 /** Adds an image slide through a seeded capture — the simplest way to produce one undoable
  *  commit, which is what makes `controller.dirty` true. The editor must already be mounted
  *  with a capture seeded (`seedCapture` before `renderEditor`). */
 async function makeDirty(footer: HTMLElement): Promise<void> {
-  await pressAddToTimeline();
+  await addCaptureAsSlide();
   await waitFor(() => {
     expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(2);
   });
+  await closeAddFromLibrary();
   // Back to the inspector the tests that follow expect.
   fireEvent.click(screen.getByRole("button", { name: "Close captures" }));
 }
@@ -563,7 +599,7 @@ describe("VideoEditorPage — editable cursor entry", () => {
   });
 });
 
-describe("VideoEditorPage — Add to timeline wiring", () => {
+describe("VideoEditorPage — Add from Library slide wiring", () => {
   beforeEach(() => {
     vi.stubGlobal("Image", FakeImage);
   });
@@ -572,7 +608,7 @@ describe("VideoEditorPage — Add to timeline wiring", () => {
     vi.unstubAllGlobals();
   });
 
-  it("inserts a new image slide at the boundary nearest the playhead (index 0 at t=0)", async () => {
+  it("inserts a new 5 s image slide at the chosen boundary (the start, with the playhead at 0)", async () => {
     seedCapture(PNG_BYTES);
     renderEditor();
     const footer = await waitForEditorLoaded();
@@ -583,13 +619,15 @@ describe("VideoEditorPage — Add to timeline wiring", () => {
     await makeDirty(footer);
 
     const blocks = footer.querySelectorAll(BLOCK_BUTTONS);
-    // Playhead is at 0, so boundaryIndexAt lands the slide at index 0 — the first
-    // block. Only a slide block renders an <img> (its picture) and the ImagePlus
+    // "At the start" is index 0 — the first block — whatever the playhead. Only a slide block
+    // renders an <img> (its picture) and the ImagePlus
     // badge icon; a plain clip block with no decoded thumbnails renders neither.
     expect(blocks[0].querySelector("img")).not.toBeNull();
     expect(blocks[0].querySelector("svg")).not.toBeNull();
     expect(blocks[1].querySelector("img")).toBeNull();
     expect(blocks[1].querySelector("svg")).toBeNull();
+    // The 30 s clip plus a slide of 5 s (not the 3 s the old Add to timeline gave).
+    expect(screen.getByText(/\/ 0:35\.0$/)).toBeInTheDocument();
   });
 });
 
@@ -650,8 +688,9 @@ describe("VideoEditorPage — background export vs. useBlocker", () => {
     await waitFor(() => expect(pending).not.toBeNull());
 
     // Another edit while the export encodes.
-    await pressAddToTimeline();
+    await addCaptureAsSlide();
     await waitFor(() => expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(3));
+    await closeAddFromLibrary();
 
     await act(async () => {
       await pending!.onSaved({
@@ -792,7 +831,7 @@ describe("VideoEditorPage — handleExport metadata guard", () => {
   });
 });
 
-describe("VideoEditorPage — Add to timeline decode failure", () => {
+describe("VideoEditorPage — Add from Library decode failure", () => {
   class FailingImage {
     onload: (() => void) | null = null;
     onerror: (() => void) | null = null;
@@ -818,7 +857,7 @@ describe("VideoEditorPage — Add to timeline decode failure", () => {
     renderEditor();
     const footer = await waitForEditorLoaded();
 
-    await pressAddToTimeline();
+    await addCaptureAsSlide();
 
     await waitFor(() => {
       expect(getToasts()).toContainEqual(
@@ -837,7 +876,7 @@ describe("VideoEditorPage — Add to timeline decode failure", () => {
     renderEditor();
     const footer = await waitForEditorLoaded();
 
-    await pressAddToTimeline();
+    await addCaptureAsSlide();
 
     await waitFor(() => {
       expect(getToasts()).toContainEqual(
@@ -1268,7 +1307,7 @@ describe("VideoEditorPage — webcam track", () => {
     expect(footer.querySelector('[data-testid="webcam-lane"]')).toBeNull();
     expect(screen.queryByTestId("webcam-layer")).toBeNull();
     expect(document.querySelectorAll("video")).toHaveLength(1);
-    expect(screen.queryByRole("button", { name: "Hide webcam here" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Hide camera from here" })).toBeNull();
     // No webcam file to decode: the webcam filmstrip is asked for nothing.
     expect(thumbnailCalls.some((args) => String(args[0]).startsWith("kaipu-media://webcam"))).toBe(
       false,
@@ -1294,20 +1333,20 @@ describe("VideoEditorPage — webcam track", () => {
     const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
     expect(cam.getAttribute("src")).toBe("kaipu-media://webcam/rec-1");
     expect(cam.muted).toBe(true);
-    expect(screen.getByRole("button", { name: "Hide webcam here" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide camera from here" })).toBeInTheDocument();
   });
 
-  it("Hide webcam here adds a selected hidden section; Delete removes it", async () => {
+  it("Hide camera from here adds a selected hidden section; Delete removes it", async () => {
     renderEditor(WITH_WEBCAM);
     const footer = await waitForEditorLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "Hide webcam here" }));
+    fireEvent.click(screen.getByRole("button", { name: "Hide camera from here" }));
     const block = await waitFor(() => {
       const found = footer.querySelector('[data-webcam-id][data-mode="hidden"]');
       expect(found).not.toBeNull();
       return found as HTMLElement;
     });
     expect(block).toHaveAttribute("aria-pressed", "true");
-    expect(await screen.findByRole("heading", { name: "Webcam section 1" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Camera hidden" })).toBeInTheDocument();
     await waitFor(() => {
       fireEvent.keyDown(window, { key: "Delete" });
       expect(footer.querySelector("[data-webcam-id]")).toBeNull();
@@ -1341,10 +1380,10 @@ describe("VideoEditorPage — webcam track", () => {
     }
   });
 
-  // Review S1: with the layer selected the inspector follows the playhead into an override.
-  // A slider drag that crossed that boundary used to swap the inspector, unmount the slider
-  // mid-gesture and leave the scene's drag open — every later commit and undo was dropped.
-  it("a slider drag survives the playhead entering an override; commits and undo still land", async () => {
+  // Review S1: a slider drag must outlive the playhead entering an override. The Camera panel
+  // keeps its Whole video tab when that happens (the tab edits the whole video's look, never
+  // the part under the playhead), so the slider stays mounted and the scene's drag closes.
+  it("a slider drag survives the playhead entering a part; commits and undo still land", async () => {
     const scene = JSON.parse(SESSION_BEFORE_WEBCAM).scene;
     const original = window.electronAPI.loadVideoEditSession;
     window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
@@ -1366,22 +1405,21 @@ describe("VideoEditorPage — webcam track", () => {
       const bubble = screen.getByTestId("webcam-layer");
       fireEvent.pointerDown(bubble, { pointerId: 1 });
       fireEvent.pointerUp(bubble, { pointerId: 1 });
-      expect(await screen.findByRole("heading", { name: "Webcam" })).toBeInTheDocument();
+      expect(await screen.findByRole("heading", { name: "Camera" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("tab", { name: "Whole video" }));
 
-      const size = screen.getByRole("slider", { name: "Size" });
-      fireEvent.pointerDown(size, { pointerId: 2 });
-      fireEvent.change(size, { target: { value: "0.3" } });
+      const shrink = screen.getByRole("slider", { name: "Size during zoom" });
+      fireEvent.pointerDown(shrink, { pointerId: 2 });
+      fireEvent.change(shrink, { target: { value: "0.5" } });
       const main = Array.from(document.querySelectorAll("video")).find(
         (v) => v.dataset.testid !== "webcam-video",
       )!;
       main.currentTime = 6;
       fireEvent.timeUpdate(main);
-      // The drag owns the inspector: it does not swap to the override under the playhead.
-      expect(screen.getByRole("heading", { name: "Webcam" })).toBeInTheDocument();
-      fireEvent.pointerUp(size, { pointerId: 2 });
+      expect(screen.getByRole("slider", { name: "Size during zoom" })).toBe(shrink);
+      fireEvent.pointerUp(shrink, { pointerId: 2 });
 
-      // Drag over, the playhead's override takes the inspector — and a commit lands.
-      expect(await screen.findByRole("heading", { name: "Webcam section 1" })).toBeInTheDocument();
+      // Drag over: a commit lands on the whole video's look, and one undo takes it back.
       fireEvent.click(screen.getByRole("button", { name: "Square" }));
       expect(screen.getByRole("button", { name: "Square" })).toHaveAttribute(
         "aria-pressed",
@@ -1399,12 +1437,311 @@ describe("VideoEditorPage — webcam track", () => {
     }
   });
 
-  it("grabbing the bubble opens the Webcam section of the inspector", async () => {
+  // A part (source 5 to 8, sliding in) and a hidden range (source 14 to 18) on the webcam layer.
+  async function openWithCameraBlocks(): Promise<{ footer: HTMLElement; main: HTMLVideoElement }> {
+    const scene = JSON.parse(SESSION_BEFORE_WEBCAM).scene;
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
+      sessionJson: JSON.stringify({
+        version: 1,
+        scene: {
+          ...scene,
+          webcam: {
+            layout: { ...WEBCAM_DEFAULTS },
+            segments: [
+              {
+                id: "cam-ov",
+                start: 5,
+                end: 8,
+                mode: "override",
+                layout: { position: { x: 0.88, y: 0.18 } },
+                transition: { kind: "slide", ms: 700, easing: "ease-in-out" },
+              },
+              { id: "cam-h", start: 14, end: 18, mode: "hidden" },
+            ],
+          },
+        },
+      }),
+      assets: [],
+    }));
+    renderEditor(WITH_WEBCAM);
+    const footer = await waitForEditorLoaded();
+    const main = Array.from(document.querySelectorAll("video")).find(
+      (v) => v.dataset.testid !== "webcam-video",
+    )!;
+    return { footer, main };
+  }
+  const moveTo = (main: HTMLVideoElement, seconds: number): void => {
+    main.currentTime = seconds;
+    fireEvent.timeUpdate(main);
+  };
+
+  it("the rail's Hide camera from here is disabled inside a part, inside a hidden range and with under a second of room, and says why", async () => {
+    const original = window.electronAPI.loadVideoEditSession;
+    try {
+      const { main } = await openWithCameraBlocks();
+      const hide = (): HTMLElement => screen.getByRole("button", { name: "Hide camera from here" });
+      // Source 0: outside every block, with room.
+      expect(hide()).toBeEnabled();
+      moveTo(main, 6);
+      await waitFor(() => expect(hide()).toBeDisabled());
+      expect(hide().title).toMatch(/Inside a part the camera cannot be hidden/);
+      moveTo(main, 15);
+      await waitFor(() => expect(hide().title).toMatch(/already hidden here/));
+      expect(hide()).toBeDisabled();
+      moveTo(main, 13.5);
+      await waitFor(() => expect(hide().title).toMatch(/under 1 second is left/));
+      expect(hide()).toBeDisabled();
+      moveTo(main, 1);
+      await waitFor(() => expect(hide()).toBeEnabled());
+    } finally {
+      window.electronAPI.loadVideoEditSession = original;
+    }
+  });
+
+  it("Play the slide goes half a second before the part and plays from there", async () => {
+    const original = window.electronAPI.loadVideoEditSession;
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    try {
+      const { footer, main } = await openWithCameraBlocks();
+      fireEvent.click(footer.querySelector('[data-webcam-id="cam-ov"]')!);
+      const play = await screen.findByRole("button", { name: "Play the slide" });
+      playSpy.mockClear();
+      fireEvent.click(play);
+      // Source 5 - 0.5 s: the slide starts from where the camera was.
+      await waitFor(() => expect(main.currentTime).toBeCloseTo(4.5, 1));
+      await waitFor(() => expect(playSpy).toHaveBeenCalled());
+    } finally {
+      playSpy.mockRestore();
+      window.electronAPI.loadVideoEditSession = original;
+    }
+  });
+
+  it("grabbing the bubble opens the Camera panel, with no Position grid", async () => {
     renderEditor(WITH_WEBCAM);
     await waitForEditorLoaded();
     fireEvent.pointerDown(screen.getByTestId("webcam-layer"), { pointerId: 1 });
-    expect(await screen.findByRole("heading", { name: "Webcam" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Position" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Camera" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "This part" })).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Position" })).toBeNull();
+  });
+});
+
+// Camera parts, drag-first: dropping the bubble outside every part asks before the scene changes.
+describe("VideoEditorPage — dropping the camera bubble", () => {
+  const WITH_WEBCAM: VideoEditorSource = {
+    ...SOURCE,
+    webcam: { startOffsetMs: 0, offsetQuality: "exact", width: 1280, height: 720, fps: 30 },
+  };
+
+  /**
+   * The editor with the bubble drawn at 1 s, then the bubble dragged 100 px to the right.
+   * `selectFirst`: a click on the bubble first, which selects it (a pointer-down alone does not).
+   */
+  async function dropBubble({ selectFirst = false } = {}): Promise<HTMLElement> {
+    renderEditor(WITH_WEBCAM);
+    const footer = await waitForEditorLoaded();
+    const main = Array.from(document.querySelectorAll("video")).find(
+      (v) => v.dataset.testid !== "webcam-video",
+    )!;
+    fireEvent.loadedMetadata(main);
+    const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
+    Object.defineProperty(cam, "duration", { configurable: true, get: () => 60 });
+    fireEvent.loadedMetadata(cam);
+    main.currentTime = 1;
+    fireEvent(main, new Event("seeked"));
+    screen.getByTestId("webcam-slot").getBoundingClientRect = () =>
+      ({ width: 1000, height: 1000 }) as DOMRect;
+    const bubble = screen.getByTestId("webcam-layer");
+    if (selectFirst) {
+      fireEvent.pointerDown(bubble, { clientX: 500, clientY: 500, pointerId: 1 });
+      fireEvent.pointerUp(bubble, { clientX: 500, clientY: 500, pointerId: 1 });
+    }
+    fireEvent.pointerDown(bubble, { clientX: 500, clientY: 500, pointerId: 1 });
+    fireEvent.pointerMove(bubble, { clientX: 300, clientY: 500, pointerId: 1 });
+    fireEvent.pointerUp(bubble, { clientX: 300, clientY: 500, pointerId: 1 });
+    return footer;
+  }
+
+  it("asks where the camera belongs and leaves the lane empty until it is answered", async () => {
+    stubDecodedVideoSize(1280, 720);
+    try {
+      const footer = await dropBubble();
+      expect(await screen.findByRole("group", { name: "Where to keep the camera" })).toBeVisible();
+      expect(footer.querySelector("[data-webcam-id]")).toBeNull();
+      // The lane previews where the part would go.
+      expect(footer.querySelector("[data-webcam-pending]")).not.toBeNull();
+    } finally {
+      stubDecodedVideoSize(0, 0);
+    }
+  });
+
+  it("'Only for this part' puts a selected part on the lane and closes the card", async () => {
+    stubDecodedVideoSize(1280, 720);
+    try {
+      const footer = await dropBubble();
+      fireEvent.click(await screen.findByRole("button", { name: /Only for this part/ }));
+      await waitFor(() => {
+        const part = footer.querySelector('[data-webcam-id][data-mode="override"]');
+        expect(part).not.toBeNull();
+        expect(part).toHaveAttribute("aria-pressed", "true");
+      });
+      expect(screen.queryByRole("group", { name: "Where to keep the camera" })).toBeNull();
+      expect(footer.querySelector("[data-webcam-pending]")).toBeNull();
+    } finally {
+      stubDecodedVideoSize(0, 0);
+    }
+  });
+
+  it("picking the bubble up while the video plays pauses it", async () => {
+    stubDecodedVideoSize(1280, 720);
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    try {
+      renderEditor(WITH_WEBCAM);
+      await waitForEditorLoaded();
+      const main = Array.from(document.querySelectorAll("video")).find(
+        (v) => v.dataset.testid !== "webcam-video",
+      )!;
+      fireEvent.loadedMetadata(main);
+      const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
+      Object.defineProperty(cam, "duration", { configurable: true, get: () => 60 });
+      fireEvent.loadedMetadata(cam);
+      fireEvent.keyDown(window, { key: " " });
+      expect(await screen.findByRole("button", { name: "Pause" })).toBeInTheDocument();
+      screen.getByTestId("webcam-slot").getBoundingClientRect = () =>
+        ({ width: 1000, height: 1000 }) as DOMRect;
+      const bubble = screen.getByTestId("webcam-layer");
+      fireEvent.pointerDown(bubble, { clientX: 500, clientY: 500, pointerId: 1 });
+      fireEvent.pointerMove(bubble, { clientX: 300, clientY: 500, pointerId: 1 });
+      expect(await screen.findByRole("button", { name: "Play" })).toBeInTheDocument();
+    } finally {
+      playSpy.mockRestore();
+      stubDecodedVideoSize(0, 0);
+    }
+  });
+
+  /**
+   * Plays, drags the bubble out of every part and drops it. `stoppedAt` is where the
+   * video reports it stopped; a time update then arrives, as the one the pause queues does.
+   */
+  async function playThenDrop(
+    stoppedAt: number,
+  ): Promise<{ footer: HTMLElement; main: HTMLVideoElement }> {
+    renderEditor(WITH_WEBCAM);
+    const footer = await waitForEditorLoaded();
+    const main = Array.from(document.querySelectorAll("video")).find(
+      (v) => v.dataset.testid !== "webcam-video",
+    )! as HTMLVideoElement;
+    fireEvent.loadedMetadata(main);
+    const cam = screen.getByTestId("webcam-video") as HTMLVideoElement;
+    Object.defineProperty(cam, "duration", { configurable: true, get: () => 60 });
+    fireEvent.loadedMetadata(cam);
+    fireEvent.keyDown(window, { key: " " });
+    expect(await screen.findByRole("button", { name: "Pause" })).toBeInTheDocument();
+    main.currentTime = 1;
+    fireEvent.timeUpdate(main);
+    screen.getByTestId("webcam-slot").getBoundingClientRect = () =>
+      ({ width: 1000, height: 1000 }) as DOMRect;
+    const bubble = screen.getByTestId("webcam-layer");
+    fireEvent.pointerDown(bubble, { clientX: 500, clientY: 500, pointerId: 1 });
+    fireEvent.pointerMove(bubble, { clientX: 300, clientY: 500, pointerId: 1 });
+    expect(await screen.findByRole("button", { name: "Play" })).toBeInTheDocument();
+    fireEvent.pointerUp(bubble, { clientX: 300, clientY: 500, pointerId: 1 });
+    main.currentTime = stoppedAt;
+    fireEvent.timeUpdate(main);
+    return { footer, main };
+  }
+
+  it("dropping outside a part after a drag during playback keeps the card open one time update later", async () => {
+    stubDecodedVideoSize(1280, 720);
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    try {
+      const { footer } = await playThenDrop(1.03);
+      expect(await screen.findByRole("group", { name: "Where to keep the camera" })).toBeVisible();
+      expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+      // Answering the card still makes the part; where it starts is checked by the verify scenario.
+      fireEvent.click(screen.getByRole("button", { name: /Only for this part/ }));
+      await waitFor(() =>
+        expect(footer.querySelector('[data-webcam-id][data-mode="override"]')).not.toBeNull(),
+      );
+    } finally {
+      playSpy.mockRestore();
+      stubDecodedVideoSize(0, 0);
+    }
+  });
+
+  it("a seek after the drop closes the card, as before", async () => {
+    stubDecodedVideoSize(1280, 720);
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    try {
+      const { main } = await playThenDrop(1);
+      await screen.findByRole("group", { name: "Where to keep the camera" });
+      main.currentTime = 5;
+      fireEvent.timeUpdate(main);
+      await waitFor(() =>
+        expect(screen.queryByRole("group", { name: "Where to keep the camera" })).toBeNull(),
+      );
+    } finally {
+      playSpy.mockRestore();
+      stubDecodedVideoSize(0, 0);
+    }
+  });
+
+  it("pressing play with the card open closes it, as before", async () => {
+    stubDecodedVideoSize(1280, 720);
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    try {
+      await playThenDrop(1);
+      await screen.findByRole("group", { name: "Where to keep the camera" });
+      fireEvent.keyDown(window, { key: " " });
+      await waitFor(() =>
+        expect(screen.queryByRole("group", { name: "Where to keep the camera" })).toBeNull(),
+      );
+    } finally {
+      playSpy.mockRestore();
+      stubDecodedVideoSize(0, 0);
+    }
+  });
+
+  it("Escape closes the card and the lane stays empty", async () => {
+    stubDecodedVideoSize(1280, 720);
+    try {
+      // Selected by a click first, so the Camera panel is open when the drop asks.
+      const footer = await dropBubble({ selectFirst: true });
+      await screen.findByRole("group", { name: "Where to keep the camera" });
+      expect(screen.getByRole("heading", { name: "Camera" })).toBeInTheDocument();
+      fireEvent.keyDown(window, { key: "Escape" });
+      await waitFor(() =>
+        expect(screen.queryByRole("group", { name: "Where to keep the camera" })).toBeNull(),
+      );
+      expect(footer.querySelector("[data-webcam-id]")).toBeNull();
+      // The page's own Escape clears the selection. The card's Escape must not, so the bubble
+      // stays selected and the Camera panel stays open.
+      expect(screen.getByRole("heading", { name: "Camera" })).toBeInTheDocument();
+    } finally {
+      stubDecodedVideoSize(0, 0);
+    }
+  });
+
+  it("Space on a drop card choice does not toggle playback and the card stays open", async () => {
+    stubDecodedVideoSize(1280, 720);
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    try {
+      await dropBubble({ selectFirst: true });
+      const card = await screen.findByRole("group", { name: "Where to keep the camera" });
+      const part = within(card).getByRole("button", { name: /Only for this part/ });
+      part.focus();
+      playSpy.mockClear();
+      const notPrevented = fireEvent.keyDown(part, { key: " " });
+      await act(async () => {});
+      // The page's Space shortcut would start playback, and the card would close with it.
+      expect(playSpy).not.toHaveBeenCalled();
+      expect(screen.getByRole("group", { name: "Where to keep the camera" })).toBeInTheDocument();
+      // Not cancelled: the browser still turns Space on a button into the click that applies it.
+      expect(notPrevented).toBe(true);
+    } finally {
+      playSpy.mockRestore();
+      stubDecodedVideoSize(0, 0);
+    }
   });
 });
 
@@ -2068,7 +2405,7 @@ describe("VideoEditorPage — background (NIW2-668)", () => {
     expect(
       section.compareDocumentPosition(detection) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(within(section).getAllByRole("button")).toHaveLength(17);
+    expect(within(section).getAllByRole("button")).toHaveLength(18);
     expect(swatch("None")).toHaveAttribute("aria-pressed", "true");
     for (const name of ["Padding", "Corners", "Shadow"]) expect(slider(name)).toBeDisabled();
     expect(slider("Padding")).toHaveValue("0");
@@ -2240,7 +2577,13 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
   let saved: { png: ArrayBuffer; meta: Record<string, unknown> }[];
   const original = { ...window.electronAPI };
 
-  function savedItem(assetId: string, timeSeconds: number, createdAt = timeSeconds) {
+  function savedItem(
+    assetId: string,
+    timeSeconds: number,
+    createdAt = timeSeconds,
+    videoAssetId: string = SOURCE.assetId,
+    sceneSourceId: string | null = null,
+  ) {
     return {
       assetId,
       kind: "screenshot",
@@ -2248,8 +2591,9 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
       createdAt,
       durationSeconds: 0,
       derivedFromAssetId: null,
-      sourceVideoAssetId: SOURCE.assetId,
+      sourceVideoAssetId: videoAssetId,
       sourceTimeSeconds: timeSeconds,
+      sourceSceneSourceId: sceneSourceId,
       local: { id: assetId, thumbnailUrl: `kaipu-media://screenshot/${assetId}` },
     };
   }
@@ -2275,6 +2619,8 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
           (meta as { source: { timeSeconds: number } }).source.timeSeconds,
           // Taken one after another: the later save is the newer item.
           saved.length,
+          (meta as { source: { videoAssetId: string } }).source.videoAssetId,
+          (meta as { source: { sceneSourceId: string | null } }).source.sceneSourceId,
         ),
         ...libraryItems,
       ];
@@ -2367,11 +2713,110 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     expect(saved[0].meta).toEqual({
       title: "My recording frame 1m23s",
       manual: false,
-      source: { videoAssetId: "asset-1", timeSeconds: 83.4 },
+      source: { videoAssetId: "asset-1", timeSeconds: 83.4, sceneSourceId: null },
     });
     const panel = await screen.findByTestId("captures-panel");
     await waitFor(() => expect(within(panel).getAllByTestId("capture-item")).toHaveLength(1));
     expect(within(panel).getByText("1:23.4")).toBeInTheDocument();
+  });
+
+  it("captures over a joined clip and saves it linked to the joined recording, in its own seconds", async () => {
+    // ADR 0058: the opened recording is [0, 30]; "b" is joined at axis 3600 and the only clip
+    // on the timeline, so the playhead at 0 is 0 s into b's file (axis 3600).
+    const joinedScene = {
+      ...initialScene(30),
+      items: [{ id: "b-clip", kind: "clip" as const, sourceStart: 3600, sourceEnd: 3610 }],
+      sources: [
+        {
+          id: "scene-b",
+          assetId: "asset-b",
+          title: "Second take",
+          offset: 3600,
+          durationSeconds: 40,
+          width: 1280,
+          height: 720,
+        },
+      ],
+    };
+    const loadSession = window.electronAPI.loadVideoEditSession;
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
+      sessionJson: serializeSession(joinedScene),
+      assets: [],
+    }));
+    stillCapture.capture.mockResolvedValue({
+      png: PNG,
+      width: 1280,
+      height: 720,
+      timelineSeconds: 4,
+      sourceSeconds: 3604,
+    });
+    try {
+      renderEditor();
+      await waitForEditorLoaded();
+      await pressCapture();
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0].meta).toMatchObject({
+        manual: false,
+        source: { videoAssetId: "asset-b", timeSeconds: 4, sceneSourceId: "scene-b" },
+      });
+      expect(stillCapture.capture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          joined: [expect.objectContaining({ sourceId: "scene-b", title: "Second take" })],
+        }),
+      );
+      // Only the session restore notice: no frame-capture refusal or error.
+      expect(getToasts().map((toast) => toast.message)).toEqual(["Restored your previous edit"]);
+    } finally {
+      window.electronAPI.loadVideoEditSession = loadSession;
+    }
+  });
+
+  it("a second press on the same joined frame points at the saved capture instead of saving again", async () => {
+    const joinedScene = {
+      ...initialScene(30),
+      items: [{ id: "b-clip", kind: "clip" as const, sourceStart: 3600, sourceEnd: 3610 }],
+      sources: [
+        {
+          id: "scene-b",
+          assetId: "asset-b",
+          title: "Second take",
+          offset: 3600,
+          durationSeconds: 40,
+          width: 1280,
+          height: 720,
+        },
+      ],
+    };
+    const loadSession = window.electronAPI.loadVideoEditSession;
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
+      sessionJson: serializeSession(joinedScene),
+      assets: [],
+    }));
+    stillCapture.capture.mockResolvedValue({
+      png: PNG,
+      width: 1280,
+      height: 720,
+      timelineSeconds: 0,
+      sourceSeconds: 3600,
+    });
+    try {
+      renderEditor();
+      await waitForEditorLoaded();
+      await pressCapture();
+      await waitFor(() => expect(saved).toHaveLength(1));
+      // The saved capture of the joined recording is listed in the panel.
+      const panel = await screen.findByTestId("captures-panel");
+      await waitFor(() => expect(within(panel).getAllByTestId("capture-item")).toHaveLength(1));
+
+      await pressCapture();
+
+      await waitFor(() =>
+        expect(getToasts().map((toast) => toast.message)).toContain("Already captured at 0:00.0"),
+      );
+      expect(saved).toHaveLength(1);
+    } finally {
+      window.electronAPI.loadVideoEditSession = loadSession;
+    }
   });
 
   it("adds the next capture at the top of an open panel without reopening it", async () => {
@@ -2476,7 +2921,7 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     expect(within(panel).queryByRole("button", { name: "Capture frame" })).toBeNull();
   });
 
-  it("Add to timeline reads the capture's bytes by id and inserts a slide", async () => {
+  it("a capture's Add from Library opens the modal on it, and Add reads its bytes by id and adds a block", async () => {
     libraryItems = [savedItem("mine", 7), savedItem("other", 9)];
     const read = vi.fn(async () => PNG);
     window.electronAPI.readScreenshotBytes = read as never;
@@ -2485,11 +2930,18 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
       renderEditor();
       const footer = await waitForEditorLoaded();
       const before = footer.querySelectorAll(BLOCK_BUTTONS).length;
+      levelsFlag.on = true;
       fireEvent.click(screen.getByRole("button", { name: "Captures" }));
       // Newest first: "other" (createdAt 9) is the first row, "mine" the second.
-      const buttons = await screen.findAllByRole("button", { name: "Add to timeline" });
+      const buttons = await screen.findAllByRole("button", { name: "Add from Library…" });
       expect(buttons).toHaveLength(2);
       fireEvent.click(buttons[1]);
+      // The button only opens the modal: nothing is added until the chooser's Add.
+      const dialog = await screen.findByRole("alertdialog", { name: "Add from Library" });
+      expect(read).not.toHaveBeenCalled();
+      expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(before);
+      fireEvent.click(await within(dialog).findByRole("radio", { name: /^At the start/ }));
+      fireEvent.click(within(dialog).getByRole("button", { name: "Add" }));
       await waitFor(() => expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(before + 1));
       expect(read).toHaveBeenCalledOnce();
       expect(read).toHaveBeenCalledWith("mine");
@@ -2593,6 +3045,44 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     await waitFor(() => expect(screen.getByText(/^0:07\.0 \/ /)).toBeInTheDocument());
   });
 
+  it("moves the playhead into a joined recording's range for its capture made in its own editor", async () => {
+    // A capture of the joined recording taken in that recording's own editor: no copy id.
+    const joinedScene = {
+      ...initialScene(30),
+      items: [
+        { id: "a-clip", kind: "clip" as const, sourceStart: 0, sourceEnd: 10 },
+        { id: "b-clip", kind: "clip" as const, sourceStart: 3600, sourceEnd: 3610 },
+      ],
+      sources: [
+        {
+          id: "scene-b",
+          assetId: "asset-b",
+          title: "Second take",
+          offset: 3600,
+          durationSeconds: 40,
+          width: 1280,
+          height: 720,
+        },
+      ],
+    };
+    const loadSession = window.electronAPI.loadVideoEditSession;
+    window.electronAPI.loadVideoEditSession = vi.fn(async () => ({
+      sessionJson: serializeSession(joinedScene),
+      assets: [],
+    }));
+    libraryItems = [savedItem("theirs", 4, 4, "asset-b", null)];
+    try {
+      renderEditor();
+      await waitForEditorLoaded();
+      fireEvent.click(screen.getByRole("button", { name: "Captures" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Go to 0:04.0" }));
+      // Second 4 of the joined recording is timeline 10 + 4, not second 4 of the opened one.
+      await waitFor(() => expect(screen.getByText(/^0:14\.0 \/ /)).toBeInTheDocument());
+    } finally {
+      window.electronAPI.loadVideoEditSession = loadSession;
+    }
+  });
+
   it("closes with Escape, and when a tool is picked", async () => {
     renderEditor();
     await waitForEditorLoaded();
@@ -2616,5 +3106,427 @@ describe("VideoEditorPage — frame captures (NIW2-764)", () => {
     fireEvent.keyDown(window, { key: "z" });
     await waitFor(() => expect(screen.queryByTestId("captures-panel")).toBeNull());
     expect(screen.getByTestId("editor-inspector")).toBeInTheDocument();
+  });
+});
+
+describe("VideoEditorPage — Add recording (NIW2-782, NIW2-790)", () => {
+  const original = { ...window.electronAPI };
+
+  /** A Library recording the editor can join (a `LibraryItem` as main lists it). */
+  function recordingItem(assetId: string, title: string, createdAt: number, durationSeconds = 10) {
+    return {
+      assetId,
+      kind: "recording",
+      title,
+      createdAt,
+      durationSeconds,
+      derivedFromAssetId: null,
+      sourceVideoAssetId: null,
+      sourceTimeSeconds: null,
+      capture: { width: 1440, height: 1080 },
+      local: { id: `${assetId}-id`, thumbnailUrl: null },
+    };
+  }
+
+  let libraryItems: unknown[];
+  beforeEach(() => {
+    stubDecodedVideoSize(1280, 720);
+    levelsFlag.on = true;
+    libraryItems = [
+      // The opened recording is never offered.
+      recordingItem(SOURCE.assetId, SOURCE.title, 5),
+      recordingItem("asset-b", "Checkout bug", 3),
+      recordingItem("asset-c", "Signup flow", 4),
+    ];
+    window.electronAPI.listLibraryItems = vi.fn(async () => ({
+      items: libraryItems,
+      vaultError: null,
+      catalogVerifiedAt: null,
+    })) as never;
+    window.electronAPI.acquireEditorSession = vi.fn(async (assetId: string) =>
+      assetId === "asset-gone" ? null : `${assetId}-id`,
+    ) as never;
+    window.electronAPI.loadCursorTrack = vi.fn(async () => null) as never;
+    window.electronAPI.closeEditorSession = vi.fn() as never;
+    // jsdom plays no media: the modal's preview calls are stubbed.
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockImplementation(() => Promise.resolve());
+    vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    // Unmount while the media stubs are still in place: the preview's cleanup pauses its video.
+    cleanup();
+    vi.restoreAllMocks();
+    stubDecodedVideoSize(0, 0);
+    levelsFlag.on = false;
+    Object.assign(window.electronAPI, original);
+    for (const toast of getToasts()) dismissToast(toast.id);
+  });
+
+  /** The modal's recording rows, by title: a row selects, the chooser and Add below apply. */
+  const row = (title: string): Promise<HTMLElement> => screen.findByRole("button", { name: title });
+  // Add applies the chooser's destination, which for a recording starts at after the clip.
+  const addAfterCurrentClip = (): void => {
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+  };
+  /** Picks one of the chooser's places by the start of its label, then presses Add. */
+  const addAt = (label: RegExp): void => {
+    fireEvent.click(screen.getByRole("radio", { name: label }));
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+  };
+  const modal = (): HTMLElement => screen.getByRole("alertdialog", { name: "Add from Library" });
+
+  it("Add recording opens the Add from Library modal with the other recordings, newest first", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+
+    const dialog = await screen.findByRole("alertdialog", { name: "Add from Library" });
+    await waitFor(() =>
+      expect(within(dialog).getAllByTestId("add-from-library-row")).toHaveLength(2),
+    );
+    const names = within(dialog)
+      .getAllByTestId("add-from-library-row")
+      .map((rowEl) => rowEl.getAttribute("aria-label"));
+    expect(names).toEqual(["Signup flow", "Checkout bug"]);
+    expect(within(dialog).queryByText(SOURCE.title)).toBeNull();
+    // The first row is selected and previewed.
+    expect(within(dialog).getByRole("heading", { name: "Signup flow" })).toBeInTheDocument();
+    // The button stays lit while the modal is open.
+    expect(screen.getByRole("button", { name: "Add recording" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("Add, with the default after-the-clip destination, inserts all of the selected recording after the clip under the playhead, as one undo step", async () => {
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    expect(screen.getByText(/\/ 0:30\.0$/)).toBeInTheDocument();
+    // 20 s into a single 30 s clip: after the clip under the playhead is its end.
+    for (let i = 0; i < 4; i += 1) fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+    await waitFor(() => expect(screen.getByText("0:20.0 / 0:30.0")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+
+    fireEvent.click(await row("Checkout bug"));
+    addAfterCurrentClip();
+
+    await waitFor(() => expect(screen.getByText("0:20.0 / 0:40.0")).toBeInTheDocument());
+    const labels = within(footer)
+      .getAllByTestId("clip-label")
+      .map((label) => label.textContent);
+    expect(labels).toHaveLength(2);
+    expect(labels[0]).toContain(SOURCE.title);
+    expect(labels[1]).toContain("Checkout bug");
+    // The modal stays open for the next one, and a toast says the add landed behind it.
+    expect(modal()).toBeInTheDocument();
+    expect(getToasts().map((toast) => toast.message)).toContain("Added “Checkout bug”");
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+    await waitFor(() => expect(screen.getByText("0:20.0 / 0:30.0")).toBeInTheDocument());
+    expect(within(footer).queryAllByTestId("clip-label")).toHaveLength(0);
+    // One step undid it: the second Undo has nothing of this join left to take back.
+    expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
+  });
+
+  it("At the start puts the recording before the opened one, and At the end after it", async () => {
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    // The playhead is in the middle of the clip, so neither is the "after current clip" place.
+    fireEvent.click(screen.getByRole("button", { name: "Forward" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+
+    fireEvent.click(await row("Checkout bug"));
+    addAt(/^At the start/);
+    await waitFor(() => expect(screen.getByText(/\/ 0:40\.0$/)).toBeInTheDocument());
+    fireEvent.click(await row("Signup flow"));
+    addAt(/^At the end/);
+    await waitFor(() => expect(screen.getByText(/\/ 0:50\.0$/)).toBeInTheDocument());
+
+    const labels = within(footer)
+      .getAllByTestId("clip-label")
+      .map((label) => label.textContent);
+    expect(labels).toHaveLength(3);
+    expect(labels[0]).toContain("Checkout bug");
+    expect(labels[1]).toContain(SOURCE.title);
+    expect(labels[2]).toContain("Signup flow");
+  });
+
+  it("a double click on a row adds it after the current clip", async () => {
+    renderEditor();
+    const footer = await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+
+    fireEvent.doubleClick(await row("Checkout bug"));
+
+    await waitFor(() => expect(screen.getByText(/\/ 0:40\.0$/)).toBeInTheDocument());
+    const labels = within(footer)
+      .getAllByTestId("clip-label")
+      .map((label) => label.textContent);
+    expect(labels[1]).toContain("Checkout bug");
+  });
+
+  it("each insert is its own undo step", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+    fireEvent.click(await row("Checkout bug"));
+    addAt(/^At the end/);
+    await waitFor(() => expect(screen.getByText(/\/ 0:40\.0$/)).toBeInTheDocument());
+    fireEvent.click(await row("Signup flow"));
+    // The chooser keeps the destination of the last add for recordings.
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(screen.getByText(/\/ 0:50\.0$/)).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+
+    await waitFor(() => expect(screen.getByText(/\/ 0:40\.0$/)).toBeInTheDocument());
+  });
+
+  it("names the recording in a toast when its file cannot be reached, and changes nothing", async () => {
+    libraryItems = [recordingItem("asset-gone", "Lost take", 1)];
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+
+    await row("Lost take");
+    addAfterCurrentClip();
+
+    await waitFor(() =>
+      expect(getToasts().map((toast) => toast.message)).toContain(
+        "Could not add Lost take: its file is not available on this device.",
+      ),
+    );
+    expect(screen.getByText(/\/ 0:30\.0$/)).toBeInTheDocument();
+  });
+
+  it("the modal does not take the inspector's place: the right column stays", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+    await screen.findByRole("alertdialog", { name: "Add from Library" });
+
+    expect(screen.getByTestId("editor-inspector")).toBeInTheDocument();
+  });
+
+  it("opening Add from Library pauses playback, and Space behind the modal does not start it again", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.keyDown(window, { key: " " });
+    await screen.findByRole("button", { name: "Pause" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+    const dialog = await screen.findByRole("alertdialog", { name: "Add from Library" });
+    expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+
+    // Behind the modal the editor's shortcuts are off: Space on a row does not toggle playback.
+    fireEvent.keyDown(within(dialog).getAllByTestId("add-from-library-row")[0], { key: " " });
+    await act(async () => {});
+    expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Pause" })).toBeNull();
+  });
+
+  it("Escape, the close button and the backdrop close Add from Library", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close Add from Library" }));
+    expect(screen.queryByRole("alertdialog", { name: "Add from Library" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Add recording" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+    fireEvent.keyDown(modal(), { key: "Escape" });
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog", { name: "Add from Library" })).toBeNull(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+    fireEvent.click(modal());
+    await waitFor(() =>
+      expect(screen.queryByRole("alertdialog", { name: "Add from Library" })).toBeNull(),
+    );
+  });
+
+  it("closing the modal leaves no preview video behind", async () => {
+    renderEditor();
+    await waitForEditorLoaded();
+    const videosBefore = document.querySelectorAll("video").length;
+    fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+    await screen.findByTestId("add-from-library-video");
+    expect(document.querySelectorAll("video")).toHaveLength(videosBefore + 1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Close Add from Library" }));
+
+    expect(document.querySelectorAll("video")).toHaveLength(videosBefore);
+  });
+
+  it("with timeline-levels off nothing in the editor adds a recording", async () => {
+    levelsFlag.on = false;
+    renderEditor();
+    await waitForEditorLoaded();
+
+    expect(screen.queryByRole("button", { name: "Add recording" })).toBeNull();
+    expect(screen.queryByRole("alertdialog", { name: "Add from Library" })).toBeNull();
+  });
+
+  describe("Screenshots tab", () => {
+    beforeEach(() => {
+      vi.stubGlobal("Image", FakeImage);
+      libraryItems = [
+        ...libraryItems,
+        {
+          assetId: "shot-1",
+          kind: "screenshot",
+          title: "Pricing page",
+          createdAt: 6,
+          durationSeconds: 0,
+          derivedFromAssetId: null,
+          sourceVideoAssetId: SOURCE.assetId,
+          sourceTimeSeconds: 3,
+          capture: null,
+          local: { id: "shot-1-id", thumbnailUrl: "kaipu-media://screenshot/shot-1-id" },
+        },
+        // A GIF export is not a still: it never reaches the tab.
+        {
+          assetId: "gif-1",
+          kind: "gif",
+          title: "A gif",
+          createdAt: 7,
+          durationSeconds: 3,
+          derivedFromAssetId: null,
+          sourceVideoAssetId: null,
+          sourceTimeSeconds: null,
+          capture: null,
+          local: { id: "gif-1-id", thumbnailUrl: null },
+        },
+      ];
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("lists the Library's screenshots, tags the ones from this recording and leaves GIFs out", async () => {
+      renderEditor();
+      await waitForEditorLoaded();
+      fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+
+      fireEvent.click(await screen.findByRole("tab", { name: /Screenshots/ }));
+
+      const card = await screen.findByRole("button", { name: "Pricing page" });
+      expect(within(card).getByText("From this recording")).toBeInTheDocument();
+      expect(screen.getAllByTestId("add-from-library-screenshot")).toHaveLength(1);
+      expect(screen.queryByText("A gif")).toBeNull();
+    });
+
+    it("a click only selects the card; Add with Over the video adds a floating image, selects it, says so and keeps the modal open", async () => {
+      const read = vi.fn(async () => PNG_BYTES.buffer.slice(0) as ArrayBuffer);
+      window.electronAPI.readScreenshotBytes = read as never;
+      renderEditor();
+      const footer = await waitForEditorLoaded();
+      fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+      fireEvent.click(await screen.findByRole("tab", { name: /Screenshots/ }));
+
+      fireEvent.click(await screen.findByRole("button", { name: "Pricing page" }));
+      expect(read).not.toHaveBeenCalled();
+      // Over the video is what a screenshot starts at.
+      expect(screen.getByRole("radio", { name: /^Over the video/ })).toBeChecked();
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+      await waitFor(() => expect(read).toHaveBeenCalledWith("shot-1-id"));
+      // It floats: the sequence is untouched, and the new image's panel is the inspector's.
+      await waitFor(() => expect(screen.getByText("Floating image")).toBeInTheDocument());
+      expect(screen.getByText(/\/ 0:30\.0$/)).toBeInTheDocument();
+      expect(within(footer).queryAllByTestId("clip-label")).toHaveLength(0);
+      expect(modal()).toBeInTheDocument();
+      // The modal covers the timeline, so a toast confirms the add.
+      await waitFor(() =>
+        expect(getToasts().map((toast) => toast.message)).toContain("Added “Pricing page”"),
+      );
+    });
+
+    it("a sequence destination adds the screenshot as a 5 s image slide after the clip under the playhead", async () => {
+      window.electronAPI.readScreenshotBytes = vi.fn(
+        async () => PNG_BYTES.buffer.slice(0) as ArrayBuffer,
+      ) as never;
+      renderEditor();
+      const footer = await waitForEditorLoaded();
+      fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+      fireEvent.click(await screen.findByRole("tab", { name: /Screenshots/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Pricing page" }));
+
+      addAt(/^After the clip under the playhead/);
+
+      // 30 s clip + 5 s slide, and the slide is a block after the clip.
+      await waitFor(() => expect(screen.getByText(/\/ 0:35\.0$/)).toBeInTheDocument());
+      const blocks = footer.querySelectorAll(BLOCK_BUTTONS);
+      expect(blocks).toHaveLength(2);
+      expect(blocks[0].querySelector("img")).toBeNull();
+      expect(blocks[1].querySelector("img")).not.toBeNull();
+      expect(getToasts().map((toast) => toast.message)).toContain("Added “Pricing page”");
+      expect(modal()).toBeInTheDocument();
+    });
+
+    it("two quick Adds to the sequence keep both slides", async () => {
+      window.electronAPI.readScreenshotBytes = vi.fn(
+        async () => PNG_BYTES.buffer.slice(0) as ArrayBuffer,
+      ) as never;
+      renderEditor();
+      const footer = await waitForEditorLoaded();
+      fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+      fireEvent.click(await screen.findByRole("tab", { name: /Screenshots/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Pricing page" }));
+
+      // Both clicks land before the first insert has rendered its commit.
+      addAt(/^After the clip under the playhead/);
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+      // 30 s clip + two 5 s slides: the second did not replace the first.
+      await waitFor(() => expect(screen.getByText(/\/ 0:40\.0$/)).toBeInTheDocument());
+      expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(3);
+    });
+
+    it("an Add whose image cannot be read leaves the next Add working", async () => {
+      window.electronAPI.readScreenshotBytes = vi
+        .fn(async () => PNG_BYTES.buffer.slice(0) as ArrayBuffer)
+        .mockRejectedValueOnce(new Error("gone")) as never;
+      renderEditor();
+      const footer = await waitForEditorLoaded();
+      fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+      fireEvent.click(await screen.findByRole("tab", { name: /Screenshots/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Pricing page" }));
+
+      addAt(/^After the clip under the playhead/);
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+      await waitFor(() => expect(screen.getByText(/\/ 0:35\.0$/)).toBeInTheDocument());
+      expect(footer.querySelectorAll(BLOCK_BUTTONS)).toHaveLength(2);
+    });
+
+    it("a screenshot whose bytes cannot be read adds nothing and says so", async () => {
+      window.electronAPI.readScreenshotBytes = vi.fn(async () => {
+        throw new Error("gone");
+      }) as never;
+      renderEditor();
+      await waitForEditorLoaded();
+      fireEvent.click(screen.getByRole("button", { name: "Add recording" }));
+      fireEvent.click(await screen.findByRole("tab", { name: /Screenshots/ }));
+
+      fireEvent.click(await screen.findByRole("button", { name: "Pricing page" }));
+      fireEvent.click(screen.getByRole("button", { name: "Add" }));
+
+      await waitFor(() =>
+        expect(getToasts().map((toast) => toast.message)).toEqual([
+          "Couldn't load the image. Try another file.",
+        ]),
+      );
+      expect(screen.queryByText("Floating image")).toBeNull();
+    });
   });
 });

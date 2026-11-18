@@ -22,6 +22,7 @@ import {
   maxZoom,
   revealTime,
   stepZoom,
+  viewForRange,
   zoomAt,
   type TimelineView,
 } from "./components/timeline-view";
@@ -52,6 +53,12 @@ export interface TimelineViewStore {
   zoomTo(zoom: number): void;
   /** ⌘/Ctrl + wheel and pinch: around the pointer. */
   zoomAtPointer(factor: number, clientX: number, laneLeft: number): void;
+  /**
+   * Zoom and scroll so the timeline range fills about 40% of the lane, centred (a double-click
+   * on a camera part). The user placed this view: playback stops following until the next play,
+   * like a pan, or the next tick would turn the page away from the part.
+   */
+  showRange(start: number, end: number): void;
   /**
    * Set the scroll. `"user"` is a pan by hand (the scrollbar, a trackpad swipe) and takes
    * the view out of the playhead's hands until the next play; `"follow"` is a scroll that
@@ -153,6 +160,10 @@ export function createTimelineViewStore(): TimelineViewStore {
     },
     zoomAtPointer(factor, clientX, laneLeft) {
       commit(zoomAt(view(), factor, clientX, laneLeft));
+    },
+    showRange(start, end) {
+      following = false;
+      commit(viewForRange(view(), start, end));
     },
     scrollTo(px, by) {
       if (by === "user") following = false;

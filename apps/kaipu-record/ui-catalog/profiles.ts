@@ -18,6 +18,16 @@ export interface Profile {
   readonly seed: "demo" | "empty" | "missing";
   /** Add the recording that carries a native cursor track (a take made with the flag on). */
   readonly cursorRecording?: boolean;
+  /** Add the recording with two overlapping floating images (`seed-vault.ts`). */
+  readonly floatingImages?: boolean;
+  /** Add the recordings whose saved edits joined another recording (`seed-vault.ts`). */
+  readonly joinedRecordings?: boolean;
+  /** Add the recording whose saved edit ends in three slides (`seed-vault.ts`). */
+  readonly slideSequence?: boolean;
+  /** Add one screenshot taken from “Weekly sync” (`seed-vault.ts`), for the “From this recording” tag. */
+  readonly frameCaptures?: boolean;
+  /** Add the two webcam recordings the editor's camera panel states open (`seed-vault.ts`). */
+  readonly cameraRecordings?: boolean;
   /** Add the screenshot that draws real text (`fixtures/text/`), for the Select text states. */
   readonly textScreenshot?: boolean;
   /** Add the screenshots the Colors panel states open (`fixtures/make-fixtures.ts`). */
@@ -40,8 +50,12 @@ export interface Profile {
    * the capture overlay turns it off; it runs last (spec failure 11).
    */
   readonly disableScreenCapture?: boolean;
-  /** `dismiss` (default) closes it with Escape; `keep` leaves the first-run takeover up. */
-  readonly onboarding?: "dismiss" | "keep";
+  /**
+   * `dismiss` (default) closes it with Escape, and the one-time privacy notice that follows;
+   * `keep` leaves the first-run takeover up; `notice` closes the takeover and leaves that
+   * notice up over the app.
+   */
+  readonly onboarding?: "dismiss" | "keep" | "notice";
   /** Permissions every state of the profile needs; else they are reported not capturable. */
   readonly requires?: Requires;
   /**
@@ -59,6 +73,11 @@ export const PROFILES = {
     description: "First launch: the onboarding takeover is left up.",
     seed: "demo",
     onboarding: "keep",
+  },
+  "privacy-notice": {
+    description: "The takeover closed before its Privacy step: the one-time notice is left up.",
+    seed: "demo",
+    onboarding: "notice",
   },
   default: {
     description: "The demo workspace, onboarding skipped, screen capture off.",
@@ -89,6 +108,34 @@ export const PROFILES = {
     cursorRecording: true,
     flags: { "native-cursor-capture": true },
   },
+  "timeline-levels": {
+    description:
+      "Flag timeline-levels forced on, and the vault adds “Floating images”, a recording whose saved edit holds two overlapping floating images: the Clips rows, the preview layer, the image panel and Add from Library… on each capture in the Captures panel.",
+    seed: "demo",
+    flags: { "timeline-levels": true },
+    floatingImages: true,
+  },
+  "add-from-library": {
+    description:
+      "The timeline-levels profile, plus “Weekly sync frame”, a screenshot taken from “Weekly sync” (the “From this recording” tag in Add from Library). A profile of its own, so the Captures panel of “Weekly sync” in the other states does not list it.",
+    seed: "demo",
+    flags: { "timeline-levels": true },
+    floatingImages: true,
+    frameCaptures: true,
+  },
+  "two-recordings": {
+    description:
+      "The vault adds “Two recordings” (a saved edit that joined “Checkout bug”, clips alternating A, B, A, with a webcam on the opened one), “Missing recording” (its joined recording is not in the vault) and “Different aspect” (joins the 1:1 “Square recording”, no webcam): the timeline's recording labels, hover outline, missing state and “No camera in this recording” span. A profile of its own, so the Library lists of the other states do not change.",
+    seed: "demo",
+    joinedRecordings: true,
+  },
+  "slide-sequence": {
+    description:
+      "Flag timeline-levels forced on, and the vault adds “Slide sequence”, a recording whose saved edit is one clip followed by three slides: the Clips row with several slides. A profile of its own, so the Library lists of the other states do not change.",
+    seed: "demo",
+    flags: { "timeline-levels": true },
+    slideSequence: true,
+  },
   "image-canvas": {
     description:
       "Flag image-canvas forced on: the image editor's content-box canvas, pan, zoom and export frame.",
@@ -109,11 +156,11 @@ export const PROFILES = {
     flags: { "image-canvas": true },
     corruptCanvas: true,
   },
-  "timeline-levels": {
+  "camera-parts": {
     description:
-      "Flag timeline-levels forced on: the video editor's Captures panel shows Add to timeline on each capture.",
+      "The vault adds “Camera parts” (a camera part and a hidden range) and “Camera size” (a camera size no S, M or L button has) and “Camera long” (20 minutes declared, a 5 s part): the editor's camera panel and Camera lane states.",
     seed: "demo",
-    flags: { "timeline-levels": true },
+    cameraRecordings: true,
   },
   "image-inspect": {
     description:

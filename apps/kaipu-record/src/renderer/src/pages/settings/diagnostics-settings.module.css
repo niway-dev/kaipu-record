@@ -1,0 +1,9 @@
+/*
+ * The shared Row keeps a description on one line with an ellipsis. This one carries a
+ * caveat people must be able to read (flags still load with it off), so it wraps.
+ */
+.description {
+  display: block;
+  white-space: normal;
+  line-height: 1.4;
+}

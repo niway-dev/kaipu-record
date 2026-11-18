@@ -191,7 +191,15 @@ async function openEditor(page: Page): Promise<void> {
     await dialog.waitFor({ state: "detached" });
   }
   const gotIt = page.getByRole("button", { name: /Got it|Entendido/ });
-  if (await gotIt.isVisible().catch(() => false)) await gotIt.click();
+  // The privacy notice (NIW2-849) mounts a moment after the tour detaches: wait for it.
+  if (
+    await gotIt.waitFor({ state: "visible", timeout: 5_000 }).then(
+      () => true,
+      () => false,
+    )
+  ) {
+    await gotIt.click();
+  }
   await page.evaluate((h) => (location.hash = h), `#/library/${ASSET_ID}`);
   await page.getByRole("button", { name: /Edit video|Editar video/ }).click();
   await page.waitForFunction(() => location.hash.startsWith("#/editor/video/"));

@@ -1,0 +1,47 @@
+/* The three facts and the toggle row under the privacy title. */
+
+.facts {
+  width: 100%;
+  max-width: 520px;
+  margin: 22px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fact {
+  margin: 0;
+  padding: 12px 16px;
+}
+
+.heading {
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-4);
+}
+
+.text {
+  margin: 4px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.toggleRow {
+  width: 100%;
+  max-width: 520px;
+  margin-top: 12px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.toggleLabel {
+  font-size: 14px;
+  font-weight: var(--font-weight-medium);
+  color: var(--text);
+}

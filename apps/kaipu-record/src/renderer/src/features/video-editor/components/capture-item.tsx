@@ -20,10 +20,10 @@ export interface CaptureItemProps {
   onSeek?: () => void;
   /** Accessible name of the Go to button. */
   seekLabel?: string;
-  /** The editor's Add to timeline button: shown when given. */
-  onAddToTimeline?: () => void;
-  /** Accessible name of the Add to timeline button. */
-  addToTimelineLabel?: string;
+  /** The editor's Add from Library button: shown when given. It opens the modal, adds nothing. */
+  onAddFromLibrary?: () => void;
+  /** Accessible name of the Add from Library button. */
+  addFromLibraryLabel?: string;
   /** The editor's Delete button: shown when given (the caller confirms). */
   onDelete?: () => void;
   /** Accessible name of the Delete button. */
@@ -43,8 +43,8 @@ export function CaptureItem({
   onImageClick,
   onSeek,
   seekLabel,
-  onAddToTimeline,
-  addToTimelineLabel,
+  onAddFromLibrary,
+  addFromLibraryLabel,
   onDelete,
   deleteLabel,
   highlighted = false,
@@ -126,14 +126,14 @@ export function CaptureItem({
           <span className={styles.time}>{formatClock(capture.sourceTimeSeconds)}</span>
         )}
         <span className={styles.actions}>
-          {onAddToTimeline && (
+          {onAddFromLibrary && (
             <button
               type="button"
               className={styles.actionButton}
-              aria-label={addToTimelineLabel}
-              title={addToTimelineLabel}
+              aria-label={addFromLibraryLabel}
+              title={addFromLibraryLabel}
               disabled={!localId}
-              onClick={onAddToTimeline}
+              onClick={onAddFromLibrary}
             >
               <ImagePlus size={14} />
             </button>

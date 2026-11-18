@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   FOLLOW_EDGE,
   MAX_ZOOM,
+  RANGE_FILL,
   ZOOM_STEPS,
   clampView,
   contentWidth,
@@ -10,6 +11,7 @@ import {
   formatZoom,
   keepLeftEdge,
   maxZoom,
+  viewForRange,
   panBy,
   revealTime,
   scaleOf,
@@ -513,5 +515,41 @@ describe("ZOOM_STEPS and stepZoom (the + and − buttons, NIW2-675)", () => {
     expect(stepZoom(0.3, 1, max)).toBe(2);
     expect(stepZoom(1, 1, 1)).toBe(1);
     expect(stepZoom(Number.NaN, 1, max)).toBe(2);
+  });
+});
+
+describe("viewForRange (double-click on a camera part)", () => {
+  // A 1000 px lane over 100 s: 10 px per second at fit.
+  const fit = fitView(1000, 100);
+
+  it("makes a 5 s range fill 40% of the lane, centred", () => {
+    const next = viewForRange(fit, 40, 45);
+    // 40% of 1000 px is 400 px for 5 s: 80 px/s, which is zoom 8.
+    expect(next.zoom).toBeCloseTo(8, 9);
+    expect(xOf(next, 45) - xOf(next, 40)).toBeCloseTo(RANGE_FILL * 1000, 6);
+    expect((xOf(next, 40) + xOf(next, 45)) / 2).toBeCloseTo(500, 6);
+  });
+
+  it("stops at the deepest zoom when the range is very short", () => {
+    const next = viewForRange(fit, 50, 50.1);
+    expect(next.zoom).toBe(MAX_ZOOM);
+    expect(xOf(next, 50.1) - xOf(next, 50)).toBeLessThan(RANGE_FILL * 1000);
+    expect((xOf(next, 50) + xOf(next, 50.1)) / 2).toBeCloseTo(500, 6);
+  });
+
+  it("keeps a range at the very start inside the content, off-centre", () => {
+    const next = viewForRange(fit, 0, 5);
+    expect(next.scroll).toBe(0);
+    expect(xOf(next, 0)).toBe(0);
+  });
+
+  it("zooms back out to fit for a range wider than the lane's share", () => {
+    expect(viewForRange({ ...fit, zoom: 8, scroll: 300 }, 0, 100).zoom).toBe(1);
+  });
+
+  it("leaves an empty range or an unmeasured lane alone", () => {
+    expect(viewForRange(fit, 10, 10)).toBe(fit);
+    const unmeasured = fitView(0, 100);
+    expect(viewForRange(unmeasured, 10, 20)).toBe(unmeasured);
   });
 });

@@ -241,7 +241,7 @@ export const UI_MAP = {
     route: ROUTES.editorVideo,
     areas: {
       page: { states: ["loaded"] },
-      preview: { states: ["frame", "zoomSelected", "overlaySelected"] },
+      preview: { states: ["frame", "zoomSelected", "overlaySelected", "differentAspect"] },
       cursor: { states: ["visible"], gatedBy: [{ flag: "native-cursor-capture" }] },
       cursorInspector: { states: ["open"], gatedBy: [{ flag: "native-cursor-capture" }] },
       // The Captures panel (NIW2-764): this video's frame captures, in the right column in
@@ -250,25 +250,100 @@ export const UI_MAP = {
       // at a moment already captured outlines the saved one; confirmDelete: the confirmation
       // dialog a capture's Delete button opens.
       capturesPanel: {
-        states: ["empty", "list", "hover", "duplicate", "confirmDelete", "addToTimeline"],
-        // addToTimeline: the row's Add to timeline button, which exists only with the flag on.
+        states: ["empty", "list", "hover", "duplicate", "confirmDelete", "addFromLibrary"],
+        // addFromLibrary: the row's Add from Library button, which exists only with the flag on;
+        // it opens that modal on Screenshots with the capture selected and adds nothing itself.
         gatedBy: [{ flag: "timeline-levels" }],
       },
+      // The Add from Library modal (NIW2-790), behind the `timeline-levels` flag: a sheet over the
+      // editor opened by the transport's Add recording button, or by a capture's Add from Library
+      // button. One chooser lists every destination for the selected item and one Add applies it
+      // (NIW2-829). recordings: the Recordings tab, a compact list with the first row selected
+      // and previewed, and the chooser with "Over the video" disabled for a recording;
+      // screenshots: the Screenshots tab, a card grid with the "From this recording" tag and no
+      // card selected yet; screenshotSelected: a card selected, with the chooser at "Over the
+      // video"; noMatch: a search that matches no recording.
+      addFromLibrary: {
+        states: ["recordings", "screenshots", "screenshotSelected", "noMatch"],
+        gatedBy: [{ flag: "timeline-levels" }],
+      },
+      // The "Insert here" bar and pill on the Clips row while a recording is dragged over it: it
+      // exists only during the drag, and nothing drags a recording today (NIW2-789 reuses it).
+      insertIndicator: { states: ["visible"], gatedBy: [{ flag: "timeline-levels" }] },
       webcam: { states: ["visible"] },
-      transport: { states: ["paused", "playing", "withCounts", "speedChanged", "zoomed"] },
+      // The card that asks where a dropped camera bubble belongs: `asking` offers a new part,
+      // `noRoom` has less than a second before the next block or the end, so that choice is off.
+      webcamDrop: { states: ["asking", "noRoom"] },
+      // The paused preview's marks around the bubble: `originalLabel` is the label on the bubble
+      // in the original position; `partRoute` is a part's ghost bubble, dotted route and chip;
+      // `hiddenOutline` is the dashed outline where a hidden range would show the camera.
+      webcamMarks: { states: ["originalLabel", "partRoute", "hiddenOutline"] },
+      // The Camera panel in the inspector (camera parts, drag-first): `thisPart` is the tab with
+      // a part selected, `noPart` the same tab with no part under the playhead (a sentence and
+      // no button), `wholeVideo` the other tab (the original position, shape, size as S, M or L,
+      // mirror, shadow, shrink), `sizeCustom` that tab on a size no button has (none pressed),
+      // `hiddenRange` the panel for a selected hidden range.
+      webcamPanel: {
+        states: ["thisPart", "noPart", "wholeVideo", "sizeCustom", "hiddenRange"],
+      },
+      // Floating images over the Clips sequence (ADR 0057, NIW2-771), behind the
+      // `timeline-levels` flag. mediaLayer: the images drawn in the preview, `selected` adds the
+      // frame with its four corner handles, `selectedFull` the same on a Full image. mediaPanel: the inspector of a selected image
+      // (Full, Box, forward/backward, fades, Delete), here with an overlapping pair.
+      // timelineMediaRows: the rows above the sequence in the Clips section (drawn by the
+      // timeline strip), here with two overlapping images.
+      mediaLayer: { states: ["selected", "selectedFull"], gatedBy: [{ flag: "timeline-levels" }] },
+      mediaPanel: { states: ["overlapping"], gatedBy: [{ flag: "timeline-levels" }] },
+      timelineMediaRows: { states: ["twoImages"], gatedBy: [{ flag: "timeline-levels" }] },
+      // addRecordingOpen: the Add recording button at the left end, lit while its modal is open
+      // (it exists only with `timeline-levels` on).
+      transport: {
+        states: ["paused", "playing", "withCounts", "speedChanged", "zoomed", "addRecordingOpen"],
+      },
       toolRail: { states: ["default", "annotate", "privacy"] },
       toolFlyout: { states: ["audio"] },
       tracksPopover: { states: ["open"] },
       // The Timeline guide (NIW2-679): a dialog over the editor, one tab per lane.
       trackGuide: { states: ["clips", "zooms", "webcam"] },
       toolbar: { states: ["default", "saving", "saved"] },
-      inspector: { states: ["detection", "zoom", "mute", "webcam", "annotation", "privacy"] },
+      // webcamBlock: a camera part or hidden range selected; `webcam` is the bubble selected
+      // (the Camera panel opens on it, see `webcamPanel`).
+      inspector: {
+        states: ["detection", "zoom", "mute", "webcam", "webcamBlock", "annotation", "privacy"],
+      },
       // The Background section at the top of the inspector with nothing selected (ADR 0051):
       // `default` is none with the sliders disabled, `set` is a preset with padding, corners, shadow.
       background: { states: ["default", "set"] },
-      timeline: { states: ["default", "zoomed"] },
+      // A scene with recordings joined into it (ADR 0058, NIW2-780): twoRecordings labels each clip
+      // with its recording's name and length and draws a joined clip from its own file;
+      // recordingHover outlines every clip of the hovered clip's recording; recordingMissing is a
+      // clip whose joined recording is gone (hatched, "Recording missing: <title>");
+      // recordingAdded: the sequence right after Add from Library added a recording (NIW2-782);
+      // threeSlides: a clip followed by three slides, all on the one Clips row (NIW2-817).
+      timeline: {
+        states: [
+          "default",
+          "zoomed",
+          "twoRecordings",
+          "recordingHover",
+          "recordingMissing",
+          "recordingAdded",
+          "threeSlides",
+        ],
+      },
       zoomLane: { states: ["empty", "segments"] },
-      webcamLane: { states: ["segments"] },
+      // cameraBlock: a part, with its small frame, name and the wedge of its slide at its start;
+      // originalStretch: the dashed stretch where the camera stays in its original position;
+      // narrowSelected: a selected part drawn narrower than its glyph (a few pixels, on a long
+      // recording), with its two edge handles spread apart so both can be grabbed.
+      // noCamera: the span over a clip whose recording has no webcam while another one has.
+      webcamLane: {
+        states: ["segments", "cameraBlock", "originalStretch", "narrowSelected", "noCamera"],
+      },
+      // The card over a Camera-lane stretch after about 120 ms of hovering: a part, a hidden
+      // range or the original stretch, with its range, length and how it arrives. A tooltip
+      // drawn in the page's top layer, so it is its own area and not part of the lane.
+      webcamLaneCard: { states: ["hover"] },
       privacyLane: { states: ["empty", "regions"] },
       // `waveform` draws the loudness bars; `waveformMuted` is a hatched block over dimmed bars
       // (NIW2-775). `empty` (the empty-state text) is left only for a recording without an
@@ -328,7 +403,10 @@ export const UI_MAP = {
       cropChip: { states: ["shown"] },
       // The canvas chrome (NIW2-711): the box Copy and Save export, the card the export frame
       // tool opens, and the notice that says where the content went when it is off stage.
-      exportBox: { states: ["labeled", "quiet"], gatedBy: [{ flag: "image-canvas" }] },
+      exportBox: {
+        states: ["labeled", "quiet"],
+        gatedBy: [{ flag: "image-canvas" }],
+      },
       exportFrameCard: { states: ["open"], gatedBy: [{ flag: "image-canvas" }] },
       offContentNotice: { states: ["shown"], gatedBy: [{ flag: "image-canvas" }] },
       addImage: { states: ["closed", "open"], gatedBy: [{ flag: "image-canvas" }] },
@@ -680,7 +758,7 @@ export const UI_MAP = {
   onboarding: {
     kind: "overlay",
     areas: {
-      root: { states: ["welcome", "permissions", "shortcuts", "done"] },
+      root: { states: ["welcome", "permissions", "shortcuts", "privacy", "done"] },
       welcomeStep: { states: ["default"] },
       demo: { states: ["record", "capture", "share", "editor", "workspaces"] },
       permissionsStep: {
@@ -693,6 +771,10 @@ export const UI_MAP = {
         ],
       },
       shortcutsStep: { states: ["none", "someTried"] },
+      // The step for new users, and the same content as a one-time notice over the app for
+      // people who finished before it existed (NIW2-849). Off is the one thing that differs.
+      privacyStep: { states: ["on", "off"] },
+      privacyNotice: { states: ["default"] },
       doneStep: { states: ["default"] },
     },
   },

@@ -51,14 +51,14 @@ Ventana principal          Ventanas secundarias
 
 ### Flags definidos
 
-| Flag                      | Default | In PostHog         | Purpose                                                                                                                                              |
-| ------------------------- | ------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `native-cursor-capture`   | `true`  | deleted 2026-11-12 | Cursor-free macOS capture with an editable cursor in the editor, for Screen, Frame and Window ([NIW2-660](https://linear.app/niway/issue/NIW2-660)). |
-| `capture-while-recording` | `false` | owner devices only | Screenshots during a take, macOS only (NIW2-688).                                                                                                    |
-| `image-canvas`            | `false` | owner devices only | Image editor canvas (NIW2-698).                                                                                                                      |
-| `image-inspect`           | `false` | owner devices only | Image editor Inspect mode (NIW2-699).                                                                                                                |
-| `image-text`              | `false` | owner devices only | Text recognition in the image editor, macOS only (NIW2-705).                                                                                         |
-| `timeline-levels`         | `false` | owner devices only | Add to timeline in the video editor's Captures panel; the Clips levels redesign builds on it (NIW2-772).                                             |
+| Flag                      | Default | In PostHog         | Purpose                                                                                                                                                                                                      |
+| ------------------------- | ------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `native-cursor-capture`   | `true`  | deleted 2026-11-12 | Cursor-free macOS capture with an editable cursor in the editor, for Screen, Frame and Window ([NIW2-660](https://linear.app/niway/issue/NIW2-660)).                                                         |
+| `capture-while-recording` | `false` | owner devices only | Screenshots during a take, macOS only (NIW2-688).                                                                                                                                                            |
+| `image-canvas`            | `false` | owner devices only | Image editor canvas (NIW2-698).                                                                                                                                                                              |
+| `image-inspect`           | `false` | owner devices only | Image editor Inspect mode (NIW2-699).                                                                                                                                                                        |
+| `image-text`              | `false` | owner devices only | Text recognition in the image editor, macOS only (NIW2-705).                                                                                                                                                 |
+| `timeline-levels`         | `false` | owner devices only | Add from Library… in the video editor's Captures panel (NIW2-772); with it on, the button opens the Add from Library modal, whose destination chooser can add the image over the video (NIW2-771, NIW2-829). |
 
 posthog-js (≥ 1.261.8) returns `undefined` for a **disabled** or missing flag, so the code
 default applies, and `false` for an enabled flag the user does not match. A PostHog value
@@ -85,6 +85,10 @@ a developer toast on every take.
 ### Comportamiento offline
 
 Si `VITE_POSTHOG_KEY` no está configurada, o si PostHog no responde, los SDKs entran en modo no-op: no envían nada y `useFlag` devuelve el default de cada flag. La app funciona exactamente igual que sin PostHog.
+
+### Flags con el toggle de uso y fallos apagado
+
+Los flags no dependen del toggle **Share usage and crash reports** (Settings → App). Con el toggle apagado, `posthog-js` sigue inicializado con el `deviceId` como `distinctID` y pide los flags de ese Mac; no envía ningún evento ni reporte de fallo (`opt_out_capturing_by_default`). Es así como una regla de PostHog (por ejemplo, los dos dispositivos del dueño) sigue llegando a un Mac que no comparte uso. Detalle y decisiones: [Desktop diagnostics opt-out](/backlog/desktop-diagnostics-opt-out/).
 
 ---
 
@@ -159,5 +163,5 @@ El foco en la privacidad no es opcional para una app de grabación de pantalla. 
 Los siguientes ítems están diseñados pero no construidos:
 
 - **Login UI y entitlement real:** `isPaid` en `useWatermark` es un stub. El swap es una línea dentro del hook una vez que exista un plans/entitlement API. El seam ya está — nada más cambia.
-- **Toggle de opt-out de telemetría en Settings:** hoy no hay forma de que el usuario desactive el envío de datos. Agregar un toggle en Settings que llame a `posthog.optOut()` / `posthog.optIn()` y persista la preferencia en `AppSettings`.
+- ~~**Toggle de opt-out de telemetría en Settings**~~ — hecho: **Share usage and crash reports** (reescrito en NIW2-849; ver [Desktop diagnostics opt-out](/backlog/desktop-diagnostics-opt-out/)).
 - **Eventos de producto explícitos:** la infraestructura está lista pero solo captura errores y flags hoy. Eventos como `recording_started`, `recording_completed`, o `settings_changed` se pueden agregar cuando haya necesidad analítica real.

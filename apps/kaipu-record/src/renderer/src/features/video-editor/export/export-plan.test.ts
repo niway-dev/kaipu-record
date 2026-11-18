@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { joinedSource } from "../media-switch.fixture";
 import { initialScene, type TrackItem } from "../scene";
 import { WEBCAM_DEFAULTS } from "../webcam/webcam-model";
-import { buildExportPlan, sliceExportPlan } from "./export-plan";
+import { buildExportPlan, sliceExportPlan, withSourceDuration } from "./export-plan";
 
 // Copied from timeline.test.ts — the same fixture factories, kept local so this
 // test file has no cross-test-file coupling.
@@ -21,6 +22,24 @@ const slide = (id: string, duration: number): TrackItem => ({
   naturalHeight: 600,
 });
 
+describe("withSourceDuration — the recording's length (camera blocks, ADR 0039)", () => {
+  const scene = { ...initialScene(10), items: [clip("a", 5, 10)] };
+
+  it("carries a usable source duration, through a range slice too", () => {
+    const plan = withSourceDuration(buildExportPlan(scene), 10.4);
+    expect(plan.sourceDurationSeconds).toBe(10.4);
+    expect(sliceExportPlan(plan, 1, 3).sourceDurationSeconds).toBe(10.4);
+  });
+
+  it("carries nothing for a missing, zero or NaN length, so the plan is as it was", () => {
+    for (const length of [undefined, 0, Number.NaN, -1, Infinity]) {
+      expect("sourceDurationSeconds" in withSourceDuration(buildExportPlan(scene), length)).toBe(
+        false,
+      );
+    }
+  });
+});
+
 describe("buildExportPlan", () => {
   it("maps the track to contiguous render segments", () => {
     const plan = buildExportPlan({
@@ -31,8 +50,22 @@ describe("buildExportPlan", () => {
     expect(plan.totalDuration).toBe(18);
     expect(plan.segments).toEqual([
       { kind: "slide", timelineStart: 0, duration: 3, assetId: "asset-s1" },
-      { kind: "clip", timelineStart: 3, duration: 10, sourceStart: 0, sourceEnd: 10 },
-      { kind: "clip", timelineStart: 13, duration: 5, sourceStart: 20, sourceEnd: 25 },
+      {
+        kind: "clip",
+        timelineStart: 3,
+        duration: 10,
+        sourceStart: 0,
+        sourceEnd: 10,
+        sourceId: null,
+      },
+      {
+        kind: "clip",
+        timelineStart: 13,
+        duration: 5,
+        sourceStart: 20,
+        sourceEnd: 25,
+        sourceId: null,
+      },
     ]);
   });
 
@@ -172,5 +205,97 @@ describe("the background in the plan (NIW2-668)", () => {
     const magenta = { bg: "magenta", padding: 48, radius: 16, shadow: 24 } as const;
     const plan = buildExportPlan({ ...scene, background: magenta });
     expect(sliceExportPlan(plan, 2, 4).background).toEqual(magenta);
+  });
+});
+
+describe("buildExportPlan with two recordings", () => {
+  // Opened [0, 100]; joined B at [3600, 3640]; the sequence goes a1 -> B -> a2.
+  const twoRecordings = {
+    ...initialScene(100),
+    sources: [joinedSource("b", 3600, 40)],
+    items: [clip("a1", 0, 10), clip("b", 3600, 3610), clip("a2", 50, 60)],
+  };
+
+  it("tells each clip which recording it reads, keeping axis ranges", () => {
+    const plan = buildExportPlan(twoRecordings);
+    expect(plan.segments).toEqual([
+      {
+        kind: "clip",
+        timelineStart: 0,
+        duration: 10,
+        sourceStart: 0,
+        sourceEnd: 10,
+        sourceId: null,
+      },
+      {
+        kind: "clip",
+        timelineStart: 10,
+        duration: 10,
+        sourceStart: 3600,
+        sourceEnd: 3610,
+        sourceId: "b",
+      },
+      {
+        kind: "clip",
+        timelineStart: 20,
+        duration: 10,
+        sourceStart: 50,
+        sourceEnd: 60,
+        sourceId: null,
+      },
+    ]);
+  });
+
+  it("gives sourceId null to every clip of a scene without joined recordings", () => {
+    const scene = {
+      ...initialScene(1),
+      items: [slide("s1", 3), clip("a", 0, 10), clip("b", 20, 25)],
+    };
+    const plan = buildExportPlan(scene);
+    const clips = plan.segments.filter((s) => s.kind === "clip");
+    expect(clips.map((s) => s.kind === "clip" && s.sourceId)).toEqual([null, null]);
+    const stripped = {
+      ...plan,
+      segments: plan.segments.map((s) => {
+        if (s.kind !== "clip") return s;
+        const { sourceId: _ignored, ...rest } = s;
+        return rest;
+      }),
+    };
+    expect(stripped.segments).toEqual([
+      { kind: "slide", timelineStart: 0, duration: 3, assetId: "asset-s1" },
+      { kind: "clip", timelineStart: 3, duration: 10, sourceStart: 0, sourceEnd: 10 },
+      { kind: "clip", timelineStart: 13, duration: 5, sourceStart: 20, sourceEnd: 25 },
+    ]);
+    expect(plan.totalDuration).toBe(18);
+  });
+
+  it("throws, naming the clip, for a clip that straddles the end of a joined recording", () => {
+    expect(() => buildExportPlan({ ...twoRecordings, items: [clip("bad", 3630, 3650)] })).toThrow(
+      /bad/,
+    );
+  });
+
+  it("keeps the recording on a segment sliced across the cut into B", () => {
+    const plan = buildExportPlan(twoRecordings);
+    const sliced = sliceExportPlan(plan, 8, 13);
+    expect(sliced.segments).toEqual([
+      {
+        kind: "clip",
+        timelineStart: 0,
+        duration: 2,
+        sourceStart: 8,
+        sourceEnd: 10,
+        sourceId: null,
+      },
+      {
+        kind: "clip",
+        timelineStart: 2,
+        duration: 3,
+        sourceStart: 3600,
+        sourceEnd: 3603,
+        sourceId: "b",
+      },
+    ]);
   });
 });
