@@ -1,0 +1,104 @@
+---
+title: Renderer settings store
+description: How a renderer window reads the app settings through one store (one getSettings call and one settings:changed listener per window), how to add a consumer, why no code calls onSettingsChanged directly, and the 2026-11-18 listener audit that led to it.
+---
+
+# Renderer settings store
+
+Every renderer window reads the app settings through one module,
+`apps/kaipu-record/src/renderer/src/features/settings/settings-store.ts`. The decision and its
+alternatives are in [ADR 0063](/architecture/decisions/0063-renderer-settings-are-read-through-one-store-per-window/).
+
+## How it works
+
+- **One read.** The store makes the window's only `window.electronAPI.getSettings()` call at
+  startup. Until it lands the value is `null`.
+- **One listener.** The store makes the window's only `window.electronAPI.onSettingsChanged`
+  call, and keeps that listener for the window's lifetime. Main sends the full effective
+  `AppSettings` on every change, so each broadcast replaces the stored value.
+- **Lazy start.** Nothing touches main until the first `subscribeSettings`, `loadSettings`,
+  `watchSettings`, `useSettings` or `updateSettings`.
+- **Consumers are a `Set`.** Hooks and modules subscribing and unsubscribing never reach the
+  bridge, so the number of `ipcRenderer` listeners does not depend on how many hooks read
+  settings.
+- **A broadcast before the first read wins.** It is newer than what the read saw, so the late
+  read is dropped.
+- **Writes.** `updateSettings(patch)` calls main, returns the new settings and hands them to
+  every consumer in the window at once. The other windows get main's broadcast.
+- **No null flash.** A window that already holds the settings returns them on the first render.
+
+| Export                            | Use it for                                                                                     |
+| --------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `useSettings(selector, isEqual?)` | A React component or hook; returns the picked value, or `null` before the first read           |
+| `watchSettings(listener)`         | An effect that applies settings to something outside React: called now if held, then on change |
+| `subscribeSettings(listener)`     | The same, without the call for the value already held                                          |
+| `getSettingsSnapshot()`           | A synchronous read of what the window holds now (`null` before the first read)                 |
+| `loadSettings()`                  | A promise for the settings once the window has them                                            |
+| `updateSettings(patch)`           | Writing a setting                                                                              |
+
+## Add a consumer
+
+```tsx
+import type { AppSettings } from "@shared/types";
+import { useSettings } from "@renderer/features/settings/settings-store";
+
+// A module-level function, so its identity is stable across renders.
+const pickCountdown = (settings: AppSettings): number => settings.recordingCountdownSeconds;
+
+export function CountdownHint(): React.JSX.Element | null {
+  const seconds = useSettings(pickCountdown); // null until the window has its settings
+  return seconds === null ? null : <p>{seconds} s</p>;
+}
+```
+
+The selector must pick a value that already exists in the settings, not build a new object or
+array: a fresh object looks changed on every read. Derive anything fresh with `useMemo` from the
+picked value. Main sends a new object for every field on each broadcast, so a nested pick is a new
+reference each time; pass an `isEqual` function to ignore broadcasts that left it as it was
+(`useShortcutLabels` does).
+
+Outside React, `watchSettings(apply)` in an effect (or at module level) does the same and returns
+the unsubscribe.
+
+## Never call `onSettingsChanged` directly
+
+The preload opens one `ipcRenderer` listener per `onSettingsChanged` call. Node warns once a
+single event holds more than ten, and a hook that subscribes for itself is how the main window
+reached twelve. A test, `features/settings/settings-store-usage.test.ts`, scans the renderer source
+and fails if any file other than the store mentions `onSettingsChanged`, so the count cannot creep
+back up unnoticed. `features/settings/settings-store.test.ts` and the per-window count test cover
+the behavior: one listener and one startup read, however many routes the main window visits.
+
+In tests, `test/settings-ipc.ts` fakes main's side (`installSettingsIpc`), counts reads and
+listeners, and broadcasts; the store resets after every test (`test/setup.ts`).
+
+## Audit 2026-11-18, main at 459120904
+
+How many `settings:changed` listeners each window held before the store, counted from the code.
+
+| Window                                     | Listeners before | After |
+| ------------------------------------------ | ---------------- | ----- |
+| Main window, on Record                     | 12               | 1     |
+| Capture panel                              | 7                | 1     |
+| Control bar                                | 2                | 1     |
+| Camera bubble                              | 2                | 1     |
+| Capture overlay (one per display)          | 1 to 2           | 1     |
+| Capture toast, recording ready card, shade | 1 each           | 1     |
+
+The main window on Record, before:
+
+- Five were there from the start of the app: `I18nRoot` (locale and theme), `useInitAnalytics`, the
+  recorder store's countdown length (registered at import), `useShortcutLabels` in `AppShell`, and
+  `PendingSettingsHost`.
+- Seven more arrived with the Record page: `useShortcutLabels` again, `useRecordingSetup`,
+  `useWatermark`, `useScreenshotMode`, `useRecordingMode`, `useAudioSettings` and
+  `useCameraSettings`.
+
+Each of them also called `getSettings()` on mount: about twelve reads at startup, against one now.
+
+The warning printed twice, not once, because StrictMode replays effects in development and the
+replay resets Node's "already warned" flag.
+
+After the change every window holds one listener and makes one startup read of its own. The
+capture overlay still makes a few one-off `getSettings()` reads (its remembered area, countdown
+length and bubble size); those are not subscriptions and are outside the decision.

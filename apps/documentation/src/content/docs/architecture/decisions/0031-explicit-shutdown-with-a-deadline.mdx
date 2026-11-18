@@ -92,9 +92,11 @@ treat the deadline as a net behind an explicit sequence, not as the mechanism.
   `browser-window-created` guard catches a window that forgot, and logs it.
 - The worst-case quit is 5 s plus one log line, never a ghost. The E2E suite treats that
   log line as a failure, so the net cannot become the norm unnoticed.
-- `onSettingsChanged` / `onSettingsKeysChanged` still have no unsubscribe. Every subscriber
-  today is a process-lifetime singleton, so nothing leaks; the first per-instance subscriber
-  must add one (tracked in NIW2-550 with the renderer-side lifecycle audit).
+- The main-process `onSettingsChanged` / `onSettingsKeysChanged` (`settings-store.ts`) still have no
+  unsubscribe (the preload's `onSettingsChanged`, which the renderer uses, returns one). Every
+  main-process subscriber today is a process-lifetime singleton, so nothing leaks; the first
+  per-instance subscriber must add one (tracked in NIW2-550 with the renderer-side lifecycle
+  audit).
 
 ## Non-goals
 

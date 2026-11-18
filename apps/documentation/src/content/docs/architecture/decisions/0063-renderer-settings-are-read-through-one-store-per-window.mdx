@@ -1,0 +1,96 @@
+---
+title: "ADR 0063: Renderer settings are read through one store per window"
+description: Each renderer window keeps one settings store that owns the window's only settings:changed listener and its only startup read of the settings. React hooks and plain modules read the store, never the preload bridge. Per-hook subscriptions kept by a hand-written inventory, and a higher Node listener limit, are rejected.
+---
+
+# ADR 0063: Renderer settings are read through one store per window
+
+## Status
+
+| Field         | Value                                                                                                                                                                                                                                    |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Status        | Accepted — the store and the test that enforces it ship with [NIW2-544](https://linear.app/niway/issue/NIW2-544)                                                                                                                         |
+| Date          | 2026-11-18                                                                                                                                                                                                                               |
+| Supersedes    | —                                                                                                                                                                                                                                        |
+| Relates to    | [0034](/architecture/decisions/0034-per-workspace-setting-overrides/) (main broadcasts the effective settings), [0031](/architecture/decisions/0031-explicit-shutdown-with-a-deadline/) (the main-process listeners have no unsubscribe) |
+| Superseded by | —                                                                                                                                                                                                                                        |
+
+## Context
+
+Main broadcasts the full effective `AppSettings` to every window on each change (`settings:changed`).
+The preload opens one `ipcRenderer.on` listener for every `window.electronAPI.onSettingsChanged(cb)`
+call and returns its unsubscribe. Until now each renderer hook made that call for itself, together
+with its own `getSettings()` on mount.
+
+Node warns `MaxListenersExceededWarning` when one emitter holds more than ten listeners for the
+same event. The main window opens on Record, and an audit on 2026-11-18 (main at `459120904`)
+counted twelve `settings:changed` listeners there and about twelve `getSettings()` calls at
+startup. Five came from the app itself (the i18n root, analytics, the recorder store's countdown
+at import, the shortcut labels in the shell, the pending-settings host), and seven more arrived
+with the Record page (the shortcut labels again, recording setup, the watermark, screenshot mode,
+recording mode, audio settings, camera settings). The warning printed twice because StrictMode
+replays effects in development, which resets Node's "already warned" flag. The other windows were
+under the limit: the capture panel held 7, the control bar 2, the camera bubble 2, the overlays 1
+or 2, and the toast, the ready card and the shade 1 each. Every new hook that read a setting would
+have added a listener, with no test to notice.
+
+## Decision
+
+1. **One settings store per renderer window**, `renderer/src/features/settings/settings-store.ts`.
+   It owns the window's only `onSettingsChanged` subscription and its only startup
+   `getSettings()`.
+2. **It starts on first use** (a subscribe, a load or an update), keeps its one `ipcRenderer`
+   listener for the window's lifetime, and keeps its consumers in a plain `Set`, so consumers
+   coming and going never touch the bridge.
+3. **Consumers read the store.** React uses `useSettings(selector)`, built on
+   `useSyncExternalStore`; code outside React uses `subscribeSettings` and `watchSettings`. A
+   window that already holds the settings returns them on the first render, with no `null` flash.
+4. **A broadcast that lands before the first read finishes wins**, because it is newer than the
+   file the read saw. The store keeps that rule once, so no consumer keeps its own flag.
+5. **Writes go through the store's `updateSettings`**, which returns main's answer and hands it to
+   every consumer in the window at once, ahead of the broadcast.
+6. **A test enforces it.** No renderer source file other than the store may reference
+   `onSettingsChanged`; the test scans the source and fails otherwise.
+
+## Alternatives rejected
+
+- **Keep one subscription per hook and keep an inventory of them.** It is what produced twelve.
+  The count crept up one hook at a time, and a list kept by hand drifted from the code, which is
+  why the audit had to be redone from the code. Each hook also carried its own copy of the "a
+  broadcast before the first read wins" rule, and each paid its own `getSettings()`.
+- **Raise the limit with `setMaxListeners`.** It silences the warning and leaves the cost: twelve
+  listeners each doing work on every broadcast, twelve reads at startup, and a limit someone must
+  raise again at the thirteenth. A real leak in this window would also stop warning.
+
+## Consequences
+
+- The main window holds one `settings:changed` listener and calls `getSettings()` once at
+  startup, however many hooks read settings. The other windows hold one each.
+- A hook that reads a setting adds no listener and no read. Adding one is a `useSettings` call.
+- A consumer's callback runs on every change the store takes: the first read, each broadcast, and
+  the answer to a write in this window. Consumers apply settings idempotently, which they
+  already had to for the broadcast echo of their own writes.
+- Selectors must pick, not build: a fresh object returned from a selector would look changed on
+  every read. Derived values go in `useMemo`.
+- Renderer tests drive the store through the faked `electronAPI`, so they still run the real
+  path. The store resets after every test.
+- Reads that are not subscriptions (the capture overlay's remembered area, its countdown length
+  and its bubble size) still call `getSettings()` once per overlay window. They hold no listener
+  and are outside this decision.
+
+## Non-goals
+
+- The main process's own settings listeners (`onSettingsChanged` and `onSettingsKeysChanged` in
+  `main/infrastructure/settings-store.ts`). They are process-lifetime singletons, covered by
+  [0031](/architecture/decisions/0031-explicit-shutdown-with-a-deadline/).
+- Other IPC broadcasts (`recording-settings:changed`, workspaces, flag overrides). They have their
+  own listeners and are not part of this audit.
+- Changing what main broadcasts, the preload, or the `KaipuElectronAPI` types.
+
+## What would reopen this
+
+- A window that needs settings before its first React render outside the store's start rules.
+- A broadcast payload too large to hand whole to every consumer, which would call for per-key
+  subscriptions in main.
+- A second renderer process shape (for example a shared worker) where "one store per window" no
+  longer bounds the listeners.
