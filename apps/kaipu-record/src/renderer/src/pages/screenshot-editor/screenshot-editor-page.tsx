@@ -220,6 +220,11 @@ interface LoadedCanvasDoc {
   assets: CanvasAssets;
 }
 
+/** A crop-mode session: the image's whole asset, the window being edited, and where it began. */
+interface CropSession extends CropTarget {
+  start: NormalizedRect;
+}
+
 /** A new asset id for an added image: matches `CANVAS_ASSET_ID_PATTERN`, never "base". */
 function newImageAssetId(): string {
   let id = "";
@@ -233,11 +238,6 @@ function newImageAssetId(): string {
  * `unreadable` when one exists but is corrupt or unsupported, lacks its base asset, or could
  * not be read. It never rejects, so a bad document can never keep the editor from opening.
  */
-/** A crop-mode session: the image's whole asset, the window being edited, and where it began. */
-interface CropSession extends CropTarget {
-  start: NormalizedRect;
-}
-
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const isPng = (bytes: ArrayBuffer): boolean => {
   const head = new Uint8Array(bytes, 0, Math.min(8, bytes.byteLength));
@@ -691,7 +691,7 @@ function ScreenshotEditorBody({
     annotations: scene.annotations,
     crop: scene.crop,
     exportFrame: scene.exportFrame,
-    // Per-image crop, unit 3: carried through, never written by this editor yet.
+    // Per-image crop: the base's view, written by crop mode and the base's corner resize.
     ...(scene.baseCrop ? { baseCrop: scene.baseCrop } : {}),
     ...(scene.baseRadius !== undefined ? { baseRadius: scene.baseRadius } : {}),
     ...(scene.basePlacement ? { basePlacement: scene.basePlacement } : {}),
