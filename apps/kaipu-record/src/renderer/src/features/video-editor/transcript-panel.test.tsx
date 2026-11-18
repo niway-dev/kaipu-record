@@ -341,6 +341,16 @@ describe("TranscriptPanel — states", () => {
     expect(start).toHaveBeenCalledOnce();
   });
 
+  it("failed: an unreadable transcript file without the model opens the offer on Try again", () => {
+    hooks.transcript.mockReturnValue({ ...NO_TRANSCRIPT, state: "invalid" });
+    control({ kind: "needs-model" });
+    setup();
+    expect(panel()).toHaveAttribute("data-state", "failed");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(start).not.toHaveBeenCalled();
+    expect(screen.getByTestId("model-offer")).toBeInTheDocument();
+  });
+
   it("failed: an unreadable transcript file cannot be retried while another video is transcribing", () => {
     hooks.transcript.mockReturnValue({ ...NO_TRANSCRIPT, state: "invalid" });
     control({ kind: "busy-elsewhere" });

@@ -352,6 +352,7 @@ export function TranscriptPanel({
               {t("transcriptRetry")}
             </Button>
           </div>
+          {offerOpen && control.state.kind === "needs-model" && <ModelOfferHost />}
         </div>
       )}
 
