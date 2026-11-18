@@ -178,14 +178,13 @@
 }
 
 /* The Transcribe button's idle looks wait for the pointer like the other actions; a running
-   job, a model download and the "Transcribed" badge are information and stay visible. */
+   job, a model download, a failure, an out-of-date or unreadable transcript and the "Transcribed"
+   badge are information and stay visible. A failed model download keeps `needs-model` as its
+   state and marks the button inside, so that one is told apart by `data-failed`. */
 .transcribeSlot
   > :is(
     [data-state="idle"],
-    [data-state="needs-model"],
-    [data-state="failed"],
-    [data-state="stale"],
-    [data-state="invalid"],
+    [data-state="needs-model"]:not(:has([data-failed])),
     [data-state="busy-elsewhere"]
   ) {
   opacity: 0;
