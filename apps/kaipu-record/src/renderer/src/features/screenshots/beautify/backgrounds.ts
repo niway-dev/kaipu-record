@@ -9,6 +9,7 @@ export const BACKGROUND_IDS = [
   "none",
   "dark",
   "carbon",
+  "white",
   "magenta",
   "purple",
   "ocean",
@@ -36,6 +37,7 @@ export type BackgroundNameKey =
   | "bgNone"
   | "bgDark"
   | "bgCarbon"
+  | "bgWhite"
   | "bgMagenta"
   | "bgPurple"
   | "bgOcean"
@@ -61,11 +63,18 @@ export interface Background {
   paint: BackgroundPaint;
 }
 
+/**
+ * The checkerboard that stands for "nothing here": the transparent swatch, and the export box
+ * drawn over a canvas gap when the background is transparent. Defined once so the two match.
+ */
+export const TRANSPARENT_CHECKER_CSS =
+  "repeating-conic-gradient(#2a2a2e 0% 25%, #232327 0% 50%) 50% / 16px 16px";
+
 export const BACKGROUNDS: Background[] = [
   {
     id: "none",
     nameKey: "bgNone",
-    css: "repeating-conic-gradient(#2a2a2e 0% 25%, #232327 0% 50%) 50% / 16px 16px",
+    css: TRANSPARENT_CHECKER_CSS,
     paint: { kind: "none" },
   },
   {
@@ -79,6 +88,14 @@ export const BACKGROUNDS: Background[] = [
     nameKey: "bgCarbon",
     css: "var(--bg-card)",
     paint: { kind: "solid", color: "#171719" },
+  },
+  {
+    // A real white for people who want one: pasting a transparent PNG into an app that
+    // flattens alpha shows black, and the canvas gap is transparent under "none".
+    id: "white",
+    nameKey: "bgWhite",
+    css: "#ffffff",
+    paint: { kind: "solid", color: "#ffffff" },
   },
   {
     id: "magenta",
