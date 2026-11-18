@@ -486,6 +486,46 @@ describe("TranscriptPanel — seek and the playing word", () => {
     ).toEqual(["new"]);
   });
 
+  describe("following the playing word", () => {
+    let scrollIntoView: ReturnType<typeof vi.fn>;
+    let rect: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      scrollIntoView = vi.fn();
+      Element.prototype.scrollIntoView =
+        scrollIntoView as unknown as typeof Element.prototype.scrollIntoView;
+      // The list is 100 px tall at the top; every word sits below it, out of view.
+      rect = vi
+        .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+        .mockImplementation(function (this: HTMLElement) {
+          const inList = this.dataset.testid === "transcript-list";
+          return { top: inList ? 0 : 500, bottom: inList ? 100 : 520 } as DOMRect;
+        });
+    });
+    afterEach(() => {
+      rect.mockRestore();
+      // @ts-expect-error jsdom has no scrollIntoView; the test installed one.
+      delete Element.prototype.scrollIntoView;
+    });
+
+    it("scrolls the playing word into view when the user has not scrolled", () => {
+      setup();
+      act(() => timeListener?.(1.2));
+      expect(scrollIntoView).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      ["wheel", (el: HTMLElement) => fireEvent.wheel(el)],
+      ["touch", (el: HTMLElement) => fireEvent.touchMove(el)],
+      ["scrollbar drag (pointer down)", (el: HTMLElement) => fireEvent.pointerDown(el)],
+      ["keyboard", (el: HTMLElement) => fireEvent.keyDown(el, { key: "PageDown" })],
+    ])("leaves the list where the user put it after %s", (_name, input) => {
+      setup();
+      input(screen.getByTestId("transcript-list"));
+      act(() => timeListener?.(1.2));
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    });
+  });
+
   it("starts from where the playhead is when it opens", () => {
     playhead = 2.45;
     setup();

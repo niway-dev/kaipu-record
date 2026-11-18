@@ -120,6 +120,11 @@ export function TranscriptPanel({
     );
   }, [rows, view.kind]);
 
+  // Any input that scrolls the list by hand, so following the playing word backs off.
+  const pauseFollow = (): void => {
+    lastUserScroll.current = Date.now();
+  };
+
   const reveal = useCallback((el: HTMLElement | undefined, force: boolean): void => {
     const list = listRef.current;
     if (!el || !list) return;
@@ -444,12 +449,12 @@ export function TranscriptPanel({
               className={styles.list}
               data-testid="transcript-list"
               onClick={onListClick}
-              onWheel={() => {
-                lastUserScroll.current = Date.now();
-              }}
-              onTouchMove={() => {
-                lastUserScroll.current = Date.now();
-              }}
+              onWheel={pauseFollow}
+              onTouchMove={pauseFollow}
+              // A scrollbar drag starts as a pointer down on the list, and the keyboard scrolls
+              // it with keys; neither fires a wheel or touch event.
+              onPointerDown={pauseFollow}
+              onKeyDown={pauseFollow}
             >
               {rows.map((row) =>
                 row.kind === "gap" ? (
