@@ -65,6 +65,7 @@ beforeEach(async () => {
   URL.createObjectURL = vi.fn(() => "blob:asset");
   URL.revokeObjectURL = vi.fn();
   exportScene.mockReset();
+  exportScene.mockResolvedValue(new ArrayBuffer(1));
   readCanvas.mockReset();
   window.electronAPI.readScreenshotCanvas = readCanvas as never;
   window.electronAPI.readScreenshotBytes = vi.fn(async () => flatBytes);
@@ -134,7 +135,9 @@ describe("crop mode on the base", () => {
   it("dragging a handle changes nothing in the export until the crop is finished", async () => {
     await open({});
     await cropBaseToTopLeftQuarter();
-    // Still being edited: the export box measures the whole asset.
+    // The window did shrink (200 px layer, window 200 -> 100)...
+    expect(screen.getByTestId("crop-window").getAttribute("width")).toBe("100");
+    // ...but it is still being edited: the export box measures the whole asset.
     expect(label()).toHaveTextContent("400 × 400 px");
   });
 
@@ -195,11 +198,89 @@ describe("crop mode on the base", () => {
     expect(screen.getByTestId("crop-scrim")).toBeInTheDocument();
   });
 
-  it("a double-click on a cropped-out part is not the base: the Export frame opens as before", async () => {
+  it("a double-click on a cropped-out part does not enter crop mode", async () => {
     await open({ baseCrop: { x: 0.5, y: 0, w: 0.5, h: 1 } });
     await waitFor(() => expect(label()).toHaveTextContent("200 × 400 px"));
     fireEvent.doubleClick(surface(), { clientX: 20, clientY: 100 });
     expect(screen.queryByTestId("crop-window")).toBeNull();
+  });
+});
+
+describe("leaving crop mode by other routes", () => {
+  const widthOf = () => screen.getByTestId("crop-window").getAttribute("width");
+
+  it("undo mid-session puts the window back and adds no history step", async () => {
+    await open({});
+    await cropBaseToTopLeftQuarter();
+    expect(widthOf()).toBe("100");
+    undoKey();
+    await waitFor(() => expect(widthOf()).toBe("200"));
+    // Still in crop mode, and nothing was committed: the undo button stays disabled.
+    expect(screen.getByRole("button", { name: /undo/i })).toBeDisabled();
+    fireEvent.keyDown(window, { key: "Enter" });
+    await waitFor(() => expect(screen.queryByTestId("crop-window")).toBeNull());
+    expect(label()).toHaveTextContent("400 × 400 px");
+  });
+
+  it("a press outside the canvas commits the crop", async () => {
+    await open({});
+    await cropBaseToTopLeftQuarter();
+    fireEvent.pointerDown(screen.getByRole("button", { name: /undo/i }));
+    await waitFor(() => expect(screen.queryByTestId("crop-window")).toBeNull());
+    expect(label()).toHaveTextContent("200 × 200 px");
+  });
+
+  it("picking another tool commits the crop", async () => {
+    await open({});
+    await cropBaseToTopLeftQuarter();
+    // The Box tool's key: a tool change goes through the same `afterPick` as its button.
+    fireEvent.keyDown(window, { key: "r" });
+    await waitFor(() => expect(screen.queryByTestId("crop-window")).toBeNull());
+    expect(label()).toHaveTextContent("200 × 200 px");
+  });
+});
+
+describe("Save, Copy and PDF never run on an uncommitted crop window", () => {
+  it("Copy by keyboard (no pointer press) exports the cropped scene", async () => {
+    await open({});
+    await cropBaseToTopLeftQuarter();
+    // A click with no pointerdown, as Space or Enter on a focused Copy button gives.
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    await waitFor(() => expect(exportScene).toHaveBeenCalled());
+    const scene = exportScene.mock.calls[0][1].scene as Scene;
+    expect(scene.baseCrop).toEqual({ x: 0, y: 0, w: 0.5, h: 0.5 });
+    expect(screen.queryByTestId("crop-window")).toBeNull();
+  });
+
+  it("PDF by keyboard exports the cropped scene", async () => {
+    window.electronAPI.exportScreenshotFile = vi.fn(async () => null) as never;
+    await open({});
+    await cropBaseToTopLeftQuarter();
+    fireEvent.click(screen.getByRole("button", { name: "PDF" }));
+    await waitFor(() => expect(exportScene).toHaveBeenCalled());
+    expect(exportScene.mock.calls[0][0]).toBe("pdf");
+    expect((exportScene.mock.calls[0][1].scene as Scene).baseCrop).toEqual({
+      x: 0,
+      y: 0,
+      w: 0.5,
+      h: 0.5,
+    });
+  });
+
+  it("Save by keyboard exports the cropped scene", async () => {
+    window.electronAPI.saveScreenshot = vi.fn(async () => ({ id: "shot-1" })) as never;
+    await open({});
+    await cropBaseToTopLeftQuarter();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    const overwrite = screen.queryByRole("button", { name: /overwrite/i });
+    if (overwrite) fireEvent.click(overwrite);
+    await waitFor(() => expect(exportScene).toHaveBeenCalled());
+    expect((exportScene.mock.calls[0][1].scene as Scene).baseCrop).toEqual({
+      x: 0,
+      y: 0,
+      w: 0.5,
+      h: 0.5,
+    });
   });
 });
 

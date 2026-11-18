@@ -1173,6 +1173,8 @@ function ScreenshotEditorBody({
    */
   const copyToClipboard = (): Promise<boolean> => {
     if (!imageReady) return Promise.resolve(false);
+    // A crop window still being edited is committed first, so the copy is what the stage shows.
+    finishCrop();
     return enqueue(async () => {
       if (!alive.current) return false;
       try {
@@ -1324,8 +1326,11 @@ function ScreenshotEditorBody({
     autoOnOpen?: boolean;
     /** First Save of an unsaved shot: if an earlier queued save already created the item, overwrite it. */
     bindToSaved?: boolean;
-  }): Promise<string | null> =>
-    enqueue(async () => {
+  }): Promise<string | null> => {
+    // An explicit save (not the quiet autosave, which must not end a crop session the user is
+    // in) commits a crop window still being edited, so it saves what the stage shows.
+    if (!opts.silent) finishCrop();
+    return enqueue(async () => {
       if (!alive.current) return null;
       // An explicit save bakes the redactions in: it counts as having read the notice.
       if (!opts.silent && noticeOpenRef.current) acknowledgeNotice();
@@ -1420,6 +1425,7 @@ function ScreenshotEditorBody({
         return null;
       }
     });
+  };
 
   /**
    * Export a PDF to a path the user picks. Independent of the vault: it neither
@@ -1428,6 +1434,7 @@ function ScreenshotEditorBody({
    */
   const onExportPdf = (): Promise<void> => {
     if (!imageReady) return Promise.resolve();
+    finishCrop();
     return enqueue(async () => {
       if (!alive.current) return;
       try {
