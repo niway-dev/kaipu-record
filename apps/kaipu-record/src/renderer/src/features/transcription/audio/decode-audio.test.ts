@@ -225,7 +225,7 @@ describe("decodeAudioToPcm", () => {
   });
 
   it("never emits negative time: audio stamped before zero is trimmed", async () => {
-    // 100 ms of packets starting at -50 ms: the first 50 ms belongs before the start.
+    // 1.05 s of packets starting at -50 ms: the first 50 ms belongs before the start, 1 s remains.
     const packets = tonePackets(-0.05, 1.05, 48000, [0.5]);
     stubDecode(packets);
 
@@ -246,7 +246,7 @@ describe("decodeAudioToPcm", () => {
   });
 
   it("decodes lazily: it does not read ahead of the consumer, so memory does not grow with duration", async () => {
-    // 60 minutes of packets would be 168750 samples; only a few may be touched for one chunk.
+    // 60 minutes of packets would be 168750 packets (3600 s * 48000 / 1024); only a few may be touched for one chunk.
     function* hour(): Generator<FakeSample> {
       const rate = 48000;
       for (let at = 0; at < 3600 * rate; at += PACKET_FRAMES) {
