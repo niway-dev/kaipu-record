@@ -311,7 +311,11 @@ export function LibraryDetailPage(): React.JSX.Element {
   const hasCaptures = !isScreenshot && captures.length > 0;
   // The Transcript tab follows the header Transcribe button's rule, plus the flag.
   const hasAudio = probe ? probe.hasAudio : undefined;
-  const showTranscript = transcriptionOn && canTranscribeVideo(video, hasAudio);
+  // Without a stored duration the tab needs the probed one: it waits while the file is being read
+  // and is not offered once the read failed (the editor refuses such an item too).
+  const durationKnownOrPending = video.durationSeconds > 0 || probeState.status !== "error";
+  const showTranscript =
+    transcriptionOn && canTranscribeVideo(video, hasAudio) && durationKnownOrPending;
   const tabs: PanelTab[] = [
     "versions",
     ...(showTranscript ? (["transcript"] as const) : []),

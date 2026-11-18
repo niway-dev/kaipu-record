@@ -2208,6 +2208,36 @@ describe("LibraryDetailPage Transcript tab (NIW2-870)", () => {
     expect(screen.queryByText(/everything is cut or muted/i)).toBeNull();
   });
 
+  it("T3c: stored duration 0 while the probe is pending shows the loading note, never 'cut'", async () => {
+    stubApi(TRANSCRIPT);
+    probe.mockImplementationOnce(() => new Promise(() => {}));
+    list({
+      ...exportedOnlyItem,
+      durationSeconds: 0,
+      local: exportedOnlyItem.local && { ...exportedOnlyItem.local, durationSeconds: 0 },
+    });
+    await openTranscript();
+    expect(await screen.findByText("Loading the transcript…")).toBeInTheDocument();
+    expect(screen.queryByText(/everything is cut or muted/i)).toBeNull();
+  });
+
+  it("T3d: stored duration 0 and an unusable probe: no Transcript tab, and the page leaves it", async () => {
+    stubApi(TRANSCRIPT);
+    let release: (value: unknown) => void = () => {};
+    probe.mockImplementationOnce(() => new Promise((resolve) => (release = resolve)) as never);
+    list({
+      ...exportedOnlyItem,
+      durationSeconds: 0,
+      local: exportedOnlyItem.local && { ...exportedOnlyItem.local, durationSeconds: 0 },
+    });
+    await openTranscript();
+    expect(await screen.findByText("Loading the transcript…")).toBeInTheDocument();
+    release({ width: 1280, height: 720, durationSec: 0, fps: 30, hasAudio: true, sampleRate: 0 });
+    await waitFor(() => expect(screen.queryByRole("tab", { name: "Transcript" })).toBeNull());
+    expect(screen.queryByText("Loading the transcript…")).toBeNull();
+    expect(screen.getByRole("tab", { selected: true })).not.toHaveTextContent("Transcript");
+  });
+
   it("T3: clicking a word sets the detail video's time to that word's start", async () => {
     stubApi(TRANSCRIPT);
     list(exportedOnlyItem);
