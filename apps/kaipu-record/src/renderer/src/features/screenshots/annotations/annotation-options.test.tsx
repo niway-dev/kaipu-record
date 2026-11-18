@@ -33,6 +33,7 @@ function makeScene(annotations: Annotation[], selectedId: string | null): Editor
     select: vi.fn(),
     addAnnotation: vi.fn(),
     commitAnnotation: vi.fn(),
+    commitBase: vi.fn(),
     beginInteract: vi.fn(),
     endInteract: vi.fn(),
     removeAnnotation: vi.fn(),
