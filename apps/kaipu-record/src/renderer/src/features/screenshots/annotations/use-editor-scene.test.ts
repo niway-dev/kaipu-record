@@ -148,13 +148,32 @@ describe("useEditorScene", () => {
     expect(result.current.baseCrop).toEqual(baseCrop);
     expect(result.current.baseRadius).toBe(10);
     expect(result.current.basePlacement).toEqual(basePlacement);
-    // Nothing in the editor writes them yet: any edit, undo and redo must leave them as saved.
+    // Any edit, undo and redo must leave them as saved.
     act(() => result.current.setExportFrame({ x: 0, y: 0, w: 2, h: 2 }));
     act(() => result.current.undo());
     act(() => result.current.redo());
     expect(result.current.baseCrop).toEqual(baseCrop);
     expect(result.current.baseRadius).toBe(10);
     expect(result.current.basePlacement).toEqual(basePlacement);
+  });
+
+  it("commitBase writes the base fields as one undoable change, undefined removes one", () => {
+    const { result } = renderHook(() => useEditorScene());
+    const baseCrop = { x: 0.25, y: 0, w: 0.5, h: 1 };
+    act(() => result.current.commitBase({ baseCrop }));
+    expect(result.current.baseCrop).toEqual(baseCrop);
+    expect(result.current.canUndo).toBe(true);
+    act(() =>
+      result.current.commitBase({ baseCrop: undefined, basePlacement: { x: 0, y: 0, scale: 2 } }),
+    );
+    expect(result.current.baseCrop).toBeUndefined();
+    expect(result.current.basePlacement).toEqual({ x: 0, y: 0, scale: 2 });
+    act(() => result.current.undo());
+    expect(result.current.baseCrop).toEqual(baseCrop);
+    expect(result.current.basePlacement).toBeUndefined();
+    act(() => result.current.undo());
+    expect(result.current.baseCrop).toBeUndefined();
+    expect(result.current.canUndo).toBe(false);
   });
 
   it("a scene with no base fields exposes none", () => {

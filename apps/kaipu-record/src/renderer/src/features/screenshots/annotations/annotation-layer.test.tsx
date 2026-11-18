@@ -45,6 +45,7 @@ function makeScene(
     select: vi.fn(),
     addAnnotation: vi.fn(),
     commitAnnotation: vi.fn(),
+    commitBase: vi.fn(),
     beginInteract: vi.fn(),
     endInteract: vi.fn(),
     removeAnnotation: vi.fn(),
@@ -755,6 +756,66 @@ describe("AnnotationLayer — added images (NIW2-703)", () => {
         : null;
     const follows = (a: Element, b: Element): boolean =>
       (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
+    // The layer is 100 x 100 px for the base asset at scale 1 (illustrative numbers).
+    const baseBlur: BlurAnnotation = { id: "u2", kind: "blur", x: 1.2, y: 0.2, w: 0.1, h: 0.1 };
+    const baseTile = {
+      url: "data:base-tile",
+      rect: { x: 240, y: 40, w: 40, h: 40 },
+      naturalW: 400,
+      naturalH: 400,
+    };
+
+    it("on a base enlarged to scale 2, the tile samples the asset the way the export bakes it", () => {
+      tileMock.mockImplementation((url: string) => (url === "blob:base" ? baseTile : null));
+      const { container } = renderImageLayer(makeScene([baseBlur], null), makeTools(), {
+        canvasMode: true,
+        src: "blob:base",
+        base: { basePlacement: { x: 0, y: 0, scale: 2 } },
+      });
+      // World 1.2 of a base 2 wide starts 60% in: source px 240 of 400, as `baseFullRect` maps it.
+      const call = tileMock.mock.calls.find((c) => c[0] === "blob:base")!;
+      expect(call[1].x).toBeCloseTo(0.6);
+      expect(call[1].y).toBeCloseTo(0.1);
+      expect(call[1].w).toBeCloseTo(0.05);
+      expect(call[1].h).toBeCloseTo(0.05);
+      // And it is drawn where the asset is: 240/400 of the 200 px wide enlarged base.
+      const tile = container.querySelector('[data-testid="redaction-tile"]')!;
+      expect(tile.getAttribute("x")).toBe("120");
+      expect(tile.getAttribute("y")).toBe("20");
+      expect(tile.getAttribute("width")).toBe("20");
+      expect(tile.getAttribute("height")).toBe("20");
+    });
+
+    it("on a cropped base the tile is still sampled against the whole asset, clipped to the window", () => {
+      tileMock.mockImplementation((url: string) => (url === "blob:base" ? baseTile : null));
+      const blurInCrop: BlurAnnotation = { ...baseBlur, x: 0.6, y: 0.1 };
+      const { container } = renderImageLayer(makeScene([blurInCrop], null), makeTools(), {
+        canvasMode: true,
+        src: "blob:base",
+        base: { baseCrop: { x: 0.5, y: 0, w: 0.5, h: 1 } },
+      });
+      const call = tileMock.mock.calls.find((c) => c[0] === "blob:base")!;
+      expect(call[1].x).toBeCloseTo(0.6); // the asset's own units, not the window's
+      const tile = container.querySelector('[data-testid="redaction-tile"]')!;
+      expect(tile.parentElement?.getAttribute("clip-path")).toMatch(/^url\(#base-clip-/);
+    });
+
+    it("a locked blur on a cropped base is clipped to the window like the unlocked tile", () => {
+      // The right half shows (world x 0.5..1); the blur reaches into the hidden left half.
+      const lockedBlur: BlurAnnotation = { ...baseBlur, x: 0.4, y: 0.1, locked: true };
+      const { container } = renderImageLayer(makeScene([lockedBlur], null), makeTools(), {
+        canvasMode: true,
+        src: "blob:base",
+        base: { baseCrop: { x: 0.5, y: 0, w: 0.5, h: 1 } },
+      });
+      const el = container.querySelector('[data-testid="locked-redaction"]')!;
+      const outer = el.querySelector('[clip-path^="url(#base-clip-"]')!;
+      expect(outer).not.toBeNull();
+      const rect = outer.querySelector("clipPath rect")!;
+      expect(rect.getAttribute("x")).toBe("50");
+      expect(rect.getAttribute("width")).toBe("50");
+    });
 
     it("a blur below an image draws the base's tile under the image", () => {
       tileMock.mockImplementation(baseTileOnly);

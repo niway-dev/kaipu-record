@@ -160,7 +160,7 @@ export type Step =
    * does). The pointer is moved there directly, so it also works over a target another layer
    * covers (the Inspect layer sits over the image).
    */
-  | ({ readonly click: Target; readonly at?: DragPoint } & On)
+  | ({ readonly click: Target; readonly at?: DragPoint; readonly double?: boolean } & On)
   /** Hover the target's centre, or `at` (fractions of its box, like a drag point). */
   | ({ readonly hover: Target; readonly at?: DragPoint } & On)
   /**
@@ -407,7 +407,8 @@ export function describeStep(step: Step): string {
   const pt = (p: DragPoint): string => `(${Math.round(p.x * 100)}%, ${Math.round(p.y * 100)}%)`;
   if ("navigate" in step) return `Go to \`#${step.navigate}\``;
   const at = (p?: DragPoint): string => (p ? ` at ${pt(p)}` : "");
-  if ("click" in step) return `Click ${target(step.click)}${at(step.at)}`;
+  if ("click" in step)
+    return `${step.double ? "Double-click" : "Click"} ${target(step.click)}${at(step.at)}`;
   if ("hover" in step) return `Hover ${target(step.hover)}${at(step.at)}`;
   if ("wheel" in step) {
     const [dx, dy] = [step.deltaX ?? 0, step.deltaY ?? 0];

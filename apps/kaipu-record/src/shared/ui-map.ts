@@ -438,6 +438,9 @@ export const UI_MAP = {
         states: ["blur", "solid"],
         gatedBy: [{ flag: "image-canvas" }],
       },
+      // Per-image crop mode (NIW2-853): the dimmed whole asset, the crop window and its handles,
+      // entered by a double-click on the image's own pixels.
+      imageCropMode: { states: ["active"], gatedBy: [{ flag: "image-canvas" }] },
       redactionLock: { states: ["shown"], gatedBy: [{ flag: "image-canvas" }] },
       redactionNotice: { states: ["shown"], gatedBy: [{ flag: "image-canvas" }] },
       // Inspect mode (NIW2-699): the toolbar button, the floating bar and the loupe chip.

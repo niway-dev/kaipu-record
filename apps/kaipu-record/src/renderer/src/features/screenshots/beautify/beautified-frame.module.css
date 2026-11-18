@@ -90,3 +90,22 @@
     border-radius 0.12s ease,
     background 0.12s ease;
 }
+
+/* A cropped or resized base (NIW2-853): the visible part, positioned over the invisible anchor
+   image in percentages of it. The asset inside is drawn whole and clipped by this box. */
+.baseView {
+  position: absolute;
+  overflow: hidden;
+  transition:
+    border-radius 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.baseViewImage {
+  position: absolute;
+  display: block;
+  max-width: none;
+  max-height: none;
+  user-select: none;
+  pointer-events: none;
+}

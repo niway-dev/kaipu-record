@@ -609,6 +609,17 @@ export const editorImage = catalog(
       gates: [{ flag: "image-canvas", side: "on" }],
       after: afterCrop,
     },
+    "canvas-crop-mode": {
+      profile: "image-canvas",
+      how: "With the flag forced on, open “Settings page” and double-click the image's own pixels: crop mode starts, the whole image shows dimmed with the crop window and its eight handles, and a Done button sits at the window's corner.",
+      steps: [
+        open(ASSETS.settingsShot),
+        { click: { area: "editorImage.canvas" }, at: { x: 0.5, y: 0.5 }, double: true },
+        { waitFor: { area: "editorImage.imageCropMode" } },
+      ],
+      demonstrates: ["editorImage.imageCropMode:active"],
+      gates: [{ flag: "image-canvas", side: "on" }],
+    },
     "canvas-zoomed-out": {
       profile: "image-canvas",
       how: "With the flag forced on, open “Settings page” and press Zoom out once: the zoom goes below 100%.",

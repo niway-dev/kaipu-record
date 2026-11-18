@@ -28,13 +28,18 @@ export interface EditorScene {
    */
   exportFrame?: CropRect;
   /**
-   * Per-image crop, unit 3: the base's crop, own radius and placement (see `Scene`). Carried
-   * from a reopened document to the next save and export; nothing in the editor writes them
-   * yet (the crop mode is unit 4), so an edit never drops them.
+   * Per-image crop: the base's crop, own radius and placement (see `Scene`). Carried from a
+   * reopened document to the next save and export; the crop mode and the base's corner
+   * handles write them through `commitBase`, so an edit never drops them.
    */
   baseCrop?: CropRect;
   baseRadius?: number;
   basePlacement?: Scene["basePlacement"];
+  /**
+   * Write the base's crop, own radius or placement as one undoable change (per-image crop,
+   * unit 4). A key set to undefined is removed, so a base back to "whole" writes nothing.
+   */
+  commitBase(patch: Partial<Pick<Scene, "baseCrop" | "baseRadius" | "basePlacement">>): void;
   /** Set the export frame as one undoable change (Reset/Esc, or a crop drag release). */
   setExportFrame(frame: CropRect | undefined): void;
   /** Step the history; false when it did nothing (empty history, or a drag is open). */
@@ -70,9 +75,15 @@ export function useEditorScene(
   const snapshot = useRef<Scene | null>(null);
 
   const commit = useCallback((next: Scene) => {
-    setPast((p) => [...p, sceneRef.current]);
+    // Read now: the updater below runs at the next render, after the ref has moved on.
+    const prev = sceneRef.current;
+    setPast((p) => [...p, prev]);
     setFuture([]);
     setScene(next);
+    // Two commits in one tick (a crop session ended by a paste, then the pasted image) must
+    // build on each other, not on the render before: the ref is the scene's source of truth
+    // between renders, and the next render only confirms it.
+    sceneRef.current = next;
   }, []);
 
   const beginInteract = useCallback(() => {
@@ -92,7 +103,8 @@ export function useEditorScene(
   // `endInteract` push a stale snapshot over the step just taken.
   const undo = useCallback(() => {
     if (snapshot.current !== null || past.length === 0) return false;
-    setFuture((f) => [sceneRef.current, ...f]);
+    const cur = sceneRef.current;
+    setFuture((f) => [cur, ...f]);
     setScene(past[past.length - 1]);
     setPast((p) => p.slice(0, -1));
     setSelectedId(null);
@@ -101,7 +113,8 @@ export function useEditorScene(
 
   const redo = useCallback(() => {
     if (snapshot.current !== null || future.length === 0) return false;
-    setPast((p) => [...p, sceneRef.current]);
+    const cur = sceneRef.current;
+    setPast((p) => [...p, cur]);
     setScene(future[0]);
     setFuture((f) => f.slice(1));
     setSelectedId(null);
@@ -137,6 +150,18 @@ export function useEditorScene(
   const setExportFrame = useCallback(
     (exportFrame: CropRect | undefined) => {
       commit({ ...sceneRef.current, exportFrame });
+    },
+    [commit],
+  );
+
+  const commitBase = useCallback(
+    (patch: Partial<Pick<Scene, "baseCrop" | "baseRadius" | "basePlacement">>) => {
+      const next: Scene = { ...sceneRef.current, ...patch };
+      // An undefined value is no field: the scene and the document never carry a dead key.
+      for (const key of ["baseCrop", "baseRadius", "basePlacement"] as const) {
+        if (next[key] === undefined) delete next[key];
+      }
+      commit(next);
     },
     [commit],
   );
@@ -187,6 +212,7 @@ export function useEditorScene(
     baseCrop: scene.baseCrop,
     baseRadius: scene.baseRadius,
     basePlacement: scene.basePlacement,
+    commitBase,
     setExportFrame,
     undo,
     redo,

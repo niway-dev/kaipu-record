@@ -60,6 +60,49 @@ export function clientToImagePixel(
   return { x: Math.floor(fx * buf.width), y: Math.floor(fy * buf.height) };
 }
 
+/** The base's view fields that decide which part of the asset shows and where it sits. */
+export interface BaseView {
+  baseCrop?: { x: number; y: number; w: number; h: number };
+  basePlacement?: { x: number; y: number; scale: number };
+}
+
+/**
+ * The WHOLE asset's rect in client px. The invisible anchor image is the asset at scale 1 at the
+ * origin (the layer's unit rect), so a resized or moved base sits at its placement of that rect.
+ */
+export function assetClientRect(
+  anchor: { left: number; top: number; width: number; height: number },
+  view: BaseView,
+): { left: number; top: number; width: number; height: number } {
+  const p = view.basePlacement;
+  if (!p) return anchor;
+  return {
+    left: anchor.left + p.x * anchor.width,
+    top: anchor.top + p.y * anchor.height,
+    width: p.scale * anchor.width,
+    height: p.scale * anchor.height,
+  };
+}
+
+/**
+ * The source pixel under a pointer on the VISIBLE base: through its placement, and null where
+ * the crop hides the pixel (the anchor's rect also covers the cropped-out part).
+ */
+export function clientToBasePixel(
+  clientX: number,
+  clientY: number,
+  anchor: { left: number; top: number; width: number; height: number },
+  buf: { width: number; height: number },
+  view: BaseView,
+): { x: number; y: number } | null {
+  const px = clientToImagePixel(clientX, clientY, assetClientRect(anchor, view), buf);
+  const c = view.baseCrop;
+  if (!px || !c) return px;
+  const fx = px.x / buf.width;
+  const fy = px.y / buf.height;
+  return fx < c.x || fy < c.y || fx >= c.x + c.w || fy >= c.y + c.h ? null : px;
+}
+
 /**
  * Whether a point on `el` is actually visible: inside every ancestor that clips its content
  * (`overflow` other than `visible`). The classic editor shows a crop as a window over the

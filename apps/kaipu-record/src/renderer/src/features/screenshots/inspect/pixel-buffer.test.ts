@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { p3ToSrgb } from "./color";
 import {
+  assetClientRect,
+  clientToBasePixel,
   clientToImagePixel,
   isPointVisible,
   loupePixels,
@@ -136,5 +138,50 @@ describe("isPointVisible", () => {
     document.body.appendChild(wrap);
     expect(isPointVisible(img, 500, 500)).toBe(true);
     wrap.remove();
+  });
+});
+
+describe("the base's view in Inspect", () => {
+  // Illustrative: the invisible anchor is the asset at scale 1, 100 x 100 px at the origin;
+  // the decoded asset is 400 x 400 px.
+  const anchor = { left: 0, top: 0, width: 100, height: 100 };
+  const buf = { width: 400, height: 400 };
+
+  it("an untouched base maps through the anchor, as before", () => {
+    expect(assetClientRect(anchor, {})).toEqual(anchor);
+    expect(clientToBasePixel(50, 25, anchor, buf, {})).toEqual({ x: 200, y: 100 });
+  });
+
+  it("a base enlarged to scale 2 reads the right and bottom halves too", () => {
+    const view = { basePlacement: { x: 0, y: 0, scale: 2 } };
+    expect(assetClientRect(anchor, view)).toEqual({ left: 0, top: 0, width: 200, height: 200 });
+    // 150 px is three quarters across the 200 px wide enlarged base: source pixel 300.
+    expect(clientToBasePixel(150, 150, anchor, buf, view)).toEqual({ x: 300, y: 300 });
+    expect(clientToBasePixel(250, 10, anchor, buf, view)).toBeNull();
+    // The old mapping, through the anchor alone, found nothing there.
+    expect(clientToImagePixel(150, 150, anchor, buf)).toBeNull();
+  });
+
+  it("a moved base maps from where the whole asset sits", () => {
+    const view = { basePlacement: { x: 0.5, y: 0, scale: 1 } };
+    expect(clientToBasePixel(75, 50, anchor, buf, view)).toEqual({ x: 100, y: 200 });
+    expect(clientToBasePixel(25, 50, anchor, buf, view)).toBeNull();
+  });
+
+  it("a cropped base returns no pixel outside the window", () => {
+    // The right half shows; the whole asset is still the anchor's rect.
+    const view = { baseCrop: { x: 0.5, y: 0, w: 0.5, h: 1 } };
+    expect(clientToBasePixel(20, 50, anchor, buf, view)).toBeNull(); // hidden, source x 80
+    expect(clientToBasePixel(70, 50, anchor, buf, view)).toEqual({ x: 280, y: 200 });
+  });
+
+  it("a scaled and cropped base uses both", () => {
+    const view = {
+      baseCrop: { x: 0.5, y: 0.5, w: 0.5, h: 0.5 },
+      basePlacement: { x: 0, y: 0, scale: 2 },
+    };
+    // The window is the lower-right quarter of the 200 px asset: client 100..200.
+    expect(clientToBasePixel(50, 150, anchor, buf, view)).toBeNull();
+    expect(clientToBasePixel(150, 150, anchor, buf, view)).toEqual({ x: 300, y: 300 });
   });
 });

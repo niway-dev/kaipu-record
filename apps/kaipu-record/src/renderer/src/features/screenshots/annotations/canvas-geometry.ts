@@ -73,6 +73,15 @@ export function visibleBaseBounds(view: BaseView, naturalW: number, naturalH: nu
   };
 }
 
+/**
+ * The visible base rect in the px of a `w` x `h` display of the whole image, NOT snapped: the
+ * live view's unit (display px are not whole source px, and the preview is placed in them).
+ */
+export function visibleBaseRectPx(view: BaseView, w: number, h: number): Bounds {
+  const r = baseVisibleRect(view);
+  return { x1: r.x * w, y1: r.y * h, x2: (r.x + r.w) * w, y2: (r.y + r.h) * h };
+}
+
 const wholeBase = (naturalW: number, naturalH: number): Bounds => ({
   x1: 0,
   y1: 0,

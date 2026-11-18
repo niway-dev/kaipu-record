@@ -32,6 +32,7 @@ import {
 } from "@renderer/features/library/rename-outcome";
 import {
   BeautifiedFrame,
+  type BaseFrameView,
   BeautifyPanel,
   CropChip,
   CropOverlay,
@@ -69,6 +70,7 @@ import {
   AnnotationLayer,
   AnnotationToolbar,
   BASE_ASSET_ID,
+  BASE_IMAGE_ID,
   ZERO_EXTENTS,
   bakeCanvasRedactions,
   buildCanvasDoc,
@@ -76,20 +78,32 @@ import {
   exportPixelSize,
   extentsToDisplay,
   frameToWorld,
+  baseVisibleRect,
+  hasBaseView,
+  imageCropPatch,
   intersectFrame,
+  cropTarget,
+  sameWindow,
+  windowToCrop,
+  wholeImage,
   nextAnnotationId,
   parseCanvasDoc,
+  visibleBaseBounds,
+  visibleBaseRectPx,
   withoutRedactedText,
   reserveAnnotationIds,
   useAnnotationTools,
   useEditorScene,
   worldToFrame,
   type AnnotationTool,
+  type BaseFields,
   type CanvasAssets,
   type CanvasGeom,
   type Annotation,
   type CropRect,
+  type CropTarget,
   type Extents,
+  type NormalizedRect,
   type ImageAnnotation,
   type EditorScene,
   type Scene,
@@ -206,6 +220,11 @@ interface LoadedCanvasDoc {
   assets: CanvasAssets;
 }
 
+/** A crop-mode session: the image's whole asset, the window being edited, and where it began. */
+interface CropSession extends CropTarget {
+  start: NormalizedRect;
+}
+
 /** A new asset id for an added image: matches `CANVAS_ASSET_ID_PATTERN`, never "base". */
 function newImageAssetId(): string {
   let id = "";
@@ -213,18 +232,18 @@ function newImageAssetId(): string {
   return `img-${id.slice(0, 12)}`;
 }
 
-/**
- * Read and validate the document saved beside a vault shot. Anything but `loaded` means
- * "open the flattened PNG instead": `absent` when there is no document (a plain screenshot),
- * `unreadable` when one exists but is corrupt or unsupported, lacks its base asset, or could
- * not be read. It never rejects, so a bad document can never keep the editor from opening.
- */
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const isPng = (bytes: ArrayBuffer): boolean => {
   const head = new Uint8Array(bytes, 0, Math.min(8, bytes.byteLength));
   return head.length === 8 && PNG_SIGNATURE.every((b, i) => head[i] === b);
 };
 
+/**
+ * Read and validate the document saved beside a vault shot. Anything but `loaded` means
+ * "open the flattened PNG instead": `absent` when there is no document (a plain screenshot),
+ * `unreadable` when one exists but is corrupt or unsupported, lacks its base asset, or could
+ * not be read. It never rejects, so a bad document can never keep the editor from opening.
+ */
 async function loadCanvasDoc(id: string): Promise<CanvasLoad<LoadedCanvasDoc>> {
   const unreadable: CanvasLoad<LoadedCanvasDoc> = { status: "unreadable" };
   try {
@@ -354,6 +373,58 @@ function ScreenshotEditorBody({
     doc?.scene,
   );
   const tools = useAnnotationTools();
+  // Per-image crop mode (NIW2-853). A session edits one image's crop window (the base answers to
+  // `BASE_IMAGE_ID`); nothing reaches the scene while the handles drag. Leaving, by any route,
+  // commits ONCE if the window moved: one undo step per session, and Esc keeps the crop.
+  const [cropSession, setCropSessionState] = useState<CropSession | null>(null);
+  const cropSessionRef = useRef<CropSession | null>(null);
+  const setCropSession = useCallback((next: CropSession | null): void => {
+    cropSessionRef.current = next;
+    setCropSessionState(next);
+  }, []);
+  const croppingId = cropSession?.id ?? null;
+  const sceneLatest = useRef(scene);
+  sceneLatest.current = scene;
+  const finishCrop = useCallback((): void => {
+    const s = cropSessionRef.current;
+    if (!s) return;
+    setCropSession(null);
+    if (sameWindow(s.win, s.start)) return;
+    const sc = sceneLatest.current;
+    if (s.id === BASE_IMAGE_ID) sc.commitBase({ baseCrop: windowToCrop(s.full, s.win) });
+    else sc.commitAnnotation(s.id, imageCropPatch(s, s.win));
+  }, [setCropSession]);
+  const onEnterCrop = useCallback(
+    (id: string): void => {
+      if (cropSessionRef.current) return;
+      const sc = sceneLatest.current;
+      let target: CropTarget | null;
+      try {
+        target = cropTarget(id, sc.annotations, {
+          baseCrop: sc.baseCrop,
+          baseRadius: sc.baseRadius,
+          basePlacement: sc.basePlacement,
+        });
+      } catch {
+        // A crop that is not a real window cannot be edited: fail closed, no crop mode.
+        return;
+      }
+      if (!target) return;
+      // Selected on entry, so the image wears its handles again once the crop is done.
+      sc.select(id);
+      setCropSession({ ...target, start: target.win });
+    },
+    [setCropSession],
+  );
+  const onCropWindow = useCallback(
+    (win: NormalizedRect): void => {
+      const s = cropSessionRef.current;
+      if (s) setCropSession({ ...s, win });
+    },
+    [setCropSession],
+  );
+  // The base mid-resize, from the layer: the frame and the page lay out from it while it drags.
+  const [liveBase, setLiveBase] = useState<BaseFields | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const pageRef = useRef<HTMLDivElement>(null);
@@ -370,8 +441,11 @@ function ScreenshotEditorBody({
     canvasMode,
     image,
     imgRef,
+    baseCrop: scene.baseCrop,
+    basePlacement: scene.basePlacement,
     // Inspect reads the image, it does not edit it: leave any drawing tool (a crop included).
     onEnter: () => {
+      finishCrop();
       tools.setTool("select");
       scene.select(null);
     },
@@ -617,7 +691,7 @@ function ScreenshotEditorBody({
     annotations: scene.annotations,
     crop: scene.crop,
     exportFrame: scene.exportFrame,
-    // Per-image crop, unit 3: carried through, never written by this editor yet.
+    // Per-image crop: the base's view, written by crop mode and the base's corner resize.
     ...(scene.baseCrop ? { baseCrop: scene.baseCrop } : {}),
     ...(scene.baseRadius !== undefined ? { baseRadius: scene.baseRadius } : {}),
     ...(scene.basePlacement ? { basePlacement: scene.basePlacement } : {}),
@@ -632,7 +706,15 @@ function ScreenshotEditorBody({
     }
     sceneRevision.current += 1;
     setDirty(true);
-  }, [scene.beautify.state, scene.annotations, scene.crop, scene.exportFrame]);
+  }, [
+    scene.beautify.state,
+    scene.annotations,
+    scene.crop,
+    scene.exportFrame,
+    scene.baseCrop,
+    scene.baseRadius,
+    scene.basePlacement,
+  ]);
 
   // Hold in-app navigation (sidebar clicks, ⌘⌃V start-recording, ⌘⇧1 new
   // capture — all go through the router) while there are unsaved changes. A shot that
@@ -643,7 +725,11 @@ function ScreenshotEditorBody({
   // still be blocked after an edit; instead, flip `discarding`, let the blocker lift on
   // re-render, and navigate from the effect below.
   const [discarding, setDiscarding] = useState(false);
-  const blocker = useBlocker(dirty && !discarding);
+  // A crop window the user moved lives only in `cropSessionRef` until `finishCrop` commits it,
+  // and a keyboard navigation (⌘⇧1, ⌘⌃V) fires no pointerdown to end the session. So an open
+  // session whose window moved holds the navigation too, even on an otherwise clean shot.
+  const cropPending = cropSession !== null && !sameWindow(cropSession.win, cropSession.start);
+  const blocker = useBlocker((dirty || cropPending) && !discarding);
   useEffect(() => {
     if (discarding) navigate(ROUTES.record);
   }, [discarding, navigate]);
@@ -673,6 +759,33 @@ function ScreenshotEditorBody({
   // Canvas mode. The view (zoom + pan) is view-only: it never reaches the scene or the export.
   const viewport = useCanvasViewport(canvasRef, canvasMode, hasImage);
   const metrics = useShotMetrics(imgRef, canvasMode, imageReady);
+  // The base as the page's geometry sees it (per-image crop, unit 4): the extents, the export
+  // frame's math, the box label and the live preview all measure from its VISIBLE rect, so a
+  // cropped or resized base is laid out where it exports. Unchanged for a base nobody touched.
+  // While the base is cropped it is measured WHOLE, so the frame does not move under a handle
+  // drag; a resize in flight (`liveBase`) stands in for the stored fields.
+  const geomBase = useMemo<BaseFields>(() => {
+    const fields: BaseFields = liveBase ?? {
+      ...(scene.baseCrop ? { baseCrop: scene.baseCrop } : {}),
+      ...(scene.baseRadius !== undefined ? { baseRadius: scene.baseRadius } : {}),
+      ...(scene.basePlacement ? { basePlacement: scene.basePlacement } : {}),
+    };
+    if (croppingId !== BASE_IMAGE_ID || !fields.baseCrop) return fields;
+    const { baseCrop: _whole, ...rest } = fields;
+    return rest;
+  }, [liveBase, croppingId, scene.baseCrop, scene.baseRadius, scene.basePlacement]);
+  // The annotations as the geometry measures them: an added image under crop is whole.
+  const geomAnnotations = useMemo(
+    () =>
+      croppingId && croppingId !== BASE_IMAGE_ID
+        ? scene.annotations.map((a) =>
+            a.id === croppingId && a.kind === "image" ? wholeImage(a) : a,
+          )
+        : scene.annotations,
+    [croppingId, scene.annotations],
+  );
+  const geomBaseRef = useRef(geomBase);
+  geomBaseRef.current = geomBase;
   // How far the content sticks out past each side of the shot, in display px, from the
   // live annotations (the same measure the export uses, at the same scale).
   // While a shape is drawn or moved the stored annotations do not hold it yet: the layer
@@ -689,7 +802,14 @@ function ScreenshotEditorBody({
       setLiveExtents(null);
       return;
     }
-    const next = contentExtents(shown, m.naturalW, m.naturalH, m.naturalW / m.w);
+    const next = contentExtents(
+      shown,
+      m.naturalW,
+      m.naturalH,
+      m.naturalW / m.w,
+      undefined,
+      visibleBaseBounds(geomBaseRef.current, m.naturalW, m.naturalH),
+    );
     setLiveExtents((prev) =>
       prev &&
       prev.left === next.left &&
@@ -706,13 +826,15 @@ function ScreenshotEditorBody({
     return (
       liveExtents ??
       contentExtents(
-        scene.annotations,
+        geomAnnotations,
         metrics.naturalW,
         metrics.naturalH,
         metrics.naturalW / metrics.w,
+        undefined,
+        visibleBaseBounds(geomBase, metrics.naturalW, metrics.naturalH),
       )
     );
-  }, [canvasMode, metrics, scene.annotations, liveExtents]);
+  }, [canvasMode, metrics, geomAnnotations, liveExtents, geomBase]);
   const extents = useMemo(() => {
     if (!canvasMode || !metrics || metrics.w <= 0 || metrics.naturalW <= 0) return ZERO_EXTENTS;
     return extentsToDisplay(extentsNatural, metrics.naturalW / metrics.w);
@@ -724,8 +846,21 @@ function ScreenshotEditorBody({
   const { compensate, fit } = viewport;
   // A reopened document wider or taller than the canvas opens fitted, not clipped.
   const fitOnOpen = useCallback(() => fit({ onlyIfOverflowing: true }), [fit]);
+  // The frame's insets around the WORLD ORIGIN (the anchor image's corner), not the visible
+  // base's: a cropped or resized base moves the visible rect against the origin, and the
+  // origin is what must stay put on screen. Equal to the extents for an untouched base.
+  const originInsets = useMemo<Extents>(() => {
+    if (!canvasMode || !metrics || metrics.w <= 0 || metrics.h <= 0) return extents;
+    const b = visibleBaseRectPx(geomBase, metrics.w, metrics.h);
+    return {
+      left: extents.left - b.x1,
+      top: extents.top - b.y1,
+      right: extents.right + b.x2 - metrics.w,
+      bottom: extents.bottom + b.y2 - metrics.h,
+    };
+  }, [canvasMode, metrics, extents, geomBase]);
   useExtentsCompensation(
-    extents,
+    originInsets,
     canvasMode && metrics != null && metrics.w > 0 && metrics.naturalW > 0,
     compensate,
     fitOnOpen,
@@ -751,8 +886,26 @@ function ScreenshotEditorBody({
   // export frame (world units). Both sides use display px, so only the ratios matter.
   const canvasGeom: CanvasGeom | null =
     canvasMode && metrics && metrics.w > 0 && metrics.h > 0
-      ? { naturalW: metrics.w, naturalH: metrics.h, pad: scene.beautify.state.padding, extents }
+      ? {
+          naturalW: metrics.w,
+          naturalH: metrics.h,
+          pad: scene.beautify.state.padding,
+          extents,
+          base: visibleBaseRectPx(geomBase, metrics.w, metrics.h),
+        }
       : null;
+  // The base's view as the live frame draws it (undefined for a base at its natural place).
+  const baseFrame: BaseFrameView | undefined =
+    canvasMode && metrics && metrics.w > 0 && metrics.h > 0 && hasBaseView(geomBase)
+      ? {
+          visible: baseVisibleRect(geomBase),
+          ...(geomBase.baseCrop ? { crop: geomBase.baseCrop } : {}),
+          ...(geomBase.baseRadius !== undefined && metrics.naturalW > 0
+            ? { radius: (geomBase.baseRadius * metrics.w) / metrics.naturalW }
+            : {}),
+          shot: { w: metrics.w, h: metrics.h },
+        }
+      : undefined;
   // The exact pixel size Copy and Save produce (mock A1's label), from the export's own
   // computation, so the label cannot say a size the export does not have.
   const exportSize = useMemo(
@@ -761,9 +914,10 @@ function ScreenshotEditorBody({
         ? exportPixelSize(
             {
               beautify: scene.beautify.state,
-              annotations: scene.annotations,
+              annotations: geomAnnotations,
               crop: scene.crop,
               exportFrame: scene.exportFrame,
+              ...geomBase,
             },
             metrics.naturalW,
             metrics.naturalH,
@@ -775,10 +929,11 @@ function ScreenshotEditorBody({
       canvasMode,
       metrics,
       scene.beautify.state,
-      scene.annotations,
+      geomAnnotations,
       scene.crop,
       scene.exportFrame,
       extentsNatural,
+      geomBase,
     ],
   );
   const exportFrameCrop: CropRect | undefined =
@@ -809,9 +964,10 @@ function ScreenshotEditorBody({
       ? exportPixelSize(
           {
             beautify: scene.beautify.state,
-            annotations: scene.annotations,
+            annotations: geomAnnotations,
             crop: scene.crop,
             exportFrame: frameToWorld(c, canvasGeom),
+            ...geomBase,
           },
           metrics.naturalW,
           metrics.naturalH,
@@ -932,10 +1088,37 @@ function ScreenshotEditorBody({
       showToast({ message: t("addImageError") });
       return;
     }
+    // A paste has no pointerdown to end a crop session, so end it here. The commit lands in
+    // state after this render, so the placement below measures from the window the session
+    // ended with, not from `geomBase` (which drops `baseCrop` while the base is being cropped).
+    const session = cropSessionRef.current;
+    finishCrop();
+    const moved = session !== null && !sameWindow(session.win, session.start);
+    let placedBase: BaseFields = geomBase;
+    let placedAnnotations = scene.annotations;
+    if (session && session.id === BASE_IMAGE_ID) {
+      const { baseCrop: _whole, ...rest } = geomBase;
+      const baseCrop = moved ? windowToCrop(session.full, session.win) : scene.baseCrop;
+      placedBase = baseCrop ? { ...rest, baseCrop } : rest;
+    } else if (session && moved) {
+      placedAnnotations = scene.annotations.map((a) =>
+        a.id === session.id ? ({ ...a, ...imageCropPatch(session, session.win) } as Annotation) : a,
+      );
+    }
     // The same scale the live extents use; before the first measurement the displayed width
     // is unknown and 1 only affects the size of text bounds.
     const scale = metrics && metrics.w > 0 ? naturalW / metrics.w : 1;
-    const { right } = contentExtents(scene.annotations, naturalW, naturalH, scale);
+    // Past the VISIBLE base's right edge, top-aligned with it (the whole image for an untouched
+    // base: x = naturalW + overhang, y = 0, as before).
+    const visible = visibleBaseBounds(placedBase, naturalW, naturalH);
+    const { right } = contentExtents(
+      placedAnnotations,
+      naturalW,
+      naturalH,
+      scale,
+      undefined,
+      visible,
+    );
     const assetId = newImageAssetId();
     assetsRef.current = { ...assetsRef.current, [assetId]: png };
     const url = registerAsset(assetId, png);
@@ -944,8 +1127,8 @@ function ScreenshotEditorBody({
       id: nextAnnotationId().id,
       kind: "image",
       assetId,
-      x: (naturalW + right + ADDED_IMAGE_GAP_PX) / naturalW,
-      y: 0,
+      x: (visible.x2 + right + ADDED_IMAGE_GAP_PX) / naturalW,
+      y: visible.y1 / naturalH,
       w: pixelWidth / naturalW,
       h: pixelHeight / naturalH,
       pixelWidth,
@@ -1013,6 +1196,8 @@ function ScreenshotEditorBody({
    */
   const copyToClipboard = (): Promise<boolean> => {
     if (!imageReady) return Promise.resolve(false);
+    // A crop window still being edited is committed first, so the copy is what the stage shows.
+    finishCrop();
     return enqueue(async () => {
       if (!alive.current) return false;
       try {
@@ -1164,8 +1349,11 @@ function ScreenshotEditorBody({
     autoOnOpen?: boolean;
     /** First Save of an unsaved shot: if an earlier queued save already created the item, overwrite it. */
     bindToSaved?: boolean;
-  }): Promise<string | null> =>
-    enqueue(async () => {
+  }): Promise<string | null> => {
+    // An explicit save (not the quiet autosave, which must not end a crop session the user is
+    // in) commits a crop window still being edited, so it saves what the stage shows.
+    if (!opts.silent) finishCrop();
+    return enqueue(async () => {
       if (!alive.current) return null;
       // An explicit save bakes the redactions in: it counts as having read the notice.
       if (!opts.silent && noticeOpenRef.current) acknowledgeNotice();
@@ -1260,6 +1448,7 @@ function ScreenshotEditorBody({
         return null;
       }
     });
+  };
 
   /**
    * Export a PDF to a path the user picks. Independent of the vault: it neither
@@ -1268,6 +1457,7 @@ function ScreenshotEditorBody({
    */
   const onExportPdf = (): Promise<void> => {
     if (!imageReady) return Promise.resolve();
+    finishCrop();
     return enqueue(async () => {
       if (!alive.current) return;
       try {
@@ -1357,15 +1547,24 @@ function ScreenshotEditorBody({
     scene.annotations,
     scene.crop,
     scene.exportFrame,
+    scene.baseCrop,
+    scene.baseRadius,
+    scene.basePlacement,
   ]);
 
   // Leaving a shot that is in the vault: save what is pending, then go. A failed save
   // stays here (`persist` reported it with a retry) instead of dropping the edits.
+  // An open crop session is committed first; the save then runs from the effect pass that
+  // follows the commit's render, because `latest.current` is only refreshed at render.
   useEffect(() => {
     if (blocker.state !== "blocked" || !savedId) return;
+    if (cropSessionRef.current) {
+      finishCrop();
+      return;
+    }
     void autosaveEdits().then((saved) => (saved ? blocker.proceed() : blocker.reset()));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once per blocked navigation
-  }, [blocker.state]);
+  }, [blocker.state, cropSession]);
 
   // Deletes only the item the auto-save on open created, never a save the user made.
   const onDiscardSaved = (): Promise<void> =>
@@ -1496,7 +1695,8 @@ function ScreenshotEditorBody({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspectActive]);
   // A selected annotation has options (colour, size, delete): show them where they live now.
-  const selectedToolId = inspectActive ? null : selectedId;
+  // The base is selectable (its handles resize it) but has no tool options to show.
+  const selectedToolId = inspectActive || selectedId === BASE_IMAGE_ID ? null : selectedId;
   useEffect(() => {
     if (selectedToolId !== null) setTab("tool");
   }, [selectedToolId]);
@@ -1547,6 +1747,7 @@ function ScreenshotEditorBody({
   // Picking a tool, by click or by key, leaves Inspect, starts the tool clean and shows its
   // options in the Tool tab. Select has none, so it leaves the tab as it was.
   const afterPick = (tool: AnnotationTool): void => {
+    finishCrop();
     scene.select(null);
     inspect.setActive(false);
     if (tool !== "select") setTab("tool");
@@ -1575,6 +1776,40 @@ function ScreenshotEditorBody({
         }
       : {}),
   });
+
+  // Crop mode keys and click-away. Enter and Esc leave it (Esc KEEPS the crop: the window as it
+  // stands is committed, never cleared); undo and redo reset the window to where the session
+  // began, since the history has nothing of the session yet. A press outside the canvas
+  // (toolbar, side panel) leaves it too, so Save and Copy never run on a stale crop.
+  useEffect(() => {
+    if (!croppingId) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (isEditingTarget(e.target) || document.querySelector('[aria-modal="true"]')) return;
+      const mod = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
+      if (e.key === "Enter" || e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        finishCrop();
+      } else if (mod && (key === "z" || key === "y")) {
+        e.preventDefault();
+        e.stopPropagation();
+        const s = cropSessionRef.current;
+        if (s) setCropSession({ ...s, win: s.start });
+      }
+    };
+    const onDown = (e: PointerEvent): void => {
+      const canvasEl = canvasRef.current;
+      if (canvasEl && e.target instanceof Node && canvasEl.contains(e.target)) return;
+      finishCrop();
+    };
+    window.addEventListener("keydown", onKey, true);
+    document.addEventListener("pointerdown", onDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("pointerdown", onDown, true);
+    };
+  }, [croppingId, finishCrop, setCropSession]);
 
   // Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z (and Ctrl+Y off macOS): the same history the buttons step.
   const keyPlatform = detectKeyPlatform();
@@ -1771,7 +2006,16 @@ function ScreenshotEditorBody({
             <BeautifiedFrame
               src={image.displayUrl}
               beautify={scene.beautify.state}
-              crop={tools.tool === "crop" ? undefined : canvasMode ? exportFrameCrop : scene.crop}
+              base={baseFrame}
+              // The Export frame tool and a crop session both edit the asset, not the frame: the
+              // whole canvas shows, or the viewport would clip the handles and Done.
+              crop={
+                tools.tool === "crop" || croppingId
+                  ? undefined
+                  : canvasMode
+                    ? exportFrameCrop
+                    : scene.crop
+              }
               windowChip={<CropChip onEnter={enterCrop} zoom={shownZoom} />}
               onWindowDoubleClick={() => {
                 if (tools.tool === "select" && !(inspectEnabled && inspect.active)) enterCrop();
@@ -1789,6 +2033,13 @@ function ScreenshotEditorBody({
                       ? {
                           imageUrls,
                           onLive,
+                          base: geomBase,
+                          cropping: cropSession,
+                          onCropWindow,
+                          onCropDone: finishCrop,
+                          onLiveBase: setLiveBase,
+                          // Inspect reads the image, it does not edit it: no crop mode there.
+                          ...(inspectEnabled && inspect.active ? {} : { onEnterCrop }),
                           ...(metrics && metrics.naturalW > 0
                             ? { natural: { w: metrics.naturalW, h: metrics.naturalH } }
                             : {}),
