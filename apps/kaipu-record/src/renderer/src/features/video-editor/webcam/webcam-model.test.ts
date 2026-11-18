@@ -1,15 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CAMERA_BUBBLE } from "@shared/camera-bubble";
+import { CAMERA_BUBBLE_PRESETS, DEFAULT_CAMERA_BUBBLE } from "@shared/camera-bubble";
 import type { WebcamTrackMeta } from "@shared/webcam-track";
 import {
   WEBCAM_DEFAULTS,
   WEBCAM_LIMITS,
+  WEBCAM_TRANSITION_DEFAULTS,
+  WEBCAM_TRANSITION_LIMITS,
   clampWebcamPatch,
+  clampWebcamTransition,
+  WEBCAM_SAVED_EASING_FALLBACK,
   seedWebcamScene,
   webcamAt,
-  webcamSizeLabel,
+  webcamEffectiveTransitionMs,
+  webcamEndSeconds,
+  WEBCAM_SIZE_PRESETS,
+  WEBCAM_SIZE_PRESET_IDS,
+  webcamSizePreset,
+  webcamStateAt,
   type WebcamLayout,
   type WebcamScene,
+  type WebcamSegment,
+  type WebcamTransition,
 } from "./webcam-model";
 
 const track = (recordedLayout?: WebcamTrackMeta["recordedLayout"]): WebcamTrackMeta => ({
@@ -160,11 +171,40 @@ describe("WEBCAM_LIMITS size range", () => {
   });
 });
 
-describe("webcamSizeLabel", () => {
-  it("maps the stored range linearly onto 10 to 90", () => {
-    expect(webcamSizeLabel(0.12)).toBe(10);
-    expect(webcamSizeLabel(0.51)).toBe(50);
-    expect(webcamSizeLabel(0.9)).toBe(90);
+describe("the S, M and L sizes", () => {
+  it("are 0.15, 0.22 and 0.33 of the frame's height", () => {
+    expect(WEBCAM_SIZE_PRESETS).toEqual({ S: 0.15, M: 0.22, L: 0.33 });
+  });
+
+  it("keep the proportions of the recorder bubble's presets around M", () => {
+    expect(WEBCAM_SIZE_PRESETS.S / WEBCAM_SIZE_PRESETS.M).toBeCloseTo(
+      CAMERA_BUBBLE_PRESETS.S / CAMERA_BUBBLE_PRESETS.M,
+      1,
+    );
+    expect(WEBCAM_SIZE_PRESETS.L / WEBCAM_SIZE_PRESETS.M).toBeCloseTo(
+      CAMERA_BUBBLE_PRESETS.L / CAMERA_BUBBLE_PRESETS.M,
+      1,
+    );
+  });
+
+  it("make M the default size", () => {
+    expect(WEBCAM_DEFAULTS.size).toBe(WEBCAM_SIZE_PRESETS.M);
+  });
+
+  it("are named by the preset helper, and any other size has no name", () => {
+    expect(webcamSizePreset(0.15)).toBe("S");
+    expect(webcamSizePreset(0.22)).toBe("M");
+    expect(webcamSizePreset(0.33)).toBe("L");
+    expect(webcamSizePreset(0.27)).toBeNull();
+    expect(webcamSizePreset(0.2200001)).toBeNull();
+    expect(webcamSizePreset(Number.NaN)).toBeNull();
+  });
+
+  it("all sit inside the size limits, so a stored preset is never clamped", () => {
+    for (const id of WEBCAM_SIZE_PRESET_IDS) {
+      const size = WEBCAM_SIZE_PRESETS[id];
+      expect(clampWebcamPatch({ size }).size).toBe(size);
+    }
   });
 });
 
@@ -215,5 +255,260 @@ describe("webcamAt", () => {
   it("merges an override over the global layout, field by field", () => {
     expect(webcamAt({ webcam }, 7)).toEqual({ ...layout, size: 0.4, shape: "rounded" });
     expect(webcamAt({ webcam }, 8)).toBe(layout);
+  });
+});
+
+describe("clampWebcamTransition", () => {
+  it("defaults to a 700 ms slide with the Smooth preset", () => {
+    expect(WEBCAM_TRANSITION_DEFAULTS).toEqual({ kind: "slide", ms: 700, easing: "ease-in-out" });
+    expect(clampWebcamTransition({})).toEqual(WEBCAM_TRANSITION_DEFAULTS);
+  });
+
+  it("takes the fallback easing for a missing or invalid one, and keeps a valid one", () => {
+    expect(clampWebcamTransition({ ms: 700 }, "back").easing).toBe("back");
+    expect(clampWebcamTransition({ easing: "bounce" }, WEBCAM_SAVED_EASING_FALLBACK).easing).toBe(
+      "back",
+    );
+    expect(clampWebcamTransition({ easing: "linear" }, "back").easing).toBe("linear");
+  });
+
+  it("keeps a valid transition as given, rounding the duration", () => {
+    expect(clampWebcamTransition({ kind: "cut", ms: 512.6, easing: "linear" })).toEqual({
+      kind: "cut",
+      ms: 513,
+      easing: "linear",
+    });
+  });
+
+  it("falls back per field to the default for a missing or invalid one", () => {
+    expect(clampWebcamTransition({ kind: "wipe", ms: Number.NaN, easing: "bounce" })).toEqual(
+      WEBCAM_TRANSITION_DEFAULTS,
+    );
+    expect(clampWebcamTransition({ kind: "cut", ms: "slow", easing: "ease-out" })).toEqual({
+      kind: "cut",
+      ms: WEBCAM_TRANSITION_DEFAULTS.ms,
+      easing: "ease-out",
+    });
+  });
+
+  it("clamps the duration to the limits", () => {
+    expect(clampWebcamTransition({ ms: 5 }).ms).toBe(WEBCAM_TRANSITION_LIMITS.minMs);
+    expect(clampWebcamTransition({ ms: 60000 }).ms).toBe(WEBCAM_TRANSITION_LIMITS.maxMs);
+    expect(clampWebcamTransition({ ms: Infinity }).ms).toBe(WEBCAM_TRANSITION_DEFAULTS.ms);
+  });
+});
+
+describe("webcamEffectiveTransitionMs", () => {
+  it("is the duration for a long block and half the block for a short one", () => {
+    expect(webcamEffectiveTransitionMs(10, 700)).toBe(700);
+    expect(webcamEffectiveTransitionMs(1, 1500)).toBe(500);
+  });
+});
+
+describe("webcamStateAt", () => {
+  const BASE = { ...WEBCAM_DEFAULTS };
+  const TOP_RIGHT = { x: 0.9, y: 0.1 };
+  const CENTER = { x: 0.5, y: 0.5 };
+  const slide = (ms = 1000, easing: WebcamTransition["easing"] = "linear"): WebcamTransition => ({
+    kind: "slide",
+    ms,
+    easing,
+  });
+  const override = (
+    id: string,
+    start: number,
+    end: number,
+    position: { x: number; y: number },
+    transition?: WebcamTransition,
+  ): WebcamSegment => ({
+    id,
+    start,
+    end,
+    mode: "override",
+    layout: { position },
+    ...(transition ? { transition } : {}),
+  });
+  const sceneOf = (...segments: WebcamSegment[]) => ({
+    webcam: { layout: BASE, segments } satisfies WebcamScene,
+  });
+
+  it("is null without a webcam and inside a hidden segment", () => {
+    expect(webcamStateAt({ webcam: null }, 1)).toBeNull();
+    const hidden: WebcamSegment = { id: "h", start: 2, end: 4, mode: "hidden" };
+    expect(webcamStateAt(sceneOf(hidden), 3)).toBeNull();
+    expect(webcamStateAt(sceneOf(hidden), 5)?.layout).toBe(BASE);
+  });
+
+  it("has no motion outside a block", () => {
+    const scene = sceneOf(override("a", 10, 20, TOP_RIGHT, slide()));
+    expect(webcamStateAt(scene, 5)).toMatchObject({ layout: BASE, from: null, progress: 1 });
+  });
+
+  it("slides from the default position at the start, midpoint and end of a transition", () => {
+    const scene = sceneOf(override("a", 10, 20, TOP_RIGHT, slide(1000)));
+    const start = webcamStateAt(scene, 10)!;
+    expect(start.layout.position).toEqual(TOP_RIGHT);
+    expect(start.from?.position).toEqual(BASE.position);
+    expect(start.progress).toBe(0);
+    expect(webcamStateAt(scene, 10.5)!.progress).toBeCloseTo(0.5);
+    const end = webcamStateAt(scene, 11)!;
+    expect(end.from).toBeNull();
+    expect(end.progress).toBe(1);
+    expect(end.layout.position).toEqual(TOP_RIGHT);
+  });
+
+  it("changes only the position in `from`: the other fields apply at once", () => {
+    const scene = sceneOf({
+      ...override("a", 10, 20, TOP_RIGHT, slide()),
+      layout: { position: TOP_RIGHT, size: 0.4, shape: "rectangle" },
+    });
+    const state = webcamStateAt(scene, 10.2)!;
+    expect(state.from).toEqual({ ...state.layout, position: BASE.position });
+    expect(state.layout).toMatchObject({ size: 0.4, shape: "rectangle" });
+  });
+
+  it("gives the same values after seeking backwards (a pure function of time)", () => {
+    const scene = sceneOf(override("a", 10, 20, TOP_RIGHT, slide(1000, "back")));
+    const first = webcamStateAt(scene, 10.4);
+    const other = webcamStateAt(scene, 3);
+    const during = webcamStateAt(scene, 10.9);
+    expect(other?.from).toBeNull();
+    expect(during).not.toBeNull();
+    expect(webcamStateAt(scene, 10.4)).toEqual(first);
+    expect(webcamStateAt(scene, 10.9)).toEqual(during);
+  });
+
+  it("passes 1 in the middle of a back transition and settles on exactly 1", () => {
+    const scene = sceneOf(override("a", 10, 20, TOP_RIGHT, slide(1000, "back")));
+    const progresses = Array.from(
+      { length: 100 },
+      (_, i) => webcamStateAt(scene, 10 + i / 100)!.progress,
+    );
+    expect(Math.max(...progresses)).toBeGreaterThan(1);
+    expect(webcamStateAt(scene, 11)!.progress).toBe(1);
+  });
+
+  it("caps the slide at half of a short block", () => {
+    const scene = sceneOf(override("a", 10, 11, TOP_RIGHT, slide(1500)));
+    expect(webcamStateAt(scene, 10.25)!.progress).toBeCloseTo(0.5);
+    expect(webcamStateAt(scene, 10.5)!.from).toBeNull();
+    expect(webcamStateAt(scene, 10.5)!.progress).toBe(1);
+  });
+
+  it("has no motion for a Cut or a block without a transition", () => {
+    const cut = sceneOf(override("a", 10, 20, TOP_RIGHT, { ...slide(), kind: "cut" }));
+    expect(webcamStateAt(cut, 10)).toMatchObject({ from: null, progress: 1 });
+    const none = sceneOf(override("a", 10, 20, TOP_RIGHT));
+    expect(webcamStateAt(none, 10)).toMatchObject({ from: null, progress: 1 });
+    expect(webcamStateAt(none, 10)!.layout.position).toEqual(TOP_RIGHT);
+  });
+
+  it("has no motion when the position does not change", () => {
+    const scene = sceneOf(override("a", 10, 20, BASE.position, slide()));
+    expect(webcamStateAt(scene, 10)).toMatchObject({ from: null, progress: 1 });
+  });
+
+  it("slides adjacent blocks from the previous block's position", () => {
+    const scene = sceneOf(
+      override("a", 10, 20, TOP_RIGHT, slide()),
+      override("b", 20, 30, CENTER, slide()),
+    );
+    const state = webcamStateAt(scene, 20.5)!;
+    expect(state.from?.position).toEqual(TOP_RIGHT);
+    expect(state.layout.position).toEqual(CENTER);
+    expect(state.progress).toBeCloseTo(0.5);
+    expect(webcamStateAt(scene, 19.9)!.from).toBeNull();
+  });
+
+  it("slides from the default layout when the previous block does not touch this one", () => {
+    const scene = sceneOf(
+      override("a", 10, 20, TOP_RIGHT, slide()),
+      override("b", 25, 35, CENTER, slide()),
+    );
+    expect(webcamStateAt(scene, 25)!.from?.position).toEqual(BASE.position);
+  });
+
+  it("slides from the default layout after a hidden segment", () => {
+    const hidden: WebcamSegment = { id: "h", start: 10, end: 14, mode: "hidden" };
+    const scene = sceneOf(hidden, override("b", 14, 24, CENTER, slide()));
+    expect(webcamStateAt(scene, 14)!.from?.position).toEqual(BASE.position);
+  });
+
+  it("returns to the default layout at the end of a block into a gap, with the block's own transition", () => {
+    const scene = sceneOf(override("a", 10, 20, TOP_RIGHT, slide(1000)));
+    const start = webcamStateAt(scene, 20)!;
+    expect(start.layout).toBe(BASE);
+    expect(start.from?.position).toEqual(TOP_RIGHT);
+    expect(start.progress).toBe(0);
+    expect(webcamStateAt(scene, 20.5)!.progress).toBeCloseTo(0.5);
+    expect(webcamStateAt(scene, 21)).toMatchObject({ from: null, progress: 1 });
+  });
+
+  it("caps the return at half the gap before the next block", () => {
+    const scene = sceneOf(
+      override("a", 10, 20, TOP_RIGHT, slide(1500)),
+      override("b", 21, 30, CENTER, { ...slide(), kind: "cut" }),
+    );
+    expect(webcamStateAt(scene, 20.25)!.progress).toBeCloseTo(0.5);
+    expect(webcamStateAt(scene, 20.5)!.from).toBeNull();
+  });
+
+  it("does not return when the next block starts exactly where this one ends", () => {
+    const scene = sceneOf(
+      override("a", 10, 20, TOP_RIGHT, slide()),
+      override("b", 20, 30, CENTER, { ...slide(), kind: "cut" }),
+    );
+    const state = webcamStateAt(scene, 20)!;
+    expect(state.layout.position).toEqual(CENTER);
+    expect(state.from).toBeNull();
+  });
+
+  it("does not return when the next segment is hidden", () => {
+    const hidden: WebcamSegment = { id: "h", start: 20, end: 24, mode: "hidden" };
+    const scene = sceneOf(override("a", 10, 20, TOP_RIGHT, slide()), hidden);
+    expect(webcamStateAt(scene, 20)).toBeNull();
+  });
+
+  it("does not return after a Cut", () => {
+    const scene = sceneOf(override("a", 10, 20, TOP_RIGHT, { ...slide(), kind: "cut" }));
+    expect(webcamStateAt(scene, 20)).toMatchObject({ from: null, progress: 1 });
+  });
+
+  it("caps the last return at half of what is left of the recording, so it finishes before the end", () => {
+    const scene = sceneOf(override("a", 10, 20, TOP_RIGHT, slide(700)));
+    // 0.1 s of recording left: the return gets 50 ms and has settled by 20.05.
+    expect(webcamStateAt(scene, 20.025, 20.1)!.progress).toBeCloseTo(0.5);
+    expect(webcamStateAt(scene, 20.05, 20.1)).toMatchObject({ from: null, progress: 1 });
+    expect(webcamStateAt(scene, 20.09, 20.1)).toMatchObject({ from: null, progress: 1 });
+  });
+
+  it("uses the transition's own length for the last return while the recording end is unknown or far", () => {
+    const scene = sceneOf(override("a", 10, 20, TOP_RIGHT, slide(1000)));
+    expect(webcamStateAt(scene, 20.5)!.progress).toBeCloseTo(0.5);
+    expect(webcamStateAt(scene, 20.5, 120)!.progress).toBeCloseTo(0.5);
+  });
+
+  it("starts the next block's slide, not the default layout, across a gap of float noise", () => {
+    const scene = sceneOf(
+      override("a", 10, 20, TOP_RIGHT, slide()),
+      override("b", 20.0000005, 30, CENTER, slide()),
+    );
+    const sliver = webcamStateAt(scene, 20)!;
+    expect(sliver.layout.position).toEqual(CENTER);
+    expect(sliver.from?.position).toEqual(TOP_RIGHT);
+    expect(sliver.progress).toBe(0);
+  });
+});
+
+describe("webcamEndSeconds", () => {
+  it("passes a usable recording length through", () => {
+    expect(webcamEndSeconds(20)).toBe(20);
+    expect(webcamEndSeconds(0.5)).toBe(0.5);
+  });
+
+  it("reads a missing, zero, negative, NaN or infinite length as no end", () => {
+    for (const v of [undefined, 0, -3, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(webcamEndSeconds(v)).toBeUndefined();
+    }
   });
 });

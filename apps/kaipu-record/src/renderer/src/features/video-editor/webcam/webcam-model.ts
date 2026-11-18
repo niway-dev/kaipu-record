@@ -17,6 +17,7 @@ import {
 } from "@shared/camera-bubble";
 import type { WebcamGap, WebcamTrackMeta } from "@shared/webcam-track";
 import { ZOOM_LIMITS } from "../zoom/zoom-model";
+import { EASING_PRESETS, easeValue, type EasingPreset } from "./easing";
 
 export interface WebcamLayout {
   shape: CameraBubbleShape;
@@ -37,6 +38,21 @@ export interface WebcamLayout {
   shadow: boolean;
 }
 
+export const WEBCAM_EASINGS = EASING_PRESETS;
+
+export type WebcamEasing = EasingPreset;
+
+/**
+ * How a block's start (and its return to the default layout) plays (ADR 0039). `cut` is an
+ * instant change. `ms` is the duration before the half-block cap of
+ * {@link webcamEffectiveTransitionMs}.
+ */
+export interface WebcamTransition {
+  kind: "slide" | "cut";
+  ms: number;
+  easing: WebcamEasing;
+}
+
 export interface WebcamSegment {
   id: string;
   /** SOURCE seconds, sorted, non-overlapping, at least `ZOOM_LIMITS.minSeconds` long. */
@@ -46,6 +62,11 @@ export interface WebcamSegment {
   mode: "hidden" | "override";
   /** `override` only: the fields that differ from the global layout. */
   layout?: Partial<WebcamLayout>;
+  /**
+   * `override` only. Absent is a Cut, so a session saved before transitions existed opens
+   * with every block changing at once, as it always did.
+   */
+  transition?: WebcamTransition;
 }
 
 export interface WebcamScene {
@@ -62,18 +83,101 @@ export const WEBCAM_LIMITS = {
 } as const;
 
 /**
- * The inspector's Size label: the stored range 0.12–0.90 shown as 10–90, so the owner's
- * wording stays while the slider moves linearly over the stored size.
+ * What a new camera part starts with. The owner's mock defaults to Smooth (`ease-in-out`), so a
+ * part glides without overshooting; it is ONE constant, so flipping the default back to `back`
+ * (Bounce) is a one-word change. A block SAVED with another easing or duration keeps it.
+ * A saved transition that lacks an easing is read with {@link WEBCAM_SAVED_EASING_FALLBACK}
+ * instead, so a new default never changes how an old session plays.
  */
-export function webcamSizeLabel(size: number): number {
-  const { minSize, maxSize } = WEBCAM_LIMITS;
-  return Math.round(10 + ((size - minSize) / (maxSize - minSize)) * 80);
+export const WEBCAM_TRANSITION_DEFAULTS: WebcamTransition = {
+  kind: "slide",
+  ms: 700,
+  easing: "ease-in-out",
+};
+
+/**
+ * The easing a SAVED transition without a valid one plays with: `back`, the default when the
+ * first version wrote those sessions. Fixed on purpose: it is not the default for new parts.
+ */
+export const WEBCAM_SAVED_EASING_FALLBACK: WebcamEasing = "back";
+
+/** How long a new camera part (or a "hide the camera here" range) lasts, at most. */
+export const WEBCAM_PART_SECONDS = 10;
+
+export const WEBCAM_TRANSITION_LIMITS = { minMs: 100, maxMs: 2000 } as const;
+
+/**
+ * A transition from untrusted fields (a saved session, an inspector control): each field
+ * that is missing or invalid takes the default's value (the easing takes `fallbackEasing`,
+ * which a session being opened sets to {@link WEBCAM_SAVED_EASING_FALLBACK}), and the duration
+ * is rounded and held inside {@link WEBCAM_TRANSITION_LIMITS}.
+ */
+export function clampWebcamTransition(
+  partial: {
+    kind?: unknown;
+    ms?: unknown;
+    easing?: unknown;
+  },
+  fallbackEasing: WebcamEasing = WEBCAM_TRANSITION_DEFAULTS.easing,
+): WebcamTransition {
+  const { kind, ms, easing } = partial;
+  return {
+    kind: kind === "slide" || kind === "cut" ? kind : WEBCAM_TRANSITION_DEFAULTS.kind,
+    ms: clamp(
+      Math.round(
+        typeof ms === "number" && Number.isFinite(ms) ? ms : WEBCAM_TRANSITION_DEFAULTS.ms,
+      ),
+      WEBCAM_TRANSITION_LIMITS.minMs,
+      WEBCAM_TRANSITION_LIMITS.maxMs,
+    ),
+    easing: (WEBCAM_EASINGS as readonly unknown[]).includes(easing)
+      ? (easing as WebcamEasing)
+      : fallbackEasing,
+  };
 }
+
+/**
+ * The three sizes the panel's S, M and L buttons store, as a share of the output frame's
+ * height. They keep the proportions of the recorder bubble's presets (160, 240 and 360 DIP,
+ * `CAMERA_BUBBLE_PRESETS`) around M, today's default: 0.22 × 160 / 240 and × 360 / 240,
+ * rounded to the hundredth.
+ */
+export const WEBCAM_SIZE_PRESETS = { S: 0.15, M: 0.22, L: 0.33 } as const;
+export type WebcamSizePreset = keyof typeof WEBCAM_SIZE_PRESETS;
+export const WEBCAM_SIZE_PRESET_IDS = [
+  "S",
+  "M",
+  "L",
+] as const satisfies readonly WebcamSizePreset[];
+
+/**
+ * The preset a size equals exactly, or `null` for any other size. A session saved at 0.27
+ * keeps playing at 0.27 and the panel shows no button selected: nothing here rounds it.
+ */
+export function webcamSizePreset(size: number): WebcamSizePreset | null {
+  for (const id of WEBCAM_SIZE_PRESET_IDS) {
+    if (WEBCAM_SIZE_PRESETS[id] === size) return id;
+  }
+  return null;
+}
+
+/** The durations (ms) the panel offers for a slide; a saved one outside them keeps playing. */
+export const WEBCAM_SLIDE_MS_PRESETS = [400, 700, 1200] as const;
+
+/**
+ * The motions the panel has a button for, in its order: Smooth, Bounce, Linear. `ease-out` stays
+ * in the model for the sessions that saved it, with no button.
+ */
+export const WEBCAM_MOTION_BUTTONS = [
+  "ease-in-out",
+  "back",
+  "linear",
+] as const satisfies readonly WebcamEasing[];
 
 /** The bubble's default look: bottom-left, where the recorder starts it. */
 export const WEBCAM_DEFAULTS: WebcamLayout = {
   shape: "circle",
-  size: 0.22,
+  size: WEBCAM_SIZE_PRESETS.M,
   cornerRadius: DEFAULT_CAMERA_CORNER_RADIUS,
   position: { x: 0.12, y: 0.82 },
   mirrored: true,
@@ -197,6 +301,134 @@ export function webcamAt(scene: { webcam: WebcamScene | null }, t: number): Webc
   if (!segment) return webcam.layout;
   if (segment.mode === "hidden") return null;
   return segment.layout ? { ...webcam.layout, ...segment.layout } : webcam.layout;
+}
+
+/**
+ * What the bubble does at one source instant: the layout in force, and while it is moving
+ * there, the layout it moves from. The two differ in `position` only (this version animates
+ * position; every other field applies at once). The module has no frame, so the rectangles
+ * and the overshoot limit belong to `webcamStateRect`.
+ */
+export interface WebcamState {
+  layout: WebcamLayout;
+  /** The layout the bubble slides from; null when no transition is active. */
+  from: WebcamLayout | null;
+  /**
+   * The EASED progress from `from.position` to `layout.position`: 0 at the start of the
+   * transition and 1 at its end. `back` passes 1 in between. 1 when `from` is null.
+   */
+  progress: number;
+  /** The preset behind `progress`; `webcamStateRect` needs its peak to fit the overshoot. */
+  easing: WebcamEasing;
+}
+
+/** Segment ends and starts this close count as touching (float noise from edge drags). */
+const ADJACENT_EPSILON = 1e-6;
+
+/** The part of a block (seconds long, `ms` asked for) a transition may use: half of it. */
+export function webcamEffectiveTransitionMs(segmentLength: number, ms: number): number {
+  return Math.min(ms, (segmentLength * 1000) / 2);
+}
+
+const samePosition = (a: { x: number; y: number }, b: { x: number; y: number }): boolean =>
+  Math.abs(a.x - b.x) < 1e-9 && Math.abs(a.y - b.y) < 1e-9;
+
+/** The position an override segment puts the bubble at (its own, else the default's). */
+const segmentPosition = (webcam: WebcamScene, segment: WebcamSegment) =>
+  segment.layout?.position ?? webcam.layout.position;
+
+function settled(layout: WebcamLayout): WebcamState {
+  return { layout, from: null, progress: 1, easing: "linear" };
+}
+
+/**
+ * The slide from `fromPosition` to `layout`'s, `elapsed` seconds into a window of `windowMs`
+ * (already capped); settled outside the window and when nothing would move.
+ */
+function slideState(
+  layout: WebcamLayout,
+  fromPosition: { x: number; y: number },
+  transition: WebcamTransition,
+  windowMs: number,
+  elapsed: number,
+): WebcamState {
+  const windowSeconds = windowMs / 1000;
+  if (!(windowSeconds > 0) || elapsed >= windowSeconds) return settled(layout);
+  if (samePosition(fromPosition, layout.position)) return settled(layout);
+  return {
+    layout,
+    from: { ...layout, position: { ...fromPosition } },
+    progress: easeValue(transition.easing, elapsed / windowSeconds),
+    easing: transition.easing,
+  };
+}
+
+/**
+ * The recording's end as {@link webcamStateAt} takes it: a missing, zero, negative, NaN or
+ * infinite length is no end (`undefined` takes the function's default). The preview, the
+ * export and the export plan all read the length through this one rule, so they cannot
+ * disagree about the last block's return.
+ */
+export function webcamEndSeconds(seconds: number | undefined): number | undefined {
+  return seconds && Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
+}
+
+/**
+ * The bubble at SOURCE time `t`: {@link webcamAt}'s layout plus the slide in progress, if
+ * any. A pure function of `t`, so scrubbing backwards shows what playing forwards did (ADR
+ * 0039). Null when there is no webcam or a hidden segment covers `t`.
+ *
+ * - A block's slide plays at its start, over {@link webcamEffectiveTransitionMs}, from the
+ *   previous block's position when that block ends exactly where this one starts, otherwise
+ *   from the default layout (also after a hidden segment).
+ * - A block that ends into a gap returns to the default layout over its OWN transition,
+ *   capped at half the gap. When the next segment starts at its end the next block's start
+ *   governs instead, so there is no return.
+ * - A Cut, or no transition, changes at once.
+ *
+ * `endSeconds` is the recording's end in source seconds: the last block's return is capped at
+ * half of what is left, so it settles before the video ends. Without it the return takes its
+ * whole duration.
+ */
+export function webcamStateAt(
+  scene: { webcam: WebcamScene | null },
+  t: number,
+  endSeconds = Infinity,
+): WebcamState | null {
+  const webcam = scene.webcam;
+  if (!webcam) return null;
+  const { segments } = webcam;
+  const index = segments.findIndex((s) => t >= s.start && t < s.end);
+  if (index >= 0) {
+    const segment = segments[index]!;
+    if (segment.mode === "hidden") return null;
+    const layout = webcamAt(scene, t)!;
+    const transition = segment.transition;
+    if (!transition || transition.kind !== "slide") return settled(layout);
+    const previous = segments[index - 1];
+    const touching = previous && Math.abs(previous.end - segment.start) <= ADJACENT_EPSILON;
+    const fromPosition =
+      touching && previous.mode === "override"
+        ? segmentPosition(webcam, previous)
+        : webcam.layout.position;
+    const windowMs = webcamEffectiveTransitionMs(segment.end - segment.start, transition.ms);
+    return slideState(layout, fromPosition, transition, windowMs, t - segment.start);
+  }
+  const layout = webcam.layout;
+  let before = -1;
+  for (let i = 0; i < segments.length && segments[i]!.end <= t; i++) before = i;
+  const ended = segments[before];
+  const transition = ended?.transition;
+  if (!ended || ended.mode !== "override" || !transition || transition.kind !== "slide") {
+    return settled(layout);
+  }
+  const next = segments[before + 1];
+  const gap = (next ? next.start : endSeconds) - ended.end;
+  // A gap of float noise is no gap: the next segment's start governs, as it does when the two
+  // touch, instead of a flash of the default layout between them.
+  if (gap <= ADJACENT_EPSILON) return next ? webcamStateAt(scene, next.start) : settled(layout);
+  const windowMs = webcamEffectiveTransitionMs(gap, transition.ms);
+  return slideState(layout, segmentPosition(webcam, ended), transition, windowMs, t - ended.end);
 }
 
 /** The override segment in force at source time `t` (null `t`: over a slide), if any. */

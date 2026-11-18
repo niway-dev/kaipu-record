@@ -32,8 +32,9 @@ taken with a system screenshot ends up outside the library, with no tie back to 
    and, below it, its time in the video and its buttons: **Copy** puts the image on the
    clipboard and **Delete** removes it from the
    library after the same confirmation the Library asks for. With the `timeline-levels` flag
-   on (off by default, NIW2-772), a third button, **Add to timeline**, inserts that image into the
-   timeline as an image slide at the playhead's nearest item boundary (what Add image did).
+   on (off by default, NIW2-772), a third button, **Add from Library…** (originally **Add to timeline**, which inserted an image
+   slide at the playhead's nearest boundary; superseded by NIW2-829), opens the Add from Library
+   modal on Screenshots with that capture selected, where one destination chooser places it.
    **Go to** is on the image:
    hovering it shows a subtle dark veil with a round Go to button centered on it, and
    clicking that button moves the playhead to the capture's moment. A frame of an image slide
@@ -56,8 +57,8 @@ taken with a system screenshot ends up outside the library, with no tie back to 
 - The new item's sidecar has the source video's asset id and the frame's time in the source
   video. A frame of an image slide has no source time: it is linked with no time, and has no
   Go to in the panel.
-- With the `timeline-levels` flag on, Add to timeline on a capture inserts its image as an image
-  slide, undoable like any edit. With it off (the default) the button is not rendered.
+- With the `timeline-levels` flag on, Add from Library… on a capture opens the modal, and adding
+  from it inserts the image as a slide or a floating image, undoable like any edit. With it off (the default) the button is not rendered.
 - The Captures panel lists only this video's captures and shows a new one right after it is taken.
 - Each capture can be copied to the clipboard as an image.
 - Pressing Capture frame twice at the same moment leaves one capture. Captures of slides

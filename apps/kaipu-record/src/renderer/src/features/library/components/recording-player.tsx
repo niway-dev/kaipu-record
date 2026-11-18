@@ -129,6 +129,7 @@ export function RecordingPlayer({
                 src={mediaUrl("webcam", id)}
                 startOffsetMs={webcam.startOffsetMs}
                 webcam={scene}
+                endSeconds={durationSeconds}
                 frame={frame}
               />
             </div>

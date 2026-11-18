@@ -90,9 +90,3 @@
     border-radius 0.12s ease,
     background 0.12s ease;
 }
-
-/* Canvas mode, no background: a neutral block under the shot over the content box. */
-.boxFill {
-  position: absolute;
-  background: #fff;
-}

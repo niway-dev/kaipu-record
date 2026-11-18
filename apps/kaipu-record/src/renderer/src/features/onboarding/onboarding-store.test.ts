@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   hasCompletedOnboarding,
+  hasSeenPrivacyNotice,
   markOnboardingComplete,
+  markPrivacySeen,
   resetOnboarding,
 } from "./onboarding-store";
 
@@ -38,5 +40,38 @@ describe("onboarding-store", () => {
       throw new Error("blocked");
     });
     expect(() => markOnboardingComplete()).not.toThrow();
+  });
+
+  describe("privacy notice flag", () => {
+    it("is unseen by default and persists once marked", () => {
+      expect(hasSeenPrivacyNotice()).toBe(false);
+      markPrivacySeen();
+      expect(hasSeenPrivacyNotice()).toBe(true);
+    });
+
+    it("is independent of completion, so people who finished before the step still see it", () => {
+      markOnboardingComplete();
+      expect(hasSeenPrivacyNotice()).toBe(false);
+    });
+
+    it("survives a replay of the onboarding", () => {
+      markPrivacySeen();
+      resetOnboarding();
+      expect(hasSeenPrivacyNotice()).toBe(true);
+    });
+
+    it("counts as seen when storage is unreadable, so it never nags on every launch", () => {
+      vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+        throw new Error("blocked");
+      });
+      expect(hasSeenPrivacyNotice()).toBe(true);
+    });
+
+    it("does not throw when persisting fails", () => {
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new Error("blocked");
+      });
+      expect(() => markPrivacySeen()).not.toThrow();
+    });
   });
 });

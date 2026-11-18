@@ -5,14 +5,22 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type CSSProperties,
   type ReactElement,
 } from "react";
 import { Film, ImagePlus, Info, PenLine, type LucideIcon } from "lucide-react";
 import { useTranslations } from "@kaipu/i18n";
+import { insertBoundaryAt, RECORDING_DRAG_MIME } from "../add-from-library";
 import { isGuideTab, type GuideTab } from "../track-guide";
 import type { PreviewPlayback } from "../use-preview-playback";
 import type { LayoutEntry } from "../timeline";
+import {
+  recordingBoundaries,
+  sameRecordingItemIds,
+  type ClipRecording,
+  type ClipRecordings,
+} from "../clip-recordings";
 import { layoutDuration } from "../timeline";
 import type { VideoOverlay } from "../scene";
 import type { SourceThumbnail } from "../use-source-thumbnails";
@@ -21,6 +29,8 @@ import {
   useTimelineViewStore,
   type TimelineViewStore,
 } from "../use-timeline-view";
+import { MediaLane } from "./media-lane";
+import type { TimelineMedia } from "./media-lane-contract";
 import { OverlayLane, type WindowChangePhase } from "./overlay-lane";
 import {
   formatScrubTime,
@@ -32,6 +42,7 @@ import {
 } from "./timeline-geometry";
 import {
   TimelinePointerContext,
+  TimelineShowRangeContext,
   TimelineViewContext,
   type TimelinePointer,
 } from "./timeline-pointer";
@@ -45,6 +56,7 @@ import {
   xOf,
   type TimelineView,
 } from "./timeline-view";
+import { uiArea } from "@renderer/lib/ui-area";
 import styles from "./timeline-strip.module.css";
 
 // Past this fraction the hover readout sits LEFT of its line: on the right it would hang
@@ -77,6 +89,8 @@ export const TimelineStrip = memo(function TimelineStrip({
   layout,
   playback,
   thumbnails,
+  clipRecordings = null,
+  recordingThumbnails,
   selectedItemId,
   onSelectItem,
   onTrim,
@@ -87,13 +101,21 @@ export const TimelineStrip = memo(function TimelineStrip({
   selectedOverlayId,
   onSelectOverlay,
   onWindowChange,
+  media,
   extraLanes = [],
   timelineView,
   onOpenGuide,
+  onDropRecording,
 }: {
   layout: LayoutEntry[];
   playback: PreviewPlayback;
   thumbnails: SourceThumbnail[];
+  /** Which recording each clip belongs to, by item id (NIW2-780). Null (the default) when the
+   *  scene has no joined recording: no name labels, no hover outline, no dividers, and every
+   *  clip draws `thumbnails` as it always did. `thumbnails` are the OPENED recording's. */
+  clipRecordings?: ClipRecordings | null;
+  /** The joined recordings' own filmstrips by `SceneSource.id`, at each recording's local time. */
+  recordingThumbnails?: ReadonlyMap<string, SourceThumbnail[]>;
   selectedItemId: string | null;
   onSelectItem: (id: string | null) => void;
   /** Fired while dragging a trim handle. `phase` tracks the drag lifecycle so the
@@ -117,6 +139,9 @@ export const TimelineStrip = memo(function TimelineStrip({
   selectedOverlayId: string | null;
   onSelectOverlay: (id: string | null) => void;
   onWindowChange?: (id: string, start: number, end: number, phase: WindowChangePhase) => void;
+  /** Floating images, drawn on rows above the sequence inside the Clips section (NIW2-771).
+   *  Omitted or empty, the strip renders exactly as it does without them. */
+  media?: TimelineMedia;
   /** Opens the Timeline guide on a lane: each lane label gets an info button that calls it
    *  (NIW2-679). Without it the labels stay plain text. */
   onOpenGuide?: (tab: GuideTab) => void;
@@ -125,8 +150,22 @@ export const TimelineStrip = memo(function TimelineStrip({
   /** The page's zoom and scroll (the transport bar's zoom control drives the same store).
    *  Omitted, the strip keeps its own, at fit. */
   timelineView?: TimelineViewStore;
+  /** A Library recording was dropped on the Clips row (NIW2-782): `time` is the timeline second
+   *  of the clip boundary the Insert here indicator showed. While a recording is dragged over the
+   *  row the strip draws that indicator. Omitted, the row accepts no drag and draws nothing. */
+  onDropRecording?: (time: number) => void;
 }): React.JSX.Element {
   const t = useTranslations("videoEditor");
+  // Hovering a clip outlines every clip of the same recording; only a scene with joins has any.
+  const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
+  const sameRecording = useMemo(
+    () => sameRecordingItemIds(clipRecordings, hoveredItemId),
+    [clipRecordings, hoveredItemId],
+  );
+  const boundaries = useMemo(
+    () => recordingBoundaries(layout, clipRecordings),
+    [layout, clipRecordings],
+  );
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const cornerRef = useRef<HTMLSpanElement | null>(null);
   const playheadRef = useRef<HTMLDivElement | null>(null);
@@ -164,6 +203,10 @@ export const TimelineStrip = memo(function TimelineStrip({
   const ownStore = useTimelineViewStore(duration);
   const store = timelineView ?? ownStore;
   const viewState = useTimelineViewState(store);
+  const showRange = useCallback(
+    (start: number, end: number) => store.showRange(start, end),
+    [store],
+  );
   // `viewState` is a stable snapshot: a new object only when zoom, scroll or lane changed.
   const view = useMemo(() => clampView({ ...viewState, duration }), [viewState, duration]);
 
@@ -364,6 +407,53 @@ export const TimelineStrip = memo(function TimelineStrip({
     if (hoverRef.current) delete hoverRef.current.dataset.visible;
   }, []);
 
+  // The Clips row is a drop target for a dragged Library recording, with the "Insert here"
+  // indicator. Nothing drags one today: Add from Library (NIW2-790) is a modal with no draggable
+  // rows, and the page does not pass `onDropRecording`. The target stays for dragging a
+  // recording to reorder clips (NIW2-789), which reuses it.
+  // Dragging a Library recording over the Clips row: the clip would land on the boundary nearest
+  // the pointer (`insertBoundaryAt`, the join's own rule), so that boundary is drawn. Only a drag
+  // that carries the recording type counts; files and text pass through untouched.
+  const [insertAt, setInsertAt] = useState<number | null>(null);
+  const isRecordingDrag = (event: React.DragEvent): boolean =>
+    Array.from(event.dataTransfer.types).includes(RECORDING_DRAG_MIME);
+  const boundaryUnder = useCallback(
+    (clientX: number): number | null => {
+      const time = timeAtPointer(clientX);
+      return time === null ? null : insertBoundaryAt(layout, time).time;
+    },
+    [layout, timeAtPointer],
+  );
+  const onTrackDragOver = (event: React.DragEvent<HTMLDivElement>): void => {
+    if (!isRecordingDrag(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setInsertAt(boundaryUnder(event.clientX));
+  };
+  const onTrackDragLeave = (event: React.DragEvent<HTMLDivElement>): void => {
+    // Crossing from the row into one of its clips also fires dragleave; only leaving the row hides.
+    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+    setInsertAt(null);
+  };
+  const onTrackDrop = (event: React.DragEvent<HTMLDivElement>): void => {
+    if (!isRecordingDrag(event)) return;
+    event.preventDefault();
+    setInsertAt(null);
+    const time = boundaryUnder(event.clientX);
+    if (time !== null) onDropRecording?.(time);
+  };
+  // A cancelled drag (Escape) or a drop elsewhere ends on the dragged row, not on this one.
+  useEffect(() => {
+    if (insertAt === null) return;
+    const hide = (): void => setInsertAt(null);
+    window.addEventListener("dragend", hide);
+    window.addEventListener("drop", hide);
+    return () => {
+      window.removeEventListener("dragend", hide);
+      window.removeEventListener("drop", hide);
+    };
+  }, [insertAt]);
+
   const onRulerPointerMove = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       const time = timeAtPointer(event.clientX) ?? 0;
@@ -434,105 +524,170 @@ export const TimelineStrip = memo(function TimelineStrip({
           playhead lives in its own layer spanning column 2 across every row (see
           .playheadLayer) and scrolls with them. */}
       <TimelinePointerContext.Provider value={pointer}>
-        <TimelineViewContext.Provider value={view}>
-          <div
-            ref={bodyRef}
-            data-testid="timeline-scroller"
-            data-zoom={view.zoom}
-            data-scrolled={view.scroll > 0 ? "true" : "false"}
-            className={styles.timelineBody}
-            style={{ "--zoom": view.zoom } as CSSProperties}
-            onScroll={onScroll}
-          >
-            <span ref={cornerRef} data-testid="lane-corner" className={styles.laneLabel} />
+        <TimelineShowRangeContext.Provider value={showRange}>
+          <TimelineViewContext.Provider value={view}>
             <div
-              data-testid="ruler"
-              className={styles.ruler}
-              onPointerDown={startScrub}
-              onPointerMove={onRulerPointerMove}
-              onPointerUp={endScrub}
-              onPointerCancel={endScrub}
-              onLostPointerCapture={endScrub}
-              onPointerLeave={hideHover}
+              ref={bodyRef}
+              data-testid="timeline-scroller"
+              data-zoom={view.zoom}
+              data-scrolled={view.scroll > 0 ? "true" : "false"}
+              className={styles.timelineBody}
+              style={{ "--zoom": view.zoom } as CSSProperties}
+              onScroll={onScroll}
             >
-              {rulerMarks}
-            </div>
-            {/* Clips lead: the recording is what every other lane edits. */}
-            <LaneLabel
-              icon={Film}
-              label={t("laneClips")}
-              guideTab="clips"
-              onOpenGuide={onOpenGuide}
-            />
-            <div
-              className={styles.track}
-              onPointerDown={startScrub}
-              onPointerMove={onTrackPointerMove}
-              onPointerUp={endScrub}
-              onPointerCancel={endScrub}
-              onLostPointerCapture={endScrub}
-            >
-              {layout.map((entry) => (
-                <TrackBlock
-                  key={entry.itemId}
-                  entry={entry}
-                  duration={duration}
-                  thumbnails={thumbnails}
-                  scale={scale}
-                  shown={shown}
-                  selected={entry.itemId === selectedItemId}
-                  onSelect={onSelectItem}
-                  freezeMapping={freezeMapping}
-                  onDragActive={setEditDrag}
-                  onTrim={onTrim}
-                  slideUrlFor={slideUrlFor}
-                  onSlideDuration={onSlideDuration}
-                />
-              ))}
-            </div>
-            {/* Annotations are made with the drawing tools on the preview, never on this lane,
-                so an empty lane would only be a blank row: it appears with the first one. */}
-            {showOverlays && overlays.length > 0 && (
-              <LaneRow
-                icon={PenLine}
-                label={t("laneAnnotations")}
-                guideTab="annotations"
-                onOpenGuide={onOpenGuide}
+              <span ref={cornerRef} data-testid="lane-corner" className={styles.laneLabel} />
+              <div
+                data-testid="ruler"
+                className={styles.ruler}
+                onPointerDown={startScrub}
+                onPointerMove={onRulerPointerMove}
+                onPointerUp={endScrub}
+                onPointerCancel={endScrub}
+                onLostPointerCapture={endScrub}
+                onPointerLeave={hideHover}
               >
-                <OverlayLane
-                  overlays={overlays}
-                  duration={duration}
-                  selectedOverlayId={selectedOverlayId}
-                  onSelectOverlay={onSelectOverlay}
-                  onWindowChange={handleWindowChange}
-                />
-              </LaneRow>
-            )}
-            {extraLanes.map((lane) => (
-              <LaneRow
-                key={lane.key}
-                icon={lane.icon}
-                label={lane.label}
-                guideTab={isGuideTab(lane.key) ? lane.key : undefined}
-                onOpenGuide={onOpenGuide}
-              >
-                {lane.node}
-              </LaneRow>
-            ))}
-            {/* Positioned via direct DOM mutation in the subscribeTime callback (avoid React
-                re-renders at 60fps). The layer spans every row of the lanes column. */}
-            <div className={styles.playheadLayer}>
-              <div ref={hoverRef} className={styles.hoverLine}>
-                <span ref={hoverLabelRef} className={styles.hoverTime} />
+                {rulerMarks}
               </div>
-              <div ref={playheadRef} className={styles.playhead} />
+              {/* The Clips section opens with the floating images, on rows above the sequence
+                (row 1 nearest it). One label cell and one lane cell, so the label/lane pairing
+                of every row below is untouched; the lane stacks its own rows. */}
+              {media && media.placed.length > 0 && (
+                <>
+                  <span className={styles.laneLabel} aria-hidden />
+                  <div className={styles.laneCell}>
+                    <MediaLane media={media} duration={duration} />
+                  </div>
+                </>
+              )}
+              {/* Clips lead: the recording is what every other lane edits. */}
+              <LaneLabel
+                icon={Film}
+                label={t("laneClips")}
+                guideTab="clips"
+                onOpenGuide={onOpenGuide}
+              />
+              <div
+                className={styles.track}
+                onPointerDown={startScrub}
+                onPointerMove={onTrackPointerMove}
+                onPointerUp={endScrub}
+                onPointerCancel={endScrub}
+                onLostPointerCapture={endScrub}
+                onDragOver={onDropRecording ? onTrackDragOver : undefined}
+                onDragLeave={onDropRecording ? onTrackDragLeave : undefined}
+                onDrop={onDropRecording ? onTrackDrop : undefined}
+              >
+                {insertAt !== null && (
+                  <InsertIndicator time={insertAt} fraction={timeToFraction(insertAt, duration)} />
+                )}
+                {layout.map((entry) => {
+                  const recording = clipRecordings?.get(entry.itemId);
+                  return (
+                    <TrackBlock
+                      key={entry.itemId}
+                      entry={entry}
+                      duration={duration}
+                      thumbnails={
+                        recording && recording.sourceId !== null
+                          ? (recordingThumbnails?.get(recording.sourceId) ?? NO_THUMBNAILS)
+                          : thumbnails
+                      }
+                      recording={recording}
+                      sameRecording={sameRecording.has(entry.itemId)}
+                      onHover={clipRecordings ? setHoveredItemId : undefined}
+                      scale={scale}
+                      shown={shown}
+                      selected={entry.itemId === selectedItemId}
+                      onSelect={onSelectItem}
+                      freezeMapping={freezeMapping}
+                      onDragActive={setEditDrag}
+                      onTrim={onTrim}
+                      slideUrlFor={slideUrlFor}
+                      onSlideDuration={onSlideDuration}
+                    />
+                  );
+                })}
+              </div>
+              {/* Annotations are made with the drawing tools on the preview, never on this lane,
+                so an empty lane would only be a blank row: it appears with the first one. */}
+              {showOverlays && overlays.length > 0 && (
+                <LaneRow
+                  icon={PenLine}
+                  label={t("laneAnnotations")}
+                  guideTab="annotations"
+                  onOpenGuide={onOpenGuide}
+                >
+                  <OverlayLane
+                    overlays={overlays}
+                    duration={duration}
+                    selectedOverlayId={selectedOverlayId}
+                    onSelectOverlay={onSelectOverlay}
+                    onWindowChange={handleWindowChange}
+                  />
+                </LaneRow>
+              )}
+              {extraLanes.map((lane) => (
+                <LaneRow
+                  key={lane.key}
+                  icon={lane.icon}
+                  label={lane.label}
+                  guideTab={isGuideTab(lane.key) ? lane.key : undefined}
+                  onOpenGuide={onOpenGuide}
+                >
+                  {lane.node}
+                </LaneRow>
+              ))}
+              {/* Positioned via direct DOM mutation in the subscribeTime callback (avoid React
+                re-renders at 60fps). The layer spans every row of the lanes column. */}
+              <div className={styles.playheadLayer}>
+                {boundaries.map((at) => (
+                  <div
+                    key={at}
+                    className={styles.recordingDivider}
+                    data-testid="recording-divider"
+                    style={{ left: `${timeToFraction(at, duration) * 100}%` }}
+                  />
+                ))}
+                <div ref={hoverRef} className={styles.hoverLine}>
+                  <span ref={hoverLabelRef} className={styles.hoverTime} />
+                </div>
+                <div ref={playheadRef} className={styles.playhead} />
+              </div>
             </div>
-          </div>
-        </TimelineViewContext.Provider>
+          </TimelineViewContext.Provider>
+        </TimelineShowRangeContext.Provider>
       </TimelinePointerContext.Provider>
     </div>
   );
 });
+
+/**
+ * Where a dragged Library recording would land (NIW2-782): a pink bar on the clip boundary and a
+ * pill above it, "Insert here · 0:22.0". Inside the Clips row, so it follows the lanes' zoom and
+ * scroll; never a drop target of its own. Near either end the pill grows inward instead of
+ * hanging past the lane.
+ */
+function InsertIndicator({
+  time,
+  fraction,
+}: {
+  time: number;
+  fraction: number;
+}): React.JSX.Element {
+  const t = useTranslations("videoEditor");
+  const edge = fraction < 0.05 ? "start" : fraction > 0.95 ? "end" : undefined;
+  return (
+    <div
+      {...uiArea("editorVideo.insertIndicator")}
+      className={styles.insertIndicator}
+      data-testid="insert-indicator"
+      data-edge={edge}
+      style={{ left: `${fraction * 100}%` }}
+    >
+      <span className={styles.insertPill}>{t("insertHere", { time: formatScrubTime(time) })}</span>
+    </div>
+  );
+}
 
 function LaneLabel({
   icon: Icon,
@@ -600,10 +755,15 @@ type DragHandlers = Pick<
   "onPointerDown" | "onPointerMove" | "onPointerUp" | "onPointerCancel" | "onLostPointerCapture"
 >;
 
+const NO_THUMBNAILS: SourceThumbnail[] = [];
+
 function TrackBlock({
   entry,
   duration,
   thumbnails,
+  recording,
+  sameRecording,
+  onHover,
   scale,
   shown,
   selected,
@@ -616,7 +776,14 @@ function TrackBlock({
 }: {
   entry: LayoutEntry;
   duration: number;
+  /** The frames of THIS clip's recording, at that recording's own time. */
   thumbnails: SourceThumbnail[];
+  /** The clip's recording; set only when the scene has joined recordings (then it is labelled). */
+  recording?: ClipRecording;
+  /** Another clip of the same recording is hovered: outline this one. */
+  sameRecording: boolean;
+  /** Reports the hovered clip (null on leave); omitted when there is nothing to outline. */
+  onHover?: (itemId: string | null) => void;
   /** Pixels per timeline second, and the window of timeline time on screen: the block
    *  draws only the thumbnails in that window. */
   scale: number;
@@ -636,12 +803,14 @@ function TrackBlock({
   slideUrlFor?: (assetId: string) => string | null;
   onSlideDuration?: (itemId: string, duration: number, phase: "start" | "move" | "end") => void;
 }): React.JSX.Element {
+  const t = useTranslations("videoEditor");
   const left = timeToFraction(entry.timelineStart, duration) * 100;
   const width = timeToFraction(entry.timelineEnd - entry.timelineStart, duration) * 100;
   const isSlide = entry.kind === "slide";
   const slideUrl = isSlide && entry.assetId ? (slideUrlFor?.(entry.assetId) ?? null) : null;
+  const missing = recording?.status === "missing";
   const tiles =
-    entry.kind === "clip"
+    entry.kind === "clip" && !missing
       ? thumbnailTiles({
           timelineStart: entry.timelineStart,
           timelineEnd: entry.timelineEnd,
@@ -798,10 +967,21 @@ function TrackBlock({
     <>
       <button
         type="button"
-        className={[styles.block, isSlide && styles.slideBlock, selected && styles.blockSelected]
+        className={[
+          styles.block,
+          isSlide && styles.slideBlock,
+          selected && styles.blockSelected,
+          missing && styles.blockMissing,
+          sameRecording && styles.blockSameRecording,
+        ]
           .filter(Boolean)
           .join(" ")}
         style={{ left: `${left}%`, width: `${width}%` }}
+        data-item-id={entry.itemId}
+        data-recording-missing={missing ? "true" : undefined}
+        data-same-recording={sameRecording ? "true" : undefined}
+        onPointerEnter={onHover && recording ? () => onHover(entry.itemId) : undefined}
+        onPointerLeave={onHover && recording ? () => onHover(null) : undefined}
         onPointerDown={(event) => {
           // Stop the pointerdown from reaching the track background handler — a clip
           // click should only select, not also scrub the timeline.
@@ -823,7 +1003,7 @@ function TrackBlock({
           </>
         ) : (
           tiles.map((tile) => {
-            const thumb = thumbnailAt(thumbnails, tile.sourceTime);
+            const thumb = thumbnailAt(thumbnails, tile.sourceTime - (recording?.offset ?? 0));
             return thumb ? (
               <img
                 key={tile.index}
@@ -835,6 +1015,24 @@ function TrackBlock({
               />
             ) : null;
           })
+        )}
+        {recording && (
+          <span className={styles.clipLabel} data-testid="clip-label">
+            {missing ? (
+              <span className={styles.clipName}>
+                {t("recordingMissing", { title: recording.title })}
+              </span>
+            ) : (
+              <>
+                <span className={styles.clipName}>{recording.title}</span>
+                <span className={styles.clipDuration}>
+                  {t("clipDuration", {
+                    seconds: (entry.timelineEnd - entry.timelineStart).toFixed(1),
+                  })}
+                </span>
+              </>
+            )}
+          </span>
         )}
       </button>
       {/* Rendered as siblings, not children of the button: the button clips its

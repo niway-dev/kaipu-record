@@ -1,0 +1,46 @@
+/* The Camera lane's hover card (spec decision 16): a tooltip in the drop card's language
+   (same surface, border and shadow), smaller, and never a hit target. Fixed to the page,
+   because the timeline's scroller clips anything that sticks out of it. */
+.card {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--bg-card);
+  box-shadow: var(--shadow-popover);
+  color: var(--text-primary);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.range {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.how {
+  font-size: 11px;
+  color: var(--text-muted);
+}

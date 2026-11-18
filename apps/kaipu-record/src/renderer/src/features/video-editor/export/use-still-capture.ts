@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { captureException } from "@renderer/features/analytics";
-import { mediaUrl } from "@renderer/lib/media-url";
+import { useTranslations } from "@kaipu/i18n";
 import type { CursorLayerData } from "../cursor/cursor-model";
 import type { VideoScene } from "../scene";
 import type { SlideAssetStore } from "../slide-assets";
 import type { CameraPath } from "../zoom/camera-path";
 import type { WebcamTrackMessage } from "./export-messages";
+import type { ExportJoinedRecording } from "./export-runner";
+import {
+  createRecordingCache,
+  fetchJoinedFiles,
+  JoinedRecordingUnreadable,
+  RecordingUnavailableError,
+  usedJoinedRecordings,
+} from "./joined-files";
 import type { GifStartMessage, GifWorkerMessage } from "./gif-messages";
 import { prepareWorkerInputs } from "./job-inputs";
 import { planStill } from "./still-plan";
@@ -26,6 +34,8 @@ export interface StillCapture {
 
 export interface StillCaptureArgs {
   scene: VideoScene;
+  /** The recording's length in source seconds, for the last camera block's return. */
+  sourceDurationSeconds?: number;
   /** The recording id the editor is open on (`mediaUrl("recording", sourceId)`). */
   sourceId: string;
   /** Native size of the source video: the PNG's size. */
@@ -38,6 +48,8 @@ export interface StillCaptureArgs {
   cursor?: CursorLayerData | null;
   /** The recording's webcam track, when it has one (ADR 0038). */
   webcamTrack?: ExportWebcamTrack | null;
+  /** The scene's joined recordings (ADR 0058), as for the MP4 export; `[]` without joins. */
+  joined: ExportJoinedRecording[];
   /** The playhead, in edited-timeline seconds. */
   playhead: number;
 }
@@ -54,15 +66,19 @@ export interface StillCaptureController {
  */
 export async function buildStillMessage(
   args: StillCaptureArgs,
-  sourceBlob: Blob,
+  sourceBlob: Blob | null,
   webcam: WebcamTrackMessage | null,
+  joined: GifStartMessage["joined"] = [],
 ): Promise<{
   message: GifStartMessage;
   transfer: Transferable[];
   still: ReturnType<typeof planStill>;
 }> {
-  const still = planStill(args.scene, args.playhead);
-  const { overlays, slides, camera, transfer } = await prepareWorkerInputs(args, still.plan);
+  const still = planStill(args.scene, args.playhead, args.sourceDurationSeconds);
+  const { overlays, slides, mediaImages, camera, transfer } = await prepareWorkerInputs(
+    args,
+    still.plan,
+  );
   const size = { width: args.videoWidth, height: args.videoHeight };
   const message: GifStartMessage = {
     type: "start",
@@ -72,6 +88,7 @@ export async function buildStillMessage(
     plan: still.plan,
     overlays,
     slides,
+    mediaImages,
     source: size,
     output: size,
     // Unused in still mode (no schedule); the field is required by the shared message.
@@ -79,6 +96,7 @@ export async function buildStillMessage(
     camera,
     cursor: args.cursor ?? null,
     webcam: still.plan.webcam ? webcam : null,
+    joined,
   };
   return { message, transfer, still };
 }
@@ -119,29 +137,15 @@ function runStillWorker(
 /**
  * Still capture (NIW2-764): the frame at the playhead, composed by the GIF worker's "still"
  * mode through the export composer. One worker per capture, terminated when it answers or
- * on unmount. The source file is fetched once per recording id and reused by later captures.
+ * on unmount. Only the recording under the playhead is fetched (ADR 0058), once per vault id
+ * and reused by later captures; a joined one by its current id, never its asset id.
  */
 export function useStillCapture(): StillCaptureController {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const workerRef = useRef<Worker | null>(null);
-  const sourceRef = useRef<{ id: string; blob: Promise<Blob> } | null>(null);
-
-  const sourceBlob = useCallback((id: string): Promise<Blob> => {
-    if (sourceRef.current?.id !== id) {
-      const blob = fetch(mediaUrl("recording", id)).then((r) => {
-        // An error page is not the recording: fail, so it is not cached as one.
-        if (!r.ok) throw new Error(`still capture: source fetch failed (${r.status})`);
-        return r.blob();
-      });
-      // A failed fetch must not be cached for the next attempt.
-      blob.catch(() => {
-        if (sourceRef.current?.blob === blob) sourceRef.current = null;
-      });
-      sourceRef.current = { id, blob };
-    }
-    return sourceRef.current.blob;
-  }, []);
+  const recordingsRef = useRef(createRecordingCache("still capture"));
+  const t = useTranslations("videoEditor");
 
   const capture = useCallback(
     async (args: StillCaptureArgs): Promise<StillCapture> => {
@@ -149,15 +153,56 @@ export function useStillCapture(): StillCaptureController {
       busyRef.current = true;
       setBusy(true);
       try {
-        const blob = await sourceBlob(args.sourceId);
-        // A webcam file that fails to load captures without the layer (reported).
-        const webcam = await fetchWebcamTrack(
-          args.sourceId,
-          args.scene.webcam,
-          args.webcamTrack,
-          (error) => captureException(error, { context: "still-capture-webcam" }),
-        );
-        const { message, transfer, still } = await buildStillMessage(args, blob, webcam);
+        // The recording under the playhead is the only one this frame reads.
+        const underPlayhead = planStill(args.scene, args.playhead);
+        let blob: Blob | null = null;
+        let joined: GifStartMessage["joined"] = [];
+        let webcam: WebcamTrackMessage | null = null;
+        if (underPlayhead.sourceId === null) {
+          blob = await recordingsRef.current.blob(args.sourceId);
+          // A webcam file that fails to load captures without the layer (reported).
+          webcam = await fetchWebcamTrack(
+            args.sourceId,
+            args.scene.webcam,
+            args.webcamTrack,
+            (error) => captureException(error, { context: "still-capture-webcam" }),
+          );
+        } else {
+          const sourceId = underPlayhead.sourceId;
+          const used = usedJoinedRecordings(
+            {
+              segments: underPlayhead.plan.segments.filter(
+                (s) => s.kind === "clip" && s.sourceId === sourceId,
+              ),
+            },
+            args.scene,
+            args.joined,
+          );
+          if (!used.ok) {
+            throw new RecordingUnavailableError(
+              used.reason === "missing"
+                ? t("captureRecordingMissing", { title: used.title })
+                : t("captureRecordingLoading"),
+            );
+          }
+          try {
+            joined = await fetchJoinedFiles(
+              used.used,
+              underPlayhead.plan.webcam,
+              recordingsRef.current,
+              (error) => captureException(error, { context: "still-capture-webcam" }),
+            );
+          } catch (error) {
+            if (error instanceof JoinedRecordingUnreadable) {
+              throw new RecordingUnavailableError(
+                t("captureRecordingMissing", { title: error.title }),
+                { cause: error },
+              );
+            }
+            throw error;
+          }
+        }
+        const { message, transfer, still } = await buildStillMessage(args, blob, webcam, joined);
         const result = await runStillWorker(message, transfer, workerRef);
         return {
           ...result,
@@ -172,7 +217,7 @@ export function useStillCapture(): StillCaptureController {
         setBusy(false);
       }
     },
-    [sourceBlob],
+    [t],
   );
 
   useEffect(() => {

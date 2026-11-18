@@ -33,22 +33,52 @@
   object-fit: cover;
 }
 
-.block {
+/* A part or hidden range is a button (the click target: its drawn box, or 12 px around it
+   when narrower) holding the box that is drawn (.block), placed by the lane as a percent of
+   the target. The button itself draws nothing. */
+.target {
   position: absolute;
   top: 3px;
   bottom: 3px;
-  min-width: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.targetSelected {
+  z-index: 2;
+}
+
+.target:focus-visible {
+  outline: none;
+}
+
+.target:focus-visible .block {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+/* No padding and a 1 px border: nothing here makes the box wider than its time, except that a
+   box under 2 px is drawn 2 px for its border. What does not fit is not rendered (the lane
+   decides); overflow is clipped. */
+.block {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 3px;
-  padding: 0 4px;
+  padding: 0;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--accent-primary) 35%, transparent);
   border-radius: 3px;
   background: color-mix(in srgb, var(--accent-primary) 15%, transparent);
   color: var(--text-primary);
-  cursor: pointer;
 }
 
 /* Hidden = striped (spec § 6): the stretch where the face is gone reads as a gap. The
@@ -64,13 +94,124 @@
   border-color: color-mix(in srgb, var(--text-muted) 45%, transparent);
 }
 
+/* Where a new part would go while the drop card asks: dashed, never a hit target. */
+.pending {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1.5px dashed var(--accent-primary);
+  border-radius: 3px;
+  /* An opaque base, so the name of the stretch it covers does not show through. */
+  background: color-mix(in srgb, var(--accent-primary) 14%, var(--bg-input));
+  color: var(--text-primary);
+  pointer-events: none;
+  z-index: 2;
+}
+
 .selected {
   border-color: var(--accent-primary);
-  z-index: 1;
 }
 
 .block.selected:not(.hidden) {
-  background: color-mix(in srgb, var(--accent-primary) 32%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 48%, transparent);
+}
+
+/* A part: the accent block. Its content starts at the left, after the slide's wedge. */
+.part {
+  justify-content: flex-start;
+  padding: 0;
+  background: color-mix(in srgb, var(--accent-primary) 34%, transparent);
+  border-color: var(--accent-primary);
+}
+
+.partContent {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+/* The slide at a part's start: a light diagonal wedge as wide as the slide lasts. */
+.wedge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: linear-gradient(
+    to bottom right,
+    color-mix(in srgb, var(--text-primary) 75%, transparent) 0 49%,
+    transparent 51% 100%
+  );
+  pointer-events: none;
+}
+
+/* A cut has no travel: a thin white bar marks the instant. */
+.cutBar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 3px;
+  background: var(--text-primary);
+  pointer-events: none;
+}
+
+/* Stretches where the camera sits in its original position: dashed, only a description. */
+.original {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px dashed color-mix(in srgb, var(--text-primary) 22%, transparent);
+  border-radius: 3px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+/* The small frame with a dot where the camera is. */
+.glyph {
+  position: relative;
+  flex-shrink: 0;
+  width: 26px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 45%, transparent);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.glyphOn {
+  border-color: color-mix(in srgb, var(--text-primary) 90%, transparent);
+}
+
+.glyphDot {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-primary) 80%, transparent);
+}
+
+.name {
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.word {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  opacity: 0.75;
 }
 
 /* A chip behind the text keeps "Custom" legible over the face. */
@@ -96,5 +237,38 @@
   background: var(--accent-primary);
   cursor: ew-resize;
   touch-action: none;
-  z-index: 2;
+  z-index: 3;
+}
+
+/* A recording with no camera, between clips of recordings that have one: a hatched, dim span
+   so the gap reads as "nothing was recorded here", not as a hidden segment. Never a hit target. */
+.noCamera {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 3px;
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--text-muted) 18%, transparent) 0 4px,
+    transparent 4px 8px
+  );
+  pointer-events: none;
+}
+
+.noCameraLabel {
+  max-width: 100%;
+  padding: 0 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--bg-raised) 80%, transparent);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
 }

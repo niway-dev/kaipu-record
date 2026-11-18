@@ -282,15 +282,28 @@ describe("compositor canvas mode", () => {
     expect(svg).toContain(`translate(140,90)`);
   });
 
-  it("with bg none fills only the union box, never the padding", () => {
+  it("with bg none and a gap the export paints nothing under the content (transparent)", () => {
     const s = scene([], "none");
     const g = { ...geom, extents: { ...ZERO, right: 300 } };
     const svg = buildSvg(s, g);
-    expect(svg).toContain(`<rect x="40" y="40" width="1300" height="600" fill="#ffffff"/>`);
+    expect(svg).not.toContain("#ffffff");
     expect(svg).not.toMatch(/<rect width="\d+" height="\d+"/);
+    expect(svg).not.toMatch(/<rect x="40" y="40" width="1300"/);
   });
 
-  it("draws no neutral fill for bg none when extents are zero", () => {
+  it("with the White swatch the bg rect covers the whole frame, gap included", () => {
+    const s = scene([], "white");
+    const g = { ...geom, extents: { ...ZERO, right: 300 } };
+    expect(buildSvg(s, g)).toMatch(/<rect width="1380" height="680" rx="\d+" fill="#ffffff"\/>/);
+  });
+
+  it("with a gradient the bg rect covers the whole frame, gap included", () => {
+    const s = scene([], "magenta");
+    const g = { ...geom, extents: { ...ZERO, right: 300 } };
+    expect(buildSvg(s, g)).toMatch(/<rect width="1380" height="680" rx="\d+" fill="url\(#bg\)"/);
+  });
+
+  it("with bg none and zero extents (one image, no gap) the export also has no white rect", () => {
     expect(buildSvg(scene([], "none"), { ...geom, extents: ZERO })).not.toContain("#ffffff");
   });
 

@@ -1,0 +1,55 @@
+/* The paused preview's marks around the camera bubble (camera parts, drag-first). They fill
+   the preview's chrome and let EVERY pointer through, so the bubble under them stays
+   grabbable. Above the webcam layer (z-index 3), below the drop card (6). */
+.root {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+/* What a drag edits: dark for the original position, the accent colour inside a part. */
+.label {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  transform: translateX(-50%);
+  border: 1px solid var(--border-light);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--bg-sidebar) 92%, transparent);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.label[data-tone="part"] {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+/* Where the camera would be inside a hidden range: it is not drawn there, in the preview or
+   in the export, so this only marks the place. */
+.hidden {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 2px dashed color-mix(in srgb, var(--text-primary) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-sidebar) 45%, transparent);
+  color: var(--text-primary);
+  pointer-events: none;
+}
+
+.hiddenText {
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+}

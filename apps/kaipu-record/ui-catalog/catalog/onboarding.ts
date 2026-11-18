@@ -19,6 +19,13 @@ const toShortcuts: Step[] = [
   { waitFor: { area: "onboarding.shortcutsStep" } },
 ];
 
+/** From Welcome to Privacy: the shortcuts step's Continue. */
+const toPrivacy: Step[] = [
+  ...toShortcuts,
+  continueStep,
+  { waitFor: { area: "onboarding.privacyStep" } },
+];
+
 /**
  * One state per demo: its card on Welcome, then the demo frozen by reduced motion. The runner
  * emulates `prefers-reduced-motion: reduce` for it (`reducedMotion`) and shoots it with
@@ -98,9 +105,39 @@ export const onboarding = catalog("onboarding", {
     ready: { area: "onboarding.shortcutsStep" },
     requires: { screen: true, microphone: true },
   },
+  privacy: {
+    profile: "onboarding",
+    how: "Shortcuts step, Continue. The share-usage toggle is on, as it is for a new user.",
+    steps: toPrivacy,
+    demonstrates: ["onboarding.root:privacy", "onboarding.privacyStep:on"],
+    ready: { area: "onboarding.privacyStep" },
+    requires: { screen: true, microphone: true },
+  },
+  "privacy-off": {
+    profile: "onboarding",
+    how: "Privacy step, then switch Share usage and crash reports off.",
+    steps: [
+      ...toPrivacy,
+      {
+        click: {
+          area: "onboarding.privacyStep",
+          part: { role: "switch", name: "Share usage and crash reports" },
+        },
+      },
+    ],
+    demonstrates: ["onboarding.privacyStep:off"],
+    ready: { area: "onboarding.privacyStep" },
+    requires: { screen: true, microphone: true },
+  },
+  "privacy-notice": {
+    profile: "privacy-notice",
+    how: "A Mac that finished onboarding before the step existed, on its next launch.",
+    demonstrates: ["onboarding.privacyNotice:default"],
+    ready: { area: "onboarding.privacyNotice" },
+  },
   done: {
     profile: "onboarding",
-    steps: [...toShortcuts, continueStep],
+    steps: [...toPrivacy, continueStep],
     demonstrates: ["onboarding.root:done", "onboarding.doneStep:default"],
     ready: { area: "onboarding.doneStep" },
     requires: { screen: true, microphone: true },

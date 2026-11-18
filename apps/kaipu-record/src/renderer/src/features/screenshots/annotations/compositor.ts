@@ -24,7 +24,6 @@ import {
 import {
   canvasLayout,
   contentExtents,
-  hasExtents,
   intersectFrame,
   worldToFrame,
   type Extents,
@@ -368,12 +367,6 @@ export function buildSvg(scene: Scene, g: Geom): string {
     bgFill === "none"
       ? ""
       : `<rect width="${fullW}" height="${fullH}" rx="${outerR}" fill="${bgFill}"/>`;
-  // Canvas mode with no background: the union box (not the padding ring) gets a neutral
-  // solid under the shot, so content outside the image does not sit on a see-through void.
-  const boxFill =
-    ext && bgFill === "none" && hasExtents(ext)
-      ? `<rect x="${g.pad}" y="${g.pad}" width="${fullW - 2 * g.pad}" height="${fullH - 2 * g.pad}" fill="#ffffff"/>`
-      : "";
   const shadow =
     sv > 0
       ? `<rect x="${ox}" y="${oy}" width="${g.naturalW}" height="${g.naturalH}" rx="${g.radius}" fill="#000" filter="url(#sh)"/>`
@@ -415,7 +408,7 @@ export function buildSvg(scene: Scene, g: Geom): string {
 
   // The output SVG selects the crop sub-rectangle via viewBox; width/height are the
   // window in native px, so it rasterizes 1:1 (no scaling).
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${outW}" height="${outH}" viewBox="${vbX} ${vbY} ${outW} ${outH}"><defs>${defs.join("")}</defs>${bg}${boxFill}${shadow}${image}${anno}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${outW}" height="${outH}" viewBox="${vbX} ${vbY} ${outW} ${outH}"><defs>${defs.join("")}</defs>${bg}${shadow}${image}${anno}</svg>`;
 }
 
 /** The def id of an added image at its own size, so each distinct size is embedded once. */

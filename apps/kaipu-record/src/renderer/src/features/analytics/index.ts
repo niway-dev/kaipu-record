@@ -4,3 +4,4 @@ export { reportError, type ReportErrorOptions } from "./report-error";
 export { ErrorBoundary } from "./error-boundary";
 export { installCrashForwarder } from "./crash-forwarder";
 export { useInitAnalytics } from "./use-init-analytics";
+export { useEditorOpened } from "./use-editor-opened";

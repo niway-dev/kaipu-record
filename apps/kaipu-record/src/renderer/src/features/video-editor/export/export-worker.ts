@@ -6,7 +6,9 @@
  *   2. For each ClipSegment: decode frames → composite overlays → encode.
  *   3. For each SlideSegment: draw the slide bitmap at plan.slideFps → composite overlays → encode.
  *   4. Audio (if present): per-clip decoded AudioSamples, trimmed to the exact
- *      source range → re-encode; silence for slides.
+ *      source range → re-encode; silence for slides. Produced in step with the video
+ *      (each frame asks the audio pump for audio up to a second past it), never as a pass
+ *      of its own after the video.
  *   5. Finalize the MP4 and notify the renderer.
  *
  * Chunks are posted via transferable ArrayBuffers so the renderer can write them to
@@ -42,19 +44,8 @@
  * only), so `AudioBufferSink`/`AudioBufferSource` throw "AudioBuffer is not defined"
  * here; `AudioSample` wraps `AudioData` and works in workers.
  *
- * Audio timestamps: `AudioSampleSource.add` honors each sample's OWN timestamp (it
- * does NOT auto-advance like `AudioBufferSource`). Every emitted sample is rebased
- * onto a single contiguous `audioCursor` so cuts stay gapless and monotonic.
- *
- * Audio trimming: `AudioSampleSink.samples(start, end)` yields whole decoder samples
- * gated on each sample's OWN timestamp (mediabunny's
- * `BaseMediaSampleSink.mediaSamplesInRange` keeps the last sample with
- * timestamp <= start, then everything up to the first sample with
- * timestamp >= end) — it does not clip a sample's PCM content to the range.
- * Left as-is, the first sample of a clip carries pre-roll before `start` and
- * the last trails past `end`, drifting audio out of sync with the
- * frame-accurate video across cuts. `trimAudioSample` below clips each
- * sample to the segment's exact [sourceStart, sourceEnd).
+ * Audio timestamps, trimming, resampling and silence: audio-pump.ts, which produces the
+ * samples on demand so the muxer is never fed video far ahead of audio (see the video pass).
  *
  * Video timestamp rebasing: `CanvasSink.canvases(start, end)` yields the sample
  * STRADDLING `start` as its first frame, whose own timestamp is usually before
@@ -70,7 +61,6 @@
 
 import {
   ALL_FORMATS,
-  AudioSample,
   AudioSampleSink,
   AudioSampleSource,
   BlobSource,
@@ -79,6 +69,7 @@ import {
   CanvasSink,
   CanvasSource,
   Input,
+  type InputAudioTrack,
   Mp4OutputFormat,
   Output,
   Quality,
@@ -86,10 +77,10 @@ import {
 } from "mediabunny";
 import type { StreamTargetChunk } from "mediabunny";
 import type { ExportStartMessage, ExportWorkerMessage } from "./export-messages";
-import { silencedSpansFor } from "../audio-edits";
 import { exportClipFrames } from "./export-clip-frames";
 import { exportCanvasSinkOptions } from "./canvas-sink-options";
 import { createOutputComposer } from "./compose-output-frame";
+import { floatingLiveAt } from "./floating-frame";
 import {
   audioEncodingCandidates,
   packetCountsFor,
@@ -101,6 +92,9 @@ import { cappedSlideFps, createFrameRateCap } from "./frame-rate-cap";
 import { chooseVideoEncoding, type VideoEncodingChoice } from "./video-encoding";
 import { WEBCAM_FPS } from "@shared/webcam-track";
 import { openWebcamSourceOrNone, webcamImageOf, type WebcamSource } from "./webcam-source";
+import { clipFramesOf, clipSource, clipWebcamCursorOf } from "./joined-media";
+import { createAudioPump, createInterleavedFeed } from "./audio-pump";
+import { audioPlan, type RecordingAudio } from "./joined-audio";
 
 // ---------------------------------------------------------------------------
 // Typing helper: TypeScript doesn't expose `Worker` on `self` in module workers.
@@ -127,15 +121,33 @@ workerSelf.onmessage = (event: MessageEvent<ExportStartMessage>) => {
 
 async function runExport(msg: ExportStartMessage): Promise<void> {
   const input = new Input({ source: new BlobSource(msg.sourceBlob), formats: ALL_FORMATS });
-  let webcam: WebcamSource | null = null;
+  // One Input (and webcam source) per joined recording, keyed by `SceneSource.id`; the opened
+  // recording is key null. Empty for a scene without joins.
+  const joinedInputs = new Map<string, Input>();
+  const webcams = new Map<string | null, WebcamSource>();
   try {
-    // A broken webcam file never fails the export: it goes on without the layer.
-    webcam = await openWebcamSourceOrNone(msg.webcam, msg.plan.webcam, (error) =>
-      post({ type: "webcam-error", message: errorMessage(error) }),
-    );
-    await runExportWithInput(msg, input, webcam);
+    // A broken webcam file never fails the export: it goes on without the layer. For a joined
+    // recording only that recording loses its camera.
+    const onWebcamError = (error: unknown): void =>
+      post({ type: "webcam-error", message: errorMessage(error) });
+    const openedWebcam = await openWebcamSourceOrNone(msg.webcam, msg.plan.webcam, onWebcamError);
+    if (openedWebcam) webcams.set(null, openedWebcam);
+    for (const entry of msg.joined) {
+      joinedInputs.set(
+        entry.sourceId,
+        new Input({ source: new BlobSource(entry.blob), formats: ALL_FORMATS }),
+      );
+      const joinedWebcam = await openWebcamSourceOrNone(
+        entry.webcam,
+        msg.plan.webcam,
+        onWebcamError,
+      );
+      if (joinedWebcam) webcams.set(entry.sourceId, joinedWebcam);
+    }
+    await runExportWithInput(msg, input, joinedInputs, webcams);
   } finally {
-    webcam?.dispose();
+    for (const source of webcams.values()) source.dispose();
+    for (const joinedInput of joinedInputs.values()) joinedInput.dispose();
     // `Input` is the only Disposable handle mediabunny exposes here — neither
     // CanvasSink nor AudioBufferSink implement Disposable/close in the .d.ts,
     // and disposing the Input already cancels their in-flight decode
@@ -148,9 +160,11 @@ async function runExport(msg: ExportStartMessage): Promise<void> {
 async function runExportWithInput(
   msg: ExportStartMessage,
   input: Input,
-  webcam: WebcamSource | null,
+  joinedInputs: ReadonlyMap<string, Input>,
+  webcams: ReadonlyMap<string | null, WebcamSource>,
 ): Promise<void> {
   const { plan, output: size, target: preset } = msg;
+  const joinedRefs = msg.joined.map((j) => ({ sourceId: j.sourceId, offset: j.offset }));
   // Fixed-canvas presets compose at SOURCE size into a view canvas, then frame it onto the
   // output. Identity framing (Balanced, Light, Maximum) composes straight onto the output.
   const framed = preset.framing !== "identity";
@@ -158,8 +172,47 @@ async function runExportWithInput(
 
   const videoTrack = await input.getPrimaryVideoTrack();
   if (!videoTrack) throw new Error("source has no video track");
-  // Audio is optional: screen-only recordings produce no audio track.
-  const audioTrack = await input.getPrimaryAudioTrack();
+  // Each joined recording decodes from its own file: the clips' sinks are built on its track.
+  const trackOf = new Map<string | null, typeof videoTrack>([[null, videoTrack]]);
+  for (const [sourceId, joinedInput] of joinedInputs) {
+    const joinedTrack = await joinedInput.getPrimaryVideoTrack();
+    if (!joinedTrack) throw new Error(`joined recording ${sourceId} has no video track`);
+    trackOf.set(sourceId, joinedTrack);
+  }
+  // `fit: "contain"` (canvas-sink-options.ts) letterboxes a joined recording of another
+  // aspect inside the opened recording's frame, the same as the preview.
+  const readers = new Map(
+    [...trackOf].map(([key, track]) => [
+      key,
+      {
+        canvases: (start: number, end: number) =>
+          new CanvasSink(
+            track,
+            exportCanvasSinkOptions(composeSize.width, composeSize.height),
+          ).canvases(start, end),
+      },
+    ]),
+  );
+  // Audio is optional: a recording can have no audio track. Each recording that has one is
+  // read from its own file; `audioPlan` decides whether the MP4 has audio and in which format.
+  const audioTracks = new Map<string | null, InputAudioTrack>();
+  const recordingAudio: RecordingAudio[] = [];
+  const openedAudio = await input.getPrimaryAudioTrack();
+  if (openedAudio) audioTracks.set(null, openedAudio);
+  recordingAudio.push(await audioFacts(null, openedAudio));
+  for (const [sourceId, joinedInput] of joinedInputs) {
+    const joinedAudio = await joinedInput.getPrimaryAudioTrack();
+    if (joinedAudio) audioTracks.set(sourceId, joinedAudio);
+    recordingAudio.push(await audioFacts(sourceId, joinedAudio));
+  }
+  const audioDecision = audioPlan(plan, recordingAudio);
+  const audioReference = audioDecision.reference;
+  const audioReaders = new Map(
+    [...audioTracks].map(([key, track]) => [
+      key,
+      { samples: (start: number, end: number) => new AudioSampleSink(track).samples(start, end) },
+    ]),
+  );
 
   // OffscreenCanvas — the only canvas type available in workers.
   const canvas = new OffscreenCanvas(size.width, size.height);
@@ -211,27 +264,28 @@ async function runExportWithInput(
   // A whole-video mute produces a file with NO audio track, not a silent one:
   // smaller, and no dead volume control in the player. This is the same branch a
   // screen-only recording already takes, so nothing downstream is new.
-  const audioMuted = plan.audio.audioMuted;
-  // Sample rate / channel count for synthesized slide silence — derived from
-  // the source track so it matches the real audio instead of assuming a
-  // fixed layout; 48000/2 is only a fallback if the track ever reports 0.
-  const silenceSampleRate = audioTrack ? (await audioTrack.getSampleRate()) || 48000 : 48000;
-  const sourceChannels = audioTrack ? (await audioTrack.getNumberOfChannels()) || 2 : 2;
+  //
+  // The runner reaches the same decision from its probes, but only for the size estimate; this
+  // one, from the opened files, is what the MP4 gets.
+  //
+  // Sample rate / channel count of the track and of the synthesized silence — the reference
+  // recording's (the first used one with audio), so every clip is converted to one format.
+  const silenceSampleRate = audioReference?.sampleRate ?? 48000;
+  const sourceChannels = audioReference?.channels ?? 2;
   // An explicit AAC config (every preset but Maximum) is checked against the encoder first:
   // Light asks for mono 64 kbps, which Chromium's AAC encoder on macOS refuses.
   const audioEncoding =
-    preset.audioBitrate === "high" || !audioTrack || audioMuted
+    preset.audioBitrate === "high" || !audioReference
       ? null
       : await pickAudioEncoding(audioEncodingCandidates(preset, sourceChannels), silenceSampleRate);
-  const audioSource =
-    audioTrack && !audioMuted
-      ? new AudioSampleSource({
-          codec: "aac",
-          quality: audioEncoding
-            ? new Quality({ bitrate: audioEncoding.bitrate })
-            : new Quality("high"),
-        })
-      : null;
+  const audioSource = audioReference
+    ? new AudioSampleSource({
+        codec: "aac",
+        quality: audioEncoding
+          ? new Quality({ bitrate: audioEncoding.bitrate })
+          : new Quality("high"),
+      })
+    : null;
   // Downmix (Light) only when the encoder took the mono config; silence matches it.
   const downmix = audioEncoding?.numberOfChannels === 1 && sourceChannels !== 1;
   const silenceChannelCount = audioEncoding?.numberOfChannels ?? sourceChannels;
@@ -243,9 +297,11 @@ async function runExportWithInput(
   // Webcam fills (see the header) add frames up to the webcam's rate over a still screen.
   const fillFps = Math.min(WEBCAM_FPS, preset.maxFps ?? WEBCAM_FPS);
   const sourceFps = stats?.averagePacketRate ?? 30;
+  // Floating images add frames over a still screen too, at the same rate.
+  const floatingItems = (plan.floating?.items.length ?? 0) > 0;
   const workerCounts = packetCountsFor({
     durationSec: plan.totalDuration,
-    fps: webcam ? Math.max(sourceFps, fillFps) : sourceFps,
+    fps: webcams.size > 0 || floatingItems ? Math.max(sourceFps, fillFps) : sourceFps,
     maxFps: preset.maxFps,
     slideFrames: slideFrameCount(plan.segments, plan.slideFps),
     hasAudio: audioSource !== null,
@@ -261,6 +317,23 @@ async function runExportWithInput(
 
   await out.start();
 
+  // The audio, produced on demand (audio-pump.ts); null for an export without an audio track.
+  const audio =
+    audioReference && audioSource
+      ? createAudioPump({
+          segments: plan.segments,
+          perSegment: audioDecision.perSegment,
+          edits: plan.audio,
+          joined: joinedRefs,
+          readers: audioReaders,
+          reference: audioReference,
+          silenceSampleRate,
+          silenceChannelCount,
+          downmix,
+          sink: audioSource,
+        })
+      : null;
+
   // Per-frame composition (fill → zoom/redactions/overlays → framing → webcam) is shared
   // with the GIF worker in compose-output-frame.ts so the two exports can never diverge.
   const compose = createOutputComposer({
@@ -273,6 +346,14 @@ async function runExportWithInput(
     overlayWindows: plan.overlayWindows,
     overlayBitmaps: new Map(msg.overlays.map((o) => [o.overlayId, o.bitmap])),
     webcam: plan.webcam,
+    sourceEndSeconds: plan.sourceDurationSeconds,
+    // Floating images (spec 2026-11-13): drawn whenever the plan has them, no flag.
+    floating: {
+      plan: plan.floating,
+      bitmaps: new Map<string, ImageBitmap>(
+        (msg.mediaImages ?? []).map((m) => [m.assetId, m.bitmap]),
+      ),
+    },
     // ADR 0051: the preset's background around the picture, drawn last; `none` draws nothing.
     background: plan.background,
     framing: view
@@ -310,6 +391,18 @@ async function runExportWithInput(
     if (data) post({ type: "poster", data }, [data]);
   };
 
+  // Every video frame goes through here, so the muxer is fed audio in step with the video
+  // (createInterleavedFeed, audio-pump.ts: frame first, then the audio a lead past it, so the
+  // frame is queued before the audio crosses a gap between frames). The video `outTs` and the
+  // audio cursor are the same output timeline: segments are contiguous from 0, and the audio of
+  // each is its duration.
+  const feed = createInterleavedFeed(audio, videoSource);
+  const addVideoFrame = async (outTs: number, duration: number): Promise<void> => {
+    await sendPosterOnce();
+    await feed.frame(outTs, duration);
+    reportProgress(outTs);
+  };
+
   // Release Output encoders on any error path. Do NOT cancel on the success
   // path — finalize already seals the output and canceling after is an error.
   let finalized = false;
@@ -326,31 +419,31 @@ async function runExportWithInput(
     const slideFps = cappedSlideFps(plan.slideFps, preset.maxFps);
     for (const segment of plan.segments) {
       if (segment.kind === "clip") {
-        const sink = new CanvasSink(
-          videoTrack,
-          exportCanvasSinkOptions(composeSize.width, composeSize.height),
-        );
-
+        // Which file the clip reads and where in it (axis -> local); frames and webcam
+        // lookups come back in axis seconds, so everything below stays on the axis.
+        const src = clipSource(segment, msg.joined);
         // The webcam frames of this clip, decoded beside the screen's (null: no webcam).
-        const webcamCursor = webcam?.cursorFor(segment.sourceStart, segment.sourceEnd) ?? null;
+        const webcamCursor = clipWebcamCursorOf(src, webcams);
         try {
           // Fills, rebase, fps cap and composition: export-clip-frames.ts.
           prevOutTs = await exportClipFrames({
             segment,
-            frames: sink.canvases(segment.sourceStart, segment.sourceEnd),
+            frames: clipFramesOf(src, readers),
             webcamCursor,
             layer: plan.webcam,
+            sourceEndSeconds: plan.sourceDurationSeconds,
             webcamImageOf,
             fillFps,
             cap,
             minFrameGap,
             prevOutTs,
+            // Floating images over a still screen: the held frame is re-composed while one is
+            // on screen (export-clip-frames.ts), so it shows at its own times with its fades.
+            floatingLive: floatingItems
+              ? (outTs) => floatingLiveAt(plan.floating, outTs)
+              : undefined,
             compose,
-            emit: async (outTs, duration) => {
-              await sendPosterOnce();
-              await videoSource.add(outTs, duration);
-              reportProgress(outTs);
-            },
+            emit: addVideoFrame,
           });
         } finally {
           await webcamCursor?.close();
@@ -371,73 +464,16 @@ async function runExportWithInput(
           if (!cap.keep(outTs)) continue;
           // Slides are always contained ("fit"), never cropped, and carry no webcam.
           compose.slide(bitmap, outTs);
-          await sendPosterOnce();
-          await videoSource.add(outTs, frameDuration);
-          reportProgress(outTs);
+          await addVideoFrame(outTs, frameDuration);
           prevOutTs = outTs;
         }
       }
     }
 
-    // Signal no more video frames — improves encoder flush latency.
-    videoSource.close();
-
-    // ---------------------------------------------------------------------------
-    // Audio pass — separate second pass; two-pass is fine because audio decode
-    // is cheap relative to encode, and mediabunny accepts interleaved or separate
-    // feeding without backpressure issues.
-    // ---------------------------------------------------------------------------
-    if (audioTrack && audioSource) {
-      // AudioSampleSource honors each sample's OWN timestamp (unlike AudioBufferSource,
-      // which auto-advances). Rebase every emitted sample onto a single contiguous
-      // output cursor so cut boundaries stay gapless and monotonic — the audio analogue
-      // of `prevOutTs` on the video pass.
-      let audioCursor = 0;
-      for (const segment of plan.segments) {
-        if (segment.kind === "clip") {
-          // Muted spans of THIS segment, clipped and merged. Walking them in
-          // order lets each decoded sample be zeroed in place rather than
-          // dropped: dropping would shorten the audio and drift it out of sync
-          // with the video, which is silence's whole job to avoid.
-          const silenced = silencedSpansFor(segment.sourceStart, segment.sourceEnd, plan.audio);
-          const sink = new AudioSampleSink(audioTrack);
-          for await (const sample of sink.samples(segment.sourceStart, segment.sourceEnd)) {
-            // Clip each decoded sample to the segment's exact source range — see the
-            // "Audio trimming" header comment for why this is needed.
-            const trimmed = trimAudioSample(sample, segment.sourceStart, segment.sourceEnd);
-            if (trimmed) {
-              const start = trimmed.timestamp;
-              const end = start + trimmed.duration;
-              const muted = silenced.some((span) => start < span.end && end > span.start);
-              const shaped = downmix ? downmixToMono(trimmed) : trimmed;
-              const emitted = muted ? zeroedLike(shaped) : shaped;
-              emitted.setTimestamp(audioCursor);
-              audioCursor += emitted.duration;
-              await audioSource.add(emitted);
-              if (emitted !== shaped) emitted.close();
-              if (shaped !== trimmed) shaped.close();
-              if (trimmed !== sample) trimmed.close();
-            }
-            sample.close();
-          }
-        } else {
-          // Slides are silent. A zeroed interleaved-f32 sample keeps A/V durations
-          // aligned so the MP4 muxer doesn't produce a track-length mismatch.
-          const frames = Math.ceil(segment.duration * silenceSampleRate);
-          const silence = new AudioSample({
-            data: new Float32Array(frames * silenceChannelCount),
-            format: "f32",
-            numberOfChannels: silenceChannelCount,
-            sampleRate: silenceSampleRate,
-            timestamp: audioCursor,
-          });
-          audioCursor += silence.duration;
-          await audioSource.add(silence);
-          silence.close();
-        }
-      }
-      audioSource.close();
-    }
+    // No more video frames (which also speeds up the encoder's flush), then the audio still
+    // owed: whatever the lead did not reach, and the resampler's tail. The pump closes the
+    // audio source when its timeline ends.
+    await feed.finish();
 
     await out.finalize();
     finalized = true;
@@ -447,9 +483,15 @@ async function runExportWithInput(
   } finally {
     if (!finalized) {
       // Cancel releases Output encoders and the muxer on any error path;
-      // Input decoders are freed by input.dispose() in the outer runExport finally.
+      // Input decoders are freed by input.dispose() in the outer runExport finally; the
+      // audio pump releases the decoder of the clip it was in the middle of.
       try {
         await out.cancel();
+      } catch {
+        /* already tearing down */
+      }
+      try {
+        await audio?.dispose();
       } catch {
         /* already tearing down */
       }
@@ -465,38 +507,6 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/**
- * Clips a decoded audio sample's data to `[rangeStart, rangeEnd)`.
- * `sample.timestamp` is the sample's own start time, which per the "Audio
- * trimming" header comment may fall before `rangeStart` (pre-roll) or extend
- * past `rangeEnd` (trailing frames) — both need to be dropped so the encoded
- * duration matches the segment's exact source range.
- *
- * Returns the original `AudioSample` unchanged when it needs no trimming (the
- * common case for interior samples), a new trimmed `AudioSample` when it does
- * (the caller closes it), or `null` if trimming leaves nothing to encode.
- */
-/**
- * A silent copy of a sample: same layout, same duration, zeroed data.
- *
- * A copy rather than a mutation because `AudioSample` owns its backing buffer
- * and the caller still has to close the original. Same rate and channel count,
- * so the encoder sees one continuous stream and not a format change mid-file.
- */
-function zeroedLike(sample: AudioSample): AudioSample {
-  return new AudioSample({
-    data: new Float32Array(sample.numberOfFrames * sample.numberOfChannels),
-    format: "f32",
-    numberOfChannels: sample.numberOfChannels,
-    sampleRate: sample.sampleRate,
-    timestamp: sample.timestamp,
-  });
-}
-
-/**
- * Light (NIW2-218): average every channel into one. A mono source passes through
- * unchanged; the caller closes a new sample when one is returned.
- */
 /**
  * Probes the hardware AVC encoder for the preset's rate control and picks per
  * video-encoding.ts. The quantizer probe passes a quantizer-only Quality: with a bitrate
@@ -559,49 +569,17 @@ async function pickAudioEncoding(
   return candidates[candidates.length - 1]!;
 }
 
-function downmixToMono(sample: AudioSample): AudioSample {
-  const channels = sample.numberOfChannels;
-  if (channels <= 1) return sample;
-  const frames = sample.numberOfFrames;
-  const mono = new Float32Array(frames);
-  const plane = new Float32Array(frames);
-  for (let c = 0; c < channels; c++) {
-    sample.copyTo(plane, { planeIndex: c, format: "f32-planar" });
-    for (let i = 0; i < frames; i++) mono[i] += plane[i];
-  }
-  for (let i = 0; i < frames; i++) mono[i] /= channels;
-  return new AudioSample({
-    data: mono,
-    format: "f32",
-    numberOfChannels: 1,
-    sampleRate: sample.sampleRate,
-    timestamp: sample.timestamp,
-  });
-}
-
-function trimAudioSample(
-  sample: AudioSample,
-  rangeStart: number,
-  rangeEnd: number,
-): AudioSample | null {
-  const { sampleRate, numberOfFrames, timestamp } = sample;
-  const sampleEnd = timestamp + numberOfFrames / sampleRate;
-
-  const leadTrim = Math.min(
-    numberOfFrames,
-    Math.max(0, Math.round((rangeStart - timestamp) * sampleRate)),
-  );
-  const trailTrim = Math.min(
-    numberOfFrames - leadTrim,
-    Math.max(0, Math.round((sampleEnd - rangeEnd) * sampleRate)),
-  );
-  const keepLength = numberOfFrames - leadTrim - trailTrim;
-  if (keepLength <= 0) return null;
-  if (leadTrim === 0 && trailTrim === 0) return sample;
-
-  // AudioSample.trim takes a [startFrame, endFrame) half-open range and returns a new
-  // sample; the caller is responsible for closing it (and the untrimmed original).
-  return sample.trim(leadTrim, leadTrim + keepLength);
+/** What `audioPlan` needs to know about a recording's audio track (none: no audio). */
+async function audioFacts(
+  sourceId: string | null,
+  track: InputAudioTrack | null,
+): Promise<RecordingAudio> {
+  return {
+    sourceId,
+    hasAudio: track !== null,
+    sampleRate: track ? (await track.getSampleRate()) || 48000 : 48000,
+    channels: track ? (await track.getNumberOfChannels()) || 2 : 2,
+  };
 }
 
 /** Poster width in px; height follows the output aspect (same size generate-thumbnail used). */

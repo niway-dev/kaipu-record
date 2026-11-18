@@ -23,6 +23,16 @@ export interface TimelinePointer {
 
 export const TimelinePointerContext = createContext<TimelinePointer | null>(null);
 
+/** Shows a timeline range at about 40% of the lane (zoom and scroll), or null with no strip. */
+export const TimelineShowRangeContext = createContext<
+  ((start: number, end: number) => void) | null
+>(null);
+
+/** The strip's "show this range", for a lane that can zoom to one of its blocks. */
+export function useTimelineShowRange(): ((start: number, end: number) => void) | null {
+  return useContext(TimelineShowRangeContext);
+}
+
 /** The view the strip last rendered with, for lanes that window what they draw by it. */
 export const TimelineViewContext = createContext<TimelineView | null>(null);
 

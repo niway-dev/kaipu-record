@@ -13,7 +13,9 @@ import {
   clampCameraPan,
   clampCameraZoom,
 } from "@shared/camera-bubble";
-import { WEBCAM_LIMITS, type WebcamLayout } from "./webcam-model";
+import { EASING_PEAK_OVERSHOOT } from "./easing";
+import { webcamRoute, webcamRoutePoint } from "./webcam-route";
+import { WEBCAM_LIMITS, type WebcamLayout, type WebcamState } from "./webcam-model";
 
 export interface WebcamRect {
   /** Left edge, in the frame's units (pixels for a pixel frame). */
@@ -114,6 +116,48 @@ export function webcamRect(
 }
 
 /**
+ * The bubble's box for a {@link WebcamState}: {@link webcamRect} of the layout when nothing
+ * moves, otherwise the centre moved along the curved route from the previous layout's clamped
+ * centre to this one's ({@link webcamRoute}: the boxes are the same size, only the position
+ * differs). `state.progress` is the EASED progress and `state.easing` gives the peak a Bounce
+ * overshoot is fitted by. This is the ONE function the preview, its marks and the export all
+ * read, so the three draw the same route. The result never leaves the frame at any progress.
+ */
+export function webcamStateRect(
+  state: WebcamState,
+  frame: FrameSize,
+  cameraScale = 1,
+): WebcamRect | null {
+  const target = webcamRect(state.layout, frame, cameraScale);
+  if (!target || !state.from) return target;
+  const origin = webcamRect(state.from, frame, cameraScale);
+  if (!origin) return target;
+  const { width, height } = target;
+  const end = { x: target.x + width / 2, y: target.y + height / 2 };
+  const start = { x: origin.x + width / 2, y: origin.y + height / 2 };
+  // The range the bubble's centre can reach: the frame minus half the box on each side.
+  const reach = {
+    minX: width / 2,
+    maxX: frame.width - width / 2,
+    minY: height / 2,
+    maxY: frame.height - height / 2,
+  };
+  const route = webcamRoute(start, end, frame, reach);
+  const center = webcamRoutePoint(
+    route,
+    state.progress,
+    EASING_PEAK_OVERSHOOT[state.easing],
+    reach,
+  );
+  return {
+    x: center.x - width / 2,
+    y: center.y - height / 2,
+    width,
+    height,
+  };
+}
+
+/**
  * CSS `clip-path` for the bubble's shape, relative to its own box. The corner is a share of
  * the shorter side; in `inset(… round h% / v%)` the horizontal radius is a percentage of the
  * width and the vertical one of the height, so each is scaled by its axis to stay circular.
@@ -169,39 +213,3 @@ export function webcamSourceRect(
  * on a ~400 px tall stage). Relative, so a 4K export does not get a hairline shadow.
  */
 export const WEBCAM_SHADOW = { blur: 0.09, offsetY: 0.022, color: "rgba(0, 0, 0, 0.35)" } as const;
-
-/** The nine inspector presets, as normalized centres; the clamp pulls them to the edges. */
-export const WEBCAM_POSITION_PRESETS = [
-  { id: "top-left", x: 0, y: 0 },
-  { id: "top", x: 0.5, y: 0 },
-  { id: "top-right", x: 1, y: 0 },
-  { id: "left", x: 0, y: 0.5 },
-  { id: "center", x: 0.5, y: 0.5 },
-  { id: "right", x: 1, y: 0.5 },
-  { id: "bottom-left", x: 0, y: 1 },
-  { id: "bottom", x: 0.5, y: 1 },
-  { id: "bottom-right", x: 1, y: 1 },
-] as const;
-
-export type WebcamPositionPresetId = (typeof WEBCAM_POSITION_PRESETS)[number]["id"];
-
-/**
- * Whether `position` is where `preset` puts a bubble of this shape and size. A preset stores
- * its raw edge (0, 0.5 or 1) and relies on {@link clampWebcamCenter}, so the bubble is flush
- * with the edge whatever its drawn size is at that instant (a shrink during zoom, another
- * shape, a new size). A centre stored for the full-size box, or one dragged to the edge,
- * therefore counts as the same preset: both clamp to the same place.
- */
-export function webcamPresetActive(
-  preset: { x: number; y: number },
-  layout: Pick<WebcamLayout, "shape" | "size" | "position">,
-  frame: FrameSize,
-): boolean {
-  if (!(frame.width > 0) || !(frame.height > 0)) return false;
-  const aspect = cameraShapeAspect(layout.shape);
-  const height = Math.min(layout.size * frame.height, frame.width / aspect, frame.height);
-  const box = { width: height * aspect, height };
-  const here = clampWebcamCenter(layout.position, box, frame);
-  const there = clampWebcamCenter(preset, box, frame);
-  return Math.abs(here.x - there.x) < 0.005 && Math.abs(here.y - there.y) < 0.005;
-}
