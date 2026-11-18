@@ -406,19 +406,26 @@ describe("ModelStore", () => {
     const entry = makeEntry("m1", smallFiles());
     const hold = deferred();
     routes.get(`/m1/${entry.files[0].name}`)!.hold = hold.promise;
-    // An incomplete install with many files, so deleting it takes long enough for a download
-    // of the same model to start and write its first bytes before remove() reaches the partial.
-    const stale = join(root, "m1");
-    await mkdir(stale, { recursive: true });
-    await Promise.all(
-      Array.from({ length: 4000 }, (_, i) => writeFile(join(stale, `junk-${i}`), "x")),
-    );
-    const store = makeStore([entry]);
+    // remove() is held while it deletes the install, so a download of the same model can start
+    // and write its first bytes before remove() reaches the partial directory.
+    const deleting = deferred();
+    const release = deferred();
+    const store = makeStore([entry], {
+      rmImpl: async (path, options) => {
+        if (path === join(root, "m1")) {
+          deleting.resolve();
+          await release.promise;
+        }
+        await rm(path, options);
+      },
+    });
 
     const removing = store.remove("m1");
+    await deleting.promise;
     const firstProgress = deferred();
     const download = store.download("m1", () => firstProgress.resolve());
     await firstProgress.promise;
+    release.resolve();
     await removing;
     hold.resolve();
 

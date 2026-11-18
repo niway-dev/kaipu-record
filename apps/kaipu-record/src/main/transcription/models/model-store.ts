@@ -55,6 +55,8 @@ export interface ModelStoreOptions {
   fetchImpl?: typeof fetch;
   /** Free-space probe; defaults to `fs.statfs` (blocks available times block size). */
   statfsImpl?: (path: string) => Promise<{ bavail: number | bigint; bsize: number | bigint }>;
+  /** Deletes a directory tree in `remove`; tests hold it open to pin the ordering. */
+  rmImpl?: (path: string, options: { recursive: true; force: true }) => Promise<void>;
   now?: () => number;
   /** Lets tests serve from `http://127.0.0.1`. Production accepts `https:` only. */
   allowInsecureHttpForTests?: boolean;
@@ -82,6 +84,7 @@ export class ModelStore {
   private readonly catalog: readonly ModelCatalogEntry[];
   private readonly fetchImpl: typeof fetch;
   private readonly statfsImpl: NonNullable<ModelStoreOptions["statfsImpl"]>;
+  private readonly rmImpl: NonNullable<ModelStoreOptions["rmImpl"]>;
   private readonly now: () => number;
   private readonly allowInsecureHttp: boolean;
   private readonly progressIntervalMs: number;
@@ -93,6 +96,7 @@ export class ModelStore {
     this.catalog = options.catalog ?? listModels();
     this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
     this.statfsImpl = options.statfsImpl ?? ((path) => statfs(path));
+    this.rmImpl = options.rmImpl ?? ((path, rmOptions) => rm(path, rmOptions));
     this.now = options.now ?? Date.now;
     this.allowInsecureHttp = options.allowInsecureHttpForTests ?? false;
     this.progressIntervalMs = options.progressIntervalMs ?? 200;
@@ -233,11 +237,11 @@ export class ModelStore {
       running.controller.abort();
       await running.promise.catch(() => undefined);
     }
-    await rm(this.destination(entry.id), { recursive: true, force: true });
+    await this.rmImpl(this.destination(entry.id), { recursive: true, force: true });
     // A download of this model may have started while the install was being deleted: the
     // partial directory is then its live one, and `run` already cleared any older leftover.
     if (this.active?.id !== entry.id) {
-      await rm(this.partialDir(entry.id), { recursive: true, force: true });
+      await this.rmImpl(this.partialDir(entry.id), { recursive: true, force: true });
     }
     this.failures.delete(entry.id);
   }
