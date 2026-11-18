@@ -29,8 +29,9 @@ export interface EditorScene {
   exportFrame?: CropRect;
   /** Set the export frame as one undoable change (Reset/Esc, or a crop drag release). */
   setExportFrame(frame: CropRect | undefined): void;
-  undo(): void;
-  redo(): void;
+  /** Step the history; false when it did nothing (empty history, or a drag is open). */
+  undo(): boolean;
+  redo(): boolean;
   canUndo: boolean;
   canRedo: boolean;
 }
@@ -73,20 +74,24 @@ export function useEditorScene(
     }
   }, []);
 
+  // A drag owns the history until it ends: stepping through it mid-drag (a key chord) would let
+  // `endInteract` push a stale snapshot over the step just taken.
   const undo = useCallback(() => {
-    if (past.length === 0) return;
+    if (snapshot.current !== null || past.length === 0) return false;
     setFuture((f) => [sceneRef.current, ...f]);
     setScene(past[past.length - 1]);
     setPast((p) => p.slice(0, -1));
     setSelectedId(null);
+    return true;
   }, [past]);
 
   const redo = useCallback(() => {
-    if (future.length === 0) return;
+    if (snapshot.current !== null || future.length === 0) return false;
     setPast((p) => [...p, sceneRef.current]);
     setScene(future[0]);
     setFuture((f) => f.slice(1));
     setSelectedId(null);
+    return true;
   }, [future]);
 
   const addAnnotation = useCallback(

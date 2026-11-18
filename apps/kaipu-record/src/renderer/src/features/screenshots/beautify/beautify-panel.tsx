@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { useTranslations } from "@kaipu/i18n";
 import { PADDING_RANGE, RADIUS_RANGE, SHADOW_RANGE } from "./backgrounds";
 import { BackgroundSwatches } from "./background-swatches";
@@ -71,6 +71,17 @@ export function BeautifyPanel({
   );
 }
 
+const SLIDER_KEYS = new Set([
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
+  "ArrowDown",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+]);
+
 function Slider({
   label,
   suffix,
@@ -88,6 +99,9 @@ function Slider({
   onLive: (value: number) => void;
   onEnd: () => void;
 }): React.JSX.Element {
+  const end = useRef(onEnd);
+  end.current = onEnd;
+  useEffect(() => () => end.current(), []);
   return (
     <div className={styles.control}>
       <div className={styles.controlHead}>
@@ -105,8 +119,19 @@ function Slider({
         value={value}
         onPointerDown={onBegin}
         onPointerUp={onEnd}
-        onKeyDown={onBegin}
-        onKeyUp={onEnd}
+        // A lost key-up or pointer-up must not leave the edit open: an open edit blocks Undo.
+        onPointerCancel={onEnd}
+        onBlur={onEnd}
+        onKeyDown={(e) => {
+          // Only a key that moves the thumb opens an edit. Any other key (Tab, or the Undo chord)
+          // would open one that no key-up on this slider closes, and an open edit blocks Undo.
+          // Modifiers do not matter: a modified arrow may still move the thumb, and that change
+          // needs its history entry. The Undo chord is excluded already (Z is not a slider key).
+          if (SLIDER_KEYS.has(e.key) && !e.repeat) onBegin();
+        }}
+        onKeyUp={(e) => {
+          if (SLIDER_KEYS.has(e.key)) onEnd();
+        }}
         onChange={(e) => onLive(Number(e.target.value))}
       />
     </div>

@@ -523,7 +523,7 @@ describe("ScreenshotEditor — adding images (image-canvas)", () => {
     await loadImage();
     pasteImage();
     await waitFor(() => expect(annotations()).toHaveLength(1));
-    fireEvent.click(screen.getByTitle("Undo"));
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     await waitFor(() => expect(annotations()).toHaveLength(0));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(saveScreenshot).toHaveBeenCalledTimes(1));
