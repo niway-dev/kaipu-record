@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   engineDir,
   locateEngine,
@@ -38,6 +38,16 @@ async function fakeEngine(options: {
   );
   await write("sherpa-onnx-offline", options.cliScript, "echo usage >&2");
   return resourcesPath;
+}
+
+/** Whether a process still exists. */
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 const arm = { platform: "darwin", arch: "arm64" } as const;
@@ -113,7 +123,10 @@ describe("locateEngine", () => {
   });
 
   it("fails the handshake when the version tool exits non-zero or prints nothing useful", async () => {
-    for (const versionScript of ['echo "sherpa-onnx version : 1.13.8"; exit 1', "echo hello"]) {
+    for (const versionScript of [
+      `echo "sherpa-onnx version : ${PINNED_ENGINE_VERSION}"; exit 1`,
+      "echo hello",
+    ]) {
       const resourcesPath = await fakeEngine({ versionScript });
       expect(await locateEngine({ resourcesPath, ...arm })).toEqual({
         available: false,
@@ -131,13 +144,22 @@ describe("locateEngine", () => {
   });
 
   it("fails the handshake, and kills the probe, when a binary hangs", async () => {
-    const resourcesPath = await fakeEngine({ versionScript: "exec sleep 30" });
+    const pidFile = join(await mkdtemp(join(tmpdir(), "kaipu-engine-pid-")), "pid");
+    directories.push(dirname(pidFile));
+    const resourcesPath = await fakeEngine({
+      versionScript: `echo $$ > "${pidFile}"\nexec sleep 30`,
+    });
     const started = Date.now();
     expect(await locateEngine({ resourcesPath, ...arm, handshakeTimeoutMs: 200 })).toEqual({
       available: false,
       reason: "handshake-failed",
     });
     expect(Date.now() - started).toBeLessThan(2000);
+    const pid = Number((await readFile(pidFile, "utf8")).trim());
+    expect(pid).toBeGreaterThan(0);
+    // The kill is a signal; give the OS a moment to reap the child before checking.
+    for (let i = 0; i < 50 && alive(pid); i++) await new Promise((r) => setTimeout(r, 20));
+    expect(alive(pid)).toBe(false);
   });
 
   it("fails the handshake when spawning throws", async () => {
