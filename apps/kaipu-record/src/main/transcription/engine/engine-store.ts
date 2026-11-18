@@ -204,13 +204,15 @@ export class EngineStore {
       const works = await this.step(signal, "Could not run the speech engine.", () =>
         this.handshake(staged),
       );
+      // The version probe cannot be aborted, so a cancel can land while it runs and make it
+      // report "unavailable". That is a cancellation, not an engine failure.
+      if (signal.aborted) throw new DownloadError("cancelled", "The download was cancelled.");
       if (!works) {
         throw new DownloadError(
           "engine-failed-to-start",
           "The downloaded speech engine did not pass its version check.",
         );
       }
-      if (signal.aborted) throw new DownloadError("cancelled", "The download was cancelled.");
 
       // A leftover (incomplete) install would make the rename fail on a non-empty directory.
       await rm(this.installDir, { recursive: true, force: true });

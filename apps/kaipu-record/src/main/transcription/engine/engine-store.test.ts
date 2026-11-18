@@ -250,6 +250,21 @@ describe("EngineStore", () => {
     expect(await rootEntries()).toEqual([]);
   });
 
+  it("reports cancelled, not engine-failed-to-start, when the user cancels during the handshake", async () => {
+    const controller = new AbortController();
+    const { store } = makeStore({
+      // The version probe is not abortable: it returns "unavailable" after the cancel.
+      handshake: async () => {
+        controller.abort();
+        return false;
+      },
+    });
+    await expect(store.install({ signal: controller.signal })).rejects.toMatchObject({
+      code: "cancelled",
+    });
+    expect(await rootEntries()).toEqual([]);
+  });
+
   it("fails with engine-failed-to-start when the handshake fails, leaving the final path untouched", async () => {
     await mkdir(join(finalDir(), "bin"), { recursive: true });
     await writeFile(join(finalDir(), "bin", "older"), "x");
