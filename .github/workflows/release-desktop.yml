@@ -232,6 +232,9 @@ jobs:
             [[ "$ARCHS" == "arm64" ]] || { echo "::error::$FILE must be arm64 only (has: $ARCHS)"; exit 1; }
           done
           test -x "$ENGINE/bin/sherpa-onnx-offline" || { echo "::error::sherpa-onnx-offline is not executable"; exit 1; }
+          # Apache-2.0 and MIT need their text to ship with the binaries (ADR 0062, point 8).
+          [[ -n "$(find "$ENGINE/licenses" -type f 2>/dev/null | head -n 1)" ]] ||
+            { echo "::error::$ENGINE/licenses has no license file"; exit 1; }
           "$ENGINE/bin/sherpa-onnx-version"
 
       # Release gate, second half (ADR 0004): Playwright drives the build above — the very
@@ -319,6 +322,8 @@ jobs:
               codesign -dv "$FILE" 2>&1 | grep -q 'flags=.*runtime' ||
                 { echo "::error::$FILE is not signed with the hardened runtime"; exit 1; }
             done
+            [[ -n "$(find "$ENGINE/licenses" -type f 2>/dev/null | head -n 1)" ]] ||
+              { echo "::error::$ENGINE/licenses has no license file"; exit 1; }
             # Runs from inside the signed app: proves the signed CLI loads the signed library.
             "$ENGINE/bin/sherpa-onnx-version" | grep -q '^sherpa-onnx version : ' ||
               { echo "::error::the packaged sherpa-onnx-version did not run"; exit 1; }

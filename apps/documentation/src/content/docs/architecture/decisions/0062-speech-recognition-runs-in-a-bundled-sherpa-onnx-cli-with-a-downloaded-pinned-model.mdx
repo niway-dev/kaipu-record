@@ -78,9 +78,12 @@ Facts this decision rests on:
    by exact version, checks its SHA-256 and copies the CLI and library into `resources/native/`;
    every packaging path calls it, `bun run setup` reports when it is missing, and a bump is a
    deliberate change with a new hash. Parakeet's CC-BY-4.0 license requires attribution: the
-   model's name, NVIDIA, the license and a link appear in the app's third-party notices and in the
-   download prompt, as invisible-assistant does in `THIRD_PARTY_NOTICES.md`. sherpa-onnx
-   (Apache-2.0) and onnxruntime (MIT) are listed there too.
+   model's name, NVIDIA, the license and a link appear in the download prompt, and the repository
+   records them in `apps/kaipu-record/THIRD_PARTY_NOTICES.md`, as invisible-assistant does. The
+   app has no screen of third-party notices. sherpa-onnx (Apache-2.0) and onnxruntime (MIT) require
+   their license text to travel with the binaries, so the fetch script copies the archive's own
+   `LICENSE*`, `NOTICE*` and `COPYING*` files into `resources/native/sherpa-onnx/licenses/` (it
+   fails if there are none) and the release checks that folder in the packaged arm64 app.
 
 ## Alternatives rejected
 

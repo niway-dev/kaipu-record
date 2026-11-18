@@ -9,7 +9,9 @@ upstream's published terms and not re-read against the pinned artifact.
 
 ### NVIDIA Parakeet TDT 0.6B v3 and v2 (int8 ONNX conversions)
 
-- Credit shown in the app: "Speech recognition: NVIDIA Parakeet (CC-BY-4.0)".
+- Credit shown in the download prompt (`attribution` in `src/main/transcription/models/catalog.ts`):
+  "Speech recognition: NVIDIA Parakeet TDT 0.6B v3 (CC-BY-4.0). Weights by NVIDIA, int8 ONNX
+  conversion by the sherpa-onnx community." (v2 for the other entry).
 - License: Creative Commons Attribution 4.0 International (CC-BY-4.0),
   <https://creativecommons.org/licenses/by/4.0/>. The model is by NVIDIA; Kaipu changes nothing in
   the weights.
@@ -40,7 +42,15 @@ upstream's published terms and not re-read against the pinned artifact.
   copy inside the sherpa-onnx archive).
 - Shipped inside the sherpa-onnx release archive and copied next to the CLI.
 
-## Not done yet
+## Where the notices are
 
-The full Apache-2.0 and MIT license texts are not copied next to the binaries. A release that
-ships the engine should bundle them; tracked in the PR that introduced this file.
+- The Apache-2.0 and MIT texts that sherpa-onnx's own release archive carries (its top-level
+  `LICENSE*`, `NOTICE*` and `COPYING*` files) are copied by `scripts/fetch-speech-engine.sh` into
+  `resources/native/sherpa-onnx/licenses/`, next to `bin/` and `lib/`, and ship inside the app. The
+  fetch fails if the archive has none, and the release checks that the folder is not empty, both
+  before packaging and in the packaged arm64 app.
+- The app has no screen that lists third-party notices (NIW2-818 tracks local transcription). The
+  model credit is shown in the download prompt. This file is the repository's record.
+- Not verified: which files the pinned archive actually holds, and whether it carries a separate
+  ONNX Runtime license text. Nobody has run the fetch against the real archive since the license
+  copy was added; a failed fetch would say so.
