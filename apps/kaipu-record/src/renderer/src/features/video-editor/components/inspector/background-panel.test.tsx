@@ -31,16 +31,17 @@ function edits(background: VideoBackground, partial: Partial<BackgroundEditing> 
 }
 
 describe("BackgroundPanel", () => {
-  it("shows the seventeen swatches of the screenshot editor, by their names", () => {
+  it("shows the eighteen swatches of the screenshot editor, by their names", () => {
     render(<BackgroundPanel edits={edits(MAGENTA)} />);
     const section = screen.getByRole("region", { name: "Background" });
     const buttons = within(section).getAllByRole("button");
-    expect(buttons).toHaveLength(17);
-    expect(BACKGROUND_IDS).toHaveLength(17);
+    expect(buttons).toHaveLength(18);
+    expect(BACKGROUND_IDS).toHaveLength(18);
     for (const name of [
       "None",
       "Dark",
       "Carbon",
+      "White",
       "Magenta",
       "Purple",
       "Ocean",

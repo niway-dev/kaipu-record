@@ -50,8 +50,12 @@ export interface Profile {
    * the capture overlay turns it off; it runs last (spec failure 11).
    */
   readonly disableScreenCapture?: boolean;
-  /** `dismiss` (default) closes it with Escape; `keep` leaves the first-run takeover up. */
-  readonly onboarding?: "dismiss" | "keep";
+  /**
+   * `dismiss` (default) closes it with Escape, and the one-time privacy notice that follows;
+   * `keep` leaves the first-run takeover up; `notice` closes the takeover and leaves that
+   * notice up over the app.
+   */
+  readonly onboarding?: "dismiss" | "keep" | "notice";
   /** Permissions every state of the profile needs; else they are reported not capturable. */
   readonly requires?: Requires;
   /**
@@ -69,6 +73,11 @@ export const PROFILES = {
     description: "First launch: the onboarding takeover is left up.",
     seed: "demo",
     onboarding: "keep",
+  },
+  "privacy-notice": {
+    description: "The takeover closed before its Privacy step: the one-time notice is left up.",
+    seed: "demo",
+    onboarding: "notice",
   },
   default: {
     description: "The demo workspace, onboarding skipped, screen capture off.",
@@ -126,6 +135,12 @@ export const PROFILES = {
     seed: "demo",
     flags: { "timeline-levels": true },
     slideSequence: true,
+  },
+  "zoom-filmstrip": {
+    description:
+      "Flag zoom-filmstrip forced on: the video editor's Clips and Webcam tiles decode a frame of their own time once the timeline is zoomed in.",
+    seed: "demo",
+    flags: { "zoom-filmstrip": true },
   },
   "image-canvas": {
     description:

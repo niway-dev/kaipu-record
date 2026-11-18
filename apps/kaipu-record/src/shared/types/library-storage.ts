@@ -86,6 +86,13 @@ export interface LocalRecording {
    */
   webcam?: WebcamTrackMeta | null;
   /**
+   * True while a webcam recording's thumbnail is still the bare screen frame (NIW2-845): the
+   * recorder excludes the bubble from the screen capture (ADR 0037), so the Library composites
+   * it in and writes the result back through `writeWebcamThumbnail`. False once it did;
+   * absent for recordings without a webcam file.
+   */
+  thumbnailNeedsWebcam?: boolean;
+  /**
    * Set only when the sidecar could not be read or parsed. Every sidecar-backed field above
    * is then a placeholder (title from the file name, `assetId` a stand-in), and nothing is
    * written for the item until a later read succeeds.

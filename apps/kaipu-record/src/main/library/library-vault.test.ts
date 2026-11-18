@@ -1,5 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultCaptureName } from "@shared/default-capture-name";
@@ -63,7 +73,7 @@ describe("LibraryVault", () => {
     expect(byId.get("shot")?.thumbnailUrl).toMatch(
       /^kaipu-media:\/\/screenshot\/shot\?v=\d+&w=ws-1$/,
     );
-    expect(byId.get("take")?.thumbnailUrl).toBe("kaipu-media://thumb/take?w=ws-1");
+    expect(byId.get("take")?.thumbnailUrl).toMatch(/^kaipu-media:\/\/thumb\/take\?v=\d+&w=ws-1$/);
     expect(await scoped.countMedia()).toBe(2);
   });
 
@@ -225,6 +235,103 @@ describe("LibraryVault", () => {
       await writeRecording("rec");
       await writeWebcamFile("rec");
       expect((await vault.describe("rec"))?.webcam ?? null).toBeNull();
+    });
+
+    describe("thumbnail with the bubble (NIW2-845)", () => {
+      const jpg = (): Buffer => Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+      const writeScreenThumb = async (id: string): Promise<void> => {
+        await mkdir(join(directory, ".kaipu"), { recursive: true });
+        await writeFile(vault.thumbnailPath(id), Buffer.from([0xff, 0xd8, 0xff]));
+      };
+
+      it("describe says a webcam recording's thumbnail still needs the bubble", async () => {
+        await writeRecording("rec");
+        await writeSidecar("rec", { webcam: webcamMeta });
+        await writeWebcamFile("rec");
+        await writeScreenThumb("rec");
+        expect((await vault.describe("rec"))?.thumbnailNeedsWebcam).toBe(true);
+      });
+
+      it("describe does not ask for it on a plain recording, or when the webcam file is gone", async () => {
+        await writeRecording("plain");
+        await writeSidecar("plain", {});
+        await writeScreenThumb("plain");
+        expect((await vault.describe("plain"))?.thumbnailNeedsWebcam ?? false).toBe(false);
+
+        await writeRecording("gone");
+        await writeSidecar("gone", { webcam: webcamMeta });
+        await writeScreenThumb("gone");
+        expect((await vault.describe("gone"))?.thumbnailNeedsWebcam ?? false).toBe(false);
+      });
+
+      it("writeWebcamThumbnail replaces the jpg and sets the marker in one step", async () => {
+        await writeRecording("rec");
+        await writeSidecar("rec", { assetId: "asset-rec", title: "Keep", webcam: webcamMeta });
+        await writeWebcamFile("rec");
+        await writeScreenThumb("rec");
+
+        const updated = await vault.writeWebcamThumbnail("rec", "asset-rec", jpg());
+
+        expect(updated?.thumbnailNeedsWebcam).toBe(false);
+        expect((await readFile(vault.thumbnailPath("rec"))).equals(jpg())).toBe(true);
+        const sidecar = JSON.parse(await readFile(vault.sidecarPath("rec"), "utf-8"));
+        expect(sidecar.thumbnailWebcam).toBe(1);
+        expect(sidecar).toMatchObject({ assetId: "asset-rec", title: "Keep" });
+        expect((await vault.describe("rec"))?.thumbnailNeedsWebcam).toBe(false);
+      });
+
+      it("a later plain thumbnail write clears the marker, so the bubble is asked for again", async () => {
+        await writeRecording("rec");
+        await writeSidecar("rec", { assetId: "asset-rec", webcam: webcamMeta });
+        await writeWebcamFile("rec");
+        await vault.writeWebcamThumbnail("rec", "asset-rec", jpg());
+        expect((await vault.describe("rec"))?.thumbnailNeedsWebcam).toBe(false);
+
+        await vault.writeThumbnail("rec", Buffer.from([0xff, 0xd8, 0xff]));
+
+        expect((await vault.describe("rec"))?.thumbnailNeedsWebcam).toBe(true);
+      });
+
+      it("the thumbnail URL carries the jpg's mtime, so a rewritten jpg is not served from cache", async () => {
+        await writeRecording("rec");
+        await writeSidecar("rec", { webcam: webcamMeta });
+        await writeWebcamFile("rec");
+        await writeScreenThumb("rec");
+        const url = (await vault.describe("rec"))?.thumbnailUrl ?? "";
+        expect(url).toMatch(/^kaipu-media:\/\/thumb\/rec\?v=\d+$/);
+        expect(parseMediaUrl(url)).toMatchObject({ kind: "thumb", id: "rec" });
+
+        // Rewritten with a later mtime, the same jpg gets a different URL.
+        const later = new Date(Date.now() + 60_000);
+        await utimes(vault.thumbnailPath("rec"), later, later);
+        const rewritten = (await vault.describe("rec"))?.thumbnailUrl ?? "";
+        expect(rewritten).toMatch(/^kaipu-media:\/\/thumb\/rec\?v=\d+$/);
+        expect(rewritten).not.toBe(url);
+      });
+
+      it("refuses a recording without a webcam track and leaves its thumbnail alone", async () => {
+        await writeRecording("plain");
+        await writeSidecar("plain", { assetId: "asset-plain" });
+        await writeScreenThumb("plain");
+        const before = await readFile(vault.thumbnailPath("plain"));
+        await expect(vault.writeWebcamThumbnail("plain", "asset-plain", jpg())).resolves.toBeNull();
+        expect((await readFile(vault.thumbnailPath("plain"))).equals(before)).toBe(true);
+      });
+
+      it("refuses when the id now carries another recording, and leaves its thumbnail alone", async () => {
+        // Composited for one recording; by the time it is written, the id names another
+        // (a workspace switch, or a file put back under the same name).
+        await writeRecording("rec");
+        await writeSidecar("rec", { assetId: "asset-other", webcam: webcamMeta });
+        await writeWebcamFile("rec");
+        await writeScreenThumb("rec");
+        const before = await readFile(vault.thumbnailPath("rec"));
+
+        await expect(vault.writeWebcamThumbnail("rec", "asset-rec", jpg())).resolves.toBeNull();
+
+        expect((await readFile(vault.thumbnailPath("rec"))).equals(before)).toBe(true);
+        expect((await vault.describe("rec"))?.thumbnailNeedsWebcam).toBe(true);
+      });
     });
 
     it("rename moves the webcam file with the item, still paired (ADR 0035)", async () => {
@@ -572,7 +679,7 @@ describe("LibraryVault — mp4 + thumbnails", () => {
       title: "Demo",
       durationSeconds: 12,
       createdAt: 111,
-      thumbnailUrl: "kaipu-media://thumb/rec-2",
+      thumbnailUrl: expect.stringMatching(/^kaipu-media:\/\/thumb\/rec-2\?v=\d+$/),
     });
   });
 
@@ -591,12 +698,12 @@ describe("LibraryVault — mp4 + thumbnails", () => {
 
     expect(updated).toMatchObject({
       durationSeconds: 54,
-      thumbnailUrl: "kaipu-media://thumb/orphan-1",
+      thumbnailUrl: expect.stringMatching(/^kaipu-media:\/\/thumb\/orphan-1\?v=\d+$/),
     });
     // A fresh describe re-reads the sidecar + thumbnail file, proving persistence.
     expect(await vault.describe("orphan-1")).toMatchObject({
       durationSeconds: 54,
-      thumbnailUrl: "kaipu-media://thumb/orphan-1",
+      thumbnailUrl: expect.stringMatching(/^kaipu-media:\/\/thumb\/orphan-1\?v=\d+$/),
     });
   });
 

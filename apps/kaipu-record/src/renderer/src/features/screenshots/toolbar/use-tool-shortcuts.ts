@@ -38,7 +38,7 @@ export function toolShortcut(
 }
 
 /** An open menu (the Draw, More or Add image list) or a dialog: the keys stay quiet. */
-const OVERLAY = '[role="menu"], [aria-modal="true"]';
+export const OVERLAY = '[role="menu"], [aria-modal="true"]';
 
 /**
  * The toolbar's key listener: a window `keydown`, so the keys work wherever focus sits on the

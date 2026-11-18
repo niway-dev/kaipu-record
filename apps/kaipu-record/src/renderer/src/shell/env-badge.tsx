@@ -1,5 +1,6 @@
 import React from "react";
 import { cx } from "@renderer/ui/cx";
+import { useAnyFlagOverridden } from "@renderer/features/analytics/use-flag-states";
 import styles from "./env-badge.module.css";
 
 export interface EnvBadgeProps {
@@ -15,9 +16,9 @@ export interface EnvBadgeProps {
  * badge can never reach users, whatever the runtime environment.
  */
 export function EnvBadge({ className }: EnvBadgeProps): React.JSX.Element | null {
+  const overridden = useAnyFlagOverridden();
   if (!import.meta.env.DEV) return null;
-  // Feature flags pinned by `KAIPU_FLAG_OVERRIDES`: say so, or a pinned window looks real.
-  const overridden = Object.keys(window.electronAPI?.flagOverrides ?? {}).length > 0;
+  // Feature flags pinned (`KAIPU_FLAG_OVERRIDES` or the Developer page): say so, or a pinned window looks real.
   return (
     <span
       className={cx(styles.badge, className)}

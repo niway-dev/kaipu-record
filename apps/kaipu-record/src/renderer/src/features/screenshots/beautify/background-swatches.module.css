@@ -1,5 +1,5 @@
 /*
- * The background swatches (seventeen presets, five per row, wrapping onto new rows), shared by the screenshot editor's Beautify panel and the
+ * The background swatches (eighteen presets, five per row, wrapping onto new rows), shared by the screenshot editor's Beautify panel and the
  * video editor's Background section (NIW2-668). Colours and spacing use base.css tokens; the
  * only literals are the preset gradients (feature-specific, defined once in backgrounds.ts).
  */
@@ -17,6 +17,11 @@
   cursor: pointer;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
   transition: transform 0.1s ease;
+}
+
+/* White would vanish into a light panel: give it a dark hairline instead of the light one. */
+.light {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
 }
 
 .swatch:hover {

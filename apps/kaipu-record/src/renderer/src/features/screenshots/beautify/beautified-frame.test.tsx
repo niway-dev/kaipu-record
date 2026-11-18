@@ -78,7 +78,7 @@ describe("BeautifiedFrame — canvas extents (NIW2-698)", () => {
     expect(frameOf().style.flexShrink).toBe("0");
   });
 
-  it("with no background and extents, a white block covers the union box, inside the padding ring", () => {
+  it("with no background and extents nothing is painted under the shot (the gap stays transparent)", () => {
     render(
       <BeautifiedFrame
         src="x"
@@ -86,10 +86,7 @@ describe("BeautifiedFrame — canvas extents (NIW2-698)", () => {
         extents={{ left: 5, top: 0, right: 0, bottom: 0 }}
       />,
     );
-    const fill = screen.getByTestId("canvas-box-fill");
-    expect(fill.style.inset).toBe("20px");
-    // It sits before the shot, so the shot paints over it.
-    expect(fill.nextElementSibling).toBe(screen.getByRole("img").parentElement);
+    expect(screen.queryByTestId("canvas-box-fill")).toBeNull();
   });
 
   it("with a background there is no extra block (the background covers the box)", () => {

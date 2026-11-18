@@ -9,11 +9,11 @@
   pointer-events: none;
 }
 
-/* Under the content: the stage colour, so the dot grid does not show inside the box. */
+/* Under the content: the transparent checker (set inline from backgrounds.ts), so the dot grid
+   does not show inside the box. */
 .fill {
   position: absolute;
   inset: 0;
-  background: var(--ie-stage);
 }
 
 /* 1 px dashed, 1 px outside the box (the border's inner edge is 1 px away). */

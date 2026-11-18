@@ -59,6 +59,7 @@ Ventana principal          Ventanas secundarias
 | `image-inspect`           | `false` | owner devices only | Image editor Inspect mode (NIW2-699).                                                                                                                                                                        |
 | `image-text`              | `false` | owner devices only | Text recognition in the image editor, macOS only (NIW2-705).                                                                                                                                                 |
 | `timeline-levels`         | `false` | owner devices only | Add from Library… in the video editor's Captures panel (NIW2-772); with it on, the button opens the Add from Library modal, whose destination chooser can add the image over the video (NIW2-771, NIW2-829). |
+| `zoom-filmstrip`          | `false` | not created yet    | The video editor's Clips and Webcam filmstrips decode a frame of each tile's own time when the timeline is zoomed in (NIW2-844). The PostHog flag is the owner's to create.                                  |
 
 posthog-js (≥ 1.261.8) returns `undefined` for a **disabled** or missing flag, so the code
 default applies, and `false` for an enabled flag the user does not match. A PostHog value
@@ -82,9 +83,35 @@ enable it with a 0% rollout: every build reads `false` and the next take uses Ch
 Never set it to 100%: 0.16.0 and earlier ship no helper, so they would stay on Chromium and show
 a developer toast on every take.
 
+### Switching flags in a dev build
+
+An unpackaged app (`bun run dev`) lets you pin flags locally. A pin wins over PostHog and over the
+default, and it never exists in a packaged build: the Developer page is routed only when
+`import.meta.env.DEV`, main's `flags:override-set` handler refuses when `app.isPackaged`, and the
+launch variable is ignored there too.
+
+- **At launch:** `KAIPU_FLAG_OVERRIDES='{"image-canvas":true}' bun run dev` (a JSON object of
+  known flags with boolean values).
+- **While running:** Settings → Developer → Feature flags. Each flag shows its effective value
+  and where it comes from (pinned here, PostHog, or default) and has a toggle; "Reset" hands a
+  pinned flag back to PostHog or its default. A toggle goes to every open window at once
+  (`flags:overrides-changed`), so the app itself needs no relaunch.
+- **Lifetime:** a toggle lasts until the app quits. The launch variable seeds the starting set
+  on every start; nothing is written to disk, so a forgotten pin cannot outlive a restart and
+  hide a real PostHog value.
+- The "LOCAL ENV · FLAGS OVERRIDDEN" badge shows while any flag is pinned, by either route.
+- **Reads that are not reactive:** a toggle reaches every window at once, but a component that
+  reads a flag once keeps that value. The recorder asks for `native-cursor-capture` at the start
+  of a take, and the screenshot editor fixes `image-canvas`, `image-inspect` and `image-text` when
+  it opens: an editor that is already open keeps its old value until you reopen it.
+
 ### Comportamiento offline
 
 Si `VITE_POSTHOG_KEY` no está configurada, o si PostHog no responde, los SDKs entran en modo no-op: no envían nada y `useFlag` devuelve el default de cada flag. La app funciona exactamente igual que sin PostHog.
+
+### Flags con el toggle de uso y fallos apagado
+
+Los flags no dependen del toggle **Share usage and crash reports** (Settings → App). Con el toggle apagado, `posthog-js` sigue inicializado con el `deviceId` como `distinctID` y pide los flags de ese Mac; no envía ningún evento ni reporte de fallo (`opt_out_capturing_by_default`). Es así como una regla de PostHog (por ejemplo, los dos dispositivos del dueño) sigue llegando a un Mac que no comparte uso. Detalle y decisiones: [Desktop diagnostics opt-out](/backlog/desktop-diagnostics-opt-out/).
 
 ---
 
@@ -159,5 +186,5 @@ El foco en la privacidad no es opcional para una app de grabación de pantalla. 
 Los siguientes ítems están diseñados pero no construidos:
 
 - **Login UI y entitlement real:** `isPaid` en `useWatermark` es un stub. El swap es una línea dentro del hook una vez que exista un plans/entitlement API. El seam ya está — nada más cambia.
-- **Toggle de opt-out de telemetría en Settings:** hoy no hay forma de que el usuario desactive el envío de datos. Agregar un toggle en Settings que llame a `posthog.optOut()` / `posthog.optIn()` y persista la preferencia en `AppSettings`.
+- ~~**Toggle de opt-out de telemetría en Settings**~~ — hecho: **Share usage and crash reports** (reescrito en NIW2-849; ver [Desktop diagnostics opt-out](/backlog/desktop-diagnostics-opt-out/)).
 - **Eventos de producto explícitos:** la infraestructura está lista pero solo captura errores y flags hoy. Eventos como `recording_started`, `recording_completed`, o `settings_changed` se pueden agregar cuando haya necesidad analítica real.

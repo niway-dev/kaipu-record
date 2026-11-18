@@ -24,6 +24,8 @@ import {
 import { layoutDuration } from "../timeline";
 import type { VideoOverlay } from "../scene";
 import type { SourceThumbnail } from "../use-source-thumbnails";
+import type { FilmstripBinding } from "../filmstrip-targets";
+import { FilmstripTiles } from "./filmstrip-tiles";
 import {
   useTimelineViewState,
   useTimelineViewStore,
@@ -91,6 +93,7 @@ export const TimelineStrip = memo(function TimelineStrip({
   thumbnails,
   clipRecordings = null,
   recordingThumbnails,
+  filmstripFiles,
   selectedItemId,
   onSelectItem,
   onTrim,
@@ -116,6 +119,9 @@ export const TimelineStrip = memo(function TimelineStrip({
   clipRecordings?: ClipRecordings | null;
   /** The joined recordings' own filmstrips by `SceneSource.id`, at each recording's local time. */
   recordingThumbnails?: ReadonlyMap<string, SourceThumbnail[]>;
+  /** With `zoom-filmstrip` on: the media file each recording's clips draw from, by `SceneSource.id`
+   *  (null is the opened recording). Absent with the flag off: tiles draw as they always did. */
+  filmstripFiles?: ReadonlyMap<string | null, string>;
   selectedItemId: string | null;
   onSelectItem: (id: string | null) => void;
   /** Fired while dragging a trim handle. `phase` tracks the drag lifecycle so the
@@ -593,6 +599,7 @@ export const TimelineStrip = memo(function TimelineStrip({
                           : thumbnails
                       }
                       recording={recording}
+                      filmstrip={clipFilmstripBinding(filmstripFiles, recording)}
                       sameRecording={sameRecording.has(entry.itemId)}
                       onHover={clipRecordings ? setHoveredItemId : undefined}
                       scale={scale}
@@ -757,11 +764,23 @@ type DragHandlers = Pick<
 
 const NO_THUMBNAILS: SourceThumbnail[] = [];
 
+/** Where a clip's tiles read frames with `zoom-filmstrip` on: its recording's file, in the file's own
+ *  time (the recording's offset on the source axis). Undefined with the flag off, or for a clip whose
+ *  recording has no file to read yet. */
+function clipFilmstripBinding(
+  files: ReadonlyMap<string | null, string> | undefined,
+  recording: ClipRecording | undefined,
+): FilmstripBinding | undefined {
+  const fileKey = files?.get(recording?.sourceId ?? null);
+  return fileKey ? { fileKey, fileOffset: recording?.offset ?? 0, legacyOffset: 0 } : undefined;
+}
+
 function TrackBlock({
   entry,
   duration,
   thumbnails,
   recording,
+  filmstrip,
   sameRecording,
   onHover,
   scale,
@@ -780,6 +799,8 @@ function TrackBlock({
   thumbnails: SourceThumbnail[];
   /** The clip's recording; set only when the scene has joined recordings (then it is labelled). */
   recording?: ClipRecording;
+  /** Set only with `zoom-filmstrip` on: where this clip's tiles read frames of their own time. */
+  filmstrip?: FilmstripBinding;
   /** Another clip of the same recording is hovered: outline this one. */
   sameRecording: boolean;
   /** Reports the hovered clip (null on leave); omitted when there is nothing to outline. */
@@ -1001,6 +1022,14 @@ function TrackBlock({
               <ImagePlus size={14} />
             </span>
           </>
+        ) : filmstrip ? (
+          <FilmstripTiles
+            tiles={tiles}
+            entry={entry}
+            binding={filmstrip}
+            legacy={thumbnails}
+            className={styles.tile}
+          />
         ) : (
           tiles.map((tile) => {
             const thumb = thumbnailAt(thumbnails, tile.sourceTime - (recording?.offset ?? 0));

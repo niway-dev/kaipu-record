@@ -1,5 +1,10 @@
-import { PostHog } from "posthog-node";
-import { DEFAULT_PRODUCT, DEFAULT_SURFACE, type SerializedError } from "@shared/analytics";
+import { PostHog, type EventMessage } from "posthog-node";
+import {
+  DEFAULT_PRODUCT,
+  DEFAULT_SURFACE,
+  scrubEventProperties,
+  type SerializedError,
+} from "@shared/analytics";
 
 let client: PostHog | null = null;
 let distinctId = "anonymous";
@@ -23,18 +28,28 @@ export function resolvePosthogHost(host: string | undefined): string {
   return host || "https://us.i.posthog.com";
 }
 
+/**
+ * Runs on every event just before it is sent: strips personal file paths (`/Users/<name>/…`)
+ * from the exception message, the stack frames and the context. Tested.
+ */
+export function scrubMainEvent(event: EventMessage | null): EventMessage | null {
+  if (!event?.properties) return event;
+  return { ...event, properties: scrubEventProperties(event.properties) };
+}
+
 function startClient(key: string): void {
   client = new PostHog(key, {
     host: resolvePosthogHost(import.meta.env.MAIN_VITE_POSTHOG_HOST),
     flushAt: 1,
     flushInterval: 0,
+    before_send: scrubMainEvent,
   });
 }
 
 /**
  * Initialize posthog-node once. No-op without a key. Installs process-level crash
  * handlers so Node-side failures (file writes, IPC, window management) are captured.
- * With `enabled` false (Settings → App → Send diagnostics off) no client is created,
+ * With `enabled` false (Settings → App → Share usage and crash reports off) no client is created,
  * so every capture below is a no-op and nothing leaves the device.
  */
 export function initMainAnalytics(deviceId: string, enabled: boolean): void {

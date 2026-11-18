@@ -4,11 +4,16 @@ import {
   DEFAULT_SURFACE,
   FLAG_DEFAULTS,
   FLAG_NAMES,
+  EDITOR_OPENED_EVENT,
   EDITOR_SPEED_CHANGED_EVENT,
   SCREENSHOT_CAPTURED_EVENT,
+  buildEditorOpenedProperties,
   buildEditorSpeedChangedProperties,
   buildRecordingStartedProperties,
   buildScreenshotCapturedProperties,
+  scrubEventProperties,
+  scrubPersonalPaths,
+  scrubPersonalPathsDeep,
   serializeError,
 } from "./analytics";
 
@@ -22,6 +27,7 @@ describe("flag model", () => {
     expect(FLAG_DEFAULTS["image-inspect"]).toBe(false);
     expect(FLAG_DEFAULTS["image-text"]).toBe(false);
     expect(FLAG_DEFAULTS["timeline-levels"]).toBe(false);
+    expect(FLAG_DEFAULTS["zoom-filmstrip"]).toBe(false);
   });
 
   it("uses stable identity defaults", () => {
@@ -149,5 +155,149 @@ describe("editor_speed_changed", () => {
     // A caller cannot smuggle an extra field through (a title, a time, a path).
     const sneaky = { speed: 2, title: "Q3 board call", timelineTime: 41 } as never;
     expect(Object.keys(buildEditorSpeedChangedProperties(sneaky))).toEqual(["speed"]);
+  });
+});
+
+describe("editor_opened", () => {
+  it("keeps a stable event name", () => {
+    expect(EDITOR_OPENED_EVENT).toBe("editor_opened");
+  });
+
+  it("carries exactly which editor opened, nothing else", () => {
+    expect(buildEditorOpenedProperties({ editor: "video" })).toEqual({ editor: "video" });
+    expect(buildEditorOpenedProperties({ editor: "image" })).toEqual({ editor: "image" });
+    // A caller cannot smuggle an extra field through (a recording id, a title, a path).
+    const sneaky = { editor: "image", recordingId: "r-1", title: "Q3 board call" } as never;
+    expect(Object.keys(buildEditorOpenedProperties(sneaky))).toEqual(["editor"]);
+  });
+});
+
+describe("scrubPersonalPaths", () => {
+  const REDACTED = "<user-path>";
+
+  it("removes a macOS home path, file name included", () => {
+    expect(
+      scrubPersonalPaths("ENOENT: open '/Users/ana/Movies/Kaipu Record/Q3 board call.mp4'"),
+    ).toBe(`ENOENT: open '${REDACTED}'`);
+  });
+
+  it("removes a path inside a stack frame and keeps the frame's shape", () => {
+    expect(scrubPersonalPaths("    at load (/Users/ana/dev/kaipu/src/a.ts:12:3)")).toBe(
+      `    at load (${REDACTED})`,
+    );
+  });
+
+  it("removes Windows and Linux home paths and file URLs", () => {
+    expect(scrubPersonalPaths("open C:\\Users\\Ana Perez\\Videos\\clip.mp4 failed")).not.toContain(
+      "Ana",
+    );
+    expect(scrubPersonalPaths("c:/Users/ana/Videos/clip.mp4")).toBe(REDACTED);
+    expect(scrubPersonalPaths("/home/ana/clips/a.mp4")).toBe(REDACTED);
+    expect(scrubPersonalPaths("file:///Users/ana/Movies/a.mp4")).toBe(`file://${REDACTED}`);
+  });
+
+  it("takes a file name that contains brackets or an apostrophe, whole", () => {
+    expect(scrubPersonalPaths("open '/Users/ana/Movies/Foo (draft) Q3 board.mp4' failed")).toBe(
+      `open '${REDACTED}' failed`,
+    );
+    expect(scrubPersonalPaths("ENOENT '/Users/ana/Screen Recording (2) final.mov'")).toBe(
+      `ENOENT '${REDACTED}'`,
+    );
+    expect(scrubPersonalPaths("'/Users/ana/Ana's Videos/clip.mp4' is gone")).toBe(
+      `'${REDACTED}' is gone`,
+    );
+    const unquoted = scrubPersonalPaths("cannot read /Users/ana/Ana's Videos/clip.mp4");
+    expect(unquoted).toBe(`cannot read ${REDACTED}`);
+    // A name can hold its own quote followed by a space: the path runs to the last closing quote.
+    expect(scrubPersonalPaths("open '/Users/ana/Clients' Archive/secret.mp4' failed")).toBe(
+      `open '${REDACTED}' failed`,
+    );
+    // Two quoted paths on one line: both are gone, and so may be the words between them.
+    expect(scrubPersonalPaths(`"/Users/ana/a.mp4" and "/Users/bob/b (1).mp4"`)).not.toMatch(
+      /ana|bob|b \(1\)/,
+    );
+  });
+
+  it("removes a recordings folder on a volume or another drive", () => {
+    expect(scrubPersonalPaths("open '/Volumes/Work/Kaipu/Q3 call.mp4'")).toBe(`open '${REDACTED}'`);
+    expect(scrubPersonalPaths("open D:\\Recordings\\Q3 call.mp4")).toBe(`open ${REDACTED}`);
+    // A network share names a server, its folders and the file.
+    expect(scrubPersonalPaths("open '\\\\NAS\\Ana\\Q3 board call.mp4' failed")).toBe(
+      `open '${REDACTED}' failed`,
+    );
+    // App and system folders are not personal.
+    const system = "at x (C:\\Program Files\\Kaipu Record\\resources\\app.asar\\main.js:1:1)";
+    expect(scrubPersonalPaths(system)).toBe(system);
+  });
+
+  it("keeps app paths and URLs that merely contain /Users or /home", () => {
+    const appPath =
+      "at x (/Applications/Kaipu Record.app/Contents/Resources/app.asar/out/main.js:1:1)";
+    expect(scrubPersonalPaths(appPath)).toBe(appPath);
+    expect(scrubPersonalPaths("GET https://kaipu.app/home/Users/ana")).toBe(
+      "GET https://kaipu.app/home/Users/ana",
+    );
+  });
+
+  it("leaves text without a personal path untouched", () => {
+    expect(scrubPersonalPaths("Cannot read properties of undefined")).toBe(
+      "Cannot read properties of undefined",
+    );
+  });
+});
+
+describe("scrubPersonalPathsDeep", () => {
+  it("scrubs every string in nested objects and arrays without mutating the input", () => {
+    const input = {
+      $exception_list: [
+        {
+          value: "open '/Users/ana/Movies/a.mp4' failed",
+          stacktrace: { frames: [{ filename: "/Users/ana/dev/a.ts", lineno: 4 }] },
+        },
+      ],
+      count: 3,
+      flag: true,
+      nothing: null,
+    };
+    const copy = JSON.parse(JSON.stringify(input));
+    const out = scrubPersonalPathsDeep(input) as typeof input;
+    expect(JSON.stringify(out)).not.toContain("ana");
+    expect(out.$exception_list[0].stacktrace.frames[0].lineno).toBe(4);
+    expect(out.count).toBe(3);
+    expect(input).toEqual(copy);
+  });
+
+  it("keeps an object that is referenced twice, and cuts only a real cycle", () => {
+    const shared = { path: "/Users/ana/a.mp4", n: 1 };
+    const out = scrubPersonalPathsDeep({ first: shared, second: shared, list: [shared] }) as {
+      first: { path: string; n: number };
+      second: { path: string; n: number };
+      list: { path: string; n: number }[];
+    };
+    expect(out.first).toEqual({ path: "<user-path>", n: 1 });
+    expect(out.second).toEqual({ path: "<user-path>", n: 1 });
+    expect(out.list[0]).toEqual({ path: "<user-path>", n: 1 });
+  });
+
+  it("survives a cyclic object", () => {
+    const loop: Record<string, unknown> = { path: "/Users/ana/a.mp4" };
+    loop.self = loop;
+    expect(() => scrubPersonalPathsDeep(loop)).not.toThrow();
+  });
+});
+
+describe("scrubEventProperties", () => {
+  it("drops the item ids, which can spell a recording's name, and scrubs the rest", () => {
+    const input = {
+      id: "Q3 board call",
+      assetId: "Q3 board call",
+      localId: "Q3 board call",
+      phase: "rename",
+      message: "open '/Users/ana/a.mp4' failed",
+    };
+    const out = scrubEventProperties(input);
+    expect(out).toEqual({ phase: "rename", message: `open '<user-path>' failed` });
+    // The input is left as it was.
+    expect(input.id).toBe("Q3 board call");
   });
 });

@@ -52,6 +52,15 @@ async function dismissOnboarding(page: Page): Promise<void> {
   }
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "detached" });
+  // Leaving before the Privacy step shows it once as a notice over the app (NIW2-849).
+  const notice = page.getByRole("alertdialog", { name: "Your recordings are yours" });
+  try {
+    await notice.waitFor({ state: "visible", timeout: 5_000 });
+  } catch {
+    return;
+  }
+  await page.keyboard.press("Escape");
+  await notice.waitFor({ state: "detached" });
 }
 
 // The account moved from Settings to its own Cloud page.

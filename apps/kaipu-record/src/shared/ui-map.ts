@@ -152,7 +152,9 @@ export const UI_MAP = {
       list: { states: ["items"] },
       emptyState: { states: ["empty", "noMatch", "error", "loading"] },
       readyCopyCard: { states: ["ready"] },
-      videoCard: { states: ["recording", "screenshot", "gif", "selected", "cloudOnly"] },
+      videoCard: {
+        states: ["recording", "webcam", "screenshot", "gif", "selected", "cloudOnly"],
+      },
       videoRow: { states: ["recording", "screenshot", "selected"] },
       selectionBar: { states: ["selecting", "moving"] },
       tagPanel: { states: ["item", "all"] },
@@ -319,7 +321,9 @@ export const UI_MAP = {
       // recordingHover outlines every clip of the hovered clip's recording; recordingMissing is a
       // clip whose joined recording is gone (hatched, "Recording missing: <title>");
       // recordingAdded: the sequence right after Add from Library added a recording (NIW2-782);
-      // threeSlides: a clip followed by three slides, all on the one Clips row (NIW2-817).
+      // threeSlides: a clip followed by three slides, all on the one Clips row (NIW2-817);
+      // filmstripZoomed: zoomed to 2000% with `zoom-filmstrip` on, every Clips tile drawn from a
+      // frame of its own time (NIW2-844).
       timeline: {
         states: [
           "default",
@@ -329,6 +333,7 @@ export const UI_MAP = {
           "recordingMissing",
           "recordingAdded",
           "threeSlides",
+          "filmstripZoomed",
         ],
       },
       zoomLane: { states: ["empty", "segments"] },
@@ -403,7 +408,10 @@ export const UI_MAP = {
       cropChip: { states: ["shown"] },
       // The canvas chrome (NIW2-711): the box Copy and Save export, the card the export frame
       // tool opens, and the notice that says where the content went when it is off stage.
-      exportBox: { states: ["labeled", "quiet"], gatedBy: [{ flag: "image-canvas" }] },
+      exportBox: {
+        states: ["labeled", "quiet"],
+        gatedBy: [{ flag: "image-canvas" }],
+      },
       exportFrameCard: { states: ["open"], gatedBy: [{ flag: "image-canvas" }] },
       offContentNotice: { states: ["shown"], gatedBy: [{ flag: "image-canvas" }] },
       addImage: { states: ["closed", "open"], gatedBy: [{ flag: "image-canvas" }] },
@@ -755,7 +763,7 @@ export const UI_MAP = {
   onboarding: {
     kind: "overlay",
     areas: {
-      root: { states: ["welcome", "permissions", "shortcuts", "done"] },
+      root: { states: ["welcome", "permissions", "shortcuts", "privacy", "done"] },
       welcomeStep: { states: ["default"] },
       demo: { states: ["record", "capture", "share", "editor", "workspaces"] },
       permissionsStep: {
@@ -768,6 +776,10 @@ export const UI_MAP = {
         ],
       },
       shortcutsStep: { states: ["none", "someTried"] },
+      // The step for new users, and the same content as a one-time notice over the app for
+      // people who finished before it existed (NIW2-849). Off is the one thing that differs.
+      privacyStep: { states: ["on", "off"] },
+      privacyNotice: { states: ["default"] },
       doneStep: { states: ["default"] },
     },
   },

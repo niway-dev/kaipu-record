@@ -278,6 +278,21 @@ export interface KaipuElectronAPI {
   nativeCapture: NativeCaptureBridge;
   /** Feature flags pinned by `KAIPU_FLAG_OVERRIDES` (unpackaged builds only); empty otherwise. */
   readonly flagOverrides: Readonly<Partial<Record<FlagName, boolean>>>;
+  /**
+   * Developer page: pin one flag to `value`, or clear it with `null`. Main updates every open
+   * window (`onFlagOverridesChanged`); a packaged app refuses. Resolves with the overrides now
+   * active.
+   */
+  setFlagOverride(
+    name: FlagName,
+    value: boolean | null,
+  ): Promise<Readonly<Partial<Record<FlagName, boolean>>>>;
+  /** The overrides main holds now: a window created before a toggle, or reloaded, starts from stale launch arguments. */
+  getFlagOverrides(): Promise<Readonly<Partial<Record<FlagName, boolean>>>>;
+  /** The active overrides changed (here or in another window). Returns an unsubscribe. */
+  onFlagOverridesChanged(
+    listener: (overrides: Readonly<Partial<Record<FlagName, boolean>>>) => void,
+  ): () => void;
   /** Host OS (`process.platform`), exposed because the renderer must not read `process` itself. */
   readonly platform: string;
   /** The running app version (`app.getVersion()`), used by the version gate. */
@@ -420,6 +435,17 @@ export interface KaipuElectronAPI {
   backfillLocalRecordingMeta(
     id: string,
     meta: RecordingBackfillMeta,
+  ): Promise<LocalRecording | null>;
+  /**
+   * NIW2-845: replace a webcam recording's thumbnail with the JPEG the Library composited
+   * (the screen frame plus the bubble) and mark it done, in one step. Returns the
+   * re-described recording, or null when nothing is written: the recording has no webcam
+   * track, its file vanished, or `id` no longer carries `assetId` (the one composited).
+   */
+  writeWebcamThumbnail(
+    id: string,
+    assetId: string,
+    jpeg: ArrayBuffer,
   ): Promise<LocalRecording | null>;
   /** Delete a local recording from disk. */
   deleteLocalRecording(id: string): Promise<void>;

@@ -8,8 +8,8 @@ import {
 } from "./onboarding-flow";
 
 describe("onboarding flow", () => {
-  it("has four steps in order", () => {
-    expect(STEPS).toEqual(["welcome", "permissions", "shortcuts", "done"]);
+  it("has five steps in order, privacy before the closing step", () => {
+    expect(STEPS).toEqual(["welcome", "permissions", "shortcuts", "privacy", "done"]);
   });
 
   it("only the permissions step blocks, until screen and microphone are granted", () => {
@@ -18,6 +18,8 @@ describe("onboarding flow", () => {
     expect(canAdvanceFrom("permissions", true)).toBe(true);
     // Trying shortcuts is optional: Continue is always on.
     expect(canAdvanceFrom("shortcuts", false)).toBe(true);
+    // Privacy informs; it never blocks (the toggle is on by default and is not a gate).
+    expect(canAdvanceFrom("privacy", false)).toBe(true);
   });
 
   it("a dot cannot jump past permissions while they are missing", () => {
@@ -35,6 +37,7 @@ describe("onboarding flow", () => {
     expect(skipActionFor("permissions", false)).toBe("blocked");
     expect(skipActionFor("permissions", true)).toBe("close");
     expect(skipActionFor("shortcuts", true)).toBe("close");
+    expect(skipActionFor("privacy", true)).toBe("close");
     expect(skipActionFor("done", true)).toBe("none");
   });
 

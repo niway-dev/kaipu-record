@@ -22,7 +22,7 @@ import { DiscardChangesDialog } from "@renderer/features/screenshots/discard-cha
 import { FitIcon } from "@renderer/features/screenshots/toolbar/editor-icons";
 import type { CanvasSavePayload } from "@shared/types/screenshot-canvas";
 import type { TextCacheSavePayload } from "@shared/types/text-recognition";
-import { captureException, reportError } from "@renderer/features/analytics";
+import { captureException, reportError, useEditorOpened } from "@renderer/features/analytics";
 import { screenshotTitle } from "@shared/screenshot-title";
 import { ROUTES } from "@shared/routes";
 import {
@@ -136,9 +136,16 @@ import {
 } from "@renderer/features/screenshots/export";
 import { useTransientValue } from "@renderer/ui/use-transient-value";
 import { PanelToggle } from "@renderer/features/screenshots/toolbar/panel-toggle";
+import { ToolButton } from "@renderer/features/screenshots/toolbar/tip";
 import { MoreMenu } from "@renderer/features/screenshots/toolbar/more-menu";
 import { useCompactEditor } from "@renderer/features/screenshots/toolbar/use-compact-editor";
 import { ToolPanel } from "@renderer/features/screenshots/tool-panel/tool-panel";
+import {
+  redoKeyLabel,
+  undoKeyLabel,
+  useHistoryShortcuts,
+} from "@renderer/features/screenshots/toolbar/use-history-shortcuts";
+import { detectKeyPlatform } from "@renderer/features/screenshots/overlay/overlay-keys";
 import { useToolShortcuts } from "@renderer/features/screenshots/toolbar/use-tool-shortcuts";
 import { isMaintenanceError } from "@renderer/features/library/vault-errors";
 import { showToast } from "@renderer/ui/toast-store";
@@ -334,6 +341,9 @@ function ScreenshotEditorBody({
     [doc, source],
   );
   const image = useImageSource(imageSource);
+  // The editor counts as opened once its image source has resolved to a URL, not while it is
+  // still resolving. A file that is missing or fails to decode afterwards is still counted.
+  useEditorOpened("image", image !== null);
   // A re-opened saved shot is already framed/flattened — start it unframed so the
   // editor doesn't beautify it twice; a fresh capture gets the default frame.
   // A pasted image is the user's own picture (often a photo), not a screenshot to
@@ -1566,6 +1576,15 @@ function ScreenshotEditorBody({
       : {}),
   });
 
+  // Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z (and Ctrl+Y off macOS): the same history the buttons step.
+  const keyPlatform = detectKeyPlatform();
+  useHistoryShortcuts({
+    onUndo: scene.undo,
+    onRedo: scene.redo,
+    canUndo: scene.canUndo,
+    canRedo: scene.canRedo,
+  });
+
   // The Add image control: a toolbar button, or (compact) only its menu, opened from "•••".
   const addImageControl = (showButton: boolean): React.JSX.Element => (
     <AddImageControl
@@ -1628,24 +1647,24 @@ function ScreenshotEditorBody({
         ) : (
           <>
             <span className={styles.divider} aria-hidden />
-            <button
-              type="button"
+            <ToolButton
+              label={t("undo")}
+              keyHint={undoKeyLabel(keyPlatform)}
               className={styles.iconBtn}
-              title={t("undo")}
               disabled={!scene.canUndo}
               onClick={scene.undo}
             >
               <Undo2 size={17} />
-            </button>
-            <button
-              type="button"
+            </ToolButton>
+            <ToolButton
+              label={t("redo")}
+              keyHint={redoKeyLabel(keyPlatform)}
               className={styles.iconBtn}
-              title={t("redo")}
               disabled={!scene.canRedo}
               onClick={scene.redo}
             >
               <Redo2 size={17} />
-            </button>
+            </ToolButton>
             <CaptureTitleInput title={captureTitle} />
           </>
         )}

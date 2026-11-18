@@ -163,4 +163,25 @@ describe("useEditorScene", () => {
     expect(result.current.baseRadius).toBeUndefined();
     expect(result.current.basePlacement).toBeUndefined();
   });
+
+  it("undo and redo do nothing while an interaction is open", () => {
+    const { result } = renderHook(() => useEditorScene());
+    act(() => result.current.addAnnotation(box));
+    act(() => result.current.beginInteract());
+    let acted = true;
+    act(() => {
+      acted = result.current.undo();
+    });
+    expect(acted).toBe(false);
+    expect(result.current.annotations).toHaveLength(1);
+    act(() => result.current.endInteract());
+    act(() => result.current.undo());
+    expect(result.current.annotations).toHaveLength(0);
+    act(() => result.current.beginInteract());
+    act(() => result.current.redo());
+    expect(result.current.annotations).toHaveLength(0);
+    act(() => result.current.endInteract());
+    act(() => result.current.redo());
+    expect(result.current.annotations).toHaveLength(1);
+  });
 });

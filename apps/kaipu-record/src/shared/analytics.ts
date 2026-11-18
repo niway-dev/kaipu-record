@@ -17,6 +17,7 @@ export const FLAG_NAMES = [
   "image-inspect",
   "image-text",
   "timeline-levels",
+  "zoom-filmstrip",
 ] as const;
 export type FlagName = (typeof FLAG_NAMES)[number];
 
@@ -44,6 +45,10 @@ export const FLAG_DEFAULTS: Record<FlagName, boolean> = {
   // sequence or over it (NIW2-771, NIW2-829). A scene that already has floating items still shows
   // and exports them with the flag off.
   "timeline-levels": false,
+  // Zoom-aware filmstrip (NIW2-844, ADR 0064): the Clips and Webcam tiles decode a frame of their
+  // own time when the timeline is zoomed in. Off until the budgets are proven on the 54-minute
+  // take (spec decision 11); with it off the filmstrip is the 24 frames per file it always was.
+  "zoom-filmstrip": false,
 };
 
 /** Identity super-properties attached to every event/error for multi-surface filtering. */
@@ -184,4 +189,113 @@ export function buildEditorSpeedChangedProperties(
   input: EditorSpeedChangedProperties,
 ): EditorSpeedChangedProperties {
   return { speed: input.speed };
+}
+
+/** Event name for an editor that finished loading (NIW2-849). */
+export const EDITOR_OPENED_EVENT = "editor_opened";
+
+/** The two editors people can open. */
+export const EDITOR_KINDS = ["video", "image"] as const;
+export type EditorKind = (typeof EDITOR_KINDS)[number];
+
+/**
+ * The whole payload of `editor_opened`: which editor loaded, the video editor or the image
+ * editor. It tells the team which of the two people actually use. No recording id, title,
+ * path or duration, and nothing about what is on screen.
+ */
+// A type alias, not an interface: `captureEvent` takes a `Record<string, unknown>`.
+export type EditorOpenedProperties = {
+  editor: EditorKind;
+};
+
+/** Copies exactly the allowed field, so a caller cannot leak an extra one. */
+export function buildEditorOpenedProperties(input: EditorOpenedProperties): EditorOpenedProperties {
+  return { editor: input.editor };
+}
+
+/**
+ * Where a personal path starts: a home folder (`/Users/<name>/…` on macOS, `/home/<name>/…`
+ * on Linux), a mounted volume where a custom recordings folder usually lives (`/Volumes/…`,
+ * `/mnt/…`, `/media/…`), or any Windows drive path except the system folders (`C:\Users\…`,
+ * `D:\Recordings\…`, not `C:\Program Files\…`), or a network share (`\\server\share\…`). Also
+ * behind `file://`.
+ */
+const PATH_ROOT = String.raw`(?:[A-Za-z]:[\\/](?!(?:Windows|Program Files|ProgramData)\b)|\\\\[^\\/\r\n]+[\\/]|[\\/](?:Users|home|Volumes|mnt|media)[\\/])`;
+
+/**
+ * Two shapes, tried at each position. A path right after a quote runs to the LAST matching quote
+ * on the line that is not followed by a letter or digit, so an apostrophe in `Ana's Videos` or
+ * `Clients' Archive` and the brackets in `Screen Recording (2).mov` stay inside it. That can take
+ * a few words after a second quoted value: safer than leaving a name. Any other path runs to the end of the
+ * line, except that a closing `)` of a stack frame (`at f (/Users/…:1:1)`) is kept. The lookbehind
+ * keeps URLs such as `https://site/home/x` and app paths such as `/Applications/…` out.
+ */
+const PERSONAL_PATH = new RegExp(
+  `(?<q>['"\`])${PATH_ROOT}[^\\r\\n]*(?=\\k<q>(?![A-Za-z0-9]))` +
+    `|(?<![A-Za-z0-9.])${PATH_ROOT}[^\\r\\n]*?(?=\\)?[ \\t]*$)`,
+  "gm",
+);
+
+/** What replaces a personal path in an exception message, stack frame or context value. */
+export const REDACTED_USER_PATH = "<user-path>";
+
+/**
+ * Replaces every personal path in `text` with `<user-path>`. Recordings live in the home
+ * folder or on a volume and are named by the user, so the whole path goes, file name
+ * included, not just the account name. An unquoted path inside a sentence also takes the rest
+ * of that line with it: losing a few words of a message beats leaking a name. A recordings
+ * folder outside these roots (say `/data/clips`) is not recognised.
+ */
+export function scrubPersonalPaths(text: string): string {
+  return text.replace(PERSONAL_PATH, (_match, quote?: string) =>
+    quote ? `${quote}${REDACTED_USER_PATH}` : REDACTED_USER_PATH,
+  );
+}
+
+/**
+ * A copy of `value` with {@link scrubPersonalPaths} applied to every string inside it,
+ * through objects and arrays. Used on whatever leaves the app as an exception or event, so
+ * a path in a message, a stack frame or a context value never travels. A cycle and a very deep
+ * value are cut instead of followed.
+ */
+export function scrubPersonalPathsDeep<T>(value: T): T {
+  return scrubDeep(value, new WeakSet(), 0) as T;
+}
+
+/**
+ * Property names that carry a library item's id. A local item's id is a file-name stem
+ * projected from its title (ADR 0035), so it can spell the recording's name. Dropped as a
+ * top-level property of any event or crash report; an `id` nested inside a context object is not
+ * touched, so callers keep ids out of nested context.
+ */
+export const ITEM_ID_PROPERTIES = ["id", "assetId", "localId"] as const;
+
+/**
+ * What `before_send` does to every event, in both processes: scrub personal paths inside the
+ * values, and drop the item-id properties. A copy; the input is untouched.
+ */
+export function scrubEventProperties<T extends Record<string, unknown>>(properties: T): T {
+  const scrubbed = scrubPersonalPathsDeep(properties) as Record<string, unknown>;
+  for (const key of ITEM_ID_PROPERTIES) delete scrubbed[key];
+  return scrubbed as T;
+}
+
+const SCRUB_MAX_DEPTH = 12;
+
+function scrubDeep(value: unknown, seen: WeakSet<object>, depth: number): unknown {
+  if (typeof value === "string") return scrubPersonalPaths(value);
+  if (value === null || typeof value !== "object") return value;
+  if (seen.has(value) || depth > SCRUB_MAX_DEPTH) return undefined;
+  seen.add(value);
+  let out: unknown;
+  if (Array.isArray(value)) {
+    out = value.map((item) => scrubDeep(item, seen, depth + 1));
+  } else {
+    const copy: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) copy[key] = scrubDeep(item, seen, depth + 1);
+    out = copy;
+  }
+  // Only the objects on the way down count as a cycle: one referenced twice is not one.
+  seen.delete(value);
+  return out;
 }
