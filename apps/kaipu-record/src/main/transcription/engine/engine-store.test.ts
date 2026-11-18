@@ -292,16 +292,22 @@ describe("EngineStore", () => {
     expect(await rootEntries()).toEqual(["1.0.0"]);
   });
 
-  it("does not throw at construction when a stale directory cannot be deleted", async () => {
-    const rootDir = join(root, "speech-engine");
-    await mkdir(join(rootDir, "9.9.9.partial"), { recursive: true });
-    await chmod(rootDir, 0o555);
-    try {
-      expect(() => makeStore()).not.toThrow();
-    } finally {
-      await chmod(rootDir, 0o755);
-    }
-  });
+  // File permissions do not stop root, so these cases would pass without exercising the failure.
+  const itUnlessRoot = it.skipIf(process.getuid?.() === 0);
+
+  itUnlessRoot(
+    "does not throw at construction when a stale directory cannot be deleted",
+    async () => {
+      const rootDir = join(root, "speech-engine");
+      await mkdir(join(rootDir, "9.9.9.partial"), { recursive: true });
+      await chmod(rootDir, 0o555);
+      try {
+        expect(() => makeStore()).not.toThrow();
+      } finally {
+        await chmod(rootDir, 0o755);
+      }
+    },
+  );
 
   /** An extractor that leaves its tree undeletable, so the cleanup after the install fails. */
   const undeletableExtract = (then?: () => never) => async (_archive: string, dest: string) => {
@@ -314,32 +320,38 @@ describe("EngineStore", () => {
     await chmod(partial, 0o755).catch(() => {});
   };
 
-  it("reports an installed engine as installed when the cleanup afterwards fails", async () => {
-    const { store } = makeStore({ extract: undeletableExtract() });
-    try {
-      await expect(store.install({})).resolves.toBe(finalDir());
-      expect(existsSync(join(finalDir(), "bin"))).toBe(true);
-    } finally {
-      await restoreExtracted();
-    }
-  });
+  itUnlessRoot(
+    "reports an installed engine as installed when the cleanup afterwards fails",
+    async () => {
+      const { store } = makeStore({ extract: undeletableExtract() });
+      try {
+        await expect(store.install({})).resolves.toBe(finalDir());
+        expect(existsSync(join(finalDir(), "bin"))).toBe(true);
+      } finally {
+        await restoreExtracted();
+      }
+    },
+  );
 
-  it("keeps the cancelled error when the cleanup of a cancelled install fails", async () => {
-    const controller = new AbortController();
-    const { store } = makeStore({
-      extract: undeletableExtract(() => {
-        controller.abort();
-        throw new Error("tar killed");
-      }),
-    });
-    try {
-      await expect(store.install({ signal: controller.signal })).rejects.toMatchObject({
-        code: "cancelled",
+  itUnlessRoot(
+    "keeps the cancelled error when the cleanup of a cancelled install fails",
+    async () => {
+      const controller = new AbortController();
+      const { store } = makeStore({
+        extract: undeletableExtract(() => {
+          controller.abort();
+          throw new Error("tar killed");
+        }),
       });
-    } finally {
-      await restoreExtracted();
-    }
-  });
+      try {
+        await expect(store.install({ signal: controller.signal })).rejects.toMatchObject({
+          code: "cancelled",
+        });
+      } finally {
+        await restoreExtracted();
+      }
+    },
+  );
 
   it("shares one promise between concurrent installs", async () => {
     const release = deferred();
