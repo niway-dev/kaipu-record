@@ -129,8 +129,11 @@
   height: 32px;
 }
 
-/* Like the row's other actions: no frame until the pointer is on it. */
-.root[data-variant="row"] .button {
+/* Like the row's other actions: no frame until the pointer is on it. The variant is wrapped in
+   :where() so this rule weighs the same as `.button` and comes after it; written plainly it would
+   weigh as much as `.button:hover:not(:disabled)` and, being later, hide the hover frame and the
+   failed border. */
+:where(.root[data-variant="row"]) .button {
   background: transparent;
   border-color: transparent;
 }
