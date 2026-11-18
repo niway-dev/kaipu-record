@@ -8,7 +8,8 @@ import type { AppSettings } from "@shared/types";
  * preload opens one `ipcRenderer` listener per `onSettingsChanged` call. A hook that listened
  * for itself put a dozen listeners on the main window, past Node's default of ten, which warns
  * `MaxListenersExceededWarning`. So this module owns the window's ONLY `onSettingsChanged`
- * subscription and the ONLY startup `getSettings()`; every consumer reads from here and a
+ * subscription and the ONLY caller of the bridge's `getSettings()` (one read at a time, asked
+ * again after a failure); every consumer reads from here and a
  * test fails if another file calls `onSettingsChanged` or the bridge's `getSettings`
  * (`settings-store-usage.test.ts`).
  *
