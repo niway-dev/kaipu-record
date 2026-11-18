@@ -70,6 +70,7 @@ import {
   AnnotationLayer,
   AnnotationToolbar,
   BASE_ASSET_ID,
+  BASE_IMAGE_ID,
   ZERO_EXTENTS,
   bakeCanvasRedactions,
   buildCanvasDoc,
@@ -79,7 +80,12 @@ import {
   frameToWorld,
   baseVisibleRect,
   hasBaseView,
+  imageCropPatch,
   intersectFrame,
+  cropTarget,
+  sameWindow,
+  windowToCrop,
+  wholeImage,
   nextAnnotationId,
   parseCanvasDoc,
   visibleBaseBounds,
@@ -95,7 +101,9 @@ import {
   type CanvasGeom,
   type Annotation,
   type CropRect,
+  type CropTarget,
   type Extents,
+  type NormalizedRect,
   type ImageAnnotation,
   type EditorScene,
   type Scene,
@@ -225,6 +233,11 @@ function newImageAssetId(): string {
  * `unreadable` when one exists but is corrupt or unsupported, lacks its base asset, or could
  * not be read. It never rejects, so a bad document can never keep the editor from opening.
  */
+/** A crop-mode session: the image's whole asset, the window being edited, and where it began. */
+interface CropSession extends CropTarget {
+  start: NormalizedRect;
+}
+
 const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 const isPng = (bytes: ArrayBuffer): boolean => {
   const head = new Uint8Array(bytes, 0, Math.min(8, bytes.byteLength));
@@ -360,6 +373,58 @@ function ScreenshotEditorBody({
     doc?.scene,
   );
   const tools = useAnnotationTools();
+  // Per-image crop mode (NIW2-853). A session edits one image's crop window (the base answers to
+  // `BASE_IMAGE_ID`); nothing reaches the scene while the handles drag. Leaving, by any route,
+  // commits ONCE if the window moved: one undo step per session, and Esc keeps the crop.
+  const [cropSession, setCropSessionState] = useState<CropSession | null>(null);
+  const cropSessionRef = useRef<CropSession | null>(null);
+  const setCropSession = useCallback((next: CropSession | null): void => {
+    cropSessionRef.current = next;
+    setCropSessionState(next);
+  }, []);
+  const croppingId = cropSession?.id ?? null;
+  const sceneLatest = useRef(scene);
+  sceneLatest.current = scene;
+  const finishCrop = useCallback((): void => {
+    const s = cropSessionRef.current;
+    if (!s) return;
+    setCropSession(null);
+    if (sameWindow(s.win, s.start)) return;
+    const sc = sceneLatest.current;
+    if (s.id === BASE_IMAGE_ID) sc.commitBase({ baseCrop: windowToCrop(s.full, s.win) });
+    else sc.commitAnnotation(s.id, imageCropPatch(s, s.win));
+  }, [setCropSession]);
+  const onEnterCrop = useCallback(
+    (id: string): void => {
+      if (cropSessionRef.current) return;
+      const sc = sceneLatest.current;
+      let target: CropTarget | null;
+      try {
+        target = cropTarget(id, sc.annotations, {
+          baseCrop: sc.baseCrop,
+          baseRadius: sc.baseRadius,
+          basePlacement: sc.basePlacement,
+        });
+      } catch {
+        // A crop that is not a real window cannot be edited: fail closed, no crop mode.
+        return;
+      }
+      if (!target) return;
+      // Selected on entry, so the image wears its handles again once the crop is done.
+      sc.select(id);
+      setCropSession({ ...target, start: target.win });
+    },
+    [setCropSession],
+  );
+  const onCropWindow = useCallback(
+    (win: NormalizedRect): void => {
+      const s = cropSessionRef.current;
+      if (s) setCropSession({ ...s, win });
+    },
+    [setCropSession],
+  );
+  // The base mid-resize, from the layer: the frame and the page lay out from it while it drags.
+  const [liveBase, setLiveBase] = useState<BaseFields | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const pageRef = useRef<HTMLDivElement>(null);
@@ -378,6 +443,7 @@ function ScreenshotEditorBody({
     imgRef,
     // Inspect reads the image, it does not edit it: leave any drawing tool (a crop included).
     onEnter: () => {
+      finishCrop();
       tools.setTool("select");
       scene.select(null);
     },
@@ -690,13 +756,27 @@ function ScreenshotEditorBody({
   // The base as the page's geometry sees it (per-image crop, unit 4): the extents, the export
   // frame's math, the box label and the live preview all measure from its VISIBLE rect, so a
   // cropped or resized base is laid out where it exports. Unchanged for a base nobody touched.
-  const geomBase = useMemo<BaseFields>(
-    () => ({
+  // While the base is cropped it is measured WHOLE, so the frame does not move under a handle
+  // drag; a resize in flight (`liveBase`) stands in for the stored fields.
+  const geomBase = useMemo<BaseFields>(() => {
+    const fields: BaseFields = liveBase ?? {
       ...(scene.baseCrop ? { baseCrop: scene.baseCrop } : {}),
       ...(scene.baseRadius !== undefined ? { baseRadius: scene.baseRadius } : {}),
       ...(scene.basePlacement ? { basePlacement: scene.basePlacement } : {}),
-    }),
-    [scene.baseCrop, scene.baseRadius, scene.basePlacement],
+    };
+    if (croppingId !== BASE_IMAGE_ID || !fields.baseCrop) return fields;
+    const { baseCrop: _whole, ...rest } = fields;
+    return rest;
+  }, [liveBase, croppingId, scene.baseCrop, scene.baseRadius, scene.basePlacement]);
+  // The annotations as the geometry measures them: an added image under crop is whole.
+  const geomAnnotations = useMemo(
+    () =>
+      croppingId && croppingId !== BASE_IMAGE_ID
+        ? scene.annotations.map((a) =>
+            a.id === croppingId && a.kind === "image" ? wholeImage(a) : a,
+          )
+        : scene.annotations,
+    [croppingId, scene.annotations],
   );
   const geomBaseRef = useRef(geomBase);
   geomBaseRef.current = geomBase;
@@ -740,7 +820,7 @@ function ScreenshotEditorBody({
     return (
       liveExtents ??
       contentExtents(
-        scene.annotations,
+        geomAnnotations,
         metrics.naturalW,
         metrics.naturalH,
         metrics.naturalW / metrics.w,
@@ -748,7 +828,7 @@ function ScreenshotEditorBody({
         visibleBaseBounds(geomBase, metrics.naturalW, metrics.naturalH),
       )
     );
-  }, [canvasMode, metrics, scene.annotations, liveExtents, geomBase]);
+  }, [canvasMode, metrics, geomAnnotations, liveExtents, geomBase]);
   const extents = useMemo(() => {
     if (!canvasMode || !metrics || metrics.w <= 0 || metrics.naturalW <= 0) return ZERO_EXTENTS;
     return extentsToDisplay(extentsNatural, metrics.naturalW / metrics.w);
@@ -828,7 +908,7 @@ function ScreenshotEditorBody({
         ? exportPixelSize(
             {
               beautify: scene.beautify.state,
-              annotations: scene.annotations,
+              annotations: geomAnnotations,
               crop: scene.crop,
               exportFrame: scene.exportFrame,
               ...geomBase,
@@ -843,7 +923,7 @@ function ScreenshotEditorBody({
       canvasMode,
       metrics,
       scene.beautify.state,
-      scene.annotations,
+      geomAnnotations,
       scene.crop,
       scene.exportFrame,
       extentsNatural,
@@ -878,7 +958,7 @@ function ScreenshotEditorBody({
       ? exportPixelSize(
           {
             beautify: scene.beautify.state,
-            annotations: scene.annotations,
+            annotations: geomAnnotations,
             crop: scene.crop,
             exportFrame: frameToWorld(c, canvasGeom),
             ...geomBase,
@@ -1576,7 +1656,8 @@ function ScreenshotEditorBody({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspectActive]);
   // A selected annotation has options (colour, size, delete): show them where they live now.
-  const selectedToolId = inspectActive ? null : selectedId;
+  // The base is selectable (its handles resize it) but has no tool options to show.
+  const selectedToolId = inspectActive || selectedId === BASE_IMAGE_ID ? null : selectedId;
   useEffect(() => {
     if (selectedToolId !== null) setTab("tool");
   }, [selectedToolId]);
@@ -1627,6 +1708,7 @@ function ScreenshotEditorBody({
   // Picking a tool, by click or by key, leaves Inspect, starts the tool clean and shows its
   // options in the Tool tab. Select has none, so it leaves the tab as it was.
   const afterPick = (tool: AnnotationTool): void => {
+    finishCrop();
     scene.select(null);
     inspect.setActive(false);
     if (tool !== "select") setTab("tool");
@@ -1655,6 +1737,40 @@ function ScreenshotEditorBody({
         }
       : {}),
   });
+
+  // Crop mode keys and click-away. Enter and Esc leave it (Esc KEEPS the crop: the window as it
+  // stands is committed, never cleared); undo and redo reset the window to where the session
+  // began, since the history has nothing of the session yet. A press outside the canvas
+  // (toolbar, side panel) leaves it too, so Save and Copy never run on a stale crop.
+  useEffect(() => {
+    if (!croppingId) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (isEditingTarget(e.target) || document.querySelector('[aria-modal="true"]')) return;
+      const mod = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
+      if (e.key === "Enter" || e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        finishCrop();
+      } else if (mod && (key === "z" || key === "y")) {
+        e.preventDefault();
+        e.stopPropagation();
+        const s = cropSessionRef.current;
+        if (s) setCropSession({ ...s, win: s.start });
+      }
+    };
+    const onDown = (e: PointerEvent): void => {
+      const canvasEl = canvasRef.current;
+      if (canvasEl && e.target instanceof Node && canvasEl.contains(e.target)) return;
+      finishCrop();
+    };
+    window.addEventListener("keydown", onKey, true);
+    document.addEventListener("pointerdown", onDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("pointerdown", onDown, true);
+    };
+  }, [croppingId, finishCrop, setCropSession]);
 
   // Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z (and Ctrl+Y off macOS): the same history the buttons step.
   const keyPlatform = detectKeyPlatform();
@@ -1870,6 +1986,13 @@ function ScreenshotEditorBody({
                       ? {
                           imageUrls,
                           onLive,
+                          base: geomBase,
+                          cropping: cropSession,
+                          onCropWindow,
+                          onCropDone: finishCrop,
+                          onLiveBase: setLiveBase,
+                          // Inspect reads the image, it does not edit it: no crop mode there.
+                          ...(inspectEnabled && inspect.active ? {} : { onEnterCrop }),
                           ...(metrics && metrics.naturalW > 0
                             ? { natural: { w: metrics.naturalW, h: metrics.naturalH } }
                             : {}),

@@ -28,6 +28,8 @@ export {
   resizeBasePlacement,
   resizeCropWindow,
   sameWindow,
+  windowToCrop,
+  wholeImage,
   baseAsImage,
   type BaseFields,
   type CropTarget,
